@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   ARBITRUM,
   AVALANCHE,
+  BASE,
   AVALANCHE_FUJI,
   BOTANIX,
   FALLBACK_PROVIDERS,
@@ -41,6 +42,10 @@ export function getWsProvider(chainId: number): WebSocketProvider | JsonRpcProvi
 
   if (chainId === AVALANCHE) {
     return new ethers.WebSocketProvider("wss://api.avax.network/ext/bc/C/ws", network, { staticNetwork: network });
+  }
+
+  if (chainId === BASE) {
+    return new ethers.WebSocketProvider("wss://base-rpc.publicnode.com", network, { staticNetwork: network });
   }
 
   if (chainId === AVALANCHE_FUJI) {

@@ -1,5 +1,6 @@
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX } from "config/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE, BOTANIX } from "config/chains";
 
+//import base from "img/base_network.svg";
 import gmIcon from "img/gm_icon.svg";
 import arbitrum from "img/ic_arbitrum_24.svg";
 import avalanche from "img/ic_avalanche_24.svg";
@@ -46,6 +47,12 @@ const ICONS: Record<number | "common", ChainIcons> = {
   },
   [AVALANCHE_FUJI]: {
     network: avalancheTestnet,
+    gm: gmAvax,
+    gmx: gmxAvax,
+    glp: glpAvax,
+  },
+  [BASE]: {
+    network: gmxOutlineIcon,
     gm: gmAvax,
     gmx: gmxAvax,
     glp: glpAvax,

@@ -1,6 +1,6 @@
 import { type Address, zeroAddress } from "viem";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX } from "./chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, BASE } from "./chains";
 
 export const CONTRACTS = {
   [ARBITRUM]: {
@@ -287,6 +287,78 @@ export const CONTRACTS = {
     ChainlinkPriceFeedProvider: zeroAddress,
 
     Multicall: "0x0f53e512b49202a37c81c6085417C9a9005F2196",
+    ArbitrumNodeInterface: zeroAddress,
+  },
+
+  [BASE]: {
+    Vault: zeroAddress,
+    Router: zeroAddress,
+    VaultReader: zeroAddress,
+    Reader: zeroAddress,
+    GlpManager: zeroAddress,
+    RewardRouter: zeroAddress,
+    RewardReader: zeroAddress,
+    GlpRewardRouter: zeroAddress,
+    NATIVE_TOKEN: "0x4200000000000000000000000000000000000006",
+    GLP: zeroAddress,
+    GMX: zeroAddress,
+    ES_GMX: zeroAddress,
+    BN_GMX: zeroAddress,
+    USDG: zeroAddress,
+    ES_GMX_IOU: zeroAddress,
+
+    StakedGmxTracker: zeroAddress,
+    BonusGmxTracker: zeroAddress,
+    FeeGmxTracker: zeroAddress,
+    StakedGlpTracker: zeroAddress,
+    FeeGlpTracker: zeroAddress,
+    ExtendedGmxTracker: zeroAddress,
+
+    StakedGmxDistributor: zeroAddress,
+    StakedGlpDistributor: zeroAddress,
+
+    GmxVester: zeroAddress,
+    GlpVester: zeroAddress,
+    AffiliateVester: zeroAddress,
+
+    OrderBook: zeroAddress,
+    OrderExecutor: zeroAddress,
+    OrderBookReader: zeroAddress,
+
+    PositionRouter: zeroAddress,
+    PositionManager: zeroAddress,
+
+    TraderJoeGmxAvaxPool: zeroAddress,
+    ReferralStorage: "0x52Aa7453d81F1d028f99344526F6c4d796758875",
+    ReferralReader: zeroAddress,
+
+    // Synthetics
+    DataStore: "0x2a7aF6409458bfE17fa997fc40e4a38AD59A8901",
+    EventEmitter: "0x2a6C367c215c3A92C0851Ccb3e13f06b8C829145",
+    ExchangeRouter: "0xB349F9ee58E5F59Ab082a7F333B52994E89B7334",
+    SubaccountRouter: "0xe97794a275Aca5A4AF8CA9A9b3A58ceE2d19B24B",
+    DepositVault: "0x99dC3192e8FA27fa9Abe1dEdc37830729a110929",
+    WithdrawalVault: "0x8f35354250036DA1382a1ee9b214E4a3192C1dd0",
+    OrderVault: "0x450c0dC8C021e053aa07c601694Fae19a49be3a0",
+    ShiftVault: "0xb0d19ec247AdaeeEb2e1EA62B4066A21B81a2678",
+    SyntheticsReader: "0x49a1b6F6b93A9d1305764dF18CCC4723f2813aA1",
+    SyntheticsRouter: "0x9a7C2f2460de166b2E47824E75ee0bB4fb96D9f9",
+    Timelock: zeroAddress,
+
+    GlvReader: "0x0e1f7b7b9E4957D96Edc1962aA24B53De80fF33b",
+    GlvRouter: "0x478816B1F4AcB45645aF047c6B8C539CFc5637ea",
+    GlvVault: "0x7Dd9d66cd75798628992A7c427dB4429EE26847b",
+
+    GelatoRelayRouter: "0x478816B1F4AcB45645aF047c6B8C539CFc5637ea",
+    SubaccountGelatoRelayRouter: "0xc2feb2ce587a182b12A19C54aF40f6afc49345Fa",
+
+    OpenOceanRouter: zeroAddress,
+
+    ExternalHandler: "0x109f4C15489c578BF88BB0CecA626192cBd457B7",
+
+    ChainlinkPriceFeedProvider: "0x483c8226C3FA248a50e33bc369F9Bf3D32bAd30f",
+
+    Multicall: "0xB6259e65afd7957c5424Cb762F7817C65DEFD28C",
     ArbitrumNodeInterface: zeroAddress,
   },
 };

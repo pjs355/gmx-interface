@@ -21,7 +21,7 @@ export type LandingPageProtocolTokenEvent = {
   event: "LandingPageAction";
   data: {
     action: "ProtocolTokenAction";
-    chain: "Arbitrum" | "Avalanche" | "Botanix";
+    chain: "Arbitrum" | "Avalanche" | "Botanix" | "Base";
     type: "GMX" | "GM" | "GLV" | "GLP";
   };
 };
@@ -197,7 +197,7 @@ export type TradeBoxWarningShownEvent = {
     isExpress1CT: boolean;
     sizeDeltaUsd: number;
     leverage: string;
-    chain: "Arbitrum" | "Avalanche";
+    chain: "Arbitrum" | "Avalanche" | "Base";
     isFirstOrder: boolean;
   };
 };

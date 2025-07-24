@@ -1,7 +1,7 @@
 import { Trans } from "@lingui/macro";
 import { useMemo } from "react";
 
-import { ARBITRUM, AVALANCHE, BOTANIX } from "config/chains";
+import { ARBITRUM, AVALANCHE, BOTANIX, BASE } from "config/chains";
 import { USD_DECIMALS } from "config/factors";
 import { useTotalVolume, useV1FeesInfo } from "domain/stats";
 import useUniqueUsers from "domain/stats/useUniqueUsers";
@@ -38,6 +38,7 @@ export function StatsCard({
   const v2ArbitrumOverview = useV2Stats(ARBITRUM);
   const v2AvalancheOverview = useV2Stats(AVALANCHE);
   const v2BotanixOverview = useV2Stats(BOTANIX);
+  const v2BaseOverview = useV2Stats(BASE);
 
   const uniqueUsers = useUniqueUsers();
 
@@ -56,7 +57,8 @@ export function StatsCard({
     v1AvalancheTotalFees?.totalFees,
     v2ArbitrumOverview.totalFees,
     v2AvalancheOverview.totalFees,
-    v2BotanixOverview.totalFees
+    v2BotanixOverview.totalFees,
+    v2BaseOverview.totalFees
   );
 
   // #endregion Fees
@@ -96,6 +98,7 @@ export function StatsCard({
       "V1 Avalanche": v1AvalancheTotalFees?.totalFees,
       "V2 Avalanche": v2AvalancheOverview?.totalFees,
       "V2 Botanix": v2BotanixOverview?.totalFees,
+      "V2 Base": v2BaseOverview?.totalFees,
     }),
     [
       v1AvalancheTotalFees?.totalFees,
@@ -103,6 +106,7 @@ export function StatsCard({
       v2ArbitrumOverview?.totalFees,
       v2AvalancheOverview?.totalFees,
       v2BotanixOverview?.totalFees,
+      v2BaseOverview?.totalFees,
     ]
   );
 
@@ -113,6 +117,7 @@ export function StatsCard({
       "V1 Avalanche": v1TotalVolume?.[AVALANCHE],
       "V2 Avalanche": v2AvalancheOverview?.totalVolume,
       "V2 Botanix": v2BotanixOverview?.totalVolume,
+      "V2 Base": v2BaseOverview?.totalVolume,
     }),
     [v1TotalVolume, v2ArbitrumOverview?.totalVolume, v2AvalancheOverview?.totalVolume, v2BotanixOverview?.totalVolume]
   );
@@ -124,8 +129,9 @@ export function StatsCard({
       "V1 Avalanche": uniqueUsers?.[AVALANCHE],
       "V2 Avalanche": v2AvalancheOverview?.totalUsers,
       "V2 Botanix": v2BotanixOverview?.totalUsers,
+      "V2 Base": v2BaseOverview?.totalUsers,
     }),
-    [uniqueUsers, v2ArbitrumOverview?.totalUsers, v2AvalancheOverview?.totalUsers, v2BotanixOverview?.totalUsers]
+    [uniqueUsers, v2ArbitrumOverview?.totalUsers, v2AvalancheOverview?.totalUsers, v2BotanixOverview?.totalUsers, v2BaseOverview?.totalUsers]
   );
 
   return (
@@ -163,7 +169,8 @@ export function StatsCard({
                   v1TotalVolume?.[BOTANIX],
                   v2ArbitrumOverview?.totalVolume,
                   v2AvalancheOverview?.totalVolume,
-                  v2BotanixOverview?.totalVolume
+                  v2BotanixOverview?.totalVolume,
+                  v2BaseOverview?.totalVolume
                 ),
                 USD_DECIMALS,
                 true,
@@ -188,7 +195,8 @@ export function StatsCard({
                   uniqueUsers?.[BOTANIX],
                   v2ArbitrumOverview?.totalUsers,
                   v2AvalancheOverview?.totalUsers,
-                  v2BotanixOverview?.totalUsers
+                  v2BotanixOverview?.totalUsers,
+                  v2BaseOverview?.totalUsers
                 ),
                 0,
                 false,

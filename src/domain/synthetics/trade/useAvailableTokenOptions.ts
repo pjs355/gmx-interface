@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { zeroAddress } from "viem";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, UiSupportedChain } from "config/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE, BOTANIX, UiSupportedChain } from "config/chains";
 import { getSortedMarketsAddressesKey } from "config/localStorage";
 import { SORTED_MARKETS } from "config/static/sortedMarkets";
 import { GlvAndGmMarketsInfoData, Market, MarketInfo, MarketsData, isMarketInfo } from "domain/synthetics/markets";
@@ -69,6 +69,7 @@ const FORCE_ALLOWED_COLLATERAL_TOKENS: Record<UiSupportedChain, string[]> = {
   ],
   [AVALANCHE]: [],
   [ARBITRUM]: [],
+  [BASE]: [],
   [AVALANCHE_FUJI]: [],
 };
 

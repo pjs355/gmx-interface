@@ -3,13 +3,14 @@ import sample from "lodash/sample";
 
 import {
   BOTANIX,
+  
   SUPPORTED_CHAIN_IDS as SDK_SUPPORTED_CHAIN_IDS,
   SUPPORTED_CHAIN_IDS_DEV as SDK_SUPPORTED_CHAIN_IDS_DEV,
   UiContractsChain,
 } from "sdk/configs/chains";
 
 import { isDevelopment } from "./env";
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, ETH_MAINNET } from "./static/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE, ETH_MAINNET } from "./static/chains";
 
 export * from "./static/chains";
 export { getChainName, CHAIN_NAMES_MAP } from "../../sdk/src/configs/chains";
@@ -21,6 +22,8 @@ const { parseEther } = ethers;
 export const ENV_ARBITRUM_RPC_URLS = import.meta.env.VITE_APP_ARBITRUM_RPC_URLS;
 export const ENV_AVALANCHE_RPC_URLS = import.meta.env.VITE_APP_AVALANCHE_RPC_URLS;
 export const ENV_BOTANIX_RPC_URLS = import.meta.env.VITE_APP_BOTANIX_RPC_URLS;
+export const ENV_BASE_RPC_URLS = import.meta.env.VITE_APP_BASE_RPV_URLS;
+
 
 // TODO take it from web3
 export const DEFAULT_CHAIN_ID = ARBITRUM;
@@ -31,12 +34,14 @@ export const IS_NETWORK_DISABLED: Record<UiContractsChain, boolean> = {
   [AVALANCHE]: false,
   [AVALANCHE_FUJI]: false,
   [BOTANIX]: false,
+  [BASE]: false,
 };
 
 export const NETWORK_EXECUTION_TO_CREATE_FEE_FACTOR = {
   [ARBITRUM]: 10n ** 29n * 5n,
   [AVALANCHE]: 10n ** 29n * 35n,
   [AVALANCHE_FUJI]: 10n ** 29n * 2n,
+  [BASE]: 10n ** 29n * 5n,
 } as const;
 
 const constants = {
@@ -80,6 +85,18 @@ const constants = {
     INCREASE_ORDER_EXECUTION_GAS_FEE: parseEther("0.01"),
     // contract requires that execution fee be strictly greater than instead of gte
     DECREASE_ORDER_EXECUTION_GAS_FEE: parseEther("0.0100001"),
+  },
+  [BASE]: {
+    nativeTokenSymbol: "ETH",
+    wrappedTokenSymbol: "WETH",
+    defaultCollateralSymbol: "USDC",
+    defaultFlagOrdersEnabled: false,
+    positionReaderPropsLength: 9,
+    v2: true,
+
+    SWAP_ORDER_EXECUTION_GAS_FEE: parseEther("0.0003"),
+    INCREASE_ORDER_EXECUTION_GAS_FEE: parseEther("0.0003"), // contract requires that execution fee be strictly greater than instead of gte
+    DECREASE_ORDER_EXECUTION_GAS_FEE: parseEther("0.000300001"),
   },
 
   [BOTANIX]: {
@@ -125,6 +142,13 @@ export const RPC_PROVIDERS: Record<UiContractsChain | typeof ETH_MAINNET, string
     // "https://rpc.botanixlabs.com",
     "https://rpc.ankr.com/botanix_mainnet",
   ],
+  [BASE]: [
+   "https://mainnet.base.org",
+    "https://base.llamarpc.com",
+    "https://base-pokt.nodies.app",
+    "https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih",
+    "https://api.developer.coinbase.com/rpc/v1/base/pCxneBOu7yvpODTPBTueR4VKfdAUBZGA",
+  ],
 };
 
 export const FALLBACK_PROVIDERS: Record<UiContractsChain, string[]> = {
@@ -136,6 +160,7 @@ export const FALLBACK_PROVIDERS: Record<UiContractsChain, string[]> = {
     "https://ava-testnet.public.blastapi.io/ext/bc/C/rpc",
   ],
   [BOTANIX]: ENV_BOTANIX_RPC_URLS ? JSON.parse(ENV_BOTANIX_RPC_URLS) : [getAlchemyBotanixHttpUrl()],
+  [BASE]: ENV_BASE_RPC_URLS ? JSON.parse(ENV_BASE_RPC_URLS) : [getAlchemyBaseHttpUrl()],
 };
 
 export const getConstant = (chainId: number, key: string) => {
@@ -173,6 +198,11 @@ export function getAlchemyArbitrumWsUrl() {
   return `wss://arb-mainnet.g.alchemy.com/v2/${getAlchemyKey()}`;
 }
 
+export function getAlchemyBaseHttpUrl() {
+  //TODO This is not an alchemy RPC, it's the same as our main
+  return `https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih`;
+}
+
 export function getAlchemyBotanixHttpUrl() {
   return `https://botanix-mainnet.g.alchemy.com/v2/${getAlchemyKey()}`;
 }
@@ -194,6 +224,8 @@ export function getExplorerUrl(chainId) {
     return "https://testnet.snowtrace.io/";
   } else if (chainId === BOTANIX) {
     return "https://botanixscan.io/";
+  } else if (chainId === BASE) {
+    return "https://basescan.org/";
   }
   return "https://etherscan.io/";
 }

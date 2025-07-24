@@ -9,7 +9,7 @@ import { getNormalizedTokenSymbol } from "sdk/configs/tokens";
 import ExternalLink from "components/ExternalLink/ExternalLink";
 import { TokenSymbolWithIcon } from "components/TokenSymbolWithIcon/TokenSymbolWithIcon";
 
-import { ARBITRUM, AVALANCHE } from "./chains";
+import { ARBITRUM, AVALANCHE, BASE } from "./chains";
 import { getIncentivesV2Url } from "./links";
 
 export type EventData = {

@@ -2,7 +2,7 @@ import { zeroAddress } from "viem";
 
 import type { Token, TokenAddressTypesMap, TokenCategory } from "types/tokens";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX } from "./chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE, BOTANIX } from "./chains";
 import { getContract } from "./contracts";
 
 export const NATIVE_TOKEN_ADDRESS = zeroAddress;
@@ -1527,6 +1527,89 @@ export const TOKENS: { [chainId: number]: Token[] } = {
       isPlatformToken: true,
     },
   ],
+
+  [BASE]: [
+
+    {
+      name: "GMX Market tokens",
+      symbol: "GM",
+      address: zeroAddress, // Use a placeholder for now if you don't have one
+      decimals: 18,
+      imageUrl: "https://raw.githubusercontent.com/gmx-io/gmx-assets/main/GMX-Assets/PNG/GM_LOGO.png",
+      isPlatformToken: true,
+    },
+    {
+      name: "Wrapped Ethereum",
+      symbol: "WETH",
+      decimals: 18,
+      address: "0x4200000000000000000000000000000000000006",
+      isWrapped: true,
+      baseSymbol: "ETH",
+      imageUrl: "https://assets.coingecko.com/coins/images/2518/thumb/weth.png?1628852295",
+      coingeckoUrl: "https://www.coingecko.com/en/coins/ethereum",
+      isV1Available: true,
+      isPermitSupported: true,
+      contractVersion: "1",
+    },
+    {
+      name: "USD Coin",
+      symbol: "USDC",
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      decimals: 6,
+      isStable: true,
+      imageUrl: "https://assets.coingecko.com/coins/images/6319/thumb/USD_Coin_icon.png?1547042389",
+      coingeckoUrl: "https://www.coingecko.com/en/coins/usd-coin",
+      explorerUrl: "https://snowtrace.io/address/0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+      isV1Available: true,
+      isPermitSupported: true,
+    },
+    {
+      name: "FAKE USDC",
+      symbol: "usdc",
+      address: "0x009764F6D17337B6a0033d95A30bDc25896075b4",
+      decimals: 6,
+      isStable: true,
+      imageUrl: "https://assets.coingecko.com/coins/images/6319/thumb/USD_Coin_icon.png?1547042389",
+      coingeckoUrl: "https://www.coingecko.com/en/coins/usd-coin",
+      explorerUrl: "https://snowtrace.io/address/0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+      isV1Available: true,
+      isPermitSupported: true,
+    },
+ 
+    {
+      name: "Apple",
+      symbol: "Apple",
+      address: "0x8341530234CE887A974155c9107b6321632eb854",
+      decimals: 6,
+      priceDecimals: 2,
+      categories: ["meme"],
+      imageUrl: "https://assets.coingecko.com/coins/images/53775/standard/melania-meme.png?1737329885",
+      coingeckoUrl: "https://www.coingecko.com/en/coins/melania-meme",
+      isSynthetic: true,
+    },
+    {
+      name: "ETH",
+      symbol: "ETH",
+      decimals: 18,
+      address: zeroAddress,
+      isNative: true,
+      isShortable: true,
+      categories: ["layer1"],
+      imageUrl: "https://assets.coingecko.com/coins/images/12559/small/coin-round-red.png?1604021818",
+      coingeckoUrl: "https://www.coingecko.com/en/coins/avalanche",
+      isV1Available: true,
+    },
+    {
+      name: "GLV Market tokens",
+      symbol: "GLV",
+      address: "<market-token-address>",
+      decimals: 18,
+      imageUrl: "https://raw.githubusercontent.com/gmx-io/gmx-assets/main/GMX-Assets/PNG/GLV_LOGO.png",
+      isPlatformToken: true,
+    },
+
+  ],
+
   [BOTANIX]: [
     {
       name: "Bitcoin",
@@ -1675,7 +1758,7 @@ export const TOKENS_BY_SYMBOL_MAP: { [chainId: number]: { [symbol: string]: Toke
 export const WRAPPED_TOKENS_MAP: { [chainId: number]: Token } = {};
 export const NATIVE_TOKENS_MAP: { [chainId: number]: Token } = {};
 
-const CHAIN_IDS = [ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX];
+const CHAIN_IDS = [ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, BASE];
 
 for (let j = 0; j < CHAIN_IDS.length; j++) {
   const chainId = CHAIN_IDS[j];
@@ -1686,7 +1769,11 @@ for (let j = 0; j < CHAIN_IDS.length; j++) {
   V1_TOKENS[chainId] = [];
   V2_TOKENS[chainId] = [];
 
-  let tokens = TOKENS[chainId];
+  if (!TOKENS_MAP[chainId]) {
+    throw new Error(`TOKENS_MAP does not contain chainId: ${chainId}`);
+  }
+  let tokens = TOKENS[chainId] || [];
+
   let wrappedTokenAddress: string | undefined;
 
   for (let i = 0; i < tokens.length; i++) {
@@ -1716,7 +1803,9 @@ for (let j = 0; j < CHAIN_IDS.length; j++) {
     }
   }
 
-  NATIVE_TOKENS_MAP[chainId].wrappedAddress = wrappedTokenAddress;
+  if (NATIVE_TOKENS_MAP[chainId]) {
+    NATIVE_TOKENS_MAP[chainId].wrappedAddress = wrappedTokenAddress;
+  }
 }
 
 export function getSyntheticTokens(chainId: number) {
@@ -1787,7 +1876,10 @@ export function getTokenBySymbol(
     symbolType = "symbol",
   }: { isSynthetic?: boolean; version?: "v1" | "v2"; symbolType?: "symbol" | "baseSymbol" } = {}
 ) {
-  let tokens = Object.values(TOKENS_MAP[chainId]);
+  if (!TOKENS_MAP[chainId]) {
+    throw new Error(`TOKENS_MAP does not contain chainId: ${chainId}`);
+  }
+  let tokens = TOKENS[chainId] || [];
 
   if (version) {
     tokens = version === "v1" ? getV1Tokens(chainId) : getV2Tokens(chainId);
@@ -1808,6 +1900,7 @@ export function getTokenBySymbol(
   }
 
   if (!token) {
+    console.error('Available tokens for chainId', chainId, ':', Object.keys(TOKENS_BY_SYMBOL_MAP[chainId]));
     throw new Error(`Incorrect symbol "${symbol}" for chainId ${chainId}`);
   }
 

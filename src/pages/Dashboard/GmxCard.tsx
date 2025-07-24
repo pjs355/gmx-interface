@@ -1,7 +1,7 @@
 import { Trans, t } from "@lingui/macro";
 import { useMemo } from "react";
 
-import { ARBITRUM, AVALANCHE } from "config/chains";
+import { ARBITRUM, AVALANCHE, BASE } from "config/chains";
 import { USD_DECIMALS } from "config/factors";
 import { getIcons } from "config/icons";
 import { GMX_PRICE_DECIMALS } from "config/ui";

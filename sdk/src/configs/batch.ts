@@ -1,6 +1,6 @@
 import { ClientConfig, MulticallBatchOptions } from "viem";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI } from "./chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE } from "./chains";
 
 export const BATCH_CONFIGS: Record<
   number,
@@ -22,6 +22,18 @@ export const BATCH_CONFIGS: Record<
     },
   },
   [AVALANCHE]: {
+    http: {
+      batchSize: 0,
+      wait: 0,
+    },
+    client: {
+      multicall: {
+        batchSize: 1024 * 1024,
+        wait: 0,
+      },
+    },
+  },
+  [BASE]: {
     http: {
       batchSize: 0,
       wait: 0,

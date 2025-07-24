@@ -2,7 +2,7 @@
   This files is used to pre-build data during the build process.
   Avoid adding client-side code here, as it can break the build process.
 */
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, UiContractsChain } from "./chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, BASE, UiContractsChain } from "./chains";
 
 export const SWAP_GRAPH_MAX_MARKETS_PER_TOKEN = 5;
 
@@ -906,6 +906,27 @@ export const MARKETS: Record<UiContractsChain, Record<string, MarketConfig>> = {
       shortTokenAddress: "0x3Bd8e00c25B12E6E60fc8B6f1E1E2236102073Ca",
     },
   },
+
+  [BASE]: {
+    // ETH/USD [ETH-USDC]
+    "0x1D13658F5a4Cd45D0077a263dCC25300c85e3F50": {
+      marketTokenAddress: "0x1D13658F5a4Cd45D0077a263dCC25300c85e3F50",
+      indexTokenAddress: "0x4200000000000000000000000000000000000006",
+      longTokenAddress: "0x4200000000000000000000000000000000000006",
+      shortTokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    },
+
+    //Apple/USD [FAKE_USDC-FAKE_USDC ]
+    "0x335b2A8794C91cDb8CA50780CBE58e75d9a9f829": {
+      marketTokenAddress: "0x335b2A8794C91cDb8CA50780CBE58e75d9a9f829",
+      indexTokenAddress: "0x8341530234CE887A974155c9107b6321632eb854",
+      longTokenAddress: "0x009764F6D17337B6a0033d95A30bDc25896075b4",
+      shortTokenAddress: "0x009764F6D17337B6a0033d95A30bDc25896075b4",
+    },
+
+  },
+
+
   [BOTANIX]: {
     // BTC/USD [stBTC-stBTC]
     "0x6682BB60590a045A956541B1433f016Ed22E361d": {

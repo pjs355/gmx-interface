@@ -2,7 +2,7 @@ import mapValues from "lodash/mapValues";
 
 import { isDevelopment } from "config/env";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI } from "./chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE } from "./chains";
 import { MARKETS } from "./static/markets";
 
 export * from "./static/markets";
@@ -46,6 +46,13 @@ export const GLV_MARKETS: {
       name: "High Caps",
       subtitle: "Core ETH Markets Vault",
       shortening: "HC",
+    },
+  },
+  [BASE]: {
+    "0x42B13a911f2fe9B56a9278A948d9D139bD56DD81": { //TODO: change to real market July 24th
+      name: "Prinx Markets",
+      subtitle: "Core ETH Markets Vault",
+      shortening: "PRINX",
     },
   },
 };

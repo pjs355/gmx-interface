@@ -1,4 +1,4 @@
-import { ARBITRUM, AVALANCHE } from "./chains";
+import { ARBITRUM, AVALANCHE, BASE } from "./chains";
 
 export const GMX_STATS_API_URL = "https://stats.gmx.io/api";
 
@@ -7,6 +7,7 @@ const BACKEND_URLS = {
 
   [ARBITRUM]: "https://gmx-server-mainnet.uw.r.appspot.com",
   [AVALANCHE]: "https://gmx-avax-server.uc.r.appspot.com",
+  [BASE]: "http://localhost:3002",
 };
 
 export function getServerBaseUrl(chainId: number) {

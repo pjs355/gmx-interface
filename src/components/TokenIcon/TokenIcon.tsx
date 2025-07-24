@@ -3,6 +3,7 @@ import cx from "classnames";
 import { importImage } from "lib/legacy";
 
 import "./TokenIcon.scss";
+import botanixIcon from "img/ic_botanix_24.svg";
 
 function getIconUrlPath(symbol, size: 24 | 40) {
   if (!symbol || !size) return;
@@ -29,7 +30,7 @@ function TokenIcon({ className, symbol, displaySize, importSize = 24, badge }: P
     <img
       data-qa="token-icon"
       className={classNames}
-      src={importImage(iconPath)}
+      src={botanixIcon}
       alt={symbol}
       width={displaySize}
       height={displaySize}

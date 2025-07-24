@@ -1,4 +1,4 @@
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, ETH_MAINNET } from "config/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, ETH_MAINNET, BASE } from "config/chains";
 
 import { createClient } from "./utils";
 

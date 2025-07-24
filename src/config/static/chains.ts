@@ -5,10 +5,10 @@
   However, this files can be a dependency for the client code.
 */
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI } from "sdk/configs/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE } from "sdk/configs/chains";
 
 export * from "sdk/configs/chains";
 
 export const FEES_HIGH_BPS = 50;
 
-export type ChainId = typeof AVALANCHE | typeof AVALANCHE_FUJI | typeof ARBITRUM;
+export type ChainId = typeof AVALANCHE | typeof AVALANCHE_FUJI | typeof ARBITRUM | typeof BASE;

@@ -2,7 +2,7 @@ import { Trans } from "@lingui/macro";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useCallback } from "react";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, getChainName } from "config/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BASE, BOTANIX, getChainName } from "config/chains";
 import { isDevelopment } from "config/env";
 import { getIcon } from "config/icons";
 import { useChainId } from "lib/chains";
@@ -44,6 +44,12 @@ const NETWORK_OPTIONS = [
     label: getChainName(AVALANCHE),
     value: AVALANCHE,
     icon: getIcon(AVALANCHE, "network"),
+    color: "#E841424D",
+  },
+  {
+    label: getChainName(BASE),
+    value: BASE,
+    icon: getIcon(BASE, "network"),
     color: "#E841424D",
   },
   {

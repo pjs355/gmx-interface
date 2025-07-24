@@ -1,6 +1,6 @@
 import { Chain, ClientConfig, createPublicClient, http } from "viem";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, UiContractsChain, getViemChain } from "config/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, BASE, UiContractsChain, getViemChain } from "config/chains";
 import { isWebWorker } from "config/env";
 import {
   MulticallErrorEvent,
@@ -62,6 +62,18 @@ const BATCH_CONFIGS: Record<
   [AVALANCHE_FUJI]: {
     http: {
       batchSize: 40,
+      wait: 0,
+    },
+    client: {
+      multicall: {
+        batchSize: 1024 * 1024,
+        wait: 0,
+      },
+    },
+  },
+  [BASE]: {
+    http: {
+      batchSize: 0,
       wait: 0,
     },
     client: {

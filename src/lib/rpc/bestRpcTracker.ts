@@ -16,6 +16,7 @@ import {
   getFallbackRpcUrl,
   UiContractsChain,
   BOTANIX,
+  BASE,
 } from "config/chains";
 import { getMulticallContract, getDataStoreContract } from "config/contracts";
 import { getContract } from "config/contracts";
@@ -46,6 +47,7 @@ const PROBE_SAMPLE_MARKET: Record<UiContractsChain, Address> = {
   [AVALANCHE]: "0xB7e69749E3d2EDd90ea59A4932EFEa2D41E245d7", // ETH/USD
   [AVALANCHE_FUJI]: "0xbf338a6C595f06B7Cfff2FA8c958d49201466374", // ETH/USD
   [BOTANIX]: "0x6682BB60590a045A956541B1433f016Ed22E361d", // STBTC-STBTC
+  [BASE]: "0x335b2A8794C91cDb8CA50780CBE58e75d9a9f829", // AVAX/USD from Base markets config
 };
 
 type ProbeData = {

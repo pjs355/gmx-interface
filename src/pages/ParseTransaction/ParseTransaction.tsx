@@ -8,7 +8,7 @@ import useSWR from "swr";
 import { Hash, isHash, PublicClient } from "viem";
 import { usePublicClient } from "wagmi";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, UiContractsChain, getExplorerUrl } from "config/chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, BASE, UiContractsChain, getExplorerUrl } from "config/chains";
 import { getIcon } from "config/icons";
 import {
   getGlvDisplayName,
@@ -58,6 +58,7 @@ const NETWORKS = {
   avalanche: AVALANCHE,
   fuji: AVALANCHE_FUJI,
   botanix: BOTANIX,
+  base: BASE,
 };
 
 export const NETWORKS_BY_CHAIN_IDS: Record<UiContractsChain, string> = {
@@ -65,6 +66,7 @@ export const NETWORKS_BY_CHAIN_IDS: Record<UiContractsChain, string> = {
   [AVALANCHE]: "avalanche",
   [AVALANCHE_FUJI]: "fuji",
   [BOTANIX]: "botanix",
+  [BASE]: "base",
 };
 
 const EXPLORER_TX_URLS: Record<UiContractsChain, string> = {
@@ -72,6 +74,7 @@ const EXPLORER_TX_URLS: Record<UiContractsChain, string> = {
   [AVALANCHE]: getExplorerUrl(AVALANCHE) + "tx/",
   [AVALANCHE_FUJI]: getExplorerUrl(AVALANCHE_FUJI) + "tx/",
   [BOTANIX]: getExplorerUrl(BOTANIX) + "tx/",
+  [BASE]: getExplorerUrl(BASE) + "tx/",
 };
 
 export function ParseTransactionPage() {

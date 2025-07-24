@@ -90,6 +90,7 @@ function AffiliatesStats({
     [ARBITRUM]: arbitrumData,
     [AVALANCHE]: avalancheData,
     [AVALANCHE_FUJI]: fujiData,
+   // [BASE]: baseData,
   } = chains || {};
 
   const { affiliateDistributions, affiliateTierInfo, affiliateReferralCodesStats } = currentReferralsData || {};

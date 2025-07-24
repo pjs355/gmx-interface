@@ -1,7 +1,7 @@
 import useSWR from "swr";
 
 import { GMX_STATS_API_URL } from "config/backend";
-import { ARBITRUM, AVALANCHE } from "config/chains";
+import { ARBITRUM, AVALANCHE, BASE } from "config/chains";
 import { bigNumberify } from "lib/numbers";
 import { CONFIG_UPDATE_INTERVAL } from "lib/timeConstants";
 
@@ -16,6 +16,7 @@ export function useVolumeInfo() {
       return {
         [ARBITRUM]: bigNumberify(json[ARBITRUM]),
         [AVALANCHE]: bigNumberify(json[AVALANCHE]),
+        [BASE]: bigNumberify(json[BASE]),
         total: bigNumberify(json.total),
       };
     },

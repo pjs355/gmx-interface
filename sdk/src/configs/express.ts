@@ -2,7 +2,7 @@ import { Token } from "types/tokens";
 import { expandDecimals, USD_DECIMALS } from "utils/numbers";
 import { periodToSeconds } from "utils/time";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, UiContractsChain } from "./chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, BASE, UiContractsChain } from "./chains";
 import { getTokenBySymbol, getWrappedToken } from "./tokens";
 
 export const SUBACCOUNT_MESSAGE =
@@ -19,6 +19,7 @@ export const MIN_GELATO_USD_BALANCE_FOR_SPONSORED_CALL = expandDecimals(100, USD
 export const MIN_RELAYER_FEE_USD = 5n ** BigInt(USD_DECIMALS - 1); // 0.5$
 
 const GAS_PAYMENT_TOKENS: Record<UiContractsChain, string[]> = {
+  [BASE]: [getTokenBySymbol(BASE, "ETH").address],
   [ARBITRUM]: [getTokenBySymbol(ARBITRUM, "USDC").address, getTokenBySymbol(ARBITRUM, "WETH").address],
   [AVALANCHE]: [getTokenBySymbol(AVALANCHE, "USDC").address, getTokenBySymbol(AVALANCHE, "WAVAX").address],
   [AVALANCHE_FUJI]: [

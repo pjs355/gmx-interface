@@ -3,14 +3,14 @@ import { subDays, format, eachDayOfInterval } from "date-fns";
 import { useMemo } from "react";
 import useSWR from "swr";
 
-import { ARBITRUM, AVALANCHE } from "config/chains";
+import { ARBITRUM, AVALANCHE, BASE } from "config/chains";
 import { USD_DECIMALS } from "config/factors";
 import { toUtcDayStart } from "lib/dates";
 import { expandDecimals } from "lib/numbers";
 import { getSubsquidGraphClient } from "lib/subgraph";
 import { CONFIG_UPDATE_INTERVAL } from "lib/timeConstants";
 
-const LARGE_ACCOUNT_CHAINS = [ARBITRUM, AVALANCHE];
+const LARGE_ACCOUNT_CHAINS = [ARBITRUM, AVALANCHE, BASE];
 
 // Thresholds to recognise large accounts
 const MAX_DAILY_VOLUME = expandDecimals(220_000n, USD_DECIMALS);

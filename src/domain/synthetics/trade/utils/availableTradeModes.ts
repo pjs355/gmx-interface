@@ -1,4 +1,4 @@
-import { ARBITRUM, AVALANCHE, BOTANIX } from "config/chains";
+import { ARBITRUM, AVALANCHE, BASE, BOTANIX } from "config/chains";
 import { getTokenBySymbol } from "sdk/configs/tokens";
 import { NATIVE_TOKEN_ADDRESS } from "sdk/configs/tokens";
 import { TradeMode, TradeType } from "sdk/types/trade";
@@ -26,6 +26,8 @@ const AVALANCHE_WAVAX_TOKEN_ADDRESS = getTokenBySymbol(AVALANCHE, "WAVAX")?.addr
 const BOTANIX_BTC_TOKEN_ADDRESS = NATIVE_TOKEN_ADDRESS;
 const BOTANIX_PBTC_TOKEN_ADDRESS = getTokenBySymbol(BOTANIX, "PBTC")?.address;
 const BOTANIX_STBTC_TOKEN_ADDRESS = getTokenBySymbol(BOTANIX, "STBTC")?.address;
+const BASE_ETH_TOKEN_ADDRESS = NATIVE_TOKEN_ADDRESS;
+const BASE_WETH_TOKEN_ADDRESS = getTokenBySymbol(BASE, "WETH")?.address;
 
 export function getAvailableTradeModes({
   chainId,

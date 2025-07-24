@@ -3,7 +3,7 @@ import { msg } from "@lingui/macro";
 import { lightFormat, parse } from "date-fns";
 
 import { ChartingLibraryFeatureset, ChartingLibraryWidgetOptions, WidgetOverrides } from "charting_library";
-import { ARBITRUM, AVALANCHE } from "config/chains";
+import { ARBITRUM, AVALANCHE, BASE } from "config/chains";
 import { USD_DECIMALS } from "config/factors";
 import { OrderType } from "domain/synthetics/orders";
 import { formatTVDate, formatTVTime } from "lib/dates";
@@ -133,7 +133,7 @@ export const defaultChartProps = {
   },
 } satisfies Partial<ChartingLibraryWidgetOptions>;
 
-export const availableNetworksForChart = [ARBITRUM, AVALANCHE];
+export const availableNetworksForChart = [ARBITRUM, AVALANCHE, BASE];
 
 export const orderTypeToTitle: Partial<Record<`${OrderType}-${"long" | "short"}`, MessageDescriptor>> = {
   [`${OrderType.LimitIncrease}-short`]: msg`Limit - Short Inc.`,

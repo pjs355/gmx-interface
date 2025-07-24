@@ -1,7 +1,7 @@
 import { TaskState } from "@gelatonetwork/relay-sdk";
 import { Address, encodePacked } from "viem";
 
-import { ARBITRUM, AVALANCHE, BOTANIX } from "config/chains";
+import { ARBITRUM, AVALANCHE, BOTANIX, BASE } from "config/chains";
 import { GelatoPollingTiming, metrics } from "lib/metrics";
 import { sleep } from "lib/sleep";
 import { gelatoRelay } from "sdk/utils/gelatoRelay";

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 
 import { getServerUrl } from "config/backend";
-import { ARBITRUM, AVALANCHE, BOTANIX } from "config/chains";
+import { ARBITRUM, AVALANCHE, BOTANIX, BASE} from "config/chains";
 import { USD_DECIMALS } from "config/factors";
 import { useGmxPrice, useTotalGmxStaked } from "domain/legacy";
 import { useV1FeesInfo, useVolumeInfo } from "domain/stats";
@@ -39,6 +39,7 @@ export function OverviewCard({
   const v2ArbitrumOverview = useV2Stats(ARBITRUM);
   const v2AvalancheOverview = useV2Stats(AVALANCHE);
   const v2BotanixOverview = useV2Stats(BOTANIX);
+  const v2BaseOverview = useV2Stats(BASE);
 
   const { data: positionStats } = useSWR<
     {
@@ -68,6 +69,7 @@ export function OverviewCard({
   const arbitrumPositionsCollateralUsd = usePositionsTotalCollateral(ARBITRUM);
   const avalanchePositionsCollateralUsd = usePositionsTotalCollateral(AVALANCHE);
   const botanixPositionsCollateralUsd = usePositionsTotalCollateral(BOTANIX);
+  const basePositionsCollateralUsd = usePositionsTotalCollateral(BASE);
 
   // #region TVL and GLP Pool
   const glpTvlArbitrum = statsArbitrum?.glp.aum;
@@ -102,12 +104,14 @@ export function OverviewCard({
   const gmTvlArbitrum = v2ArbitrumOverview.totalGMLiquidity;
   const gmTvlAvalanche = v2AvalancheOverview.totalGMLiquidity;
   const gmTvlBotanix = v2BotanixOverview.totalGMLiquidity;
+  const gmTvlBase = v2BaseOverview.totalGMLiquidity;
 
   const totalGmTvl = gmTvlArbitrum + gmTvlAvalanche + gmTvlBotanix;
 
   let displayTvlArbitrum: bigint | undefined = undefined;
   let displayTvlAvalanche: bigint | undefined = undefined;
   let displayTvlBotanix: bigint | undefined = undefined;
+  let displayTvlBase: bigint | undefined = undefined;
   let displayTvl: bigint | undefined = undefined;
   if (
     gmxPrice !== undefined &&
@@ -117,7 +121,8 @@ export function OverviewCard({
     glpMarketCapAvalanche !== undefined &&
     arbitrumPositionsCollateralUsd !== undefined &&
     avalanchePositionsCollateralUsd !== undefined &&
-    botanixPositionsCollateralUsd !== undefined
+    botanixPositionsCollateralUsd !== undefined &&
+    basePositionsCollateralUsd !== undefined
   ) {
     const stakedGmxUsdArbitrum = bigMath.mulDiv(gmxPrice, stakedGmxArbitrum, expandDecimals(1, GMX_DECIMALS));
     const stakedGmxUsdAvalanche = bigMath.mulDiv(gmxPrice, stakedGmxAvalanche, expandDecimals(1, GMX_DECIMALS));
@@ -140,13 +145,15 @@ export function OverviewCard({
   const v2ArbitrumDailyVolume = v2ArbitrumOverview.dailyVolume;
   const v2AvalancheDailyVolume = v2AvalancheOverview.dailyVolume;
   const v2BotanixDailyVolume = v2BotanixOverview.dailyVolume;
+  const v2BaseDailyVolume = v2BaseOverview.dailyVolume;
 
   const totalDailyVolume = sumBigInts(
     v1ArbitrumDailyVolume,
     v1AvalancheDailyVolume,
     v2ArbitrumDailyVolume,
     v2AvalancheDailyVolume,
-    v2BotanixDailyVolume
+    v2BotanixDailyVolume,
+    v2BaseDailyVolume
   );
   // #endregion Daily Volume
 
@@ -156,13 +163,15 @@ export function OverviewCard({
   const v2ArbitrumOpenInterest = v2ArbitrumOverview.openInterest;
   const v2AvalancheOpenInterest = v2AvalancheOverview.openInterest;
   const v2BotanixOpenInterest = v2BotanixOverview.openInterest;
+  const v2BaseOpenInterest = v2BaseOverview.openInterest;
 
   const totalOpenInterest = sumBigInts(
     v1ArbitrumOpenInterest,
     v1AvalancheOpenInterest,
     v2ArbitrumOpenInterest,
     v2AvalancheOpenInterest,
-    v2BotanixOpenInterest
+    v2BotanixOpenInterest,
+    v2BaseOpenInterest
   );
   // #endregion Open Interest
 
@@ -173,30 +182,35 @@ export function OverviewCard({
   const v2ArbitrumLongPositionSizes = v2ArbitrumOverview.totalLongPositionSizes;
   const v2AvalancheLongPositionSizes = v2AvalancheOverview.totalLongPositionSizes;
   const v2BotanixLongPositionSizes = v2BotanixOverview.totalLongPositionSizes;
+  const v2BaseLongPositionSizes = v2BaseOverview.totalLongPositionSizes;
 
   const totalLongPositionSizes = sumBigInts(
     v1ArbitrumLongPositionSizes,
     v1AvalancheLongPositionSizes,
     v2ArbitrumLongPositionSizes,
     v2AvalancheLongPositionSizes,
-    v2BotanixLongPositionSizes
+    v2BotanixLongPositionSizes,
+    v2BaseLongPositionSizes
   );
   // #endregion Long Position Sizes
 
   // #region Short Position Sizes
   const v1ArbitrumShortPositionSizes = positionStatsInfo?.[ARBITRUM]?.totalShortPositionSizes;
   const v1AvalancheShortPositionSizes = positionStatsInfo?.[AVALANCHE]?.totalShortPositionSizes;
+  const v1BaseShortPositionSizes = positionStatsInfo?.[BASE]?.totalShortPositionSizes;
 
   const v2ArbitrumShortPositionSizes = v2ArbitrumOverview.totalShortPositionSizes;
   const v2AvalancheShortPositionSizes = v2AvalancheOverview.totalShortPositionSizes;
   const v2BotanixShortPositionSizes = v2BotanixOverview.totalShortPositionSizes;
+  const v2BaseShortPositionSizes = v2BaseOverview.totalShortPositionSizes;
 
   const totalShortPositionSizes = sumBigInts(
     v1ArbitrumShortPositionSizes,
     v1AvalancheShortPositionSizes,
     v2ArbitrumShortPositionSizes,
     v2AvalancheShortPositionSizes,
-    v2BotanixShortPositionSizes
+    v2BotanixShortPositionSizes,
+    v2BaseShortPositionSizes
   );
   // #endregion Short Position Sizes
 
@@ -207,13 +221,15 @@ export function OverviewCard({
   const v2ArbitrumEpochFees = v2ArbitrumOverview?.epochFees;
   const v2AvalancheEpochFees = v2AvalancheOverview?.epochFees;
   const v2BotanixEpochFees = v2BotanixOverview?.epochFees;
+  const v2BaseEpochFees = v2BaseOverview?.epochFees;
 
   const totalEpochFeesUsd = sumBigInts(
     v1ArbitrumEpochFees,
     v1AvalancheEpochFees,
     v2ArbitrumEpochFees,
     v2AvalancheEpochFees,
-    v2BotanixEpochFees
+    v2BotanixEpochFees,
+    v2BaseEpochFees
   );
 
   const v1ArbitrumWeeklyFees = v1ArbitrumFees?.weeklyFees;
@@ -222,13 +238,15 @@ export function OverviewCard({
   const v2ArbitrumWeeklyFees = v2ArbitrumOverview?.weeklyFees;
   const v2AvalancheWeeklyFees = v2AvalancheOverview?.weeklyFees;
   const v2BotanixWeeklyFees = v2BotanixOverview?.weeklyFees;
+  const v2BaseWeeklyFees = v2BaseOverview?.weeklyFees;
 
   const totalWeeklyFeesUsd = sumBigInts(
     v1ArbitrumWeeklyFees,
     v1AvalancheWeeklyFees,
     v2ArbitrumWeeklyFees,
     v2AvalancheWeeklyFees,
-    v2BotanixWeeklyFees
+    v2BotanixWeeklyFees,
+    v2BaseWeeklyFees
   );
 
   // #endregion Fees
@@ -240,6 +258,7 @@ export function OverviewCard({
       "V1 Avalanche": v1AvalancheDailyVolume,
       "V2 Avalanche": v2AvalancheOverview?.dailyVolume,
       "V2 Botanix": v2BotanixOverview?.dailyVolume,
+      "V2 Base": v2BaseOverview?.dailyVolume,
     }),
     [
       v1ArbitrumDailyVolume,
@@ -247,6 +266,7 @@ export function OverviewCard({
       v2ArbitrumOverview?.dailyVolume,
       v2AvalancheOverview?.dailyVolume,
       v2BotanixOverview?.dailyVolume,
+      v2BaseOverview?.dailyVolume,
     ]
   );
 
@@ -257,6 +277,7 @@ export function OverviewCard({
       "V1 Avalanche": v1AvalancheOpenInterest,
       "V2 Avalanche": v2AvalancheOpenInterest,
       "V2 Botanix": v2BotanixOpenInterest,
+      "V2 Base": v2BaseOpenInterest,
     }),
     [
       v1ArbitrumOpenInterest,
@@ -264,6 +285,7 @@ export function OverviewCard({
       v2ArbitrumOpenInterest,
       v2AvalancheOpenInterest,
       v2BotanixOpenInterest,
+      v2BaseOpenInterest,
     ]
   );
 
@@ -274,6 +296,7 @@ export function OverviewCard({
       "V1 Avalanche": v1AvalancheLongPositionSizes,
       "V2 Avalanche": v2AvalancheLongPositionSizes,
       "V2 Botanix": v2BotanixLongPositionSizes,
+      "V2 Base": v2BaseLongPositionSizes,
     }),
     [
       v1ArbitrumLongPositionSizes,
@@ -281,6 +304,7 @@ export function OverviewCard({
       v2ArbitrumLongPositionSizes,
       v2AvalancheLongPositionSizes,
       v2BotanixLongPositionSizes,
+      v2BaseLongPositionSizes,
     ]
   );
 
@@ -291,6 +315,7 @@ export function OverviewCard({
       "V1 Avalanche": v1AvalancheShortPositionSizes,
       "V2 Avalanche": v2AvalancheShortPositionSizes,
       "V2 Botanix": v2BotanixShortPositionSizes,
+      "V2 Base": v2BaseShortPositionSizes,
     }),
     [
       v1ArbitrumShortPositionSizes,
@@ -298,6 +323,7 @@ export function OverviewCard({
       v2ArbitrumShortPositionSizes,
       v2AvalancheShortPositionSizes,
       v2BotanixShortPositionSizes,
+      v2BaseShortPositionSizes,
     ]
   );
 
@@ -308,8 +334,9 @@ export function OverviewCard({
       "V1 Avalanche": v1AvalancheEpochFees,
       "V2 Avalanche": v2AvalancheEpochFees,
       "V2 Botanix": v2BotanixEpochFees,
+      "V2 Base": v2BaseEpochFees,
     }),
-    [v1ArbitrumEpochFees, v1AvalancheEpochFees, v2ArbitrumEpochFees, v2AvalancheEpochFees, v2BotanixEpochFees]
+    [v1ArbitrumEpochFees, v1AvalancheEpochFees, v2ArbitrumEpochFees, v2AvalancheEpochFees, v2BotanixEpochFees, v2BaseEpochFees]
   );
 
   const [formattedDuration, setFormattedDuration] = useState(() => getFormattedFeesDuration());
@@ -355,6 +382,7 @@ export function OverviewCard({
     v2ArbitrumWeeklyFees,
     v2AvalancheWeeklyFees,
     v2BotanixWeeklyFees,
+    v2BaseWeeklyFees,
     totalWeeklyFeesUsd,
   ]);
 
@@ -397,6 +425,11 @@ export function OverviewCard({
                     label="Botanix"
                     showDollar={false}
                     value={formatAmountHuman(displayTvlBotanix, USD_DECIMALS, true, 2)}
+                  />
+                  <StatsTooltipRow
+                    label="Base"
+                    showDollar={false}
+                    value={formatAmountHuman(displayTvlBase, USD_DECIMALS, true, 2)}
                   />
                   <div className="!my-8 h-1 bg-gray-800" />
                   <StatsTooltipRow
@@ -475,6 +508,11 @@ export function OverviewCard({
                     label="Botanix"
                     showDollar={false}
                     value={formatAmountHuman(gmTvlBotanix, USD_DECIMALS, true, 2)}
+                  />
+                  <StatsTooltipRow
+                    label="Base"
+                    showDollar={false}
+                    value={formatAmountHuman(gmTvlBase, USD_DECIMALS, true, 2)}
                   />
                   <div className="!my-8 h-1 bg-gray-800" />
                   <StatsTooltipRow

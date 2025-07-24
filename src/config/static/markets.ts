@@ -6,7 +6,7 @@
 */
 import { MARKETS as SDK_MARKETS } from "sdk/configs/markets";
 
-import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, UiContractsChain } from "./chains";
+import { ARBITRUM, AVALANCHE, AVALANCHE_FUJI, BOTANIX, UiContractsChain, BASE } from "./chains";
 
 type MarketUiConfig = {
   enabled: boolean;
@@ -534,6 +534,15 @@ const MARKETS_UI_CONFIGS: Record<UiContractsChain, Record<string, MarketUiConfig
     },
     // BTC/USD [stBTC-USDC.E]
     "0x2f95a2529328E427d3204555F164B1102086690E": {
+      enabled: true,
+    },
+  },
+  [BASE]: {
+    // AVAX/USD [WAVAX-USDC]
+    "0x1D13658F5a4Cd45D0077a263dCC25300c85e3F50": {
+      enabled: true,
+    },
+    "0x335b2A8794C91cDb8CA50780CBE58e75d9a9f829": {
       enabled: true,
     },
   },

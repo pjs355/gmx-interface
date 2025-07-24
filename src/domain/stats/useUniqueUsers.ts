@@ -1,11 +1,11 @@
 import useSWR from "swr";
 
-import { ARBITRUM, AVALANCHE } from "config/chains";
+import { ARBITRUM, AVALANCHE, BASE } from "config/chains";
 import { getSubgraphUrl } from "config/subgraph";
 import { CONFIG_UPDATE_INTERVAL } from "lib/timeConstants";
 import graphqlFetcher from "sdk/utils/graphqlFetcher";
 
-const ACTIVE_CHAIN_IDS = [ARBITRUM, AVALANCHE];
+const ACTIVE_CHAIN_IDS = [ARBITRUM, AVALANCHE, BASE];
 
 type UserStatsData = {
   userStats: {

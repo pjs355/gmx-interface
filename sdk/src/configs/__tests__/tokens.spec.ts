@@ -1,7 +1,7 @@
 import { withRetry, zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { ARBITRUM, AVALANCHE, BOTANIX, getChainName, SUPPORTED_CHAIN_IDS } from "configs/chains";
+import { ARBITRUM, AVALANCHE, BOTANIX, BASE, getChainName, SUPPORTED_CHAIN_IDS } from "configs/chains";
 import { getOracleKeeperUrl } from "configs/oracleKeeper";
 import { TOKENS } from "configs/tokens";
 

@@ -1,7 +1,7 @@
 import { Trans, t } from "@lingui/macro";
 import { Link } from "react-router-dom";
 
-import { ARBITRUM, AVALANCHE } from "config/chains";
+import { ARBITRUM, AVALANCHE, BASE } from "config/chains";
 import { USD_DECIMALS } from "config/factors";
 import { SyntheticsStateContextProvider } from "context/SyntheticsStateContext/SyntheticsStateContextProvider";
 import { useGmxPrice, useTotalGmxInLiquidity, useTotalGmxSupply } from "domain/legacy";
@@ -46,6 +46,7 @@ export default function DashboardV2() {
 
   const statsArbitrum = useDashboardChainStatsMulticall(ARBITRUM);
   const statsAvalanche = useDashboardChainStatsMulticall(AVALANCHE);
+  const statsBase = useDashboardChainStatsMulticall(BASE);
 
   const tokenWeightsArbitrum = statsArbitrum?.vault.totalTokenWeights;
   const tokenWeightsAvalanche = statsAvalanche?.vault.totalTokenWeights;
