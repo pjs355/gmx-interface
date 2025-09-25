@@ -1,0 +1,459 @@
+import { useMemo } from 'react';
+import Button from "components/Button/Button";
+import Tabs from "components/Tabs/Tabs";
+import type { TradeBoxProps, TradeBoxState, ApprovalState } from './types';
+import './PredictionMarketTradeBox.scss';
+import { MyPositionsRow } from './MyPositionsRow';
+// Helper function to calculate prices from orderbook
+const calculateOrderbookPrices = (orderbook: any) => {
+  if (!orderbook) return { bestAsk: null, bestBid: null };
+  
+  const bestAsk = orderbook.asks && orderbook.asks.length > 0 
+    ? Math.min(...orderbook.asks.map((a: any) => a.price))
+    : null;
+    
+  const bestBid = orderbook.bids && orderbook.bids.length > 0
+    ? Math.max(...orderbook.bids.map((b: any) => b.price))
+    : null;
+    
+  return { bestAsk, bestBid };
+};
+import { useMarketOrderHandler } from './MarketOrderHandler';
+import Tooltip from "components/Tooltip/Tooltip";
+
+interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
+  state: TradeBoxState;
+  onPositionChange: (position: 'yes' | 'no') => void;
+  onAmountChange: (amount: string) => void;
+  onPriceChange: (price: string) => void;
+  onOrderTypeChange: (orderType: 'market' | 'limit') => void;
+  onSideChange: (side: 'buy' | 'sell') => void;
+  onTrade: () => void;
+  buttonState: {
+    text: string;
+    disabled: boolean;
+    onClick: () => void;
+  };
+  approvalState: ApprovalState;
+}
+
+export default function PredictionMarketTradeBoxUI({
+  market,
+  orderbook,
+  state,
+  onPositionChange,
+  onAmountChange,
+  onPriceChange,
+  onOrderTypeChange,
+  onSideChange,
+  onTrade,
+  buttonState,
+  approvalState
+}: PredictionMarketTradeBoxUIProps) {
+  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd } = state;
+  const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
+  const { calculateContractsForMarketOrder, getEffectivePrice } = useMarketOrderHandler(orderbook as any);
+
+  // Format amount string for display with thousands separators while preserving a trailing dot and decimals
+  const formatAmountForDisplay = (value: string | undefined): string => {
+    if (!value) return '0';
+    // Handle leading dot like '.5'
+    let raw = value;
+    if (raw.startsWith('.')) raw = `0${raw}`;
+
+    const endsWithDot = raw.endsWith('.') && !raw.endsWith('..');
+    const [intPartRaw, fracPartRaw] = raw.split('.');
+
+    // Remove any non-digits from integer part just in case (input is numeric but be safe)
+    const intPartDigits = (intPartRaw ?? '0').replace(/\D/g, '');
+    const intNumber = Number(intPartDigits || '0');
+    const intFormatted = intNumber.toLocaleString('en-US');
+
+    if (endsWithDot) {
+      // Preserve trailing dot while formatting the integer part
+      return `${intFormatted}.`;
+    }
+
+    if (typeof fracPartRaw === 'string') {
+      // Preserve fractional part as typed (limited elsewhere to 2 decimals)
+      return `${intFormatted}.${fracPartRaw}`;
+    }
+
+    return intFormatted;
+  };
+
+  const formattedAmountDisplay = useMemo(() => formatAmountForDisplay(amount), [amount]);
+
+  const toCentsString = (value?: number | null): string => {
+    if (value === undefined || value === null || !isFinite(value)) return "--";
+    return Math.round(value * 100).toString();
+  };
+
+  // Match orderbook labeling: YES shows bestAsk, NO shows (1 - bestBid)
+  const yesPriceCents = toCentsString(bestAsk);
+  const noPriceCents = toCentsString(bestBid === null ? null : 1 - bestBid);
+
+  // Helpers for single vs markets coloring
+  const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
+    if (!hex) return `rgba(0,0,0,${alpha})`;
+    const cleaned = hex.replace('#', '');
+    const full = cleaned.length === 3 ? cleaned.split('').map((c) => c + c).join('') : cleaned;
+    const r = parseInt(full.substring(0, 2), 16) || 0;
+    const g = parseInt(full.substring(2, 4), 16) || 0;
+    const b = parseInt(full.substring(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const isVsSingle = useMemo(() => {
+    const title = (market?.displayName || (market as any)?.question || '').trim();
+    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
+    return parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1;
+  }, [market]);
+
+  const yesTeamColor: string = (market as any)?.yesColor || '#22c55e';
+  const noTeamColor: string = (market as any)?.noColor || '#ef4444';
+
+  // Derive team labels conditionally based on market title and umbrella having a single market
+  const { yesTeamLabel, noTeamLabel } = useMemo(() => {
+    const title = (market?.displayName || (market as any)?.question || '').trim();
+    if (!title) return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
+    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
+    if (parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1) {
+      return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
+    }
+    return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
+  }, [market?.displayName, (market as any)?.question, (market as any)?.umbrellaChildrenCount]);
+
+  const tabsOptions = [
+    {
+      label: "Market",
+      options: [
+        { value: 'market', label: 'Market' },
+        { value: 'limit', label: 'Limit' }
+      ]
+    }
+  ];
+
+  // Compute values for limit orders
+  const limitOrderAmount = (() => {
+    if (orderType !== 'limit' || !amount || !price) return null;
+    const shares = Number(amount);
+    const cents = Number(price);
+    if (!Number.isFinite(shares) || !Number.isFinite(cents) || shares <= 0 || cents <= 0) return null;
+    return shares * cents / 100; // Convert cents to dollars
+  })();
+
+  const limitOrderToWin = (() => {
+    if (orderType !== 'limit' || !amount || side !== 'buy') return null;
+    const shares = Number(amount);
+    return Number.isFinite(shares) && shares > 0 ? shares : null;
+  })();
+
+  // Compute numeric value for To Win / Receive; hide if null/NaN/0
+  const toWinNumeric = (() => {
+    if (!amount || !selectedPosition) return null;
+    
+    if (orderType === 'limit') {
+      if (side === 'sell') {
+        // For sell limit orders: shares × cents = total value received
+        return limitOrderAmount;
+      } else {
+        // For buy limit orders: to win = shares amount
+        return limitOrderToWin;
+      }
+    }
+    
+    // Market order calculations (existing logic)
+    if (calculatedContracts === null) return null;
+    if (side === 'sell') {
+      const v = remainingUsd;
+      const num = v !== undefined && v !== null ? Number(v) : NaN;
+      return Number.isFinite(num) && num > 0 ? num : null;
+    }
+    // buy side calculation
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return null;
+    const rem = remainingUsd ?? 0;
+    const avgPrice = (amt - rem) / calculatedContracts;
+    
+    // For both YES and NO positions, if we win we get $1 per contract
+    // So the total payout is just the number of contracts we bought
+    const totalPayout = calculatedContracts * 1; // We get $1 per contract if we win
+    return Number.isFinite(totalPayout) && totalPayout > 0 ? totalPayout : null;
+  })();
+
+  // Compute Odds % for market BUY orders using weighted average fill price
+  const oddsData = useMemo(() => {
+    if (orderType !== 'market' || side !== 'buy') return null;
+    if (!amount || !selectedPosition) return null;
+    const usdAmount = Number(amount);
+    if (!Number.isFinite(usdAmount) || usdAmount <= 0) return null;
+    const { contracts, remainingUsd } = calculateContractsForMarketOrder(usdAmount, selectedPosition, 'buy');
+    if (!contracts || contracts <= 0) return null;
+    const avgPrice = getEffectivePrice(usdAmount, contracts, remainingUsd);
+    if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
+    // Determine reference current market price for comparison
+    const referencePrice = selectedPosition === 'yes'
+      ? (bestAsk ?? null)
+      : (bestBid === null || bestBid === undefined ? null : (1 - bestBid));
+    const pct = Math.round(avgPrice * 100);
+    if (!Number.isFinite(pct) || pct < 0) return null;
+    const isUpdated = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
+      ? avgPrice > referencePrice * 1.1
+      : false;
+    const fromPct = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
+      ? Math.round(referencePrice * 100)
+      : null;
+    return { pct, avgPrice, isUpdated, fromPct };
+  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, getEffectivePrice, bestAsk, bestBid]);
+
+  // Compute Avg Price (¢) for market SELL orders using weighted average sale price
+  const sellAvgCents = useMemo(() => {
+    if (orderType !== 'market' || side !== 'sell') return null;
+    if (!amount || !selectedPosition) return null;
+    const shares = Number(amount);
+    if (!Number.isFinite(shares) || shares <= 0) return null;
+    const { contracts, remainingUsd } = calculateContractsForMarketOrder(shares, selectedPosition, 'sell');
+    if (!contracts || contracts <= 0) return null;
+    const avgPrice = remainingUsd / contracts; // remainingUsd holds total USD received for sell path
+    if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
+    const cents = Math.round(avgPrice * 100);
+    return cents;
+  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder]);
+
+  return (
+    <div className="prediction-market-tradebox">
+      {/* Market Name Header */}
+      <div className="market-name-header">
+        <h3>{market.displayName || market.question}</h3>
+      </div>
+      
+      <div className="tradebox-header">
+        {/* Buy/Sell Toggle moved to header */}
+        <div className="side-selector">
+          <Button
+            variant={side === 'buy' ? 'primary' : 'secondary'}
+            onClick={() => onSideChange('buy')}
+            className={`side-btn ${side === 'buy' ? 'selected primary' : ''}`}
+          >
+            Buy
+          </Button>
+          
+          <Button
+            variant={side === 'sell' ? 'primary' : 'secondary'}
+            onClick={() => onSideChange('sell')}
+            className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
+          >
+            Sell
+        </Button>
+        </div>
+        <div className="trade-mode-selector">
+          <Tabs
+            options={tabsOptions}
+            regularOptionClassname="py-10"
+            type="inline"
+            selectedValue={orderType}
+            onChange={(value) => onOrderTypeChange(value as 'market' | 'limit')}
+            qa="trade-mode"
+          />
+        </div>
+      </div>
+      
+      <div className="tradebox-separator" />
+
+      {/* Position Selection */}
+      <div className="position-selector" style={{ marginBottom: 24 }}>
+        <Button
+          variant="secondary"
+          onClick={() => onPositionChange('yes')}
+          className={`position-btn ${selectedPosition === 'yes' ? 'selected primary' : ''}`}
+          style={isVsSingle ? {
+            background: selectedPosition === 'yes' ? yesTeamColor : hexToRgba(yesTeamColor, 0.35),
+            color: '#ffffff',
+            border: `2px solid ${selectedPosition === 'yes' ? yesTeamColor : hexToRgba(yesTeamColor, 0.35)}`,
+          } : undefined}
+          onMouseEnter={(e) => {
+            if (isVsSingle && selectedPosition !== 'yes') {
+              e.currentTarget.style.border = `2px solid ${yesTeamColor}`;
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (isVsSingle && selectedPosition !== 'yes') {
+              e.currentTarget.style.border = `2px solid ${hexToRgba(yesTeamColor, 0.35)}`;
+            }
+          }}
+        >
+          {`${yesTeamLabel} ${yesPriceCents}¢`}
+        </Button>
+        
+        <Button
+          variant="secondary"
+          onClick={() => onPositionChange('no')}
+          className={`position-btn ${selectedPosition === 'no' ? 'selected secondary' : ''}`}
+          style={isVsSingle ? {
+            background: selectedPosition === 'no' ? noTeamColor : hexToRgba(noTeamColor, 0.35),
+            color: '#ffffff',
+            border: `2px solid ${selectedPosition === 'no' ? noTeamColor : hexToRgba(noTeamColor, 0.35)}`,
+          } : undefined}
+          onMouseEnter={(e) => {
+            if (isVsSingle && selectedPosition !== 'no') {
+              e.currentTarget.style.border = `2px solid ${noTeamColor}`;
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (isVsSingle && selectedPosition !== 'no') {
+              e.currentTarget.style.border = `2px solid ${hexToRgba(noTeamColor, 0.35)}`;
+            }
+          }}
+        >
+          {`${noTeamLabel} ${noPriceCents}¢`}
+        </Button>
+      </div>
+
+      {/* My Positions - shown if user holds this market's YES/NO */}
+      <div style={{ marginTop: 24 }}>
+        <MyPositionsRow market={market as any} />
+      </div>
+
+      {/* Amount Input */}
+      <div className="input-section">
+        <div className="input-label">
+          {orderType === 'market' 
+            ? (side === 'sell' ? 'Shares' : 'Amount')
+            : 'Shares'
+          }
+        </div>
+        <div className="input-container prediction-input-container">
+          {/* Simple input bars; no overlay */}
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value.includes('.') && value.split('.')[1]?.length > 2) {
+                return;
+              }
+              onAmountChange(value);
+            }}
+            placeholder={orderType === 'market' ? (side === 'sell' ? '0' : '0.00') : '0'}
+            min="0"
+            step={orderType === 'limit' ? '0.01' : '0.01'}
+            className={`trade-input prediction-trade-input`}
+          />
+        </div>
+        
+
+      </div>
+      
+      {/* Price Input (for Limit Orders) */}
+      {orderType === 'limit' && (
+        <div className="input-section">
+          <div className="input-label">Limit Price</div>
+          <div className="input-container prediction-input-container">
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => {
+                const value = e.target.value;
+                const num = parseInt(value);
+                if (value && (isNaN(num) || num < 1 || num > 99)) {
+                  return;
+                }
+                onPriceChange(value);
+              }}
+              placeholder="0"
+              min="1"
+              max="99"
+              step="1"
+              className="trade-input prediction-trade-input"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Bet Size / To Win - render only when a positive numeric value exists */}
+      {(toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null) && (
+        <div className="bet-size-section">
+          {/* Odds line for market BUY orders */}
+          {oddsData !== null && (
+            <div className="bet-size-info">
+              <span className={`bet-size-label ${oddsData.isUpdated ? 'updated-odds-label' : ''}`}>
+                {oddsData.isUpdated ? 'Updated Odds' : 'Odds'}
+                {oddsData.isUpdated && (
+                  <Tooltip
+                    handle={<span className="info-icon">i</span>}
+                    position="top"
+                    content={(function(){
+                      const from = oddsData.fromPct ?? oddsData.pct; // fallback
+                      const to = oddsData.pct;
+                      // Payout for market buy is number of contracts (each pays $1)
+                      const payout = (function(){
+                        const amt = Number(amount);
+                        if (!Number.isFinite(amt) || amt <= 0) return null;
+                        const res = calculateContractsForMarketOrder(amt, selectedPosition!, 'buy');
+                        const contracts = res.contracts || 0;
+                        return contracts > 0 ? contracts : null;
+                      })();
+                      const payoutStr = payout !== null ? `$ ${payout.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '$ --';
+                      return (
+                        <div className="updated-odds-tooltip">
+                          Your trade will change the odds from {from}% to {to}% , with a payout of {payoutStr}
+                        </div>
+                      );
+                    })()}
+                  />
+                )}
+              </span>
+              <span className="bet-size-value odds-value">{oddsData.pct}%</span>
+            </div>
+          )}
+          {/* Avg Price line for market SELL orders */}
+          {sellAvgCents !== null && (
+            <div className="bet-size-info">
+              <span className="bet-size-label">Avg Price</span>
+              <span className="bet-size-value avg-price-value">{sellAvgCents}¢</span>
+            </div>
+          )}
+          {/* Show Amount line for buy limit orders */}
+          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && (
+            <div className="bet-size-info">
+              <span className="bet-size-label">Amount</span>
+              <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          
+          {/* Show To Win / Receive line */}
+          {toWinNumeric !== null && (
+            <div className="bet-size-info">
+              <span className="bet-size-label">{side === 'sell' ? 'Receive' : 'To Win'}</span>
+              <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trade Button */}
+      <Button
+        variant="primary"
+        onClick={buttonState.onClick}
+        disabled={buttonState.disabled}
+        className="trade-button"
+      >
+        {buttonState.text}
+      </Button>
+
+      {/* Small Popup Notification */}
+      {orderResult && (
+        <div className={`trade-notification ${orderResult.success ? 'success' : 'error'}`}>
+          <div className="notification-content">
+            {orderResult.success ? (
+              <div className="notification-text">Trade Executed Successfully!</div>
+            ) : (
+              <div className="notification-text">Trade Failed</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

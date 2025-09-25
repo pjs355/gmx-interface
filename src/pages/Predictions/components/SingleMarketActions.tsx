@@ -1,0 +1,124 @@
+import React from 'react';
+import Button from "components/Button/Button";
+import { calculateOrderbookPrices, toCentsString } from '../utils/predictionUtils';
+import type { PredictionMarket } from "lib/predictionMarketDataService";
+
+interface SingleMarketActionsProps {
+  orderbook: any;
+  onNavigate: (position: 'yes' | 'no') => void;
+  question?: PredictionMarket;
+}
+
+export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({ orderbook, onNavigate, question }) => {
+  const { bestAsk, bestBid } = calculateOrderbookPrices(orderbook);
+  const yesPriceCents = toCentsString(bestAsk);
+  const noPriceCents = toCentsString(bestBid === null ? null : 1 - bestBid);
+  
+  const hexToRgba = (hex?: string, alpha: number = 0.3): string => {
+    if (!hex) return `rgba(0,0,0,${alpha})`;
+    const cleaned = hex.replace('#', '');
+    const full = cleaned.length === 3
+      ? cleaned.split('').map((c) => c + c).join('')
+      : cleaned;
+    const r = parseInt(full.substring(0, 2), 16) || 0;
+    const g = parseInt(full.substring(2, 4), 16) || 0;
+    const b = parseInt(full.substring(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  // Derive team labels for single-market umbrellas with "vs" in the title
+  const deriveLabels = (): { yesLabel: string; noLabel: string } => {
+    const raw = (question?.displayName || (question as any)?.question || "").trim();
+    if (!raw) return { yesLabel: "Yes", noLabel: "No" };
+    const parts = raw.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
+    if (parts.length === 2) {
+      return { yesLabel: parts[0], noLabel: parts[1] };
+    }
+    return { yesLabel: "Yes", noLabel: "No" };
+  };
+
+  const { yesLabel, noLabel } = deriveLabels();
+
+  const isVsSingle = (() => {
+    const raw = (question?.displayName || (question as any)?.question || "").trim();
+    const parts = raw.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
+    return Boolean(question && parts.length === 2);
+  })();
+  const yesColor = (question as any)?.yesColor || "#22c55e";
+  const noColor = (question as any)?.noColor || "#ef4444";
+
+  // Calculate payouts for $100 bet
+  const betAmount = 100;
+  const yesPayout = bestAsk !== null ? Math.round(betAmount / bestAsk) : 0;
+  const noPayout = bestBid !== null ? Math.round(betAmount / (1 - bestBid)) : 0;
+  
+  return (
+    <div className="single-market-actions">
+      <div className="single-market-buttons">
+        <Button
+          variant="secondary"
+          className="action-button yes-button"
+          onClick={() => onNavigate('yes')}
+          style={{
+            background: isVsSingle ? yesColor : "rgba(34, 197, 94, 0.1)",
+            color: isVsSingle ? "#ffffff" : "#22c55e",
+            border: `2px solid ${isVsSingle ? yesColor : "#22c55e"}`,
+            fontSize: "16px",
+            padding: "12px 24px",
+            minHeight: "48px",
+            width: "100%"
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = isVsSingle ? yesColor : "rgba(34, 197, 94, 0.2)";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = isVsSingle ? `0 4px 8px ${hexToRgba(yesColor, 0.45)}` : "0 4px 8px rgba(34, 197, 94, 0.3)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = isVsSingle ? yesColor : "rgba(34, 197, 94, 0.1)";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "none";
+          }}
+        >
+          <strong>{yesLabel} {yesPriceCents}¢</strong>
+        </Button>
+        <Button
+          variant="secondary"
+          className="action-button no-button"
+          onClick={() => onNavigate('no')}
+          style={{
+            background: isVsSingle ? noColor : "rgba(239, 68, 68, 0.1)",
+            color: isVsSingle ? "#ffffff" : "#ef4444",
+            border: `2px solid ${isVsSingle ? noColor : "#ef4444"}`,
+            fontSize: "16px",
+            padding: "12px 24px",
+            minHeight: "48px",
+            width: "100%"
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = isVsSingle ? noColor : "rgba(239, 68, 68, 0.2)";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = isVsSingle ? `0 4px 8px ${hexToRgba(noColor, 0.45)}` : "0 4px 8px rgba(239, 68, 68, 0.3)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = isVsSingle ? noColor : "rgba(239, 68, 68, 0.1)";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "none";
+          }}
+        >
+          <strong>{noLabel} {noPriceCents}¢</strong>
+        </Button>
+      </div>
+      
+      <div className="payout-info">
+        <div className="payout-row">
+          <span className="payout-label">$100 → </span>
+          <span className="payout-amount">${yesPayout}</span>
+        </div>
+        <div className="payout-row">
+          <span className="payout-label">$100 → </span>
+          <span className="payout-amount">${noPayout}</span>
+        </div>
+      </div>
+    </div>
+  );
+};

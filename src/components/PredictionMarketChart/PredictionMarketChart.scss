@@ -1,0 +1,341 @@
+.prediction-market-chart {
+  width: 100%;
+  height: 100%;
+  background: #000000;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+
+    .chart-titles {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap; // Keep both markets on the same line
+      gap: 12px; // Bring markets closer together
+      align-items: center;
+      min-width: 0; // Allow container to shrink
+      flex: 1; // Take available space
+      overflow: hidden; // Prevent overflow from affecting layout
+    }
+
+    .market-info {
+      display: flex;
+      flex-direction: row; // Title and price on the same line
+      align-items: center;
+      gap: 8px;
+      min-width: 0; // Allow flex item to shrink
+      flex: 0 1 auto; // Size to content; don't stretch apart
+
+      h3 {
+        color: #ffffff;
+        font-size: 16px; // Match percentage size for consistency
+        font-weight: 600;
+        margin: 0;
+        line-height: 1.2;
+        white-space: nowrap; // Keep name on one line
+        overflow: hidden; // Truncate long names
+        text-overflow: ellipsis; // Show ellipsis for long names
+        min-width: 0; // Allow flex-basis to shrink
+      }
+
+      .current-price {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto; // Keep price from shrinking and stay visible
+
+        .price-value {
+          font-size: 16px; // Match title size
+          font-weight: 700;
+        }
+
+        .live-indicator {
+          font-size: 12px;
+          animation: pulse 2s infinite;
+        }
+      }
+
+      &.primary-market {
+        .price-value.primary-price {
+          color: #8b5cf6; // Purple
+        }
+
+        .live-indicator.primary-indicator {
+          color: #8b5cf6; // Purple
+        }
+      }
+
+      &.second-market {
+        .price-value.second-price {
+          color: #3b82f6; // Blue
+        }
+
+        .live-indicator.second-indicator {
+          color: #3b82f6; // Blue
+        }
+      }
+    }
+
+    // Chart controls removed - using direct time range selector
+
+    .time-range-selector {
+      display: flex;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      padding: 4px;
+
+      .time-range-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.6);
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+
+        &:hover {
+          color: #ffffff;
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        &.active {
+          color: #ffffff;
+          background: #8b5cf6; // Purple
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          
+          &:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.6);
+          }
+        }
+      }
+    }
+
+    // Scroll controls removed
+  }
+
+  .chart-container {
+    flex: 1;
+    min-height: 300px;
+    position: relative;
+    overflow: visible;
+
+    .no-data,
+    .loading-data {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      
+      p {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 14px;
+        margin: 0;
+      }
+    }
+
+    .loading-data {
+      p {
+        color: rgba(255, 255, 255, 0.8);
+      }
+    }
+
+    // Time range selector positioned at bottom right
+    .time-range-selector.bottom-right {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      z-index: 1000;
+      display: flex;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 6px;
+      padding: 4px;
+
+      .time-range-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.6);
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+
+        &:hover {
+          color: #ffffff;
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        &.active {
+          color: #ffffff;
+          background: #8b5cf6; // Purple
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          
+          &:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.6);
+          }
+        }
+      }
+    }
+  }
+
+  // Custom tooltip styling
+  .prediction-chart-tooltip {
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+    .tooltip-time {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 12px;
+      margin: 0 0 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 4px;
+    }
+
+    .tooltip-price {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 4px 0;
+
+      .tooltip-label {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 12px;
+        flex: 1;
+      }
+
+      .tooltip-value {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .tooltip-live-badge {
+        background: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+        font-size: 8px;
+        font-weight: 600;
+        padding: 2px 4px;
+        border-radius: 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-left: 6px;
+      }
+
+      &.primary-tooltip .tooltip-value.primary-value {
+        color: #8b5cf6; // Purple
+      }
+
+      &.second-tooltip .tooltip-value.second-value {
+        color: #3b82f6; // Blue
+      }
+    }
+  }
+
+  // Mobile responsiveness
+  @media (max-width: 768px) {
+    padding: 12px 8px; // Reduce side padding on mobile
+
+      .chart-header {
+        flex-direction: row; // Keep header on a single row
+        align-items: center;
+        gap: 12px;
+
+        .chart-titles {
+          flex-direction: row; // Keep markets side-by-side
+          flex-wrap: nowrap; // Prevent stacking
+          gap: 8px; // Closer on mobile
+          width: 100%;
+          min-width: 0;
+        }
+
+        .market-info {
+          width: auto;
+          min-width: 0; // Allow shrinking on mobile
+
+          h3 {
+            font-size: 16px; // Keep consistent with percentage on mobile
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .current-price {
+            .price-value {
+              font-size: 16px; // Same as title on mobile
+            }
+          }
+        }
+
+      .time-range-selector.bottom-right {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        width: auto;
+        justify-content: flex-end;
+
+        .time-range-btn {
+          flex: none;
+          text-align: center;
+          min-width: 40px;
+        }
+      }
+    }
+
+    .chart-container {
+      min-height: 250px;
+    }
+  }
+
+  // Animation for live indicator
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
+// Recharts customizations for dark theme
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.recharts-tooltip-wrapper {
+  z-index: 1000;
+}
+
+.recharts-active-dot {
+  filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.6));
+}
+
+.recharts-reference-line-line {
+  opacity: 0.5;
+}

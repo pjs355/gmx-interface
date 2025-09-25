@@ -1,0 +1,55 @@
+/* Prediction trade inputs - replicate prinx-interface styles */
+.prediction-input-container { padding: 0; margin: 0 0 1.05rem 0; background: transparent; border: none; }
+
+/* Simple, solid input bars exactly like before */
+.prediction-trade-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #4B5563;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  background: #2a2a2a;
+  color: #ffffff;
+  outline: none;
+}
+
+.prediction-trade-input:focus {
+  border-color: #3b82f6;
+  background: #1a1a1a;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.prediction-trade-input::placeholder {
+  color: #d1d1d1;
+  font-weight: 400;
+}
+
+/* Disable overlay method so typing is visible */
+.amount-display, .shares-display { display: none !important; }
+.amount-input, .shares-input { position: static !important; width: 100% !important; height: auto !important; color: #ffffff !important; }
+.input-form {
+  max-width: 38.75rem;
+}
+
+.input-row {
+  margin-bottom: 1.5rem;
+}
+
+.input-label {
+  display: block;
+  margin-bottom: 0.8rem;
+  font-size: var(--font-size-body-medium);
+}
+
+.text-input {
+  color: var(--color-slate-100);
+  border: 1px solid var(--color-gray-700);
+  font-size: var(--font-size-body-medium);
+  width: 100%;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: var(--color-slate-500);
+  }
+}

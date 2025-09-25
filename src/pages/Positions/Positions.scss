@@ -1,0 +1,70 @@
+.positions-tabs {
+  .side-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 400;
+    transition: all 0.2s ease;
+    border: 1px solid #D1D5DB; /* grey border like tradebox */
+    color: #9CA3AF; /* grey text like tradebox */
+    background: transparent; /* black/transparent background */
+
+    &:hover {
+      border-color: #8B5CF6; /* purple hover border */
+      color: #8B5CF6; /* purple hover text */
+      background: transparent !important; /* keep black/transparent on hover */
+    }
+
+    &.selected.primary {
+      background: transparent !important; /* no fill when selected */
+      border-color: #8B5CF6; /* purple border when selected */
+      color: #7C3AED; /* dark purple text when selected */
+      font-weight: 700;
+    }
+
+    &.selected.secondary {
+      background: transparent !important;
+      border-color: #8B5CF6;
+      color: #7C3AED;
+      font-weight: 700;
+    }
+  }
+}
+
+/* Soft loading blur used in Positions table numeric cells */
+.soft-blur {
+  filter: blur(2px);
+  opacity: 0.7;
+  transition: filter 160ms ease, opacity 160ms ease;
+}
+
+/* Match prior table layout spacing and full-width grid */
+.positions-header {
+  width: 100%;
+}
+
+.umbrella-block {
+  width: 100%;
+  background: #000;
+}
+
+.position-row,
+.order-row {
+  width: 100%;
+}
+
+/* Subtle skeleton shimmer for loading placeholders */
+.skeleton-box {
+  display: inline-block;
+  background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.06) 63%);
+  background-size: 400% 100%;
+  animation: skeletonShimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+

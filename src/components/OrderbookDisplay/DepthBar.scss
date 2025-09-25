@@ -1,0 +1,17 @@
+.depth-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  opacity: 0.4;
+  transition: width 0.2s ease;
+  z-index: 0;
+  
+  &.bid {
+    background: rgba(5, 150, 105, 0.6);
+  }
+  
+  &.ask {
+    background: rgba(220, 38, 38, 0.6);
+  }
+}

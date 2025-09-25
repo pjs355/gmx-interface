@@ -1,0 +1,28 @@
+.OneClickButton {
+  position: relative;
+  border-radius: var(--border-radius-sm);
+  height: 2.4rem;
+  width: 2.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+
+  &:hover {
+    background: var(--dark-blue-hover);
+    cursor: pointer;
+  }
+  &:active {
+    background: var(--dark-blue-active);
+  }
+  &:active {
+    background: var(--dark-blue-active);
+  }
+}
+
+/* Ensure the globe icon matches previous size */
+.OneClickButton-icon {
+  width: 2.0rem;
+  height: 2.0rem;
+  display: block;
+}

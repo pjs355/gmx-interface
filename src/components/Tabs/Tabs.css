@@ -1,0 +1,207 @@
+.Tab.Tab__block {
+  display: grid;
+  grid-auto-flow: column;
+  font-size: var(--font-size-body-medium);
+  border-radius: 0;
+  overflow: visible;
+  color: var(--color-slate-100);
+  background: transparent;
+  box-shadow: none;
+}
+
+.Tab-option-icon {
+  margin-right: 0.465rem;
+  opacity: 0.7;
+}
+
+.Tab.Tab__block .Tab-option {
+  text-align: center;
+  padding: 0.8rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+/* Specific styling for trade type buttons */
+.Tab.Tab__block[data-qa="trade-direction"] {
+  gap: 16px !important;
+  margin-bottom: 24px !important;
+}
+
+.Tab.Tab__block[data-qa="trade-direction"] .Tab-option {
+  border-radius: 10px !important;
+}
+
+/* Reduce spacing for Market/Limit/More tabs */
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option {
+  margin-right: 1px !important;
+}
+
+/* Light blue background for input sections */
+.bg-cold-blue-900 {
+  background-color: #1a1a1a !important;
+}
+
+/* Light faded purple for disabled trade button */
+[data-qa="confirm-trade-button"]:disabled {
+  background-color: rgba(146, 133, 243, 0.3) !important;
+  color: #000000 !important;
+}
+
+/* White text for active trade button */
+[data-qa="confirm-trade-button"]:not(:disabled) {
+  color: white !important;
+}
+
+/* Rounded edges for trade button to match long/short buttons */
+[data-qa="confirm-trade-button"] {
+  border-radius: 10px !important;
+}
+
+/* Light blue background for selected exchange list tabs */
+[data-qa="exchange-list-tabs"] .Tab-option.active {
+  background-color: #1a1a1a !important;
+  color: #000000 !important;
+}
+
+/* Active state styling for trade type buttons */
+.Tab.Tab__block[data-qa="trade-direction"] .Tab-option:nth-child(1).active {
+  background-color: rgba(15, 222, 141, 0.1) !important; /* Light faded green for Long */
+}
+
+.Tab.Tab__block[data-qa="trade-direction"] .Tab-option:nth-child(2).active {
+  background-color: rgba(255, 80, 106, 0.1) !important; /* Light faded red for Short */
+}
+
+.Tab.Tab__block.Tab__l .Tab-option {
+  padding: 10.5px;
+}
+
+.Tab.Tab__block .Tab-option:not(.disabled):not(.active):hover {
+  color: inherit;
+  background: transparent;
+}
+
+.Tab.Tab__block .Tab-option.active {
+  opacity: 1;
+  pointer-events: none;
+  background: transparent;
+  color: inherit;
+}
+
+.Tab.Tab__block .Tab-option.active .Tab-option-icon {
+  opacity: 1;
+}
+
+.Tab.Tab__inline {
+  overflow-x: scroll;
+  white-space: nowrap;
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+  scrollbar-width: none; /* Firefox */
+  transition: all 0.2s ease-in-out;
+}
+
+.Tab.Tab__inline::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
+}
+
+.Tab.Tab__inline .Tab-option {
+  display: inline-block;
+  margin-right: 1rem;
+  font-size: 1.4rem;
+  color: #e5e7eb; /* slate-200 */
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.2s ease-in-out;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  background: #111827; /* slate-900 */
+  border: 1px solid #374151; /* slate-700 */
+}
+
+.Tab.Tab__inline .Tab-option:not(.disabled):not(.active):hover {
+  color: #e5e5e5;
+  transform: translateY(-1px);
+}
+
+.Tab.Tab__inline .Tab-option.active {
+  color: #ffffff;
+  pointer-events: none;
+  background-color: #1f2937; /* slate-800 */
+  border-color: #6b7280; /* slate-500 */
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 700;
+  transform: translateY(0);
+}
+
+/* Minimal, text-only style for trade mode (Market / Limit) */
+.Tab.Tab__inline[data-qa="trade-mode"] {
+  overflow: visible;
+}
+
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option {
+  margin-right: 1.6rem !important;
+  padding: 2px 16px !important; /* more side padding, no background */
+  min-height: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-size: 1.2rem !important; /* bring down text size */
+  font-weight: 600 !important;
+  color: #e5e7eb !important; /* slate-200 */
+  transform: none !important;
+}
+
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option.active {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option:not(.active):hover {
+  color: #f3f4f6 !important; /* slate-100 */
+  transform: none !important;
+}
+
+/* Smooth transitions for tab content */
+.Tab-content {
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.Tab-content-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.Tab-content-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.Tab-content-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.Tab-content-exit-active {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* Prevent layout shifts */
+.Tab-container {
+  min-height: 200px;
+  transition: all 0.3s ease-in-out;
+}
+
+.Tab-option {
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.Tab-option.disabled {
+  cursor: not-allowed;
+}
