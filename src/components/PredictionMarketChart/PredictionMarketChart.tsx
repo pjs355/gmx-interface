@@ -37,11 +37,20 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
     questionId || (activeMarket?._id || activeMarket?.questionId || activeMarket?.marketId || '')
   ), [questionId, activeMarket]);
 
+  // Detect single-market VS condition and derive team labels
+  const isVsSingleMarket = useMemo(() => {
+    const title = (activeMarket?.displayName || activeMarket?.question || '').trim();
+    const hasVs = /\svs\.?\s/i.test(title);
+    const single = (activeMarket as any)?.umbrellaChildrenCount === 1;
+    return Boolean(single && hasVs);
+  }, [activeMarket]);
+
   const { data: chartData, timeWindowStart, timeWindowEnd, setTimeWindowEnd } = usePredictionChartData({
     questionId: effectiveQuestionId,
     secondMarket,
     questionOrderbooks,
     timeRange,
+    isVsSingleMarket,
   });
 
   // Reduce noisy debug logs; log only when effectiveQuestionId changes to a new non-empty value
@@ -57,14 +66,6 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
     });
     lastLoggedIdRef.current = effectiveQuestionId;
   }, [effectiveQuestionId, questionId, activeMarket]);
-
-  // Detect single-market VS condition and derive team labels
-  const isVsSingleMarket = useMemo(() => {
-    const title = (activeMarket?.displayName || activeMarket?.question || '').trim();
-    const hasVs = /\svs\.?\s/i.test(title);
-    const single = (activeMarket as any)?.umbrellaChildrenCount === 1;
-    return Boolean(single && hasVs);
-  }, [activeMarket]);
 
   const { teamOneLabel, teamTwoLabel } = useMemo(() => {
     const title = (activeMarket?.displayName || activeMarket?.question || '').trim();
@@ -191,9 +192,9 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
 
       {/* Chart */}
       <div className="chart-container" style={{ minWidth: 400, minHeight: 300 }}>
-        {chartData.length === 0 ? (
+        {!effectiveQuestionId ? (
           <div className="no-data">
-            <p>{effectiveQuestionId ? 'Loading chart data...' : 'Select a market to load chart'}</p>
+            <p>Select a market to load chart</p>
           </div>
         ) : (
           <SeriesChart
