@@ -1,0 +1,17 @@
+import { OrderType } from "types/orders";
+import { TwapDuration } from "types/twap";
+export declare function getIsValidTwapParams(duration: TwapDuration, numberOfParts: number): boolean;
+export declare function getTwapDurationInSeconds(duration: TwapDuration): number;
+export declare function getTwapValidFromTime(duration: TwapDuration, numberOfParts: number, partIndex: number): bigint;
+export declare function changeTwapNumberOfPartsValue(value: number): number;
+export declare function getTwapOrderKey({ twapId, orderType, pool, isLong, collateralTokenSymbol, swapPath, account, initialCollateralToken, }: {
+    twapId: string;
+    orderType: OrderType;
+    pool: string;
+    collateralTokenSymbol: string;
+    initialCollateralToken: string;
+    isLong: boolean;
+    swapPath: string[];
+    account: string;
+}): string;
+export declare function makeTwapValidFromTimeGetter(duration: TwapDuration, numberOfParts: number): (part: number) => bigint;

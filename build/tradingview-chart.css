@@ -1,0 +1,178 @@
+/* TradingView Light Theme - Proper CSS Custom Properties */
+:root {
+  /* Core TradingView theme variables for light mode */
+  --tv-color-platform-background: #ffffff;
+  --tv-color-pane-background: #ffffff;
+  --tv-color-pane-background-secondary: #ffffff;
+  --tv-color-toolbar-button-background: #ffffff;
+  --tv-color-toolbar-button-background-hover: #f8f9fa;
+  --tv-color-toolbar-button-text: #000000;
+  --tv-color-toolbar-button-text-hover: #000000;
+  --tv-color-toolbar-button-text-active: #000000;
+  --tv-color-toolbar-toggle-button-background-active: #f5f8fe;
+  --tv-color-toolbar-toggle-button-background-active-hover: #f5f8fe;
+  --tv-color-popup-background: #ffffff;
+  --tv-color-popup-element-text: #000000;
+  --themed-color-bg-primary: #ffffff;
+  --themed-color-properties-dialog-tab-bg: #0ecc83;
+  --themed-color-properties-dialog-defaults-text: #000000;
+  --themed-color-item-row-bg-hover: #f8f9fa;
+  --themed-color-background-hover: #f8f9fa;
+  --themed-color-common-tooltip-bg: #ffffff;
+  --themed-color-arrow-stroke: #f8f9fa;
+  --themed-color-main-background: #ffffff;
+  --themed-color-toolbar-toggle-button-background-active: #f5f8fe;
+  --themed-color-toolbar-toggle-button-background-active-hover: #f5f8fe;
+  --themed-color-brand: #f5f8fe;
+  --themed-color-item-active-bg: #f5f8fe;
+  --themed-color-button-bg: #ffffff;
+}
+
+/* Chart controls styling */
+.chart-controls-bar {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e9ecef !important;
+}
+
+.chart-controls-bar .chart-controls-bar__button {
+  color: #000000 !important;
+}
+
+.chart-controls-bar .chart-controls-bar__button:hover {
+  background-color: #f8f9fa !important;
+  color: #000000 !important;
+}
+
+.chart-controls-bar .chart-controls-bar__button--active {
+  background-color: #f5f8fe !important;
+  color: #000000 !important;
+}
+
+.chart-controls-bar .chart-controls-bar__button--active .chart-controls-bar__button-text {
+  color: #000000 !important;
+}
+
+/* Direct TradingView button overrides */
+.button-KTgbfaP5.isActive-KTgbfaP5 .bg-KTgbfaP5 {
+  background-color: #f5f8fe !important;
+  border-radius: 6px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+/* ONLY keep the specific selectors that work for active buttons */
+[class*="button"][class*="isActive"] {
+  background-color: #f5f8fe !important;
+  border-radius: 6px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+[class*="button"][class*="is-active"] {
+  background-color: #f5f8fe !important;
+  border-radius: 6px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+/* Show chart style selector to allow switching between chart types */
+[data-name="chart-style-button"],
+[data-name="chart-style-selector"],
+.chart-style-button {
+  display: block !important;
+}
+
+/* Hide less common chart style options */
+[data-value="Bar"],
+[data-value="Area"],
+[data-value="Renko"],
+[data-value="Kagi"],
+[data-value="PnF"],
+[data-value="LineBreak"],
+[data-value="Baseline"],
+[data-value="HiLo"],
+[data-value="Column"],
+[data-value="LineWithMarkers"],
+[data-value="Stepline"],
+[data-value="HLCArea"],
+[data-value="VolCandle"] {
+  display: none !important;
+}
+
+/* Show chart types that support green/red coloring */
+[data-value="Line"],
+[data-value="Candle"],
+[data-value="HollowCandle"],
+[data-value="HeikinAshi"] {
+  display: block !important;
+}
+
+/* Make hover popup text darker and more readable */
+[class*="tooltip"],
+[class*="popup"],
+[class*="Tooltip"],
+[class*="Popup"] {
+  color: #333333 !important;
+}
+
+/* Target specific TradingView popup elements */
+[class*="tooltip"] [class*="text"],
+[class*="popup"] [class*="text"],
+[class*="Tooltip"] [class*="text"],
+[class*="Popup"] [class*="text"] {
+  color: #333333 !important;
+}
+
+/* Make all text in popups darker */
+[class*="tooltip"] *,
+[class*="popup"] *,
+[class*="Tooltip"] *,
+[class*="Popup"] * {
+  color: #333333 !important;
+}
+
+/* Target hover state text specifically */
+[class*="hover"] [class*="text"],
+[class*="Hover"] [class*="text"] {
+  color: #333333 !important;
+}
+
+/* More aggressive targeting for button tooltips and hover text */
+[title],
+[data-title],
+[aria-label] {
+  color: #333333 !important;
+}
+
+/* Target any element that might contain hover text */
+[class*="button"] [class*="title"],
+[class*="Button"] [class*="title"],
+[class*="button"] [class*="label"],
+[class*="Button"] [class*="label"] {
+  color: #333333 !important;
+}
+
+/* Target TradingView's specific tooltip classes */
+[class*="tooltip-text"],
+[class*="TooltipText"],
+[class*="tooltip-content"],
+[class*="TooltipContent"] {
+  color: #333333 !important;
+}
+
+/* Force all text in any popup-like element to be dark */
+[class*="popup"] *,
+[class*="tooltip"] *,
+[class*="hover"] *,
+[class*="Popup"] *,
+[class*="Tooltip"] *,
+[class*="Hover"] * {
+  color: #333333 !important;
+}
+
+/* Target the specific interval button tooltips */
+[class*="interval"] [class*="tooltip"],
+[class*="resolution"] [class*="tooltip"],
+[class*="timeframe"] [class*="tooltip"] {
+  color: #333333 !important;
+}

@@ -1,0 +1,32 @@
+import { Abi, Address, PublicClient, WalletClient } from "viem";
+import { Accounts } from "modules/accounts/accounts";
+import { Markets } from "modules/markets";
+import { Oracle } from "modules/oracle";
+import { Orders } from "modules/orders/orders";
+import { Positions } from "modules/positions/positions";
+import { Tokens } from "modules/tokens/tokens";
+import { Trades } from "modules/trades/trades";
+import { Utils } from "modules/utils/utils";
+import type { GmxSdkConfig } from "types/sdk";
+import { CallContractOpts } from "utils/callContract";
+import { MulticallRequestConfig } from "utils/multicall";
+export declare class GmxSdk {
+    config: GmxSdkConfig;
+    readonly markets: Markets;
+    readonly tokens: Tokens;
+    readonly positions: Positions;
+    readonly orders: Orders;
+    readonly trades: Trades;
+    readonly accounts: Accounts;
+    readonly utils: Utils;
+    readonly oracle: Oracle;
+    publicClient: PublicClient;
+    walletClient: WalletClient;
+    constructor(config: GmxSdkConfig);
+    setAccount(account: Address): void;
+    executeMulticall<T = any>(request: MulticallRequestConfig<any>): Promise<T>;
+    callContract(address: Address, abi: Abi, method: string, params: any[], opts?: CallContractOpts): Promise<`0x${string}`>;
+    get chainId(): import("configs/chains").UiContractsChain;
+    get chain(): import("viem").Chain;
+    get account(): `0x${string}`;
+}

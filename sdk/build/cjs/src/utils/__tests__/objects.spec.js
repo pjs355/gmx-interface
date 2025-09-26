@@ -1,0 +1,139 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const vitest_1 = require("vitest");
+const objects_1 = require("../objects");
+(0, vitest_1.describe)("setByKey", () => {
+    (0, vitest_1.it)("should set a key in an object", () => {
+        const obj = { a: 1, b: 2 };
+        const key = "c";
+        const data = 3;
+        (0, vitest_1.expect)((0, objects_1.setByKey)(obj, key, data)).toEqual({ a: 1, b: 2, c: 3 });
+    });
+    (0, vitest_1.it)("should set a key in an empty object", () => {
+        const obj = {};
+        const key = "c";
+        const data = 3;
+        (0, vitest_1.expect)((0, objects_1.setByKey)(obj, key, data)).toEqual({ c: 3 });
+    });
+    (0, vitest_1.it)("should set a key in an object with existing key", () => {
+        const obj = { a: 1, b: 2 };
+        const key = "b";
+        const data = 3;
+        (0, vitest_1.expect)((0, objects_1.setByKey)(obj, key, data)).toEqual({ a: 1, b: 3 });
+    });
+});
+(0, vitest_1.describe)("updateByKey", () => {
+    (0, vitest_1.it)("should update a key in an object", () => {
+        const obj = { a: { x: 1, y: 2 }, b: { x: 3, y: 4 } };
+        const key = "b";
+        const data = { y: 5 };
+        (0, vitest_1.expect)((0, objects_1.updateByKey)(obj, key, data)).toEqual({ a: { x: 1, y: 2 }, b: { x: 3, y: 5 } });
+    });
+    (0, vitest_1.it)("should update a key in an empty object", () => {
+        const obj = {};
+        const key = "b";
+        const data = { y: 5 };
+        (0, vitest_1.expect)((0, objects_1.updateByKey)(obj, key, data)).toEqual({});
+    });
+    (0, vitest_1.it)("should update a key in an object with non-existing key", () => {
+        const obj = { a: { x: 1, y: 2 }, b: { x: 3, y: 4 } };
+        const key = "c";
+        const data = { y: 5 };
+        (0, vitest_1.expect)((0, objects_1.updateByKey)(obj, key, data)).toEqual({ a: { x: 1, y: 2 }, b: { x: 3, y: 4 } });
+    });
+});
+(0, vitest_1.describe)("getByKey", () => {
+    (0, vitest_1.it)("should get a key in an object", () => {
+        const obj = { a: 1, b: 2 };
+        const key = "b";
+        (0, vitest_1.expect)((0, objects_1.getByKey)(obj, key)).toEqual(2);
+    });
+    (0, vitest_1.it)("should get a key in an empty object", () => {
+        const obj = {};
+        const key = "b";
+        (0, vitest_1.expect)((0, objects_1.getByKey)(obj, key)).toEqual(undefined);
+    });
+    (0, vitest_1.it)("should get a non-existing key in an object", () => {
+        const obj = { a: 1, b: 2 };
+        const key = "c";
+        (0, vitest_1.expect)((0, objects_1.getByKey)(obj, key)).toEqual(undefined);
+    });
+});
+(0, vitest_1.describe)("objectKeysDeep", () => {
+    (0, vitest_1.it)("should get all keys from a flat object", () => {
+        const obj = { a: 1, b: 2, c: 3 };
+        const keys = (0, objects_1.objectKeysDeep)(obj);
+        (0, vitest_1.expect)(keys).toEqual(["a", "b", "c"]);
+    });
+    (0, vitest_1.it)("should get all keys from a nested object with default depth", () => {
+        const obj = {
+            a: 1,
+            b: {
+                x: 2,
+                y: 3,
+            },
+            c: 4,
+        };
+        const keys = (0, objects_1.objectKeysDeep)(obj);
+        (0, vitest_1.expect)(keys).toEqual(["a", "b", "c", "x", "y"]);
+    });
+    (0, vitest_1.it)("should get all keys from a deeply nested object with custom depth", () => {
+        const obj = {
+            a: 1,
+            b: {
+                x: 2,
+                y: {
+                    m: 3,
+                    n: 4,
+                },
+            },
+            c: 5,
+        };
+        const keys = (0, objects_1.objectKeysDeep)(obj, 2);
+        (0, vitest_1.expect)(keys).toEqual(["a", "b", "c", "x", "y", "m", "n"]);
+    });
+    (0, vitest_1.it)("should respect depth limit when specified", () => {
+        const obj = {
+            a: 1,
+            b: {
+                x: 2,
+                y: {
+                    m: 3,
+                    n: 4,
+                },
+            },
+            c: 5,
+        };
+        const keys = (0, objects_1.objectKeysDeep)(obj, 1);
+        (0, vitest_1.expect)(keys).toEqual(["a", "b", "c", "x", "y"]);
+    });
+    (0, vitest_1.it)("should handle empty objects", () => {
+        const obj = {};
+        const keys = (0, objects_1.objectKeysDeep)(obj);
+        (0, vitest_1.expect)(keys).toEqual([]);
+    });
+    (0, vitest_1.it)("should handle objects with arrays", () => {
+        const obj = {
+            a: 1,
+            b: [2, 3],
+            c: {
+                x: 4,
+                y: [5, 6],
+            },
+        };
+        const keys = (0, objects_1.objectKeysDeep)(obj);
+        (0, vitest_1.expect)(keys).toEqual(["a", "b", "c", "x", "y"]);
+    });
+    (0, vitest_1.it)("should handle objects with null values", () => {
+        const obj = {
+            a: 1,
+            b: null,
+            c: {
+                x: 2,
+                y: null,
+            },
+        };
+        const keys = (0, objects_1.objectKeysDeep)(obj);
+        (0, vitest_1.expect)(keys).toEqual(["a", "b", "c", "x", "y"]);
+    });
+});

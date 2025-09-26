@@ -1,0 +1,19 @@
+# Large build outputs (re-built on Railway)
+build/
+sdk/build/
+
+# Dependencies and caches
+node_modules/
+.yarn/
+.pnp.*
+
+# Source maps and large artifacts
+**/*.map
+stats.html
+
+# Generic dist outputs
+/dist/
+
+# VCS
+.git/
+.gitignore
