@@ -1,14 +1,10 @@
 import { t } from "@lingui/macro";
 import { FiX } from "react-icons/fi";
-import { Link } from "react-router-dom";
-
 // Removed GMX legacy imports - not needed for prediction markets
 // Removed GMX userAnalytics imports - not needed for prediction markets
 import { useRedirectPopupTimestamp } from "lib/useRedirectPopupTimestamp";
 
 import ExternalLink from "components/ExternalLink/ExternalLink";
-
-import logoImg from "img/prinx.png";
 
 import { HeaderLink } from "./HeaderLink";
 
@@ -52,7 +48,7 @@ export function HomeHeaderLinks({ small, clickCloseIcon, showRedirectModal }: Pr
       link: "https://docs.gmx.io/",
     },
     {
-      label: t`Get Test USDC`,
+      label: t`Get Test USD`,
       link: "/get_test_usdc",
       isHomeLink: true,
     },
@@ -61,9 +57,6 @@ export function HomeHeaderLinks({ small, clickCloseIcon, showRedirectModal }: Pr
     <div className="App-header-links">
       {small && (
         <div className="App-header-links-header">
-          <Link className="App-header-link-main" to="/">
-            <img src={logoImg} alt="Prinx Logo" />
-          </Link>
           <div
             className="App-header-menu-icon-block mobile-cross-menu"
             onClick={() => clickCloseIcon && clickCloseIcon()}

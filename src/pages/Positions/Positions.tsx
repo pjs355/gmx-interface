@@ -79,7 +79,7 @@ export default function Positions() {
             return { market, yesBalance, noBalance, yesPrice, noPrice, yesValue, noValue, totalValue, orders: marketOrders, aggregates };
           })
           .filter(market => market.yesBalance > 0 || market.noBalance > 0);
-        const activeMarkets = processedMarkets.filter(mp => (mp.market as any).status !== 'resolved');
+        const activeMarkets = processedMarkets.filter(mp => (mp.market as any).status !== 'settled');
         return { umbrella, markets: activeMarkets };
       })
       .filter(umbrella => umbrella.markets.length > 0);
@@ -91,7 +91,7 @@ export default function Positions() {
     const resolved: UmbrellaPositions[] = [];
     allUmbrellas.forEach(({ umbrella, markets }) => {
       const res = markets
-        .filter((m: any) => String(m?.status || '').toLowerCase() === 'resolved')
+        .filter((m: any) => String(m?.status || '').toLowerCase() === 'settled')
         .map((m) => {
           const marketId = (m as any)._id || (m as any).questionId || (m as any).marketId;
           const tb = marketId ? tokenBalances.get(marketId) : undefined;
@@ -261,6 +261,8 @@ export default function Positions() {
                             }))}
                             toCentsString={toCentsString}
                             softLoading={softLoading}
+                            onClaim={claim}
+                            isClaiming={isClaiming}
                           />
                         </div>
                       )}

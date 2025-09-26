@@ -14,6 +14,7 @@ export function useButtonState({
   handleTrade,
   checkSufficientBalance,
   checkSufficientShares,
+  market,
 }: any) {
   return useMemo(() => {
     if (!authenticated) {
@@ -46,8 +47,24 @@ export function useButtonState({
     if (!balanceCheck.hasSufficientBalance) return { text: "Insufficient Balance", disabled: true, onClick: () => {} };
     const sharesCheck = checkSufficientShares(state.amount, state.orderType, state.side, state.selectedPosition, yesBalance, noBalance);
     if (!sharesCheck.hasSufficientShares) return { text: "Insufficient Shares", disabled: true, onClick: () => {} };
-    return { text: `Trade ${state.selectedPosition.toUpperCase()}`, disabled: false, onClick: handleTrade };
-  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares]);
+    
+    // Determine button text based on market type
+    let buttonText = `Trade ${state.selectedPosition.toUpperCase()}`;
+    
+    // Check if this is a single VS market
+    if (market) {
+      const title = (market?.displayName || (market as any)?.question || '').trim();
+      const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
+      const isVsSingle = parts.length === 2 && ((market as any)?.umbrellaChildrenCount === 1);
+      
+      if (isVsSingle) {
+        const teamName = state.selectedPosition === 'yes' ? parts[0] : parts[1];
+        buttonText = `Trade ${teamName}`;
+      }
+    }
+    
+    return { text: buttonText, disabled: false, onClick: handleTrade };
+  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market]);
 }
 
 

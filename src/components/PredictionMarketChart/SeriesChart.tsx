@@ -12,9 +12,20 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
   return (
     <div style={{ width: '100%' }}>
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data} margin={{ top: 20, right: 20, left: 10, bottom: 55 }}>
+        <LineChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 70 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" horizontal vertical={false} />
-          <XAxis dataKey="displayTime" allowDataOverflow axisLine={false} tickLine={false} tick={{ fill: '#ffffff', fontSize: 11 }} interval={data.length > 10 ? Math.floor(data.length / 6) : 0} height={50} angle={0} textAnchor="middle" />
+          <XAxis 
+            dataKey="displayTime" 
+            allowDataOverflow 
+            axisLine={false} 
+            tickLine={false} 
+            tick={{ fill: '#ffffff', fontSize: 11 }} 
+            interval={data.length > 10 ? Math.floor(data.length / 6) : 0} 
+            height={60} 
+            angle={0} 
+            textAnchor="middle"
+            padding={{ left: 20, right: 20 }}
+          />
           <YAxis yAxisId="right" orientation="right" domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#ffffff', fontSize: 12 }} tickFormatter={(value) => `${value}%`} width={45} />
           <Tooltip content={tooltip} />
           <ReferenceLine yAxisId="right" y={50} stroke="rgba(255, 255, 255, 0.3)" strokeDasharray="2 2" />

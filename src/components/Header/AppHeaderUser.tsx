@@ -138,28 +138,32 @@ export function AppHeaderUser({
 
       {true ? ( // Always show for prediction markets
         <>
-          {/* Portfolio Display */}
-          <HeaderLink className="header-metric-box mr-4" to="/positions" showRedirectModal={showRedirectModal}>
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-bold text-white" style={{ color: "white" }}>
-                Portfolio
-              </span>
-              <span className="text-sm font-normal text-white" style={{ color: "white" }}>
-                {portfolioTotal === null || !isFinite(portfolioTotal) ? "--" : `$${formatCurrency(portfolioTotal)}`}
-              </span>
-            </div>
-          </HeaderLink>
-          {/* USDC Balance Display */}
-          <HeaderLink className="header-metric-box mr-4" to="/positions" showRedirectModal={showRedirectModal}>
-            <div className="flex flex-col items-center">
-              <span className="text-xs font-bold text-white" style={{ color: "white" }}>
-                Cash
-              </span>
-              <span className="text-sm font-normal text-white" style={{ color: "white" }}>
-                ${formatCurrency(formattedUsdcBalance)}
-              </span>
-            </div>
-          </HeaderLink>
+          {/* Portfolio Display - Hidden on mobile */}
+          {!small && (
+            <HeaderLink className="header-metric-box mr-4" to="/positions" showRedirectModal={showRedirectModal}>
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-bold text-white" style={{ color: "white" }}>
+                  Portfolio
+                </span>
+                <span className="text-sm font-normal text-white" style={{ color: "white" }}>
+                  {portfolioTotal === null || !isFinite(portfolioTotal) ? "--" : `$${formatCurrency(portfolioTotal)}`}
+                </span>
+              </div>
+            </HeaderLink>
+          )}
+          {/* USDC Balance Display - Hidden on mobile */}
+          {!small && (
+            <HeaderLink className="header-metric-box mr-4" to="/positions" showRedirectModal={showRedirectModal}>
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-bold text-white" style={{ color: "white" }}>
+                  Cash
+                </span>
+                <span className="text-sm font-normal text-white" style={{ color: "white" }}>
+                  ${formatCurrency(formattedUsdcBalance)}
+                </span>
+              </div>
+            </HeaderLink>
+          )}
 
           <div data-qa="user-address" className="App-header-user-address">
             <AddressDropdown

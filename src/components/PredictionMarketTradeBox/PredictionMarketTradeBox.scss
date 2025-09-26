@@ -14,6 +14,7 @@
   .market-name-header {
     text-align: left;
     margin-bottom: 20px;
+    margin-top: 30px !important; // Add more padding above the question
     
     h3 {
       margin: 0;
@@ -50,10 +51,19 @@
         border: 1px solid #6B7280;
         color: #6B7280;
         background: transparent;
+        transform: none !important; // Prevent any size changes
+        min-width: 60px; // Fixed minimum width
+        width: 60px; // Fixed width
+        height: 36px; // Fixed height
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
         
         &:hover {
           border-color: #7C3AED;
           color: #7C3AED;
+          transform: none !important; // Prevent any size changes
         }
         
         &.selected.primary {
@@ -61,6 +71,10 @@
           border-color: #7C3AED;
           color: #7C3AED;
           font-weight: 700;
+          transform: none !important; // Prevent any size changes
+          min-width: 60px; // Maintain fixed width
+          width: 60px; // Maintain fixed width
+          height: 36px; // Maintain fixed height
         }
         
         &.selected.secondary {
@@ -68,6 +82,10 @@
           border-color: #7C3AED;
           color: #7C3AED;
           font-weight: 700;
+          transform: none !important; // Prevent any size changes
+          min-width: 60px; // Maintain fixed width
+          width: 60px; // Maintain fixed width
+          height: 36px; // Maintain fixed height
         }
       }
     }
@@ -88,38 +106,134 @@
       color: #ffffff !important;
     }
     
-    // Target the dropdown menu specifically
-    .trade-mode-selector [role="menu"] {
-      background: black !important;
-      border: 1px solid #374151 !important;
+    // Style the dropdown menu similar to AddressDropdown
+    .trade-mode-selector .menu-items,
+    .trade-mode-selector [data-headlessui-portal],
+    .trade-mode-selector div[class*="z-"] {
+      position: absolute !important;
+      right: 0 !important;
+      top: 4.3rem !important;
+      min-width: 12rem !important;
+      width: 100% !important;
+      transform-origin: top right !important;
+      border-radius: 0.4rem !important;
+      overflow: hidden !important;
+      background: #1a1a1a !important;
+      border: 1px solid var(--color-stroke-primary) !important;
+      list-style: none !important;
+      cursor: pointer !important;
+      outline: none !important;
+      z-index: 1000 !important;
     }
     
-    .trade-mode-selector [role="menuitem"] {
-      color: white !important;
-      background: black !important;
+    // Style dropdown items similar to AddressDropdown
+    .trade-mode-selector .menu-item,
+    .trade-mode-selector [data-headlessui-portal] > div,
+    .trade-mode-selector div[class*="z-"] > div,
+    .trade-mode-selector .p-8,
+    .trade-mode-selector .text-body-medium {
+      display: flex !important;
+      align-items: center !important;
+      color: #ffffff !important;
+      padding: 0.85rem 0.8rem !important;
+      font-size: var(--font-size-body-medium) !important;
+      border-radius: 0.4rem !important;
+      min-height: 44px !important;
     }
     
-    .trade-mode-selector [role="menuitem"]:hover {
-      color: white !important;
-      background: #374151 !important;
-    }
-    
-    // Additional targeting for the dropdown container
-    .trade-mode-selector .z-\[1105\] {
-      background: black !important;
+    .trade-mode-selector .menu-item:hover,
+    .trade-mode-selector [data-headlessui-portal] > div:hover,
+    .trade-mode-selector div[class*="z-"] > div:hover,
+    .trade-mode-selector .p-8:hover,
+    .trade-mode-selector .text-body-medium:hover {
+      background: #808aff14 !important;
+      border-radius: 0.4rem !important;
+      opacity: 1 !important;
+      color: #ffffff !important;
     }
     
     // Target any div inside the trade mode selector that might be the dropdown
     .trade-mode-selector div[class*="z-"] {
       background: black !important;
     }
-    
-    // Target the floating portal content
-    .trade-mode-selector [data-headlessui-portal] {
-      background: black !important;
-    }
   }
+}
 
+// Global targeting for dropdown - outside the main component scope
+.prediction-market-tradebox .trade-mode-selector [data-headlessui-portal],
+.prediction-market-tradebox .trade-mode-selector div[class*="z-"],
+.prediction-market-tradebox .trade-mode-selector .mt-8,
+.prediction-market-tradebox .trade-mode-selector .rounded-4 {
+  background: black !important;
+  border: 1px solid #374151 !important;
+  border-radius: 8px !important;
+  padding: 8px 0 !important;
+  min-width: 120px !important;
+}
+
+.prediction-market-tradebox .trade-mode-selector [data-headlessui-portal] > div,
+.prediction-market-tradebox .trade-mode-selector div[class*="z-"] > div,
+.prediction-market-tradebox .trade-mode-selector .mt-8 > div,
+.prediction-market-tradebox .trade-mode-selector .rounded-4 > div,
+.prediction-market-tradebox .trade-mode-selector .p-8,
+.prediction-market-tradebox .trade-mode-selector .text-body-medium {
+  padding: 12px 16px !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  line-height: 1.4 !important;
+  min-height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+  color: white !important;
+  background: black !important;
+}
+
+.prediction-market-tradebox .trade-mode-selector [data-headlessui-portal] > div:hover,
+.prediction-market-tradebox .trade-mode-selector div[class*="z-"] > div:hover,
+.prediction-market-tradebox .trade-mode-selector .mt-8 > div:hover,
+.prediction-market-tradebox .trade-mode-selector .rounded-4 > div:hover,
+.prediction-market-tradebox .trade-mode-selector .p-8:hover,
+.prediction-market-tradebox .trade-mode-selector .text-body-medium:hover {
+  color: white !important;
+  background: #374151 !important;
+}
+
+/* Explicit hover for Market/Limit dropdown items */
+.trade-mode-menu .trade-mode-menu-item:hover {
+  background: #374151 !important; /* slate-700 */
+  color: #ffffff !important;
+  border-radius: 6px !important;
+}
+
+/* Mobile-specific dropdown fixes */
+@media (max-width: 768px) {
+  .trade-mode-menu {
+    z-index: 99999 !important;
+    width: 200px !important;
+    max-width: 90vw !important;
+  }
+  
+  .trade-mode-menu-item {
+    padding: 16px 20px !important;
+    font-size: 16px !important;
+    min-height: 48px !important;
+  }
+  
+  /* Ensure curtain doesn't clip dropdown */
+  .prediction-curtain {
+    overflow: visible !important;
+  }
+  
+  .curtain-content-inner {
+    overflow: visible !important;
+    padding-bottom: 60px !important; /* Add more space below trade button */
+    margin-left: 20px !important; /* Add margin from left edge */
+    margin-right: 20px !important; /* Add margin from right edge */
+    margin-top: 20px !important; /* Add margin from top */
+  }
+}
+
+.prediction-market-tradebox {
   .tradebox-separator {
     height: 1px;
     background: #333;
@@ -203,7 +317,7 @@
     }
     
     .input-container {
-      padding: 1.5rem;
+      padding: 0.9rem;
       margin-bottom: 1.05rem;
       border-radius: 8px;
       background: black !important;
@@ -234,9 +348,17 @@
         font-size: var(--font-size-h2);
         font-weight: 600;
         margin-left: 0.2rem;
+        transition: color 0.2s ease;
         
         &.faded {
           color: #6B7280;
+        }
+      }
+      
+      // When input container has empty-input class, make the cents symbol grey
+      &.empty-input {
+        .currency-symbol {
+          color: #6B7280 !important;
         }
       }
       
@@ -248,7 +370,7 @@
         border: none;
         background: transparent;
         color: #ffffff;
-        font-size: var(--font-size-h2);
+        font-size: 28px;
         font-weight: 600;
         font-family: inherit;
         font-variant-numeric: tabular-nums;
@@ -265,6 +387,22 @@
           line-height: 1;
           letter-spacing: normal;
           opacity: 1; // ensure consistent rendering
+        }
+        
+        // When input is empty, make the text grey like placeholder
+        &:placeholder-shown {
+          color: #6B7280;
+        }
+      }
+      
+      // When input container has empty-input class, make the $ symbol and cents symbol grey
+      &.empty-input {
+        .trade-input {
+          color: #6B7280 !important;
+        }
+        
+        .currency-symbol {
+          color: #6B7280 !important;
         }
       }
 
@@ -500,13 +638,24 @@
     }
 
     .bet-size-value, .leverage-value {
-      font-size: var(--font-size-h2); // match input size
+      font-size: 28px; // match input size
       font-weight: 600; // match input weight
       color: #ffffff; // white
       font-family: inherit; // match input font family
       font-variant-numeric: tabular-nums; // align digit widths
       line-height: 1;
       letter-spacing: normal;
+    }
+
+    // Keep odds text small like before
+    .odds-value {
+      font-size: 16px;
+    }
+
+    // Make the "To Win / Receive" label same size as the amount
+    .bet-size-label.to-win-label {
+      font-size: 28px;
+      font-weight: 600;
     }
 
     // Make the monetary amount (To Win / Receive) bright green
@@ -516,16 +665,19 @@
 
     // Force Odds value to white
     .odds-value {
+      font-size: 16px; // match label size
       color: #ffffff;
     }
 
     // Force Avg Price value to white
     .avg-price-value {
+      font-size: 16px; // match label size
       color: #ffffff;
     }
 
     // Amount value should be white, not green
     .amount-value {
+      font-size: 16px; // match label size
       color: #ffffff;
     }
   }

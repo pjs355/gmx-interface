@@ -8,6 +8,8 @@ export default function ResolvedPositionsTable({
   umbrellaBalances,
   toCentsString,
   softLoading = false,
+  onClaim,
+  isClaiming = false,
 }: {
   umbrellaBalances: Array<{
     umbrella: Umbrella;
@@ -15,6 +17,8 @@ export default function ResolvedPositionsTable({
   }>;
   toCentsString: (n?: number | null) => string;
   softLoading?: boolean;
+  onClaim?: () => void;
+  isClaiming?: boolean;
 }) {
   const formatCurrency = (value?: number | null): string => {
     if (value === null || value === undefined || !isFinite(value)) return "—";
@@ -112,7 +116,7 @@ export default function ResolvedPositionsTable({
                       <span className={softLoading ? "soft-blur" : undefined}>{formatCurrency(totalPayout)}</span>
                     </div>
                   <div style={{ textAlign: "center" }}>
-                    <ClaimButton />
+                    <ClaimButton onClaim={onClaim} isClaiming={isClaiming} />
                   </div>
                 </div>
               );
@@ -124,18 +128,25 @@ export default function ResolvedPositionsTable({
   );
 }
 
-function ClaimButton() {
-  const [claiming, setClaiming] = React.useState(false);
+function ClaimButton({ onClaim, isClaiming }: { onClaim?: () => void; isClaiming?: boolean }) {
+  const [localClaiming, setLocalClaiming] = React.useState(false);
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
 
-  const handleClick = () => {
-    if (claiming) return;
-    setClaiming(true);
+  const handleClick = async () => {
+    if (localClaiming || isClaiming) return;
+    setLocalClaiming(true);
     if (btnRef.current) {
       triggerFireworksForElement(btnRef.current);
     }
-    setTimeout(() => setClaiming(false), 3000);
+    
+    if (onClaim) {
+      await onClaim();
+    }
+    
+    setTimeout(() => setLocalClaiming(false), 3000);
   };
+
+  const claiming = localClaiming || isClaiming;
 
   return (
     <button

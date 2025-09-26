@@ -16,7 +16,7 @@ export function useUSDCBalance() {
 }
 
 // Hook to fetch YES/NO token balances for a specific market
-export function useYesNoBalances(market: { yesTokenId?: string; noTokenId?: string }) {
+export function useYesNoBalances(market: { yesTokenId?: string; noTokenId?: string; _id?: string }) {
   const { getDataAddress } = useWallet();
   const account = getDataAddress();
   const { getTokenBalance } = useUserData();
@@ -29,22 +29,36 @@ export function useYesNoBalances(market: { yesTokenId?: string; noTokenId?: stri
       setNoBalance(0);
       return;
     }
-    // Lookup by tokenId via UserDataContext balances map
-    // We maintain a tiny cache here for stability across renders
-    const yesKey = getCacheKey(account, market.yesTokenId);
-    const noKey = getCacheKey(account, market.noTokenId);
 
-    const found = (() => {
-      // getTokenBalance expects marketId; we need to scan map once via local cache
-      // As an approximation, reuse local cache values if present
+    // Get the market ID for lookup in UserDataContext
+    const marketId = market._id;
+    if (!marketId) {
+      setYesBalance(0);
+      setNoBalance(0);
+      return;
+    }
+
+    // Use getTokenBalance from UserDataContext which has the most up-to-date balances
+    const tokenBalance = getTokenBalance(marketId);
+    if (tokenBalance) {
+      const yesBal = Number(tokenBalance.yesBalance) || 0;
+      const noBal = Number(tokenBalance.noBalance) || 0;
+      console.log(`🔍 useYesNoBalances - Market ${marketId}:`, { yesBalance: yesBal, noBalance: noBal });
+      setYesBalance(yesBal);
+      setNoBalance(noBal);
+    } else {
+      // Fallback to local cache if UserDataContext doesn't have this market yet
+      const yesKey = getCacheKey(account, market.yesTokenId);
+      const noKey = getCacheKey(account, market.noTokenId);
       const cachedYes = balanceCache.get(yesKey);
       const cachedNo = balanceCache.get(noKey);
-      if (cachedYes !== undefined) setYesBalance(Number(cachedYes));
-      if (cachedNo !== undefined) setNoBalance(Number(cachedNo));
-    })();
-
-    // We cannot derive by market here reliably without marketId; leave as-is and rely on rows using getTokenBalance directly where possible
-  }, [account, market?.yesTokenId, market?.noTokenId, getTokenBalance]);
+      const yesBal = cachedYes ? Number(cachedYes) : 0;
+      const noBal = cachedNo ? Number(cachedNo) : 0;
+      console.log(`🔍 useYesNoBalances - Fallback cache for Market ${marketId}:`, { yesBalance: yesBal, noBalance: noBal });
+      setYesBalance(yesBal);
+      setNoBalance(noBal);
+    }
+  }, [account, market?.yesTokenId, market?.noTokenId, market?._id, getTokenBalance]);
 
   return { yesBalance, noBalance };
 }
@@ -100,6 +114,15 @@ export function checkSufficientShares(
   // For sell orders, amount represents the number of shares they want to sell
   const requiredShares = amountNum;
   const availableShares = position === 'yes' ? yesBalance : noBalance;
+
+  console.log(`🔍 checkSufficientShares - ${side} ${position}:`, {
+    amount: amountNum,
+    requiredShares,
+    availableShares,
+    yesBalance,
+    noBalance,
+    hasSufficient: availableShares >= requiredShares
+  });
 
   return {
     hasSufficientShares: availableShares >= requiredShares,

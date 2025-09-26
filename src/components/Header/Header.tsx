@@ -1,4 +1,4 @@
-import { Trans } from "@lingui/react";
+import { Trans } from "@lingui/macro";
 import cx from "classnames";
 import { AnimatePresence as FramerAnimatePresence, motion } from "framer-motion";
 import React, { ReactNode, useCallback, useEffect, useState } from "react";
@@ -18,6 +18,7 @@ import { AppHeaderLinks } from "./AppHeaderLinks";
 import { AppHeaderUser } from "./AppHeaderUser";
 import { HeaderLink } from "./HeaderLink";
 import { HomeHeaderLinks } from "./HomeHeaderLinks";
+import { isHomeSite } from "lib/legacy";
 
 import "./Header.scss";
 
@@ -110,8 +111,11 @@ export function Header({ disconnectAccountAndCloseSettings, openSettings, showRe
                 <img src={logoImg} className="big" alt="Prinx Logo" />
                 <img src={logoSmallImg} className="small" alt="Prinx Logo" />
               </Link>
-              {/* Always show app header for prediction markets */}
-              <AppHeaderLinks showRedirectModal={showRedirectModal} />
+              {isHomeSite() ? (
+                <HomeHeaderLinks showRedirectModal={showRedirectModal} />
+              ) : (
+                <AppHeaderLinks showRedirectModal={showRedirectModal} />
+              )}
             </div>
             <div className="App-header-container-right">
               {/* Removed GMX promo banner logic */}
@@ -183,13 +187,20 @@ export function Header({ disconnectAccountAndCloseSettings, openSettings, showRe
             variants={SLIDE_VARIANTS}
             transition={TRANSITION}
           >
-            {/* Always show app header for prediction markets */}
-            <AppHeaderLinks
-              small
-              openSettings={openSettings}
-              clickCloseIcon={() => setIsDrawerVisible(false)}
-              showRedirectModal={showRedirectModal}
-            />
+            {isHomeSite() ? (
+              <HomeHeaderLinks
+                small
+                clickCloseIcon={() => setIsDrawerVisible(false)}
+                showRedirectModal={showRedirectModal}
+              />
+            ) : (
+              <AppHeaderLinks
+                small
+                openSettings={openSettings}
+                clickCloseIcon={() => setIsDrawerVisible(false)}
+                showRedirectModal={showRedirectModal}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

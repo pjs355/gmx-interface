@@ -3,18 +3,16 @@ import { t } from "@lingui/macro";
 // Removed useLingui - not used after cleanup
 import { useCallback, useState } from "react";
 import { FiX } from "react-icons/fi";
-import { Link } from "react-router-dom";
-
 // Removed useNotifyModalState - not used after cleanup
 // Removed userAnalytics imports - not needed for prediction markets
 
 // Removed ExternalLink - not used in this component
 
-import logoImg from "img/prinx.png";
-
 import { HeaderLink } from "./HeaderLink";
 import ModalWithPortal from "../Modal/ModalWithPortal";
 // Removed LanguageModalContent - not needed for prediction markets
+import useWallet from "lib/wallets/useWallet";
+import { usePortfolio } from "context/PortfolioContext";
 
 import "./Header.scss";
 
@@ -27,31 +25,67 @@ type Props = {
 
 export function AppHeaderLinks({ small, clickCloseIcon, showRedirectModal }: Props) {
   // Removed unused openNotifyModal and currentLanguage
-  const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
+  // TODO: Re-enable when language support is fully implemented
+  // const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
+  
+  // Add portfolio data for mobile display
+  const { isConnected: active } = useWallet();
+  const { portfolioTotal, cashBalance } = usePortfolio();
+
+  const formatCurrency = (value: number | string | null | undefined): string => {
+    const num = typeof value === "string" ? parseFloat(value) : value;
+    if (num === null || num === undefined || !isFinite(num)) return "--";
+    return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+  };
+
+  const formattedUsdcBalance = Number.isFinite(cashBalance) ? Number(cashBalance).toFixed(2) : "0.00";
 
   // const isLeaderboardActive = useCallback(
   //   (match: any, location: any) => Boolean(match) || location.pathname.startsWith("/competitions"),
   //   []
   // );
 
-  const handleLanguageModalClose = useCallback(() => {
-    setIsLanguageModalOpen(false);
-  }, []);
+  // TODO: Re-enable when language support is fully implemented
+  // const handleLanguageModalClose = useCallback(() => {
+  //   setIsLanguageModalOpen(false);
+  // }, []);
 
   return (
     <>
       <div className="App-header-links">
         {small && (
           <div className="App-header-links-header">
-            <Link className="App-header-link-main" to="/">
-              <img src={logoImg} alt="GMX Logo" />
-            </Link>
             <div
               className="App-header-menu-icon-block max-w-[450px]:mr-12 mr-8 !border-0"
               onClick={() => clickCloseIcon && clickCloseIcon()}
             >
               <FiX className="App-header-menu-icon" />
             </div>
+          </div>
+        )}
+        {/* Mobile Cash/Portfolio Display - Only show when connected */}
+        {small && active && (
+          <div className="App-header-mobile-metrics">
+            <HeaderLink className="mobile-metric-box" to="/positions" showRedirectModal={showRedirectModal}>
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-bold text-white">
+                  Portfolio
+                </span>
+                <span className="text-sm font-normal text-white">
+                  {portfolioTotal === null || !isFinite(portfolioTotal) ? "--" : `$${formatCurrency(portfolioTotal)}`}
+                </span>
+              </div>
+            </HeaderLink>
+            <HeaderLink className="mobile-metric-box" to="/positions" showRedirectModal={showRedirectModal}>
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-bold text-white">
+                  Cash
+                </span>
+                <span className="text-sm font-normal text-white">
+                  ${formatCurrency(formattedUsdcBalance)}
+                </span>
+              </div>
+            </HeaderLink>
           </div>
         )}
         <div className="App-header-link-container">
@@ -96,7 +130,7 @@ export function AppHeaderLinks({ small, clickCloseIcon, showRedirectModal }: Pro
         </div>
         <div className="App-header-link-container">
           <HeaderLink qa="get-test-usdc" to="/get_test_usdc" showRedirectModal={showRedirectModal}>
-            Get Test USDC
+            Get Test USD
           </HeaderLink>
         </div>
         {/* Intentionally no Leaderboard or Positions text links here. Portfolio and Cash are separate buttons in AppHeaderUser. */}
@@ -125,6 +159,7 @@ export function AppHeaderLinks({ small, clickCloseIcon, showRedirectModal }: Pro
             </a>
           </div>
         )} */}
+        {/* TODO: Re-enable language selection when language support is fully implemented
         {small && (
           <div className="App-header-link-container">
             <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsLanguageModalOpen(true); }}>
@@ -132,8 +167,10 @@ export function AppHeaderLinks({ small, clickCloseIcon, showRedirectModal }: Pro
             </a>
           </div>
         )}
+        */}
       </div>
 
+      {/* TODO: Re-enable language modal when language support is fully implemented
       <ModalWithPortal
         className="language-popup"
         isVisible={isLanguageModalOpen}
@@ -145,6 +182,7 @@ export function AppHeaderLinks({ small, clickCloseIcon, showRedirectModal }: Pro
           <button onClick={handleLanguageModalClose}>Close</button>
         </div>
       </ModalWithPortal>
+      */}
     </>
   );
 }

@@ -1,27 +1,30 @@
-import { t } from "@lingui/macro";
-import { useLingui } from "@lingui/react";
-import { useCallback, useState } from "react";
+// TODO: Re-enable when language support is fully implemented
+// import { t } from "@lingui/macro";
+// import { useLingui } from "@lingui/react";
+// import { useCallback, useState } from "react";
 
 import "./OneClickButton.scss";
 
-import language24Icon from "img/ic_language24.svg";
+// import language24Icon from "img/ic_language24.svg";
 
-import ModalWithPortal from "../Modal/ModalWithPortal";
-import LanguageModalContent from "../NetworkDropdown/LanguageModalContent";
+// import ModalWithPortal from "../Modal/ModalWithPortal";
+// import LanguageModalContent from "../NetworkDropdown/LanguageModalContent";
 
 export function OneClickButton({ openSettings }: { openSettings: () => void }) {
-  const currentLanguage = useLingui().i18n.locale;
-  const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
+  // TODO: Re-enable when language support is fully implemented
+  // const currentLanguage = useLingui().i18n.locale;
+  // const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
 
-  const handleLanguageModalClose = useCallback(() => {
-    setIsLanguageModalOpen(false);
-  }, []);
+  // const handleLanguageModalClose = useCallback(() => {
+  //   setIsLanguageModalOpen(false);
+  // }, []);
 
   return (
     <>
+      {/* TODO: Re-enable language selection when language support is fully implemented
       <div className="OneClickButton" onClick={() => setIsLanguageModalOpen(true)}>
         <img className="OneClickButton-icon" src={language24Icon} alt="Select Language" />
-    </div>
+      </div>
 
       <ModalWithPortal
         className="language-popup"
@@ -31,6 +34,7 @@ export function OneClickButton({ openSettings }: { openSettings: () => void }) {
       >
         <LanguageModalContent currentLanguage={currentLanguage} onClose={handleLanguageModalClose} />
       </ModalWithPortal>
+      */}
     </>
   );
 }

@@ -9,7 +9,8 @@ export function getPredictionApiBaseUrl(): string {
 
   const isDev = typeof import.meta !== "undefined" && (import.meta as any).env && (import.meta as any).env.DEV;
   if (isDev) {
-    return "http://localhost:8080";
+    // Use Vite dev proxy. See vite.config.ts -> server.proxy['/api']
+    return "/api";
   }
   return "https://prediction-api-production.up.railway.app";
 }

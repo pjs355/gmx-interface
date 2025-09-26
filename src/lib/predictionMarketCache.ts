@@ -12,7 +12,7 @@ interface CachedMarketData {
 
 class PredictionMarketCache {
   private cache: Map<string, CachedMarketData> = new Map();
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
   /**
    * Store prediction market data in cache
@@ -45,12 +45,6 @@ class PredictionMarketCache {
       this.cache.set(market.marketId, cachedData);
     }
     
-    console.log('📦 Cached market data:', { 
-      name: market.displayName || market.question,
-      cacheKey, 
-      alternateIds: [market._id, market.questionId, market.marketId].filter(Boolean),
-      historicalCount: historicalPrices.length 
-    });
   }
 
   /**

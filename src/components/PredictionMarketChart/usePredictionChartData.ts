@@ -104,18 +104,6 @@ export function usePredictionChartData({ questionId, secondMarket, questionOrder
       const currentLivePrice = getCurrentLivePrice(questionId);
       const currentSecondLivePrice = secondId ? getCurrentLivePrice(secondId) : null;
 
-      // Debug logging for 1M time range
-      if (timeRange === '1m' && process.env.NODE_ENV === 'development') {
-        console.log('🔍 1M Debug:', {
-          timeRange,
-          timeWindowStart,
-          timeWindowEnd,
-          currentLivePrice,
-          currentSecondLivePrice,
-          allTimestampsLength: allTimestamps.length,
-          hasOrderbook: !!questionOrderbooks?.[questionId]
-        });
-      }
 
       // Front-fill logic with live prices
       const findLastAtOrBefore = (map: Map<number, { price: number }>, cutoff: number) => {
@@ -216,6 +204,38 @@ export function usePredictionChartData({ questionId, secondMarket, questionOrder
   useEffect(() => {
     setData(processedData);
   }, [processedData]);
+
+  // Monitor cache expiration and trigger re-renders
+  useEffect(() => {
+    if (!questionId) return;
+
+    const checkCacheAndRefresh = () => {
+      const cachedData = predictionMarketDataService.getCachedMarketData(questionId);
+      if (!cachedData) {
+        // Cache expired, trigger refresh
+        predictionMarketDataService.refreshHistoricalData(questionId).catch(console.warn);
+      }
+    };
+
+    // Check immediately
+    checkCacheAndRefresh();
+
+    // Set up periodic cache monitoring (every 2 minutes)
+    const interval = setInterval(checkCacheAndRefresh, 2 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [questionId]);
+
+  // Check cache on data processing to trigger refresh if needed
+  useEffect(() => {
+    if (!questionId) return;
+    
+    const cachedData = predictionMarketDataService.getCachedMarketData(questionId);
+    if (!cachedData) {
+      // Cache expired or missing, trigger a re-fetch
+      predictionMarketDataService.refreshHistoricalData(questionId).catch(console.warn);
+    }
+  }, [questionId, timeRange, timeWindowStart, timeWindowEnd]);
 
   return {
     data,

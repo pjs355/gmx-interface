@@ -5,6 +5,7 @@ import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import useWallet from "lib/wallets/useWallet";
 import { fetchUserOrders, type ProcessedOrder } from "lib/simplifiedOrderService";
 import { umbrellaDataService } from "lib/umbrellaDataService";
+import { usePredictionData } from "context/PredictionDataContext";
 
 const CTF_ADDRESS = "0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f";
 const USDC_ADDRESS = "0x333C89b2857FA0EE8d9Bcb7328C8672A45637C65"; // NEW_FAKE_USDC_ADDRESS (same as trading box)
@@ -100,6 +101,8 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [account, privyWallets]);
 
+  const { umbrellas, getAllQuestionsForUmbrella } = usePredictionData();
+
   const load = useCallback(async () => {
     if (!account) {
       setOrders([]);
@@ -109,16 +112,31 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(true);
     try {
-      // Build market data map once
-      const umbrellas = await umbrellaDataService.fetchAllUmbrellas();
-      const markets = await Promise.all(umbrellas.map((u) => umbrellaDataService.fetchQuestionsForUmbrella(u, { includeResolved: true })));
+      // Build market data map once from already-loaded PredictionData (includes resolved)
       const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
-      markets.flat().forEach((market: any) => {
-        const marketId = market._id || market.questionId || market.marketId;
-        if (marketId && market.yesTokenId && market.noTokenId) {
-          marketDataMap.set(marketId, { yesTokenId: market.yesTokenId, noTokenId: market.noTokenId });
-        }
-      });
+      try {
+        umbrellas.forEach((u: any) => {
+          const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
+          marketsForUmb.forEach((market: any) => {
+            const marketId = market?._id || market?.questionId || market?.marketId;
+            if (marketId && market?.yesTokenId && market?.noTokenId) {
+              marketDataMap.set(marketId, { yesTokenId: market.yesTokenId, noTokenId: market.noTokenId });
+            }
+          });
+        });
+      } catch {
+        // Fallback to direct fetch if prediction data not ready
+        const umbrellasDirect = await umbrellaDataService.fetchAllUmbrellas();
+        const markets = await Promise.all(
+          umbrellasDirect.map((u) => umbrellaDataService.fetchQuestionsForUmbrella(u, { includeResolved: true }))
+        );
+        markets.flat().forEach((market: any) => {
+          const marketId = market?._id || market?.questionId || market?.marketId;
+          if (marketId && market?.yesTokenId && market?.noTokenId) {
+            marketDataMap.set(marketId, { yesTokenId: market.yesTokenId, noTokenId: market.noTokenId });
+          }
+        });
+      }
       
       // Fetch user orders
       const userOrders = await fetchUserOrders(account, marketDataMap);
@@ -132,7 +150,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [account, privyWallets, checkApproval]);
+  }, [account, privyWallets, checkApproval, umbrellas, getAllQuestionsForUmbrella]);
 
   const loadTokenBalances = useCallback(async (account: string, marketDataMap: Map<string, { yesTokenId: string; noTokenId: string }>) => {
     try {
@@ -266,9 +284,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
   // Throttle initial and dependency-driven reloads to prevent rapid RPC bursts
   useEffect(() => {
     if (!account) return;
-    const t = setTimeout(load, 300);
+    // Ensure markets are available before attempting load
+    if (!Array.isArray(umbrellas) || umbrellas.length === 0) return;
+    const t = setTimeout(load, 200);
     return () => clearTimeout(t);
-  }, [account, load]);
+  }, [account, load, umbrellas]);
 
   const value = useMemo<UserDataContextValue>(() => ({ 
     orders, 

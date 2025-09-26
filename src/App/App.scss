@@ -26,10 +26,7 @@ $app-card-padding: 1.5rem;
   display: flex;
 }
 
-.App-header.small {
-  display: none;
-  z-index: 1;
-}
+/* Mobile header styles moved to Header.scss */
 
 .App-header-link-home {
   display: none;
@@ -1064,8 +1061,8 @@ button.App-button {
 }
 
 .header-connect-btn:focus {
-  background: #7a7fec;
-  border: 1px solid var(--color-blue-600);
+  background: #6a70ea;
+  border: 1px solid transparent;
   box-sizing: border-box;
   padding-left: 1.5rem;
   padding-right: 1.5rem;
@@ -1160,17 +1157,7 @@ button.App-button {
     display: none;
   }
 
-  .App-header.small {
-    height: 6.2rem;
-    backdrop-filter: blur(4px);
-    display: flex;
-    justify-content: space-between;
-    position: relative;
-    padding-left: 1.6rem;
-    padding-right: 1.6rem;
-    background: transparent 0% 0% no-repeat padding-box;
-    border-bottom: 1px solid #333333;
-  }
+  /* Mobile header styles moved to Header.scss */
 
   .Page-title-section {
     margin-top: 3.1rem;
@@ -1229,10 +1216,7 @@ button.App-button {
     margin: 0.4rem 0.5rem;
   }
 
-  .App-header.small {
-    padding-left: 0.6rem;
-    padding-right: 0.6rem;
-  }
+  /* Mobile header padding moved to Header.scss */
 
   .Home-faqs-content {
     padding-left: 1.5rem;

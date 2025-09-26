@@ -12,6 +12,7 @@ import PredictionMarketTradeBoxResponsiveContainer from "./PredictionMarketTrade
 import { useUSDCBalance, checkSufficientBalance, useYesNoBalances, checkSufficientShares } from "./checkBalances";
 // Removed useApproval import - using global context instead
 import { useUserData } from "context/UserDataContext";
+import { useBalances } from "context/BalanceContext";
 import { useButtonState } from "./hooks/useButtonState";
 import { useTradeState } from "./hooks/useTradeState";
 
@@ -30,7 +31,8 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
-  const { approvalState, checkApproval, approveToken } = useUserData();
+  const { approvalState, checkApproval, approveToken, refresh } = useUserData();
+  const { refreshBalances } = useBalances();
 
   const { wallets: privyWallets } = usePrivyWallets();
   
@@ -302,6 +304,27 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
           amount: "",
           price: "",
         }));
+        
+        // Refresh balances after successful trade
+        try {
+          // Get the market's token IDs for this specific market
+          const marketId = market._id;
+          const yesTokenId = (market as any)?.yesTokenId;
+          const noTokenId = (market as any)?.noTokenId;
+          
+          // Refresh USDC balance and market token balances
+          if (yesTokenId && noTokenId) {
+            await refreshBalances([yesTokenId, noTokenId]);
+          }
+          
+          // Also refresh the main user data (USDC balance, portfolio, etc.)
+          await refresh();
+          
+          console.log("✅ Balances refreshed after successful trade");
+        } catch (error) {
+          console.error("❌ Error refreshing balances after trade:", error);
+          // Don't fail the trade if balance refresh fails
+        }
       }
     } catch (error: any) {
       setState((prev) => ({
@@ -341,6 +364,7 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
     handleTrade,
     checkSufficientBalance,
     checkSufficientShares,
+    market,
   });
 
   return (

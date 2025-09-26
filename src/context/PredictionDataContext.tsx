@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { umbrellaDataService, type Umbrella } from "lib/umbrellaDataService";
+import { currentPriceService } from "lib/currentPriceService";
 
 type MarketLite = any;
 
@@ -115,6 +116,21 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
         const updatesMulti: Record<string, any> = {};
         
         console.log('🔄 Starting background data fetch for', Object.keys(marketsMap).length, 'umbrellas');
+
+        // Warm price cache for all markets across umbrellas
+        try {
+          const allMarketIds: string[] = [];
+          Object.values(marketsMap).forEach((markets) => {
+            (markets || []).forEach((q: any) => {
+              const qid = q?._id || q?.questionId || q?.marketId;
+              if (qid) allMarketIds.push(qid);
+            });
+          });
+          if (allMarketIds.length > 0) {
+            // Fire-and-forget; PortfolioContext will read from cache
+            currentPriceService.refreshMarkets(allMarketIds).catch(() => {});
+          }
+        } catch {}
         
         for (const [umbId, markets] of Object.entries(marketsMap)) {
           if (!Array.isArray(markets) || markets.length === 0) continue;

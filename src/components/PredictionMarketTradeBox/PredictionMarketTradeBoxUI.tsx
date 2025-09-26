@@ -54,9 +54,15 @@ export default function PredictionMarketTradeBoxUI({
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
   const { calculateContractsForMarketOrder, getEffectivePrice } = useMarketOrderHandler(orderbook as any);
 
-  // Format amount string for display with thousands separators while preserving a trailing dot and decimals
+  // Format amount string for display with $ symbol and thousands separators
   const formatAmountForDisplay = (value: string | undefined): string => {
-    if (!value) return '0';
+    // Only show $ for BUY + MARKET orders (dollars)
+    const showDollar = (side === 'buy' && orderType === 'market');
+    
+    console.log('DEBUG formatAmountForDisplay:', { side, orderType, showDollar, value });
+    
+    if (!value || value === '') return showDollar ? '$0' : '0';
+    
     // Handle leading dot like '.5'
     let raw = value;
     if (raw.startsWith('.')) raw = `0${raw}`;
@@ -64,25 +70,27 @@ export default function PredictionMarketTradeBoxUI({
     const endsWithDot = raw.endsWith('.') && !raw.endsWith('..');
     const [intPartRaw, fracPartRaw] = raw.split('.');
 
-    // Remove any non-digits from integer part just in case (input is numeric but be safe)
+    // Remove any non-digits from integer part
     const intPartDigits = (intPartRaw ?? '0').replace(/\D/g, '');
     const intNumber = Number(intPartDigits || '0');
     const intFormatted = intNumber.toLocaleString('en-US');
 
+    const prefix = showDollar ? '$' : '';
+
     if (endsWithDot) {
       // Preserve trailing dot while formatting the integer part
-      return `${intFormatted}.`;
+      return `${prefix}${intFormatted}.`;
     }
 
     if (typeof fracPartRaw === 'string') {
       // Preserve fractional part as typed (limited elsewhere to 2 decimals)
-      return `${intFormatted}.${fracPartRaw}`;
+      return `${prefix}${intFormatted}.${fracPartRaw}`;
     }
 
-    return intFormatted;
+    return `${prefix}${intFormatted}`;
   };
 
-  const formattedAmountDisplay = useMemo(() => formatAmountForDisplay(amount), [amount]);
+  const formattedAmountDisplay = useMemo(() => formatAmountForDisplay(amount), [amount, side, orderType]);
 
   const toCentsString = (value?: number | null): string => {
     if (value === undefined || value === null || !isFinite(value)) return "--";
@@ -323,21 +331,21 @@ export default function PredictionMarketTradeBoxUI({
             : 'Shares'
           }
         </div>
-        <div className="input-container prediction-input-container">
+        <div className={`input-container prediction-input-container ${(!amount || amount === '') ? 'empty-input' : ''}`}>
           {/* Simple input bars; no overlay */}
           <input
-            type="number"
-            value={amount}
+            type="text"
+            value={formattedAmountDisplay}
             onChange={(e) => {
               const value = e.target.value;
-              if (value.includes('.') && value.split('.')[1]?.length > 2) {
+              // Remove $ and commas for processing
+              const cleanValue = value.replace(/[$,\s]/g, '');
+              if (cleanValue.includes('.') && cleanValue.split('.')[1]?.length > 2) {
                 return;
               }
-              onAmountChange(value);
+              onAmountChange(cleanValue);
             }}
-            placeholder={orderType === 'market' ? (side === 'sell' ? '0' : '0.00') : '0'}
-            min="0"
-            step={orderType === 'limit' ? '0.01' : '0.01'}
+            placeholder={(side === 'buy' && orderType === 'market') ? 'Enter amount' : 'Enter shares'}
             className={`trade-input prediction-trade-input`}
           />
         </div>
@@ -349,7 +357,7 @@ export default function PredictionMarketTradeBoxUI({
       {orderType === 'limit' && (
         <div className="input-section">
           <div className="input-label">Limit Price</div>
-          <div className="input-container prediction-input-container">
+          <div className={`input-container prediction-input-container ${(!price || price === '') ? 'empty-input' : ''}`}>
             <input
               type="number"
               value={price}
@@ -367,6 +375,7 @@ export default function PredictionMarketTradeBoxUI({
               step="1"
               className="trade-input prediction-trade-input"
             />
+            <span className="currency-symbol">¢</span>
           </div>
         </div>
       )}
@@ -425,7 +434,7 @@ export default function PredictionMarketTradeBoxUI({
           {/* Show To Win / Receive line */}
           {toWinNumeric !== null && (
             <div className="bet-size-info">
-              <span className="bet-size-label">{side === 'sell' ? 'Receive' : 'To Win'}</span>
+              <span className={`bet-size-label to-win-label`}>{side === 'sell' ? 'Receive' : 'To Win'}</span>
               <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           )}

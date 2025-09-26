@@ -15,9 +15,9 @@
 }
 
 .prediction-trade-input:focus {
-  border-color: #3b82f6;
+  border-color: #8b8b8b;
   background: #1a1a1a;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: none;
 }
 
 .prediction-trade-input::placeholder {
@@ -28,6 +28,24 @@
 /* Disable overlay method so typing is visible */
 .amount-display, .shares-display { display: none !important; }
 .amount-input, .shares-input { position: static !important; width: 100% !important; height: auto !important; color: #ffffff !important; }
+
+/* Remove number input spinners (arrows) in trading inputs */
+.prediction-trade-input::-webkit-outer-spin-button,
+.prediction-trade-input::-webkit-inner-spin-button,
+.trade-input::-webkit-outer-spin-button,
+.trade-input::-webkit-inner-spin-button,
+.amount-input-field::-webkit-outer-spin-button,
+.amount-input-field::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+.prediction-trade-input[type="number"],
+.trade-input[type="number"],
+.amount-input-field[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
 .input-form {
   max-width: 38.75rem;
 }

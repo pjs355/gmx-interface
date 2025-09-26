@@ -6,7 +6,14 @@
 
   color-scheme: dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  background-color: #000000;
+
+  /* CSS Variables */
+  --color-slate-800: #1e293b;
+  --color-slate-700: #334155;
+  --color-slate-100: #f1f5f9;
+  --color-gray-800: #1f2937;
+  --color-gray-300: #d1d5db;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -21,7 +28,7 @@ body {
   min-height: 100vh;
   width: 100vw;
   overflow-x: hidden;
-  background: #0a0a0a;
+  background: #000000;
   color: white;
 }
 
@@ -60,7 +67,38 @@ button:hover {
 }
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  outline: none;
+}
+
+/* Remove default focus rings globally */
+*:focus {
+  outline: none;
+}
+*:focus-visible {
+  outline: none;
+}
+
+/* Neutralize text selection color */
+::selection {
+  background: rgba(128, 128, 128, 0.35);
+  color: inherit;
+}
+::-moz-selection {
+  background: rgba(128, 128, 128, 0.35);
+  color: inherit;
+}
+
+/* AGGRESSIVELY REMOVE ALL NUMBER INPUT SPINNERS */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .App {

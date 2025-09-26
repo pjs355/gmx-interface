@@ -24,7 +24,6 @@ import { PredictionCurtainProvider } from "components/PredictionMarketTradeBox/P
 // Removed runBatchTestOrders - not used in this component
 // Removed gtaVIImage - not used in this component
 // Removed RulesSection - not used in this component
-import { ChartDataDebugger } from "components/ChartDataDebugger";
 
 // Helper function to calculate best ask from orderbook
 const getBestAsk = (orderbook: any) => {
@@ -365,14 +364,6 @@ function PredictionMarketContent() {
           chartState={chartOnlyState}
         />
 
-        {/* Chart Data Debugger - only in development */}
-        {process.env.NODE_ENV === 'development' && (
-          <ChartDataDebugger
-            umbrellaId={umbrellaId || ''}
-            markets={sortedQuestions}
-            orderbooks={questionOrderbooks}
-          />
-        )}
 
         <div style={{ marginTop: 'auto' }}>
           <Footer />

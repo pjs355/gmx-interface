@@ -2,6 +2,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import React, { useEffect, useState } from "react";
 import { getPredictionApiBaseUrl } from "../../lib/predictionApiBase";
+import useWallet from "lib/wallets/useWallet";
 
 import Button from "components/Button/Button";
 
@@ -12,6 +13,7 @@ import "./GetTestUsdc.css";
 export function GetTestUsdc() {
   const { getAccessToken, user } = usePrivy();
   const { client: smartClient } = useSmartWallets();
+  const wallet = useWallet();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingClaim, setIsCheckingClaim] = useState(true);
   const [hasAlreadyClaimed, setHasAlreadyClaimed] = useState(false);
@@ -19,18 +21,23 @@ export function GetTestUsdc() {
   // Resolve API base via shared helper
   const API_ROOT = getPredictionApiBaseUrl();
 
-  // Wait for smart wallet to initialize, then POST to check-claim with smart wallet in body
+  // Wait for a wallet address (smart/embedded/external) to initialize, then POST to check-claim with address in body
   useEffect(() => {
     let cancelled = false;
     const start = Date.now();
 
     async function run() {
       try {
-        // Wait up to 5s for smart wallet address to appear
-        let smartWalletAddress;
+        // Wait up to 5s for any wallet address to appear
+        let resolvedAddress;
         while (!cancelled) {
-          smartWalletAddress = (user?.linkedAccounts || []).find((a) => a?.type === "smart_wallet")?.address;
-          if (smartWalletAddress || Date.now() - start > 5000) break;
+          resolvedAddress =
+            wallet?.smartAddress ||
+            wallet?.embeddedAddress ||
+            wallet?.externalAddress ||
+            wallet?.anyWalletAddress ||
+            wallet?.linkedAccountAddress;
+          if (resolvedAddress || Date.now() - start > 5000) break;
           await new Promise((r) => setTimeout(r, 200));
         }
 
@@ -43,7 +50,7 @@ export function GetTestUsdc() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ smartWallet: smartWalletAddress }),
+          body: JSON.stringify({ smartWallet: resolvedAddress }),
         });
 
         let claimed = false;
@@ -67,13 +74,18 @@ export function GetTestUsdc() {
     return () => {
       cancelled = true;
     };
-  }, [getAccessToken, user?.linkedAccounts, smartClient]);
+  }, [getAccessToken, user?.linkedAccounts, smartClient, wallet?.smartAddress, wallet?.embeddedAddress, wallet?.externalAddress, wallet?.anyWalletAddress, wallet?.linkedAccountAddress]);
 
   const handleClaimClick = async () => {
     try {
       setIsLoading(true);
       const token = await getAccessToken();
-      const smartWallet = (user?.linkedAccounts || []).find((a) => a?.type === "smart_wallet")?.address;
+      const smartWallet =
+        wallet?.smartAddress ||
+        wallet?.embeddedAddress ||
+        wallet?.externalAddress ||
+        wallet?.anyWalletAddress ||
+        wallet?.linkedAccountAddress;
       const response = await fetch(`${API_ROOT}/test-coins/claim`, {
         method: "POST",
         headers: {

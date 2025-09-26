@@ -97,6 +97,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     }
     // Compute once on mount and whenever holdings or cash change.
     compute();
+    // Recompute once more shortly after to include freshly warmed prices
+    const t = setTimeout(compute, 500);
+    return () => clearTimeout(t);
   }, [account, tokenBalances, usdcBalance, umbrellas, compute]);
 
   const value = useMemo<PortfolioContextValue>(() => ({ portfolioTotal, cashBalance, loading: userDataLoading }), [portfolioTotal, cashBalance, userDataLoading]);

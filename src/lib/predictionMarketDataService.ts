@@ -29,8 +29,6 @@ interface ApiResponse {
 
 class PredictionMarketDataService {
   private readonly API_BASE_URL = 'https://prediction-api-production.up.railway.app'; 
-  // Track which markets we've already logged to avoid spammy console output
-  private loggedHistoricalMarkets = new Set<string>();
 
   async fetchAllMarkets(): Promise<PredictionMarket[]> {
     try {
@@ -65,15 +63,9 @@ class PredictionMarketDataService {
       const apiResponse = await response.json();
       if (apiResponse.success && apiResponse.data) {
         const questionData = apiResponse.data;
-        try {
-          console.log('🧩 Question fetched:', questionData);
-        } catch {}
         predictionMarketCache.setMarketData(questionData);
         return questionData;
       } else if (apiResponse._id) {
-        try {
-          console.log('🧩 Question fetched:', apiResponse);
-        } catch {}
         predictionMarketCache.setMarketData(apiResponse);
         return apiResponse;
       } else {
@@ -101,19 +93,6 @@ class PredictionMarketDataService {
   }> {
     const prices = predictionMarketCache.getHistoricalPrices(questionId);
 
-    // Log the full dataset once per market to help debug "pulling" issues
-    if (!this.loggedHistoricalMarkets.has(questionId)) {
-      this.loggedHistoricalMarkets.add(questionId);
-      try {
-        const market = predictionMarketCache.getMarketData(questionId)?.market;
-        const name = market?.displayName || market?.question || questionId;
-        // Single concise log with all data for this market
-        console.log(
-          '📈 Historical prices pulled for market:',
-          { questionId, name, count: Array.isArray(prices) ? prices.length : 0, prices }
-        );
-      } catch {}
-    }
 
     return prices;
   }

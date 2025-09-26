@@ -53,19 +53,6 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
     isVsSingleMarket,
   });
 
-  // Reduce noisy debug logs; log only when effectiveQuestionId changes to a new non-empty value
-  const lastLoggedIdRef = useRef<string>('');
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return;
-    if (!effectiveQuestionId || effectiveQuestionId === lastLoggedIdRef.current) return;
-      // eslint-disable-next-line no-console
-    console.log('🎯 CHART PROPS:', {
-        questionId,
-      effectiveQuestionId,
-        activeMarketName: activeMarket?.displayName || activeMarket?.question,
-    });
-    lastLoggedIdRef.current = effectiveQuestionId;
-  }, [effectiveQuestionId, questionId, activeMarket]);
 
   const { teamOneLabel, teamTwoLabel } = useMemo(() => {
     const title = (activeMarket?.displayName || activeMarket?.question || '').trim();
