@@ -82,7 +82,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
   // Navigation functions
   const navigateToUmbrella = (umbrella: Umbrella) => {
     localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-    history.push(`/predictions/umbrella/${umbrella._id}`);
+    navigate(`/predictions/umbrella/${umbrella._id}`);
   };
 
   const navigateToSingleMarket = (umbrella: Umbrella, position: 'yes' | 'no') => {
@@ -92,7 +92,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
       localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
       localStorage.setItem("activePosition", position);
     }
-    history.push(`/predictions/umbrella/${umbrella._id}`);
+    navigate(`/predictions/umbrella/${umbrella._id}`);
   };
 
   const navigateToMultiMarket = (umbrella: Umbrella, question: PredictionMarket, position: 'yes' | 'no') => {
@@ -106,7 +106,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
       localStorage.setItem("selectedMarketId", marketId);
     }
     
-    history.push(`/predictions/umbrella/${umbrella._id}`);
+    navigate(`/predictions/umbrella/${umbrella._id}`);
   };
 
   const handleRetry = () => {
@@ -124,7 +124,13 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
   return (
     <div className="predictions-page page-layout">
-      <GameLinks selectedGame={selectedGame} onGameSelect={setSelectedGame} />
+      <GameLinks 
+        selectedGame={selectedGame} 
+        onGameSelect={setSelectedGame} 
+        umbrellas={umbrellas}
+        loading={loading}
+        filterType={filterType}
+      />
 
       <div className="predictions-grid">
         {(filteredUmbrellas.length > 0) ? (

@@ -68,7 +68,7 @@
 
 .game-links-wrapper {
   position: relative;
-  margin: 8px 0 24px 0; // small top margin to pull pills closer to header
+  margin: -12px 0 24px 0; // negative top margin to pull pills even closer to header
 }
 
 /* Reduce header-to-pills spacing on desktop by overriding global .page-layout padding */
@@ -110,6 +110,21 @@
   justify-content: center;
   cursor: pointer;
   z-index: 2;
+  /* Ensure perfect circle by removing default button styling */
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  min-width: 28px;
+  min-height: 28px;
+  max-width: 28px;
+  max-height: 28px;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+
+  &:hover {
+    border-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+  }
 }
 .scroll-arrow.left { left: 0; }
 .scroll-arrow.right { right: 0; }
@@ -156,10 +171,13 @@
   cursor: pointer;
   transition:
     color 0.2s ease,
-    background-color 0.2s ease;
+    background-color 0.2s ease,
+    border-color 0.2s ease;
 
   &:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(139, 92, 246, 0.1);
+    border-color: #8b5cf6;
+    color: #8b5cf6;
   }
 
   &.active {
@@ -371,7 +389,7 @@
   color: white;
   font-size: 16px;
   font-weight: 500;
-  max-width: 160px;
+  max-width: 188px;
   height: 1.25em; /* Fixed height for 1 line */
   line-height: 1.25;
   white-space: nowrap;
@@ -383,6 +401,14 @@
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  
+  /* Mobile: slightly wider buttons */
+  @media (max-width: 768px) {
+    .action-button {
+      width: 108px !important;
+      flex: 0 0 108px !important;
+    }
+  }
 }
 
 .action-button {

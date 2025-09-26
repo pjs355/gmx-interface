@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import useWallet from "lib/wallets/useWallet";
 import { type PredictionMarket } from "lib/predictionMarketDataService";
 import { type Umbrella } from "lib/umbrellaDataService";
@@ -15,7 +15,6 @@ import PositionsTableView from "./PositionsTableView";
 import ResolvedPositionsTable from "./ResolvedPositionsTable";
 import OrdersView from "./OrdersView";
 import HistoryView from "./HistoryView";
-import { useClaimEarnings } from "lib/claimEarnings";
 import Footer from "components/Footer/Footer";
 
 type MarketPosition = {
@@ -41,21 +40,38 @@ export default function Positions() {
   const account = getDataAddress();
   // unified balances via PortfolioContext
   const { portfolioTotal: portfolioTotalCtx, cashBalance: cashBalanceCtx, loading: portfolioLoading } = usePortfolio();
-  const { orders, tokenBalances, loading: userDataLoading } = useUserData();
-  const { umbrellas, getQuestionsForUmbrella, getAllQuestionsForUmbrella, loading: predictionLoading } = usePredictionData();
+  const { orders, tokenBalances, loading: userDataLoading, refresh: refreshUserData } = useUserData();
+  const { umbrellas, getQuestionsForUmbrella, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, loading: predictionLoading } = usePredictionData();
   const { getCurrentPrice, isLoading: pricesLoading } = useCurrentPrices();
-  const { claim, isClaiming, error: claimError } = useClaimEarnings();
+  
+  // Check if all data is loaded before showing resolved positions
+  const isDataFullyLoaded = !predictionLoading && !userDataLoading && !portfolioLoading && !pricesLoading;
   // removed setPortfolioTotal – portfolio is computed in context
 
   const [loading] = useState(false);
   const [error] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"positions" | "orders" | "history">("positions");
+  const [claimedMarkets, setClaimedMarkets] = useState<Set<string>>(new Set());
   const allUmbrellas = useMemo(() => {
     return umbrellas.map((umb) => ({ umbrella: umb, markets: (getAllQuestionsForUmbrella(umb._id) as PredictionMarket[]) || [] }));
   }, [umbrellas, getAllQuestionsForUmbrella]);
 
   // Effective account comes from unified resolver (smart -> embedded -> external)
   const effectiveAccount = account || null;
+
+  // Callback to handle successful claims
+  const handleClaimSuccess = useCallback((marketId: string, umbrellaId: string) => {
+    console.log('🎉 CLAIM SUCCESS CALLBACK: Removing market', marketId, 'from umbrella', umbrellaId);
+    setClaimedMarkets(prev => {
+      const newSet = new Set([...prev, marketId]);
+      console.log('📝 CLAIMED MARKETS: Updated set:', Array.from(newSet));
+      return newSet;
+    });
+    
+    // Refresh user data to update cash balance
+    console.log('💰 REFRESHING: User data to update cash balance');
+    refreshUserData();
+  }, [refreshUserData]);
 
   // derive active positions
   const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
@@ -79,46 +95,104 @@ export default function Positions() {
             return { market, yesBalance, noBalance, yesPrice, noPrice, yesValue, noValue, totalValue, orders: marketOrders, aggregates };
           })
           .filter(market => market.yesBalance > 0 || market.noBalance > 0);
-        const activeMarkets = processedMarkets.filter(mp => (mp.market as any).status !== 'settled');
+        const activeMarkets = processedMarkets.filter(mp => (mp.market as any).status !== 'resolved');
         return { umbrella, markets: activeMarkets };
       })
       .filter(umbrella => umbrella.markets.length > 0);
   }, [effectiveAccount, umbrellas, getQuestionsForUmbrella, tokenBalances, orders, getCurrentPrice]);
 
-  // derive resolved winnings
+  // derive resolved winnings using dedicated resolved markets storage
   const resolvedUmbrellaPositions: UmbrellaPositions[] = useMemo(() => {
-    if (!effectiveAccount) return [];
+    if (!effectiveAccount) {
+      console.log('🔍 DEBUG: No effective account, returning empty resolved positions');
+      return [];
+    }
     const resolved: UmbrellaPositions[] = [];
-    allUmbrellas.forEach(({ umbrella, markets }) => {
-      const res = markets
-        .filter((m: any) => String(m?.status || '').toLowerCase() === 'settled')
-        .map((m) => {
-          const marketId = (m as any)._id || (m as any).questionId || (m as any).marketId;
-          const tb = marketId ? tokenBalances.get(marketId) : undefined;
-          const yesBalance = tb ? Number(tb.yesBalance) : 0;
-          const noBalance = tb ? Number(tb.noBalance) : 0;
-          return { market: m, yesBalance, noBalance } as any;
-        })
-        .filter((mp: any) => {
-          const outcome = String((mp.market as any).resolvedOutcome || '').toLowerCase();
-          return (outcome === 'yes' && mp.yesBalance > 0) || (outcome === 'no' && mp.noBalance > 0);
-        })
-        .map((mp: any) => ({
-          market: mp.market,
-          yesBalance: mp.yesBalance,
-          noBalance: mp.noBalance,
-          yesPrice: null,
-          noPrice: null,
-          yesValue: 0,
-          noValue: 0,
-          totalValue: 0,
-          orders: [],
-          aggregates: { Yes: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 }, No: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 } },
-        } as MarketPosition));
-      if (res.length > 0) resolved.push({ umbrella, markets: res });
+    
+    console.log('🔍 DEBUG: Checking for resolved markets using dedicated storage...');
+    console.log('🔍 DEBUG: resolvedMarketsByUmbrella:', resolvedMarketsByUmbrella);
+    console.log('🔍 DEBUG: Object.keys(resolvedMarketsByUmbrella):', Object.keys(resolvedMarketsByUmbrella));
+    
+    // Process all umbrellas that have resolved markets
+    Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
+      console.log(`🔍 DEBUG: Processing umbrella ID: ${umbrellaId} with ${resolvedMarkets.length} resolved markets`);
+      console.log(`🔍 DEBUG: Resolved markets data:`, resolvedMarkets);
+      
+      if (resolvedMarkets.length > 0) {
+        // Find the umbrella object for this ID
+        let umbrella = umbrellas.find(u => u._id === umbrellaId);
+        
+         // If not found in umbrellas array, create a basic umbrella object from the resolved market data
+         if (!umbrella) {
+           console.log(`🔍 DEBUG: No umbrella found for ID ${umbrellaId}, creating basic umbrella object`);
+           // Get the first resolved market to extract umbrella info
+           const firstMarket = resolvedMarkets[0];
+           umbrella = {
+             _id: umbrellaId,
+             displayName: firstMarket?.umbrellaName || firstMarket?.displayName || `Umbrella ${umbrellaId}`,
+             children: resolvedMarkets,
+             createdAt: new Date().toISOString(),
+             updatedAt: new Date().toISOString(),
+             __v: 0
+           } as Umbrella;
+         }
+        
+         console.log(`🔍 DEBUG: Processing ${resolvedMarkets.length} resolved markets for ${umbrella.displayName}`);
+         const res = resolvedMarkets
+           .map((m) => {
+             const marketId = (m as any)._id || (m as any).questionId || (m as any).marketId;
+             const tb = marketId ? tokenBalances.get(marketId) : undefined;
+             const yesBalance = tb ? Number(tb.yesBalance) : 0;
+             const noBalance = tb ? Number(tb.noBalance) : 0;
+             console.log(`🔍 DEBUG: Market ${m?.displayName} - marketId: ${marketId}, yesBalance: ${yesBalance}, noBalance: ${noBalance}`);
+             return { market: m, yesBalance, noBalance } as any;
+           })
+           // Filter to only show markets where user has winning positions AND haven't been claimed
+           .filter((mp: any) => {
+             const marketId = (mp.market as any)._id || (mp.market as any).questionId || (mp.market as any).marketId;
+             const isClaimed = claimedMarkets.has(marketId);
+             
+             if (isClaimed) {
+               console.log(`🔍 DEBUG: Market ${mp.market?.displayName} - ALREADY CLAIMED, filtering out`);
+               return false;
+             }
+             
+             const outcome = String((mp.market as any).resolvedOutcome || '').toLowerCase();
+             const hasWinningYes = outcome === 'yes' && mp.yesBalance > 0;
+             const hasWinningNo = outcome === 'no' && mp.noBalance > 0;
+             const hasWinningPosition = hasWinningYes || hasWinningNo;
+             console.log(`🔍 DEBUG: Market ${mp.market?.displayName} - outcome: ${outcome}, hasWinningYes: ${hasWinningYes}, hasWinningNo: ${hasWinningNo}, hasWinningPosition: ${hasWinningPosition}`);
+             return hasWinningPosition;
+           })
+           .map((mp: any) => ({
+             market: mp.market,
+             yesBalance: mp.yesBalance,
+             noBalance: mp.noBalance,
+             yesPrice: null,
+             noPrice: null,
+             yesValue: 0,
+             noValue: 0,
+             totalValue: 0,
+             orders: [],
+             aggregates: { Yes: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 }, No: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 } },
+           } as MarketPosition));
+        
+         console.log(`🔍 DEBUG: Adding ${res.length} resolved markets to table for ${umbrella.displayName}`);
+         console.log(`🔍 DEBUG: Processed markets data:`, res);
+         
+         // Only add umbrella if it has qualifying markets (user has winning positions)
+         if (res.length > 0) {
+           resolved.push({ umbrella, markets: res });
+         } else {
+           console.log(`🔍 DEBUG: Skipping umbrella ${umbrella.displayName} - no winning positions found`);
+         }
+      }
     });
+    
+    console.log('🔍 DEBUG: Final resolvedUmbrellaPositions:', resolved);
+    console.log('🔍 DEBUG: Final resolvedUmbrellaPositions.length:', resolved.length);
     return resolved;
-  }, [effectiveAccount, allUmbrellas, tokenBalances]);
+  }, [effectiveAccount, resolvedMarketsByUmbrella, umbrellas, tokenBalances, claimedMarkets]);
 
   // Calculate totals
   const positionsTotalValue = useMemo(() => {
@@ -216,7 +290,11 @@ export default function Positions() {
 
   return (
     <div className="default-container page-layout">
-      <div className="mb-2">
+      <div>
+        {/* Spacer bar for proper spacing - responsive */}
+        <div className="block md:hidden" style={{ height: '4px', width: '100%' }}></div>
+        <div className="hidden md:block" style={{ height: '48px', width: '100%' }}></div>
+        
         <PositionsHeader
           portfolioTotal={portfolioTotalCtx ?? (cashBalanceCtx + positionsTotalValue)}
           positionsTotalValue={positionsTotalValue}
@@ -227,15 +305,13 @@ export default function Positions() {
         <PositionsTabs 
           activeTab={activeTab} 
           setActiveTab={setActiveTab} 
-          onClaim={claim} 
-          isClaiming={isClaiming}
         />
         
         {!account && <p className="text-body">Log in to view balances.</p>}
         {account && (
           <div className="mt-12">
-            {error || claimError ? (
-              <p className="error-message">{error || claimError}</p>
+            {error ? (
+              <p className="error-message">{error}</p>
             ) : (
               (() => {
                 const softLoading = loading || predictionLoading || userDataLoading || pricesLoading;
@@ -244,29 +320,38 @@ export default function Positions() {
                   return <p className="text-body">No positions found.</p>;
                 }
                 if (activeTab === "positions") {
+                  console.log('🔍 DEBUG: In positions tab, resolvedUmbrellaPositions.length:', resolvedUmbrellaPositions.length);
+                  console.log('🔍 DEBUG: resolvedUmbrellaPositions:', resolvedUmbrellaPositions);
+                  
                   return (
                     <>
-                      {resolvedUmbrellaPositions.length > 0 && (
-                        <div className="mb-24">
-                          <h3 className="mb-6 text-20 font-bold" style={{ color: '#ffffff', fontSize: 34 }}>Winnings</h3>
-                          <ResolvedPositionsTable
-                            umbrellaBalances={resolvedUmbrellaPositions.map(up => ({
-                              umbrella: up.umbrella,
-                              markets: up.markets.map(mp => {
-                                const outcome = String((mp.market as any).resolvedOutcome || '').toLowerCase();
-                                const yes = outcome === 'yes' ? mp.yesBalance.toString() : '0';
-                                const no = outcome === 'no' ? mp.noBalance.toString() : '0';
-                                return { market: mp.market, yes, no };
-                              })
-                            }))}
-                            toCentsString={toCentsString}
-                            softLoading={softLoading}
-                            onClaim={claim}
-                            isClaiming={isClaiming}
-                          />
-                        </div>
-                      )}
-                      {resolvedUmbrellaPositions.length > 0 && (
+         {isDataFullyLoaded && resolvedUmbrellaPositions.length > 0 && (
+           <div className="mb-24">
+             <h3 className="mb-6 text-20 font-bold" style={{ color: '#ffffff', fontSize: 34 }}>Winnings</h3>
+             {(() => {
+               const transformedData = resolvedUmbrellaPositions.map(up => ({
+                 umbrella: up.umbrella,
+                 markets: up.markets.map(mp => {
+                   const outcome = String((mp.market as any).resolvedOutcome || '').toLowerCase();
+                   const yes = outcome === 'yes' ? mp.yesBalance.toString() : '0';
+                   const no = outcome === 'no' ? mp.noBalance.toString() : '0';
+                   console.log(`🔍 DEBUG: Transformed market ${mp.market?.displayName} - outcome: ${outcome}, yes: ${yes}, no: ${no}`);
+                   return { market: mp.market, yes, no };
+                 })
+               }));
+               console.log('🔍 DEBUG: Transformed data for ResolvedPositionsTable:', transformedData);
+               return (
+                 <ResolvedPositionsTable
+                   umbrellaBalances={transformedData}
+                   toCentsString={toCentsString}
+                   softLoading={softLoading}
+                   onClaimSuccess={handleClaimSuccess}
+                 />
+               );
+             })()}
+           </div>
+         )}
+                      {isDataFullyLoaded && resolvedUmbrellaPositions.length > 0 && (
                         <h3 className="mb-6 text-20 font-bold" style={{ color: '#ffffff', fontSize: 34, marginTop: 40 }}>Positions</h3>
                       )}
                       <PositionsTableView
@@ -289,6 +374,7 @@ export default function Positions() {
                     umbrellaBalances={umbrellaBalancesPositions}
                     returnsByQid={returnsByQid}
                     orders={orders || []}
+                    resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
                   />
                 );
               })()

@@ -101,7 +101,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [account, privyWallets]);
 
-  const { umbrellas, getAllQuestionsForUmbrella } = usePredictionData();
+  const { umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella } = usePredictionData();
 
   const load = useCallback(async () => {
     if (!account) {
@@ -115,6 +115,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
       // Build market data map once from already-loaded PredictionData (includes resolved)
       const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
       try {
+        // Process active markets from umbrellas
         umbrellas.forEach((u: any) => {
           const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
           marketsForUmb.forEach((market: any) => {
@@ -124,6 +125,23 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
             }
           });
         });
+        
+        // Process resolved markets separately
+        console.log('🔍 USERDATA DEBUG: Processing resolved markets for token balances...');
+        Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
+          console.log(`🔍 USERDATA DEBUG: Processing ${resolvedMarkets.length} resolved markets for umbrella ${umbrellaId}`);
+          resolvedMarkets.forEach((market: any) => {
+            const marketId = market?._id || market?.questionId || market?.marketId;
+            if (marketId && market?.yesTokenId && market?.noTokenId) {
+              console.log(`🔍 USERDATA DEBUG: Adding resolved market ${marketId} to marketDataMap`);
+              marketDataMap.set(marketId, { yesTokenId: market.yesTokenId, noTokenId: market.noTokenId });
+            } else {
+              console.log(`🔍 USERDATA DEBUG: Skipping resolved market ${marketId} - missing token IDs`);
+            }
+          });
+        });
+        
+        console.log(`🔍 USERDATA DEBUG: Total markets in marketDataMap: ${marketDataMap.size}`);
       } catch {
         // Fallback to direct fetch if prediction data not ready
         const umbrellasDirect = await umbrellaDataService.fetchAllUmbrellas();
@@ -150,7 +168,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [account, privyWallets, checkApproval, umbrellas, getAllQuestionsForUmbrella]);
+  }, [account, privyWallets, checkApproval, umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella]);
 
   const loadTokenBalances = useCallback(async (account: string, marketDataMap: Map<string, { yesTokenId: string; noTokenId: string }>) => {
     try {

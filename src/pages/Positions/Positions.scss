@@ -5,15 +5,26 @@
     border-radius: 6px;
     font-size: 16px;
     font-weight: 400;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid #D1D5DB; /* grey border like tradebox */
     color: #9CA3AF; /* grey text like tradebox */
     background: transparent; /* black/transparent background */
+    transform: translateY(0) scale(1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
 
     &:hover {
       border-color: #8B5CF6; /* purple hover border */
       color: #8B5CF6; /* purple hover text */
       background: transparent !important; /* keep black/transparent on hover */
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+    }
+
+    &:active {
+      transform: translateY(0) scale(0.98);
+      transition: all 0.1s ease;
     }
 
     &.selected.primary {
@@ -21,6 +32,8 @@
       border-color: #8B5CF6; /* purple border when selected */
       color: #7C3AED; /* dark purple text when selected */
       font-weight: 700;
+      transform: translateY(-1px) scale(1.05);
+      box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
     }
 
     &.selected.secondary {
@@ -28,7 +41,10 @@
       border-color: #8B5CF6;
       color: #7C3AED;
       font-weight: 700;
+      transform: translateY(-1px) scale(1.05);
+      box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
     }
+
   }
 }
 

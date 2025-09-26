@@ -1,9 +1,8 @@
-import React from "react";
 import { useNavigate } from "react-router-dom";
-import type { OrderbookSnapshot } from "lib/orderbookService";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 import type { Umbrella } from "lib/umbrellaDataService";
 import Tooltip from "components/Tooltip/Tooltip";
+import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import gtaIcon from "img/ic_gtaVI_24.svg";
 
 export default function PositionsTableView({
@@ -57,17 +56,18 @@ export default function PositionsTableView({
           font-weight: normal !important;
         }
       `}</style>
-      <div
-        className="positions-header grid items-center px-12 py-10"
-        style={{
-          gridTemplateColumns: "minmax(200px, 2fr) repeat(7, 1fr)",
-          borderBottom: "1px solid #333333",
-          color: "#888",
-          fontSize: 12,
-          textTransform: "uppercase",
-          letterSpacing: 0.6,
-        }}
-      >
+      <ScrollableTable minWidth="800px">
+        <div
+          className="positions-header grid items-center px-12 py-10"
+          style={{
+            gridTemplateColumns: "minmax(200px, 2fr) repeat(7, 1fr)",
+            borderBottom: "1px solid #333333",
+            color: "#888",
+            fontSize: 12,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+          }}
+        >
         <div>Market</div>
         <div style={{ textAlign: "center" }}>Current Price</div>
         <div style={{ textAlign: "center" }}>Shares</div>
@@ -84,9 +84,9 @@ export default function PositionsTableView({
             Total Return
           </Tooltip>
         </div>
-      </div>
+        </div>
 
-      <div className="flex flex-col">
+        <div className="flex flex-col">
         {umbrellaBalances.map(({ umbrella, markets }: any) => (
           <div key={umbrella._id} className="umbrella-block">
             <div
@@ -218,7 +218,7 @@ export default function PositionsTableView({
                     <div style={{ textAlign: "center", color: "#fff" }}>
                       <span className={softLoading ? "soft-blur" : undefined}>{marketValue === null || marketValue === undefined || isNaN(marketValue) ? "—" : formatCurrency(marketValue)}</span>
                     </div>
-                    <div style={{ textAlign: "center", color: totalReturnColor }}>
+                    <div style={{ textAlign: "center", color: totalReturnColor, fontWeight: "bold" }}>
                       <span className={softLoading ? "soft-blur" : undefined}>{totalReturnText}</span>
                     </div>
                   </div>
@@ -227,7 +227,8 @@ export default function PositionsTableView({
             })}
           </div>
         ))}
-      </div>
+        </div>
+      </ScrollableTable>
     </div>
   );
 }

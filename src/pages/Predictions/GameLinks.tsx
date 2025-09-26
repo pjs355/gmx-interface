@@ -1,7 +1,8 @@
 import React from "react";
+import type { Umbrella } from "lib/umbrellaDataService";
 
-// Load all game logo images from the local GameLogos directory using Vite's glob import
-const links = [
+// All possible game names
+const allGameNames = [
   "Apex Legends",
   "Battlefield",
   "Call of Duty",
@@ -15,19 +16,68 @@ const links = [
   "Valorant",
   "World of Warcraft",
 ];
-const gameNames = links
-  .map((name) => {
-    return name;
-  })
-  .sort((a, b) => a.localeCompare(b));
 
 interface GameLinksProps {
   selectedGame: string | null;
   onGameSelect: (game: string | null) => void;
+  umbrellas?: Umbrella[];
+  loading?: boolean;
+  filterType?: 'esports' | 'games';
 }
 
-export default function GameLinks({ selectedGame, onGameSelect }: GameLinksProps) {
-  if (gameNames.length === 0) return null;
+export default function GameLinks({ selectedGame, onGameSelect, umbrellas = [], loading = false, filterType }: GameLinksProps) {
+  // Helper function to normalize tags (same as in Predictions.tsx)
+  const normalizeTag = (value: string) =>
+    value
+      .toUpperCase()
+      .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+  // Filter game names to only show games that have active markets for the current page type
+  const gameNames = React.useMemo(() => {
+    if (loading || !umbrellas || umbrellas.length === 0) {
+      return []; // Don't show any games while loading
+    }
+
+    // First filter umbrellas by esports/games type if filterType is provided
+    const filteredUmbrellas = filterType ? umbrellas.filter((umbrella) => {
+      const children = (umbrella as any).children as Array<any> | undefined;
+      if (!children || children.length === 0) return false;
+      
+      // Check if any child has the ESPORTS tag
+      const hasEsportsTag = children.some((q) => {
+        const tags: string[] | undefined = (q && (q as any).tags) as any;
+        if (!tags || tags.length === 0) return false;
+        return tags.some((t) => normalizeTag(t) === "ESPORTS");
+      });
+
+      // Filter based on filterType
+      if (filterType === 'esports') {
+        return hasEsportsTag;
+      } else { // games
+        return !hasEsportsTag;
+      }
+    }) : umbrellas;
+
+    const gamesWithActiveMarkets = allGameNames.filter(gameName => {
+      const normalizedGame = normalizeTag(gameName);
+      return filteredUmbrellas.some(umbrella => {
+        const children = (umbrella as any).children as Array<any> | undefined;
+        if (!children || children.length === 0) return false;
+        return children.some((q) => {
+          const tags: string[] | undefined = (q && (q as any).tags) as any;
+          if (!tags || tags.length === 0) return false;
+          return tags.some((t) => normalizeTag(t) === normalizedGame);
+        });
+      });
+    });
+
+    return gamesWithActiveMarkets.sort((a, b) => a.localeCompare(b));
+  }, [umbrellas, loading, filterType]);
+
+  // Don't render anything while loading or if no games have active markets
+  if (loading || gameNames.length === 0) return null;
 
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
@@ -82,7 +132,14 @@ export default function GameLinks({ selectedGame, onGameSelect }: GameLinksProps
           <button
             className={`game-link ${selectedGame === name ? 'active' : ''}`}
             key={name}
-            onClick={() => onGameSelect(name)}
+            onClick={() => {
+              // Toggle selection: if already selected, deselect; otherwise select
+              if (selectedGame === name) {
+                onGameSelect(null);
+              } else {
+                onGameSelect(name);
+              }
+            }}
           >
             {name}
           </button>

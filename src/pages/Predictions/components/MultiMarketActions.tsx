@@ -41,10 +41,10 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
                   border: "2px solid #22c55e",
                   marginRight: "8px",
                   fontSize: "16px",
-                  padding: "10px 20px",
+                  padding: "10px 16px",
                   minHeight: "42px",
-                  width: "128px",
-                  flex: "0 0 128px",
+                  width: "100px",
+                  flex: "0 0 100px",
                   textAlign: "center",
                 }}
                 onMouseEnter={(e) => {
@@ -69,10 +69,10 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
                   color: "#ef4444",
                   border: "2px solid #ef4444",
                   fontSize: "16px",
-                  padding: "10px 20px",
+                  padding: "10px 16px",
                   minHeight: "42px",
-                  width: "128px",
-                  flex: "0 0 128px",
+                  width: "100px",
+                  flex: "0 0 100px",
                   textAlign: "center",
                 }}
                 onMouseEnter={(e) => {

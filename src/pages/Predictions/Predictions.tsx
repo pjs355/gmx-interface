@@ -97,7 +97,12 @@ export default function Predictions() {
   return (
     <div className="predictions-page page-layout">
       {/** <ImageBanner /> */}
-      <GameLinks selectedGame={selectedGame} onGameSelect={setSelectedGame} />
+      <GameLinks 
+        selectedGame={selectedGame} 
+        onGameSelect={setSelectedGame} 
+        umbrellas={umbrellas}
+        loading={loading}
+      />
 
       <div className="predictions-grid">
         {(filteredUmbrellas.length > 0) ? (

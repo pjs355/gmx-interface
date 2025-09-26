@@ -3,13 +3,14 @@ import type { PredictionMarket } from "lib/predictionMarketDataService";
 import type { Umbrella } from "lib/umbrellaDataService";
 import gtaIcon from "img/ic_gtaVI_24.svg";
 import { triggerFireworksForElement } from "./Fireworks";
+import { useClaimEarningsForMarket } from "lib/claimEarnings";
+import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 
 export default function ResolvedPositionsTable({
   umbrellaBalances,
   toCentsString,
   softLoading = false,
-  onClaim,
-  isClaiming = false,
+  onClaimSuccess,
 }: {
   umbrellaBalances: Array<{
     umbrella: Umbrella;
@@ -17,9 +18,10 @@ export default function ResolvedPositionsTable({
   }>;
   toCentsString: (n?: number | null) => string;
   softLoading?: boolean;
-  onClaim?: () => void;
-  isClaiming?: boolean;
+  onClaimSuccess?: (marketId: string, umbrellaId: string) => void;
 }) {
+  console.log('🔍 ResolvedPositionsTable DEBUG: Received umbrellaBalances:', umbrellaBalances);
+  
   const formatCurrency = (value?: number | null): string => {
     if (value === null || value === undefined || !isFinite(value)) return "—";
     const isInt = Math.abs(value % 1) < 1e-9;
@@ -28,25 +30,26 @@ export default function ResolvedPositionsTable({
 
   return (
     <div className="flex flex-col gap-8">
-      <div
-        className="positions-header grid items-center px-12 py-10"
-        style={{
-          gridTemplateColumns: "minmax(200px, 2fr) repeat(3, 1fr) 1fr",
-          borderBottom: "1px solid #333333",
-          color: "#888",
-          fontSize: 12,
-          textTransform: "uppercase",
-          letterSpacing: 0.6,
-        }}
-      >
+      <ScrollableTable minWidth="600px">
+        <div
+          className="positions-header grid items-center px-12 py-10"
+          style={{
+            gridTemplateColumns: "minmax(200px, 2fr) repeat(3, 1fr) 1fr",
+            borderBottom: "1px solid #333333",
+            color: "#888",
+            fontSize: 12,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+          }}
+        >
         <div>Market</div>
         <div style={{ textAlign: "center" }}>Shares</div>
         <div style={{ textAlign: "center" }}>Settlement Payout</div>
         <div style={{ textAlign: "center" }}>Total Payout</div>
         <div style={{ textAlign: "center" }}></div>
-      </div>
+        </div>
 
-      <div className="flex flex-col">
+        <div className="flex flex-col">
         {umbrellaBalances.map(({ umbrella, markets }) => (
           <div key={umbrella._id} className="umbrella-block">
             <div
@@ -89,7 +92,7 @@ export default function ResolvedPositionsTable({
               // Derive display name to mirror Positions table logic
               const resolvedOutcome = String((market as any).resolvedOutcome || '').toLowerCase();
               const winningSideLabel: 'Yes' | 'No' = resolvedOutcome === 'yes' ? 'Yes' : 'No';
-              const parts = title.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
+              const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
               const isVs = parts.length === 2;
               const yesColor = '#16a34a';
               const noColor = '#ef4444';
@@ -116,68 +119,99 @@ export default function ResolvedPositionsTable({
                       <span className={softLoading ? "soft-blur" : undefined}>{formatCurrency(totalPayout)}</span>
                     </div>
                   <div style={{ textAlign: "center" }}>
-                    <ClaimButton onClaim={onClaim} isClaiming={isClaiming} />
+                    <ClaimButton 
+                      market={market} 
+                      resolvedOutcome={resolvedOutcome as 'yes' | 'no'}
+                      onClaimSuccess={onClaimSuccess}
+                      umbrellaId={umbrella._id}
+                    />
                   </div>
                 </div>
               );
             })}
           </div>
         ))}
-      </div>
+        </div>
+      </ScrollableTable>
     </div>
   );
 }
 
-function ClaimButton({ onClaim, isClaiming }: { onClaim?: () => void; isClaiming?: boolean }) {
-  const [localClaiming, setLocalClaiming] = React.useState(false);
+function ClaimButton({ 
+  market, 
+  resolvedOutcome,
+  onClaimSuccess,
+  umbrellaId
+}: { 
+  market: PredictionMarket; 
+  resolvedOutcome: 'yes' | 'no';
+  onClaimSuccess?: (marketId: string, umbrellaId: string) => void;
+  umbrellaId: string;
+}) {
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
+  const { claim, isClaiming, error } = useClaimEarningsForMarket(market, resolvedOutcome);
 
   const handleClick = async () => {
-    if (localClaiming || isClaiming) return;
-    setLocalClaiming(true);
+    if (isClaiming) return;
+    
+    // Trigger fireworks immediately on click
     if (btnRef.current) {
       triggerFireworksForElement(btnRef.current);
+      console.log('🎉 FIREWORKS: Triggered immediately on click for', market.displayName);
     }
     
-    if (onClaim) {
-      await onClaim();
+    try {
+      console.log('🎯 CLAIM BUTTON: Starting claim for market:', market.displayName);
+      const success = await claim();
+      
+      if (success) {
+        console.log('✅ CLAIM SUCCESS: Transaction completed for', market.displayName);
+        // Call the success callback to remove the market from the table
+        const marketId = market._id || market.questionId || market.marketId;
+        if (onClaimSuccess && marketId) {
+          onClaimSuccess(marketId, umbrellaId);
+        }
+      } else if (error) {
+        console.error('❌ CLAIM FAILED:', error);
+      }
+    } catch (err) {
+      console.error('❌ CLAIM ERROR:', err);
     }
-    
-    setTimeout(() => setLocalClaiming(false), 3000);
   };
-
-  const claiming = localClaiming || isClaiming;
 
   return (
     <button
       ref={btnRef}
       className="side-btn"
+      disabled={isClaiming}
       style={{
-        background: claiming ? "#6d28d9" : "#7c3aed",
+        background: isClaiming ? "#6d28d9" : "#7c3aed",
         color: "#fff",
         border: "none",
         padding: "10px 16px",
         borderRadius: 6,
         fontWeight: 600,
-        cursor: "pointer",
-        transition: "background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease",
-        boxShadow: claiming ? "0 0 0 0 rgba(0,0,0,0)" : "0 4px 10px rgba(124, 58, 237, 0.35)",
+        cursor: isClaiming ? "not-allowed" : "pointer",
+        opacity: isClaiming ? 0.7 : 1,
+        transition: "background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
+        boxShadow: isClaiming ? "0 0 0 0 rgba(0,0,0,0)" : "0 4px 10px rgba(124, 58, 237, 0.35)",
       }}
       onMouseEnter={(e) => {
-        if (!claiming) (e.currentTarget as HTMLButtonElement).style.background = "#8b5cf6";
+        if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.background = "#8b5cf6";
       }}
       onMouseLeave={(e) => {
-        if (!claiming) (e.currentTarget as HTMLButtonElement).style.background = "#7c3aed";
+        if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.background = "#7c3aed";
       }}
       onMouseDown={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.transform = "translateY(1px)";
+        if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(1px)";
       }}
       onMouseUp={(e) => {
         (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
       }}
       onClick={handleClick}
+      title={error ? `Error: ${error}` : undefined}
     >
-      {claiming ? "Claiming..." : "Claim Winnings"}
+      {isClaiming ? "Claiming..." : "Claim Winnings"}
     </button>
   );
 }

@@ -18,10 +18,12 @@
   justify-content: flex-start;
 }
 
-.Footer-logo {
-  width: 83px;
-  height: 21px;
-  object-fit: contain;
+.Footer-logo-text {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  text-decoration: none;
 }
 
 .Footer-center {

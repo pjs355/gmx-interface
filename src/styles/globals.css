@@ -41,12 +41,13 @@ body {
 	box-sizing: border-box;
 }
 
-a {
+/* Only apply global link styles to non-header links */
+a:not(.App-header a):not(.App-header-drawer a) {
 	font-weight: 500;
 	color: #646cff;
 	text-decoration: inherit;
 }
-a:hover {
+a:not(.App-header a):not(.App-header-drawer a):hover {
 	color: #535bf2;
 }
 

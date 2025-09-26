@@ -5,13 +5,9 @@ import "./Positions.scss";
 export default function PositionsTabs({
   activeTab,
   setActiveTab,
-  onClaim,
-  isClaiming,
 }: {
   activeTab: "positions" | "orders" | "history";
   setActiveTab: (t: "positions" | "orders" | "history") => void;
-  onClaim?: () => void;
-  isClaiming?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between mb-12">
@@ -36,16 +32,6 @@ export default function PositionsTabs({
           className={`side-btn ${activeTab === "history" ? "selected primary" : ""}`}
         >
           History
-        </Button>
-      </div>
-      <div>
-        <Button
-          variant="primary"
-          onClick={onClaim}
-          disabled={!onClaim || isClaiming}
-          className="side-btn"
-        >
-          {isClaiming ? "Claiming..." : "Claim"}
         </Button>
       </div>
     </div>

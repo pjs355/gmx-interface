@@ -8,6 +8,7 @@ type PredictionDataContextValue = {
   umbrellas: Umbrella[];
   marketsByUmbrella: Record<string, MarketLite[]>;
   allMarketsByUmbrella: Record<string, MarketLite[]>;
+  resolvedMarketsByUmbrella: Record<string, MarketLite[]>;
   // Legacy fields expected by existing pages/components
   singleMarketQuestions: Record<string, any>;
   singleMarketOrderbooks: Record<string, any>;
@@ -19,6 +20,7 @@ type PredictionDataContextValue = {
   getUmbrellaById: (umbrellaId: string) => Umbrella | undefined;
   getQuestionsForUmbrella: (umbrellaId: string) => any[];
   getAllQuestionsForUmbrella: (umbrellaId: string) => any[];
+  getResolvedQuestionsForUmbrella: (umbrellaId: string) => any[];
   getOrderbookForQuestion: (umbrellaId: string, questionId: string) => any | null;
   refreshOrderbook: (umbrellaId: string, questionId: string) => Promise<void>;
 };
@@ -27,6 +29,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
   umbrellas: [],
   marketsByUmbrella: {},
   allMarketsByUmbrella: {},
+  resolvedMarketsByUmbrella: {},
   singleMarketQuestions: {},
   singleMarketOrderbooks: {},
   multiMarketData: {},
@@ -36,6 +39,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
   getUmbrellaById: () => undefined,
   getQuestionsForUmbrella: () => [],
   getAllQuestionsForUmbrella: () => [],
+  getResolvedQuestionsForUmbrella: () => [],
   getOrderbookForQuestion: () => null,
   refreshOrderbook: async () => {},
 });
@@ -45,6 +49,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
   const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
   const [marketsByUmbrella, setMarketsByUmbrella] = useState<Record<string, MarketLite[]>>({});
   const [allMarketsByUmbrella, setAllMarketsByUmbrella] = useState<Record<string, MarketLite[]>>({});
+  const [resolvedMarketsByUmbrella, setResolvedMarketsByUmbrella] = useState<Record<string, MarketLite[]>>({});
   const [singleMarketQuestions, setSingleMarketQuestions] = useState<Record<string, any>>({});
   const [singleMarketOrderbooks, setSingleMarketOrderbooks] = useState<Record<string, any>>({});
   const [multiMarketData, setMultiMarketData] = useState<Record<string, any>>({});
@@ -61,30 +66,44 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
         umbrellas.map(async (umbrella: any) => {
           const markets = await umbrellaDataService.fetchQuestionsForUmbrella(umbrella, { includeResolved: true });
           const key = umbrella?._id || umbrella?.id || umbrella?.slug || JSON.stringify(umbrella);
+          
+          console.log(`🔍 CONTEXT DEBUG: Fetched ${markets.length} markets for ${umbrella.displayName}`);
+          const resolvedCount = markets.filter((m: any) => String(m?.status ?? "").toLowerCase() === "resolved").length;
+          console.log(`🔍 CONTEXT DEBUG: Found ${resolvedCount} resolved markets in ${umbrella.displayName}`);
+          
           // Filter out resolved markets here so downstream consumers never see them
           const filteredMarkets = Array.isArray(markets)
             ? markets.filter((m: any) => String((m?.status ?? "")).toLowerCase() !== "resolved")
             : [];
           // Provide a cleaned umbrella copy with filtered children for pages that read umbrella.children
           const cleanedUmbrella = { ...umbrella, children: filteredMarkets };
-          return [key as string, filteredMarkets, cleanedUmbrella] as const;
+           return [key as string, filteredMarkets, cleanedUmbrella, markets] as const;
         })
       );
       const marketsMap: Record<string, MarketLite[]> = {};
       const allMarketsMap: Record<string, MarketLite[]> = {};
+      const resolvedMarketsMap: Record<string, MarketLite[]> = {};
       const singleQuestions: Record<string, any> = {};
       const orderbooks: Record<string, any> = {};
       const multiData: Record<string, any> = {};
 
       const cleanedUmbrellas: any[] = [];
-      entries.forEach(([key, markets, cleanedUmbrella]) => {
+       entries.forEach(([key, markets, cleanedUmbrella, allMarkets]) => {
+        // Store all markets (including resolved) for consumers like Positions page (no re-fetch on mount)
+        allMarketsMap[key] = allMarkets;
+        console.log(`🔍 CONTEXT DEBUG: Stored ${allMarkets.length} markets in allMarketsMap[${key}] for ${cleanedUmbrella.displayName}`);
+        
+        // Store only resolved markets separately
+        const resolvedMarkets = allMarkets.filter((m: any) => String(m?.status ?? "").toLowerCase() === "resolved");
+        if (resolvedMarkets.length > 0) {
+          resolvedMarketsMap[key] = resolvedMarkets;
+          console.log(`🔍 CONTEXT DEBUG: Stored ${resolvedMarkets.length} resolved markets in resolvedMarketsMap[${key}] for ${cleanedUmbrella.displayName}`);
+        }
+
         // Skip umbrellas that have no active markets left
         if (!Array.isArray(markets) || markets.length === 0) {
           return;
         }
-
-        // Store all markets (including resolved) for consumers like Positions page (no re-fetch on mount)
-        allMarketsMap[key] = markets;
 
         marketsMap[key] = markets;
         const isSingle = Array.isArray(markets) && markets.length === 1;
@@ -105,6 +124,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
       setUmbrellas(cleanedUmbrellas as any);
       setMarketsByUmbrella(marketsMap);
       setAllMarketsByUmbrella(allMarketsMap);
+      setResolvedMarketsByUmbrella(resolvedMarketsMap);
       setSingleMarketQuestions(singleQuestions);
       setSingleMarketOrderbooks(orderbooks);
       setMultiMarketData(multiData);
@@ -241,10 +261,27 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 
   const getAllQuestionsForUmbrella = useCallback((umbrellaId: string) => {
     const all = allMarketsByUmbrella[umbrellaId];
-    if (Array.isArray(all)) return all as any[];
+    console.log(`🔍 CONTEXT DEBUG: getAllQuestionsForUmbrella(${umbrellaId}) - allMarketsByUmbrella[${umbrellaId}]:`, all);
+    if (Array.isArray(all)) {
+      const resolvedCount = all.filter((m: any) => String(m?.status ?? "").toLowerCase() === "resolved").length;
+      console.log(`🔍 CONTEXT DEBUG: Returning ${all.length} markets (${resolvedCount} resolved) for ${umbrellaId}`);
+      return all as any[];
+    }
     // fallback to active-only if all not present yet
+    console.log(`🔍 CONTEXT DEBUG: Fallback to getQuestionsForUmbrella for ${umbrellaId}`);
     return getQuestionsForUmbrella(umbrellaId);
   }, [allMarketsByUmbrella, getQuestionsForUmbrella]);
+
+  const getResolvedQuestionsForUmbrella = useCallback((umbrellaId: string) => {
+    const resolved = resolvedMarketsByUmbrella[umbrellaId];
+    console.log(`🔍 CONTEXT DEBUG: getResolvedQuestionsForUmbrella(${umbrellaId}) - resolvedMarketsByUmbrella[${umbrellaId}]:`, resolved);
+    if (Array.isArray(resolved)) {
+      console.log(`🔍 CONTEXT DEBUG: Returning ${resolved.length} resolved markets for ${umbrellaId}`);
+      return resolved as any[];
+    }
+    console.log(`🔍 CONTEXT DEBUG: No resolved markets found for ${umbrellaId}`);
+    return [];
+  }, [resolvedMarketsByUmbrella]);
 
   const refreshOrderbook = useCallback(async (umbrellaId: string, questionId: string) => {
     try {
@@ -280,6 +317,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
     umbrellas,
     marketsByUmbrella,
     allMarketsByUmbrella,
+    resolvedMarketsByUmbrella,
     singleMarketQuestions,
     singleMarketOrderbooks,
     multiMarketData,
@@ -289,9 +327,10 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
     getUmbrellaById,
     getQuestionsForUmbrella,
     getAllQuestionsForUmbrella,
+    getResolvedQuestionsForUmbrella,
     getOrderbookForQuestion,
     refreshOrderbook,
-  }), [umbrellas, marketsByUmbrella, allMarketsByUmbrella, singleMarketQuestions, singleMarketOrderbooks, multiMarketData, loading, error, load, getUmbrellaById, getQuestionsForUmbrella, getAllQuestionsForUmbrella, getOrderbookForQuestion, refreshOrderbook]);
+  }), [umbrellas, marketsByUmbrella, allMarketsByUmbrella, resolvedMarketsByUmbrella, singleMarketQuestions, singleMarketOrderbooks, multiMarketData, loading, error, load, getUmbrellaById, getQuestionsForUmbrella, getAllQuestionsForUmbrella, getResolvedQuestionsForUmbrella, getOrderbookForQuestion, refreshOrderbook]);
 
   return <PredictionDataContext.Provider value={value}>{children}</PredictionDataContext.Provider>;
 }
@@ -299,5 +338,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 export function usePredictionData(): PredictionDataContextValue {
   return useContext(PredictionDataContext);
 }
+
+
 
 

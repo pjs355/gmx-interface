@@ -50,7 +50,7 @@
   left: inherit;
   height: 100vh;
   width: 30.4rem;
-  overflow-y: auto;
+  overflow-y: auto; /* Allow scrolling if needed */
   -ms-overflow-style: none; /* Internet Explorer 10+ */
   scrollbar-width: none; /* Firefox */
 }
@@ -58,15 +58,18 @@
 .App-header-drawer .App-header-links {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 2rem 0;
+  height: auto; /* Changed from 100% to auto */
+  max-height: 100vh; /* Ensure it doesn't exceed viewport */
+  padding: 1rem 0; /* Reduced from 2rem to 1rem */
   align-items: stretch;
   justify-content: flex-start;
+  overflow-y: visible; /* Allow content to be visible */
 }
 
 .App-header-drawer .App-header-link-container {
   flex: 0 0 auto;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem; /* Reduced from 0.5rem to 0.25rem */
+  width: 100%; /* Full width */
 }
 
 /* Mobile metrics display */
@@ -108,16 +111,17 @@
 
 .App-header-drawer .App-header-link-container .a,
 .App-header-drawer .App-header-link-container a {
-  font-size: var(--font-size-body-large);
-  line-height: var(--line-height-body-large);
-  font-weight: normal;
-  letter-spacing: 0.1px;
-  color: #ffffff;
-  padding: 1.5rem 2rem;
-  text-decoration: none;
-  display: block;
-  transition: color 0.2s ease, background-color 0.2s ease;
-  text-align: left;
+  font-size: 1.2rem !important; /* Increased text size */
+  line-height: 1.4 !important;
+  font-weight: normal !important;
+  letter-spacing: 0.1px !important;
+  color: #ffffff !important;
+  padding: 1rem 2rem !important; /* Increased padding for better touch targets */
+  text-decoration: none !important;
+  display: block !important;
+  transition: color 0.2s ease, background-color 0.2s ease !important;
+  text-align: left !important;
+  width: 100% !important; /* Full width */
 }
 
 .App-header-drawer .App-header-link-container .a:hover,
@@ -125,13 +129,13 @@
 .App-header-drawer .App-header-link-container .a:active,
 .App-header-drawer .App-header-link-container a:hover,
 .App-header-drawer .App-header-link-container a:focus {
-  color: #9285f3;
-  background-color: #1a1a1a;
+  color: #9285f3 !important;
+  background-color: #1a1a1a !important; /* Back to original grey color */
 }
 
 .App-header-drawer .App-header-link-container a.active {
-  color: #9285f3;
-  font-weight: bold;
+  color: #9285f3 !important;
+  font-weight: bold !important;
 }
 
 .App-header.large .App-header-link-container {
@@ -201,14 +205,19 @@
   margin-right: 1.2rem;
 }
 
-.App-header-link-main img {
+.App-header-logo-text {
   display: inline-block;
-  height: 2.15rem;
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: #ffffff;
   vertical-align: middle;
+  letter-spacing: -0.02em;
+  text-decoration: none;
 }
 
-.App-header-link-main img.small {
+.App-header-logo-text.small {
   display: none;
+  font-size: 1.8rem;
 }
 
 .App-header .a,
@@ -356,8 +365,8 @@
     grid-template-columns: 1fr auto auto auto auto;
   }
 
-  .App-header-link-main img {
-    height: 2.1rem;
+  .App-header-logo-text {
+    font-size: 2.1rem;
   }
 
 .App-header.small {
@@ -396,11 +405,11 @@
 }
 
 @media (max-width: 600px) {
-  .App-header-link-main img.big {
+  .App-header-logo-text.big {
     display: none;
   }
 
-  .App-header-link-main img.small {
+  .App-header-logo-text.small {
     display: inline-block;
   }
 }

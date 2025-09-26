@@ -5,7 +5,7 @@ import { isHomeSite } from "config/ui";
 import ExternalLink from "components/ExternalLink/ExternalLink";
 import { TrackingLink } from "components/TrackingLink/TrackingLink";
 
-import logoImg from "img/prinx.png";
+// Removed logo import - using text instead
 
 import { SOCIAL_LINKS, getFooterLinks } from "./constants";
 import "./Footer.scss";
@@ -26,7 +26,7 @@ export default function Footer({ showRedirectModal, redirectPopupTimestamp, isMo
   return (
     <div className={`Footer ${isMobileTradePage ? "pb-large" : "pb-normal"}`}>
       <div className="Footer-left">
-        <img src={logoImg} alt="Prinx Logo" className="Footer-logo" />
+        <span className="Footer-logo-text">LevelUp</span>
       </div>
       <div className="Footer-center">
         {getFooterLinks(isHome).map(({ external, label, link, isAppLink }) => {

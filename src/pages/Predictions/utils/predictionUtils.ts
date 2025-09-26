@@ -51,7 +51,7 @@ export const getTopTwoMarkets = (
 };
 
 // Helper function to truncate market name
-export const truncateMarketName = (name: string, maxLength: number = 20) => {
+export const truncateMarketName = (name: string, maxLength: number = 25) => {
   if (name.length <= maxLength) return name;
   return name.substring(0, maxLength - 3) + '...';
 };

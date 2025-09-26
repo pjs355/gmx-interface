@@ -2,39 +2,113 @@ import React from "react";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 import { getFinalAmount } from "lib/simplifiedOrderService";
 import gtaIcon from "img/ic_gtaVI_24.svg";
+import Tooltip from "components/Tooltip/Tooltip";
+import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 
 export default function HistoryView({ 
   umbrellaBalances, 
   returnsByQid,
-  orders
+  orders,
+  resolvedMarketsByUmbrella
 }: { 
   umbrellaBalances: any[];
   returnsByQid: Record<string, { Yes: number; No: number }>;
   orders: any[];
+  resolvedMarketsByUmbrella: Record<string, any[]>;
 }) {
+  // Filter resolved markets to only show those where user has trading history
+  const filteredResolvedMarkets = React.useMemo(() => {
+    const filtered: Array<{ umbrella: any; markets: any[] }> = [];
+    
+    console.log('🔍 HISTORY DEBUG: Processing resolved markets for history tab...');
+    console.log('🔍 HISTORY DEBUG: resolvedMarketsByUmbrella:', resolvedMarketsByUmbrella);
+    
+    Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
+      console.log(`🔍 HISTORY DEBUG: Processing umbrella ${umbrellaId} with ${resolvedMarkets.length} resolved markets`);
+      
+      const marketsWithHistory: any[] = [];
+      
+      resolvedMarkets.forEach((market) => {
+        const marketId = market._id || market.questionId || market.marketId;
+        if (!marketId) return;
+        
+        // Check if user has any trading history for this market
+        const finalAmounts = getFinalAmount(orders, marketId);
+        const hasTradingHistory = finalAmounts.yesShares > 0 || finalAmounts.noShares > 0;
+        
+        console.log(`🔍 HISTORY DEBUG: Market ${market.displayName} - hasTradingHistory: ${hasTradingHistory}, yesShares: ${finalAmounts.yesShares}, noShares: ${finalAmounts.noShares}`);
+        
+        if (hasTradingHistory) {
+          // Create market data in the format expected by the component
+          const yesShares = finalAmounts.yesShares;
+          const noShares = finalAmounts.noShares;
+          
+          marketsWithHistory.push({
+            market,
+            yes: yesShares.toString(),
+            no: noShares.toString()
+          });
+        }
+      });
+      
+      if (marketsWithHistory.length > 0) {
+        // Create umbrella object
+        const umbrella = {
+          _id: umbrellaId,
+          displayName: resolvedMarkets[0]?.umbrellaName || resolvedMarkets[0]?.displayName || `Umbrella ${umbrellaId}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          __v: 0
+        };
+        
+        filtered.push({ umbrella, markets: marketsWithHistory });
+        console.log(`🔍 HISTORY DEBUG: Added umbrella ${umbrella.displayName} with ${marketsWithHistory.length} markets with history`);
+      }
+    });
+    
+    console.log('🔍 HISTORY DEBUG: Final filtered resolved markets:', filtered);
+    return filtered;
+  }, [resolvedMarketsByUmbrella, orders]);
+
   return (
     <div className="flex flex-col gap-8">
-      <div
-        className="grid items-center px-12 py-10"
-        style={{
-          gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr)",
-          borderBottom: "1px solid #333333",
-          color: "#888",
-          fontSize: 12,
-          textTransform: "uppercase",
-          letterSpacing: 0.6,
-        }}
-      >
-        <div>Market</div>
-        <div style={{ textAlign: "center" }}>Final Position</div>
-        <div style={{ textAlign: "center" }}>Settlement Payout</div>
-        <div style={{ textAlign: "center" }}>Total Cost</div>
-        <div style={{ textAlign: "center" }}>Total Payout</div>
-        <div style={{ textAlign: "center" }}>Total Return</div>
-      </div>
+      {filteredResolvedMarkets.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px", color: "#888" }}>
+          <p>No resolved markets with trading history found.</p>
+          <p style={{ fontSize: "14px", marginTop: "8px" }}>
+            Only resolved markets where you have trading history will appear here.
+          </p>
+        </div>
+      ) : (
+        <ScrollableTable minWidth="700px">
+          <div
+            className="grid items-center px-12 py-10"
+            style={{
+              gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr)",
+              borderBottom: "1px solid #333333",
+              color: "#888",
+              fontSize: 12,
+              textTransform: "uppercase",
+              letterSpacing: 0.6,
+            }}
+          >
+            <div>Market</div>
+            <div style={{ textAlign: "center" }}>Final Position</div>
+            <div style={{ textAlign: "center" }}>Settlement Payout</div>
+            <div style={{ textAlign: "center" }}>Total Cost</div>
+            <div style={{ textAlign: "center" }}>Total Payout</div>
+            <div style={{ textAlign: "center" }}>
+              <Tooltip
+                content="Total return includes total payout of current positions and any past gains you have bought or sold."
+                position="top"
+              >
+                Total Return
+              </Tooltip>
+            </div>
+          </div>
 
-      <div className="flex flex-col">
-        {umbrellaBalances.map(({ umbrella, markets }) => (
+          <div className="flex flex-col">
+        {filteredResolvedMarkets.map(({ umbrella, markets }) => (
           <div key={umbrella._id} className="umbrella-block">
             <div
               className="grid px-12 py-10"
@@ -60,16 +134,14 @@ export default function HistoryView({
               // Calculate final amounts for this market
               const finalAmounts = qid ? getFinalAmount(orders, qid) : { yesShares: 0, noShares: 0, yesCost: 0, noCost: 0 };
               
+              // Get the resolved outcome to determine if user was correct
+              const resolvedOutcome = String((market as any).resolvedOutcome || '').toLowerCase();
+              
               const rows: { side: "Yes" | "No"; amount: string }[] = [];
               if (yesNum > 0) rows.push({ side: "Yes", amount: yes });
               if (noNum > 0) rows.push({ side: "No", amount: no });
 
               return rows.map(({ side, amount }) => {
-                const legPnls = qid ? returnsByQid[qid] : undefined;
-                const legPnl = side === "Yes" ? (legPnls?.Yes || 0) : (legPnls?.No || 0);
-                const totalReturnColor = legPnl >= 0 ? "#16a34a" : "#ef4444";
-                const totalReturnText = legPnl === 0 ? "—" : `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(2)}`;
-
                 // Get final position and cost for this leg
                 const finalShares = side === "Yes" ? finalAmounts.yesShares : finalAmounts.noShares;
                 const finalCost = side === "Yes" ? finalAmounts.yesCost : finalAmounts.noCost;
@@ -79,6 +151,45 @@ export default function HistoryView({
                 
                 // Format USDC cost - remove unnecessary decimals
                 const totalCostText = finalCost > 0 ? `$${finalCost % 1 === 0 ? finalCost.toFixed(0) : finalCost.toFixed(2)}` : "—";
+
+                // Calculate settlement payout: $1 if user was correct, $0 if wrong
+                const wasCorrect = (side === "Yes" && resolvedOutcome === "yes") || (side === "No" && resolvedOutcome === "no");
+                const settlementPayout = wasCorrect ? 1 : 0;
+                const settlementPayoutText = settlementPayout === 1 ? "$1" : "$0";
+
+                // Calculate total payout: Final Position × Settlement Payout
+                const totalPayout = finalShares * settlementPayout;
+                const totalPayoutText = totalPayout > 0 ? `$${totalPayout % 1 === 0 ? totalPayout.toFixed(0) : totalPayout.toFixed(2)}` : "$0";
+                const totalPayoutColor = totalPayout > 0 ? "#16a34a" : "#fff"; // Green if positive, white if $0
+
+                // Calculate total return using same logic as positions tab
+                // baseReturn = totalPayout - effectiveCost (totalPayout is like marketValue)
+                const effectiveCost = finalCost;
+                const baseReturn = (totalPayout === null || effectiveCost === null) ? null : (totalPayout - effectiveCost);
+                const realizedLegPnl = (() => {
+                  if (!qid) return 0;
+                  const legPnls = returnsByQid[qid];
+                  if (!legPnls) return 0;
+                  return side === "Yes" ? (legPnls.Yes || 0) : (legPnls.No || 0);
+                })();
+                const totalReturn = baseReturn === null ? null : (baseReturn + realizedLegPnl);
+                const totalReturnPct = (totalReturn !== null && effectiveCost && effectiveCost > 0)
+                  ? (totalReturn / effectiveCost) * 100
+                  : null;
+                const totalReturnColor = totalReturn === null
+                  ? "#fff"
+                  : (totalReturn >= 0 ? "#16a34a" : "#ef4444");
+                const totalReturnText = (() => {
+                  if (totalReturn === null || !isFinite(totalReturn)) return "—";
+                  const signUsd = totalReturn >= 0 ? "+" : "-";
+                  const usdPart = `$${Math.abs(totalReturn) % 1 === 0 ? Math.abs(totalReturn).toFixed(0) : Math.abs(totalReturn).toFixed(2)}`;
+                  if (totalReturnPct === null || !isFinite(totalReturnPct)) {
+                    return `${signUsd}${usdPart}`;
+                  }
+                  const signPct = totalReturnPct >= 0 ? "+" : "-";
+                  const pctPart = `${Math.round(Math.abs(totalReturnPct))}%`;
+                  return `${signUsd}${usdPart} (${signPct}${pctPart})`;
+                })();
 
                 const title = (market?.displayName || (market as any)?.question || '').trim();
                 const parts = title.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
@@ -104,17 +215,19 @@ export default function HistoryView({
                       )}
                     </div>
                     <div style={{ textAlign: "center", color: "#fff" }}>{finalPositionText}</div>
-                    <div style={{ textAlign: "center", color: "#fff" }}>—</div>
+                    <div style={{ textAlign: "center", color: "#fff" }}>{settlementPayoutText}</div>
                     <div style={{ textAlign: "center", color: "#fff" }}>{totalCostText}</div>
-                    <div style={{ textAlign: "center", color: "#fff" }}>—</div>
-                    <div style={{ textAlign: "center", color: totalReturnColor }}>{totalReturnText}</div>
+                    <div style={{ textAlign: "center", color: totalPayoutColor }}>{totalPayoutText}</div>
+                    <div style={{ textAlign: "center", color: totalReturnColor, fontWeight: "bold" }}>{totalReturnText}</div>
                   </div>
                 );
               });
             })}
           </div>
         ))}
-      </div>
+          </div>
+        </ScrollableTable>
+      )}
     </div>
   );
 }

@@ -11,8 +11,7 @@ import { useMedia } from "react-use";
 import { HeaderPromoBanner } from "components/HeaderPromoBanner/HeaderPromoBanner";
 // Removed GMX OneClickPromoBanner import - not needed for prediction markets
 
-import logoImg from "img/prinx.png";
-import logoSmallImg from "img/prinx.png";
+// Removed logo imports - using text instead
 
 import { AppHeaderLinks } from "./AppHeaderLinks";
 import { AppHeaderUser } from "./AppHeaderUser";
@@ -48,8 +47,7 @@ type Props = {
 export function Header({ disconnectAccountAndCloseSettings, openSettings, showRedirectModal }: Props) {
   const isMobile = useMedia("(max-width: 1335px)");
 
-  const shouldHide1CTBanner = useMedia("(max-width: 1100px)");
-  const shouldShorten1CTBanner = useMedia("(max-width: 1590px)");
+  // Removed unused media queries for GMX banners
 
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [isNativeSelectorModalVisible, setIsNativeSelectorModalVisible] = useState(false);
@@ -108,8 +106,8 @@ export function Header({ disconnectAccountAndCloseSettings, openSettings, showRe
           <div className="App-header large">
             <div className="App-header-container-left">
               <Link className="App-header-link-main" to="/">
-                <img src={logoImg} className="big" alt="Prinx Logo" />
-                <img src={logoSmallImg} className="small" alt="Prinx Logo" />
+                <span className="App-header-logo-text big">LevelUp</span>
+                <span className="App-header-logo-text small">LevelUp</span>
               </Link>
               {isHomeSite() ? (
                 <HomeHeaderLinks showRedirectModal={showRedirectModal} />
@@ -137,8 +135,8 @@ export function Header({ disconnectAccountAndCloseSettings, openSettings, showRe
             >
               <div className="App-header-container-left">
                 <div className="App-header-link-main clickable" onClick={toggleDrawer}>
-                  <img src={logoImg} className="big" alt="Prinx Logo" />
-                  <img src={logoSmallImg} className="small" alt="Prinx Logo" />
+                  <span className="App-header-logo-text big">LevelUp</span>
+                  <span className="App-header-logo-text small">LevelUp</span>
                 </div>
               </div>
               <div className="App-header-container-right">
