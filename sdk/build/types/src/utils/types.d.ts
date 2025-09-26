@@ -1,5 +1,0 @@
-export declare const mustNeverExist: (x: never) => never;
-export declare const assertDefined: <T>(x: T | undefined) => T;
-export type DeepPartial<T> = T extends object ? {
-    [P in keyof T]?: DeepPartial<T[P]>;
-} : T;
