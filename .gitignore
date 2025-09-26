@@ -1,1 +1,15 @@
 node_modules
+
+# Built SDK artifacts
+sdk/build/
+
+# Local Yarn and caches
+.yarn/
+.pnp.*
+
+# Build outputs
+build/
+dist/
+
+# OS junk
+.DS_Store
