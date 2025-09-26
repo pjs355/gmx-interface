@@ -1,28 +1,20 @@
-// Dynamic resolver for umbrella banners using Vite's import.meta.glob
-// Looks for any file in src/img named like: b_<umbrellaId>_anything.(webp|jpg|jpeg|png|svg)
+// Server-based resolver for umbrella banners using Firebase Storage
+// Constructs URLs for images stored in Firebase Storage with pattern: b_<umbrellaId>.*
 
-// From this file (src/pages/Predictions/utils), the relative path to src/img is ../../../img
-const bannerModules = import.meta.glob('../../../img/b_*.{webp,jpg,jpeg,png,svg}', { eager: true });
-
-type EagerModule = { default?: string } | string;
+const FIREBASE_STORAGE_BASE_URL = 'https://firebasestorage.googleapis.com/v0/b/leveluptrades-46ac9.firebasestorage.app/o/umbrellas%2F';
 
 export function resolveUmbrellaBannerById(umbrellaId?: string): string | null {
   if (!umbrellaId) return null;
 
-  const prefix = `b_${umbrellaId}_`;
+  // Return the most common format first (jpg), let the component handle fallback
+  // The component will try different extensions if this one fails
+  return `${FIREBASE_STORAGE_BASE_URL}b_${umbrellaId}.jpg?alt=media`;
+}
 
-  for (const [key, mod] of Object.entries(bannerModules)) {
-    // key looks like '../../../img/b_<id>_<name>.ext'
-    const fileName = key.split('/').pop() || '';
-    if (fileName.startsWith(prefix)) {
-      const url = (mod as EagerModule);
-      if (typeof url === 'string') return url;
-      if (url && typeof (url as any).default === 'string') return (url as any).default as string;
-      return null;
-    }
-  }
-
-  return null;
+// Helper function to get alternative image URLs for fallback
+export function getAlternativeImageUrls(umbrellaId: string): string[] {
+  const extensions = ['webp', 'jpg', 'jpeg', 'png', 'svg'];
+  return extensions.map(ext => `${FIREBASE_STORAGE_BASE_URL}b_${umbrellaId}.${ext}?alt=media`);
 }
 
 

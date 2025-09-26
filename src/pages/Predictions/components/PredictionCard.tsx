@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trans } from "@lingui/macro";
 import Button from "components/Button/Button";
 import { SingleMarketActions } from './SingleMarketActions';
 import { MultiMarketActions } from './MultiMarketActions';
 import type { Umbrella } from "lib/umbrellaDataService";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
-import { resolveUmbrellaBannerById } from "../utils/umbrellaBanners";
+import { resolveUmbrellaBannerById, getAlternativeImageUrls } from "../utils/umbrellaBanners";
 
 interface PredictionCardProps {
   umbrella: Umbrella;
@@ -26,6 +26,24 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
   onNavigateToSingleMarket,
   onNavigateToMultiMarket
 }) => {
+  const [imageError, setImageError] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  
+  // Set up image URLs when umbrella changes
+  useEffect(() => {
+    if (umbrella.image) {
+      setImageUrls([umbrella.image]);
+    } else if (umbrella._id) {
+      const urls = getAlternativeImageUrls(umbrella._id);
+      setImageUrls(urls);
+    } else {
+      setImageUrls([]);
+    }
+    setCurrentImageIndex(0);
+    setImageError(false);
+  }, [umbrella._id, umbrella.image]);
+  
   const navigateToUmbrella = () => {
     onNavigateToUmbrella(umbrella);
   };
@@ -73,15 +91,19 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
     }
   };
 
+  const bannerImageUrl = umbrella.image || resolveUmbrellaBannerById(umbrella._id);
+  const shouldShowImage = bannerImageUrl && !imageError;
+
   return (
     <div key={umbrella._id} className="prediction-card">
       {/* Banner Image */}
       <div className="prediction-banner">
-        {umbrella.image || resolveUmbrellaBannerById(umbrella._id) ? (
+        {shouldShowImage ? (
           <img 
-            src={umbrella.image || (resolveUmbrellaBannerById(umbrella._id) as string)}
+            src={bannerImageUrl as string}
             alt={umbrella.displayName}
             className="banner-image"
+            onError={() => setImageError(true)}
           />
         ) : (
           <div className="banner-placeholder">
