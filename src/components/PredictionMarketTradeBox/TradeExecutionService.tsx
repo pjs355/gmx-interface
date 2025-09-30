@@ -153,7 +153,7 @@ export function useTradeExecutionService() {
           const { ethers } = await import("ethers");
           const abi = ["function nonces(address) view returns (uint256)"];
           const EXCHANGE = "0xf6A7428602c0D2623fC3e79A1e903CE6b55f6078";
-          const provider = (activeSigner as any).provider ?? new ethers.JsonRpcProvider("https://base.llamarpc.com");
+          const provider = (activeSigner as any).provider ?? new ethers.JsonRpcProvider("https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae");
           const ex = new ethers.Contract(EXCHANGE, abi, provider);
           onchainNonce = await ex.nonces(signerAddr);
           console.log("🔢 On-chain nonce fetched:", onchainNonce?.toString());

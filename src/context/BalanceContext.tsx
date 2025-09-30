@@ -4,7 +4,7 @@ import { useWallets as usePrivyWallets } from '@privy-io/react-auth';
 import { Contract, JsonRpcProvider, formatUnits } from 'ethers';
 
 const CTF_ADDRESS = '0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f';
-const BASE_PUBLIC_RPC = 'https://base.llamarpc.com';
+const BASE_PUBLIC_RPC = 'https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae';
 
 // Global balance cache
 const balanceCache = new Map<string, string>();

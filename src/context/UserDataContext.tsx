@@ -10,7 +10,7 @@ import { usePredictionData } from "context/PredictionDataContext";
 const CTF_ADDRESS = "0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f";
 const USDC_ADDRESS = "0x333C89b2857FA0EE8d9Bcb7328C8672A45637C65"; // NEW_FAKE_USDC_ADDRESS (same as trading box)
 const EXCHANGE_ADDRESS = "0xf6A7428602c0D2623fC3e79A1e903CE6b55f6078"; // EXCHANGE contract address
-const BASE_PUBLIC_RPC = "https://base.llamarpc.com";
+const BASE_PUBLIC_RPC = "https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae";
 
 type TokenBalance = {
   yesTokenId: string;

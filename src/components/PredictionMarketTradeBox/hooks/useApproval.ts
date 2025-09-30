@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 
-const BASE_PUBLIC_RPC = "https://base.llamarpc.com";
+const BASE_PUBLIC_RPC = "https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae";
 let READ_PROVIDER: ethers.JsonRpcProvider | null = null;
 function getReadProvider(): ethers.JsonRpcProvider {
   if (!READ_PROVIDER) READ_PROVIDER = new ethers.JsonRpcProvider(BASE_PUBLIC_RPC);
