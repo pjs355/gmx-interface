@@ -8,6 +8,7 @@ import type { PredictionMarket } from "lib/predictionMarketDataService";
 import type { Umbrella } from "lib/umbrellaDataService";
 import { cancelOrder } from "lib/simplifiedOrderService";
 import gtaIcon from "img/ic_gtaVI_24.svg";
+import { resolveLogoByTags, collectTagsFromUmbrella } from "../Predictions/utils/gameLogoResolver";
 
 type NormalizedOpenOrder = {
   orderId?: string;
@@ -109,8 +110,19 @@ export default function OrdersView({ umbrellaBalances, orders }: { umbrellaBalan
                   paddingBottom: 16,
                 }}
               >
-                <div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
-                  <img src={gtaIcon} alt="umbrella" width={48} height={48} style={{ display: "block" }} />
+              <div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
+                {(() => {
+                  const logo = resolveLogoByTags(collectTagsFromUmbrella(umbrella)) || gtaIcon;
+                  return (
+                    <img
+                      src={(umbrella as any).image || logo}
+                      alt="umbrella"
+                      width={48}
+                      height={48}
+                      style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }}
+                    />
+                  );
+                })()}
                   {umbrella.displayName}
                 </div>
               </div>

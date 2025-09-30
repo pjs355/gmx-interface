@@ -4,6 +4,7 @@ import type { Umbrella } from "lib/umbrellaDataService";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import gtaIcon from "img/ic_gtaVI_24.svg";
+import { resolveLogoByTags, collectTagsFromUmbrella } from "../Predictions/utils/gameLogoResolver";
 
 export default function PositionsTableView({
   umbrellaBalances,
@@ -100,7 +101,18 @@ export default function PositionsTableView({
               }}
             >
               <div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
-                <img src={gtaIcon} alt="umbrella" width={48} height={48} style={{ display: "block" }} />
+                {(() => {
+                  const logo = resolveLogoByTags(collectTagsFromUmbrella(umbrella)) || gtaIcon;
+                  return (
+                    <img
+                      src={(umbrella as any).image || logo}
+                      alt="umbrella"
+                      width={48}
+                      height={48}
+                      style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }}
+                    />
+                  );
+                })()}
                 {umbrella.displayName}
               </div>
             </div>
@@ -160,13 +172,13 @@ export default function PositionsTableView({
                     return `${signUsd}${usdPart}`;
                   }
                   const signPct = totalReturnPct >= 0 ? "+" : "-";
-                  const pctPart = `${Math.round(Math.abs(totalReturnPct))}%`;
+                  const pctPart = `${Math.round(Math.abs(totalReturnPct as number))}%`;
                   return `${signUsd}${usdPart} (${signPct}${pctPart})`;
                 })();
 
                 // Derive team labels for single-market VS titles
                 const title = (market?.displayName || (market as any)?.question || '').trim();
-                const parts = title.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
+                const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
                 const isVs = parts.length === 2;
                 const primaryLabel = isVs ? parts[0] : (market.displayName || (market as any).question);
                 const secondaryLabel = isVs ? parts[1] : '';

@@ -64,7 +64,7 @@ export async function fetchUserOrders(account: string, marketData?: Map<string, 
 
     const responseData = await response.json();
     // Log the raw API response exactly as returned
-    try { console.log('🧾 Orders API raw response:', responseData); } catch {}
+    // Quiet orders API raw response log
     
     // Handle different response formats
     let rawOrders: RawOrder[];

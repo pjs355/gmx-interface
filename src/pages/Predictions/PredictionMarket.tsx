@@ -55,6 +55,7 @@ function PredictionMarketContent() {
   const [loading, setLoading] = useState(true);
   const isMobile = useMedia("(max-width: 1100px)");
   const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({ umbrella: false, markets: false });
   
   const { umbrellas, getUmbrellaById, getQuestionsForUmbrella, getOrderbookForQuestion, refreshOrderbook } = usePredictionData();
   // Removed tradeExecutionService - not used in this component
@@ -73,6 +74,14 @@ function PredictionMarketContent() {
     }
 
     setUmbrella(umbrellaFromContext);
+    if (!hasLogged.current.umbrella) {
+      try {
+        console.groupCollapsed('🧩 Umbrella (PredictionMarket page)');
+        console.log(umbrellaFromContext);
+        console.groupEnd();
+      } catch {}
+      hasLogged.current.umbrella = true;
+    }
     const qs = getQuestionsForUmbrella(umbrellaFromContext._id);
     if (!qs || qs.length === 0) {
       setQuestions([]);
@@ -81,6 +90,15 @@ function PredictionMarketContent() {
       return;
     }
     const sanitized = (qs as any[]).filter((q) => q && ((q as any)._id || (q as any).questionId || (q as any).marketId));
+    if (!hasLogged.current.markets) {
+      try {
+        console.groupCollapsed('🧺 Markets (PredictionMarket page)');
+        console.log('raw questions from context:', qs);
+        console.log('sanitized markets:', sanitized);
+        console.groupEnd();
+      } catch {}
+      hasLogged.current.markets = true;
+    }
     setQuestions(sanitized as any);
 
     // Seed local orderbook map from context

@@ -37,7 +37,7 @@ class UmbrellaDataService {
       if (this.umbrellasCache && this.umbrellasCache.length > 0) {
         return this.umbrellasCache;
       }
-      console.log('🌂 Fetching umbrellas from:', `${this.API_BASE_URL}/umbrellas`);
+      // Quiet fetch start log to keep console clean
       
       const response = await fetch(`${this.API_BASE_URL}/umbrellas`);
       
@@ -117,13 +117,7 @@ class UmbrellaDataService {
             if (!question.marketId) {
               question.marketId = questionRef.marketId;
             }
-            try {
-              console.log('✅ Aggregated question data:', {
-                umbrellaId: umbrella._id,
-                umbrellaName: umbrella.displayName,
-                question
-              });
-            } catch {}
+            // Quiet per-question aggregation logs to keep console clean
             return question as PredictionMarket;
           }
         } catch (error) {

@@ -2,6 +2,7 @@ import React from "react";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 import { getFinalAmount } from "lib/simplifiedOrderService";
 import gtaIcon from "img/ic_gtaVI_24.svg";
+import { resolveLogoByTags, collectTagsFromUmbrella } from "../Predictions/utils/gameLogoResolver";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 

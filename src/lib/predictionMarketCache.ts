@@ -104,7 +104,7 @@ class PredictionMarketCache {
     if (existing) {
       existing.historicalPrices = transformedPrices;
       existing.lastUpdated = Date.now();
-      console.log('📈 Updated historical data for', questionId, ':', transformedPrices.length, 'points');
+      // Quiet cache update log to keep console clean
     } else {
       // Create placeholder entry if market not cached yet
       const placeholderData = {
@@ -113,7 +113,7 @@ class PredictionMarketCache {
         historicalPrices: transformedPrices
       };
       this.cache.set(questionId, placeholderData);
-      console.log('📈 Stored historical data for uncached market', questionId, ':', transformedPrices.length, 'points');
+      // Quiet initial store log to keep console clean
     }
   }
 
@@ -175,11 +175,14 @@ class PredictionMarketCache {
         if (price < 0) price = 0;
         if (price > 1) price = 1;
 
-        return {
+        const entry: { timestamp: number; price: number; volume?: number } = {
           timestamp,
-          price,
-          volume: volume && !isNaN(volume) ? volume : undefined
+          price
         };
+        if (typeof volume === 'number' && !isNaN(volume)) {
+          entry.volume = volume;
+        }
+        return entry;
       })
       .filter((item): item is { timestamp: number; price: number; volume?: number } => item !== null)
       .sort((a, b) => a.timestamp - b.timestamp);

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { Umbrella } from 'lib/umbrellaDataService';
 import gtaVIImage from 'img/ic_gtaVI_40.svg';
+import { resolveLogoByTags, collectTagsFromUmbrella } from '../utils/gameLogoResolver';
 
 type MarketHeaderProps = {
   umbrella: Umbrella;
@@ -8,12 +9,17 @@ type MarketHeaderProps = {
 };
 
 export const MarketHeader: React.FC<MarketHeaderProps> = ({ umbrella, titleRef }) => {
+  const resolvedLogo = useMemo(() => {
+    const tags = collectTagsFromUmbrella(umbrella);
+    return resolveLogoByTags(tags);
+  }, [umbrella]);
+
   return (
     <div style={{ marginBottom: 8 }}>
       <div className="market-header">
         <div className="market-title-container">
           <img
-            src={umbrella.image || gtaVIImage}
+            src={umbrella.image || resolvedLogo || gtaVIImage}
             alt="Umbrella"
             className="market-image"
           />

@@ -62,14 +62,17 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
       const { OrderbookService } = await import("lib/orderbookService");
       const orderbookService = new OrderbookService();
       const umbrellas = await umbrellaDataService.fetchAllUmbrellas();
+      try {
+        console.groupCollapsed("🧩 Umbrellas fetched (PredictionDataContext)");
+        console.log(umbrellas);
+        console.groupEnd();
+      } catch {}
       const entries = await Promise.all(
         umbrellas.map(async (umbrella: any) => {
           const markets = await umbrellaDataService.fetchQuestionsForUmbrella(umbrella, { includeResolved: true });
           const key = umbrella?._id || umbrella?.id || umbrella?.slug || JSON.stringify(umbrella);
           
-          console.log(`🔍 CONTEXT DEBUG: Fetched ${markets.length} markets for ${umbrella.displayName}`);
-          const resolvedCount = markets.filter((m: any) => String(m?.status ?? "").toLowerCase() === "resolved").length;
-          console.log(`🔍 CONTEXT DEBUG: Found ${resolvedCount} resolved markets in ${umbrella.displayName}`);
+          // Quiet detailed context debug counts to keep console clean
           
           // Filter out resolved markets here so downstream consumers never see them
           const filteredMarkets = Array.isArray(markets)
@@ -89,15 +92,21 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 
       const cleanedUmbrellas: any[] = [];
        entries.forEach(([key, markets, cleanedUmbrella, allMarkets]) => {
+        try {
+          // Keep markets print minimal and grouped
+          console.groupCollapsed(`🧺 Markets fetched for umbrella ${cleanedUmbrella.displayName} [${key}]`);
+          console.log({ allMarkets, activeMarkets: markets });
+          console.groupEnd();
+        } catch {}
         // Store all markets (including resolved) for consumers like Positions page (no re-fetch on mount)
         allMarketsMap[key] = allMarkets;
-        console.log(`🔍 CONTEXT DEBUG: Stored ${allMarkets.length} markets in allMarketsMap[${key}] for ${cleanedUmbrella.displayName}`);
+        // Quiet per-umbrella store log to keep console clean
         
         // Store only resolved markets separately
         const resolvedMarkets = allMarkets.filter((m: any) => String(m?.status ?? "").toLowerCase() === "resolved");
         if (resolvedMarkets.length > 0) {
           resolvedMarketsMap[key] = resolvedMarkets;
-          console.log(`🔍 CONTEXT DEBUG: Stored ${resolvedMarkets.length} resolved markets in resolvedMarketsMap[${key}] for ${cleanedUmbrella.displayName}`);
+          // Quiet resolved markets store log to keep console clean
         }
 
         // Skip umbrellas that have no active markets left
@@ -135,7 +144,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
         const updatesSingle: Record<string, any> = {};
         const updatesMulti: Record<string, any> = {};
         
-        console.log('🔄 Starting background data fetch for', Object.keys(marketsMap).length, 'umbrellas');
+        // Quiet background fetch start log
 
         // Warm price cache for all markets across umbrellas
         try {
@@ -155,14 +164,14 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
         for (const [umbId, markets] of Object.entries(marketsMap)) {
           if (!Array.isArray(markets) || markets.length === 0) continue;
           
-          console.log(`📂 Processing umbrella ${umbId} with ${markets.length} markets`);
+          // Quiet processing log
           
           if (markets.length === 1) {
             const q = markets[0] as any;
             const qid = q?._id || q?.questionId || q?.marketId;
             if (!qid) continue;
             
-            console.log(`📊 Processing single market: ${q.displayName || q.question} (${qid})`);
+          // Quiet per-market processing log
             
             // First, ensure market is cached
             try {
@@ -178,8 +187,8 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
             
             // Fetch historical data
             try {
-              const success = await predictionMarketDataService.refreshHistoricalData(qid);
-              console.log(`📈 Historical data for ${qid}:`, success ? '✅ Success' : '⚠️ No data');
+              await predictionMarketDataService.refreshHistoricalData(qid);
+              // Quiet historical data log
             } catch (error) {
               console.warn('Failed to load historical data for', qid, error);
             }
@@ -191,7 +200,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
                 const qid = q?._id || q?.questionId || q?.marketId;
                 if (!qid) return;
                 
-                console.log(`📊 Processing multi market: ${q.displayName || q.question} (${qid})`);
+                // Quiet per-market processing log
                 
                 // First, ensure market is cached
                 try {
@@ -207,8 +216,8 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
                 
                 // Fetch historical data
                 try {
-                  const success = await predictionMarketDataService.refreshHistoricalData(qid);
-                  console.log(`📈 Historical data for ${qid}:`, success ? '✅ Success' : '⚠️ No data');
+                  await predictionMarketDataService.refreshHistoricalData(qid);
+                  // Quiet historical data log
                 } catch (error) {
                   console.warn('Failed to load historical data for', qid, error);
                 }
@@ -219,7 +228,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
           }
         }
         
-        console.log('✅ Background data fetch completed');
+        // Quiet background fetch completion log
         if (Object.keys(updatesSingle).length) setSingleMarketOrderbooks((prev) => ({ ...prev, ...updatesSingle }));
         if (Object.keys(updatesMulti).length) setMultiMarketData((prev) => ({ ...prev, ...updatesMulti }));
       };
@@ -261,25 +270,24 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 
   const getAllQuestionsForUmbrella = useCallback((umbrellaId: string) => {
     const all = allMarketsByUmbrella[umbrellaId];
-    console.log(`🔍 CONTEXT DEBUG: getAllQuestionsForUmbrella(${umbrellaId}) - allMarketsByUmbrella[${umbrellaId}]:`, all);
+    // Quiet getAllQuestionsForUmbrella debug log
     if (Array.isArray(all)) {
-      const resolvedCount = all.filter((m: any) => String(m?.status ?? "").toLowerCase() === "resolved").length;
-      console.log(`🔍 CONTEXT DEBUG: Returning ${all.length} markets (${resolvedCount} resolved) for ${umbrellaId}`);
+      // Quiet return count log
       return all as any[];
     }
     // fallback to active-only if all not present yet
-    console.log(`🔍 CONTEXT DEBUG: Fallback to getQuestionsForUmbrella for ${umbrellaId}`);
+    // Quiet fallback log
     return getQuestionsForUmbrella(umbrellaId);
   }, [allMarketsByUmbrella, getQuestionsForUmbrella]);
 
   const getResolvedQuestionsForUmbrella = useCallback((umbrellaId: string) => {
     const resolved = resolvedMarketsByUmbrella[umbrellaId];
-    console.log(`🔍 CONTEXT DEBUG: getResolvedQuestionsForUmbrella(${umbrellaId}) - resolvedMarketsByUmbrella[${umbrellaId}]:`, resolved);
+    // Quiet resolved lookup log
     if (Array.isArray(resolved)) {
-      console.log(`🔍 CONTEXT DEBUG: Returning ${resolved.length} resolved markets for ${umbrellaId}`);
+      // Quiet resolved return count log
       return resolved as any[];
     }
-    console.log(`🔍 CONTEXT DEBUG: No resolved markets found for ${umbrellaId}`);
+    // Quiet no resolved markets log
     return [];
   }, [resolvedMarketsByUmbrella]);
 

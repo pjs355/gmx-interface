@@ -2,6 +2,7 @@ import React from "react";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 import type { Umbrella } from "lib/umbrellaDataService";
 import gtaIcon from "img/ic_gtaVI_24.svg";
+import { resolveLogoByTags, collectTagsFromUmbrella } from "../Predictions/utils/gameLogoResolver";
 import { triggerFireworksForElement } from "./Fireworks";
 import { useClaimEarningsForMarket } from "lib/claimEarnings";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
@@ -63,7 +64,18 @@ export default function ResolvedPositionsTable({
               }}
             >
               <div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
-                <img src={gtaIcon} alt="umbrella" width={48} height={48} style={{ display: "block" }} />
+                {(() => {
+                  const logo = resolveLogoByTags(collectTagsFromUmbrella(umbrella)) || gtaIcon;
+                  return (
+                    <img
+                      src={(umbrella as any).image || logo}
+                      alt="umbrella"
+                      width={48}
+                      height={48}
+                      style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }}
+                    />
+                  );
+                })()}
                 {umbrella.displayName}
               </div>
             </div>

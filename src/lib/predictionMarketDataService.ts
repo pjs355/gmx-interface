@@ -55,7 +55,7 @@ class PredictionMarketDataService {
       const response = await fetch(`${this.API_BASE_URL}/questions/${id}`);
       if (!response.ok) {
         if (response.status === 404) {
-          console.warn(`Market not found: ${id} (404)`);
+      // Quiet missing market warning
           return null;
         }
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -72,7 +72,7 @@ class PredictionMarketDataService {
         return null;
       }
     } catch (error) {
-      console.warn(`Failed to fetch market ${id}:`, error);
+      // Quiet fetch error warning
       return null; // Return null instead of throwing to prevent breaking the UI
     }
   }
@@ -132,7 +132,7 @@ class PredictionMarketDataService {
    */
   async refreshHistoricalData(questionId: string): Promise<boolean> {
     try {
-      console.log('🔄 Refreshing historical data for:', questionId);
+      // Quiet historical refresh start log
       const market = await this.fetchMarketById(questionId);
       
       if (market && market.historicalPrices && market.historicalPrices.length > 0) {
@@ -140,11 +140,11 @@ class PredictionMarketDataService {
           market._id || market.questionId,
           market.historicalPrices as unknown as Array<{ timestamp?: number; ts?: number; price: number; volume?: number }>
         );
-        console.log('✅ Historical data refreshed for:', questionId);
+        // Quiet historical refresh success log
         return true;
       }
       
-      console.log('⚠️ No historical data available for:', questionId);
+      // Quiet no historical data log
       return false;
     } catch (error) {
       console.error('❌ Error refreshing historical data for', questionId, ':', error);

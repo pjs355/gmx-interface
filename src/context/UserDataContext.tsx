@@ -127,21 +127,21 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
         });
         
         // Process resolved markets separately
-        console.log('🔍 USERDATA DEBUG: Processing resolved markets for token balances...');
+        // Quiet user data debug logs
         Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
-          console.log(`🔍 USERDATA DEBUG: Processing ${resolvedMarkets.length} resolved markets for umbrella ${umbrellaId}`);
+          // Quiet user data debug logs
           resolvedMarkets.forEach((market: any) => {
             const marketId = market?._id || market?.questionId || market?.marketId;
             if (marketId && market?.yesTokenId && market?.noTokenId) {
-              console.log(`🔍 USERDATA DEBUG: Adding resolved market ${marketId} to marketDataMap`);
+              // Quiet user data debug logs
               marketDataMap.set(marketId, { yesTokenId: market.yesTokenId, noTokenId: market.noTokenId });
             } else {
-              console.log(`🔍 USERDATA DEBUG: Skipping resolved market ${marketId} - missing token IDs`);
+              // Quiet user data debug logs
             }
           });
         });
         
-        console.log(`🔍 USERDATA DEBUG: Total markets in marketDataMap: ${marketDataMap.size}`);
+        // Quiet user data debug logs
       } catch {
         // Fallback to direct fetch if prediction data not ready
         const umbrellasDirect = await umbrellaDataService.fetchAllUmbrellas();

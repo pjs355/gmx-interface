@@ -26,11 +26,21 @@ export default function UmbrellaPage() {
           // Verify the umbrella ID matches the URL parameter
           if (parsedUmbrella._id === umbrellaId) {
             setUmbrella(parsedUmbrella);
+            try {
+              console.groupCollapsed('🧩 Umbrella (UmbrellaPage)');
+              console.log(parsedUmbrella);
+              console.groupEnd();
+            } catch {}
             
             // Fetch all questions for this umbrella
             try {
               if (parsedUmbrella.children && parsedUmbrella.children.length > 0) {
                 const fetchedQuestions = await umbrellaDataService.fetchQuestionsForUmbrella(parsedUmbrella);
+                try {
+                  console.groupCollapsed('🧺 Markets (UmbrellaPage)');
+                  console.log(fetchedQuestions);
+                  console.groupEnd();
+                } catch {}
                 setQuestions(fetchedQuestions);
               } else {
                 console.log('⚠️ No children found for umbrella:', parsedUmbrella.displayName);

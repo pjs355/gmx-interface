@@ -80,7 +80,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    margin-top: -30px;
+    margin-top: 12px; // add space below global header; avoid bleeding under header
     flex-wrap: nowrap; // Keep image and title on the same row; let title wrap internally
 
     // Ensure the title can share the row with the image and wrap when needed
@@ -94,10 +94,11 @@
   }
 
   .market-image {
-    width: 120px;
-    height: 120px;
-    border-radius: 16px;
-    object-fit: cover;
+    width: 80px;
+    height: 80px;
+    border-radius: 12px;
+    object-fit: contain;
+    background: #000; // pure black background to blend transparent PNGs
     flex-shrink: 0;
   }
 
@@ -172,8 +173,8 @@
     }
 
     .market-image {
-      width: 80px;
-      height: 80px;
+      width: 64px;
+      height: 64px;
     }
   }
 }
