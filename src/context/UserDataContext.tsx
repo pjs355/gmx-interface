@@ -5,11 +5,9 @@ import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import useWallet from "lib/wallets/useWallet";
 import { fetchUserOrders, type ProcessedOrder } from "lib/simplifiedOrderService";
 import { CTF_ADDRESS, USDC_ADDRESS, EXCHANGE_ADDRESS } from "config/addresses";
+import { DEFAULT_RPC_URL } from "config/rpc";
 import { umbrellaDataService } from "lib/umbrellaDataService";
 import { usePredictionData } from "context/PredictionDataContext";
-
-// Addresses centralized in config/addresses
-const BASE_PUBLIC_RPC = "https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae";
 
 type TokenBalance = {
   yesTokenId: string;
@@ -62,7 +60,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
   const getReadProvider = useCallback((): JsonRpcProvider => {
     if (readProviderRef.current) return readProviderRef.current;
-    readProviderRef.current = new JsonRpcProvider(BASE_PUBLIC_RPC);
+    readProviderRef.current = new JsonRpcProvider(DEFAULT_RPC_URL);
     return readProviderRef.current;
   }, []);
 
@@ -127,7 +125,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
         
         // Process resolved markets separately
         // Quiet user data debug logs
-        Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
+        Object.entries(resolvedMarketsByUmbrella).forEach(([, resolvedMarkets]) => {
           // Quiet user data debug logs
           resolvedMarkets.forEach((market: any) => {
             const marketId = market?._id || market?.questionId || market?.marketId;
