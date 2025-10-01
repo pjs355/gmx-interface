@@ -122,7 +122,18 @@ export default function HistoryView({
               }}
             >
               <div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
-                <img src={gtaIcon} alt="umbrella" width={48} height={48} style={{ display: "block" }} />
+                {(() => {
+                  const logo = resolveLogoByTags(collectTagsFromUmbrella(umbrella)) || gtaIcon;
+                  return (
+                    <img
+                      src={(umbrella as any).image || logo}
+                      alt="umbrella"
+                      width={48}
+                      height={48}
+                      style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }}
+                    />
+                  );
+                })()}
                 {umbrella.displayName}
               </div>
             </div>
@@ -193,7 +204,7 @@ export default function HistoryView({
                 })();
 
                 const title = (market?.displayName || (market as any)?.question || '').trim();
-                const parts = title.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
+                const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
                 const isVs = parts.length === 2;
                 return (
                   <div

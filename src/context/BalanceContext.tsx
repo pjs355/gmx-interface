@@ -2,9 +2,8 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import useWallet from 'lib/wallets/useWallet';
 import { useWallets as usePrivyWallets } from '@privy-io/react-auth';
 import { Contract, JsonRpcProvider, formatUnits } from 'ethers';
-
-const CTF_ADDRESS = '0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f';
-const BASE_PUBLIC_RPC = 'https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae';
+import { CTF_ADDRESS } from 'config/addresses';
+import { DEFAULT_RPC_URL } from 'config/rpc';
 
 // Global balance cache
 const balanceCache = new Map<string, string>();
@@ -51,7 +50,7 @@ export function BalanceProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Get shared read-only provider
-      const provider = new JsonRpcProvider(BASE_PUBLIC_RPC);
+      const provider = new JsonRpcProvider(DEFAULT_RPC_URL);
 
       // Batch fetch all balances
       const ctf = new Contract(CTF_ADDRESS, [

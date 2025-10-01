@@ -5,6 +5,7 @@ import type { OrderExecutionResult } from "lib/predictionMarketService";
 import useWallet from "lib/wallets/useWallet";
 import { useSignerContext } from "context/SignerContext";
 import { EXCHANGE_ADDRESS } from "config/addresses";
+import { DEFAULT_RPC_URL } from "config/rpc";
 
 export function useTradeExecutionService() {
   const { hasSmartWallet, getActiveSigner } = useWallet() as any;
@@ -153,7 +154,7 @@ export function useTradeExecutionService() {
         try {
           const { ethers } = await import("ethers");
           const abi = ["function nonces(address) view returns (uint256)"];
-          const provider = (activeSigner as any).provider ?? new ethers.JsonRpcProvider("https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae");
+          const provider = (activeSigner as any).provider ?? new ethers.JsonRpcProvider(DEFAULT_RPC_URL);
           const ex = new ethers.Contract(EXCHANGE_ADDRESS, abi, provider);
           onchainNonce = await ex.nonces(signerAddr);
           console.log("🔢 On-chain nonce fetched:", onchainNonce?.toString());

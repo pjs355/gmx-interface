@@ -1,11 +1,11 @@
 import { useCallback, useState } from "react";
 import { useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { ethers } from "ethers";
+import { DEFAULT_RPC_URL } from "config/rpc";
 
-const BASE_PUBLIC_RPC = "https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae";
 let READ_PROVIDER: ethers.JsonRpcProvider | null = null;
 function getReadProvider(): ethers.JsonRpcProvider {
-  if (!READ_PROVIDER) READ_PROVIDER = new ethers.JsonRpcProvider(BASE_PUBLIC_RPC);
+  if (!READ_PROVIDER) READ_PROVIDER = new ethers.JsonRpcProvider(DEFAULT_RPC_URL);
   return READ_PROVIDER;
 }
 
@@ -85,7 +85,7 @@ export function useApproval({
       } else if (getActiveSigner) {
         const signer = await getActiveSigner();
         if (!signer) throw new Error("No signer available for external wallet");
-        const provider = (signer as any).provider ?? signer; // ethers v6 signer has provider
+        // ethers v6 signer has provider
         const tx = await (new ethers.Contract(usdcAddress, usdcAbi, signer)).approve(exchangeAddress, ethers.MaxUint256);
         await tx.wait?.();
       } else {
