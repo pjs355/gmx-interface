@@ -101,7 +101,7 @@ export default function ListTag({
 	}
 
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div style={{ color: "white" }}>
 			<div
 				style={{
 					display: "flex",

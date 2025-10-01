@@ -283,7 +283,7 @@ export default function AddMarket() {
 	}
 
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div style={{ color: "white" }}>
 			<h2 style={{ marginBottom: 16 }}>Add Market</h2>
 			<form
 				onSubmit={handleSubmit}

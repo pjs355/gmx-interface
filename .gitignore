@@ -13,3 +13,5 @@ dist/
 
 # OS junk
 .DS_Store
+
+src/lib/predictionApiBase.ts
