@@ -1,11 +1,52 @@
-import React from "react";
+import React, { useState } from "react";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 import type { Umbrella } from "lib/umbrellaDataService";
 import gtaIcon from "img/ic_gtaVI_24.svg";
-import { resolveLogoByTags, collectTagsFromUmbrella } from "../Predictions/utils/gameLogoResolver";
+import { resolveLogoWithPriority, collectTagsFromUmbrella, resolveUmbrellaIconById } from "../Predictions/utils/gameLogoResolver";
 import { triggerFireworksForElement } from "./Fireworks";
 import { useClaimEarningsForMarket } from "lib/claimEarnings";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
+
+// Component to handle image with proper fallback
+function UmbrellaImage({ umbrella }: { umbrella: any }) {
+  const [imageError, setImageError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState<string | null>(null);
+
+  // Priority 1: Check for server image (ic_{umbrellaID})
+  const serverImage = umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
+  
+  // Priority 2: Check for game logo based on tags
+  const gameLogo = resolveLogoWithPriority(umbrella, collectTagsFromUmbrella(umbrella));
+  
+  // Priority 3: Fallback to game controller
+  const fallbackLogo = gameLogo || gtaIcon;
+
+  // Determine initial source
+  const initialSrc = serverImage || fallbackLogo;
+
+  const handleError = () => {
+    if (!imageError && serverImage && gameLogo) {
+      // If server image fails, fall back to game logo
+      setImageError(true);
+      setCurrentSrc(gameLogo);
+    } else if (!imageError && serverImage && !gameLogo) {
+      // If server image fails and no game logo, fall back to controller
+      setImageError(true);
+      setCurrentSrc(gtaIcon);
+    }
+  };
+
+  return (
+    <img
+      src={currentSrc || initialSrc}
+      alt="umbrella"
+      width={48}
+      height={48}
+      style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }}
+      onError={handleError}
+    />
+  );
+}
 
 export default function ResolvedPositionsTable({
   umbrellaBalances,
@@ -64,18 +105,7 @@ export default function ResolvedPositionsTable({
               }}
             >
               <div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
-                {(() => {
-                  const logo = resolveLogoByTags(collectTagsFromUmbrella(umbrella)) || gtaIcon;
-                  return (
-                    <img
-                      src={(umbrella as any).image || logo}
-                      alt="umbrella"
-                      width={48}
-                      height={48}
-                      style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }}
-                    />
-                  );
-                })()}
+                <UmbrellaImage umbrella={umbrella} />
                 {umbrella.displayName}
               </div>
             </div>
