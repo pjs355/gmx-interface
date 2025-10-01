@@ -22,7 +22,7 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
   // Constants for token approval
   const NEW_FAKE_USDC_ADDRESS = "0x333C89b2857FA0EE8d9Bcb7328C8672A45637C65";
   const CTF_ADDRESS = "0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f"; // CTF contract address
-  const EXCHANGE_ADDRESS = "0xf6A7428602c0D2623fC3e79A1e903CE6b55f6078"; // EXCHANGE contract address
+  const EXCHANGE_ADDRESS = "0x40fdD2b575b3CF3dF64eA6B43C3C47E1eC2fbf03"; // EXCHANGE contract address
 
   const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange } = useTradeState(initialPosition);
   const { client: smartClient, getClientForChain } = useSmartWallets();

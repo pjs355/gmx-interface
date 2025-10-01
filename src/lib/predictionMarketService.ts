@@ -1,16 +1,13 @@
 import { ethers } from 'ethers';
+import { CTF_ADDRESS, EXCHANGE_ADDRESS, USDC_ADDRESS } from 'config/addresses';
 
-// ========================================
-// PREDICTION MARKETS SERVICE ONLY
-// This service is COMPLETELY SEPARATE from perps markets
-// DO NOT modify any perps-related code or endpoints
-// ========================================
 
-// Contract addresses on Base (your custom setup)
+
+// Contract addresses on Base (centralized)
 const CONTRACTS = {
-  CTF: '0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f',
-  EXCHANGE: '0xf6A7428602c0D2623fC3e79A1e903CE6b55f6078',
-  COLLATERAL: '0x333C89b2857FA0EE8d9Bcb7328C8672A45637C65', // TestUSDC
+  CTF: CTF_ADDRESS,
+  EXCHANGE: EXCHANGE_ADDRESS,
+  COLLATERAL: USDC_ADDRESS, // TestUSDC
 };
 
 const BASE_RPC = 'https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih';
@@ -101,10 +98,7 @@ export class PredictionMarketService {
         orderType: order.orderType
       });
 
-      const marketTokens = MARKET_TOKENS[order.marketId as keyof typeof MARKET_TOKENS];
-      if (!marketTokens) {
-        throw new Error(`Unknown market: ${order.marketId}`);
-      }
+      // Market tokens must come from API-provided market data; no local token map
 
       // For now, we'll create and sign the order, then submit to your local server
       // This follows the exact pattern from your script
@@ -336,17 +330,8 @@ export class PredictionMarketService {
       userAddress
     });
 
-    // Get token ID
-    let tokenId: string;
-    if (marketData && marketData.yesTokenId && marketData.noTokenId) {
-      tokenId = position === 'yes' ? marketData.yesTokenId : marketData.noTokenId;
-    } else {
-      const marketTokens = MARKET_TOKENS[marketId as keyof typeof MARKET_TOKENS];
-      if (!marketTokens) {
-        throw new Error(`Unknown market: ${marketId}`);
-      }
-      tokenId = position === 'yes' ? marketTokens.yes : marketTokens.no;
-    }
+    // Get token ID strictly from provided market data (single source of truth)
+    const tokenId: string = position === 'yes' ? marketData.yesTokenId : marketData.noTokenId;
 
     // EIP-712 Domain
     const domain = {
@@ -455,10 +440,7 @@ export class PredictionMarketService {
   }
 
   async getMarketInfo(marketId: string) {
-    const marketTokens = MARKET_TOKENS[marketId as keyof typeof MARKET_TOKENS];
-    if (!marketTokens) {
-      throw new Error(`Unknown market: ${marketId}`);
-    }
+    // Market existence is validated by server; no local token map check
 
     // Fetch real market data from server - no fallbacks, no mocks
     console.log('🌐 Fetching market data from:', `${PRODUCTION_API}/markets/${marketId}`);

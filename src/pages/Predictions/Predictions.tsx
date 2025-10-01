@@ -42,10 +42,15 @@ export default function Predictions() {
       .replace(/^_+|_+$/g, "");
 
   const filteredUmbrellas = React.useMemo(() => {
-    if (!selectedGame) return umbrellas;
+    // First filter out inactive umbrellas
+    const activeUmbrellas = umbrellas.filter((umbrella) => {
+      return (umbrella as any).active === true;
+    });
+    
+    if (!selectedGame) return activeUmbrellas;
     
     const normalizedSelected = normalizeTag(selectedGame);
-    return umbrellas.filter((umbrella) => {
+    return activeUmbrellas.filter((umbrella) => {
       const children = (umbrella as any).children as Array<any> | undefined;
       if (!children || children.length === 0) return false;
       return children.some((q) => {
