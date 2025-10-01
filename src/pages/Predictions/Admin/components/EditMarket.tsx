@@ -6,6 +6,7 @@ import type {
 	Umbrella,
 	UmbrellaQuestion,
 } from "../../../../lib/umbrellaDataService";
+import SeedMarket from "./SeedMarket";
 
 const AVAILABLE_TAGS = [
 	"APEX LEGENDS",
@@ -1080,6 +1081,13 @@ export default function EditMarket({
 									</span>
 								)}
 							</div>
+							{/* Seed Market Component */}
+							<SeedMarket
+								questionId={
+									details.questionId || details._id || ""
+								}
+								questionDisplayName={details.displayName}
+							/>
 						</div>
 					)}
 				</div>
