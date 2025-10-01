@@ -4,8 +4,8 @@ import { Helmet } from "react-helmet";
 function SEO(props: any) {
   const { children, ...customMeta } = props;
   const meta = {
-    title: t`Prinx | Perpetual Exchange`,
-    description: t`Trade pre-IPO, music, video games, and alternative assets with up to 10x leverage.`,
+    title: t`LevelUp Markets`,
+    description: t`Bet on all things esports and video games.`,
     image: "https://prinx.io/png",
     type: "exchange",
     ...customMeta,

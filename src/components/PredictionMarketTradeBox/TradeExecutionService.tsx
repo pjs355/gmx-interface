@@ -4,6 +4,7 @@ import type { TradeExecutionParams } from "./types";
 import type { OrderExecutionResult } from "lib/predictionMarketService";
 import useWallet from "lib/wallets/useWallet";
 import { useSignerContext } from "context/SignerContext";
+import { EXCHANGE_ADDRESS } from "config/addresses";
 
 export function useTradeExecutionService() {
   const { hasSmartWallet, getActiveSigner } = useWallet() as any;
@@ -152,9 +153,8 @@ export function useTradeExecutionService() {
         try {
           const { ethers } = await import("ethers");
           const abi = ["function nonces(address) view returns (uint256)"];
-          const EXCHANGE = "0xf6A7428602c0D2623fC3e79A1e903CE6b55f6078";
           const provider = (activeSigner as any).provider ?? new ethers.JsonRpcProvider("https://base-mainnet.infura.io/v3/5b51ad43553b44ffabc2980afa70f7ae");
-          const ex = new ethers.Contract(EXCHANGE, abi, provider);
+          const ex = new ethers.Contract(EXCHANGE_ADDRESS, abi, provider);
           onchainNonce = await ex.nonces(signerAddr);
           console.log("🔢 On-chain nonce fetched:", onchainNonce?.toString());
         } catch (e) {
@@ -166,7 +166,7 @@ export function useTradeExecutionService() {
           name: "Polymarket CTF Exchange",
           version: "1",
           chainId: 8453, // Base chain ID
-          verifyingContract: "0xf6A7428602c0D2623fC3e79A1e903CE6b55f6078", // EXCHANGE contract
+          verifyingContract: EXCHANGE_ADDRESS, // EXCHANGE contract
         };
 
         const types = {

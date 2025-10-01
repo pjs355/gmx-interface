@@ -46,7 +46,12 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
       .replace(/^_+|_+$/g, "");
 
   const filteredUmbrellas = React.useMemo(() => {
-    return umbrellas.filter((umbrella) => {
+    // First filter out inactive umbrellas
+    const activeUmbrellas = umbrellas.filter((umbrella) => {
+      return (umbrella as any).active === true;
+    });
+    
+    return activeUmbrellas.filter((umbrella) => {
       const children = (umbrella as any).children as Array<any> | undefined;
       if (!children || children.length === 0) return false;
       
@@ -114,7 +119,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
   };
 
   if (loading || error) {
-    return <LoadingState error={error} onRetry={handleRetry} />;
+    return <LoadingState error={error || null} onRetry={handleRetry} />;
   }
 
   const pageTitle = filterType === 'esports' ? 'Esports' : 'Games';
