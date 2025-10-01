@@ -23,7 +23,6 @@
 		"date-fns": "^4.1.0",
 		"ethers": "^6.8.1",
 		"firebase": "^12.3.0",
-		"framer-motion": "^12.23.21",
 		"lodash": "^4.17.21",
 		"permissionless": "^0.2.57",
 		"react": "^18.2.0",
