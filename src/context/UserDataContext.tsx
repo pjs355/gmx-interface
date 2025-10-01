@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useWallets as usePrivyWallets } from "@privy-io/react-auth";
+import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { Contract, JsonRpcProvider, formatUnits, ethers } from "ethers";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import useWallet from "lib/wallets/useWallet";
@@ -39,6 +39,7 @@ const UserDataContext = createContext<UserDataContextValue | null>(null);
 export function UserDataProvider({ children }: { children: React.ReactNode }) {
   const { getDataAddress } = useWallet();
   const account = getDataAddress();
+  const { user } = usePrivy();
   const { wallets: privyWallets } = usePrivyWallets();
   const { getClientForChain } = useSmartWallets();
   const [loading, setLoading] = useState(false);
@@ -86,6 +87,23 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
       const usdcAllowance: bigint = await usdcContract.allowance(account, EXCHANGE_ADDRESS);
       const hasUsdcApproval = usdcAllowance > 0n;
       const hasCtfApproval: boolean = await ctfRead.isApprovedForAll(account, EXCHANGE_ADDRESS);
+
+      // Add detailed console logging for debugging
+      console.log("🔍 APPROVAL CHECK DEBUG:", {
+        account,
+        usdcAllowance: usdcAllowance.toString(),
+        usdcAllowanceFormatted: formatUnits(usdcAllowance, 6),
+        hasUsdcApproval,
+        hasCtfApproval,
+        overallApproved: hasUsdcApproval && hasCtfApproval,
+        walletType: "checking wallet types...",
+        privyWallets: privyWallets?.map((w: any) => ({
+          type: w.type,
+          walletClientType: w.walletClientType,
+          connectorType: w.connectorType,
+          address: w.address
+        }))
+      });
 
       setApprovalState((prev) => ({ 
         ...prev, 
@@ -245,18 +263,52 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      let embeddedWallet: any = Array.isArray(privyWallets)
-        ? (privyWallets as any[]).find((w) => w?.type === "embedded_wallet") || (privyWallets as any[])[0]
-        : undefined;
+      // Detect wallet type properly
+      const smartWalletAccount = (user?.linkedAccounts || [])
+        .find((acct: any) => acct?.type === "smart_wallet") as any;
+      const smartAddress = smartWalletAccount?.address;
+      
+      const embeddedWallet = (privyWallets || []).find((w: any) => 
+        w?.type === "embedded_wallet" || 
+        w?.walletClientType === "privy" || 
+        w?.connectorType === "privy"
+      );
+      
+      const externalWallet = (privyWallets || []).find((w: any) => 
+        w?.type === "wallet" || 
+        w?.connectorType !== "privy"
+      );
 
-      const hasSmartWallet = Boolean(embeddedWallet);
+      const hasSmartWallet = Boolean(smartAddress);
+      const hasEmbeddedWallet = Boolean(embeddedWallet);
+      const hasExternalWallet = Boolean(externalWallet);
+
+      console.log("🔍 WALLET TYPE DETECTION:", {
+        smartAddress,
+        hasSmartWallet,
+        hasEmbeddedWallet,
+        hasExternalWallet,
+        embeddedWallet: embeddedWallet ? {
+          type: embeddedWallet.type,
+          walletClientType: embeddedWallet.walletClientType,
+          connectorType: embeddedWallet.connectorType,
+          address: embeddedWallet.address
+        } : null,
+        externalWallet: externalWallet ? {
+          type: externalWallet.type,
+          walletClientType: externalWallet.walletClientType,
+          connectorType: externalWallet.connectorType,
+          address: externalWallet.address
+        } : null
+      });
 
       // Approve USDC
       const usdcAbi = ["function approve(address spender, uint256 amount) returns (bool)"];
       const usdcInterface = new ethers.Interface(usdcAbi);
       const approvalData = usdcInterface.encodeFunctionData("approve", [EXCHANGE_ADDRESS, ethers.MaxUint256]);
 
-      if (hasSmartWallet) {
+      if (hasSmartWallet || hasEmbeddedWallet) {
+        // Use smart wallet client for embedded/smart wallets
         const smartWalletClient = await getClientForChain({ id: 8453 });
         if (!smartWalletClient) throw new Error("No smart wallet client available for Base chain");
         await smartWalletClient.sendTransaction({ 
@@ -264,16 +316,30 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
           data: approvalData as `0x${string}`, 
           value: 0n 
         });
+        console.log("✅ USDC approved via smart wallet");
+      } else if (hasExternalWallet && externalWallet) {
+        // Use external wallet signer
+        if (typeof externalWallet.getEthereumProvider !== "function") {
+          throw new Error("External wallet does not support getEthereumProvider");
+        }
+        
+        const eip1193 = await externalWallet!.getEthereumProvider();
+        const provider = new ethers.BrowserProvider(eip1193 as any);
+        const signer = await provider.getSigner();
+        
+        const usdcContract = new ethers.Contract(USDC_ADDRESS, usdcAbi, signer);
+        const tx = await usdcContract.approve(EXCHANGE_ADDRESS, ethers.MaxUint256);
+        await tx.wait();
+        console.log("✅ USDC approved via external wallet");
       } else {
-        // For external wallets, we'd need a signer - this would need to be passed in
-        throw new Error("External wallet approval not implemented in context");
+        throw new Error("No compatible wallet found for approval");
       }
 
       await new Promise((r) => setTimeout(r, 1500));
 
       // Approve CTF (ERC1155) operator
       const ctfAbi = ["function setApprovalForAll(address operator, bool approved)"];
-      if (hasSmartWallet) {
+      if (hasSmartWallet || hasEmbeddedWallet) {
         const smartWalletClient = await getClientForChain({ id: 8453 });
         if (!smartWalletClient) throw new Error("No smart wallet client available for Base chain");
         const ctfInterface = new ethers.Interface(ctfAbi);
@@ -283,8 +349,18 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
           data: ctfData as `0x${string}`, 
           value: 0n 
         });
+        console.log("✅ CTF approved via smart wallet");
+      } else if (hasExternalWallet && externalWallet) {
+        const eip1193 = await externalWallet!.getEthereumProvider();
+        const provider = new ethers.BrowserProvider(eip1193 as any);
+        const signer = await provider.getSigner();
+        
+        const ctfContract = new ethers.Contract(CTF_ADDRESS, ctfAbi, signer);
+        const tx = await ctfContract.setApprovalForAll(EXCHANGE_ADDRESS, true);
+        await tx.wait();
+        console.log("✅ CTF approved via external wallet");
       } else {
-        throw new Error("External wallet approval not implemented in context");
+        throw new Error("No compatible wallet found for CTF approval");
       }
 
       // Re-check approval status
@@ -294,7 +370,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
       console.error("Error approving tokens:", error);
       setApprovalState((prev) => ({ ...prev, isApproving: false }));
     }
-  }, [account, checkApproval, approvalState.isApproved, privyWallets]);
+  }, [account, checkApproval, approvalState.isApproved, privyWallets, user?.linkedAccounts, getClientForChain]);
 
   // Throttle initial and dependency-driven reloads to prevent rapid RPC bursts
   useEffect(() => {
