@@ -27,6 +27,22 @@ for (const [path, url] of Object.entries(logoModules)) {
   }
 }
 
+// Add specific mappings for common tag variations
+const tagMappings: Record<string, string> = {
+  'LEAGUE_OF_LEGENDS': 'LOL',
+  'CALL_OF_DUTY': 'CALLOFDUTY', 
+  'BATTLEFIELD_6': 'BATTLEFIELD',
+  'GTA_VI': 'GTA6'
+};
+
+// Apply tag mappings to the logo map
+for (const [tagKey, imageKey] of Object.entries(tagMappings)) {
+  const imageUrl = logoMap[imageKey];
+  if (imageUrl) {
+    logoMap[tagKey] = imageUrl;
+  }
+}
+
 export function resolveLogoByTags(tags: string[] | undefined | null): string | null {
   if (Array.isArray(tags)) {
     for (const raw of tags) {
@@ -36,6 +52,31 @@ export function resolveLogoByTags(tags: string[] | undefined | null): string | n
       if (candidate) return candidate;
     }
   }
+  return fallbackLogoUrl;
+}
+
+
+// Server-based resolver for umbrella icons using Firebase Storage
+// Constructs URLs for images stored in Firebase Storage with pattern: ic_<umbrellaId>.*
+const FIREBASE_STORAGE_BASE_URL = 'https://firebasestorage.googleapis.com/v0/b/leveluptrades-46ac9.firebasestorage.app/o/umbrellas%2F';
+
+export function resolveUmbrellaIconById(umbrellaId?: string): string | null {
+  if (!umbrellaId) return null;
+  
+  // Return the most common format first (png), let the component handle fallback
+  return `${FIREBASE_STORAGE_BASE_URL}ic_${umbrellaId}.png?alt=media`;
+}
+
+// Enhanced resolver with priority: Game logo → Fallback
+// Note: Server images are handled at component level with error fallback
+export function resolveLogoWithPriority(umbrella: any, tags: string[] | undefined | null): string | null {
+  // Check for game logo based on tags
+  const gameLogo = resolveLogoByTags(tags);
+  if (gameLogo) {
+    return gameLogo;
+  }
+  
+  // Fallback to game controller image (already handled by resolveLogoByTags)
   return fallbackLogoUrl;
 }
 
