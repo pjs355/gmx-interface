@@ -86,7 +86,10 @@ export default function PositionsTableView({
   const formatCurrency = (value?: number | null): string => {
     if (value === null || value === undefined || !isFinite(value)) return "—";
     const isInt = Math.abs(value % 1) < 1e-9;
-    return `$${isInt ? value.toFixed(0) : value.toFixed(2)}`;
+    return `$${isInt ? 
+      new Intl.NumberFormat('en-US').format(value) : 
+      new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+    }`;
   };
   return (
     <div className="flex flex-col gap-8">
