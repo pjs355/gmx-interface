@@ -54,43 +54,25 @@ export default function PredictionMarketTradeBoxUI({
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
   const { calculateContractsForMarketOrder, getEffectivePrice } = useMarketOrderHandler(orderbook as any);
 
-  // Format amount string for display with $ symbol and thousands separators
-  const formatAmountForDisplay = (value: string | undefined): string => {
-    // Only show $ for BUY + MARKET orders (dollars)
-    const showDollar = (side === 'buy' && orderType === 'market');
+  // Helper function to format numbers with commas
+  const formatNumberWithCommas = (value: string): string => {
+    if (!value) return '';
     
-    console.log('DEBUG formatAmountForDisplay:', { side, orderType, showDollar, value });
+    // Handle decimal numbers
+    const parts = value.split('.');
+    const integerPart = parts[0];
+    const decimalPart = parts[1];
     
-    if (!value || value === '') return showDollar ? '$0' : '0';
+    // Add commas to integer part
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     
-    // Handle leading dot like '.5'
-    let raw = value;
-    if (raw.startsWith('.')) raw = `0${raw}`;
-
-    const endsWithDot = raw.endsWith('.') && !raw.endsWith('..');
-    const [intPartRaw, fracPartRaw] = raw.split('.');
-
-    // Remove any non-digits from integer part
-    const intPartDigits = (intPartRaw ?? '0').replace(/\D/g, '');
-    const intNumber = Number(intPartDigits || '0');
-    const intFormatted = intNumber.toLocaleString('en-US');
-
-    const prefix = showDollar ? '$' : '';
-
-    if (endsWithDot) {
-      // Preserve trailing dot while formatting the integer part
-      return `${prefix}${intFormatted}.`;
+    // Rejoin with decimal part if it exists, or if there's a trailing decimal point
+    if (decimalPart !== undefined) {
+      return `${formattedInteger}.${decimalPart}`;
     }
-
-    if (typeof fracPartRaw === 'string') {
-      // Preserve fractional part as typed (limited elsewhere to 2 decimals)
-      return `${prefix}${intFormatted}.${fracPartRaw}`;
-    }
-
-    return `${prefix}${intFormatted}`;
+    
+    return formattedInteger;
   };
-
-  const formattedAmountDisplay = useMemo(() => formatAmountForDisplay(amount), [amount, side, orderType]);
 
   const toCentsString = (value?: number | null): string => {
     if (value === undefined || value === null || !isFinite(value)) return "--";
@@ -332,20 +314,42 @@ export default function PredictionMarketTradeBoxUI({
           }
         </div>
         <div className={`input-container prediction-input-container ${(!amount || amount === '') ? 'empty-input' : ''}`}>
-          {/* Simple input bars; no overlay */}
+          {/* Show $ symbol when there's a value, use placeholder when empty */}
           <input
             type="text"
-            value={formattedAmountDisplay}
+            value={amount ? (side === 'buy' && orderType === 'market' ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
             onChange={(e) => {
               const value = e.target.value;
+              
               // Remove $ and commas for processing
               const cleanValue = value.replace(/[$,\s]/g, '');
-              if (cleanValue.includes('.') && cleanValue.split('.')[1]?.length > 2) {
+              
+              // Only block if there are multiple decimal points
+              const decimalCount = (cleanValue.match(/\./g) || []).length;
+              if (decimalCount > 1) {
                 return;
               }
+              
+              // Only block if there are more than 2 decimal places
+              if (cleanValue.includes('.') && cleanValue.split('.')[1] && cleanValue.split('.')[1].length > 2) {
+                return;
+              }
+              
               onAmountChange(cleanValue);
             }}
-            placeholder={(side === 'buy' && orderType === 'market') ? 'Enter amount' : 'Enter shares'}
+            onKeyDown={(e) => {
+              // Only allow numbers, decimal point, and control keys
+              const char = e.key;
+              const isNumber = /[0-9]/.test(char);
+              const isDecimal = char === '.';
+              const isControlKey = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(char);
+              
+              // Block everything except numbers, decimal, and control keys
+              if (!isNumber && !isDecimal && !isControlKey) {
+                e.preventDefault();
+              }
+            }}
+            placeholder={(side === 'buy' && orderType === 'market') ? '$0' : '0'}
             className={`trade-input prediction-trade-input`}
           />
         </div>
@@ -364,10 +368,23 @@ export default function PredictionMarketTradeBoxUI({
               onChange={(e) => {
                 const value = e.target.value;
                 const num = parseInt(value);
-                if (value && (isNaN(num) || num < 1 || num > 99)) {
+                
+                // Only allow whole numbers between 1-99
+                if (value && (isNaN(num) || num < 1 || num > 99 || !Number.isInteger(parseFloat(value)))) {
                   return;
                 }
                 onPriceChange(value);
+              }}
+              onKeyDown={(e) => {
+                // Only allow numbers and control keys
+                const char = e.key;
+                const isNumber = /[0-9]/.test(char);
+                const isControlKey = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(char);
+                
+                // Block everything except numbers and control keys
+                if (!isNumber && !isControlKey) {
+                  e.preventDefault();
+                }
               }}
               placeholder="0"
               min="1"

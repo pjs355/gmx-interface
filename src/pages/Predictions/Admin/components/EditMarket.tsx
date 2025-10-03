@@ -387,7 +387,7 @@ export default function EditMarket({
 	}
 
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div style={{ color: "white" }}>
 			<button
 				type="button"
 				onClick={onBack}

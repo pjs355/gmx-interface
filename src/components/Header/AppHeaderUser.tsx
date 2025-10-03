@@ -87,8 +87,36 @@ export function AppHeaderUser({
                   borderRadius: "6px",
                   backgroundColor: "transparent",
                   transition: "background-color 0.2s ease",
-                  fontSize: "14px",
+                  fontSize: "var(--font-size-body-medium)",
                   fontWeight: "700",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#1f2937";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                Log In
+              </div>
+            )}
+            {small && (
+              <div
+                className="login-text-link"
+                onClick={() => {
+                  // Removed userAnalytics call
+                  login();
+                }}
+                style={{
+                  color: "#8b5cf6",
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  backgroundColor: "transparent",
+                  transition: "background-color 0.2s ease",
+                  fontSize: "var(--font-size-body-medium)",
+                  fontWeight: "700",
+                  marginRight: "8px",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = "#1f2937";
@@ -106,7 +134,7 @@ export function AppHeaderUser({
                 login();
               }}
             >
-              {small ? "Log In" : "Sign Up"}
+              {small ? "Sign Up" : "Sign Up"}
             </ConnectWalletButton>
             {!small && <OneClickButton openSettings={openSettings} />}
             {/* <NetworkDropdown

@@ -28,43 +28,25 @@ export default function MobileTradingBoxHeader({
 }: MobileTradingBoxHeaderProps) {
   const { selectedPosition, amount, side, orderType } = state;
 
-  // Format amount string for display with $ symbol and thousands separators
-  const formatAmountForDisplay = (value: string | undefined): string => {
-    // Mobile is always market orders, so only show $ for BUY
-    const showDollar = (side === 'buy');
+  // Helper function to format numbers with commas
+  const formatNumberWithCommas = (value: string): string => {
+    if (!value) return '';
     
-    console.log('DEBUG Mobile formatAmountForDisplay:', { side, showDollar, value });
+    // Handle decimal numbers
+    const parts = value.split('.');
+    const integerPart = parts[0];
+    const decimalPart = parts[1];
     
-    if (!value || value === '') return showDollar ? '$0' : '0';
+    // Add commas to integer part
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     
-    // Handle leading dot like '.5'
-    let raw = value;
-    if (raw.startsWith('.')) raw = `0${raw}`;
-
-    const endsWithDot = raw.endsWith('.') && !raw.endsWith('..');
-    const [intPartRaw, fracPartRaw] = raw.split('.');
-
-    // Remove any non-digits from integer part
-    const intPartDigits = (intPartRaw ?? '0').replace(/\D/g, '');
-    const intNumber = Number(intPartDigits || '0');
-    const intFormatted = intNumber.toLocaleString('en-US');
-
-    const prefix = showDollar ? '$' : '';
-
-    if (endsWithDot) {
-      // Preserve trailing dot while formatting the integer part
-      return `${prefix}${intFormatted}.`;
+    // Rejoin with decimal part if it exists, or if there's a trailing decimal point
+    if (decimalPart !== undefined) {
+      return `${formattedInteger}.${decimalPart}`;
     }
-
-    if (typeof fracPartRaw === 'string') {
-      // Preserve fractional part as typed
-      return `${prefix}${intFormatted}.${fracPartRaw}`;
-    }
-
-    return `${prefix}${intFormatted}`;
+    
+    return formattedInteger;
   };
-
-  const formattedAmountDisplay = useMemo(() => formatAmountForDisplay(amount), [amount, side]);
 
   return (
     <div className="mobile-trading-header">
@@ -128,14 +110,38 @@ export default function MobileTradingBoxHeader({
           <div className={`amount-input-mobile ${(!amount || amount === '') ? 'empty-input' : ''}`}>
             <input
               type="text"
-              value={formattedAmountDisplay}
+              value={amount ? (side === 'buy' ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
               onChange={(e) => {
                 const value = e.target.value;
                 // Remove $ and commas for processing
                 const cleanValue = value.replace(/[$,\s]/g, '');
+                
+                // Allow only one decimal point
+                const decimalCount = (cleanValue.match(/\./g) || []).length;
+                if (decimalCount > 1) {
+                  return;
+                }
+                
+                // Limit to 2 decimal places (but allow decimal point at the end)
+                if (cleanValue.includes('.') && cleanValue.split('.')[1] && cleanValue.split('.')[1].length > 2) {
+                  return;
+                }
+                
                 onAmountChange(cleanValue);
               }}
-              placeholder={side === 'buy' ? 'Enter amount' : 'Enter shares'}
+              onKeyDown={(e) => {
+                // Only allow numbers, decimal point, and control keys
+                const char = e.key;
+                const isNumber = /[0-9]/.test(char);
+                const isDecimal = char === '.';
+                const isControlKey = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(char);
+                
+                // Block everything except numbers, decimal, and control keys
+                if (!isNumber && !isDecimal && !isControlKey) {
+                  e.preventDefault();
+                }
+              }}
+              placeholder={side === 'buy' ? '$0' : '0'}
               className="amount-input-field"
             />
           </div>

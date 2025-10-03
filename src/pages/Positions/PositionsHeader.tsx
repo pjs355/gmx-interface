@@ -1,13 +1,5 @@
 // React import not required with automatic JSX runtime
 
-// Helper function to format numbers with commas
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value);
-}
-
 export default function PositionsHeader({
   portfolioTotal,
   positionsTotalValue,
@@ -28,7 +20,7 @@ export default function PositionsHeader({
             {softLoading ? (
               <span className="skeleton-box" style={{ display: 'inline-block', width: 160, height: 28, borderRadius: 6 }} />
             ) : (
-              <>${formatCurrency(portfolioTotal)}</>
+              <>${portfolioTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
             )}
           </div>
         </div>
@@ -38,7 +30,7 @@ export default function PositionsHeader({
             {softLoading ? (
               <span className="skeleton-box" style={{ display: 'inline-block', width: 120, height: 18, borderRadius: 4 }} />
             ) : (
-              <>${formatCurrency(positionsTotalValue)}</>
+              <>${positionsTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
             )}
           </div>
         </div>
@@ -48,7 +40,7 @@ export default function PositionsHeader({
             {softLoading ? (
               <span className="skeleton-box" style={{ display: 'inline-block', width: 100, height: 18, borderRadius: 4 }} />
             ) : (
-              <>${formatCurrency(Number(usdcBalance || 0))}</>
+              <>${Number(usdcBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
             )}
           </div>
         </div>

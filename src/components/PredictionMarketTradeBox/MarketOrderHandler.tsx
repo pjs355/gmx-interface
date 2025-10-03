@@ -68,6 +68,11 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
     // - For NO positions: use bids (people buying YES tokens, which gives us NO tokens)
     const relevantOrders = position === 'yes' ? orderbook.asks : orderbook.bids;
     
+    // Check if relevantOrders exists and is an array
+    if (!relevantOrders || !Array.isArray(relevantOrders)) {
+      return { contracts: 0, remainingUsd: usdAmount };
+    }
+    
     // Sort orders by price
     // - For YES positions: ascending (lowest ask first)
     // - For NO positions: descending (highest bid first)

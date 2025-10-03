@@ -33,6 +33,7 @@ type AddMarketForm = {
 	eventDate?: string; // ISO date (yyyy-mm-dd) or datetime-local
 	image1Url?: string;
 	image2Url?: string;
+	status: boolean; // true = Active, false = Inactive
 };
 
 type QuestionEntry = {
@@ -52,6 +53,7 @@ export default function AddMarket() {
 		umbrellaRule: "",
 		isEvent: false,
 		eventDate: "",
+		status: true, // Default to Active
 	});
 	const [submitting, setSubmitting] = useState(false);
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
@@ -60,7 +62,7 @@ export default function AddMarket() {
 	const [questions, setQuestions] = useState<QuestionEntry[]>([
 		{
 			displayName: "",
-			tags: ["POKEMON"],
+			tags: [],
 			yesColor: "#22c55e",
 			noColor: "#ef4444",
 		},
@@ -129,15 +131,20 @@ export default function AddMarket() {
 	}
 
 	function addQuestionEntry() {
-		setQuestions((prev) => [
-			...prev,
-			{
-				displayName: "",
-				tags: ["POKEMON"],
-				yesColor: "#22c55e",
-				noColor: "#ef4444",
-			},
-		]);
+		setQuestions((prev) => {
+			// Get tags from the last question, or empty array if no questions exist
+			const lastQuestionTags = prev.length > 0 ? prev[prev.length - 1].tags : [];
+			
+			return [
+				...prev,
+				{
+					displayName: "",
+					tags: [...lastQuestionTags], // Copy tags from the last question
+					yesColor: "#22c55e",
+					noColor: "#ef4444",
+				},
+			];
+		});
 	}
 
 	function removeQuestionEntry(index: number) {
@@ -223,6 +230,7 @@ export default function AddMarket() {
 					form.isEvent && form.eventDate
 						? new Date(form.eventDate).toISOString()
 						: undefined,
+				status: form.status, // Include status in payload
 			};
 
 			// Upload images if selected
@@ -283,7 +291,7 @@ export default function AddMarket() {
 	}
 
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div style={{ color: "white" }}>
 			<h2 style={{ marginBottom: 16 }}>Add Market</h2>
 			<form
 				onSubmit={handleSubmit}
@@ -546,6 +554,45 @@ export default function AddMarket() {
 					)}
 				</div>
 
+				{/* Status Selection */}
+				<div style={{ display: "grid", gap: 6 }}>
+					<span>Status</span>
+					<div style={{ display: "flex", gap: 8 }}>
+						<button
+							type="button"
+							onClick={() => update("status", true)}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background: form.status
+									? "rgba(255,255,255,0.2)"
+									: "transparent",
+								color: "white",
+								cursor: "pointer",
+							}}
+						>
+							Active
+						</button>
+						<button
+							type="button"
+							onClick={() => update("status", false)}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background: !form.status
+									? "rgba(255,255,255,0.2)"
+									: "transparent",
+								color: "white",
+								cursor: "pointer",
+							}}
+						>
+							Inactive
+						</button>
+					</div>
+				</div>
+
 				{/* Image Upload Section */}
 				<div
 					style={{
@@ -738,23 +785,12 @@ export default function AddMarket() {
 				>
 					<div
 						style={{
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "space-between",
 							marginBottom: 8,
 						}}
 					>
 						<div style={{ fontWeight: 600 }}>
 							Questions (add one or more entries)
 						</div>
-						<button
-							type="button"
-							onClick={addQuestionEntry}
-							disabled={submitting}
-							style={{ padding: "6px 10px" }}
-						>
-							+ Add Question
-						</button>
 					</div>
 					<div style={{ display: "grid", gap: 12 }}>
 						{questions.map((q, idx) => (
@@ -905,6 +941,23 @@ export default function AddMarket() {
 								</div>
 							</div>
 						))}
+					</div>
+					<div style={{ marginTop: 12 }}>
+						<button
+							type="button"
+							onClick={addQuestionEntry}
+							disabled={submitting}
+							style={{ 
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background: "transparent",
+								color: "white",
+								cursor: "pointer",
+							}}
+						>
+							+ Add Question
+						</button>
 					</div>
 				</div>
 

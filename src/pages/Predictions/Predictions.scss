@@ -71,8 +71,11 @@
   margin: -12px 0 24px 0; // negative top margin to pull pills even closer to header
 }
 
-/* Reduce header-to-pills spacing on desktop by overriding global .page-layout padding */
-@media (min-width: 1100px) {
+/* Consistent spacing approach across all screen sizes */
+/* Mobile: Use global padding-top (4.7rem) with negative margin */
+/* Medium and Desktop: Use reduced padding-top (2.4rem) with negative margin */
+
+@media (min-width: 769px) {
   .predictions-page.page-layout {
     padding-top: 2.4rem;
   }

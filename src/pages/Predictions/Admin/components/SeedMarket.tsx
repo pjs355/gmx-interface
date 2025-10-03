@@ -19,30 +19,42 @@ export default function SeedMarket({
 	questionDisplayName,
 }: SeedMarketProps) {
 	const { getAccessToken } = usePrivy();
-	const [minPrice, setMinPrice] = useState<string>("0.1");
-	const [maxPrice, setMaxPrice] = useState<string>("0.9");
+	const [bidMin, setBidMin] = useState<string>("0.2");
+	const [bidMax, setBidMax] = useState<string>("0.4");
+	const [askMin, setAskMin] = useState<string>("0.5");
+	const [askMax, setAskMax] = useState<string>("0.8");
 	const [amount, setAmount] = useState<string>("100");
 	const [seeding, setSeeding] = useState<boolean>(false);
 	const [clearing, setClearing] = useState<boolean>(false);
+	const [wiping, setWiping] = useState<boolean>(false);
 	const [result, setResult] = useState<SeedResult | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [clearResult, setClearResult] = useState<string | null>(null);
+	const [wipeResult, setWipeResult] = useState<string | null>(null);
 
 	const validateInputs = (): string | null => {
-		const min = Number(minPrice);
-		const max = Number(maxPrice);
+		const bMin = Number(bidMin);
+		const bMax = Number(bidMax);
+		const aMin = Number(askMin);
+		const aMax = Number(askMax);
 		const amt = Number(amount);
 
 		if (
-			!Number.isFinite(min) ||
-			!Number.isFinite(max) ||
+			!Number.isFinite(bMin) ||
+			!Number.isFinite(bMax) ||
+			!Number.isFinite(aMin) ||
+			!Number.isFinite(aMax) ||
 			!Number.isFinite(amt)
 		) {
 			return "All values must be valid numbers";
 		}
 
-		if (!(min > 0) || !(max < 1) || !(max > min)) {
-			return "Range must satisfy 0 < min < max < 1";
+		if (!(bMin > 0) || !(bMax < 1) || !(bMax > bMin)) {
+			return "Bid range must satisfy 0 < min < max < 1";
+		}
+
+		if (!(aMin > 0) || !(aMax < 1) || !(aMax > aMin)) {
+			return "Ask range must satisfy 0 < min < max < 1";
 		}
 
 		if (!(amt > 0)) {
@@ -71,7 +83,8 @@ export default function SeedMarket({
 			const base = getPredictionApiBaseUrl();
 
 			const body = {
-				range: [Number(minPrice), Number(maxPrice)],
+				bidRange: [Number(bidMin), Number(bidMax)],
+				askRange: [Number(askMin), Number(askMax)],
 				amount: Number(amount),
 			};
 
@@ -144,13 +157,56 @@ export default function SeedMarket({
 		}
 	};
 
+	const handleWipe = async () => {
+		setWiping(true);
+		setError(null);
+		setWipeResult(null);
+
+		try {
+			const token =
+				typeof getAccessToken === "function"
+					? await getAccessToken()
+					: undefined;
+			const base = getPredictionApiBaseUrl();
+
+			const response = await fetch(
+				`${base}/admin/markets/wipe-book/${questionId}`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...(token ? { Authorization: `Bearer ${token}` } : {}),
+					},
+				}
+			);
+
+			const json = await response.json().catch(() => ({} as any));
+
+			if (!response.ok || !json?.success) {
+				throw new Error(json?.error || `HTTP ${response.status}`);
+			}
+
+			setWipeResult("Market wiped successfully");
+		} catch (err) {
+			console.error("error", err);
+			setError(
+				err instanceof Error ? err.message : "Unknown error occurred"
+			);
+		} finally {
+			setWiping(false);
+		}
+	};
+
 	const resetForm = () => {
-		setMinPrice("0.1");
-		setMaxPrice("0.9");
+		setBidMin("0.1");
+		setBidMax("0.4");
+		setAskMin("0.6");
+		setAskMax("0.9");
 		setAmount("100");
 		setResult(null);
 		setError(null);
 		setClearResult(null);
+		setWipeResult(null);
 	};
 
 	return (
@@ -170,58 +226,104 @@ export default function SeedMarket({
 					Market: {questionDisplayName}
 				</div>
 			)}
-
-			<div style={{ fontSize: 12, opacity: 0.7, marginBottom: 12 }}>
-				Seeds order book with {amount} USDC across price range{" "}
-				{minPrice} - {maxPrice} with 5¢ spread
-			</div>
-
 			<div style={{ display: "grid", gap: 12, maxWidth: 400 }}>
-				<div
-					style={{
-						display: "grid",
-						gridTemplateColumns: "1fr 1fr",
-						gap: 8,
-					}}
-				>
-					<label style={{ display: "grid", gap: 4 }}>
-						<span style={{ fontSize: 12 }}>Min Price</span>
-						<input
-							type="number"
-							step="0.01"
-							min="0.01"
-							max="0.99"
-							value={minPrice}
-							onChange={(e) => setMinPrice(e.target.value)}
-							style={{
-								padding: 6,
-								color: "cyan",
-								border: "1px solid white",
-								borderRadius: 4,
-								background: "transparent",
-								fontSize: 12,
-							}}
-						/>
-					</label>
-					<label style={{ display: "grid", gap: 4 }}>
-						<span style={{ fontSize: 12 }}>Max Price</span>
-						<input
-							type="number"
-							step="0.01"
-							min="0.01"
-							max="0.99"
-							value={maxPrice}
-							onChange={(e) => setMaxPrice(e.target.value)}
-							style={{
-								padding: 6,
-								color: "cyan",
-								border: "1px solid white",
-								borderRadius: 4,
-								background: "transparent",
-								fontSize: 12,
-							}}
-						/>
-					</label>
+				<div style={{ display: "grid", gap: 12 }}>
+					<div style={{ fontWeight: 600 }}>Bid Range</div>
+					<div
+						style={{
+							display: "grid",
+							gridTemplateColumns: "1fr 1fr",
+							gap: 8,
+						}}
+					>
+						<label style={{ display: "grid", gap: 4 }}>
+							<span style={{ fontSize: 12 }}>Bid Min</span>
+							<input
+								type="number"
+								step="0.01"
+								min="0.01"
+								max="0.99"
+								value={bidMin}
+								onChange={(e) => setBidMin(e.target.value)}
+								style={{
+									padding: 6,
+									color: "cyan",
+									border: "1px solid white",
+									borderRadius: 4,
+									background: "transparent",
+									fontSize: 12,
+								}}
+							/>
+						</label>
+						<label style={{ display: "grid", gap: 4 }}>
+							<span style={{ fontSize: 12 }}>Bid Max</span>
+							<input
+								type="number"
+								step="0.01"
+								min="0.01"
+								max="0.99"
+								value={bidMax}
+								onChange={(e) => setBidMax(e.target.value)}
+								style={{
+									padding: 6,
+									color: "cyan",
+									border: "1px solid white",
+									borderRadius: 4,
+									background: "transparent",
+									fontSize: 12,
+								}}
+							/>
+						</label>
+					</div>
+					<div style={{ fontWeight: 600, marginTop: 8 }}>
+						Ask Range
+					</div>
+					<div
+						style={{
+							display: "grid",
+							gridTemplateColumns: "1fr 1fr",
+							gap: 8,
+						}}
+					>
+						<label style={{ display: "grid", gap: 4 }}>
+							<span style={{ fontSize: 12 }}>Ask Min</span>
+							<input
+								type="number"
+								step="0.01"
+								min="0.01"
+								max="0.99"
+								value={askMin}
+								onChange={(e) => setAskMin(e.target.value)}
+								style={{
+									padding: 6,
+									color: "cyan",
+									border: "1px solid white",
+									borderRadius: 4,
+									background: "transparent",
+									fontSize: 12,
+								}}
+							/>
+						</label>
+						<label style={{ display: "grid", gap: 4 }}>
+							<span style={{ fontSize: 12 }}>Ask Max</span>
+							<input
+								type="number"
+								step="0.01"
+								min="0.01"
+								max="0.99"
+								value={askMax}
+								onChange={(e) => setAskMax(e.target.value)}
+								style={{
+									padding: 6,
+									color: "cyan",
+									border: "1px solid white",
+									borderRadius: 4,
+									background: "transparent",
+									fontSize: 12,
+								}}
+							/>
+						</label>
+					</div>
 				</div>
 
 				<label style={{ display: "grid", gap: 4 }}>
@@ -275,7 +377,7 @@ export default function SeedMarket({
 					<button
 						type="button"
 						onClick={handleClear}
-						disabled={seeding || clearing}
+						disabled={seeding || clearing || wiping}
 						style={{
 							padding: "6px 12px",
 							border: "1px solid #ef4444",
@@ -286,8 +388,8 @@ export default function SeedMarket({
 							color: "white",
 							fontSize: 12,
 							cursor:
-								seeding || clearing ? "not-allowed" : "pointer",
-							opacity: seeding || clearing ? 0.6 : 1,
+								seeding || clearing || wiping ? "not-allowed" : "pointer",
+							opacity: seeding || clearing || wiping ? 0.6 : 1,
 						}}
 					>
 						{clearing ? "Clearing..." : "Clear Order Book"}
@@ -295,8 +397,29 @@ export default function SeedMarket({
 
 					<button
 						type="button"
+						onClick={handleWipe}
+						disabled={seeding || clearing || wiping}
+						style={{
+							padding: "6px 12px",
+							border: "1px solid #f59e0b",
+							borderRadius: 4,
+							background: wiping
+								? "transparent"
+								: "rgba(245, 158, 11, 0.2)",
+							color: "white",
+							fontSize: 12,
+							cursor:
+								seeding || clearing || wiping ? "not-allowed" : "pointer",
+							opacity: seeding || clearing || wiping ? 0.6 : 1,
+						}}
+					>
+						{wiping ? "Wiping..." : "Wipe Market"}
+					</button>
+
+					<button
+						type="button"
 						onClick={resetForm}
-						disabled={seeding || clearing}
+						disabled={seeding || clearing || wiping}
 						style={{
 							padding: "6px 12px",
 							border: "1px solid white",
@@ -305,8 +428,8 @@ export default function SeedMarket({
 							color: "white",
 							fontSize: 12,
 							cursor:
-								seeding || clearing ? "not-allowed" : "pointer",
-							opacity: seeding || clearing ? 0.6 : 1,
+								seeding || clearing || wiping ? "not-allowed" : "pointer",
+							opacity: seeding || clearing || wiping ? 0.6 : 1,
 						}}
 					>
 						Reset
@@ -359,6 +482,21 @@ export default function SeedMarket({
 						}}
 					>
 						✓ {clearResult}
+					</div>
+				)}
+
+				{wipeResult && (
+					<div
+						style={{
+							padding: 8,
+							border: "1px solid rgba(34, 197, 94, 0.3)",
+							borderRadius: 4,
+							background: "rgba(34, 197, 94, 0.1)",
+							fontSize: 12,
+							color: "#22c55e",
+						}}
+					>
+						✓ {wipeResult}
 					</div>
 				)}
 

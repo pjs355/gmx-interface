@@ -70,7 +70,7 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 	}
 
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div style={{ color: "white" }}>
 			<h2 style={{ marginBottom: 16 }}>Add Tag</h2>
 			<form
 				onSubmit={handleSubmit}
