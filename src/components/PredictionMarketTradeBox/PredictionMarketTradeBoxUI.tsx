@@ -19,7 +19,7 @@ const calculateOrderbookPrices = (orderbook: any) => {
   return { bestAsk, bestBid };
 };
 import { useMarketOrderHandler } from './MarketOrderHandler';
-import Tooltip from "components/Tooltip/Tooltip";
+// import Tooltip from "components/Tooltip/Tooltip";
 
 interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   state: TradeBoxState;
@@ -164,7 +164,7 @@ export default function PredictionMarketTradeBoxUI({
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) return null;
     const rem = remainingUsd ?? 0;
-    const avgPrice = (amt - rem) / calculatedContracts;
+    const avgPrice = (amt - rem) / calculatedContracts; // local only
     
     // For both YES and NO positions, if we win we get $1 per contract
     // So the total payout is just the number of contracts we bought
@@ -324,27 +324,45 @@ export default function PredictionMarketTradeBoxUI({
               // Remove $ and commas for processing
               const cleanValue = value.replace(/[$,\s]/g, '');
               
-              // Only block if there are multiple decimal points
-              const decimalCount = (cleanValue.match(/\./g) || []).length;
-              if (decimalCount > 1) {
-                return;
-              }
-              
-              // Only block if there are more than 2 decimal places
-              if (cleanValue.includes('.') && cleanValue.split('.')[1] && cleanValue.split('.')[1].length > 2) {
-                return;
+              // For limit orders and market sell orders, only allow whole numbers (no decimals)
+              if (orderType === 'limit' || (orderType === 'market' && side === 'sell')) {
+                // Block any decimal points for limit orders and market sell orders
+                if (cleanValue.includes('.')) {
+                  return;
+                }
+                // Only allow digits for limit orders and market sell orders
+                if (!/^\d*$/.test(cleanValue)) {
+                  return;
+                }
+              } else {
+                // For market buy orders, allow decimals with existing validation
+                // Only block if there are multiple decimal points
+                const decimalCount = (cleanValue.match(/\./g) || []).length;
+                if (decimalCount > 1) {
+                  return;
+                }
+                
+                // Only block if there are more than 2 decimal places
+                if (cleanValue.includes('.') && cleanValue.split('.')[1] && cleanValue.split('.')[1].length > 2) {
+                  return;
+                }
               }
               
               onAmountChange(cleanValue);
             }}
             onKeyDown={(e) => {
-              // Only allow numbers, decimal point, and control keys
               const char = e.key;
               const isNumber = /[0-9]/.test(char);
               const isDecimal = char === '.';
               const isControlKey = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(char);
               
-              // Block everything except numbers, decimal, and control keys
+              // For limit orders and market sell orders, block decimal points
+              if ((orderType === 'limit' || (orderType === 'market' && side === 'sell')) && isDecimal) {
+                e.preventDefault();
+                return;
+              }
+              
+              // Block everything except numbers, decimal (for market buy orders), and control keys
               if (!isNumber && !isDecimal && !isControlKey) {
                 e.preventDefault();
               }
@@ -400,59 +418,52 @@ export default function PredictionMarketTradeBoxUI({
       {/* Bet Size / To Win - render only when a positive numeric value exists */}
       {(toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null) && (
         <div className="bet-size-section">
-          {/* Odds line for market BUY orders */}
-          {oddsData !== null && (
+          {/* Estimated Shares and Cost (whole shares) for market BUY orders */}
+          {oddsData !== null && calculatedContracts !== null && remainingUsd !== null && (
             <div className="bet-size-info">
-              <span className={`bet-size-label ${oddsData.isUpdated ? 'updated-odds-label' : ''}`}>
-                {oddsData.isUpdated ? 'Updated Odds' : 'Odds'}
-                {oddsData.isUpdated && (
-                  <Tooltip
-                    handle={<span className="info-icon">i</span>}
-                    position="top"
-                    content={(function(){
-                      const from = oddsData.fromPct ?? oddsData.pct; // fallback
-                      const to = oddsData.pct;
-                      // Payout for market buy is number of contracts (each pays $1)
-                      const payout = (function(){
-                        const amt = Number(amount);
-                        if (!Number.isFinite(amt) || amt <= 0) return null;
-                        const res = calculateContractsForMarketOrder(amt, selectedPosition!, 'buy');
-                        const contracts = res.contracts || 0;
-                        return contracts > 0 ? contracts : null;
-                      })();
-                      const payoutStr = payout !== null ? `$ ${payout.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '$ --';
-                      return (
-                        <div className="updated-odds-tooltip">
-                          Your trade will change the odds from {from}% to {to}% , with a payout of {payoutStr}
-                        </div>
-                      );
-                    })()}
-                  />
-                )}
-              </span>
-              <span className="bet-size-value odds-value">{oddsData.pct}%</span>
+              <div className="bet-size-main-row">
+                <span className="bet-size-label">Estimated</span>
+                <span className="bet-size-value estimated-cost-value">
+                  {(() => {
+                    const sharesInt = Math.floor(calculatedContracts as number);
+                    const usdAmount = Number(amount);
+                    const spent = usdAmount - (remainingUsd as number);
+                    return `${sharesInt.toLocaleString('en-US')} shares · $ ${spent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                  })()}
+                </span>
+              </div>
             </div>
           )}
           {/* Avg Price line for market SELL orders */}
           {sellAvgCents !== null && (
             <div className="bet-size-info">
-              <span className="bet-size-label">Avg Price</span>
-              <span className="bet-size-value avg-price-value">{sellAvgCents}¢</span>
+              <div className="bet-size-main-row">
+                <span className="bet-size-label">Avg Price</span>
+                <span className="bet-size-value avg-price-value">{sellAvgCents}¢</span>
+              </div>
             </div>
           )}
           {/* Show Amount line for buy limit orders */}
           {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && (
             <div className="bet-size-info">
-              <span className="bet-size-label">Amount</span>
-              <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <div className="bet-size-main-row">
+                <span className="bet-size-label">Amount</span>
+                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
             </div>
           )}
           
           {/* Show To Win / Receive line */}
           {toWinNumeric !== null && (
             <div className="bet-size-info">
-              <span className={`bet-size-label to-win-label`}>{side === 'sell' ? 'Receive' : 'To Win'}</span>
-              <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <div className="bet-size-main-row">
+                <span className={`bet-size-label to-win-label`}>{side === 'sell' ? 'Receive' : 'To Win'}</span>
+                <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              {/* Small grey odds text under To Win for market buy orders only */}
+              {orderType === 'market' && side === 'buy' && oddsData && (
+                <div className="bet-size-odds-subtext">Avg. odds {oddsData.pct}%</div>
+              )}
             </div>
           )}
         </div>

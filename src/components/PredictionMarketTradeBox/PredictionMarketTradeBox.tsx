@@ -1,8 +1,8 @@
-import React, { useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useEffect } from "react";
 import useWallet from "lib/wallets/useWallet";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
-import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-import { ethers } from "ethers";
+// import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
+// import { ethers } from "ethers";
 import type { TradeBoxProps, TradeExecutionParams } from "./types";
 import { useMarketOrderHandler } from "./MarketOrderHandler";
 import { useLimitOrderHandler } from "./LimitOrderHandler";
@@ -20,18 +20,18 @@ interface PredictionMarketTradeBoxProps extends TradeBoxProps {}
 
 export default function PredictionMarketTradeBox({ market, orderbook: propOrderbook, initialPosition, onPositionChange }: PredictionMarketTradeBoxProps) {
   // Constants for token approval
-  const NEW_FAKE_USDC_ADDRESS = "0x333C89b2857FA0EE8d9Bcb7328C8672A45637C65";
-  const CTF_ADDRESS = "0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f"; // CTF contract address
-  const EXCHANGE_ADDRESS = "0x40fdD2b575b3CF3dF64eA6B43C3C47E1eC2fbf03"; // EXCHANGE contract address
+  // const NEW_FAKE_USDC_ADDRESS = "0x333C89b2857FA0EE8d9Bcb7328C8672A45637C65";
+  // const CTF_ADDRESS = "0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f"; // CTF contract address
+  // const EXCHANGE_ADDRESS = "0x40fdD2b575b3CF3dF64eA6B43C3C47E1eC2fbf03"; // EXCHANGE contract address
 
   const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange } = useTradeState(initialPosition);
-  const { client: smartClient, getClientForChain } = useSmartWallets();
+  // const { client: smartClient, getClientForChain } = useSmartWallets();
   const walletApi = useWallet() as any;
   const account = walletApi.getDataAddress();
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
-  const { approvalState, checkApproval, approveToken, refresh } = useUserData();
+  const { approvalState, /* checkApproval, */ approveToken, refresh } = useUserData();
   const { refreshBalances } = useBalances();
 
   const { wallets: privyWallets } = usePrivyWallets();
@@ -43,7 +43,7 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
 
   // Custom hooks for different order types
   const marketOrderHandler = useMarketOrderHandler(orderbook);
-  const limitOrderHandler = useLimitOrderHandler(orderbook);
+  // const limitOrderHandler = useLimitOrderHandler(orderbook);
   const tradeExecutionService = useTradeExecutionService();
   const usdcBalance = useUSDCBalance();
   const { yesBalance, noBalance } = useYesNoBalances(market);
@@ -64,10 +64,6 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
   //       // Create a simple provider that can make read calls
   //       const { ethers } = await import("ethers");
 
-  //       // Use Base RPC for read operations (this is safe for read-only calls)
-  //       const provider = new ethers.JsonRpcProvider(
-  //         "https://base-mainnet.rpc.privy.systems/?privyAppId=cm0yq8l6c03i1gec9i6yz1w6f"
-  //       );
 
   //       // Check USDC allowance for CTF contract
   //       const usdcContract = new ethers.Contract(
@@ -142,8 +138,9 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
           state.selectedPosition,
           state.side
         );
+        const contractsInt = Math.floor(result.contracts);
         return {
-          calculatedContracts: result.contracts,
+          calculatedContracts: contractsInt,
           remainingUsd: result.remainingUsd,
         };
       }
@@ -235,6 +232,14 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
       let orderPrice: number;
       
       if (frozenState.orderType === "market") {
+        // Helper: derive top-of-book prices (do not mutate orderbook)
+        const bestAsk = orderbook?.asks && orderbook.asks.length > 0
+          ? Math.min(...orderbook.asks.map((a: any) => a.price))
+          : null;
+        const bestBid = orderbook?.bids && orderbook.bids.length > 0
+          ? Math.max(...orderbook.bids.map((b: any) => b.price))
+          : null;
+
         if (frozenState.side === "buy") {
           const usdAmount = parseFloat(frozenState.amount);
           const calc = marketOrderHandler.calculateContractsForMarketOrder(
@@ -242,31 +247,45 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
             frozenState.selectedPosition,
             "buy"
           );
-          orderAmount = calc.contracts;
+          // Ensure whole-share execution
+          orderAmount = Math.floor(calc.contracts);
 
           if (!orderAmount || !isFinite(orderAmount) || orderAmount <= 0) {
             throw new Error("Unable to compute contracts for market buy order");
           }
-          
-          // Calculate effective price for market buy orders
-          orderPrice = marketOrderHandler.getEffectivePrice(usdAmount, orderAmount, calc.remainingUsd);
-          if (!orderPrice || !isFinite(orderPrice) || orderPrice <= 0) {
-            throw new Error("Unable to calculate effective price for market buy order");
+
+          // Use max price seen during fill if available; fallback to top-of-book
+          const topPriceRaw = (calc as any).maxPrice && isFinite((calc as any).maxPrice as number) && (calc as any).maxPrice! > 0
+            ? (calc as any).maxPrice as number
+            : (frozenState.selectedPosition === 'yes'
+                ? bestAsk
+                : (bestBid === null || bestBid === undefined ? null : (1 - (bestBid as number))));
+          if (topPriceRaw === null || topPriceRaw === undefined || !isFinite(topPriceRaw) || topPriceRaw <= 0) {
+            throw new Error("Unable to determine price for market buy order");
           }
+          orderPrice = Math.round(topPriceRaw * 100) / 100;
         } else {
           // SELL market uses shares input directly
           orderAmount = parseFloat(frozenState.amount);
-          
-          // Calculate effective price for market sell orders
-          const calc = marketOrderHandler.calculateContractsForMarketOrder(
+          if (!orderAmount || !isFinite(orderAmount) || orderAmount <= 0) {
+            throw new Error("Invalid shares for market sell order");
+          }
+
+          // Use max price seen during fill if available; fallback to top-of-book
+          const sellCalc = marketOrderHandler.calculateContractsForMarketOrder(
             orderAmount,
             frozenState.selectedPosition,
             "sell"
           );
-          orderPrice = marketOrderHandler.getEffectivePrice(orderAmount, orderAmount, calc.remainingUsd);
-          if (!orderPrice || !isFinite(orderPrice) || orderPrice <= 0) {
-            throw new Error("Unable to calculate effective price for market sell order");
+          const topPriceRaw = (sellCalc as any).maxPrice && isFinite((sellCalc as any).maxPrice as number) && (sellCalc as any).maxPrice! > 0
+            ? (sellCalc as any).maxPrice as number
+            : (frozenState.selectedPosition === 'yes'
+                ? bestBid
+                : (bestAsk === null || bestAsk === undefined ? null : (1 - (bestAsk as number))));
+          if (topPriceRaw === null || topPriceRaw === undefined || !isFinite(topPriceRaw) || topPriceRaw <= 0) {
+            throw new Error("Unable to determine price for market sell order");
           }
+          orderPrice = Math.round(topPriceRaw * 100) / 100;
         }
       } else {
         // LIMIT orders use shares input directly and provided price
@@ -308,7 +327,7 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
         // Refresh balances after successful trade
         try {
           // Get the market's token IDs for this specific market
-          const marketId = market._id;
+          // const marketId = market._id;
           const yesTokenId = (market as any)?.yesTokenId;
           const noTokenId = (market as any)?.noTokenId;
           

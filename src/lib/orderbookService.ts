@@ -74,14 +74,14 @@ export class OrderbookService {
 
   // Helper method to format size for display
   formatSize(size: number): string {
-    return size.toFixed(2);
+    return Math.round(size).toString();
   }
 
   // Helper method to get total volume at a price level
   getTotalVolumeAtPrice(orders: OrderbookEntry[], price: number): number {
     return orders
       .filter(order => order.price === price)
-      .reduce((total, order) => total + order.size, 0);
+      .reduce((total, order) => total + (order.size || 0), 0);
   }
 
   // Helper method to get best bid and ask

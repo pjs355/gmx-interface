@@ -204,7 +204,7 @@ export default function OrdersView({ umbrellaBalances, orders }: { umbrellaBalan
                       {o.side === 'buy' ? 'Buy' : 'Sell'}
                     </div>
                     <div style={{ textAlign: "center", color: "#fff" }}>{o.price !== undefined ? `${Math.round((o.price || 0) * 100)}¢` : "—"}</div>
-                    <div style={{ textAlign: "center", color: "#fff" }}>{o.size !== undefined ? Number(o.size).toFixed(2) : "—"}</div>
+                    <div style={{ textAlign: "center", color: "#fff" }}>{o.size !== undefined ? Math.round(Number(o.size)) : "—"}</div>
                     <div style={{ textAlign: "center" }}>
                       <button
                         type="button"

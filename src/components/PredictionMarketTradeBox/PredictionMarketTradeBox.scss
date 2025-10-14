@@ -589,13 +589,18 @@
 
     .bet-size-info, .leverage-info {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
       margin-bottom: 8px;
 
       &:last-child {
         margin-bottom: 0;
       }
+    }
+
+    .bet-size-main-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     // Add extra spacing between Amount and To Win for buy limit orders
@@ -675,10 +680,25 @@
       color: #ffffff;
     }
 
+    // Force Estimated Cost value to white
+    .estimated-cost-value {
+      font-size: 16px; // match label size
+      color: #ffffff;
+    }
+
     // Amount value should be white, not green
     .amount-value {
       font-size: 16px; // match label size
       color: #ffffff;
+    }
+
+    // Small grey odds text under To Win for market buy orders
+    .bet-size-odds-subtext {
+      font-size: 12px;
+      color: #9CA3AF; // brighter grey color
+      font-weight: 400;
+      margin-top: 4px;
+      text-align: left;
     }
   }
 

@@ -11,16 +11,20 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
     
     // For SELL orders, usdAmount represents shares, not USD
     if (side === 'sell') {
-      const sharesToSell = usdAmount;
+      // Whole shares only
+      const sharesToSell = Math.floor(usdAmount);
       let remainingShares = sharesToSell;
       let totalUsdReceived = 0;
+      let maxPriceSeen = 0;
       
       // For SELL "Yes": use bids (people buying YES tokens)
       // For SELL "No": use asks (people selling YES tokens, which gives us NO tokens)
       const relevantOrders = position === 'yes' ? orderbook.bids : orderbook.asks;
-      const sortedOrders = position === 'yes' 
-        ? relevantOrders.sort((a, b) => b.price - a.price) // Highest bid first for YES
-        : relevantOrders.sort((a, b) => a.price - b.price); // Lowest ask first for NO
+      // IMPORTANT: never mutate the original orderbook arrays; copy before sorting
+      const sortedOrders = (position === 'yes'
+        ? [...relevantOrders].sort((a, b) => b.price - a.price) // Highest bid first for YES
+        : [...relevantOrders].sort((a, b) => a.price - b.price) // Lowest ask first for NO
+      );
       
       // Process SELL order using step-clearing
       for (const order of sortedOrders) {
@@ -35,28 +39,32 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
         } else {
           availableSize = order.size || 0;
         }
-        
+        // Only whole shares can be sold
+        const availableWhole = Math.floor(availableSize);
         // How many shares we can sell at this price level
-        const sharesAtThisPrice = Math.min(availableSize, remainingShares);
+        const sharesAtThisPrice = Math.min(availableWhole, remainingShares);
         
         if (sharesAtThisPrice > 0) {
           const usdAtThisPrice = sharesAtThisPrice * orderPrice;
           totalUsdReceived += usdAtThisPrice;
           remainingShares -= sharesAtThisPrice;
+          if (orderPrice > maxPriceSeen) maxPriceSeen = orderPrice;
         }
       }
       
       // For SELL orders, return shares as "contracts" and USD received as "remainingUsd"
       return { 
         contracts: sharesToSell - remainingShares, 
-        remainingUsd: totalUsdReceived 
+        remainingUsd: totalUsdReceived,
+        maxPrice: maxPriceSeen
       };
     }
     
-    // NEW STEP-CLEARING LOGIC FOR BUY ORDERS
+    // NEW STEP-CLEARING LOGIC FOR BUY ORDERS (whole shares only)
     // Convert USD amount to cents for exact integer math
     const S_cents = Math.floor(usdAmount * 100);
-    let filled_units = 0; // in hundredths of shares
+    let filled_shares = 0; // whole shares only
+    let maxPriceSeen = 0;
     let remaining_cents = S_cents;
     
     // For BUY orders: 
@@ -72,9 +80,11 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
     // Sort orders by price
     // - For YES positions: ascending (lowest ask first) - process from bottom up
     // - For NO positions: descending (highest bid first)
-    const sortedOrders = position === 'yes' 
-      ? relevantOrders.sort((a, b) => a.price - b.price)
-      : relevantOrders.sort((a, b) => b.price - a.price);
+    // IMPORTANT: never mutate the original orderbook arrays; copy before sorting
+    const sortedOrders = (position === 'yes'
+      ? [...relevantOrders].sort((a, b) => a.price - b.price)
+      : [...relevantOrders].sort((a, b) => b.price - a.price)
+    );
     
     let i = 0;
     while (i < sortedOrders.length && remaining_cents > 0) {
@@ -83,7 +93,8 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
       
       // For NO positions using bids, we need to invert the price
       const costPerContract = position === 'no' ? (1 - orderPrice) : orderPrice;
-      const p_cents = Math.floor(costPerContract * 100); // Convert to cents
+      // Round to nearest cent to avoid float underestimation (e.g., 0.4499999 -> 45¢)
+      const p_cents = Math.round(costPerContract * 100);
       
       // Handle nested orders structure - sum up all available size at this price level
       let totalAvailableSize = 0;
@@ -96,38 +107,38 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
         totalAvailableSize = order.size || 0;
       }
       
-      // Convert available size to hundredths of shares
-      const avail_units = Math.floor(totalAvailableSize * 100);
-      
-      // Calculate row total in cents (floor division)
-      const row_total_cents = Math.floor((avail_units * p_cents) / 100);
-      
+      // Only whole shares at each price level
+      const availableWhole = Math.floor(totalAvailableSize);
+      if (availableWhole <= 0 || p_cents <= 0) { i++; continue; }
+
+      const row_total_cents = availableWhole * p_cents;
+
       if (remaining_cents >= row_total_cents) {
-        // Full clear this row
-        filled_units += avail_units;
+        // Full clear this row with whole shares
+        filled_shares += availableWhole;
         remaining_cents -= row_total_cents;
+        if (costPerContract > maxPriceSeen) maxPriceSeen = costPerContract;
         i++;
         continue;
       } else {
-        // Partial fill at this price level
-        // Maximum purchasable units at this price: floor(100 * S_cents / p_cents)
-        const max_units_by_budget = Math.floor((100 * remaining_cents) / p_cents);
-        const take_units = Math.min(avail_units, Math.max(0, max_units_by_budget));
-        
-        if (take_units > 0) {
-          const cost_cents = Math.floor((take_units * p_cents) / 100);
-          filled_units += take_units;
+        // Partial fill: take as many whole shares as budget allows
+        const affordableShares = Math.floor(remaining_cents / p_cents);
+        const takeShares = Math.min(availableWhole, Math.max(0, affordableShares));
+        if (takeShares > 0) {
+          const cost_cents = takeShares * p_cents;
+          filled_shares += takeShares;
           remaining_cents -= cost_cents;
+          if (costPerContract > maxPriceSeen) maxPriceSeen = costPerContract;
         }
         break;
       }
     }
     
-    // Convert back to shares and USD
-    const total_contracts = filled_units / 100.0;
+    // Convert back to USD; contracts are whole shares already
+    const total_contracts = filled_shares;
     const remaining_usd = remaining_cents / 100.0;
     
-    return { contracts: total_contracts, remainingUsd: remaining_usd };
+    return { contracts: total_contracts, remainingUsd: remaining_usd, maxPrice: maxPriceSeen };
   }, [orderbook]);
 
   // Get effective price for market orders

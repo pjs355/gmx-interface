@@ -24,6 +24,7 @@ export interface TradeBoxProps {
 export interface MarketOrderCalculation {
   contracts: number;
   remainingUsd: number;
+  maxPrice?: number;
 }
 
 export interface TradeExecutionParams {

@@ -398,7 +398,7 @@ export default function OrderbookDisplay({
                   <DepthBar depth={ask.depthPercentage} side="ask" />
                   <span className="side-label ask">{isLowestAsk ? "Asks" : ""}</span>
                   <span className="price ask">${ask.price.toFixed(2)}</span>
-                  <span className="size">{ask.size.toFixed(2)}</span>
+                  <span className="size">{Math.round(ask.size)}</span>
                   <span className="total">${ask.cumulativeTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               );
@@ -427,7 +427,7 @@ export default function OrderbookDisplay({
                   <DepthBar depth={bid.depthPercentage} side="bid" />
                   <span className="side-label bid">{isHighestBid ? "Bids" : ""}</span>
                   <span className="price bid">${bid.price.toFixed(2)}</span>
-                  <span className="size">{bid.size.toFixed(2)}</span>
+                  <span className="size">{Math.round(bid.size)}</span>
                   <span className="total">${bid.cumulativeTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               );

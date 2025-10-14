@@ -9,10 +9,12 @@ export function useLimitOrderHandler(orderbook: OrderbookSnapshot | null) {
   } => {
     const errors: string[] = [];
     
-    // Check if amount is valid
+    // Check if amount is valid (must be a whole number for limit orders)
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
       errors.push('Amount must be a positive number');
+    } else if (!Number.isInteger(numAmount)) {
+      errors.push('Amount must be a whole number for limit orders');
     }
     
     // Check if price is valid (convert cents to dollars for validation)
@@ -47,6 +49,11 @@ export function useLimitOrderHandler(orderbook: OrderbookSnapshot | null) {
     const numPrice = parseFloat(price) / 100; // Convert cents to dollars
     
     if (isNaN(numAmount) || isNaN(numPrice) || numAmount <= 0 || numPrice <= 0) {
+      return 0;
+    }
+    
+    // Ensure amount is a whole number for limit orders
+    if (!Number.isInteger(numAmount)) {
       return 0;
     }
     
