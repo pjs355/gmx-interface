@@ -1,4 +1,5 @@
 // import { Trans } from "@lingui/react";
+import { useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 // Removed useCallback - not used after cleanup
 
@@ -25,11 +26,11 @@ import "./Header.scss";
 import { usePortfolio as usePortfolioContext } from "context/PortfolioContext";
 
 type Props = {
-  openSettings: () => void;
-  small?: boolean;
-  disconnectAccountAndCloseSettings: () => void;
-  showRedirectModal: (to: string) => void;
-  menuToggle?: React.ReactNode;
+	openSettings: () => void;
+	small?: boolean;
+	disconnectAccountAndCloseSettings: () => void;
+	showRedirectModal: (to: string) => void;
+	menuToggle?: React.ReactNode;
 };
 
 // Removed NETWORK_OPTIONS - not used since we removed NetworkDropdown
@@ -37,179 +38,245 @@ type Props = {
 // Removed development networks - prediction markets only need Base
 
 export function AppHeaderUser({
-  small,
-  menuToggle,
-  openSettings,
-  disconnectAccountAndCloseSettings,
-  showRedirectModal,
+	small,
+	menuToggle,
+	openSettings,
+	disconnectAccountAndCloseSettings,
+	showRedirectModal,
 }: Props) {
-  // Simplified for prediction markets - removed GMX-specific hooks
-  const { isConnected: active, address: account } = useWallet();
-  const { login } = usePrivy();
-  const { portfolioTotal, cashBalance } = usePortfolioContext();
+	// Simplified for prediction markets - removed GMX-specific hooks
+	const { isConnected: active, address: account } = useWallet();
+	const { login, user, authenticated } = usePrivy();
+	const { portfolioTotal, cashBalance } = usePortfolioContext();
 
-  const formatCurrency = (value: number | string | null | undefined): string => {
-    const num = typeof value === "string" ? parseFloat(value) : value;
-    if (num === null || num === undefined || !isFinite(num)) return "--";
-    return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
-  };
+	const formatCurrency = (
+		value: number | string | null | undefined
+	): string => {
+		const num = typeof value === "string" ? parseFloat(value) : value;
+		if (num === null || num === undefined || !isFinite(num)) return "--";
+		return new Intl.NumberFormat("en-US", {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2,
+		}).format(num);
+	};
 
-  // Cash balance (USDC) via direct ERC-20 balance on Base, using unified data address
-  const formattedUsdcBalance = Number.isFinite(cashBalance) ? Number(cashBalance).toFixed(2) : "0.00";
+	// Cash balance (USDC) via direct ERC-20 balance on Base, using unified data address
+	const formattedUsdcBalance = Number.isFinite(cashBalance)
+		? Number(cashBalance).toFixed(2)
+		: "0.00";
+	// Log user after successful authentication
+	useEffect(() => {
+		if (authenticated && user) {
+			console.log("Logged in user:", {
+				id: user.id,
+				wallet: account,
+				email: user.email?.address,
+				hasWallet: Boolean(account),
+			});
+		}
+	}, [authenticated, user, account]);
 
-  // Removed GMX-specific variables and tracking functions
+	// Removed GMX-specific variables and tracking functions
 
-  if (!active || !account) {
-    return (
-      <div className="App-header-user">
-        {false ? ( // Removed isHomeSite check
-        <div data-qa="trade" className="App-header-trade-link homepage-header text-body-medium">
-          <HeaderLink className="default-btn" to="/predictions" showRedirectModal={showRedirectModal}>
-            Launch App
-          </HeaderLink>
-        </div>
-        ) : null}
+	if (!active || !account) {
+		return (
+			<div className="App-header-user">
+				{false ? ( // Removed isHomeSite check
+					<div
+						data-qa="trade"
+						className="App-header-trade-link homepage-header text-body-medium"
+					>
+						<HeaderLink
+							className="default-btn"
+							to="/predictions"
+							showRedirectModal={showRedirectModal}
+						>
+							Launch App
+						</HeaderLink>
+					</div>
+				) : null}
 
-        {/* Always show connection options for prediction markets */}
-        {true ? (
-          <>
-            {!small && (
-              <div
-                className="login-text-link"
-                onClick={() => {
-                  // Removed userAnalytics call
-                  login();
-                }}
-                style={{
-                  color: "#8b5cf6",
-                  cursor: "pointer",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  backgroundColor: "transparent",
-                  transition: "background-color 0.2s ease",
-                  fontSize: "var(--font-size-body-medium)",
-                  fontWeight: "700",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#1f2937";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
-                Log In
-              </div>
-            )}
-            {small && (
-              <div
-                className="login-text-link"
-                onClick={() => {
-                  // Removed userAnalytics call
-                  login();
-                }}
-                style={{
-                  color: "#8b5cf6",
-                  cursor: "pointer",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  backgroundColor: "transparent",
-                  transition: "background-color 0.2s ease",
-                  fontSize: "var(--font-size-body-medium)",
-                  fontWeight: "700",
-                  marginRight: "8px",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#1f2937";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
-                Log In
-              </div>
-            )}
-            <ConnectWalletButton
-              onClick={() => {
-                // Removed userAnalytics call
-                login();
-              }}
-            >
-              {small ? "Sign Up" : "Sign Up"}
-            </ConnectWalletButton>
-            {!small && <OneClickButton openSettings={openSettings} />}
-            {/* <NetworkDropdown
+				{/* Always show connection options for prediction markets */}
+				{true ? (
+					<>
+						{!small && (
+							<div
+								className="login-text-link"
+								onClick={() => {
+									// Removed userAnalytics call
+									login();
+								}}
+								style={{
+									color: "#8b5cf6",
+									cursor: "pointer",
+									padding: "8px 12px",
+									borderRadius: "6px",
+									backgroundColor: "transparent",
+									transition: "background-color 0.2s ease",
+									fontSize: "var(--font-size-body-medium)",
+									fontWeight: "700",
+								}}
+								onMouseEnter={(e) => {
+									e.currentTarget.style.backgroundColor =
+										"#1f2937";
+								}}
+								onMouseLeave={(e) => {
+									e.currentTarget.style.backgroundColor =
+										"transparent";
+								}}
+							>
+								Log In
+							</div>
+						)}
+						{small && (
+							<div
+								className="login-text-link"
+								onClick={() => {
+									// Removed userAnalytics call
+									login();
+								}}
+								style={{
+									color: "#8b5cf6",
+									cursor: "pointer",
+									padding: "8px 12px",
+									borderRadius: "6px",
+									backgroundColor: "transparent",
+									transition: "background-color 0.2s ease",
+									fontSize: "var(--font-size-body-medium)",
+									fontWeight: "700",
+									marginRight: "8px",
+								}}
+								onMouseEnter={(e) => {
+									e.currentTarget.style.backgroundColor =
+										"#1f2937";
+								}}
+								onMouseLeave={(e) => {
+									e.currentTarget.style.backgroundColor =
+										"transparent";
+								}}
+							>
+								Log In
+							</div>
+						)}
+						<ConnectWalletButton
+							onClick={() => {
+								// Removed userAnalytics call
+								login();
+							}}
+						>
+							{small ? "Sign Up" : "Sign Up"}
+						</ConnectWalletButton>
+						{!small && (
+							<OneClickButton openSettings={openSettings} />
+						)}
+						{/* <NetworkDropdown
               small={small}
               networkOptions={NETWORK_OPTIONS}
               selectorLabel={selectorLabel}
               openSettings={openSettings}
             /> */}
-          </>
-        ) : null}
-        {menuToggle}
-      </div>
-    );
-  }
+					</>
+				) : null}
+				{menuToggle}
+			</div>
+		);
+	}
 
-  // Build simple Base explorer URL
-  const accountUrl = account ? `https://basescan.org/address/${account}` : "";
+	// Build simple Base explorer URL
+	const accountUrl = account ? `https://basescan.org/address/${account}` : "";
 
-  return (
-    <div className="App-header-user">
-      {/* Removed isHomeSite check - not needed for prediction markets */}
-      {false ? (
-        <div data-qa="trade" className="App-header-trade-link text-body-medium">
-          <HeaderLink className="default-btn" to="/predictions" showRedirectModal={showRedirectModal}>
-            Launch App
-          </HeaderLink>
-        </div>
-      ) : null}
+	return (
+		<div className="App-header-user">
+			{/* Removed isHomeSite check - not needed for prediction markets */}
+			{false ? (
+				<div
+					data-qa="trade"
+					className="App-header-trade-link text-body-medium"
+				>
+					<HeaderLink
+						className="default-btn"
+						to="/predictions"
+						showRedirectModal={showRedirectModal}
+					>
+						Launch App
+					</HeaderLink>
+				</div>
+			) : null}
 
-      {true ? ( // Always show for prediction markets
-        <>
-          {/* Portfolio Display - Hidden on mobile */}
-          {!small && (
-            <HeaderLink className="header-metric-box mr-4" to="/positions" showRedirectModal={showRedirectModal}>
-              <div className="flex flex-col items-center">
-                <span className="text-xs font-bold text-white" style={{ color: "white" }}>
-                  Portfolio
-                </span>
-                <span className="text-sm font-normal text-white" style={{ color: "white" }}>
-                  {portfolioTotal === null || !isFinite(portfolioTotal) ? "--" : `$${formatCurrency(portfolioTotal)}`}
-                </span>
-              </div>
-            </HeaderLink>
-          )}
-          {/* USDC Balance Display - Hidden on mobile */}
-          {!small && (
-            <HeaderLink className="header-metric-box mr-4" to="/positions" showRedirectModal={showRedirectModal}>
-              <div className="flex flex-col items-center">
-                <span className="text-xs font-bold text-white" style={{ color: "white" }}>
-                  Cash
-                </span>
-                <span className="text-sm font-normal text-white" style={{ color: "white" }}>
-                  ${formatCurrency(formattedUsdcBalance)}
-                </span>
-              </div>
-            </HeaderLink>
-          )}
+			{true ? ( // Always show for prediction markets
+				<>
+					{/* Portfolio Display - Hidden on mobile */}
+					{!small && (
+						<HeaderLink
+							className="header-metric-box mr-4"
+							to="/positions"
+							showRedirectModal={showRedirectModal}
+						>
+							<div className="flex flex-col items-center">
+								<span
+									className="text-xs font-bold text-white"
+									style={{ color: "white" }}
+								>
+									Portfolio
+								</span>
+								<span
+									className="text-sm font-normal text-white"
+									style={{ color: "white" }}
+								>
+									{portfolioTotal === null ||
+									!isFinite(portfolioTotal)
+										? "--"
+										: `$${formatCurrency(portfolioTotal)}`}
+								</span>
+							</div>
+						</HeaderLink>
+					)}
+					{/* USDC Balance Display - Hidden on mobile */}
+					{!small && (
+						<HeaderLink
+							className="header-metric-box mr-4"
+							to="/positions"
+							showRedirectModal={showRedirectModal}
+						>
+							<div className="flex flex-col items-center">
+								<span
+									className="text-xs font-bold text-white"
+									style={{ color: "white" }}
+								>
+									Cash
+								</span>
+								<span
+									className="text-sm font-normal text-white"
+									style={{ color: "white" }}
+								>
+									${formatCurrency(formattedUsdcBalance)}
+								</span>
+							</div>
+						</HeaderLink>
+					)}
 
-          <div data-qa="user-address" className="App-header-user-address">
-            <AddressDropdown
-              account={account as string}
-              accountUrl={accountUrl}
-              disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
-            />
-          </div>
-          {!small && <OneClickButton openSettings={openSettings} />}
-          {/* <NetworkDropdown
+					<div
+						data-qa="user-address"
+						className="App-header-user-address"
+					>
+						<AddressDropdown
+							account={account as string}
+							accountUrl={accountUrl}
+							disconnectAccountAndCloseSettings={
+								disconnectAccountAndCloseSettings
+							}
+						/>
+					</div>
+					{!small && <OneClickButton openSettings={openSettings} />}
+					{/* <NetworkDropdown
             small={small}
             networkOptions={NETWORK_OPTIONS}
             selectorLabel={selectorLabel}
             openSettings={openSettings}
           /> */}
-        </>
-      ) : null}
-      {menuToggle}
-    </div>
-  );
+				</>
+			) : null}
+			{menuToggle}
+		</div>
+	);
 }
