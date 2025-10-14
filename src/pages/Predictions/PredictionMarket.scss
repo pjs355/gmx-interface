@@ -1,214 +1,218 @@
 .prediction-market-page {
-  padding-left: 50px;
-  padding-right: 50px;
-  max-width: none;
-  min-height: calc(100vh - 62px);
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 2.4rem;
-  padding-top: 1.2rem;
+	padding-left: 50px;
+	padding-right: 50px;
+	max-width: none;
+	min-height: calc(100vh - 62px);
+	display: flex;
+	flex-direction: column;
+	padding-bottom: 2.4rem;
+	padding-top: 1.2rem;
 
-  &.mobile {
-    padding-left: 16px;
-    padding-right: 16px;
-    padding-bottom: 3.2rem; // compact mobile bottom spacing
-  }
+	&.mobile {
+		padding-left: 16px;
+		padding-right: 16px;
+		padding-bottom: 3.2rem; // compact mobile bottom spacing
+	}
 }
 
 .prediction-market-content {
-  margin-top: 0;
-  width: 100%;
-  max-width: none;
+	margin-top: 0;
+	width: 100%;
+	max-width: none;
 }
 
 // Desktop Layout
 .desktop-layout {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 16px;
-  align-items: start;
+	display: grid;
+	grid-template-columns: 2fr 1fr;
+	gap: 16px;
+	align-items: start;
 }
 
 .left-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
 }
 
 .right-panel {
-  position: sticky;
-  top: 0;
+	position: sticky;
+	top: 0;
 }
 
 .chart-section {
-  margin-top: 0;
-  margin-bottom: 4px;
+	margin-top: 0;
+	margin-bottom: 4px;
 }
 
 .orderbook-section {
-  // Orderbook styles will be handled by the component itself
-  margin-top: 16px;
+	// Orderbook styles will be handled by the component itself
+	margin-top: 16px;
 }
 
 // Mobile Layout
 .mobile-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  margin-bottom: 120px; // Space for fixed trading container
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	margin-bottom: 120px; // Space for fixed trading container
 }
 
 .chart-section-mobile {
-  width: 100%;
+	width: 100%;
 }
 
 .orderbook-section-mobile {
-  width: 100%;
+	width: 100%;
 }
 
 .mobile-trading-container {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	min-height: 200px;
+	background: #000000;
+	border-top: 1px solid #333333;
+	/* Reserve space even if inner content is fixed and out of flow */
+	min-height: 72px;
 }
 
-
 .market-header {
-  .market-title-container {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-top: 12px; // add space below global header; avoid bleeding under header
-    flex-wrap: nowrap; // Keep image and title on the same row; let title wrap internally
+	.market-title-container {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin-top: 12px; // add space below global header; avoid bleeding under header
+		flex-wrap: nowrap; // Keep image and title on the same row; let title wrap internally
 
-    // Ensure the title can share the row with the image and wrap when needed
-    h1 {
-      margin: 0;
-      flex: 1 1 auto;
-      min-width: 0;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-  }
+		// Ensure the title can share the row with the image and wrap when needed
+		h1 {
+			margin: 0;
+			flex: 1 1 auto;
+			min-width: 0;
+			word-break: break-word;
+			overflow-wrap: anywhere;
+		}
+	}
 
-  .market-image {
-    width: 80px;
-    height: 80px;
-    border-radius: 12px;
-    object-fit: contain;
-    background: #000; // pure black background to blend transparent PNGs
-    flex-shrink: 0;
-  }
+	.market-image {
+		width: 80px;
+		height: 80px;
+		border-radius: 12px;
+		object-fit: contain;
+		background: #000; // pure black background to blend transparent PNGs
+		flex-shrink: 0;
+	}
 
-  .back-button {
-    background: #1a1a1a;
-    border: 1px solid #4B5563;
-    color: #ffffff;
-    border-radius: 8px;
-    transition: all 0.2s ease;
+	.back-button {
+		background: #1a1a1a;
+		border: 1px solid #4b5563;
+		color: #ffffff;
+		border-radius: 8px;
+		transition: all 0.2s ease;
 
-    &:hover {
-      background: #2a2a2a;
-      border-color: #6B7280;
-    }
-  }
+		&:hover {
+			background: #2a2a2a;
+			border-color: #6b7280;
+		}
+	}
 
-  .market-description {
-    color: #9CA3AF;
-    font-size: 16px;
-    line-height: 1.6;
-    margin-top: 8px;
-  }
+	.market-description {
+		color: #9ca3af;
+		font-size: 16px;
+		line-height: 1.6;
+		margin-top: 8px;
+	}
 }
 
 // Responsive design
 @media (max-width: 1100px) {
-  .prediction-market-page {
-    padding-left: 16px;
-    padding-right: 16px;
-    padding-bottom: calc(4.7rem + 8rem + 80px); // Extra space for mobile trading box
-  }
+	.prediction-market-page {
+		padding-left: 16px;
+		padding-right: 16px;
+		padding-bottom: calc(
+			4.7rem + 8rem + 80px
+		); // Extra space for mobile trading box
+	}
 
-  .desktop-layout {
-    display: none;
-  }
+	.desktop-layout {
+		display: none;
+	}
 
-  .mobile-layout {
-    display: flex;
-  }
+	.mobile-layout {
+		display: flex;
+	}
 
-  .mobile-trading-box {
-    display: block;
-  }
+	.mobile-trading-box {
+		display: block;
+	}
 }
 
 @media (min-width: 1101px) {
-  .mobile-layout {
-    display: none;
-  }
+	.mobile-layout {
+		display: none;
+	}
 
-  .mobile-trading-box {
-    display: none;
-  }
+	.mobile-trading-box {
+		display: none;
+	}
 
-  .desktop-layout {
-    display: grid;
-  }
+	.desktop-layout {
+		display: grid;
+	}
 }
 
 @media (max-width: 768px) {
-  .prediction-market-page {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
+	.prediction-market-page {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
 
-  .market-header {
-    .market-title-container {
-      // Keep items on the same line; title wraps within its own area
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: 12px;
-    }
+	.market-header {
+		.market-title-container {
+			// Keep items on the same line; title wraps within its own area
+			flex-wrap: nowrap;
+			align-items: center;
+			gap: 12px;
+		}
 
-    .market-image {
-      width: 64px;
-      height: 64px;
-    }
-  }
+		.market-image {
+			width: 64px;
+			height: 64px;
+		}
+	}
 }
 
 // Orderbook section styling
 .orderbook-section,
 .orderbook-section-mobile {
-  // Remove borders to eliminate line under rules section
-  border-top: none;
-  border-bottom: none;
-  
-  .question-orderbook {
-    // Remove border between orderbooks
-    &:not(:last-child) {
-      border-bottom: none;
-    }
-    
-    // Make the entire orderbook area clickable and hoverable
-    .orderbook-display {
-      .orderbook-header {
-        // Remove default padding to let clickable-header control it
-        padding: 0;
-        
-        .header-top {
-          &.clickable-header {
-            // Extend the hover area to fill entire space between lines
-            margin: 0;
-            padding: 16px 20px;
-            // Ensure it covers full width and height
-            width: 100%;
-            box-sizing: border-box;
-          }
-        }
-      }
-    }
-  }
+	// Remove borders to eliminate line under rules section
+	border-top: none;
+	border-bottom: none;
+
+	.question-orderbook {
+		// Remove border between orderbooks
+		&:not(:last-child) {
+			border-bottom: none;
+		}
+
+		// Make the entire orderbook area clickable and hoverable
+		.orderbook-display {
+			.orderbook-header {
+				// Remove default padding to let clickable-header control it
+				padding: 0;
+
+				.header-top {
+					&.clickable-header {
+						// Extend the hover area to fill entire space between lines
+						margin: 0;
+						padding: 16px 20px;
+						// Ensure it covers full width and height
+						width: 100%;
+						box-sizing: border-box;
+					}
+				}
+			}
+		}
+	}
 }

@@ -1,162 +1,162 @@
 .prediction-market-tradebox {
-  background: black;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border: 1px solid #4B5563;
-  color: #333;
+	background: black;
+	border-radius: 12px;
+	padding: 20px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	border: 1px solid #4b5563;
+	color: #333;
 
-  // Remove border on mobile only
-  @media (max-width: 1100px) {
-    border: none;
-  }
+	// Remove border on mobile only
+	@media (max-width: 1100px) {
+		border: none;
+	}
 
-  .market-name-header {
-    text-align: left;
-    margin-bottom: 20px;
-    margin-top: 30px !important; // Add more padding above the question
-    
-    h3 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 600;
-      color: #ffffff;
-      // Allow long titles to wrap without stretching the container
-      white-space: normal;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-      overflow: visible;
-      text-overflow: clip;
-    }
-  }
+	.market-name-header {
+		text-align: left;
+		margin-bottom: 20px;
+		margin-top: 30px !important; // Add more padding above the question
 
-  .tradebox-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-    
-    .side-selector {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 0;
-      
-      .side-btn {
-        flex: 1;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 16px;
-        font-weight: 400;
-        transition: all 0.2s ease;
-        border: 1px solid #6B7280;
-        color: #6B7280;
-        background: transparent;
-        transform: none !important; // Prevent any size changes
-        min-width: 60px; // Fixed minimum width
-        width: 60px; // Fixed width
-        height: 36px; // Fixed height
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-        
-        &:hover {
-          border-color: #7C3AED;
-          color: #7C3AED;
-          transform: none !important; // Prevent any size changes
-        }
-        
-        &.selected.primary {
-          background: transparent;
-          border-color: #7C3AED;
-          color: #7C3AED;
-          font-weight: 700;
-          transform: none !important; // Prevent any size changes
-          min-width: 60px; // Maintain fixed width
-          width: 60px; // Maintain fixed width
-          height: 36px; // Maintain fixed height
-        }
-        
-        &.selected.secondary {
-          background: transparent;
-          border-color: #7C3AED;
-          color: #7C3AED;
-          font-weight: 700;
-          transform: none !important; // Prevent any size changes
-          min-width: 60px; // Maintain fixed width
-          width: 60px; // Maintain fixed width
-          height: 36px; // Maintain fixed height
-        }
-      }
-    }
-    
-    .trade-mode-selector {
-    .Tab.Tab__inline {
-      background: transparent;
-      border: none;
-    }
-    }
-    
-    // Additional specific targeting for the trade mode selector
-    .trade-mode-selector .Tab-option > div {
-      color: #ffffff !important;
-    }
-    
-    .trade-mode-selector .Tab-option > div:hover {
-      color: #ffffff !important;
-    }
-    
-    // Style the dropdown menu similar to AddressDropdown
-    .trade-mode-selector .menu-items,
-    .trade-mode-selector [data-headlessui-portal],
-    .trade-mode-selector div[class*="z-"] {
-      position: absolute !important;
-      right: 0 !important;
-      top: 4.3rem !important;
-      min-width: 12rem !important;
-      width: 100% !important;
-      transform-origin: top right !important;
-      border-radius: 0.4rem !important;
-      overflow: hidden !important;
-      background: #1a1a1a !important;
-      border: 1px solid var(--color-stroke-primary) !important;
-      list-style: none !important;
-      cursor: pointer !important;
-      outline: none !important;
-      z-index: 1000 !important;
-    }
-    
-    // Style dropdown items similar to AddressDropdown
-    .trade-mode-selector .menu-item,
-    .trade-mode-selector [data-headlessui-portal] > div,
-    .trade-mode-selector div[class*="z-"] > div,
-    .trade-mode-selector .p-8,
-    .trade-mode-selector .text-body-medium {
-      display: flex !important;
-      align-items: center !important;
-      color: #ffffff !important;
-      padding: 0.85rem 0.8rem !important;
-      font-size: var(--font-size-body-medium) !important;
-      border-radius: 0.4rem !important;
-      min-height: 44px !important;
-    }
-    
-    .trade-mode-selector .menu-item:hover,
-    .trade-mode-selector [data-headlessui-portal] > div:hover,
-    .trade-mode-selector div[class*="z-"] > div:hover,
-    .trade-mode-selector .p-8:hover,
-    .trade-mode-selector .text-body-medium:hover {
-      background: #808aff14 !important;
-      border-radius: 0.4rem !important;
-      opacity: 1 !important;
-      color: #ffffff !important;
-    }
-    
-    // Target any div inside the trade mode selector that might be the dropdown
-    .trade-mode-selector div[class*="z-"] {
-      background: black !important;
-    }
-  }
+		h3 {
+			margin: 0;
+			font-size: 20px;
+			font-weight: 600;
+			color: #ffffff;
+			// Allow long titles to wrap without stretching the container
+			white-space: normal;
+			word-break: break-word;
+			overflow-wrap: anywhere;
+			overflow: visible;
+			text-overflow: clip;
+		}
+	}
+
+	.tradebox-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 16px;
+
+		.side-selector {
+			display: flex;
+			gap: 4px;
+			margin-bottom: 0;
+
+			.side-btn {
+				flex: 1;
+				padding: 8px 12px;
+				border-radius: 6px;
+				font-size: 16px;
+				font-weight: 400;
+				transition: all 0.2s ease;
+				border: 1px solid #6b7280;
+				color: #6b7280;
+				background: transparent;
+				transform: none !important; // Prevent any size changes
+				min-width: 60px; // Fixed minimum width
+				width: 60px; // Fixed width
+				height: 36px; // Fixed height
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				box-sizing: border-box;
+
+				&:hover {
+					border-color: #7c3aed;
+					color: #7c3aed;
+					transform: none !important; // Prevent any size changes
+				}
+
+				&.selected.primary {
+					background: transparent;
+					border-color: #7c3aed;
+					color: #7c3aed;
+					font-weight: 700;
+					transform: none !important; // Prevent any size changes
+					min-width: 60px; // Maintain fixed width
+					width: 60px; // Maintain fixed width
+					height: 36px; // Maintain fixed height
+				}
+
+				&.selected.secondary {
+					background: transparent;
+					border-color: #7c3aed;
+					color: #7c3aed;
+					font-weight: 700;
+					transform: none !important; // Prevent any size changes
+					min-width: 60px; // Maintain fixed width
+					width: 60px; // Maintain fixed width
+					height: 36px; // Maintain fixed height
+				}
+			}
+		}
+
+		.trade-mode-selector {
+			.Tab.Tab__inline {
+				background: transparent;
+				border: none;
+			}
+		}
+
+		// Additional specific targeting for the trade mode selector
+		.trade-mode-selector .Tab-option > div {
+			color: #ffffff !important;
+		}
+
+		.trade-mode-selector .Tab-option > div:hover {
+			color: #ffffff !important;
+		}
+
+		// Style the dropdown menu similar to AddressDropdown
+		.trade-mode-selector .menu-items,
+		.trade-mode-selector [data-headlessui-portal],
+		.trade-mode-selector div[class*="z-"] {
+			position: absolute !important;
+			right: 0 !important;
+			top: 4.3rem !important;
+			min-width: 12rem !important;
+			width: 100% !important;
+			transform-origin: top right !important;
+			border-radius: 0.4rem !important;
+			overflow: hidden !important;
+			background: #1a1a1a !important;
+			border: 1px solid var(--color-stroke-primary) !important;
+			list-style: none !important;
+			cursor: pointer !important;
+			outline: none !important;
+			z-index: 1000 !important;
+		}
+
+		// Style dropdown items similar to AddressDropdown
+		.trade-mode-selector .menu-item,
+		.trade-mode-selector [data-headlessui-portal] > div,
+		.trade-mode-selector div[class*="z-"] > div,
+		.trade-mode-selector .p-8,
+		.trade-mode-selector .text-body-medium {
+			display: flex !important;
+			align-items: center !important;
+			color: #ffffff !important;
+			padding: 0.85rem 0.8rem !important;
+			font-size: var(--font-size-body-medium) !important;
+			border-radius: 0.4rem !important;
+			min-height: 44px !important;
+		}
+
+		.trade-mode-selector .menu-item:hover,
+		.trade-mode-selector [data-headlessui-portal] > div:hover,
+		.trade-mode-selector div[class*="z-"] > div:hover,
+		.trade-mode-selector .p-8:hover,
+		.trade-mode-selector .text-body-medium:hover {
+			background: #808aff14 !important;
+			border-radius: 0.4rem !important;
+			opacity: 1 !important;
+			color: #ffffff !important;
+		}
+
+		// Target any div inside the trade mode selector that might be the dropdown
+		.trade-mode-selector div[class*="z-"] {
+			background: black !important;
+		}
+	}
 }
 
 // Global targeting for dropdown - outside the main component scope
@@ -164,11 +164,11 @@
 .prediction-market-tradebox .trade-mode-selector div[class*="z-"],
 .prediction-market-tradebox .trade-mode-selector .mt-8,
 .prediction-market-tradebox .trade-mode-selector .rounded-4 {
-  background: black !important;
-  border: 1px solid #374151 !important;
-  border-radius: 8px !important;
-  padding: 8px 0 !important;
-  min-width: 120px !important;
+	background: black !important;
+	border: 1px solid #374151 !important;
+	border-radius: 8px !important;
+	padding: 8px 0 !important;
+	min-width: 120px !important;
 }
 
 .prediction-market-tradebox .trade-mode-selector [data-headlessui-portal] > div,
@@ -177,805 +177,832 @@
 .prediction-market-tradebox .trade-mode-selector .rounded-4 > div,
 .prediction-market-tradebox .trade-mode-selector .p-8,
 .prediction-market-tradebox .trade-mode-selector .text-body-medium {
-  padding: 12px 16px !important;
-  font-size: 16px !important;
-  font-weight: 500 !important;
-  line-height: 1.4 !important;
-  min-height: 44px !important;
-  display: flex !important;
-  align-items: center !important;
-  color: white !important;
-  background: black !important;
+	padding: 12px 16px !important;
+	font-size: 16px !important;
+	font-weight: 500 !important;
+	line-height: 1.4 !important;
+	min-height: 44px !important;
+	display: flex !important;
+	align-items: center !important;
+	color: white !important;
+	background: black !important;
 }
 
-.prediction-market-tradebox .trade-mode-selector [data-headlessui-portal] > div:hover,
+.prediction-market-tradebox
+	.trade-mode-selector
+	[data-headlessui-portal]
+	> div:hover,
 .prediction-market-tradebox .trade-mode-selector div[class*="z-"] > div:hover,
 .prediction-market-tradebox .trade-mode-selector .mt-8 > div:hover,
 .prediction-market-tradebox .trade-mode-selector .rounded-4 > div:hover,
 .prediction-market-tradebox .trade-mode-selector .p-8:hover,
 .prediction-market-tradebox .trade-mode-selector .text-body-medium:hover {
-  color: white !important;
-  background: #374151 !important;
+	color: white !important;
+	background: #374151 !important;
 }
 
 /* Explicit hover for Market/Limit dropdown items */
 .trade-mode-menu .trade-mode-menu-item:hover {
-  background: #374151 !important; /* slate-700 */
-  color: #ffffff !important;
-  border-radius: 6px !important;
+	background: #374151 !important; /* slate-700 */
+	color: #ffffff !important;
+	border-radius: 6px !important;
 }
 
 /* Mobile-specific dropdown fixes */
 @media (max-width: 768px) {
-  .trade-mode-menu {
-    z-index: 99999 !important;
-    width: 200px !important;
-    max-width: 90vw !important;
-  }
-  
-  .trade-mode-menu-item {
-    padding: 16px 20px !important;
-    font-size: 16px !important;
-    min-height: 48px !important;
-  }
-  
-  /* Ensure curtain doesn't clip dropdown */
-  .prediction-curtain {
-    overflow: visible !important;
-  }
-  
-  .curtain-content-inner {
-    overflow: visible !important;
-    padding-bottom: 60px !important; /* Add more space below trade button */
-    margin-left: 20px !important; /* Add margin from left edge */
-    margin-right: 20px !important; /* Add margin from right edge */
-    margin-top: 20px !important; /* Add margin from top */
-  }
+	.trade-mode-menu {
+		z-index: 99999 !important;
+		width: 200px !important;
+		max-width: 90vw !important;
+	}
+
+	.trade-mode-menu-item {
+		padding: 16px 20px !important;
+		font-size: 16px !important;
+		min-height: 48px !important;
+	}
+
+	/* Ensure curtain doesn't clip dropdown */
+	.prediction-curtain {
+		overflow: visible !important;
+	}
+
+	.curtain-content-inner {
+		overflow: visible !important;
+		padding-bottom: 60px !important; /* Add more space below trade button */
+		margin-left: 20px !important; /* Add margin from left edge */
+		margin-right: 20px !important; /* Add margin from right edge */
+		margin-top: 20px !important; /* Add margin from top */
+	}
 }
 
 .prediction-market-tradebox {
-  .tradebox-separator {
-    height: 1px;
-    background: #333;
-    margin: 16px 0;
-  }
+	.tradebox-separator {
+		height: 1px;
+		background: #333;
+		margin: 16px 0;
+	}
 
-  .position-selector {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    
-    .position-btn {
-      flex: 1;
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 18px;
-      font-weight: 600;
-      transition: all 0.2s ease;
-      min-height: 48px;
-      border: 2px solid #6B7280;
-      color: #6B7280;
-      background: transparent;
-      
-      &:hover {
-        border-color: #22c55e;
-        color: #22c55e;
-      }
-      
-      &.selected.primary {
-        background: rgba(34, 197, 94, 0.1);
-        border-color: #22c55e;
-        color: #22c55e;
-      }
-      
-      &.selected.secondary {
-        background: rgba(239, 68, 68, 0.1);
-        border-color: #ef4444;
-        color: #ef4444;
-      }
-      
-      // Yes button (first child) - always green theme
-      &:first-child {
-        &:hover {
-          background: rgba(34, 197, 94, 0.1);
-          border-color: #22c55e;
-          color: #22c55e;
-        }
-        
-        &.selected {
-          background: rgba(34, 197, 94, 0.1);
-          border-color: #22c55e;
-          color: #22c55e;
-        }
-      }
-      
-      // No button (second child) - always red theme
-      &:last-child {
-        &:hover {
-          background: rgba(239, 68, 68, 0.1);
-          border-color: #ef4444;
-          color: #ef4444;
-        }
-        
-        &.selected {
-          background: rgba(239, 68, 68, 0.1);
-          border-color: #ef4444;
-          color: #ef4444;
-        }
-      }
-    }
-  }
+	.position-selector {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 16px;
 
-  .input-section {
-    margin-bottom: 16px;
-    
-    .input-label {
-      font-size: 16px; // slightly bigger than before
-      font-weight: 700; // bold
-      color: #ffffff; // white
-      margin-bottom: 8px;
-    }
-    
-    .input-container {
-      padding: 0.9rem;
-      margin-bottom: 1.05rem;
-      border-radius: 8px;
-      background: black !important;
-      border: 1px solid #4B5563;
-      display: flex;
-      justify-content: flex-end;
-      gap: 0;
-      align-items: center;
-      position: relative;
-      
-      &:hover {
-        border-color: #9CA3AF;
-      }
-      
-      // Hide by default for other inputs; amount wrapper handles its own styling
-      .currency-symbol { display: none; }
-      .amount-prefix { display: none; }
-      
-      // Show currency symbol for amount wrapper
-      .amount-input-wrapper .currency-symbol {
-        display: inline;
-      }
+		.position-btn {
+			flex: 1;
+			padding: 12px;
+			border-radius: 8px;
+			font-size: 18px;
+			font-weight: 600;
+			transition: all 0.2s ease;
+			min-height: 48px;
+			border: 2px solid #6b7280;
+			color: #6b7280;
+			background: transparent;
 
-      // Show cents symbol for limit price input (non-amount inputs)
-      &:has(input[step="1"]) .currency-symbol {
-        display: inline;
-        color: #ffffff;
-        font-size: var(--font-size-h2);
-        font-weight: 600;
-        margin-left: 0.2rem;
-        transition: color 0.2s ease;
-        
-        &.faded {
-          color: #6B7280;
-        }
-      }
-      
-      // When input container has empty-input class, make the cents symbol grey
-      &.empty-input {
-        .currency-symbol {
-          color: #6B7280 !important;
-        }
-      }
-      
-      input.trade-input {
-        width: auto;
-        min-width: 6ch;
-        padding: 0;
-        padding-right: 0;
-        border: none;
-        background: transparent;
-        color: #ffffff;
-        font-size: 28px;
-        font-weight: 600;
-        font-family: inherit;
-        font-variant-numeric: tabular-nums;
-        line-height: 1;
-        letter-spacing: normal;
-        outline: none;
-        text-align: right;
-        
-        &::placeholder {
-          color: #6B7280;
-          font-family: inherit;
-          font-weight: 600;
-          font-variant-numeric: tabular-nums;
-          line-height: 1;
-          letter-spacing: normal;
-          opacity: 1; // ensure consistent rendering
-        }
-        
-        // When input is empty, make the text grey like placeholder
-        &:placeholder-shown {
-          color: #6B7280;
-        }
-      }
-      
-      // When input container has empty-input class, make the $ symbol and cents symbol grey
-      &.empty-input {
-        .trade-input {
-          color: #6B7280 !important;
-        }
-        
-        .currency-symbol {
-          color: #6B7280 !important;
-        }
-      }
+			&:hover {
+				border-color: #22c55e;
+				color: #22c55e;
+			}
 
-      // Amount input with overlay display - completely custom approach
-      .amount-input-wrapper {
-        position: relative;
-        width: 100%;
-        height: auto;
-        min-height: calc(var(--font-size-h2) * 1); // Same as line-height: 1
-        
-        // Hidden input that captures user interaction but is invisible
-        input.amount-input {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: transparent;
-          border: none;
-          outline: none;
-          color: transparent; // Make input text invisible
-          font-size: var(--font-size-h2);
-          font-weight: 600;
-          z-index: 2;
-          
-          &::placeholder {
-            opacity: 0; // Hide native placeholder
-          }
-        }
-        
-        // Custom display overlay that shows our formatted $X
-        .amount-display {
-          position: absolute;
-          top: 0;
-          right: 0;
-          display: flex;
-          align-items: baseline;
-          gap: 0;
-          pointer-events: none; // Allow clicks to pass through to input
-          z-index: 1;
-          
-          .currency-symbol,
-          .amount-value {
-            font-size: var(--font-size-h2);
-            font-weight: 600;
-            line-height: 1; // Match other inputs
-            transition: color 0.2s ease;
-            color: #ffffff; // Default white
-            
-            &.faded {
-              color: #6B7280; // Faded when empty
-            }
-          }
-          
-          .cursor-indicator {
-            width: 2px; // visible thin block caret
-            height: 1em; // align with text height
-            background: #ffffff; // solid white
-            display: inline-block;
-            margin-left: 2px;
-            animation: blink 1s infinite;
-          }
-        }
-      }
-      
-      // Shares input with overlay display (commas formatting)
-      .shares-input-wrapper {
-        position: relative;
-        width: 100%;
-        height: auto;
-        min-height: calc(var(--font-size-h2) * 1);
-        
-        input.shares-input {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: transparent;
-          border: none;
-          outline: none;
-          color: transparent;
-          font-size: var(--font-size-h2);
-          font-weight: 600;
-          z-index: 2;
-          
-          &::placeholder {
-            opacity: 0;
-          }
-        }
-        
-        .shares-display {
-          position: absolute;
-          top: 0;
-          right: 0;
-          display: flex;
-          align-items: baseline;
-          gap: 0;
-          pointer-events: none;
-          z-index: 1;
-          
-          .shares-value {
-            font-size: var(--font-size-h2);
-            font-weight: 600;
-            line-height: 1;
-            transition: color 0.2s ease;
-            color: #ffffff;
-            
-            &.faded {
-              color: #6B7280;
-            }
-          }
-          
-          .cursor-indicator {
-            width: 2px;
-            height: 1em;
-            background: #ffffff;
-            display: inline-block;
-            margin-left: 2px;
-            animation: blink 1s infinite;
-          }
-        }
-      }
-      
-      // Blinking cursor animation
-      @keyframes blink {
-        0%, 50% { opacity: 1; }
-        51%, 100% { opacity: 0; }
-      }
-      
-      .contracts-info {
-        margin-top: 8px;
-        padding: 8px 12px;
-        background: rgba(139, 92, 246, 0.1);
-        border-radius: 6px;
-        border: 1px solid rgba(139, 92, 246, 0.2);
-        
-        .contracts-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 4px;
-          
-          &:last-child {
-            margin-bottom: 0;
-          }
-        }
-        
-        .contracts-label {
-          font-size: 12px;
-          font-weight: 500;
-          color: #6B7280;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        
-        .contracts-value {
-          font-size: 14px;
-          font-weight: 600;
-          color: #8B5CF6;
-        }
-        
-        .contracts-warning {
-          font-size: 11px;
-          font-weight: 500;
-          color: #DC2626;
-          text-align: center;
-          margin-top: 6px;
-          padding: 4px 8px;
-          background: rgba(220, 38, 38, 0.1);
-          border-radius: 4px;
-          border: 1px solid rgba(220, 38, 38, 0.2);
-        }
-      }
-    }
-  }
+			&.selected.primary {
+				background: rgba(34, 197, 94, 0.1);
+				border-color: #22c55e;
+				color: #22c55e;
+			}
 
-  .bet-size-section {
-    background: black !important;
-    border: none;
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 20px;
+			&.selected.secondary {
+				background: rgba(239, 68, 68, 0.1);
+				border-color: #ef4444;
+				color: #ef4444;
+			}
 
-    .bet-size-info, .leverage-info {
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 8px;
+			// Yes button (first child) - always green theme
+			&:first-child {
+				&:hover {
+					background: rgba(34, 197, 94, 0.1);
+					border-color: #22c55e;
+					color: #22c55e;
+				}
 
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
+				&.selected {
+					background: rgba(34, 197, 94, 0.1);
+					border-color: #22c55e;
+					color: #22c55e;
+				}
+			}
 
-    .bet-size-main-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
+			// No button (second child) - always red theme
+			&:last-child {
+				&:hover {
+					background: rgba(239, 68, 68, 0.1);
+					border-color: #ef4444;
+					color: #ef4444;
+				}
 
-    // Add extra spacing between Amount and To Win for buy limit orders
-    .bet-size-info:first-child {
-      margin-bottom: 12px;
-    }
+				&.selected {
+					background: rgba(239, 68, 68, 0.1);
+					border-color: #ef4444;
+					color: #ef4444;
+				}
+			}
+		}
+	}
 
-    .bet-size-label, .leverage-label {
-      font-size: 16px; // slightly bigger than input labels
-      font-weight: 700; // bold
-      color: #ffffff; // white
-    }
+	.input-section {
+		margin-bottom: 16px;
 
-    .updated-odds-label {
-      color: #fbbf24; // amber-400
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
+		.input-label {
+			font-size: 16px; // slightly bigger than before
+			font-weight: 700; // bold
+			color: #ffffff; // white
+			margin-bottom: 8px;
+		}
 
-    .info-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 1px solid #fbbf24;
-      color: #fbbf24;
-      font-size: 10px;
-      line-height: 1;
-      cursor: help;
-    }
+		.input-container {
+			padding: 0.9rem;
+			margin-bottom: 1.05rem;
+			border-radius: 8px;
+			background: black !important;
+			border: 1px solid #4b5563;
+			display: flex;
+			justify-content: flex-end;
+			gap: 0;
+			align-items: center;
+			position: relative;
 
-    .updated-odds-tooltip {
-      color: #ffffff;
-      font-size: 12px;
-      line-height: 1.4;
-      max-width: 260px;
-    }
+			&:hover {
+				border-color: #9ca3af;
+			}
 
-    .bet-size-value, .leverage-value {
-      font-size: 28px; // match input size
-      font-weight: 600; // match input weight
-      color: #ffffff; // white
-      font-family: inherit; // match input font family
-      font-variant-numeric: tabular-nums; // align digit widths
-      line-height: 1;
-      letter-spacing: normal;
-    }
+			// Hide by default for other inputs; amount wrapper handles its own styling
+			.currency-symbol {
+				display: none;
+			}
+			.amount-prefix {
+				display: none;
+			}
 
-    // Keep odds text small like before
-    .odds-value {
-      font-size: 16px;
-    }
+			// Show currency symbol for amount wrapper
+			.amount-input-wrapper .currency-symbol {
+				display: inline;
+			}
 
-    // Make the "To Win / Receive" label same size as the amount
-    .bet-size-label.to-win-label {
-      font-size: 28px;
-      font-weight: 600;
-    }
+			// Show cents symbol for limit price input (non-amount inputs)
+			&:has(input[step="1"]) .currency-symbol {
+				display: inline;
+				color: #ffffff;
+				font-size: var(--font-size-h2);
+				font-weight: 600;
+				margin-left: 0.2rem;
+				transition: color 0.2s ease;
 
-    // Make the monetary amount (To Win / Receive) bright green
-    .bet-size-value {
-      color: #22c55e;
-    }
+				&.faded {
+					color: #6b7280;
+				}
+			}
 
-    // Force Odds value to white
-    .odds-value {
-      font-size: 16px; // match label size
-      color: #ffffff;
-    }
+			// When input container has empty-input class, make the cents symbol grey
+			&.empty-input {
+				.currency-symbol {
+					color: #6b7280 !important;
+				}
+			}
 
-    // Force Avg Price value to white
-    .avg-price-value {
-      font-size: 16px; // match label size
-      color: #ffffff;
-    }
+			input.trade-input {
+				width: auto;
+				min-width: 6ch;
+				padding: 0;
+				padding-right: 0;
+				border: none;
+				background: transparent;
+				color: #ffffff;
+				font-size: 28px;
+				font-weight: 600;
+				font-family: inherit;
+				font-variant-numeric: tabular-nums;
+				line-height: 1;
+				letter-spacing: normal;
+				outline: none;
+				text-align: right;
 
-    // Force Estimated Cost value to white
-    .estimated-cost-value {
-      font-size: 16px; // match label size
-      color: #ffffff;
-    }
+				&::placeholder {
+					color: #6b7280;
+					font-family: inherit;
+					font-weight: 600;
+					font-variant-numeric: tabular-nums;
+					line-height: 1;
+					letter-spacing: normal;
+					opacity: 1; // ensure consistent rendering
+				}
 
-    // Amount value should be white, not green
-    .amount-value {
-      font-size: 16px; // match label size
-      color: #ffffff;
-    }
+				// When input is empty, make the text grey like placeholder
+				&:placeholder-shown {
+					color: #6b7280;
+				}
+			}
 
-    // Small grey odds text under To Win for market buy orders
-    .bet-size-odds-subtext {
-      font-size: 12px;
-      color: #9CA3AF; // brighter grey color
-      font-weight: 400;
-      margin-top: 4px;
-      text-align: left;
-    }
-  }
+			// When input container has empty-input class, make the $ symbol and cents symbol grey
+			&.empty-input {
+				.trade-input {
+					color: #6b7280 !important;
+				}
 
-  .order-result {
-    padding: 16px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    font-size: 14px;
+				.currency-symbol {
+					color: #6b7280 !important;
+				}
+			}
 
-    &.success {
-      background: rgba(34, 197, 94, 0.1);
-      border: 1px solid #22c55e;
-      color: #22c55e;
-    }
+			// Amount input with overlay display - completely custom approach
+			.amount-input-wrapper {
+				position: relative;
+				width: 100%;
+				height: auto;
+				min-height: calc(
+					var(--font-size-h2) * 1
+				); // Same as line-height: 1
 
-    &.error {
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid #ef4444;
-      color: #ef4444;
-    }
+				// Hidden input that captures user interaction but is invisible
+				input.amount-input {
+					position: absolute;
+					top: 0;
+					left: 0;
+					width: 100%;
+					height: 100%;
+					background: transparent;
+					border: none;
+					outline: none;
+					color: transparent; // Make input text invisible
+					font-size: var(--font-size-h2);
+					font-weight: 600;
+					z-index: 2;
 
-    .result-header {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 12px;
-    }
+					&::placeholder {
+						opacity: 0; // Hide native placeholder
+					}
+				}
 
-    .result-details {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      font-size: 12px;
+				// Custom display overlay that shows our formatted $X
+				.amount-display {
+					position: absolute;
+					top: 0;
+					right: 0;
+					display: flex;
+					align-items: baseline;
+					gap: 0;
+					pointer-events: none; // Allow clicks to pass through to input
+					z-index: 1;
 
-      .hash {
-        font-family: monospace;
-        word-break: break-all;
-        max-width: 200px;
-      }
-    }
-  }
+					.currency-symbol,
+					.amount-value {
+						font-size: var(--font-size-h2);
+						font-weight: 600;
+						line-height: 1; // Match other inputs
+						transition: color 0.2s ease;
+						color: #ffffff; // Default white
 
-  .trade-button {
-    width: 100%;
-    padding: 16px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 16px;
-    background: #8B5CF6;
-    border: none;
-    color: white;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    
-    &:hover:not(:disabled) {
-      background: #7C3AED;
-      transform: translateY(-1px);
-    }
-    
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      color: white;
-    }
-  }
-  
-  .trade-notification {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 2147483647;
-    animation: slideIn 0.3s ease-out;
-    
-    &.success {
-      background: black;
-      border: none;
-    }
-    
-    &.error {
-      background: black;
-      border: none;
-    }
-    
-    .notification-content {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 16px;
-      border-radius: 12px;
-      color: #ffffff;
-      font-weight: 500;
-      font-size: 14px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      background: black;
-      border: 1px solid #4B5563;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      
-      .notification-text {
-        white-space: nowrap;
-      }
-    }
-  }
-  
-  @keyframes slideIn {
-    from {
-      transform: translateX(100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateX(0);
-      opacity: 1;
-    }
-  }
+						&.faded {
+							color: #6b7280; // Faded when empty
+						}
+					}
 
-  .wallet-required {
-    text-align: center;
-    padding: 40px 20px;
-    color: #999;
+					.cursor-indicator {
+						width: 2px; // visible thin block caret
+						height: 1em; // align with text height
+						background: #ffffff; // solid white
+						display: inline-block;
+						margin-left: 2px;
+						animation: blink 1s infinite;
+					}
+				}
+			}
 
-    .wallet-required-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-    }
+			// Shares input with overlay display (commas formatting)
+			.shares-input-wrapper {
+				position: relative;
+				width: 100%;
+				height: auto;
+				min-height: calc(var(--font-size-h2) * 1);
 
-    h3 {
-      font-size: 18px;
-      font-weight: 600;
-      color: #ffffff;
-      margin-bottom: 8px;
-    }
+				input.shares-input {
+					position: absolute;
+					top: 0;
+					left: 0;
+					width: 100%;
+					height: 100%;
+					background: transparent;
+					border: none;
+					outline: none;
+					color: transparent;
+					font-size: var(--font-size-h2);
+					font-weight: 600;
+					z-index: 2;
 
-    p {
-      font-size: 14px;
-      line-height: 1.4;
-    }
-  }
+					&::placeholder {
+						opacity: 0;
+					}
+				}
 
-  .wallet-status {
-    margin-top: 16px;
-    padding: 12px;
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    border-radius: 8px;
+				.shares-display {
+					position: absolute;
+					top: 0;
+					right: 0;
+					display: flex;
+					align-items: baseline;
+					gap: 0;
+					pointer-events: none;
+					z-index: 1;
 
-    .wallet-info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 14px;
-      margin-bottom: 8px;
+					.shares-value {
+						font-size: var(--font-size-h2);
+						font-weight: 600;
+						line-height: 1;
+						transition: color 0.2s ease;
+						color: #ffffff;
 
-      &:last-child {
-        margin-bottom: 0;
-      }
+						&.faded {
+							color: #6b7280;
+						}
+					}
 
-      .label {
-        color: #999;
-        font-weight: 500;
-      }
+					.cursor-indicator {
+						width: 2px;
+						height: 1em;
+						background: #ffffff;
+						display: inline-block;
+						margin-left: 2px;
+						animation: blink 1s infinite;
+					}
+				}
+			}
 
-      .value {
-        color: #8B5CF6;
-        font-weight: 600;
-        font-family: monospace;
-      }
-    }
-  }
+			// Blinking cursor animation
+			@keyframes blink {
+				0%,
+				50% {
+					opacity: 1;
+				}
+				51%,
+				100% {
+					opacity: 0;
+				}
+			}
+
+			.contracts-info {
+				margin-top: 8px;
+				padding: 8px 12px;
+				background: rgba(139, 92, 246, 0.1);
+				border-radius: 6px;
+				border: 1px solid rgba(139, 92, 246, 0.2);
+
+				.contracts-row {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					margin-bottom: 4px;
+
+					&:last-child {
+						margin-bottom: 0;
+					}
+				}
+
+				.contracts-label {
+					font-size: 12px;
+					font-weight: 500;
+					color: #6b7280;
+					text-transform: uppercase;
+					letter-spacing: 0.5px;
+				}
+
+				.contracts-value {
+					font-size: 14px;
+					font-weight: 600;
+					color: #8b5cf6;
+				}
+
+				.contracts-warning {
+					font-size: 11px;
+					font-weight: 500;
+					color: #dc2626;
+					text-align: center;
+					margin-top: 6px;
+					padding: 4px 8px;
+					background: rgba(220, 38, 38, 0.1);
+					border-radius: 4px;
+					border: 1px solid rgba(220, 38, 38, 0.2);
+				}
+			}
+		}
+	}
+
+	.bet-size-section {
+		background: black !important;
+		border: none;
+		border-radius: 8px;
+		padding: 12px;
+		margin-bottom: 20px;
+
+		.bet-size-info,
+		.leverage-info {
+			display: flex;
+			flex-direction: column;
+			margin-bottom: 8px;
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		.bet-size-main-row {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		// Add extra spacing between Amount and To Win for buy limit orders
+		.bet-size-info:first-child {
+			margin-bottom: 12px;
+		}
+
+		.bet-size-label,
+		.leverage-label {
+			font-size: 16px; // slightly bigger than input labels
+			font-weight: 700; // bold
+			color: #ffffff; // white
+		}
+
+		.updated-odds-label {
+			color: #fbbf24; // amber-400
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.info-icon {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 16px;
+			height: 16px;
+			border-radius: 50%;
+			border: 1px solid #fbbf24;
+			color: #fbbf24;
+			font-size: 10px;
+			line-height: 1;
+			cursor: help;
+		}
+
+		.updated-odds-tooltip {
+			color: #ffffff;
+			font-size: 12px;
+			line-height: 1.4;
+			max-width: 260px;
+		}
+
+		.bet-size-value,
+		.leverage-value {
+			font-size: 28px; // match input size
+			font-weight: 600; // match input weight
+			color: #ffffff; // white
+			font-family: inherit; // match input font family
+			font-variant-numeric: tabular-nums; // align digit widths
+			line-height: 1;
+			letter-spacing: normal;
+		}
+
+		// Keep odds text small like before
+		.odds-value {
+			font-size: 16px;
+		}
+
+		// Make the "To Win / Receive" label same size as the amount
+		.bet-size-label.to-win-label {
+			font-size: 28px;
+			font-weight: 600;
+		}
+
+		// Make the monetary amount (To Win / Receive) bright green
+		.bet-size-value {
+			color: #22c55e;
+		}
+
+		// Force Odds value to white
+		.odds-value {
+			font-size: 16px; // match label size
+			color: #ffffff;
+		}
+
+		// Force Avg Price value to white
+		.avg-price-value {
+			font-size: 16px; // match label size
+			color: #ffffff;
+		}
+
+		// Force Estimated Cost value to white
+		.estimated-cost-value {
+			font-size: 16px; // match label size
+			color: #ffffff;
+		}
+
+		// Amount value should be white, not green
+		.amount-value {
+			font-size: 16px; // match label size
+			color: #ffffff;
+		}
+
+		// Small grey odds text under To Win for market buy orders
+		.bet-size-odds-subtext {
+			font-size: 12px;
+			color: #9ca3af; // brighter grey color
+			font-weight: 400;
+			margin-top: 4px;
+			text-align: left;
+		}
+	}
+
+	.order-result {
+		padding: 16px;
+		border-radius: 8px;
+		margin-bottom: 20px;
+		font-size: 14px;
+
+		&.success {
+			background: rgba(34, 197, 94, 0.1);
+			border: 1px solid #22c55e;
+			color: #22c55e;
+		}
+
+		&.error {
+			background: rgba(239, 68, 68, 0.1);
+			border: 1px solid #ef4444;
+			color: #ef4444;
+		}
+
+		.result-header {
+			font-size: 16px;
+			font-weight: 600;
+			margin-bottom: 12px;
+		}
+
+		.result-details {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 8px;
+			font-size: 12px;
+
+			.hash {
+				font-family: monospace;
+				word-break: break-all;
+				max-width: 200px;
+			}
+		}
+	}
+
+	.trade-button {
+		width: 100%;
+		padding: 16px;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 16px;
+		background: #8b5cf6;
+		border: none;
+		color: white;
+		cursor: pointer;
+		transition: all 0.2s ease;
+
+		&:hover:not(:disabled) {
+			background: #7c3aed;
+			transform: translateY(-1px);
+		}
+
+		&:disabled {
+			opacity: 0.6;
+			cursor: not-allowed;
+			color: white;
+		}
+	}
+
+	.trade-notification {
+		position: fixed;
+		bottom: 20px;
+		right: 20px;
+		animation: slideIn 0.3s ease-out;
+
+		&.success {
+			background: black;
+			border: none;
+		}
+
+		&.error {
+			background: black;
+			border: none;
+		}
+
+		.notification-content {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 12px 16px;
+			border-radius: 12px;
+			color: #ffffff;
+			font-weight: 500;
+			font-size: 14px;
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+			background: black;
+			border: 1px solid #4b5563;
+			backdrop-filter: blur(10px);
+			-webkit-backdrop-filter: blur(10px);
+
+			.notification-text {
+				white-space: nowrap;
+			}
+		}
+	}
+
+	@keyframes slideIn {
+		from {
+			transform: translateX(100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateX(0);
+			opacity: 1;
+		}
+	}
+
+	.wallet-required {
+		text-align: center;
+		padding: 40px 20px;
+		color: #999;
+
+		.wallet-required-icon {
+			font-size: 48px;
+			margin-bottom: 16px;
+		}
+
+		h3 {
+			font-size: 18px;
+			font-weight: 600;
+			color: #ffffff;
+			margin-bottom: 8px;
+		}
+
+		p {
+			font-size: 14px;
+			line-height: 1.4;
+		}
+	}
+
+	.wallet-status {
+		margin-top: 16px;
+		padding: 12px;
+		background: rgba(139, 92, 246, 0.1);
+		border: 1px solid rgba(139, 92, 246, 0.3);
+		border-radius: 8px;
+
+		.wallet-info {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			font-size: 14px;
+			margin-bottom: 8px;
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+
+			.label {
+				color: #999;
+				font-weight: 500;
+			}
+
+			.value {
+				color: #8b5cf6;
+				font-weight: 600;
+				font-family: monospace;
+			}
+		}
+	}
 }
 
 /* Curtain layout for mobile */
 .prediction-curtain {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1001;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	display: block; /* ensure it can size to children */
+	min-height: 64px; /* ensure visible bar even when closed */
+}
+
+/* Mobile debug: highlight tradebox on small screens */
+@media (max-width: 768px) {
+	.prediction-market-tradebox {
+		padding: 0px;
+		// background: red !important; /* DEBUG ensure mobile tradebox visible */
+	}
 }
 
 .prediction-curtain-content {
-  background: black;
-  border-top: 1px solid #4B5563;
-  border-radius: 12px 12px 0 0;
-  padding: 16px;
+	background: black;
+	// border-top: 1px solid #4b5563;
+	border-radius: 12px 12px 0 0;
+	max-height: min(80vh, 640px); /* make sure content has height on mobile */
+	overflow: auto;
 }
 
 .prediction-curtain-header {
-  width: 100%;
-  padding: 12px 15px;
-  background: black; /* ensure solid background under header buttons */
-  border-top: 1px solid #4B5563;
-  border-radius: 12px 12px 0 0;
+	width: 100%;
+	padding: 12px 15px;
+	background: black; /* ensure solid background under header buttons */
+	border-top: 1px solid #4b5563;
+	border-radius: 12px 12px 0 0;
+	min-height: 64px; /* visible height when curtain is closed */
 }
 
 .curtain-content-inner {
-  position: relative;
+	position: relative;
 }
 
 .curtain-close-btn {
-  position: absolute;
-  right: 8px;
-  top: 8px;
-  background: transparent;
-  color: #9CA3AF;
-  border: 1px solid #4B5563;
-  border-radius: 6px;
-  line-height: 1;
-  padding: 6px 10px;
-  cursor: pointer;
+	position: absolute;
+	right: 8px;
+	top: 8px;
+	background: transparent;
+	color: #9ca3af;
+	border: 1px solid #4b5563;
+	border-radius: 6px;
+	line-height: 1;
+	padding: 6px 10px;
+	cursor: pointer;
 
-  &:hover {
-    color: #FFFFFF;
-    border-color: #6B7280;
-    background: #111827;
-  }
+	&:hover {
+		color: #ffffff;
+		border-color: #6b7280;
+		background: #111827;
+	}
 }
 
 // Mobile curtain header buttons should look EXACTLY like position buttons
 .curtain-header-buttons {
-  .position-btn {
-    flex: 1;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 18px;
-    font-weight: 600;
-    transition: all 0.2s ease;
-    min-height: 48px;
-    border: 2px solid #6B7280;
-    color: #6B7280;
-    background: transparent;
+	.position-btn {
+		flex: 1;
+		padding: 12px;
+		border-radius: 8px;
+		font-size: 18px;
+		font-weight: 600;
+		transition: all 0.2s ease;
+		min-height: 48px;
+		border: 2px solid #6b7280;
+		color: #6b7280;
+		background: transparent;
 
-    &:hover {
-      border-color: #22c55e;
-      color: #22c55e;
-    }
+		&:hover {
+			border-color: #22c55e;
+			color: #22c55e;
+		}
 
-    &.selected.primary {
-      background: rgba(34, 197, 94, 0.1);
-      border-color: #22c55e;
-      color: #22c55e;
-    }
+		&.selected.primary {
+			background: rgba(34, 197, 94, 0.1);
+			border-color: #22c55e;
+			color: #22c55e;
+		}
 
-    &.selected.secondary {
-      background: rgba(239, 68, 68, 0.1);
-      border-color: #ef4444;
-      color: #ef4444;
-    }
+		&.selected.secondary {
+			background: rgba(239, 68, 68, 0.1);
+			border-color: #ef4444;
+			color: #ef4444;
+		}
 
-    // Yes button (first child) - always green theme
-    &:first-child {
-      &:hover {
-        background: rgba(34, 197, 94, 0.1);
-        border-color: #22c55e;
-        color: #22c55e;
-      }
+		// Yes button (first child) - always green theme
+		&:first-child {
+			&:hover {
+				background: rgba(34, 197, 94, 0.1);
+				border-color: #22c55e;
+				color: #22c55e;
+			}
 
-      &.selected {
-        background: rgba(34, 197, 94, 0.1);
-        border-color: #22c55e;
-        color: #22c55e;
-      }
-    }
+			&.selected {
+				background: rgba(34, 197, 94, 0.1);
+				border-color: #22c55e;
+				color: #22c55e;
+			}
+		}
 
-    // No button (second child) - always red theme
-    &:last-child {
-      &:hover {
-        background: rgba(239, 68, 68, 0.1);
-        border-color: #ef4444;
-        color: #ef4444;
-      }
+		// No button (second child) - always red theme
+		&:last-child {
+			&:hover {
+				background: rgba(239, 68, 68, 0.1);
+				border-color: #ef4444;
+				color: #ef4444;
+			}
 
-      &.selected {
-        background: rgba(239, 68, 68, 0.1);
-        border-color: #ef4444;
-        color: #ef4444;
-      }
-    }
-  }
+			&.selected {
+				background: rgba(239, 68, 68, 0.1);
+				border-color: #ef4444;
+				color: #ef4444;
+			}
+		}
+	}
 }
-

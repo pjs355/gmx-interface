@@ -1,127 +1,129 @@
 .App-header-backdrop {
-  background-color: rgba(0, 0, 0, 0.3);
-  position: fixed;
-  z-index: 1000;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
+	background-color: rgba(0, 0, 0, 0.3);
+	position: fixed;
+	z-index: 1000;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	right: 0;
 }
 
 .App-header.large {
-  height: 6.2rem;
-  backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: space-between;
-  position: relative;
-  padding-left: 50px;
-  padding-right: 50px;
-  background: transparent 0% 0% no-repeat padding-box;
-  border-bottom: 1px solid #333333;
-  /* Prevent layout shifts when text becomes bold */
-  align-items: center;
+	height: 6.2rem;
+	backdrop-filter: blur(4px);
+	display: flex;
+	justify-content: space-between;
+	position: relative;
+	padding-left: 50px;
+	padding-right: 50px;
+	background: transparent 0% 0% no-repeat padding-box;
+	border-bottom: 1px solid #333333;
+	/* Prevent layout shifts when text becomes bold */
+	align-items: center;
 }
 
 .App-header.large .App-header-links {
-  display: flex;
-  min-width: 0;
+	display: flex;
+	min-width: 0;
 }
 
 .App-header-link-home {
-  display: none;
+	display: none;
 }
 
 .App-header-links-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1000;
 }
 
 .App-header-drawer {
-  background: #000000;
-  opacity: 1;
-  position: fixed;
-  z-index: 1001;
-  right: 0;
-  top: 0;
-  left: inherit;
-  height: 100vh;
-  width: 30.4rem;
-  overflow-y: auto; /* Allow scrolling if needed */
-  -ms-overflow-style: none; /* Internet Explorer 10+ */
-  scrollbar-width: none; /* Firefox */
+	background: #000000;
+	opacity: 1;
+	position: fixed;
+	z-index: 1001;
+	right: 0;
+	top: 0;
+	left: auto;
+	height: 100vh;
+	width: clamp(18rem, 92vw, 28rem);
+	overflow-y: auto; /* Allow scrolling if needed */
+	-ms-overflow-style: none; /* Internet Explorer 10+ */
+	scrollbar-width: none; /* Firefox */
 }
 
 .App-header-drawer .App-header-links {
-  display: flex;
-  flex-direction: column;
-  height: auto; /* Changed from 100% to auto */
-  max-height: 100vh; /* Ensure it doesn't exceed viewport */
-  padding: 1rem 0; /* Reduced from 2rem to 1rem */
-  align-items: stretch;
-  justify-content: flex-start;
-  overflow-y: visible; /* Allow content to be visible */
+	display: flex;
+	flex-direction: column;
+	height: auto; /* Changed from 100% to auto */
+	max-height: 100vh; /* Ensure it doesn't exceed viewport */
+	padding: 1rem 0; /* Reduced from 2rem to 1rem */
+	align-items: stretch;
+	justify-content: flex-start;
+	overflow-y: visible; /* Allow content to be visible */
 }
 
 .App-header-drawer .App-header-link-container {
-  flex: 0 0 auto;
-  margin-bottom: 0.25rem; /* Reduced from 0.5rem to 0.25rem */
-  width: 100%; /* Full width */
+	flex: 0 0 auto;
+	margin-bottom: 0.25rem; /* Reduced from 0.5rem to 0.25rem */
+	width: 100%; /* Full width */
 }
 
 /* Mobile metrics display */
 .App-header-mobile-metrics {
-  display: flex;
-  gap: 1rem;
-  padding: 1rem 2rem;
-  margin-bottom: 1rem;
+	display: flex;
+	gap: 1rem;
+	padding: 1rem 2rem;
+	margin-bottom: 1rem;
 }
 
 .mobile-metric-box {
-  background-color: #1a1a1a;
-  border-radius: 8px;
-  padding: 12px 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  transition: background-color 0.15s ease-in-out;
-  flex: 1;
+	background-color: #1a1a1a;
+	border-radius: 8px;
+	padding: 12px 16px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	text-decoration: none;
+	transition: background-color 0.15s ease-in-out;
+	flex: 1;
 }
 
 .mobile-metric-box:hover {
-  background-color: #2a2a2a;
+	background-color: #2a2a2a;
 }
 
 .mobile-metric-box .text-xs,
 .mobile-metric-box .text-sm {
-  color: #ffffff !important;
+	color: #ffffff !important;
 }
 
 .App-header-drawer .App-header-link-container:nth-of-type(3) {
-  border-top: 1px solid #374151;
-  padding-top: 1rem;
+	border-top: 1px solid #374151;
+	padding-top: 1rem;
 }
 .App-header-drawer::-webkit-scrollbar {
-  display: none; /* Safari and Chrome */
+	display: none; /* Safari and Chrome */
 }
 
 .App-header-drawer .App-header-link-container .a,
 .App-header-drawer .App-header-link-container a {
-  font-size: 1.2rem !important; /* Increased text size */
-  line-height: 1.4 !important;
-  font-weight: normal !important;
-  letter-spacing: 0.1px !important;
-  color: #ffffff !important;
-  padding: 1rem 2rem !important; /* Increased padding for better touch targets */
-  text-decoration: none !important;
-  display: block !important;
-  transition: color 0.2s ease, background-color 0.2s ease !important;
-  text-align: left !important;
-  width: 100% !important; /* Full width */
+	font-size: 1.2rem !important; /* Increased text size */
+	line-height: 1.4 !important;
+	font-weight: normal !important;
+	letter-spacing: 0.1px !important;
+	color: #ffffff !important;
+	padding: 1rem 2rem !important; /* Increased padding for better touch targets */
+	text-decoration: none !important;
+	display: block !important;
+	transition: color 0.2s ease, background-color 0.2s ease !important;
+	text-align: left !important;
+	width: 100% !important; /* Full width */
+	white-space: normal !important; /* allow wrapping on small screens */
+	overflow-wrap: anywhere !important;
 }
 
 .App-header-drawer .App-header-link-container .a:hover,
@@ -129,318 +131,324 @@
 .App-header-drawer .App-header-link-container .a:active,
 .App-header-drawer .App-header-link-container a:hover,
 .App-header-drawer .App-header-link-container a:focus {
-  color: #9285f3 !important;
-  background-color: #1a1a1a !important; /* Back to original grey color */
+	color: #9285f3 !important;
+	background-color: #1a1a1a !important; /* Back to original grey color */
 }
 
 .App-header-drawer .App-header-link-container a.active {
-  color: #9285f3 !important;
-  font-weight: bold !important;
+	color: #9285f3 !important;
+	font-weight: bold !important;
 }
 
 .App-header.large .App-header-link-container {
-  min-width: 0;
+	min-width: 0;
 }
 
 .App-header-links-header {
-  height: 6.2rem;
-  display: flex;
-  align-items: center;
-  z-index: 3;
+	height: 6.2rem;
+	display: flex;
+	align-items: center;
+	z-index: 3;
 }
 
 /* Drawer header: pin the close button to the top-right */
 .App-header-drawer .App-header-links-header {
-  position: sticky;
-  top: 0;
-  justify-content: flex-end;
-  padding: 0.8rem 1rem;
-  background: #000000;
+	position: sticky;
+	top: 0;
+	justify-content: flex-end;
+	padding: 0.8rem 1rem;
+	background: #000000;
 }
 
 .App-header-drawer .mobile-cross-menu {
-  margin-left: auto;
+	margin-left: auto;
 }
 
 .App-header-container-left {
-  display: flex;
-  align-items: center;
-  min-width: 0;
+	display: flex;
+	align-items: center;
+	min-width: 0;
 }
 
 .App-header-top {
-  width: 100%;
-  position: relative;
-  display: flex;
-  justify-content: space-between;
-  /* z-index: 2; */
+	width: 100%;
+	position: relative;
+	display: flex;
+	justify-content: space-between;
+	/* z-index: 2; */
 }
 
 .App-header-menu-icon-block {
-  display: flex;
-  align-items: center;
-  border: none;
-  border-radius: 4px;
-  height: 3.6rem;
+	display: flex;
+	align-items: center;
+	border: none;
+	border-radius: 4px;
+	height: 3.6rem;
 }
 
 .App-header-menu-icon {
-  color: #ffffff;
-  font-size: 2rem;
-  cursor: pointer;
-  opacity: 0.7;
-  margin: 0.7rem;
+	color: #ffffff;
+	font-size: 2rem;
+	cursor: pointer;
+	opacity: 0.7;
+	margin: 0.7rem;
 }
 
 .App-header-menu-icon:hover {
-  opacity: 0.9;
+	opacity: 0.9;
 }
 
 .App-header a.App-header-link-main,
 .App-header .App-header-link-main {
-  font-size: 1.7rem;
-  padding: 1.5rem;
-  margin-left: -1.5rem;
-  display: flex;
-  margin-right: 1.2rem;
+	font-size: 1.7rem;
+	padding: 1.5rem;
+	margin-left: -1.5rem;
+	display: flex;
+	margin-right: 1.2rem;
 }
 
 .App-header-logo-text {
-  display: inline-block;
-  font-size: 2.4rem;
-  font-weight: 900;
-  color: #ffffff;
-  vertical-align: middle;
-  letter-spacing: -0.02em;
-  text-decoration: none;
+	display: inline-block;
+	font-size: 2.4rem;
+	font-weight: 900;
+	color: #ffffff;
+	vertical-align: middle;
+	letter-spacing: -0.02em;
+	text-decoration: none;
 }
 
 .App-header-logo-text.small {
-  display: none;
-  font-size: 1.8rem;
+	display: none;
+	font-size: 1.8rem;
 }
 
 .App-header .a,
 .App-header a {
-  text-decoration: none;
-  vertical-align: middle;
-  display: inline-block;
-  cursor: pointer;
+	text-decoration: none;
+	vertical-align: middle;
+	display: inline-block;
+	cursor: pointer;
 }
 
 .App-header .a.active,
 .App-header a.active {
-  pointer-events: all;
-  opacity: 1;
-  color: #ffffff;
-  font-weight: bold;
-  /* Prevent layout shift by using consistent spacing */
-  position: relative;
+	pointer-events: all;
+	opacity: 1;
+	color: #ffffff;
+	font-weight: bold;
+	/* Prevent layout shift by using consistent spacing */
+	position: relative;
 }
 
 /* Ensure consistent spacing for all header links */
 .App-header-links {
-  display: flex;
-  align-items: center;
-  height: 100%;
+	display: flex;
+	align-items: center;
+	height: 100%;
 }
 
 .App-header-link-container {
-  display: flex;
-  align-items: center;
-  height: 100%;
+	display: flex;
+	align-items: center;
+	height: 100%;
 }
 
 .App-header .a:hover,
 .App-header a:hover {
-  opacity: 1;
-  color: #9285f3;
+	opacity: 1;
+	color: #9285f3;
 }
 
 .App-header-container-left .a,
 .App-header-container-left a {
-  padding: 1.8rem 1.7rem;
-  display: flex;
-  align-items: center;
-  color: #ffffff;
-  font-size: var(--font-size-body-large);
-  line-height: var(--line-height-body-large);
-  font-weight: normal;
-  /* Prevent layout shift when text becomes bold */
-  min-height: 2.4rem;
-  text-rendering: optimizeSpeed;
-  /* Use consistent width to prevent shifts */
-  white-space: nowrap;
-  position: relative;
+	padding: 1.8rem 1.7rem;
+	display: flex;
+	align-items: center;
+	color: #ffffff;
+	font-size: var(--font-size-body-large);
+	line-height: var(--line-height-body-large);
+	font-weight: normal;
+	/* Prevent layout shift when text becomes bold */
+	min-height: 2.4rem;
+	text-rendering: optimizeSpeed;
+	/* Use consistent width to prevent shifts */
+	white-space: nowrap;
+	position: relative;
 }
 .App-header.large .App-header-container-left a {
-  white-space: nowrap;
+	white-space: nowrap;
 }
 
 /* Prevent overly aggressive truncation of top nav labels */
 .App-header-links .App-header-link-container {
-  flex: 0 0 auto;
+	flex: 0 0 auto;
 }
 
 .App-header-links {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
 }
 
 .App-header-container-left a.active {
-  color: #9285f3;
-  font-weight: bold;
+	color: #9285f3;
+	font-weight: bold;
 }
 
 .App-header-container-right {
-  display: flex;
-  align-items: center;
+	display: flex;
+	align-items: center;
 }
 
 .App-header-user {
-  display: flex;
-  align-items: center;
-  gap: 12px; /* add breathing room between metric boxes and other header items */
+	display: flex;
+	align-items: center;
+	gap: 12px; /* add breathing room between metric boxes and other header items */
 }
 
 /* Clickable metric boxes for Portfolio and Cash */
 .header-metric-box {
-  background-color: #000000;
-  border-radius: 8px;
-  padding: 8px 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  transition: background-color 0.15s ease-in-out;
-  margin-left: 8px; /* separation between Portfolio and Cash */
+	background-color: #000000;
+	border-radius: 8px;
+	padding: 8px 12px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	text-decoration: none;
+	transition: background-color 0.15s ease-in-out;
+	margin-left: 8px; /* separation between Portfolio and Cash */
 }
 
 .header-metric-box:hover {
-  background-color: #1a1a1a;
+	background-color: #1a1a1a;
 }
 
 .App-header-user-link {
-  margin-right: 2.4rem;
+	margin-right: 2.4rem;
 }
 
 .App-header-user-address {
-  border: 1px solid var(--color-stroke-primary);
-  height: 3.6rem;
-  border-radius: 0.8rem;
-  display: inline-flex;
-  align-items: center;
-  color: #ffffff;
-  position: relative;
+	border: 1px solid var(--color-stroke-primary);
+	height: 3.6rem;
+	border-radius: 0.8rem;
+	display: inline-flex;
+	align-items: center;
+	color: #ffffff;
+	position: relative;
 }
 
 @media (max-width: 1335px) {
-  .App-header-user-address {
-    padding: 0 0px;
-  }
+	.App-header-user-address {
+		padding: 0 0px;
+	}
 
-  .App-header-user-link {
-    margin-right: 1.6rem;
-  }
+	.App-header-user-link {
+		margin-right: 1.6rem;
+	}
 
-  .App-header-link-home {
-    display: block;
-  }
+	.App-header-link-home {
+		display: block;
+	}
 
-  .App-header-user {
-    padding-bottom: 0;
-  }
+	.App-header-user {
+		padding-bottom: 0;
+	}
 
-  .App-header-container-right {
-    display: flex;
-    align-items: center;
-  }
+	.App-header-container-right {
+		display: flex;
+		align-items: center;
+	}
 
-  .App-header-link-desktop {
-    display: none;
-  }
+	.App-header-link-desktop {
+		display: none;
+	}
 
-  .App-header {
-    grid-template-columns: 1fr auto auto auto auto;
-  }
+	.App-header {
+		grid-template-columns: 1fr auto auto auto auto;
+	}
 
-  .App-header-logo-text {
-    font-size: 2.1rem;
-  }
+	.App-header-logo-text {
+		font-size: 2.1rem;
+	}
 
-.App-header.small {
-  display: none;
-  z-index: 1;
-}
+	.App-header.small {
+		display: none;
+		z-index: 1;
+	}
 
-@media (max-width: 1335px) {
-  .App-header.small {
-    height: 6.2rem;
-    backdrop-filter: blur(4px);
-    display: flex;
-    justify-content: space-between;
-    position: relative;
-    padding-left: 16px;
-    padding-right: 16px;
-    background: transparent 0% 0% no-repeat padding-box;
-    border-bottom: 1px solid #333333;
-  }
+	@media (max-width: 1335px) {
+		.App-header.small {
+			height: 6.2rem;
+			backdrop-filter: blur(4px);
+			display: flex;
+			justify-content: space-between;
+			position: relative;
+			padding-left: 16px;
+			padding-right: 16px;
+			background: transparent 0% 0% no-repeat padding-box;
+			border-bottom: 1px solid #333333;
+		}
 
-  .App-header.small.active {
-    z-index: 1002;
-  }
-}
+		.App-header.small.active {
+			z-index: 1002;
+		}
+	}
 
-@media (max-width: 450px) {
-  .App-header.small {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-}
+	@media (max-width: 450px) {
+		.App-header.small {
+			padding-left: 12px;
+			padding-right: 12px;
+		}
+	}
 
-  a.App-header-user-account {
-    margin-right: 0;
-  }
+	@media (max-width: 400px) {
+		.App-header-drawer {
+			width: 100vw;
+		}
+	}
+
+	a.App-header-user-account {
+		margin-right: 0;
+	}
 }
 
 @media (max-width: 600px) {
-  .App-header-logo-text.big {
-    display: none;
-  }
+	.App-header-logo-text.big {
+		display: none;
+	}
 
-  .App-header-logo-text.small {
-    display: inline-block;
-  }
+	.App-header-logo-text.small {
+		display: inline-block;
+	}
 }
 
 @media (max-width: 450px) {
-  .App-header-user-link {
-    margin-right: 0.6rem;
-  }
+	.App-header-user-link {
+		margin-right: 0.6rem;
+	}
 
-  .App-header-menu-icon-block {
-    margin-left: 0;
-    margin-right: 0.4rem;
-  }
+	.App-header-menu-icon-block {
+		margin-left: 0;
+		margin-right: 0.4rem;
+	}
 
-  .App-header-menu-icon {
-    margin: 0.4rem 0.5rem;
-  }
+	.App-header-menu-icon {
+		margin: 0.4rem 0.5rem;
+	}
 
-  .App-header.small {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
+	.App-header.small {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
 
-  .App-header .App-header-link-main {
-    padding: 0.155rem !important;
-    margin-left: 0rem !important;
-  }
+	.App-header .App-header-link-main {
+		padding: 0.155rem !important;
+		margin-left: 0rem !important;
+	}
 }
 
 @supports not ((-webkit-backdrop-filter: none) or (backdrop-filter: none)) {
-  .App-header-drawer {
-    background: var(--color-slate-800);
-  }
+	.App-header-drawer {
+		background: var(--color-slate-800);
+	}
 }
