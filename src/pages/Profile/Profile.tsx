@@ -2,7 +2,7 @@ import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { useLocation } from "react-router-dom";
-import useWallet from "../../lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import Developers from "../Developers/Developers";
 import GamingAccounts from "./GamingAccounts/GamingAccounts";
 import Details from "./Details/Details";
@@ -11,7 +11,7 @@ export default function Profile() {
 	const location = useLocation();
 	const { user } = usePrivy();
 	const { wallets: privyWallets } = usePrivyWallets();
-	const { account, signer } = useWallet();
+    const { account, signer } = useSignerContext() as any;
 	const [signerAddress, setSignerAddress] = useState<string | null>(null);
 	const [activeSection, setActiveSection] = useState<
 		"profile" | "developers" | "gaming-accounts" | "details"

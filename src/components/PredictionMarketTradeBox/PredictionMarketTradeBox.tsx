@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useEffect } from "react";
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 // import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 // import { ethers } from "ethers";
 import type { TradeBoxProps, TradeExecutionParams } from "./types";
 import { useMarketOrderHandler } from "./MarketOrderHandler";
-import { useLimitOrderHandler } from "./LimitOrderHandler";
+// import { useLimitOrderHandler } from "./LimitOrderHandler";
 import { useTradeExecutionService } from "./TradeExecutionService";
 import PredictionMarketTradeBoxResponsiveContainer from "./PredictionMarketTradeBoxResponsiveContainer";
 // Removed OrderbookContext import - using passed orderbook prop instead
@@ -26,8 +26,7 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
 
   const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange } = useTradeState(initialPosition);
   // const { client: smartClient, getClientForChain } = useSmartWallets();
-  const walletApi = useWallet() as any;
-  const account = walletApi.getDataAddress();
+  const { account } = useSignerContext();
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
@@ -35,8 +34,6 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
   const { refreshBalances } = useBalances();
 
   const { wallets: privyWallets } = usePrivyWallets();
-  
-  
 
   // Use passed orderbook directly (no longer using OrderbookContext)
   const orderbook = propOrderbook ?? null;

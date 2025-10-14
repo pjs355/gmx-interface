@@ -10,7 +10,7 @@ import React, {
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { Contract, JsonRpcProvider, formatUnits, ethers } from "ethers";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import {
 	fetchUserOrders,
 	type ProcessedOrder,
@@ -48,8 +48,7 @@ type UserDataContextValue = {
 const UserDataContext = createContext<UserDataContextValue | null>(null);
 
 export function UserDataProvider({ children }: { children: React.ReactNode }) {
-	const { getDataAddress } = useWallet();
-	const account = getDataAddress();
+	const { account } = useSignerContext();
 	const { user } = usePrivy();
 	const { wallets: privyWallets } = usePrivyWallets();
 	const { getClientForChain } = useSmartWallets();

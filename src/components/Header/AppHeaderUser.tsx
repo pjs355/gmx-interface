@@ -12,7 +12,7 @@ import { usePrivy } from "@privy-io/react-auth";
 // Removed lib/legacy imports - GMX-specific
 
 // Removed all userAnalytics and GMX-specific imports
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 
 import { OneClickButton } from "components/OneClickButton/OneClickButton";
 import AddressDropdown from "components/AddressDropdown/AddressDropdown";
@@ -44,8 +44,8 @@ export function AppHeaderUser({
 	disconnectAccountAndCloseSettings,
 	showRedirectModal,
 }: Props) {
-	// Simplified for prediction markets - removed GMX-specific hooks
-	const { isConnected: active, address: account } = useWallet();
+    // Simplified for prediction markets - centralized signer context
+    const { authenticated: active, account } = useSignerContext();
 	const { login, user, authenticated } = usePrivy();
 	const { portfolioTotal, cashBalance } = usePortfolioContext();
 

@@ -2,7 +2,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import React, { useEffect, useState } from "react";
 import { getPredictionApiBaseUrl } from "../../lib/predictionApiBase";
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 
 import Button from "components/Button/Button";
 
@@ -13,7 +13,7 @@ import "./GetTestUsdc.css";
 export function GetTestUsdc() {
   const { getAccessToken, user } = usePrivy();
   const { client: smartClient } = useSmartWallets();
-  const wallet = useWallet();
+  const wallet = useSignerContext();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingClaim, setIsCheckingClaim] = useState(true);
   const [hasAlreadyClaimed, setHasAlreadyClaimed] = useState(false);
