@@ -1,6 +1,17 @@
 import { ethers } from 'ethers';
 import { CTF_ADDRESS, EXCHANGE_ADDRESS, USDC_ADDRESS } from 'config/addresses';
 
+// Utility function to round dollar amounts based on buy/sell direction
+function roundDollarAmount(amount: number, side: 'buy' | 'sell'): number {
+  // Round up for buy orders, round down for sell orders
+  const factor = 100; // Round to nearest penny
+  if (side === 'buy') {
+    return Math.ceil(amount * factor) / factor;
+  } else {
+    return Math.floor(amount * factor) / factor;
+  }
+}
+
 
 
 // Contract addresses on Base (centralized)
@@ -232,9 +243,9 @@ export class PredictionMarketService {
       taker: ethers.ZeroAddress, // Public order
       tokenId: tokenId,
       // For limit orders: amount = shares, price = price per token
-      // makerAmount = shares × price (total USDC cost)
+      // makerAmount = shares × price (total USDC cost) - rounded based on buy/sell direction
       // takerAmount = shares (number of tokens wanted)
-      makerAmount: ethers.parseUnits(roundToDecimals(amount * price, 6), 6).toString(), // Total USDC cost (properly rounded)
+      makerAmount: ethers.parseUnits(roundToDecimals(roundDollarAmount(amount * price, side), 6), 6).toString(), // Total USDC cost (rounded to nearest penny)
       takerAmount: ethers.parseUnits(roundToDecimals(Number(amount), 6), 6).toString(), // Number of tokens wanted (properly rounded)
       expiration,
       nonce: 0, // Will be fetched from contract in real implementation
