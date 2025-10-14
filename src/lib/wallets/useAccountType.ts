@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-
-import useWallet from "./useWallet";
+import { useSignerContext } from "context/SignerContext";
 
 export enum AccountType {
   CONTRACT = "contract",
@@ -8,7 +7,7 @@ export enum AccountType {
 }
 
 export default function useAccountType() {
-  const { active, account, signer } = useWallet();
+  const { authenticated: active, account, signer } = useSignerContext() as any;
   const [contractType, setContractType] = useState<AccountType | null>(null);
 
   useEffect(() => {

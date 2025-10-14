@@ -1,7 +1,7 @@
-import { t } from "@lingui/macro";
+// import { t } from "@lingui/macro";
 // import { Trans } from "@lingui/react";
 // Removed useLingui - not used after cleanup
-import { useCallback, useState } from "react";
+// import { useCallback, useState } from "react";
 import { FiX } from "react-icons/fi";
 // Removed useNotifyModalState - not used after cleanup
 // Removed userAnalytics imports - not needed for prediction markets
@@ -9,9 +9,9 @@ import { FiX } from "react-icons/fi";
 // Removed ExternalLink - not used in this component
 
 import { HeaderLink } from "./HeaderLink";
-import ModalWithPortal from "../Modal/ModalWithPortal";
+// import ModalWithPortal from "../Modal/ModalWithPortal";
 // Removed LanguageModalContent - not needed for prediction markets
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import { usePortfolio } from "context/PortfolioContext";
 
 import "./Header.scss";
@@ -33,7 +33,7 @@ export function AppHeaderLinks({
 	// const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
 
 	// Add portfolio data for mobile display
-	const { isConnected: active } = useWallet();
+    const { authenticated: active } = useSignerContext();
 	const { portfolioTotal, cashBalance } = usePortfolio();
 
 	const formatCurrency = (

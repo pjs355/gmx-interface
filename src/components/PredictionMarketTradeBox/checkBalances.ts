@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import useWallet from "lib/wallets/useWallet";
 import { useUserData } from "context/UserDataContext";
+import { useSignerContext } from "context/SignerContext";
 
 // Simple in-memory cache to avoid duplicate RPC calls per session
 // Key: `${account}:${tokenId}` -> value: string balance
@@ -17,8 +17,7 @@ export function useUSDCBalance() {
 
 // Hook to fetch YES/NO token balances for a specific market
 export function useYesNoBalances(market: { yesTokenId?: string; noTokenId?: string; _id?: string }) {
-  const { getDataAddress } = useWallet();
-  const account = getDataAddress();
+  const { account } = useSignerContext();
   const { getTokenBalance } = useUserData();
   const [yesBalance, setYesBalance] = useState<number>(0);
   const [noBalance, setNoBalance] = useState<number>(0);

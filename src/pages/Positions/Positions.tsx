@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "lib/predictionMarketDataService";
 import { type Umbrella } from "lib/umbrellaDataService";
 // import { useUSDCBalance } from "components/PredictionMarketTradeBox/checkBalances";
@@ -36,8 +36,7 @@ type UmbrellaPositions = {
 };
 
 export default function Positions() {
-  const { getDataAddress } = useWallet();
-  const account = getDataAddress();
+  const { account } = useSignerContext();
   // unified balances via PortfolioContext
   const { portfolioTotal: portfolioTotalCtx, cashBalance: cashBalanceCtx, loading: portfolioLoading } = usePortfolio();
   const { orders, tokenBalances, loading: userDataLoading, refresh: refreshUserData } = useUserData();

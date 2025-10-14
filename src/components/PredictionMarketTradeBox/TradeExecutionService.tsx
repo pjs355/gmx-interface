@@ -2,14 +2,12 @@ import { useCallback } from "react";
 import { predictionMarketService } from "lib/predictionMarketService";
 import type { TradeExecutionParams } from "./types";
 import type { OrderExecutionResult } from "lib/predictionMarketService";
-import useWallet from "lib/wallets/useWallet";
 import { useSignerContext } from "context/SignerContext";
 import { EXCHANGE_ADDRESS } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 
 export function useTradeExecutionService() {
-  const { hasSmartWallet, getActiveSigner } = useWallet() as any;
-  const { signer: cachedSigner, signerAddress: cachedSignerAddress, ready, refresh } = useSignerContext();
+  const { hasSmartWallet, signer: cachedSigner, signerAddress: cachedSignerAddress, ready, refresh } = useSignerContext();
 
   // Execute a trade (create order, sign, submit)
   const executeTrade = useCallback(
@@ -65,11 +63,7 @@ export function useTradeExecutionService() {
         let activeSigner = cachedSigner as any;
         let signerAddress = cachedSignerAddress as string | undefined;
         // Try direct resolve if cached signer not ready
-        if (!activeSigner) {
-          try {
-            activeSigner = await getActiveSigner();
-          } catch {}
-        }
+        // No cross-hook signer resolution; rely solely on SignerContext
         if (!signerAddress && activeSigner && typeof activeSigner.getAddress === 'function') {
           try {
             signerAddress = await activeSigner.getAddress();
@@ -82,9 +76,7 @@ export function useTradeExecutionService() {
           activeSigner = (cachedSigner as any) || activeSigner;
           signerAddress = (cachedSignerAddress as any) || signerAddress;
           // One more direct attempt
-          if (!activeSigner) {
-            try { activeSigner = await getActiveSigner(); } catch {}
-          }
+          // No direct wallet calls
           if (!signerAddress && activeSigner && typeof activeSigner.getAddress === 'function') {
             try { signerAddress = await activeSigner.getAddress(); } catch {}
           }

@@ -3,7 +3,7 @@ import { usePredictionData } from "context/PredictionDataContext";
 // import { useCurrentPrices } from "context/CurrentPriceContext";
 import { currentPriceService } from "lib/currentPriceService";
 import { useUserData } from "context/UserDataContext";
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 
 type PortfolioContextValue = {
   portfolioTotal: number | null;
@@ -18,8 +18,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   // Deprecated local loading; rely on userDataLoading for display smoothing
   const lastCashRef = React.useRef<number>(0);
   const lastPositionsRef = React.useRef<number>(0);
-  const { getDataAddress } = useWallet();
-  const account = getDataAddress();
+  const { account } = useSignerContext();
   const { umbrellas, getQuestionsForUmbrella } = usePredictionData();
   const { usdcBalance, tokenBalances, loading: userDataLoading } = useUserData();
 

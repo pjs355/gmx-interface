@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useCallback, useMemo, useState } from "react";
 import type { PredictionMarket } from "./predictionMarketDataService";
@@ -25,7 +25,7 @@ const NO_INDEX_SET = 2;
 
 // Legacy hook for backward compatibility (hardcoded market)
 export function useClaimEarnings() {
-  const { account, hasSmartWallet, getActiveSigner } = useWallet();
+  const { account, hasSmartWallet, signer } = useSignerContext() as any;
   const { getClientForChain } = useSmartWallets();
   const [isClaiming, setIsClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +67,6 @@ export function useClaimEarnings() {
         txHash = tx;
       } else {
         // External/Embedded wallet path
-        const signer = await getActiveSigner();
         if (!signer) throw new Error("No signer available");
         
         const tx = await signer.sendTransaction({
@@ -87,14 +86,14 @@ export function useClaimEarnings() {
     } finally {
       setIsClaiming(false);
     }
-  }, [account, hasSmartWallet, getActiveSigner, getClientForChain, iface]);
+  }, [account, hasSmartWallet, signer, getClientForChain, iface]);
 
   return { claim, isClaiming, error, txHash };
 }
 
 // New dynamic hook for specific markets
 export function useClaimEarningsForMarket(market: PredictionMarket, resolvedOutcome: 'yes' | 'no') {
-  const { account, hasSmartWallet, getActiveSigner } = useWallet();
+  const { account, hasSmartWallet, signer } = useSignerContext() as any;
   const { getClientForChain } = useSmartWallets();
   const [isClaiming, setIsClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +156,6 @@ export function useClaimEarningsForMarket(market: PredictionMarket, resolvedOutc
       } else {
         // External/Embedded wallet path - use ethers signer
         console.log('🔍 CLAIM DEBUG: Using external/embedded wallet path');
-        const signer = await getActiveSigner();
         if (!signer) throw new Error("No signer available");
         
         const tx = await signer.sendTransaction({
@@ -179,7 +177,7 @@ export function useClaimEarningsForMarket(market: PredictionMarket, resolvedOutc
     } finally {
       setIsClaiming(false);
     }
-  }, [account, hasSmartWallet, getActiveSigner, getClientForChain, iface, market, resolvedOutcome]);
+  }, [account, hasSmartWallet, signer, getClientForChain, iface, market, resolvedOutcome]);
 
   return { claim, isClaiming, error, txHash };
 }

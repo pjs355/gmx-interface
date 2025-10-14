@@ -1,8 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import useWallet from "lib/wallets/useWallet";
-import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
-import type { OrderbookSnapshot } from "lib/orderbookService";
+// import { usePrivy } from "@privy-io/react-auth";
 import type { ProcessedOrder } from "lib/simplifiedOrderService";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 import type { Umbrella } from "lib/umbrellaDataService";
@@ -51,21 +49,8 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
   );
 }
 
-type NormalizedOpenOrder = {
-  orderId?: string;
-  questionId?: string;
-  side: "buy" | "sell";
-  price?: number;
-  size?: number;
-  ts?: number;
-  tokenId?: string;
-  status?: string;
-};
 
 export default function OrdersView({ umbrellaBalances, orders }: { umbrellaBalances: any[]; orders: ProcessedOrder[] }) {
-  const { account } = useWallet();
-  const { user } = usePrivy();
-  const { wallets: privyWallets } = usePrivyWallets();
   const navigate = useNavigate();
 
   // Navigation function to go to trading page with specific market and position

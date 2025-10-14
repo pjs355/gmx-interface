@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { ethers } from "ethers";
-import useWallet from "../../lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import {
   createApiKey,
   deleteApiKey,
@@ -15,7 +15,7 @@ import type { L2Secrets } from "../../lib/lvlup/hmac";
 export default function Developers() {
   const { authenticated, getAccessToken } = usePrivy();
   const { wallets: privyWallets } = usePrivyWallets();
-  const { account, signer } = useWallet();
+  const { account, signer } = useSignerContext() as any;
   const [keys, setKeys] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

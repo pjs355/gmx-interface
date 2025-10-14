@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { Contract, JsonRpcProvider, formatUnits, ethers } from "ethers";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-import useWallet from "lib/wallets/useWallet";
+import { useSignerContext } from "context/SignerContext";
 import { fetchUserOrders, type ProcessedOrder } from "lib/simplifiedOrderService";
 import { CTF_ADDRESS, USDC_ADDRESS, EXCHANGE_ADDRESS } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
@@ -37,8 +37,7 @@ type UserDataContextValue = {
 const UserDataContext = createContext<UserDataContextValue | null>(null);
 
 export function UserDataProvider({ children }: { children: React.ReactNode }) {
-  const { getDataAddress } = useWallet();
-  const account = getDataAddress();
+  const { account } = useSignerContext();
   const { user } = usePrivy();
   const { wallets: privyWallets } = usePrivyWallets();
   const { getClientForChain } = useSmartWallets();

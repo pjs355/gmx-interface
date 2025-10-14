@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import useWallet from 'lib/wallets/useWallet';
-import { useWallets as usePrivyWallets } from '@privy-io/react-auth';
+import { useSignerContext } from 'context/SignerContext';
 import { Contract, JsonRpcProvider, formatUnits } from 'ethers';
 import { CTF_ADDRESS } from 'config/addresses';
 import { DEFAULT_RPC_URL } from 'config/rpc';
@@ -21,9 +20,7 @@ interface BalanceContextType {
 const BalanceContext = createContext<BalanceContextType | null>(null);
 
 export function BalanceProvider({ children }: { children: React.ReactNode }) {
-  const { getDataAddress } = useWallet();
-  const account = getDataAddress();
-  const { wallets: privyWallets } = usePrivyWallets();
+  const { account } = useSignerContext();
   const [isLoading, setIsLoading] = useState(false);
 
   const getBalance = useCallback((tokenId: string): number => {
@@ -77,7 +74,7 @@ export function BalanceProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [account, privyWallets]);
+  }, [account]);
 
   return (
     <BalanceContext.Provider value={{ getBalance, refreshBalances, isLoading }}>
