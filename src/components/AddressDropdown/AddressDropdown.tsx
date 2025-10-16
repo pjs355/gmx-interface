@@ -73,7 +73,7 @@ export default function AddressDropdown({ account, accountUrl, disconnectAccount
            >
               <img width={20} className="size-20" src={disconnect} alt="Sign out" />
               <p>
-                <Trans>Sign out</Trans>
+                Sign out
               </p>
             </div>
           </Menu.Item>
