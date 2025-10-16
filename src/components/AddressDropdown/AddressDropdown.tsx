@@ -17,70 +17,89 @@ import disconnect from "img/ic_sign_out_20.svg";
 import "./AddressDropdown.scss";
 
 type Props = {
-  account: string;
-  accountUrl: string;
-  disconnectAccountAndCloseSettings: () => void;
+	account: string;
+	accountUrl: string;
+	disconnectAccountAndCloseSettings: () => void;
 };
 
 const useBreakpoint = createBreakpoint({ L: 600, M: 550, S: 400 });
 
-export default function AddressDropdown({ account, accountUrl, disconnectAccountAndCloseSettings }: Props) {
-  const breakpoint = useBreakpoint();
-  const [, copyToClipboard] = useCopyToClipboard();
-  const displayAddressLength = breakpoint === "S" ? 9 : 13;
-  const { logout } = usePrivy();
+export default function AddressDropdown({
+	account,
+	accountUrl,
+	disconnectAccountAndCloseSettings,
+}: Props) {
+	const breakpoint = useBreakpoint();
+	const [, copyToClipboard] = useCopyToClipboard();
+	const displayAddressLength = breakpoint === "S" ? 9 : 13;
+	const { logout } = usePrivy();
 
-  return (
-    <Menu>
-      <Menu.Button as="div">
-        <button className="App-cta small transparent address-btn">
-          {/* avatar intentionally omitted */}
-          <span className="user-address">{shortenAddress(account, displayAddressLength)}</span>
-          <FaChevronDown />
-        </button>
-      </Menu.Button>
-      <div>
-        <Menu.Items as="div" className="menu-items">
-          <Menu.Item>
-            <div
-              className="menu-item"
-              onClick={() => {
-                copyToClipboard(account);
-                helperToast.success(t`Address copied to your clipboard`);
-              }}
-           >
-              <img width={20} className="size-20" src={copy} alt="Copy user address" />
-              <p>
-                <Trans>Copy Address</Trans>
-              </p>
-            </div>
-          </Menu.Item>
-          <Menu.Item>
-            <ExternalLink href={accountUrl} className="menu-item">
-              <img width={20} className="size-20" src={externalLink} alt="Open address in explorer" />
-              <p>
-                <Trans>View in Explorer</Trans>
-              </p>
-            </ExternalLink>
-          </Menu.Item>
-          <Menu.Item>
-            <div
-              className="menu-item"
-              onClick={() => {
-                disconnectAccountAndCloseSettings();
-                logout();
-              }}
-           >
-              <img width={20} className="size-20" src={disconnect} alt="Sign out" />
-              <p>
-                <Trans>Sign out</Trans>
-              </p>
-            </div>
-          </Menu.Item>
-        </Menu.Items>
-      </div>
-    </Menu>
-  );
+	return (
+		<Menu>
+			<Menu.Button as="div">
+				<button className="App-cta small transparent address-btn">
+					{/* avatar intentionally omitted */}
+					<span className="user-address">
+						{shortenAddress(account, displayAddressLength)}
+					</span>
+					<FaChevronDown />
+				</button>
+			</Menu.Button>
+			<div>
+				<Menu.Items as="div" className="menu-items">
+					<Menu.Item>
+						<div
+							className="menu-item"
+							onClick={() => {
+								copyToClipboard(account);
+								helperToast.success(
+									t`Address copied to your clipboard`
+								);
+							}}
+						>
+							<img
+								width={20}
+								className="size-20"
+								src={copy}
+								alt="Copy user address"
+							/>
+							<p>
+								<Trans>Copy Address</Trans>
+							</p>
+						</div>
+					</Menu.Item>
+					<Menu.Item>
+						<ExternalLink href={accountUrl} className="menu-item">
+							<img
+								width={20}
+								className="size-20"
+								src={externalLink}
+								alt="Open address in explorer"
+							/>
+							<p>
+								<Trans>View in Explorer</Trans>
+							</p>
+						</ExternalLink>
+					</Menu.Item>
+					<Menu.Item>
+						<div
+							className="menu-item"
+							onClick={() => {
+								disconnectAccountAndCloseSettings();
+								logout();
+							}}
+						>
+							<img
+								width={20}
+								className="size-20"
+								src={disconnect}
+								alt="Sign out"
+							/>
+							<p>Sign out</p>
+						</div>
+					</Menu.Item>
+				</Menu.Items>
+			</div>
+		</Menu>
+	);
 }
-
-
