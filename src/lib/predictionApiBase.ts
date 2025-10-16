@@ -1,3 +1,3 @@
 export function getPredictionApiBaseUrl(): string {
-	return "https://prediction-api-production.up.railway.app";
+	return "http://localhost:8080";
 }
