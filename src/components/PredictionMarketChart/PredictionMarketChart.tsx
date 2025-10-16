@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePredictionChartData } from './usePredictionChartData';
 import { SeriesChart } from './SeriesChart';
 import { ChartTooltip } from './ChartTooltip';
@@ -178,7 +178,7 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
       </div>
 
       {/* Chart */}
-      <div className="chart-container" style={{ minWidth: 400, minHeight: 300 }}>
+      <div className="chart-container" style={{ minWidth: 0, minHeight: 280 }}>
         {!effectiveQuestionId ? (
           <div className="no-data">
             <p>Select a market to load chart</p>
@@ -190,6 +190,7 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
             noTeamColor={noTeamColor}
             isVsSingleMarket={isVsSingleMarket}
             tooltip={<TooltipContent />}
+            height={typeof window !== 'undefined' && window.innerWidth <= 768 ? 240 : 300}
           />
         )}
         

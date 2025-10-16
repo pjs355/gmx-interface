@@ -1,8 +1,8 @@
 import { Trans } from "@lingui/macro";
 import cx from "classnames";
-import React, { useCallback, useEffect, useState } from "react"; // react in scope for JSX
+import { useCallback, useEffect, useState } from "react";
 import { RiMenuLine } from "react-icons/ri";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMedia } from "react-use";
 
 // Removed GMX legacy imports - not needed for prediction markets
@@ -32,6 +32,7 @@ export function Header({
 	showRedirectModal,
 }: Props) {
 	const isMobile = useMedia("(max-width: 1335px)");
+	const navigate = useNavigate();
 
 	// Removed unused media queries for GMX banners
 
@@ -127,7 +128,7 @@ export function Header({
 							<div className="App-header-container-left">
 								<div
 									className="App-header-link-main clickable"
-									onClick={toggleDrawer}
+									onClick={() => navigate('/')}
 								>
 									<span className="App-header-logo-text big">
 										LevelUp
@@ -185,18 +186,19 @@ export function Header({
 					className="App-header-links-container App-header-drawer"
 				>
 					{isHomeSite() ? (
-						<HomeHeaderLinks
-							small
-							clickCloseIcon={() => setIsDrawerVisible(false)}
-							showRedirectModal={showRedirectModal}
-						/>
+                        <HomeHeaderLinks
+                            small
+                            clickCloseIcon={() => setIsDrawerVisible(false)}
+                            showRedirectModal={showRedirectModal}
+                        />
 					) : (
-						<AppHeaderLinks
-							small
-							openSettings={openSettings}
-							clickCloseIcon={() => setIsDrawerVisible(false)}
-							showRedirectModal={showRedirectModal}
-						/>
+                        <AppHeaderLinks
+                            small
+                            openSettings={openSettings}
+                            clickCloseIcon={() => setIsDrawerVisible(false)}
+                            showRedirectModal={showRedirectModal}
+                            disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
+                        />
 					)}
 				</div>
 			)}

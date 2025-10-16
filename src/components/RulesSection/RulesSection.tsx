@@ -22,8 +22,8 @@ export default function RulesSection({ umbrella }: RulesSectionProps) {
     : 'Rules Pending';
 
   const paragraphs = rulesText.split('\n\n');
-  const previewParagraphs = paragraphs.slice(0, 1);
-  const remainingParagraphs = paragraphs.slice(1);
+  const previewParagraphs = paragraphs.slice(0, 3);
+  const remainingParagraphs = paragraphs.slice(3);
   
   return (
     <div className="rules-section">

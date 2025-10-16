@@ -12,28 +12,37 @@ import { HeaderLink } from "./HeaderLink";
 // import ModalWithPortal from "../Modal/ModalWithPortal";
 // Removed LanguageModalContent - not needed for prediction markets
 import { useSignerContext } from "context/SignerContext";
+import { usePrivy } from "@privy-io/react-auth";
+import { useCopyToClipboard } from "react-use";
+import ExternalLink from "components/ExternalLink/ExternalLink";
+import { shortenAddress } from "lib/wallets/shortenAddress";
+import { helperToast } from "lib/errors";
 import { usePortfolio } from "context/PortfolioContext";
 
 import "./Header.scss";
 
 type Props = {
-	small?: boolean;
-	clickCloseIcon?: () => void;
-	openSettings?: () => void;
-	showRedirectModal: (to: string) => void;
+    small?: boolean;
+    clickCloseIcon?: () => void;
+    openSettings?: () => void;
+    showRedirectModal: (to: string) => void;
+    disconnectAccountAndCloseSettings?: () => void;
 };
 
 export function AppHeaderLinks({
-	small,
-	clickCloseIcon,
-	showRedirectModal,
+    small,
+    clickCloseIcon,
+    showRedirectModal,
+    disconnectAccountAndCloseSettings,
 }: Props) {
 	// Removed unused openNotifyModal and currentLanguage
 	// TODO: Re-enable when language support is fully implemented
 	// const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
 
 	// Add portfolio data for mobile display
-    const { authenticated: active } = useSignerContext();
+    const { authenticated: active, account } = useSignerContext();
+    const { logout } = usePrivy();
+    const [, copyToClipboard] = useCopyToClipboard();
 	const { portfolioTotal, cashBalance } = usePortfolio();
 
 	const formatCurrency = (
@@ -96,7 +105,7 @@ export function AppHeaderLinks({
 						</HeaderLink>
 						<HeaderLink
 							className="mobile-metric-box"
-							to="/positions"
+							to="/get_test_usdc"
 							showRedirectModal={showRedirectModal}
 						>
 							<div className="flex flex-col items-center">
@@ -146,7 +155,7 @@ export function AppHeaderLinks({
 						Esports
 					</HeaderLink>
 				</div>
-				<div className="App-header-link-container">
+				{/* <div className="App-header-link-container">
 					<HeaderLink
 						qa="prizes"
 						to="/prizes"
@@ -157,7 +166,7 @@ export function AppHeaderLinks({
 					>
 						Prizes
 					</HeaderLink>
-				</div>
+				</div> */}
 				<div className="App-header-link-container">
 					<HeaderLink
 						qa="games"
@@ -180,11 +189,27 @@ export function AppHeaderLinks({
 					</HeaderLink>
 				</div>
 				{/* Intentionally no Leaderboard or Positions text links here. Portfolio and Cash are separate buttons in AppHeaderUser. */}
-				<div className="App-header-link-container">
-					{/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>
+                <div className="App-header-link-container">
+                    {/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>
             <Trans>Trade</Trans>
           </HeaderLink> */}
-				</div>
+                </div>
+                {small && active && account && (
+                    <div className="App-header-link-container mobile-address-dropdown">
+                        <div className="mobile-address-inline">
+                            <div className="address-line">{shortenAddress(account as string, 13)}</div>
+                            <button
+                                className="inline-item"
+                                onClick={() => {
+                                    (disconnectAccountAndCloseSettings || (() => {}))();
+                                    logout();
+                                }}
+                            >
+                                Sign out
+                            </button>
+                        </div>
+                    </div>
+                )}
 				{/* <div className="App-header-link-container">
           <HeaderLink qa="pools" to="/pools" showRedirectModal={showRedirectModal}>
             <Trans>Pools</Trans>

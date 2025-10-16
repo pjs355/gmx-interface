@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import { useMedia } from "react-use";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "lib/predictionMarketDataService";
 import { type Umbrella } from "lib/umbrellaDataService";
@@ -12,9 +13,12 @@ import PositionsHeader from "./PositionsHeader";
 import { usePortfolio } from "context/PortfolioContext";
 import PositionsTabs from "./PositionsTabs";
 import PositionsTableView from "./PositionsTableView";
+import PositionsCardView from "./PositionsCardView";
 import ResolvedPositionsTable from "./ResolvedPositionsTable";
 import OrdersView from "./OrdersView";
+import OrdersCardView from "./OrdersCardView";
 import HistoryView from "./HistoryView";
+import HistoryCardView from "./HistoryCardView";
 import Footer from "components/Footer/Footer";
 
 type MarketPosition = {
@@ -36,6 +40,7 @@ type UmbrellaPositions = {
 };
 
 export default function Positions() {
+  const isMobile = useMedia("(max-width: 768px)");
   const { account } = useSignerContext();
   // unified balances via PortfolioContext
   const { portfolioTotal: portfolioTotalCtx, cashBalance: cashBalanceCtx, loading: portfolioLoading } = usePortfolio();
@@ -291,8 +296,11 @@ export default function Positions() {
     <div className="default-container page-layout">
       <div>
         {/* Spacer bar for proper spacing - responsive */}
-        <div className="block md:hidden" style={{ height: '4px', width: '100%' }}></div>
-        <div className="hidden md:block" style={{ height: '48px', width: '100%' }}></div>
+        {isMobile ? (
+          <div style={{ height: '4px', width: '100%' }}></div>
+        ) : (
+          <div style={{ height: '36px', width: '100%' }}></div>
+        )}
         
         <PositionsHeader
           portfolioTotal={portfolioTotalCtx ?? (cashBalanceCtx + positionsTotalValue)}
@@ -353,24 +361,46 @@ export default function Positions() {
                       {isDataFullyLoaded && resolvedUmbrellaPositions.length > 0 && (
                         <h3 className="mb-6 text-20 font-bold" style={{ color: '#ffffff', fontSize: 34, marginTop: 40 }}>Positions</h3>
                       )}
-                      <PositionsTableView
-                        umbrellaBalances={umbrellaBalancesPositions}
-                        aggregates={aggregates}
-                        spentByQid={spentByQid}
-                        returnsByQid={returnsByQid}
-                        getCurrentPriceForSide={getCurrentPriceForSide}
-                        toCentsString={toCentsString}
-                        softLoading={softLoading}
-                      />
+                      {!isMobile ? (
+                        <PositionsTableView
+                          umbrellaBalances={umbrellaBalancesPositions}
+                          aggregates={aggregates}
+                          spentByQid={spentByQid}
+                          returnsByQid={returnsByQid}
+                          getCurrentPriceForSide={getCurrentPriceForSide}
+                          toCentsString={toCentsString}
+                          softLoading={softLoading}
+                        />
+                      ) : (
+                        <PositionsCardView
+                          umbrellaBalances={umbrellaBalancesPositions}
+                          aggregates={aggregates}
+                          spentByQid={spentByQid}
+                          returnsByQid={returnsByQid}
+                          getCurrentPriceForSide={getCurrentPriceForSide}
+                          toCentsString={toCentsString}
+                          softLoading={softLoading}
+                        />
+                      )}
                     </>
                   );
                 }
                 if (activeTab === "orders") {
-                  return <OrdersView umbrellaBalances={umbrellaBalancesOrders} orders={orders || []} />;
+                  return !isMobile ? (
+                    <OrdersView umbrellaBalances={umbrellaBalancesOrders} orders={orders || []} />
+                  ) : (
+                    <OrdersCardView umbrellaBalances={umbrellaBalancesOrders} orders={orders || []} />
+                  );
                 }
-                return (
+                return !isMobile ? (
                   <HistoryView
                     umbrellaBalances={umbrellaBalancesPositions}
+                    returnsByQid={returnsByQid}
+                    orders={orders || []}
+                    resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
+                  />
+                ) : (
+                  <HistoryCardView
                     returnsByQid={returnsByQid}
                     orders={orders || []}
                     resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}

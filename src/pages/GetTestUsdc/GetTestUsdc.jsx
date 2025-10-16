@@ -5,6 +5,7 @@ import { getPredictionApiBaseUrl } from "../../lib/predictionApiBase";
 import { useSignerContext } from "context/SignerContext";
 
 import Button from "components/Button/Button";
+import Footer from "components/Footer/Footer";
 
 import "./GetTestUsdc.css";
 
@@ -21,7 +22,7 @@ export function GetTestUsdc() {
   // Resolve API base via shared helper
   const API_ROOT = getPredictionApiBaseUrl();
 
-  // Wait for a wallet address (smart/embedded/external) to initialize, then POST to check-claim with address in body
+  // Wait for a wallet address to initialize, then POST to check-claim with address in body
   useEffect(() => {
     let cancelled = false;
     const start = Date.now();
@@ -31,18 +32,22 @@ export function GetTestUsdc() {
         // Wait up to 5s for any wallet address to appear
         let resolvedAddress;
         while (!cancelled) {
-          resolvedAddress =
-            wallet?.smartAddress ||
-            wallet?.embeddedAddress ||
-            wallet?.externalAddress ||
-            wallet?.anyWalletAddress ||
-            wallet?.linkedAccountAddress;
+          // Use the unified account address from SignerContext
+          resolvedAddress = wallet?.account || wallet?.signerAddress;
           if (resolvedAddress || Date.now() - start > 5000) break;
           await new Promise((r) => setTimeout(r, 200));
         }
 
+        if (!resolvedAddress) {
+          console.log("No wallet address found");
+          if (!cancelled) setIsCheckingClaim(false);
+          return;
+        }
+
         const token = await getAccessToken();
         if (!token) return;
+
+        console.log("Sending check-claim request with address:", resolvedAddress);
 
         const res = await fetch(`${API_ROOT}/test-coins/check-claim`, {
           method: "POST",
@@ -74,18 +79,21 @@ export function GetTestUsdc() {
     return () => {
       cancelled = true;
     };
-  }, [getAccessToken, user?.linkedAccounts, smartClient, wallet?.smartAddress, wallet?.embeddedAddress, wallet?.externalAddress, wallet?.anyWalletAddress, wallet?.linkedAccountAddress]);
+  }, [getAccessToken, user?.linkedAccounts, smartClient, wallet?.account, wallet?.signerAddress]);
 
   const handleClaimClick = async () => {
     try {
       setIsLoading(true);
       const token = await getAccessToken();
-      const smartWallet =
-        wallet?.smartAddress ||
-        wallet?.embeddedAddress ||
-        wallet?.externalAddress ||
-        wallet?.anyWalletAddress ||
-        wallet?.linkedAccountAddress;
+      const smartWallet = wallet?.account || wallet?.signerAddress;
+      
+      if (!smartWallet) {
+        console.error("No wallet address available for claiming");
+        return;
+      }
+
+      console.log("Sending claim request with address:", smartWallet);
+
       const response = await fetch(`${API_ROOT}/test-coins/claim`, {
         method: "POST",
         headers: {
@@ -105,7 +113,7 @@ export function GetTestUsdc() {
 
   const getButtonText = () => {
     if (isCheckingClaim) return "Checking...";
-    if (hasAlreadyClaimed) return "You have already claimed";
+    if (hasAlreadyClaimed) return "Already Claimed";
     if (isLoading) return "Processing...";
     return "Claim Test USD";
   };
@@ -136,10 +144,12 @@ export function GetTestUsdc() {
       {/* Disclosure Statement */}
       <div className="GetTestUsdc-disclosure">
         <p>
-          This is FAKE USD and it has 0 real world value or use case. It can not be redeemed for anything of value and
-          it is just for testing and funding purposes.
+          This is FAKE USD and it has 0 real world value or use case. It can not be redeemed for anything of value. 
+          It is just for testing and funding purposes.
         </p>
       </div>
+      
+      <Footer />
     </div>
   );
 }

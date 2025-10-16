@@ -6,7 +6,7 @@
   justify-content: center;
   background: linear-gradient(135deg, var(--dark-blue-bg) 0%, var(--dark-blue) 100%);
   padding: 2rem;
-  padding-top: 0;
+  padding-top: 8rem; /* Increased top padding for desktop/tablet */
   margin-top: -5rem;
 }
 
@@ -21,6 +21,7 @@
 
 .GetTestUsdc-disclosure {
   margin-top: 2rem;
+  margin-bottom: 4rem; /* Added more padding below the text */
   text-align: center;
 }
 
@@ -197,7 +198,13 @@
 @media (max-width: 768px) {
   .GetTestUsdc {
     padding: 1rem;
+    padding-top: 8rem; /* Keep same top padding on mobile */
   }
+  
+  .GetTestUsdc-disclosure {
+    margin-bottom: 6rem; /* More padding below text on mobile */
+  }
+}
   
   .GetTestUsdc-banner {
     padding: 3rem 2rem;
@@ -229,5 +236,12 @@
   .GetTestUsdc-claim-button {
     font-size: 1.8rem !important;
     padding: 1.4rem 2.8rem !important;
+  }
+}
+
+/* Desktop - add more padding below disclosure text */
+@media (min-width: 1024px) {
+  .GetTestUsdc-disclosure {
+    margin-bottom: 6rem; /* More padding below text on desktop */
   }
 } 

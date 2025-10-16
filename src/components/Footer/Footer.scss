@@ -3,7 +3,7 @@
   display: grid;
   grid-template-columns: 1fr 2fr 1fr;
   align-items: center;
-  padding: 3.2rem;
+  padding: 3.2rem 50px;
   border-top: 1px solid #333333;
   gap: 2rem;
   margin-top: auto; /* push to bottom within page flex column */
@@ -19,11 +19,12 @@
 }
 
 .Footer-logo-text {
-  font-size: 2.2rem;
+  font-size: 2.4rem;
   font-weight: 900;
   color: #ffffff;
   letter-spacing: -0.02em;
   text-decoration: none;
+  vertical-align: middle;
 }
 
 .Footer-center {
@@ -58,6 +59,13 @@
   height: 100%;
 }
 
+@media (max-width: 1335px) {
+  .Footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
 @media (max-width: 1024px) {
   .Footer {
     display: flex;
@@ -71,8 +79,21 @@
   .Footer-center { gap: 2.4rem; }
 }
 
+@media (max-width: 600px) {
+  .Footer-logo-text {
+    font-size: 1.8rem;
+  }
+}
+
 @media (max-width: 580px) {
   .Footer-center { gap: 1.6rem; }
+}
+
+@media (max-width: 450px) {
+  .Footer {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 }
 
 

@@ -95,6 +95,13 @@
   padding: 0 28px; /* extra inner space so end pills are fully visible */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE 10+ */
+  
+  /* Mobile: more padding and better scrolling */
+  @media (max-width: 768px) {
+    padding: 0 20px; /* more side padding on mobile */
+    scroll-behavior: smooth; /* smooth scrolling on mobile */
+    -webkit-overflow-scrolling: touch; /* momentum scrolling on iOS */
+  }
 }
 .game-links-scroll::-webkit-scrollbar { display: none; }
 
@@ -128,6 +135,11 @@
     background: rgba(139, 92, 246, 0.1);
     color: #8b5cf6;
   }
+  
+  /* Hide scroll arrows on mobile - use touch scrolling instead */
+  @media (max-width: 768px) {
+    display: none;
+  }
 }
 .scroll-arrow.left { left: 0; }
 .scroll-arrow.right { right: 0; }
@@ -140,6 +152,11 @@
   bottom: 0;
   width: 56px; /* increased to strengthen fade coverage */
   z-index: 1;
+  
+  /* Hide fade effects on mobile - not needed with touch scrolling */
+  @media (max-width: 768px) {
+    display: none;
+  }
 }
 .fade-left { 
   left: 0; 
@@ -405,11 +422,13 @@
   gap: 4px;
   flex-shrink: 0;
   
-  /* Mobile: slightly wider buttons */
+  /* Mobile: smaller buttons to give more room for text */
   @media (max-width: 768px) {
     .action-button {
-      width: 108px !important;
-      flex: 0 0 108px !important;
+      width: 80px !important;
+      flex: 0 0 80px !important;
+      font-size: 12px !important;
+      padding: 8px 6px !important;
     }
   }
 }

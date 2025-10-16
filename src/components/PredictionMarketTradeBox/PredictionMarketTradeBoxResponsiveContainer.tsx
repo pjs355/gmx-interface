@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useMedia } from "react-use";
 import PredictionMarketTradeBoxUI from './PredictionMarketTradeBoxUI';
 import { PredictionCurtain, useIsCurtainOpen, useCurtainActions } from './PredictionCurtain';
@@ -38,16 +38,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
   const isCurtainOpen = useIsCurtainOpen();
   const { openCurtain, closeCurtain } = useCurtainActions();
 
-  // Compute YES/NO labels and cents exactly like UI component
-  const { yesTeamLabel, noTeamLabel } = useMemo(() => {
-    const title = (market?.displayName || (market as any)?.question || '').trim();
-    if (!title) return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-    const parts = title.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
-    if (parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1) {
-      return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
-    }
-    return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-  }, [market]);
 
   const calcCents = useCallback((value?: number | null): string => {
     if (value === undefined || value === null || !isFinite(value)) return "--";
@@ -195,6 +185,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
       dataQa="prediction-tradebox"
     >
       <div className="curtain-content-inner">
+        <div className="curtain-drag-handle"></div>
         <button className="curtain-close-btn" aria-label="Close trading panel" onClick={closeCurtain}>▾</button>
         <PredictionMarketTradeBoxUI
           market={market}

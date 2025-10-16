@@ -32,9 +32,25 @@
   }
 }
 
+@media (max-width: 768px) {
+  .connect-wallet-btn {
+    padding: 0.6rem 1rem;
+    font-size: 14px;
+    
+    .btn-label {
+      font-size: 14px;
+    }
+  }
+}
+
 @media (max-width: 450px) {
-  .connect-wallet {
+  .connect-wallet-btn {
     padding: 0.5rem 0.8rem;
+    font-size: 13px;
+    
+    .btn-label {
+      font-size: 13px;
+    }
   }
 }
 

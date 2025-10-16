@@ -367,5 +367,20 @@
     .orderbook-content {
       height: 260px; // Slightly smaller on mobile
     }
+
+    .orderbook-header {
+      .header-top {
+        .header-right {
+          .orderbook-tabs {
+            gap: 6px; // Increased gap between YES/NO buttons on mobile
+            
+            .tab-button {
+              padding: 10px 14px; // Slightly more padding on mobile
+              font-size: 15px; // Slightly smaller font for better fit
+            }
+          }
+        }
+      }
+    }
   }
 }

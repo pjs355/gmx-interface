@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { OrderbookSnapshot, OrderbookEntry } from 'lib/orderbookService';
 import type { PredictionMarket } from 'lib/predictionMarketDataService';
+import { useCurtainActions } from 'components/PredictionMarketTradeBox/PredictionCurtain';
 // Helper function to calculate prices from orderbook
 const calculateOrderbookPrices = (orderbook: OrderbookSnapshot | null) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -48,13 +49,14 @@ export default function OrderbookDisplay({
   isCollapsed = true
 }: OrderbookDisplayProps) {
   const [activeTab, setActiveTab] = useState<'yes' | 'no'>('yes');
+  const { openCurtain } = useCurtainActions();
 
-  // Sync local activeTab with external activePosition (from trade box)
+  // Sync local activeTab with external activePosition ONLY for the active market
   useEffect(() => {
-    if (activePosition && activePosition !== activeTab) {
+    if (isActiveMarket && activePosition && activePosition !== activeTab) {
       setActiveTab(activePosition);
     }
-  }, [activePosition, activeTab]);
+  }, [isActiveMarket, activePosition, activeTab]);
 
   // Calculate prices for this market's orderbook
   const { bestBid: marketBestBid, bestAsk: marketBestAsk } = useMemo(() => {
@@ -321,8 +323,12 @@ export default function OrderbookDisplay({
                 onClick={(e) => {
                   e.stopPropagation(); // Prevent header click
                   setActiveTab('yes');
-                  if (market && onMarketSwitchWithOrderbook) {
-                    onMarketSwitchWithOrderbook(market, 'yes');
+                  if (market && onMarketSwitch) {
+                    onMarketSwitch(market, 'yes');
+                  }
+                  // On mobile/tablet, also open the trading panel (curtain)
+                  if (typeof window !== 'undefined' && window.innerWidth <= 1100) {
+                    openCurtain();
                   }
                 }}
                 onMouseEnter={(e) => {
@@ -348,8 +354,12 @@ export default function OrderbookDisplay({
                 onClick={(e) => {
                   e.stopPropagation(); // Prevent header click
                   setActiveTab('no');
-                  if (market && onMarketSwitchWithOrderbook) {
-                    onMarketSwitchWithOrderbook(market, 'no');
+                  if (market && onMarketSwitch) {
+                    onMarketSwitch(market, 'no');
+                  }
+                  // On mobile/tablet, also open the trading panel (curtain)
+                  if (typeof window !== 'undefined' && window.innerWidth <= 1100) {
+                    openCurtain();
                   }
                 }}
                 onMouseEnter={(e) => {

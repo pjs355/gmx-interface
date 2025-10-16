@@ -235,7 +235,7 @@ export function AppHeaderUser({
 					{!small && (
 						<HeaderLink
 							className="header-metric-box mr-4"
-							to="/positions"
+							to="/get_test_usdc"
 							showRedirectModal={showRedirectModal}
 						>
 							<div className="flex flex-col items-center">
@@ -255,18 +255,20 @@ export function AppHeaderUser({
 						</HeaderLink>
 					)}
 
-					<div
-						data-qa="user-address"
-						className="App-header-user-address"
-					>
-						<AddressDropdown
-							account={account as string}
-							accountUrl={accountUrl}
-							disconnectAccountAndCloseSettings={
-								disconnectAccountAndCloseSettings
-							}
-						/>
-					</div>
+                    {!small && (
+                        <div
+                            data-qa="user-address"
+                            className="App-header-user-address"
+                        >
+                            <AddressDropdown
+                                account={account as string}
+                                accountUrl={accountUrl}
+                                disconnectAccountAndCloseSettings={
+                                    disconnectAccountAndCloseSettings
+                                }
+                            />
+                        </div>
+                    )}
 					{!small && <OneClickButton openSettings={openSettings} />}
 					{/* <NetworkDropdown
             small={small}
