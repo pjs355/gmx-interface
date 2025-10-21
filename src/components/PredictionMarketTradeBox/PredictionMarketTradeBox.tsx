@@ -399,3 +399,5 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
     />
   );
 }
+
+

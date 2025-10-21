@@ -230,15 +230,16 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				});
 			}
 
+      	// Check approval status
+			await checkApproval();
+
 			// Fetch user orders
 			const userOrders = await fetchUserOrders(account, marketDataMap);
 			setOrders(userOrders);
 
 			// Fetch token balances
 			await loadTokenBalances(account, marketDataMap);
-
-			// Check approval status
-			await checkApproval();
+		
 		} finally {
 			setLoading(false);
 		}
