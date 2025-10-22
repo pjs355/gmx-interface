@@ -40,8 +40,13 @@ export default function GameLinks({ selectedGame, onGameSelect, umbrellas = [], 
       return []; // Don't show any games while loading
     }
 
-    // First filter umbrellas by esports/games type if filterType is provided
-    const filteredUmbrellas = filterType ? umbrellas.filter((umbrella) => {
+    // First filter out inactive umbrellas (same logic as home page cards)
+    const activeUmbrellas = umbrellas.filter((umbrella) => {
+      return (umbrella as any).active === true;
+    });
+
+    // Then filter umbrellas by esports/games type if filterType is provided
+    const filteredUmbrellas = filterType ? activeUmbrellas.filter((umbrella) => {
       const children = (umbrella as any).children as Array<any> | undefined;
       if (!children || children.length === 0) return false;
       
@@ -58,7 +63,7 @@ export default function GameLinks({ selectedGame, onGameSelect, umbrellas = [], 
       } else { // games
         return !hasEsportsTag;
       }
-    }) : umbrellas;
+    }) : activeUmbrellas;
 
     const gamesWithActiveMarkets = allGameNames.filter(gameName => {
       const normalizedGame = normalizeTag(gameName);

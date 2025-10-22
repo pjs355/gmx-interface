@@ -16,6 +16,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
       let remainingShares = sharesToSell;
       let totalUsdReceived = 0;
       let maxPriceSeen = 0;
+      let minPriceSeen = Infinity; // Track minimum price for signing
       
       // For SELL "Yes": use bids (people buying YES tokens)
       // For SELL "No": use asks (people selling YES tokens, which gives us NO tokens)
@@ -49,6 +50,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
           totalUsdReceived += usdAtThisPrice;
           remainingShares -= sharesAtThisPrice;
           if (orderPrice > maxPriceSeen) maxPriceSeen = orderPrice;
+          if (orderPrice < minPriceSeen) minPriceSeen = orderPrice; // Track minimum
         }
       }
       
@@ -56,7 +58,8 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
       return { 
         contracts: sharesToSell - remainingShares, 
         remainingUsd: totalUsdReceived,
-        maxPrice: maxPriceSeen
+        maxPrice: maxPriceSeen,
+        minPrice: minPriceSeen === Infinity ? 0 : minPriceSeen // Add minimum price
       };
     }
     

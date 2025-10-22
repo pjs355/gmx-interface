@@ -54,8 +54,16 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
     return Math.max(...orderbook.bids.map((b: any) => b.price));
   }, [orderbook]);
 
-  const yesPriceCents = useMemo(() => calcCents(bestAsk as any), [bestAsk, calcCents]);
-  const noPriceCents = useMemo(() => calcCents(bestBid === null ? null : 1 - (bestBid as any)), [bestBid, calcCents]);
+  // Flip prices based on buy/sell side (same logic as PredictionMarketTradeBoxUI)
+  const yesPriceCents = useMemo(() => {
+    return state.side === 'buy' ? calcCents(bestAsk as any) : calcCents(bestBid as any);
+  }, [bestAsk, bestBid, calcCents, state.side]);
+  
+  const noPriceCents = useMemo(() => {
+    return state.side === 'buy'
+      ? calcCents(bestBid === null ? null : 1 - (bestBid as any))
+      : calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
+  }, [bestBid, bestAsk, calcCents, state.side]);
 
   // Dynamic color logic for single VS markets
   const isVsSingle = useMemo(() => {
@@ -96,7 +104,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
     return (
       <div 
         className="text-body-medium flex flex-col rounded-12 shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-15" 
-        style={{ backgroundColor: 'black', marginTop: '20px', marginBottom: '80px' }}
+        style={{ backgroundColor: 'black', marginTop: '8px', marginBottom: '80px' }}
         data-qa="prediction-tradebox"
       >
         <PredictionMarketTradeBoxUI

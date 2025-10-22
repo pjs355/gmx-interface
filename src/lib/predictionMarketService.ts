@@ -236,21 +236,38 @@ export class PredictionMarketService {
       // Ensure fixed decimal places to avoid scientific notation
       return rounded.toFixed(decimals);
     };
+    // Calculate makerAmount and takerAmount based on buy/sell side
+    // BUY orders: maker gives USDC (amount × price), wants tokens (amount)
+    // SELL orders: maker gives tokens (amount), wants USDC (amount × minPrice)
+    // For SELL, price = minPrice (conservative, guarantees at least this much per share)
+    
+    // Calculate USD amount WITHOUT aggressive rounding (parseUnits handles precision)
+    const usdValue = amount * price;
+    const usdcAmount = ethers.parseUnits(roundToDecimals(usdValue, 6), 6).toString();
+    const tokenAmount = ethers.parseUnits(roundToDecimals(Number(amount), 6), 6).toString();
+    
+    console.log('💰 USD Calculation:', {
+      side,
+      amount,
+      price,
+      calculatedUsd: usdValue,
+      usdcAmount: ethers.formatUnits(usdcAmount, 6),
+      tokenAmount: ethers.formatUnits(tokenAmount, 6)
+    });
+    
     const order: MarketOrder = {
       salt: ethers.id(`order-${Date.now()}-${Math.random()}`),
       maker: userAddress, // Smart wallet address
       signer: signerAddress || userAddress, // Embedded wallet address (fallback to smart wallet)
       taker: ethers.ZeroAddress, // Public order
       tokenId: tokenId,
-      // For limit orders: amount = shares, price = price per token
-      // makerAmount = shares × price (total USDC cost) - rounded based on buy/sell direction
-      // takerAmount = shares (number of tokens wanted)
-      makerAmount: ethers.parseUnits(roundToDecimals(roundDollarAmount(amount * price, side), 6), 6).toString(), // Total USDC cost (rounded to nearest penny)
-      takerAmount: ethers.parseUnits(roundToDecimals(Number(amount), 6), 6).toString(), // Number of tokens wanted (properly rounded)
+      // CRITICAL: Swap makerAmount/takerAmount based on side
+      makerAmount: side === 'buy' ? usdcAmount : tokenAmount, // BUY: give USDC | SELL: give tokens
+      takerAmount: side === 'buy' ? tokenAmount : usdcAmount, // BUY: want tokens | SELL: want USDC
       expiration,
       nonce: 0, // Will be fetched from contract in real implementation
       feeRateBps: 0,
-      side: position === 'yes' ? 'buy' : 'sell', // String side for server
+      side: side, // Use actual side parameter for consistency
       signatureType: 3,
       // Additional fields your server expects
       type: 'market', // Default to market order

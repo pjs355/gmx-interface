@@ -45,7 +45,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       }
-    }
+    },
+    // Enable history fallback for client-side routing
+    // This makes page reloads work properly with React Router
+    historyApiFallback: true,
   },
   build: {
     outDir: 'dist',

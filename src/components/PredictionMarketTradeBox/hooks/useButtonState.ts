@@ -48,8 +48,9 @@ export function useButtonState({
     const sharesCheck = checkSufficientShares(state.amount, state.orderType, state.side, state.selectedPosition, yesBalance, noBalance);
     if (!sharesCheck.hasSufficientShares) return { text: "Insufficient Shares", disabled: true, onClick: () => {} };
     
-    // Determine button text based on market type
-    let buttonText = `Trade ${state.selectedPosition.toUpperCase()}`;
+    // Determine button text based on side (buy/sell) and market type
+    const actionText = state.side === 'buy' ? 'Buy' : 'Sell';
+    let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
     
     // Check if this is a single VS market
     if (market) {
@@ -59,7 +60,7 @@ export function useButtonState({
       
       if (isVsSingle) {
         const teamName = state.selectedPosition === 'yes' ? parts[0] : parts[1];
-        buttonText = `Trade ${teamName}`;
+        buttonText = `${actionText} ${teamName}`;
       }
     }
     

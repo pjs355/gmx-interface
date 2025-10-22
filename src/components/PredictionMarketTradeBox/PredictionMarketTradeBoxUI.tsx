@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import Button from "components/Button/Button";
 import Tabs from "components/Tabs/Tabs";
+import Tooltip from "components/Tooltip/Tooltip";
 import type { TradeBoxProps, TradeBoxState, ApprovalState } from './types';
 import './PredictionMarketTradeBox.scss';
 import { MyPositionsRow } from './MyPositionsRow';
@@ -79,9 +80,15 @@ export default function PredictionMarketTradeBoxUI({
     return Math.round(value * 100).toString();
   };
 
-  // Match orderbook labeling: YES shows bestAsk, NO shows (1 - bestBid)
-  const yesPriceCents = toCentsString(bestAsk);
-  const noPriceCents = toCentsString(bestBid === null ? null : 1 - bestBid);
+  // Flip prices based on buy/sell side:
+  // - BUY: YES shows bestAsk (what you pay), NO shows (1 - bestBid) (what you pay)
+  // - SELL: YES shows bestBid (what you receive), NO shows (1 - bestAsk) (what you receive)
+  const yesPriceCents = side === 'buy' 
+    ? toCentsString(bestAsk) 
+    : toCentsString(bestBid);
+  const noPriceCents = side === 'buy'
+    ? toCentsString(bestBid === null ? null : 1 - bestBid)
+    : toCentsString(bestAsk === null ? null : 1 - bestAsk);
 
   // Helpers for single vs markets coloring
   const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
@@ -418,17 +425,22 @@ export default function PredictionMarketTradeBoxUI({
       {/* Bet Size / To Win - render only when a positive numeric value exists */}
       {(toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null) && (
         <div className="bet-size-section">
-          {/* Estimated Shares and Cost (whole shares) for market BUY orders */}
+          {/* Estimated Cost for market BUY orders */}
           {oddsData !== null && calculatedContracts !== null && remainingUsd !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
-                <span className="bet-size-label">Estimated</span>
+                <Tooltip
+                  content="Your cost was reduced to give you an even dollar payout."
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Estimated Cost</span>
+                </Tooltip>
                 <span className="bet-size-value estimated-cost-value">
                   {(() => {
-                    const sharesInt = Math.floor(calculatedContracts as number);
                     const usdAmount = Number(amount);
                     const spent = usdAmount - (remainingUsd as number);
-                    return `${sharesInt.toLocaleString('en-US')} shares · $ ${spent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    return `$ ${spent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                   })()}
                 </span>
               </div>

@@ -19,12 +19,14 @@ export interface TradeBoxProps {
   orderbook?: OrderbookSnapshot | null;
   initialPosition?: 'yes' | 'no';
   onPositionChange?: (position: 'yes' | 'no') => void;
+  onSideChange?: (side: 'buy' | 'sell') => void;
 }
 
 export interface MarketOrderCalculation {
   contracts: number;
   remainingUsd: number;
   maxPrice?: number;
+  minPrice?: number;
 }
 
 export interface TradeExecutionParams {

@@ -141,9 +141,8 @@ function PredictionMarketContent() {
 	}, [
 		umbrellaId,
 		umbrellas,
-		getUmbrellaById,
-		getQuestionsForUmbrella,
-		getOrderbookForQuestion,
+		// Removed function dependencies that cause infinite re-renders
+		// getUmbrellaById, getQuestionsForUmbrella, getOrderbookForQuestion are stable
 		navigate,
 	]);
 
@@ -388,9 +387,8 @@ function PredictionMarketContent() {
 	}, [
 		activeMarket,
 		umbrella,
-		getMarketId,
-		refreshOrderbook,
-		getOrderbookForQuestion,
+		// Removed function dependencies that cause infinite re-renders
+		// getMarketId, refreshOrderbook, getOrderbookForQuestion are stable
 	]);
 
 	// Cleanup localStorage when component unmounts

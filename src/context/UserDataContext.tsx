@@ -517,7 +517,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		if (!Array.isArray(umbrellas) || umbrellas.length === 0) return;
 		const t = setTimeout(load, 200);
 		return () => clearTimeout(t);
-	}, [account, load, umbrellas]);
+	}, [account, umbrellas]); // Removed 'load' from dependencies to prevent circular dependency
 
 	const value = useMemo<UserDataContextValue>(
 		() => ({

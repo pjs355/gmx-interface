@@ -114,15 +114,6 @@ export function checkSufficientShares(
   const requiredShares = amountNum;
   const availableShares = position === 'yes' ? yesBalance : noBalance;
 
-  console.log(`🔍 checkSufficientShares - ${side} ${position}:`, {
-    amount: amountNum,
-    requiredShares,
-    availableShares,
-    yesBalance,
-    noBalance,
-    hasSufficient: availableShares >= requiredShares
-  });
-
   return {
     hasSufficientShares: availableShares >= requiredShares,
     requiredShares

@@ -32,6 +32,7 @@ interface OrderbookDisplayProps {
   isActiveMarket?: boolean;
   activePosition?: 'yes' | 'no';
   isCollapsed?: boolean;
+  side?: 'buy' | 'sell';
 }
 
 export default function OrderbookDisplay({ 
@@ -46,7 +47,8 @@ export default function OrderbookDisplay({
   onOrderbookToggle,
   isActiveMarket, 
   activePosition,
-  isCollapsed = true
+  isCollapsed = true,
+  side = 'buy'
 }: OrderbookDisplayProps) {
   const [activeTab, setActiveTab] = useState<'yes' | 'no'>('yes');
   const { openCurtain } = useCurtainActions();
@@ -100,8 +102,13 @@ export default function OrderbookDisplay({
   };
 
   // Calculate display prices following the same convention as trading box
-  const yesLabel = `${toCentsString(marketBestAsk)}¢`;
-  const noLabel = `${toCentsString(marketBestBid === null ? null : 1 - marketBestBid)}¢`;
+  // Flip prices based on buy/sell side (same logic as trade box)
+  const yesLabel = side === 'buy'
+    ? `${toCentsString(marketBestAsk)}¢`
+    : `${toCentsString(marketBestBid)}¢`;
+  const noLabel = side === 'buy'
+    ? `${toCentsString(marketBestBid === null ? null : 1 - marketBestBid)}¢`
+    : `${toCentsString(marketBestAsk === null ? null : 1 - marketBestAsk)}¢`;
 
   if (loading) {
     return (

@@ -1,7 +1,7 @@
 .prediction-market-tradebox {
 	background: black;
 	border-radius: 12px;
-	padding: 20px;
+	padding: 15px;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	border: 1px solid #4b5563;
 	color: #333;
@@ -13,8 +13,8 @@
 
 	.market-name-header {
 		text-align: left;
-		margin-bottom: 20px;
-		margin-top: 30px !important; // Add more padding above the question
+		margin-bottom: 12px;
+		margin-top: 0px !important; // Reduced from 30px
 
 		h3 {
 			margin: 0;
@@ -34,7 +34,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 16px;
+		margin-bottom: 12px;
 
 		.side-selector {
 			display: flex;
@@ -230,9 +230,9 @@
 	.curtain-content-inner {
 		overflow: visible !important;
 		padding-bottom: 60px !important; /* Add more space below trade button */
-		margin-left: 20px !important; /* Add margin from left edge */
-		margin-right: 20px !important; /* Add margin from right edge */
-		margin-top: 20px !important; /* Add margin from top */
+		padding-left: 20px !important; /* Add padding from left edge */
+		padding-right: 20px !important; /* Add padding from right edge */
+		padding-top: 20px !important; /* Add padding from top */
 	}
 }
 
@@ -908,7 +908,7 @@
 /* Mobile debug: highlight tradebox on small screens */
 @media (max-width: 768px) {
 	.prediction-market-tradebox {
-		padding: 0px;
+		padding: 15px;
 		// background: red !important; /* DEBUG ensure mobile tradebox visible */
 	}
 }
@@ -983,6 +983,7 @@
 
 .curtain-content-inner {
 	position: relative;
+	padding: 20px;
 }
 
 .curtain-drag-handle {

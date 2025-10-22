@@ -18,7 +18,7 @@ import { useTradeState } from "./hooks/useTradeState";
 
 interface PredictionMarketTradeBoxProps extends TradeBoxProps {}
 
-export default function PredictionMarketTradeBox({ market, orderbook: propOrderbook, initialPosition, onPositionChange }: PredictionMarketTradeBoxProps) {
+export default function PredictionMarketTradeBox({ market, orderbook: propOrderbook, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }: PredictionMarketTradeBoxProps) {
 
   const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange } = useTradeState(initialPosition);
   // const { client: smartClient, getClientForChain } = useSmartWallets();
@@ -109,6 +109,12 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
     handlePositionChange(position);
     onPositionChange?.(position);
   }, [handlePositionChange, onPositionChange]);
+
+  // Notify parent when side changes (buy/sell)
+  const onSideChangeWrapper = useCallback((side: "buy" | "sell") => {
+    handleSideChange(side);
+    onSideChangeCallback?.(side);
+  }, [handleSideChange, onSideChangeCallback]);
 
   // Approval is now handled globally in UserDataContext
 
@@ -247,16 +253,33 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
             throw new Error("Unable to compute contracts for market buy order");
           }
 
-          // Use max price seen during fill if available; fallback to top-of-book
-          const topPriceRaw = (calc as any).maxPrice && isFinite((calc as any).maxPrice as number) && (calc as any).maxPrice! > 0
-            ? (calc as any).maxPrice as number
-            : (frozenState.selectedPosition === 'yes'
-                ? bestAsk
-                : (bestBid === null || bestBid === undefined ? null : (1 - (bestBid as number))));
-          if (topPriceRaw === null || topPriceRaw === undefined || !isFinite(topPriceRaw) || topPriceRaw <= 0) {
-            throw new Error("Unable to determine price for market buy order");
+          // For BUY market orders:
+          // - calc.contracts = shares bought
+          // - calc.remainingUsd = leftover USD that wasn't spent
+          // - calc.maxPrice = HIGHEST price hit (worst case for signing)
+          const sharesBought = orderAmount;
+          const usdSpent = usdAmount - calc.remainingUsd;
+          const effectiveAvgPrice = usdSpent / sharesBought;
+          const maxPrice = (calc as any).maxPrice;
+          
+          // Use MAXIMUM price for signing (conservative/worst case)
+          // Sign at highest price to guarantee we pay at most this much
+          if (!maxPrice || !isFinite(maxPrice) || maxPrice <= 0) {
+            throw new Error("Unable to determine maximum price for market buy order");
           }
-          orderPrice = Math.round(topPriceRaw * 100) / 100;
+          
+          // Round to 2 decimal places to avoid floating point precision errors
+          orderPrice = Math.round(maxPrice * 100) / 100;
+          
+          console.log("📊 Market BUY calculation:", {
+            usdAmount: usdAmount,
+            sharesBought: sharesBought,
+            usdSpent: usdSpent,
+            remainingUsd: calc.remainingUsd,
+            maxPrice: maxPrice,
+            effectiveAvgPrice: effectiveAvgPrice,
+            signingPrice: orderPrice
+          });
         } else {
           // SELL market uses shares input directly
           orderAmount = parseFloat(frozenState.amount);
@@ -264,21 +287,51 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
             throw new Error("Invalid shares for market sell order");
           }
 
-          // Use max price seen during fill if available; fallback to top-of-book
+          // Calculate minimum price from all price levels for signing
           const sellCalc = marketOrderHandler.calculateContractsForMarketOrder(
             orderAmount,
             frozenState.selectedPosition,
             "sell"
           );
-          const topPriceRaw = (sellCalc as any).maxPrice && isFinite((sellCalc as any).maxPrice as number) && (sellCalc as any).maxPrice! > 0
-            ? (sellCalc as any).maxPrice as number
-            : (frozenState.selectedPosition === 'yes'
-                ? bestBid
-                : (bestAsk === null || bestAsk === undefined ? null : (1 - (bestAsk as number))));
-          if (topPriceRaw === null || topPriceRaw === undefined || !isFinite(topPriceRaw) || topPriceRaw <= 0) {
-            throw new Error("Unable to determine price for market sell order");
+          
+          // For SELL market orders:
+          // - sellCalc.contracts = shares actually sold (may be less than requested!)
+          // - sellCalc.remainingUsd = total USD received (NOT remaining!)
+          // - sellCalc.minPrice = LOWEST price hit (conservative for signing)
+          const sharesSold = sellCalc.contracts;
+          const totalUsdReceived = sellCalc.remainingUsd;
+          const minPrice = (sellCalc as any).minPrice;
+          
+          if (!sharesSold || sharesSold <= 0) {
+            throw new Error("Unable to sell shares - insufficient orderbook liquidity");
           }
-          orderPrice = Math.round(topPriceRaw * 100) / 100;
+          
+          // CRITICAL: Use actual shares sold, not requested amount
+          // This handles cases where orderbook can't fill the full amount
+          orderAmount = sharesSold;
+          
+          // Use MINIMUM price for signing (conservative/worst case)
+          // Sign at lowest price to guarantee at least this much back
+          // This allows fills at minPrice OR BETTER (higher prices)
+          if (!minPrice || !isFinite(minPrice) || minPrice <= 0) {
+            throw new Error("Unable to determine minimum price for market sell order");
+          }
+          
+          // Round to 2 decimal places to avoid floating point precision errors
+          orderPrice = Math.round(minPrice * 100) / 100;
+          
+          const effectiveAvgPrice = totalUsdReceived / sharesSold;
+          
+          console.log("📊 Market SELL calculation:", {
+            sharesRequested: parseFloat(frozenState.amount),
+            sharesSold: sharesSold,
+            totalUsdReceived: totalUsdReceived,
+            minPrice: minPrice,
+            maxPrice: (sellCalc as any).maxPrice,
+            effectiveAvgPrice: effectiveAvgPrice,
+            signingPrice: orderPrice,
+            finalOrderAmount: orderAmount
+          });
         }
       } else {
         // LIMIT orders use shares input directly and provided price
@@ -317,26 +370,32 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
           price: "",
         }));
         
-        // Refresh balances after successful trade
-        try {
-          // Get the market's token IDs for this specific market
-          // const marketId = market._id;
-          const yesTokenId = (market as any)?.yesTokenId;
-          const noTokenId = (market as any)?.noTokenId;
-          
-          // Refresh USDC balance and market token balances
-          if (yesTokenId && noTokenId) {
-            await refreshBalances([yesTokenId, noTokenId]);
+        // Refresh balances after successful trade with a delay
+        // Wait 4 seconds to give blockchain time to process the transaction
+        setTimeout(async () => {
+          try {
+            console.log("🔄 Starting balance refresh after 4 second delay...");
+            
+            // First refresh the main user data (includes all token balances)
+            await refresh();
+            console.log("✅ User data refreshed");
+            
+            // Get the market's token IDs for this specific market
+            const yesTokenId = (market as any)?.yesTokenId;
+            const noTokenId = (market as any)?.noTokenId;
+            
+            // Then refresh the specific market token balances in BalanceContext
+            if (yesTokenId && noTokenId) {
+              await refreshBalances([yesTokenId, noTokenId]);
+              console.log("✅ Market token balances refreshed");
+            }
+            
+            console.log("✅ All balances refreshed after successful trade");
+          } catch (error) {
+            console.error("❌ Error refreshing balances after trade:", error);
+            // Don't fail the trade if balance refresh fails
           }
-          
-          // Also refresh the main user data (USDC balance, portfolio, etc.)
-          await refresh();
-          
-          console.log("✅ Balances refreshed after successful trade");
-        } catch (error) {
-          console.error("❌ Error refreshing balances after trade:", error);
-          // Don't fail the trade if balance refresh fails
-        }
+        }, 4000); // 4 second delay
       }
     } catch (error: any) {
       setState((prev) => ({
@@ -392,7 +451,7 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
       onAmountChange={handleAmountChange}
       onPriceChange={handlePriceChange}
       onOrderTypeChange={handleOrderTypeChange}
-      onSideChange={handleSideChange}
+      onSideChange={onSideChangeWrapper}
       onTrade={handleTrade}
       buttonState={buttonState}
       approvalState={approvalState}

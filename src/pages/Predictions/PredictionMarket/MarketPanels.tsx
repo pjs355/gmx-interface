@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useMedia } from "react-use";
 import PredictionMarketChart from 'components/PredictionMarketChart';
 import OrderbookDisplay from 'components/OrderbookDisplay/OrderbookDisplay';
@@ -44,6 +44,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
   chartState,
 }) => {
   useMedia("(max-width: 1100px)");
+  
+  // Track buy/sell side state
+  const [tradeSide, setTradeSide] = useState<'buy' | 'sell'>('buy');
 
   return (
     <div className="prediction-market-content">
@@ -82,6 +85,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
                     isActiveMarket={getMarketId(activeMarket) === getMarketId(question)}
                     activePosition={activePosition}
                     isCollapsed={openOrderbookId !== orderBookId}
+                    side={tradeSide}
                   />
                 </div>
               );
@@ -98,6 +102,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
               orderbook={questionOrderbooks[getMarketId(activeMarket)]}
               initialPosition={activePosition}
               onPositionChange={onPositionChange}
+              onSideChange={setTradeSide}
             />
           )}
         </div>
@@ -137,6 +142,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
                   isActiveMarket={getMarketId(activeMarket) === getMarketId(question)}
                   activePosition={activePosition}
                   isCollapsed={openOrderbookId !== orderBookId}
+                  side={tradeSide}
                 />
               </div>
             );
@@ -153,6 +159,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
               orderbook={questionOrderbooks[getMarketId(activeMarket)]}
               initialPosition={activePosition}
               onPositionChange={onPositionChange}
+              onSideChange={setTradeSide}
             />
           </div>
         )}
