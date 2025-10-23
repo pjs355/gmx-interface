@@ -78,7 +78,10 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const checkApproval = useCallback(async () => {
-		if (!account) return;
+		if (!account) {
+			setApprovalState({ isApproved: false, isChecking: false, isApproving: false });
+			return;
+		}
 
 		setApprovalState((prev) => ({ ...prev, isChecking: true }));
 
@@ -87,187 +90,48 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
 			const usdcContract = new Contract(
 				USDC_ADDRESS,
-				[
-					"function allowance(address owner, address spender) view returns (uint256)",
-				],
+				["function allowance(address owner, address spender) view returns (uint256)"],
 				provider
 			);
-			const ctfRead = new Contract(
+			const ctfContract = new Contract(
 				CTF_ADDRESS,
-				[
-					"function isApprovedForAll(address owner, address operator) view returns (bool)",
-				],
+				["function isApprovedForAll(address owner, address operator) view returns (bool)"],
 				provider
 			);
 
-			const usdcAllowance: bigint = await usdcContract.allowance(
-				account,
-				EXCHANGE_ADDRESS
-			);
+			const [usdcAllowance, hasCtfApproval] = await Promise.all([
+				usdcContract.allowance(account, EXCHANGE_ADDRESS),
+				ctfContract.isApprovedForAll(account, EXCHANGE_ADDRESS)
+			]);
+
 			const hasUsdcApproval = usdcAllowance > 0n;
-			const hasCtfApproval: boolean = await ctfRead.isApprovedForAll(
-				account,
-				EXCHANGE_ADDRESS
-			);
+			const isApproved = hasUsdcApproval && hasCtfApproval;
 
-			// Add detailed console logging for debugging
-			console.log("🔍 APPROVAL CHECK DEBUG:", {
-				account,
-				usdcAllowance: usdcAllowance.toString(),
-				usdcAllowanceFormatted: formatUnits(usdcAllowance, 6),
-				hasUsdcApproval,
-				hasCtfApproval,
-				overallApproved: hasUsdcApproval && hasCtfApproval,
-				walletType: "checking wallet types...",
-				privyWallets: privyWallets?.map((w: any) => ({
-					type: w.type,
-					walletClientType: w.walletClientType,
-					connectorType: w.connectorType,
-					address: w.address,
-				})),
-			});
-
-			setApprovalState((prev) => ({
-				...prev,
-				isApproved: hasUsdcApproval && hasCtfApproval,
+			setApprovalState({
+				isApproved,
 				isChecking: false,
-			}));
+				isApproving: false,
+			});
 		} catch (error) {
 			console.error("Error checking approval:", error);
 			setApprovalState((prev) => ({ ...prev, isChecking: false }));
 		}
-	}, [account, privyWallets]);
+	}, [account, getReadProvider]);
 
 	const { umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella } =
 		usePredictionData();
 
-	const load = useCallback(async () => {
-		if (!account) {
-			setOrders([]);
-			setTokenBalances(new Map());
-			setUsdcBalance(null);
-			return;
-		}
-		setLoading(true);
-		try {
-			// Build market data map once from already-loaded PredictionData (includes resolved)
-			const marketDataMap = new Map<
-				string,
-				{ yesTokenId: string; noTokenId: string }
-			>();
-			try {
-				// Process active markets from umbrellas
-				umbrellas.forEach((u: any) => {
-					const marketsForUmb = getAllQuestionsForUmbrella(
-						u._id
-					) as any[];
-					marketsForUmb.forEach((market: any) => {
-						const marketId =
-							market?._id ||
-							market?.questionId ||
-							market?.marketId;
-						if (
-							marketId &&
-							market?.yesTokenId &&
-							market?.noTokenId
-						) {
-							marketDataMap.set(marketId, {
-								yesTokenId: market.yesTokenId,
-								noTokenId: market.noTokenId,
-							});
-						}
-					});
-				});
-
-				// Process resolved markets separately
-				// Quiet user data debug logs
-				Object.entries(resolvedMarketsByUmbrella).forEach(
-					([, resolvedMarkets]) => {
-						// Quiet user data debug logs
-						resolvedMarkets.forEach((market: any) => {
-							const marketId =
-								market?._id ||
-								market?.questionId ||
-								market?.marketId;
-							if (
-								marketId &&
-								market?.yesTokenId &&
-								market?.noTokenId
-							) {
-								// Quiet user data debug logs
-								marketDataMap.set(marketId, {
-									yesTokenId: market.yesTokenId,
-									noTokenId: market.noTokenId,
-								});
-							} else {
-								// Quiet user data debug logs
-							}
-						});
-					}
-				);
-
-				// Quiet user data debug logs
-			} catch {
-				// Fallback to direct fetch if prediction data not ready
-				const umbrellasDirect =
-					await umbrellaDataService.fetchAllUmbrellas();
-				const markets = await Promise.all(
-					umbrellasDirect.map((u) =>
-						umbrellaDataService.fetchQuestionsForUmbrella(u, {
-							includeResolved: true,
-						})
-					)
-				);
-				markets.flat().forEach((market: any) => {
-					const marketId =
-						market?._id || market?.questionId || market?.marketId;
-					if (marketId && market?.yesTokenId && market?.noTokenId) {
-						marketDataMap.set(marketId, {
-							yesTokenId: market.yesTokenId,
-							noTokenId: market.noTokenId,
-						});
-					}
-				});
-			}
-
-      	// Check approval status
-			await checkApproval();
-
-			// Fetch user orders
-			const userOrders = await fetchUserOrders(account, marketDataMap);
-			setOrders(userOrders);
-
-			// Fetch token balances
-			await loadTokenBalances(account, marketDataMap);
-		
-		} finally {
-			setLoading(false);
-		}
-	}, [
-		account,
-		privyWallets,
-		checkApproval,
-		umbrellas,
-		getAllQuestionsForUmbrella,
-		resolvedMarketsByUmbrella,
-	]);
-
 	const loadTokenBalances = useCallback(
 		async (
 			account: string,
-			marketDataMap: Map<
-				string,
-				{ yesTokenId: string; noTokenId: string }
-			>
+			marketDataMap: Map<string, { yesTokenId: string; noTokenId: string }>
 		) => {
 			try {
 				const provider = getReadProvider();
 
 				const ctf = new Contract(
 					CTF_ADDRESS,
-					[
-						"function balanceOf(address account, uint256 id) view returns (uint256)",
-					],
+					["function balanceOf(address account, uint256 id) view returns (uint256)"],
 					provider
 				);
 
@@ -287,11 +151,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				]);
 				setUsdcBalance(formatUnits(usdcRaw, usdcDecimals));
 
-				// Fetch CTF token balances with throttling to avoid RPC batch limits
+				// Fetch CTF token balances with throttling
 				const entries = Array.from(marketDataMap.entries());
 				const newTokenBalances = new Map<string, TokenBalance>();
-				let processed = 0;
-				for (const [marketId, { yesTokenId, noTokenId }] of entries) {
+				
+				for (let i = 0; i < entries.length; i++) {
+					const [marketId, { yesTokenId, noTokenId }] = entries[i];
 					try {
 						const [yesRaw, noRaw] = await Promise.all([
 							ctf.balanceOf(account, yesTokenId),
@@ -304,10 +169,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 							noBalance: formatUnits(noRaw, 6),
 						});
 					} catch (error) {
-						console.error(
-							`Error fetching balances for market ${marketId}:`,
-							error
-						);
+						console.error(`Error fetching balances for market ${marketId}:`, error);
 						newTokenBalances.set(marketId, {
 							yesTokenId,
 							noTokenId,
@@ -316,9 +178,8 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 						});
 					}
 
-					processed += 1;
-					// Brief pause every 20 markets to avoid provider batching too many calls
-					if (processed % 20 === 0) {
+					// Brief pause every 20 markets to avoid RPC rate limits
+					if ((i + 1) % 20 === 0) {
 						await new Promise((r) => setTimeout(r, 50));
 					}
 				}
@@ -330,8 +191,104 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				setTokenBalances(new Map());
 			}
 		},
-		[privyWallets]
+		[getReadProvider]
 	);
+
+	const load = useCallback(async () => {
+		if (!account) {
+			setOrders([]);
+			setTokenBalances(new Map());
+			setUsdcBalance(null);
+			return;
+		}
+		
+		setLoading(true);
+		try {
+			// Build market data map from umbrellas and resolved markets
+			const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
+			
+			try {
+				// Process active markets
+				umbrellas.forEach((u: any) => {
+					const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
+					marketsForUmb.forEach((market: any) => {
+						const marketId = market?._id || market?.questionId || market?.marketId;
+						if (marketId && market?.yesTokenId && market?.noTokenId) {
+							marketDataMap.set(marketId, {
+								yesTokenId: market.yesTokenId,
+								noTokenId: market.noTokenId,
+							});
+						}
+					});
+				});
+
+				// Process resolved markets
+				Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
+					resolvedMarkets.forEach((market: any) => {
+						const marketId = market?._id || market?.questionId || market?.marketId;
+						if (marketId && market?.yesTokenId && market?.noTokenId) {
+							marketDataMap.set(marketId, {
+								yesTokenId: market.yesTokenId,
+								noTokenId: market.noTokenId,
+							});
+						}
+					});
+				});
+			} catch {
+				// Fallback to direct fetch if prediction data not ready
+				const umbrellasDirect = await umbrellaDataService.fetchAllUmbrellas();
+				const markets = await Promise.all(
+					umbrellasDirect.map((u) =>
+						umbrellaDataService.fetchQuestionsForUmbrella(u, {
+							includeResolved: true,
+						})
+					)
+				);
+				markets.flat().forEach((market: any) => {
+					const marketId = market?._id || market?.questionId || market?.marketId;
+					if (marketId && market?.yesTokenId && market?.noTokenId) {
+						marketDataMap.set(marketId, {
+							yesTokenId: market.yesTokenId,
+							noTokenId: market.noTokenId,
+						});
+					}
+				});
+			}
+
+			// Fetch user orders FIRST to determine which markets to check balances for
+			const userOrders = await fetchUserOrders(account, marketDataMap);
+			setOrders(userOrders);
+
+			// Extract unique market IDs from user's order history
+			const tradedMarketIds = new Set(userOrders.map(order => order.questionId));
+			
+			// Filter marketDataMap to only include markets the user has traded
+			const filteredMarketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
+			tradedMarketIds.forEach(marketId => {
+				const marketData = marketDataMap.get(marketId);
+				if (marketData) {
+					filteredMarketDataMap.set(marketId, marketData);
+				}
+			});
+
+			console.log(`📊 Balance check optimization: ${filteredMarketDataMap.size} markets with positions (vs ${marketDataMap.size} total markets)`);
+
+			// Load balances and check approval in parallel (only for traded markets)
+			await Promise.all([
+				loadTokenBalances(account, filteredMarketDataMap),
+				checkApproval(),
+			]);
+		} finally {
+			setLoading(false);
+		}
+	}, [
+		account,
+		checkApproval,
+		loadTokenBalances,
+		umbrellas,
+		getAllQuestionsForUmbrella,
+		resolvedMarketsByUmbrella,
+	]);
 
 	const getTokenBalance = useCallback(
 		(marketId: string) => {
@@ -346,18 +303,10 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		setApprovalState((prev) => ({ ...prev, isApproving: true }));
 
 		try {
-			// Check current approval status first
-			await checkApproval();
-			if (approvalState.isApproved) {
-				setApprovalState((prev) => ({ ...prev, isApproving: false }));
-				return;
-			}
-
-			// Detect wallet type properly
+			// Detect wallet type
 			const smartWalletAccount = (user?.linkedAccounts || []).find(
 				(acct: any) => acct?.type === "smart_wallet"
 			) as any;
-			const smartAddress = smartWalletAccount?.address;
 
 			const embeddedWallet = (privyWallets || []).find(
 				(w: any) =>
@@ -370,145 +319,79 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				(w: any) => w?.type === "wallet" || w?.connectorType !== "privy"
 			);
 
-			const hasSmartWallet = Boolean(smartAddress);
-			const hasEmbeddedWallet = Boolean(embeddedWallet);
-			const hasExternalWallet = Boolean(externalWallet);
-
-			console.log("🔍 WALLET TYPE DETECTION:", {
-				smartAddress,
-				hasSmartWallet,
-				hasEmbeddedWallet,
-				hasExternalWallet,
-				embeddedWallet: embeddedWallet
-					? {
-							type: embeddedWallet.type,
-							walletClientType: embeddedWallet.walletClientType,
-							connectorType: embeddedWallet.connectorType,
-							address: embeddedWallet.address,
-					  }
-					: null,
-				externalWallet: externalWallet
-					? {
-							type: externalWallet.type,
-							walletClientType: externalWallet.walletClientType,
-							connectorType: externalWallet.connectorType,
-							address: externalWallet.address,
-					  }
-					: null,
-			});
+			const useSmartWallet = Boolean(smartWalletAccount?.address) || Boolean(embeddedWallet);
+			const useExternalWallet = Boolean(externalWallet) && !useSmartWallet;
 
 			// Approve USDC
-			const usdcAbi = [
-				"function approve(address spender, uint256 amount) returns (bool)",
-			];
-			const usdcInterface = new ethers.Interface(usdcAbi);
-			const approvalData = usdcInterface.encodeFunctionData("approve", [
-				EXCHANGE_ADDRESS,
-				ethers.MaxUint256,
-			]);
-
-			if (hasSmartWallet || hasEmbeddedWallet) {
-				// Use smart wallet client for embedded/smart wallets
+			const usdcAbi = ["function approve(address spender, uint256 amount) returns (bool)"];
+			
+			if (useSmartWallet) {
 				const smartWalletClient = await getClientForChain({ id: 8453 });
-				if (!smartWalletClient)
-					throw new Error(
-						"No smart wallet client available for Base chain"
-					);
+				if (!smartWalletClient) throw new Error("No smart wallet client available");
+				
+				const usdcInterface = new ethers.Interface(usdcAbi);
+				const approvalData = usdcInterface.encodeFunctionData("approve", [
+					EXCHANGE_ADDRESS,
+					ethers.MaxUint256,
+				]);
+
 				await smartWalletClient.sendTransaction({
 					to: USDC_ADDRESS as `0x${string}`,
 					data: approvalData as `0x${string}`,
 					value: 0n,
 				});
-				console.log("✅ USDC approved via smart wallet");
-			} else if (hasExternalWallet && externalWallet) {
-				// Use external wallet signer
-				if (typeof externalWallet.getEthereumProvider !== "function") {
-					throw new Error(
-						"External wallet does not support getEthereumProvider"
-					);
-				}
-
-				const eip1193 = await externalWallet!.getEthereumProvider();
+			} else if (useExternalWallet && externalWallet) {
+				const eip1193 = await externalWallet.getEthereumProvider();
 				const provider = new ethers.BrowserProvider(eip1193 as any);
 				const signer = await provider.getSigner();
 
-				const usdcContract = new ethers.Contract(
-					USDC_ADDRESS,
-					usdcAbi,
-					signer
-				);
-				const tx = await usdcContract.approve(
-					EXCHANGE_ADDRESS,
-					ethers.MaxUint256
-				);
+				const usdcContract = new ethers.Contract(USDC_ADDRESS, usdcAbi, signer);
+				const tx = await usdcContract.approve(EXCHANGE_ADDRESS, ethers.MaxUint256);
 				await tx.wait();
-				console.log("✅ USDC approved via external wallet");
 			} else {
-				throw new Error("No compatible wallet found for approval");
+				throw new Error("No compatible wallet found");
 			}
 
+			// Brief delay between transactions
 			await new Promise((r) => setTimeout(r, 1500));
 
 			// Approve CTF (ERC1155) operator
-			const ctfAbi = [
-				"function setApprovalForAll(address operator, bool approved)",
-			];
-			if (hasSmartWallet || hasEmbeddedWallet) {
+			const ctfAbi = ["function setApprovalForAll(address operator, bool approved)"];
+			
+			if (useSmartWallet) {
 				const smartWalletClient = await getClientForChain({ id: 8453 });
-				if (!smartWalletClient)
-					throw new Error(
-						"No smart wallet client available for Base chain"
-					);
+				if (!smartWalletClient) throw new Error("No smart wallet client available");
+				
 				const ctfInterface = new ethers.Interface(ctfAbi);
-				const ctfData = ctfInterface.encodeFunctionData(
-					"setApprovalForAll",
-					[EXCHANGE_ADDRESS, true]
-				);
+				const ctfData = ctfInterface.encodeFunctionData("setApprovalForAll", [
+					EXCHANGE_ADDRESS,
+					true
+				]);
+
 				await smartWalletClient.sendTransaction({
 					to: CTF_ADDRESS as `0x${string}`,
 					data: ctfData as `0x${string}`,
 					value: 0n,
 				});
-				console.log("✅ CTF approved via smart wallet");
-			} else if (hasExternalWallet && externalWallet) {
-				const eip1193 = await externalWallet!.getEthereumProvider();
+			} else if (useExternalWallet && externalWallet) {
+				const eip1193 = await externalWallet.getEthereumProvider();
 				const provider = new ethers.BrowserProvider(eip1193 as any);
 				const signer = await provider.getSigner();
 
-				const ctfContract = new ethers.Contract(
-					CTF_ADDRESS,
-					ctfAbi,
-					signer
-				);
-				const tx = await ctfContract.setApprovalForAll(
-					EXCHANGE_ADDRESS,
-					true
-				);
+				const ctfContract = new ethers.Contract(CTF_ADDRESS, ctfAbi, signer);
+				const tx = await ctfContract.setApprovalForAll(EXCHANGE_ADDRESS, true);
 				await tx.wait();
-				console.log("✅ CTF approved via external wallet");
 			} else {
-				throw new Error("No compatible wallet found for CTF approval");
+				throw new Error("No compatible wallet found");
 			}
 
-			// Re-check approval status
+			// Refresh approval status once at the end
 			await checkApproval();
-			setApprovalState((prev) => ({
-				...prev,
-				isApproving: false,
-				isApproved: true,
-			}));
 		} catch (error) {
 			console.error("Error approving tokens:", error);
 			setApprovalState((prev) => ({ ...prev, isApproving: false }));
 		}
-	}, [
-		account,
-		checkApproval,
-		approvalState.isApproved,
-		privyWallets,
-		user?.linkedAccounts,
-		getClientForChain,
-	]);
+	}, [account, checkApproval, privyWallets, user?.linkedAccounts, getClientForChain]);
 
 	// Throttle initial and dependency-driven reloads to prevent rapid RPC bursts
 	useEffect(() => {

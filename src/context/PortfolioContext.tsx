@@ -9,18 +9,46 @@ type PortfolioContextValue = {
   portfolioTotal: number | null;
   cashBalance: number;
   loading: boolean;
+  cashLoading: boolean;
+  portfolioLoading: boolean;
 };
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
 
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const [portfolioTotal, setPortfolioTotal] = useState<number | null>(null);
-  // Deprecated local loading; rely on userDataLoading for display smoothing
   const lastCashRef = React.useRef<number>(0);
   const lastPositionsRef = React.useRef<number>(0);
   const { account } = useSignerContext();
   const { umbrellas, getQuestionsForUmbrella } = usePredictionData();
   const { usdcBalance, tokenBalances, loading: userDataLoading } = useUserData();
+
+  // Track separate loading states
+  const [hasInitialCashLoad, setHasInitialCashLoad] = React.useState(false);
+  const [hasInitialPortfolioLoad, setHasInitialPortfolioLoad] = React.useState(false);
+
+  // Reset loading states when account changes
+  React.useEffect(() => {
+    setHasInitialCashLoad(false);
+    setHasInitialPortfolioLoad(false);
+  }, [account]);
+
+  React.useEffect(() => {
+    if (usdcBalance !== null && usdcBalance !== undefined) {
+      setHasInitialCashLoad(true);
+    }
+  }, [usdcBalance]);
+
+  React.useEffect(() => {
+    if (portfolioTotal !== null && portfolioTotal !== undefined) {
+      setHasInitialPortfolioLoad(true);
+    }
+  }, [portfolioTotal]);
+
+  // Cash is loading if we haven't loaded it yet and user data is loading
+  const cashLoading = !hasInitialCashLoad && (usdcBalance === null || usdcBalance === undefined);
+  // Portfolio is loading if we haven't loaded it yet OR if balances are still being fetched
+  const portfolioLoading = !hasInitialPortfolioLoad || (userDataLoading && tokenBalances.size === 0);
 
   // Stable cash balance: do not drop to 0 when upstream temporarily returns null
   const cashBalance = useMemo(() => {
@@ -101,7 +129,13 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, [account, tokenBalances, usdcBalance, umbrellas, compute]);
 
-  const value = useMemo<PortfolioContextValue>(() => ({ portfolioTotal, cashBalance, loading: userDataLoading }), [portfolioTotal, cashBalance, userDataLoading]);
+  const value = useMemo<PortfolioContextValue>(() => ({ 
+    portfolioTotal, 
+    cashBalance, 
+    loading: userDataLoading,
+    cashLoading,
+    portfolioLoading
+  }), [portfolioTotal, cashBalance, userDataLoading, cashLoading, portfolioLoading]);
 
   return <PortfolioContext.Provider value={value}>{children}</PortfolioContext.Provider>;
 }

@@ -31,11 +31,11 @@ export function getFooterLinks(isHome: boolean) {
 }
 
 export const SOCIAL_LINKS: SocialLink[] = [
-	{ link: "https://x.com/prinx_io", name: "Twitter", icon: xIcon },
-	{ link: "https://t.me/prinx_io", name: "Telegram", icon: telegramIcon },
-	{
-		link: "https://discord.gg/hmnSBU2XrA",
-		name: "Discord",
-		icon: discordIcon,
-	},
+	{ link: "https://x.com/levelup_markets", name: "Twitter", icon: xIcon },
+	//{ link: "https://t.me/prinx_io", name: "Telegram", icon: telegramIcon },
+	// {
+	// 	link: "https://discord.gg/hmnSBU2XrA",
+	// 	name: "Discord",
+	// 	icon: discordIcon,
+	// },
 ];

@@ -47,7 +47,7 @@ export function AppHeaderUser({
     // Simplified for prediction markets - centralized signer context
     const { authenticated: active, account } = useSignerContext();
 	const { login, user, authenticated } = usePrivy();
-	const { portfolioTotal, cashBalance } = usePortfolioContext();
+	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
 
 	const formatCurrency = (
 		value: number | string | null | undefined
@@ -59,11 +59,6 @@ export function AppHeaderUser({
 			maximumFractionDigits: 2,
 		}).format(num);
 	};
-
-	// Cash balance (USDC) via direct ERC-20 balance on Base, using unified data address
-	const formattedUsdcBalance = Number.isFinite(cashBalance)
-		? Number(cashBalance).toFixed(2)
-		: "0.00";
 	// Log user after successful authentication
 	useEffect(() => {
 		if (authenticated && user) {
@@ -223,10 +218,13 @@ export function AppHeaderUser({
 									className="text-sm font-normal text-white"
 									style={{ color: "white" }}
 								>
-									{portfolioTotal === null ||
-									!isFinite(portfolioTotal)
-										? "--"
-										: `$${formatCurrency(portfolioTotal)}`}
+									{portfolioLoading ? (
+										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+									) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
+										"--"
+									) : (
+										`$${formatCurrency(portfolioTotal)}`
+									)}
 								</span>
 							</div>
 						</HeaderLink>
@@ -249,7 +247,11 @@ export function AppHeaderUser({
 									className="text-sm font-normal text-white"
 									style={{ color: "white" }}
 								>
-									${formatCurrency(formattedUsdcBalance)}
+									{cashLoading ? (
+										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+									) : (
+										`$${formatCurrency(cashBalance)}`
+									)}
 								</span>
 							</div>
 						</HeaderLink>
