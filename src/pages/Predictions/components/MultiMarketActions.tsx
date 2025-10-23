@@ -7,6 +7,7 @@ import {
 	truncateMarketName,
 } from "../utils/predictionUtils";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
+import { usePredictionData } from "context/PredictionDataContext";
 
 interface MultiMarketActionsProps {
 	umbrellaId: string;
@@ -24,22 +25,36 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 	multiMarketData,
 	onNavigate,
 }) => {
+	const { allBooksPreview } = usePredictionData();
 	const topMarkets = getTopTwoMarkets(umbrellaId, multiMarketData);
 
 	return (
 		<div className="multi-market-actions">
 			{topMarkets.map((marketData, index) => {
 				const { question } = marketData;
-				const yesHistoricalPrices = question.historicalPricesYes;
+				const questionId = question.questionId || question._id;
+				const preview = questionId
+					? allBooksPreview[questionId]
+					: undefined;
 
-				const noHistoricalPrices = question.historicalPricesNo;
+				console.log("🔍 MultiMarketActions lookup:", {
+					questionId,
+					preview,
+				});
 
-				const lastYes =
-					yesHistoricalPrices[yesHistoricalPrices.length - 1];
-				const lastNo =
-					noHistoricalPrices[noHistoricalPrices.length - 1];
-				const yesCents = toCentsString(lastYes?.price || 0);
-				const noCents = toCentsString(lastNo?.price || 0);
+				// Use preview data for prices (lowestAsk = Yes price, highestBid for No calculation)
+				const yesPrice = preview?.lowestAsk;
+				const noPrice =
+					preview?.highestBid !== null &&
+					preview?.highestBid !== undefined
+						? 1 - preview.highestBid
+						: null;
+
+				const yesCents =
+					yesPrice !== null && yesPrice !== undefined
+						? toCentsString(yesPrice)
+						: "—";
+				const noCents = noPrice !== null ? toCentsString(noPrice) : "—";
 
 				return (
 					<div

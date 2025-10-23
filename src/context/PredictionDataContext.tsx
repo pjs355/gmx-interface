@@ -8,14 +8,21 @@ import React, {
 } from "react";
 import { umbrellaDataService, type Umbrella } from "lib/umbrellaDataService";
 import { currentPriceService } from "lib/currentPriceService";
+import { getPredictionApiBaseUrl } from "lib/predictionApiBase";
 
 type MarketLite = any;
+
+type BookPreview = {
+	lowestAsk: number | null;
+	highestBid: number | null;
+};
 
 type PredictionDataContextValue = {
 	umbrellas: Umbrella[];
 	marketsByUmbrella: Record<string, MarketLite[]>;
 	allMarketsByUmbrella: Record<string, MarketLite[]>;
 	resolvedMarketsByUmbrella: Record<string, MarketLite[]>;
+	allBooksPreview: Record<string, BookPreview>;
 	// Legacy fields expected by existing pages/components
 	singleMarketQuestions: Record<string, any>;
 	singleMarketOrderbooks: Record<string, any>;
@@ -40,6 +47,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	marketsByUmbrella: {},
 	allMarketsByUmbrella: {},
 	resolvedMarketsByUmbrella: {},
+	allBooksPreview: {},
 	singleMarketQuestions: {},
 	singleMarketOrderbooks: {},
 	multiMarketData: {},
@@ -79,6 +87,9 @@ export function PredictionDataProvider({
 	const [multiMarketData, setMultiMarketData] = useState<Record<string, any>>(
 		{}
 	);
+	const [allBooksPreview, setAllBooksPreview] = useState<
+		Record<string, BookPreview>
+	>({});
 	const [error, setError] = useState<string | undefined>(undefined);
 
 	const load = useCallback(async () => {
@@ -311,12 +322,64 @@ export function PredictionDataProvider({
 		load();
 	}, [load]);
 
+	// Fetch lightweight orderbook preview for all markets
+	useEffect(() => {
+		const fetchAllBooksPreview = async () => {
+			try {
+				const baseUrl = getPredictionApiBaseUrl();
+				const response = await fetch(
+					`${baseUrl}/api/all-books-preview`
+				);
+				if (!response.ok) {
+					throw new Error(
+						`Failed to fetch all-books-preview: ${response.status}`
+					);
+				}
+				const json = await response.json();
+				console.log("📚 Raw all-books-preview response:", json);
+
+				if (json.success && json.data) {
+					// Transform array into object keyed by questionId
+					const previewMap: Record<string, BookPreview> = {};
+					if (Array.isArray(json.data)) {
+						json.data.forEach((item: any) => {
+							const qId = item.questionId;
+							if (qId) {
+								previewMap[qId] = {
+									lowestAsk: item.lowestAsk ?? null,
+									highestBid: item.highestBid ?? null,
+								};
+							}
+						});
+					}
+					setAllBooksPreview(previewMap);
+					console.log(
+						"📚 All books preview mapped by questionId:",
+						previewMap
+					);
+				}
+			} catch (err) {
+				console.error(
+					"error",
+					"Failed to fetch all-books-preview:",
+					err
+				);
+			}
+		};
+
+		fetchAllBooksPreview();
+		// Refresh every 30 seconds
+		const interval = setInterval(fetchAllBooksPreview, 30000);
+		return () => clearInterval(interval);
+	}, []);
+
 	const value = useMemo<PredictionDataContextValue>(
 		() => ({
 			umbrellas,
 			marketsByUmbrella,
 			allMarketsByUmbrella,
 			resolvedMarketsByUmbrella,
+			allBooksPreview,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,
@@ -335,6 +398,7 @@ export function PredictionDataProvider({
 			marketsByUmbrella,
 			allMarketsByUmbrella,
 			resolvedMarketsByUmbrella,
+			allBooksPreview,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,

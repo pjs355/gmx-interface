@@ -5,6 +5,7 @@ import {
 	toCentsString,
 } from "../utils/predictionUtils";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
+import { usePredictionData } from "context/PredictionDataContext";
 
 interface SingleMarketActionsProps {
 	orderbook: any;
@@ -17,13 +18,31 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	onNavigate,
 	question,
 }) => {
+	const { allBooksPreview } = usePredictionData();
+	const questionId = question.questionId || question._id;
+	const preview = questionId ? allBooksPreview[questionId] : undefined;
+
+	console.log("🔍 SingleMarketActions lookup:", {
+		questionId,
+		preview,
+		allBooksPreview,
+	});
+
+	// Use preview data for prices (lowestAsk = Yes price, highestBid for No calculation)
+	const yesPrice = preview?.lowestAsk;
+	const noPrice =
+		preview?.highestBid !== null && preview?.highestBid !== undefined
+			? 1 - preview.highestBid
+			: null;
+
+	const yesPriceCents =
+		yesPrice !== null && yesPrice !== undefined
+			? toCentsString(yesPrice)
+			: "—";
+	const noPriceCents = noPrice !== null ? toCentsString(noPrice) : "—";
+
+	// Keep bestAsk/bestBid for payout calculation
 	const { bestAsk, bestBid } = calculateOrderbookPrices(orderbook);
-	const yesHistoricalPrices = question.historicalPricesYes;
-	const noHistoricalPrices = question.historicalPricesNo;
-	const lastYes = yesHistoricalPrices[yesHistoricalPrices.length - 1];
-	const lastNo = noHistoricalPrices[noHistoricalPrices.length - 1];
-	const yesPriceCents = toCentsString(lastYes.price);
-	const noPriceCents = toCentsString(lastNo.price);
 
 	const hexToRgba = (hex?: string, alpha: number = 0.3): string => {
 		if (!hex) return `rgba(0,0,0,${alpha})`;
