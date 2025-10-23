@@ -1,4 +1,5 @@
 import { predictionMarketCache } from "./predictionMarketCache";
+import { getPredictionApiBaseUrl } from "./predictionApiBase";
 
 export interface PredictionMarket {
 	_id: string;
@@ -35,8 +36,7 @@ interface ApiResponse {
 }
 
 class PredictionMarketDataService {
-	private readonly API_BASE_URL =
-		"https://prediction-api-production.up.railway.app";
+	private readonly API_BASE_URL = getPredictionApiBaseUrl();
 
 	async fetchAllMarkets(): Promise<PredictionMarket[]> {
 		try {

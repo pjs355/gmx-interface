@@ -9,6 +9,7 @@ import Button from "components/Button/Button";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 // Removed predictionMarketDataService - not used in this component
 import { Umbrella } from "lib/umbrellaDataService";
+import { getPredictionWebSocketUrl } from "lib/predictionApiBase";
 // OrderbookService usage moved into hooks
 import { usePredictionData } from "context/PredictionDataContext";
 // Removed usePredictionMarket - not used in this component
@@ -142,6 +143,99 @@ function PredictionMarketContent() {
 		// getUmbrellaById, getQuestionsForUmbrella, getOrderbookForQuestion are stable
 		navigate,
 	]);
+
+	// WebSocket connections for real-time orderbook updates
+	useEffect(() => {
+		if (!umbrella?._id || questions.length === 0) return;
+
+		const wsUrl = getPredictionWebSocketUrl();
+		const connections: WebSocket[] = [];
+
+		console.log(
+			`🔌 Connecting WebSockets for ${questions.length} markets...`
+		);
+
+		// Create a WebSocket connection for each market
+		questions.forEach((question) => {
+			const marketId =
+				question._id || question.questionId || question.marketId;
+			if (!marketId) return;
+
+			try {
+				const ws = new WebSocket(`${wsUrl}/orderbook/${marketId}`);
+
+				ws.onopen = () => {
+					console.log(
+						`✅ WebSocket connected for market ${marketId}`
+					);
+				};
+
+				ws.onmessage = (event) => {
+					try {
+						console.log(
+							`📦 WebSocket message received for market ${marketId}:`,
+							event.data
+						);
+						const message = JSON.parse(event.data);
+
+						// Extract the orderbook snapshot from the message
+						const orderbook = message.snapshot || message;
+						console.log(
+							`📊 Parsed orderbook for market ${marketId}:`,
+							orderbook
+						);
+
+						// Update the orderbook for this specific market
+						setQuestionOrderbooks((prev) => ({
+							...prev,
+							[marketId]: orderbook,
+						}));
+					} catch (error) {
+						console.error(
+							"error",
+							`Failed to parse WebSocket message for market ${marketId}:`,
+							error
+						);
+					}
+				};
+
+				ws.onerror = (error) => {
+					console.error(
+						"error",
+						`WebSocket error for market ${marketId}:`,
+						error
+					);
+				};
+
+				ws.onclose = () => {
+					console.log(`🔌 WebSocket closed for market ${marketId}`);
+				};
+
+				connections.push(ws);
+			} catch (error) {
+				console.error(
+					"error",
+					`Failed to create WebSocket for market ${marketId}:`,
+					error
+				);
+			}
+		});
+
+		// Cleanup: close all connections on unmount or when dependencies change
+		return () => {
+			console.log(
+				`🔌 Closing ${connections.length} WebSocket connections...`
+			);
+			connections.forEach((ws) => {
+				if (
+					ws.readyState === WebSocket.OPEN ||
+					ws.readyState === WebSocket.CONNECTING
+				) {
+					ws.close();
+				}
+			});
+		};
+	}, [umbrella?._id, questions.length]);
 
 	// Mobile-only: ensure umbrella title fits within 3 lines by reducing font size as needed
 	useEffect(() => {
@@ -363,30 +457,31 @@ function PredictionMarketContent() {
 	]);
 
 	// Auto-refresh active market orderbook every 15 seconds via context
-	useEffect(() => {
-		if (!activeMarket || !umbrella) return;
-		const activeMarketId = getMarketId(activeMarket);
-		if (!activeMarketId) return;
+	// DISABLED: Now using WebSocket for real-time updates instead of HTTP polling
+	// useEffect(() => {
+	// 	if (!activeMarket || !umbrella) return;
+	// 	const activeMarketId = getMarketId(activeMarket);
+	// 	if (!activeMarketId) return;
 
-		const refreshActive = async () => {
-			await refreshOrderbook(umbrella._id, activeMarketId);
-			const ob = getOrderbookForQuestion(umbrella._id, activeMarketId);
-			setQuestionOrderbooks((prev) => ({
-				...prev,
-				[activeMarketId]: ob,
-			}));
-		};
+	// 	const refreshActive = async () => {
+	// 		await refreshOrderbook(umbrella._id, activeMarketId);
+	// 		const ob = getOrderbookForQuestion(umbrella._id, activeMarketId);
+	// 		setQuestionOrderbooks((prev) => ({
+	// 			...prev,
+	// 			[activeMarketId]: ob,
+	// 		}));
+	// 	};
 
-		// Initial and interval refresh
-		refreshActive();
-		const interval = setInterval(refreshActive, 20000); // 20 seconds
-		return () => clearInterval(interval);
-	}, [
-		activeMarket,
-		umbrella,
-		// Removed function dependencies that cause infinite re-renders
-		// getMarketId, refreshOrderbook, getOrderbookForQuestion are stable
-	]);
+	// 	// Initial and interval refresh
+	// 	refreshActive();
+	// 	const interval = setInterval(refreshActive, 20000); // 20 seconds
+	// 	return () => clearInterval(interval);
+	// }, [
+	// 	activeMarket,
+	// 	umbrella,
+	// 	// Removed function dependencies that cause infinite re-renders
+	// 	// getMarketId, refreshOrderbook, getOrderbookForQuestion are stable
+	// ]);
 
 	// Cleanup localStorage when component unmounts
 	useEffect(() => {
