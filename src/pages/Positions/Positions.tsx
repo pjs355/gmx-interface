@@ -3,8 +3,6 @@ import { useMedia } from "react-use";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "lib/predictionMarketDataService";
 import { type Umbrella } from "lib/umbrellaDataService";
-// import { useUSDCBalance } from "components/PredictionMarketTradeBox/checkBalances";
-import { useCurrentPrices } from "context/CurrentPriceContext";
 import { getOrderAggregates, getTradingReturns, type ProcessedOrder, type OrderAggregates } from "lib/simplifiedOrderService";
 import { useUserData } from "context/UserDataContext";
 import { usePredictionData } from "context/PredictionDataContext";
@@ -45,11 +43,10 @@ export default function Positions() {
   // unified balances via PortfolioContext
   const { portfolioTotal: portfolioTotalCtx, cashBalance: cashBalanceCtx, loading: portfolioLoading } = usePortfolio();
   const { orders, tokenBalances, loading: userDataLoading, refresh: refreshUserData } = useUserData();
-  const { umbrellas, getQuestionsForUmbrella, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, loading: predictionLoading } = usePredictionData();
-  const { getCurrentPrice, isLoading: pricesLoading } = useCurrentPrices();
+  const { umbrellas, getQuestionsForUmbrella, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, loading: predictionLoading, allBooksPreview, booksPreviewLoading } = usePredictionData();
   
   // Check if all data is loaded before showing resolved positions
-  const isDataFullyLoaded = !predictionLoading && !userDataLoading && !portfolioLoading && !pricesLoading;
+  const isDataFullyLoaded = !predictionLoading && !userDataLoading && !portfolioLoading && !booksPreviewLoading;
   // removed setPortfolioTotal – portfolio is computed in context
 
   const [loading] = useState(false);
@@ -80,17 +77,32 @@ export default function Positions() {
   // derive active positions
   const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
     if (!effectiveAccount) return [];
+    
+    console.log('🏢 Computing umbrellaPositions with:', {
+      allBooksPreviewKeys: Object.keys(allBooksPreview),
+      allBooksPreview: allBooksPreview,
+      booksPreviewLoading,
+      tokenBalancesSize: tokenBalances.size
+    });
+    
     return umbrellas
       .map((umbrella) => {
         const markets = (getQuestionsForUmbrella(umbrella._id) as PredictionMarket[]) || [];
         const processedMarkets: MarketPosition[] = markets
           .map((market) => {
+            console.log('🔍 MARKET OBJECT:', market);
             const marketId = market._id || market.questionId || market.marketId;
             const tb = marketId ? tokenBalances.get(marketId) : undefined;
             const yesBalance = tb ? Number(tb.yesBalance) : 0;
             const noBalance = tb ? Number(tb.noBalance) : 0;
-            const yesPrice = marketId ? getCurrentPrice(marketId, 'yes') : null;
-            const noPrice = marketId ? getCurrentPrice(marketId, 'no') : null;
+            
+            // Get prices from allBooksPreview (same pattern as home page cards)
+            const preview = marketId ? allBooksPreview[marketId] : undefined;
+            const yesPrice = preview?.lowestAsk ?? null; // Yes price = lowestAsk
+            const noPrice = preview?.highestBid !== null && preview?.highestBid !== undefined
+              ? 1 - preview.highestBid // No price = 1 - highestBid
+              : null;
+            
             const yesValue = yesPrice ? yesBalance * yesPrice : 0;
             const noValue = noPrice ? noBalance * noPrice : 0;
             const totalValue = yesValue + noValue;
@@ -103,7 +115,7 @@ export default function Positions() {
         return { umbrella, markets: activeMarkets };
       })
       .filter(umbrella => umbrella.markets.length > 0);
-  }, [effectiveAccount, umbrellas, getQuestionsForUmbrella, tokenBalances, orders, getCurrentPrice]);
+  }, [effectiveAccount, umbrellas, getQuestionsForUmbrella, tokenBalances, orders, allBooksPreview]);
 
   // derive resolved winnings using dedicated resolved markets storage
   const resolvedUmbrellaPositions: UmbrellaPositions[] = useMemo(() => {
@@ -217,8 +229,32 @@ export default function Positions() {
 
   const getCurrentPriceForSide = (market: PredictionMarket, side: "Yes" | "No"): number | null => {
     const marketId = market._id || market.questionId || market.marketId;
-    if (!marketId) return null;
-    return getCurrentPrice(marketId, side.toLowerCase() as 'yes' | 'no');
+    if (!marketId) {
+      console.log('❌ No marketId for market:', market);
+      return null;
+    }
+    
+    // Get prices from allBooksPreview (same pattern as home page cards)
+    const preview = allBooksPreview[marketId];
+    
+    console.log(`💰 Getting price for ${marketId} (${side}):`, {
+      marketId,
+      preview,
+      allBooksPreviewKeys: Object.keys(allBooksPreview),
+      hasPreview: !!preview
+    });
+    
+    if (side === "Yes") {
+      const price = preview?.lowestAsk ?? null; // Yes price = lowestAsk
+      console.log(`  ✅ Yes price = ${price}`);
+      return price;
+    } else {
+      const price = preview?.highestBid !== null && preview?.highestBid !== undefined
+        ? 1 - preview.highestBid // No price = 1 - highestBid
+        : null;
+      console.log(`  ✅ No price = ${price}`);
+      return price;
+    }
   };
 
   // Convert to old format for compatibility with existing components
@@ -306,7 +342,7 @@ export default function Positions() {
           portfolioTotal={portfolioTotalCtx ?? (cashBalanceCtx + positionsTotalValue)}
           positionsTotalValue={positionsTotalValue}
           usdcBalance={Number(cashBalanceCtx)}
-          softLoading={loading || predictionLoading || userDataLoading || pricesLoading || portfolioLoading}
+          softLoading={loading || predictionLoading || userDataLoading || portfolioLoading || booksPreviewLoading}
         />
 
         <PositionsTabs 
@@ -321,7 +357,7 @@ export default function Positions() {
               <p className="error-message">{error}</p>
             ) : (
               (() => {
-                const softLoading = loading || predictionLoading || userDataLoading || pricesLoading;
+                const softLoading = loading || predictionLoading || userDataLoading || booksPreviewLoading;
                 const hasPositions = umbrellaPositions.length > 0;
                 if (!hasPositions && !softLoading) {
                   return <p className="text-body">No positions found.</p>;

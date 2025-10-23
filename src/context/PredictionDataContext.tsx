@@ -7,7 +7,6 @@ import React, {
 	useState,
 } from "react";
 import { umbrellaDataService, type Umbrella } from "lib/umbrellaDataService";
-import { currentPriceService } from "lib/currentPriceService";
 import { getPredictionApiBaseUrl } from "lib/predictionApiBase";
 
 type MarketLite = any;
@@ -28,6 +27,7 @@ type PredictionDataContextValue = {
 	singleMarketOrderbooks: Record<string, any>;
 	multiMarketData: Record<string, any>;
 	loading: boolean;
+	booksPreviewLoading: boolean;
 	error?: string;
 	refresh: () => Promise<void>;
 	// Helpers for consumers (e.g. trading page)
@@ -52,6 +52,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	singleMarketOrderbooks: {},
 	multiMarketData: {},
 	loading: true,
+	booksPreviewLoading: true,
 	error: undefined,
 	refresh: async () => {},
 	getUmbrellaById: () => undefined,
@@ -90,6 +91,7 @@ export function PredictionDataProvider({
 	const [allBooksPreview, setAllBooksPreview] = useState<
 		Record<string, BookPreview>
 	>({});
+	const [booksPreviewLoading, setBooksPreviewLoading] = useState(true);
 	const [error, setError] = useState<string | undefined>(undefined);
 
 	const load = useCallback(async () => {
@@ -353,6 +355,7 @@ export function PredictionDataProvider({
 						});
 					}
 					setAllBooksPreview(previewMap);
+					setBooksPreviewLoading(false); // Mark as loaded
 					console.log(
 						"📚 All books preview mapped by questionId:",
 						previewMap
@@ -364,6 +367,7 @@ export function PredictionDataProvider({
 					"Failed to fetch all-books-preview:",
 					err
 				);
+				setBooksPreviewLoading(false); // Mark as loaded even on error
 			}
 		};
 
@@ -384,6 +388,7 @@ export function PredictionDataProvider({
 			singleMarketOrderbooks,
 			multiMarketData,
 			loading,
+			booksPreviewLoading,
 			error,
 			refresh: load,
 			getUmbrellaById,
@@ -403,6 +408,7 @@ export function PredictionDataProvider({
 			singleMarketOrderbooks,
 			multiMarketData,
 			loading,
+			booksPreviewLoading,
 			error,
 			load,
 			getUmbrellaById,

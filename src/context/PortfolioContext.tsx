@@ -1,7 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePredictionData } from "context/PredictionDataContext";
-// import { useCurrentPrices } from "context/CurrentPriceContext";
-import { currentPriceService } from "lib/currentPriceService";
 import { useUserData } from "context/UserDataContext";
 import { useSignerContext } from "context/SignerContext";
 
@@ -20,7 +18,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const lastCashRef = React.useRef<number>(0);
   const lastPositionsRef = React.useRef<number>(0);
   const { account } = useSignerContext();
-  const { umbrellas, getQuestionsForUmbrella } = usePredictionData();
+  const { umbrellas, getQuestionsForUmbrella, allBooksPreview, booksPreviewLoading } = usePredictionData();
   const { usdcBalance, tokenBalances, loading: userDataLoading } = useUserData();
 
   // Track separate loading states
@@ -47,8 +45,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 
   // Cash is loading if we haven't loaded it yet and user data is loading
   const cashLoading = !hasInitialCashLoad && (usdcBalance === null || usdcBalance === undefined);
-  // Portfolio is loading if we haven't loaded it yet OR if balances are still being fetched
-  const portfolioLoading = !hasInitialPortfolioLoad || (userDataLoading && tokenBalances.size === 0);
+  // Portfolio is loading if we haven't loaded it yet OR if balances/prices are still being fetched
+  const portfolioLoading = !hasInitialPortfolioLoad || (userDataLoading && tokenBalances.size === 0) || booksPreviewLoading;
 
   // Stable cash balance: do not drop to 0 when upstream temporarily returns null
   const cashBalance = useMemo(() => {
@@ -65,6 +63,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       setPortfolioTotal(0);
       return;
     }
+    
+    // Don't compute if prices haven't loaded yet
+    if (booksPreviewLoading) {
+      return;
+    }
+    
     try {
       // Collect market IDs from PredictionData
       const marketIds: string[] = [];
@@ -75,7 +79,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
           if (id) marketIds.push(id);
         });
       });
-      // Compute positions total from tokenBalances and cached prices (refresh runs separately to avoid UI snap)
+      // Compute positions total from tokenBalances and allBooksPreview (best ask/bid prices)
       let positions = 0;
       let pricedMarkets = 0;
       marketIds.forEach((id) => {
@@ -83,9 +87,14 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         if (!tb) return;
         const yes = Number(tb.yesBalance) || 0;
         const no = Number(tb.noBalance) || 0;
-        const cached = currentPriceService.getCachedPrices(id);
-        const yp = cached?.yes.value ?? null;
-        const np = cached?.no.value ?? null;
+        
+        // Get prices from allBooksPreview (same pattern as home page cards)
+        const preview = allBooksPreview[id];
+        const yp = preview?.lowestAsk ?? null; // Yes price = lowestAsk
+        const np = preview?.highestBid !== null && preview?.highestBid !== undefined
+          ? 1 - preview.highestBid // No price = 1 - highestBid
+          : null;
+        
         if (typeof yp === 'number' || typeof np === 'number') {
           pricedMarkets += 1;
         }
@@ -115,19 +124,23 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setPortfolioTotal((current) => current ?? cashBalance);
     }
-  }, [account, umbrellas, getQuestionsForUmbrella, tokenBalances, cashBalance]);
+  }, [account, umbrellas, getQuestionsForUmbrella, tokenBalances, cashBalance, allBooksPreview, booksPreviewLoading]);
 
   useEffect(() => {
     if (!account) {
       setPortfolioTotal(0);
       return;
     }
+    // Don't compute until prices are loaded
+    if (booksPreviewLoading) {
+      return;
+    }
     // Compute once on mount and whenever holdings or cash change.
     compute();
-    // Recompute once more shortly after to include freshly warmed prices
+    // Recompute once more shortly after to include freshly loaded prices
     const t = setTimeout(compute, 500);
     return () => clearTimeout(t);
-  }, [account, tokenBalances, usdcBalance, umbrellas, compute]);
+  }, [account, tokenBalances, usdcBalance, umbrellas, allBooksPreview, booksPreviewLoading, compute]);
 
   const value = useMemo<PortfolioContextValue>(() => ({ 
     portfolioTotal, 

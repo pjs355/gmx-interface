@@ -1,9 +1,7 @@
 import React from "react";
 import Button from "components/Button/Button";
 import {
-	calculateOrderbookPrices,
 	toCentsString,
-	getTopTwoMarkets,
 	truncateMarketName,
 } from "../utils/predictionUtils";
 import type { PredictionMarket } from "lib/predictionMarketDataService";
@@ -26,7 +24,42 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 	onNavigate,
 }) => {
 	const { allBooksPreview } = usePredictionData();
-	const topMarkets = getTopTwoMarkets(umbrellaId, multiMarketData);
+	
+	// Helper to get lowestAsk from WebSocket orderbook data
+	const getLowestAsk = React.useCallback((questionId: string, orderbooks: any) => {
+		const orderbook = orderbooks[questionId];
+		if (!orderbook?.asks || orderbook.asks.length === 0) return null;
+		return Math.min(...orderbook.asks.map((a: any) => a.price));
+	}, []);
+	
+	// Get top 2 markets using allBooksPreview with WebSocket fallback
+	const data = multiMarketData[umbrellaId];
+	const topMarkets = React.useMemo(() => {
+		if (!data) return [];
+		
+		const { questions, orderbooks } = data;
+		
+		// Calculate Yes prices from allBooksPreview (with WebSocket fallback) and sort by highest
+		const marketsWithPrices = questions.map(question => {
+			const questionId = question.questionId || question._id;
+			const preview = questionId ? allBooksPreview[questionId] : undefined;
+			// Try allBooksPreview first, fallback to WebSocket orderbook
+			const yesPrice = preview?.lowestAsk ?? getLowestAsk(questionId, orderbooks);
+			
+			return {
+				question,
+				yesPrice,
+			};
+		}).sort((a, b) => {
+			// Sort by highest Yes price first, handle nulls by putting them at the end
+			if (a.yesPrice === null && b.yesPrice === null) return 0;
+			if (a.yesPrice === null) return 1;
+			if (b.yesPrice === null) return -1;
+			return b.yesPrice - a.yesPrice;
+		});
+		
+		return marketsWithPrices.slice(0, 2); // Return top 2
+	}, [data, allBooksPreview, getLowestAsk]);
 
 	return (
 		<div className="multi-market-actions">

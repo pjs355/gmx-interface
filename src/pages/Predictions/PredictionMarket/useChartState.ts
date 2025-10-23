@@ -11,7 +11,7 @@ type ChartState = {
 };
 
 export function useChartState(sortedQuestions: any[], questionOrderbooks: Record<string, any>) {
-  const { refreshOrderbook } = usePredictionData();
+  const { allBooksPreview } = usePredictionData();
   const [chartOnlyState, setChartOnlyState] = useState<ChartState>({
     isInitialized: false,
     primaryMarket: null,
@@ -21,29 +21,41 @@ export function useChartState(sortedQuestions: any[], questionOrderbooks: Record
     frozenOrderbooks: {},
   });
 
-  // Initialize chart state immediately - don't wait for data
+  // Initialize/update chart state based on sorted questions
   useEffect(() => {
-    if (!chartOnlyState.isInitialized && sortedQuestions.length > 0) {
+    if (sortedQuestions.length > 0) {
       const primaryMarket = { ...sortedQuestions[0] };
       const secondaryMarket = sortedQuestions.length > 1 ? { ...sortedQuestions[1] } : null;
 
       const primaryQuestionId = (primaryMarket._id || primaryMarket.questionId || primaryMarket.marketId || '') as string;
       const secondaryQuestionId = secondaryMarket ? (secondaryMarket._id || secondaryMarket.questionId || secondaryMarket.marketId) : null;
 
-      const frozenOrderbooks: Record<string, any> = {};
-      if (questionOrderbooks[primaryQuestionId]) frozenOrderbooks[primaryQuestionId] = { ...questionOrderbooks[primaryQuestionId] };
-      if (secondaryQuestionId && questionOrderbooks[secondaryQuestionId]) frozenOrderbooks[secondaryQuestionId] = { ...questionOrderbooks[secondaryQuestionId] };
+      // Only update if the markets actually changed
+      if (primaryQuestionId !== chartOnlyState.primaryQuestionId || 
+          secondaryQuestionId !== chartOnlyState.secondaryQuestionId) {
+        
+        const frozenOrderbooks: Record<string, any> = {};
+        if (questionOrderbooks[primaryQuestionId]) frozenOrderbooks[primaryQuestionId] = { ...questionOrderbooks[primaryQuestionId] };
+        if (secondaryQuestionId && questionOrderbooks[secondaryQuestionId]) frozenOrderbooks[secondaryQuestionId] = { ...questionOrderbooks[secondaryQuestionId] };
 
-      setChartOnlyState({
-        isInitialized: true,
-        primaryMarket,
-        secondaryMarket,
-        primaryQuestionId,
-        secondaryQuestionId,
-        frozenOrderbooks,
-      });
+        console.log('📊 Chart state updated with top markets:', {
+          primary: primaryMarket.displayName || primaryMarket.question,
+          secondary: secondaryMarket?.displayName || secondaryMarket?.question,
+          primaryPrice: allBooksPreview[primaryQuestionId]?.lowestAsk,
+          secondaryPrice: secondaryQuestionId ? allBooksPreview[secondaryQuestionId]?.lowestAsk : null,
+        });
+
+        setChartOnlyState({
+          isInitialized: true,
+          primaryMarket,
+          secondaryMarket,
+          primaryQuestionId,
+          secondaryQuestionId,
+          frozenOrderbooks,
+        });
+      }
     }
-  }, [sortedQuestions, questionOrderbooks, chartOnlyState.isInitialized]);
+  }, [sortedQuestions, questionOrderbooks, chartOnlyState.primaryQuestionId, chartOnlyState.secondaryQuestionId, allBooksPreview]);
 
   // Update frozen orderbooks when questionOrderbooks changes
   useEffect(() => {
