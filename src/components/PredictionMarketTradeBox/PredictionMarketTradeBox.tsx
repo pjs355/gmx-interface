@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 // import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
@@ -18,7 +18,19 @@ import { useTradeState } from "./hooks/useTradeState";
 
 interface PredictionMarketTradeBoxProps extends TradeBoxProps {}
 
-export default function PredictionMarketTradeBox({ market, orderbook: propOrderbook, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }: PredictionMarketTradeBoxProps) {
+// Exposed methods for testing
+export interface PredictionMarketTradeBoxHandle {
+  setPosition: (position: 'yes' | 'no') => void;
+  setAmount: (amount: string) => void;
+  setPrice: (price: string) => void;
+  setOrderType: (orderType: 'market' | 'limit') => void;
+  setSide: (side: 'buy' | 'sell') => void;
+  executeTrade: () => Promise<void>;
+  getState: () => any;
+}
+
+const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
+  ({ market, orderbook: propOrderbook, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }, ref) => {
 
   const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange } = useTradeState(initialPosition);
   // const { client: smartClient, getClientForChain } = useSmartWallets();
@@ -330,7 +342,11 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
             maxPrice: (sellCalc as any).maxPrice,
             effectiveAvgPrice: effectiveAvgPrice,
             signingPrice: orderPrice,
-            finalOrderAmount: orderAmount
+            finalOrderAmount: orderAmount,
+            signatureAmount: orderAmount,
+            signaturePrice: orderPrice,
+            signatureTotalUSD: orderAmount * orderPrice,
+            actualTotalUSD: totalUsdReceived
           });
         }
       } else {
@@ -420,6 +436,73 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
     }
   }, [state.orderResult]);
 
+  // Expose methods for testing via ref
+  useImperativeHandle(ref, () => ({
+    setPosition: (position: 'yes' | 'no') => {
+      handlePositionChange(position);
+    },
+    setAmount: (amount: string) => {
+      handleAmountChange(amount);
+    },
+    setPrice: (price: string) => {
+      handlePriceChange(price);
+    },
+    setOrderType: (orderType: 'market' | 'limit') => {
+      handleOrderTypeChange(orderType);
+    },
+    setSide: (side: 'buy' | 'sell') => {
+      handleSideChange(side);
+    },
+    executeTrade: async () => {
+      // Validation checks - same as button would do
+      if (!authenticated) {
+        throw new Error("Not authenticated - please log in with Privy");
+      }
+      if (!account) {
+        throw new Error("No wallet connected - account not available");
+      }
+      if (state.isLoading) {
+        throw new Error("Already processing a trade");
+      }
+      if (!approvalState.isApproved) {
+        throw new Error("Tokens not approved - please approve first");
+      }
+      if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) {
+        throw new Error("Missing required fields: position, amount, or price");
+      }
+      
+      // CRITICAL: Check for sufficient shares on SELL orders
+      if (state.side === 'sell') {
+        console.log("🔍 SELL order validation:", {
+          side: state.side,
+          position: state.selectedPosition,
+          amount: state.amount,
+          yesBalance: yesBalance,
+          noBalance: noBalance,
+          availableForThisPosition: state.selectedPosition === 'yes' ? yesBalance : noBalance
+        });
+        
+        const sharesCheck = checkSufficientShares(
+          state.amount, 
+          state.orderType, 
+          state.side, 
+          state.selectedPosition, 
+          yesBalance, 
+          noBalance
+        );
+        
+        console.log("🔍 Shares check result:", sharesCheck);
+        
+        if (!sharesCheck.hasSufficientShares) {
+          throw new Error(`Insufficient ${state.selectedPosition.toUpperCase()} shares. Required: ${sharesCheck.requiredShares}, Available: ${state.selectedPosition === 'yes' ? yesBalance : noBalance}`);
+        }
+      }
+      
+      await handleTrade();
+    },
+    getState: () => state,
+  }), [handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTrade, state, authenticated, account, approvalState, yesBalance, noBalance]);
+
   // Button state logic
   const buttonState = useButtonState({
     authenticated,
@@ -457,6 +540,10 @@ export default function PredictionMarketTradeBox({ market, orderbook: propOrderb
       approvalState={approvalState}
     />
   );
-}
+});
+
+PredictionMarketTradeBox.displayName = "PredictionMarketTradeBox";
+
+export default PredictionMarketTradeBox;
 
 

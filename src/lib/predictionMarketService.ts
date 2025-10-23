@@ -238,22 +238,9 @@ export class PredictionMarketService {
     };
     // Calculate makerAmount and takerAmount based on buy/sell side
     // BUY orders: maker gives USDC (amount × price), wants tokens (amount)
-    // SELL orders: maker gives tokens (amount), wants USDC (amount × minPrice)
-    // For SELL, price = minPrice (conservative, guarantees at least this much per share)
-    
-    // Calculate USD amount WITHOUT aggressive rounding (parseUnits handles precision)
-    const usdValue = amount * price;
-    const usdcAmount = ethers.parseUnits(roundToDecimals(usdValue, 6), 6).toString();
+    // SELL orders: maker gives tokens (amount), wants USDC (amount × price)
+    const usdcAmount = ethers.parseUnits(roundToDecimals(roundDollarAmount(amount * price, side), 6), 6).toString();
     const tokenAmount = ethers.parseUnits(roundToDecimals(Number(amount), 6), 6).toString();
-    
-    console.log('💰 USD Calculation:', {
-      side,
-      amount,
-      price,
-      calculatedUsd: usdValue,
-      usdcAmount: ethers.formatUnits(usdcAmount, 6),
-      tokenAmount: ethers.formatUnits(tokenAmount, 6)
-    });
     
     const order: MarketOrder = {
       salt: ethers.id(`order-${Date.now()}-${Math.random()}`),

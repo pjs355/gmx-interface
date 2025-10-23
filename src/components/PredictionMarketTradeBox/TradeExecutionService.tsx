@@ -70,6 +70,7 @@ export function useTradeExecutionService() {
           } catch {}
         }
         if (!ready || !activeSigner || !signerAddress) {
+          console.log("⚠️ Missing signer, attempting refresh...");
           await refresh();
           await wait(600);
           // Re-check cache
@@ -253,8 +254,8 @@ export function useTradeExecutionService() {
           // Additional fields for server
           type: params.orderType, // Use the dropdown selection: "market" or "limit"
           size: params.amount.toString(),
-          // Add price for both market and limit orders
-          price: params.price.toString(),
+          // Add price for both market and limit orders - API requires exactly 2 decimal places
+          price: params.price.toFixed(2),
         };
 
         console.log("📋 Final signed order:", signedOrder);
@@ -307,7 +308,7 @@ export function useTradeExecutionService() {
         };
       }
     },
-    []
+    [cachedSigner, cachedSignerAddress, ready, hasSmartWallet, refresh]
   );
 
   // Validate trade parameters before execution

@@ -14,6 +14,7 @@ import Profile from "pages/Profile/Profile";
 import Admin from "pages/Predictions/Admin/Admin";
 import Positions from "pages/Positions/Positions";
 import Prizes from "pages/Prizes/Prizes";
+import TradeBoxTest from "pages/TradeBoxTest/TradeBoxTest";
 
 export function MainRoutes() {
 	const { pathname } = useLocation();
@@ -50,6 +51,7 @@ export function MainRoutes() {
 			<Route path="/get_test_usdc" element={<GetTestUsdc />} />
 			<Route path="/positions" element={<Positions />} />
 			<Route path="/prizes" element={<Prizes />} />
+			<Route path="/test/tradebox/:umbrellaId" element={<TradeBoxTest />} />
 
 			<Route path="*" element={<PageNotFound />} />
 		</Routes>
