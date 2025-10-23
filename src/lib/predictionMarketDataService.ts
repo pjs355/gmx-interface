@@ -14,11 +14,18 @@ export interface PredictionMarket {
 	__v: number;
 	displayName?: string;
 	image?: string;
-	historicalPrices?: Array<{
-		timestamp: number | string;
+	historicalPricesYes: Array<{
+		ts: number | string;
+		price: number;
+	}>;
+	historicalPricesNo: Array<{
+		ts: number | string;
+		price: number;
+	}>;
+	historicalPrices: Array<{
+		ts: number | string;
 		price: number;
 		volume?: number;
-		[key: string]: any;
 	}>;
 }
 

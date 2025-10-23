@@ -5,9 +5,6 @@ import { useMedia } from "react-use";
 import Footer from "components/Footer/Footer";
 import Button from "components/Button/Button";
 // Removed PredictionMarketTradeBox - not used in this component
-// Commented out TradingView components - replaced with Recharts
-// import { Chart } from "components/PredictionMarketTVChart/Chart";
-// import { TVChart } from "components/PredictionMarketTVChart/TVChart";
 // Chart is rendered via MarketPanels
 import type { PredictionMarket } from "lib/predictionMarketDataService";
 // Removed predictionMarketDataService - not used in this component
@@ -271,7 +268,7 @@ function PredictionMarketContent() {
 		return orderbook;
 	}, [activeMarket, questionOrderbooks]);
 
-	// Update the live ask store with the active market's best ask price for TradingView
+	// Update the live ask store with the active market's best ask price
 	useEffect(() => {
 		if (
 			activeMarketOrderbook?.asks &&

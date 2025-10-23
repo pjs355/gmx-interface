@@ -18,9 +18,6 @@ import { BalanceProvider } from "context/BalanceContext";
 import { CurrentPriceProvider } from "context/CurrentPriceContext";
 import { PortfolioProvider } from "context/PortfolioContext";
 
-const REACT_APP_PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as
-	| string
-	| undefined;
 import App from "./App/App";
 import "./styles/globals.css";
 

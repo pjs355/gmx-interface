@@ -97,11 +97,7 @@ export function PredictionDataProvider({
 			} catch {}
 			const entries = await Promise.all(
 				umbrellas.map(async (umbrella: any) => {
-					const markets =
-						await umbrellaDataService.fetchQuestionsForUmbrella(
-							umbrella,
-							{ includeResolved: true }
-						);
+					const markets = umbrella.children;
 					const key =
 						umbrella?._id ||
 						umbrella?.id ||
@@ -147,7 +143,12 @@ export function PredictionDataProvider({
 					);
 					console.log({ allMarkets, activeMarkets: markets });
 					console.groupEnd();
-				} catch {}
+				} catch {
+					console.error(
+						`Error fetching markets for umbrella ${cleanedUmbrella.displayName} [${key}]`,
+						error
+					);
+				}
 				// Store all markets (including resolved) for consumers like Positions page (no re-fetch on mount)
 				allMarketsMap[key] = allMarkets;
 				// Quiet per-umbrella store log to keep console clean
@@ -192,149 +193,6 @@ export function PredictionDataProvider({
 			setMultiMarketData(multiData);
 
 			// Kick off orderbook and historical data fetches in background
-			const fetchAll = async () => {
-				const { predictionMarketDataService } = await import(
-					"lib/predictionMarketDataService"
-				);
-				const updatesSingle: Record<string, any> = {};
-				const updatesMulti: Record<string, any> = {};
-
-				// Quiet background fetch start log
-
-				// Warm price cache for all markets across umbrellas
-				try {
-					const allMarketIds: string[] = [];
-					Object.values(marketsMap).forEach((markets) => {
-						(markets || []).forEach((q: any) => {
-							const qid = q?._id || q?.questionId || q?.marketId;
-							if (qid) allMarketIds.push(qid);
-						});
-					});
-					if (allMarketIds.length > 0) {
-						// Fire-and-forget; PortfolioContext will read from cache
-						currentPriceService
-							.refreshMarkets(allMarketIds)
-							.catch(() => {});
-					}
-				} catch {}
-
-				for (const [umbId, markets] of Object.entries(marketsMap)) {
-					if (!Array.isArray(markets) || markets.length === 0)
-						continue;
-
-					// Quiet processing log
-
-					if (markets.length === 1) {
-						const q = markets[0] as any;
-						const qid = q?._id || q?.questionId || q?.marketId;
-						if (!qid) continue;
-
-						// Quiet per-market processing log
-
-						// First, ensure market is cached
-						try {
-							predictionMarketDataService.getCachedMarketData(
-								qid
-							) ||
-								(await predictionMarketDataService.fetchMarketById(
-									qid
-								));
-						} catch (error) {
-							console.warn(
-								"Failed to cache market data for",
-								qid,
-								error
-							);
-						}
-
-						// Fetch orderbook
-						const ob = await orderbookService.fetchOrderbook(qid);
-						if (ob) updatesSingle[umbId] = ob;
-
-						// Fetch historical data
-						try {
-							await predictionMarketDataService.refreshHistoricalData(
-								qid
-							);
-							// Quiet historical data log
-						} catch (error) {
-							console.warn(
-								"Failed to load historical data for",
-								qid,
-								error
-							);
-						}
-					} else {
-						// Fetch orderbooks and historical data for each question under umbrella
-						const obMap: Record<string, any> = {};
-						await Promise.all(
-							markets.map(async (q: any) => {
-								const qid =
-									q?._id || q?.questionId || q?.marketId;
-								if (!qid) return;
-
-								// Quiet per-market processing log
-
-								// First, ensure market is cached
-								try {
-									predictionMarketDataService.getCachedMarketData(
-										qid
-									) ||
-										(await predictionMarketDataService.fetchMarketById(
-											qid
-										));
-								} catch (error) {
-									console.warn(
-										"Failed to cache market data for",
-										qid,
-										error
-									);
-								}
-
-								// Fetch orderbook
-								const ob =
-									await orderbookService.fetchOrderbook(qid);
-								if (ob) obMap[qid] = ob;
-
-								// Fetch historical data
-								try {
-									await predictionMarketDataService.refreshHistoricalData(
-										qid
-									);
-									// Quiet historical data log
-								} catch (error) {
-									console.warn(
-										"Failed to load historical data for",
-										qid,
-										error
-									);
-								}
-							})
-						);
-						if (!updatesMulti[umbId]) updatesMulti[umbId] = {};
-						updatesMulti[umbId] = {
-							...(multiData[umbId] || {
-								questions: markets,
-								orderbooks: {},
-							}),
-							orderbooks: obMap,
-						};
-					}
-				}
-
-				// Quiet background fetch completion log
-				if (Object.keys(updatesSingle).length)
-					setSingleMarketOrderbooks((prev) => ({
-						...prev,
-						...updatesSingle,
-					}));
-				if (Object.keys(updatesMulti).length)
-					setMultiMarketData((prev) => ({
-						...prev,
-						...updatesMulti,
-					}));
-			};
-			fetchAll().catch(() => {});
 		} catch (e: any) {
 			setError(e?.message || "Failed to load markets");
 		} finally {
