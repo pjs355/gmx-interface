@@ -43,7 +43,7 @@ export function AppHeaderLinks({
     const { authenticated: active, account } = useSignerContext();
     const { logout } = usePrivy();
     const [, copyToClipboard] = useCopyToClipboard();
-	const { portfolioTotal, cashBalance } = usePortfolio();
+	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolio();
 
 	const formatCurrency = (
 		value: number | string | null | undefined
@@ -55,10 +55,6 @@ export function AppHeaderLinks({
 			maximumFractionDigits: 2,
 		}).format(num);
 	};
-
-	const formattedUsdcBalance = Number.isFinite(cashBalance)
-		? Number(cashBalance).toFixed(2)
-		: "0.00";
 
 	// const isLeaderboardActive = useCallback(
 	//   (match: any, location: any) => Boolean(match) || location.pathname.startsWith("/competitions"),
@@ -96,10 +92,13 @@ export function AppHeaderLinks({
 									Portfolio
 								</span>
 								<span className="text-sm font-normal text-white">
-									{portfolioTotal === null ||
-									!isFinite(portfolioTotal)
-										? "--"
-										: `$${formatCurrency(portfolioTotal)}`}
+									{portfolioLoading ? (
+										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+									) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
+										"--"
+									) : (
+										`$${formatCurrency(portfolioTotal)}`
+									)}
 								</span>
 							</div>
 						</HeaderLink>
@@ -113,7 +112,11 @@ export function AppHeaderLinks({
 									Cash
 								</span>
 								<span className="text-sm font-normal text-white">
-									${formatCurrency(formattedUsdcBalance)}
+									{cashLoading ? (
+										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+									) : (
+										`$${formatCurrency(cashBalance)}`
+									)}
 								</span>
 							</div>
 						</HeaderLink>

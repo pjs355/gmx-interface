@@ -25,41 +25,43 @@ export default function Footer({ showRedirectModal, redirectPopupTimestamp, isMo
 
   return (
     <div className={`Footer ${isMobileTradePage ? "pb-large" : "pb-normal"}`}>
-      <div className="Footer-left">
-        <span className="Footer-logo-text">LevelUp</span>
-      </div>
-      <div className="Footer-center">
-        {getFooterLinks(isHome).map(({ external, label, link, isAppLink }) => {
-          if (external) {
+      <div className="Footer-content">
+        <div className="Footer-left">
+          <span className="Footer-logo-text">LevelUp</span>
+        </div>
+        <div className="Footer-center">
+          {getFooterLinks(isHome).map(({ external, label, link, isAppLink }) => {
+            if (external) {
+              return (
+                <ExternalLink key={label} href={link} className={linkClassName}>
+                  {label}
+                </ExternalLink>
+              );
+            }
+            if (isAppLink) {
+              const baseUrl = "";
+              return (
+                <a key={label} href={baseUrl + link} className={linkClassName}>
+                  {label}
+                </a>
+              );
+            }
             return (
-              <ExternalLink key={label} href={link} className={linkClassName}>
+              <NavLink key={link} to={link} className={({ isActive }) => `${linkClassName} ${isActive ? "active" : ""}`}>
                 {label}
+              </NavLink>
+            );
+          })}
+        </div>
+        <div className="Footer-right">
+          {SOCIAL_LINKS.map((platform) => (
+            <TrackingLink key={platform.name}>
+              <ExternalLink href={platform.link} className="Footer-social">
+                <img src={platform.icon} alt={platform.name} />
               </ExternalLink>
-            );
-          }
-          if (isAppLink) {
-            const baseUrl = "";
-            return (
-              <a key={label} href={baseUrl + link} className={linkClassName}>
-                {label}
-              </a>
-            );
-          }
-          return (
-            <NavLink key={link} to={link} className={({ isActive }) => `${linkClassName} ${isActive ? "active" : ""}`}>
-              {label}
-            </NavLink>
-          );
-        })}
-      </div>
-      <div className="Footer-right">
-        {SOCIAL_LINKS.map((platform) => (
-          <TrackingLink key={platform.name}>
-            <ExternalLink href={platform.link} className="Footer-social">
-              <img src={platform.icon} alt={platform.name} />
-            </ExternalLink>
-          </TrackingLink>
-        ))}
+            </TrackingLink>
+          ))}
+        </div>
       </div>
     </div>
   );

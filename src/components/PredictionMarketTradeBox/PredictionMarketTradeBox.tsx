@@ -10,7 +10,6 @@ import { useTradeExecutionService } from "./TradeExecutionService";
 import PredictionMarketTradeBoxResponsiveContainer from "./PredictionMarketTradeBoxResponsiveContainer";
 // Removed OrderbookContext import - using passed orderbook prop instead
 import { useUSDCBalance, checkSufficientBalance, useYesNoBalances, checkSufficientShares } from "./checkBalances";
-// Removed useApproval import - using global context instead
 import { useUserData } from "context/UserDataContext";
 import { useBalances } from "context/BalanceContext";
 import { useButtonState } from "./hooks/useButtonState";
