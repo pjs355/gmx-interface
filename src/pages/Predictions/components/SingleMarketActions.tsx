@@ -19,9 +19,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	question,
 }) => {
 	const { allBooksPreview } = usePredictionData();
-	const questionId = question.questionId || question._id;
+	const questionId = question.questionId;
 	const preview = questionId ? allBooksPreview[questionId] : undefined;
-
+	console.log("🔍 Preview:", preview);
 	console.log("🔍 SingleMarketActions lookup:", {
 		questionId,
 		preview,
