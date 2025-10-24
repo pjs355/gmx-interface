@@ -1,7 +1,7 @@
 // Reusable resolver for picking a game logo from GameLogos by tags, with fallback
 
 // Load all game logos at build time via Vite glob
-const logoModules = import.meta.glob('../GameLogos/*.{png,jpg,jpeg,svg,webp}', {
+const logoModules = import.meta.glob('../../../assets/GameLogos/*.{png,jpg,jpeg,svg,webp}', {
   eager: true,
   as: 'url'
 }) as Record<string, string>;
@@ -26,6 +26,7 @@ for (const [path, url] of Object.entries(logoModules)) {
     fallbackLogoUrl = url;
   }
 }
+
 
 // Add specific mappings for common tag variations
 const tagMappings: Record<string, string> = {
