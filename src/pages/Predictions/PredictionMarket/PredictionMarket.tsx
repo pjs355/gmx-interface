@@ -5,7 +5,7 @@ import { useMedia } from "react-use";
 import Footer from "components/Footer/Footer";
 import Button from "components/Button/Button";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { Umbrella } from "services/api/umbrellaDataService";
+import { Umbrella } from "@/services/api/umbrellaDataService";
 import { getPredictionWebSocketUrl } from "@/config/predictionApiBase";
 import { usePredictionData } from "context/PredictionDataContext";
 import { MarketPanels } from "./MarketPanels";
@@ -13,10 +13,11 @@ import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
 import "../PredictionMarket.scss";
 import { PredictionCurtainProvider } from "components/PredictionMarketTradeBox/PredictionCurtain";
-const getBestAsk = (orderbook: any) => {
-	if (!orderbook?.asks || orderbook.asks.length === 0) return null;
-	return Math.min(...orderbook.asks.map((a: any) => a.price));
-};
+// Removed runBatchTestOrders - not used in this component
+// Removed gtaVIImage - not used in this component
+// Removed RulesSection - not used in this component
+
+// Removed getBestAsk - now using allBooksPreview instead of local orderbook
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -58,6 +59,7 @@ function PredictionMarketContent() {
 		getQuestionsForUmbrella,
 		getOrderbookForQuestion,
 		refreshOrderbook,
+		allBooksPreview,
 		loading: contextLoading,
 	} = usePredictionData();
 	// Removed tradeExecutionService - not used in this component
@@ -340,28 +342,109 @@ function PredictionMarketContent() {
 		[]
 	);
 
-	// Sort questions by highest Yes price (bestAsk)
+	// Get the active market's orderbook
+	const activeMarketOrderbook = useMemo(() => {
+		if (!activeMarket) return null;
+		const orderBookId =
+			activeMarket._id ||
+			activeMarket.questionId ||
+			activeMarket.marketId;
+		const orderbook = questionOrderbooks[orderBookId] || null;
+		return orderbook;
+	}, [activeMarket, questionOrderbooks]);
+
+	// Update the live ask store with the active market's best ask price
+	useEffect(() => {
+		if (
+			activeMarketOrderbook?.asks &&
+			activeMarketOrderbook.asks.length > 0
+		) {
+			// Removed unused bestAsk calculation
+			// NOTE: Live ask store is now managed separately for chart independence
+			// The chart has its own live ask management that doesn't depend on activeMarket
+		}
+	}, [activeMarketOrderbook, activeMarket]);
+
+	// Helper to get lowestAsk from WebSocket orderbook data
+	const getLowestAsk = useCallback(
+		(questionId: string) => {
+			const orderbook = questionOrderbooks[questionId];
+			if (!orderbook?.asks || orderbook.asks.length === 0) return null;
+			return Math.min(...orderbook.asks.map((a: any) => a.price));
+		},
+		[questionOrderbooks]
+	);
+
+	// Sort questions by highest Yes price using allBooksPreview with WebSocket fallback
 	const sortedQuestions = useMemo(() => {
-		return [...questions].sort((a, b) => {
-			const orderBookIdA = a._id || a.questionId || a.marketId;
-			const orderBookIdB = b._id || b.questionId || b.marketId;
+		console.log("🔍 DETAILED allBooksPreview check:", {
+			previewKeys: Object.keys(allBooksPreview),
+			previewData: allBooksPreview,
+			orderbooksKeys: Object.keys(questionOrderbooks),
+			questionIds: questions.map((q) => ({
+				_id: q._id,
+				questionId: q.questionId,
+				marketId: q.marketId,
+				name: q.displayName || q.question,
+			})),
+		});
 
-			const orderbookA = questionOrderbooks[orderBookIdA];
-			const orderbookB = questionOrderbooks[orderBookIdB];
+		const sorted = [...questions].sort((a, b) => {
+			const questionIdA = a._id || a.questionId || a.marketId;
+			const questionIdB = b._id || b.questionId || b.marketId;
 
-			// Calculate Yes prices (bestAsk) for both markets
-			const bestAskA = getBestAsk(orderbookA);
-			const bestAskB = getBestAsk(orderbookB);
+			// Try allBooksPreview first, fallback to WebSocket orderbook
+			const previewA = questionIdA
+				? allBooksPreview[questionIdA]
+				: undefined;
+			const previewB = questionIdB
+				? allBooksPreview[questionIdB]
+				: undefined;
+
+			const yesPriceA = previewA?.lowestAsk ?? getLowestAsk(questionIdA);
+			const yesPriceB = previewB?.lowestAsk ?? getLowestAsk(questionIdB);
+
+			console.log("🔎 Comparing:", {
+				A: {
+					id: questionIdA,
+					name: a.displayName || a.question,
+					preview: previewA,
+					wsPrice: getLowestAsk(questionIdA),
+					finalPrice: yesPriceA,
+				},
+				B: {
+					id: questionIdB,
+					name: b.displayName || b.question,
+					preview: previewB,
+					wsPrice: getLowestAsk(questionIdB),
+					finalPrice: yesPriceB,
+				},
+			});
 
 			// Sort by highest Yes price first (descending order)
 			// Handle null/undefined cases by putting them at the end
-			if (bestAskA === null && bestAskB === null) return 0;
-			if (bestAskA === null) return 1;
-			if (bestAskB === null) return -1;
+			if (yesPriceA === null && yesPriceB === null) return 0;
+			if (yesPriceA === null) return 1;
+			if (yesPriceB === null) return -1;
 
-			return bestAskB - bestAskA;
+			return yesPriceB - yesPriceA;
 		});
-	}, [questions, questionOrderbooks]);
+
+		console.log(
+			"🔀 Markets sorted by Yes price (highest first):",
+			sorted.map((q) => {
+				const qid = q._id || q.questionId || q.marketId;
+				return {
+					name: q.displayName || q.question,
+					previewPrice: allBooksPreview[qid]?.lowestAsk,
+					wsPrice: getLowestAsk(qid),
+					questionId: qid,
+				};
+			})
+		);
+
+		return sorted;
+	}, [questions, allBooksPreview, questionOrderbooks, getLowestAsk]);
 
 	// COMPLETELY ISOLATED CHART STATE - Never changes after initial load
 	// Chart state managed by useChartState hook
