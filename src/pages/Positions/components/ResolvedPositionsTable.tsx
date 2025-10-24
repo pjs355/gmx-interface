@@ -84,7 +84,10 @@ export default function ResolvedPositionsTable({
 		if (value === null || value === undefined || !isFinite(value))
 			return "—";
 		const isInt = Math.abs(value % 1) < 1e-9;
-		return `$${isInt ? value.toFixed(0) : value.toFixed(2)}`;
+		const formatted = isInt 
+			? value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+			: value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		return `$${formatted}`;
 	};
 
 	return (

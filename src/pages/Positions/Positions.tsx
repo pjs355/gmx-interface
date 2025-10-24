@@ -124,13 +124,6 @@ export default function Positions() {
 	const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) return [];
 
-		console.log("🏢 Computing umbrellaPositions with:", {
-			allBooksPreviewKeys: Object.keys(allBooksPreview),
-			allBooksPreview: allBooksPreview,
-			booksPreviewLoading,
-			tokenBalancesSize: tokenBalances.size,
-		});
-
 		return umbrellas
 			.map((umbrella) => {
 				const markets =
@@ -139,18 +132,22 @@ export default function Positions() {
 					) as PredictionMarket[]) || [];
 				const processedMarkets: MarketPosition[] = markets
 					.map((market) => {
-						console.log("🔍 MARKET OBJECT:", market);
-						const marketId =
-							market._id || market.questionId || market.marketId;
-						const tb = marketId
-							? tokenBalances.get(marketId)
+						// TWO DIFFERENT IDS:
+						// 1. MongoDB _id for tokenBalances lookup
+						const balanceId = market._id;
+						// 2. Transaction hash questionId for price lookup
+						const priceId = market.questionId || market._id;
+						
+						// Get balances using MongoDB _id
+						const tb = balanceId
+							? tokenBalances.get(balanceId)
 							: undefined;
 						const yesBalance = tb ? Number(tb.yesBalance) : 0;
 						const noBalance = tb ? Number(tb.noBalance) : 0;
 
-						// Get prices from allBooksPreview (same pattern as home page cards)
-						const preview = marketId
-							? allBooksPreview[marketId]
+						// Get prices using questionId (transaction hash) - EXACTLY like home page
+						const preview = priceId
+							? allBooksPreview[priceId]
 							: undefined;
 						const yesPrice = preview?.lowestAsk ?? null; // Yes price = lowestAsk
 						const noPrice =
@@ -162,13 +159,16 @@ export default function Positions() {
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;
 						const totalValue = yesValue + noValue;
+						
+						// Orders might use either ID, so check both
 						const marketOrders = (orders || []).filter(
-							(order) => order.questionId === marketId
+							(order) => order.questionId === priceId || order.questionId === balanceId
 						);
 						const aggregates = getOrderAggregates(
 							orders || [],
-							marketId
+							balanceId // Use balance ID for order lookups
 						);
+						
 						return {
 							market,
 							yesBalance,
@@ -263,27 +263,23 @@ export default function Positions() {
 					);
 					const res = resolvedMarkets
 						.map((m) => {
-							const marketId =
-								(m as any)._id ||
-								(m as any).questionId ||
-								(m as any).marketId;
-							const tb = marketId
-								? tokenBalances.get(marketId)
+							// Use MongoDB _id for balance lookup
+							const balanceId = (m as any)._id;
+							const tb = balanceId
+								? tokenBalances.get(balanceId)
 								: undefined;
 							const yesBalance = tb ? Number(tb.yesBalance) : 0;
 							const noBalance = tb ? Number(tb.noBalance) : 0;
 							console.log(
-								`🔍 DEBUG: Market ${m?.displayName} - marketId: ${marketId}, yesBalance: ${yesBalance}, noBalance: ${noBalance}`
+								`🔍 DEBUG: Market ${m?.displayName} - balanceId: ${balanceId}, yesBalance: ${yesBalance}, noBalance: ${noBalance}`
 							);
 							return { market: m, yesBalance, noBalance } as any;
 						})
 						// Filter to only show markets where user has winning positions AND haven't been claimed
 						.filter((mp: any) => {
-							const marketId =
-								(mp.market as any)._id ||
-								(mp.market as any).questionId ||
-								(mp.market as any).marketId;
-							const isClaimed = claimedMarkets.has(marketId);
+							// Use MongoDB _id for claimed check
+							const balanceId = (mp.market as any)._id;
+							const isClaimed = claimedMarkets.has(balanceId);
 
 							if (isClaimed) {
 								console.log(
@@ -391,34 +387,20 @@ export default function Positions() {
 		market: PredictionMarket,
 		side: "Yes" | "No"
 	): number | null => {
-		const marketId = market._id || market.questionId || market.marketId;
-		if (!marketId) {
-			console.log("❌ No marketId for market:", market);
-			return null;
-		}
+		// USE questionId for price lookups (transaction hash) - EXACTLY like home page
+		const questionId = market.questionId || market._id;
+		if (!questionId) return null;
 
-		// Get prices from allBooksPreview (same pattern as home page cards)
-		const preview = allBooksPreview[marketId];
-
-		console.log(`💰 Getting price for ${marketId} (${side}):`, {
-			marketId,
-			preview,
-			allBooksPreviewKeys: Object.keys(allBooksPreview),
-			hasPreview: !!preview,
-		});
+		// Get prices from allBooksPreview (EXACTLY like home page cards)
+		const preview = questionId ? allBooksPreview[questionId] : undefined;
 
 		if (side === "Yes") {
-			const price = preview?.lowestAsk ?? null; // Yes price = lowestAsk
-			console.log(`  ✅ Yes price = ${price}`);
-			return price;
+			return preview?.lowestAsk ?? null; // Yes price = lowestAsk
 		} else {
-			const price =
-				preview?.highestBid !== null &&
+			return preview?.highestBid !== null &&
 				preview?.highestBid !== undefined
-					? 1 - preview.highestBid // No price = 1 - highestBid
-					: null;
-			console.log(`  ✅ No price = ${price}`);
-			return price;
+				? 1 - preview.highestBid // No price = 1 - highestBid
+				: null;
 		}
 	};
 
@@ -449,15 +431,15 @@ export default function Positions() {
 		const map: Record<string, { Yes: number; No: number }> = {};
 		umbrellaPositions.forEach((up) => {
 			up.markets.forEach((mp) => {
-				const marketId =
-					mp.market._id || mp.market.questionId || mp.market.marketId;
-				if (marketId) {
+				// Use MongoDB _id for order/return lookups
+				const balanceId = mp.market._id;
+				if (balanceId) {
 					try {
 						const returns = getTradingReturns(
 							orders || [],
-							marketId
+							balanceId
 						);
-						map[marketId] = {
+						map[balanceId] = {
 							Yes: returns.yesPnL,
 							No: returns.noPnL,
 						};
@@ -471,11 +453,11 @@ export default function Positions() {
 
 	const aggregates = umbrellaPositions.reduce((acc, up) => {
 		up.markets.forEach((mp) => {
-			const marketId =
-				mp.market._id || mp.market.questionId || mp.market.marketId;
-			if (marketId) {
+			// Use MongoDB _id for aggregate lookups
+			const balanceId = mp.market._id;
+			if (balanceId) {
 				// Convert to the format expected by PositionsTableView
-				acc[marketId] = {
+				acc[balanceId] = {
 					Yes: {
 						avgPrice: mp.aggregates.Yes.avgPrice,
 						cost: mp.aggregates.Yes.totalValue,
@@ -492,10 +474,10 @@ export default function Positions() {
 
 	const spentByQid = umbrellaPositions.reduce((acc, up) => {
 		up.markets.forEach((mp) => {
-			const marketId =
-				mp.market._id || mp.market.questionId || mp.market.marketId;
-			if (marketId) {
-				acc[marketId] = {
+			// Use MongoDB _id for spent lookups
+			const balanceId = mp.market._id;
+			if (balanceId) {
+				acc[balanceId] = {
 					Yes: mp.aggregates.Yes.totalValue,
 					No: mp.aggregates.No.totalValue,
 				};
