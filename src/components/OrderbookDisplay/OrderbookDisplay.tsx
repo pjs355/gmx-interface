@@ -1,5 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
-import type { OrderbookSnapshot, OrderbookEntry } from "lib/orderbookService";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import type {
+	OrderbookSnapshot,
+	OrderbookEntry,
+} from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useCurtainActions } from "components/PredictionMarketTradeBox/PredictionCurtain";
 // Helper function to calculate prices from orderbook
@@ -57,6 +60,7 @@ export default function OrderbookDisplay({
 }: OrderbookDisplayProps) {
 	const [activeTab, setActiveTab] = useState<"yes" | "no">("yes");
 	const { openCurtain } = useCurtainActions();
+	const spreadRef = useRef<HTMLDivElement>(null);
 
 	// Sync local activeTab with external activePosition ONLY for the active market
 	useEffect(() => {
@@ -64,6 +68,19 @@ export default function OrderbookDisplay({
 			setActiveTab(activePosition);
 		}
 	}, [isActiveMarket, activePosition, activeTab]);
+
+	// Auto-scroll to spread when orderbook opens
+	useEffect(() => {
+		if (!isCollapsed && spreadRef.current) {
+			// Use setTimeout to ensure the DOM has rendered
+			setTimeout(() => {
+				spreadRef.current?.scrollIntoView({
+					behavior: "smooth",
+					block: "center",
+				});
+			}, 100);
+		}
+	}, [isCollapsed]);
 
 	// Calculate prices for this market's orderbook
 	const { bestBid: marketBestBid, bestAsk: marketBestAsk } = useMemo(() => {
@@ -87,7 +104,7 @@ export default function OrderbookDisplay({
 		if (!title) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
 		const parts = title
 			.split(/\s*vs\.?\s*/i)
-			.map((s) => s.trim())
+			.map((s: any) => s.trim())
 			.filter(Boolean);
 		if (
 			parts.length === 2 &&
@@ -110,7 +127,7 @@ export default function OrderbookDisplay({
 		).trim();
 		const parts = title
 			.split(/\s*vs\.?\s*/i)
-			.map((s) => s.trim())
+			.map((s: any) => s.trim())
 			.filter(Boolean);
 		return (
 			parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1
@@ -410,6 +427,18 @@ export default function OrderbookDisplay({
 								market._id ||
 								market.questionId ||
 								market.marketId;
+
+							// If this is not the active market, switch to it while preserving the current position
+							if (
+								!isActiveMarket &&
+								onMarketSwitch &&
+								activePosition
+							) {
+								// Switch to this market but keep the current yes/no position from the active market
+								onMarketSwitch(market, activePosition);
+							}
+
+							// Toggle the orderbook open/closed
 							onOrderbookToggle(marketId);
 						}
 					}}
@@ -605,7 +634,10 @@ export default function OrderbookDisplay({
 							)}
 
 							{/* Separator with Spread */}
-							<div className="orderbook-separator">
+							<div
+								className="orderbook-separator"
+								ref={spreadRef}
+							>
 								{spread !== null && (
 									<div className="spread-display">
 										<span className="spread-label">

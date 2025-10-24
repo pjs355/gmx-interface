@@ -15,7 +15,6 @@ import { SignerProvider } from "context/SignerContext";
 import { PredictionDataProvider } from "context/PredictionDataContext";
 import { UserDataProvider } from "context/UserDataContext";
 import { BalanceProvider } from "context/BalanceContext";
-import { CurrentPriceProvider } from "context/CurrentPriceContext";
 import { PortfolioProvider } from "context/PortfolioContext";
 
 import App from "./app/App";
@@ -49,13 +48,11 @@ createRoot(document.getElementById("root")!).render(
 					<PredictionDataProvider>
 						<SignerProvider>
 							<UserDataProvider>
-								<CurrentPriceProvider>
-									<BalanceProvider>
-										<PortfolioProvider>
-											<App />
-										</PortfolioProvider>
-									</BalanceProvider>
-								</CurrentPriceProvider>
+								<BalanceProvider>
+									<PortfolioProvider>
+										<App />
+									</PortfolioProvider>
+								</BalanceProvider>
 							</UserDataProvider>
 						</SignerProvider>
 					</PredictionDataProvider>

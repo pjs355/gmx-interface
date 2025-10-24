@@ -13,11 +13,6 @@ import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
 import "../PredictionMarket.scss";
 import { PredictionCurtainProvider } from "components/PredictionMarketTradeBox/PredictionCurtain";
-// Removed runBatchTestOrders - not used in this component
-// Removed gtaVIImage - not used in this component
-// Removed RulesSection - not used in this component
-
-// Removed getBestAsk - now using allBooksPreview instead of local orderbook
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -394,6 +389,7 @@ function PredictionMarketContent() {
 			const questionIdB = b._id || b.questionId || b.marketId;
 
 			// Try allBooksPreview first, fallback to WebSocket orderbook
+
 			const previewA = questionIdA
 				? allBooksPreview[questionIdA]
 				: undefined;
@@ -404,23 +400,6 @@ function PredictionMarketContent() {
 			const yesPriceA = previewA?.lowestAsk ?? getLowestAsk(questionIdA);
 			const yesPriceB = previewB?.lowestAsk ?? getLowestAsk(questionIdB);
 
-			console.log("🔎 Comparing:", {
-				A: {
-					id: questionIdA,
-					name: a.displayName || a.question,
-					preview: previewA,
-					wsPrice: getLowestAsk(questionIdA),
-					finalPrice: yesPriceA,
-				},
-				B: {
-					id: questionIdB,
-					name: b.displayName || b.question,
-					preview: previewB,
-					wsPrice: getLowestAsk(questionIdB),
-					finalPrice: yesPriceB,
-				},
-			});
-
 			// Sort by highest Yes price first (descending order)
 			// Handle null/undefined cases by putting them at the end
 			if (yesPriceA === null && yesPriceB === null) return 0;
@@ -429,19 +408,6 @@ function PredictionMarketContent() {
 
 			return yesPriceB - yesPriceA;
 		});
-
-		console.log(
-			"🔀 Markets sorted by Yes price (highest first):",
-			sorted.map((q) => {
-				const qid = q._id || q.questionId || q.marketId;
-				return {
-					name: q.displayName || q.question,
-					previewPrice: allBooksPreview[qid]?.lowestAsk,
-					wsPrice: getLowestAsk(qid),
-					questionId: qid,
-				};
-			})
-		);
 
 		return sorted;
 	}, [questions, allBooksPreview, questionOrderbooks, getLowestAsk]);

@@ -35,9 +35,6 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			: "—";
 	const noPriceCents = noPrice !== null ? toCentsString(noPrice) : "—";
 
-	// Keep bestAsk/bestBid for payout calculation
-	const { bestAsk, bestBid } = calculateOrderbookPrices(orderbook);
-
 	const hexToRgba = (hex?: string, alpha: number = 0.3): string => {
 		if (!hex) return `rgba(0,0,0,${alpha})`;
 		const cleaned = hex.replace("#", "");
@@ -89,11 +86,18 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const yesColor = (question as any)?.yesColor || "#22c55e";
 	const noColor = (question as any)?.noColor || "#ef4444";
 
-	// Calculate payouts for $100 bet
+	// Calculate payouts for $100 bet using preview data
 	const betAmount = 100;
-	const yesPayout = bestAsk !== null ? Math.round(betAmount / bestAsk) : 0;
+	const yesPayout =
+		yesPrice !== null && yesPrice !== undefined && yesPrice > 0
+			? Math.round(betAmount / yesPrice)
+			: 0;
 	const noPayout =
-		bestBid !== null ? Math.round(betAmount / (1 - bestBid)) : 0;
+		preview?.highestBid !== null &&
+		preview?.highestBid !== undefined &&
+		preview.highestBid < 1
+			? Math.round(betAmount / (1 - preview.highestBid))
+			: 0;
 	return (
 		<div className="single-market-actions">
 			<div className="single-market-buttons">
@@ -173,16 +177,18 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 				</Button>
 			</div>
 
-			<div className="payout-info">
-				<div className="payout-row">
-					<span className="payout-label">$100 → </span>
-					<span className="payout-amount">${yesPayout}</span>
-				</div>
-				<div className="payout-row">
-					<span className="payout-label">$100 → </span>
-					<span className="payout-amount">${noPayout}</span>
-				</div>
-			</div>
+	<div className="payout-info">
+		<div className="payout-row">
+			<span className="payout-label">
+				$100 → <span style={{ color: "#22c55e" }}>${yesPayout}</span>
+			</span>
+		</div>
+		<div className="payout-row">
+			<span className="payout-label">
+				$100 → <span style={{ color: "#22c55e" }}>${noPayout}</span>
+			</span>
+		</div>
+	</div>
 		</div>
 	);
 };

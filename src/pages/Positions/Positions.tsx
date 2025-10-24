@@ -2,9 +2,7 @@ import { useMemo, useState, useCallback } from "react";
 import { useMedia } from "react-use";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { type Umbrella } from "services/api/umbrellaDataService";
-// import { useUSDCBalance } from "components/PredictionMarketTradeBox/checkBalances";
-import { useCurrentPrices } from "context/CurrentPriceContext";
+import { type Umbrella } from "@/services/api/umbrellaDataService";
 import {
 	getOrderAggregates,
 	getTradingReturns,
@@ -65,15 +63,16 @@ export default function Positions() {
 		getAllQuestionsForUmbrella,
 		resolvedMarketsByUmbrella,
 		loading: predictionLoading,
+		allBooksPreview,
+		booksPreviewLoading,
 	} = usePredictionData();
-	const { getCurrentPrice, isLoading: pricesLoading } = useCurrentPrices();
 
 	// Check if all data is loaded before showing resolved positions
 	const isDataFullyLoaded =
 		!predictionLoading &&
 		!userDataLoading &&
 		!portfolioLoading &&
-		!pricesLoading;
+		!booksPreviewLoading;
 	// removed setPortfolioTotal – portfolio is computed in context
 
 	const [loading] = useState(false);
@@ -124,6 +123,14 @@ export default function Positions() {
 	// derive active positions
 	const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) return [];
+
+		console.log("🏢 Computing umbrellaPositions with:", {
+			allBooksPreviewKeys: Object.keys(allBooksPreview),
+			allBooksPreview: allBooksPreview,
+			booksPreviewLoading,
+			tokenBalancesSize: tokenBalances.size,
+		});
+
 		return umbrellas
 			.map((umbrella) => {
 				const markets =
@@ -132,6 +139,7 @@ export default function Positions() {
 					) as PredictionMarket[]) || [];
 				const processedMarkets: MarketPosition[] = markets
 					.map((market) => {
+						console.log("🔍 MARKET OBJECT:", market);
 						const marketId =
 							market._id || market.questionId || market.marketId;
 						const tb = marketId
@@ -139,12 +147,18 @@ export default function Positions() {
 							: undefined;
 						const yesBalance = tb ? Number(tb.yesBalance) : 0;
 						const noBalance = tb ? Number(tb.noBalance) : 0;
-						const yesPrice = marketId
-							? getCurrentPrice(marketId, "yes")
-							: null;
-						const noPrice = marketId
-							? getCurrentPrice(marketId, "no")
-							: null;
+
+						// Get prices from allBooksPreview (same pattern as home page cards)
+						const preview = marketId
+							? allBooksPreview[marketId]
+							: undefined;
+						const yesPrice = preview?.lowestAsk ?? null; // Yes price = lowestAsk
+						const noPrice =
+							preview?.highestBid !== null &&
+							preview?.highestBid !== undefined
+								? 1 - preview.highestBid // No price = 1 - highestBid
+								: null;
+
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;
 						const totalValue = yesValue + noValue;
@@ -184,7 +198,7 @@ export default function Positions() {
 		getQuestionsForUmbrella,
 		tokenBalances,
 		orders,
-		getCurrentPrice,
+		allBooksPreview,
 	]);
 
 	// derive resolved winnings using dedicated resolved markets storage
@@ -378,8 +392,34 @@ export default function Positions() {
 		side: "Yes" | "No"
 	): number | null => {
 		const marketId = market._id || market.questionId || market.marketId;
-		if (!marketId) return null;
-		return getCurrentPrice(marketId, side.toLowerCase() as "yes" | "no");
+		if (!marketId) {
+			console.log("❌ No marketId for market:", market);
+			return null;
+		}
+
+		// Get prices from allBooksPreview (same pattern as home page cards)
+		const preview = allBooksPreview[marketId];
+
+		console.log(`💰 Getting price for ${marketId} (${side}):`, {
+			marketId,
+			preview,
+			allBooksPreviewKeys: Object.keys(allBooksPreview),
+			hasPreview: !!preview,
+		});
+
+		if (side === "Yes") {
+			const price = preview?.lowestAsk ?? null; // Yes price = lowestAsk
+			console.log(`  ✅ Yes price = ${price}`);
+			return price;
+		} else {
+			const price =
+				preview?.highestBid !== null &&
+				preview?.highestBid !== undefined
+					? 1 - preview.highestBid // No price = 1 - highestBid
+					: null;
+			console.log(`  ✅ No price = ${price}`);
+			return price;
+		}
 	};
 
 	// Convert to old format for compatibility with existing components
@@ -485,8 +525,8 @@ export default function Positions() {
 						loading ||
 						predictionLoading ||
 						userDataLoading ||
-						pricesLoading ||
-						portfolioLoading
+						portfolioLoading ||
+						booksPreviewLoading
 					}
 				/>
 
@@ -508,7 +548,7 @@ export default function Positions() {
 									loading ||
 									predictionLoading ||
 									userDataLoading ||
-									pricesLoading;
+									booksPreviewLoading;
 								const hasPositions =
 									umbrellaPositions.length > 0;
 								if (!hasPositions && !softLoading) {
