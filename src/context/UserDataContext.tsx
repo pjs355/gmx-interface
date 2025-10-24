@@ -14,10 +14,10 @@ import { useSignerContext } from "context/SignerContext";
 import {
 	fetchUserOrders,
 	type ProcessedOrder,
-} from "lib/simplifiedOrderService";
+} from "@/services/api/simplifiedOrderService";
 import { CTF_ADDRESS, USDC_ADDRESS, EXCHANGE_ADDRESS } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
-import { umbrellaDataService } from "lib/umbrellaDataService";
+import { umbrellaDataService } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "context/PredictionDataContext";
 
 type TokenBalance = {
@@ -79,7 +79,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
 	const checkApproval = useCallback(async () => {
 		if (!account) {
-			setApprovalState({ isApproved: false, isChecking: false, isApproving: false });
+			setApprovalState({
+				isApproved: false,
+				isChecking: false,
+				isApproving: false,
+			});
 			return;
 		}
 
@@ -90,18 +94,22 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
 			const usdcContract = new Contract(
 				USDC_ADDRESS,
-				["function allowance(address owner, address spender) view returns (uint256)"],
+				[
+					"function allowance(address owner, address spender) view returns (uint256)",
+				],
 				provider
 			);
 			const ctfContract = new Contract(
 				CTF_ADDRESS,
-				["function isApprovedForAll(address owner, address operator) view returns (bool)"],
+				[
+					"function isApprovedForAll(address owner, address operator) view returns (bool)",
+				],
 				provider
 			);
 
 			const [usdcAllowance, hasCtfApproval] = await Promise.all([
 				usdcContract.allowance(account, EXCHANGE_ADDRESS),
-				ctfContract.isApprovedForAll(account, EXCHANGE_ADDRESS)
+				ctfContract.isApprovedForAll(account, EXCHANGE_ADDRESS),
 			]);
 
 			const hasUsdcApproval = usdcAllowance > 0n;
@@ -124,14 +132,19 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	const loadTokenBalances = useCallback(
 		async (
 			account: string,
-			marketDataMap: Map<string, { yesTokenId: string; noTokenId: string }>
+			marketDataMap: Map<
+				string,
+				{ yesTokenId: string; noTokenId: string }
+			>
 		) => {
 			try {
 				const provider = getReadProvider();
 
 				const ctf = new Contract(
 					CTF_ADDRESS,
-					["function balanceOf(address account, uint256 id) view returns (uint256)"],
+					[
+						"function balanceOf(address account, uint256 id) view returns (uint256)",
+					],
 					provider
 				);
 
@@ -154,7 +167,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				// Fetch CTF token balances with throttling
 				const entries = Array.from(marketDataMap.entries());
 				const newTokenBalances = new Map<string, TokenBalance>();
-				
+
 				for (let i = 0; i < entries.length; i++) {
 					const [marketId, { yesTokenId, noTokenId }] = entries[i];
 					try {
@@ -169,7 +182,10 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 							noBalance: formatUnits(noRaw, 6),
 						});
 					} catch (error) {
-						console.error(`Error fetching balances for market ${marketId}:`, error);
+						console.error(
+							`Error fetching balances for market ${marketId}:`,
+							error
+						);
 						newTokenBalances.set(marketId, {
 							yesTokenId,
 							noTokenId,
@@ -201,19 +217,31 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			setUsdcBalance(null);
 			return;
 		}
-		
+
 		setLoading(true);
 		try {
 			// Build market data map from umbrellas and resolved markets
-			const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
-			
+			const marketDataMap = new Map<
+				string,
+				{ yesTokenId: string; noTokenId: string }
+			>();
+
 			try {
 				// Process active markets
 				umbrellas.forEach((u: any) => {
-					const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
+					const marketsForUmb = getAllQuestionsForUmbrella(
+						u._id
+					) as any[];
 					marketsForUmb.forEach((market: any) => {
-						const marketId = market?._id || market?.questionId || market?.marketId;
-						if (marketId && market?.yesTokenId && market?.noTokenId) {
+						const marketId =
+							market?._id ||
+							market?.questionId ||
+							market?.marketId;
+						if (
+							marketId &&
+							market?.yesTokenId &&
+							market?.noTokenId
+						) {
 							marketDataMap.set(marketId, {
 								yesTokenId: market.yesTokenId,
 								noTokenId: market.noTokenId,
@@ -223,29 +251,40 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				});
 
 				// Process resolved markets
-				Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
-					resolvedMarkets.forEach((market: any) => {
-						const marketId = market?._id || market?.questionId || market?.marketId;
-						if (marketId && market?.yesTokenId && market?.noTokenId) {
-							marketDataMap.set(marketId, {
-								yesTokenId: market.yesTokenId,
-								noTokenId: market.noTokenId,
-							});
-						}
-					});
-				});
+				Object.values(resolvedMarketsByUmbrella).forEach(
+					(resolvedMarkets) => {
+						resolvedMarkets.forEach((market: any) => {
+							const marketId =
+								market?._id ||
+								market?.questionId ||
+								market?.marketId;
+							if (
+								marketId &&
+								market?.yesTokenId &&
+								market?.noTokenId
+							) {
+								marketDataMap.set(marketId, {
+									yesTokenId: market.yesTokenId,
+									noTokenId: market.noTokenId,
+								});
+							}
+						});
+					}
+				);
 			} catch {
 				// Fallback to direct fetch if prediction data not ready
-				const umbrellasDirect = await umbrellaDataService.fetchAllUmbrellas();
+				const umbrellasDirect =
+					await umbrellaDataService.fetchAllUmbrellas();
 				const markets = await Promise.all(
-					umbrellasDirect.map((u) =>
+					umbrellasDirect.map((u: any) =>
 						umbrellaDataService.fetchQuestionsForUmbrella(u, {
 							includeResolved: true,
 						})
 					)
 				);
 				markets.flat().forEach((market: any) => {
-					const marketId = market?._id || market?.questionId || market?.marketId;
+					const marketId =
+						market?._id || market?.questionId || market?.marketId;
 					if (marketId && market?.yesTokenId && market?.noTokenId) {
 						marketDataMap.set(marketId, {
 							yesTokenId: market.yesTokenId,
@@ -260,18 +299,25 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			setOrders(userOrders);
 
 			// Extract unique market IDs from user's order history
-			const tradedMarketIds = new Set(userOrders.map(order => order.questionId));
-			
+			const tradedMarketIds = new Set(
+				userOrders.map((order) => order.questionId)
+			);
+
 			// Filter marketDataMap to only include markets the user has traded
-			const filteredMarketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
-			tradedMarketIds.forEach(marketId => {
-				const marketData = marketDataMap.get(marketId);
+			const filteredMarketDataMap = new Map<
+				string,
+				{ yesTokenId: string; noTokenId: string }
+			>();
+			tradedMarketIds.forEach((marketId) => {
+				const marketData = marketDataMap.get(marketId as string);
 				if (marketData) {
 					filteredMarketDataMap.set(marketId, marketData);
 				}
 			});
 
-			console.log(`📊 Balance check optimization: ${filteredMarketDataMap.size} markets with positions (vs ${marketDataMap.size} total markets)`);
+			console.log(
+				`📊 Balance check optimization: ${filteredMarketDataMap.size} markets with positions (vs ${marketDataMap.size} total markets)`
+			);
 
 			// Load balances and check approval in parallel (only for traded markets)
 			await Promise.all([
@@ -319,21 +365,26 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				(w: any) => w?.type === "wallet" || w?.connectorType !== "privy"
 			);
 
-			const useSmartWallet = Boolean(smartWalletAccount?.address) || Boolean(embeddedWallet);
-			const useExternalWallet = Boolean(externalWallet) && !useSmartWallet;
+			const useSmartWallet =
+				Boolean(smartWalletAccount?.address) || Boolean(embeddedWallet);
+			const useExternalWallet =
+				Boolean(externalWallet) && !useSmartWallet;
 
 			// Approve USDC
-			const usdcAbi = ["function approve(address spender, uint256 amount) returns (bool)"];
-			
+			const usdcAbi = [
+				"function approve(address spender, uint256 amount) returns (bool)",
+			];
+
 			if (useSmartWallet) {
 				const smartWalletClient = await getClientForChain({ id: 8453 });
-				if (!smartWalletClient) throw new Error("No smart wallet client available");
-				
+				if (!smartWalletClient)
+					throw new Error("No smart wallet client available");
+
 				const usdcInterface = new ethers.Interface(usdcAbi);
-				const approvalData = usdcInterface.encodeFunctionData("approve", [
-					EXCHANGE_ADDRESS,
-					ethers.MaxUint256,
-				]);
+				const approvalData = usdcInterface.encodeFunctionData(
+					"approve",
+					[EXCHANGE_ADDRESS, ethers.MaxUint256]
+				);
 
 				await smartWalletClient.sendTransaction({
 					to: USDC_ADDRESS as `0x${string}`,
@@ -345,8 +396,15 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				const provider = new ethers.BrowserProvider(eip1193 as any);
 				const signer = await provider.getSigner();
 
-				const usdcContract = new ethers.Contract(USDC_ADDRESS, usdcAbi, signer);
-				const tx = await usdcContract.approve(EXCHANGE_ADDRESS, ethers.MaxUint256);
+				const usdcContract = new ethers.Contract(
+					USDC_ADDRESS,
+					usdcAbi,
+					signer
+				);
+				const tx = await usdcContract.approve(
+					EXCHANGE_ADDRESS,
+					ethers.MaxUint256
+				);
 				await tx.wait();
 			} else {
 				throw new Error("No compatible wallet found");
@@ -356,17 +414,20 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			await new Promise((r) => setTimeout(r, 1500));
 
 			// Approve CTF (ERC1155) operator
-			const ctfAbi = ["function setApprovalForAll(address operator, bool approved)"];
-			
+			const ctfAbi = [
+				"function setApprovalForAll(address operator, bool approved)",
+			];
+
 			if (useSmartWallet) {
 				const smartWalletClient = await getClientForChain({ id: 8453 });
-				if (!smartWalletClient) throw new Error("No smart wallet client available");
-				
+				if (!smartWalletClient)
+					throw new Error("No smart wallet client available");
+
 				const ctfInterface = new ethers.Interface(ctfAbi);
-				const ctfData = ctfInterface.encodeFunctionData("setApprovalForAll", [
-					EXCHANGE_ADDRESS,
-					true
-				]);
+				const ctfData = ctfInterface.encodeFunctionData(
+					"setApprovalForAll",
+					[EXCHANGE_ADDRESS, true]
+				);
 
 				await smartWalletClient.sendTransaction({
 					to: CTF_ADDRESS as `0x${string}`,
@@ -378,8 +439,15 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				const provider = new ethers.BrowserProvider(eip1193 as any);
 				const signer = await provider.getSigner();
 
-				const ctfContract = new ethers.Contract(CTF_ADDRESS, ctfAbi, signer);
-				const tx = await ctfContract.setApprovalForAll(EXCHANGE_ADDRESS, true);
+				const ctfContract = new ethers.Contract(
+					CTF_ADDRESS,
+					ctfAbi,
+					signer
+				);
+				const tx = await ctfContract.setApprovalForAll(
+					EXCHANGE_ADDRESS,
+					true
+				);
 				await tx.wait();
 			} else {
 				throw new Error("No compatible wallet found");
@@ -391,7 +459,13 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			console.error("Error approving tokens:", error);
 			setApprovalState((prev) => ({ ...prev, isApproving: false }));
 		}
-	}, [account, checkApproval, privyWallets, user?.linkedAccounts, getClientForChain]);
+	}, [
+		account,
+		checkApproval,
+		privyWallets,
+		user?.linkedAccounts,
+		getClientForChain,
+	]);
 
 	// Throttle initial and dependency-driven reloads to prevent rapid RPC bursts
 	useEffect(() => {

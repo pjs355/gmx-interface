@@ -18,7 +18,7 @@ import { BalanceProvider } from "context/BalanceContext";
 import { CurrentPriceProvider } from "context/CurrentPriceContext";
 import { PortfolioProvider } from "context/PortfolioContext";
 
-import App from "./App/App";
+import App from "./app/App";
 import "./styles/globals.css";
 
 createRoot(document.getElementById("root")!).render(

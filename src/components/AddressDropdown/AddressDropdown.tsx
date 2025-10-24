@@ -4,15 +4,15 @@ import { usePrivy } from "@privy-io/react-auth";
 import { FaChevronDown } from "react-icons/fa";
 import { createBreakpoint, useCopyToClipboard } from "react-use";
 
-import { helperToast } from "lib/errors";
-import { shortenAddress } from "lib/wallets/shortenAddress";
+import { helperToast } from "@/components/Toast/toast";
+import { shortenAddress } from "@/services/wallets/shortenAddress";
 
 // Fallback avatar-less display; Avatar not present in LevelUp
 import ExternalLink from "components/ExternalLink/ExternalLink";
 
-import copy from "img/ic_copy_20.svg";
-import externalLink from "img/ic_new_link_20.svg";
-import disconnect from "img/ic_sign_out_20.svg";
+import copy from "@/assets/img/ic_copy_20.svg";
+import externalLink from "@/assets/img/ic_new_link_20.svg";
+import disconnect from "@/assets/img/ic_sign_out_20.svg";
 
 import "./AddressDropdown.scss";
 

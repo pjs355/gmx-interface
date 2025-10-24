@@ -1,10 +1,10 @@
 import { t } from "@lingui/macro";
 
-import discordIcon from "img/ic_discord.svg";
-import githubIcon from "img/ic_github.svg";
-import substackIcon from "img/ic_substack.svg";
-import telegramIcon from "img/ic_telegram.svg";
-import xIcon from "img/ic_x.svg";
+import discordIcon from "@/assets/img/ic_discord.svg";
+import githubIcon from "@/assets/img/ic_github.svg";
+import substackIcon from "@/assets/img/ic_substack.svg";
+import telegramIcon from "@/assets/img/ic_telegram.svg";
+import xIcon from "@/assets/img/ic_x.svg";
 
 type Link = {
 	label: string;

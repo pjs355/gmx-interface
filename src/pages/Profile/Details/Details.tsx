@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
-import { getPredictionApiBaseUrl } from "../../../lib/predictionApiBase";
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 interface UserDetails {
 	id: string;

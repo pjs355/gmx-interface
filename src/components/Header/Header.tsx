@@ -16,7 +16,7 @@ import { AppHeaderLinks } from "./AppHeaderLinks";
 import { AppHeaderUser } from "./AppHeaderUser";
 import { HeaderLink } from "./HeaderLink";
 import { HomeHeaderLinks } from "./HomeHeaderLinks";
-import { isHomeSite } from "lib/legacy";
+import { isHomeSite } from "@/config/ui";
 
 import "./Header.scss";
 
@@ -128,7 +128,7 @@ export function Header({
 							<div className="App-header-container-left">
 								<div
 									className="App-header-link-main clickable"
-									onClick={() => navigate('/')}
+									onClick={() => navigate("/")}
 								>
 									<span className="App-header-logo-text big">
 										LevelUp
@@ -186,19 +186,21 @@ export function Header({
 					className="App-header-links-container App-header-drawer"
 				>
 					{isHomeSite() ? (
-                        <HomeHeaderLinks
-                            small
-                            clickCloseIcon={() => setIsDrawerVisible(false)}
-                            showRedirectModal={showRedirectModal}
-                        />
+						<HomeHeaderLinks
+							small
+							clickCloseIcon={() => setIsDrawerVisible(false)}
+							showRedirectModal={showRedirectModal}
+						/>
 					) : (
-                        <AppHeaderLinks
-                            small
-                            openSettings={openSettings}
-                            clickCloseIcon={() => setIsDrawerVisible(false)}
-                            showRedirectModal={showRedirectModal}
-                            disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
-                        />
+						<AppHeaderLinks
+							small
+							openSettings={openSettings}
+							clickCloseIcon={() => setIsDrawerVisible(false)}
+							showRedirectModal={showRedirectModal}
+							disconnectAccountAndCloseSettings={
+								disconnectAccountAndCloseSettings
+							}
+						/>
 					)}
 				</div>
 			)}

@@ -4,7 +4,7 @@ import {
 	calculateOrderbookPrices,
 	toCentsString,
 } from "../utils/predictionUtils";
-import type { PredictionMarket } from "lib/predictionMarketDataService";
+import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
 
 interface SingleMarketActionsProps {
@@ -21,12 +21,6 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const { allBooksPreview } = usePredictionData();
 	const questionId = question.questionId;
 	const preview = questionId ? allBooksPreview[questionId] : undefined;
-	console.log("🔍 Preview:", preview);
-	console.log("🔍 SingleMarketActions lookup:", {
-		questionId,
-		preview,
-		allBooksPreview,
-	});
 
 	// Use preview data for prices (lowestAsk = Yes price, highestBid for No calculation)
 	const yesPrice = preview?.lowestAsk;

@@ -15,35 +15,36 @@ import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCopyToClipboard } from "react-use";
 import ExternalLink from "components/ExternalLink/ExternalLink";
-import { shortenAddress } from "lib/wallets/shortenAddress";
-import { helperToast } from "lib/errors";
+import { shortenAddress } from "@/services/wallets/shortenAddress";
 import { usePortfolio } from "context/PortfolioContext";
+import { isHomeSite } from "config/ui";
 
 import "./Header.scss";
 
 type Props = {
-    small?: boolean;
-    clickCloseIcon?: () => void;
-    openSettings?: () => void;
-    showRedirectModal: (to: string) => void;
-    disconnectAccountAndCloseSettings?: () => void;
+	small?: boolean;
+	clickCloseIcon?: () => void;
+	openSettings?: () => void;
+	showRedirectModal: (to: string) => void;
+	disconnectAccountAndCloseSettings?: () => void;
 };
 
 export function AppHeaderLinks({
-    small,
-    clickCloseIcon,
-    showRedirectModal,
-    disconnectAccountAndCloseSettings,
+	small,
+	clickCloseIcon,
+	showRedirectModal,
+	disconnectAccountAndCloseSettings,
 }: Props) {
 	// Removed unused openNotifyModal and currentLanguage
 	// TODO: Re-enable when language support is fully implemented
 	// const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
 
 	// Add portfolio data for mobile display
-    const { authenticated: active, account } = useSignerContext();
-    const { logout } = usePrivy();
-    const [, copyToClipboard] = useCopyToClipboard();
-	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolio();
+	const { authenticated: active, account } = useSignerContext();
+	const { logout } = usePrivy();
+	const [, copyToClipboard] = useCopyToClipboard();
+	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
+		usePortfolio();
 
 	const formatCurrency = (
 		value: number | string | null | undefined
@@ -93,8 +94,19 @@ export function AppHeaderLinks({
 								</span>
 								<span className="text-sm font-normal text-white">
 									{portfolioLoading ? (
-										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
-									) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
+										<span
+											className="skeleton-box"
+											style={{
+												display: "inline-block",
+												width: 70,
+												height: 16,
+												borderRadius: 4,
+												backgroundColor:
+													"rgba(255, 255, 255, 0.1)",
+											}}
+										/>
+									) : portfolioTotal === null ||
+									  !isFinite(portfolioTotal) ? (
 										"--"
 									) : (
 										`$${formatCurrency(portfolioTotal)}`
@@ -113,7 +125,17 @@ export function AppHeaderLinks({
 								</span>
 								<span className="text-sm font-normal text-white">
 									{cashLoading ? (
-										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+										<span
+											className="skeleton-box"
+											style={{
+												display: "inline-block",
+												width: 70,
+												height: 16,
+												borderRadius: 4,
+												backgroundColor:
+													"rgba(255, 255, 255, 0.1)",
+											}}
+										/>
 									) : (
 										`$${formatCurrency(cashBalance)}`
 									)}
@@ -192,27 +214,32 @@ export function AppHeaderLinks({
 					</HeaderLink>
 				</div>
 				{/* Intentionally no Leaderboard or Positions text links here. Portfolio and Cash are separate buttons in AppHeaderUser. */}
-                <div className="App-header-link-container">
-                    {/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>
+				<div className="App-header-link-container">
+					{/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>
             <Trans>Trade</Trans>
           </HeaderLink> */}
-                </div>
-                {small && active && account && (
-                    <div className="App-header-link-container mobile-address-dropdown">
-                        <div className="mobile-address-inline">
-                            <div className="address-line">{shortenAddress(account as string, 13)}</div>
-                            <button
-                                className="inline-item"
-                                onClick={() => {
-                                    (disconnectAccountAndCloseSettings || (() => {}))();
-                                    logout();
-                                }}
-                            >
-                                Sign out
-                            </button>
-                        </div>
-                    </div>
-                )}
+				</div>
+				{small && active && account && (
+					<div className="App-header-link-container mobile-address-dropdown">
+						<div className="mobile-address-inline">
+							<div className="address-line">
+								{shortenAddress(account as string, 13)}
+							</div>
+							<button
+								className="inline-item"
+								onClick={() => {
+									(
+										disconnectAccountAndCloseSettings ||
+										(() => {})
+									)();
+									logout();
+								}}
+							>
+								Sign out
+							</button>
+						</div>
+					</div>
+				)}
 				{/* <div className="App-header-link-container">
           <HeaderLink qa="pools" to="/pools" showRedirectModal={showRedirectModal}>
             <Trans>Pools</Trans>

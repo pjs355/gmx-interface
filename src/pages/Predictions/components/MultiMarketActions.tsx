@@ -6,7 +6,7 @@ import {
 	getTopTwoMarkets,
 	truncateMarketName,
 } from "../utils/predictionUtils";
-import type { PredictionMarket } from "lib/predictionMarketDataService";
+import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
 
 interface MultiMarketActionsProps {
@@ -36,11 +36,6 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 				const preview = questionId
 					? allBooksPreview[questionId]
 					: undefined;
-
-				console.log("🔍 MultiMarketActions lookup:", {
-					questionId,
-					preview,
-				});
 
 				// Use preview data for prices (lowestAsk = Yes price, highestBid for No calculation)
 				const yesPrice = preview?.lowestAsk;

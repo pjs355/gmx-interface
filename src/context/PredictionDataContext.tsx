@@ -6,10 +6,12 @@ import React, {
 	useMemo,
 	useState,
 } from "react";
-import { umbrellaDataService, type Umbrella } from "lib/umbrellaDataService";
-import { currentPriceService } from "lib/currentPriceService";
-import { getPredictionApiBaseUrl } from "lib/predictionApiBase";
-
+import {
+	umbrellaDataService,
+	type Umbrella,
+} from "@/services/api/umbrellaDataService";
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { OrderbookService } from "@/services/api/orderbookService";
 type MarketLite = any;
 
 type BookPreview = {
@@ -96,16 +98,7 @@ export function PredictionDataProvider({
 		setLoading(true);
 		setError(undefined);
 		try {
-			const { OrderbookService } = await import("lib/orderbookService");
-			const orderbookService = new OrderbookService();
 			const umbrellas = await umbrellaDataService.fetchAllUmbrellas();
-			try {
-				console.groupCollapsed(
-					"🧩 Umbrellas fetched (PredictionDataContext)"
-				);
-				console.log(umbrellas);
-				console.groupEnd();
-			} catch {}
 			const entries = await Promise.all(
 				umbrellas.map(async (umbrella: any) => {
 					const markets = umbrella.children;
@@ -147,22 +140,8 @@ export function PredictionDataProvider({
 
 			const cleanedUmbrellas: any[] = [];
 			entries.forEach(([key, markets, cleanedUmbrella, allMarkets]) => {
-				try {
-					// Keep markets print minimal and grouped
-					console.groupCollapsed(
-						`🧺 Markets fetched for umbrella ${cleanedUmbrella.displayName} [${key}]`
-					);
-					console.log({ allMarkets, activeMarkets: markets });
-					console.groupEnd();
-				} catch {
-					console.error(
-						`Error fetching markets for umbrella ${cleanedUmbrella.displayName} [${key}]`,
-						error
-					);
-				}
 				// Store all markets (including resolved) for consumers like Positions page (no re-fetch on mount)
 				allMarketsMap[key] = allMarkets;
-				// Quiet per-umbrella store log to keep console clean
 
 				// Store only resolved markets separately
 				const resolvedMarkets = allMarkets.filter(
@@ -171,7 +150,6 @@ export function PredictionDataProvider({
 				);
 				if (resolvedMarkets.length > 0) {
 					resolvedMarketsMap[key] = resolvedMarkets;
-					// Quiet resolved markets store log to keep console clean
 				}
 
 				// Skip umbrellas that have no active markets left
@@ -282,9 +260,6 @@ export function PredictionDataProvider({
 	const refreshOrderbook = useCallback(
 		async (umbrellaId: string, questionId: string) => {
 			try {
-				const { OrderbookService } = await import(
-					"lib/orderbookService"
-				);
 				const orderbookService = new OrderbookService();
 				const ob = await orderbookService.fetchOrderbook(questionId);
 				if (!ob) return;
@@ -336,7 +311,6 @@ export function PredictionDataProvider({
 					);
 				}
 				const json = await response.json();
-				console.log("📚 Raw all-books-preview response:", json);
 
 				if (json.success && json.data) {
 					// Transform array into object keyed by questionId
@@ -353,10 +327,6 @@ export function PredictionDataProvider({
 						});
 					}
 					setAllBooksPreview(previewMap);
-					console.log(
-						"📚 All books preview mapped by questionId:",
-						previewMap
-					);
 				}
 			} catch (err) {
 				console.error(
