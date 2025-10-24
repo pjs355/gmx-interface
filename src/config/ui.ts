@@ -17,12 +17,10 @@ export const UI = {
 
 // Environment and URL utilities
 export function isHomeSite() {
-	//formally some VITE_APP_IS_HOME_APP or something
-	// Chat can help if this isn't returning true
-	return (
-		window.location.host?.includes("levelup") ||
-		window.location.host?.includes("prinx")
-	);
+	// This is a prediction markets app, not a home/landing page
+	// Always return false to show AppHeaderLinks (All, Esports, Games)
+	// instead of HomeHeaderLinks (Protocol, Governance, Voting, Docs)
+	return false;
 }
 
 export function getAppBaseUrl() {
