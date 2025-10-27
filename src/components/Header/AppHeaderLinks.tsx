@@ -41,10 +41,17 @@ export function AppHeaderLinks({
 
 	// Add portfolio data for mobile display
 	const { authenticated: active, account } = useSignerContext();
-	const { logout } = usePrivy();
+	const { logout, user } = usePrivy();
 	const [, copyToClipboard] = useCopyToClipboard();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
 		usePortfolio();
+
+	// Detect if user logged in with email (smart wallet) or external wallet
+	const hasSmartWallet = user?.linkedAccounts?.some(
+		(acct: any) => acct?.type === "smart_wallet"
+	);
+	const userEmail = user?.email?.address || user?.google?.email;
+	const isSmartWallet = Boolean(hasSmartWallet && userEmail);
 
 	const formatCurrency = (
 		value: number | string | null | undefined
@@ -204,15 +211,17 @@ export function AppHeaderLinks({
 						Games
 					</HeaderLink>
 				</div>
-				<div className="App-header-link-container">
-					<HeaderLink
-						qa="get-test-usdc"
-						to="/get_test_usdc"
-						showRedirectModal={showRedirectModal}
-					>
-						Get Test USD
-					</HeaderLink>
-				</div>
+				{active && (
+					<div className="App-header-link-container">
+						<HeaderLink
+							qa="get-test-usdc"
+							to="/get_test_usdc"
+							showRedirectModal={showRedirectModal}
+						>
+							Get Test USD
+						</HeaderLink>
+					</div>
+				)}
 				{/* Intentionally no Leaderboard or Positions text links here. Portfolio and Cash are separate buttons in AppHeaderUser. */}
 				<div className="App-header-link-container">
 					{/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>
@@ -223,7 +232,9 @@ export function AppHeaderLinks({
 					<div className="App-header-link-container mobile-address-dropdown">
 						<div className="mobile-address-inline">
 							<div className="address-line">
-								{shortenAddress(account as string, 13)}
+								{isSmartWallet && userEmail
+									? userEmail
+									: shortenAddress(account as string, 13)}
 							</div>
 							<button
 								className="inline-item"

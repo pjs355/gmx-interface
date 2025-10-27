@@ -41,11 +41,17 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const [hasInitialCashLoad, setHasInitialCashLoad] = React.useState(false);
 	const [hasInitialPortfolioLoad, setHasInitialPortfolioLoad] =
 		React.useState(false);
+	const initialLoadTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
 	// Reset loading states when account changes
 	React.useEffect(() => {
 		setHasInitialCashLoad(false);
 		setHasInitialPortfolioLoad(false);
+		// Clear any existing timeout
+		if (initialLoadTimeoutRef.current) {
+			clearTimeout(initialLoadTimeoutRef.current);
+			initialLoadTimeoutRef.current = null;
+		}
 	}, [account]);
 
 	React.useEffect(() => {
@@ -59,6 +65,25 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			setHasInitialPortfolioLoad(true);
 		}
 	}, [portfolioTotal]);
+
+	// Set a timeout to force initial portfolio load complete after reasonable wait
+	// This handles new users with no trading history where data loads quickly but portfolioTotal might be 0
+	React.useEffect(() => {
+		if (account && !hasInitialPortfolioLoad && !userDataLoading) {
+			// If user data has finished loading and we still haven't set portfolio, give it 2 seconds max
+			initialLoadTimeoutRef.current = setTimeout(() => {
+				if (!hasInitialPortfolioLoad) {
+					console.log('Portfolio: Forcing initial load complete after timeout');
+					setHasInitialPortfolioLoad(true);
+				}
+			}, 2000);
+		}
+		return () => {
+			if (initialLoadTimeoutRef.current) {
+				clearTimeout(initialLoadTimeoutRef.current);
+			}
+		};
+	}, [account, hasInitialPortfolioLoad, userDataLoading]);
 
 	// Cash is loading if we haven't loaded it yet and user data is loading
 	const cashLoading =
@@ -86,8 +111,11 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			return;
 		}
 
-		// Don't compute if prices haven't loaded yet
-		if (booksPreviewLoading) {
+		// For users with no token balances (new users), we can compute immediately
+		const hasNoTokens = tokenBalances.size === 0 && !userDataLoading;
+		
+		// Don't compute if prices haven't loaded yet, UNLESS user has no tokens
+		if (booksPreviewLoading && !hasNoTokens) {
 			return;
 		}
 
@@ -171,6 +199,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		cashBalance,
 		allBooksPreview,
 		booksPreviewLoading,
+		userDataLoading,
 	]);
 
 	useEffect(() => {
@@ -178,8 +207,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			setPortfolioTotal(0);
 			return;
 		}
-		// Don't compute until prices are loaded
-		if (booksPreviewLoading) {
+		
+		// For users with no tokens, compute immediately even if prices are loading
+		const hasNoTokens = tokenBalances.size === 0 && !userDataLoading;
+		
+		// Don't compute until prices are loaded, UNLESS user has no tokens
+		if (booksPreviewLoading && !hasNoTokens) {
 			return;
 		}
 		// Compute once on mount and whenever holdings or cash change.
@@ -194,6 +227,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		umbrellas,
 		allBooksPreview,
 		booksPreviewLoading,
+		userDataLoading,
 		compute,
 	]);
 

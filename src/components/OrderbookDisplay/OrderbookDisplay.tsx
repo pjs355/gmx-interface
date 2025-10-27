@@ -61,6 +61,7 @@ export default function OrderbookDisplay({
 	const [activeTab, setActiveTab] = useState<"yes" | "no">("yes");
 	const { openCurtain } = useCurtainActions();
 	const spreadRef = useRef<HTMLDivElement>(null);
+	const ordersListRef = useRef<HTMLDivElement>(null);
 
 	// Sync local activeTab with external activePosition ONLY for the active market
 	useEffect(() => {
@@ -69,15 +70,26 @@ export default function OrderbookDisplay({
 		}
 	}, [isActiveMarket, activePosition, activeTab]);
 
-	// Auto-scroll to spread when orderbook opens
+	// Scroll the orderbook's internal container to center the spread (does NOT scroll the page)
 	useEffect(() => {
-		if (!isCollapsed && spreadRef.current) {
-			// Use setTimeout to ensure the DOM has rendered
+		if (!isCollapsed && spreadRef.current && ordersListRef.current) {
+			// Use setTimeout to ensure the DOM has rendered and slide animation has started
 			setTimeout(() => {
-				spreadRef.current?.scrollIntoView({
-					behavior: "smooth",
-					block: "center",
-				});
+				if (spreadRef.current && ordersListRef.current) {
+					const container = ordersListRef.current;
+					const spread = spreadRef.current;
+					
+					// Calculate position to center the spread within the orderbook container
+					const spreadTop = spread.offsetTop;
+					const containerHeight = container.clientHeight;
+					const scrollPosition = spreadTop - (containerHeight / 2);
+					
+					// Scroll within the orderbook container only (not the page)
+					container.scrollTo({
+						top: scrollPosition,
+						behavior: 'smooth'
+					});
+				}
 			}, 100);
 		}
 	}, [isCollapsed]);
@@ -591,7 +603,7 @@ export default function OrderbookDisplay({
 					</div>
 
 					<div className="orderbook-content">
-						<div className="unified-orders-list">
+						<div className="unified-orders-list" ref={ordersListRef}>
 							{/* Asks */}
 							{asksWithDepth.length > 0 ? (
 								asksWithDepth.map((ask, index) => {

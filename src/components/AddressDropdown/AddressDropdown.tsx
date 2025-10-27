@@ -20,6 +20,8 @@ type Props = {
 	account: string;
 	accountUrl: string;
 	disconnectAccountAndCloseSettings: () => void;
+	userEmail?: string | null;
+	isSmartWallet?: boolean;
 };
 
 const useBreakpoint = createBreakpoint({ L: 600, M: 550, S: 400 });
@@ -28,11 +30,18 @@ export default function AddressDropdown({
 	account,
 	accountUrl,
 	disconnectAccountAndCloseSettings,
+	userEmail,
+	isSmartWallet = false,
 }: Props) {
 	const breakpoint = useBreakpoint();
 	const [, copyToClipboard] = useCopyToClipboard();
 	const displayAddressLength = breakpoint === "S" ? 9 : 13;
 	const { logout } = usePrivy();
+
+	// Determine what to display: email for smart wallet users, address for external wallet users
+	const displayText = isSmartWallet && userEmail 
+		? userEmail 
+		: shortenAddress(account, displayAddressLength);
 
 	return (
 		<Menu>
@@ -40,47 +49,53 @@ export default function AddressDropdown({
 				<button className="App-cta small transparent address-btn">
 					{/* avatar intentionally omitted */}
 					<span className="user-address">
-						{shortenAddress(account, displayAddressLength)}
+						{displayText}
 					</span>
 					<FaChevronDown />
 				</button>
 			</Menu.Button>
 			<div>
 				<Menu.Items as="div" className="menu-items">
-					<Menu.Item>
-						<div
-							className="menu-item"
-							onClick={() => {
-								copyToClipboard(account);
-								helperToast.success(
-									t`Address copied to your clipboard`
-								);
-							}}
-						>
-							<img
-								width={20}
-								className="size-20"
-								src={copy}
-								alt="Copy user address"
-							/>
-							<p>
-								<Trans>Copy Address</Trans>
-							</p>
-						</div>
-					</Menu.Item>
-					<Menu.Item>
-						<ExternalLink href={accountUrl} className="menu-item">
-							<img
-								width={20}
-								className="size-20"
-								src={externalLink}
-								alt="Open address in explorer"
-							/>
-							<p>
-								<Trans>View in Explorer</Trans>
-							</p>
-						</ExternalLink>
-					</Menu.Item>
+					{/* Only show Copy Address and View in Explorer for external wallet users */}
+					{!isSmartWallet && (
+						<>
+							<Menu.Item>
+								<div
+									className="menu-item"
+									onClick={() => {
+										copyToClipboard(account);
+										helperToast.success(
+											t`Address copied to your clipboard`
+										);
+									}}
+								>
+									<img
+										width={20}
+										className="size-20"
+										src={copy}
+										alt="Copy user address"
+									/>
+									<p>
+										<Trans>Copy Address</Trans>
+									</p>
+								</div>
+							</Menu.Item>
+							<Menu.Item>
+								<ExternalLink href={accountUrl} className="menu-item">
+									<img
+										width={20}
+										className="size-20"
+										src={externalLink}
+										alt="Open address in explorer"
+									/>
+									<p>
+										<Trans>View in Explorer</Trans>
+									</p>
+								</ExternalLink>
+							</Menu.Item>
+						</>
+					)}
+					{/* Always show Sign out for all users */}
 					<Menu.Item>
 						<div
 							className="menu-item"

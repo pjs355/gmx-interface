@@ -462,6 +462,14 @@ function PredictionMarketContent() {
 			) {
 				setActiveMarket(targetMarket);
 			}
+
+			// Auto-open orderbook for single-market umbrellas
+			if (sortedQuestions.length === 1 && targetMarket) {
+				const marketId = getMarketId(targetMarket);
+				if (marketId) {
+					setOpenOrderbookId(marketId);
+				}
+			}
 		}
 	}, [
 		hasUserSelectedMarket,

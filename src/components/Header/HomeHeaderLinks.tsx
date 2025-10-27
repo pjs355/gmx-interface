@@ -3,6 +3,7 @@ import { FiX } from "react-icons/fi";
 // Removed GMX legacy imports - not needed for prediction markets
 // Removed GMX userAnalytics imports - not needed for prediction markets
 import { useRedirectPopupTimestamp } from "@/hooks/useRedirectPopupTimestamp";
+import { useSignerContext } from "context/SignerContext";
 
 import ExternalLink from "components/ExternalLink/ExternalLink";
 
@@ -29,38 +30,28 @@ export function HomeHeaderLinks({
 	showRedirectModal,
 }: Props) {
 	const { timestamp: redirectPopupTimestamp } = useRedirectPopupTimestamp();
+	const { authenticated: active } = useSignerContext();
 
+	// Note: This component is not currently used since isHomeSite() returns false
+	// The app always uses AppHeaderLinks instead
 	const HOME_MENUS: HomeLink[] = [
 		{
 			label: t`App`,
 			isHomeLink: true,
-			// link: `/trade?${userAnalytics.getSessionIdUrlParams()}`,
 			link: `/predictions`,
 			onClick: () => {
-				// Removed GMX analytics tracking - not needed for prediction markets
+				// No analytics tracking needed
 			},
 		},
-		{
-			label: t`Protocol`,
-			link: "https://github.com/gmx-io",
-		},
-		{
-			label: t`Governance`,
-			link: "https://gov.gmx.io/",
-		},
-		{
-			label: t`Voting`,
-			link: "https://snapshot.org/#/gmx.eth",
-		},
-		{
-			label: t`Docs`,
-			link: "https://docs.gmx.io/",
-		},
-		{
-			label: t`Get Test USD`,
-			link: "/get_test_usdc",
-			isHomeLink: true,
-		},
+		...(active
+			? [
+					{
+						label: t`Get Test USDC`,
+						link: "/get_test_usdc",
+						isHomeLink: true,
+					},
+			  ]
+			: []),
 	];
 	return (
 		<div className="App-header-links">

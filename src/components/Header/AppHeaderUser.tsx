@@ -49,6 +49,13 @@ export function AppHeaderUser({
 	const { login, user, authenticated } = usePrivy();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
 
+	// Detect if user logged in with email (smart wallet) or external wallet
+	const hasSmartWallet = user?.linkedAccounts?.some(
+		(acct: any) => acct?.type === "smart_wallet"
+	);
+	const userEmail = user?.email?.address || user?.google?.email;
+	const isSmartWallet = Boolean(hasSmartWallet && userEmail);
+
 	const formatCurrency = (
 		value: number | string | null | undefined
 	): string => {
@@ -268,6 +275,8 @@ export function AppHeaderUser({
                                 disconnectAccountAndCloseSettings={
                                     disconnectAccountAndCloseSettings
                                 }
+                                userEmail={userEmail}
+                                isSmartWallet={isSmartWallet}
                             />
                         </div>
                     )}
