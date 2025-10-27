@@ -1,4 +1,3 @@
-import { Trans } from "@lingui/macro";
 import cx from "classnames";
 import { useCallback, useEffect, useState } from "react";
 import { RiMenuLine } from "react-icons/ri";
@@ -6,9 +5,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useMedia } from "react-use";
 
 // Removed GMX legacy imports - not needed for prediction markets
-
-import { HeaderPromoBanner } from "components/HeaderPromoBanner/HeaderPromoBanner";
-// Removed GMX OneClickPromoBanner import - not needed for prediction markets
 
 // Removed logo imports - using text instead
 
@@ -39,7 +35,6 @@ export function Header({
 	const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 	const [isNativeSelectorModalVisible, setIsNativeSelectorModalVisible] =
 		useState(false);
-	const isTradingIncentivesActive = false;
 
 	const toggleDrawer = useCallback(() => {
 		setIsDrawerVisible(!isDrawerVisible);
@@ -161,23 +156,6 @@ export function Header({
 							</div>
 						</div>
 					</div>
-				)}
-				{isTradingIncentivesActive && (
-					<HeaderPromoBanner>
-						<Trans>
-							Trade&nbsp;on GMX&nbsp;V2 in&nbsp;Arbitrum and
-							win&nbsp;280,000&nbsp;ARB ({">"} $500k) in prizes in{" "}
-							<HeaderLink
-								to="/competitions/"
-								showRedirectModal={showRedirectModal}
-								className="clickable inline-block underline"
-							>
-								two&nbsp;weekly
-							</HeaderLink>{" "}
-							competitions. Live&nbsp;from&nbsp;March 13th to
-							27th.
-						</Trans>
-					</HeaderPromoBanner>
 				)}
 			</header>
 			{isDrawerVisible && (

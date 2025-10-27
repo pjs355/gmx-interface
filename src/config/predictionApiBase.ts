@@ -1,5 +1,5 @@
 export function getPredictionApiBaseUrl(): string {
-	return "http://localhost:8080";
+	return "https://prediction-api-production.up.railway.app";
 }
 
 export function getPredictionWebSocketUrl(): string {
