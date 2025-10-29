@@ -24,7 +24,7 @@ export function About() {
 					</p>
 				</div>
 
-				<div className="About-section About-section-highlight">
+				{/* <div className="About-section About-section-highlight">
 					<h2 className="About-section-title">Trading Competition</h2>
 					<p className="About-section-text">
 						We're currently in our <strong>test phase</strong>, and
@@ -44,15 +44,15 @@ export function About() {
 							</Button>
 						</Link>
 					</div>
-				</div>
+				</div> */}
 
 				<div className="About-section">
 					<h2 className="About-section-title">Coming Soon</h2>
 					<p className="About-section-text">
-						Once the trading competition concludes, we'll be going
-						live shortly thereafter. We're working hard to bring you
-						the best prediction market experience for gaming and
-						esports.
+						We are going to launch a trading competition soon, and
+						once that concludes, we'll be going live shortly
+						thereafter. We're working hard to bring you the best
+						prediction market experience for gaming and esports.
 					</p>
 				</div>
 
