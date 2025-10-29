@@ -13,7 +13,6 @@ export function About() {
 						A Prediction Market For Gamers, By Gamers
 					</h1>
 				</div>
-
 				<div className="About-video-container">
 					<iframe
 						width="560"
@@ -35,29 +34,6 @@ export function About() {
 						prediction markets to the gaming community.
 					</p>
 				</div>
-
-				{/* <div className="About-section About-section-highlight">
-					<h2 className="About-section-title">Trading Competition</h2>
-					<p className="About-section-text">
-						We're currently in our <strong>test phase</strong>, and
-						we're running a trading competition for all early
-						adopters! The competition is your chance to win amazing
-						prizes, including a <strong>Nintendo Switch</strong>!
-					</p>
-					<p className="About-section-text">
-						Test out the platform, trade on your favorite markets,
-						and compete against other gamers for the top spot on the
-						leaderboard.
-					</p>
-					<div className="About-button-container">
-						<Link to="/prizes">
-							<Button variant="primary">
-								View Prizes & Leaderboard
-							</Button>
-						</Link>
-					</div>
-				</div> */}
-
 				<div className="About-section">
 					<h2 className="About-section-title">Coming Soon</h2>
 					<p className="About-section-text">
@@ -67,7 +43,6 @@ export function About() {
 						prediction market experience for gaming and esports.
 					</p>
 				</div>
-
 				<div className="About-section About-section-important">
 					<h2 className="About-section-title">
 						Important Information
@@ -92,7 +67,6 @@ export function About() {
 						the platform and win great prizes!
 					</p>
 				</div>
-
 				<div className="About-section">
 					<h2 className="About-section-title">What's Next?</h2>
 					<p className="About-section-text">
@@ -111,7 +85,6 @@ export function About() {
 					</div>
 				</div>
 			</div>
-
 			<Footer />
 		</div>
 	);

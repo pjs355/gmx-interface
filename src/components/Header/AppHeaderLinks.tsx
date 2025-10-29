@@ -158,7 +158,7 @@ export function AppHeaderLinks({
 				</div>
 				<div className="App-header-link-container">
 					<HeaderLink
-						qa="all"
+						qa="predictions"
 						to="/predictions"
 						showRedirectModal={showRedirectModal}
 						exact
@@ -172,7 +172,7 @@ export function AppHeaderLinks({
 							);
 						}}
 					>
-						All
+						Predictions
 					</HeaderLink>
 				</div>
 				<div className="App-header-link-container">
@@ -199,18 +199,6 @@ export function AppHeaderLinks({
 						Prizes
 					</HeaderLink>
 				</div> */}
-				<div className="App-header-link-container">
-					<HeaderLink
-						qa="games"
-						to="/predictions/games"
-						showRedirectModal={showRedirectModal}
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/predictions/games"
-						}
-					>
-						Games
-					</HeaderLink>
-				</div>
 				{active && (
 					<div className="App-header-link-container">
 						<HeaderLink
