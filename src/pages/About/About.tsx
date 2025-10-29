@@ -13,6 +13,18 @@ export function About() {
 						A Prediction Market For Gamers, By Gamers
 					</h1>
 				</div>
+
+				<div className="About-video-container">
+					<iframe
+						width="560"
+						height="315"
+						src="https://www.youtube.com/embed/Q4cVz67E4bU"
+						title="YouTube video player"
+						frameBorder="0"
+						allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+						allowFullScreen
+					></iframe>
+				</div>
 				<div className="About-section">
 					<h2 className="About-section-title">Welcome to Level Up</h2>
 					<p className="About-section-text">
