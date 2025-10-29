@@ -13,3 +13,5 @@ dist/
 
 # OS junk
 .DS_Store
+# Sentry Config File
+.env.sentry-build-plugin

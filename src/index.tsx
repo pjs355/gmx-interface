@@ -1,3 +1,11 @@
+import * as Sentry from "@sentry/react";
+Sentry.init({
+	dsn: "https://014a3809164e437ea9fa07f4dc0d3f32@o4508413424893952.ingest.us.sentry.io/4510275102703616",
+	// Setting this option to true will send default PII data to Sentry.
+	// For example, automatic IP address collection on events
+	sendDefaultPii: true,
+});
+
 import { PrivyProvider } from "@privy-io/react-auth";
 import { addRpcUrlOverrideToChain } from "@privy-io/react-auth";
 import { SmartWalletsProvider } from "@privy-io/react-auth/smart-wallets";

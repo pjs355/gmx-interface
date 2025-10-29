@@ -1,3 +1,4 @@
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { lingui } from '@lingui/vite-plugin'
@@ -5,14 +6,14 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: ["macros"],
-      },
-    }),
-    lingui(),
-  ],
+  plugins: [react({
+    babel: {
+      plugins: ["macros"],
+    },
+  }), lingui(), sentryVitePlugin({
+    org: "prinx",
+    project: "javascript-react"
+  })],
   define: {
     global: 'globalThis',
     'process.env': {},
