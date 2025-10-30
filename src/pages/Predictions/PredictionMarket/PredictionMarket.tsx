@@ -145,7 +145,7 @@ function PredictionMarketContent() {
 		const wsUrl = getPredictionWebSocketUrl();
 		const connections: WebSocket[] = [];
 		const receivedOrderbooks = new Set<string>();
-		
+
 		// Reset ready state when questions change
 		setOrderbooksReady(false);
 
@@ -190,8 +190,12 @@ function PredictionMarketContent() {
 						receivedOrderbooks.add(marketId);
 
 						// Check if all orderbooks have been received
-						if (receivedOrderbooks.size === expectedMarketIds.length) {
-							console.log('✅ All orderbooks loaded - displaying UI');
+						if (
+							receivedOrderbooks.size === expectedMarketIds.length
+						) {
+							console.log(
+								"✅ All orderbooks loaded - displaying UI"
+							);
 							setOrderbooksReady(true);
 						}
 					} catch (error) {
@@ -227,7 +231,9 @@ function PredictionMarketContent() {
 		// Fallback timeout - if orderbooks don't load within 5 seconds, show UI anyway
 		const timeout = setTimeout(() => {
 			if (!receivedOrderbooks.size) {
-				console.warn('⚠️ Orderbooks taking too long, showing UI anyway');
+				console.warn(
+					"⚠️ Orderbooks taking too long, showing UI anyway"
+				);
 				setOrderbooksReady(true);
 			}
 		}, 5000);
@@ -398,35 +404,16 @@ function PredictionMarketContent() {
 		[questionOrderbooks]
 	);
 
-	// Sort questions by highest Yes price using allBooksPreview with WebSocket fallback
+	// Sort questions by highest Yes price using live WebSocket orderbook data
+	// Sort once when orderbooks are ready, then keep stable
 	const sortedQuestions = useMemo(() => {
-		console.log("🔍 DETAILED allBooksPreview check:", {
-			previewKeys: Object.keys(allBooksPreview),
-			previewData: allBooksPreview,
-			orderbooksKeys: Object.keys(questionOrderbooks),
-			questionIds: questions.map((q) => ({
-				_id: q._id,
-				questionId: q.questionId,
-				marketId: q.marketId,
-				name: q.displayName || q.question,
-			})),
-		});
-
 		const sorted = [...questions].sort((a, b) => {
 			const questionIdA = a._id || a.questionId || a.marketId;
 			const questionIdB = b._id || b.questionId || b.marketId;
 
-			// Try allBooksPreview first, fallback to WebSocket orderbook
-
-			const previewA = questionIdA
-				? allBooksPreview[questionIdA]
-				: undefined;
-			const previewB = questionIdB
-				? allBooksPreview[questionIdB]
-				: undefined;
-
-			const yesPriceA = previewA?.lowestAsk ?? getLowestAsk(questionIdA);
-			const yesPriceB = previewB?.lowestAsk ?? getLowestAsk(questionIdB);
+			// Use live WebSocket orderbook data for accurate current prices
+			const yesPriceA = getLowestAsk(questionIdA);
+			const yesPriceB = getLowestAsk(questionIdB);
 
 			// Sort by highest Yes price first (descending order)
 			// Handle null/undefined cases by putting them at the end
@@ -438,7 +425,7 @@ function PredictionMarketContent() {
 		});
 
 		return sorted;
-	}, [questions, allBooksPreview, questionOrderbooks, getLowestAsk]);
+	}, [questions, orderbooksReady, getLowestAsk]); // Re-sort when orderbooks become ready
 
 	// COMPLETELY ISOLATED CHART STATE - Never changes after initial load
 	// Chart state managed by useChartState hook
@@ -513,28 +500,35 @@ function PredictionMarketContent() {
 		questionOrderbooks
 	);
 
-	// Show loader while waiting for initial data or orderbooks
-	if (loading || !orderbooksReady) {
+	// Only show error page if umbrella fails to load
+	if (loading && !umbrella) {
 		return (
-			<div
-				className="default-container page-layout"
-				style={{
-					display: 'flex',
-					justifyContent: 'center',
-					alignItems: 'center',
-					minHeight: '100vh',
-					backgroundColor: '#000',
-					color: '#fff'
-				}}
-				aria-label="Loading market data"
-				role="status"
-			>
-				<SpinningLoader size="2rem" />
+			<div className="default-container page-layout">
+				<div className="mb-2">
+					<h1 className="mb-16 text-34 font-bold">
+						<Trans>Umbrella Not Found</Trans>
+					</h1>
+					<p className="error-message">
+						Please navigate to this page from the Predictions list.
+					</p>
+					<Button
+						variant="primary"
+						onClick={() => navigate("/predictions")}
+						style={{
+							padding: "12px 24px",
+							fontSize: "16px",
+							marginTop: "16px",
+						}}
+					>
+						← Back to Predictions
+					</Button>
+				</div>
 			</div>
 		);
 	}
 
-	if (!umbrella) {
+	// Show error page if umbrella is explicitly null after loading
+	if (!loading && !umbrella) {
 		return (
 			<div className="default-container page-layout">
 				<div className="mb-2">
@@ -567,10 +561,12 @@ function PredictionMarketContent() {
 					isMobile ? "mobile" : "desktop"
 				}`}
 			>
-				<MarketHeader umbrella={umbrella} titleRef={titleRef} />
+				{umbrella && (
+					<MarketHeader umbrella={umbrella} titleRef={titleRef} />
+				)}
 
 				<MarketPanels
-					umbrella={umbrella}
+					umbrella={umbrella!}
 					sortedQuestions={sortedQuestions as any}
 					questionOrderbooks={questionOrderbooks}
 					activeMarket={activeMarket as any}
@@ -581,11 +577,12 @@ function PredictionMarketContent() {
 						handleMarketSwitchWithOrderbook
 					}
 					onOrderbookToggle={handleOrderbookToggle}
-				onPositionChange={handlePositionChange}
-				fetchAllOrderbooks={fetchAllOrderbooks}
-				chartState={chartOnlyState}
-			/>
-		</div>
-	</PredictionCurtainProvider>
+					onPositionChange={handlePositionChange}
+					fetchAllOrderbooks={fetchAllOrderbooks}
+					chartState={chartOnlyState}
+					orderbooksReady={orderbooksReady}
+				/>
+			</div>
+		</PredictionCurtainProvider>
 	);
 }
