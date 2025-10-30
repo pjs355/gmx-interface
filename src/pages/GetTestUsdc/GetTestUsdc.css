@@ -21,6 +21,9 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	background: #000000;
+	padding: 3rem;
+	border-radius: 1.6rem;
 }
 
 .GetTestUsdc-disclosure {
@@ -228,6 +231,10 @@
 		padding-top: 8rem; /* Keep same top padding on mobile */
 	}
 
+	.GetTestUsdc-content {
+		padding: 2rem;
+	}
+
 	.GetTestUsdc-disclosure {
 		margin-bottom: 6rem; /* More padding below text on mobile */
 	}
@@ -251,6 +258,10 @@
 }
 
 @media (max-width: 480px) {
+	.GetTestUsdc-content {
+		padding: 1.5rem;
+	}
+
 	.GetTestUsdc-title {
 		font-size: 3rem;
 	}

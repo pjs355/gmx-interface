@@ -8,10 +8,12 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import "./Predictions.scss";
 import ImageBanner from "./ImageBanner";
 import GameLinks from "./GameLinks";
+import { resolveUmbrellaBannerById } from "./utils/umbrellaBanners";
 
 export default function Predictions() {
 	const navigate = useNavigate();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
+	const [imagesReady, setImagesReady] = useState(false);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -108,11 +110,53 @@ export default function Predictions() {
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
+	// Preload all banner images
+	useEffect(() => {
+		if (loading || umbrellas.length === 0) return;
+
+		const imageUrls = umbrellas
+			.map((u) => u.image || resolveUmbrellaBannerById(u._id))
+			.filter(Boolean);
+
+		if (imageUrls.length === 0) {
+			setImagesReady(true);
+			return;
+		}
+
+		let loadedCount = 0;
+		const totalImages = imageUrls.length;
+
+		imageUrls.forEach((url) => {
+			const img = new Image();
+			img.onload = () => {
+				loadedCount++;
+				if (loadedCount === totalImages) {
+					setImagesReady(true);
+				}
+			};
+			img.onerror = () => {
+				// Count errors as loaded to prevent hanging
+				loadedCount++;
+				if (loadedCount === totalImages) {
+					setImagesReady(true);
+				}
+			};
+			img.src = url as string;
+		});
+
+		// Fallback timeout - show page after 3 seconds even if images not loaded
+		const timeout = setTimeout(() => {
+			setImagesReady(true);
+		}, 3000);
+
+		return () => clearTimeout(timeout);
+	}, [loading, umbrellas]);
+
 	const handleRetry = () => {
 		window.location.reload();
 	};
 
-	if (loading || error) {
+	if (loading || error || !imagesReady) {
 		return <LoadingState error={error} onRetry={handleRetry} />;
 	}
 

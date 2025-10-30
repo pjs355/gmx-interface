@@ -513,8 +513,25 @@ function PredictionMarketContent() {
 		questionOrderbooks
 	);
 
-	if (loading) {
-		return <div className="default-container page-layout"></div>;
+	// Show loader while waiting for initial data or orderbooks
+	if (loading || !orderbooksReady) {
+		return (
+			<div
+				className="default-container page-layout"
+				style={{
+					display: 'flex',
+					justifyContent: 'center',
+					alignItems: 'center',
+					minHeight: '100vh',
+					backgroundColor: '#000',
+					color: '#fff'
+				}}
+				aria-label="Loading market data"
+				role="status"
+			>
+				<SpinningLoader size="2rem" />
+			</div>
+		);
 	}
 
 	if (!umbrella) {
@@ -564,11 +581,11 @@ function PredictionMarketContent() {
 						handleMarketSwitchWithOrderbook
 					}
 					onOrderbookToggle={handleOrderbookToggle}
-					onPositionChange={handlePositionChange}
-					fetchAllOrderbooks={fetchAllOrderbooks}
-					chartState={chartOnlyState}
-				/>
-			</div>
-		</PredictionCurtainProvider>
+				onPositionChange={handlePositionChange}
+				fetchAllOrderbooks={fetchAllOrderbooks}
+				chartState={chartOnlyState}
+			/>
+		</div>
+	</PredictionCurtainProvider>
 	);
 }

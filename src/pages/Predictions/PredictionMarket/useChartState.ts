@@ -64,7 +64,7 @@ export function useChartState(sortedQuestions: any[], questionOrderbooks: Record
         });
       }
     }
-  }, [sortedQuestions, questionOrderbooks, chartOnlyState.primaryQuestionId, chartOnlyState.secondaryQuestionId, chartOnlyState.isInitialized, allBooksPreview]);
+  }, [sortedQuestions, questionOrderbooks, chartOnlyState.primaryQuestionId, chartOnlyState.secondaryQuestionId, chartOnlyState.isInitialized, chartOnlyState.frozenOrderbooks, allBooksPreview]);
 
   // Chart uses frozen data from global context - no additional API calls needed
 
