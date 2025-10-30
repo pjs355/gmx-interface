@@ -3,6 +3,7 @@ import { Trans } from "@lingui/macro";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMedia } from "react-use";
 import Button from "components/Button/Button";
+import SpinningLoader from "components/Common/SpinningLoader";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { Umbrella } from "@/services/api/umbrellaDataService";
 import { getPredictionWebSocketUrl } from "@/config/predictionApiBase";
@@ -40,6 +41,7 @@ function PredictionMarketContent() {
 	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] =
 		useState(false);
 	const [loading, setLoading] = useState(true);
+	const [orderbooksReady, setOrderbooksReady] = useState(false);
 	const isMobile = useMedia("(max-width: 1100px)");
 	const titleRef = useRef<HTMLHeadingElement | null>(null);
 	const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({
@@ -142,10 +144,19 @@ function PredictionMarketContent() {
 
 		const wsUrl = getPredictionWebSocketUrl();
 		const connections: WebSocket[] = [];
+		const receivedOrderbooks = new Set<string>();
+		
+		// Reset ready state when questions change
+		setOrderbooksReady(false);
 
 		console.log(
 			`🔌 Connecting WebSockets for ${questions.length} markets...`
 		);
+
+		// Get all market IDs we're expecting
+		const expectedMarketIds = questions
+			.map((q) => q._id || q.questionId || q.marketId)
+			.filter(Boolean);
 
 		// Create a WebSocket connection for each market
 		questions.forEach((question) => {
@@ -174,6 +185,15 @@ function PredictionMarketContent() {
 							...prev,
 							[marketId]: orderbook,
 						}));
+
+						// Track that we've received data for this market
+						receivedOrderbooks.add(marketId);
+
+						// Check if all orderbooks have been received
+						if (receivedOrderbooks.size === expectedMarketIds.length) {
+							console.log('✅ All orderbooks loaded - displaying UI');
+							setOrderbooksReady(true);
+						}
 					} catch (error) {
 						console.error(
 							"error",
@@ -204,8 +224,17 @@ function PredictionMarketContent() {
 			}
 		});
 
+		// Fallback timeout - if orderbooks don't load within 5 seconds, show UI anyway
+		const timeout = setTimeout(() => {
+			if (!receivedOrderbooks.size) {
+				console.warn('⚠️ Orderbooks taking too long, showing UI anyway');
+				setOrderbooksReady(true);
+			}
+		}, 5000);
+
 		// Cleanup: close all connections on unmount or when dependencies change
 		return () => {
+			clearTimeout(timeout);
 			localStorage.removeItem("activePosition");
 
 			console.log(
