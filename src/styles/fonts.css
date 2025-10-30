@@ -9,6 +9,14 @@
 }
 
 @font-face {
+	font-family: "Akkurat";
+	src: url("@/assets/fonts/akkurat-bold.ttf") format("truetype");
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
 	font-family: "Knockout";
 	src: url("@/assets/fonts/KnockoutBan.otf") format("opentype");
 	font-weight: normal;

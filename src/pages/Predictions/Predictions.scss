@@ -82,12 +82,6 @@
 /* Mobile: Use global padding-top (4.7rem) with negative margin */
 /* Medium and Desktop: Use reduced padding-top (2.4rem) with negative margin */
 
-@media (min-width: 769px) {
-	.predictions-page.page-layout {
-		//padding-top: 2.4rem;
-	}
-}
-
 .game-links-bar {
 	display: flex;
 	gap: 10px 16px;
@@ -454,6 +448,11 @@
 	border: none;
 	outline: none;
 	min-height: 44px;
+
+	strong {
+		font-family: "Akkurat", sans-serif;
+		font-weight: 700 !important;
+	}
 
 	&.yes-button {
 		background: rgba(34, 197, 94, 0.1);

@@ -103,7 +103,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					className="action-button yes-button"
 					onClick={navigateToUmbrella}
 				>
-					<Trans>Explore Questions</Trans>
+					<strong><Trans>Explore Questions</Trans></strong>
 				</Button>
 			);
 		}
