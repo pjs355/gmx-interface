@@ -460,7 +460,7 @@ export default function PredictionMarketTradeBoxUI({
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <span className="bet-size-label">Amount</span>
-                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
               </div>
             </div>
           )}
@@ -470,7 +470,7 @@ export default function PredictionMarketTradeBoxUI({
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <span className={`bet-size-label to-win-label`}>{side === 'sell' ? 'Receive' : 'To Win'}</span>
-                <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
               </div>
               {/* Small grey odds text under To Win for market buy orders only */}
               {orderType === 'market' && side === 'buy' && oddsData && (
