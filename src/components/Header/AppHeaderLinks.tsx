@@ -199,17 +199,6 @@ export function AppHeaderLinks({
 						Prizes
 					</HeaderLink>
 				</div> */}
-				{active && (
-					<div className="App-header-link-container">
-						<HeaderLink
-							qa="get-test-usdc"
-							to="/get_test_usdc"
-							showRedirectModal={showRedirectModal}
-						>
-							Get Test USD
-						</HeaderLink>
-					</div>
-				)}
 				<div className="App-header-link-container">
 					<HeaderLink
 						qa="about"
@@ -222,6 +211,17 @@ export function AppHeaderLinks({
 						About
 					</HeaderLink>
 				</div>
+				{active && (
+					<div className="App-header-link-container">
+						<HeaderLink
+							qa="get-test-usdc"
+							to="/get_test_usdc"
+							showRedirectModal={showRedirectModal}
+						>
+							Get Test USD
+						</HeaderLink>
+					</div>
+				)}
 				{/* Intentionally no Leaderboard or Positions text links here. Portfolio and Cash are separate buttons in AppHeaderUser. */}
 				<div className="App-header-link-container">
 					{/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>

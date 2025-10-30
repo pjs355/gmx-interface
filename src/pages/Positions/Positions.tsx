@@ -18,6 +18,7 @@ import PositionsTabs from "./components/PositionsTabs";
 import PositionsTableView from "./components/PositionsTableView";
 import PositionsCardView from "./components/PositionsCardView";
 import ResolvedPositionsTable from "./components/ResolvedPositionsTable";
+import ResolvedPositionsCardView from "./components/ResolvedPositionsCardView";
 import OrdersView from "./components/OrdersView";
 import OrdersCardView from "./components/OrdersCardView";
 import HistoryView from "./components/HistoryView";
@@ -488,7 +489,7 @@ export default function Positions() {
 	}, {} as Record<string, { Yes: number; No: number }>);
 
 	return (
-		<div className="default-container page-layout">
+		<div className="positions-page default-container page-layout">
 			<div>
 				<div className="positions-header-group">
 					<PositionsHeader
@@ -507,12 +508,13 @@ export default function Positions() {
 						}
 					/>
 
-					<PositionsTabs
-						activeTab={activeTab}
-						setActiveTab={setActiveTab}
-					/>
-				</div>
+				<PositionsTabs
+					activeTab={activeTab}
+					setActiveTab={setActiveTab}
+				/>
+			</div>
 
+			<div className="positions-content-wrapper">
 				{!account && (
 					<p className="text-body">Log in to view balances.</p>
 				)}
@@ -603,11 +605,26 @@ export default function Positions() {
 																	})
 																);
 															console.log(
-																"🔍 DEBUG: Transformed data for ResolvedPositionsTable:",
+																"🔍 DEBUG: Transformed data for Resolved Positions:",
 																transformedData
 															);
-															return (
+															return !isMobile ? (
 																<ResolvedPositionsTable
+																	umbrellaBalances={
+																		transformedData
+																	}
+																	toCentsString={
+																		toCentsString
+																	}
+																	softLoading={
+																		softLoading
+																	}
+																	onClaimSuccess={
+																		handleClaimSuccess
+																	}
+																/>
+															) : (
+																<ResolvedPositionsCardView
 																	umbrellaBalances={
 																		transformedData
 																	}
@@ -716,6 +733,7 @@ export default function Positions() {
 						)}
 					</>
 				)}
+			</div>
 			</div>
 		</div>
 	);

@@ -75,6 +75,23 @@
 	width: 100%;
 }
 
+/* Remove tiled background from positions page only */
+.positions-page {
+	background: #000000;
+	min-height: 100vh;
+}
+
+/* Add padding between tabs and content */
+.positions-content-wrapper {
+	margin-top: 32px; /* Desktop padding between tabs and content */
+	padding-bottom: 40px; /* Desktop padding to prevent table from pressing against footer */
+	
+	@media (max-width: 768px) {
+		margin-top: 24px; /* Mobile padding between tabs and content */
+		padding-bottom: 60px; /* Extra padding on mobile */
+	}
+}
+
 /* Subtle skeleton shimmer for loading placeholders */
 .skeleton-box {
 	display: inline-block;
