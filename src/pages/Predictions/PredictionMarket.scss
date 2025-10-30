@@ -6,8 +6,6 @@
 	display: flex;
 	flex-direction: column;
 	padding-bottom: 2.4rem;
-	padding-top: 1.2rem;
-
 	&.mobile {
 		padding-left: 16px;
 		padding-right: 16px;
@@ -32,7 +30,7 @@
 .left-panel {
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	//gap: 16px;
 }
 
 .right-panel {
@@ -42,19 +40,12 @@
 
 .chart-section {
 	margin-top: 0;
-	margin-bottom: 4px;
-}
-
-.orderbook-section {
-	// Orderbook styles will be handled by the component itself
-	margin-top: 16px;
 }
 
 // Mobile Layout
 .mobile-layout {
 	display: flex;
 	flex-direction: column;
-	gap: 24px;
 	margin-bottom: 80px; // Space for fixed trading container
 	padding-bottom: 80px; // Additional padding to ensure content is not hidden behind fixed trading box
 }
@@ -87,11 +78,19 @@
 }
 
 .market-header {
+	background: #000000;
+	margin-left: -50px;
+	margin-right: -50px;
+	padding-left: 50px;
+	padding-right: 50px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+
 	.market-title-container {
 		display: flex;
+		background: black;
 		align-items: center;
 		gap: 16px;
-		margin-top: 12px; // add space below global header; avoid bleeding under header
 		flex-wrap: nowrap; // Keep image and title on the same row; let title wrap internally
 
 		// Ensure the title can share the row with the image and wrap when needed
@@ -171,6 +170,15 @@
 	}
 }
 
+@media (max-width: 1100px) {
+	.market-header {
+		margin-left: -16px;
+		margin-right: -16px;
+		padding-left: 16px;
+		padding-right: 16px;
+	}
+}
+
 @media (max-width: 768px) {
 	.prediction-market-page {
 		padding-left: 12px;
@@ -178,6 +186,11 @@
 	}
 
 	.market-header {
+		margin-left: -12px;
+		margin-right: -12px;
+		padding-left: 12px;
+		padding-right: 12px;
+
 		.market-title-container {
 			// Keep items on the same line; title wraps within its own area
 			flex-wrap: nowrap;

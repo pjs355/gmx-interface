@@ -10,7 +10,7 @@ export default function PositionsTabs({
 	setActiveTab: (t: "positions" | "orders" | "history") => void;
 }) {
 	return (
-		<div className="flex items-center justify-between mb-12">
+		<div className="flex items-center justify-between">
 			<div className="flex gap-8 positions-tabs" role="tablist">
 				<Button
 					variant="ghost"

@@ -1,86 +1,98 @@
 .positions-tabs {
-  .side-btn {
-    flex: 1;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 16px;
-    font-weight: 400;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border: 1px solid #D1D5DB; /* grey border like tradebox */
-    color: #9CA3AF; /* grey text like tradebox */
-    background: transparent; /* black/transparent background */
-    transform: translateY(0) scale(1);
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
+	.side-btn {
+		flex: 1;
+		padding: 8px 12px;
+		border-radius: 6px;
+		font-size: 16px;
+		font-weight: 400;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		border: 1px solid #d1d5db; /* grey border like tradebox */
+		color: #9ca3af; /* grey text like tradebox */
+		background: #000000; /* solid black background */
+		transform: translateY(0) scale(1);
+		cursor: pointer;
+		position: relative;
+		overflow: hidden;
 
-    &:hover {
-      border-color: #8B5CF6; /* purple hover border */
-      color: #8B5CF6; /* purple hover text */
-      background: transparent !important; /* keep black/transparent on hover */
-      transform: translateY(-2px) scale(1.02);
-      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
-    }
+		&:hover {
+			border-color: #8b5cf6; /* purple hover border */
+			color: #8b5cf6; /* purple hover text */
+			background: #000000 !important; /* solid black on hover */
+			transform: translateY(-2px) scale(1.02);
+			box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+		}
 
-    &:active {
-      transform: translateY(0) scale(0.98);
-      transition: all 0.1s ease;
-    }
+		&:active {
+			transform: translateY(0) scale(0.98);
+			transition: all 0.1s ease;
+		}
 
-    &.selected.primary {
-      background: transparent !important; /* no fill when selected */
-      border-color: #8B5CF6; /* purple border when selected */
-      color: #7C3AED; /* dark purple text when selected */
-      font-weight: 700;
-      transform: translateY(-1px) scale(1.05);
-      box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
-    }
+		&.selected.primary {
+			background: #000000 !important; /* solid black when selected */
+			border-color: #8b5cf6; /* purple border when selected */
+			color: #7c3aed; /* dark purple text when selected */
+			font-weight: 700;
+			transform: translateY(-1px) scale(1.05);
+			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+		}
 
-    &.selected.secondary {
-      background: transparent !important;
-      border-color: #8B5CF6;
-      color: #7C3AED;
-      font-weight: 700;
-      transform: translateY(-1px) scale(1.05);
-      box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
-    }
-
-  }
+		&.selected.secondary {
+			background: #000000 !important;
+			border-color: #8b5cf6;
+			color: #7c3aed;
+			font-weight: 700;
+			transform: translateY(-1px) scale(1.05);
+			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+		}
+	}
 }
 
 /* Soft loading blur used in Positions table numeric cells */
 .soft-blur {
-  filter: blur(2px);
-  opacity: 0.7;
-  transition: filter 160ms ease, opacity 160ms ease;
+	filter: blur(2px);
+	opacity: 0.7;
+	transition: filter 160ms ease, opacity 160ms ease;
 }
 
 /* Match prior table layout spacing and full-width grid */
+.positions-header-group {
+	background: #000000;
+	padding-top: 24px;
+}
+
 .positions-header {
-  width: 100%;
+	width: 100%;
+	background: #000000;
 }
 
 .umbrella-block {
-  width: 100%;
-  background: #000;
+	width: 100%;
+	background: #000;
 }
 
 .position-row,
 .order-row {
-  width: 100%;
+	width: 100%;
 }
 
 /* Subtle skeleton shimmer for loading placeholders */
 .skeleton-box {
-  display: inline-block;
-  background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.06) 63%);
-  background-size: 400% 100%;
-  animation: skeletonShimmer 1.2s ease-in-out infinite;
+	display: inline-block;
+	background: linear-gradient(
+		90deg,
+		rgba(255, 255, 255, 0.06) 25%,
+		rgba(255, 255, 255, 0.12) 37%,
+		rgba(255, 255, 255, 0.06) 63%
+	);
+	background-size: 400% 100%;
+	animation: skeletonShimmer 1.2s ease-in-out infinite;
 }
 
 @keyframes skeletonShimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: 0 0; }
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: 0 0;
+	}
 }
-
-

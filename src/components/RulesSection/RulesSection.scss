@@ -1,49 +1,47 @@
 .rules-section {
-  margin-top: 24px;
-  margin-bottom: 24px;
-  background: black;
-  border-radius: 12px;
-  padding: 20px;
-  
-  .rules-header {
-    color: white;
-    font-size: 24px;
-    font-weight: 600;
-    margin: 0 0 16px 0;
-  }
-  
-  .rules-content {
-    .rules-text {
-      color: white;
-      line-height: 1.6;
-      
-      p {
-        margin: 0 0 12px 0;
-        font-size: 14px;
-        
-        &:last-child {
-          margin-bottom: 0;
-        }
-      }
-      
-      
-      .expand-button {
-        background: none;
-        border: none;
-        color: #8B5CF6;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        padding: 0;
-        text-decoration: underline;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        
-        &:hover {
-          color: #7C3AED;
-        }
-      }
-    }
-  }
+	margin-bottom: 24px;
+	background: black;
+	border-radius: 12px;
+	padding: 20px;
+
+	.rules-header {
+		color: white;
+		font-size: 24px;
+		font-weight: 600;
+		margin: 0 0 16px 0;
+	}
+
+	.rules-content {
+		.rules-text {
+			color: white;
+			line-height: 1.6;
+
+			p {
+				margin: 0 0 12px 0;
+				font-size: 14px;
+
+				&:last-child {
+					margin-bottom: 0;
+				}
+			}
+
+			.expand-button {
+				background: none;
+				border: none;
+				color: #8b5cf6;
+				cursor: pointer;
+				font-size: 14px;
+				font-weight: 500;
+				padding: 0;
+				text-decoration: underline;
+				display: flex;
+				align-items: center;
+				gap: 4px;
+
+				&:hover {
+					color: #7c3aed;
+				}
+			}
+		}
+	}
 }

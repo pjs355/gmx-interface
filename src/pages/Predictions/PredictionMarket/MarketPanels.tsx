@@ -53,7 +53,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			{/* Desktop Layout */}
 			<div className="desktop-layout">
 				<div className="left-panel">
-					<div className="chart-section" style={{ marginTop: 0 }}>
+					<div className="chart-section">
 						<div
 							className="ExchangeChart"
 							style={{
@@ -102,7 +102,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						</div>
 					</div>
 
-					<div className="orderbook-section" style={{ marginTop: 8 }}>
+					<div className="orderbook-section">
 						{sortedQuestions.map((question, index) => {
 							if (!question) return null;
 							const orderBookId =

@@ -490,39 +490,34 @@ export default function Positions() {
 	return (
 		<div className="default-container page-layout">
 			<div>
-				{/* Spacer bar for proper spacing - responsive */}
-				{isMobile ? (
-					<div style={{ height: "4px", width: "100%" }}></div>
-				) : (
-					<div style={{ height: "36px", width: "100%" }}></div>
-				)}
+				<div className="positions-header-group">
+					<PositionsHeader
+						portfolioTotal={
+							portfolioTotalCtx ??
+							cashBalanceCtx + positionsTotalValue
+						}
+						positionsTotalValue={positionsTotalValue}
+						usdcBalance={Number(cashBalanceCtx)}
+						softLoading={
+							loading ||
+							predictionLoading ||
+							userDataLoading ||
+							portfolioLoading ||
+							booksPreviewLoading
+						}
+					/>
 
-				<PositionsHeader
-					portfolioTotal={
-						portfolioTotalCtx ??
-						cashBalanceCtx + positionsTotalValue
-					}
-					positionsTotalValue={positionsTotalValue}
-					usdcBalance={Number(cashBalanceCtx)}
-					softLoading={
-						loading ||
-						predictionLoading ||
-						userDataLoading ||
-						portfolioLoading ||
-						booksPreviewLoading
-					}
-				/>
-
-				<PositionsTabs
-					activeTab={activeTab}
-					setActiveTab={setActiveTab}
-				/>
+					<PositionsTabs
+						activeTab={activeTab}
+						setActiveTab={setActiveTab}
+					/>
+				</div>
 
 				{!account && (
 					<p className="text-body">Log in to view balances.</p>
 				)}
 				{account && (
-					<div className="mt-12">
+					<>
 						{error ? (
 							<p className="error-message">{error}</p>
 						) : (
@@ -719,7 +714,7 @@ export default function Positions() {
 								);
 							})()
 						)}
-					</div>
+					</>
 				)}
 			</div>
 		</div>

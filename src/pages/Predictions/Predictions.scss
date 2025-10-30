@@ -1,6 +1,7 @@
 .predictions-page {
 	min-height: 100vh;
 	background: #000000 url(@/assets/img/lu-bg-tiles.png) repeat;
+	background-size: 300px 300px;
 	display: flex;
 	flex-direction: column;
 	margin: 0 auto;
@@ -69,7 +70,12 @@
 
 .game-links-wrapper {
 	position: relative;
-	margin: -12px 0 24px 0; // negative top margin to pull pills even closer to header
+	background: #000000;
+	padding: 24px 0;
+	margin-left: -50px;
+	margin-right: -50px;
+	padding-left: 50px;
+	padding-right: 50px;
 }
 
 /* Consistent spacing approach across all screen sizes */
@@ -78,7 +84,7 @@
 
 @media (min-width: 769px) {
 	.predictions-page.page-layout {
-		padding-top: 2.4rem;
+		//padding-top: 2.4rem;
 	}
 }
 
@@ -481,6 +487,13 @@
 		padding-right: 16px;
 	}
 
+	.game-links-wrapper {
+		margin-left: -16px;
+		margin-right: -16px;
+		padding-left: 16px;
+		padding-right: 16px;
+	}
+
 	.predictions-grid {
 		grid-template-columns: repeat(2, 1fr);
 	}
@@ -505,6 +518,13 @@
 
 @media (max-width: 768px) {
 	.predictions-page {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+
+	.game-links-wrapper {
+		margin-left: -12px;
+		margin-right: -12px;
 		padding-left: 12px;
 		padding-right: 12px;
 	}

@@ -389,6 +389,7 @@ button.btn-link:hover .logout-icon {
 .page-layout {
 	min-height: calc(100vh - 62px);
 	background: #000000 url(@/assets/img/lu-bg-tiles.png) repeat;
+	background-size: 300px 300px;
 	display: flex;
 	flex-direction: column;
 	padding-bottom: calc(4.7rem + 8rem);

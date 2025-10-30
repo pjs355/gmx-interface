@@ -157,16 +157,14 @@ export function GetTestUsdc() {
 							</Button>
 						</div>
 					</div>
+					<div className="GetTestUsdc-disclosure">
+						<p>
+							This is FAKE USD and it has ZERO real world value or
+							use case. It can not be redeemed for anything of
+							value. It is just for testing and funding purposes.
+						</p>
+					</div>
 				</div>
-			</div>
-
-			{/* Disclosure Statement */}
-			<div className="GetTestUsdc-disclosure">
-				<p>
-					This is FAKE USD and it has 0 real world value or use case.
-					It can not be redeemed for anything of value. It is just for
-					testing and funding purposes.
-				</p>
 			</div>
 		</div>
 	);

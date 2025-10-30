@@ -48,34 +48,32 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 	};
 
 	return (
-		<div style={{ marginBottom: 8 }}>
-			<div className="market-header">
-				<div className="market-title-container">
-					<img
-						src={currentSrc || initialSrc}
-						alt="Umbrella"
-						className="market-image"
-						onError={handleError}
-					/>
-					<h1
-						ref={titleRef}
-						className="mb-16 text-34 font-bold"
-						style={{ color: "white" }}
+		<div className="market-header">
+			<div className="market-title-container">
+				<img
+					src={currentSrc || initialSrc}
+					alt="Umbrella"
+					className="market-image"
+					onError={handleError}
+				/>
+				<h1
+					ref={titleRef}
+					className="mb-16 text-34 font-bold"
+					style={{ color: "white" }}
+				>
+					{umbrella.displayName}
+				</h1>
+				{umbrella.description && (
+					<p
+						style={{
+							color: "#888",
+							fontSize: "16px",
+							marginTop: "8px",
+						}}
 					>
-						{umbrella.displayName}
-					</h1>
-					{umbrella.description && (
-						<p
-							style={{
-								color: "#888",
-								fontSize: "16px",
-								marginTop: "8px",
-							}}
-						>
-							{umbrella.description}
-						</p>
-					)}
-				</div>
+						{umbrella.description}
+					</p>
+				)}
 			</div>
 		</div>
 	);
