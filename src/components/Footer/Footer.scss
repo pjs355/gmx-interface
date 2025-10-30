@@ -9,7 +9,7 @@
 	display: grid;
 	grid-template-columns: 1fr 2fr 1fr;
 	align-items: center;
-	padding: 3.2rem 50px;
+	padding: 3.2rem 80px;
 	gap: 2rem;
 }
 
@@ -74,8 +74,8 @@
 
 @media (max-width: 1335px) {
 	.Footer-content {
-		padding-left: 16px;
-		padding-right: 16px;
+		padding-left: 32px;
+		padding-right: 32px;
 	}
 }
 
