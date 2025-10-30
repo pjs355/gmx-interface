@@ -1,6 +1,9 @@
 /* Global styles for LevelUp Predictions */
+@import "./fonts.css";
+
 :root {
-	font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+	font-family: "Akkurat", -apple-system, BlinkMacSystemFont, system-ui,
+		sans-serif;
 	line-height: 1.5;
 	font-weight: 400;
 
@@ -28,8 +31,18 @@ body {
 	min-height: 100vh;
 	width: 100vw;
 	overflow-x: hidden;
-	background: #000000;
+	background: #000000 url(@/assets/img/lu-bg-tiles.png) repeat;
 	color: white;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-family: "Akkurat", "Knockout", sans-serif;
+	font-weight: 300;
 }
 
 #root {

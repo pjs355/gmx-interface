@@ -1,8 +1,7 @@
 .About {
 	min-height: 100vh;
-	background: #000000;
+	background: #000000 url(@/assets/img/lu-bg-tiles.png) repeat;
 	color: white;
-	padding: 2rem 1rem;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -28,7 +27,7 @@
 		height: 0;
 		overflow: hidden;
 		border-radius: 12px;
-		background: rgba(255, 255, 255, 0.05);
+		background: #000000;
 
 		iframe {
 			position: absolute;
@@ -41,26 +40,25 @@
 	}
 
 	&-title {
-		font-size: 2.5rem;
-		font-weight: 700;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
+		font-size: calc(2.5rem + 2px);
+		font-family: "Knockout", sans-serif;
+		font-weight: normal;
+		letter-spacing: 0.05em;
+		color: #ffffff;
 		margin: 0;
 		line-height: 1.2;
 
 		@media (max-width: 768px) {
-			font-size: 2rem;
+			font-size: calc(2rem + 2px);
 		}
 	}
 
 	&-section {
-		background: rgba(255, 255, 255, 0.05);
+		background: #000000;
 		border-radius: 12px;
 		padding: 2rem;
 		margin-bottom: 2rem;
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
 
 		&-title {
 			font-size: 1.5rem;
@@ -86,17 +84,13 @@
 		}
 
 		&-highlight {
-			background: linear-gradient(
-				135deg,
-				rgba(102, 126, 234, 0.2) 0%,
-				rgba(118, 75, 162, 0.2) 100%
-			);
-			border: 1px solid rgba(102, 126, 234, 0.3);
+			background: #000000;
+			border: 1px solid rgba(102, 126, 234, 0.5);
 		}
 
 		&-important {
-			background: rgba(255, 193, 7, 0.1);
-			border: 1px solid rgba(255, 193, 7, 0.3);
+			background: #000000;
+			border: 1px solid rgba(255, 193, 7, 0.5);
 		}
 	}
 
@@ -105,9 +99,11 @@
 		gap: 1rem;
 		margin-top: 1.5rem;
 		flex-wrap: wrap;
+		align-items: center;
 
 		a {
 			text-decoration: none;
+			display: flex;
 		}
 
 		@media (max-width: 480px) {

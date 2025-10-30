@@ -5,7 +5,6 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { useSignerContext } from "context/SignerContext";
 
 import Button from "components/Button/Button";
-import Footer from "components/Footer/Footer";
 
 import "./GetTestUsdc.css";
 
@@ -169,8 +168,6 @@ export function GetTestUsdc() {
 					testing and funding purposes.
 				</p>
 			</div>
-
-			<Footer />
 		</div>
 	);
 }

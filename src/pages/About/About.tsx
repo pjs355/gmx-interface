@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import Footer from "components/Footer/Footer";
 import Button from "components/Button/Button";
 
 import "./About.scss";
@@ -85,7 +84,6 @@ export function About() {
 					</div>
 				</div>
 			</div>
-			<Footer />
 		</div>
 	);
 }

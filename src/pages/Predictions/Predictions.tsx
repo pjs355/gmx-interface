@@ -8,7 +8,6 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import "./Predictions.scss";
 import ImageBanner from "./ImageBanner";
 import GameLinks from "./GameLinks";
-import Footer from "components/Footer/Footer";
 
 export default function Predictions() {
 	const navigate = useNavigate();
@@ -149,7 +148,6 @@ export default function Predictions() {
 					</div>
 				)}
 			</div>
-			<Footer />
 		</div>
 	);
 }

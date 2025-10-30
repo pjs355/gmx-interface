@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Trans } from "@lingui/macro";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMedia } from "react-use";
-import Footer from "components/Footer/Footer";
 import Button from "components/Button/Button";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { Umbrella } from "@/services/api/umbrellaDataService";
@@ -486,11 +485,7 @@ function PredictionMarketContent() {
 	);
 
 	if (loading) {
-		return (
-			<div className="default-container page-layout">
-				<Footer />
-			</div>
-		);
+		return <div className="default-container page-layout"></div>;
 	}
 
 	if (!umbrella) {
@@ -515,7 +510,6 @@ function PredictionMarketContent() {
 						← Back to Predictions
 					</Button>
 				</div>
-				<Footer />
 			</div>
 		);
 	}
@@ -545,10 +539,6 @@ function PredictionMarketContent() {
 					fetchAllOrderbooks={fetchAllOrderbooks}
 					chartState={chartOnlyState}
 				/>
-
-				<div style={{ marginTop: "auto" }}>
-					<Footer />
-				</div>
 			</div>
 		</PredictionCurtainProvider>
 	);
