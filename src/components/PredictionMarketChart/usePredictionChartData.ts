@@ -140,7 +140,7 @@ export function usePredictionChartData({
 					}
 
 					// Get the best ask (lowest price in asks array)
-					const bestAsk = orderbook.asks.reduce((best, current) => {
+					const bestAsk = orderbook.asks.reduce((best: any, current: any) => {
 						const currentPrice = parseFloat(
 							current.price || current[0] || "0"
 						);
@@ -304,7 +304,7 @@ export function usePredictionChartData({
 		setData(processedData);
 	}, [processedData]);
 
-	// Monitor cache expiration and trigger re-renders
+	// Consolidated cache monitoring - check once when questionId changes and periodically
 	useEffect(() => {
 		if (!questionId) return;
 
@@ -312,35 +312,21 @@ export function usePredictionChartData({
 			const cachedData =
 				predictionMarketDataService.getCachedMarketData(questionId);
 			if (!cachedData) {
-				// Cache expired, trigger refresh
+				// Cache expired, trigger refresh (silent background update)
 				predictionMarketDataService
 					.refreshHistoricalData(questionId)
 					.catch(console.warn);
 			}
 		};
 
-		// Check immediately
+		// Check immediately when questionId changes
 		checkCacheAndRefresh();
 
-		// Set up periodic cache monitoring (every 2 minutes)
-		const interval = setInterval(checkCacheAndRefresh, 2 * 60 * 1000);
+		// Set up periodic cache monitoring (every 5 minutes to reduce update frequency)
+		const interval = setInterval(checkCacheAndRefresh, 5 * 60 * 1000);
 
 		return () => clearInterval(interval);
 	}, [questionId]);
-
-	// Check cache on data processing to trigger refresh if needed
-	useEffect(() => {
-		if (!questionId) return;
-
-		const cachedData =
-			predictionMarketDataService.getCachedMarketData(questionId);
-		if (!cachedData) {
-			// Cache expired or missing, trigger a re-fetch
-			predictionMarketDataService
-				.refreshHistoricalData(questionId)
-				.catch(console.warn);
-		}
-	}, [questionId, timeRange, timeWindowStart, timeWindowEnd]);
 
 	return {
 		data,

@@ -85,17 +85,8 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
 
   // Chart data preparation handled in usePredictionChartData
 
-  // Periodic refresh every 30 seconds to keep chart data fresh
-  useEffect(() => {
-    if (!effectiveQuestionId || timeWindowStart === 0 || timeWindowEnd === 0) return;
-
-    const interval = setInterval(() => {
-      const now = Math.floor(Date.now() / 1000);
-      setTimeWindowEnd(now);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [effectiveQuestionId, timeWindowStart]);
+  // Removed 30-second interval refresh - WebSocket updates provide real-time data
+  // and the interval was causing unnecessary re-renders and chart animations
 
   // display time handled in hook
 
@@ -137,13 +128,26 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
     formatTime: formatTooltipTime,
   });
 
-  // Guard: do not render chart until we have a valid question id
+  // Guard: do not render chart until we have a valid question id and data
   if (!effectiveQuestionId) {
     return (
       <div className={`prediction-market-chart ${className}`}>
         <div className="chart-container" style={{ minHeight: 300 }}>
           <div className="no-data">
             <p>Select a market to load chart</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render chart until we have at least 2 data points (historical data loaded)
+  if (chartData.length < 2) {
+    return (
+      <div className={`prediction-market-chart ${className}`}>
+        <div className="chart-container" style={{ minHeight: 300 }}>
+          <div className="no-data">
+            <p>Loading chart data...</p>
           </div>
         </div>
       </div>
@@ -179,20 +183,14 @@ const PredictionMarketChart: React.FC<PredictionMarketChartProps> = ({
 
       {/* Chart */}
       <div className="chart-container" style={{ minWidth: 0, minHeight: 280 }}>
-        {!effectiveQuestionId ? (
-          <div className="no-data">
-            <p>Select a market to load chart</p>
-          </div>
-        ) : (
-          <SeriesChart
-            data={chartData as any}
-            yesTeamColor={yesTeamColor}
-            noTeamColor={noTeamColor}
-            isVsSingleMarket={isVsSingleMarket}
-            tooltip={<TooltipContent />}
-            height={typeof window !== 'undefined' && window.innerWidth <= 768 ? 240 : 300}
-          />
-        )}
+        <SeriesChart
+          data={chartData as any}
+          yesTeamColor={yesTeamColor}
+          noTeamColor={noTeamColor}
+          isVsSingleMarket={isVsSingleMarket}
+          tooltip={<TooltipContent />}
+          height={typeof window !== 'undefined' && window.innerWidth <= 768 ? 240 : 300}
+        />
         
         {/* Time Range Selector - Bottom Right */}
         <div className="time-range-selector bottom-right">
