@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Trans } from "@lingui/macro";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMedia } from "react-use";
-import Footer from "components/Footer/Footer";
 import Button from "components/Button/Button";
 import SpinningLoader from "components/Common/SpinningLoader";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -514,25 +513,8 @@ function PredictionMarketContent() {
 		questionOrderbooks
 	);
 
-	// Show loader while waiting for initial data or orderbooks
-	if (loading || !orderbooksReady) {
-		return (
-			<div
-				className="default-container page-layout"
-				style={{
-					display: 'flex',
-					justifyContent: 'center',
-					alignItems: 'center',
-					minHeight: '100vh',
-					backgroundColor: '#000',
-					color: '#fff'
-				}}
-				aria-label="Loading market data"
-				role="status"
-			>
-				<SpinningLoader size="2rem" />
-			</div>
-		);
+	if (loading) {
+		return <div className="default-container page-layout"></div>;
 	}
 
 	if (!umbrella) {
@@ -557,7 +539,6 @@ function PredictionMarketContent() {
 						← Back to Predictions
 					</Button>
 				</div>
-				<Footer />
 			</div>
 		);
 	}
@@ -587,10 +568,6 @@ function PredictionMarketContent() {
 					fetchAllOrderbooks={fetchAllOrderbooks}
 					chartState={chartOnlyState}
 				/>
-
-				<div style={{ marginTop: "auto" }}>
-					<Footer />
-				</div>
 			</div>
 		</PredictionCurtainProvider>
 	);

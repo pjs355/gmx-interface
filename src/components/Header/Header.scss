@@ -255,6 +255,7 @@
 	vertical-align: middle;
 	letter-spacing: -0.02em;
 	text-decoration: none;
+	cursor: pointer;
 }
 
 .App-header-logo-text.small {
@@ -291,6 +292,7 @@
 	display: flex;
 	align-items: center;
 	height: 100%;
+	background: #000000;
 }
 
 .App-header .a:hover,
@@ -493,7 +495,7 @@
 		padding: 0.155rem !important;
 		margin-left: 0rem !important;
 	}
-	
+
 	.login-text-link {
 		padding: 5px 6px !important;
 		font-size: 13px !important;

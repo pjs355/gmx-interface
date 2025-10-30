@@ -14,6 +14,7 @@ import { TOAST_AUTO_CLOSE_TIME } from "config/ui";
 import { Header } from "components/Header/Header";
 import { SettingsModal } from "components/SettingsModal/SettingsModal";
 import { NotifyModal } from "components/NotifyModal/NotifyModal";
+import Footer from "components/Footer/Footer";
 
 import { MainRoutes } from "./MainRoutes";
 
@@ -60,6 +61,7 @@ export function AppRoutes() {
 						showRedirectModal={showRedirectModal}
 					/>
 					<MainRoutes />
+					<Footer />
 				</div>
 			</div>
 			<ToastContainer

@@ -7,7 +7,6 @@ import type { Umbrella } from "lib/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import "./Predictions.scss";
 import GameLinks from "./GameLinks";
-import Footer from "components/Footer/Footer";
 
 interface FilteredPredictionsProps {
 	filterType: "esports" | "games";
@@ -190,7 +189,6 @@ export default function FilteredPredictions({
 					</div>
 				)}
 			</div>
-			<Footer />
 		</div>
 	);
 }

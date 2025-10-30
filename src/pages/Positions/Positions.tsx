@@ -22,7 +22,6 @@ import OrdersView from "./components/OrdersView";
 import OrdersCardView from "./components/OrdersCardView";
 import HistoryView from "./components/HistoryView";
 import HistoryCardView from "./components/HistoryCardView";
-import Footer from "components/Footer/Footer";
 
 type MarketPosition = {
 	market: PredictionMarket;
@@ -137,7 +136,7 @@ export default function Positions() {
 						const balanceId = market._id;
 						// 2. Transaction hash questionId for price lookup
 						const priceId = market.questionId || market._id;
-						
+
 						// Get balances using MongoDB _id
 						const tb = balanceId
 							? tokenBalances.get(balanceId)
@@ -159,16 +158,18 @@ export default function Positions() {
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;
 						const totalValue = yesValue + noValue;
-						
+
 						// Orders might use either ID, so check both
 						const marketOrders = (orders || []).filter(
-							(order) => order.questionId === priceId || order.questionId === balanceId
+							(order) =>
+								order.questionId === priceId ||
+								order.questionId === balanceId
 						);
 						const aggregates = getOrderAggregates(
 							orders || [],
 							balanceId // Use balance ID for order lookups
 						);
-						
+
 						return {
 							market,
 							yesBalance,
@@ -721,7 +722,6 @@ export default function Positions() {
 					</div>
 				)}
 			</div>
-			<Footer />
 		</div>
 	);
 }

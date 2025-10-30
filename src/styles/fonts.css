@@ -1,0 +1,17 @@
+/* Custom Fonts */
+
+@font-face {
+	font-family: "Akkurat";
+	src: url("@/assets/fonts/Akkurat-Light.ttf") format("truetype");
+	font-weight: 300;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Knockout";
+	src: url("@/assets/fonts/KnockoutBan.otf") format("opentype");
+	font-weight: normal;
+	font-style: normal;
+	font-display: swap;
+}
