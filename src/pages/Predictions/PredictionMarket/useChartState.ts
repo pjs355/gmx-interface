@@ -1,74 +1,79 @@
-import { useEffect, useState } from 'react';
-import { usePredictionData } from 'context/PredictionDataContext';
+import { useEffect, useState, useRef } from "react";
+import { usePredictionData } from "context/PredictionDataContext";
 
 type ChartState = {
-  isInitialized: boolean;
-  primaryMarket: any;
-  secondaryMarket: any | null;
-  primaryQuestionId: string;
-  secondaryQuestionId: string | null;
-  frozenOrderbooks: Record<string, any>;
+	isInitialized: boolean;
+	primaryMarket: any;
+	secondaryMarket: any | null;
+	primaryQuestionId: string;
+	secondaryQuestionId: string | null;
+	frozenOrderbooks: Record<string, any>;
 };
 
-export function useChartState(sortedQuestions: any[], questionOrderbooks: Record<string, any>) {
-  const { allBooksPreview } = usePredictionData();
-  const [chartOnlyState, setChartOnlyState] = useState<ChartState>({
-    isInitialized: false,
-    primaryMarket: null,
-    secondaryMarket: null,
-    primaryQuestionId: '', 
-    secondaryQuestionId: null,
-    frozenOrderbooks: {},
-  });
+export function useChartState(
+	sortedQuestions: any[],
+	questionOrderbooks: Record<string, any>
+) {
+	const { allBooksPreview } = usePredictionData();
+	const [chartOnlyState, setChartOnlyState] = useState<ChartState>({
+		isInitialized: false,
+		primaryMarket: null,
+		secondaryMarket: null,
+		primaryQuestionId: "",
+		secondaryQuestionId: null,
+		frozenOrderbooks: {},
+	});
 
-  // Initialize/update chart state based on sorted questions
-  useEffect(() => {
-    if (sortedQuestions.length > 0) {
-      const primaryMarket = { ...sortedQuestions[0] };
-      const secondaryMarket = sortedQuestions.length > 1 ? { ...sortedQuestions[1] } : null;
+	// Store orderbooks in a ref to avoid triggering re-renders
+	const orderbooksRef = useRef(questionOrderbooks);
+	orderbooksRef.current = questionOrderbooks;
 
-      const primaryQuestionId = (primaryMarket._id || primaryMarket.questionId || primaryMarket.marketId || '') as string;
-      const secondaryQuestionId = secondaryMarket ? (secondaryMarket._id || secondaryMarket.questionId || secondaryMarket.marketId) : null;
+	// Initialize/update chart state based on sorted questions ONLY
+	useEffect(() => {
+		if (sortedQuestions.length > 0) {
+			const primaryQuestionId = (sortedQuestions[0]._id ||
+				sortedQuestions[0].questionId ||
+				sortedQuestions[0].marketId ||
+				"") as string;
+			const secondaryQuestionId =
+				sortedQuestions.length > 1
+					? sortedQuestions[1]._id ||
+					  sortedQuestions[1].questionId ||
+					  sortedQuestions[1].marketId
+					: null;
 
-      // Only update if the markets actually changed
-      const marketsChanged = primaryQuestionId !== chartOnlyState.primaryQuestionId || 
-                             secondaryQuestionId !== chartOnlyState.secondaryQuestionId;
-      
-      // Check if orderbooks changed for current markets
-      const orderbooksChanged = chartOnlyState.isInitialized && (
-        questionOrderbooks[primaryQuestionId] !== chartOnlyState.frozenOrderbooks[primaryQuestionId] ||
-        (secondaryQuestionId && questionOrderbooks[secondaryQuestionId] !== chartOnlyState.frozenOrderbooks[secondaryQuestionId])
-      );
+			// Only update if the markets actually changed
+			const marketsChanged =
+				primaryQuestionId !== chartOnlyState.primaryQuestionId ||
+				secondaryQuestionId !== chartOnlyState.secondaryQuestionId;
 
-      if (marketsChanged || orderbooksChanged) {
-        const frozenOrderbooks: Record<string, any> = {};
-        if (questionOrderbooks[primaryQuestionId]) frozenOrderbooks[primaryQuestionId] = { ...questionOrderbooks[primaryQuestionId] };
-        if (secondaryQuestionId && questionOrderbooks[secondaryQuestionId]) frozenOrderbooks[secondaryQuestionId] = { ...questionOrderbooks[secondaryQuestionId] };
+			if (marketsChanged) {
+				const primaryMarket = { ...sortedQuestions[0] };
+				const secondaryMarket =
+					sortedQuestions.length > 1
+						? { ...sortedQuestions[1] }
+						: null;
 
-        if (marketsChanged) {
-          console.log('📊 Chart state updated with top markets:', {
-            primary: primaryMarket.displayName || primaryMarket.question,
-            secondary: secondaryMarket?.displayName || secondaryMarket?.question,
-            primaryPrice: allBooksPreview[primaryQuestionId]?.lowestAsk,
-            secondaryPrice: secondaryQuestionId ? allBooksPreview[secondaryQuestionId]?.lowestAsk : null,
-          });
-        }
+				setChartOnlyState((prev) => ({
+					...prev,
+					isInitialized: true,
+					primaryMarket,
+					secondaryMarket,
+					primaryQuestionId,
+					secondaryQuestionId,
+					// Keep the same frozenOrderbooks reference to avoid triggering re-renders
+				}));
+			}
+		}
+	}, [
+		sortedQuestions,
+		chartOnlyState.primaryQuestionId,
+		chartOnlyState.secondaryQuestionId,
+		// Don't include allBooksPreview - it updates on every WebSocket message
+		// and we only use it for logging, not for determining which markets to show
+	]);
 
-        setChartOnlyState({
-          isInitialized: true,
-          primaryMarket,
-          secondaryMarket,
-          primaryQuestionId,
-          secondaryQuestionId,
-          frozenOrderbooks,
-        });
-      }
-    }
-  }, [sortedQuestions, questionOrderbooks, chartOnlyState.primaryQuestionId, chartOnlyState.secondaryQuestionId, chartOnlyState.isInitialized, chartOnlyState.frozenOrderbooks, allBooksPreview]);
+	// Chart uses frozen data from global context - no additional API calls needed
 
-  // Chart uses frozen data from global context - no additional API calls needed
-
-  return chartOnlyState;
+	return chartOnlyState;
 }
-
-

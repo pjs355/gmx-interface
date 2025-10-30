@@ -4,6 +4,7 @@ import type { ChartDataPoint, TimeRange } from "./types";
 
 type UsePredictionChartDataArgs = {
 	questionId: string;
+	activeMarket?: any;
 	secondMarket?: any;
 	questionOrderbooks?: { [questionId: string]: any };
 	timeRange: TimeRange;
@@ -12,6 +13,7 @@ type UsePredictionChartDataArgs = {
 
 export function usePredictionChartData({
 	questionId,
+	activeMarket,
 	secondMarket,
 	questionOrderbooks,
 	timeRange,
@@ -37,23 +39,26 @@ export function usePredictionChartData({
 		setTimeWindowStart(now - seconds);
 	}, [timeRange]);
 
-	// Memoize the data processing for instant loading
-	const processedData = useMemo(() => {
+	// Memoize ONLY the historical data processing (no orderbooks)
+	const historicalData = useMemo(() => {
 		if (!questionId || timeWindowStart === 0 || timeWindowEnd === 0) {
 			return [];
 		}
 
 		try {
-			// Get historical data
+			// Get historical data - prefer from activeMarket.historicalPricesYes, fallback to service
 			const primaryHistorical =
+				activeMarket?.historicalPricesYes ||
 				predictionMarketDataService.getHistoricalPrices(questionId) ||
 				[];
 			const secondId = secondMarket?._id || secondMarket?.questionId;
 			const secondHistorical =
 				secondId && !isVsSingleMarket
-					? predictionMarketDataService.getHistoricalPrices(
+					? secondMarket?.historicalPricesYes ||
+					  predictionMarketDataService.getHistoricalPrices(
 							secondId
-					  ) || []
+					  ) ||
+					  []
 					: [];
 
 			// Create maps
@@ -67,49 +72,28 @@ export function usePredictionChartData({
 			>();
 
 			// Sort and populate maps
+			// Historical data uses 'ts' (in milliseconds), convert to seconds
 			const primarySeries = [...primaryHistorical].sort(
-				(a, b) => a.timestamp - b.timestamp
+				(a, b) => (a.ts || a.timestamp) - (b.ts || b.timestamp)
 			);
 			const secondSeries = [...secondHistorical].sort(
-				(a, b) => a.timestamp - b.timestamp
+				(a, b) => (a.ts || a.timestamp) - (b.ts || b.timestamp)
 			);
 
-			primarySeries.forEach((p) =>
-				primaryMap.set(p.timestamp, { price: p.price })
-			);
-			secondSeries.forEach((p) =>
-				secondMap.set(p.timestamp, { price: p.price })
-			);
+			primarySeries.forEach((p) => {
+				const timestampSeconds = p.ts
+					? Math.floor(p.ts / 1000) // Convert ms to seconds
+					: p.timestamp;
+				primaryMap.set(timestampSeconds, { price: p.price });
+			});
+			secondSeries.forEach((p) => {
+				const timestampSeconds = p.ts
+					? Math.floor(p.ts / 1000) // Convert ms to seconds
+					: p.timestamp;
+				secondMap.set(timestampSeconds, { price: p.price });
+			});
 
-			// Add creation time 50% backfill
-			try {
-				const primaryMarket =
-					predictionMarketDataService.getCachedMarketData(questionId);
-				const primaryCreated = primaryMarket?.createdAt
-					? Math.floor(
-							new Date(primaryMarket.createdAt).getTime() / 1000
-					  )
-					: null;
-				if (primaryCreated && !primaryMap.has(primaryCreated)) {
-					primaryMap.set(primaryCreated, { price: 0.5 });
-				}
-
-				if (secondId && !isVsSingleMarket) {
-					const secondaryMarket =
-						predictionMarketDataService.getCachedMarketData(
-							secondId
-						);
-					const secondaryCreated = secondaryMarket?.createdAt
-						? Math.floor(
-								new Date(secondaryMarket.createdAt).getTime() /
-									1000
-						  )
-						: null;
-					if (secondaryCreated && !secondMap.has(secondaryCreated)) {
-						secondMap.set(secondaryCreated, { price: 0.5 });
-					}
-				}
-			} catch {}
+			// No backfill - use only actual historical prices and live orderbook data
 
 			// Derive NO side for VS single market
 			if (isVsSingleMarket) {
@@ -127,44 +111,7 @@ export function usePredictionChartData({
 				.filter((t) => t >= timeWindowStart && t <= timeWindowEnd)
 				.sort((a, b) => a - b);
 
-			// Get current live best ask prices for front-filling
-			const getCurrentLivePrice = (questionId: string): number | null => {
-				try {
-					const orderbook = questionOrderbooks?.[questionId];
-					if (
-						!orderbook?.asks ||
-						!Array.isArray(orderbook.asks) ||
-						orderbook.asks.length === 0
-					) {
-						return null;
-					}
-
-					// Get the best ask (lowest price in asks array)
-					const bestAsk = orderbook.asks.reduce((best: any, current: any) => {
-						const currentPrice = parseFloat(
-							current.price || current[0] || "0"
-						);
-						const bestPrice = parseFloat(
-							best.price || best[0] || "0"
-						);
-						return currentPrice < bestPrice ? current : best;
-					});
-
-					const price = parseFloat(
-						bestAsk.price || bestAsk[0] || "0"
-					);
-					return isNaN(price) || price <= 0 ? null : price;
-				} catch {
-					return null;
-				}
-			};
-
-			const currentLivePrice = getCurrentLivePrice(questionId);
-			const currentSecondLivePrice = secondId
-				? getCurrentLivePrice(secondId)
-				: null;
-
-			// Front-fill logic with live prices
+			// Front-fill logic - use last historical price only (no live prices yet)
 			const findLastAtOrBefore = (
 				map: Map<number, { price: number }>,
 				cutoff: number
@@ -183,13 +130,15 @@ export function usePredictionChartData({
 			};
 
 			if (allTimestamps.length === 0) {
-				// Use live price first, fallback to last historical
-				const primaryPrice =
-					currentLivePrice ??
-					findLastAtOrBefore(primaryMap, timeWindowEnd)?.price;
-				const secondPrice =
-					currentSecondLivePrice ??
-					findLastAtOrBefore(secondMap, timeWindowEnd)?.price;
+				// Use last historical price only
+				const primaryPrice = findLastAtOrBefore(
+					primaryMap,
+					timeWindowEnd
+				)?.price;
+				const secondPrice = findLastAtOrBefore(
+					secondMap,
+					timeWindowEnd
+				)?.price;
 
 				if (primaryPrice || secondPrice) {
 					allTimestamps = [timeWindowStart, timeWindowEnd];
@@ -208,37 +157,20 @@ export function usePredictionChartData({
 				const now = Math.floor(Date.now() / 1000);
 				if (timeWindowEnd >= now) {
 					allTimestamps = [...allTimestamps, timeWindowEnd];
-					// Use live price first, fallback to last historical
-					const primaryPrice =
-						currentLivePrice ??
-						findLastAtOrBefore(primaryMap, timeWindowEnd)?.price;
-					const secondPrice =
-						currentSecondLivePrice ??
-						findLastAtOrBefore(secondMap, timeWindowEnd)?.price;
+					// Use last historical price only
+					const primaryPrice = findLastAtOrBefore(
+						primaryMap,
+						timeWindowEnd
+					)?.price;
+					const secondPrice = findLastAtOrBefore(
+						secondMap,
+						timeWindowEnd
+					)?.price;
 
 					if (primaryPrice)
 						primaryMap.set(timeWindowEnd, { price: primaryPrice });
 					if (secondPrice)
 						secondMap.set(timeWindowEnd, { price: secondPrice });
-				}
-
-				// Special handling for 1M to ensure live price is always used
-				if (timeRange === "1m" && currentLivePrice !== null) {
-					// Force update the end point with live price for 1M
-					primaryMap.set(timeWindowEnd, { price: currentLivePrice });
-					if (!allTimestamps.includes(timeWindowEnd)) {
-						allTimestamps.push(timeWindowEnd);
-					}
-				}
-
-				if (timeRange === "1m" && currentSecondLivePrice !== null) {
-					// Force update the end point with live price for 1M
-					secondMap.set(timeWindowEnd, {
-						price: currentSecondLivePrice,
-					});
-					if (!allTimestamps.includes(timeWindowEnd)) {
-						allTimestamps.push(timeWindowEnd);
-					}
 				}
 			}
 
@@ -288,6 +220,7 @@ export function usePredictionChartData({
 
 			return out;
 		} catch (e) {
+			console.error("📊 Chart data calculation error:", e);
 			return [];
 		}
 	}, [
@@ -299,10 +232,120 @@ export function usePredictionChartData({
 		isVsSingleMarket,
 	]);
 
-	// Update data when processed data changes - instant loading
+	// Update data when historical data changes - instant loading
 	useEffect(() => {
-		setData(processedData);
-	}, [processedData]);
+		setData(historicalData);
+	}, [historicalData]);
+
+	// Separate effect to update ONLY the live price point when orderbooks change
+	// This prevents recalculating the entire historical dataset
+	const orderbooksRef = useRef(questionOrderbooks);
+	orderbooksRef.current = questionOrderbooks;
+
+	useEffect(() => {
+		if (!orderbooksRef.current) return;
+
+		// Get current live best ask prices
+		const getCurrentLivePrice = (qId: string): number | null => {
+			try {
+				const orderbook = orderbooksRef.current?.[qId];
+				if (
+					!orderbook?.asks ||
+					!Array.isArray(orderbook.asks) ||
+					orderbook.asks.length === 0
+				) {
+					return null;
+				}
+
+				const bestAsk = orderbook.asks.reduce(
+					(best: any, current: any) => {
+						const currentPrice = parseFloat(
+							current.price || current[0] || "0"
+						);
+						const bestPrice = parseFloat(
+							best.price || best[0] || "0"
+						);
+						return currentPrice < bestPrice ? current : best;
+					}
+				);
+
+				const price = parseFloat(bestAsk.price || bestAsk[0] || "0");
+				return isNaN(price) || price <= 0 ? null : price;
+			} catch {
+				return null;
+			}
+		};
+
+		const currentLivePrice = getCurrentLivePrice(questionId);
+		const secondId = secondMarket?._id || secondMarket?.questionId;
+		const currentSecondLivePrice = secondId
+			? getCurrentLivePrice(secondId)
+			: null;
+
+		// Only update if we have live prices
+		if (currentLivePrice === null && currentSecondLivePrice === null) {
+			return;
+		}
+
+		// Update or create data point with live prices
+		setData((prevData) => {
+			const now = Math.floor(Date.now() / 1000);
+
+			// If no data yet, create initial data point from live prices
+			if (prevData.length === 0) {
+				if (currentLivePrice === null) return prevData;
+
+				const dateObj = new Date(now * 1000);
+				const date = dateObj.toLocaleDateString("en-US");
+				const displayTime = dateObj.toLocaleTimeString("en-US", {
+					hour: "numeric",
+					minute: "2-digit",
+					hour12: true,
+				});
+
+				return [
+					{
+						timestamp: now,
+						date,
+						displayTime,
+						price: currentLivePrice,
+						percentage: currentLivePrice * 100,
+						secondPrice: currentSecondLivePrice,
+						secondPercentage: currentSecondLivePrice
+							? currentSecondLivePrice * 100
+							: null,
+						isLive: true,
+						secondIsLive: currentSecondLivePrice !== null,
+					},
+				];
+			}
+
+			const lastPoint = prevData[prevData.length - 1];
+
+			// Only update if the last point is recent (within 5 minutes)
+			if (Math.abs(lastPoint.timestamp - now) > 300) {
+				return prevData;
+			}
+
+			const updatedLastPoint = {
+				...lastPoint,
+				price: currentLivePrice ?? lastPoint.price,
+				percentage:
+					currentLivePrice !== null
+						? currentLivePrice * 100
+						: lastPoint.percentage,
+				secondPrice: currentSecondLivePrice ?? lastPoint.secondPrice,
+				secondPercentage:
+					currentSecondLivePrice !== null
+						? currentSecondLivePrice * 100
+						: lastPoint.secondPercentage,
+				isLive: currentLivePrice !== null,
+				secondIsLive: currentSecondLivePrice !== null,
+			};
+
+			return [...prevData.slice(0, -1), updatedLastPoint];
+		});
+	}, [questionOrderbooks]);
 
 	// Consolidated cache monitoring - check once when questionId changes and periodically
 	useEffect(() => {
