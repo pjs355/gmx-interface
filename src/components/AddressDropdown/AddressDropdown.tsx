@@ -1,8 +1,9 @@
 import { Menu } from "@headlessui/react";
 import { Trans, t } from "@lingui/macro";
 import { usePrivy } from "@privy-io/react-auth";
-import { FaChevronDown } from "react-icons/fa";
+import { FaChevronDown, FaUser } from "react-icons/fa";
 import { createBreakpoint, useCopyToClipboard } from "react-use";
+import { useNavigate } from "react-router-dom";
 
 import { helperToast } from "@/components/Toast/toast";
 import { shortenAddress } from "@/services/wallets/shortenAddress";
@@ -37,20 +38,20 @@ export default function AddressDropdown({
 	const [, copyToClipboard] = useCopyToClipboard();
 	const displayAddressLength = breakpoint === "S" ? 9 : 13;
 	const { logout } = usePrivy();
+	const navigate = useNavigate();
 
 	// Determine what to display: email for smart wallet users, address for external wallet users
-	const displayText = isSmartWallet && userEmail 
-		? userEmail 
-		: shortenAddress(account, displayAddressLength);
+	const displayText =
+		isSmartWallet && userEmail
+			? userEmail
+			: shortenAddress(account, displayAddressLength);
 
 	return (
 		<Menu>
 			<Menu.Button as="div">
 				<button className="App-cta small transparent address-btn">
 					{/* avatar intentionally omitted */}
-					<span className="user-address">
-						{displayText}
-					</span>
+					<span className="user-address">{displayText}</span>
 					<FaChevronDown />
 				</button>
 			</Menu.Button>
@@ -81,7 +82,10 @@ export default function AddressDropdown({
 								</div>
 							</Menu.Item>
 							<Menu.Item>
-								<ExternalLink href={accountUrl} className="menu-item">
+								<ExternalLink
+									href={accountUrl}
+									className="menu-item"
+								>
 									<img
 										width={20}
 										className="size-20"
@@ -95,6 +99,18 @@ export default function AddressDropdown({
 							</Menu.Item>
 						</>
 					)}
+					{/* Profile link for all users */}
+					<Menu.Item>
+						<div
+							className="menu-item"
+							onClick={() => {
+								navigate("/profile");
+							}}
+						>
+							<FaUser width={20} className="size-20" />
+							<p>Profile</p>
+						</div>
+					</Menu.Item>
 					{/* Always show Sign out for all users */}
 					<Menu.Item>
 						<div

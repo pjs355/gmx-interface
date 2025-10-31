@@ -1,5 +1,5 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import type { TradeExecutionParams } from "components/PredictionMarketTradeBox/types";
+import type { TradeExecutionParams } from "@/pages/Predictions/components/PredictionMarketTradeBox/types";
 
 export type ExecuteTradeFn = (
 	params: TradeExecutionParams,

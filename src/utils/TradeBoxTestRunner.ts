@@ -1,6 +1,6 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import type { OrderbookSnapshot } from "lib/orderbookService";
-import type { TradeBoxState } from "components/PredictionMarketTradeBox/types";
+import type { OrderbookSnapshot } from "@/services/api/orderbookService";
+import type { TradeBoxState } from "@/pages/Predictions/components/PredictionMarketTradeBox/types";
 
 export interface TestScenario {
 	id: string;

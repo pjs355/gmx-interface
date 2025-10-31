@@ -1,0 +1,94 @@
+.tag-container {
+	color: white;
+}
+
+.tag-title {
+	margin-bottom: 16px;
+}
+
+.tag-form {
+	display: grid;
+	gap: 12px;
+	max-width: 600px;
+}
+
+.tag-form-label {
+	display: grid;
+	gap: 6px;
+}
+
+.tag-form-input {
+	padding: 8px;
+	color: cyan;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+}
+
+.tag-flags-section {
+	display: grid;
+	gap: 6px;
+}
+
+.tag-flags-group {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.tag-flag-button {
+	padding: 6px 10px;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+	color: white;
+	cursor: pointer;
+
+	&.active {
+		background: rgba(255, 255, 255, 0.2);
+	}
+}
+
+.tag-state-summary {
+	font-size: 12px;
+	opacity: 0.8;
+}
+
+.tag-actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.tag-submit-button {
+	padding: 8px 16px;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+	color: white;
+	cursor: pointer;
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+}
+
+.tag-success-message {
+	color: #22c55e;
+}
+
+.tag-error-message {
+	color: #ff6b6b;
+}
+
+/* Edit Tag Specific */
+.tag-back-button {
+	margin-bottom: 12px;
+	padding: 6px 10px;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+	color: white;
+	cursor: pointer;
+}

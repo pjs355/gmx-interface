@@ -1,0 +1,130 @@
+.Details {
+	padding: 8px;
+	color: white;
+}
+
+.Details-title {
+	margin: 0 0 8px 0;
+	text-decoration: underline;
+}
+
+.Details-description {
+	margin-bottom: 16px;
+	opacity: 0.9;
+	line-height: 1.5;
+}
+
+.Details-username-section {
+	margin-bottom: 24px;
+}
+
+.Details-username-label {
+	font-weight: 500;
+	opacity: 0.9;
+	margin-bottom: 8px;
+}
+
+.Details-username-controls {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.Details-username-input {
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 6px;
+	padding: 8px 12px;
+	color: white;
+	font-size: 14px;
+	flex: 1;
+
+	&:not(:disabled) {
+		background: rgba(255, 255, 255, 0.1);
+		opacity: 1;
+		cursor: text;
+	}
+
+	&:disabled {
+		background: rgba(255, 255, 255, 0.05);
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+}
+
+.Details-button {
+	padding: 8px 16px;
+	border-radius: 6px;
+	font-size: 14px;
+	cursor: pointer;
+	border: 1px solid #8b5cf6;
+	background: rgba(139, 92, 246, 0.1);
+	color: #8b5cf6;
+
+	&:hover:not(:disabled) {
+		background: rgba(139, 92, 246, 0.2);
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	&.secondary {
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		background: rgba(255, 255, 255, 0.1);
+		color: white;
+
+		&:hover:not(:disabled) {
+			background: rgba(255, 255, 255, 0.15);
+		}
+	}
+}
+
+.Details-error {
+	padding: 8px 12px;
+	background: rgba(239, 68, 68, 0.1);
+	border: 1px solid rgba(239, 68, 68, 0.3);
+	border-radius: 6px;
+	margin-top: 8px;
+
+	span {
+		color: #ef4444;
+		font-size: 12px;
+	}
+}
+
+.Details-hint {
+	font-size: 12px;
+	opacity: 0.7;
+	font-style: italic;
+	margin-top: 12px;
+}
+
+.Details-loading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 24px;
+}
+
+.Details-spinner {
+	width: 16px;
+	height: 16px;
+	border: 2px solid transparent;
+	border-top: 2px solid #8b5cf6;
+	border-radius: 50%;
+}
+
+.Details-error-container {
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 12px;
+	padding: 24px;
+	background: rgba(255, 255, 255, 0.03);
+	text-align: center;
+
+	div {
+		opacity: 0.8;
+		font-size: 16px;
+	}
+}
+

@@ -6,9 +6,23 @@ $app-card-padding: 1.5rem;
 	font-size: var(--font-size-body-medium);
 }
 
+.App-content {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+}
+
 .App-content header {
 	position: relative;
 	z-index: 800;
+}
+
+.App-content > *:not(header):not(footer) {
+	flex: 1;
+}
+
+.App-content footer {
+	margin-top: auto;
 }
 
 .App-header.large {

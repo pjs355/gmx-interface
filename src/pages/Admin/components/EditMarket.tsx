@@ -6,23 +6,12 @@ import type {
 	Umbrella,
 	UmbrellaQuestion,
 } from "@/services/api/umbrellaDataService";
+import { tagService, type Tag } from "@/services/api/tagService";
 import SeedMarket from "./SeedMarket";
-
-const AVAILABLE_TAGS = [
-	"APEX LEGENDS",
-	"BATTLEFIELD 6",
-	"CALL OF DUTY",
-	"CS2",
-	"DOTA2",
-	"FORTNITE",
-	"GTA VI",
-	"LEAGUE OF LEGENDS",
-	"POKEMON",
-	"STAR WARS",
-	"VALORANT",
-	"WOW",
-	"ESPORTS",
-] as const;
+import MarketImageUpload from "./MarketImageUpload";
+import MarketTwitch from "./MarketTwitch";
+import SettleMarket from "./SettleMarket";
+import "./Markets.scss";
 
 type QuestionDetails = {
 	_id?: string;
@@ -59,12 +48,6 @@ export default function EditMarket({
 	const [qSaving, setQSaving] = useState<boolean>(false);
 	const [qSaveMsg, setQSaveMsg] = useState<string | null>(null);
 	const [qSaveErr, setQSaveErr] = useState<string | null>(null);
-	const [settleOutcome, setSettleOutcome] = useState<"yes" | "no" | null>(
-		null
-	);
-	const [settling, setSettling] = useState<boolean>(false);
-	const [settleMsg, setSettleMsg] = useState<string | null>(null);
-	const [settleErr, setSettleErr] = useState<string | null>(null);
 	const [umbDisplayName, setUmbDisplayName] = useState<string>(
 		umbrella.displayName || ""
 	);
@@ -89,10 +72,29 @@ export default function EditMarket({
 		)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 		return local;
 	});
+	const [umbEndDate, setUmbEndDate] = useState<string>(() => {
+		const d = (umbrella as any).endDate as string | undefined;
+		if (!d) return "";
+		const dt = new Date(d);
+		const pad = (n: number) => String(n).padStart(2, "0");
+		const local = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
+			dt.getDate()
+		)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+		return local;
+	});
 	const umbEventRef = useRef<HTMLInputElement | null>(null);
+	const umbEndRef = useRef<HTMLInputElement | null>(null);
 	const [umbSaving, setUmbSaving] = useState<boolean>(false);
 	const [umbSaveMsg, setUmbSaveMsg] = useState<string | null>(null);
 	const [umbSaveErr, setUmbSaveErr] = useState<string | null>(null);
+
+	// Twitch integration states
+	const [twitchEnabled, setTwitchEnabled] = useState<boolean>(
+		Boolean((umbrella as any).twitchEnabled)
+	);
+	const [twitchChannel, setTwitchChannel] = useState<string>(
+		(umbrella as any).twitchChannel || ""
+	);
 
 	// Image upload states
 	const [image1, setImage1] = useState<File | null>(null);
@@ -109,7 +111,37 @@ export default function EditMarket({
 		"image1" | "image2" | null
 	>(null);
 
+	// Tags state
+	const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+	const [loadingTags, setLoadingTags] = useState(true);
+
 	const children = useMemo(() => umbrella.children || [], [umbrella]);
+
+	// Fetch tags
+	useEffect(() => {
+		let mounted = true;
+
+		async function loadTags() {
+			try {
+				const token = await getAccessToken();
+				if (!token) {
+					throw new Error("No access token available");
+				}
+				const tags = await tagService.fetchAllTags(token);
+				if (mounted) setAvailableTags(tags);
+			} catch (err) {
+				console.error("error", err);
+			} finally {
+				if (mounted) setLoadingTags(false);
+			}
+		}
+
+		loadTags();
+
+		return () => {
+			mounted = false;
+		};
+	}, [getAccessToken]);
 
 	useEffect(() => {
 		setSelectedChild(null);
@@ -131,16 +163,27 @@ export default function EditMarket({
 		} else {
 			setUmbEventDate("");
 		}
-		setSettleOutcome(null);
-		setSettling(false);
-		setSettleMsg(null);
-		setSettleErr(null);
+
+		if ((umbrella as any).endDate) {
+			const dt = new Date((umbrella as any).endDate);
+			const pad = (n: number) => String(n).padStart(2, "0");
+			const local = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
+				dt.getDate()
+			)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+			setUmbEndDate(local);
+		} else {
+			setUmbEndDate("");
+		}
 
 		// Initialize image URLs
 		setImage1Url((umbrella as any).image1Url || "");
 		setImage2Url((umbrella as any).image2Url || "");
 		setImage1Preview((umbrella as any).image1Url || null);
 		setImage2Preview((umbrella as any).image2Url || null);
+
+		// Initialize Twitch settings
+		setTwitchEnabled(Boolean((umbrella as any).twitchEnabled));
+		setTwitchChannel((umbrella as any).twitchChannel || "");
 	}, [umbrella._id]);
 
 	async function loadQuestion(qid: string) {
@@ -170,13 +213,13 @@ export default function EditMarket({
 		}
 	}
 
-	function toggleTag(tag: string) {
+	function toggleTag(tagId: string) {
 		if (!details) return;
 		const current = Array.isArray(details.tags) ? details.tags : [];
-		const exists = current.includes(tag);
+		const exists = current.includes(tagId);
 		const next = exists
-			? current.filter((t) => t !== tag)
-			: [...current, tag];
+			? current.filter((t) => t !== tagId)
+			: [...current, tagId];
 		setDetails({ ...details, tags: next });
 	}
 
@@ -285,14 +328,20 @@ export default function EditMarket({
 				displayName: umbDisplayName || undefined,
 				rule: umbRule || undefined,
 				active: umbActive,
+				twitchEnabled: twitchEnabled,
+				twitchChannel: twitchChannel || undefined,
 			};
 
 			if (umbIsEvent) {
 				body.eventDate = umbEventDate
 					? new Date(umbEventDate).toISOString()
 					: null;
+				body.endDate = umbEndDate
+					? new Date(umbEndDate).toISOString()
+					: null;
 			} else {
 				body.eventDate = null;
+				body.endDate = null;
 			}
 
 			// Upload images if new ones are selected
@@ -339,480 +388,218 @@ export default function EditMarket({
 		}
 	}
 
-	async function settleQuestion() {
-		if (!details && !selectedChild) return;
-		const questionId = (
-			details?.questionId ||
-			selectedChild?.questionId ||
-			""
-		).toString();
-		if (!questionId) {
-			setSettleErr("Missing questionId");
-			return;
-		}
-		if (!settleOutcome) {
-			setSettleErr("Select an outcome (Yes/No)");
-			return;
-		}
-		setSettling(true);
-		setSettleMsg(null);
-		setSettleErr(null);
-		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
-			const base = getPredictionApiBaseUrl();
-			const resp = await fetch(
-				`${base}/admin/markets/settle/${questionId}`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...(token ? { Authorization: `Bearer ${token}` } : {}),
-					},
-					body: JSON.stringify({ outcome: settleOutcome }),
-				}
-			);
-			const json = await resp.json().catch(() => ({} as any));
-			if (!resp.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
-			}
-			setSettleMsg("Settlement submitted");
-		} catch (e: any) {
-			setSettleErr(e?.message || String(e));
-		} finally {
-			setSettling(false);
-		}
-	}
-
 	return (
-		<div style={{ color: "white" }}>
-			<button
-				type="button"
-				onClick={onBack}
-				style={{
-					marginBottom: 12,
-					padding: "6px 10px",
-					border: "1px solid white",
-					borderRadius: 6,
-					background: "transparent",
-					color: "white",
-				}}
-			>
+		<div className="admin-market-container">
+			<button type="button" onClick={onBack} className="edit-back-button">
 				Back
 			</button>
-			<h2 style={{ marginBottom: 8 }}>Edit Umbrella</h2>
-			<div style={{ opacity: 0.9 }}>ID: {umbrella._id}</div>
-			<label
-				style={{ display: "grid", gap: 6, marginTop: 8, maxWidth: 720 }}
-			>
+			<h2 className="edit-title">Edit Umbrella</h2>
+			<div className="edit-umbrella-id">ID: {umbrella._id}</div>
+			<label className="edit-form-label">
 				<span>Umbrella Display Name</span>
 				<input
 					value={umbDisplayName}
 					onChange={(e) => setUmbDisplayName(e.target.value)}
-					style={{
-						padding: 8,
-						color: "cyan",
-						border: "1px solid white",
-						borderRadius: 6,
-						background: "transparent",
-					}}
+					className="edit-form-input"
 				/>
 			</label>
-			<label
-				style={{ display: "grid", gap: 6, marginTop: 8, maxWidth: 720 }}
-			>
+			<label className="edit-form-label">
 				<span>Umbrella Rules</span>
 				<textarea
 					value={umbRule}
 					onChange={(e) => setUmbRule(e.target.value)}
 					rows={4}
-					style={{
-						padding: 8,
-						color: "cyan",
-						border: "1px solid white",
-						borderRadius: 6,
-						background: "transparent",
-					}}
+					className="edit-form-textarea"
 				/>
 			</label>
 
-			<div
-				style={{ display: "grid", gap: 6, marginTop: 8, maxWidth: 720 }}
-			>
+			<div className="edit-status-section">
 				<span>Status</span>
-				<div style={{ display: "flex", gap: 8 }}>
+				<div className="edit-toggle-group">
 					<button
 						type="button"
 						onClick={() => setUmbActive(true)}
-						style={{
-							padding: "6px 10px",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: umbActive
-								? "rgba(255,255,255,0.2)"
-								: "transparent",
-							color: "white",
-							cursor: "pointer",
-						}}
+						className={`edit-toggle-button ${
+							umbActive ? "active" : ""
+						}`}
 					>
 						Active
 					</button>
 					<button
 						type="button"
 						onClick={() => setUmbActive(false)}
-						style={{
-							padding: "6px 10px",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: !umbActive
-								? "rgba(255,255,255,0.2)"
-								: "transparent",
-							color: "white",
-							cursor: "pointer",
-						}}
+						className={`edit-toggle-button ${
+							!umbActive ? "active" : ""
+						}`}
 					>
 						Inactive
 					</button>
 				</div>
 
 				<span>Is this part of an event?</span>
-				<div style={{ display: "flex", gap: 8 }}>
+				<div className="edit-toggle-group">
 					<button
 						type="button"
 						onClick={() => setUmbIsEvent(false)}
-						style={{
-							padding: "6px 10px",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: umbIsEvent
-								? "transparent"
-								: "rgba(255,255,255,0.2)",
-							color: "white",
-							cursor: "pointer",
-						}}
+						className={`edit-toggle-button ${
+							!umbIsEvent ? "active" : ""
+						}`}
 					>
 						No
 					</button>
 					<button
 						type="button"
 						onClick={() => setUmbIsEvent(true)}
-						style={{
-							padding: "6px 10px",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: umbIsEvent
-								? "rgba(255,255,255,0.2)"
-								: "transparent",
-							color: "white",
-							cursor: "pointer",
-						}}
+						className={`edit-toggle-button ${
+							umbIsEvent ? "active" : ""
+						}`}
 					>
 						Yes
 					</button>
 				</div>
 				{umbIsEvent && (
-					<label style={{ display: "grid", gap: 6 }}>
-						<span>Event Date & Time</span>
-						<div
-							style={{
-								display: "flex",
-								gap: 8,
-								alignItems: "center",
-							}}
-						>
-							<input
-								ref={umbEventRef}
-								type="datetime-local"
-								value={umbEventDate}
-								onChange={(e) =>
-									setUmbEventDate(e.target.value)
-								}
-								style={{
-									padding: 8,
-									color: "cyan",
-									border: "1px solid white",
-									borderRadius: 6,
-									background: "transparent",
-								}}
-							/>
-							<button
-								type="button"
-								onClick={() => {
-									try {
-										// @ts-ignore
-										umbEventRef.current?.showPicker?.();
-									} catch {
-										umbEventRef.current?.focus();
+					<>
+						<label className="admin-form-label">
+							<span>Event Start Date & Time</span>
+							<div className="edit-event-date-group">
+								<input
+									ref={umbEventRef}
+									type="datetime-local"
+									value={umbEventDate}
+									onChange={(e) =>
+										setUmbEventDate(e.target.value)
 									}
-								}}
-								style={{
-									padding: "6px 10px",
-									border: "1px solid white",
-									borderRadius: 6,
-									background: "rgba(255,255,255,0.2)",
-									color: "white",
-									cursor: "pointer",
-									whiteSpace: "nowrap",
-								}}
-							>
-								Pick
-							</button>
-							<button
-								type="button"
-								onClick={() => setUmbEventDate("")}
-								style={{
-									padding: "6px 10px",
-									border: "1px solid white",
-									borderRadius: 6,
-									background: "transparent",
-									color: "white",
-								}}
-							>
-								Clear
-							</button>
-						</div>
-					</label>
+									className="edit-event-date-input"
+								/>
+								<button
+									type="button"
+									onClick={() => {
+										try {
+											// @ts-ignore
+											umbEventRef.current?.showPicker?.();
+										} catch {
+											umbEventRef.current?.focus();
+										}
+									}}
+									className="edit-event-button"
+								>
+									Pick
+								</button>
+								<button
+									type="button"
+									onClick={() => setUmbEventDate("")}
+									className="edit-clear-button"
+								>
+									Clear
+								</button>
+							</div>
+						</label>
+						<label className="admin-form-label">
+							<span>Event End Date & Time</span>
+							<div className="edit-event-date-group">
+								<input
+									ref={umbEndRef}
+									type="datetime-local"
+									value={umbEndDate}
+									onChange={(e) =>
+										setUmbEndDate(e.target.value)
+									}
+									className="edit-event-date-input"
+								/>
+								<button
+									type="button"
+									onClick={() => {
+										try {
+											// @ts-ignore
+											umbEndRef.current?.showPicker?.();
+										} catch {
+											umbEndRef.current?.focus();
+										}
+									}}
+									className="edit-event-button"
+								>
+									Pick
+								</button>
+								<button
+									type="button"
+									onClick={() => setUmbEndDate("")}
+									className="edit-clear-button"
+								>
+									Clear
+								</button>
+							</div>
+						</label>
+					</>
 				)}
 			</div>
 
-			{/* Image Upload Section */}
-			<div
-				style={{
-					marginTop: 16,
-					borderTop: "1px solid rgba(255,255,255,0.2)",
-					paddingTop: 12,
-				}}
-			>
-				<div style={{ marginBottom: 12, fontWeight: 600 }}>Images</div>
-
-				<div
-					style={{
-						display: "grid",
-						gridTemplateColumns: "1fr 1fr",
-						gap: 16,
-						maxWidth: 720,
-					}}
-				>
-					{/* Image 1 */}
-					<div style={{ display: "grid", gap: 8 }}>
-						<label style={{ fontSize: 14, fontWeight: 500 }}>
-							Banner Image
-						</label>
-						<div style={{ display: "grid", gap: 8 }}>
-							{image1Preview && (
-								<div
-									style={{
-										position: "relative",
-										display: "inline-block",
-									}}
-								>
-									<img
-										src={image1Preview}
-										alt="Preview"
-										style={{
-											width: "100%",
-											height: 120,
-											objectFit: "cover",
-											borderRadius: 8,
-											border: "1px solid rgba(255,255,255,0.2)",
-										}}
-									/>
-									<button
-										type="button"
-										onClick={() => {
-											setImage1(null);
-											setImage1Preview(image1Url || null);
-										}}
-										style={{
-											position: "absolute",
-											top: 4,
-											right: 4,
-											padding: "4px 8px",
-											border: "1px solid #ef4444",
-											borderRadius: 4,
-											background:
-												"rgba(239, 68, 68, 0.9)",
-											color: "white",
-											fontSize: 12,
-											cursor: "pointer",
-										}}
-									>
-										Remove
-									</button>
-								</div>
-							)}
-							<input
-								type="file"
-								accept="image/*"
-								onChange={(e) => {
-									const file = e.target.files?.[0];
-									if (file) handleImageSelect(file, "image1");
-								}}
-								style={{
-									padding: 8,
-									color: "white",
-									border: "1px solid white",
-									borderRadius: 6,
-									background: "transparent",
-								}}
-							/>
-							{uploadingImage === "image1" && (
-								<div
-									style={{
-										fontSize: 12,
-										opacity: 0.8,
-										color: "#8b5cf6",
-									}}
-								>
-									Uploading...
-								</div>
-							)}
-						</div>
-					</div>
-
-					{/* Image 2 */}
-					<div style={{ display: "grid", gap: 8 }}>
-						<label style={{ fontSize: 14, fontWeight: 500 }}>
-							Square Image
-						</label>
-						<div style={{ display: "grid", gap: 8 }}>
-							{image2Preview && (
-								<div
-									style={{
-										position: "relative",
-										display: "inline-block",
-									}}
-								>
-									<img
-										src={image2Preview}
-										alt="Preview"
-										style={{
-											width: 100,
-											height: 100,
-											objectFit: "cover",
-											borderRadius: 8,
-											border: "1px solid rgba(255,255,255,0.2)",
-										}}
-									/>
-									<button
-										type="button"
-										onClick={() => {
-											setImage2(null);
-											setImage2Preview(image2Url || null);
-										}}
-										style={{
-											position: "absolute",
-											top: 4,
-											right: 4,
-											padding: "4px 8px",
-											border: "1px solid #ef4444",
-											borderRadius: 4,
-											background:
-												"rgba(239, 68, 68, 0.9)",
-											color: "white",
-											fontSize: 12,
-											cursor: "pointer",
-										}}
-									>
-										Remove
-									</button>
-								</div>
-							)}
-							<input
-								type="file"
-								accept="image/*"
-								onChange={(e) => {
-									const file = e.target.files?.[0];
-									if (file) handleImageSelect(file, "image2");
-								}}
-								style={{
-									padding: 8,
-									color: "white",
-									border: "1px solid white",
-									borderRadius: 6,
-									background: "transparent",
-								}}
-							/>
-							{uploadingImage === "image2" && (
-								<div
-									style={{
-										fontSize: 12,
-										opacity: 0.8,
-										color: "#8b5cf6",
-									}}
-								>
-									Uploading...
-								</div>
-							)}
-						</div>
-					</div>
-				</div>
-
-				<div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-					Supported formats: JPG, PNG, GIF. Max size: 5MB per image.
-				</div>
+			{/* Twitch Enabled */}
+			<div className="edit-twitch-wrapper">
+				<MarketTwitch
+					twitchEnabled={twitchEnabled}
+					twitchChannel={twitchChannel}
+					onTwitchEnabledChange={setTwitchEnabled}
+					onTwitchChannelChange={setTwitchChannel}
+				/>
 			</div>
 
-			<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+			{/* Image Upload Section */}
+			<MarketImageUpload
+				image1={image1}
+				image2={image2}
+				image1Preview={image1Preview}
+				image2Preview={image2Preview}
+				image1Url={image1Url}
+				image2Url={image2Url}
+				uploadingImage={uploadingImage}
+				onImage1Select={(file) => handleImageSelect(file, "image1")}
+				onImage2Select={(file) => handleImageSelect(file, "image2")}
+				onImage1Remove={() => {
+					setImage1(null);
+					setImage1Preview(image1Url || null);
+				}}
+				onImage2Remove={() => {
+					setImage2(null);
+					setImage2Preview(image2Url || null);
+				}}
+			/>
+
+			<div className="edit-save-umbrella-group">
 				<button
 					type="button"
 					onClick={saveUmbrella}
 					disabled={umbSaving}
-					style={{
-						padding: "6px 10px",
-						border: "1px solid white",
-						borderRadius: 6,
-						background: "transparent",
-						color: "white",
-					}}
+					className="edit-save-umbrella-button"
 				>
 					{umbSaving ? "Saving..." : "Save Umbrella"}
 				</button>
 				{umbSaveMsg && (
-					<span style={{ color: "#22c55e" }}>{umbSaveMsg}</span>
+					<span className="edit-success-message">{umbSaveMsg}</span>
 				)}
 				{umbSaveErr && (
-					<span style={{ color: "#ff6b6b" }}>{umbSaveErr}</span>
+					<span className="edit-error-message">{umbSaveErr}</span>
 				)}
 			</div>
 
-			<div
-				style={{
-					marginTop: 16,
-					borderTop: "1px solid rgba(255,255,255,0.2)",
-					paddingTop: 12,
-				}}
-			>
-				<div style={{ marginBottom: 8, fontWeight: 600 }}>
-					Questions
-				</div>
+			<div className="edit-questions-list-section">
+				<div className="edit-questions-title">Questions</div>
 				{children.length === 0 && (
-					<div style={{ opacity: 0.8 }}>
+					<div className="edit-no-questions">
 						No questions in this umbrella.
 					</div>
 				)}
 				{children.length > 0 && (
-					<div style={{ display: "grid", gap: 8 }}>
+					<div className="edit-questions-grid">
 						{children.map((c) => (
 							<div
 								key={c.questionId}
-								style={{
-									display: "flex",
-									justifyContent: "space-between",
-									alignItems: "center",
-									border: "1px solid rgba(255,255,255,0.2)",
-									borderRadius: 8,
-									padding: 10,
-									background: "rgba(255,255,255,0.03)",
-								}}
+								className="edit-question-item"
 							>
 								<div>
-									<div style={{ fontWeight: 600 }}>
+									<div className="edit-question-info-name">
 										{c.displayName}
 									</div>
-									<div style={{ fontSize: 12, opacity: 0.8 }}>
+									<div className="edit-question-info-id">
 										id: {c.questionId}
 									</div>
 								</div>
@@ -822,14 +609,7 @@ export default function EditMarket({
 										setSelectedChild(c);
 										loadQuestion(c.questionId);
 									}}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "rgba(255,255,255,0.2)",
-										color: "white",
-										cursor: "pointer",
-									}}
+									className="edit-load-button"
 								>
 									Load
 								</button>
@@ -840,37 +620,23 @@ export default function EditMarket({
 			</div>
 
 			{selectedChild && (
-				<div
-					style={{
-						marginTop: 16,
-						borderTop: "1px solid rgba(255,255,255,0.2)",
-						paddingTop: 12,
-					}}
-				>
-					<div style={{ marginBottom: 8, fontWeight: 600 }}>
-						Editing Question
-					</div>
-					{loading && <div style={{ opacity: 0.8 }}>Loading…</div>}
-					{error && <div style={{ color: "#ff6b6b" }}>{error}</div>}
+				<div className="edit-editing-section">
+					<div className="edit-editing-title">Editing Question</div>
+					{loading && (
+						<div className="admin-loading-text">Loading…</div>
+					)}
+					{error && <div className="edit-error-message">{error}</div>}
 					{details && (
-						<div
-							style={{ display: "grid", gap: 12, maxWidth: 720 }}
-						>
-							<label style={{ display: "grid", gap: 6 }}>
+						<div className="edit-question-details">
+							<label className="admin-form-label">
 								<span>Question</span>
 								<input
 									value={details.question || ""}
 									readOnly
-									style={{
-										padding: 8,
-										color: "cyan",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-									}}
+									className="edit-question-readonly"
 								/>
 							</label>
-							<label style={{ display: "grid", gap: 6 }}>
+							<label className="admin-form-label">
 								<span>Display Name</span>
 								<input
 									value={details.displayName || ""}
@@ -880,23 +646,11 @@ export default function EditMarket({
 											displayName: e.target.value,
 										})
 									}
-									style={{
-										padding: 8,
-										color: "cyan",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-									}}
+									className="edit-form-input"
 								/>
 							</label>
-							<div
-								style={{
-									display: "grid",
-									gridTemplateColumns: "1fr 1fr",
-									gap: 12,
-								}}
-							>
-								<label style={{ display: "grid", gap: 6 }}>
+							<div className="edit-color-grid">
+								<label className="admin-form-label">
 									<span>Yes Color</span>
 									<input
 										type="color"
@@ -907,16 +661,10 @@ export default function EditMarket({
 												yesColor: e.target.value,
 											})
 										}
-										style={{
-											height: 40,
-											padding: 0,
-											background: "transparent",
-											border: "1px solid white",
-											borderRadius: 6,
-										}}
+										className="edit-color-input"
 									/>
 								</label>
-								<label style={{ display: "grid", gap: 6 }}>
+								<label className="admin-form-label">
 									<span>No Color</span>
 									<input
 										type="color"
@@ -927,156 +675,69 @@ export default function EditMarket({
 												noColor: e.target.value,
 											})
 										}
-										style={{
-											height: 40,
-											padding: 0,
-											background: "transparent",
-											border: "1px solid white",
-											borderRadius: 6,
-										}}
+										className="edit-color-input"
 									/>
 								</label>
 							</div>
-							<div style={{ display: "grid", gap: 6 }}>
+							<div className="edit-tags-section">
 								<span>Tags</span>
-								<div
-									style={{
-										display: "flex",
-										flexWrap: "wrap",
-										gap: 8,
-									}}
-								>
-									{AVAILABLE_TAGS.map((tag) => {
-										const selected =
-											Array.isArray(details.tags) &&
-											details.tags.includes(tag);
-										return (
-											<button
-												type="button"
-												key={tag}
-												onClick={() => toggleTag(tag)}
-												style={{
-													padding: "6px 10px",
-													border: "1px solid white",
-													borderRadius: 999,
-													background: selected
-														? "rgba(255,255,255,0.2)"
-														: "transparent",
-													color: "white",
-													cursor: "pointer",
-												}}
-											>
-												{tag}
-											</button>
-										);
-									})}
+								<div className="edit-tags-container">
+									{loadingTags ? (
+										<div
+											style={{
+												fontSize: 12,
+												opacity: 0.8,
+											}}
+										>
+											Loading tags...
+										</div>
+									) : (
+										availableTags.map((tag) => {
+											const selected =
+												Array.isArray(details.tags) &&
+												details.tags.includes(tag._id);
+											return (
+												<button
+													type="button"
+													key={tag._id}
+													onClick={() =>
+														toggleTag(tag._id)
+													}
+													className={`edit-tag-button ${
+														selected
+															? "selected"
+															: ""
+													}`}
+												>
+													{tag.label}
+												</button>
+											);
+										})
+									)}
 								</div>
 							</div>
 
-							<div
-								style={{
-									display: "grid",
-									gap: 6,
-									marginTop: 8,
-									borderTop:
-										"1px solid rgba(255,255,255,0.2)",
-									paddingTop: 12,
-									order: 2,
-								}}
-							>
-								<span>Settle Market</span>
-								<div style={{ display: "flex", gap: 8 }}>
-									<button
-										type="button"
-										onClick={() => setSettleOutcome("yes")}
-										style={{
-											padding: "6px 10px",
-											border: "1px solid white",
-											borderRadius: 6,
-											background:
-												settleOutcome === "yes"
-													? "rgba(255,255,255,0.2)"
-													: "transparent",
-											color: "white",
-											cursor: "pointer",
-										}}
-									>
-										Yes
-									</button>
-									<button
-										type="button"
-										onClick={() => setSettleOutcome("no")}
-										style={{
-											padding: "6px 10px",
-											border: "1px solid white",
-											borderRadius: 6,
-											background:
-												settleOutcome === "no"
-													? "rgba(255,255,255,0.2)"
-													: "transparent",
-											color: "white",
-											cursor: "pointer",
-										}}
-									>
-										No
-									</button>
-								</div>
-								<div style={{ display: "flex", gap: 8 }}>
-									<button
-										type="button"
-										onClick={settleQuestion}
-										disabled={settling || !settleOutcome}
-										style={{
-											padding: "6px 10px",
-											border: "1px solid white",
-											borderRadius: 6,
-											background: "transparent",
-											color: "white",
-										}}
-									>
-										{settling ? "Settling..." : "Settle"}
-									</button>
-									{settleMsg && (
-										<span style={{ color: "#22c55e" }}>
-											{settleMsg}
-										</span>
-									)}
-									{settleErr && (
-										<span style={{ color: "#ff6b6b" }}>
-											{settleErr}
-										</span>
-									)}
-								</div>
-							</div>
-							<div
-								style={{
-									display: "flex",
-									gap: 8,
-									marginTop: 8,
-									order: 1,
-								}}
-							>
+							<SettleMarket
+								questionId={
+									details.questionId || details._id || ""
+								}
+							/>
+							<div className="edit-save-question-section">
 								<button
 									type="button"
 									onClick={saveQuestion}
 									disabled={qSaving}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-										color: "white",
-									}}
+									className="edit-save-question-button"
 								>
 									{qSaving ? "Saving..." : "Save Question"}
 								</button>
 								{qSaveMsg && (
-									<span style={{ color: "#22c55e" }}>
+									<span className="edit-success-message">
 										{qSaveMsg}
 									</span>
 								)}
 								{qSaveErr && (
-									<span style={{ color: "#ff6b6b" }}>
+									<span className="edit-error-message">
 										{qSaveErr}
 									</span>
 								)}

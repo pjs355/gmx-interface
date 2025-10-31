@@ -14,6 +14,7 @@ import { HeaderLink } from "./HeaderLink";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCopyToClipboard } from "react-use";
+import { useNavigate } from "react-router-dom";
 import ExternalLink from "components/ExternalLink/ExternalLink";
 import { shortenAddress } from "@/services/wallets/shortenAddress";
 import { usePortfolio } from "context/PortfolioContext";
@@ -43,6 +44,7 @@ export function AppHeaderLinks({
 	const { authenticated: active, account } = useSignerContext();
 	const { logout, user } = usePrivy();
 	const [, copyToClipboard] = useCopyToClipboard();
+	const navigate = useNavigate();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
 		usePortfolio();
 
@@ -201,6 +203,18 @@ export function AppHeaderLinks({
 				</div> */}
 				<div className="App-header-link-container">
 					<HeaderLink
+						qa="leaderboard"
+						to="/leaderboard"
+						showRedirectModal={showRedirectModal}
+						isActive={(_match: any, location: any) =>
+							location.pathname === "/leaderboard"
+						}
+					>
+						Leaderboard
+					</HeaderLink>
+				</div>
+				<div className="App-header-link-container">
+					<HeaderLink
 						qa="about"
 						to="/about"
 						showRedirectModal={showRedirectModal}
@@ -236,6 +250,15 @@ export function AppHeaderLinks({
 									? userEmail
 									: shortenAddress(account as string, 13)}
 							</div>
+							<button
+								className="inline-item"
+								onClick={() => {
+									navigate("/profile");
+									if (clickCloseIcon) clickCloseIcon();
+								}}
+							>
+								Profile
+							</button>
 							<button
 								className="inline-item"
 								onClick={() => {

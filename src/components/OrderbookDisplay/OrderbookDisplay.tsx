@@ -4,7 +4,7 @@ import type {
 	OrderbookEntry,
 } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { useCurtainActions } from "components/PredictionMarketTradeBox/PredictionCurtain";
+import { useCurtainActions } from "@/pages/Predictions/components/PredictionMarketTradeBox/PredictionCurtain";
 // Helper function to calculate prices from orderbook
 const calculateOrderbookPrices = (orderbook: OrderbookSnapshot | null) => {
 	if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -78,16 +78,16 @@ export default function OrderbookDisplay({
 				if (spreadRef.current && ordersListRef.current) {
 					const container = ordersListRef.current;
 					const spread = spreadRef.current;
-					
+
 					// Calculate position to center the spread within the orderbook container
 					const spreadTop = spread.offsetTop;
 					const containerHeight = container.clientHeight;
-					const scrollPosition = spreadTop - (containerHeight / 2);
-					
+					const scrollPosition = spreadTop - containerHeight / 2;
+
 					// Scroll within the orderbook container only (not the page)
 					container.scrollTo({
 						top: scrollPosition,
-						behavior: 'smooth'
+						behavior: "smooth",
 					});
 				}
 			}, 100);
@@ -603,7 +603,10 @@ export default function OrderbookDisplay({
 					</div>
 
 					<div className="orderbook-content">
-						<div className="unified-orders-list" ref={ordersListRef}>
+						<div
+							className="unified-orders-list"
+							ref={ordersListRef}
+						>
 							{/* Asks */}
 							{asksWithDepth.length > 0 ? (
 								asksWithDepth.map((ask, index) => {

@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useMedia } from "react-use";
-import PredictionMarketChart from "components/PredictionMarketChart";
+import PredictionMarketChart from "../components/PredictionMarketChart";
 import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
-import PredictionMarketTradeBox from "components/PredictionMarketTradeBox/PredictionMarketTradeBox";
+import PredictionMarketTradeBox from "../components/PredictionMarketTradeBox/PredictionMarketTradeBox";
 import RulesSection from "components/RulesSection/RulesSection";
+import { TwitchEmbed } from "./TwitchEmbed";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getMarketId } from "./utils";
@@ -89,6 +90,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			{/* Desktop Layout */}
 			<div className="desktop-layout">
 				<div className="left-panel">
+					{umbrella?.twitchEnabled && umbrella?.twitchChannel && (
+						<div className="twitch-section">
+							<TwitchEmbed channel={umbrella.twitchChannel} />
+						</div>
+					)}
 					<div className="chart-section">
 						{hasQuestions && orderbooksReady ? (
 							<div
@@ -223,6 +229,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 			{/* Mobile Layout */}
 			<div className="mobile-layout">
+				{umbrella?.twitchEnabled && umbrella?.twitchChannel && (
+					<div className="twitch-section-mobile">
+						<TwitchEmbed channel={umbrella.twitchChannel} />
+					</div>
+				)}
 				<div className="chart-section-mobile">
 					{hasQuestions && orderbooksReady ? (
 						<div

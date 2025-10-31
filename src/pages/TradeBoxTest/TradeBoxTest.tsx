@@ -10,17 +10,17 @@ import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import PredictionMarketTradeBox, {
 	type PredictionMarketTradeBoxHandle,
-} from "components/PredictionMarketTradeBox/PredictionMarketTradeBox";
+} from "@/pages/Predictions/components/PredictionMarketTradeBox/PredictionMarketTradeBox";
 import {
 	TradeBoxTestRunner,
 	type TestResult,
 	type TestScenario,
 } from "utils/TradeBoxTestRunner";
 import { TradeBoxTestScenarios } from "utils/TradeBoxTestScenarios";
-import { useTradeExecutionService } from "components/PredictionMarketTradeBox/TradeExecutionService";
-import { useMarketOrderHandler } from "components/PredictionMarketTradeBox/MarketOrderHandler";
-import { useYesNoBalances } from "components/PredictionMarketTradeBox/checkBalances";
-import type { TradeExecutionParams } from "components/PredictionMarketTradeBox/types";
+import { useTradeExecutionService } from "@/pages/Predictions/components/PredictionMarketTradeBox/TradeExecutionService";
+import { useMarketOrderHandler } from "@/pages/Predictions/components/PredictionMarketTradeBox/MarketOrderHandler";
+import { useYesNoBalances } from "@/pages/Predictions/components/PredictionMarketTradeBox/checkBalances";
+import type { TradeExecutionParams } from "@/pages/Predictions/components/PredictionMarketTradeBox/types";
 import "./TradeBoxTest.scss";
 
 export default function TradeBoxTest() {

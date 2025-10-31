@@ -3,7 +3,6 @@ import { Trans } from "@lingui/macro";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMedia } from "react-use";
 import Button from "components/Button/Button";
-import SpinningLoader from "components/Common/SpinningLoader";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { Umbrella } from "@/services/api/umbrellaDataService";
 import { getPredictionWebSocketUrl } from "@/config/predictionApiBase";
@@ -12,7 +11,7 @@ import { MarketPanels } from "./MarketPanels";
 import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
 import "../PredictionMarket.scss";
-import { PredictionCurtainProvider } from "components/PredictionMarketTradeBox/PredictionCurtain";
+import { PredictionCurtainProvider } from "../components/PredictionMarketTradeBox/PredictionCurtain";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;

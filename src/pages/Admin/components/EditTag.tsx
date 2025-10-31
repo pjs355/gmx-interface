@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { tagService } from "@/services/api/tagService";
 import type { AdminTag } from "./ListTag";
+import "./Tags.scss";
 
 export default function EditTag({
 	tag,
@@ -96,6 +98,7 @@ export default function EditTag({
 				throw new Error(json?.error || `HTTP ${resp.status}`);
 			}
 			setMessage("Saved");
+			tagService.clearCache(); // Clear cache so updated tag appears
 			const nextTag: AdminTag = json as AdminTag;
 			onSaved?.(nextTag);
 		} catch (err: any) {
@@ -107,72 +110,43 @@ export default function EditTag({
 	}
 
 	return (
-		<div style={{ color: "white" }}>
-			<button
-				type="button"
-				onClick={onBack}
-				style={{
-					marginBottom: 12,
-					padding: "6px 10px",
-					border: "1px solid white",
-					borderRadius: 6,
-					background: "transparent",
-					color: "white",
-				}}
-			>
+		<div className="tag-container">
+			<button type="button" onClick={onBack} className="tag-back-button">
 				Back
 			</button>
-			<h2 style={{ marginBottom: 16 }}>Edit Tag</h2>
+			<h2 className="tag-title">Edit Tag</h2>
 
-			<div style={{ display: "grid", gap: 12, maxWidth: 600 }}>
-				<label style={{ display: "grid", gap: 6 }}>
+			<div className="tag-form">
+				<label className="tag-form-label">
 					<span>Label</span>
 					<input
 						value={label}
 						onChange={(e) => setLabel(e.target.value)}
 						placeholder="ESPORTS"
-						style={{
-							padding: 8,
-							color: "cyan",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-						}}
+						className="tag-form-input"
 					/>
 				</label>
-				<label style={{ display: "grid", gap: 6 }}>
+				<label className="tag-form-label">
 					<span>Slug</span>
 					<input
 						value={slug}
 						onChange={(e) => setSlug(e.target.value)}
 						placeholder="esports"
-						style={{
-							padding: 8,
-							color: "cyan",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-						}}
+						className="tag-form-input"
 					/>
 				</label>
 
-				<div style={{ display: "grid", gap: 6 }}>
+				<div className="tag-flags-section">
 					<span>Flags</span>
-					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+					<div className="tag-flags-group">
 						<button
 							type="button"
 							onClick={() =>
 								setForceShow(forceShow === true ? null : true)
 							}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: forceShow
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-							}}
+							className={`tag-flag-button ${
+								forceShow ? "active" : ""
+							}`}
 						>
 							Force Show
 						</button>
@@ -181,15 +155,9 @@ export default function EditTag({
 							onClick={() =>
 								setForceHide(forceHide === true ? null : true)
 							}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: forceHide
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-							}}
+							className={`tag-flag-button ${
+								forceHide ? "active" : ""
+							}`}
 						>
 							Force Hide
 						</button>
@@ -198,53 +166,41 @@ export default function EditTag({
 							onClick={() =>
 								setIsCarousel(isCarousel === true ? null : true)
 							}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: isCarousel
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-							}}
+							className={`tag-flag-button ${
+								isCarousel ? "active" : ""
+							}`}
 						>
 							Carousel
 						</button>
 					</div>
-					<div style={{ fontSize: 12, opacity: 0.8 }}>
-						{stateSummary}
-					</div>
+					<div className="tag-state-summary">{stateSummary}</div>
 				</div>
 
-				<label style={{ display: "grid", gap: 6 }}>
+				<label className="tag-form-label">
 					<span>Published At</span>
 					<input
 						type="datetime-local"
 						value={publishedAt}
 						onChange={(e) => setPublishedAt(e.target.value)}
-						style={{
-							padding: 8,
-							color: "cyan",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-						}}
+						className="tag-form-input"
 					/>
 				</label>
 
-				<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+				<div className="tag-actions">
 					<button
 						type="button"
 						disabled={saving}
 						onClick={handleSave}
-						style={{ padding: "8px 16px" }}
+						className="tag-submit-button"
 					>
 						{saving ? "Saving..." : "Save"}
 					</button>
 					{message && (
-						<span style={{ color: "#22c55e" }}>{message}</span>
+						<span className="tag-success-message">{message}</span>
 					)}
-					{error && <span style={{ color: "#ff6b6b" }}>{error}</span>}
+					{error && (
+						<span className="tag-error-message">{error}</span>
+					)}
 				</div>
 			</div>
 		</div>

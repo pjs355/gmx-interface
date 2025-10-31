@@ -14,6 +14,8 @@ export interface Umbrella {
 	displayName: string;
 	description?: string;
 	image?: string;
+	twitchChannel?: string;
+	twitchEnabled?: boolean;
 	children: UmbrellaQuestion[];
 	createdAt: string;
 	updatedAt: string;

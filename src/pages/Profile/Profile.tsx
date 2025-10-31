@@ -2,6 +2,7 @@ import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { useLocation } from "react-router-dom";
+import { useMedia } from "react-use";
 import { useSignerContext } from "context/SignerContext";
 import Developers from "../Developers/Developers";
 import GamingAccounts from "./GamingAccounts/GamingAccounts";
@@ -11,11 +12,12 @@ export default function Profile() {
 	const location = useLocation();
 	const { user } = usePrivy();
 	const { wallets: privyWallets } = usePrivyWallets();
-    const { account, signer } = useSignerContext() as any;
+	const { account, signer } = useSignerContext() as any;
 	const [signerAddress, setSignerAddress] = useState<string | null>(null);
 	const [activeSection, setActiveSection] = useState<
 		"profile" | "developers" | "gaming-accounts" | "details"
-	>("profile");
+	>("details");
+	const isMobile = useMedia("(max-width: 768px)");
 
 	// Handle query parameters to auto-select sections
 	useEffect(() => {
@@ -93,22 +95,95 @@ export default function Profile() {
 	return (
 		<div
 			style={{
-				display: "grid",
-				gridTemplateColumns: "280px 1fr",
 				gap: 16,
-				padding: 24,
+				padding: isMobile ? 16 : 24,
 				color: "white",
+				background: "#000000",
 			}}
 		>
-			<aside
-				style={{
-					border: "1px solid rgba(255,255,255,0.2)",
-					borderRadius: 8,
-					padding: 16,
-					background: "rgba(255,255,255,0.03)",
-				}}
-			>
-				<div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+			{/* Mobile: Tabs at top */}
+			{isMobile && (
+				<div
+					style={{
+						display: "flex",
+						gap: 12,
+						marginBottom: 16,
+					}}
+				>
+					<button
+						onClick={() => setActiveSection("details")}
+						style={{
+							color:
+								activeSection === "details" ? "cyan" : "white",
+							background: "transparent",
+							border: "none",
+							borderRadius: 0,
+							cursor: "pointer",
+							padding: "8px 12px",
+							fontSize: "inherit",
+							fontWeight: activeSection === "details" ? 600 : 400,
+							textDecoration: "none",
+							outline: "none",
+						}}
+					>
+						Details
+					</button>
+					<button
+						onClick={() => setActiveSection("developers")}
+						style={{
+							color:
+								activeSection === "developers"
+									? "cyan"
+									: "white",
+							background: "transparent",
+							border: "none",
+							borderRadius: 0,
+							cursor: "pointer",
+							padding: "8px 12px",
+							fontSize: "inherit",
+							fontWeight:
+								activeSection === "developers" ? 600 : 400,
+							textDecoration: "none",
+							outline: "none",
+						}}
+					>
+						Developers
+					</button>
+					<button
+						onClick={() => setActiveSection("gaming-accounts")}
+						style={{
+							color:
+								activeSection === "gaming-accounts"
+									? "cyan"
+									: "white",
+							background: "transparent",
+							border: "none",
+							borderRadius: 0,
+							cursor: "pointer",
+							padding: "8px 12px",
+							fontSize: "inherit",
+							fontWeight:
+								activeSection === "gaming-accounts" ? 600 : 400,
+							textDecoration: "none",
+							outline: "none",
+						}}
+					>
+						Gaming Accounts
+					</button>
+				</div>
+			)}
+
+			{/* Desktop: Sidebar */}
+			{!isMobile && (
+				<aside
+					style={{
+						border: "1px solid rgba(255,255,255,0.2)",
+						borderRadius: 8,
+						padding: 16,
+						background: "rgba(255,255,255,0.03)",
+					}}
+				>
+					{/* <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
 					Profile
 				</div>
 				<div style={{ marginBottom: 16, opacity: 0.9 }}>
@@ -188,6 +263,7 @@ export default function Profile() {
 						paddingTop: 12,
 					}}
 				>
+				*/}
 					<div style={{ fontWeight: 600, marginBottom: 8 }}>
 						Sections
 					</div>
@@ -244,16 +320,73 @@ export default function Profile() {
 							Gaming Accounts
 						</button>
 					</div>
-				</div>
-			</aside>
+					{/* </div> */}
+				</aside>
+			)}
 
 			<main>
 				{activeSection === "details" ? (
 					<Details />
 				) : activeSection === "developers" ? (
-					<Developers />
+					<div
+						style={{
+							border: "1px solid rgba(255,255,255,0.2)",
+							borderRadius: 8,
+							padding: 32,
+							background: "rgba(255,255,255,0.03)",
+							textAlign: "center",
+						}}
+					>
+						<div
+							style={{
+								fontSize: 24,
+								fontWeight: 600,
+								marginBottom: 12,
+							}}
+						>
+							🚧 Under Construction
+						</div>
+						<div
+							style={{
+								opacity: 0.8,
+								maxWidth: 500,
+								margin: "0 auto",
+							}}
+						>
+							Developer tools and API documentation are coming
+							soon. Stay tuned for updates!
+						</div>
+					</div>
 				) : activeSection === "gaming-accounts" ? (
-					<GamingAccounts />
+					<div
+						style={{
+							border: "1px solid rgba(255,255,255,0.2)",
+							borderRadius: 8,
+							padding: 32,
+							background: "rgba(255,255,255,0.03)",
+							textAlign: "center",
+						}}
+					>
+						<div
+							style={{
+								fontSize: 24,
+								fontWeight: 600,
+								marginBottom: 12,
+							}}
+						>
+							🚧 Under Construction
+						</div>
+						<div
+							style={{
+								opacity: 0.8,
+								maxWidth: 500,
+								margin: "0 auto",
+							}}
+						>
+							Connect your gaming accounts to enhance your
+							experience. This feature is coming soon!
+						</div>
+					</div>
 				) : (
 					<div>
 						<h1>Profile</h1>

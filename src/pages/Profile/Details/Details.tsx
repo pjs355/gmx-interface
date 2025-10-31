@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
+import { useMedia } from "react-use";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import "./Details.scss";
 
 interface UserDetails {
 	id: string;
@@ -13,7 +15,7 @@ interface UserDetails {
 }
 
 export default function Details() {
-	const { getAccessToken } = usePrivy();
+	const { getAccessToken, ready, authenticated } = usePrivy();
 	const { identityToken } = useIdentityToken();
 	const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
@@ -21,17 +23,36 @@ export default function Details() {
 	const [usernameValue, setUsernameValue] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 	const [usernameError, setUsernameError] = useState<string | null>(null);
+	const isMobile = useMedia("(max-width: 768px)");
 
 	useEffect(() => {
+		// Wait for Privy to be ready and user to be authenticated
+		if (!ready || !authenticated) {
+			console.log(
+				"Privy not ready yet - ready:",
+				ready,
+				"authenticated:",
+				authenticated
+			);
+			return;
+		}
+
+		// Also wait for identity token to be available
+		if (!identityToken) {
+			console.log("Waiting for identity token...");
+			return;
+		}
+
+		console.log(
+			"Privy ready, authenticated, and identity token available - fetching details"
+		);
 		fetchUserDetails();
-	}, []);
+	}, [ready, authenticated, identityToken]);
 
 	const fetchUserDetails = async () => {
 		try {
 			const serverUrl = getPredictionApiBaseUrl();
 			const apiUrl = `${serverUrl}/profiles/me`;
-
-			console.log("Fetching user details from:", apiUrl);
 
 			const accessToken = await getAccessToken();
 			if (!accessToken) {
@@ -42,13 +63,15 @@ export default function Details() {
 				return;
 			}
 
+			if (!identityToken) {
+				throw new Error("No identity token available");
+			}
+
 			const headers: Record<string, string> = {
 				"Content-Type": "application/json",
 				Authorization: `Bearer ${accessToken}`,
+				"privy-id-token": identityToken,
 			};
-			if (identityToken) {
-				headers["privy-id-token"] = identityToken;
-			}
 
 			const response = await fetch(apiUrl, { method: "GET", headers });
 
@@ -99,12 +122,19 @@ export default function Details() {
 				throw new Error("No access token available");
 			}
 
+			if (!identityToken) {
+				throw new Error("No identity token available");
+			}
+
+			const headers: Record<string, string> = {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${accessToken}`,
+				"privy-id-token": identityToken,
+			};
+
 			const response = await fetch(apiUrl, {
 				method: "PUT",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${accessToken}`,
-				},
+				headers,
 				body: JSON.stringify({
 					username: usernameValue.trim(),
 				}),
@@ -137,407 +167,101 @@ export default function Details() {
 		}
 	};
 
-	function toDisplayString(input: any): string {
-		if (input == null) return "";
-		if (typeof input === "string") return input;
-		if (typeof input === "number" || typeof input === "boolean")
-			return String(input);
-		if (typeof input === "object") {
-			if (typeof input.address === "string") return input.address;
-			if (typeof input.email === "string") return input.email;
-			if (typeof input.id === "string") return input.id;
-			if (typeof input.subject === "string") return input.subject;
-			try {
-				return JSON.stringify(input);
-			} catch {
-				return String(input);
-			}
-		}
-		return String(input);
-	}
-
 	if (isLoading) {
 		return (
-			<div
-				style={{
-					display: "flex",
-					alignItems: "center",
-					gap: 8,
-					padding: 24,
-				}}
-			>
-				<div
-					className="spin-animation"
-					style={{
-						width: 16,
-						height: 16,
-						border: "2px solid transparent",
-						borderTop: "2px solid #8b5cf6",
-						borderRadius: "50%",
-					}}
-				/>
+			<div className="Details-loading">
+				<div className="Details-spinner spin-animation" />
 				Loading user details...
 			</div>
 		);
 	}
 
-	return (
-		<div style={{ padding: 24, color: "white" }}>
-			<h1 style={{ margin: "0 0 24px 0", fontSize: 28, fontWeight: 600 }}>
-				Account Details
-			</h1>
-
-			<div style={{ marginBottom: 24, opacity: 0.9, lineHeight: 1.5 }}>
-				View and manage your account information and settings.
-			</div>
-
-			{userDetails ? (
-				<div
-					style={{
-						border: "1px solid rgba(255,255,255,0.2)",
-						borderRadius: 12,
-						padding: 24,
-						background: "rgba(255,255,255,0.03)",
-					}}
-				>
-					<div style={{ marginBottom: 20 }}>
-						<h2
-							style={{
-								margin: "0 0 16px 0",
-								fontSize: 20,
-								fontWeight: 600,
-							}}
-						>
-							Profile Information
-						</h2>
-
-						<div style={{ display: "grid", gap: 16 }}>
-							<div
-								style={{
-									fontSize: 12,
-									opacity: 0.7,
-									fontStyle: "italic",
-									padding: "4px 0",
-									marginBottom: 4,
-								}}
-							>
-								💡 The username will be used when sharing
-								markets as well as for leaderboards.
-								<br />⏰ Username can only be changed once every
-								7 days.
-							</div>
-
-							<div
-								style={{
-									display: "flex",
-									justifyContent: "space-between",
-									alignItems: "center",
-									padding: "12px 0",
-									borderBottom:
-										"1px solid rgba(255,255,255,0.1)",
-								}}
-							>
-								<span style={{ fontWeight: 500, opacity: 0.9 }}>
-									Username
-								</span>
-								<div
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 8,
-									}}
-								>
-									{isEditingUsername ? (
-										<>
-											<input
-												type="text"
-												value={usernameValue}
-												onChange={(e) =>
-													setUsernameValue(
-														e.target.value
-													)
-												}
-												placeholder="Enter username"
-												style={{
-													background:
-														"rgba(255,255,255,0.1)",
-													border: "1px solid rgba(255,255,255,0.3)",
-													borderRadius: 6,
-													padding: "6px 12px",
-													color: "white",
-													fontSize: 14,
-													minWidth: 150,
-												}}
-												onKeyDown={(e) => {
-													if (e.key === "Enter") {
-														handleSaveUsername();
-													} else if (
-														e.key === "Escape"
-													) {
-														handleCancelEdit();
-													}
-												}}
-											/>
-											<button
-												onClick={handleSaveUsername}
-												disabled={
-													isSaving ||
-													!usernameValue.trim()
-												}
-												style={{
-													padding: "6px 12px",
-													border: "1px solid #8b5cf6",
-													borderRadius: 6,
-													background:
-														isSaving ||
-														!usernameValue.trim()
-															? "rgba(139, 92, 246, 0.3)"
-															: "rgba(139, 92, 246, 0.1)",
-													color:
-														isSaving ||
-														!usernameValue.trim()
-															? "rgba(255,255,255,0.5)"
-															: "#8b5cf6",
-													cursor:
-														isSaving ||
-														!usernameValue.trim()
-															? "not-allowed"
-															: "pointer",
-													fontSize: 12,
-													display: "flex",
-													alignItems: "center",
-													gap: 4,
-												}}
-											>
-												{isSaving ? (
-													<>
-														<div
-															className="spin-animation"
-															style={{
-																width: 10,
-																height: 10,
-																border: "2px solid transparent",
-																borderTop:
-																	"2px solid currentColor",
-																borderRadius:
-																	"50%",
-															}}
-														/>
-														Saving...
-													</>
-												) : (
-													"Save"
-												)}
-											</button>
-											<button
-												onClick={handleCancelEdit}
-												disabled={isSaving}
-												style={{
-													padding: "6px 12px",
-													border: "1px solid rgba(255,255,255,0.3)",
-													borderRadius: 6,
-													background:
-														"rgba(255,255,255,0.1)",
-													color: "rgba(255,255,255,0.8)",
-													cursor: isSaving
-														? "not-allowed"
-														: "pointer",
-													fontSize: 12,
-												}}
-											>
-												Cancel
-											</button>
-										</>
-									) : (
-										<>
-											<span style={{ opacity: 0.8 }}>
-												{userDetails.username ||
-													"Not set"}
-											</span>
-											<button
-												onClick={handleEditUsername}
-												style={{
-													padding: "6px 12px",
-													border: "1px solid #8b5cf6",
-													borderRadius: 6,
-													background:
-														"rgba(139, 92, 246, 0.1)",
-													color: "#8b5cf6",
-													cursor: "pointer",
-													fontSize: 12,
-												}}
-											>
-												Edit
-											</button>
-										</>
-									)}
-								</div>
-							</div>
-
-							{usernameError && (
-								<div
-									style={{
-										padding: "8px 12px",
-										background: "rgba(239, 68, 68, 0.1)",
-										border: "1px solid rgba(239, 68, 68, 0.3)",
-										borderRadius: 6,
-										marginBottom: 8,
-									}}
-								>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 6,
-										}}
-									>
-										<span
-											style={{
-												color: "#ef4444",
-												fontSize: 14,
-											}}
-										>
-											⚠️
-										</span>
-										<span
-											style={{
-												color: "#ef4444",
-												fontSize: 12,
-											}}
-										>
-											{usernameError}
-										</span>
-									</div>
-								</div>
-							)}
-
-							{userDetails.email && (
-								<div
-									style={{
-										display: "flex",
-										justifyContent: "space-between",
-										alignItems: "center",
-										padding: "12px 0",
-										borderBottom:
-											"1px solid rgba(255,255,255,0.1)",
-									}}
-								>
-									<span
-										style={{
-											fontWeight: 500,
-											opacity: 0.9,
-										}}
-									>
-										Email
-									</span>
-									<span style={{ opacity: 0.8 }}>
-										{toDisplayString(userDetails.email)}
-									</span>
-								</div>
-							)}
-
-							{userDetails.walletAddress && (
-								<div
-									style={{
-										display: "flex",
-										justifyContent: "space-between",
-										alignItems: "center",
-										padding: "12px 0",
-										borderBottom:
-											"1px solid rgba(255,255,255,0.1)",
-									}}
-								>
-									<span
-										style={{
-											fontWeight: 500,
-											opacity: 0.9,
-										}}
-									>
-										Wallet Address
-									</span>
-									<span
-										style={{
-											fontFamily: "monospace",
-											fontSize: 14,
-											opacity: 0.8,
-										}}
-									>
-										{userDetails.walletAddress.slice(0, 6)}
-										...{userDetails.walletAddress.slice(-4)}
-									</span>
-								</div>
-							)}
-
-							{userDetails.createdAt && (
-								<div
-									style={{
-										display: "flex",
-										justifyContent: "space-between",
-										alignItems: "center",
-										padding: "12px 0",
-										borderBottom:
-											"1px solid rgba(255,255,255,0.1)",
-									}}
-								>
-									<span
-										style={{
-											fontWeight: 500,
-											opacity: 0.9,
-										}}
-									>
-										Account Created
-									</span>
-									<span style={{ opacity: 0.8 }}>
-										{new Date(
-											userDetails.createdAt
-										).toLocaleDateString()}
-									</span>
-								</div>
-							)}
-
-							{userDetails.lastLogin && (
-								<div
-									style={{
-										display: "flex",
-										justifyContent: "space-between",
-										alignItems: "center",
-										padding: "12px 0",
-									}}
-								>
-									<span
-										style={{
-											fontWeight: 500,
-											opacity: 0.9,
-										}}
-									>
-										Last Login
-									</span>
-									<span style={{ opacity: 0.8 }}>
-										{new Date(
-											userDetails.lastLogin
-										).toLocaleDateString()}
-									</span>
-								</div>
-							)}
-						</div>
-					</div>
-				</div>
-			) : (
-				<div
-					style={{
-						border: "1px solid rgba(255,255,255,0.2)",
-						borderRadius: 12,
-						padding: 24,
-						background: "rgba(255,255,255,0.03)",
-						textAlign: "center",
-					}}
-				>
-					<div style={{ opacity: 0.8, fontSize: 16 }}>
+	if (!userDetails) {
+		return (
+			<div className="Details">
+				<div className="Details-error-container">
+					<div>
 						Unable to load user details. Please try refreshing the
 						page.
 					</div>
 				</div>
-			)}
+			</div>
+		);
+	}
+
+	const inputValue = isEditingUsername
+		? usernameValue
+		: userDetails.username || "";
+	const canSave = !isSaving && usernameValue.trim().length > 0;
+	const saveButtonText = isSaving ? "Saving..." : "Save";
+
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter" && isEditingUsername) handleSaveUsername();
+		if (e.key === "Escape" && isEditingUsername) handleCancelEdit();
+	};
+
+	const renderButtons = () => {
+		if (isEditingUsername) {
+			return (
+				<>
+					<button
+						className="Details-button"
+						onClick={handleSaveUsername}
+						disabled={!canSave}
+					>
+						{saveButtonText}
+					</button>
+					<button
+						className="Details-button secondary"
+						onClick={handleCancelEdit}
+						disabled={isSaving}
+					>
+						Cancel
+					</button>
+				</>
+			);
+		}
+		return (
+			<button className="Details-button" onClick={handleEditUsername}>
+				Edit
+			</button>
+		);
+	};
+
+	return (
+		<div className="Details">
+			<h4 className="Details-title">Account Details</h4>
+			<div className="Details-description">
+				View and manage your account information and settings.
+			</div>
+
+			<div className="Details-username-section">
+				<div className="Details-username-label">Username</div>
+				<div className="Details-username-controls">
+					<input
+						type="text"
+						className="Details-username-input"
+						value={inputValue}
+						onChange={(e) => setUsernameValue(e.target.value)}
+						disabled={!isEditingUsername}
+						placeholder="Enter username"
+						onKeyDown={handleKeyDown}
+					/>
+					{renderButtons()}
+				</div>
+
+				{usernameError && (
+					<div className="Details-error">
+						<span>⚠️ {usernameError}</span>
+					</div>
+				)}
+
+				<div className="Details-hint">
+					💡 The username will be used when sharing markets as well as
+					for leaderboards.
+					<br />⏰ Username can only be changed once every 7 days.
+				</div>
+			</div>
 		</div>
 	);
 }

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { tagService } from "@/services/api/tagService";
+import "./Tags.scss";
 
 export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 	const { getAccessToken } = usePrivy();
@@ -60,6 +62,7 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 			setForceHide(null);
 			setIsCarousel(null);
 			setPublishedAt("");
+			tagService.clearCache(); // Clear cache so new tag appears
 			onCreated?.();
 		} catch (err: any) {
 			console.error("error", err);
@@ -70,61 +73,40 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 	}
 
 	return (
-		<div style={{ color: "white" }}>
-			<h2 style={{ marginBottom: 16 }}>Add Tag</h2>
-			<form
-				onSubmit={handleSubmit}
-				style={{ display: "grid", gap: 12, maxWidth: 600 }}
-			>
-				<label style={{ display: "grid", gap: 6 }}>
+		<div className="tag-container">
+			<h2 className="tag-title">Add Tag</h2>
+			<form onSubmit={handleSubmit} className="tag-form">
+				<label className="tag-form-label">
 					<span>Label</span>
 					<input
 						value={label}
 						onChange={(e) => setLabel(e.target.value)}
 						placeholder="e.g. ESPORTS"
 						required
-						style={{
-							padding: 8,
-							color: "cyan",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-						}}
+						className="tag-form-input"
 					/>
 				</label>
-				<label style={{ display: "grid", gap: 6 }}>
+				<label className="tag-form-label">
 					<span>Slug (optional)</span>
 					<input
 						value={slug}
 						onChange={(e) => setSlug(e.target.value)}
 						placeholder="lowercase-dashed"
-						style={{
-							padding: 8,
-							color: "cyan",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-						}}
+						className="tag-form-input"
 					/>
 				</label>
 
-				<div style={{ display: "grid", gap: 6 }}>
+				<div className="tag-flags-section">
 					<span>Force Show / Hide</span>
-					<div style={{ display: "flex", gap: 8 }}>
+					<div className="tag-flags-group">
 						<button
 							type="button"
 							onClick={() =>
 								setForceShow(forceShow === true ? null : true)
 							}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: forceShow
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-							}}
+							className={`tag-flag-button ${
+								forceShow ? "active" : ""
+							}`}
 						>
 							Force Show
 						</button>
@@ -133,72 +115,56 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 							onClick={() =>
 								setForceHide(forceHide === true ? null : true)
 							}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: forceHide
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-							}}
+							className={`tag-flag-button ${
+								forceHide ? "active" : ""
+							}`}
 						>
 							Force Hide
 						</button>
 					</div>
 				</div>
 
-				<div style={{ display: "grid", gap: 6 }}>
+				<div className="tag-flags-section">
 					<span>Carousel</span>
-					<div style={{ display: "flex", gap: 8 }}>
+					<div className="tag-flags-group">
 						<button
 							type="button"
 							onClick={() =>
 								setIsCarousel(isCarousel === true ? null : true)
 							}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: isCarousel
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-							}}
+							className={`tag-flag-button ${
+								isCarousel ? "active" : ""
+							}`}
 						>
 							Is Carousel
 						</button>
 					</div>
 				</div>
 
-				<label style={{ display: "grid", gap: 6 }}>
+				<label className="tag-form-label">
 					<span>Published At (optional)</span>
 					<input
 						type="datetime-local"
 						value={publishedAt}
 						onChange={(e) => setPublishedAt(e.target.value)}
-						style={{
-							padding: 8,
-							color: "cyan",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-						}}
+						className="tag-form-input"
 					/>
 				</label>
 
-				<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+				<div className="tag-actions">
 					<button
 						type="submit"
 						disabled={submitting}
-						style={{ padding: "8px 16px" }}
+						className="tag-submit-button"
 					>
 						{submitting ? "Creating..." : "Create Tag"}
 					</button>
 					{message && (
-						<span style={{ color: "#22c55e" }}>{message}</span>
+						<span className="tag-success-message">{message}</span>
 					)}
-					{error && <span style={{ color: "#ff6b6b" }}>{error}</span>}
+					{error && (
+						<span className="tag-error-message">{error}</span>
+					)}
 				</div>
 			</form>
 		</div>

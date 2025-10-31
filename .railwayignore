@@ -17,3 +17,8 @@ stats.html
 # VCS
 .git/
 .gitignore
+
+# Local env files and Sentry config
+.env
+.env.*
+.sentryclirc

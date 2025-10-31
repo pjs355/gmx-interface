@@ -6,22 +6,11 @@ import {
 } from "@/services/api/umbrellaDataService";
 import { uploadUmbrellaImage } from "@/services/firebase/firebaseStorage";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-
-const AVAILABLE_TAGS = [
-	"APEX LEGENDS",
-	"BATTLEFIELD 6",
-	"CALL OF DUTY",
-	"CS2",
-	"DOTA2",
-	"FORTNITE",
-	"GTA VI",
-	"LEAGUE OF LEGENDS",
-	"POKEMON",
-	"STAR WARS",
-	"VALORANT",
-	"WOW",
-	"ESPORTS",
-] as const;
+import MarketImageUpload from "./MarketImageUpload";
+import MarketTwitch from "./MarketTwitch";
+import MarketQuestions, { type QuestionEntry } from "./MarketQuestions";
+import UmbrellaFormFields from "./UmbrellaFormFields";
+import "./Markets.scss";
 
 type AddMarketForm = {
 	oracle: string;
@@ -31,16 +20,12 @@ type AddMarketForm = {
 	umbrellaRule: string;
 	isEvent: boolean;
 	eventDate?: string; // ISO date (yyyy-mm-dd) or datetime-local
+	endDate?: string; // ISO date (yyyy-mm-dd) or datetime-local
 	image1Url?: string;
 	image2Url?: string;
 	status: boolean; // true = Active, false = Inactive
-};
-
-type QuestionEntry = {
-	displayName: string;
-	tags: string[];
-	yesColor: string;
-	noColor: string;
+	twitchEnabled: boolean;
+	twitchChannel: string;
 };
 
 export default function AddMarket() {
@@ -53,12 +38,16 @@ export default function AddMarket() {
 		umbrellaRule: "",
 		isEvent: false,
 		eventDate: "",
+		endDate: "",
 		status: true, // Default to Active
+		twitchEnabled: false,
+		twitchChannel: "",
 	});
 	const [submitting, setSubmitting] = useState(false);
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [loadingUmbrellas, setLoadingUmbrellas] = useState<boolean>(false);
 	const eventDateRef = useRef<HTMLInputElement | null>(null);
+	const endDateRef = useRef<HTMLInputElement | null>(null);
 	const [questions, setQuestions] = useState<QuestionEntry[]>([
 		{
 			displayName: "",
@@ -101,55 +90,6 @@ export default function AddMarket() {
 		value: AddMarketForm[K]
 	) {
 		setForm((prev) => ({ ...prev, [key]: value }));
-	}
-
-	// Removed top-level tags; tags are configured per-question below
-
-	function updateQuestion<K extends keyof QuestionEntry>(
-		index: number,
-		key: K,
-		value: QuestionEntry[K]
-	) {
-		setQuestions((prev) =>
-			prev.map((q, i) => (i === index ? { ...q, [key]: value } : q))
-		);
-	}
-
-	function toggleTagForQuestion(index: number, tag: string) {
-		setQuestions((prev) =>
-			prev.map((q, i) => {
-				if (i !== index) return q;
-				const has = q.tags.includes(tag);
-				return {
-					...q,
-					tags: has
-						? q.tags.filter((t) => t !== tag)
-						: [...q.tags, tag],
-				};
-			})
-		);
-	}
-
-	function addQuestionEntry() {
-		setQuestions((prev) => {
-			// Get tags from the last question, or empty array if no questions exist
-			const lastQuestionTags =
-				prev.length > 0 ? prev[prev.length - 1].tags : [];
-
-			return [
-				...prev,
-				{
-					displayName: "",
-					tags: [...lastQuestionTags], // Copy tags from the last question
-					yesColor: "#22c55e",
-					noColor: "#ef4444",
-				},
-			];
-		});
-	}
-
-	function removeQuestionEntry(index: number) {
-		setQuestions((prev) => prev.filter((_, i) => i !== index));
 	}
 
 	// Image upload functions
@@ -231,7 +171,13 @@ export default function AddMarket() {
 					form.isEvent && form.eventDate
 						? new Date(form.eventDate).toISOString()
 						: undefined,
+				endDate:
+					form.isEvent && form.endDate
+						? new Date(form.endDate).toISOString()
+						: undefined,
 				status: form.status, // Include status in payload
+				twitchEnabled: form.twitchEnabled,
+				twitchChannel: form.twitchChannel || undefined,
 			};
 
 			// Upload images if selected
@@ -292,156 +238,42 @@ export default function AddMarket() {
 	}
 
 	return (
-		<div style={{ color: "white" }}>
-			<h2 style={{ marginBottom: 16 }}>Add Market</h2>
-			<form
-				onSubmit={handleSubmit}
-				style={{ display: "grid", gap: 12, maxWidth: 720 }}
-			>
-				<label style={{ display: "grid", gap: 6 }}>
+		<div className="admin-market-container">
+			<h2 className="admin-market-title">Add Market</h2>
+			<form onSubmit={handleSubmit} className="admin-market-form">
+				<label className="admin-form-label">
 					<span>Umbrella (optional)</span>
 					<select
 						value={form.selectedUmbrellaId}
 						onChange={(e) =>
 							update("selectedUmbrellaId", e.target.value)
 						}
-						style={{
-							padding: 8,
-							color: "cyan",
-							border: "1px solid white",
-							borderRadius: "4px",
-							background: "transparent",
-						}}
+						className="admin-form-select"
 					>
-						<option value="" style={{ color: "black" }}>
-							Create new umbrella (default)
-						</option>
+						<option value="">Create new umbrella (default)</option>
 						{umbrellas.map((u) => (
-							<option
-								key={u._id}
-								value={u._id}
-								style={{ color: "black" }}
-							>
+							<option key={u._id} value={u._id}>
 								{u.displayName}
 							</option>
 						))}
 					</select>
 					{loadingUmbrellas && (
-						<span style={{ fontSize: 12, opacity: 0.8 }}>
+						<span className="admin-hint-text">
 							Loading umbrellas...
 						</span>
 					)}
 				</label>
 
-				{!form.selectedUmbrellaId && (
-					<label style={{ display: "grid", gap: 6 }}>
-						<span>Umbrella Display Name</span>
-						<input
-							value={form.umbrellaDisplayName}
-							onChange={(e) =>
-								update("umbrellaDisplayName", e.target.value)
-							}
-							placeholder="If empty, defaults to Question text"
-							style={{
-								padding: 8,
-								color: "cyan",
-								border: "1px solid white",
-								borderRadius: "4px",
-								background: "transparent",
-							}}
-						/>
-					</label>
-				)}
-
-				{!form.selectedUmbrellaId && (
-					<label style={{ display: "grid", gap: 6 }}>
-						<span>Umbrella Rules (optional)</span>
-						<textarea
-							value={form.umbrellaRule}
-							onChange={(e) =>
-								update("umbrellaRule", e.target.value)
-							}
-							placeholder="Add any adjudication/rules text for this umbrella"
-							rows={4}
-							style={{
-								padding: 8,
-								color: "cyan",
-								border: "1px solid white",
-								borderRadius: "4px",
-								background: "transparent",
-							}}
-						/>
-					</label>
-				)}
-
-				{form.selectedUmbrellaId &&
-					(() => {
-						const selected = umbrellas.find(
-							(u) => u._id === form.selectedUmbrellaId
-						);
-						if (!selected) return null;
-						const children = Array.isArray(selected.children)
-							? selected.children
-							: [];
-						return (
-							<div
-								style={{
-									border: "1px solid rgba(255,255,255,0.2)",
-									borderRadius: 8,
-									padding: 12,
-									background: "rgba(255,255,255,0.03)",
-								}}
-							>
-								<div
-									style={{ marginBottom: 8, fontWeight: 600 }}
-								>
-									Existing questions in "
-									{selected.displayName}" ({children.length})
-								</div>
-								{children.length === 0 && (
-									<div style={{ opacity: 0.8 }}>
-										No questions found under this umbrella.
-									</div>
-								)}
-								{children.length > 0 && (
-									<ul
-										style={{
-											listStyle: "disc",
-											paddingLeft: 20,
-											margin: 0,
-											color: "white",
-										}}
-									>
-										{children.map((c) => (
-											<li
-												key={c.questionId}
-												style={{ marginBottom: 6 }}
-											>
-												<span
-													style={{ color: "white" }}
-												>
-													{c.displayName}
-												</span>
-												<span
-													style={{ color: "#9ca3af" }}
-												>
-													{" — "}
-												</span>
-												<span
-													style={{
-														color: "#9ca3af",
-														fontSize: 12,
-													}}
-												>
-													id: {c.questionId}
-												</span>
-											</li>
-										))}
-									</ul>
-								)}
-							</div>
-						);
-					})()}
+				<UmbrellaFormFields
+					selectedUmbrellaId={form.selectedUmbrellaId}
+					umbrellas={umbrellas}
+					umbrellaDisplayName={form.umbrellaDisplayName}
+					umbrellaRule={form.umbrellaRule}
+					onDisplayNameChange={(value) =>
+						update("umbrellaDisplayName", value)
+					}
+					onRuleChange={(value) => update("umbrellaRule", value)}
+				/>
 
 				{/* Removed top-level Question and Display Name fields (server auto-generates question; per-entry displayName below) */}
 				{/* Removed top-level color pickers; per-question colors are configured below */}
@@ -500,58 +332,104 @@ export default function AddMarket() {
 						</button>
 					</div>
 					{form.isEvent && (
-						<label style={{ display: "grid", gap: 6 }}>
-							<span>Event Date & Time</span>
-							<div
-								style={{
-									display: "flex",
-									gap: 8,
-									alignItems: "center",
-								}}
-							>
-								<input
-									ref={eventDateRef}
-									type="datetime-local"
-									value={form.eventDate || ""}
-									onChange={(e) =>
-										update("eventDate", e.target.value)
-									}
+						<>
+							<label style={{ display: "grid", gap: 6 }}>
+								<span>Event Start Date & Time</span>
+								<div
 									style={{
-										padding: 8,
-										color: "cyan",
-										border: "1px solid white",
-										borderRadius: "4px",
-										background: "transparent",
-									}}
-								/>
-								<button
-									type="button"
-									onClick={() => {
-										try {
-											// @ts-ignore showPicker is supported in modern Chrome
-											eventDateRef.current?.showPicker?.();
-										} catch {
-											eventDateRef.current?.focus();
-										}
-									}}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "rgba(255,255,255,0.2)",
-										color: "white",
-										cursor: "pointer",
-										whiteSpace: "nowrap",
+										display: "flex",
+										gap: 8,
+										alignItems: "center",
 									}}
 								>
-									Pick
-								</button>
-							</div>
-							<span style={{ fontSize: 12, opacity: 0.8 }}>
-								Stored as local time; we can convert to UTC ISO
-								on submit if preferred.
-							</span>
-						</label>
+									<input
+										ref={eventDateRef}
+										type="datetime-local"
+										value={form.eventDate || ""}
+										onChange={(e) =>
+											update("eventDate", e.target.value)
+										}
+										style={{
+											padding: 8,
+											color: "cyan",
+											border: "1px solid white",
+											borderRadius: "4px",
+											background: "transparent",
+										}}
+									/>
+									<button
+										type="button"
+										onClick={() => {
+											try {
+												// @ts-ignore showPicker is supported in modern Chrome
+												eventDateRef.current?.showPicker?.();
+											} catch {
+												eventDateRef.current?.focus();
+											}
+										}}
+										style={{
+											padding: "6px 10px",
+											border: "1px solid white",
+											borderRadius: 6,
+											background: "rgba(255,255,255,0.2)",
+											color: "white",
+											cursor: "pointer",
+											whiteSpace: "nowrap",
+										}}
+									>
+										Pick
+									</button>
+								</div>
+							</label>
+							<label style={{ display: "grid", gap: 6 }}>
+								<span>Event End Date & Time</span>
+								<div
+									style={{
+										display: "flex",
+										gap: 8,
+										alignItems: "center",
+									}}
+								>
+									<input
+										ref={endDateRef}
+										type="datetime-local"
+										value={form.endDate || ""}
+										onChange={(e) =>
+											update("endDate", e.target.value)
+										}
+										style={{
+											padding: 8,
+											color: "cyan",
+											border: "1px solid white",
+											borderRadius: "4px",
+											background: "transparent",
+										}}
+									/>
+									<button
+										type="button"
+										onClick={() => {
+											try {
+												// @ts-ignore showPicker is supported in modern Chrome
+												endDateRef.current?.showPicker?.();
+											} catch {
+												endDateRef.current?.focus();
+											}
+										}}
+										style={{
+											padding: "6px 10px",
+											border: "1px solid white",
+											borderRadius: 6,
+											background: "rgba(255,255,255,0.2)",
+											color: "white",
+											cursor: "pointer",
+											whiteSpace: "nowrap",
+										}}
+									>
+										Pick
+									</button>
+								</div>
+							</label>
+						</>
 					)}
 				</div>
 
@@ -594,373 +472,43 @@ export default function AddMarket() {
 					</div>
 				</div>
 
+				{/* Twitch Enabled */}
+				<MarketTwitch
+					twitchEnabled={form.twitchEnabled}
+					twitchChannel={form.twitchChannel}
+					onTwitchEnabledChange={(enabled) =>
+						update("twitchEnabled", enabled)
+					}
+					onTwitchChannelChange={(channel) =>
+						update("twitchChannel", channel)
+					}
+				/>
+
 				{/* Image Upload Section */}
-				<div
-					style={{
-						marginTop: 16,
-						borderTop: "1px solid rgba(255,255,255,0.2)",
-						paddingTop: 12,
+				<MarketImageUpload
+					image1={image1}
+					image2={image2}
+					image1Preview={image1Preview}
+					image2Preview={image2Preview}
+					uploadingImage={uploadingImage}
+					onImage1Select={(file) => handleImageSelect(file, "image1")}
+					onImage2Select={(file) => handleImageSelect(file, "image2")}
+					onImage1Remove={() => {
+						setImage1(null);
+						setImage1Preview(null);
 					}}
-				>
-					<div style={{ marginBottom: 12, fontWeight: 600 }}>
-						Images (Optional)
-					</div>
-
-					<div
-						style={{
-							display: "grid",
-							gridTemplateColumns: "1fr 1fr",
-							gap: 16,
-						}}
-					>
-						{/* Image 1 */}
-						<div style={{ display: "grid", gap: 8 }}>
-							<label style={{ fontSize: 14, fontWeight: 500 }}>
-								Banner Image
-							</label>
-							<div style={{ display: "grid", gap: 8 }}>
-								{image1Preview && (
-									<div
-										style={{
-											position: "relative",
-											display: "inline-block",
-										}}
-									>
-										<img
-											src={image1Preview}
-											alt="Preview"
-											style={{
-												width: "100%",
-												height: 120,
-												objectFit: "cover",
-												borderRadius: 8,
-												border: "1px solid rgba(255,255,255,0.2)",
-											}}
-										/>
-										<button
-											type="button"
-											onClick={() => {
-												setImage1(null);
-												setImage1Preview(null);
-											}}
-											style={{
-												position: "absolute",
-												top: 4,
-												right: 4,
-												padding: "4px 8px",
-												border: "1px solid #ef4444",
-												borderRadius: 4,
-												background:
-													"rgba(239, 68, 68, 0.9)",
-												color: "white",
-												fontSize: 12,
-												cursor: "pointer",
-											}}
-										>
-											Remove
-										</button>
-									</div>
-								)}
-								<input
-									type="file"
-									accept="image/*"
-									onChange={(e) => {
-										const file = e.target.files?.[0];
-										if (file)
-											handleImageSelect(file, "image1");
-									}}
-									style={{
-										padding: 8,
-										color: "white",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-									}}
-								/>
-								{uploadingImage === "image1" && (
-									<div
-										style={{
-											fontSize: 12,
-											opacity: 0.8,
-											color: "#8b5cf6",
-										}}
-									>
-										Uploading...
-									</div>
-								)}
-							</div>
-						</div>
-
-						{/* Image 2 */}
-						<div style={{ display: "grid", gap: 8 }}>
-							<label style={{ fontSize: 14, fontWeight: 500 }}>
-								Square Image
-							</label>
-							<div style={{ display: "grid", gap: 8 }}>
-								{image2Preview && (
-									<div
-										style={{
-											position: "relative",
-											display: "inline-block",
-										}}
-									>
-										<img
-											src={image2Preview}
-											alt="Preview"
-											style={{
-												width: 100,
-												height: 100,
-												objectFit: "cover",
-												borderRadius: 8,
-												border: "1px solid rgba(255,255,255,0.2)",
-											}}
-										/>
-										<button
-											type="button"
-											onClick={() => {
-												setImage2(null);
-												setImage2Preview(null);
-											}}
-											style={{
-												position: "absolute",
-												top: 4,
-												right: 4,
-												padding: "4px 8px",
-												border: "1px solid #ef4444",
-												borderRadius: 4,
-												background:
-													"rgba(239, 68, 68, 0.9)",
-												color: "white",
-												fontSize: 12,
-												cursor: "pointer",
-											}}
-										>
-											Remove
-										</button>
-									</div>
-								)}
-								<input
-									type="file"
-									accept="image/*"
-									onChange={(e) => {
-										const file = e.target.files?.[0];
-										if (file)
-											handleImageSelect(file, "image2");
-									}}
-									style={{
-										padding: 8,
-										color: "white",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-									}}
-								/>
-								{uploadingImage === "image2" && (
-									<div
-										style={{
-											fontSize: 12,
-											opacity: 0.8,
-											color: "#8b5cf6",
-										}}
-									>
-										Uploading...
-									</div>
-								)}
-							</div>
-						</div>
-					</div>
-
-					<div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-						Supported formats: JPG, PNG, GIF. Max size: 5MB per
-						image.
-					</div>
-				</div>
+					onImage2Remove={() => {
+						setImage2(null);
+						setImage2Preview(null);
+					}}
+				/>
 
 				{/* Multiple Questions Section */}
-				<div
-					style={{
-						marginTop: 16,
-						borderTop: "1px solid rgba(255,255,255,0.2)",
-						paddingTop: 12,
-					}}
-				>
-					<div
-						style={{
-							marginBottom: 8,
-						}}
-					>
-						<div style={{ fontWeight: 600 }}>
-							Questions (add one or more entries)
-						</div>
-					</div>
-					<div style={{ display: "grid", gap: 12 }}>
-						{questions.map((q, idx) => (
-							<div
-								key={idx}
-								style={{
-									border: "1px solid rgba(255,255,255,0.2)",
-									borderRadius: 8,
-									padding: 12,
-									background: "rgba(255,255,255,0.03)",
-								}}
-							>
-								<div
-									style={{
-										display: "flex",
-										justifyContent: "space-between",
-										alignItems: "center",
-										marginBottom: 8,
-									}}
-								>
-									<div style={{ fontWeight: 600 }}>
-										Question #{idx + 1}
-									</div>
-									<button
-										type="button"
-										onClick={() => removeQuestionEntry(idx)}
-										style={{ padding: "4px 8px" }}
-									>
-										Remove
-									</button>
-								</div>
-								<label style={{ display: "grid", gap: 6 }}>
-									<span>Display Name</span>
-									<input
-										value={q.displayName}
-										onChange={(e) =>
-											updateQuestion(
-												idx,
-												"displayName",
-												e.target.value
-											)
-										}
-										placeholder="Question display name"
-										style={{
-											padding: 8,
-											color: "cyan",
-											border: "1px solid white",
-											borderRadius: "4px",
-											background: "transparent",
-										}}
-									/>
-								</label>
-								<div
-									style={{
-										display: "grid",
-										gridTemplateColumns: "1fr 1fr",
-										gap: 12,
-										marginTop: 8,
-									}}
-								>
-									<label style={{ display: "grid", gap: 6 }}>
-										<span>Yes Color</span>
-										<input
-											type="color"
-											value={q.yesColor}
-											onChange={(e) =>
-												updateQuestion(
-													idx,
-													"yesColor",
-													e.target.value
-												)
-											}
-											style={{
-												height: 40,
-												padding: 0,
-												background: "transparent",
-												border: "1px solid white",
-												borderRadius: 4,
-											}}
-										/>
-									</label>
-									<label style={{ display: "grid", gap: 6 }}>
-										<span>No Color</span>
-										<input
-											type="color"
-											value={q.noColor}
-											onChange={(e) =>
-												updateQuestion(
-													idx,
-													"noColor",
-													e.target.value
-												)
-											}
-											style={{
-												height: 40,
-												padding: 0,
-												background: "transparent",
-												border: "1px solid white",
-												borderRadius: 4,
-											}}
-										/>
-									</label>
-								</div>
-								<div
-									style={{
-										display: "grid",
-										gap: 6,
-										marginTop: 8,
-									}}
-								>
-									<span>Tags</span>
-									<div
-										style={{
-											display: "flex",
-											flexWrap: "wrap",
-											gap: 8,
-										}}
-									>
-										{AVAILABLE_TAGS.map((tag) => {
-											const isSelected =
-												q.tags.includes(tag);
-											return (
-												<button
-													type="button"
-													key={tag}
-													onClick={() =>
-														toggleTagForQuestion(
-															idx,
-															tag
-														)
-													}
-													style={{
-														padding: "6px 10px",
-														border: "1px solid white",
-														borderRadius: 999,
-														background: isSelected
-															? "rgba(255,255,255,0.2)"
-															: "transparent",
-														color: "white",
-														cursor: "pointer",
-													}}
-												>
-													{tag}
-												</button>
-											);
-										})}
-									</div>
-								</div>
-							</div>
-						))}
-					</div>
-					<div style={{ marginTop: 12 }}>
-						<button
-							type="button"
-							onClick={addQuestionEntry}
-							disabled={submitting}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: "transparent",
-								color: "white",
-								cursor: "pointer",
-							}}
-						>
-							+ Add Question
-						</button>
-					</div>
-				</div>
+				<MarketQuestions
+					questions={questions}
+					submitting={submitting}
+					onQuestionsChange={setQuestions}
+				/>
 
 				<div style={{ display: "flex", gap: 12, marginTop: 12 }}>
 					<button

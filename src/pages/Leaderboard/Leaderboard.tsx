@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { usePrivy } from "@privy-io/react-auth";
+import rank1Icon from "@/assets/img/rank1.svg";
+import rank2Icon from "@/assets/img/rank2.svg";
+import rank3Icon from "@/assets/img/rank3.svg";
+import "./Leaderboard.scss";
 
 type LeaderboardEntry = {
 	wallet: string;
@@ -82,62 +86,81 @@ export default function Leaderboard() {
 		};
 	}, [getAccessToken]);
 
+	const getRankIcon = (position: number) => {
+		switch (position) {
+			case 1:
+				return rank1Icon;
+			case 2:
+				return rank2Icon;
+			case 3:
+				return rank3Icon;
+			default:
+				return null;
+		}
+	};
+
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div className="Leaderboard">
 			<h1>Leaderboard</h1>
-			{loading && <div style={{ opacity: 0.8 }}>Loading…</div>}
-			{error && <div style={{ color: "#ff6b6b" }}>{error}</div>}
+			{loading && <div className="Leaderboard-loading">Loading…</div>}
+			{error && <div className="Leaderboard-error">{error}</div>}
 			{!loading && !error && (
-				<div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-					{data.map((row, idx) => (
-						<div
-							key={`${row.wallet}-${idx}`}
-							style={{
-								display: "grid",
-								gridTemplateColumns:
-									"48px 2.5fr 1.2fr 1.2fr 1fr 1fr",
-								gap: 12,
-								alignItems: "center",
-								border: "1px solid rgba(255,255,255,0.2)",
-								borderRadius: 8,
-								padding: 12,
-								background: "rgba(255,255,255,0.03)",
-							}}
-						>
-							<div style={{ opacity: 0.8 }}>#{idx + 1}</div>
+				<div className="Leaderboard-list">
+					{data.map((row, idx) => {
+						const position = idx + 1;
+						const rankIcon = getRankIcon(position);
+
+						return (
 							<div
-								style={{
-									overflow: "hidden",
-									textOverflow: "ellipsis",
-								}}
+								key={`${row.wallet}-${idx}`}
+								className="Leaderboard-entry"
 							>
-								{row.username && row.username.trim().length > 0
-									? row.username
-									: `${row.wallet.slice(
-											0,
-											6
-									  )}...${row.wallet.slice(-4)}`}
+								<div className="Leaderboard-rank-username">
+									<div className="Leaderboard-rank">
+										{rankIcon ? (
+											<img
+												src={rankIcon}
+												alt={`Rank ${position}`}
+												className="Leaderboard-rank-icon"
+											/>
+										) : (
+											`#${position}`
+										)}
+									</div>
+									<div className="Leaderboard-username">
+										{row.username &&
+										row.username.trim().length > 0
+											? row.username
+											: `${row.wallet.slice(
+													0,
+													6
+											  )}...${row.wallet.slice(-4)}`}
+									</div>
+								</div>
+								<div className="Leaderboard-return">
+									<span>{row.totalReturnText}</span>
+								</div>
+								<div className="Leaderboard-cost">
+									<span>
+										$
+										{Number(
+											row.effectiveCostUSD
+										).toLocaleString(undefined, {
+											maximumFractionDigits: 2,
+										})}
+									</span>
+								</div>
+								<div className="Leaderboard-trades">
+									<span>{row.numTrades}</span>
+								</div>
+								<div className="Leaderboard-markets">
+									<span>{row.numMarkets}</span>
+								</div>
 							</div>
-							<div style={{ textAlign: "right" }}>
-								{row.totalReturnText}
-							</div>
-							<div style={{ textAlign: "right" }}>
-								$
-								{Number(row.effectiveCostUSD).toLocaleString(
-									undefined,
-									{ maximumFractionDigits: 2 }
-								)}
-							</div>
-							<div style={{ textAlign: "right", opacity: 0.9 }}>
-								{row.numTrades} trades
-							</div>
-							<div style={{ textAlign: "right", opacity: 0.8 }}>
-								{row.numMarkets} markets
-							</div>
-						</div>
-					))}
+						);
+					})}
 					{data.length === 0 && (
-						<div style={{ opacity: 0.8 }}>No entries yet.</div>
+						<div className="Leaderboard-empty">No entries yet.</div>
 					)}
 				</div>
 			)}
