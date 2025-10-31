@@ -45,3 +45,17 @@ export async function uploadUmbrellaImage(
   const path = `umbrellas/${filename}`;
   return await uploadImageToFirebase(file, path, onProgress);
 }
+
+export async function uploadTagImage(
+  file: File,
+  slug: string,
+  onProgress?: (progress: number) => void
+): Promise<UploadResult> {
+  // Generate filename with tag- prefix and slug
+  const fileExtension = file.name.split(".").pop();
+  const filename = `tag-${slug}.${fileExtension}`;
+
+  // Upload to Firebase Storage in tags folder
+  const path = `tags/${filename}`;
+  return await uploadImageToFirebase(file, path, onProgress);
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { tagService } from "@/services/api/tagService";
+import { uploadTagImage } from "@/services/firebase/firebaseStorage";
 import type { AdminTag } from "./ListTag";
 import "./Tags.scss";
 
@@ -17,48 +18,49 @@ export default function EditTag({
 	const { getAccessToken } = usePrivy();
 	const [label, setLabel] = useState<string>(tag.label || "");
 	const [slug, setSlug] = useState<string>(tag.slug || "");
-	const [forceShow, setForceShow] = useState<boolean | null>(
-		tag.forceShow ?? null
-	);
-	const [forceHide, setForceHide] = useState<boolean | null>(
-		tag.forceHide ?? null
-	);
-	const [isCarousel, setIsCarousel] = useState<boolean | null>(
-		tag.isCarousel ?? null
-	);
-	const [publishedAt, setPublishedAt] = useState<string>(() =>
-		tag.publishedAt
-			? new Date(tag.publishedAt).toISOString().slice(0, 16)
-			: ""
-	);
 	const [saving, setSaving] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
 	const [message, setMessage] = useState<string | null>(null);
 
+	// Image upload states
+	const [image, setImage] = useState<File | null>(null);
+	const [imagePreview, setImagePreview] = useState<string | null>(
+		(tag as any).imageUrl || null
+	);
+	const [imageUrl, setImageUrl] = useState<string>(
+		(tag as any).imageUrl || ""
+	);
+	const [uploadingImage, setUploadingImage] = useState<boolean>(false);
+
 	useEffect(() => {
 		setLabel(tag.label || "");
 		setSlug(tag.slug || "");
-		setForceShow(tag.forceShow ?? null);
-		setForceHide(tag.forceHide ?? null);
-		setIsCarousel(tag.isCarousel ?? null);
-		setPublishedAt(
-			tag.publishedAt
-				? new Date(tag.publishedAt).toISOString().slice(0, 16)
-				: ""
-		);
+		setImageUrl((tag as any).imageUrl || "");
+		setImagePreview((tag as any).imageUrl || null);
+		setImage(null);
 		setError(null);
 		setMessage(null);
 	}, [tag._id]);
 
-	const stateSummary = useMemo(() => {
-		return [
-			forceShow === true ? "forceShow" : null,
-			forceHide === true ? "forceHide" : null,
-			isCarousel === true ? "carousel" : null,
-		]
-			.filter(Boolean)
-			.join(", ");
-	}, [forceShow, forceHide, isCarousel]);
+	const handleImageSelect = (file: File) => {
+		if (!file.type.startsWith("image/")) {
+			alert("Please select an image file");
+			return;
+		}
+
+		if (file.size > 5 * 1024 * 1024) {
+			alert("Image size must be less than 5MB");
+			return;
+		}
+
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			const previewUrl = e.target?.result as string;
+			setImage(file);
+			setImagePreview(previewUrl);
+		};
+		reader.readAsDataURL(file);
+	};
 
 	async function handleSave() {
 		setSaving(true);
@@ -76,11 +78,19 @@ export default function EditTag({
 			const body: any = {};
 			if (label.trim()) body.label = label.trim();
 			if (slug.trim()) body.slug = slug.trim();
-			if (typeof forceShow === "boolean") body.forceShow = forceShow;
-			if (typeof forceHide === "boolean") body.forceHide = forceHide;
-			if (typeof isCarousel === "boolean") body.isCarousel = isCarousel;
-			if (publishedAt)
-				body.publishedAt = new Date(publishedAt).toISOString();
+
+			// Upload image if selected
+			if (image) {
+				setUploadingImage(true);
+				const slugForUpload =
+					slug.trim() ||
+					label.trim().toLowerCase().replace(/\s+/g, "-");
+				const result = await uploadTagImage(image, slugForUpload);
+				body.imageUrl = result.url;
+				setUploadingImage(false);
+			} else if (imageUrl) {
+				body.imageUrl = imageUrl;
+			}
 
 			const resp = await fetch(
 				`${base}/admin/tags/${encodeURIComponent(tag._id)}`,
@@ -99,6 +109,13 @@ export default function EditTag({
 			}
 			setMessage("Saved");
 			tagService.clearCache(); // Clear cache so updated tag appears
+
+			// Clear uploaded image after successful save
+			if (image) {
+				setImage(null);
+				setImagePreview(imageUrl || null);
+			}
+
 			const nextTag: AdminTag = json as AdminTag;
 			onSaved?.(nextTag);
 		} catch (err: any) {
@@ -136,55 +153,40 @@ export default function EditTag({
 					/>
 				</label>
 
-				<div className="tag-flags-section">
-					<span>Flags</span>
-					<div className="tag-flags-group">
-						<button
-							type="button"
-							onClick={() =>
-								setForceShow(forceShow === true ? null : true)
-							}
-							className={`tag-flag-button ${
-								forceShow ? "active" : ""
-							}`}
-						>
-							Force Show
-						</button>
-						<button
-							type="button"
-							onClick={() =>
-								setForceHide(forceHide === true ? null : true)
-							}
-							className={`tag-flag-button ${
-								forceHide ? "active" : ""
-							}`}
-						>
-							Force Hide
-						</button>
-						<button
-							type="button"
-							onClick={() =>
-								setIsCarousel(isCarousel === true ? null : true)
-							}
-							className={`tag-flag-button ${
-								isCarousel ? "active" : ""
-							}`}
-						>
-							Carousel
-						</button>
-					</div>
-					<div className="tag-state-summary">{stateSummary}</div>
-				</div>
-
-				<label className="tag-form-label">
-					<span>Published At</span>
+				<div className="tag-form-label">
+					<span>Tag Image</span>
+					{imagePreview && (
+						<div className="tag-image-preview-container">
+							<img
+								src={imagePreview}
+								alt="Preview"
+								className="tag-image-preview"
+							/>
+							<button
+								type="button"
+								onClick={() => {
+									setImage(null);
+									setImagePreview(imageUrl || null);
+								}}
+								className="tag-image-remove-button"
+							>
+								Remove
+							</button>
+						</div>
+					)}
 					<input
-						type="datetime-local"
-						value={publishedAt}
-						onChange={(e) => setPublishedAt(e.target.value)}
-						className="tag-form-input"
+						type="file"
+						accept="image/*"
+						onChange={(e) => {
+							const file = e.target.files?.[0];
+							if (file) handleImageSelect(file);
+						}}
+						className="tag-file-input"
 					/>
-				</label>
+					{uploadingImage && (
+						<div className="tag-uploading-text">Uploading...</div>
+					)}
+				</div>
 
 				<div className="tag-actions">
 					<button

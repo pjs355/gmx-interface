@@ -82,6 +82,48 @@
 	color: #ff6b6b;
 }
 
+/* Image Upload */
+.tag-image-preview-container {
+	position: relative;
+	display: inline-block;
+	margin-bottom: 8px;
+}
+
+.tag-image-preview {
+	width: 120px;
+	height: 120px;
+	object-fit: cover;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tag-image-remove-button {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	padding: 4px 8px;
+	border: 1px solid #ef4444;
+	border-radius: 4px;
+	background: rgba(239, 68, 68, 0.9);
+	color: white;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.tag-file-input {
+	padding: 8px;
+	color: white;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+}
+
+.tag-uploading-text {
+	font-size: 12px;
+	opacity: 0.8;
+	color: #8b5cf6;
+}
+
 /* Edit Tag Specific */
 .tag-back-button {
 	margin-bottom: 12px;

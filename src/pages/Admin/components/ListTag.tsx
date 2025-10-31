@@ -6,10 +6,7 @@ export interface AdminTag {
 	_id: string;
 	label: string;
 	slug: string;
-	forceShow: boolean | null;
-	forceHide: boolean | null;
-	isCarousel: boolean | null;
-	publishedAt: string | null;
+	imageUrl?: string;
 	createdAt?: string;
 	updatedAt?: string;
 }
@@ -146,29 +143,46 @@ export default function ListTag({
 								gap: 12,
 							}}
 						>
-							<div>
-								<div style={{ fontWeight: 600 }}>{t.label}</div>
-								<div style={{ fontSize: 12, opacity: 0.8 }}>
-									slug: {t.slug}
-								</div>
-								<div style={{ fontSize: 12, opacity: 0.8 }}>
-									{t.publishedAt
-										? `published: ${new Date(
-												t.publishedAt
-										  ).toLocaleString()}`
-										: "unpublished"}
-								</div>
-								<div style={{ fontSize: 12, opacity: 0.8 }}>
-									{t.forceShow === true
-										? "forceShow"
-										: t.forceHide === true
-										? "forceHide"
-										: ""}
-									{t.isCarousel
-										? t.forceShow || t.forceHide
-											? ", carousel"
-											: "carousel"
-										: ""}
+							<div
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: 12,
+								}}
+							>
+								{t.imageUrl && (
+									<img
+										src={t.imageUrl}
+										alt={t.label}
+										style={{
+											width: 48,
+											height: 48,
+											objectFit: "cover",
+											borderRadius: 8,
+											border: "1px solid rgba(255,255,255,0.2)",
+										}}
+									/>
+								)}
+								<div>
+									<div style={{ fontWeight: 600 }}>
+										{t.label}
+									</div>
+									<div style={{ fontSize: 12, opacity: 0.8 }}>
+										slug: {t.slug}
+									</div>
+									{t.createdAt && (
+										<div
+											style={{
+												fontSize: 12,
+												opacity: 0.8,
+											}}
+										>
+											created:{" "}
+											{new Date(
+												t.createdAt
+											).toLocaleString()}
+										</div>
+									)}
 								</div>
 							</div>
 							<div style={{ display: "flex", gap: 8 }}>
