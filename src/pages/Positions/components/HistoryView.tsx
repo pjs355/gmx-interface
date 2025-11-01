@@ -6,7 +6,7 @@ import {
 	resolveLogoWithPriority,
 	collectTagsFromUmbrella,
 	resolveUmbrellaIconById,
-} from "@/pages/Predictions/utils/gameLogoResolver";
+} from "@/helpers/gameLogoResolver";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 

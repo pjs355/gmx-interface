@@ -189,18 +189,6 @@ export function AppHeaderLinks({
 						Esports
 					</HeaderLink>
 				</div>
-				{/* <div className="App-header-link-container">
-					<HeaderLink
-						qa="prizes"
-						to="/prizes"
-						showRedirectModal={showRedirectModal}
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/prizes"
-						}
-					>
-						Prizes
-					</HeaderLink>
-				</div> */}
 				<div className="App-header-link-container">
 					<HeaderLink
 						qa="leaderboard"
@@ -215,14 +203,14 @@ export function AppHeaderLinks({
 				</div>
 				<div className="App-header-link-container">
 					<HeaderLink
-						qa="about"
-						to="/about"
+						qa="prizes"
+						to="/prizes"
 						showRedirectModal={showRedirectModal}
 						isActive={(_match: any, location: any) =>
-							location.pathname === "/about"
+							location.pathname === "/prizes"
 						}
 					>
-						About
+						Prizes
 					</HeaderLink>
 				</div>
 				{active && (
@@ -236,6 +224,18 @@ export function AppHeaderLinks({
 						</HeaderLink>
 					</div>
 				)}
+				<div className="App-header-link-container">
+					<HeaderLink
+						qa="about"
+						to="/about"
+						showRedirectModal={showRedirectModal}
+						isActive={(_match: any, location: any) =>
+							location.pathname === "/about"
+						}
+					>
+						About
+					</HeaderLink>
+				</div>
 				{/* Intentionally no Leaderboard or Positions text links here. Portfolio and Cash are separate buttons in AppHeaderUser. */}
 				<div className="App-header-link-container">
 					{/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>

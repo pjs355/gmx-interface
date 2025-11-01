@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { useMedia } from "react-use";
-import PredictionMarketChart from "../components/PredictionMarketChart";
+import PredictionMarketChart from "./PredictionMarketChart";
 import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
-import PredictionMarketTradeBox from "../components/PredictionMarketTradeBox/PredictionMarketTradeBox";
+import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarketTradeBox";
 import RulesSection from "components/RulesSection/RulesSection";
 import { TwitchEmbed } from "./TwitchEmbed";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";

@@ -3,7 +3,7 @@ import Button from "components/Button/Button";
 import {
 	calculateOrderbookPrices,
 	toCentsString,
-} from "../utils/predictionUtils";
+} from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
 

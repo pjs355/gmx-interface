@@ -12,6 +12,8 @@ import {
 } from "@/services/api/umbrellaDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { OrderbookService } from "@/services/api/orderbookService";
+import { tagService, type Tag } from "@/services/api/tagService";
+import { usePrivy } from "@privy-io/react-auth";
 
 type MarketLite = any;
 
@@ -26,6 +28,8 @@ type PredictionDataContextValue = {
 	allMarketsByUmbrella: Record<string, MarketLite[]>;
 	resolvedMarketsByUmbrella: Record<string, MarketLite[]>;
 	allBooksPreview: Record<string, BookPreview>;
+	tags: Tag[];
+	tagsLoading: boolean;
 	// Legacy fields expected by existing pages/components
 	singleMarketQuestions: Record<string, any>;
 	singleMarketOrderbooks: Record<string, any>;
@@ -52,6 +56,8 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	allMarketsByUmbrella: {},
 	resolvedMarketsByUmbrella: {},
 	allBooksPreview: {},
+	tags: [],
+	tagsLoading: true,
 	singleMarketQuestions: {},
 	singleMarketOrderbooks: {},
 	multiMarketData: {},
@@ -72,6 +78,7 @@ export function PredictionDataProvider({
 }: {
 	children: React.ReactNode;
 }) {
+	const { getAccessToken } = usePrivy();
 	const [loading, setLoading] = useState(false);
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [marketsByUmbrella, setMarketsByUmbrella] = useState<
@@ -96,6 +103,8 @@ export function PredictionDataProvider({
 		Record<string, BookPreview>
 	>({});
 	const [booksPreviewLoading, setBooksPreviewLoading] = useState(true);
+	const [tags, setTags] = useState<Tag[]>([]);
+	const [tagsLoading, setTagsLoading] = useState(true);
 	const [error, setError] = useState<string | undefined>(undefined);
 
 	const load = useCallback(async () => {
@@ -301,6 +310,42 @@ export function PredictionDataProvider({
 		load();
 	}, [load]);
 
+	// Fetch tags from tagService
+	useEffect(() => {
+		let mounted = true;
+
+		async function fetchTags() {
+			try {
+				const token = await getAccessToken();
+				if (!token) {
+					// Tags might be publicly accessible, try without token
+					const fetchedTags = await tagService.fetchAllTags("");
+					if (mounted) {
+						setTags(fetchedTags);
+						setTagsLoading(false);
+					}
+					return;
+				}
+				const fetchedTags = await tagService.fetchAllTags(token);
+				if (mounted) {
+					setTags(fetchedTags);
+					setTagsLoading(false);
+				}
+			} catch (err) {
+				console.error("Failed to fetch tags:", err);
+				if (mounted) {
+					setTagsLoading(false);
+				}
+			}
+		}
+
+		fetchTags();
+
+		return () => {
+			mounted = false;
+		};
+	}, [getAccessToken]);
+
 	// Fetch lightweight orderbook preview for all markets
 	useEffect(() => {
 		const fetchAllBooksPreview = async () => {
@@ -356,6 +401,8 @@ export function PredictionDataProvider({
 			allMarketsByUmbrella,
 			resolvedMarketsByUmbrella,
 			allBooksPreview,
+			tags,
+			tagsLoading,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,
@@ -376,6 +423,8 @@ export function PredictionDataProvider({
 			allMarketsByUmbrella,
 			resolvedMarketsByUmbrella,
 			allBooksPreview,
+			tags,
+			tagsLoading,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,

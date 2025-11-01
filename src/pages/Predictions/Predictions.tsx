@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { PredictionCard } from "./components/PredictionCard";
 import { LoadingState } from "./components/LoadingState";
-import type { Umbrella } from "lib/umbrellaDataService";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import "./Predictions.scss";
-import ImageBanner from "./ImageBanner";
-import GameLinks from "./GameLinks";
-import { resolveUmbrellaBannerById } from "./utils/umbrellaBanners";
+import ImageBanner from "./components/ImageBanner";
+import GameLinks from "./components/GameLinks";
+import { resolveUmbrellaBannerById } from "@/helpers/umbrellaBanners";
 
 export default function Predictions() {
 	const navigate = useNavigate();
@@ -33,6 +33,7 @@ export default function Predictions() {
 		singleMarketOrderbooks,
 		singleMarketQuestions,
 		multiMarketData,
+		tags,
 	} = usePredictionData();
 
 	const normalizeTag = (value: string) =>
@@ -51,20 +52,26 @@ export default function Predictions() {
 
 		if (!selectedGame) return activeUmbrellas;
 
-		const normalizedSelected = normalizeTag(selectedGame);
+		// Find the selected tag by label
+		const selectedTag = tags.find((t) => t.label === selectedGame);
+		if (!selectedTag) return activeUmbrellas;
+
 		return activeUmbrellas.filter((umbrella) => {
 			const children = (umbrella as any).children as
 				| Array<any>
 				| undefined;
 			if (!children || children.length === 0) return false;
 			return children.some((q) => {
-				const tags: string[] | undefined = (q &&
-					(q as any).tags) as any;
-				if (!tags || tags.length === 0) return false;
-				return tags.some((t) => normalizeTag(t) === normalizedSelected);
+				const tagIds: string[] | undefined = (q &&
+					(q as any).tagIds) as any;
+				// MUST have tagIds array (skip questions with legacy tags only)
+				if (!Array.isArray(tagIds) || tagIds.length === 0) {
+					return false;
+				}
+				return tagIds.includes(selectedTag._id);
 			});
 		});
-	}, [umbrellas, selectedGame]);
+	}, [umbrellas, selectedGame, tags]);
 
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
@@ -110,13 +117,13 @@ export default function Predictions() {
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
-	// Preload all banner images
+	// Preload banner images only for umbrellas being displayed
 	useEffect(() => {
-		if (loading || umbrellas.length === 0) return;
+		if (loading || filteredUmbrellas.length === 0) return;
 
-		const imageUrls = umbrellas
-			.map((u) => u.image || resolveUmbrellaBannerById(u._id))
-			.filter(Boolean);
+		// Only preload if umbrella has an explicit image URL set
+		// Don't speculatively try Firebase URLs that might 404
+		const imageUrls = filteredUmbrellas.map((u) => u.image).filter(Boolean);
 
 		if (imageUrls.length === 0) {
 			setImagesReady(true);
@@ -150,14 +157,14 @@ export default function Predictions() {
 		}, 3000);
 
 		return () => clearTimeout(timeout);
-	}, [loading, umbrellas]);
+	}, [loading, filteredUmbrellas]);
 
 	const handleRetry = () => {
 		window.location.reload();
 	};
 
 	if (loading || error || !imagesReady) {
-		return <LoadingState error={error} onRetry={handleRetry} />;
+		return <LoadingState error={error ?? null} onRetry={handleRetry} />;
 	}
 
 	return (

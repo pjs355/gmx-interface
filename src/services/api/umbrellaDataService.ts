@@ -96,8 +96,12 @@ class UmbrellaDataService {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 
-			const data = await response.json();
-			return data;
+		const json = await response.json();
+		// Server returns { success: true, data: umbrella }
+		if (json.success && json.data) {
+			return json.data;
+		}
+		return json;
 		} catch (error) {
 			console.error("❌ Error fetching umbrella by ID:", error);
 			throw error;

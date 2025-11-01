@@ -51,7 +51,7 @@ export default function AddMarket() {
 	const [questions, setQuestions] = useState<QuestionEntry[]>([
 		{
 			displayName: "",
-			tags: [],
+			tagIds: [],
 			yesColor: "#22c55e",
 			noColor: "#ef4444",
 		},
@@ -203,7 +203,7 @@ export default function AddMarket() {
 			if (Array.isArray(questions) && questions.length > 0) {
 				payload.questions = questions.map((q) => ({
 					displayName: q.displayName,
-					tags: q.tags,
+					tagIds: q.tagIds,
 					yesColor: q.yesColor,
 					noColor: q.noColor,
 				}));
@@ -394,6 +394,7 @@ export default function AddMarket() {
 										ref={endDateRef}
 										type="datetime-local"
 										value={form.endDate || ""}
+										min={form.eventDate || undefined}
 										onChange={(e) =>
 											update("endDate", e.target.value)
 										}

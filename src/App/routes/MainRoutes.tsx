@@ -4,10 +4,8 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import GetTestUsdc from "pages/GetTestUsdc/GetTestUsdc.jsx";
 import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
 import Predictions from "pages/Predictions/Predictions";
-import EsportsPredictions from "pages/Predictions/EsportsPredictions";
-import GamesPredictions from "pages/Predictions/GamesPredictions";
-import UmbrellaPage from "pages/Predictions/UmbrellaPage";
-import PredictionMarket from "pages/Predictions/PredictionMarket/PredictionMarket";
+import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";
+import PredictionMarket from "@/pages/PredictionMarket/PredictionMarket";
 import Leaderboard from "@/pages/Leaderboard/Leaderboard";
 // Removed Developers import - not used in routes (using Profile instead)
 import Profile from "pages/Profile/Profile";
@@ -32,12 +30,11 @@ export function MainRoutes() {
 			<Route path="/predictions" element={<Predictions />} />
 			<Route
 				path="/predictions/esports"
-				element={<EsportsPredictions />}
+				element={<FilteredPredictions filterType="esports" />}
 			/>
-			<Route path="/predictions/games" element={<GamesPredictions />} />
 			<Route
-				path="/predictions/umbrella/:umbrellaId/questions"
-				element={<UmbrellaPage />}
+				path="/predictions/games"
+				element={<FilteredPredictions filterType="games" />}
 			/>
 			<Route
 				path="/predictions/umbrella/:umbrellaId"

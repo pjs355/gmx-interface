@@ -2,7 +2,7 @@
 
 // Load all game logos at build time via Vite glob
 const logoModules = import.meta.glob(
-	"../../../assets/game-logos/*.{png,jpg,jpeg,svg,webp}",
+	"@/assets/game-logos/*.{png,jpg,jpeg,svg,webp}",
 	{
 		eager: true,
 		as: "url",

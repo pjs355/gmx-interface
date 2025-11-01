@@ -10,7 +10,7 @@ import {
 	resolveLogoWithPriority,
 	collectTagsFromUmbrella,
 	resolveUmbrellaIconById,
-} from "@/pages/Predictions/utils/gameLogoResolver";
+} from "@/helpers/gameLogoResolver";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {

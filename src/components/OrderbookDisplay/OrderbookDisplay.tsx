@@ -4,7 +4,7 @@ import type {
 	OrderbookEntry,
 } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { useCurtainActions } from "@/pages/Predictions/components/PredictionMarketTradeBox/PredictionCurtain";
+import { useCurtainActions } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
 // Helper function to calculate prices from orderbook
 const calculateOrderbookPrices = (orderbook: OrderbookSnapshot | null) => {
 	if (!orderbook) return { bestAsk: null, bestBid: null };

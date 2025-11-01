@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
-import { PredictionCard } from "./components/PredictionCard";
-import { LoadingState } from "./components/LoadingState";
-import type { Umbrella } from "lib/umbrellaDataService";
+import { PredictionCard } from "./PredictionCard";
+import { LoadingState } from "./LoadingState";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import "./Predictions.scss";
+import "../Predictions.scss";
 import GameLinks from "./GameLinks";
 
 interface FilteredPredictionsProps {
@@ -37,6 +37,7 @@ export default function FilteredPredictions({
 		singleMarketOrderbooks,
 		singleMarketQuestions,
 		multiMarketData,
+		tags,
 	} = usePredictionData();
 
 	const normalizeTag = (value: string) =>
@@ -53,6 +54,11 @@ export default function FilteredPredictions({
 			return (umbrella as any).active === true;
 		});
 
+		// Find ESPORTS tag
+		const esportsTag = tags.find(
+			(t) => normalizeTag(t.label) === "ESPORTS"
+		);
+
 		return activeUmbrellas
 			.filter((umbrella) => {
 				const children = (umbrella as any).children as
@@ -62,10 +68,13 @@ export default function FilteredPredictions({
 
 				// Check if any child has the ESPORTS tag
 				const hasEsportsTag = children.some((q) => {
-					const tags: string[] | undefined = (q &&
-						(q as any).tags) as any;
-					if (!tags || tags.length === 0) return false;
-					return tags.some((t) => normalizeTag(t) === "ESPORTS");
+					const tagIds: string[] | undefined = (q &&
+						(q as any).tagIds) as any;
+					// MUST have tagIds array (skip questions with legacy tags only)
+					if (!Array.isArray(tagIds) || tagIds.length === 0) {
+						return false;
+					}
+					return esportsTag && tagIds.includes(esportsTag._id);
 				});
 
 				// Filter based on filterType
@@ -80,22 +89,26 @@ export default function FilteredPredictions({
 				// Apply secondary game filter if selected
 				if (!selectedGame) return true;
 
-				const normalizedSelected = normalizeTag(selectedGame);
+				// Find the selected tag by label
+				const selectedTag = tags.find((t) => t.label === selectedGame);
+				if (!selectedTag) return true;
+
 				const children = (umbrella as any).children as
 					| Array<any>
 					| undefined;
 				if (!children || children.length === 0) return false;
 
 				return children.some((q) => {
-					const tags: string[] | undefined = (q &&
-						(q as any).tags) as any;
-					if (!tags || tags.length === 0) return false;
-					return tags.some(
-						(t) => normalizeTag(t) === normalizedSelected
-					);
+					const tagIds: string[] | undefined = (q &&
+						(q as any).tagIds) as any;
+					// MUST have tagIds array (skip questions with legacy tags only)
+					if (!Array.isArray(tagIds) || tagIds.length === 0) {
+						return false;
+					}
+					return tagIds.includes(selectedTag._id);
 				});
 			});
-	}, [umbrellas, filterType, selectedGame]);
+	}, [umbrellas, filterType, selectedGame, tags]);
 
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {

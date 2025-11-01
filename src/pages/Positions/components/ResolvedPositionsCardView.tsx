@@ -6,7 +6,7 @@ import {
 	resolveLogoWithPriority,
 	collectTagsFromUmbrella,
 	resolveUmbrellaIconById,
-} from "@/pages/Predictions/utils/gameLogoResolver";
+} from "@/helpers/gameLogoResolver";
 import { triggerFireworksForElement } from "../utils/Fireworks";
 import { useClaimEarningsForMarket } from "@/helpers/claimEarnings";
 

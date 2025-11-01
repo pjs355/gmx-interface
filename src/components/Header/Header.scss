@@ -303,7 +303,7 @@
 
 .App-header-container-left .a,
 .App-header-container-left a {
-	padding: 1.8rem 1.7rem;
+	padding: 1.8rem 0.8rem;
 	display: flex;
 	align-items: center;
 	color: #ffffff;
@@ -329,7 +329,7 @@
 .App-header-links {
 	display: flex;
 	align-items: center;
-	gap: 0.4rem;
+	gap: 0;
 }
 
 .App-header-container-left a.active {

@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import AddMarket from "./components/AddMarket";
-import ListMarket from "./components/ListMarket";
-import EditMarket from "./components/EditMarket";
-import ListTag, { type AdminTag } from "./components/ListTag";
-import AddTag from "./components/AddTag";
-import EditTag from "./components/EditTag";
+import AddMarket from "./components/Markets/AddMarket";
+import ListMarket from "./components/Markets/ListMarket";
+import EditMarket from "./components/Markets/EditMarket";
+import ResolveMarkets from "./components/Markets/ResolveMarkets";
+import ListTag, { type AdminTag } from "./components/Tags/ListTag";
+import AddTag from "./components/Tags/AddTag";
+import EditTag from "./components/Tags/EditTag";
 import type { Umbrella } from "services/api/umbrellaDataService";
 
 export default function Admin() {
@@ -17,6 +18,7 @@ export default function Admin() {
 	const [view, setView] = useState<
 		| "markets-list"
 		| "markets-add"
+		| "markets-resolve"
 		| "markets-edit"
 		| "tags-list"
 		| "tags-add"
@@ -120,6 +122,22 @@ export default function Admin() {
 						>
 							Add
 						</button>
+						<button
+							type="button"
+							onClick={() => setView("markets-resolve")}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "markets-resolve"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							Resolve
+						</button>
 					</div>
 				</div>
 				<div>
@@ -171,6 +189,8 @@ export default function Admin() {
 			)}
 
 			{view === "markets-add" && <AddMarket />}
+
+			{view === "markets-resolve" && <ResolveMarkets />}
 
 			{view === "markets-edit" && selected && (
 				<EditMarket
