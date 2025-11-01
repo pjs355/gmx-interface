@@ -30,6 +30,25 @@ export default function GameLinks({
 			.replace(/^_+|_+$/g, "");
 
 	// Filter tags to only show tags that have active markets for the current page type
+	// All hooks must be called before any early returns
+	const scrollRef = React.useRef<HTMLDivElement | null>(null);
+	const [canScrollLeft, setCanScrollLeft] = React.useState(false);
+	const [canScrollRight, setCanScrollRight] = React.useState(false);
+
+	const updateScrollState = React.useCallback(() => {
+		const el = scrollRef.current;
+		if (!el) return;
+		const { scrollLeft, clientWidth, scrollWidth } = el;
+		setCanScrollLeft(scrollLeft > 0);
+		setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1);
+	}, []);
+
+	const scrollByAmount = (delta: number) => {
+		const el = scrollRef.current;
+		if (!el) return;
+		el.scrollBy({ left: delta, behavior: "smooth" });
+	};
+
 	const filteredTags = React.useMemo(() => {
 		if (loading || tagsLoading || !umbrellas || umbrellas.length === 0) {
 			return []; // Don't show any tags while loading
@@ -80,8 +99,11 @@ export default function GameLinks({
 			: activeUmbrellas;
 
 		// For each tag, check if any umbrella has a question with that tagId
-		// Only show tags for questions that HAVE tagIds (ignore legacy questions)
+		// Only show tags that have images AND have active markets
 		const tagsWithActiveMarkets = tags.filter((tag) => {
+			// Skip tags without images
+			if (!tag.imageUrl) return false;
+
 			return typeFilteredUmbrellas.some((umbrella) => {
 				const children = (umbrella as any).children as
 					| Array<any>
@@ -107,21 +129,6 @@ export default function GameLinks({
 		);
 	}, [umbrellas, loading, tagsLoading, filterType, tags]);
 
-	// Don't render anything while loading or if no tags have active markets
-	if (loading || tagsLoading || filteredTags.length === 0) return null;
-
-	const scrollRef = React.useRef<HTMLDivElement | null>(null);
-	const [canScrollLeft, setCanScrollLeft] = React.useState(false);
-	const [canScrollRight, setCanScrollRight] = React.useState(false);
-
-	const updateScrollState = React.useCallback(() => {
-		const el = scrollRef.current;
-		if (!el) return;
-		const { scrollLeft, clientWidth, scrollWidth } = el;
-		setCanScrollLeft(scrollLeft > 0);
-		setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1);
-	}, []);
-
 	React.useEffect(() => {
 		// Ensure we start at the far left
 		if (scrollRef.current) {
@@ -139,11 +146,8 @@ export default function GameLinks({
 		};
 	}, [updateScrollState]);
 
-	const scrollByAmount = (delta: number) => {
-		const el = scrollRef.current;
-		if (!el) return;
-		el.scrollBy({ left: delta, behavior: "smooth" });
-	};
+	// Don't render anything while loading or if no tags have active markets
+	if (loading || tagsLoading || filteredTags.length === 0) return null;
 
 	return (
 		<div className="game-links-wrapper">

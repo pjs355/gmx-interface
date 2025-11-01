@@ -80,22 +80,8 @@ $app-card-padding: 1.5rem;
 	opacity: 0.9;
 }
 
-.App-highlight-box {
-	background: linear-gradient(
-		45deg,
-		rgba(80, 10, 245, 1) 0%,
-		rgba(43, 118, 224, 1) 35%,
-		rgba(7, 157, 250, 1) 77%,
-		rgba(2, 207, 207, 1) 100%
-	);
-	border-radius: 0.3rem;
-	box-shadow: 0 0 0.4rem 0.6rem rgba(45, 66, 252, 0.15);
-}
-
 .App-box,
 .App-card,
-.App-card-primary,
-.App-box-highlight,
 .App-box-solid {
 	position: relative;
 	border-radius: 0.4rem;
@@ -103,119 +89,10 @@ $app-card-padding: 1.5rem;
 	font-size: var(--font-size-body-medium);
 }
 
-.App-card-space-between {
-	display: flex;
-	flex-direction: column;
-	justify-content: space-between;
-}
-
-.App-card-bottom-placeholder {
-	visibility: hidden;
-}
-
-.App-card-bottom {
-	position: absolute;
-	bottom: 0;
-	left: 0;
-	right: 0;
-	padding: 1.5rem;
-	padding-bottom: 1.8rem;
-}
-
-.App-card-bottom .App-card-divider,
-.App-card-bottom-placeholder .App-card-divider {
-	margin-bottom: 1.8rem;
-}
-
 .App-card-divider-vertical {
 	width: 1px;
 	height: 8.8rem;
 	background: var(--color-slate-100);
-}
-
-.App-card-title-block {
-	display: flex;
-	justify-content: space-between;
-	padding: 1.6rem;
-}
-
-.App-card-title-info-icon {
-	display: flex;
-	margin-right: 0.8rem;
-	flex-shrink: 0;
-}
-
-.App-card-title-info {
-	display: flex;
-}
-
-.App-card-info-title {
-	font-weight: normal;
-	letter-spacing: 0px;
-	color: var(--color-white);
-}
-
-.App-card-info-subtitle {
-	font-weight: normal;
-	letter-spacing: 0px;
-	color: var(--color-gray-400);
-}
-
-.App-card-title-iconlist {
-	display: grid;
-	grid-template-columns: 1fr 1fr 1fr;
-	grid-column-gap: 0.8rem;
-	grid-row-gap: 0.8rem;
-}
-
-.App-card-title-iconlist___icon img {
-	filter: grayscale(1);
-}
-
-.App-card-title-iconlist___icon img:hover {
-	filter: unset;
-}
-
-.Wallet-btn {
-	display: block;
-	box-shadow: inset 0px 0px 1rem 0.5rem rgba(27, 30, 46, 0.2);
-	background: var(--dark-blue);
-	height: 5.1rem;
-	width: 26.35rem;
-	border: 1px solid var(--color-stroke-primary);
-	border-radius: 0.3rem;
-	position: relative;
-	color: var(--color-white);
-	font-size: 2rem;
-	display: grid;
-	grid-template-columns: auto 1fr;
-	text-align: left;
-	padding-left: 1.85rem;
-	padding-top: 1.05rem;
-}
-.Wallet-btn:hover {
-	background: var(--dark-blue-hover);
-	border-color: var(--dark-blue-border);
-}
-.Wallet-btn:active {
-	background: var(--dark-blue-active);
-}
-
-.Wallet-btn:not(:last-child) {
-	margin-bottom: 1.05rem;
-}
-
-.MetaMask-btn img {
-	display: inline-block;
-	height: 2.325rem;
-	margin-right: 1.7rem;
-	margin-left: 0.15rem;
-}
-
-.CoinbaseWallet-btn img {
-	display: inline-block;
-	height: 2.8rem;
-	margin-right: 1.7rem;
 }
 
 button.App-connect-wallet {
@@ -294,55 +171,6 @@ button.App-connect-wallet:hover {
 	padding-top: 1.5rem;
 }
 
-.section-title-block {
-	display: flex;
-	margin-bottom: 2.325rem;
-	max-width: 58.4rem;
-	width: 100%;
-}
-
-.page-main-content .section-title-block {
-	margin-top: 6.2rem;
-}
-
-.section-title-icon {
-	/* margin-right: 1.2rem; */
-	display: flex;
-	align-items: center;
-}
-
-.section-title-icon img {
-	/* display: flex; */
-	display: none;
-}
-
-.section-title-content {
-	display: flex;
-	flex-direction: column;
-	justify-content: flex-end;
-}
-
-.section-title-content .section-title-content__title {
-	font-size: var(--font-size-body-large);
-	line-height: 3.1rem;
-	color: var(--color-white);
-	letter-spacing: 0px;
-}
-
-.section-title-content .section-title-content__description {
-	font-size: 1.8rem;
-	line-height: 2.3rem;
-	letter-spacing: 0px;
-	color: var(--color-slate-100);
-	margin-top: 0.4rem;
-	max-width: 62rem;
-}
-
-.section-title-content .section-title-content__description span {
-	cursor: pointer;
-	color: var(--color-white);
-}
-
 .Page-title-section {
 	padding-left: 4.65rem;
 	padding-right: 1.5rem;
@@ -391,26 +219,6 @@ button.App-connect-wallet:hover {
 	margin-left: 0.4rem;
 }
 
-.App-hero {
-	position: relative;
-	text-align: center;
-	padding-top: 6.2rem;
-	margin-bottom: 3.1rem;
-}
-
-.App-hero-primary {
-	font-size: 4.65rem;
-	font-weight: bold;
-	margin-bottom: 1rem;
-}
-
-.App-note {
-	text-align: center;
-	font-weight: bold;
-	font-size: var(--font-size-body-small);
-	padding: 0 3.1rem;
-}
-
 .App-card {
 	padding: $app-card-padding;
 	border-radius: 0.4rem;
@@ -428,32 +236,9 @@ button.App-connect-wallet:hover {
 	justify-content: space-between;
 }
 
-.Position-card-title {
-	justify-content: start;
-}
-
-.Position-card-title::after {
-	content: "";
-	position: absolute;
-	left: -$app-card-padding;
-	top: -$app-card-padding;
-	bottom: -$app-card-padding;
-	right: -$app-card-padding;
-}
-
-.App-card-title-small {
-	font-size: var(--font-size-body-medium);
-	display: inline-flex;
-}
-
 .App-card-content {
 	display: grid;
 	grid-row-gap: 0.8rem;
-}
-
-.title-icon {
-	margin-left: 1rem;
-	align-self: flex-end;
 }
 
 .App-card-row {
@@ -475,15 +260,6 @@ button.App-connect-wallet:hover {
 
 .App-card-row > div:last-child {
 	text-align: right;
-}
-
-.App-card-options {
-	padding: unset;
-	margin: -0.62rem;
-}
-
-.App-card-option {
-	margin: 0.62rem;
 }
 
 .App-header a.App-header-link-main,
@@ -559,37 +335,6 @@ button.App-connect-wallet:hover {
 	margin-bottom: 0.465rem;
 }
 
-.App-background-side-1 {
-	z-index: 1;
-	position: absolute;
-	left: 0;
-	right: 0;
-	top: 0;
-	bottom: 0;
-	pointer-events: none;
-	background: linear-gradient(
-		90deg,
-		rgba(45, 66, 252, 0.05) 0%,
-		rgba(8, 8, 10, 0) 100%
-	);
-}
-
-.App-background-side-2 {
-	z-index: 2;
-	position: absolute;
-	left: 0;
-	right: 0;
-	top: 0;
-	bottom: 0;
-	pointer-events: none;
-	background: linear-gradient(
-		90deg,
-		rgba(0, 0, 0, 0) 0%,
-		rgba(0, 216, 240, 0.01) 51%,
-		rgba(0, 216, 240, 0.03) 100%
-	);
-}
-
 .App-background {
 	z-index: 4;
 	position: absolute;
@@ -606,76 +351,8 @@ button.App-connect-wallet:hover {
 	);
 }
 
-.App-background-ball-1 {
-	z-index: 3;
-	position: absolute;
-	left: 0%;
-	right: 0%;
-	top: -50%;
-	bottom: -200%;
-	pointer-events: none;
-	background: radial-gradient(
-		circle,
-		rgba(102, 56, 217, 0.05) 0%,
-		rgba(56, 33, 105, 0.02) 36%,
-		rgba(8, 8, 10, 0) 100%
-	);
-}
-
-.App-background-ball-2 {
-	z-index: 2;
-	position: absolute;
-	left: -50%;
-	right: -150%;
-	top: -30%;
-	bottom: -200%;
-	pointer-events: none;
-	background: radial-gradient(
-		circle,
-		rgba(7, 149, 250, 0.05) 0%,
-		rgba(7, 149, 250, 0.02) 36%,
-		rgba(8, 8, 10, 0) 100%
-	);
-}
-
-.App-highlight {
-	z-index: 0;
-	position: absolute;
-	left: 0%;
-	right: -100%;
-	top: -100%;
-	bottom: 0%;
-	pointer-events: none;
-}
-
-.App-title {
-	text-align: center;
-	font-size: 4.65rem;
-	margin-top: 17vh;
-	margin-bottom: 1.5rem;
-	font-weight: bold;
-}
-
-.App-subtitle {
-	text-align: center;
-	font-size: 1.7rem;
-	margin-bottom: 7.75rem;
-	opacity: 0.9;
-	padding: 0 1.5rem;
-}
-
-.App-info-row {
-	display: grid;
-	grid-template-columns: auto auto;
-	font-size: var(--font-size-body-medium);
-	margin-bottom: 0.465rem;
-}
-
-.App-info-label {
-	opacity: 0.7;
-}
-
-.App-cta {
+a.App-cta,
+button.App-cta {
 	text-align: center;
 	cursor: pointer;
 	display: inline-block;
@@ -683,10 +360,6 @@ button.App-connect-wallet:hover {
 	border-radius: 0.3rem;
 	border: none;
 	font-size: var(--font-size-body-medium);
-}
-
-a.App-cta,
-button.App-cta {
 	color: var(--color-white);
 	text-decoration: none;
 	background: linear-gradient(
@@ -721,41 +394,6 @@ a.App-cta.option {
 	font-size: var(--font-size-body-small);
 }
 
-a.App-button-option,
-button.App-button-option {
-	cursor: pointer;
-	border-radius: 4px;
-	font-size: var(--font-size-body-small);
-	line-height: 2rem;
-	font-weight: normal;
-	letter-spacing: 0px;
-	color: var(--color-white);
-	padding-left: 16px;
-	padding-right: 16px;
-	text-decoration: none;
-	box-sizing: border-box;
-	position: relative;
-	min-height: 36px;
-	display: inline-flex !important;
-	align-items: center;
-	border: none;
-	background: rgba(43, 55, 94, 1);
-}
-
-a.App-button-option:hover,
-button.App-button-option:hover:enabled {
-	background: rgb(54, 69, 117);
-}
-
-a.App-button-option:active,
-button.App-button-option:active:enabled {
-	background: rgb(64, 82, 141);
-}
-
-button.App-button-option:disabled {
-	cursor: not-allowed;
-}
-
 .App-header-container-right {
 	display: flex;
 	align-items: center;
@@ -775,73 +413,6 @@ button.App-button-option:disabled {
 
 .App-content {
 	position: static !important;
-}
-
-.App-footer {
-	left: 0;
-	right: 0;
-	position: fixed;
-	bottom: 5vh;
-	text-align: center;
-}
-
-a.App-social-link {
-	margin-left: 1.1rem;
-	margin-right: 1.1rem;
-	font-size: 2.635rem;
-	color: var(--color-white);
-	opacity: 0.8;
-}
-
-a.App-social-link:hover {
-	opacity: 0.9;
-}
-
-.App-input {
-	text-align: center;
-	display: inline-block;
-	width: 90%;
-	max-width: 46.5rem;
-}
-
-.App-input input {
-	width: 100%;
-}
-
-.App-input-top {
-	display: grid;
-	grid-template-columns: auto auto;
-	margin-bottom: 0.8rem;
-	padding-left: 0.155rem;
-	padding-right: 0.465rem;
-}
-
-.App-input-label {
-	text-align: left;
-	opacity: 0.9;
-}
-
-.App-input-max {
-	text-align: right;
-	opacity: 0.9;
-	cursor: pointer;
-}
-
-.App-input-max:hover {
-	opacity: 1;
-}
-
-.App-input-container {
-	border: 2px solid rgba(48, 31, 130, 0.8);
-	background: rgba(0, 0, 0, 0.1);
-	display: grid;
-	grid-template-columns: 1fr auto;
-}
-
-.App-input-unit {
-	text-align: right;
-	padding: 1.25rem;
-	font-size: 2rem;
 }
 
 button.App-button {
@@ -1044,62 +615,6 @@ button.App-button {
 	padding: 0 3.1rem;
 }
 
-.App-slider .rc-slider-rail {
-	background: linear-gradient(90deg, #1e223d, #282d4a);
-}
-
-.App-slider .rc-slider-track {
-	background: linear-gradient(90deg, #2e3dcd, var(--color-blue-600));
-}
-
-.App-slider .rc-slider-dot {
-	border: none;
-	border-radius: 1px;
-	width: 2px;
-	margin-left: -1px;
-	background: #282d4a;
-}
-
-.App-slider .rc-slider-dot-active {
-	background: var(--color-blue-500);
-}
-
-.App-slider .rc-slider-handle {
-	background: var(--color-slate-600);
-	border: 2px solid var(--color-blue-600);
-}
-
-.App-slider .rc-slider-handle:active {
-	box-shadow: 0 0 0.4rem 0.6rem rgba(45, 66, 252, 0.2);
-}
-
-.App-slider .rc-slider-mark-text,
-.App-slider .rc-slider-mark-text-active {
-	color: var(--color-slate-100);
-	opacity: 0.5;
-}
-
-.App-slider .rc-slider-mark-text:hover,
-.App-slider .rc-slider-mark-text-active:hover {
-	opacity: 1;
-}
-
-.rc-slider-tooltip {
-	z-index: 5;
-}
-
-.rc-slider-tooltip-inner {
-	box-shadow: none;
-	padding: 0.465rem 0.8rem;
-
-	background: rgb(49, 54, 85) !important;
-	box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.25) !important;
-}
-
-.rc-slider-tooltip-placement-top .rc-slider-tooltip-arrow {
-	border-top-color: rgb(49, 54, 85) !important;
-}
-
 .header-connect-btn {
 	background: var(--color-blue-600);
 }
@@ -1196,7 +711,9 @@ button.App-button {
 	.App-header {
 		grid-template-columns: 1fr auto auto auto auto;
 	}
-
+	.App-header-link-main {
+		padding: 0px;
+	}
 	.App-header-link-main img {
 		height: 2.1rem;
 	}

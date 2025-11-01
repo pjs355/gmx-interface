@@ -1,19 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { PredictionCard } from "./components/PredictionCard";
 import { LoadingState } from "./components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./Predictions.scss";
-import ImageBanner from "./components/ImageBanner";
 import GameLinks from "./components/GameLinks";
-import { resolveUmbrellaBannerById } from "@/helpers/umbrellaBanners";
+import { Search } from "./components/Search/Search";
 
 export default function Predictions() {
 	const navigate = useNavigate();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [imagesReady, setImagesReady] = useState(false);
+	const [searchActive, setSearchActive] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [searchResults, setSearchResults] = useState<Umbrella[]>([]);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -44,7 +47,39 @@ export default function Predictions() {
 			.replace(/[^A-Z0-9]+/g, "_")
 			.replace(/^_+|_+$/g, "");
 
+	const handleSearchActive = useCallback(
+		async (active: boolean, query: string) => {
+			if (!active) {
+				setSearchActive(false);
+				setSearchQuery("");
+				setSearchResults([]);
+				return;
+			}
+
+			try {
+				const baseUrl = getPredictionApiBaseUrl();
+				const response = await fetch(
+					`${baseUrl}/umbrellas/search?q=${encodeURIComponent(query)}`
+				);
+				if (!response.ok) throw new Error("Search failed");
+
+				const data = await response.json();
+				setSearchResults(data.data || []);
+				setSearchQuery(query);
+				setSearchActive(true);
+			} catch (error) {
+				console.error("error", error);
+			}
+		},
+		[]
+	);
+
 	const filteredUmbrellas = React.useMemo(() => {
+		// If search is active, use search results instead
+		if (searchActive && searchResults.length > 0) {
+			return searchResults;
+		}
+
 		// First filter out inactive umbrellas
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			return (umbrella as any).active === true;
@@ -71,7 +106,7 @@ export default function Predictions() {
 				return tagIds.includes(selectedTag._id);
 			});
 		});
-	}, [umbrellas, selectedGame, tags]);
+	}, [umbrellas, selectedGame, tags, searchActive, searchResults]);
 
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
@@ -170,6 +205,11 @@ export default function Predictions() {
 	return (
 		<div className="predictions-page page-layout">
 			{/** <ImageBanner /> */}
+			<Search
+				onSearchActive={handleSearchActive}
+				searchResults={searchResults}
+				activeQuery={searchQuery}
+			/>
 			<GameLinks
 				selectedGame={selectedGame}
 				onGameSelect={setSelectedGame}

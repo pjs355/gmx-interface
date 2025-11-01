@@ -9,6 +9,11 @@
 	width: 100%;
 	padding-left: 50px;
 	padding-right: 50px;
+
+	.search-container {
+		margin-top: 24px;
+		margin-bottom: 24px;
+	}
 }
 
 .predictions-header {
@@ -74,8 +79,9 @@
 	padding: 24px 0;
 	margin-left: -50px;
 	margin-right: -50px;
-	padding-left: 50px;
-	padding-right: 50px;
+	@media (min-width: 1100px) {
+		padding: 20px 50px;
+	}
 }
 
 /* Consistent spacing approach across all screen sizes */
@@ -93,7 +99,6 @@
 	overflow-x: auto;
 	overflow-y: hidden;
 	white-space: nowrap;
-	padding: 0 28px; /* extra inner space so end pills are fully visible */
 	scrollbar-width: none; /* Firefox */
 	-ms-overflow-style: none; /* IE 10+ */
 
@@ -193,7 +198,7 @@
 	font-weight: 600;
 	font-size: 14px;
 	padding: 6px 10px;
-	border-radius: 9999px;
+	border-radius: 0 9999px 9999px 0;
 	border: 1px solid var(--color-slate-200, #333333);
 	background: transparent;
 	cursor: pointer;
@@ -534,8 +539,6 @@
 	.game-links-wrapper {
 		margin-left: -12px;
 		margin-right: -12px;
-		padding-left: 12px;
-		padding-right: 12px;
 	}
 
 	.predictions-grid {
