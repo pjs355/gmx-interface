@@ -7,44 +7,146 @@ import steam20 from "@/assets/game-logos/steam-20.jpg";
 
 export default function Prizes() {
 	return (
-		<div className="prizes-container">
-			<h1 className="prizes-title">Prizes</h1>
-			<p className="prizes-subtitle">
-				Compete, climb the leaderboard, and win awesome prizes!
-			</p>
+		<div style={{ padding: 24, color: "white" }}>
+			{/* Hero Section with Nintendo Switch */}
+			<div
+				style={{
+					display: "flex",
+					flexDirection: "column",
+					alignItems: "center",
+					justifyContent: "center",
+					textAlign: "center",
+					marginBottom: 60,
+				}}
+			>
+				{/* Image Container with Overlay Text */}
+				<div
+					style={{
+						position: "relative",
+						width: "100%",
+						maxWidth: "800px",
+						marginBottom: 40,
+					}}
+				>
+					{/* Placeholder Image - Replace with actual Nintendo Switch image */}
+					<div
+						style={{
+							width: "100%",
+							height: "500px",
+							background:
+								"linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+							borderRadius: "20px",
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							position: "relative",
+							overflow: "hidden",
+							boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+						}}
+					>
+						{/* Placeholder for Nintendo Switch Image */}
+						<div
+							style={{
+								fontSize: 24,
+								opacity: 0.3,
+								fontWeight: 600,
+							}}
+						>
+							Nintendo Switch Image Placeholder
+						</div>
 
-			<div className="prizes-info-box">
-				<p>
-					Our trading competition will conclude{" "}
-					<strong>December 7th</strong>.
-				</p>
-				<p>
-					You must have created an account with an email in order to
-					participate. If you logged in with an external wallet, your
-					trades will not be tracked.
-				</p>
-				<p>
-					Be sure to navigate to{" "}
-					<Link to="/profile" className="prizes-link">
-						Profile
-					</Link>{" "}
-					to set a username.
+						{/* Overlay Text */}
+						<h1
+							style={{
+								position: "absolute",
+								top: "50%",
+								left: "50%",
+								transform: "translate(-50%, -50%)",
+								fontSize: "72px",
+								fontWeight: 900,
+								margin: 0,
+								textShadow: "0 4px 20px rgba(0,0,0,0.8)",
+								lineHeight: 1.2,
+								zIndex: 10,
+							}}
+						>
+							Win a Nintendo Switch 2
+						</h1>
+					</div>
+				</div>
+
+				{/* Subtitle Text */}
+				<p
+					style={{
+						fontSize: "32px",
+						fontWeight: 600,
+						maxWidth: "800px",
+						lineHeight: 1.4,
+						margin: 0,
+						opacity: 0.95,
+					}}
+				>
+					Trade your favorite game predictions for a chance to win a
+					Nintendo Switch. Absolutely free to play.
 				</p>
 			</div>
 
-			<div className="prizes-grid">
+			<div style={{ display: "grid", gap: 20 }}>
 				{/* Grand Prize */}
-				<div className="prize-card grand-prize">
-					<div className="prize-image-wrapper">
+				<div
+					style={{
+						display: "grid",
+						gridTemplateColumns: "120px 1fr",
+						gap: 16,
+						alignItems: "center",
+						padding: 16,
+						border: "1px solid rgba(255,255,255,0.15)",
+						borderRadius: 12,
+						background:
+							"linear-gradient(180deg, rgba(146,133,243,0.15), rgba(0,0,0,0.4))",
+					}}
+				>
+					<div
+						style={{
+							width: 120,
+							height: 120,
+							borderRadius: 12,
+							overflow: "hidden",
+							background: "#111",
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							border: "1px solid rgba(255,255,255,0.12)",
+						}}
+					>
 						<img
-							src={nintendoSwitch2}
-							alt="Nintendo Switch 2"
-							className="prize-image"
+							src="https://www.nintendo.com/content/dam/noa/en_US/hardware/switch/nintendo-switch/console/console-blue-red.png"
+							alt="Nintendo Switch Console"
+							style={{
+								width: "100%",
+								height: "100%",
+								objectFit: "cover",
+							}}
 						/>
 					</div>
 					<div>
-						<div className="prize-rank">Grand Prize</div>
-						<div className="prize-name grand">
+						<div
+							style={{
+								fontSize: 20,
+								fontWeight: 800,
+								marginBottom: 6,
+							}}
+						>
+							Grand Prize
+						</div>
+						<div
+							style={{
+								fontSize: 28,
+								fontWeight: 900,
+								color: "#c9c5ff",
+								letterSpacing: 0.5,
+							}}
+						>
 							Nintendo Switch 2
 						</div>
 						<div className="prize-description">
