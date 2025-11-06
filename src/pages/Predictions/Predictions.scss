@@ -101,13 +101,6 @@
 	white-space: nowrap;
 	scrollbar-width: none; /* Firefox */
 	-ms-overflow-style: none; /* IE 10+ */
-
-	/* Mobile: more padding and better scrolling */
-	@media (max-width: 768px) {
-		padding: 0 20px; /* more side padding on mobile */
-		scroll-behavior: smooth; /* smooth scrolling on mobile */
-		-webkit-overflow-scrolling: touch; /* momentum scrolling on iOS */
-	}
 }
 .game-links-scroll::-webkit-scrollbar {
 	display: none;

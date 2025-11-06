@@ -20,6 +20,8 @@ export interface Umbrella {
 	createdAt: string;
 	updatedAt: string;
 	__v: number;
+	game?: string;
+	pandascore_matchId?: string;
 }
 
 interface UmbrellaApiResponse {

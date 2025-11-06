@@ -26,31 +26,107 @@ type AddMarketForm = {
 	status: boolean; // true = Active, false = Inactive
 	twitchEnabled: boolean;
 	twitchChannel: string;
+	game: string;
+	pandascore_matchId: string;
 };
 
-export default function AddMarket() {
+interface SeriesMatch {
+	id: number;
+	name: string;
+	scheduledAt: string | null;
+	team1: {
+		name: string;
+	};
+	team2: {
+		name: string;
+	};
+}
+
+interface SeriesData {
+	name: string;
+	game: string;
+}
+
+interface AddMarketProps {
+	series?: SeriesData;
+	match?: SeriesMatch;
+}
+
+export default function AddMarket({ series, match }: AddMarketProps = {}) {
 	const { getAccessToken } = usePrivy();
+
+	// Track if component was used with props (for disabling certain fields)
+	const isPrefilled = !!(series && match);
+
+	// Helper to format datetime-local input value
+	const formatDateTimeLocal = (isoString: string | null): string => {
+		if (!isoString) return "";
+		// datetime-local input expects format: YYYY-MM-DDTHH:mm
+		const date = new Date(isoString);
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, "0");
+		const day = String(date.getDate()).padStart(2, "0");
+		const hours = String(date.getHours()).padStart(2, "0");
+		const minutes = String(date.getMinutes()).padStart(2, "0");
+		return `${year}-${month}-${day}T${hours}:${minutes}`;
+	};
+
+	// Helper to extract team name before parenthesis
+	const cleanTeamName = (teamName: string): string => {
+		const openParenIndex = teamName.indexOf("(");
+		if (openParenIndex !== -1) {
+			return teamName.substring(0, openParenIndex).trim();
+		}
+		return teamName.trim();
+	};
+
+	// Build match display name using full team names
+	const buildMatchDisplayName = (m: SeriesMatch): string => {
+		const team1Name = cleanTeamName(m.team1.name);
+		const team2Name = cleanTeamName(m.team2.name);
+		return `${team1Name} vs ${team2Name}`;
+	};
+
+	// Prefill umbrella display name if series/match provided
+	const initialUmbrellaDisplayName =
+		series && match
+			? `${buildMatchDisplayName(match)} - ${series.name}`
+			: "";
+
+	// Prefill event date if match provided
+	const initialEventDate = match?.scheduledAt
+		? formatDateTimeLocal(match.scheduledAt)
+		: "";
+
 	const [form, setForm] = useState<AddMarketForm>({
 		oracle: "",
 		seedAmount: "50",
 		selectedUmbrellaId: "",
-		umbrellaDisplayName: "",
+		umbrellaDisplayName: initialUmbrellaDisplayName,
 		umbrellaRule: "",
-		isEvent: false,
-		eventDate: "",
+		isEvent: !!match, // Set to true if match provided
+		eventDate: initialEventDate,
 		endDate: "",
-		status: true, // Default to Active
+		status: false, // Inactive for series matches
 		twitchEnabled: false,
 		twitchChannel: "",
+		game: series?.game || "",
+		pandascore_matchId: match?.id ? String(match.id) : "",
 	});
 	const [submitting, setSubmitting] = useState(false);
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [loadingUmbrellas, setLoadingUmbrellas] = useState<boolean>(false);
 	const eventDateRef = useRef<HTMLInputElement | null>(null);
 	const endDateRef = useRef<HTMLInputElement | null>(null);
+
+	// Prefill question display name if match provided
+	const initialQuestionDisplayName = match
+		? buildMatchDisplayName(match)
+		: "";
+
 	const [questions, setQuestions] = useState<QuestionEntry[]>([
 		{
-			displayName: "",
+			displayName: initialQuestionDisplayName,
 			tagIds: [],
 			yesColor: "#22c55e",
 			noColor: "#ef4444",
@@ -178,6 +254,8 @@ export default function AddMarket() {
 				status: form.status, // Include status in payload
 				twitchEnabled: form.twitchEnabled,
 				twitchChannel: form.twitchChannel || undefined,
+				game: form.game || undefined,
+				pandascore_matchId: form.pandascore_matchId || undefined,
 			};
 
 			// Upload images if selected
@@ -289,6 +367,50 @@ export default function AddMarket() {
 							border: "1px solid white",
 							borderRadius: "4px",
 							background: "transparent",
+						}}
+					/>
+				</label>
+
+				{/* Game field */}
+				<label style={{ display: "grid", gap: 6 }}>
+					<span>Game</span>
+					<input
+						value={form.game}
+						onChange={(e) => update("game", e.target.value)}
+						placeholder="e.g., Counter-Strike, League of Legends"
+						disabled={isPrefilled}
+						style={{
+							padding: 8,
+							color: isPrefilled ? "#888" : "cyan",
+							border: "1px solid white",
+							borderRadius: "4px",
+							background: isPrefilled
+								? "rgba(0,0,0,0.2)"
+								: "transparent",
+							cursor: isPrefilled ? "not-allowed" : "text",
+						}}
+					/>
+				</label>
+
+				{/* PandaScore Match ID field */}
+				<label style={{ display: "grid", gap: 6 }}>
+					<span>PandaScore Match ID</span>
+					<input
+						value={form.pandascore_matchId}
+						onChange={(e) =>
+							update("pandascore_matchId", e.target.value)
+						}
+						placeholder="Leave empty if not from PandaScore"
+						disabled={isPrefilled}
+						style={{
+							padding: 8,
+							color: isPrefilled ? "#888" : "cyan",
+							border: "1px solid white",
+							borderRadius: "4px",
+							background: isPrefilled
+								? "rgba(0,0,0,0.2)"
+								: "transparent",
+							cursor: isPrefilled ? "not-allowed" : "text",
 						}}
 					/>
 				</label>
@@ -509,6 +631,8 @@ export default function AddMarket() {
 					questions={questions}
 					submitting={submitting}
 					onQuestionsChange={setQuestions}
+					gameName={series?.game}
+					autoMatchTags={isPrefilled}
 				/>
 
 				<div style={{ display: "flex", gap: 12, marginTop: 12 }}>

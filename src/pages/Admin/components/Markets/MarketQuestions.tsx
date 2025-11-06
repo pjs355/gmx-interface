@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { tagService, type Tag } from "@/services/api/tagService";
+import { findMatchingTag } from "./tagMatcher";
 
 export type QuestionEntry = {
 	displayName: string;
@@ -13,12 +14,16 @@ interface MarketQuestionsProps {
 	questions: QuestionEntry[];
 	submitting?: boolean;
 	onQuestionsChange: (questions: QuestionEntry[]) => void;
+	gameName?: string;
+	autoMatchTags?: boolean;
 }
 
 export default function MarketQuestions({
 	questions,
 	submitting = false,
 	onQuestionsChange,
+	gameName,
+	autoMatchTags = false,
 }: MarketQuestionsProps) {
 	const { getAccessToken } = usePrivy();
 	const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -48,6 +53,33 @@ export default function MarketQuestions({
 			mounted = false;
 		};
 	}, [getAccessToken]);
+
+	// Auto-match tags when tags are loaded and gameName is provided
+	useEffect(() => {
+		if (
+			availableTags.length > 0 &&
+			gameName &&
+			autoMatchTags &&
+			questions.length > 0 &&
+			questions[0].tagIds.length === 0
+		) {
+			const matchedTagId = findMatchingTag(gameName, availableTags);
+			if (matchedTagId) {
+				const matchedTag = availableTags.find(
+					(t) => t._id === matchedTagId
+				);
+				console.log(
+					`Auto-matched tag: "${gameName}" → "${matchedTag?.label}" (${matchedTag?.slug})`
+				);
+				const updated = [...questions];
+				updated[0] = {
+					...updated[0],
+					tagIds: [matchedTagId],
+				};
+				onQuestionsChange(updated);
+			}
+		}
+	}, [availableTags, gameName, autoMatchTags, questions, onQuestionsChange]);
 
 	function updateQuestion<K extends keyof QuestionEntry>(
 		index: number,

@@ -9,6 +9,8 @@ import ResolveMarkets from "./components/Markets/ResolveMarkets";
 import ListTag, { type AdminTag } from "./components/Tags/ListTag";
 import AddTag from "./components/Tags/AddTag";
 import EditTag from "./components/Tags/EditTag";
+import ListSeries from "./components/Series/ListSeries";
+import AddSeries from "./components/Series/AddSeries";
 import type { Umbrella } from "services/api/umbrellaDataService";
 
 export default function Admin() {
@@ -23,6 +25,8 @@ export default function Admin() {
 		| "tags-list"
 		| "tags-add"
 		| "tags-edit"
+		| "series-list"
+		| "series-add"
 	>("markets-list");
 	const [selected, setSelected] = useState<Umbrella | null>(null);
 	const [selectedTag, setSelectedTag] = useState<AdminTag | null>(null);
@@ -177,6 +181,43 @@ export default function Admin() {
 						</button>
 					</div>
 				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Series</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => setView("series-list")}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "series-list"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							List
+						</button>
+						<button
+							type="button"
+							onClick={() => setView("series-add")}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "series-add"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							Add
+						</button>
+					</div>
+				</div>
 			</div>
 
 			{view === "markets-list" && (
@@ -227,6 +268,10 @@ export default function Admin() {
 					}}
 				/>
 			)}
+
+			{view === "series-list" && <ListSeries />}
+
+			{view === "series-add" && <AddSeries />}
 		</div>
 	);
 }
