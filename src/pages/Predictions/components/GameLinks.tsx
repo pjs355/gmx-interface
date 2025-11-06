@@ -121,9 +121,16 @@ export default function GameLinks({
 			});
 		});
 
-		return tagsWithActiveMarkets.sort((a, b) =>
-			a.label.localeCompare(b.label)
-		);
+		// Filter out ESPORTS tag when on esports page (it's already implied by the URL)
+		const finalTags = tagsWithActiveMarkets.filter((tag) => {
+			if (filterType === "esports") {
+				const normalizedLabel = normalizeTag(tag.label);
+				return normalizedLabel !== "ESPORTS";
+			}
+			return true;
+		});
+
+		return finalTags.sort((a, b) => a.label.localeCompare(b.label));
 	}, [umbrellas, loading, tagsLoading, filterType, tags]);
 
 	React.useEffect(() => {
