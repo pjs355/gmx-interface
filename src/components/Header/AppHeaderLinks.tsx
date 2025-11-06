@@ -160,25 +160,6 @@ export function AppHeaderLinks({
 				</div>
 				<div className="App-header-link-container">
 					<HeaderLink
-						qa="predictions"
-						to="/predictions"
-						showRedirectModal={showRedirectModal}
-						exact
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/predictions"
-						}
-						onClick={() => {
-							// Dispatch event to reset game filter on predictions page
-							window.dispatchEvent(
-								new CustomEvent("resetGameFilter")
-							);
-						}}
-					>
-						Predictions
-					</HeaderLink>
-				</div>
-				<div className="App-header-link-container">
-					<HeaderLink
 						qa="esports"
 						to="/predictions/esports"
 						showRedirectModal={showRedirectModal}

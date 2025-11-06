@@ -21,6 +21,33 @@
 		gap: 8px;
 	}
 
+	&-header {
+		display: grid;
+		grid-template-columns: 2.5fr 1.2fr 1.2fr 1fr 1fr;
+		gap: 12px;
+		align-items: center;
+		padding: 12px;
+		font-weight: 600;
+		opacity: 0.8;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+		margin-bottom: 4px;
+
+		@media (max-width: 768px) {
+			display: none;
+		}
+
+		&-username {
+			// Username column
+		}
+
+		&-return,
+		&-cost,
+		&-trades,
+		&-markets {
+			text-align: right;
+		}
+	}
+
 	&-entry {
 		display: grid;
 		grid-template-columns: 2.5fr 1.2fr 1.2fr 1fr 1fr;
@@ -91,6 +118,14 @@
 	}
 
 	&-return {
+		&.positive {
+			color: #22c55e; // Green for positive
+		}
+
+		&.negative {
+			color: #ef4444; // Red for negative
+		}
+
 		@media (max-width: 768px) {
 			grid-area: return;
 			font-size: 18px;

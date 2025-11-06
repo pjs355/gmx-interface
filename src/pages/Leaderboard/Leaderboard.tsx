@@ -106,9 +106,22 @@ export default function Leaderboard() {
 			{error && <div className="Leaderboard-error">{error}</div>}
 			{!loading && !error && (
 				<div className="Leaderboard-list">
+					{/* Desktop Headers */}
+					<div className="Leaderboard-header">
+						<div className="Leaderboard-header-username">
+							Username
+						</div>
+						<div className="Leaderboard-header-return">P&L</div>
+						<div className="Leaderboard-header-cost">Volume</div>
+						<div className="Leaderboard-header-trades">Trades</div>
+						<div className="Leaderboard-header-markets">
+							Markets
+						</div>
+					</div>
 					{data.map((row, idx) => {
 						const position = idx + 1;
 						const rankIcon = getRankIcon(position);
+						const isPositive = row.totalReturnUSD >= 0;
 
 						return (
 							<div
@@ -137,7 +150,11 @@ export default function Leaderboard() {
 											  )}...${row.wallet.slice(-4)}`}
 									</div>
 								</div>
-								<div className="Leaderboard-return">
+								<div
+									className={`Leaderboard-return ${
+										isPositive ? "positive" : "negative"
+									}`}
+								>
 									<span>{row.totalReturnText}</span>
 								</div>
 								<div className="Leaderboard-cost">
