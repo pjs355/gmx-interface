@@ -3,12 +3,88 @@ import React from "react";
 export default function Prizes() {
 	return (
 		<div style={{ padding: 24, color: "white" }}>
-			<h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8 }}>
-				Prizes
-			</h1>
-			<p style={{ opacity: 0.85, marginBottom: 24 }}>
-				Compete, climb the leaderboard, and win awesome prizes!
-			</p>
+			{/* Hero Section with Nintendo Switch */}
+			<div
+				style={{
+					display: "flex",
+					flexDirection: "column",
+					alignItems: "center",
+					justifyContent: "center",
+					textAlign: "center",
+					marginBottom: 60,
+				}}
+			>
+				{/* Image Container with Overlay Text */}
+				<div
+					style={{
+						position: "relative",
+						width: "100%",
+						maxWidth: "800px",
+						marginBottom: 40,
+					}}
+				>
+					{/* Placeholder Image - Replace with actual Nintendo Switch image */}
+					<div
+						style={{
+							width: "100%",
+							height: "500px",
+							background:
+								"linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+							borderRadius: "20px",
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							position: "relative",
+							overflow: "hidden",
+							boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+						}}
+					>
+						{/* Placeholder for Nintendo Switch Image */}
+						<div
+							style={{
+								fontSize: 24,
+								opacity: 0.3,
+								fontWeight: 600,
+							}}
+						>
+							Nintendo Switch Image Placeholder
+						</div>
+
+						{/* Overlay Text */}
+						<h1
+							style={{
+								position: "absolute",
+								top: "50%",
+								left: "50%",
+								transform: "translate(-50%, -50%)",
+								fontSize: "72px",
+								fontWeight: 900,
+								margin: 0,
+								textShadow: "0 4px 20px rgba(0,0,0,0.8)",
+								lineHeight: 1.2,
+								zIndex: 10,
+							}}
+						>
+							Win a Nintendo Switch 2
+						</h1>
+					</div>
+				</div>
+
+				{/* Subtitle Text */}
+				<p
+					style={{
+						fontSize: "32px",
+						fontWeight: 600,
+						maxWidth: "800px",
+						lineHeight: 1.4,
+						margin: 0,
+						opacity: 0.95,
+					}}
+				>
+					Trade your favorite game predictions for a chance to win a
+					Nintendo Switch. Absolutely free to play.
+				</p>
+			</div>
 
 			<div style={{ display: "grid", gap: 20 }}>
 				{/* Grand Prize */}
