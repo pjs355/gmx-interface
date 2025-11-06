@@ -4,7 +4,7 @@ import { tagService, type Tag } from "@/services/api/tagService";
 
 export type QuestionEntry = {
 	displayName: string;
-	tags: string[]; // Array of tag IDs
+	tagIds: string[]; // Array of tag ObjectIds
 	yesColor: string;
 	noColor: string;
 };
@@ -63,26 +63,26 @@ export default function MarketQuestions({
 	function toggleTagForQuestion(index: number, tagId: string) {
 		const updated = questions.map((q, i) => {
 			if (i !== index) return q;
-			const has = q.tags.includes(tagId);
+			const has = q.tagIds.includes(tagId);
 			return {
 				...q,
-				tags: has
-					? q.tags.filter((t) => t !== tagId)
-					: [...q.tags, tagId],
+				tagIds: has
+					? q.tagIds.filter((t) => t !== tagId)
+					: [...q.tagIds, tagId],
 			};
 		});
 		onQuestionsChange(updated);
 	}
 
 	function addQuestionEntry() {
-		const lastQuestionTags =
-			questions.length > 0 ? questions[questions.length - 1].tags : [];
+		const lastQuestionTagIds =
+			questions.length > 0 ? questions[questions.length - 1].tagIds : [];
 
 		onQuestionsChange([
 			...questions,
 			{
 				displayName: "",
-				tags: [...lastQuestionTags],
+				tagIds: [...lastQuestionTagIds],
 				yesColor: "#22c55e",
 				noColor: "#ef4444",
 			},
@@ -233,7 +233,7 @@ export default function MarketQuestions({
 									</div>
 								) : (
 									availableTags.map((tag) => {
-										const isSelected = q.tags.includes(
+										const isSelected = q.tagIds.includes(
 											tag._id
 										);
 										return (

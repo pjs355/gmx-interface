@@ -6,16 +6,22 @@ interface TwitchEmbedProps {
 }
 
 export function TwitchEmbed({ channel, height = "480" }: TwitchEmbedProps) {
+	// Clean the channel name - trim whitespace
+	const channelName = channel.trim();
+
 	const hostname = window.location.hostname;
 
 	// Build parent parameters - Twitch requires all possible parent domains
-	const parents = [hostname];
-	if (hostname === "localhost") {
+	const parents: string[] = [];
+	if (hostname === "localhost" || hostname === "127.0.0.1") {
+		parents.push("localhost");
 		parents.push("127.0.0.1");
+	} else {
+		parents.push(hostname);
 	}
 
 	const parentParams = parents.map((p) => `parent=${p}`).join("&");
-	const embedUrl = `https://embed.twitch.tv/embed/v1.html?channel=${channel}&${parentParams}&autoplay=false&muted=false`;
+	const embedUrl = `https://player.twitch.tv/?channel=${channelName}&${parentParams}&autoplay=true&muted=false&controls=false`;
 
 	return (
 		<div className="twitch-embed-container">

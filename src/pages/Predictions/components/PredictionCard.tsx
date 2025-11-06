@@ -8,7 +8,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import {
 	resolveUmbrellaBannerById,
 	getAlternativeImageUrls,
-} from "../utils/umbrellaBanners";
+} from "@/helpers/umbrellaBanners";
 
 interface PredictionCardProps {
 	umbrella: Umbrella;

@@ -1,19 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { PredictionCard } from "./components/PredictionCard";
 import { LoadingState } from "./components/LoadingState";
-import type { Umbrella } from "lib/umbrellaDataService";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./Predictions.scss";
-import ImageBanner from "./ImageBanner";
-import GameLinks from "./GameLinks";
-import { resolveUmbrellaBannerById } from "./utils/umbrellaBanners";
+import GameLinks from "./components/GameLinks";
+import { Search } from "./components/Search/Search";
 
 export default function Predictions() {
 	const navigate = useNavigate();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [imagesReady, setImagesReady] = useState(false);
+	const [searchActive, setSearchActive] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [searchResults, setSearchResults] = useState<Umbrella[]>([]);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -33,6 +36,7 @@ export default function Predictions() {
 		singleMarketOrderbooks,
 		singleMarketQuestions,
 		multiMarketData,
+		tags,
 	} = usePredictionData();
 
 	const normalizeTag = (value: string) =>
@@ -43,7 +47,39 @@ export default function Predictions() {
 			.replace(/[^A-Z0-9]+/g, "_")
 			.replace(/^_+|_+$/g, "");
 
+	const handleSearchActive = useCallback(
+		async (active: boolean, query: string) => {
+			if (!active) {
+				setSearchActive(false);
+				setSearchQuery("");
+				setSearchResults([]);
+				return;
+			}
+
+			try {
+				const baseUrl = getPredictionApiBaseUrl();
+				const response = await fetch(
+					`${baseUrl}/umbrellas/search?q=${encodeURIComponent(query)}`
+				);
+				if (!response.ok) throw new Error("Search failed");
+
+				const data = await response.json();
+				setSearchResults(data.data || []);
+				setSearchQuery(query);
+				setSearchActive(true);
+			} catch (error) {
+				console.error("error", error);
+			}
+		},
+		[]
+	);
+
 	const filteredUmbrellas = React.useMemo(() => {
+		// If search is active, use search results instead
+		if (searchActive && searchResults.length > 0) {
+			return searchResults;
+		}
+
 		// First filter out inactive umbrellas
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			return (umbrella as any).active === true;
@@ -51,20 +87,26 @@ export default function Predictions() {
 
 		if (!selectedGame) return activeUmbrellas;
 
-		const normalizedSelected = normalizeTag(selectedGame);
+		// Find the selected tag by label
+		const selectedTag = tags.find((t) => t.label === selectedGame);
+		if (!selectedTag) return activeUmbrellas;
+
 		return activeUmbrellas.filter((umbrella) => {
 			const children = (umbrella as any).children as
 				| Array<any>
 				| undefined;
 			if (!children || children.length === 0) return false;
 			return children.some((q) => {
-				const tags: string[] | undefined = (q &&
-					(q as any).tags) as any;
-				if (!tags || tags.length === 0) return false;
-				return tags.some((t) => normalizeTag(t) === normalizedSelected);
+				const tagIds: string[] | undefined = (q &&
+					(q as any).tagIds) as any;
+				// MUST have tagIds array (skip questions with legacy tags only)
+				if (!Array.isArray(tagIds) || tagIds.length === 0) {
+					return false;
+				}
+				return tagIds.includes(selectedTag._id);
 			});
 		});
-	}, [umbrellas, selectedGame]);
+	}, [umbrellas, selectedGame, tags, searchActive, searchResults]);
 
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
@@ -110,13 +152,13 @@ export default function Predictions() {
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
-	// Preload all banner images
+	// Preload banner images only for umbrellas being displayed
 	useEffect(() => {
-		if (loading || umbrellas.length === 0) return;
+		if (loading || filteredUmbrellas.length === 0) return;
 
-		const imageUrls = umbrellas
-			.map((u) => u.image || resolveUmbrellaBannerById(u._id))
-			.filter(Boolean);
+		// Only preload if umbrella has an explicit image URL set
+		// Don't speculatively try Firebase URLs that might 404
+		const imageUrls = filteredUmbrellas.map((u) => u.image).filter(Boolean);
 
 		if (imageUrls.length === 0) {
 			setImagesReady(true);
@@ -150,19 +192,24 @@ export default function Predictions() {
 		}, 3000);
 
 		return () => clearTimeout(timeout);
-	}, [loading, umbrellas]);
+	}, [loading, filteredUmbrellas]);
 
 	const handleRetry = () => {
 		window.location.reload();
 	};
 
 	if (loading || error || !imagesReady) {
-		return <LoadingState error={error} onRetry={handleRetry} />;
+		return <LoadingState error={error ?? null} onRetry={handleRetry} />;
 	}
 
 	return (
 		<div className="predictions-page page-layout">
 			{/** <ImageBanner /> */}
+			<Search
+				onSearchActive={handleSearchActive}
+				searchResults={searchResults}
+				activeQuery={searchQuery}
+			/>
 			<GameLinks
 				selectedGame={selectedGame}
 				onGameSelect={setSelectedGame}

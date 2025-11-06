@@ -31,6 +31,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	className = "",
 }) => {
 	const [timeRange, setTimeRange] = useState<TimeRange>("1d");
+
 	// Resolve question id from prop or activeMarket first
 	const effectiveQuestionId = useMemo(
 		() =>
@@ -86,6 +87,40 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 	const yesTeamColor: string = (activeMarket as any)?.yesColor || "#8b5cf6";
 	const noTeamColor: string = (activeMarket as any)?.noColor || "#3b82f6";
+
+	// Calculate data coverage for each time range
+	const dataSpan = useMemo(() => {
+		if (chartData.length < 2) return 0;
+		const timestamps = chartData
+			.map((d) => d.timestamp)
+			.filter((t) => t !== null && t !== undefined) as number[];
+		if (timestamps.length < 2) return 0;
+		const oldest = Math.min(...timestamps);
+		const newest = Math.max(...timestamps);
+		return newest - oldest; // in seconds
+	}, [chartData]);
+
+	// Determine which time ranges should be visible based on data coverage
+	const availableTimeRanges = useMemo(() => {
+		return TIME_RANGES.filter((range) => {
+			// Always show 1H and 1D
+			if (range.key === "1h" || range.key === "1d") return true;
+
+			// For 1W, require at least 75% coverage (5.25 days)
+			if (range.key === "1w") {
+				const requiredSeconds = range.seconds * 0.75; // 75% of 7 days
+				return dataSpan >= requiredSeconds;
+			}
+
+			// For 1M, require at least 75% coverage (22.5 days)
+			if (range.key === "1m") {
+				const requiredSeconds = range.seconds * 0.75; // 75% of 30 days
+				return dataSpan >= requiredSeconds;
+			}
+
+			return true;
+		});
+	}, [dataSpan]);
 
 	// Remove container readiness check - charts should load immediately
 
@@ -263,11 +298,14 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 							? 240
 							: 300
 					}
+					timeRangeSeconds={
+						TIME_RANGES.find((r) => r.key === timeRange)?.seconds
+					}
 				/>
 
 				{/* Time Range Selector - Bottom Right */}
 				<div className="time-range-selector bottom-right">
-					{TIME_RANGES.map((range) => (
+					{availableTimeRanges.map((range) => (
 						<button
 							key={range.key}
 							className={`time-range-btn ${

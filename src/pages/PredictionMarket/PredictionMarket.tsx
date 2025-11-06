@@ -4,14 +4,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMedia } from "react-use";
 import Button from "components/Button/Button";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { Umbrella } from "@/services/api/umbrellaDataService";
+import {
+	Umbrella,
+	umbrellaDataService,
+} from "@/services/api/umbrellaDataService";
 import { getPredictionWebSocketUrl } from "@/config/predictionApiBase";
 import { usePredictionData } from "context/PredictionDataContext";
 import { MarketPanels } from "./MarketPanels";
 import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
-import "../PredictionMarket.scss";
-import { PredictionCurtainProvider } from "../components/PredictionMarketTradeBox/PredictionCurtain";
+import "./PredictionMarket.scss";
+import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -56,6 +59,7 @@ function PredictionMarketContent() {
 		refreshOrderbook,
 		allBooksPreview,
 		loading: contextLoading,
+		refresh: refreshContext,
 	} = usePredictionData();
 	// Removed tradeExecutionService - not used in this component
 
@@ -77,14 +81,6 @@ function PredictionMarketContent() {
 		}
 
 		setUmbrella(umbrellaFromContext);
-		if (!hasLogged.current.umbrella) {
-			try {
-				console.groupCollapsed("🧩 Umbrella (PredictionMarket page)");
-				console.log(umbrellaFromContext);
-				console.groupEnd();
-			} catch {}
-			hasLogged.current.umbrella = true;
-		}
 		const qs = getQuestionsForUmbrella(umbrellaFromContext._id);
 		if (!qs || qs.length === 0) {
 			// Don't redirect if context is still loading - data might not be fetched yet
@@ -255,6 +251,30 @@ function PredictionMarketContent() {
 			});
 		};
 	}, [umbrella?._id, questions.length]);
+
+	// Poll for THIS umbrella's updates every 60 seconds (e.g., twitchEnabled toggled by cron)
+	useEffect(() => {
+		if (!umbrella?._id) return;
+
+		const interval = setInterval(async () => {
+			try {
+				// Fetch only this specific umbrella using umbrellaDataService
+				const updatedUmbrella =
+					await umbrellaDataService.fetchUmbrellaById(umbrella._id);
+				if (updatedUmbrella) {
+					// Update local umbrella state with fresh data
+					setUmbrella((prev) => ({
+						...prev,
+						...updatedUmbrella,
+					}));
+				}
+			} catch (err) {
+				console.error("Error polling umbrella:", err);
+			}
+		}, 60000); // 60 seconds
+
+		return () => clearInterval(interval);
+	}, [umbrella?._id]);
 
 	// Mobile-only: ensure umbrella title fits within 3 lines by reducing font size as needed
 	useEffect(() => {

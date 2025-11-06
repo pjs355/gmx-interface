@@ -28,7 +28,7 @@ type QuestionDetails = {
 	creationTxHash?: string;
 	yesColor?: string;
 	noColor?: string;
-	tags?: string[];
+	tagIds?: string[]; // Array of tag ObjectIds
 };
 
 export default function EditMarket({
@@ -215,12 +215,12 @@ export default function EditMarket({
 
 	function toggleTag(tagId: string) {
 		if (!details) return;
-		const current = Array.isArray(details.tags) ? details.tags : [];
+		const current = Array.isArray(details.tagIds) ? details.tagIds : [];
 		const exists = current.includes(tagId);
 		const next = exists
 			? current.filter((t) => t !== tagId)
 			: [...current, tagId];
-		setDetails({ ...details, tags: next });
+		setDetails({ ...details, tagIds: next });
 	}
 
 	async function saveQuestion() {
@@ -239,7 +239,9 @@ export default function EditMarket({
 				displayName: details.displayName || undefined,
 				yesColor: details.yesColor || undefined,
 				noColor: details.noColor || undefined,
-				tags: Array.isArray(details.tags) ? details.tags : undefined,
+				tagIds: Array.isArray(details.tagIds)
+					? details.tagIds
+					: undefined,
 			};
 			const base = getPredictionApiBaseUrl();
 			const resp = await fetch(`${base}/questions/${id}`, {
@@ -501,6 +503,7 @@ export default function EditMarket({
 									ref={umbEndRef}
 									type="datetime-local"
 									value={umbEndDate}
+									min={umbEventDate || undefined}
 									onChange={(e) =>
 										setUmbEndDate(e.target.value)
 									}
@@ -694,8 +697,10 @@ export default function EditMarket({
 									) : (
 										availableTags.map((tag) => {
 											const selected =
-												Array.isArray(details.tags) &&
-												details.tags.includes(tag._id);
+												Array.isArray(details.tagIds) &&
+												details.tagIds.includes(
+													tag._id
+												);
 											return (
 												<button
 													type="button"

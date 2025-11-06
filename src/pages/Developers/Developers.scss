@@ -1,0 +1,173 @@
+.developers-container {
+	padding: 24px;
+	color: white;
+}
+
+.developers-unauthenticated {
+	margin-top: 16px;
+}
+
+.developers-keys-section {
+	margin-top: 16px;
+}
+
+.developers-actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin-bottom: 8px;
+}
+
+.developers-button {
+	padding: 6px 10px;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+	color: white;
+	cursor: pointer;
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+}
+
+.developers-error {
+	color: #ff6b6b;
+}
+
+.developers-keys-grid {
+	display: grid;
+	gap: 8px;
+}
+
+.developers-key-card {
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 8px;
+	padding: 12px;
+	background: rgba(255, 255, 255, 0.03);
+	display: grid;
+	grid-template-columns: 2fr 1fr 1fr auto;
+	gap: 12px;
+}
+
+.developers-key-info {
+	font-weight: 600;
+}
+
+.developers-key-meta {
+	font-size: 12px;
+	opacity: 0.8;
+}
+
+.developers-no-keys {
+	opacity: 0.8;
+}
+
+.developers-create-modal {
+	margin-top: 24px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 8px;
+	padding: 16px;
+}
+
+.developers-warning {
+	margin: 8px 0;
+	font-size: 13px;
+	opacity: 0.9;
+	line-height: 1.5;
+}
+
+.developers-instruction {
+	margin: 8px 0;
+	font-size: 14px;
+	opacity: 0.9;
+}
+
+.developers-passphrase-label {
+	display: grid;
+	gap: 6px;
+	max-width: 640px;
+}
+
+.developers-input {
+	padding: 8px;
+	color: cyan;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+}
+
+.developers-button-group {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.developers-error-message {
+	color: #ff6b6b;
+	margin-top: 8px;
+}
+
+.developers-created-grid {
+	display: grid;
+	gap: 8px;
+	max-width: 720px;
+}
+
+.developers-download-section {
+	display: grid;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.developers-saved-checkbox {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin-top: 12px;
+}
+
+.developers-close-section {
+	margin-top: 8px;
+}
+
+.developers-test-section {
+	margin-top: 24px;
+}
+
+.developers-test-note {
+	font-size: 12px;
+	opacity: 0.8;
+	margin-top: 8px;
+}
+
+// ReadOnlyRow Component
+.readonly-row {
+	display: grid;
+	grid-template-columns: 160px 1fr auto;
+	align-items: center;
+	gap: 8px;
+}
+
+.readonly-label {
+	opacity: 0.9;
+}
+
+.readonly-input {
+	padding: 8px;
+	color: cyan;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+}
+
+.readonly-copy-button {
+	padding: 6px 10px;
+	border: 1px solid white;
+	border-radius: 6px;
+	background: transparent;
+	color: white;
+	cursor: pointer;
+}
+

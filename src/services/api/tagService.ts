@@ -4,10 +4,7 @@ export interface Tag {
 	_id: string;
 	label: string;
 	slug: string;
-	forceShow?: boolean;
-	forceHide?: boolean;
-	isCarousel?: boolean;
-	publishedAt?: string;
+	imageUrl?: string;
 	createdAt: string;
 	updatedAt: string;
 }

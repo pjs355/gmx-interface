@@ -11,6 +11,7 @@ import {
 	listApiKeysBySession,
 } from "@/services/lvlup/api";
 import type { L2Secrets } from "@/services/lvlup/hmac";
+import "./Developers.scss";
 
 export default function Developers() {
 	const { authenticated, getAccessToken } = usePrivy();
@@ -158,85 +159,53 @@ export default function Developers() {
 	}
 
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div className="developers-container">
 			<h1>Developers</h1>
 			{!authenticated && (
-				<div>Please sign in with Privy to manage API keys.</div>
+				<div className="developers-unauthenticated">
+					Please sign in with Privy to manage API keys.
+				</div>
 			)}
 
-			<div style={{ marginTop: 16 }}>
+			<div className="developers-keys-section">
 				<h2>Your API Keys</h2>
-				<div
-					style={{
-						display: "flex",
-						gap: 8,
-						alignItems: "center",
-						marginBottom: 8,
-					}}
-				>
+				<div className="developers-actions">
 					<button
 						onClick={() => setShowCreate(true)}
-						style={{
-							padding: "6px 10px",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-							color: "white",
-						}}
+						className="developers-button"
 					>
 						Create API Key
 					</button>
 					<button
 						onClick={loadKeys}
 						disabled={!l2Auth || loading}
-						style={{
-							padding: "6px 10px",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-							color: "white",
-						}}
+						className="developers-button"
 					>
 						Refresh
 					</button>
-					{error && <span style={{ color: "#ff6b6b" }}>{error}</span>}
+					{error && <span className="developers-error">{error}</span>}
 				</div>
-				<div style={{ display: "grid", gap: 8 }}>
+				<div className="developers-keys-grid">
 					{keys.map((k) => (
-						<div
-							key={k.key}
-							style={{
-								border: "1px solid rgba(255,255,255,0.2)",
-								borderRadius: 8,
-								padding: 12,
-								background: "rgba(255,255,255,0.03)",
-								display: "grid",
-								gridTemplateColumns: "2fr 1fr 1fr auto",
-								gap: 12,
-							}}
-						>
+						<div key={k.key} className="developers-key-card">
 							<div>
-								<div style={{ fontWeight: 600 }}>{k.key}</div>
-								<div style={{ fontSize: 12, opacity: 0.8 }}>
+								<div className="developers-key-info">
+									{k.key}
+								</div>
+								<div className="developers-key-meta">
 									disabled: {String(k.disabled ?? false)}
 								</div>
 							</div>
-							<div style={{ fontSize: 12, opacity: 0.8 }}>
+							<div className="developers-key-meta">
 								created: {k.createdAt}
 							</div>
-							<div style={{ fontSize: 12, opacity: 0.8 }}>
+							<div className="developers-key-meta">
 								last used: {k.lastUsedAt || "—"}
 							</div>
 							<div>
 								<button
 									onClick={() => onRevoke(k.key)}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-										color: "white",
-									}}
+									className="developers-button"
 								>
 									Revoke
 								</button>
@@ -244,122 +213,66 @@ export default function Developers() {
 						</div>
 					))}
 					{keys.length === 0 && (
-						<div style={{ opacity: 0.8 }}>No keys yet.</div>
+						<div className="developers-no-keys">No keys yet.</div>
 					)}
 				</div>
 			</div>
 
 			{showCreate && (
-				<div
-					style={{
-						marginTop: 24,
-						border: "1px solid rgba(255,255,255,0.2)",
-						borderRadius: 8,
-						padding: 16,
-					}}
-				>
+				<div className="developers-create-modal">
 					<h3>Create API Key</h3>
 					{!created && (
 						<>
-							<div
-								style={{
-									margin: "8px 0",
-									fontSize: 13,
-									opacity: 0.9,
-									lineHeight: 1.5,
-								}}
-							>
+							<div className="developers-warning">
 								The wallet used to create an API key must be
 								used for authenticated API actions. Operations
 								performed against the LVLUP API require access
-								to that wallet’s private key. The embedded Privy
+								to that wallet's private key. The embedded Privy
 								wallet shown in the UI cannot sign server-side
 								operations on your behalf. Verify you are
 								connected to the intended wallet before
 								generating a key. You can view your linked
 								accounts in the profile sidebar.
 							</div>
-							<div
-								style={{
-									margin: "8px 0",
-									fontSize: 14,
-									opacity: 0.9,
-								}}
-							>
+							<div className="developers-instruction">
 								Store your passphrase and secret in your .env.
 								Shown once.
 							</div>
-							<label
-								style={{
-									display: "grid",
-									gap: 6,
-									maxWidth: 640,
-								}}
-							>
+							<label className="developers-passphrase-label">
 								<span>Passphrase</span>
 								<input
 									value={passphrase}
 									onChange={(e) =>
 										setPassphrase(e.target.value)
 									}
-									style={{
-										padding: 8,
-										color: "cyan",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-									}}
+									className="developers-input"
 								/>
 							</label>
-							<div
-								style={{
-									display: "flex",
-									gap: 8,
-									marginTop: 12,
-								}}
-							>
+							<div className="developers-button-group">
 								<button
 									onClick={() =>
 										setPassphrase(generatePassphrase())
 									}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-										color: "white",
-									}}
+									className="developers-button"
 								>
 									Regenerate
 								</button>
 								<button
 									onClick={onCreate}
 									disabled={!account || loading}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-										color: "white",
-									}}
+									className="developers-button"
 								>
 									Create
 								</button>
 								<button
 									onClick={() => setShowCreate(false)}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-										color: "white",
-									}}
+									className="developers-button"
 								>
 									Close
 								</button>
 							</div>
 							{error && (
-								<div style={{ color: "#ff6b6b", marginTop: 8 }}>
+								<div className="developers-error-message">
 									{error}
 								</div>
 							)}
@@ -367,13 +280,7 @@ export default function Developers() {
 					)}
 					{created && (
 						<>
-							<div
-								style={{
-									display: "grid",
-									gap: 8,
-									maxWidth: 720,
-								}}
-							>
+							<div className="developers-created-grid">
 								<ReadOnlyRow
 									label="API Key"
 									value={created.key}
@@ -389,13 +296,7 @@ export default function Developers() {
 									secret
 								/>
 							</div>
-							<div
-								style={{
-									display: "grid",
-									gap: 8,
-									marginTop: 12,
-								}}
-							>
+							<div className="developers-download-section">
 								<EnvDownload
 									keyVal={created.key}
 									secret={created.secret}
@@ -403,14 +304,7 @@ export default function Developers() {
 									address={account!}
 								/>
 							</div>
-							<label
-								style={{
-									display: "flex",
-									gap: 8,
-									alignItems: "center",
-									marginTop: 12,
-								}}
-							>
+							<label className="developers-saved-checkbox">
 								<input
 									type="checkbox"
 									checked={iSaved}
@@ -420,17 +314,11 @@ export default function Developers() {
 								/>
 								<span>I saved it</span>
 							</label>
-							<div style={{ marginTop: 8 }}>
+							<div className="developers-close-section">
 								<button
 									onClick={() => setShowCreate(false)}
 									disabled={!iSaved}
-									style={{
-										padding: "6px 10px",
-										border: "1px solid white",
-										borderRadius: 6,
-										background: "transparent",
-										color: "white",
-									}}
+									className="developers-button"
 								>
 									Close
 								</button>
@@ -441,21 +329,12 @@ export default function Developers() {
 			)}
 
 			{created && (
-				<div style={{ marginTop: 24 }}>
+				<div className="developers-test-section">
 					<h3>Test L2 (Me)</h3>
-					<button
-						onClick={loadKeys}
-						style={{
-							padding: "6px 10px",
-							border: "1px solid white",
-							borderRadius: 6,
-							background: "transparent",
-							color: "white",
-						}}
-					>
+					<button onClick={loadKeys} className="developers-button">
 						Call /api/auth/me
 					</button>
-					<div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>
+					<div className="developers-test-note">
 						Example: send LVLUP headers with HMAC(LVLUP_API_SECRET,
 						method+path+timestamp)
 					</div>
@@ -478,39 +357,16 @@ function ReadOnlyRow({
 	const safe = value ?? "";
 	const display = secret ? "•".repeat(Math.min(safe.length, 16)) : safe;
 	return (
-		<div
-			style={{
-				display: "grid",
-				gridTemplateColumns: "160px 1fr auto",
-				alignItems: "center",
-				gap: 8,
-			}}
-		>
-			<div style={{ opacity: 0.9 }}>{label}</div>
-			<input
-				readOnly
-				value={display}
-				style={{
-					padding: 8,
-					color: "cyan",
-					border: "1px solid white",
-					borderRadius: 6,
-					background: "transparent",
-				}}
-			/>
+		<div className="readonly-row">
+			<div className="readonly-label">{label}</div>
+			<input readOnly value={display} className="readonly-input" />
 			<button
 				onClick={() => {
 					navigator.clipboard.writeText(safe);
 					setCopied(true);
 					setTimeout(() => setCopied(false), 1500);
 				}}
-				style={{
-					padding: "6px 10px",
-					border: "1px solid white",
-					borderRadius: 6,
-					background: "transparent",
-					color: "white",
-				}}
+				className="readonly-copy-button"
 			>
 				{copied ? "Copied" : "Copy"}
 			</button>
@@ -540,16 +396,7 @@ function EnvDownload({
 		URL.revokeObjectURL(url);
 	}
 	return (
-		<button
-			onClick={download}
-			style={{
-				padding: "6px 10px",
-				border: "1px solid white",
-				borderRadius: 6,
-				background: "transparent",
-				color: "white",
-			}}
-		>
+		<button onClick={download} className="developers-button">
 			Download .env
 		</button>
 	);
