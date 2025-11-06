@@ -1,207 +1,180 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import "./Prizes.scss";
-import nintendoSwitch2 from "@/assets/img/nintendo-switch-2.webp";
-import steam50 from "@/assets/game-logos/steam-50.jpg";
-import steam20 from "@/assets/game-logos/steam-20.jpg";
+import nintendoSwitch2 from "@/assets/img/Nintendo-Switch-2.png";
+import nintendoSwitch2Box from "@/assets/img/Nintendo-Switch-2-box.jpeg";
+import steam50 from "@/assets/img/steam-50.png";
+import steam20 from "@/assets/img/steam-20.png";
 
 export default function Prizes() {
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div className="prizes-page-container">
 			{/* Hero Section with Nintendo Switch */}
-			<div
-				style={{
-					display: "flex",
-					flexDirection: "column",
-					alignItems: "center",
-					justifyContent: "center",
-					textAlign: "center",
-					marginBottom: 60,
-				}}
-			>
-				{/* Image Container with Overlay Text */}
-				<div
-					style={{
-						position: "relative",
-						width: "100%",
-						maxWidth: "800px",
-						marginBottom: 40,
-					}}
-				>
-					{/* Placeholder Image - Replace with actual Nintendo Switch image */}
-					<div
-						style={{
-							width: "100%",
-							height: "500px",
-							background:
-								"linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-							borderRadius: "20px",
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							position: "relative",
-							overflow: "hidden",
-							boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-						}}
-					>
-						{/* Placeholder for Nintendo Switch Image */}
-						<div
-							style={{
-								fontSize: 24,
-								opacity: 0.3,
-								fontWeight: 600,
-							}}
-						>
-							Nintendo Switch Image Placeholder
-						</div>
+			<div className="prizes-hero-section">
+				{/* Large "Win" Text - Behind the image */}
+				<h1 className="prizes-win-text">
+					Win
+				</h1>
 
-						{/* Overlay Text */}
-						<h1
-							style={{
-								position: "absolute",
-								top: "50%",
-								left: "50%",
-								transform: "translate(-50%, -50%)",
-								fontSize: "72px",
-								fontWeight: 900,
-								margin: 0,
-								textShadow: "0 4px 20px rgba(0,0,0,0.8)",
-								lineHeight: 1.2,
-								zIndex: 10,
-							}}
-						>
-							Win a Nintendo Switch 2
-						</h1>
+				{/* Nintendo Switch Image Container */}
+				<div className="prizes-image-container">
+					{/* Nintendo Switch Image */}
+					<div className="prizes-image-wrapper">
+						<img
+							src={nintendoSwitch2}
+							alt="Nintendo Switch 2"
+							className="prizes-switch-image"
+						/>
 					</div>
 				</div>
 
 				{/* Subtitle Text */}
-				<p
-					style={{
-						fontSize: "32px",
-						fontWeight: 600,
-						maxWidth: "800px",
-						lineHeight: 1.4,
-						margin: 0,
-						opacity: 0.95,
-					}}
-				>
-					Trade your favorite game predictions for a chance to win a
-					Nintendo Switch. Absolutely free to play.
-				</p>
+				<div className="prizes-subtitle-container">
+					<p className="prizes-subtitle-text">
+						Trade your favorite predictions for a chance to win.
+						Ranking is based on profits made from trading.
+					</p>
+					<p className="prizes-subtitle-highlight">
+						Absolutely free to play. No real money involved.
+					</p>
+				</div>
 			</div>
 
-			<div style={{ display: "grid", gap: 20 }}>
-				{/* Grand Prize */}
+			<div className="prizes-grid">
+				{/* Grand Prize Card */}
 				<div
 					style={{
-						display: "grid",
-						gridTemplateColumns: "120px 1fr",
-						gap: 16,
-						alignItems: "center",
-						padding: 16,
-						border: "1px solid rgba(255,255,255,0.15)",
-						borderRadius: 12,
-						background:
-							"linear-gradient(180deg, rgba(146,133,243,0.15), rgba(0,0,0,0.4))",
+						width: "100%",
+						border: "2px solid #FFD700",
+						borderRadius: 16,
+						overflow: "hidden",
+						background: "#000000",
 					}}
 				>
-					<div
-						style={{
-							width: 120,
-							height: 120,
-							borderRadius: 12,
-							overflow: "hidden",
-							background: "#111",
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							border: "1px solid rgba(255,255,255,0.12)",
-						}}
-					>
+					{/* Image */}
+					<div style={{ position: "relative", width: "100%" }}>
 						<img
-							src="https://www.nintendo.com/content/dam/noa/en_US/hardware/switch/nintendo-switch/console/console-blue-red.png"
-							alt="Nintendo Switch Console"
+							src={nintendoSwitch2Box}
+							alt="Nintendo Switch 2 Console"
 							style={{
 								width: "100%",
-								height: "100%",
+								aspectRatio: "1 / 1",
 								objectFit: "cover",
 							}}
 						/>
 					</div>
-					<div>
+					{/* Card Content */}
+					<div style={{ padding: 24, textAlign: "center" }}>
 						<div
 							style={{
-								fontSize: 20,
-								fontWeight: 800,
-								marginBottom: 6,
-							}}
-						>
-							Grand Prize
-						</div>
-						<div
-							style={{
-								fontSize: 28,
+								fontSize: 32,
 								fontWeight: 900,
-								color: "#c9c5ff",
+								color: "#FFD700",
 								letterSpacing: 0.5,
+								marginBottom: 12,
 							}}
 						>
 							Nintendo Switch 2
 						</div>
-						<div className="prize-description">
+						<div style={{ opacity: 0.85, fontSize: 16 }}>
 							1 winner. The ultimate portable console to level up
 							your game.
 						</div>
 					</div>
 				</div>
 
-				{/* Second Place */}
-				<div className="prize-card">
-					<div className="prize-image-wrapper">
+				{/* Second Place Card */}
+				<div
+					style={{
+						width: "100%",
+						border: "2px solid #C0C0C0",
+						borderRadius: 16,
+						overflow: "hidden",
+						background: "#000000",
+					}}
+				>
+					{/* Image */}
+					<div style={{ position: "relative", width: "100%" }}>
 						<img
 							src={steam50}
 							alt="$50 Steam Gift Card"
-							className="prize-image"
+							style={{
+								width: "100%",
+								aspectRatio: "1 / 1",
+								objectFit: "cover",
+							}}
 						/>
 					</div>
-					<div>
-						<div className="prize-rank">Second Place</div>
-						<div className="prize-name second">
+					{/* Card Content */}
+					<div style={{ padding: 24, textAlign: "center" }}>
+						<div
+							style={{
+								fontSize: 28,
+								fontWeight: 900,
+								color: "#C0C0C0",
+								marginBottom: 12,
+							}}
+						>
 							3 × $50 Steam Gift Card
 						</div>
-						<div className="prize-description">
+						<div style={{ opacity: 0.85, fontSize: 16 }}>
 							Three winners. Load up your library with the latest
 							hits.
 						</div>
 					</div>
 				</div>
 
-				{/* Third Place */}
-				<div className="prize-card">
-					<div className="prize-image-wrapper">
+				{/* Third Place Card */}
+				<div
+					style={{
+						width: "100%",
+						border: "2px solid #CD7F32",
+						borderRadius: 16,
+						overflow: "hidden",
+						background: "#000000",
+					}}
+				>
+					{/* Image */}
+					<div style={{ position: "relative", width: "100%" }}>
 						<img
 							src={steam20}
-							alt="$25 Steam Gift Card"
-							className="prize-image"
+							alt="$20 Steam Gift Card"
+							style={{
+								width: "100%",
+								aspectRatio: "1 / 1",
+								objectFit: "cover",
+							}}
 						/>
 					</div>
-					<div>
-						<div className="prize-rank">Third Place</div>
-						<div className="prize-name third">
+					{/* Card Content */}
+					<div style={{ padding: 24, textAlign: "center" }}>
+						<div
+							style={{
+								fontSize: 28,
+								fontWeight: 900,
+								color: "#CD7F32",
+								marginBottom: 12,
+							}}
+						>
 							5 × $20 Steam Gift Card
 						</div>
-						<div className="prize-description">
+						<div style={{ opacity: 0.85, fontSize: 16 }}>
 							Five winners. Grab DLCs, indies, or stash for a
 							sale.
 						</div>
 					</div>
 				</div>
+			</div>
 
-				<div className="prizes-disclaimer">
-					Prizes, eligibility, and distribution are subject to the
-					official rules. Prizes not affiliated with Nintendo or Valve
-					Corporation.
+			{/* Full Width Disclaimer Section */}
+			<div className="prizes-disclaimer-section">
+				<div className="prizes-disclaimer-content">
+					<div className="prizes-disclaimer-title">
+						OFFICIAL RULES & ELIGIBILITY
+					</div>
+					<div>
+						Participants must be 18 years of age or older and reside in a jurisdiction where participation is legally permitted. Prizes, eligibility criteria, and distribution methods are subject to official contest rules and regulations. Any user suspected of cheating, fraud, or tampering with the contest in any way will be immediately disqualified and ineligible to receive any prizes. In the event that a winner is unable to receive a physical prize due to geographic restrictions, legal limitations, or any other reason beyond their control, the winner will be provided with the equivalent cash value of the prize. This promotion is in no way sponsored, endorsed, administered by, or associated with Nintendo Co., Ltd., Valve Corporation, or any of their respective subsidiaries or affiliates. All trademarks and product names are the property of their respective owners.
+					</div>
 				</div>
 			</div>
 		</div>
