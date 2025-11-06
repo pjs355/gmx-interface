@@ -99,11 +99,8 @@ export default function GameLinks({
 			: activeUmbrellas;
 
 		// For each tag, check if any umbrella has a question with that tagId
-		// Only show tags that have images AND have active markets
+		// Only show tags that have active markets
 		const tagsWithActiveMarkets = tags.filter((tag) => {
-			// Skip tags without images
-			if (!tag.imageUrl) return false;
-
 			return typeFilteredUmbrellas.some((umbrella) => {
 				const children = (umbrella as any).children as
 					| Array<any>
@@ -182,13 +179,6 @@ export default function GameLinks({
 							}
 						}}
 					>
-						{tag.imageUrl && (
-							<img
-								src={tag.imageUrl}
-								alt={tag.label}
-								className="game-link-icon"
-							/>
-						)}
 						{tag.label}
 					</button>
 				))}

@@ -191,13 +191,12 @@
 	font-weight: 600;
 	font-size: 14px;
 	padding: 6px 10px;
-	border-radius: 0 9999px 9999px 0;
+	border-radius: 9999px;
 	border: 1px solid var(--color-slate-200, #333333);
 	background: transparent;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
-	gap: 8px;
 	transition: color 0.2s ease, background-color 0.2s ease,
 		border-color 0.2s ease;
 
@@ -214,12 +213,6 @@
 	}
 }
 
-.game-link-icon {
-	width: 32px;
-	height: 32px;
-	object-fit: contain;
-	border-radius: 4px;
-}
 
 .loading-message,
 .error-message,

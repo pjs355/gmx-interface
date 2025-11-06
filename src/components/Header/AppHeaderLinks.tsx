@@ -182,18 +182,6 @@ export function AppHeaderLinks({
 						Prizes
 					</HeaderLink>
 				</div>
-				<div className="App-header-link-container">
-					<HeaderLink
-						qa="prizes"
-						to="/prizes"
-						showRedirectModal={showRedirectModal}
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/prizes"
-						}
-					>
-						Prizes
-					</HeaderLink>
-				</div>
 				{active && (
 					<div className="App-header-link-container">
 						<HeaderLink
