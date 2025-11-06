@@ -205,11 +205,11 @@ export default function Predictions() {
 	return (
 		<div className="predictions-page page-layout">
 			{/** <ImageBanner /> */}
-			<Search
+			{/* <Search
 				onSearchActive={handleSearchActive}
 				searchResults={searchResults}
 				activeQuery={searchQuery}
-			/>
+			/> */}
 			<GameLinks
 				selectedGame={selectedGame}
 				onGameSelect={setSelectedGame}
