@@ -1,14 +1,40 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Trans } from "@lingui/macro";
 import Button from "components/Button/Button";
 import { SingleMarketActions } from "./SingleMarketActions";
 import { MultiMarketActions } from "./MultiMarketActions";
-import type { Umbrella } from "services/api/umbrellaDataService";
+import type { Umbrella, UmbrellaTeamMapping } from "services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import {
 	resolveUmbrellaBannerById,
 	getAlternativeImageUrls,
 } from "@/helpers/umbrellaBanners";
+import { resolveTeamLogo } from "@/config/team-map";
+
+const gameBannerModules = import.meta.glob<string>(
+	"../../../assets/game-banners/*",
+	{ eager: true, import: "default" }
+);
+
+const gameBannerMap: Record<string, string> = Object.entries(
+	gameBannerModules
+).reduce((acc, [path, url]) => {
+	const fileName = path.split("/").pop()?.replace(/\.[^.]+$/, "");
+	if (fileName && typeof url === "string") {
+		acc[fileName] = url;
+	}
+	return acc;
+}, {} as Record<string, string>);
+
+const normalizeGameName = (game?: string | null): string | null => {
+	if (!game) {
+		return null;
+	}
+	return game
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+};
 
 interface PredictionCardProps {
 	umbrella: Umbrella;
@@ -32,6 +58,31 @@ interface PredictionCardProps {
 	) => void;
 }
 
+const resolveTeamLogoUrl = (team: UmbrellaTeamMapping): string | undefined => {
+	if (team.logoUrl) {
+		return team.logoUrl;
+	}
+	if (team.shortCode) {
+		const resolved = resolveTeamLogo(team.shortCode);
+		if (resolved) {
+			return resolved;
+		}
+	}
+	if (team.slug) {
+		const resolved = resolveTeamLogo(team.slug);
+		if (resolved) {
+			return resolved;
+		}
+	}
+	if (team.displayName) {
+		const resolved = resolveTeamLogo(team.displayName);
+		if (resolved) {
+			return resolved;
+		}
+	}
+	return undefined;
+};
+
 export const PredictionCard: React.FC<PredictionCardProps> = ({
 	umbrella,
 	singleMarketOrderbooks,
@@ -45,19 +96,72 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const [currentImageIndex, setCurrentImageIndex] = useState(0);
 	const [imageUrls, setImageUrls] = useState<string[]>([]);
 
+	const sortedTeamMappings = useMemo(() => {
+		if (!Array.isArray(umbrella.teamMappings)) {
+			return [] as UmbrellaTeamMapping[];
+		}
+		return [...umbrella.teamMappings].slice(0, 2);
+	}, [umbrella.teamMappings]);
+
+	const teamLogos = useMemo(() => {
+		return sortedTeamMappings
+			.map((team) => {
+				const logoUrl = resolveTeamLogoUrl(team);
+				if (!logoUrl) {
+					return null;
+				}
+				return {
+					logoUrl,
+					displayName: team.displayName,
+					shortCode: team.shortCode,
+				};
+			})
+			.filter(Boolean) as Array<{
+				logoUrl: string;
+				displayName: string;
+				shortCode: string;
+			}>;
+	}, [sortedTeamMappings]);
+
 	// Set up image URLs when umbrella changes
 	useEffect(() => {
+		const urls: string[] = [];
+
 		if (umbrella.image) {
-			setImageUrls([umbrella.image]);
-		} else if (umbrella._id) {
-			const urls = getAlternativeImageUrls(umbrella._id);
-			setImageUrls(urls);
-		} else {
-			setImageUrls([]);
+			urls.push(umbrella.image);
 		}
+
+		const resolvedBanner = resolveUmbrellaBannerById(umbrella._id);
+		if (resolvedBanner) {
+			urls.push(resolvedBanner);
+		}
+
+		const normalizedGame = normalizeGameName(umbrella.game);
+		if (normalizedGame) {
+			const gameBanner = gameBannerMap[normalizedGame];
+			if (gameBanner) {
+				urls.push(gameBanner);
+			}
+		}
+
+		const alternativeUrls = getAlternativeImageUrls(umbrella._id);
+		if (Array.isArray(alternativeUrls) && alternativeUrls.length > 0) {
+			urls.push(...alternativeUrls);
+		}
+
+		const uniqueUrls = Array.from(new Set(urls.filter(Boolean))) as string[];
+		setImageUrls(uniqueUrls);
 		setCurrentImageIndex(0);
 		setImageError(false);
-	}, [umbrella._id, umbrella.image]);
+	}, [umbrella._id, umbrella.image, umbrella.game]);
+
+	const handleImageError = () => {
+		if (currentImageIndex < imageUrls.length - 1) {
+			setCurrentImageIndex((prev) => prev + 1);
+		} else {
+			setImageError(true);
+		}
+	};
 
 	const navigateToUmbrella = () => {
 		onNavigateToUmbrella(umbrella);
@@ -109,9 +213,10 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 	};
 
-	const bannerImageUrl =
-		umbrella.image || resolveUmbrellaBannerById(umbrella._id);
-	const shouldShowImage = bannerImageUrl && !imageError;
+	const bannerImageUrl = imageUrls[currentImageIndex];
+	const shouldShowImage = !!bannerImageUrl && !imageError;
+	const showTeamLogos = teamLogos.length >= 2;
+	const showPlaceholderIcon = !shouldShowImage && !showTeamLogos;
 
 	return (
 		<div key={umbrella._id} className="prediction-card">
@@ -122,11 +227,32 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 						src={bannerImageUrl as string}
 						alt={umbrella.displayName}
 						className="banner-image"
-						onError={() => setImageError(true)}
+						onError={handleImageError}
 					/>
 				) : (
 					<div className="banner-placeholder">
-						<span className="placeholder-text">🎮</span>
+						{showPlaceholderIcon && (
+							<span className="placeholder-text">🎮</span>
+						)}
+					</div>
+				)}
+				{showTeamLogos && (
+					<div className="banner-team-overlay">
+						<div className="banner-team">
+							<img
+								src={teamLogos[0].logoUrl}
+								alt={teamLogos[0].displayName}
+								className="banner-team-logo"
+							/>
+						</div>
+						<span className="banner-vs">VS</span>
+						<div className="banner-team">
+							<img
+								src={teamLogos[1].logoUrl}
+								alt={teamLogos[1].displayName}
+								className="banner-team-logo"
+							/>
+						</div>
 					</div>
 				)}
 			</div>

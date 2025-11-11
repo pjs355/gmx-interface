@@ -1,5 +1,4 @@
-import { t } from "@lingui/macro";
-import { Trans } from "@lingui/react";
+import { Trans, t } from "@lingui/macro";
 
 // Removed lib/legacy imports - not needed for prediction markets
 
@@ -23,14 +22,17 @@ function PageNotFound() {
 				<div className="page-not-found-container">
 					<div className="page-not-found">
 						<h2>
-							<Trans>Page not found</Trans>
+							<Trans id="pageNotFound.title">Page not found</Trans>
 						</h2>
 						<p className="go-back">
-							<Trans>
-								<span>Return to </span>
-								<a href={homeUrl}>Homepage</a> <span>or </span>{" "}
-								<a href={tradePageUrl}>Trade</a>
-							</Trans>
+						<Trans
+							id="pageNotFound.goBack"
+							components={{
+								homepage: <a href={homeUrl} />,
+								trade: <a href={tradePageUrl} />,
+							}}
+							defaults="Return to <homepage>Homepage</homepage> or <trade>Trade</trade>"
+						/>
 						</p>
 					</div>
 				</div>

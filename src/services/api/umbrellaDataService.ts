@@ -9,6 +9,18 @@ export interface UmbrellaQuestion {
 	marketId: string;
 }
 
+export interface UmbrellaTeamMapping {
+	teamId?: string;
+	displayName: string;
+	slug: string;
+	shortCode?: string;
+	pandaId?: number;
+	logoUrl?: string | null;
+	backgroundUrl?: string | null;
+	primaryColor?: string | null;
+	secondaryColor?: string | null;
+}
+
 export interface Umbrella {
 	_id: string;
 	displayName: string;
@@ -22,6 +34,7 @@ export interface Umbrella {
 	__v: number;
 	game?: string;
 	pandascore_matchId?: string;
+	teamMappings?: UmbrellaTeamMapping[];
 }
 
 interface UmbrellaApiResponse {

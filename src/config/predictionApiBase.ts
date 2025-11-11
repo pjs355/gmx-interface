@@ -1,9 +1,9 @@
 export function getPredictionApiBaseUrl(): string {
-	// const isLocal = window.location.hostname === "localhost";
+	const isLocal = window.location.hostname === "localhost";
 
-	// if (isLocal) {
-	// 	return "http://localhost:8080";
-	// }
+	if (isLocal) {
+		return "http://localhost:8080";
+	}
 	return "https://prediction-api-production.up.railway.app";
 }
 

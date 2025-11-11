@@ -271,11 +271,12 @@
 	width: 100%;
 	height: 120px;
 	border-radius: 12px 12px 0 0;
+	background: #1f2937;
 	overflow: hidden;
-	margin-bottom: 16px;
+	position: relative;
 }
 
-.banner-image {
+.prediction-banner img {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
@@ -289,6 +290,47 @@
 	align-items: center;
 	justify-content: center;
 	border: 2px dashed #333333;
+	padding: 12px;
+	box-sizing: border-box;
+}
+
+.banner-team-overlay {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	display: flex;
+	align-items: center;
+	gap: 20px;
+	padding: 0;
+	border-radius: 0;
+	background: none;
+	backdrop-filter: none;
+	box-shadow: none;
+}
+
+.banner-team {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	width: 72px;
+	height: 72px;
+}
+
+.banner-team-logo {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+}
+
+.banner-vs {
+	font-size: 18px;
+	font-weight: 700;
+	letter-spacing: 2px;
+	color: #f9fafb;
+	text-transform: uppercase;
 }
 
 .placeholder-text {
@@ -311,7 +353,7 @@
 	font-size: 20px;
 	font-weight: 600;
 	color: white;
-	margin: 0 0 8px 0;
+	margin: 12px 0 8px 0;
 	line-height: 1.25;
 	height: 2.5em; /* Fixed height for 2 lines */
 	overflow: hidden;

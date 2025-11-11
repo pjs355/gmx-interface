@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import {
 	umbrellaDataService,
@@ -10,7 +10,14 @@ import MarketImageUpload from "./MarketImageUpload";
 import MarketTwitch from "./MarketTwitch";
 import MarketQuestions, { type QuestionEntry } from "./MarketQuestions";
 import UmbrellaFormFields from "./UmbrellaFormFields";
+import TeamLinker from "../Teams/TeamLinker";
+import type { TeamRecord } from "@/services/api/teamService";
 import "./Markets.scss";
+
+interface TeamColors {
+	yesColor?: string;
+	noColor?: string;
+}
 
 type AddMarketForm = {
 	oracle: string;
@@ -35,10 +42,14 @@ interface SeriesMatch {
 	name: string;
 	scheduledAt: string | null;
 	team1: {
+		id: number | null;
 		name: string;
+		acronym?: string | null;
 	};
 	team2: {
+		id: number | null;
 		name: string;
+		acronym?: string | null;
 	};
 }
 
@@ -51,6 +62,14 @@ interface AddMarketProps {
 	series?: SeriesData;
 	match?: SeriesMatch;
 }
+
+const slugify = (value: string): string => {
+	return value
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+};
 
 export default function AddMarket({ series, match }: AddMarketProps = {}) {
 	const { getAccessToken } = usePrivy();
@@ -80,17 +99,65 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 		return teamName.trim();
 	};
 
-	// Build match display name using full team names
-	const buildMatchDisplayName = (m: SeriesMatch): string => {
+	const extractTeamKey = (
+		teamName: string,
+		acronym?: string | null
+	): string | null => {
+		const keyFromAcronym = acronym?.trim();
+		if (keyFromAcronym && keyFromAcronym.length > 0) {
+			return keyFromAcronym.replace(/\./g, "").trim().toUpperCase();
+		}
+		const matchKey = teamName.match(/\(([^)]+)\)/);
+		if (!matchKey) {
+			return null;
+		}
+		const normalized = matchKey[1]?.replace(/\./g, "").trim();
+		return normalized && normalized.length > 0
+			? normalized.toUpperCase()
+			: null;
+	};
+
+	const getTeamCode = (
+		team: Pick<SeriesMatch["team1"], "name" | "acronym">
+	): string => {
+		const key = extractTeamKey(team.name, team.acronym);
+		if (key) {
+			return key;
+		}
+		return cleanTeamName(team.name);
+	};
+
+	const normalizeTeamKey = (value?: string | null): string | null => {
+		if (!value) {
+			return null;
+		}
+		return value.replace(/\./g, "").trim().toUpperCase();
+	};
+
+	const buildLongMatchDisplayName = (m: SeriesMatch): string => {
 		const team1Name = cleanTeamName(m.team1.name);
 		const team2Name = cleanTeamName(m.team2.name);
 		return `${team1Name} vs ${team2Name}`;
 	};
 
+	const buildShortMatchDisplayName = (m: SeriesMatch): string => {
+		const team1Code = getTeamCode(m.team1);
+		const team2Code = getTeamCode(m.team2);
+		return `${team1Code} vs ${team2Code}`;
+	};
+
+	// Build match display name using full team names
+	interface TeamCandidateInfo {
+		displayName: string;
+		slug: string;
+		shortCode: string | null;
+		pandaId: number | null;
+	}
+
 	// Prefill umbrella display name if series/match provided
 	const initialUmbrellaDisplayName =
 		series && match
-			? `${buildMatchDisplayName(match)} - ${series.name}`
+			? `${buildLongMatchDisplayName(match)} - ${series.name}`
 			: "";
 
 	// Prefill event date if match provided
@@ -121,7 +188,7 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 
 	// Prefill question display name if match provided
 	const initialQuestionDisplayName = match
-		? buildMatchDisplayName(match)
+		? buildShortMatchDisplayName(match)
 		: "";
 
 	const [questions, setQuestions] = useState<QuestionEntry[]>([
@@ -141,6 +208,70 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 	const [uploadingImage, setUploadingImage] = useState<
 		"image1" | "image2" | null
 	>(null);
+	const [linkedTeams, setLinkedTeams] = useState<Record<string, TeamRecord>>(
+		{}
+	);
+	const teamCandidates = useMemo<TeamCandidateInfo[]>(() => {
+		if (!match) {
+			return [];
+		}
+		const displayName1 = cleanTeamName(match.team1.name);
+		const displayName2 = cleanTeamName(match.team2.name);
+		const team1Short = extractTeamKey(
+			match.team1.name,
+			match.team1.acronym
+		);
+		const team2Short = extractTeamKey(
+			match.team2.name,
+			match.team2.acronym
+		);
+		return [
+			{
+				displayName: displayName1,
+				slug: slugify(displayName1),
+				shortCode: team1Short,
+				pandaId: match.team1.id ?? null,
+			},
+			{
+				displayName: displayName2,
+				slug: slugify(displayName2),
+				shortCode: team2Short,
+				pandaId: match.team2.id ?? null,
+			},
+		];
+	}, [match]);
+	const teamColors = useMemo<TeamColors>(() => {
+		if (teamCandidates.length === 0) {
+			return {};
+		}
+		const yesCandidate = teamCandidates[0];
+		const noCandidate = teamCandidates[1];
+		const yesKey = normalizeTeamKey(yesCandidate?.shortCode);
+		const noKey = normalizeTeamKey(noCandidate?.shortCode);
+		const yesRecord = yesKey ? linkedTeams[yesKey] : undefined;
+		const noRecord = noKey ? linkedTeams[noKey] : undefined;
+		return {
+			yesColor: yesRecord?.primaryColor ?? undefined,
+			noColor: noRecord?.primaryColor ?? undefined,
+		};
+	}, [linkedTeams, teamCandidates]);
+
+	const handleTeamLinked = useCallback(
+		(shortCode: string, team: TeamRecord) => {
+			setLinkedTeams((prev) => {
+				const clone = { ...prev };
+				const normalizedKey =
+					normalizeTeamKey(shortCode) ??
+					normalizeTeamKey(team.shortCode);
+				if (!normalizedKey) {
+					return prev;
+				}
+				clone[normalizedKey] = team;
+				return clone;
+			});
+		},
+		[]
+	);
 
 	useEffect(() => {
 		let mounted = true;
@@ -284,6 +415,16 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 					tagIds: q.tagIds,
 					yesColor: q.yesColor,
 					noColor: q.noColor,
+				}));
+			}
+			const linkedTeamEntries = Object.values(linkedTeams);
+			if (linkedTeamEntries.length > 0) {
+				payload.teamMappings = linkedTeamEntries.map((team) => ({
+					teamId: team._id,
+					shortCode: team.shortCode,
+					pandaId: team.pandaId,
+					slug: team.slug,
+					displayName: team.displayName,
 				}));
 			}
 
@@ -626,6 +767,13 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 					}}
 				/>
 
+				{teamCandidates.length > 0 && (
+					<TeamLinker
+						candidates={teamCandidates}
+						onTeamLinked={handleTeamLinked}
+					/>
+				)}
+
 				{/* Multiple Questions Section */}
 				<MarketQuestions
 					questions={questions}
@@ -633,6 +781,7 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 					onQuestionsChange={setQuestions}
 					gameName={series?.game}
 					autoMatchTags={isPrefilled}
+					defaultColors={teamColors}
 				/>
 
 				<div style={{ display: "flex", gap: 12, marginTop: 12 }}>

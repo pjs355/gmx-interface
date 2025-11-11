@@ -31,8 +31,8 @@ interface ProcessedTournament {
 	beginAt: string | null;
 	endAt: string | null;
 	totalMatches: number;
-	knownMatches: ProcessedMatch[];
-	tbdMatches: ProcessedMatch[];
+	knownMatches?: ProcessedMatch[];
+	tbdMatches?: ProcessedMatch[];
 }
 
 interface ProcessedSerie {
@@ -43,12 +43,12 @@ interface ProcessedSerie {
 	endAt: string | null;
 	game: string;
 	league: string;
-	tournaments: ProcessedTournament[];
+	tournaments?: ProcessedTournament[];
 }
 
 interface SeriesApiResponse {
-	success: true;
-	data: ProcessedSerie | null;
+	success: boolean;
+	data: ProcessedSerie[] | ProcessedSerie | null;
 	message?: string;
 }
 
@@ -90,7 +90,13 @@ export default function ListSeries() {
 					throw new Error("Invalid response for series list");
 				}
 				if (mounted) {
-					setSeries(json.data ? [json.data] : []);
+					if (Array.isArray(json.data)) {
+						setSeries(json.data);
+					} else if (json.data) {
+						setSeries([json.data]);
+					} else {
+						setSeries([]);
+					}
 				}
 			} catch (err: any) {
 				console.error("error", err);
@@ -147,8 +153,8 @@ export default function ListSeries() {
 	// Get all known matches and filter out ones that already exist
 	const allKnownMatches = useMemo(() => {
 		const matches = series.flatMap((serie) =>
-			serie.tournaments.flatMap((tournament) =>
-				tournament.knownMatches.map((match) => ({
+			(serie.tournaments ?? []).flatMap((tournament) =>
+				(tournament.knownMatches ?? []).map((match) => ({
 					match,
 					tournament,
 					serie,
@@ -157,10 +163,16 @@ export default function ListSeries() {
 		);
 
 		console.log(
-			"Sample match IDs from series:",
+			"Sample matches with teams:",
 			matches.slice(0, 5).map((m) => ({
 				id: m.match.id,
 				name: m.match.name,
+				team1: `${m.match.team1.name} (${
+					m.match.team1.acronym ?? "-"
+				})`,
+				team2: `${m.match.team2.name} (${
+					m.match.team2.acronym ?? "-"
+				})`,
 			}))
 		);
 
@@ -207,10 +219,14 @@ export default function ListSeries() {
 						name: selectedMatch.match.name,
 						scheduledAt: selectedMatch.match.scheduledAt,
 						team1: {
+							id: selectedMatch.match.team1.id ?? null,
 							name: selectedMatch.match.team1.name,
+							acronym: selectedMatch.match.team1.acronym ?? null,
 						},
 						team2: {
+							id: selectedMatch.match.team2.id ?? null,
 							name: selectedMatch.match.team2.name,
+							acronym: selectedMatch.match.team2.acronym ?? null,
 						},
 					}}
 				/>

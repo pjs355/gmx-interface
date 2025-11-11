@@ -1,17 +1,71 @@
 import { usePrivy } from "@privy-io/react-auth";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { uploadUmbrellaImage } from "@/services/firebase/firebaseStorage";
 import type {
 	Umbrella,
 	UmbrellaQuestion,
+	UmbrellaTeamMapping,
 } from "@/services/api/umbrellaDataService";
+import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
 import { tagService, type Tag } from "@/services/api/tagService";
 import SeedMarket from "./SeedMarket";
 import MarketImageUpload from "./MarketImageUpload";
 import MarketTwitch from "./MarketTwitch";
 import SettleMarket from "./SettleMarket";
+import TeamLinker from "../Teams/TeamLinker";
+import { teamService, type TeamRecord } from "@/services/api/teamService";
 import "./Markets.scss";
+
+function cloneDeepMappings(
+	mappings: UmbrellaTeamMapping[]
+): UmbrellaTeamMapping[] {
+	return mappings.map((mapping) => ({
+		teamId: mapping.teamId,
+		displayName: mapping.displayName,
+		slug: mapping.slug,
+		shortCode: mapping.shortCode,
+		pandaId: mapping.pandaId,
+		logoUrl: mapping.logoUrl,
+		backgroundUrl: mapping.backgroundUrl,
+		primaryColor: mapping.primaryColor,
+		secondaryColor: mapping.secondaryColor,
+	}));
+}
+
+function teamRecordToMapping(team: TeamRecord): UmbrellaTeamMapping {
+	return {
+		teamId: team._id,
+		displayName: team.displayName,
+		slug: team.slug,
+		shortCode: team.shortCode,
+		pandaId: team.pandaId ?? undefined,
+		logoUrl: team.logoUrl ?? undefined,
+		backgroundUrl: team.backgroundUrl ?? undefined,
+		primaryColor: team.primaryColor ?? undefined,
+		secondaryColor: team.secondaryColor ?? undefined,
+	};
+}
+
+function areMappingsEqual(
+	current: UmbrellaTeamMapping | undefined,
+	next: UmbrellaTeamMapping
+): boolean {
+	if (!current) {
+		return false;
+	}
+	return (
+		current.teamId === next.teamId &&
+		current.displayName === next.displayName &&
+		current.slug === next.slug &&
+		current.shortCode === next.shortCode &&
+		current.pandaId === next.pandaId &&
+		current.logoUrl === next.logoUrl &&
+		current.backgroundUrl === next.backgroundUrl &&
+		current.primaryColor === next.primaryColor &&
+		current.secondaryColor === next.secondaryColor
+	);
+}
 
 type QuestionDetails = {
 	_id?: string;
@@ -29,6 +83,36 @@ type QuestionDetails = {
 	yesColor?: string;
 	noColor?: string;
 	tagIds?: string[]; // Array of tag ObjectIds
+};
+
+type TeamCandidate = {
+	displayName: string;
+	slug: string;
+	shortCode: string | null;
+	pandaId: number | null;
+	logoUrl?: string | null;
+};
+
+const slugify = (value: string): string =>
+	value
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+
+const splitDisplayName = (displayName: string | undefined) => {
+	if (!displayName) {
+		return [] as string[];
+	}
+	const [matchPart] = displayName.split(" - ");
+	if (!matchPart) {
+		return [] as string[];
+	}
+	const pieces = matchPart.split(/\s+vs\s+/i);
+	if (pieces.length === 2) {
+		return pieces;
+	}
+	return [] as string[];
 };
 
 export default function EditMarket({
@@ -110,12 +194,74 @@ export default function EditMarket({
 	const [uploadingImage, setUploadingImage] = useState<
 		"image1" | "image2" | null
 	>(null);
+	const [teamMappingsState, setTeamMappingsState] = useState<
+		UmbrellaTeamMapping[]
+	>(() => cloneDeepMappings(umbrella.teamMappings ?? []));
+	const [linkedTeams, setLinkedTeams] = useState<Record<string, TeamRecord>>(
+		{}
+	);
+	const [prefilledTeamCandidates, setPrefilledTeamCandidates] = useState<
+		TeamCandidate[]
+	>([]);
 
 	// Tags state
 	const [availableTags, setAvailableTags] = useState<Tag[]>([]);
 	const [loadingTags, setLoadingTags] = useState(true);
+	const [hasAttemptedPandascorePrefill, setHasAttemptedPandascorePrefill] =
+		useState(false);
 
 	const children = useMemo(() => umbrella.children || [], [umbrella]);
+
+	const teamCandidates = useMemo(() => {
+		if (prefilledTeamCandidates.length > 0) {
+			return prefilledTeamCandidates;
+		}
+		if (teamMappingsState && teamMappingsState.length > 0) {
+			return teamMappingsState.map((mapping) => {
+				const displayName =
+					mapping.displayName ||
+					mapping.shortCode ||
+					mapping.slug ||
+					"";
+				const slug = mapping.slug || slugify(displayName);
+				return {
+					displayName,
+					slug,
+					shortCode: mapping.shortCode || null,
+					pandaId:
+						typeof mapping.pandaId === "number"
+							? mapping.pandaId
+							: null,
+					logoUrl: mapping.logoUrl ?? null,
+				};
+			});
+		}
+		return [
+			{
+				displayName: "",
+				slug: slugify(""),
+				shortCode: null,
+				pandaId: null,
+				logoUrl: null,
+			},
+			{
+				displayName: "",
+				slug: slugify(""),
+				shortCode: null,
+				pandaId: null,
+				logoUrl: null,
+			},
+		];
+	}, [prefilledTeamCandidates, teamMappingsState]);
+
+	const teamCandidatesKey = useMemo(
+		() => JSON.stringify(teamCandidates),
+		[teamCandidates]
+	);
+
+	useEffect(() => {
+		console.log("EditMarket teamCandidates", teamCandidates);
+	}, [teamCandidatesKey]);
 
 	// Fetch tags
 	useEffect(() => {
@@ -184,7 +330,228 @@ export default function EditMarket({
 		// Initialize Twitch settings
 		setTwitchEnabled(Boolean((umbrella as any).twitchEnabled));
 		setTwitchChannel((umbrella as any).twitchChannel || "");
+		setTeamMappingsState(cloneDeepMappings(umbrella.teamMappings ?? []));
+		setLinkedTeams({});
+		setPrefilledTeamCandidates([]);
+		setHasAttemptedPandascorePrefill(false);
 	}, [umbrella._id]);
+
+	const umbrellaTeamMappingsKey = useMemo(
+		() => JSON.stringify(umbrella.teamMappings ?? []),
+		[umbrella.teamMappings]
+	);
+
+	const prevLoadedTeamsSnapshot = useRef<string>("");
+
+	useEffect(() => {
+		let cancelled = false;
+		async function loadTeamRecords() {
+			if (!umbrella.teamMappings || umbrella.teamMappings.length === 0) {
+				const emptySnapshot = "{}";
+				if (prevLoadedTeamsSnapshot.current !== emptySnapshot) {
+					prevLoadedTeamsSnapshot.current = emptySnapshot;
+					setLinkedTeams({});
+				}
+				return;
+			}
+			try {
+				const token = await getAccessToken();
+				if (!token) {
+					return;
+				}
+				const entries: Record<string, TeamRecord> = {};
+				for (const mapping of umbrella.teamMappings) {
+					let record: TeamRecord | null = null;
+					try {
+						if (typeof mapping.pandaId === "number") {
+							record = await teamService.lookupByPandaId(
+								mapping.pandaId,
+								token
+							);
+						}
+						if (!record && mapping.shortCode) {
+							record = await teamService.lookupByShortCode(
+								mapping.shortCode,
+								token
+							);
+						}
+					} catch (error) {
+						console.error("error", error);
+					}
+					if (!record && mapping.teamId) {
+						record = {
+							_id: mapping.teamId,
+							displayName:
+								mapping.displayName ||
+								mapping.shortCode ||
+								mapping.slug,
+							slug:
+								mapping.slug ||
+								slugify(mapping.displayName ?? ""),
+							shortCode: mapping.shortCode || mapping.slug || "",
+							pandaId:
+								typeof mapping.pandaId === "number"
+									? mapping.pandaId
+									: 0,
+							logoUrl: mapping.logoUrl,
+							backgroundUrl: mapping.backgroundUrl,
+							primaryColor: mapping.primaryColor,
+							secondaryColor: mapping.secondaryColor,
+						};
+					}
+					if (record && record.shortCode) {
+						entries[record.shortCode] = record;
+					}
+				}
+				if (!cancelled) {
+					const snapshot = JSON.stringify(entries);
+					if (snapshot !== prevLoadedTeamsSnapshot.current) {
+						prevLoadedTeamsSnapshot.current = snapshot;
+						setLinkedTeams(entries);
+					}
+				}
+			} catch (error) {
+				console.error("error", error);
+			}
+		}
+		loadTeamRecords();
+		return () => {
+			cancelled = true;
+		};
+	}, [getAccessToken, umbrellaTeamMappingsKey]);
+
+	useEffect(() => {
+		let cancelled = false;
+		async function populateCandidatesFromPandascore() {
+			if (
+				prefilledTeamCandidates.length > 0 ||
+				teamMappingsState.length > 0 ||
+				!umbrella.pandascore_matchId
+			) {
+				return;
+			}
+			try {
+				const token = await getAccessToken();
+				if (!token) {
+					return;
+				}
+				const match =
+					await predictionMarketDataService.fetchMatchFromPandascore(
+						umbrella.pandascore_matchId,
+						token
+					);
+				if (!match) {
+					return;
+				}
+				const rawTeams = Array.isArray((match as any).opponents)
+					? (match as any).opponents
+					: Array.isArray((match as any).teams)
+					? (match as any).teams
+					: [];
+				const mapped = rawTeams
+					.slice(0, 2)
+					.map((entry: any) => {
+						const opponent = entry?.opponent || entry;
+						if (!opponent) {
+							return null;
+						}
+						const name =
+							opponent.displayName || opponent.name || "";
+						const cleanedName = name.trim();
+						if (!cleanedName) {
+							return null;
+						}
+						const shortCode = opponent.acronym
+							? opponent.acronym.replace(/\./g, "").toUpperCase()
+							: null;
+						const pandaId =
+							typeof entry?.id === "number"
+								? entry.id
+								: typeof opponent.id === "number"
+								? opponent.id
+								: null;
+						const logoUrl =
+							opponent.imageUrl || opponent.image_url || null;
+						return {
+							displayName: cleanedName,
+							slug: opponent.slug || slugify(cleanedName),
+							shortCode,
+							pandaId,
+							logoUrl,
+						};
+					})
+					.filter(Boolean) as TeamCandidate[];
+				if (!cancelled && mapped.length > 0) {
+					setPrefilledTeamCandidates(mapped);
+				}
+			} catch (error) {
+				console.error("error", error);
+			} finally {
+				if (!cancelled) {
+					setHasAttemptedPandascorePrefill(true);
+				}
+			}
+		}
+		if (!hasAttemptedPandascorePrefill) {
+			populateCandidatesFromPandascore();
+		}
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		hasAttemptedPandascorePrefill,
+		prefilledTeamCandidates.length,
+		teamMappingsState.length,
+		umbrella.pandascore_matchId,
+		getAccessToken,
+	]);
+
+	const handleTeamLinked = useCallback(
+		(shortCode: string, team: TeamRecord) => {
+			setLinkedTeams((prev) => ({ ...prev, [shortCode]: team }));
+			setTeamMappingsState((prev) => {
+				const nextMapping = teamRecordToMapping(team);
+				const existingIndex = prev.findIndex((mapping) => {
+					if (mapping.shortCode && nextMapping.shortCode) {
+						return mapping.shortCode === nextMapping.shortCode;
+					}
+					if (mapping.teamId && nextMapping.teamId) {
+						return mapping.teamId === nextMapping.teamId;
+					}
+					return false;
+				});
+				if (existingIndex >= 0) {
+					const current = prev[existingIndex];
+					if (areMappingsEqual(current, nextMapping)) {
+						return prev;
+					}
+					const clone = [...prev];
+					clone[existingIndex] = nextMapping;
+					return clone;
+				}
+				return [...prev, nextMapping];
+			});
+		},
+		[]
+	);
+
+	const teamMappingsPayload = useMemo(() => {
+		if (teamMappingsState.length > 0) {
+			return teamMappingsState;
+		}
+		// fallback: derive from linkedTeams if no state entries
+		return Object.values(linkedTeams).map((team) => ({
+			teamId: team._id,
+			displayName: team.displayName,
+			slug: team.slug,
+			shortCode: team.shortCode,
+			pandaId: team.pandaId,
+			logoUrl: team.logoUrl ?? undefined,
+			backgroundUrl: team.backgroundUrl ?? undefined,
+			primaryColor: team.primaryColor ?? undefined,
+			secondaryColor: team.secondaryColor ?? undefined,
+		}));
+	}, [teamMappingsState, linkedTeams]);
 
 	async function loadQuestion(qid: string) {
 		setLoading(true);
@@ -359,6 +726,13 @@ export default function EditMarket({
 				body.image2Url = image2Url;
 			}
 
+			if (teamMappingsPayload.length > 0) {
+				body.teamMappings = teamMappingsPayload;
+			} else if (Array.isArray(umbrella.teamMappings)) {
+				// Explicitly clear if user removed all mappings
+				body.teamMappings = [];
+			}
+
 			const base = getPredictionApiBaseUrl();
 			const resp = await fetch(`${base}/umbrellas/${umbrella._id}`, {
 				method: "PUT",
@@ -389,7 +763,6 @@ export default function EditMarket({
 			setUmbSaving(false);
 		}
 	}
-
 	return (
 		<div className="admin-market-container">
 			<button type="button" onClick={onBack} className="edit-back-button">
@@ -566,6 +939,13 @@ export default function EditMarket({
 					setImage2Preview(image2Url || null);
 				}}
 			/>
+
+			{teamCandidates.length > 0 && (
+				<TeamLinker
+					candidates={teamCandidates}
+					onTeamLinked={handleTeamLinked}
+				/>
+			)}
 
 			<div className="edit-save-umbrella-group">
 				<button

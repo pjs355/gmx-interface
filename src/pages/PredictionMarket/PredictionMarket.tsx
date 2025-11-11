@@ -15,6 +15,7 @@ import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
+import { Comments } from "./Comments/Comments";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -601,6 +602,13 @@ function PredictionMarketContent() {
 					chartState={chartOnlyState}
 					orderbooksReady={orderbooksReady}
 				/>
+
+				{umbrella && (
+					<Comments
+						umbrellaId={umbrella._id}
+						markets={sortedQuestions as PredictionMarket[]}
+					/>
+				)}
 			</div>
 		</PredictionCurtainProvider>
 	);

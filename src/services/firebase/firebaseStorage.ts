@@ -59,3 +59,18 @@ export async function uploadTagImage(
   const path = `tags/${filename}`;
   return await uploadImageToFirebase(file, path, onProgress);
 }
+
+export async function uploadTeamLogo(
+	file: File,
+	shortCode: string,
+	onProgress?: (progress: number) => void
+): Promise<UploadResult> {
+	const normalizedShortCode = shortCode.replace(/\./g, "").trim().toLowerCase();
+	const extension = file.name.split(".").pop();
+	if (!extension) {
+		throw new Error("Unable to determine file extension for team logo");
+	}
+	const filename = `team-${normalizedShortCode}.${extension}`;
+	const path = `team-logos/${filename}`;
+	return await uploadImageToFirebase(file, path, onProgress);
+}

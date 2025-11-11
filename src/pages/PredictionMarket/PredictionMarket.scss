@@ -54,8 +54,6 @@
 .mobile-layout {
 	display: flex;
 	flex-direction: column;
-	margin-bottom: 80px; // Space for fixed trading container
-	padding-bottom: 80px; // Additional padding to ensure content is not hidden behind fixed trading box
 }
 
 .chart-section-mobile {

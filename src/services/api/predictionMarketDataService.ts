@@ -35,6 +35,35 @@ interface ApiResponse {
 	data: PredictionMarket[];
 }
 
+interface PandaMatchTeam {
+	id: number | null;
+	name: string;
+	slug?: string | null;
+	acronym?: string | null;
+}
+
+export interface PandaScoreMatch {
+	id: number;
+	name: string;
+	status?: string;
+	scheduled_at?: string | null;
+	tournament?: {
+		id: number;
+		name: string;
+	};
+	serie?: {
+		id: number;
+		name: string;
+	};
+	league?: {
+		id: number;
+		name: string;
+	};
+	opponents?: Array<{
+		opponent: PandaMatchTeam;
+	}>;
+}
+
 class PredictionMarketDataService {
 	private readonly API_BASE_URL = getPredictionApiBaseUrl();
 
@@ -86,6 +115,40 @@ class PredictionMarketDataService {
 		} catch (error) {
 			// Quiet fetch error warning
 			return null; // Return null instead of throwing to prevent breaking the UI
+		}
+	}
+
+	async fetchMatchFromPandascore(
+		matchId: string | number,
+		accessToken?: string | null
+	): Promise<PandaScoreMatch | null> {
+		try {
+			const requestedUrl = `${this.API_BASE_URL}/admin/pandascore/matches/${matchId}`;
+			const headers: Record<string, string> = {};
+			if (accessToken) {
+				headers.Authorization = `Bearer ${accessToken}`;
+			}
+			const response = await fetch(requestedUrl, {
+				headers,
+			});
+			if (!response.ok) {
+				return null;
+			}
+			const json = await response.json().catch(() => null);
+			if (json && (json.success === undefined || json.success === true)) {
+				const payload = json.data ?? json;
+				if (payload) {
+					const teams = payload.opponents || payload.teams;
+					if (Array.isArray(teams) && teams.length > 0) {
+						return payload;
+					}
+				}
+				return payload;
+			}
+			return null;
+		} catch (error) {
+			console.error("error", error);
+			return null;
 		}
 	}
 

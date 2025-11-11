@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { tagService, type Tag } from "@/services/api/tagService";
 import { findMatchingTag } from "./tagMatcher";
@@ -10,12 +10,18 @@ export type QuestionEntry = {
 	noColor: string;
 };
 
+interface DefaultColors {
+	yesColor?: string;
+	noColor?: string;
+}
+
 interface MarketQuestionsProps {
 	questions: QuestionEntry[];
 	submitting?: boolean;
 	onQuestionsChange: (questions: QuestionEntry[]) => void;
 	gameName?: string;
 	autoMatchTags?: boolean;
+	defaultColors?: DefaultColors;
 }
 
 export default function MarketQuestions({
@@ -24,10 +30,83 @@ export default function MarketQuestions({
 	onQuestionsChange,
 	gameName,
 	autoMatchTags = false,
+	defaultColors,
 }: MarketQuestionsProps) {
 	const { getAccessToken } = usePrivy();
 	const [availableTags, setAvailableTags] = useState<Tag[]>([]);
 	const [loadingTags, setLoadingTags] = useState(true);
+
+	const BASE_YES_COLOR = "#22c55e";
+	const BASE_NO_COLOR = "#ef4444";
+
+	const resolvedDefaultYesColor = useMemo(() => {
+		if (defaultColors?.yesColor) {
+			return defaultColors.yesColor;
+		}
+		return BASE_YES_COLOR;
+	}, [defaultColors]);
+
+	const resolvedDefaultNoColor = useMemo(() => {
+		if (defaultColors?.noColor) {
+			return defaultColors.noColor;
+		}
+		return BASE_NO_COLOR;
+	}, [defaultColors]);
+
+	useEffect(() => {
+		if (questions.length > 0) {
+			return;
+		}
+		onQuestionsChange([
+			{
+				displayName: "",
+				tagIds: [],
+				yesColor: resolvedDefaultYesColor,
+				noColor: resolvedDefaultNoColor,
+			},
+		]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	useEffect(() => {
+		if (questions.length === 0) {
+			return;
+		}
+		let didUpdate = false;
+		const updated = questions.map((question) => {
+			let yesColor = question.yesColor;
+			let noColor = question.noColor;
+			let questionChanged = false;
+			if (
+				defaultColors?.yesColor &&
+				(yesColor === BASE_YES_COLOR || yesColor === defaultColors.yesColor) &&
+				yesColor !== defaultColors.yesColor
+			) {
+				yesColor = defaultColors.yesColor;
+				questionChanged = true;
+			}
+			if (
+				defaultColors?.noColor &&
+				(noColor === BASE_NO_COLOR || noColor === defaultColors.noColor) &&
+				noColor !== defaultColors.noColor
+			) {
+				noColor = defaultColors.noColor;
+				questionChanged = true;
+			}
+			if (questionChanged) {
+				didUpdate = true;
+				return {
+					...question,
+					yesColor,
+					noColor,
+				};
+			}
+			return question;
+		});
+		if (didUpdate) {
+			onQuestionsChange(updated);
+		}
+	}, [defaultColors, questions, onQuestionsChange]);
 
 	useEffect(() => {
 		let mounted = true;
@@ -92,6 +171,17 @@ export default function MarketQuestions({
 		onQuestionsChange(updated);
 	}
 
+	function updateQuestionColor(
+		index: number,
+		key: "yesColor" | "noColor",
+		value: string
+	) {
+		const updated = questions.map((q, i) =>
+			i === index ? { ...q, [key]: value } : q
+		);
+		onQuestionsChange(updated);
+	}
+
 	function toggleTagForQuestion(index: number, tagId: string) {
 		const updated = questions.map((q, i) => {
 			if (i !== index) return q;
@@ -106,17 +196,14 @@ export default function MarketQuestions({
 		onQuestionsChange(updated);
 	}
 
-	function addQuestionEntry() {
-		const lastQuestionTagIds =
-			questions.length > 0 ? questions[questions.length - 1].tagIds : [];
-
+	function addQuestion() {
 		onQuestionsChange([
 			...questions,
 			{
 				displayName: "",
-				tagIds: [...lastQuestionTagIds],
-				yesColor: "#22c55e",
-				noColor: "#ef4444",
+				tagIds: [],
+				yesColor: resolvedDefaultYesColor,
+				noColor: resolvedDefaultNoColor,
 			},
 		]);
 	}
@@ -205,13 +292,9 @@ export default function MarketQuestions({
 								<span>Yes Color</span>
 								<input
 									type="color"
-									value={q.yesColor}
-									onChange={(e) =>
-										updateQuestion(
-											idx,
-											"yesColor",
-											e.target.value
-										)
+									value={q.yesColor || resolvedDefaultYesColor}
+									onChange={(event) =>
+										updateQuestionColor(idx, "yesColor", event.target.value)
 									}
 									style={{
 										height: 40,
@@ -226,13 +309,9 @@ export default function MarketQuestions({
 								<span>No Color</span>
 								<input
 									type="color"
-									value={q.noColor}
-									onChange={(e) =>
-										updateQuestion(
-											idx,
-											"noColor",
-											e.target.value
-										)
+									value={q.noColor || resolvedDefaultNoColor}
+									onChange={(event) =>
+										updateQuestionColor(idx, "noColor", event.target.value)
 									}
 									style={{
 										height: 40,
@@ -302,7 +381,7 @@ export default function MarketQuestions({
 			<div style={{ marginTop: 12 }}>
 				<button
 					type="button"
-					onClick={addQuestionEntry}
+					onClick={addQuestion}
 					disabled={submitting}
 					style={{
 						padding: "6px 10px",

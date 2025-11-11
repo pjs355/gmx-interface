@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import AddMarket from "./components/Markets/AddMarket";
@@ -11,25 +11,110 @@ import AddTag from "./components/Tags/AddTag";
 import EditTag from "./components/Tags/EditTag";
 import ListSeries from "./components/Series/ListSeries";
 import AddSeries from "./components/Series/AddSeries";
-import type { Umbrella } from "services/api/umbrellaDataService";
+import {
+	umbrellaDataService,
+	type Umbrella,
+} from "@/services/api/umbrellaDataService";
+
+type AdminView =
+	| "markets-list"
+	| "markets-add"
+	| "markets-resolve"
+	| "markets-edit"
+	| "tags-list"
+	| "tags-add"
+	| "tags-edit"
+	| "series-list"
+	| "series-add";
+
+const DEFAULT_ADMIN_VIEW: AdminView = "markets-list";
+
+const VALID_ADMIN_VIEWS: AdminView[] = [
+	"markets-list",
+	"markets-add",
+	"markets-resolve",
+	"markets-edit",
+	"tags-list",
+	"tags-add",
+	"tags-edit",
+	"series-list",
+	"series-add",
+] as const;
+
+function isValidAdminView(value: string | null): value is AdminView {
+	if (value === null) {
+		return false;
+	}
+	return (VALID_ADMIN_VIEWS as readonly string[]).includes(value);
+}
 
 export default function Admin() {
 	const navigate = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const { getAccessToken } = usePrivy();
 	const [checking, setChecking] = useState(true);
-	const [view, setView] = useState<
-		| "markets-list"
-		| "markets-add"
-		| "markets-resolve"
-		| "markets-edit"
-		| "tags-list"
-		| "tags-add"
-		| "tags-edit"
-		| "series-list"
-		| "series-add"
-	>("markets-list");
 	const [selected, setSelected] = useState<Umbrella | null>(null);
 	const [selectedTag, setSelectedTag] = useState<AdminTag | null>(null);
+
+	const view: AdminView = useMemo(() => {
+		const param = searchParams.get("view");
+		return isValidAdminView(param) ? param : DEFAULT_ADMIN_VIEW;
+	}, [searchParams]);
+
+	const updateView = useCallback(
+		(nextView: AdminView, extra?: Record<string, string | null>) => {
+			setSearchParams(
+				(prev) => {
+					const prevString = prev.toString();
+					const next = new URLSearchParams(prev);
+					if (next.get("view") !== nextView) {
+						next.set("view", nextView);
+					}
+					if (extra) {
+						for (const [key, value] of Object.entries(extra)) {
+							if (value === null) {
+								next.delete(key);
+							} else {
+								next.set(key, value);
+							}
+						}
+					}
+					if (next.toString() === prevString) {
+						return prev;
+					}
+					return next;
+				},
+				{ replace: false }
+			);
+		},
+		[setSearchParams]
+	);
+
+	useEffect(() => {
+		if (view !== "markets-edit") {
+			return;
+		}
+		const umbrellaId = searchParams.get("umbrellaId");
+		if (!umbrellaId || selected) {
+			return;
+		}
+		let cancelled = false;
+		(async () => {
+			try {
+				const fetched = await umbrellaDataService.fetchUmbrellaById(
+					umbrellaId
+				);
+				if (!cancelled && fetched) {
+					setSelected(fetched);
+				}
+			} catch (error) {
+				console.error("error", error);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [searchParams, selected, view]);
 
 	useEffect(() => {
 		let mounted = true;
@@ -96,7 +181,10 @@ export default function Admin() {
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
-							onClick={() => setView("markets-list")}
+							onClick={() => {
+								setSelected(null);
+								updateView("markets-list", { umbrellaId: null });
+							}}
 							style={{
 								padding: "6px 10px",
 								border: "1px solid white",
@@ -112,7 +200,10 @@ export default function Admin() {
 						</button>
 						<button
 							type="button"
-							onClick={() => setView("markets-add")}
+							onClick={() => {
+								setSelected(null);
+								updateView("markets-add", { umbrellaId: null });
+							}}
 							style={{
 								padding: "6px 10px",
 								border: "1px solid white",
@@ -128,7 +219,12 @@ export default function Admin() {
 						</button>
 						<button
 							type="button"
-							onClick={() => setView("markets-resolve")}
+							onClick={() => {
+								setSelected(null);
+								updateView("markets-resolve", {
+									umbrellaId: null,
+								});
+							}}
 							style={{
 								padding: "6px 10px",
 								border: "1px solid white",
@@ -149,7 +245,10 @@ export default function Admin() {
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
-							onClick={() => setView("tags-list")}
+							onClick={() => {
+								setSelectedTag(null);
+								updateView("tags-list", { umbrellaId: null });
+							}}
 							style={{
 								padding: "6px 10px",
 								border: "1px solid white",
@@ -165,7 +264,10 @@ export default function Admin() {
 						</button>
 						<button
 							type="button"
-							onClick={() => setView("tags-add")}
+							onClick={() => {
+								setSelectedTag(null);
+								updateView("tags-add", { umbrellaId: null });
+							}}
 							style={{
 								padding: "6px 10px",
 								border: "1px solid white",
@@ -186,7 +288,9 @@ export default function Admin() {
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
-							onClick={() => setView("series-list")}
+							onClick={() => {
+								updateView("series-list", { umbrellaId: null });
+							}}
 							style={{
 								padding: "6px 10px",
 								border: "1px solid white",
@@ -202,7 +306,9 @@ export default function Admin() {
 						</button>
 						<button
 							type="button"
-							onClick={() => setView("series-add")}
+							onClick={() => {
+								updateView("series-add", { umbrellaId: null });
+							}}
 							style={{
 								padding: "6px 10px",
 								border: "1px solid white",
@@ -224,7 +330,7 @@ export default function Admin() {
 				<ListMarket
 					onEdit={(u) => {
 						setSelected(u);
-						setView("markets-edit");
+						updateView("markets-edit", { umbrellaId: u._id });
 					}}
 				/>
 			)}
@@ -237,8 +343,8 @@ export default function Admin() {
 				<EditMarket
 					umbrella={selected}
 					onBack={() => {
-						setView("markets-list");
 						setSelected(null);
+						updateView("markets-list", { umbrellaId: null });
 					}}
 				/>
 			)}
@@ -247,21 +353,23 @@ export default function Admin() {
 				<ListTag
 					onEdit={(t) => {
 						setSelectedTag(t);
-						setView("tags-edit");
+						updateView("tags-edit", { umbrellaId: null });
 					}}
 				/>
 			)}
 
 			{view === "tags-add" && (
-				<AddTag onCreated={() => setView("tags-list")} />
+				<AddTag
+					onCreated={() => updateView("tags-list", { umbrellaId: null })}
+				/>
 			)}
 
 			{view === "tags-edit" && selectedTag && (
 				<EditTag
 					tag={selectedTag}
 					onBack={() => {
-						setView("tags-list");
 						setSelectedTag(null);
+						updateView("tags-list", { umbrellaId: null });
 					}}
 					onSaved={(next) => {
 						setSelectedTag(next);
