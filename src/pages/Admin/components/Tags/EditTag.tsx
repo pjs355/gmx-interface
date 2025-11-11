@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import { tagService } from "@/services/api/tagService";
+import { tagService, type TagPayload } from "@/services/api/tagService";
 import { uploadTagImage } from "@/services/firebase/firebaseStorage";
 import type { AdminTag } from "./ListTag";
 import "./Tags.scss";
@@ -67,56 +66,56 @@ export default function EditTag({
 		setError(null);
 		setMessage(null);
 		try {
-			if (!label.trim()) {
+			const trimmedLabel = label.trim();
+			if (trimmedLabel.length === 0) {
 				throw new Error("label is required");
 			}
 			const token = await getAccessToken?.();
 			if (typeof token === "undefined" || !token) {
 				throw new Error("Missing admin access token");
 			}
-			const base = getPredictionApiBaseUrl();
-			const body: any = {};
-			if (label.trim()) body.label = label.trim();
-			if (slug.trim()) body.slug = slug.trim();
+			const trimmedSlug = slug.trim();
+			const payload: TagPayload = {
+				label: trimmedLabel,
+			};
+			if (trimmedSlug.length > 0) {
+				payload.slug = trimmedSlug;
+			}
 
 			// Upload image if selected
 			if (image) {
 				setUploadingImage(true);
-				const slugForUpload =
-					slug.trim() ||
-					label.trim().toLowerCase().replace(/\s+/g, "-");
-				const result = await uploadTagImage(image, slugForUpload);
-				body.imageUrl = result.url;
-				setUploadingImage(false);
+				try {
+					const baseSlugSource =
+						trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
+					const slugForUpload = baseSlugSource
+						.toLowerCase()
+						.replace(/\s+/g, "-");
+					const result = await uploadTagImage(image, slugForUpload);
+					payload.imageUrl = result.url;
+				} finally {
+					setUploadingImage(false);
+				}
 			} else if (imageUrl) {
-				body.imageUrl = imageUrl;
+				payload.imageUrl = imageUrl;
 			}
 
-			const resp = await fetch(
-				`${base}/admin/tags/${encodeURIComponent(tag._id)}`,
-				{
-					method: "PUT",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${token}`,
-					},
-					body: JSON.stringify(body),
-				}
-			);
-			const json = await resp.json().catch(() => ({} as any));
-			if (!resp.ok) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
-			}
+			const json = await tagService.updateTag(tag._id, payload, token);
 			setMessage("Saved");
-			tagService.clearCache(); // Clear cache so updated tag appears
 
 			// Clear uploaded image after successful save
+			const nextTag: AdminTag = json as AdminTag;
 			if (image) {
 				setImage(null);
-				setImagePreview(imageUrl || null);
 			}
-
-			const nextTag: AdminTag = json as AdminTag;
+			const rawNextImageUrl = (nextTag as any).imageUrl;
+			let computedImageUrl = "";
+			if (typeof rawNextImageUrl === "string") {
+				computedImageUrl = rawNextImageUrl;
+			}
+			setImageUrl(computedImageUrl);
+			const previewValue = computedImageUrl.length > 0 ? computedImageUrl : null;
+			setImagePreview(previewValue);
 			onSaved?.(nextTag);
 		} catch (err: any) {
 			console.error("error", err);

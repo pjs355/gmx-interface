@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { tagService } from "@/services/api/tagService";
 
 export interface AdminTag {
 	_id: string;
@@ -28,22 +28,8 @@ export default function ListTag({
 			setLoading(true);
 			setError(null);
 			try {
-				const token = await getAccessToken?.();
-				if (typeof token === "undefined" || !token) {
-					throw new Error("Missing admin access token");
-				}
-				const base = getPredictionApiBaseUrl();
-				const resp = await fetch(`${base}/admin/tags`, {
-					headers: { Authorization: `Bearer ${token}` },
-				});
-				const json = await resp.json().catch(() => ({} as any));
-				if (!resp.ok) {
-					throw new Error(json?.error || `HTTP ${resp.status}`);
-				}
-				if (!Array.isArray(json)) {
-					throw new Error("Invalid response for tags list");
-				}
-				if (mounted) setTags(json as AdminTag[]);
+				const allTags = await tagService.fetchAllTags();
+				if (mounted) setTags(allTags as AdminTag[]);
 			} catch (err: any) {
 				console.error("error", err);
 				if (mounted) setError(err?.message || String(err));
@@ -77,18 +63,7 @@ export default function ListTag({
 			if (typeof token === "undefined" || !token) {
 				throw new Error("Missing admin access token");
 			}
-			const base = getPredictionApiBaseUrl();
-			const resp = await fetch(
-				`${base}/admin/tags/${encodeURIComponent(tag._id)}`,
-				{
-					method: "DELETE",
-					headers: { Authorization: `Bearer ${token}` },
-				}
-			);
-			const json = await resp.json().catch(() => ({} as any));
-			if (!resp.ok) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
-			}
+			await tagService.deleteTag(tag._id, token);
 			// Refresh list
 			setTags((prev) => prev.filter((t) => t._id !== tag._id));
 		} catch (err: any) {

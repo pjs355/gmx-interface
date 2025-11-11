@@ -79,13 +79,14 @@
 .positions-page {
 	background: #000000;
 	min-height: 100vh;
+	padding: 0px 50px;
 }
 
 /* Add padding between tabs and content */
 .positions-content-wrapper {
 	margin-top: 32px; /* Desktop padding between tabs and content */
 	padding-bottom: 40px; /* Desktop padding to prevent table from pressing against footer */
-	
+
 	@media (max-width: 768px) {
 		margin-top: 24px; /* Mobile padding between tabs and content */
 		padding-bottom: 60px; /* Extra padding on mobile */

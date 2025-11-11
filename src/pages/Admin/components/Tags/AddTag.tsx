@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import { tagService } from "@/services/api/tagService";
+import { tagService, type TagPayload } from "@/services/api/tagService";
 import { uploadTagImage } from "@/services/firebase/firebaseStorage";
 import "./Tags.scss";
 
@@ -44,47 +43,43 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 		setError(null);
 		setMessage(null);
 		try {
-			if (!label.trim()) {
+			const trimmedLabel = label.trim();
+			if (trimmedLabel.length === 0) {
 				throw new Error("label is required");
 			}
 			const token = await getAccessToken?.();
 			if (typeof token === "undefined" || !token) {
 				throw new Error("Missing admin access token");
 			}
-			const base = getPredictionApiBaseUrl();
-			const body: any = {
-				label: label.trim(),
-				slug: slug.trim() || undefined,
+			const trimmedSlug = slug.trim();
+			const payload: TagPayload = {
+				label: trimmedLabel,
 			};
+			if (trimmedSlug.length > 0) {
+				payload.slug = trimmedSlug;
+			}
 
 			// Upload image if selected
 			if (image) {
 				setUploadingImage(true);
-				const slugForUpload =
-					slug.trim() ||
-					label.trim().toLowerCase().replace(/\s+/g, "-");
-				const result = await uploadTagImage(image, slugForUpload);
-				body.imageUrl = result.url;
-				setUploadingImage(false);
+				try {
+					const baseSlugSource =
+						trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
+					const slugForUpload = baseSlugSource
+						.toLowerCase()
+						.replace(/\s+/g, "-");
+					const result = await uploadTagImage(image, slugForUpload);
+					payload.imageUrl = result.url;
+				} finally {
+					setUploadingImage(false);
+				}
 			}
-			const resp = await fetch(`${base}/admin/tags`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${token}`,
-				},
-				body: JSON.stringify(body),
-			});
-			const json = await resp.json().catch(() => ({} as any));
-			if (!resp.ok) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
-			}
+			await tagService.createTag(payload, token);
 			setMessage("Created");
 			setLabel("");
 			setSlug("");
 			setImage(null);
 			setImagePreview(null);
-			tagService.clearCache(); // Clear cache so new tag appears
 			onCreated?.();
 		} catch (err: any) {
 			console.error("error", err);

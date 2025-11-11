@@ -24,15 +24,15 @@ import {
 } from "@/services/api/teamService";
 
 type AdminView =
-	| "markets-list"
-	| "markets-add"
-	| "markets-resolve"
-	| "markets-edit"
-	| "tags-list"
-	| "tags-add"
-	| "tags-edit"
-	| "series-list"
-	| "series-add"
+		| "markets-list"
+		| "markets-add"
+		| "markets-resolve"
+		| "markets-edit"
+		| "tags-list"
+		| "tags-add"
+		| "tags-edit"
+		| "series-list"
+		| "series-add"
 	| "teams-list"
 	| "teams-edit";
 

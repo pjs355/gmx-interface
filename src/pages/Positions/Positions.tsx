@@ -489,7 +489,7 @@ export default function Positions() {
 	}, {} as Record<string, { Yes: number; No: number }>);
 
 	return (
-		<div className="positions-page default-container page-layout">
+		<div className="positions-page page-layout">
 			<div>
 				<div className="positions-header-group">
 					<PositionsHeader
@@ -508,232 +508,242 @@ export default function Positions() {
 						}
 					/>
 
-				<PositionsTabs
-					activeTab={activeTab}
-					setActiveTab={setActiveTab}
-				/>
-			</div>
+					<PositionsTabs
+						activeTab={activeTab}
+						setActiveTab={setActiveTab}
+					/>
+				</div>
 
-			<div className="positions-content-wrapper">
-				{!account && (
-					<p className="text-body">Log in to view balances.</p>
-				)}
-				{account && (
-					<>
-						{error ? (
-							<p className="error-message">{error}</p>
-						) : (
-							(() => {
-								const softLoading =
-									loading ||
-									predictionLoading ||
-									userDataLoading ||
-									booksPreviewLoading;
-								const hasPositions =
-									umbrellaPositions.length > 0;
-								if (!hasPositions && !softLoading) {
-									return (
-										<p className="text-body">
-											No positions found.
-										</p>
-									);
-								}
-								if (activeTab === "positions") {
-									console.log(
-										"🔍 DEBUG: In positions tab, resolvedUmbrellaPositions.length:",
-										resolvedUmbrellaPositions.length
-									);
-									console.log(
-										"🔍 DEBUG: resolvedUmbrellaPositions:",
-										resolvedUmbrellaPositions
-									);
+				<div className="positions-content-wrapper">
+					{!account && (
+						<p className="text-body">Log in to view balances.</p>
+					)}
+					{account && (
+						<>
+							{error ? (
+								<p className="error-message">{error}</p>
+							) : (
+								(() => {
+									const softLoading =
+										loading ||
+										predictionLoading ||
+										userDataLoading ||
+										booksPreviewLoading;
+									const hasPositions =
+										umbrellaPositions.length > 0;
+									if (!hasPositions && !softLoading) {
+										return (
+											<p className="text-body">
+												No positions found.
+											</p>
+										);
+									}
+									if (activeTab === "positions") {
+										console.log(
+											"🔍 DEBUG: In positions tab, resolvedUmbrellaPositions.length:",
+											resolvedUmbrellaPositions.length
+										);
+										console.log(
+											"🔍 DEBUG: resolvedUmbrellaPositions:",
+											resolvedUmbrellaPositions
+										);
 
-									return (
-										<>
-											{isDataFullyLoaded &&
-												resolvedUmbrellaPositions.length >
-													0 && (
-													<div className="mb-24">
+										return (
+											<>
+												{isDataFullyLoaded &&
+													resolvedUmbrellaPositions.length >
+														0 && (
+														<div className="mb-24">
+															<h3
+																className="mb-6 text-20 font-bold"
+																style={{
+																	color: "#ffffff",
+																	fontSize: 34,
+																}}
+															>
+																Winnings
+															</h3>
+															{(() => {
+																const transformedData =
+																	resolvedUmbrellaPositions.map(
+																		(
+																			up
+																		) => ({
+																			umbrella:
+																				up.umbrella,
+																			markets:
+																				up.markets.map(
+																					(
+																						mp
+																					) => {
+																						const outcome =
+																							String(
+																								(
+																									mp.market as any
+																								)
+																									.resolvedOutcome ||
+																									""
+																							).toLowerCase();
+																						const yes =
+																							outcome ===
+																							"yes"
+																								? mp.yesBalance.toString()
+																								: "0";
+																						const no =
+																							outcome ===
+																							"no"
+																								? mp.noBalance.toString()
+																								: "0";
+																						console.log(
+																							`🔍 DEBUG: Transformed market ${mp.market?.displayName} - outcome: ${outcome}, yes: ${yes}, no: ${no}`
+																						);
+																						return {
+																							market: mp.market,
+																							yes,
+																							no,
+																						};
+																					}
+																				),
+																		})
+																	);
+																console.log(
+																	"🔍 DEBUG: Transformed data for Resolved Positions:",
+																	transformedData
+																);
+																return !isMobile ? (
+																	<ResolvedPositionsTable
+																		umbrellaBalances={
+																			transformedData
+																		}
+																		toCentsString={
+																			toCentsString
+																		}
+																		softLoading={
+																			softLoading
+																		}
+																		onClaimSuccess={
+																			handleClaimSuccess
+																		}
+																	/>
+																) : (
+																	<ResolvedPositionsCardView
+																		umbrellaBalances={
+																			transformedData
+																		}
+																		toCentsString={
+																			toCentsString
+																		}
+																		softLoading={
+																			softLoading
+																		}
+																		onClaimSuccess={
+																			handleClaimSuccess
+																		}
+																	/>
+																);
+															})()}
+														</div>
+													)}
+												{isDataFullyLoaded &&
+													resolvedUmbrellaPositions.length >
+														0 && (
 														<h3
 															className="mb-6 text-20 font-bold"
 															style={{
 																color: "#ffffff",
 																fontSize: 34,
+																marginTop: 40,
 															}}
 														>
-															Winnings
+															Positions
 														</h3>
-														{(() => {
-															const transformedData =
-																resolvedUmbrellaPositions.map(
-																	(up) => ({
-																		umbrella:
-																			up.umbrella,
-																		markets:
-																			up.markets.map(
-																				(
-																					mp
-																				) => {
-																					const outcome =
-																						String(
-																							(
-																								mp.market as any
-																							)
-																								.resolvedOutcome ||
-																								""
-																						).toLowerCase();
-																					const yes =
-																						outcome ===
-																						"yes"
-																							? mp.yesBalance.toString()
-																							: "0";
-																					const no =
-																						outcome ===
-																						"no"
-																							? mp.noBalance.toString()
-																							: "0";
-																					console.log(
-																						`🔍 DEBUG: Transformed market ${mp.market?.displayName} - outcome: ${outcome}, yes: ${yes}, no: ${no}`
-																					);
-																					return {
-																						market: mp.market,
-																						yes,
-																						no,
-																					};
-																				}
-																			),
-																	})
-																);
-															console.log(
-																"🔍 DEBUG: Transformed data for Resolved Positions:",
-																transformedData
-															);
-															return !isMobile ? (
-																<ResolvedPositionsTable
-																	umbrellaBalances={
-																		transformedData
-																	}
-																	toCentsString={
-																		toCentsString
-																	}
-																	softLoading={
-																		softLoading
-																	}
-																	onClaimSuccess={
-																		handleClaimSuccess
-																	}
-																/>
-															) : (
-																<ResolvedPositionsCardView
-																	umbrellaBalances={
-																		transformedData
-																	}
-																	toCentsString={
-																		toCentsString
-																	}
-																	softLoading={
-																		softLoading
-																	}
-																	onClaimSuccess={
-																		handleClaimSuccess
-																	}
-																/>
-															);
-														})()}
-													</div>
+													)}
+												{!isMobile ? (
+													<PositionsTableView
+														umbrellaBalances={
+															umbrellaBalancesPositions
+														}
+														aggregates={aggregates}
+														spentByQid={spentByQid}
+														returnsByQid={
+															returnsByQid
+														}
+														getCurrentPriceForSide={
+															getCurrentPriceForSide
+														}
+														toCentsString={
+															toCentsString
+														}
+														softLoading={
+															softLoading
+														}
+													/>
+												) : (
+													<PositionsCardView
+														umbrellaBalances={
+															umbrellaBalancesPositions
+														}
+														aggregates={aggregates}
+														spentByQid={spentByQid}
+														returnsByQid={
+															returnsByQid
+														}
+														getCurrentPriceForSide={
+															getCurrentPriceForSide
+														}
+														toCentsString={
+															toCentsString
+														}
+														softLoading={
+															softLoading
+														}
+													/>
 												)}
-											{isDataFullyLoaded &&
-												resolvedUmbrellaPositions.length >
-													0 && (
-													<h3
-														className="mb-6 text-20 font-bold"
-														style={{
-															color: "#ffffff",
-															fontSize: 34,
-															marginTop: 40,
-														}}
-													>
-														Positions
-													</h3>
-												)}
-											{!isMobile ? (
-												<PositionsTableView
-													umbrellaBalances={
-														umbrellaBalancesPositions
-													}
-													aggregates={aggregates}
-													spentByQid={spentByQid}
-													returnsByQid={returnsByQid}
-													getCurrentPriceForSide={
-														getCurrentPriceForSide
-													}
-													toCentsString={
-														toCentsString
-													}
-													softLoading={softLoading}
-												/>
-											) : (
-												<PositionsCardView
-													umbrellaBalances={
-														umbrellaBalancesPositions
-													}
-													aggregates={aggregates}
-													spentByQid={spentByQid}
-													returnsByQid={returnsByQid}
-													getCurrentPriceForSide={
-														getCurrentPriceForSide
-													}
-													toCentsString={
-														toCentsString
-													}
-													softLoading={softLoading}
-												/>
-											)}
-										</>
-									);
-								}
-								if (activeTab === "orders") {
+											</>
+										);
+									}
+									if (activeTab === "orders") {
+										return !isMobile ? (
+											<OrdersView
+												umbrellaBalances={
+													umbrellaBalancesOrders
+												}
+												orders={orders || []}
+											/>
+										) : (
+											<OrdersCardView
+												umbrellaBalances={
+													umbrellaBalancesOrders
+												}
+												orders={orders || []}
+											/>
+										);
+									}
 									return !isMobile ? (
-										<OrdersView
+										<HistoryView
 											umbrellaBalances={
-												umbrellaBalancesOrders
+												umbrellaBalancesPositions
 											}
+											returnsByQid={returnsByQid}
 											orders={orders || []}
+											resolvedMarketsByUmbrella={
+												resolvedMarketsByUmbrella
+											}
 										/>
 									) : (
-										<OrdersCardView
-											umbrellaBalances={
-												umbrellaBalancesOrders
-											}
+										<HistoryCardView
+											returnsByQid={returnsByQid}
 											orders={orders || []}
+											resolvedMarketsByUmbrella={
+												resolvedMarketsByUmbrella
+											}
 										/>
 									);
-								}
-								return !isMobile ? (
-									<HistoryView
-										umbrellaBalances={
-											umbrellaBalancesPositions
-										}
-										returnsByQid={returnsByQid}
-										orders={orders || []}
-										resolvedMarketsByUmbrella={
-											resolvedMarketsByUmbrella
-										}
-									/>
-								) : (
-									<HistoryCardView
-										returnsByQid={returnsByQid}
-										orders={orders || []}
-										resolvedMarketsByUmbrella={
-											resolvedMarketsByUmbrella
-										}
-									/>
-								);
-							})()
-						)}
-					</>
-				)}
-			</div>
+								})()
+							)}
+						</>
+					)}
+				</div>
 			</div>
 		</div>
 	);

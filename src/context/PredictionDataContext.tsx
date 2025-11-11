@@ -316,17 +316,7 @@ export function PredictionDataProvider({
 
 		async function fetchTags() {
 			try {
-				const token = await getAccessToken();
-				if (!token) {
-					// Tags might be publicly accessible, try without token
-					const fetchedTags = await tagService.fetchAllTags("");
-					if (mounted) {
-						setTags(fetchedTags);
-						setTagsLoading(false);
-					}
-					return;
-				}
-				const fetchedTags = await tagService.fetchAllTags(token);
+				const fetchedTags = await tagService.fetchAllTags();
 				if (mounted) {
 					setTags(fetchedTags);
 					setTagsLoading(false);
@@ -344,7 +334,7 @@ export function PredictionDataProvider({
 		return () => {
 			mounted = false;
 		};
-	}, [getAccessToken]);
+	}, []);
 
 	// Fetch lightweight orderbook preview for all markets
 	useEffect(() => {

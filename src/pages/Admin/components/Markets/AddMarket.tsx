@@ -257,8 +257,8 @@ export default function AddMarket({
 				form,
 				questions,
 				linkedTeams,
-				image1,
-				image2,
+					image1,
+					image2,
 				uploadImage: uploadImageToFirebase,
 			});
 
@@ -380,8 +380,8 @@ export default function AddMarket({
 							onMatchIdChange={(value) =>
 								update("pandascore_matchId", value)
 							}
-							disabled={isPrefilled}
-						/>
+						disabled={isPrefilled}
+					/>
 					)}
 
 				{/* Removed top-level tags; tags are configured per-question below */}
