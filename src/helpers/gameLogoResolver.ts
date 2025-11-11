@@ -96,13 +96,90 @@ export function collectTagsFromUmbrella(umbrella: any): string[] {
 	const collected: string[] = [];
 	const children: any[] | undefined = umbrella && (umbrella as any).children;
 	if (!Array.isArray(children)) return collected;
+	
 	for (const child of children) {
+		// Support both old 'tags' field (string labels) and new 'tagIds' field
 		const tags: string[] | undefined = child && (child as any).tags;
+		const tagIds: string[] | undefined = child && (child as any).tagIds;
+		
+		// Collect from legacy tags field (string labels)
 		if (Array.isArray(tags)) {
 			for (const t of tags) {
 				if (t != null) collected.push(String(t));
 			}
 		}
+		
+		// Collect from new tagIds field (note: these are IDs, not labels)
+		// The tag lookup will happen via the tag service context
+		if (Array.isArray(tagIds)) {
+			for (const tagId of tagIds) {
+				if (tagId != null) collected.push(String(tagId));
+			}
+		}
 	}
+	
 	return collected;
+}
+
+/**
+ * Get tag image URL from umbrella's children's tagIds
+ * Looks up tags from the provided tags array and returns the first imageUrl found
+ */
+export function getTagImageFromUmbrella(
+	umbrella: any,
+	tags: Array<{ _id: string; label: string; imageUrl?: string }>
+): string | null {
+	const children: any[] | undefined = umbrella && (umbrella as any).children;
+	if (!Array.isArray(children) || children.length === 0) return null;
+
+	// Check all children for tagIds
+	for (const child of children) {
+		const tagIds: string[] | undefined = child && (child as any).tagIds;
+		
+		if (Array.isArray(tagIds) && tagIds.length > 0) {
+			// Look for tags with imageUrl
+			for (const tagId of tagIds) {
+				const tag = tags.find((t) => t._id === tagId);
+				if (tag?.imageUrl) {
+					return tag.imageUrl;
+				}
+			}
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Get tag labels from umbrella's children's tagIds
+ * Converts tagIds to actual tag labels for logo resolution
+ */
+export function getTagLabelsFromUmbrella(
+	umbrella: any,
+	tags: Array<{ _id: string; label: string; imageUrl?: string }>
+): string[] {
+	const labels: string[] = [];
+	const children: any[] | undefined = umbrella && (umbrella as any).children;
+	if (!Array.isArray(children)) return labels;
+
+	for (const child of children) {
+		const tagIds: string[] | undefined = child && (child as any).tagIds;
+		
+		if (Array.isArray(tagIds)) {
+			for (const tagId of tagIds) {
+				const tag = tags.find((t) => t._id === tagId);
+				if (tag?.label) {
+					labels.push(tag.label);
+				}
+			}
+		}
+		
+		// Also collect from legacy tags field
+		const legacyTags: string[] | undefined = child && (child as any).tags;
+		if (Array.isArray(legacyTags)) {
+			labels.push(...legacyTags);
+		}
+	}
+
+	return labels;
 }

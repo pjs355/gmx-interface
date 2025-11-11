@@ -5,6 +5,7 @@ import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
 import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarketTradeBox";
 import RulesSection from "components/RulesSection/RulesSection";
 import { TwitchEmbed } from "./TwitchEmbed";
+import { Comments } from "./Comments/Comments";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getMarketId } from "./utils";
@@ -202,6 +203,14 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							</>
 						)}
 					</div>
+
+					{/* Comments Section */}
+					{umbrella && (
+						<Comments
+							umbrellaId={umbrella._id}
+							markets={sortedQuestions as PredictionMarket[]}
+						/>
+					)}
 				</div>
 
 				<div className="right-panel">
@@ -333,6 +342,14 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						</>
 					)}
 				</div>
+
+				{/* Comments Section */}
+				{umbrella && (
+					<Comments
+						umbrellaId={umbrella._id}
+						markets={sortedQuestions as PredictionMarket[]}
+					/>
+				)}
 
 				{/* Mobile Trading Container - Fixed at bottom */}
 				{hasQuestions && orderbooksReady && activeMarket ? (

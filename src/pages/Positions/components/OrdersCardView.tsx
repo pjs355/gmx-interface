@@ -6,32 +6,37 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
-	resolveLogoWithPriority,
-	collectTagsFromUmbrella,
+	resolveLogoByTags,
 	resolveUmbrellaIconById,
+	getTagImageFromUmbrella,
+	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
+import { usePredictionData } from "@/context/PredictionDataContext";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
+	const { tags } = usePredictionData();
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
 	const serverImage =
 		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
-	const gameLogo = resolveLogoWithPriority(
-		umbrella,
-		collectTagsFromUmbrella(umbrella)
-	);
+	const tagImage = getTagImageFromUmbrella(umbrella, tags);
+	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
+	const gameLogo = resolveLogoByTags(tagLabels);
 	const fallbackLogo = gameLogo || gtaIcon;
-	const initialSrc = serverImage || fallbackLogo;
+	const initialSrc = serverImage || tagImage || fallbackLogo;
 
 	const handleError = () => {
-		if (!imageError && serverImage && gameLogo) {
+		if (!imageError) {
 			setImageError(true);
-			setCurrentSrc(gameLogo);
-		} else if (!imageError && serverImage && !gameLogo) {
-			setImageError(true);
-			setCurrentSrc(gtaIcon);
+			if (currentSrc !== tagImage && tagImage) {
+				setCurrentSrc(tagImage);
+			} else if (currentSrc !== gameLogo && gameLogo) {
+				setCurrentSrc(gameLogo);
+			} else {
+				setCurrentSrc(gtaIcon);
+			}
 		}
 	};
 

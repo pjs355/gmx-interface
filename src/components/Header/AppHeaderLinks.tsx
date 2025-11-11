@@ -2,6 +2,7 @@
 // import { Trans } from "@lingui/react";
 // Removed useLingui - not used after cleanup
 // import { useCallback, useState } from "react";
+import { useState, useEffect } from "react";
 import { FiX } from "react-icons/fi";
 // Removed useNotifyModalState - not used after cleanup
 // Removed userAnalytics imports - not needed for prediction markets
@@ -12,13 +13,14 @@ import { HeaderLink } from "./HeaderLink";
 // import ModalWithPortal from "../Modal/ModalWithPortal";
 // Removed LanguageModalContent - not needed for prediction markets
 import { useSignerContext } from "context/SignerContext";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useCopyToClipboard } from "react-use";
 import { useNavigate } from "react-router-dom";
 import ExternalLink from "components/ExternalLink/ExternalLink";
 import { shortenAddress } from "@/services/wallets/shortenAddress";
 import { usePortfolio } from "context/PortfolioContext";
 import { isHomeSite } from "config/ui";
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 import "./Header.scss";
 
@@ -42,11 +44,13 @@ export function AppHeaderLinks({
 
 	// Add portfolio data for mobile display
 	const { authenticated: active, account } = useSignerContext();
-	const { logout, user } = usePrivy();
+	const { logout, user, getAccessToken, ready, authenticated } = usePrivy();
+	const { identityToken } = useIdentityToken();
 	const [, copyToClipboard] = useCopyToClipboard();
 	const navigate = useNavigate();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
 		usePortfolio();
+	const [username, setUsername] = useState<string | null>(null);
 
 	// Detect if user logged in with email (smart wallet) or external wallet
 	const hasSmartWallet = user?.linkedAccounts?.some(
@@ -54,6 +58,39 @@ export function AppHeaderLinks({
 	);
 	const userEmail = user?.email?.address || user?.google?.email;
 	const isSmartWallet = Boolean(hasSmartWallet && userEmail);
+
+	// Fetch username from profile API
+	useEffect(() => {
+		if (!ready || !authenticated || !identityToken) return;
+
+		const fetchUsername = async () => {
+			try {
+				const serverUrl = getPredictionApiBaseUrl();
+				const apiUrl = `${serverUrl}/profiles/me`;
+				const accessToken = await getAccessToken();
+				
+				if (!accessToken) return;
+
+				const headers: Record<string, string> = {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${accessToken}`,
+					"privy-id-token": identityToken,
+				};
+
+				const response = await fetch(apiUrl, { method: "GET", headers });
+				if (!response.ok) return;
+
+				const result = await response.json();
+				if (result.success && result.data?.username) {
+					setUsername(result.data.username);
+				}
+			} catch (error) {
+				console.error("Failed to fetch username for mobile menu:", error);
+			}
+		};
+
+		fetchUsername();
+	}, [ready, authenticated, identityToken, getAccessToken]);
 
 	const formatCurrency = (
 		value: number | string | null | undefined
@@ -160,6 +197,20 @@ export function AppHeaderLinks({
 				</div>
 				<div className="App-header-link-container">
 					<HeaderLink
+						qa="predictions"
+						to="/predictions"
+						showRedirectModal={showRedirectModal}
+						isActive={(_match: any, location: any) => {
+							const path = location.pathname;
+							// Only active on exactly /predictions or /, but NOT /predictions/esports or any other /predictions/* route
+							return (path === "/predictions" || path === "/");
+						}}
+					>
+						Predictions
+					</HeaderLink>
+				</div>
+				<div className="App-header-link-container">
+					<HeaderLink
 						qa="esports"
 						to="/predictions/esports"
 						showRedirectModal={showRedirectModal}
@@ -215,7 +266,9 @@ export function AppHeaderLinks({
 					<div className="App-header-link-container mobile-address-dropdown">
 						<div className="mobile-address-inline">
 							<div className="address-line">
-								{isSmartWallet && userEmail
+								{username
+									? `@${username}`
+									: isSmartWallet && userEmail
 									? userEmail
 									: shortenAddress(account as string, 13)}
 							</div>

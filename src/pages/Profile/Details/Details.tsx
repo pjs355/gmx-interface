@@ -15,7 +15,7 @@ interface UserDetails {
 }
 
 export default function Details() {
-	const { getAccessToken, ready, authenticated } = usePrivy();
+	const { getAccessToken, ready, authenticated, user } = usePrivy();
 	const { identityToken } = useIdentityToken();
 	const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
@@ -23,7 +23,28 @@ export default function Details() {
 	const [usernameValue, setUsernameValue] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 	const [usernameError, setUsernameError] = useState<string | null>(null);
+	const [copySuccess, setCopySuccess] = useState(false);
 	const isMobile = useMedia("(max-width: 768px)");
+
+	// Extract email, phone, and smart wallet from Privy user object
+	const userEmail = user?.email?.address || null;
+	const userPhone = user?.phone?.number || null;
+	const smartWallet = user?.linkedAccounts?.find(
+		(account: any) => account.type === "smart_wallet"
+	);
+	const smartWalletAddress = smartWallet?.address || null;
+
+	const handleCopyAddress = async () => {
+		if (smartWalletAddress) {
+			try {
+				await navigator.clipboard.writeText(smartWalletAddress);
+				setCopySuccess(true);
+				setTimeout(() => setCopySuccess(false), 2000);
+			} catch (err) {
+				console.error("Failed to copy address:", err);
+			}
+		}
+	};
 
 	useEffect(() => {
 		// Wait for Privy to be ready and user to be authenticated
@@ -230,7 +251,6 @@ export default function Details() {
 
 	return (
 		<div className="Details">
-			<h4 className="Details-title">Account Details</h4>
 			<div className="Details-description">
 				View and manage your account information and settings.
 			</div>
@@ -257,11 +277,46 @@ export default function Details() {
 				)}
 
 				<div className="Details-hint">
-					💡 The username will be used when sharing markets as well as
+					The username will be used when sharing markets as well as
 					for leaderboards.
-					<br />⏰ Username can only be changed once every 7 days.
+					<br />Username can only be changed once every 7 days.
 				</div>
 			</div>
+
+			{/* Email Display */}
+			{userEmail && (
+				<div className="Details-info-section">
+					<div className="Details-info-label">Email</div>
+					<div className="Details-info-value">{userEmail}</div>
+				</div>
+			)}
+
+			{/* Phone Display */}
+			{userPhone && (
+				<div className="Details-info-section">
+					<div className="Details-info-label">Phone</div>
+					<div className="Details-info-value">{userPhone}</div>
+				</div>
+			)}
+
+			{/* Smart Wallet Address Display */}
+			{smartWalletAddress && (
+				<div className="Details-info-section">
+					<div className="Details-info-label">Smart Wallet Address (Base)</div>
+					<div className="Details-wallet-display">
+						<div className="Details-info-value Details-wallet-address">
+							{smartWalletAddress}
+						</div>
+						<button
+							className="Details-copy-button"
+							onClick={handleCopyAddress}
+							title="Copy address"
+						>
+							{copySuccess ? "✓" : "Copy"}
+						</button>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

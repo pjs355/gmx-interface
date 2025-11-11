@@ -1,0 +1,90 @@
+.profile-header {
+	font-size: 32px;
+	font-weight: 700;
+	color: #ffffff;
+	margin-top: 0;
+	margin-bottom: 24px;
+	text-decoration: none;
+	border: none;
+}
+
+.profile-tabs {
+	.side-btn {
+		padding: 6px 16px; /* Reduced vertical padding from 8px to 6px */
+		border-radius: 6px;
+		font-size: 16px;
+		font-weight: 400;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		border: 1px solid #d1d5db; /* grey border like tradebox */
+		color: #9ca3af; /* grey text like tradebox */
+		background: #000000; /* solid black background */
+		transform: translateY(0) scale(1);
+		cursor: pointer;
+		position: relative;
+		overflow: hidden;
+		white-space: nowrap; /* Prevent text wrapping */
+
+		&:hover {
+			border-color: #8b5cf6; /* purple hover border */
+			color: #8b5cf6; /* purple hover text */
+			background: #000000 !important; /* solid black on hover */
+			transform: translateY(-2px) scale(1.02);
+			box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+		}
+
+		&:active {
+			transform: translateY(0) scale(0.98);
+			transition: all 0.1s ease;
+		}
+
+		&.selected.primary {
+			background: #000000 !important; /* solid black when selected */
+			border-color: #8b5cf6; /* purple border when selected */
+			color: #7c3aed; /* dark purple text when selected */
+			font-weight: 700;
+			transform: translateY(-1px) scale(1.05);
+			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+		}
+
+		&.selected.secondary {
+			background: #000000 !important;
+			border-color: #8b5cf6;
+			color: #7c3aed;
+			font-weight: 700;
+			transform: translateY(-1px) scale(1.05);
+			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+		}
+	}
+}
+
+.profile-page {
+	background: #000000;
+	min-height: 100vh;
+}
+
+.profile-content-wrapper {
+	margin-top: 32px; /* Desktop padding between tabs and content */
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+	.profile-header {
+		font-size: 24px;
+		margin-bottom: 16px;
+	}
+
+	.profile-tabs {
+		width: 100%;
+		gap: 8px !important;
+
+		.side-btn {
+			font-size: 13px;
+			padding: 6px 12px; /* Smaller padding on mobile */
+		}
+	}
+
+	.profile-content-wrapper {
+		margin-top: 20px; /* Reduce spacing on mobile */
+	}
+}
+

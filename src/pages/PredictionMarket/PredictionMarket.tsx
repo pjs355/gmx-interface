@@ -15,7 +15,6 @@ import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
-import { Comments } from "./Comments/Comments";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -585,31 +584,24 @@ function PredictionMarketContent() {
 					<MarketHeader umbrella={umbrella} titleRef={titleRef} />
 				)}
 
-				<MarketPanels
-					umbrella={umbrella!}
-					sortedQuestions={sortedQuestions as any}
-					questionOrderbooks={questionOrderbooks}
-					activeMarket={activeMarket as any}
-					activePosition={activePosition}
-					openOrderbookId={openOrderbookId}
-					onMarketSwitch={handleMarketSwitch}
-					onMarketSwitchWithOrderbook={
-						handleMarketSwitchWithOrderbook
-					}
-					onOrderbookToggle={handleOrderbookToggle}
-					onPositionChange={handlePositionChange}
-					fetchAllOrderbooks={fetchAllOrderbooks}
-					chartState={chartOnlyState}
-					orderbooksReady={orderbooksReady}
-				/>
-
-				{umbrella && (
-					<Comments
-						umbrellaId={umbrella._id}
-						markets={sortedQuestions as PredictionMarket[]}
-					/>
-				)}
-			</div>
+			<MarketPanels
+				umbrella={umbrella!}
+				sortedQuestions={sortedQuestions as any}
+				questionOrderbooks={questionOrderbooks}
+				activeMarket={activeMarket as any}
+				activePosition={activePosition}
+				openOrderbookId={openOrderbookId}
+				onMarketSwitch={handleMarketSwitch}
+				onMarketSwitchWithOrderbook={
+					handleMarketSwitchWithOrderbook
+				}
+				onOrderbookToggle={handleOrderbookToggle}
+				onPositionChange={handlePositionChange}
+				fetchAllOrderbooks={fetchAllOrderbooks}
+				chartState={chartOnlyState}
+				orderbooksReady={orderbooksReady}
+			/>
+		</div>
 		</PredictionCurtainProvider>
 	);
 }

@@ -4,9 +4,11 @@ import { ethers } from "ethers";
 import { useLocation } from "react-router-dom";
 import { useMedia } from "react-use";
 import { useSignerContext } from "context/SignerContext";
+import Button from "components/Button/Button";
 import Developers from "../Developers/Developers";
 import GamingAccounts from "./GamingAccounts/GamingAccounts";
 import Details from "./Details/Details";
+import "./Profile.scss";
 
 export default function Profile() {
 	const location = useLocation();
@@ -94,237 +96,52 @@ export default function Profile() {
 
 	return (
 		<div
+			className="profile-page"
 			style={{
-				gap: 16,
-				padding: isMobile ? 16 : 24,
+				paddingLeft: isMobile ? 16 : 50,
+				paddingRight: isMobile ? 16 : 24,
+				paddingTop: isMobile ? 16 : 24,
+				paddingBottom: isMobile ? 16 : 24,
 				color: "white",
-				background: "#000000",
 			}}
 		>
-			{/* Mobile: Tabs at top */}
-			{isMobile && (
-				<div
-					style={{
-						display: "flex",
-						gap: 12,
-						marginBottom: 16,
-					}}
-				>
-					<button
+			{/* Account Details Header */}
+			<h1 className="profile-header">Account Details</h1>
+
+			{/* Profile Tabs - Same styling as Positions page */}
+			<div className="flex items-center justify-between">
+				<div className="flex gap-8 profile-tabs" role="tablist">
+					<Button
+						variant="ghost"
 						onClick={() => setActiveSection("details")}
-						style={{
-							color:
-								activeSection === "details" ? "cyan" : "white",
-							background: "transparent",
-							border: "none",
-							borderRadius: 0,
-							cursor: "pointer",
-							padding: "8px 12px",
-							fontSize: "inherit",
-							fontWeight: activeSection === "details" ? 600 : 400,
-							textDecoration: "none",
-							outline: "none",
-						}}
+						className={`side-btn ${
+							activeSection === "details" ? "selected primary" : ""
+						}`}
 					>
 						Details
-					</button>
-					<button
+					</Button>
+					<Button
+						variant="ghost"
 						onClick={() => setActiveSection("developers")}
-						style={{
-							color:
-								activeSection === "developers"
-									? "cyan"
-									: "white",
-							background: "transparent",
-							border: "none",
-							borderRadius: 0,
-							cursor: "pointer",
-							padding: "8px 12px",
-							fontSize: "inherit",
-							fontWeight:
-								activeSection === "developers" ? 600 : 400,
-							textDecoration: "none",
-							outline: "none",
-						}}
+						className={`side-btn ${
+							activeSection === "developers" ? "selected primary" : ""
+						}`}
 					>
 						Developers
-					</button>
-					<button
+					</Button>
+					<Button
+						variant="ghost"
 						onClick={() => setActiveSection("gaming-accounts")}
-						style={{
-							color:
-								activeSection === "gaming-accounts"
-									? "cyan"
-									: "white",
-							background: "transparent",
-							border: "none",
-							borderRadius: 0,
-							cursor: "pointer",
-							padding: "8px 12px",
-							fontSize: "inherit",
-							fontWeight:
-								activeSection === "gaming-accounts" ? 600 : 400,
-							textDecoration: "none",
-							outline: "none",
-						}}
+						className={`side-btn ${
+							activeSection === "gaming-accounts" ? "selected primary" : ""
+						}`}
 					>
 						Gaming Accounts
-					</button>
+					</Button>
 				</div>
-			)}
+			</div>
 
-			{/* Desktop: Sidebar */}
-			{!isMobile && (
-				<aside
-					style={{
-						border: "1px solid rgba(255,255,255,0.2)",
-						borderRadius: 8,
-						padding: 16,
-						background: "rgba(255,255,255,0.03)",
-					}}
-				>
-					{/* <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-					Profile
-				</div>
-				<div style={{ marginBottom: 16, opacity: 0.9 }}>
-					{toDisplayString((user as any)?.username) ||
-						toDisplayString((user as any)?.email) ||
-						toDisplayString(user?.id) ||
-						"Unknown user"}
-				</div>
-				<div style={{ marginBottom: 8 }}>
-					<div style={{ fontWeight: 600, marginBottom: 4 }}>
-						Active Wallet
-					</div>
-					<div style={{ wordBreak: "break-all" }}>
-						{account || "Not connected"}
-					</div>
-				</div>
-				<div style={{ marginBottom: 12 }}>
-					<div style={{ fontWeight: 600, marginBottom: 4 }}>
-						Resolved Signer
-					</div>
-					<div style={{ wordBreak: "break-all" }}>
-						{signerAddress || "Unavailable"}
-					</div>
-					{account &&
-						signerAddress &&
-						account.toLowerCase() !==
-							signerAddress.toLowerCase() && (
-							<div
-								style={{
-									fontSize: 12,
-									color: "#eab308",
-									marginTop: 4,
-								}}
-							>
-								Warning: connected wallet differs from signer
-								used for API key creation
-							</div>
-						)}
-				</div>
-
-				<div style={{ marginBottom: 12, fontWeight: 600 }}>
-					Linked Accounts
-				</div>
-				{linked.length === 0 && (
-					<div style={{ opacity: 0.8 }}>No linked accounts.</div>
-				)}
-				{linked.length > 0 && (
-					<div style={{ display: "grid", gap: 8 }}>
-						{linked.map((acc: any, idx: number) => (
-							<div
-								key={idx}
-								style={{
-									border: "1px solid rgba(255,255,255,0.2)",
-									borderRadius: 6,
-									padding: 8,
-								}}
-							>
-								<div style={{ fontSize: 12, opacity: 0.8 }}>
-									{acc.type}
-								</div>
-								<div style={{ wordBreak: "break-all" }}>
-									{toDisplayString(acc.address) ||
-										toDisplayString(acc.email) ||
-										toDisplayString(acc.issuer) ||
-										toDisplayString(acc.subject) ||
-										toDisplayString(acc.id)}
-								</div>
-							</div>
-						))}
-					</div>
-				)}
-
-				<div
-					style={{
-						marginTop: 16,
-						borderTop: "1px solid rgba(255,255,255,0.2)",
-						paddingTop: 12,
-					}}
-				>
-				*/}
-					<div style={{ fontWeight: 600, marginBottom: 8 }}>
-						Sections
-					</div>
-					<div style={{ display: "grid", gap: 6 }}>
-						<button
-							onClick={() => setActiveSection("details")}
-							style={{
-								color:
-									activeSection === "details"
-										? "cyan"
-										: "white",
-								background: "transparent",
-								border: "none",
-								textAlign: "left",
-								cursor: "pointer",
-								padding: 0,
-								fontSize: "inherit",
-							}}
-						>
-							Details
-						</button>
-						<button
-							onClick={() => setActiveSection("developers")}
-							style={{
-								color:
-									activeSection === "developers"
-										? "cyan"
-										: "white",
-								background: "transparent",
-								border: "none",
-								textAlign: "left",
-								cursor: "pointer",
-								padding: 0,
-								fontSize: "inherit",
-							}}
-						>
-							Developers
-						</button>
-						<button
-							onClick={() => setActiveSection("gaming-accounts")}
-							style={{
-								color:
-									activeSection === "gaming-accounts"
-										? "cyan"
-										: "white",
-								background: "transparent",
-								border: "none",
-								textAlign: "left",
-								cursor: "pointer",
-								padding: 0,
-								fontSize: "inherit",
-							}}
-						>
-							Gaming Accounts
-						</button>
-					</div>
-					{/* </div> */}
-				</aside>
-			)}
-
-			<main>
+			<main className="profile-content-wrapper">
 				{activeSection === "details" ? (
 					<Details />
 				) : activeSection === "developers" ? (
