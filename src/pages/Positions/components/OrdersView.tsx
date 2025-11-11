@@ -7,41 +7,37 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
-	resolveLogoWithPriority,
-	collectTagsFromUmbrella,
+	resolveLogoByTags,
 	resolveUmbrellaIconById,
+	getTagImageFromUmbrella,
+	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
+import { usePredictionData } from "@/context/PredictionDataContext";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
+	const { tags } = usePredictionData();
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
-	// Priority 1: Check for server image (ic_{umbrellaID})
 	const serverImage =
 		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
-
-	// Priority 2: Check for game logo based on tags
-	const gameLogo = resolveLogoWithPriority(
-		umbrella,
-		collectTagsFromUmbrella(umbrella)
-	);
-
-	// Priority 3: Fallback to game controller
+	const tagImage = getTagImageFromUmbrella(umbrella, tags);
+	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
+	const gameLogo = resolveLogoByTags(tagLabels);
 	const fallbackLogo = gameLogo || gtaIcon;
-
-	// Determine initial source
-	const initialSrc = serverImage || fallbackLogo;
+	const initialSrc = serverImage || tagImage || fallbackLogo;
 
 	const handleError = () => {
-		if (!imageError && serverImage && gameLogo) {
-			// If server image fails, fall back to game logo
+		if (!imageError) {
 			setImageError(true);
-			setCurrentSrc(gameLogo);
-		} else if (!imageError && serverImage && !gameLogo) {
-			// If server image fails and no game logo, fall back to controller
-			setImageError(true);
-			setCurrentSrc(gtaIcon);
+			if (currentSrc !== tagImage && tagImage) {
+				setCurrentSrc(tagImage);
+			} else if (currentSrc !== gameLogo && gameLogo) {
+				setCurrentSrc(gameLogo);
+			} else {
+				setCurrentSrc(gtaIcon);
+			}
 		}
 	};
 

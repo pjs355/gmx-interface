@@ -85,13 +85,40 @@ export default function Predictions() {
 			return (umbrella as any).active === true;
 		});
 
-		if (!selectedGame) return activeUmbrellas;
+		// Find ESPORTS tag to exclude esports markets from home page
+		const esportsTag = tags.find(
+			(t) => normalizeTag(t.label) === "ESPORTS"
+		);
+
+		// Filter out esports-tagged umbrellas
+		const nonEsportsUmbrellas = activeUmbrellas.filter((umbrella) => {
+			const children = (umbrella as any).children as
+				| Array<any>
+				| undefined;
+			if (!children || children.length === 0) return false;
+
+			// Check if any child has the ESPORTS tag
+			const hasEsportsTag = children.some((q) => {
+				const tagIds: string[] | undefined = (q &&
+					(q as any).tagIds) as any;
+				// MUST have tagIds array (skip questions with legacy tags only)
+				if (!Array.isArray(tagIds) || tagIds.length === 0) {
+					return false;
+				}
+				return esportsTag && tagIds.includes(esportsTag._id);
+			});
+
+			// Exclude umbrellas with esports tag from home page
+			return !hasEsportsTag;
+		});
+
+		if (!selectedGame) return nonEsportsUmbrellas;
 
 		// Find the selected tag by label
 		const selectedTag = tags.find((t) => t.label === selectedGame);
-		if (!selectedTag) return activeUmbrellas;
+		if (!selectedTag) return nonEsportsUmbrellas;
 
-		return activeUmbrellas.filter((umbrella) => {
+		return nonEsportsUmbrellas.filter((umbrella) => {
 			const children = (umbrella as any).children as
 				| Array<any>
 				| undefined;
@@ -215,6 +242,7 @@ export default function Predictions() {
 				onGameSelect={setSelectedGame}
 				umbrellas={umbrellas}
 				loading={loading}
+				filterType="games"
 			/>
 
 			<div className="predictions-grid">

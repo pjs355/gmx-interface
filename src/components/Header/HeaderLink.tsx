@@ -81,7 +81,11 @@ export function HeaderLink({
 
 	return (
 		<NavLink
-			className={({ isActive }) => cx(className, { active: isActive })}
+			className={({ isActive: navIsActive }) => {
+				// Use custom isActive if provided, otherwise use NavLink's default
+				const active = isActive ? isActive(null, window.location) : navIsActive;
+				return cx(className, { active });
+			}}
 			end={exact}
 			to={to}
 			onClick={onClick}

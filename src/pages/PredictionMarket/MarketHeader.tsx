@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import gtaVIImage from "@/assets/img/ic_gtaVI_40.svg";
-import { resolveUmbrellaIconById } from "@/helpers/gameLogoResolver";
-import { usePredictionData } from "@/context/PredictionDataContext";
+import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
+import {
+	resolveLogoWithPriority,
+	collectTagsFromUmbrella,
+	resolveUmbrellaIconById,
+} from "@/helpers/gameLogoResolver";
 
 type MarketHeaderProps = {
 	umbrella: Umbrella;
@@ -13,48 +16,34 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 	umbrella,
 	titleRef,
 }) => {
-	const { tags } = usePredictionData();
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
-	// Priority 1: Use umbrella's uploaded image (image1Url or image2Url)
-	const umbrellaImage =
-		(umbrella as any).image1Url || (umbrella as any).image2Url || null;
+	// Priority 1: Check for server image (ic_{umbrellaID})
+	const serverImage =
+		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
 
-	// Priority 2: Get tag image from first question's tagIds
-	const tagImage = useMemo(() => {
-		const children = (umbrella as any).children;
-		if (!Array.isArray(children) || children.length === 0) return null;
-
-		const firstQuestion = children[0];
-		const tagIds: string[] | undefined = firstQuestion?.tagIds;
-
-		if (!Array.isArray(tagIds) || tagIds.length === 0) return null;
-
-		// Find the first tag that has an imageUrl
-		for (const tagId of tagIds) {
-			const tag = tags.find((t) => t._id === tagId);
-			if (tag?.imageUrl) return tag.imageUrl;
-		}
-
-		return null;
-	}, [umbrella, tags]);
+	// Priority 2: Check for game logo based on tags
+	const gameLogo = resolveLogoWithPriority(
+		umbrella,
+		collectTagsFromUmbrella(umbrella)
+	);
 
 	// Priority 3: Fallback to game controller
-	const fallbackLogo = gtaVIImage;
+	const fallbackLogo = gameLogo || gtaIcon;
 
 	// Determine initial source
-	const initialSrc = umbrellaImage || tagImage || fallbackLogo;
+	const initialSrc = serverImage || fallbackLogo;
 
 	const handleError = () => {
-		if (!imageError) {
+		if (!imageError && serverImage && gameLogo) {
+			// If server image fails, fall back to game logo
 			setImageError(true);
-			// Try fallback order: tagImage → gtaVIImage
-			if (currentSrc !== tagImage && tagImage) {
-				setCurrentSrc(tagImage);
-			} else {
-				setCurrentSrc(fallbackLogo);
-			}
+			setCurrentSrc(gameLogo);
+		} else if (!imageError && serverImage && !gameLogo) {
+			// If server image fails and no game logo, fall back to controller
+			setImageError(true);
+			setCurrentSrc(gtaIcon);
 		}
 	};
 

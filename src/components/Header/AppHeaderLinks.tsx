@@ -160,6 +160,20 @@ export function AppHeaderLinks({
 				</div>
 				<div className="App-header-link-container">
 					<HeaderLink
+						qa="predictions"
+						to="/predictions"
+						showRedirectModal={showRedirectModal}
+						isActive={(_match: any, location: any) => {
+							const path = location.pathname;
+							// Only active on exactly /predictions or /, but NOT /predictions/esports or any other /predictions/* route
+							return (path === "/predictions" || path === "/");
+						}}
+					>
+						Predictions
+					</HeaderLink>
+				</div>
+				<div className="App-header-link-container">
+					<HeaderLink
 						qa="esports"
 						to="/predictions/esports"
 						showRedirectModal={showRedirectModal}
