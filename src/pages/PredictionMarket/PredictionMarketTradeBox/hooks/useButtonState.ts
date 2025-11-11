@@ -43,7 +43,7 @@ export function useButtonState({
       );
       if (!hasLiquidity) return { text: "Not enough liquidity", disabled: true, onClick: () => {} };
     }
-    const balanceCheck = checkSufficientBalance(state.amount, state.orderType, state.side, usdcBalance);
+    const balanceCheck = checkSufficientBalance(state.amount, state.orderType, state.side, usdcBalance, state.price);
     if (!balanceCheck.hasSufficientBalance) return { text: "Insufficient Balance", disabled: true, onClick: () => {} };
     const sharesCheck = checkSufficientShares(state.amount, state.orderType, state.side, state.selectedPosition, yesBalance, noBalance);
     if (!sharesCheck.hasSufficientShares) return { text: "Insufficient Shares", disabled: true, onClick: () => {} };
