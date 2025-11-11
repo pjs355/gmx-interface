@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import "./TeamLinker.scss";
 
 import {
 	teamService,
@@ -7,17 +8,12 @@ import {
 	type CreateTeamPayload,
 } from "@/services/api/teamService";
 import { uploadTeamLogo } from "@/services/firebase/firebaseStorage";
-
-interface TeamCandidate {
-	displayName: string;
-	slug: string;
-	shortCode: string | null;
-	pandaId: number | null;
-}
+import type { TeamCandidate } from "@/types/market-types";
 
 interface TeamLinkerProps {
 	candidates: TeamCandidate[];
 	onTeamLinked?: (shortCode: string, team: TeamRecord) => void;
+	readOnly?: boolean;
 }
 
 type TeamStatus = "idle" | "loading" | "linked" | "error";
@@ -38,7 +34,7 @@ interface CandidateState {
 	backgroundUrl: string;
 	errorMessage: string | null;
 	saving: boolean;
-	isEditing: boolean;
+	isExpanded: boolean;
 }
 
 const slugify = (value: string): string => {
@@ -50,14 +46,23 @@ const slugify = (value: string): string => {
 };
 
 const buildInitialState = (candidate: TeamCandidate): CandidateState => {
+	const shortCodeValue = candidate.shortCode;
+	const shortCode = typeof shortCodeValue === "string" ? shortCodeValue : "";
+	const candidatePandaId = candidate.pandaId;
+	let pandaId: number | null;
+	if (typeof candidatePandaId === "number") {
+		pandaId = candidatePandaId;
+	} else {
+		pandaId = null;
+	}
 	return {
 		candidate,
 		status: "idle",
 		existingTeam: null,
 		displayName: candidate.displayName,
 		slug: candidate.slug,
-		shortCode: candidate.shortCode ?? "",
-		pandaId: candidate.pandaId,
+		shortCode,
+		pandaId,
 		primaryColor: "",
 		secondaryColor: "",
 		logoUrl: null,
@@ -66,7 +71,7 @@ const buildInitialState = (candidate: TeamCandidate): CandidateState => {
 		backgroundUrl: "",
 		errorMessage: null,
 		saving: false,
-		isEditing: false,
+		isExpanded: true,
 	};
 };
 
@@ -77,6 +82,7 @@ function normalizeShortCode(shortCode: string): string {
 export default function TeamLinker({
 	candidates,
 	onTeamLinked,
+	readOnly,
 }: TeamLinkerProps) {
 	const { getAccessToken } = usePrivy();
 	const [states, setStates] = useState<CandidateState[]>(
@@ -143,6 +149,7 @@ export default function TeamLinker({
 							current.secondaryColor = team.secondaryColor ?? "";
 							current.logoUrl = team.logoUrl ?? null;
 							current.backgroundUrl = team.backgroundUrl ?? "";
+							current.isExpanded = false;
 						}
 						clone[index] = current;
 						return clone;
@@ -197,12 +204,6 @@ export default function TeamLinker({
 		[updateState]
 	);
 
-	const disabledInputStyle: React.CSSProperties = {
-		opacity: 0.5,
-		cursor: "not-allowed",
-		color: "#9ca3af",
-	};
-
 	const handleDisplayNameChange = useCallback(
 		(index: number, value: string) => {
 			updateState(index, (prev) => {
@@ -221,32 +222,12 @@ export default function TeamLinker({
 		[updateState]
 	);
 
-	const handleToggleEditing = useCallback(
-		(index: number, editing: boolean) => {
-			updateState(index, (prev) => {
-				if (!prev.existingTeam) {
-					return { ...prev, isEditing: editing };
-				}
-				if (!editing) {
-					const team = prev.existingTeam;
-					return {
-						...prev,
-						isEditing: false,
-						displayName: team.displayName,
-						slug: team.slug,
-						shortCode: team.shortCode,
-						pandaId: team.pandaId ?? prev.pandaId,
-						primaryColor: team.primaryColor ?? "",
-						secondaryColor: team.secondaryColor ?? "",
-						backgroundUrl: team.backgroundUrl ?? "",
-						logoUrl: team.logoUrl ?? prev.logoUrl,
-						logoFile: null,
-						logoPreview: null,
-						errorMessage: null,
-					};
-				}
-				return { ...prev, isEditing: true };
-			});
+	const toggleExpanded = useCallback(
+		(index: number) => {
+			updateState(index, (prev) => ({
+				...prev,
+				isExpanded: !prev.isExpanded,
+			}));
 		},
 		[updateState]
 	);
@@ -255,7 +236,7 @@ export default function TeamLinker({
 		(index: number, fileList: FileList | null) => {
 			const state = states[index];
 			const fieldsDisabled =
-				state.status === "linked" && !state.isEditing;
+				state.status === "linked" || readOnly === true;
 			if (fieldsDisabled) {
 				return;
 			}
@@ -282,13 +263,16 @@ export default function TeamLinker({
 			};
 			reader.readAsDataURL(file);
 		},
-		[updateState, states]
+		[updateState, states, readOnly]
 	);
 
 	const handleCreateTeam = useCallback(
 		async (index: number) => {
+			if (readOnly === true) {
+				return;
+			}
 			const state = states[index];
-			if (state.status === "linked" && !state.isEditing) {
+			if (state.status === "linked") {
 				return;
 			}
 			const shortCode = state.shortCode.trim();
@@ -391,6 +375,7 @@ export default function TeamLinker({
 					backgroundUrl:
 						createdTeam.backgroundUrl ?? prev.backgroundUrl,
 					saving: false,
+					isExpanded: false,
 				}));
 				if (typeof onTeamLinked === "function") {
 					onTeamLinked(createdTeam.shortCode, createdTeam);
@@ -407,7 +392,7 @@ export default function TeamLinker({
 				}));
 			}
 		},
-		[getAccessToken, onTeamLinked, states, updateState]
+		[getAccessToken, onTeamLinked, readOnly, states, updateState]
 	);
 
 	if (enrichedStates.length === 0) {
@@ -415,429 +400,268 @@ export default function TeamLinker({
 	}
 
 	return (
-		<div
-			style={{
-				marginTop: 24,
-				padding: 16,
-				border: "1px solid rgba(255,255,255,0.2)",
-				borderRadius: 12,
-				display: "grid",
-				gap: 16,
-			}}
-		>
-			<h3 style={{ margin: 0 }}>Team Links</h3>
-			{enrichedStates.map((state, index) => (
-				<div
-					key={`${state.shortCode}-${index}`}
-					style={{
-						border: "1px solid rgba(255,255,255,0.1)",
-						borderRadius: 10,
-						padding: 12,
-						display: "grid",
-						gap: 12,
-						background: "rgba(10, 12, 28, 0.4)",
-					}}
-				>
+		<div className="team-linker">
+			<h3 className="team-linker__header">Team Links</h3>
+			{enrichedStates.map((state, index) => {
+				const isLocked = state.status === "linked" || readOnly === true;
+				const inputClass = `team-linker__input${
+					isLocked ? " team-linker__input--disabled" : ""
+				}`;
+				const logoPickerClass = `team-linker__logo-picker${
+					isLocked ? " team-linker__logo-picker--disabled" : ""
+				}`;
+				const saveButtonClass = [
+					"team-linker__save-button",
+					state.saving || isLocked
+						? "team-linker__save-button--disabled"
+						: "team-linker__save-button--primary",
+				].join(" ");
+
+				return (
 					<div
-						style={{
-							display: "flex",
-							justifyContent: "space-between",
-							alignItems: "center",
-							gap: 8,
-							flexWrap: "wrap",
-						}}
+						key={`${state.shortCode}-${index}`}
+						className="team-linker__card"
 					>
-						<strong>{state.candidate.displayName}</strong>
-						{state.status === "linked" && state.existingTeam && (
-							<span
-								style={{
-									padding: "4px 8px",
-									borderRadius: 6,
-									background: "rgba(34,197,94,0.2)",
-									color: "#22c55e",
-								}}
-							>
-								Linked
-							</span>
-						)}
-						{state.status === "linked" && state.existingTeam && (
-							<div style={{ display: "flex", gap: 8 }}>
-								{state.isEditing ? (
-									<button
-										type="button"
-										onClick={() =>
-											handleToggleEditing(index, false)
-										}
-										style={{
-											padding: "4px 10px",
-											borderRadius: 6,
-											border: "1px solid rgba(255,255,255,0.2)",
-											background: "rgba(255,255,255,0.1)",
-											color: "white",
-											cursor: "pointer",
-										}}
-									>
-										Cancel
-									</button>
-								) : (
-									<button
-										type="button"
-										onClick={() =>
-											handleToggleEditing(index, true)
-										}
-										style={{
-											padding: "4px 10px",
-											borderRadius: 6,
-											border: "1px solid rgba(255,255,255,0.2)",
-											background: "rgba(79,70,229,0.35)",
-											color: "white",
-											cursor: "pointer",
-										}}
-									>
-										Edit
-									</button>
-								)}
+						<div className="team-linker__card-top">
+							<div className="team-linker__card-top-left">
+								<button
+									type="button"
+									onClick={() => toggleExpanded(index)}
+									className="team-linker__toggle-button"
+								>
+									<span>
+										{state.isExpanded
+											? "Collapse"
+											: "Expand"}
+									</span>
+								</button>
+								<div className="team-linker__summary">
+									<strong>
+										{state.candidate.displayName}
+									</strong>
+									<span className="team-linker__shortcode-label">
+										Short code:{" "}
+										{state.shortCode.length > 0
+											? state.shortCode
+											: "—"}
+									</span>
+								</div>
 							</div>
+							{state.status === "linked" &&
+								state.existingTeam && (
+									<span className="team-linker__status-badge">
+										Linked
+									</span>
+								)}
+						</div>
+
+						{state.isExpanded && (
+							<>
+								<div className="team-linker__fields">
+									<label className="team-linker__field-label">
+										<span>Display Name</span>
+										<input
+											name={`team-display-name-${index}`}
+											value={state.displayName}
+											onChange={(event) =>
+												handleDisplayNameChange(
+													index,
+													event.target.value
+												)
+											}
+											disabled={isLocked}
+											className={inputClass}
+										/>
+									</label>
+									<label className="team-linker__field-label">
+										<span>Slug</span>
+										<input
+											name={`team-slug-${index}`}
+											value={state.slug}
+											onChange={(event) =>
+												handleInputChange(
+													index,
+													"slug",
+													event.target.value
+												)
+											}
+											disabled={isLocked}
+											className={inputClass}
+										/>
+									</label>
+									<label className="team-linker__field-label">
+										<span>Short Code</span>
+										<input
+											name={`team-shortcode-${index}`}
+											value={state.shortCode}
+											onChange={(event) =>
+												handleInputChange(
+													index,
+													"shortCode",
+													event.target.value
+												)
+											}
+											disabled={isLocked}
+											className={inputClass}
+										/>
+									</label>
+									<label className="team-linker__field-label">
+										<span>PandaScore ID</span>
+										<input
+											name={`team-panda-${index}`}
+											value={
+												state.pandaId !== null
+													? String(state.pandaId)
+													: ""
+											}
+											onChange={(event) => {
+												const value =
+													event.target.value.trim();
+												updateState(index, (prev) => ({
+													...prev,
+													pandaId:
+														value.length === 0
+															? null
+															: Number.parseInt(
+																	value,
+																	10
+															  ),
+													errorMessage: null,
+												}));
+											}}
+											disabled
+											className="team-linker__input team-linker__input--disabled"
+										/>
+									</label>
+								</div>
+
+								<div className="team-linker__colors">
+									<label className="team-linker__field-label">
+										<span>Primary Color (hex)</span>
+										<input
+											name={`team-primary-${index}`}
+											value={state.primaryColor}
+											onChange={(event) =>
+												handleInputChange(
+													index,
+													"primaryColor",
+													event.target.value
+												)
+											}
+											placeholder="#000000"
+											disabled={isLocked}
+											className={inputClass}
+										/>
+									</label>
+									<label className="team-linker__field-label">
+										<span>Secondary Color (hex)</span>
+										<input
+											name={`team-secondary-${index}`}
+											value={state.secondaryColor}
+											onChange={(event) =>
+												handleInputChange(
+													index,
+													"secondaryColor",
+													event.target.value
+												)
+											}
+											placeholder="#ffffff"
+											disabled={isLocked}
+											className={inputClass}
+										/>
+									</label>
+								</div>
+
+								<label className="team-linker__field-label">
+									<span>Background URL</span>
+									<input
+										name={`team-background-${index}`}
+										value={state.backgroundUrl}
+										onChange={(event) =>
+											handleInputChange(
+												index,
+												"backgroundUrl",
+												event.target.value
+											)
+										}
+										placeholder="https://..."
+										disabled={isLocked}
+										className={inputClass}
+									/>
+								</label>
+
+								<div className="team-linker__logo-section">
+									<span>Team Logo</span>
+									<div className="team-linker__logo-controls">
+										<label className={logoPickerClass}>
+											<input
+												type="file"
+												name={`team-logo-${index}`}
+												accept="image/*"
+												onChange={(event) =>
+													handleFileSelect(
+														index,
+														event.target.files
+													)
+												}
+												disabled={isLocked}
+												className="team-linker__file-input"
+											/>
+											Select logo
+										</label>
+										{state.logoPreview && (
+											<img
+												src={state.logoPreview}
+												alt={`${state.displayName} preview`}
+												className="team-linker__logo-preview"
+											/>
+										)}
+										{state.logoUrl &&
+											!state.logoPreview && (
+												<img
+													src={state.logoUrl}
+													alt={`${state.displayName} current logo`}
+													className="team-linker__logo-preview"
+												/>
+											)}
+									</div>
+								</div>
+
+								{state.errorMessage && (
+									<div className="team-linker__error">
+										{state.errorMessage}
+									</div>
+								)}
+
+								{!readOnly && (
+									<div>
+										<button
+											type="button"
+											onClick={() =>
+												handleCreateTeam(index)
+											}
+											disabled={state.saving || isLocked}
+											className={saveButtonClass}
+										>
+											{state.status === "linked"
+												? "Team Linked"
+												: state.saving
+												? "Saving..."
+												: "Save team"}
+										</button>
+									</div>
+								)}
+								{readOnly && state.status === "linked" && (
+									<div className="team-linker__read-only-note">
+										Manage updates in the Teams admin
+										section.
+									</div>
+								)}
+							</>
 						)}
 					</div>
-					<div
-						style={{
-							display: "grid",
-							gap: 8,
-							gridTemplateColumns:
-								"repeat(auto-fit, minmax(200px, 1fr))",
-						}}
-					>
-						<label style={{ display: "grid", gap: 4 }}>
-							<span>Display Name</span>
-							<input
-								name={`team-display-name-${index}`}
-								value={state.displayName}
-								onChange={(event) =>
-									handleDisplayNameChange(
-										index,
-										event.target.value
-									)
-								}
-								disabled={
-									state.status === "linked" &&
-									!state.isEditing
-								}
-								style={{
-									padding: 8,
-									borderRadius: 6,
-									border: "1px solid rgba(255,255,255,0.2)",
-									background: "rgba(255,255,255,0.05)",
-									color: "#ffffff",
-									...(state.status === "linked" &&
-									!state.isEditing
-										? disabledInputStyle
-										: {}),
-								}}
-							/>
-						</label>
-						<label style={{ display: "grid", gap: 4 }}>
-							<span>Slug</span>
-							<input
-								name={`team-slug-${index}`}
-								value={state.slug}
-								onChange={(event) =>
-									handleInputChange(
-										index,
-										"slug",
-										event.target.value
-									)
-								}
-								disabled={
-									state.status === "linked" &&
-									!state.isEditing
-								}
-								style={{
-									padding: 8,
-									borderRadius: 6,
-									border: "1px solid rgba(255,255,255,0.2)",
-									background: "rgba(255,255,255,0.05)",
-									color: "#ffffff",
-									...(state.status === "linked" &&
-									!state.isEditing
-										? disabledInputStyle
-										: {}),
-								}}
-							/>
-						</label>
-						<label style={{ display: "grid", gap: 4 }}>
-							<span>Short Code</span>
-							<input
-								name={`team-shortcode-${index}`}
-								value={state.shortCode}
-								onChange={(event) =>
-									handleInputChange(
-										index,
-										"shortCode",
-										event.target.value
-									)
-								}
-								disabled={
-									state.status === "linked" &&
-									!state.isEditing
-								}
-								style={{
-									padding: 8,
-									borderRadius: 6,
-									border: "1px solid rgba(255,255,255,0.2)",
-									background: "rgba(255,255,255,0.05)",
-									color: "#ffffff",
-									...(state.status === "linked" &&
-									!state.isEditing
-										? disabledInputStyle
-										: {}),
-								}}
-							/>
-						</label>
-						<label style={{ display: "grid", gap: 4 }}>
-							<span>PandaScore ID</span>
-							<input
-								name={`team-panda-${index}`}
-								value={
-									state.pandaId !== null
-										? String(state.pandaId)
-										: ""
-								}
-								onChange={(event) => {
-									const value = event.target.value.trim();
-									updateState(index, (prev) => ({
-										...prev,
-										pandaId:
-											value.length === 0
-												? null
-												: Number.parseInt(value, 10),
-										errorMessage: null,
-									}));
-								}}
-								disabled
-								style={{
-									padding: 8,
-									borderRadius: 6,
-									border: "1px solid rgba(255,255,255,0.2)",
-									background: "rgba(255,255,255,0.05)",
-									color: "#ffffff",
-									...disabledInputStyle,
-								}}
-							/>
-						</label>
-					</div>
-					<div
-						style={{
-							display: "grid",
-							gap: 8,
-							gridTemplateColumns:
-								"repeat(auto-fit, minmax(200px, 1fr))",
-						}}
-					>
-						<label style={{ display: "grid", gap: 4 }}>
-							<span>Primary Color (hex)</span>
-							<input
-								name={`team-primary-${index}`}
-								value={state.primaryColor}
-								onChange={(event) =>
-									handleInputChange(
-										index,
-										"primaryColor",
-										event.target.value
-									)
-								}
-								placeholder="#000000"
-								disabled={
-									state.status === "linked" &&
-									!state.isEditing
-								}
-								style={{
-									padding: 8,
-									borderRadius: 6,
-									border: "1px solid rgba(255,255,255,0.2)",
-									background: "rgba(255,255,255,0.05)",
-									color: "#ffffff",
-									...(state.status === "linked" &&
-									!state.isEditing
-										? disabledInputStyle
-										: {}),
-								}}
-							/>
-						</label>
-						<label style={{ display: "grid", gap: 4 }}>
-							<span>Secondary Color (hex)</span>
-							<input
-								name={`team-secondary-${index}`}
-								value={state.secondaryColor}
-								onChange={(event) =>
-									handleInputChange(
-										index,
-										"secondaryColor",
-										event.target.value
-									)
-								}
-								placeholder="#ffffff"
-								disabled={
-									state.status === "linked" &&
-									!state.isEditing
-								}
-								style={{
-									padding: 8,
-									borderRadius: 6,
-									border: "1px solid rgba(255,255,255,0.2)",
-									background: "rgba(255,255,255,0.05)",
-									color: "#ffffff",
-									...(state.status === "linked" &&
-									!state.isEditing
-										? disabledInputStyle
-										: {}),
-								}}
-							/>
-						</label>
-					</div>
-					<label style={{ display: "grid", gap: 4 }}>
-						<span>Background URL</span>
-						<input
-							name={`team-background-${index}`}
-							value={state.backgroundUrl}
-							onChange={(event) =>
-								handleInputChange(
-									index,
-									"backgroundUrl",
-									event.target.value
-								)
-							}
-							placeholder="https://..."
-							disabled={
-								state.status === "linked" && !state.isEditing
-							}
-							style={{
-								padding: 8,
-								borderRadius: 6,
-								border: "1px solid rgba(255,255,255,0.2)",
-								background: "rgba(255,255,255,0.05)",
-								color: "#ffffff",
-								...(state.status === "linked" &&
-								!state.isEditing
-									? disabledInputStyle
-									: {}),
-							}}
-						/>
-					</label>
-					<div style={{ display: "grid", gap: 8 }}>
-						<span>Team Logo</span>
-						<div
-							style={{
-								display: "flex",
-								gap: 12,
-								alignItems: "center",
-								flexWrap: "wrap",
-							}}
-						>
-							<label
-								style={{
-									padding: "6px 12px",
-									borderRadius: 6,
-									border: "1px solid rgba(255,255,255,0.2)",
-									background:
-										state.status === "linked" &&
-										!state.isEditing
-											? "rgba(255,255,255,0.05)"
-											: "rgba(255,255,255,0.1)",
-									cursor:
-										state.status === "linked" &&
-										!state.isEditing
-											? "not-allowed"
-											: "pointer",
-								}}
-							>
-								<input
-									type="file"
-									name={`team-logo-${index}`}
-									accept="image/*"
-									style={{ display: "none" }}
-									onChange={(event) =>
-										handleFileSelect(
-											index,
-											event.target.files
-										)
-									}
-									disabled={
-										state.status === "linked" &&
-										!state.isEditing
-									}
-								/>
-								Select logo
-							</label>
-							{state.logoPreview && (
-								<img
-									src={state.logoPreview}
-									alt={`${state.displayName} preview`}
-									style={{
-										width: 48,
-										height: 48,
-										objectFit: "contain",
-										borderRadius: 8,
-										border: "1px solid rgba(255,255,255,0.2)",
-									}}
-								/>
-							)}
-							{state.logoUrl && !state.logoPreview && (
-								<img
-									src={state.logoUrl}
-									alt={`${state.displayName} current logo`}
-									style={{
-										width: 48,
-										height: 48,
-										objectFit: "contain",
-										borderRadius: 8,
-										border: "1px solid rgba(255,255,255,0.2)",
-									}}
-								/>
-							)}
-						</div>
-					</div>
-					{state.errorMessage && (
-						<div style={{ color: "#f87171" }}>
-							{state.errorMessage}
-						</div>
-					)}
-					<div>
-						<button
-							type="button"
-							onClick={() => handleCreateTeam(index)}
-							disabled={
-								state.saving ||
-								(state.status === "linked" && !state.isEditing)
-							}
-							style={{
-								padding: "8px 14px",
-								borderRadius: 6,
-								border: "1px solid rgba(255,255,255,0.2)",
-								background:
-									state.status === "linked"
-										? "rgba(255,255,255,0.1)"
-										: "rgba(79,70,229,0.35)",
-								color: "white",
-								cursor:
-									state.saving ||
-									(state.status === "linked" &&
-										!state.isEditing)
-										? "not-allowed"
-										: "pointer",
-							}}
-						>
-							{state.status === "linked"
-								? state.isEditing
-									? "Update team"
-									: "Team Linked"
-								: state.saving
-								? "Saving..."
-								: "Save team"}
-						</button>
-					</div>
-				</div>
-			))}
+				);
+			})}
 		</div>
 	);
 }

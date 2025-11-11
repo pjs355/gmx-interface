@@ -3,6 +3,7 @@ import {
 	PredictionMarket,
 } from "./predictionMarketDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import type { UmbrellaUpdatePayload } from "@/types/market-types";
 export interface UmbrellaQuestion {
 	questionId: string;
 	displayName: string;
@@ -204,6 +205,32 @@ class UmbrellaDataService {
 		} catch (error) {
 			console.error("❌ Umbrella service health check failed:", error);
 			return false;
+		}
+	}
+
+	async updateUmbrella(
+		id: string,
+		payload: UmbrellaUpdatePayload,
+		token?: string
+	) {
+		try {
+			const response = await fetch(`${this.API_BASE_URL}/umbrellas/${id}`, {
+				method: "PUT",
+				headers: {
+					"Content-Type": "application/json",
+					...(token ? { Authorization: `Bearer ${token}` } : {}),
+				},
+				body: JSON.stringify(payload),
+			});
+			const json = await response.json().catch(() => ({} as any));
+			if (!response.ok || json?.success === false) {
+				throw new Error(json?.error || `HTTP ${response.status}`);
+			}
+			this.invalidateCache();
+			return json;
+		} catch (err) {
+			console.error("error", err);
+			throw err;
 		}
 	}
 }

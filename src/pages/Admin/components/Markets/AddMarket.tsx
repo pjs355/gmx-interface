@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import {
 	umbrellaDataService,
@@ -12,65 +12,26 @@ import MarketQuestions, { type QuestionEntry } from "./MarketQuestions";
 import UmbrellaFormFields from "./UmbrellaFormFields";
 import TeamLinker from "../Teams/TeamLinker";
 import type { TeamRecord } from "@/services/api/teamService";
+import EventScheduleSection from "./components/EventScheduleSection";
+import StatusToggle from "./components/StatusToggle";
+import PandascoreFields from "./components/PandascoreFields";
+import { buildCreateMarketPayload } from "./helpers/market-helpers";
+import {
+	TeamColors,
+	AddMarketForm,
+	AddMarketProps,
+	TeamCandidate,
+} from "@/types/market-types";
+import {
+	slugify,
+	formatDateTimeLocal,
+	cleanTeamName,
+	extractTeamKey,
+	normalizeTeamKey,
+	buildLongMatchDisplayName,
+	buildShortMatchDisplayName,
+} from "./helpers/market-helpers";
 import "./Markets.scss";
-
-interface TeamColors {
-	yesColor?: string;
-	noColor?: string;
-}
-
-type AddMarketForm = {
-	oracle: string;
-	seedAmount: string;
-	selectedUmbrellaId?: string;
-	umbrellaDisplayName: string;
-	umbrellaRule: string;
-	isEvent: boolean;
-	eventDate?: string; // ISO date (yyyy-mm-dd) or datetime-local
-	endDate?: string; // ISO date (yyyy-mm-dd) or datetime-local
-	image1Url?: string;
-	image2Url?: string;
-	status: boolean; // true = Active, false = Inactive
-	twitchEnabled: boolean;
-	twitchChannel: string;
-	game: string;
-	pandascore_matchId: string;
-};
-
-interface SeriesMatch {
-	id: number;
-	name: string;
-	scheduledAt: string | null;
-	team1: {
-		id: number | null;
-		name: string;
-		acronym?: string | null;
-	};
-	team2: {
-		id: number | null;
-		name: string;
-		acronym?: string | null;
-	};
-}
-
-interface SeriesData {
-	name: string;
-	game: string;
-}
-
-interface AddMarketProps {
-	series?: SeriesData;
-	match?: SeriesMatch;
-	onCreated?: (createdData: any) => void | Promise<void>;
-}
-
-const slugify = (value: string): string => {
-	return value
-		.toLowerCase()
-		.trim()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-};
 
 export default function AddMarket({
 	series,
@@ -81,83 +42,6 @@ export default function AddMarket({
 
 	// Track if component was used with props (for disabling certain fields)
 	const isPrefilled = !!(series && match);
-
-	// Helper to format datetime-local input value
-	const formatDateTimeLocal = (isoString: string | null): string => {
-		if (!isoString) return "";
-		// datetime-local input expects format: YYYY-MM-DDTHH:mm
-		const date = new Date(isoString);
-		const year = date.getFullYear();
-		const month = String(date.getMonth() + 1).padStart(2, "0");
-		const day = String(date.getDate()).padStart(2, "0");
-		const hours = String(date.getHours()).padStart(2, "0");
-		const minutes = String(date.getMinutes()).padStart(2, "0");
-		return `${year}-${month}-${day}T${hours}:${minutes}`;
-	};
-
-	// Helper to extract team name before parenthesis
-	const cleanTeamName = (teamName: string): string => {
-		const openParenIndex = teamName.indexOf("(");
-		if (openParenIndex !== -1) {
-			return teamName.substring(0, openParenIndex).trim();
-		}
-		return teamName.trim();
-	};
-
-	const extractTeamKey = (
-		teamName: string,
-		acronym?: string | null
-	): string | null => {
-		const keyFromAcronym = acronym?.trim();
-		if (keyFromAcronym && keyFromAcronym.length > 0) {
-			return keyFromAcronym.replace(/\./g, "").trim().toUpperCase();
-		}
-		const matchKey = teamName.match(/\(([^)]+)\)/);
-		if (!matchKey) {
-			return null;
-		}
-		const normalized = matchKey[1]?.replace(/\./g, "").trim();
-		return normalized && normalized.length > 0
-			? normalized.toUpperCase()
-			: null;
-	};
-
-	const getTeamCode = (
-		team: Pick<SeriesMatch["team1"], "name" | "acronym">
-	): string => {
-		const key = extractTeamKey(team.name, team.acronym);
-		if (key) {
-			return key;
-		}
-		return cleanTeamName(team.name);
-	};
-
-	const normalizeTeamKey = (value?: string | null): string | null => {
-		if (!value) {
-			return null;
-		}
-		return value.replace(/\./g, "").trim().toUpperCase();
-	};
-
-	const buildLongMatchDisplayName = (m: SeriesMatch): string => {
-		const team1Name = cleanTeamName(m.team1.name);
-		const team2Name = cleanTeamName(m.team2.name);
-		return `${team1Name} vs ${team2Name}`;
-	};
-
-	const buildShortMatchDisplayName = (m: SeriesMatch): string => {
-		const team1Code = getTeamCode(m.team1);
-		const team2Code = getTeamCode(m.team2);
-		return `${team1Code} vs ${team2Code}`;
-	};
-
-	// Build match display name using full team names
-	interface TeamCandidateInfo {
-		displayName: string;
-		slug: string;
-		shortCode: string | null;
-		pandaId: number | null;
-	}
 
 	// Prefill umbrella display name if series/match provided
 	const initialUmbrellaDisplayName =
@@ -188,8 +72,6 @@ export default function AddMarket({
 	const [submitting, setSubmitting] = useState(false);
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [loadingUmbrellas, setLoadingUmbrellas] = useState<boolean>(false);
-	const eventDateRef = useRef<HTMLInputElement | null>(null);
-	const endDateRef = useRef<HTMLInputElement | null>(null);
 
 	// Prefill question display name if match provided
 	const initialQuestionDisplayName = match
@@ -220,7 +102,7 @@ export default function AddMarket({
 	const [linkedTeams, setLinkedTeams] = useState<Record<string, TeamRecord>>(
 		{}
 	);
-	const teamCandidates = useMemo<TeamCandidateInfo[]>(() => {
+	const teamCandidates = useMemo<TeamCandidate[]>(() => {
 		if (!match) {
 			return [];
 		}
@@ -240,12 +122,14 @@ export default function AddMarket({
 				slug: slugify(displayName1),
 				shortCode: team1Short,
 				pandaId: match.team1.id ?? null,
+				logoUrl: null,
 			},
 			{
 				displayName: displayName2,
 				slug: slugify(displayName2),
 				shortCode: team2Short,
 				pandaId: match.team2.id ?? null,
+				logoUrl: null,
 			},
 		];
 	}, [match]);
@@ -369,73 +253,19 @@ export default function AddMarket({
 		setSubmitting(true);
 		// Implementation will be wired to on-chain + API later
 		try {
-			const payload: any = {
-				oracle: form.oracle,
-				seedAmount: form.seedAmount || "0",
-				umbrellaId: form.selectedUmbrellaId || undefined,
-				umbrellaDisplayName: !form.selectedUmbrellaId
-					? form.umbrellaDisplayName || undefined
-					: undefined,
-				umbrellaRule: !form.selectedUmbrellaId
-					? form.umbrellaRule || undefined
-					: undefined,
-				rule: !form.selectedUmbrellaId
-					? form.umbrellaRule || undefined
-					: undefined,
-				isEvent: !!form.isEvent,
-				eventDate:
-					form.isEvent && form.eventDate
-						? new Date(form.eventDate).toISOString()
-						: undefined,
-				endDate:
-					form.isEvent && form.endDate
-						? new Date(form.endDate).toISOString()
-						: undefined,
-				status: form.status, // Include status in payload
-				twitchEnabled: form.twitchEnabled,
-				twitchChannel: form.twitchChannel || undefined,
-				game: form.game || undefined,
-				pandascore_matchId: form.pandascore_matchId || undefined,
-			};
-
-			// Upload images if selected
-			if (image1) {
-				payload.image1Url = await uploadImageToFirebase(
-					image1,
-					"image1"
-				);
-			}
-
-			if (image2) {
-				payload.image2Url = await uploadImageToFirebase(
-					image2,
-					"image2"
-				);
-			}
+			const payload = await buildCreateMarketPayload({
+				form,
+				questions,
+				linkedTeams,
+				image1,
+				image2,
+				uploadImage: uploadImageToFirebase,
+			});
 
 			const accessToken =
 				typeof getAccessToken === "function"
 					? await getAccessToken()
 					: undefined;
-			// Include per-question entries if provided
-			if (Array.isArray(questions) && questions.length > 0) {
-				payload.questions = questions.map((q) => ({
-					displayName: q.displayName,
-					tagIds: q.tagIds,
-					yesColor: q.yesColor,
-					noColor: q.noColor,
-				}));
-			}
-			const linkedTeamEntries = Object.values(linkedTeams);
-			if (linkedTeamEntries.length > 0) {
-				payload.teamMappings = linkedTeamEntries.map((team) => ({
-					teamId: team._id,
-					shortCode: team.shortCode,
-					pandaId: team.pandaId,
-					slug: team.slug,
-					displayName: team.displayName,
-				}));
-			}
 
 			const resp = await fetch(
 				`${getPredictionApiBaseUrl()}/admin/markets`,
@@ -484,7 +314,6 @@ export default function AddMarket({
 			setSubmitting(false);
 		}
 	}
-	console.log("Rendering", new Date().toISOString());
 
 	return (
 		<div className="admin-market-container">
@@ -542,229 +371,34 @@ export default function AddMarket({
 					/>
 				</label>
 
-				{/* Game field */}
-				<label style={{ display: "grid", gap: 6 }}>
-					<span>Game</span>
-					<input
-						value={form.game}
-						onChange={(e) => update("game", e.target.value)}
-						placeholder="e.g., Counter-Strike, League of Legends"
-						disabled={isPrefilled}
-						style={{
-							padding: 8,
-							color: isPrefilled ? "#888" : "cyan",
-							border: "1px solid white",
-							borderRadius: "4px",
-							background: isPrefilled
-								? "rgba(0,0,0,0.2)"
-								: "transparent",
-							cursor: isPrefilled ? "not-allowed" : "text",
-						}}
-					/>
-				</label>
-
-				{/* PandaScore Match ID field */}
-				<label style={{ display: "grid", gap: 6 }}>
-					<span>PandaScore Match ID</span>
-					<input
-						value={form.pandascore_matchId}
-						onChange={(e) =>
-							update("pandascore_matchId", e.target.value)
-						}
-						placeholder="Leave empty if not from PandaScore"
-						disabled={isPrefilled}
-						style={{
-							padding: 8,
-							color: isPrefilled ? "#888" : "cyan",
-							border: "1px solid white",
-							borderRadius: "4px",
-							background: isPrefilled
-								? "rgba(0,0,0,0.2)"
-								: "transparent",
-							cursor: isPrefilled ? "not-allowed" : "text",
-						}}
-					/>
-				</label>
+				{form.pandascore_matchId &&
+					form.pandascore_matchId.length > 0 && (
+						<PandascoreFields
+							game={form.game}
+							matchId={form.pandascore_matchId}
+							onGameChange={(value) => update("game", value)}
+							onMatchIdChange={(value) =>
+								update("pandascore_matchId", value)
+							}
+							disabled={isPrefilled}
+						/>
+					)}
 
 				{/* Removed top-level tags; tags are configured per-question below */}
 
-				<div style={{ display: "grid", gap: 6 }}>
-					<span>Is this part of an event?</span>
-					<div style={{ display: "flex", gap: 8 }}>
-						<button
-							type="button"
-							onClick={() => update("isEvent", false)}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: form.isEvent
-									? "transparent"
-									: "rgba(255,255,255,0.2)",
-								color: "white",
-								cursor: "pointer",
-							}}
-						>
-							No
-						</button>
-						<button
-							type="button"
-							onClick={() => update("isEvent", true)}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: form.isEvent
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-								cursor: "pointer",
-							}}
-						>
-							Yes
-						</button>
-					</div>
-					{form.isEvent && (
-						<>
-							<label style={{ display: "grid", gap: 6 }}>
-								<span>Event Start Date & Time</span>
-								<div
-									style={{
-										display: "flex",
-										gap: 8,
-										alignItems: "center",
-									}}
-								>
-									<input
-										ref={eventDateRef}
-										type="datetime-local"
-										value={form.eventDate || ""}
-										onChange={(e) =>
-											update("eventDate", e.target.value)
-										}
-										style={{
-											padding: 8,
-											color: "cyan",
-											border: "1px solid white",
-											borderRadius: "4px",
-											background: "transparent",
-										}}
-									/>
-									<button
-										type="button"
-										onClick={() => {
-											try {
-												// @ts-ignore showPicker is supported in modern Chrome
-												eventDateRef.current?.showPicker?.();
-											} catch {
-												eventDateRef.current?.focus();
-											}
-										}}
-										style={{
-											padding: "6px 10px",
-											border: "1px solid white",
-											borderRadius: 6,
-											background: "rgba(255,255,255,0.2)",
-											color: "white",
-											cursor: "pointer",
-											whiteSpace: "nowrap",
-										}}
-									>
-										Pick
-									</button>
-								</div>
-							</label>
-							<label style={{ display: "grid", gap: 6 }}>
-								<span>Event End Date & Time</span>
-								<div
-									style={{
-										display: "flex",
-										gap: 8,
-										alignItems: "center",
-									}}
-								>
-									<input
-										ref={endDateRef}
-										type="datetime-local"
-										value={form.endDate || ""}
-										min={form.eventDate || undefined}
-										onChange={(e) =>
-											update("endDate", e.target.value)
-										}
-										style={{
-											padding: 8,
-											color: "cyan",
-											border: "1px solid white",
-											borderRadius: "4px",
-											background: "transparent",
-										}}
-									/>
-									<button
-										type="button"
-										onClick={() => {
-											try {
-												// @ts-ignore showPicker is supported in modern Chrome
-												endDateRef.current?.showPicker?.();
-											} catch {
-												endDateRef.current?.focus();
-											}
-										}}
-										style={{
-											padding: "6px 10px",
-											border: "1px solid white",
-											borderRadius: 6,
-											background: "rgba(255,255,255,0.2)",
-											color: "white",
-											cursor: "pointer",
-											whiteSpace: "nowrap",
-										}}
-									>
-										Pick
-									</button>
-								</div>
-							</label>
-						</>
-					)}
-				</div>
+				<EventScheduleSection
+					isEvent={form.isEvent}
+					onToggle={(value) => update("isEvent", value)}
+					eventDate={form.eventDate || ""}
+					endDate={form.endDate || ""}
+					onEventDateChange={(value) => update("eventDate", value)}
+					onEndDateChange={(value) => update("endDate", value)}
+				/>
 
-				{/* Status Selection */}
-				<div style={{ display: "grid", gap: 6 }}>
-					<span>Status</span>
-					<div style={{ display: "flex", gap: 8 }}>
-						<button
-							type="button"
-							onClick={() => update("status", true)}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: form.status
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-								cursor: "pointer",
-							}}
-						>
-							Active
-						</button>
-						<button
-							type="button"
-							onClick={() => update("status", false)}
-							style={{
-								padding: "6px 10px",
-								border: "1px solid white",
-								borderRadius: 6,
-								background: !form.status
-									? "rgba(255,255,255,0.2)"
-									: "transparent",
-								color: "white",
-								cursor: "pointer",
-							}}
-						>
-							Inactive
-						</button>
-					</div>
-				</div>
+				<StatusToggle
+					value={form.status}
+					onChange={(value) => update("status", value)}
+				/>
 
 				{/* Twitch Enabled */}
 				<MarketTwitch

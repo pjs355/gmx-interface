@@ -20,11 +20,13 @@ export type CreateCommentInput = {
 	comment: string;
 	token?: string;
 	accessToken: string;
+	identityToken: string;
 };
 
 export type DeleteCommentInput = {
 	commentId: string;
 	accessToken: string;
+	identityToken: string;
 };
 
 class CommentsService {
@@ -62,6 +64,9 @@ class CommentsService {
 		if (input.accessToken === undefined) {
 			throw new Error("access token is required to create a comment");
 		}
+		if (input.identityToken === undefined) {
+			throw new Error("identity token is required to create a comment");
+		}
 		const requestUrl = `${this.baseUrl}/comments`;
 		const bodyPayload: {
 			umbrellaId: string;
@@ -79,6 +84,7 @@ class CommentsService {
 			headers: {
 				"Content-Type": "application/json",
 				Authorization: `Bearer ${input.accessToken}`,
+				"privy-id-token": input.identityToken,
 			},
 			body: JSON.stringify(bodyPayload),
 		});
@@ -96,11 +102,15 @@ class CommentsService {
 		if (input.accessToken === undefined) {
 			throw new Error("access token is required to delete a comment");
 		}
+		if (input.identityToken === undefined) {
+			throw new Error("identity token is required to delete a comment");
+		}
 		const requestUrl = `${this.baseUrl}/comments/${input.commentId}`;
 		const response = await fetch(requestUrl, {
 			method: "DELETE",
 			headers: {
 				Authorization: `Bearer ${input.accessToken}`,
+				"privy-id-token": input.identityToken,
 			},
 		});
 		if (!response.ok) {

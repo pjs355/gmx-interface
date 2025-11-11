@@ -1,0 +1,149 @@
+.teams-admin {
+	display: grid;
+	gap: 16px;
+
+	&__header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 16px;
+	}
+
+	&__title {
+		margin: 0;
+		font-size: 20px;
+	}
+
+	&__header-actions {
+		display: flex;
+		gap: 8px;
+	}
+
+	&__back-button {
+		padding: 6px 12px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		background: transparent;
+		color: white;
+		cursor: pointer;
+	}
+
+	&__status {
+		padding: 12px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.06);
+
+		&--error {
+			background: rgba(248, 113, 113, 0.15);
+			color: #f87171;
+		}
+
+		&--success {
+			background: rgba(34, 197, 94, 0.18);
+			color: #4ade80;
+		}
+	}
+
+	&__table-wrapper {
+		overflow-x: auto;
+	}
+
+	&__table {
+		width: 100%;
+		border-collapse: collapse;
+
+		thead tr {
+			background: rgba(255, 255, 255, 0.08);
+		}
+
+		th,
+		td {
+			padding: 10px 12px;
+			text-align: left;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		}
+	}
+
+	&__link {
+		padding: 4px 10px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		background: transparent;
+		color: white;
+		cursor: pointer;
+	}
+
+	&__color-chip {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	&__color-swatch {
+		width: 18px;
+		height: 18px;
+		border-radius: 4px;
+		border: 1px solid rgba(255, 255, 255, 0.3);
+	}
+
+	&__form-grid {
+		display: grid;
+		gap: 16px;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	}
+
+	&__field-label {
+		display: grid;
+		gap: 6px;
+	}
+
+	&__input {
+		padding: 8px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.25);
+		background: rgba(255, 255, 255, 0.05);
+		color: white;
+
+		&--wide {
+			grid-column: span 2;
+		}
+
+		&--disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+			color: #9ca3af;
+			background: rgba(255, 255, 255, 0.03);
+			border-color: rgba(255, 255, 255, 0.15);
+		}
+	}
+
+	&__actions-row {
+		display: flex;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	&__primary-btn,
+	&__secondary-btn {
+		padding: 8px 16px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.25);
+		cursor: pointer;
+		background: transparent;
+		color: white;
+	}
+
+	&__primary-btn {
+		background: rgba(79, 70, 229, 0.35);
+		border-color: rgba(129, 140, 248, 0.45);
+	}
+
+	&__secondary-btn {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	&__table-empty {
+		padding: 12px;
+		text-align: center;
+	}
+}

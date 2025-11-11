@@ -2,19 +2,28 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { uploadUmbrellaImage } from "@/services/firebase/firebaseStorage";
-import type {
-	Umbrella,
-	UmbrellaQuestion,
-	UmbrellaTeamMapping,
+import {
+	umbrellaDataService,
+	type Umbrella,
+	type UmbrellaQuestion,
+	type UmbrellaTeamMapping,
 } from "@/services/api/umbrellaDataService";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
-import { tagService, type Tag } from "@/services/api/tagService";
-import SeedMarket from "./SeedMarket";
 import MarketImageUpload from "./MarketImageUpload";
 import MarketTwitch from "./MarketTwitch";
-import SettleMarket from "./SettleMarket";
 import TeamLinker from "../Teams/TeamLinker";
 import { teamService, type TeamRecord } from "@/services/api/teamService";
+import EventScheduleSection from "./components/EventScheduleSection";
+import StatusToggle from "./components/StatusToggle";
+import QuestionEditor from "./components/QuestionEditor";
+import QuestionSelector from "./components/QuestionSelector";
+import { usePredictionData } from "@/context/PredictionDataContext";
+import {
+	QuestionDetails,
+	TeamCandidate,
+	type UmbrellaUpdatePayload,
+} from "@/types/market-types";
+import { slugify, formatDateTimeLocal } from "./helpers/market-helpers";
 import "./Markets.scss";
 
 function cloneDeepMappings(
@@ -67,53 +76,13 @@ function areMappingsEqual(
 	);
 }
 
-type QuestionDetails = {
-	_id?: string;
-	questionId?: string;
-	question?: string;
-	displayName?: string;
-	oracle?: string;
-	conditionId?: string;
-	yesTokenId?: string;
-	noTokenId?: string;
-	seedAmount?: string;
-	registered?: boolean;
-	registrationTxHash?: string;
-	creationTxHash?: string;
-	yesColor?: string;
-	noColor?: string;
-	tagIds?: string[]; // Array of tag ObjectIds
-};
-
-type TeamCandidate = {
-	displayName: string;
-	slug: string;
-	shortCode: string | null;
-	pandaId: number | null;
-	logoUrl?: string | null;
-};
-
-const slugify = (value: string): string =>
-	value
-		.toLowerCase()
-		.trim()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-
-const splitDisplayName = (displayName: string | undefined) => {
-	if (!displayName) {
-		return [] as string[];
-	}
-	const [matchPart] = displayName.split(" - ");
-	if (!matchPart) {
-		return [] as string[];
-	}
-	const pieces = matchPart.split(/\s+vs\s+/i);
-	if (pieces.length === 2) {
-		return pieces;
-	}
-	return [] as string[];
-};
+const createEmptyCandidate = (): TeamCandidate => ({
+	displayName: "",
+	slug: slugify(""),
+	shortCode: null,
+	pandaId: null,
+	logoUrl: null,
+});
 
 export default function EditMarket({
 	umbrella,
@@ -124,7 +93,9 @@ export default function EditMarket({
 }) {
 	const { getAccessToken } = usePrivy();
 	const [selectedChild, setSelectedChild] = useState<UmbrellaQuestion | null>(
-		null
+		umbrella.children && umbrella.children.length > 0
+			? umbrella.children[0]
+			: null
 	);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -146,28 +117,12 @@ export default function EditMarket({
 	const [umbIsEvent, setUmbIsEvent] = useState<boolean>(
 		Boolean((umbrella as any).eventDate)
 	);
-	const [umbEventDate, setUmbEventDate] = useState<string>(() => {
-		const d = (umbrella as any).eventDate as string | undefined;
-		if (!d) return "";
-		const dt = new Date(d);
-		const pad = (n: number) => String(n).padStart(2, "0");
-		const local = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
-			dt.getDate()
-		)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-		return local;
-	});
-	const [umbEndDate, setUmbEndDate] = useState<string>(() => {
-		const d = (umbrella as any).endDate as string | undefined;
-		if (!d) return "";
-		const dt = new Date(d);
-		const pad = (n: number) => String(n).padStart(2, "0");
-		const local = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
-			dt.getDate()
-		)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-		return local;
-	});
-	const umbEventRef = useRef<HTMLInputElement | null>(null);
-	const umbEndRef = useRef<HTMLInputElement | null>(null);
+	const [umbEventDate, setUmbEventDate] = useState<string>(() =>
+		formatDateTimeLocal((umbrella as any).eventDate)
+	);
+	const [umbEndDate, setUmbEndDate] = useState<string>(() =>
+		formatDateTimeLocal((umbrella as any).endDate)
+	);
 	const [umbSaving, setUmbSaving] = useState<boolean>(false);
 	const [umbSaveMsg, setUmbSaveMsg] = useState<string | null>(null);
 	const [umbSaveErr, setUmbSaveErr] = useState<string | null>(null);
@@ -205,8 +160,8 @@ export default function EditMarket({
 	>([]);
 
 	// Tags state
-	const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-	const [loadingTags, setLoadingTags] = useState(true);
+	const { tags: availableTags, tagsLoading: loadingTags } =
+		usePredictionData();
 	const [hasAttemptedPandascorePrefill, setHasAttemptedPandascorePrefill] =
 		useState(false);
 
@@ -218,80 +173,43 @@ export default function EditMarket({
 		}
 		if (teamMappingsState && teamMappingsState.length > 0) {
 			return teamMappingsState.map((mapping) => {
-				const displayName =
-					mapping.displayName ||
-					mapping.shortCode ||
-					mapping.slug ||
-					"";
-				const slug = mapping.slug || slugify(displayName);
+				const displayNameValue = mapping.displayName;
+				if (
+					typeof displayNameValue !== "string" ||
+					displayNameValue.length === 0
+				) {
+					throw new Error("Team mapping is missing displayName");
+				}
+				const slugValue = mapping.slug;
+				if (typeof slugValue !== "string" || slugValue.length === 0) {
+					throw new Error("Team mapping is missing slug");
+				}
+				const shortCodeValue = mapping.shortCode;
+				const shortCode =
+					typeof shortCodeValue === "string" &&
+					shortCodeValue.length > 0
+						? shortCodeValue
+						: null;
+				const logoUrlValue = mapping.logoUrl;
+				const logoUrl =
+					typeof logoUrlValue === "string" && logoUrlValue.length > 0
+						? logoUrlValue
+						: null;
 				return {
-					displayName,
-					slug,
-					shortCode: mapping.shortCode || null,
-					pandaId:
-						typeof mapping.pandaId === "number"
-							? mapping.pandaId
-							: null,
-					logoUrl: mapping.logoUrl ?? null,
+					displayName: displayNameValue,
+					slug: slugValue,
+					shortCode,
+					pandaId: mapping.pandaId,
+					logoUrl,
 				};
 			});
 		}
-		return [
-			{
-				displayName: "",
-				slug: slugify(""),
-				shortCode: null,
-				pandaId: null,
-				logoUrl: null,
-			},
-			{
-				displayName: "",
-				slug: slugify(""),
-				shortCode: null,
-				pandaId: null,
-				logoUrl: null,
-			},
-		];
+		return [createEmptyCandidate(), createEmptyCandidate()];
 	}, [prefilledTeamCandidates, teamMappingsState]);
-
-	const teamCandidatesKey = useMemo(
-		() => JSON.stringify(teamCandidates),
-		[teamCandidates]
-	);
 
 	const shouldRenderTeamLinker = Boolean(
 		umbrella.pandascore_matchId && teamCandidates.length > 0
 	);
-
-	useEffect(() => {
-		console.log("EditMarket teamCandidates", teamCandidates);
-	}, [teamCandidatesKey]);
-
-	// Fetch tags
-	useEffect(() => {
-		let mounted = true;
-
-		async function loadTags() {
-			try {
-				const token = await getAccessToken();
-				if (!token) {
-					throw new Error("No access token available");
-				}
-				const tags = await tagService.fetchAllTags(token);
-				if (mounted) setAvailableTags(tags);
-			} catch (err) {
-				console.error("error", err);
-			} finally {
-				if (mounted) setLoadingTags(false);
-			}
-		}
-
-		loadTags();
-
-		return () => {
-			mounted = false;
-		};
-	}, [getAccessToken]);
 
 	useEffect(() => {
 		console.log("EditMarket umbrella changed, resetting state", umbrella);
@@ -303,27 +221,8 @@ export default function EditMarket({
 		setUmbActive(typeof v === "boolean" ? v : false);
 		const hasDate = Boolean((umbrella as any).eventDate);
 		setUmbIsEvent(hasDate);
-		if ((umbrella as any).eventDate) {
-			const dt = new Date((umbrella as any).eventDate);
-			const pad = (n: number) => String(n).padStart(2, "0");
-			const local = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
-				dt.getDate()
-			)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-			setUmbEventDate(local);
-		} else {
-			setUmbEventDate("");
-		}
-
-		if ((umbrella as any).endDate) {
-			const dt = new Date((umbrella as any).endDate);
-			const pad = (n: number) => String(n).padStart(2, "0");
-			const local = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
-				dt.getDate()
-			)}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-			setUmbEndDate(local);
-		} else {
-			setUmbEndDate("");
-		}
+		setUmbEventDate(formatDateTimeLocal((umbrella as any).eventDate));
+		setUmbEndDate(formatDateTimeLocal((umbrella as any).endDate));
 
 		// Initialize image URLs
 		setImage1Url((umbrella as any).image1Url || "");
@@ -653,14 +552,28 @@ export default function EditMarket({
 		}
 	}
 
-	function toggleTag(tagId: string) {
-		if (!details) return;
-		const current = Array.isArray(details.tagIds) ? details.tagIds : [];
-		const exists = current.includes(tagId);
-		const next = exists
-			? current.filter((t) => t !== tagId)
-			: [...current, tagId];
-		setDetails({ ...details, tagIds: next });
+	const toggleTag = useCallback((tagId: string) => {
+		setDetails((prev) => {
+			if (!prev) return prev;
+			const current = Array.isArray(prev.tagIds) ? prev.tagIds : [];
+			const exists = current.includes(tagId);
+			const next = exists
+				? current.filter((t) => t !== tagId)
+				: [...current, tagId];
+			return { ...prev, tagIds: next };
+		});
+	}, []);
+
+	const handleDetailsChange = useCallback(
+		(patch: Partial<QuestionDetails>) => {
+			setDetails((prev) => (prev ? { ...prev, ...patch } : prev));
+		},
+		[]
+	);
+
+	function handleSelectQuestion(question: UmbrellaQuestion) {
+		setSelectedChild(question);
+		loadQuestion(question.questionId);
 	}
 
 	async function saveQuestion() {
@@ -767,69 +680,84 @@ export default function EditMarket({
 				typeof getAccessToken === "function"
 					? await getAccessToken()
 					: undefined;
-			const body: any = {
+			const payload: UmbrellaUpdatePayload = {
 				displayName: umbDisplayName || undefined,
 				rule: umbRule || undefined,
 				active: umbActive,
-				twitchEnabled: twitchEnabled,
+				twitchEnabled,
 				twitchChannel: twitchChannel || undefined,
+				eventDate: null,
+				endDate: null,
 			};
 
 			if (umbIsEvent) {
-				body.eventDate = umbEventDate
+				payload.eventDate = umbEventDate
 					? new Date(umbEventDate).toISOString()
 					: null;
-				body.endDate = umbEndDate
+				payload.endDate = umbEndDate
 					? new Date(umbEndDate).toISOString()
 					: null;
-			} else {
-				body.eventDate = null;
-				body.endDate = null;
 			}
 
-			// Upload images if new ones are selected
+			let nextImage1Url: string | null | undefined = image1Url;
 			if (image1) {
-				body.image1Url = await uploadImageToFirebase(image1, "image1");
-			} else if (image1Url) {
-				body.image1Url = image1Url;
+				nextImage1Url = await uploadImageToFirebase(image1, "image1");
+			}
+			if (typeof nextImage1Url === "string" || nextImage1Url === null) {
+				payload.image1Url = nextImage1Url;
 			}
 
+			let nextImage2Url: string | null | undefined = image2Url;
 			if (image2) {
-				body.image2Url = await uploadImageToFirebase(image2, "image2");
-			} else if (image2Url) {
-				body.image2Url = image2Url;
+				nextImage2Url = await uploadImageToFirebase(image2, "image2");
+			}
+			if (typeof nextImage2Url === "string" || nextImage2Url === null) {
+				payload.image2Url = nextImage2Url;
 			}
 
 			if (teamMappingsPayload.length > 0) {
-				body.teamMappings = teamMappingsPayload;
+				payload.teamMappings = teamMappingsPayload;
 			} else if (Array.isArray(umbrella.teamMappings)) {
-				// Explicitly clear if user removed all mappings
-				body.teamMappings = [];
+				payload.teamMappings = [];
 			}
 
-			const base = getPredictionApiBaseUrl();
-			const resp = await fetch(`${base}/umbrellas/${umbrella._id}`, {
-				method: "PUT",
-				headers: {
-					"Content-Type": "application/json",
-					...(token ? { Authorization: `Bearer ${token}` } : {}),
-				},
-				body: JSON.stringify(body),
-			});
-			const json = await resp.json().catch(() => ({} as any));
-			if (!resp.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
+			const response = await umbrellaDataService.updateUmbrella(
+				umbrella._id,
+				payload,
+				token ?? undefined
+			);
+
+			if (!response?.success) {
+				throw new Error(response?.error || "Failed to save umbrella");
 			}
 			setUmbSaveMsg("Saved");
 
 			// Clear uploaded images after successful save
 			if (image1) {
 				setImage1(null);
-				setImage1Preview(image1Url || null);
+				setImage1Preview(
+					typeof nextImage1Url === "string"
+						? nextImage1Url
+						: nextImage1Url === null
+						? null
+						: image1Preview
+				);
+				setImage1Url(
+					typeof nextImage1Url === "string" ? nextImage1Url : ""
+				);
 			}
 			if (image2) {
 				setImage2(null);
-				setImage2Preview(image2Url || null);
+				setImage2Preview(
+					typeof nextImage2Url === "string"
+						? nextImage2Url
+						: nextImage2Url === null
+						? null
+						: image2Preview
+				);
+				setImage2Url(
+					typeof nextImage2Url === "string" ? nextImage2Url : ""
+				);
 			}
 		} catch (e: any) {
 			setUmbSaveErr(e?.message || String(e));
@@ -864,126 +792,26 @@ export default function EditMarket({
 				/>
 			</label>
 
-			<div className="edit-status-section">
-				<span>Status</span>
-				<div className="edit-toggle-group">
-					<button
-						type="button"
-						onClick={() => setUmbActive(true)}
-						className={`edit-toggle-button ${
-							umbActive ? "active" : ""
-						}`}
-					>
-						Active
-					</button>
-					<button
-						type="button"
-						onClick={() => setUmbActive(false)}
-						className={`edit-toggle-button ${
-							!umbActive ? "active" : ""
-						}`}
-					>
-						Inactive
-					</button>
-				</div>
+			<StatusToggle
+				value={umbActive}
+				onChange={setUmbActive}
+				buttonClassName="edit-toggle-button"
+				activeButtonClassName="active"
+			/>
 
-				<span>Is this part of an event?</span>
-				<div className="edit-toggle-group">
-					<button
-						type="button"
-						onClick={() => setUmbIsEvent(false)}
-						className={`edit-toggle-button ${
-							!umbIsEvent ? "active" : ""
-						}`}
-					>
-						No
-					</button>
-					<button
-						type="button"
-						onClick={() => setUmbIsEvent(true)}
-						className={`edit-toggle-button ${
-							umbIsEvent ? "active" : ""
-						}`}
-					>
-						Yes
-					</button>
-				</div>
-				{umbIsEvent && (
-					<>
-						<label className="admin-form-label">
-							<span>Event Start Date & Time</span>
-							<div className="edit-event-date-group">
-								<input
-									ref={umbEventRef}
-									type="datetime-local"
-									value={umbEventDate}
-									onChange={(e) =>
-										setUmbEventDate(e.target.value)
-									}
-									className="edit-event-date-input"
-								/>
-								<button
-									type="button"
-									onClick={() => {
-										try {
-											// @ts-ignore
-											umbEventRef.current?.showPicker?.();
-										} catch {
-											umbEventRef.current?.focus();
-										}
-									}}
-									className="edit-event-button"
-								>
-									Pick
-								</button>
-								<button
-									type="button"
-									onClick={() => setUmbEventDate("")}
-									className="edit-clear-button"
-								>
-									Clear
-								</button>
-							</div>
-						</label>
-						<label className="admin-form-label">
-							<span>Event End Date & Time</span>
-							<div className="edit-event-date-group">
-								<input
-									ref={umbEndRef}
-									type="datetime-local"
-									value={umbEndDate}
-									min={umbEventDate || undefined}
-									onChange={(e) =>
-										setUmbEndDate(e.target.value)
-									}
-									className="edit-event-date-input"
-								/>
-								<button
-									type="button"
-									onClick={() => {
-										try {
-											// @ts-ignore
-											umbEndRef.current?.showPicker?.();
-										} catch {
-											umbEndRef.current?.focus();
-										}
-									}}
-									className="edit-event-button"
-								>
-									Pick
-								</button>
-								<button
-									type="button"
-									onClick={() => setUmbEndDate("")}
-									className="edit-clear-button"
-								>
-									Clear
-								</button>
-							</div>
-						</label>
-					</>
-				)}
-			</div>
+			<EventScheduleSection
+				isEvent={umbIsEvent}
+				onToggle={setUmbIsEvent}
+				eventDate={umbEventDate}
+				endDate={umbEndDate}
+				onEventDateChange={setUmbEventDate}
+				onEndDateChange={setUmbEndDate}
+				buttonClassName="edit-toggle-button"
+				activeButtonClassName="active"
+				showClearButtons
+				onClearEventDate={() => setUmbEventDate("")}
+				onClearEndDate={() => setUmbEndDate("")}
+			/>
 
 			{/* Twitch Enabled */}
 			<div className="edit-twitch-wrapper">
@@ -1020,6 +848,7 @@ export default function EditMarket({
 				<TeamLinker
 					candidates={teamCandidates}
 					onTeamLinked={handleTeamLinked}
+					readOnly
 				/>
 			)}
 
@@ -1040,183 +869,26 @@ export default function EditMarket({
 				)}
 			</div>
 
-			<div className="edit-questions-list-section">
-				<div className="edit-questions-title">Questions</div>
-				{children.length === 0 && (
-					<div className="edit-no-questions">
-						No questions in this umbrella.
-					</div>
-				)}
-				{children.length > 0 && (
-					<div className="edit-questions-grid">
-						{children.map((c) => (
-							<div
-								key={c.questionId}
-								className="edit-question-item"
-							>
-								<div>
-									<div className="edit-question-info-name">
-										{c.displayName}
-									</div>
-									<div className="edit-question-info-id">
-										id: {c.questionId}
-									</div>
-								</div>
-								<button
-									type="button"
-									onClick={() => {
-										setSelectedChild(c);
-										loadQuestion(c.questionId);
-									}}
-									className="edit-load-button"
-								>
-									Load
-								</button>
-							</div>
-						))}
-					</div>
-				)}
-			</div>
+			<QuestionSelector
+				questions={children}
+				onSelect={handleSelectQuestion}
+				selectedQuestionId={selectedChild?.questionId ?? null}
+			/>
 
 			{selectedChild && (
-				<div className="edit-editing-section">
-					<div className="edit-editing-title">Editing Question</div>
-					{loading && (
-						<div className="admin-loading-text">Loading…</div>
-					)}
-					{error && <div className="edit-error-message">{error}</div>}
-					{details && (
-						<div className="edit-question-details">
-							<label className="admin-form-label">
-								<span>Question</span>
-								<input
-									value={details.question || ""}
-									readOnly
-									className="edit-question-readonly"
-									name="questionIdReadonly"
-								/>
-							</label>
-							<label className="admin-form-label">
-								<span>Display Name</span>
-								<input
-									value={details.displayName || ""}
-									onChange={(e) =>
-										setDetails({
-											...details,
-											displayName: e.target.value,
-										})
-									}
-									className="edit-form-input"
-									name="questionDisplayName"
-								/>
-							</label>
-							<div className="edit-color-grid">
-								<label className="admin-form-label">
-									<span>Yes Color</span>
-									<input
-										type="color"
-										value={details.yesColor || "#22c55e"}
-										onChange={(e) =>
-											setDetails({
-												...details,
-												yesColor: e.target.value,
-											})
-										}
-										className="edit-color-input"
-										name="questionYesColor"
-									/>
-								</label>
-								<label className="admin-form-label">
-									<span>No Color</span>
-									<input
-										type="color"
-										value={details.noColor || "#ef4444"}
-										onChange={(e) =>
-											setDetails({
-												...details,
-												noColor: e.target.value,
-											})
-										}
-										className="edit-color-input"
-										name="questionNoColor"
-									/>
-								</label>
-							</div>
-							<div className="edit-tags-section">
-								<span>Tags</span>
-								<div className="edit-tags-container">
-									{loadingTags ? (
-										<div
-											style={{
-												fontSize: 12,
-												opacity: 0.8,
-											}}
-										>
-											Loading tags...
-										</div>
-									) : (
-										availableTags.map((tag) => {
-											const selected =
-												Array.isArray(details.tagIds) &&
-												details.tagIds.includes(
-													tag._id
-												);
-											return (
-												<button
-													type="button"
-													key={tag._id}
-													onClick={() =>
-														toggleTag(tag._id)
-													}
-													className={`edit-tag-button ${
-														selected
-															? "selected"
-															: ""
-													}`}
-												>
-													{tag.label}
-												</button>
-											);
-										})
-									)}
-								</div>
-							</div>
-
-							<SettleMarket
-								questionId={
-									details.questionId || details._id || ""
-								}
-							/>
-							<div className="edit-save-question-section">
-								<button
-									type="button"
-									onClick={saveQuestion}
-									disabled={qSaving}
-									className="edit-save-question-button"
-								>
-									{qSaving ? "Saving..." : "Save Question"}
-								</button>
-								{qSaveMsg && (
-									<span className="edit-success-message">
-										{qSaveMsg}
-									</span>
-								)}
-								{qSaveErr && (
-									<span className="edit-error-message">
-										{qSaveErr}
-									</span>
-								)}
-							</div>
-							{/* Seed Market Component */}
-							<SeedMarket
-								questionId={
-									details.questionId || details._id || ""
-								}
-								questionDisplayName={details.displayName}
-							/>
-						</div>
-					)}
-				</div>
+				<QuestionEditor
+					loading={loading}
+					error={error}
+					details={details}
+					availableTags={availableTags}
+					loadingTags={loadingTags}
+					onTagToggle={toggleTag}
+					onDetailsChange={handleDetailsChange}
+					onSave={saveQuestion}
+					saving={qSaving}
+					saveMessage={qSaveMsg}
+					saveError={qSaveErr}
+				/>
 			)}
 		</div>
 	);

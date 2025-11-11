@@ -11,11 +11,17 @@ import AddTag from "./components/Tags/AddTag";
 import EditTag from "./components/Tags/EditTag";
 import ListSeries from "./components/Series/ListSeries";
 import AddSeries from "./components/Series/AddSeries";
+import ListTeams from "./components/Teams/ListTeams";
+import EditTeam from "./components/Teams/EditTeam";
 import {
 	umbrellaDataService,
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import {
+	teamService,
+	type TeamRecord,
+} from "@/services/api/teamService";
 
 type AdminView =
 	| "markets-list"
@@ -26,7 +32,9 @@ type AdminView =
 	| "tags-add"
 	| "tags-edit"
 	| "series-list"
-	| "series-add";
+	| "series-add"
+	| "teams-list"
+	| "teams-edit";
 
 const DEFAULT_ADMIN_VIEW: AdminView = "markets-list";
 
@@ -40,6 +48,8 @@ const VALID_ADMIN_VIEWS: AdminView[] = [
 	"tags-edit",
 	"series-list",
 	"series-add",
+	"teams-list",
+	"teams-edit",
 ] as const;
 
 function isValidAdminView(value: string | null): value is AdminView {
@@ -57,8 +67,12 @@ export default function Admin() {
 	const [checking, setChecking] = useState(true);
 	const [selected, setSelected] = useState<Umbrella | null>(null);
 	const [selectedTag, setSelectedTag] = useState<AdminTag | null>(null);
+	const [selectedTeam, setSelectedTeam] = useState<TeamRecord | null>(null);
 	const [umbrellasRevision, setUmbrellasRevision] = useState(0);
+	const [teamsRevision, setTeamsRevision] = useState(0);
 	const pendingRefreshRef = useRef(false);
+	const [teamLoading, setTeamLoading] = useState(false);
+	const [teamError, setTeamError] = useState<string | null>(null);
 
 	const view: AdminView = useMemo(() => {
 		const param = searchParams.get("view");
@@ -146,6 +160,63 @@ export default function Admin() {
 	}, [searchParams, selected, view]);
 
 	useEffect(() => {
+		if (view !== "teams-edit") {
+			setTeamLoading(false);
+			setTeamError(null);
+			return;
+		}
+		const teamId = searchParams.get("teamId");
+		if (!teamId) {
+			setSelectedTeam(null);
+			return;
+		}
+		if (selectedTeam && selectedTeam._id === teamId) {
+			return;
+		}
+		let cancelled = false;
+		setTeamLoading(true);
+		setTeamError(null);
+		(async () => {
+			try {
+				const token =
+					typeof getAccessToken === "function"
+						? await getAccessToken()
+						: null;
+				if (typeof token !== "string" || token.length === 0) {
+					throw new Error(
+						"Missing admin access token for loading team"
+					);
+				}
+				const fetched = await teamService.fetchTeamById(teamId, token);
+				if (!cancelled) {
+					if (fetched) {
+						setSelectedTeam(fetched);
+					} else {
+						setSelectedTeam(null);
+						setTeamError("Team not found");
+					}
+				}
+			} catch (error) {
+				console.error("error", error);
+				if (!cancelled) {
+					setTeamError(
+						error instanceof Error
+							? error.message
+							: "Failed to load team"
+					);
+				}
+			} finally {
+				if (!cancelled) {
+					setTeamLoading(false);
+				}
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [getAccessToken, searchParams, selectedTeam, view]);
+
+	useEffect(() => {
 		let mounted = true;
 		(async () => {
 			try {
@@ -212,7 +283,11 @@ export default function Admin() {
 							type="button"
 							onClick={() => {
 								setSelected(null);
-								updateView("markets-list", { umbrellaId: null });
+								setSelectedTeam(null);
+								updateView("markets-list", {
+									umbrellaId: null,
+									teamId: null,
+								});
 							}}
 							style={{
 								padding: "6px 10px",
@@ -231,7 +306,11 @@ export default function Admin() {
 							type="button"
 							onClick={() => {
 								setSelected(null);
-								updateView("markets-add", { umbrellaId: null });
+								setSelectedTeam(null);
+								updateView("markets-add", {
+									umbrellaId: null,
+									teamId: null,
+								});
 							}}
 							style={{
 								padding: "6px 10px",
@@ -250,8 +329,10 @@ export default function Admin() {
 							type="button"
 							onClick={() => {
 								setSelected(null);
+								setSelectedTeam(null);
 								updateView("markets-resolve", {
 									umbrellaId: null,
+									teamId: null,
 								});
 							}}
 							style={{
@@ -276,7 +357,11 @@ export default function Admin() {
 							type="button"
 							onClick={() => {
 								setSelectedTag(null);
-								updateView("tags-list", { umbrellaId: null });
+								setSelectedTeam(null);
+								updateView("tags-list", {
+									umbrellaId: null,
+									teamId: null,
+								});
 							}}
 							style={{
 								padding: "6px 10px",
@@ -295,7 +380,11 @@ export default function Admin() {
 							type="button"
 							onClick={() => {
 								setSelectedTag(null);
-								updateView("tags-add", { umbrellaId: null });
+								setSelectedTeam(null);
+								updateView("tags-add", {
+									umbrellaId: null,
+									teamId: null,
+								});
 							}}
 							style={{
 								padding: "6px 10px",
@@ -318,7 +407,11 @@ export default function Admin() {
 						<button
 							type="button"
 							onClick={() => {
-								updateView("series-list", { umbrellaId: null });
+								setSelectedTeam(null);
+								updateView("series-list", {
+									umbrellaId: null,
+									teamId: null,
+								});
 							}}
 							style={{
 								padding: "6px 10px",
@@ -336,7 +429,11 @@ export default function Admin() {
 						<button
 							type="button"
 							onClick={() => {
-								updateView("series-add", { umbrellaId: null });
+								setSelectedTeam(null);
+								updateView("series-add", {
+									umbrellaId: null,
+									teamId: null,
+								});
 							}}
 							style={{
 								padding: "6px 10px",
@@ -350,6 +447,30 @@ export default function Admin() {
 							}}
 						>
 							Add
+						</button>
+					</div>
+				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Teams</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelectedTeam(null);
+								updateView("teams-list", { teamId: null });
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "teams-list"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							List
 						</button>
 					</div>
 				</div>
@@ -414,6 +535,40 @@ export default function Admin() {
 			)}
 
 			{view === "series-add" && <AddSeries />}
+
+			{view === "teams-list" && (
+				<ListTeams
+					onEdit={(teamRecord) => {
+						setSelectedTeam(teamRecord);
+						updateView("teams-edit", { teamId: teamRecord._id });
+					}}
+					refreshKey={teamsRevision}
+				/>
+			)}
+
+			{view === "teams-edit" && (
+				teamLoading ? (
+					<div style={{ padding: 12 }}>Loading team…</div>
+				) : teamError ? (
+					<div style={{ padding: 12, color: "#f87171" }}>{teamError}</div>
+				) : selectedTeam ? (
+					<EditTeam
+						team={selectedTeam}
+						onBack={() => {
+							setSelectedTeam(null);
+							updateView("teams-list", { teamId: null });
+						}}
+						onSaved={(updated) => {
+							setSelectedTeam(updated);
+							setTeamsRevision((prev) => prev + 1);
+						}}
+					/>
+				) : (
+					<div style={{ padding: 12 }}>
+						Select a team from the list to edit.
+					</div>
+				)
+			)}
 		</div>
 	);
 }

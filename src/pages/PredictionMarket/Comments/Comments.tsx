@@ -211,6 +211,8 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 		[]
 	);
 
+	const currentIdentityToken = identityToken ?? null;
+
 	const handleDeleted = useCallback(
 		async (commentId: string) => {
 			if (typeof getAccessToken !== "function") {
@@ -223,7 +225,14 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 				if (token === null) {
 					throw new Error("Authentication required");
 				}
-				await commentsService.delete({ commentId, accessToken: token });
+				if (currentIdentityToken === null) {
+					throw new Error("Identity token missing. Please re-authenticate.");
+				}
+				await commentsService.delete({
+					commentId,
+					accessToken: token,
+					identityToken: currentIdentityToken,
+				});
 				setComments((prev) => prev.filter((item) => item._id !== commentId));
 			} catch (error) {
 				const message =
@@ -235,7 +244,7 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 				setIsDeleting(null);
 			}
 		},
-		[getAccessToken]
+		[getAccessToken, currentIdentityToken]
 	);
 
 	const renderComment = useCallback(
@@ -298,6 +307,7 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 			umbrellaId={umbrellaId}
 			onCreated={handleCreated}
 			isAuthenticated={authenticated}
+			identityToken={currentIdentityToken}
 			requestLogin={login}
 		/>
 			{loading && <div className="comments__status">{t`Loading comments...`}</div>}
@@ -323,6 +333,7 @@ type NewCommentProps = {
 	onCreated: CreateResponseHandler;
 	isAuthenticated: boolean;
 	requestLogin: () => Promise<void> | void;
+	identityToken: string | null;
 };
 
 function NewComment({
@@ -330,6 +341,7 @@ function NewComment({
 	onCreated,
 	isAuthenticated,
 	requestLogin,
+	identityToken,
 }: NewCommentProps) {
 	const [commentText, setCommentText] = useState("");
 	const [submitting, setSubmitting] = useState(false);
@@ -358,11 +370,15 @@ function NewComment({
 			if (token === null) {
 				throw new Error("Authentication required");
 			}
+			if (identityToken === null) {
+				throw new Error("Identity token missing. Please re-authenticate.");
+			}
 			const payloadComment = commentText.trim();
 			const created = await commentsService.create({
 				umbrellaId,
 				comment: payloadComment,
 				accessToken: token,
+				identityToken,
 			});
 			onCreated(created);
 			setCommentText("");
@@ -378,6 +394,7 @@ function NewComment({
 	}, [
 		commentText,
 		getAccessToken,
+		identityToken,
 		isAuthenticated,
 		onCreated,
 		requestLogin,
