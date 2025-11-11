@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import AddMarket from "../Markets/AddMarket";
@@ -111,25 +111,22 @@ export default function ListSeries() {
 		};
 	}, [getAccessToken]);
 
+	const refreshUmbrellas = useCallback(async () => {
+		setLoadingUmbrellas(true);
+		try {
+			const list = await umbrellaDataService.fetchAllUmbrellas();
+			setUmbrellas(list || []);
+		} catch (err) {
+			console.error("error", err);
+		} finally {
+			setLoadingUmbrellas(false);
+		}
+	}, []);
+
 	// Fetch all umbrellas to check for existing matches
 	useEffect(() => {
-		let mounted = true;
-		setLoadingUmbrellas(true);
-		umbrellaDataService
-			.fetchAllUmbrellas()
-			.then((list) => {
-				if (mounted) setUmbrellas(list || []);
-			})
-			.catch((err) => {
-				console.error("error", err);
-			})
-			.finally(() => {
-				if (mounted) setLoadingUmbrellas(false);
-			});
-		return () => {
-			mounted = false;
-		};
-	}, []);
+		refreshUmbrellas();
+	}, [refreshUmbrellas]);
 
 	// Create a Set of existing pandascore match IDs for quick lookup
 	const existingMatchIds = useMemo(() => {
@@ -228,6 +225,14 @@ export default function ListSeries() {
 							name: selectedMatch.match.team2.name,
 							acronym: selectedMatch.match.team2.acronym ?? null,
 						},
+					}}
+					onCreated={async () => {
+						await new Promise((resolve) =>
+							setTimeout(resolve, 1500)
+						);
+						umbrellaDataService.invalidateCache();
+						await refreshUmbrellas();
+						setSelectedMatch(null);
 					}}
 				/>
 			</div>

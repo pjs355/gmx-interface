@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	umbrellaDataService,
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
 
-export default function ListMarket({
-	onEdit,
-}: {
+interface ListMarketProps {
 	onEdit: (umbrella: Umbrella) => void;
-}) {
+	refreshKey?: number;
+}
+
+export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [query, setQuery] = useState<string>("");
@@ -27,13 +28,16 @@ export default function ListMarket({
 		return () => {
 			mounted = false;
 		};
-	}, []);
+	}, [refreshKey]);
 
-	const filtered = query
-		? umbrellas.filter((u) =>
-				u.displayName.toLowerCase().includes(query.toLowerCase())
-		  )
-		: umbrellas;
+	const filtered = useMemo(() => {
+		const base = query
+			? umbrellas.filter((u) =>
+					u.displayName.toLowerCase().includes(query.toLowerCase())
+			  )
+			: umbrellas;
+		return base;
+	}, [umbrellas, query]);
 
 	return (
 		<div style={{ color: "white" }}>
@@ -62,7 +66,11 @@ export default function ListMarket({
 			</div>
 
 			<div style={{ display: "grid", gap: 12 }}>
-				{filtered.map((u) => (
+				{filtered.map((u) => {
+					const isActive = Boolean((u as any).active);
+					const statusColor = isActive ? "#22c55e" : "#ef4444";
+					const statusLabel = isActive ? "Active" : "Inactive";
+					return (
 					<div
 						key={u._id}
 						style={{
@@ -81,8 +89,23 @@ export default function ListMarket({
 							}}
 						>
 							<div>
-								<div style={{ fontWeight: 600 }}>
-									{u.displayName}
+								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<span
+										style={{
+											display: "inline-flex",
+											width: 10,
+											height: 10,
+											borderRadius: "50%",
+											background: statusColor,
+											boxShadow: `0 0 6px ${
+												isActive ? "rgba(34,197,94,0.6)" : "rgba(239,68,68,0.6)"
+											}`,
+										}}
+										title={statusLabel}
+									/>
+									<div style={{ fontWeight: 600 }}>
+										{u.displayName}
+									</div>
 								</div>
 								<div style={{ fontSize: 12, opacity: 0.8 }}>
 									ID: {u._id}
@@ -116,7 +139,8 @@ export default function ListMarket({
 							</div>
 						</div>
 					</div>
-				))}
+				);
+			})}
 				{!loading && filtered.length === 0 && (
 					<div style={{ opacity: 0.8 }}>No umbrellas found.</div>
 				)}

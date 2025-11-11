@@ -22,6 +22,7 @@ interface MarketQuestionsProps {
 	gameName?: string;
 	autoMatchTags?: boolean;
 	defaultColors?: DefaultColors;
+	preferredTagLabels?: string[];
 }
 
 export default function MarketQuestions({
@@ -31,6 +32,7 @@ export default function MarketQuestions({
 	gameName,
 	autoMatchTags = false,
 	defaultColors,
+	preferredTagLabels,
 }: MarketQuestionsProps) {
 	const { getAccessToken } = usePrivy();
 	const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -133,32 +135,94 @@ export default function MarketQuestions({
 		};
 	}, [getAccessToken]);
 
-	// Auto-match tags when tags are loaded and gameName is provided
 	useEffect(() => {
 		if (
-			availableTags.length > 0 &&
-			gameName &&
-			autoMatchTags &&
-			questions.length > 0 &&
-			questions[0].tagIds.length === 0
+			!preferredTagLabels ||
+			preferredTagLabels.length === 0 ||
+			availableTags.length === 0 ||
+			questions.length === 0 ||
+			questions[0].tagIds.length > 0
 		) {
-			const matchedTagId = findMatchingTag(gameName, availableTags);
-			if (matchedTagId) {
-				const matchedTag = availableTags.find(
-					(t) => t._id === matchedTagId
+			return;
+		}
+		const normalizedPreferred = preferredTagLabels.map((label) =>
+			label.toLowerCase()
+		);
+		const preferredTag = availableTags.find((tag) => {
+			const labelMatch = normalizedPreferred.includes(
+				tag.label.toLowerCase()
+			);
+			const slugMatch = normalizedPreferred.includes(
+				tag.slug.toLowerCase()
+			);
+			return labelMatch || slugMatch;
+		});
+		if (!preferredTag) {
+			return;
+		}
+		const updated = [...questions];
+		updated[0] = {
+			...updated[0],
+			tagIds: [preferredTag._id],
+		};
+		onQuestionsChange(updated);
+	}, [
+		availableTags,
+		preferredTagLabels,
+		questions,
+		onQuestionsChange,
+	]);
+
+	// Auto-match tags when tags are loaded and gameName is provided
+	useEffect(() => {
+		if (questions.length === 0) {
+			return;
+		}
+		if (questions[0].tagIds.length > 0) {
+			return;
+		}
+		let matchedTagId: string | null = null;
+		if (preferredTagLabels && preferredTagLabels.length > 0) {
+			const normalizedPreferred = preferredTagLabels.map((label) =>
+				label.toLowerCase()
+			);
+			const preferredTag = availableTags.find((tag) => {
+				const labelMatch = normalizedPreferred.includes(
+					tag.label.toLowerCase()
 				);
-				console.log(
-					`Auto-matched tag: "${gameName}" → "${matchedTag?.label}" (${matchedTag?.slug})`
+				const slugMatch = normalizedPreferred.includes(
+					tag.slug.toLowerCase()
 				);
-				const updated = [...questions];
-				updated[0] = {
-					...updated[0],
-					tagIds: [matchedTagId],
-				};
-				onQuestionsChange(updated);
+				return labelMatch || slugMatch;
+			});
+			if (preferredTag) {
+				matchedTagId = preferredTag._id;
 			}
 		}
-	}, [availableTags, gameName, autoMatchTags, questions, onQuestionsChange]);
+		if (
+			!matchedTagId &&
+			availableTags.length > 0 &&
+			gameName &&
+			autoMatchTags
+		) {
+			matchedTagId = findMatchingTag(gameName, availableTags);
+		}
+		if (matchedTagId) {
+			const updated = [...questions];
+			updated[0] = {
+				...updated[0],
+				tagIds: [matchedTagId],
+			};
+			onQuestionsChange(updated);
+		}
+	}, [
+		availableTags,
+		gameName,
+		autoMatchTags,
+		preferredTagLabels,
+		questions,
+		onQuestionsChange,
+	]);
 
 	function updateQuestion<K extends keyof QuestionEntry>(
 		index: number,

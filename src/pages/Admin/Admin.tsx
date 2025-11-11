@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
@@ -15,6 +21,7 @@ import {
 	umbrellaDataService,
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
+import { usePredictionData } from "@/context/PredictionDataContext";
 
 type AdminView =
 	| "markets-list"
@@ -52,9 +59,12 @@ export default function Admin() {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { getAccessToken } = usePrivy();
+	const { refresh: refreshPredictionData } = usePredictionData();
 	const [checking, setChecking] = useState(true);
 	const [selected, setSelected] = useState<Umbrella | null>(null);
 	const [selectedTag, setSelectedTag] = useState<AdminTag | null>(null);
+	const [umbrellasRevision, setUmbrellasRevision] = useState(0);
+	const pendingRefreshRef = useRef(false);
 
 	const view: AdminView = useMemo(() => {
 		const param = searchParams.get("view");
@@ -89,6 +99,33 @@ export default function Admin() {
 		},
 		[setSearchParams]
 	);
+
+	const runUmbrellaRefresh = useCallback(async () => {
+		// Give backend processes (e.g., image propagation) a brief window
+		await new Promise((resolve) => setTimeout(resolve, 1500));
+		umbrellaDataService.invalidateCache();
+		try {
+			await refreshPredictionData();
+		} catch (error) {
+			console.error("error", error);
+		}
+		setUmbrellasRevision((prev) => prev + 1);
+	}, [refreshPredictionData]);
+
+	const handleMarketCreated = useCallback(() => {
+		pendingRefreshRef.current = true;
+		if (view !== "markets-add") {
+			pendingRefreshRef.current = false;
+			void runUmbrellaRefresh();
+		}
+	}, [runUmbrellaRefresh, view]);
+
+	useEffect(() => {
+		if (pendingRefreshRef.current && view !== "markets-add") {
+			pendingRefreshRef.current = false;
+			void runUmbrellaRefresh();
+		}
+	}, [runUmbrellaRefresh, view]);
 
 	useEffect(() => {
 		if (view !== "markets-edit") {
@@ -332,10 +369,13 @@ export default function Admin() {
 						setSelected(u);
 						updateView("markets-edit", { umbrellaId: u._id });
 					}}
+					refreshKey={umbrellasRevision}
 				/>
 			)}
 
-			{view === "markets-add" && <AddMarket />}
+			{view === "markets-add" && (
+				<AddMarket onCreated={handleMarketCreated} />
+			)}
 
 			{view === "markets-resolve" && <ResolveMarkets />}
 

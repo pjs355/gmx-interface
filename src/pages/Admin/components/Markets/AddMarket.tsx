@@ -61,6 +61,7 @@ interface SeriesData {
 interface AddMarketProps {
 	series?: SeriesData;
 	match?: SeriesMatch;
+	onCreated?: (createdData: any) => void | Promise<void>;
 }
 
 const slugify = (value: string): string => {
@@ -71,7 +72,11 @@ const slugify = (value: string): string => {
 		.replace(/^-+|-+$/g, "");
 };
 
-export default function AddMarket({ series, match }: AddMarketProps = {}) {
+export default function AddMarket({
+	series,
+	match,
+	onCreated,
+}: AddMarketProps = {}) {
 	const { getAccessToken } = usePrivy();
 
 	// Track if component was used with props (for disabling certain fields)
@@ -448,6 +453,26 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 				);
 			}
 			console.log("✅ Market created:", data?.data);
+
+			if (typeof onCreated === "function") {
+				await Promise.resolve(onCreated(data?.data));
+			} else {
+				umbrellaDataService.invalidateCache();
+				setLoadingUmbrellas(true);
+				try {
+					const refreshedUmbrellas =
+						await umbrellaDataService.fetchAllUmbrellas();
+					setUmbrellas(
+						Array.isArray(refreshedUmbrellas)
+							? refreshedUmbrellas
+							: []
+					);
+				} catch (refreshListError) {
+					console.error("error", refreshListError);
+				} finally {
+					setLoadingUmbrellas(false);
+				}
+			}
 		} catch (error) {
 			console.error("error", error);
 			alert((error as any)?.message || "Failed to create market(s)");
@@ -782,6 +807,7 @@ export default function AddMarket({ series, match }: AddMarketProps = {}) {
 					gameName={series?.game}
 					autoMatchTags={isPrefilled}
 					defaultColors={teamColors}
+					preferredTagLabels={isPrefilled ? ["ESPORTS"] : undefined}
 				/>
 
 				<div style={{ display: "flex", gap: 12, marginTop: 12 }}>

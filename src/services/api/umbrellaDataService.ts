@@ -49,6 +49,12 @@ class UmbrellaDataService {
 	private questionsCacheActive = new Map<string, PredictionMarket[]>();
 	private questionsCacheAll = new Map<string, PredictionMarket[]>();
 
+	invalidateCache() {
+		this.umbrellasCache = null;
+		this.questionsCacheActive.clear();
+		this.questionsCacheAll.clear();
+	}
+
 	/**
 	 * Fetch all umbrellas from the server
 	 */
