@@ -116,10 +116,7 @@ export default function MarketQuestions({
 		async function loadTags() {
 			try {
 				const token = await getAccessToken();
-				if (!token) {
-					throw new Error("No access token available");
-				}
-				const tags = await tagService.fetchAllTags(token);
+				const tags = await tagService.fetchAllTags(token || undefined);
 				if (mounted) setAvailableTags(tags);
 			} catch (err) {
 				console.error("error", err);
@@ -165,6 +162,11 @@ export default function MarketQuestions({
 			...updated[0],
 			tagIds: [preferredTag._id],
 		};
+		console.log(
+			"MarketQuestions preferred tag applied",
+			preferredTag.label,
+			updated[0].tagIds
+		);
 		onQuestionsChange(updated);
 	}, [
 		availableTags,
@@ -213,6 +215,11 @@ export default function MarketQuestions({
 				...updated[0],
 				tagIds: [matchedTagId],
 			};
+			console.log(
+				"MarketQuestions auto-match applied",
+				matchedTagId,
+				updated[0].tagIds
+			);
 			onQuestionsChange(updated);
 		}
 	}, [

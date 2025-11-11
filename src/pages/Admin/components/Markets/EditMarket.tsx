@@ -259,6 +259,10 @@ export default function EditMarket({
 		[teamCandidates]
 	);
 
+	const shouldRenderTeamLinker = Boolean(
+		umbrella.pandascore_matchId && teamCandidates.length > 0
+	);
+
 	useEffect(() => {
 		console.log("EditMarket teamCandidates", teamCandidates);
 	}, [teamCandidatesKey]);
@@ -290,7 +294,7 @@ export default function EditMarket({
 	}, [getAccessToken]);
 
 	useEffect(() => {
-		setSelectedChild(null);
+		console.log("EditMarket umbrella changed, resetting state", umbrella);
 		setDetails(null);
 		setError(null);
 		setUmbDisplayName(umbrella.displayName || "");
@@ -554,9 +558,38 @@ export default function EditMarket({
 	}, [teamMappingsState, linkedTeams]);
 
 	async function loadQuestion(qid: string) {
-		setLoading(true);
+		console.log("EditMarket.loadQuestion -> begin", qid);
 		setError(null);
-		setDetails(null);
+
+		const child = children.find((c) => c.questionId === qid);
+		if (!child) {
+			setError("Unable to locate question on umbrella");
+			setDetails(null);
+			return;
+		}
+
+		const baseDetails: QuestionDetails = {
+			...(child as any),
+			question: (child as any).question ?? child.displayName,
+			displayName: child.displayName,
+			yesColor: (child as any).yesColor,
+			noColor: (child as any).noColor,
+			tagIds: Array.isArray((child as any).tagIds)
+				? [...((child as any).tagIds as string[])]
+				: [],
+		} as QuestionDetails;
+
+		setDetails(baseDetails);
+
+		if (!umbrella.pandascore_matchId) {
+			console.log(
+				"EditMarket.loadQuestion using umbrella child only",
+				baseDetails
+			);
+			return;
+		}
+
+		setLoading(true);
 		try {
 			const token =
 				typeof getAccessToken === "function"
@@ -569,11 +602,51 @@ export default function EditMarket({
 				},
 			});
 			const json = await resp.json().catch(() => ({} as any));
+			console.log("EditMarket.loadQuestion response", json);
+			const payload = json?.data ?? json;
+			let normalized: any = Array.isArray(payload)
+				? payload[0]
+				: payload?.question ?? payload;
+
 			if (!resp.ok || !json?.success) {
 				throw new Error(json?.error || `HTTP ${resp.status}`);
 			}
-			setDetails(json.data as QuestionDetails);
+
+			if (!normalized || typeof normalized !== "object") {
+				console.warn(
+					"EditMarket.loadQuestion unexpected payload",
+					payload
+				);
+				return;
+			}
+
+			if (!normalized.questionId) {
+				normalized.questionId = qid;
+			}
+
+			if (
+				!normalized.displayName &&
+				typeof normalized.display_name === "string"
+			) {
+				normalized.displayName = normalized.display_name;
+			}
+
+			if (
+				Array.isArray(baseDetails.tagIds) &&
+				!Array.isArray(normalized.tagIds)
+			) {
+				normalized.tagIds = baseDetails.tagIds;
+			}
+
+			const merged: QuestionDetails = {
+				...baseDetails,
+				...normalized,
+			} as QuestionDetails;
+
+			console.log("EditMarket.loadQuestion merged", merged);
+			setDetails(merged);
 		} catch (e: any) {
+			console.error("EditMarket.loadQuestion error", e);
 			setError(e?.message || String(e));
 		} finally {
 			setLoading(false);
@@ -593,6 +666,7 @@ export default function EditMarket({
 	async function saveQuestion() {
 		if (!details) return;
 		const id = details._id || details.questionId;
+		console.log("EditMarket.saveQuestion attempt", id, details);
 		if (!id) return;
 		setQSaving(true);
 		setQSaveMsg(null);
@@ -606,9 +680,7 @@ export default function EditMarket({
 				displayName: details.displayName || undefined,
 				yesColor: details.yesColor || undefined,
 				noColor: details.noColor || undefined,
-				tagIds: Array.isArray(details.tagIds)
-					? details.tagIds
-					: undefined,
+				tagIds: Array.isArray(details.tagIds) ? details.tagIds : [],
 			};
 			const base = getPredictionApiBaseUrl();
 			const resp = await fetch(`${base}/questions/${id}`, {
@@ -620,11 +692,13 @@ export default function EditMarket({
 				body: JSON.stringify(body),
 			});
 			const json = await resp.json().catch(() => ({} as any));
+			console.log("EditMarket.saveQuestion response", json);
 			if (!resp.ok || !json?.success) {
 				throw new Error(json?.error || `HTTP ${resp.status}`);
 			}
 			setQSaveMsg("Saved");
 		} catch (e: any) {
+			console.error("EditMarket.saveQuestion error", e);
 			setQSaveErr(e?.message || String(e));
 		} finally {
 			setQSaving(false);
@@ -776,6 +850,7 @@ export default function EditMarket({
 					value={umbDisplayName}
 					onChange={(e) => setUmbDisplayName(e.target.value)}
 					className="edit-form-input"
+					name="umbrellaDisplayName"
 				/>
 			</label>
 			<label className="edit-form-label">
@@ -785,6 +860,7 @@ export default function EditMarket({
 					onChange={(e) => setUmbRule(e.target.value)}
 					rows={4}
 					className="edit-form-textarea"
+					name="umbrellaRule"
 				/>
 			</label>
 
@@ -940,7 +1016,7 @@ export default function EditMarket({
 				}}
 			/>
 
-			{teamCandidates.length > 0 && (
+			{shouldRenderTeamLinker && (
 				<TeamLinker
 					candidates={teamCandidates}
 					onTeamLinked={handleTeamLinked}
@@ -1017,6 +1093,7 @@ export default function EditMarket({
 									value={details.question || ""}
 									readOnly
 									className="edit-question-readonly"
+									name="questionIdReadonly"
 								/>
 							</label>
 							<label className="admin-form-label">
@@ -1030,6 +1107,7 @@ export default function EditMarket({
 										})
 									}
 									className="edit-form-input"
+									name="questionDisplayName"
 								/>
 							</label>
 							<div className="edit-color-grid">
@@ -1045,6 +1123,7 @@ export default function EditMarket({
 											})
 										}
 										className="edit-color-input"
+										name="questionYesColor"
 									/>
 								</label>
 								<label className="admin-form-label">
@@ -1059,6 +1138,7 @@ export default function EditMarket({
 											})
 										}
 										className="edit-color-input"
+										name="questionNoColor"
 									/>
 								</label>
 							</div>

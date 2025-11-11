@@ -106,6 +106,7 @@ export default function SeedMarket({
 				throw new Error(json?.error || `HTTP ${response.status}`);
 			}
 
+			console.log("SeedMarket.handleSeed response", json);
 			setResult(json.data as SeedResult);
 		} catch (err) {
 			console.error("error", err);
@@ -146,6 +147,7 @@ export default function SeedMarket({
 				throw new Error(json?.error || `HTTP ${response.status}`);
 			}
 
+			console.log("SeedMarket.handleClear response", json);
 			setClearResult("Order book cleared successfully");
 		} catch (err) {
 			console.error("error", err);
@@ -186,6 +188,7 @@ export default function SeedMarket({
 				throw new Error(json?.error || `HTTP ${response.status}`);
 			}
 
+			console.log("SeedMarket.handleWipe response", json);
 			setWipeResult("Market wiped successfully");
 		} catch (err) {
 			console.error("error", err);
@@ -198,6 +201,7 @@ export default function SeedMarket({
 	};
 
 	const resetForm = () => {
+		console.log("SeedMarket.resetForm");
 		setBidMin("0.1");
 		setBidMax("0.4");
 		setAskMin("0.6");
@@ -245,6 +249,7 @@ export default function SeedMarket({
 								max="0.99"
 								value={bidMin}
 								onChange={(e) => setBidMin(e.target.value)}
+								name="seedBidMin"
 								style={{
 									padding: 6,
 									color: "cyan",
@@ -264,6 +269,7 @@ export default function SeedMarket({
 								max="0.99"
 								value={bidMax}
 								onChange={(e) => setBidMax(e.target.value)}
+								name="seedBidMax"
 								style={{
 									padding: 6,
 									color: "cyan",
@@ -294,6 +300,7 @@ export default function SeedMarket({
 								max="0.99"
 								value={askMin}
 								onChange={(e) => setAskMin(e.target.value)}
+								name="seedAskMin"
 								style={{
 									padding: 6,
 									color: "cyan",
@@ -313,6 +320,7 @@ export default function SeedMarket({
 								max="0.99"
 								value={askMax}
 								onChange={(e) => setAskMax(e.target.value)}
+								name="seedAskMax"
 								style={{
 									padding: 6,
 									color: "cyan",
@@ -334,6 +342,7 @@ export default function SeedMarket({
 						min="1"
 						value={amount}
 						onChange={(e) => setAmount(e.target.value)}
+						name="seedAmount"
 						style={{
 							padding: 6,
 							color: "cyan",

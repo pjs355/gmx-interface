@@ -7,6 +7,7 @@ export interface UmbrellaQuestion {
 	questionId: string;
 	displayName: string;
 	marketId: string;
+    tagIds?: string[];
 }
 
 export interface UmbrellaTeamMapping {

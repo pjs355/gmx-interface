@@ -1,10 +1,4 @@
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
@@ -101,8 +95,6 @@ export default function Admin() {
 	);
 
 	const runUmbrellaRefresh = useCallback(async () => {
-		// Give backend processes (e.g., image propagation) a brief window
-		await new Promise((resolve) => setTimeout(resolve, 1500));
 		umbrellaDataService.invalidateCache();
 		try {
 			await refreshPredictionData();
@@ -417,7 +409,9 @@ export default function Admin() {
 				/>
 			)}
 
-			{view === "series-list" && <ListSeries />}
+			{view === "series-list" && (
+				<ListSeries onMarketCreated={handleMarketCreated} />
+			)}
 
 			{view === "series-add" && <AddSeries />}
 		</div>

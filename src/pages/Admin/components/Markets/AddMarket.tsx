@@ -205,6 +205,10 @@ export default function AddMarket({
 		},
 	]);
 
+	useEffect(() => {
+		console.log("AddMarket questions state:", questions);
+	}, [questions]);
+
 	// Image upload states
 	const [image1, setImage1] = useState<File | null>(null);
 	const [image2, setImage2] = useState<File | null>(null);
@@ -480,6 +484,7 @@ export default function AddMarket({
 			setSubmitting(false);
 		}
 	}
+	console.log("Rendering", new Date().toISOString());
 
 	return (
 		<div className="admin-market-container">

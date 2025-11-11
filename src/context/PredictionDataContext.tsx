@@ -350,6 +350,12 @@ export function PredictionDataProvider({
 	useEffect(() => {
 		const fetchAllBooksPreview = async () => {
 			try {
+				if (typeof window !== "undefined") {
+					const currentPath = window.location?.pathname ?? "";
+					if (currentPath.startsWith("/admin")) {
+						return;
+					}
+				}
 				const baseUrl = getPredictionApiBaseUrl();
 				const response = await fetch(
 					`${baseUrl}/api/all-books-preview`
@@ -362,6 +368,12 @@ export function PredictionDataProvider({
 				const json = await response.json();
 
 				if (json.success && json.data) {
+					if (typeof window !== "undefined") {
+						const currentPath = window.location?.pathname ?? "";
+						if (currentPath.startsWith("/admin")) {
+							return;
+						}
+					}
 					// Transform array into object keyed by questionId
 					const previewMap: Record<string, BookPreview> = {};
 					if (Array.isArray(json.data)) {

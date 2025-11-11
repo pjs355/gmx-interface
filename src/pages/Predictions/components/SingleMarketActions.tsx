@@ -51,6 +51,25 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 	};
 
+	const getContrastingTextColor = (hex?: string): string => {
+		if (!hex) return "#ffffff";
+		let cleaned = hex.trim().replace("#", "");
+		if (cleaned.length === 3) {
+			cleaned = cleaned
+				.split("")
+				.map((c) => c + c)
+				.join("");
+		}
+		if (cleaned.length !== 6) {
+			return "#ffffff";
+		}
+		const r = parseInt(cleaned.substring(0, 2), 16) / 255;
+		const g = parseInt(cleaned.substring(2, 4), 16) / 255;
+		const b = parseInt(cleaned.substring(4, 6), 16) / 255;
+		const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+		return luminance > 0.6 ? "#000000" : "#ffffff";
+	};
+
 	// Derive team labels for single-market umbrellas with "vs" in the title
 	const deriveLabels = (): { yesLabel: string; noLabel: string } => {
 		const raw = (
@@ -85,6 +104,8 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	})();
 	const yesColor = (question as any)?.yesColor || "#22c55e";
 	const noColor = (question as any)?.noColor || "#ef4444";
+	const yesTextColor = getContrastingTextColor(yesColor);
+	const noTextColor = getContrastingTextColor(noColor);
 
 	// Calculate payouts for $100 bet using preview data
 	const betAmount = 100;
@@ -109,7 +130,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						background: isVsSingle
 							? yesColor
 							: "rgba(34, 197, 94, 0.1)",
-						color: isVsSingle ? "#ffffff" : "#22c55e",
+						color: isVsSingle ? yesTextColor : "#22c55e",
 						border: `2px solid ${
 							isVsSingle ? yesColor : "#22c55e"
 						}`,
@@ -126,6 +147,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						e.currentTarget.style.boxShadow = isVsSingle
 							? `0 4px 8px ${hexToRgba(yesColor, 0.45)}`
 							: "0 4px 8px rgba(34, 197, 94, 0.3)";
+						if (isVsSingle) {
+							e.currentTarget.style.color = yesTextColor;
+						}
 					}}
 					onMouseLeave={(e) => {
 						e.currentTarget.style.background = isVsSingle
@@ -133,6 +157,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 							: "rgba(34, 197, 94, 0.1)";
 						e.currentTarget.style.transform = "translateY(0)";
 						e.currentTarget.style.boxShadow = "none";
+						if (isVsSingle) {
+							e.currentTarget.style.color = yesTextColor;
+						}
 					}}
 				>
 					<strong>
@@ -147,7 +174,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						background: isVsSingle
 							? noColor
 							: "rgba(239, 68, 68, 0.1)",
-						color: isVsSingle ? "#ffffff" : "#ef4444",
+						color: isVsSingle ? noTextColor : "#ef4444",
 						border: `2px solid ${isVsSingle ? noColor : "#ef4444"}`,
 						fontSize: "16px",
 						padding: "12px 24px",
@@ -162,6 +189,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						e.currentTarget.style.boxShadow = isVsSingle
 							? `0 4px 8px ${hexToRgba(noColor, 0.45)}`
 							: "0 4px 8px rgba(239, 68, 68, 0.3)";
+						if (isVsSingle) {
+							e.currentTarget.style.color = noTextColor;
+						}
 					}}
 					onMouseLeave={(e) => {
 						e.currentTarget.style.background = isVsSingle
@@ -169,6 +199,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 							: "rgba(239, 68, 68, 0.1)";
 						e.currentTarget.style.transform = "translateY(0)";
 						e.currentTarget.style.boxShadow = "none";
+						if (isVsSingle) {
+							e.currentTarget.style.color = noTextColor;
+						}
 					}}
 				>
 					<strong>

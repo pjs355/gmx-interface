@@ -52,7 +52,11 @@ interface SeriesApiResponse {
 	message?: string;
 }
 
-export default function ListSeries() {
+interface ListSeriesProps {
+	onMarketCreated?: () => void | Promise<void>;
+}
+
+export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 	const { getAccessToken } = usePrivy();
 	const [series, setSeries] = useState<ProcessedSerie[]>([]);
 	const [loading, setLoading] = useState<boolean>(false);
@@ -227,10 +231,9 @@ export default function ListSeries() {
 						},
 					}}
 					onCreated={async () => {
-						await new Promise((resolve) =>
-							setTimeout(resolve, 1500)
-						);
-						umbrellaDataService.invalidateCache();
+						if (onMarketCreated) {
+							await Promise.resolve(onMarketCreated());
+						}
 						await refreshUmbrellas();
 						setSelectedMatch(null);
 					}}
