@@ -131,6 +131,16 @@ export default function FilteredPredictions({
 				}
 			})
 			.filter((umbrella) => {
+				// For esports, filter out umbrellas with status "finished"
+				if (filterType === "esports") {
+					const status = (umbrella as any).status;
+					if (typeof status === "string" && status === "finished") {
+						return false;
+					}
+				}
+				return true;
+			})
+			.filter((umbrella) => {
 				// Apply secondary game filter if selected
 				if (!selectedGame) return true;
 

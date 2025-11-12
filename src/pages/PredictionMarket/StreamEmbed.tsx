@@ -57,7 +57,7 @@ function getStreamEmbedUrl(streamUrl: string, hostname: string): string {
 	return "";
 }
 
-export function StreamEmbed({ streamUrl, height = "480" }: StreamEmbedProps) {
+export function StreamEmbed({ streamUrl, height = "600" }: StreamEmbedProps) {
 	const trimmedUrl = streamUrl.trim();
 	if (trimmedUrl.length === 0) {
 		return null;
@@ -69,12 +69,26 @@ export function StreamEmbed({ streamUrl, height = "480" }: StreamEmbedProps) {
 	if (embedUrl.length === 0) {
 		return null;
 	}
+	const heightPx =
+		typeof height === "string"
+			? height.includes("px")
+				? height
+				: `${height}px`
+			: `${height}px`;
 	return (
-		<div className="stream-embed-container">
+		<div
+			className="stream-embed-container"
+			style={{ height: heightPx, minHeight: heightPx }}
+		>
 			<iframe
 				src={embedUrl}
-				height={height}
-				width="100%"
+				style={{
+					height: heightPx,
+					width: "100%",
+					display: "block",
+					border: "none",
+					flexShrink: 0,
+				}}
 				allowFullScreen
 				frameBorder="0"
 				scrolling="no"

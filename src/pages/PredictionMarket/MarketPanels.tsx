@@ -98,7 +98,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				<div className="left-panel">
 					{showStream && (
 						<div className="stream-section">
-							<StreamEmbed streamUrl={streamUrl} />
+							<StreamEmbed streamUrl={streamUrl} height="720" />
 						</div>
 					)}
 					<div className="chart-section">
