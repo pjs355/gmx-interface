@@ -35,6 +35,26 @@ export const formatDateTimeLocal = (
 	return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
+export const addHoursAndFormat = (
+	isoString: string | null | undefined,
+	hoursToAdd: number
+): string => {
+	if (typeof isoString !== "string" || isoString.length === 0) {
+		return "";
+	}
+	if (typeof hoursToAdd !== "number" || Number.isNaN(hoursToAdd)) {
+		return "";
+	}
+	const originalDate = new Date(isoString);
+	const milliseconds = originalDate.getTime();
+	if (Number.isNaN(milliseconds)) {
+		return "";
+	}
+	const offsetMilliseconds = hoursToAdd * 60 * 60 * 1000;
+	const adjustedDate = new Date(milliseconds + offsetMilliseconds);
+	return formatDateTimeLocal(adjustedDate.toISOString());
+};
+
 export const cleanTeamName = (teamName: string): string => {
 	const openParenIndex = teamName.indexOf("(");
 	if (openParenIndex === -1) {
@@ -118,7 +138,7 @@ export const buildCreateMarketPayload = async ({
 		seedAmount,
 		isEvent: Boolean(form.isEvent),
 		status: form.status,
-		twitchEnabled: form.twitchEnabled,
+		streamEnabled: form.streamEnabled,
 	};
 
 	const umbrellaId = form.selectedUmbrellaId;
@@ -147,9 +167,9 @@ export const buildCreateMarketPayload = async ({
 		}
 	}
 
-	const twitchChannel = form.twitchChannel;
-	if (twitchChannel && twitchChannel.length > 0) {
-		payload.twitchChannel = twitchChannel;
+	const streamUrl = form.streamUrl;
+	if (streamUrl && streamUrl.length > 0) {
+		payload.streamUrl = streamUrl;
 	}
 
 	const game = form.game;

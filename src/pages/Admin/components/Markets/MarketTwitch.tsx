@@ -1,28 +1,28 @@
-interface MarketTwitchProps {
-	twitchEnabled: boolean;
-	twitchChannel: string;
-	onTwitchEnabledChange: (enabled: boolean) => void;
-	onTwitchChannelChange: (channel: string) => void;
+interface MarketStreamProps {
+	streamEnabled: boolean;
+	streamUrl: string;
+	onStreamEnabledChange: (enabled: boolean) => void;
+	onStreamUrlChange: (url: string) => void;
 }
 
 export default function MarketTwitch({
-	twitchEnabled,
-	twitchChannel,
-	onTwitchEnabledChange,
-	onTwitchChannelChange,
-}: MarketTwitchProps) {
+	streamEnabled,
+	streamUrl,
+	onStreamEnabledChange,
+	onStreamUrlChange,
+}: MarketStreamProps) {
 	return (
 		<div style={{ display: "grid", gap: 6 }}>
-			<span>Twitch Enabled</span>
+			<span>Stream Enabled</span>
 			<div style={{ display: "flex", gap: 8 }}>
 				<button
 					type="button"
-					onClick={() => onTwitchEnabledChange(false)}
+					onClick={() => onStreamEnabledChange(false)}
 					style={{
 						padding: "6px 10px",
 						border: "1px solid white",
 						borderRadius: 6,
-						background: twitchEnabled
+						background: streamEnabled
 							? "transparent"
 							: "rgba(255,255,255,0.2)",
 						color: "white",
@@ -33,12 +33,12 @@ export default function MarketTwitch({
 				</button>
 				<button
 					type="button"
-					onClick={() => onTwitchEnabledChange(true)}
+					onClick={() => onStreamEnabledChange(true)}
 					style={{
 						padding: "6px 10px",
 						border: "1px solid white",
 						borderRadius: 6,
-						background: twitchEnabled
+						background: streamEnabled
 							? "rgba(255,255,255,0.2)"
 							: "transparent",
 						color: "white",
@@ -49,11 +49,11 @@ export default function MarketTwitch({
 				</button>
 			</div>
 			<label style={{ display: "grid", gap: 6 }}>
-				<span>Twitch Channel</span>
+				<span>Stream URL</span>
 				<input
-					value={twitchChannel}
-					onChange={(e) => onTwitchChannelChange(e.target.value)}
-					placeholder="Enter Twitch channel name (e.g., shroud)"
+					value={streamUrl}
+					onChange={(e) => onStreamUrlChange(e.target.value)}
+					placeholder="Enter full stream URL (e.g., https://www.twitch.tv/shroud)"
 					style={{
 						padding: 8,
 						color: "cyan",
@@ -63,7 +63,7 @@ export default function MarketTwitch({
 					}}
 				/>
 				<span style={{ fontSize: 12, opacity: 0.8 }}>
-					Enter the Twitch channel name without the URL. Leave blank
+					Provide a full streaming URL (Twitch, Kick, etc.). Leave blank
 					if no stream is associated.
 				</span>
 			</label>

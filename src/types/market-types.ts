@@ -17,8 +17,8 @@ export type AddMarketForm = {
 	image1Url?: string;
 	image2Url?: string;
 	status: boolean;
-	twitchEnabled: boolean;
-	twitchChannel: string;
+	streamEnabled: boolean;
+	streamUrl: string;
 	game: string;
 	pandascore_matchId: string;
 };
@@ -78,8 +78,8 @@ export interface UmbrellaUpdatePayload {
 	displayName?: string;
 	rule?: string;
 	active: boolean;
-	twitchEnabled: boolean;
-	twitchChannel?: string;
+	streamEnabled: boolean;
+	streamUrl?: string;
 	eventDate: string | null;
 	endDate: string | null;
 	image1Url?: string | null;
@@ -106,8 +106,8 @@ export interface CreateMarketRequestPayload {
 	eventDate?: string | null;
 	endDate?: string | null;
 	status: boolean;
-	twitchEnabled: boolean;
-	twitchChannel?: string;
+	streamEnabled: boolean;
+	streamUrl?: string;
 	game?: string;
 	pandascore_matchId?: string;
 	image1Url?: string;

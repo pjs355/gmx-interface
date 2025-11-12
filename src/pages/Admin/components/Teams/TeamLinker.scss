@@ -19,6 +19,19 @@
 		background: rgba(10, 12, 28, 0.4);
 	}
 
+	&__card-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	&__card-top-right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
 	&__summary {
 		display: grid;
 		gap: 2px;
@@ -46,6 +59,26 @@
 		border-radius: 6px;
 		background: rgba(34, 197, 94, 0.2);
 		color: #22c55e;
+	}
+
+	&__reorder-controls {
+		display: flex;
+		gap: 6px;
+	}
+
+	&__reorder-button {
+		width: 30px;
+		height: 30px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(255, 255, 255, 0.08);
+		color: white;
+		cursor: pointer;
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
 	}
 
 	&__actions {

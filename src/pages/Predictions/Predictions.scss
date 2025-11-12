@@ -325,6 +325,21 @@
 	filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
 }
 
+.banner-team-fallback {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 28px;
+	font-weight: 700;
+	color: #ffffff;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+	border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
 .banner-vs {
 	font-size: 18px;
 	font-weight: 700;
@@ -351,33 +366,29 @@
 
 .prediction-title {
 	font-size: 20px;
-	font-weight: 600;
-	color: white;
 	margin: 12px 0 8px 0;
-	line-height: 1.25;
-	height: 2.5em; /* Fixed height for 2 lines */
-	overflow: hidden;
-	text-overflow: ellipsis;
-	word-wrap: break-word;
-	hyphens: auto;
-	display: -webkit-box;
-	-webkit-line-clamp: 2; /* Limit to 2 lines */
-	line-clamp: 2; /* Standard property for compatibility */
-	-webkit-box-orient: vertical;
+	font-weight: 700;
+	color: white;
+	transition: color 0.2s ease;
+	max-width: 100%;
+	word-break: break-word;
+	display: flex;
+	flex-direction: column;
+}
 
-	/* Fallback for browsers that don't support line-clamp */
-	@supports not (-webkit-line-clamp: 2) {
-		position: relative;
+.prediction-title-prefix {
+	font-size: 14px;
+	font-weight: 500;
+	color: #9ca3af;
+	margin-bottom: 4px;
+	text-transform: none;
+	letter-spacing: 0;
+}
 
-		&::after {
-			content: "...";
-			position: absolute;
-			bottom: 0;
-			right: 0;
-			background: black;
-			padding-left: 4px;
-		}
-	}
+.prediction-title-main {
+	font-size: 20px;
+	font-weight: 700;
+	line-height: 1.2;
 }
 
 .prediction-actions {
@@ -386,6 +397,126 @@
 	justify-content: center;
 	margin-top: auto;
 	padding: 0 24px 16px 24px;
+}
+
+.prediction-card-footer {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 24px 20px 24px;
+	margin-top: 8px;
+	min-height: 24px;
+	color: #d1d5db;
+}
+
+.prediction-countdown {
+	font-size: 14px;
+	color: #d1d5db;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.prediction-live-indicator {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	font-weight: 600;
+	color: #f87171;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.prediction-live-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 9999px;
+	background: #f87171;
+	box-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
+}
+
+.prediction-ended-label {
+	font-size: 12px;
+	color: #9ca3af;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.prediction-calendar {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+}
+
+.prediction-calendar-day {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.prediction-calendar-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 8px;
+}
+
+.prediction-calendar-title {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.prediction-calendar-primary {
+	font-size: 18px;
+	font-weight: 700;
+	color: #f9fafb;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.prediction-calendar-secondary {
+	font-size: 13px;
+	color: #d1d5db;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.prediction-calendar-grid {
+	margin-top: 4px;
+}
+
+.prediction-calendar-day--unscheduled .prediction-calendar-primary {
+	color: #fbbf24;
+}
+
+.prediction-calendar-day--unscheduled .prediction-calendar-secondary {
+	color: #fcd34d;
+}
+
+.prediction-calendar-day--past .prediction-calendar-primary {
+	color: #9ca3af;
+}
+
+.prediction-calendar-day--past .prediction-calendar-secondary {
+	color: #6b7280;
+}
+
+.prediction-calendar-archive {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	padding-top: 8px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.prediction-calendar-archive-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #d1d5db;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	padding: 0 8px;
 }
 
 .single-market-actions {
@@ -411,7 +542,6 @@
 	display: flex;
 	justify-content: space-between;
 	width: 100%;
-	padding-bottom: 20px;
 }
 
 .payout-row {

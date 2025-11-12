@@ -2,6 +2,7 @@
 	background: black;
 	border-radius: 12px;
 	padding: 15px;
+	margin-top: 15px;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	border: 1px solid #4b5563;
 	color: #333;
@@ -919,7 +920,7 @@
 		height: 80vh; /* Slightly smaller on tablets */
 		max-height: 80vh;
 	}
-	
+
 	.prediction-curtain-header {
 		padding: 10px 12px;
 		min-height: 60px;
@@ -931,7 +932,7 @@
 		height: 85vh; /* Larger on mobile phones */
 		max-height: 85vh;
 	}
-	
+
 	.prediction-curtain-header {
 		padding: 8px 10px;
 		min-height: 56px;
@@ -993,7 +994,7 @@
 	border-radius: 2px;
 	margin: 8px auto;
 	cursor: grab;
-	
+
 	&:active {
 		cursor: grabbing;
 	}

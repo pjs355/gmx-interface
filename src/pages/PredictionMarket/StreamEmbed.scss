@@ -1,0 +1,15 @@
+.stream-embed-container {
+	position: relative;
+	width: 100%;
+	background: #0f0f0f;
+	border-radius: 12px;
+	overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.stream-embed {
+	border: none;
+	width: 100%;
+	min-height: 200px;
+	height: 100%;
+}

@@ -4,7 +4,7 @@ import PredictionMarketChart from "./PredictionMarketChart";
 import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
 import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarketTradeBox";
 import RulesSection from "components/RulesSection/RulesSection";
-import { TwitchEmbed } from "./TwitchEmbed";
+import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -59,6 +59,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
+	const streamUrl =
+		typeof umbrella?.streamUrl === "string"
+			? umbrella.streamUrl
+			: "";
+	const showStream = Boolean(umbrella?.streamEnabled) && streamUrl.length > 0;
 
 	// Debug: Uncomment to track MarketPanels re-renders
 	// console.log("🎬 MarketPanels rendering", {
@@ -91,9 +96,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			{/* Desktop Layout */}
 			<div className="desktop-layout">
 				<div className="left-panel">
-					{umbrella?.twitchEnabled && umbrella?.twitchChannel && (
-						<div className="twitch-section">
-							<TwitchEmbed channel={umbrella.twitchChannel} />
+					{showStream && (
+						<div className="stream-section">
+							<StreamEmbed streamUrl={streamUrl} />
 						</div>
 					)}
 					<div className="chart-section">
@@ -238,9 +243,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 			{/* Mobile Layout */}
 			<div className="mobile-layout">
-				{umbrella?.twitchEnabled && umbrella?.twitchChannel && (
-					<div className="twitch-section-mobile">
-						<TwitchEmbed channel={umbrella.twitchChannel} />
+				{showStream && (
+					<div className="stream-section-mobile">
+						<StreamEmbed streamUrl={streamUrl} height="360" />
 					</div>
 				)}
 				<div className="chart-section-mobile">

@@ -8,7 +8,8 @@ export interface UmbrellaQuestion {
 	questionId: string;
 	displayName: string;
 	marketId: string;
-    tagIds?: string[];
+	tagIds?: string[];
+	eventDate?: string | null;
 }
 
 export interface UmbrellaTeamMapping {
@@ -28,8 +29,8 @@ export interface Umbrella {
 	displayName: string;
 	description?: string;
 	image?: string;
-	twitchChannel?: string;
-	twitchEnabled?: boolean;
+	streamUrl?: string;
+	streamEnabled?: boolean;
 	children: UmbrellaQuestion[];
 	createdAt: string;
 	updatedAt: string;
@@ -37,6 +38,7 @@ export interface Umbrella {
 	game?: string;
 	pandascore_matchId?: string;
 	teamMappings?: UmbrellaTeamMapping[];
+	eventDate?: string | null;
 }
 
 interface UmbrellaApiResponse {

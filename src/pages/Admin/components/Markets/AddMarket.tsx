@@ -25,6 +25,7 @@ import {
 import {
 	slugify,
 	formatDateTimeLocal,
+	addHoursAndFormat,
 	cleanTeamName,
 	extractTeamKey,
 	normalizeTeamKey,
@@ -49,9 +50,12 @@ export default function AddMarket({
 			? `${buildLongMatchDisplayName(match)} - ${series.name}`
 			: "";
 
-	// Prefill event date if match provided
+	// Prefill event timing if match provided
 	const initialEventDate = match?.scheduledAt
 		? formatDateTimeLocal(match.scheduledAt)
+		: "";
+	const initialEndDate = match?.scheduledAt
+		? addHoursAndFormat(match.scheduledAt, 3)
 		: "";
 
 	const [form, setForm] = useState<AddMarketForm>({
@@ -62,10 +66,10 @@ export default function AddMarket({
 		umbrellaRule: "",
 		isEvent: !!match, // Set to true if match provided
 		eventDate: initialEventDate,
-		endDate: "",
+		endDate: initialEndDate,
 		status: false, // Inactive for series matches
-		twitchEnabled: false,
-		twitchChannel: "",
+		streamEnabled: false,
+		streamUrl: "",
 		game: series?.game || "",
 		pandascore_matchId: match?.id ? String(match.id) : "",
 	});
@@ -257,8 +261,8 @@ export default function AddMarket({
 				form,
 				questions,
 				linkedTeams,
-					image1,
-					image2,
+				image1,
+				image2,
 				uploadImage: uploadImageToFirebase,
 			});
 
@@ -380,8 +384,8 @@ export default function AddMarket({
 							onMatchIdChange={(value) =>
 								update("pandascore_matchId", value)
 							}
-						disabled={isPrefilled}
-					/>
+							disabled={isPrefilled}
+						/>
 					)}
 
 				{/* Removed top-level tags; tags are configured per-question below */}
@@ -402,14 +406,12 @@ export default function AddMarket({
 
 				{/* Twitch Enabled */}
 				<MarketTwitch
-					twitchEnabled={form.twitchEnabled}
-					twitchChannel={form.twitchChannel}
-					onTwitchEnabledChange={(enabled) =>
-						update("twitchEnabled", enabled)
+					streamEnabled={form.streamEnabled}
+					streamUrl={form.streamUrl}
+					onStreamEnabledChange={(enabled) =>
+						update("streamEnabled", enabled)
 					}
-					onTwitchChannelChange={(channel) =>
-						update("twitchChannel", channel)
-					}
+					onStreamUrlChange={(value) => update("streamUrl", value)}
 				/>
 
 				{/* Image Upload Section */}

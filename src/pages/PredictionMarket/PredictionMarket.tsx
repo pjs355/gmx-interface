@@ -252,7 +252,7 @@ function PredictionMarketContent() {
 		};
 	}, [umbrella?._id, questions.length]);
 
-	// Poll for THIS umbrella's updates every 60 seconds (e.g., twitchEnabled toggled by cron)
+	// Poll for THIS umbrella's updates every 60 seconds (e.g., streamEnabled toggled by cron)
 	useEffect(() => {
 		if (!umbrella?._id) return;
 

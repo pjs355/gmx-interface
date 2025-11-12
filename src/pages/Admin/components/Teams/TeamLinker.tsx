@@ -14,6 +14,7 @@ interface TeamLinkerProps {
 	candidates: TeamCandidate[];
 	onTeamLinked?: (shortCode: string, team: TeamRecord) => void;
 	readOnly?: boolean;
+	onReorder?: (fromIndex: number, toIndex: number) => void;
 }
 
 type TeamStatus = "idle" | "loading" | "linked" | "error";
@@ -83,6 +84,7 @@ export default function TeamLinker({
 	candidates,
 	onTeamLinked,
 	readOnly,
+	onReorder,
 }: TeamLinkerProps) {
 	const { getAccessToken } = usePrivy();
 	const [states, setStates] = useState<CandidateState[]>(
@@ -220,6 +222,33 @@ export default function TeamLinker({
 			});
 		},
 		[updateState]
+	);
+
+	const reorderCandidates = useCallback(
+		(fromIndex: number, toIndex: number) => {
+			if (fromIndex === toIndex) {
+				return;
+			}
+			if (fromIndex < 0 || toIndex < 0) {
+				return;
+			}
+			if (fromIndex >= states.length || toIndex >= states.length) {
+				return;
+			}
+			setStates((prev) => {
+				const clone = [...prev];
+				const [removed] = clone.splice(fromIndex, 1);
+				if (!removed) {
+					return prev;
+				}
+				clone.splice(toIndex, 0, removed);
+				return clone;
+			});
+			if (typeof onReorder === "function") {
+				onReorder(fromIndex, toIndex);
+			}
+		},
+		[onReorder, states]
 	);
 
 	const toggleExpanded = useCallback(
@@ -395,9 +424,7 @@ export default function TeamLinker({
 		[getAccessToken, onTeamLinked, readOnly, states, updateState]
 	);
 
-	if (enrichedStates.length === 0) {
-		return null;
-	}
+	const canReorder = typeof onReorder === "function";
 
 	return (
 		<div className="team-linker">
@@ -447,12 +474,40 @@ export default function TeamLinker({
 									</span>
 								</div>
 							</div>
-							{state.status === "linked" &&
-								state.existingTeam && (
-									<span className="team-linker__status-badge">
-										Linked
-									</span>
+							<div className="team-linker__card-top-right">
+								{state.status === "linked" &&
+									state.existingTeam && (
+										<span className="team-linker__status-badge">
+											Linked
+										</span>
+									)}
+								{canReorder && (
+									<div className="team-linker__reorder-controls">
+										<button
+											type="button"
+											onClick={() =>
+												reorderCandidates(index, index - 1)
+											}
+											disabled={index === 0}
+											className="team-linker__reorder-button"
+										>
+											↑
+										</button>
+										<button
+											type="button"
+											onClick={() =>
+												reorderCandidates(index, index + 1)
+											}
+											disabled={
+												index === enrichedStates.length - 1
+											}
+											className="team-linker__reorder-button"
+										>
+											↓
+										</button>
+									</div>
 								)}
+							</div>
 						</div>
 
 						{state.isExpanded && (

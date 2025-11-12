@@ -6,7 +6,7 @@ import {
 } from "@/services/api/umbrellaDataService";
 import { tagService, type Tag } from "@/services/api/tagService";
 import CountdownTimer from "@/components/CountdownTimer/CountdownTimer";
-import twitchLogo from "@/assets/img/twitch-logo.png";
+import streamLogo from "@/assets/img/twitch-logo.png";
 
 interface ListMarketProps {
 	onEdit: (umbrella: Umbrella) => void;
@@ -160,10 +160,19 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 					const eventDate = eventDateRaw
 						? new Date(eventDateRaw)
 						: null;
-					const hasTwitch = Boolean(
-						(u as any).twitchEnabled && (u as any).twitchChannel
-					);
-					const twitchIndicator = hasTwitch
+					const rawStreamUrl =
+						typeof (u as any).streamUrl === "string"
+							? ((u as any).streamUrl as string)
+							: "";
+					const streamEnabled = Boolean((u as any).streamEnabled);
+					const hasStream = streamEnabled && rawStreamUrl.length > 0;
+					let streamPlatformLabel = "Stream";
+					if (rawStreamUrl.includes("twitch.tv")) {
+						streamPlatformLabel = "Twitch";
+					} else if (rawStreamUrl.includes("kick.com")) {
+						streamPlatformLabel = "Kick";
+					}
+					const streamIndicator = hasStream
 						? { symbol: "✓", color: "#22c55e", label: "Connected" }
 						: { symbol: "!", color: "#ef4444", label: "Missing" };
 					return (
@@ -316,8 +325,8 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 												}}
 											>
 												<img
-													src={twitchLogo}
-													alt="Twitch"
+													src={streamLogo}
+													alt={streamPlatformLabel}
 													style={{
 														width: "100%",
 														height: "100%",
@@ -336,7 +345,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 														height: 16,
 														borderRadius: "50%",
 														background:
-															twitchIndicator.color,
+															streamIndicator.color,
 														color: "#0f0f0f",
 														display: "flex",
 														alignItems: "center",
@@ -346,9 +355,9 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 														fontWeight: 700,
 														border: "1px solid rgba(0,0,0,0.4)",
 													}}
-													title={`Twitch ${twitchIndicator.label}`}
+													title={`${streamPlatformLabel} ${streamIndicator.label}`}
 												>
-													{twitchIndicator.symbol}
+													{streamIndicator.symbol}
 												</span>
 											</div>
 											<div
@@ -357,7 +366,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 													opacity: 0.75,
 												}}
 											>
-												Twitch {twitchIndicator.label}
+												{streamPlatformLabel} {streamIndicator.label}
 											</div>
 										</div>
 										<button

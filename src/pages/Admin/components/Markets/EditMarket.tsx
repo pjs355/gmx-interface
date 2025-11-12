@@ -26,6 +26,28 @@ import {
 import { slugify, formatDateTimeLocal } from "./helpers/market-helpers";
 import "./Markets.scss";
 
+function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+	if (!Array.isArray(items)) {
+		return items;
+	}
+	if (fromIndex === toIndex) {
+		return items;
+	}
+	if (fromIndex < 0 || toIndex < 0) {
+		return items;
+	}
+	if (fromIndex >= items.length || toIndex >= items.length) {
+		return items;
+	}
+	const clone = [...items];
+	const [removed] = clone.splice(fromIndex, 1);
+	if (typeof removed === "undefined") {
+		return items;
+	}
+	clone.splice(toIndex, 0, removed);
+	return clone;
+}
+
 function cloneDeepMappings(
 	mappings: UmbrellaTeamMapping[]
 ): UmbrellaTeamMapping[] {
@@ -128,12 +150,14 @@ export default function EditMarket({
 	const [umbSaveErr, setUmbSaveErr] = useState<string | null>(null);
 
 	// Twitch integration states
-	const [twitchEnabled, setTwitchEnabled] = useState<boolean>(
-		Boolean((umbrella as any).twitchEnabled)
-	);
-	const [twitchChannel, setTwitchChannel] = useState<string>(
-		(umbrella as any).twitchChannel || ""
-	);
+	const initialStreamEnabled = Boolean((umbrella as any).streamEnabled);
+	const initialStreamUrl =
+		typeof (umbrella as any).streamUrl === "string"
+			? (umbrella as any).streamUrl
+			: "";
+	const [streamEnabled, setStreamEnabled] =
+		useState<boolean>(initialStreamEnabled);
+	const [streamUrl, setStreamUrl] = useState<string>(initialStreamUrl);
 
 	// Image upload states
 	const [image1, setImage1] = useState<File | null>(null);
@@ -231,8 +255,12 @@ export default function EditMarket({
 		setImage2Preview((umbrella as any).image2Url || null);
 
 		// Initialize Twitch settings
-		setTwitchEnabled(Boolean((umbrella as any).twitchEnabled));
-		setTwitchChannel((umbrella as any).twitchChannel || "");
+		setStreamEnabled(Boolean((umbrella as any).streamEnabled));
+		const resetStreamUrl =
+			typeof (umbrella as any).streamUrl === "string"
+				? ((umbrella as any).streamUrl as string)
+				: "";
+		setStreamUrl(resetStreamUrl);
 		setTeamMappingsState(cloneDeepMappings(umbrella.teamMappings ?? []));
 		setLinkedTeams({});
 		setPrefilledTeamCandidates([]);
@@ -433,6 +461,21 @@ export default function EditMarket({
 					return clone;
 				}
 				return [...prev, nextMapping];
+			});
+		},
+		[]
+	);
+
+	const handleTeamReorder = useCallback(
+		(fromIndex: number, toIndex: number) => {
+			setTeamMappingsState((prev) =>
+				reorderList(prev, fromIndex, toIndex)
+			);
+			setPrefilledTeamCandidates((prev) => {
+				if (!Array.isArray(prev) || prev.length === 0) {
+					return prev;
+				}
+				return reorderList(prev, fromIndex, toIndex);
 			});
 		},
 		[]
@@ -684,8 +727,8 @@ export default function EditMarket({
 				displayName: umbDisplayName || undefined,
 				rule: umbRule || undefined,
 				active: umbActive,
-				twitchEnabled,
-				twitchChannel: twitchChannel || undefined,
+				streamEnabled,
+				streamUrl: streamUrl.length > 0 ? streamUrl : undefined,
 				eventDate: null,
 				endDate: null,
 			};
@@ -814,12 +857,12 @@ export default function EditMarket({
 			/>
 
 			{/* Twitch Enabled */}
-			<div className="edit-twitch-wrapper">
+			<div className="edit-stream-wrapper">
 				<MarketTwitch
-					twitchEnabled={twitchEnabled}
-					twitchChannel={twitchChannel}
-					onTwitchEnabledChange={setTwitchEnabled}
-					onTwitchChannelChange={setTwitchChannel}
+					streamEnabled={streamEnabled}
+					streamUrl={streamUrl}
+					onStreamEnabledChange={setStreamEnabled}
+					onStreamUrlChange={setStreamUrl}
 				/>
 			</div>
 
@@ -849,6 +892,7 @@ export default function EditMarket({
 					candidates={teamCandidates}
 					onTeamLinked={handleTeamLinked}
 					readOnly
+					onReorder={handleTeamReorder}
 				/>
 			)}
 
