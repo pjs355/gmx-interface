@@ -341,6 +341,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					umbrellaId={umbrella._id}
 					multiMarketData={multiMarketData}
 					onNavigate={navigateToMultiMarket}
+					onNavigateToUmbrella={navigateToUmbrella}
 				/>
 			);
 		} else {
@@ -420,7 +421,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	return (
 		<div key={umbrella._id} className="prediction-card">
 			{/* Banner Image */}
-			<div className="prediction-banner">
+			<div 
+				className="prediction-banner" 
+				onClick={navigateToUmbrella}
+				style={{ cursor: 'pointer' }}
+			>
 				{shouldShowImage ? (
 					<img
 						src={bannerImageUrl as string}

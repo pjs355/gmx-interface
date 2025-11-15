@@ -202,8 +202,8 @@ export function AppHeaderLinks({
 						showRedirectModal={showRedirectModal}
 						isActive={(_match: any, location: any) => {
 							const path = location.pathname;
-							// Only active on exactly /predictions or /, but NOT /predictions/esports or any other /predictions/* route
-							return (path === "/predictions" || path === "/");
+							// Active on /predictions or /predictions/games, but NOT / (home) or /predictions/esports
+							return path === "/predictions" || path === "/predictions/games";
 						}}
 					>
 						Gaming

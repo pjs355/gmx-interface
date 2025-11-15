@@ -105,23 +105,21 @@ export function CountdownBanner() {
 		return null;
 	}
 
-	// Don't show banner until we've checked claim status
-	if (isCheckingClaim) {
-		return null;
-	}
-
 	// Only show banner if user HAS claimed test USDC
-	if (!hasClaimedTestUsdc) {
+	if (!isCheckingClaim && !hasClaimedTestUsdc) {
 		return null;
 	}
 
-	// Don't show banner if countdown has ended
-	if (!timeLeft) {
+	// Don't show banner if countdown has ended (only if we're done loading)
+	if (!isCheckingClaim && !timeLeft) {
 		return null;
 	}
+
+	// Show placeholder values while loading
+	const displayTime = timeLeft || { days: 0, hours: 0, minutes: 0, seconds: 0 };
 
 	return (
-		<div className="countdown-banner">
+		<div className={`countdown-banner ${isCheckingClaim ? 'countdown-banner--loading' : 'countdown-banner--loaded'}`}>
 			<div className="countdown-banner-container">
 				<div className="countdown-banner-content">
 					<h3 className="countdown-banner-title">
@@ -130,27 +128,27 @@ export function CountdownBanner() {
 				</div>
 				<div className="countdown-timer">
 					<div className="time-unit">
-						<div className="time-value">{timeLeft.days}</div>
+						<div className="time-value">{displayTime.days}</div>
 						<div className="time-label">D</div>
 					</div>
 					<div className="time-separator">:</div>
 					<div className="time-unit">
 						<div className="time-value">
-							{String(timeLeft.hours).padStart(2, "0")}
+							{String(displayTime.hours).padStart(2, "0")}
 						</div>
 						<div className="time-label">H</div>
 					</div>
 					<div className="time-separator">:</div>
 					<div className="time-unit">
 						<div className="time-value">
-							{String(timeLeft.minutes).padStart(2, "0")}
+							{String(displayTime.minutes).padStart(2, "0")}
 						</div>
 						<div className="time-label">M</div>
 					</div>
 					<div className="time-separator">:</div>
 					<div className="time-unit">
 						<div className="time-value">
-							{String(timeLeft.seconds).padStart(2, "0")}
+							{String(displayTime.seconds).padStart(2, "0")}
 						</div>
 						<div className="time-label">S</div>
 					</div>

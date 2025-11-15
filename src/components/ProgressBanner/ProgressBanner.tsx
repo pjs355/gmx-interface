@@ -67,21 +67,6 @@ export function ProgressBanner() {
 		};
 	}, [account, getAccessToken]);
 
-	// Don't show banner if user is not authenticated
-	if (!authenticated || !account) {
-		return null;
-	}
-
-	// Don't show banner until data is loaded
-	if (isCheckingClaim) {
-		return null;
-	}
-
-	// If user has already claimed, don't show the banner
-	if (hasClaimedTestUsdc) {
-		return null;
-	}
-
 	const handleClaimClick = async () => {
 		try {
 			setIsClaiming(true);
@@ -129,8 +114,19 @@ export function ProgressBanner() {
 		}
 	};
 
+	// Don't show banner if user is not authenticated
+	if (!authenticated || !account) {
+		return null;
+	}
+
+	// If user has already claimed, don't show the banner
+	if (hasClaimedTestUsdc) {
+		return null;
+	}
+
+	// Show banner (with skeleton if still loading)
 	return (
-		<div className="progress-banner">
+		<div className={`progress-banner ${isCheckingClaim ? 'progress-banner--loading' : 'progress-banner--loaded'}`}>
 			<div className="progress-banner-container">
 				<div className="progress-banner-content">
 					<div className="progress-banner-subtitle">Welcome to LevelUp!</div>
@@ -141,7 +137,7 @@ export function ProgressBanner() {
 				<button
 					className="progress-banner-button"
 					onClick={handleClaimClick}
-					disabled={isClaiming}
+					disabled={isClaiming || isCheckingClaim}
 				>
 					{isClaiming ? "Claiming..." : "Claim Test $"}
 				</button>

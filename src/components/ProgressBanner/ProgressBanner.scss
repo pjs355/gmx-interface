@@ -11,6 +11,28 @@
 	overflow: hidden;
 	border-top: 1px solid rgba(255, 255, 255, 0.1);
 	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	opacity: 1;
+	transition: opacity 0.3s ease-in-out;
+
+	&--loading {
+		opacity: 0.5;
+		pointer-events: none;
+		
+		.progress-banner-content,
+		.progress-banner-button {
+			opacity: 0.3;
+		}
+	}
+
+	&--loaded {
+		opacity: 1;
+		
+		.progress-banner-content,
+		.progress-banner-button {
+			opacity: 1;
+			transition: opacity 0.3s ease-in-out 0.1s;
+		}
+	}
 
 	&::before {
 		content: "";

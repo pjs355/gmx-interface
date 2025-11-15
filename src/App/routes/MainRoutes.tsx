@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import GetTestUsdc from "pages/GetTestUsdc/GetTestUsdc.jsx";
 import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
+import Home from "pages/Home/Home";
 import Predictions from "pages/Predictions/Predictions";
 import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";
 import PredictionMarket from "@/pages/PredictionMarket/PredictionMarket";
@@ -25,7 +26,7 @@ export function MainRoutes() {
 
 	return (
 		<Routes>
-			<Route path="/" element={<Navigate to="/predictions" replace />} />
+			<Route path="/" element={<Home />} />
 
 			<Route path="/predictions" element={<Predictions />} />
 			<Route
