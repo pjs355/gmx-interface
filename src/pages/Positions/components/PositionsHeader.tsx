@@ -48,98 +48,98 @@ export default function PositionsHeader({
 									}}
 								/>
 							) : (
-								<>
-									$
-									{portfolioTotal.toLocaleString("en-US", {
-										minimumFractionDigits: 2,
+							<>
+								$
+								{portfolioTotal.toLocaleString("en-US", {
+									minimumFractionDigits: 0,
+									maximumFractionDigits: 2,
+								})}
+							</>
+						)}
+					</div>
+				</div>
+				<div>
+					<div
+						style={{
+							color: "#9CA3AF",
+							fontSize: 12,
+							textTransform: "uppercase",
+							letterSpacing: 0.6,
+						}}
+					>
+						Positions
+					</div>
+					<div
+						style={{
+							color: "#fff",
+							fontSize: 20,
+							fontWeight: 700,
+						}}
+					>
+						{softLoading ? (
+							<span
+								className="skeleton-box"
+								style={{
+									display: "inline-block",
+									width: 120,
+									height: 18,
+									borderRadius: 4,
+								}}
+							/>
+						) : (
+							<>
+								$
+								{positionsTotalValue.toLocaleString(
+									"en-US",
+									{
+										minimumFractionDigits: 0,
 										maximumFractionDigits: 2,
-									})}
-								</>
-							)}
-						</div>
+									}
+								)}
+							</>
+						)}
 					</div>
-					<div>
-						<div
-							style={{
-								color: "#9CA3AF",
-								fontSize: 12,
-								textTransform: "uppercase",
-								letterSpacing: 0.6,
-							}}
-						>
-							Positions
-						</div>
-						<div
-							style={{
-								color: "#fff",
-								fontSize: 20,
-								fontWeight: 700,
-							}}
-						>
-							{softLoading ? (
-								<span
-									className="skeleton-box"
-									style={{
-										display: "inline-block",
-										width: 120,
-										height: 18,
-										borderRadius: 4,
-									}}
-								/>
-							) : (
-								<>
-									$
-									{positionsTotalValue.toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 2,
-											maximumFractionDigits: 2,
-										}
-									)}
-								</>
-							)}
-						</div>
+				</div>
+				<div>
+					<div
+						style={{
+							color: "#9CA3AF",
+							fontSize: 12,
+							textTransform: "uppercase",
+							letterSpacing: 0.6,
+						}}
+					>
+						Cash Balance
 					</div>
-					<div>
-						<div
-							style={{
-								color: "#9CA3AF",
-								fontSize: 12,
-								textTransform: "uppercase",
-								letterSpacing: 0.6,
-							}}
-						>
-							Cash Balance
-						</div>
-						<div
-							style={{
-								color: "#fff",
-								fontSize: 20,
-								fontWeight: 700,
-							}}
-						>
-							{softLoading ? (
-								<span
-									className="skeleton-box"
-									style={{
-										display: "inline-block",
-										width: 100,
-										height: 18,
-										borderRadius: 4,
-									}}
-								/>
-							) : (
-								<>
-									$
-									{Number(usdcBalance || 0).toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 2,
-											maximumFractionDigits: 2,
-										}
-									)}
-								</>
-							)}
+					<div
+						style={{
+							color: "#fff",
+							fontSize: 20,
+							fontWeight: 700,
+						}}
+					>
+						{softLoading ? (
+							<span
+								className="skeleton-box"
+								style={{
+									display: "inline-block",
+									width: 100,
+									height: 18,
+									borderRadius: 4,
+								}}
+							/>
+						) : (
+							<>
+								$
+								{Number(usdcBalance || 0).toLocaleString(
+									"en-US",
+									{
+										minimumFractionDigits: 0,
+										maximumFractionDigits: 2,
+									}
+								)}
+							</>
+						)}
 						</div>
 					</div>
 				</div>
@@ -175,99 +175,99 @@ export default function PositionsHeader({
 								}}
 							/>
 						) : (
-							<>
-								$
-								{portfolioTotal.toLocaleString("en-US", {
-									minimumFractionDigits: 2,
-									maximumFractionDigits: 2,
-								})}
-							</>
-						)}
-					</div>
+					<>
+						$
+						{portfolioTotal.toLocaleString("en-US", {
+							minimumFractionDigits: 0,
+							maximumFractionDigits: 2,
+						})}
+					</>
+				)}
+			</div>
+		</div>
+		<div className="flex items-end gap-32 mt-16">
+			<div>
+				<div
+					style={{
+						color: "#9CA3AF",
+						fontSize: 12,
+						textTransform: "uppercase",
+						letterSpacing: 0.6,
+					}}
+				>
+					Positions
 				</div>
-				<div className="flex items-end gap-32 mt-16">
-					<div>
-						<div
+				<div
+					style={{
+						color: "#fff",
+						fontSize: 20,
+						fontWeight: 700,
+					}}
+				>
+					{softLoading ? (
+						<span
+							className="skeleton-box"
 							style={{
-								color: "#9CA3AF",
-								fontSize: 12,
-								textTransform: "uppercase",
-								letterSpacing: 0.6,
+								display: "inline-block",
+								width: 120,
+								height: 18,
+								borderRadius: 4,
 							}}
-						>
-							Positions
-						</div>
-						<div
-							style={{
-								color: "#fff",
-								fontSize: 20,
-								fontWeight: 700,
-							}}
-						>
-							{softLoading ? (
-								<span
-									className="skeleton-box"
-									style={{
-										display: "inline-block",
-										width: 120,
-										height: 18,
-										borderRadius: 4,
-									}}
-								/>
-							) : (
-								<>
-									$
-									{positionsTotalValue.toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 2,
-											maximumFractionDigits: 2,
-										}
-									)}
-								</>
+						/>
+					) : (
+						<>
+							$
+							{positionsTotalValue.toLocaleString(
+								"en-US",
+								{
+									minimumFractionDigits: 0,
+									maximumFractionDigits: 2,
+								}
 							)}
-						</div>
-					</div>
-					<div>
-						<div
+						</>
+					)}
+				</div>
+			</div>
+			<div>
+				<div
+					style={{
+						color: "#9CA3AF",
+						fontSize: 12,
+						textTransform: "uppercase",
+						letterSpacing: 0.6,
+					}}
+				>
+					Cash Balance
+				</div>
+				<div
+					style={{
+						color: "#fff",
+						fontSize: 20,
+						fontWeight: 700,
+					}}
+				>
+					{softLoading ? (
+						<span
+							className="skeleton-box"
 							style={{
-								color: "#9CA3AF",
-								fontSize: 12,
-								textTransform: "uppercase",
-								letterSpacing: 0.6,
+								display: "inline-block",
+								width: 100,
+								height: 18,
+								borderRadius: 4,
 							}}
-						>
-							Cash Balance
-						</div>
-						<div
-							style={{
-								color: "#fff",
-								fontSize: 20,
-								fontWeight: 700,
-							}}
-						>
-							{softLoading ? (
-								<span
-									className="skeleton-box"
-									style={{
-										display: "inline-block",
-										width: 100,
-										height: 18,
-										borderRadius: 4,
-									}}
-								/>
-							) : (
-								<>
-									$
-									{Number(usdcBalance || 0).toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 2,
-											maximumFractionDigits: 2,
-										}
-									)}
-								</>
+						/>
+					) : (
+						<>
+							$
+							{Number(usdcBalance || 0).toLocaleString(
+								"en-US",
+								{
+									minimumFractionDigits: 0,
+									maximumFractionDigits: 2,
+								}
 							)}
+						</>
+					)}
 						</div>
 					</div>
 				</div>

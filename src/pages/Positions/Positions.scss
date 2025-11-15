@@ -80,6 +80,10 @@
 	background: #000000;
 	min-height: 100vh;
 	padding: 0px 50px;
+
+	@media (max-width: 768px) {
+		padding: 0px 16px; /* Reduced side padding for mobile */
+	}
 }
 
 /* Add padding between tabs and content */

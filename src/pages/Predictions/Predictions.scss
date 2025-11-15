@@ -11,6 +11,14 @@
 	padding-right: 50px;
 	padding-top: 10px;
 
+	// Promotion bar should extend full width (only used when shown on predictions page for non-authenticated users)
+	.promotion-bar {
+		margin-top: -10px;
+		margin-bottom: 0;
+	}
+
+	// Progress banner is now global, no special spacing needed here
+
 	.search-container {
 		margin-top: 24px;
 		margin-bottom: 24px;
@@ -269,7 +277,7 @@
 
 .prediction-banner {
 	width: 100%;
-	height: 120px;
+	height: 140px;
 	border-radius: 12px 12px 0 0;
 	background: #1f2937;
 	overflow: hidden;
@@ -301,8 +309,9 @@
 	transform: translate(-50%, -50%);
 	display: flex;
 	align-items: center;
-	gap: 20px;
-	padding: 0;
+	justify-content: center;
+	gap: 24px;
+	padding: 10px;
 	border-radius: 0;
 	background: none;
 	backdrop-filter: none;
@@ -313,27 +322,28 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 0;
-	width: 72px;
-	height: 72px;
+	width: 90px;
+	height: 90px;
+	box-sizing: border-box;
 }
 
 .banner-team-logo {
-	width: 100%;
-	height: 100%;
+	width: 80px;
+	height: 80px;
 	object-fit: contain;
+	object-position: center;
 	filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
 }
 
 .banner-team-fallback {
-	width: 72px;
-	height: 72px;
+	width: 56px;
+	height: 56px;
 	border-radius: 50%;
 	background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 28px;
+	font-size: 24px;
 	font-weight: 700;
 	color: #ffffff;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);

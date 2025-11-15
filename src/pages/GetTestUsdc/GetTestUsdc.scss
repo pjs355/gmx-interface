@@ -17,9 +17,12 @@
 
 	&-cards {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: 1fr;
 		gap: 2rem;
 		margin-bottom: 2rem;
+		max-width: 600px;
+		margin-left: auto;
+		margin-right: auto;
 
 		@media (max-width: 768px) {
 			grid-template-columns: 1fr;
@@ -101,16 +104,22 @@
 	&-claim-button {
 		width: 100%;
 		max-width: 250px;
-		padding: 0.75rem 1rem;
-		font-size: 0.875rem;
+		padding: 1rem 1.5rem;
+		font-size: 1.125rem;
+		font-weight: 700;
 		color: white !important;
 
 		&:not(:disabled) {
-			background: var(--primary-btn-bg) !important;
+			background: #8b5cf6 !important;
+		}
+
+		&:hover:not(:disabled) {
+			background: #7c3aed !important;
 		}
 
 		@media (max-width: 768px) {
 			max-width: 200px;
+			font-size: 1rem;
 		}
 	}
 
@@ -139,7 +148,11 @@
 		margin-bottom: 0.5rem;
 
 		button:not(:disabled) {
-			background: #9285f3 !important;
+			background: #8b5cf6 !important;
+		}
+
+		button:hover:not(:disabled) {
+			background: #7c3aed !important;
 		}
 	}
 

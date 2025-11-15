@@ -98,7 +98,7 @@ export function AppHeaderLinks({
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || num === undefined || !isFinite(num)) return "--";
 		return new Intl.NumberFormat("en-US", {
-			minimumFractionDigits: 2,
+			minimumFractionDigits: 0,
 			maximumFractionDigits: 2,
 		}).format(num);
 	};
@@ -206,7 +206,7 @@ export function AppHeaderLinks({
 							return (path === "/predictions" || path === "/");
 						}}
 					>
-						Predictions
+						Gaming
 					</HeaderLink>
 				</div>
 				<div className="App-header-link-container">
@@ -240,7 +240,7 @@ export function AppHeaderLinks({
 							to="/get_test_usdc"
 							showRedirectModal={showRedirectModal}
 						>
-							Get Test USD
+							Referral
 						</HeaderLink>
 					</div>
 				)}

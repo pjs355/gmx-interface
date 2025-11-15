@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
+import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "./components/PredictionCard";
 import { LoadingState } from "./components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -9,9 +10,11 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./Predictions.scss";
 import GameLinks from "./components/GameLinks";
 import { Search } from "./components/Search/Search";
+import { PromotionBar } from "@/components/PromotionBar";
 
 export default function Predictions() {
 	const navigate = useNavigate();
+	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [imagesReady, setImagesReady] = useState(false);
 	const [searchActive, setSearchActive] = useState(false);
@@ -231,6 +234,8 @@ export default function Predictions() {
 
 	return (
 		<div className="predictions-page page-layout">
+			{/* Show PromotionBar only for non-authenticated users */}
+			{!authenticated && <PromotionBar />}
 			{/** <ImageBanner /> */}
 			{/* <Search
 				onSearchActive={handleSearchActive}

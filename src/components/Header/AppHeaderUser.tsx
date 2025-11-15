@@ -62,7 +62,7 @@ export function AppHeaderUser({
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || num === undefined || !isFinite(num)) return "--";
 		return new Intl.NumberFormat("en-US", {
-			minimumFractionDigits: 2,
+			minimumFractionDigits: 0,
 			maximumFractionDigits: 2,
 		}).format(num);
 	};

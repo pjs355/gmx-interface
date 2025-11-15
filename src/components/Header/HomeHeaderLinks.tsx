@@ -46,7 +46,7 @@ export function HomeHeaderLinks({
 		...(active
 			? [
 					{
-						label: t`Get Test USDC`,
+						label: t`Referral`,
 						link: "/get_test_usdc",
 						isHomeLink: true,
 					},
