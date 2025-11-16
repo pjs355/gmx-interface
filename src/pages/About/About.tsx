@@ -7,11 +7,15 @@ export function About() {
 	return (
 		<div className="About">
 			<div className="About-content">
-				<div className="About-header">
-					<h1 className="About-title">
-						A Prediction Market For Gamers, By Gamers
-					</h1>
-				</div>
+		<div className="About-header">
+			<h1 className="About-title">
+				<span className="About-title-white">Think you know gaming?</span>
+				<span className="About-title-purple">Prove it.</span>
+			</h1>
+			<p className="About-subtitle">
+				Predict what happens next across esports, consoles, and your favorite titles. All for bragging rights, glory, and prizes.
+			</p>
+		</div>
 				<div className="About-video-container">
 					<iframe
 						width="560"
@@ -23,66 +27,86 @@ export function About() {
 						allowFullScreen
 					></iframe>
 				</div>
-				<div className="About-section">
-					<h2 className="About-section-title">Welcome to Level Up</h2>
-					<p className="About-section-text">
-						Level Up is a prediction market platform where gamers
-						can bet on the outcomes of their favorite games and
-						esports events. We're built by gamers, for gamers, and
-						we're passionate about bringing the excitement of
-						prediction markets to the gaming community.
-					</p>
+			<div className="About-section">
+				<h2 className="About-section-title">Welcome to Level Up</h2>
+				<p className="About-section-text">
+					LevelUp is where gamers flex their instincts.
+					Every trailer, every tournament, and every rumor is your chance to call the shots before anyone else.
+				</p>
+			<p className="About-section-text">
+				A place to turn hot takes into leaderboard wins. Whether it's who wins Valorant Champs or what price Steam Machine drops at, your predictions will earn you rank, XP, and bragging rights.
+			</p>
+		</div>
+		<div className="About-section">
+			<h2 className="About-section-title">How It Works</h2>
+			<p className="About-section-text">
+				<strong>Pick a Market</strong><br />
+				Choose anything you've got a take on. From "Will GTA VI cost more than $80?" to "Who wins the next Valorant match?"
+			</p>
+			<p className="About-section-text">
+				<strong>Buy Shares in Your Prediction</strong><br />
+				Every bet (or "share") costs between 1¢ and 99¢.
+				That price = the odds.
+				If something's trading at 10¢, it means the market gives it about a 10% chance.
+			</p>
+			<p className="About-section-text">
+				When you buy, you're locking in that prediction.
+			</p>
+			<p className="About-section-text">
+				<strong>Win $1 Per Correct Share</strong><br />
+				When the event settles, each correct share pays out $1.
+				If you bought 10 shares at 10¢ each, that's $1 spent and if you're right, you win $10.
+			</p>
+			<p className="About-section-text">
+				<strong>We Settle Every Market</strong><br />
+				Once the real world result is confirmed (like official game data, Metacritic scores, or tournament outcomes), we resolve it and update the leaderboard.
+			</p>
+			<p className="About-section-text">
+				All free. All fair. All fun.
+			</p>
+		</div>
+		<div className="About-section">
+			<h2 className="About-section-title">Trading Competition Live Now</h2>
+				<p className="About-section-text">
+					The beta season is on. The best players are already climbing the leaderboard. And the top prize? A brand new Nintendo Switch 2.
+				</p>
+				<div className="About-button-container center">
+					<Link to="/prizes">
+						<Button variant="primary">See Prizes</Button>
+					</Link>
 				</div>
-				<div className="About-section">
-					<h2 className="About-section-title">Coming Soon</h2>
-					<p className="About-section-text">
-						We are going to launch a trading competition soon, and
-						once that concludes, we'll be going live shortly
-						thereafter. We're working hard to bring you the best
-						prediction market experience for gaming and esports.
-					</p>
+				<p className="About-section-text">
+					Jump in now, make your picks, and prove you're built different.
+					No real money. Just ego, instinct, and a need for loot.
+				</p>
+			</div>
+			<div className="About-section">
+				<h2 className="About-section-title">What's Next</h2>
+				<p className="About-section-text">
+					We're ranking up fast.
+					After the competition wraps, we'll open full trading worldwide with real stakes, real wins, and new market types for every major release, esports event, and patch cycle.
+				</p>
+				<p className="About-section-text">
+					Want to be early?
+				</p>
+				<div className="About-button-container center">
+					<Link to="/predictions">
+						<Button variant="primary">Start Trading</Button>
+					</Link>
 				</div>
-				<div className="About-section About-section-important">
-					<h2 className="About-section-title">
-						Important Information
-					</h2>
-					<p className="About-section-text">
-						We are currently working on obtaining our license from
-						the{" "}
-						<strong>
-							CFTC (Commodity Futures Trading Commission)
-						</strong>{" "}
-						in the United States. While we work through this
-						regulatory process, we will not be available for live
-						trading in the United States.
-					</p>
-					<p className="About-section-text">
-						However,{" "}
-						<strong>
-							Americans are allowed to participate in our trading
-							competition
-						</strong>{" "}
-						during this test phase. This is your chance to try out
-						the platform and win great prizes!
-					</p>
+			</div>
+			<div className="About-section">
+				<h2 className="About-section-title">Got Ideas?</h2>
+				<p className="About-section-text">
+					Have a wild market idea or want to collab?
+					Hit us up because we actually read every message.
+				</p>
+				<div className="About-button-container center">
+					<a href="mailto:brendan@levelup.markets">
+						<Button variant="primary">Contact Us</Button>
+					</a>
 				</div>
-				<div className="About-section">
-					<h2 className="About-section-title">What's Next?</h2>
-					<p className="About-section-text">
-						Join us now to get a head start on the competition,
-						learn how the platform works, and be ready when we go
-						live. Login, claim your test USD, and start trading on
-						your favorite gaming markets today!
-					</p>
-					<div className="About-button-container">
-						<Link to="/predictions">
-							<Button variant="secondary">Explore Markets</Button>
-						</Link>
-						<Link to="/get_test_usdc">
-							<Button variant="primary">Get Test USD</Button>
-						</Link>
-					</div>
-				</div>
+			</div>
 			</div>
 		</div>
 	);

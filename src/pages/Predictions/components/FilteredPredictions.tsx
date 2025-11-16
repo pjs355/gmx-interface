@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
+import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "./PredictionCard";
 import { LoadingState } from "./LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -11,6 +12,7 @@ import {
 	resolveUmbrellaEventDate,
 	startOfLocalDay,
 } from "../utils/eventDates";
+import { PromotionBar } from "@/components/PromotionBar";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -61,6 +63,7 @@ export default function FilteredPredictions({
 	filterType,
 }: FilteredPredictionsProps) {
 	const navigate = useNavigate();
+	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
 	// Listen for reset filter event from header
@@ -483,6 +486,8 @@ export default function FilteredPredictions({
 
 	return (
 		<div className="predictions-page page-layout">
+			{/* Show PromotionBar only for non-authenticated users */}
+			{!authenticated && <PromotionBar />}
 			<GameLinks
 				selectedGame={selectedGame}
 				onGameSelect={setSelectedGame}

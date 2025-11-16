@@ -14,7 +14,7 @@
 	// Promotion bar should extend full width (only used when shown on predictions page for non-authenticated users)
 	.promotion-bar {
 		margin-top: -10px;
-		margin-bottom: 0;
+		margin-bottom: 32px;
 	}
 
 	// Progress banner is now global, no special spacing needed here
@@ -632,6 +632,22 @@
 	.action-button {
 		flex: 1;
 		max-width: calc(50% - 6px);
+		font-size: 16px;
+		
+		strong {
+			font-size: 16px;
+		}
+	}
+
+	/* Keep mobile size smaller */
+	@media (max-width: 768px) {
+		.action-button {
+			font-size: 14px;
+			
+			strong {
+				font-size: 14px;
+			}
+		}
 	}
 }
 
@@ -723,12 +739,12 @@
 	flex-shrink: 0;
 
 	.action-button {
-		font-size: 11px;
+		font-size: 16px;
 		padding: 8px 12px;
 		min-height: 36px;
 		
 		strong {
-			font-size: 11px;
+			font-size: 16px;
 		}
 	}
 
