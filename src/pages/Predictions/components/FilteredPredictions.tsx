@@ -343,7 +343,7 @@ export default function FilteredPredictions({
 							day.date,
 							calendarData.todayStartMs
 						);
-						return (
+	return (
 							<section
 								key={`upcoming-${buildDayKey(day.date)}`}
 								className="prediction-calendar-day"

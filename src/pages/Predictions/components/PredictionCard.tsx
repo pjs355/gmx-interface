@@ -4,6 +4,7 @@ import Button from "components/Button/Button";
 import CountdownTimer from "components/CountdownTimer/CountdownTimer";
 import { SingleMarketActions } from "./SingleMarketActions";
 import { MultiMarketActions } from "./MultiMarketActions";
+import mixpanel from "mixpanel-browser";
 import type {
 	Umbrella,
 	UmbrellaTeamMapping,
@@ -308,10 +309,66 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	};
 
 	const navigateToUmbrella = () => {
+		try {
+			const isSingleMarket =
+				umbrella.children && umbrella.children.length === 1;
+			const isMultiMarket =
+				umbrella.children && umbrella.children.length >= 2;
+
+			const trackingData: any = {
+				umbrellaId: umbrella._id,
+				umbrellaName: umbrella.displayName,
+			};
+
+			if (isSingleMarket) {
+				const question = singleMarketQuestions[umbrella._id];
+				if (question) {
+					trackingData.marketId = question._id || question.questionId;
+					trackingData.marketName =
+						question.displayName || question.question;
+					trackingData.marketType = "single";
+				}
+			} else if (isMultiMarket) {
+				trackingData.marketType = "multi";
+				trackingData.marketCount = umbrella.children?.length || 0;
+				const multiData = multiMarketData[umbrella._id];
+				if (
+					multiData &&
+					multiData.questions &&
+					multiData.questions.length > 0
+				) {
+					trackingData.marketIds = multiData.questions.map(
+						(q) => q._id || q.questionId
+					);
+					trackingData.marketNames = multiData.questions.map(
+						(q) => q.displayName || q.question
+					);
+				}
+			} else {
+				trackingData.marketType = "none";
+			}
+
+			mixpanel.track("PredictionCardClick", trackingData);
+		} catch (error) {
+			console.error("error", error);
+		}
 		onNavigateToUmbrella(umbrella);
 	};
 
 	const navigateToSingleMarket = (position: "yes" | "no") => {
+		try {
+			const question = singleMarketQuestions[umbrella._id];
+			mixpanel.track("PredictionCardWSideClick", {
+				umbrellaId: umbrella._id,
+				umbrellaName: umbrella.displayName,
+				marketId: question?._id || question?.questionId,
+				marketName: question?.displayName || question?.question,
+				position: position,
+				marketType: "single",
+			});
+		} catch (error) {
+			console.error("error", error);
+		}
 		onNavigateToSingleMarket(umbrella, position);
 	};
 
@@ -319,6 +376,20 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		question: PredictionMarket,
 		position: "yes" | "no"
 	) => {
+		try {
+			mixpanel.track("PredictionCardWSideClick", {
+				umbrellaId: umbrella._id,
+				umbrellaName: umbrella.displayName,
+				marketId: question._id || question.questionId,
+				marketName: question.displayName || question.question,
+				questionId: question._id || question.questionId,
+				questionName: question.displayName || question.question,
+				position: position,
+				marketType: "multi",
+			});
+		} catch (error) {
+			console.error("error", error);
+		}
 		onNavigateToMultiMarket(umbrella, question, position);
 	};
 
@@ -417,8 +488,24 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		statusContent = <span className="prediction-ended-label">Ended</span>;
 	}
 
+	const handleCardClick = (e: React.MouseEvent) => {
+		const target = e.target as HTMLElement;
+		if (
+			target.closest(".prediction-actions") ||
+			target.closest(".action-button")
+		) {
+			return;
+		}
+		navigateToUmbrella();
+	};
+
 	return (
-		<div key={umbrella._id} className="prediction-card">
+		<div
+			key={umbrella._id}
+			className="prediction-card"
+			onClick={handleCardClick}
+			style={{ cursor: "pointer" }}
+		>
 			{/* Banner Image */}
 			<div className="prediction-banner">
 				{shouldShowImage ? (
@@ -473,15 +560,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					<h3
 						className="prediction-title"
 						style={{
-							cursor: "pointer",
 							transition: "color 0.2s ease",
-						}}
-						onClick={navigateToUmbrella}
-						onMouseEnter={(e) => {
-							e.currentTarget.style.color = "#8b5cf6";
-						}}
-						onMouseLeave={(e) => {
-							e.currentTarget.style.color = "white";
 						}}
 					>
 						{shouldRenderSubtitle ? (
@@ -508,7 +587,12 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				</div>
 			</div>
 
-			<div className="prediction-actions">{renderActions()}</div>
+			<div
+				className="prediction-actions"
+				onClick={(e) => e.stopPropagation()}
+			>
+				{renderActions()}
+			</div>
 			{hasEventDate && statusContent !== null ? (
 				<div className="prediction-card-footer">
 					Starts In:&nbsp;&nbsp; {statusContent}

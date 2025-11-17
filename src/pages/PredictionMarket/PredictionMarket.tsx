@@ -99,12 +99,6 @@ function PredictionMarketContent() {
 				((q as any)._id || (q as any).questionId || (q as any).marketId)
 		);
 		if (!hasLogged.current.markets) {
-			try {
-				console.groupCollapsed("🧺 Markets (PredictionMarket page)");
-				console.log("raw questions from context:", qs);
-				console.log("sanitized markets:", sanitized);
-				console.groupEnd();
-			} catch {}
 			hasLogged.current.markets = true;
 		}
 		setQuestions(sanitized as any);
@@ -144,10 +138,6 @@ function PredictionMarketContent() {
 		// Reset ready state when questions change
 		setOrderbooksReady(false);
 
-		console.log(
-			`🔌 Connecting WebSockets for ${questions.length} markets...`
-		);
-
 		// Get all market IDs we're expecting
 		const expectedMarketIds = questions
 			.map((q) => q._id || q.questionId || q.marketId)
@@ -163,9 +153,7 @@ function PredictionMarketContent() {
 				const ws = new WebSocket(`${wsUrl}/orderbook/${marketId}`);
 
 				ws.onopen = () => {
-					console.log(
-						`✅ WebSocket connected for market ${marketId}`
-					);
+					// WebSocket connected
 				};
 
 				ws.onmessage = (event) => {
@@ -188,9 +176,6 @@ function PredictionMarketContent() {
 						if (
 							receivedOrderbooks.size === expectedMarketIds.length
 						) {
-							console.log(
-								"✅ All orderbooks loaded - displaying UI"
-							);
 							setOrderbooksReady(true);
 						}
 					} catch (error) {
@@ -211,7 +196,7 @@ function PredictionMarketContent() {
 				};
 
 				ws.onclose = () => {
-					console.log(`🔌 WebSocket closed for market ${marketId}`);
+					// WebSocket closed
 				};
 				connections.push(ws);
 			} catch (error) {
@@ -226,9 +211,6 @@ function PredictionMarketContent() {
 		// Fallback timeout - if orderbooks don't load within 5 seconds, show UI anyway
 		const timeout = setTimeout(() => {
 			if (!receivedOrderbooks.size) {
-				console.warn(
-					"⚠️ Orderbooks taking too long, showing UI anyway"
-				);
 				setOrderbooksReady(true);
 			}
 		}, 5000);
@@ -238,9 +220,6 @@ function PredictionMarketContent() {
 			clearTimeout(timeout);
 			localStorage.removeItem("activePosition");
 
-			console.log(
-				`🔌 Closing ${connections.length} WebSocket connections...`
-			);
 			connections.forEach((ws) => {
 				if (
 					ws.readyState === WebSocket.OPEN ||

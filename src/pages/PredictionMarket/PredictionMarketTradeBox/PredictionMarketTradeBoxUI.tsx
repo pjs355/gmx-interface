@@ -5,6 +5,7 @@ import Tooltip from "components/Tooltip/Tooltip";
 import type { TradeBoxProps, TradeBoxState, ApprovalState } from './types';
 import './PredictionMarketTradeBox.scss';
 import { MyPositionsRow } from './MyPositionsRow';
+import mixpanel from "mixpanel-browser";
 // Helper function to calculate prices from orderbook
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -99,6 +100,23 @@ export default function PredictionMarketTradeBoxUI({
     const g = parseInt(full.substring(2, 4), 16) || 0;
     const b = parseInt(full.substring(4, 6), 16) || 0;
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const getBorderColorForSelected = (backgroundColor: string): string => {
+    if (!backgroundColor) return '#ffffff';
+    const cleaned = backgroundColor.replace('#', '').toLowerCase();
+    if (cleaned === '000000' || cleaned === '000' || backgroundColor.toLowerCase() === 'rgb(0, 0, 0)' || backgroundColor.toLowerCase() === 'black') {
+      return '#ffffff';
+    }
+    if (cleaned === 'ffffff' || cleaned === 'fff' || backgroundColor.toLowerCase() === 'rgb(255, 255, 255)' || backgroundColor.toLowerCase() === 'white') {
+      return '#000000';
+    }
+    const full = cleaned.length === 3 ? cleaned.split('').map((c) => c + c).join('') : cleaned;
+    const r = parseInt(full.substring(0, 2), 16) || 0;
+    const g = parseInt(full.substring(2, 4), 16) || 0;
+    const b = parseInt(full.substring(4, 6), 16) || 0;
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128 ? '#ffffff' : '#000000';
   };
 
   const isVsSingle = useMemo(() => {
@@ -267,7 +285,7 @@ export default function PredictionMarketTradeBoxUI({
           style={isVsSingle ? {
             background: selectedPosition === 'yes' ? yesTeamColor : hexToRgba(yesTeamColor, 0.35),
             color: '#ffffff',
-            border: `2px solid ${selectedPosition === 'yes' ? yesTeamColor : hexToRgba(yesTeamColor, 0.35)}`,
+            border: `2px solid ${selectedPosition === 'yes' ? getBorderColorForSelected(yesTeamColor) : hexToRgba(yesTeamColor, 0.35)}`,
           } : undefined}
           onMouseEnter={(e) => {
             if (isVsSingle && selectedPosition !== 'yes') {
@@ -290,7 +308,7 @@ export default function PredictionMarketTradeBoxUI({
           style={isVsSingle ? {
             background: selectedPosition === 'no' ? noTeamColor : hexToRgba(noTeamColor, 0.35),
             color: '#ffffff',
-            border: `2px solid ${selectedPosition === 'no' ? noTeamColor : hexToRgba(noTeamColor, 0.35)}`,
+            border: `2px solid ${selectedPosition === 'no' ? getBorderColorForSelected(noTeamColor) : hexToRgba(noTeamColor, 0.35)}`,
           } : undefined}
           onMouseEnter={(e) => {
             if (isVsSingle && selectedPosition !== 'no') {
@@ -325,6 +343,19 @@ export default function PredictionMarketTradeBoxUI({
           <input
             type="text"
             value={amount ? (side === 'buy' && orderType === 'market' ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
+            onFocus={() => {
+              try {
+                mixpanel.track("AmountInputFocused", {
+                  marketId: market?._id || market?.questionId,
+                  marketName: market?.displayName || market?.question,
+                  orderType: orderType,
+                  side: side,
+                  selectedPosition: selectedPosition,
+                });
+              } catch (error) {
+                console.error("error", error);
+              }
+            }}
             onChange={(e) => {
               const value = e.target.value;
               
@@ -484,7 +515,23 @@ export default function PredictionMarketTradeBoxUI({
       {/* Trade Button */}
       <Button
         variant="primary"
-        onClick={buttonState.onClick}
+        onClick={() => {
+          try {
+            mixpanel.track("TradeButtonClicked", {
+              marketId: market?._id || market?.questionId,
+              marketName: market?.displayName || market?.question,
+              orderType: orderType,
+              side: side,
+              selectedPosition: selectedPosition,
+              amount: amount,
+              price: price,
+              buttonText: buttonState.text,
+            });
+          } catch (error) {
+            console.error("error", error);
+          }
+          buttonState.onClick();
+        }}
         disabled={buttonState.disabled}
         className="trade-button"
       >

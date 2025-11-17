@@ -8,6 +8,7 @@ import React, {
 	useState,
 } from "react";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
+import mixpanel from "mixpanel-browser";
 import { Contract, JsonRpcProvider, formatUnits, ethers } from "ethers";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useSignerContext } from "context/SignerContext";
@@ -68,6 +69,36 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	// Reserved for future signer-based flows
 	// const providerRef = useRef<BrowserProvider | JsonRpcProvider | null>(null);
 	const readProviderRef = useRef<JsonRpcProvider | null>(null);
+	const mixpanelIdentifiedRef = useRef<string | null>(null);
+
+	// Identify user in Mixpanel when authenticated
+	useEffect(() => {
+		if (!user || !user.id) {
+			// Reset on logout
+			mixpanelIdentifiedRef.current = null;
+			return;
+		}
+		
+		// Only identify if we haven't already identified this user
+		if (mixpanelIdentifiedRef.current === user.id) return;
+		
+		try {
+			mixpanel.identify(user.id);
+			
+			const email = user.email?.address || user.google?.email || user.twitter?.email || null;
+			const name = user.name || user.google?.name || user.twitter?.name || null;
+			
+			mixpanel.people.set({
+				$name: name || undefined,
+				$email: email || undefined,
+				// Add any other user properties here
+			});
+			
+			mixpanelIdentifiedRef.current = user.id;
+		} catch (error) {
+			console.error("error", error);
+		}
+	}, [user]);
 
 	// Removed unused resolveProvider to avoid warnings; transactions use smart wallet client directly
 

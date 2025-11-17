@@ -6,6 +6,12 @@ Sentry.init({
 	sendDefaultPii: true,
 });
 
+import mixpanel from "mixpanel-browser";
+mixpanel.init("0da2aa66dee9343cec64d0cdeb46562e", {
+	autocapture: true,
+	record_sessions_percent: 100,
+});
+
 import { PrivyProvider } from "@privy-io/react-auth";
 import { addRpcUrlOverrideToChain } from "@privy-io/react-auth";
 import { SmartWalletsProvider } from "@privy-io/react-auth/smart-wallets";

@@ -8,7 +8,7 @@ export interface UmbrellaQuestion {
 	questionId: string;
 	displayName: string;
 	marketId: string;
-	tagIds?: string[];
+    tagIds?: string[];
 	eventDate?: string | null;
 }
 
