@@ -11,6 +11,14 @@
 	padding-right: 50px;
 	padding-top: 10px;
 
+	// Promotion bar should extend full width (only used when shown on predictions page for non-authenticated users)
+	.promotion-bar {
+		margin-top: -10px;
+		margin-bottom: 32px;
+	}
+
+	// Progress banner is now global, no special spacing needed here
+
 	.search-container {
 		margin-top: 24px;
 		margin-bottom: 24px;
@@ -248,6 +256,48 @@
 	@media (min-width: 1100px) {
 		grid-template-columns: repeat(3, 1fr);
 	}
+
+	/* Mobile: For vertical scroll (non-carousel), cards take full width minus small padding */
+	@media (max-width: 767px) {
+		gap: 16px;
+		
+		.prediction-card {
+			width: 100%;
+			max-width: 100%;
+		}
+	}
+}
+
+/* Carousel style for esports page on mobile */
+.predictions-grid.predictions-grid--carousel {
+	@media (max-width: 767px) {
+		display: flex !important;
+		overflow-x: auto !important;
+		overflow-y: hidden !important;
+		scroll-snap-type: x mandatory;
+		scroll-behavior: smooth;
+		gap: 16px;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none; /* Firefox */
+		-ms-overflow-style: none; /* IE 10+ */
+		padding-bottom: 8px;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+
+		/* Carousel cards: narrower to show peek of next card */
+		.prediction-card,
+		.view-all-card-filtered {
+			flex: 0 0 calc(100vw - 80px) !important;
+			max-width: calc(100vw - 80px) !important;
+			min-width: calc(100vw - 80px) !important;
+			width: calc(100vw - 80px) !important;
+			scroll-snap-align: start;
+			scroll-snap-stop: always;
+			height: auto !important;
+		}
+	}
 }
 
 .prediction-card {
@@ -273,11 +323,17 @@
 
 .prediction-banner {
 	width: 100%;
-	height: 120px;
+	height: 140px;
 	border-radius: 12px 12px 0 0;
 	background: #1f2937;
 	overflow: hidden;
 	position: relative;
+	cursor: pointer;
+	transition: opacity 0.2s ease;
+
+	&:hover {
+		opacity: 0.85;
+	}
 }
 
 .prediction-banner img {
@@ -304,8 +360,9 @@
 	transform: translate(-50%, -50%);
 	display: flex;
 	align-items: center;
-	gap: 20px;
-	padding: 0;
+	justify-content: center;
+	gap: 24px;
+	padding: 10px;
 	border-radius: 0;
 	background: none;
 	backdrop-filter: none;
@@ -316,27 +373,28 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 0;
-	width: 72px;
-	height: 72px;
+	width: 90px;
+	height: 90px;
+	box-sizing: border-box;
 }
 
 .banner-team-logo {
-	width: 100%;
-	height: 100%;
+	width: 80px;
+	height: 80px;
 	object-fit: contain;
+	object-position: center;
 	filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
 }
 
 .banner-team-fallback {
-	width: 72px;
-	height: 72px;
+	width: 56px;
+	height: 56px;
 	border-radius: 50%;
 	background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 28px;
+	font-size: 24px;
 	font-weight: 700;
 	color: #ffffff;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
@@ -449,12 +507,22 @@
 	display: flex;
 	flex-direction: column;
 	width: 100%;
+	
+	/* Add spacing at bottom on mobile to prevent hitting footer */
+	@media (max-width: 767px) {
+		padding-bottom: 32px;
+	}
 }
 
 .prediction-calendar-day {
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
+	margin-bottom: 32px;
+
+	&:last-child {
+		margin-bottom: 0;
+	}
 }
 
 .prediction-calendar-header {
@@ -487,6 +555,34 @@
 
 .prediction-calendar-grid {
 	margin-top: 4px;
+	margin-bottom: 24px;
+
+	/* Mobile: Horizontal scroll carousel for esports calendar */
+	@media (max-width: 767px) {
+		display: flex;
+		overflow-x: auto;
+		overflow-y: hidden;
+		scroll-snap-type: x mandatory;
+		scroll-behavior: smooth;
+		gap: 16px;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none; /* Firefox */
+		-ms-overflow-style: none; /* IE 10+ */
+		padding-bottom: 8px;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+
+		/* Each card takes most of screen width but shows peek of next card */
+		.prediction-card {
+			flex: 0 0 calc(100vw - 80px);
+			max-width: calc(100vw - 80px);
+			scroll-snap-align: start;
+			scroll-snap-stop: always;
+			height: auto !important;
+		}
+	}
 }
 
 .prediction-calendar-day--unscheduled .prediction-calendar-primary {
@@ -527,6 +623,7 @@
 	flex-direction: column;
 	gap: 12px;
 	width: 100%;
+	margin-top: 16px;
 }
 
 .single-market-buttons {
@@ -538,6 +635,22 @@
 	.action-button {
 		flex: 1;
 		max-width: calc(50% - 6px);
+		font-size: 16px;
+		
+		strong {
+			font-size: 16px;
+		}
+	}
+
+	/* Keep mobile size smaller */
+	@media (max-width: 768px) {
+		.action-button {
+			font-size: 14px;
+			
+			strong {
+				font-size: 14px;
+			}
+		}
 	}
 }
 
@@ -573,6 +686,30 @@
 	width: 100%;
 }
 
+.view-more-markets {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 8px 0 4px 0;
+	font-size: 12px;
+	color: #888888;
+	cursor: pointer;
+	transition: color 0.2s ease;
+
+	&:hover {
+		color: #8b5cf6;
+	}
+
+	svg {
+		transition: transform 0.2s ease;
+	}
+
+	&:hover svg {
+		transform: translateY(2px);
+	}
+}
+
 .market-row {
 	display: flex;
 	justify-content: space-between;
@@ -604,13 +741,27 @@
 	gap: 4px;
 	flex-shrink: 0;
 
+	.action-button {
+		font-size: 16px;
+		padding: 8px 12px;
+		min-height: 36px;
+		
+		strong {
+			font-size: 16px;
+		}
+	}
+
 	/* Mobile: smaller buttons to give more room for text */
 	@media (max-width: 768px) {
 		.action-button {
 			width: 80px !important;
 			flex: 0 0 80px !important;
-			font-size: 12px !important;
+			font-size: 10px !important;
 			padding: 8px 6px !important;
+			
+			strong {
+				font-size: 10px !important;
+			}
 		}
 	}
 }
@@ -624,10 +775,21 @@
 	border: none;
 	outline: none;
 	min-height: 44px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 
 	strong {
 		font-family: "Akkurat", sans-serif;
 		font-weight: 700 !important;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
+		font-size: 0.9em;
 	}
 
 	&.yes-button {
@@ -653,6 +815,75 @@
 			box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
 		}
 	}
+}
+
+/* View All Card for Filtered Pages (Esports) */
+.view-all-card-filtered {
+	background: #000000;
+	border-radius: 16px;
+	display: none; /* Hidden by default */
+	cursor: pointer;
+	position: relative;
+	overflow: hidden;
+
+	/* Gradient border effect */
+	&::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		border-radius: 16px;
+		padding: 2px;
+		background: linear-gradient(135deg, #1e3a8a 0%, #8b5cf6 100%);
+		-webkit-mask: 
+			linear-gradient(#fff 0 0) content-box, 
+			linear-gradient(#fff 0 0);
+		-webkit-mask-composite: xor;
+		mask: 
+			linear-gradient(#fff 0 0) content-box, 
+			linear-gradient(#fff 0 0);
+		mask-composite: exclude;
+		pointer-events: none;
+	}
+
+	/* Only show on mobile */
+	@media (max-width: 767px) {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+}
+
+.view-all-card-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	padding: 32px;
+	gap: 16px;
+	position: relative;
+	z-index: 1;
+}
+
+.view-all-card-icon {
+	color: #8b5cf6;
+}
+
+.view-all-card-title {
+	font-size: 24px;
+	font-weight: 700;
+	color: #ffffff;
+	margin: 0;
+}
+
+.view-all-card-count {
+	font-size: 16px;
+	color: #8b5cf6;
+	margin: 0;
+	font-weight: 600;
 }
 
 // Responsive design
@@ -693,17 +924,24 @@
 
 @media (max-width: 768px) {
 	.predictions-page {
-		padding-left: 12px;
-		padding-right: 12px;
+		padding-left: 8px;
+		padding-right: 8px;
 	}
 
 	.game-links-wrapper {
-		margin-left: -12px;
-		margin-right: -12px;
+		margin-left: -8px;
+		margin-right: -8px;
 	}
 
 	.predictions-grid {
 		grid-template-columns: 1fr;
+		gap: 16px;
+		
+		/* For non-carousel grids on mobile, make cards wider */
+		&:not(.predictions-grid--carousel) {
+			padding-left: 0;
+			padding-right: 0;
+		}
 	}
 
 	.prediction-card {

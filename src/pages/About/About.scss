@@ -6,13 +6,15 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	position: relative;
 
 	&-content {
-		max-width: 800px;
+		max-width: 1000px;
 		width: 100%;
 		margin: 0 auto;
-		padding: 2rem 2rem;
-		background: #000000;
+		padding: 3rem 2rem;
+		position: relative;
+		z-index: 1;
 
 		@media (max-width: 768px) {
 			padding: 2rem 1.5rem;
@@ -25,19 +27,33 @@
 
 	&-header {
 		text-align: center;
-		margin-bottom: 2rem;
+		margin-bottom: 3rem;
+		padding: 2rem 0;
+		position: relative;
 	}
 
 	&-video-container {
 		width: 100%;
-		max-width: 800px;
-		margin: 0 auto 3rem auto;
+		max-width: 900px;
+		margin: 0 auto 4rem auto;
 		position: relative;
 		padding-bottom: 56.25%; /* 16:9 aspect ratio */
 		height: 0;
 		overflow: hidden;
-		border-radius: 12px;
+		border-radius: 16px;
 		background: #000000;
+		border: 2px solid transparent;
+		background-image: linear-gradient(#000, #000), 
+						  linear-gradient(135deg, #1e3a8a 0%, #8b5cf6 100%);
+		background-origin: border-box;
+		background-clip: padding-box, border-box;
+		box-shadow: 0 8px 32px rgba(139, 92, 246, 0.3);
+		transition: all 0.3s ease;
+
+		&:hover {
+			box-shadow: 0 12px 48px rgba(139, 92, 246, 0.5);
+			transform: translateY(-4px);
+		}
 
 		iframe {
 			position: absolute;
@@ -46,6 +62,7 @@
 			width: 100%;
 			height: 100%;
 			border: none;
+			border-radius: 14px;
 		}
 	}
 
@@ -54,60 +71,149 @@
 		font-family: "Akkurat", sans-serif;
 		font-weight: 700;
 		letter-spacing: 0.05em;
-		color: #ffffff;
-		margin: 0;
+		margin: 0 0 1.5rem 0;
 		line-height: 1.2;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 
 		@media (max-width: 768px) {
+			font-size: calc(2.5rem + 2px);
+		}
+
+		@media (max-width: 480px) {
 			font-size: calc(2rem + 2px);
+		}
+
+		&-white {
+			color: #ffffff;
+		}
+
+		&-purple {
+			color: #8b5cf6;
+		}
+	}
+
+	&-subtitle {
+		font-size: 1.35rem;
+		font-family: "Akkurat", sans-serif;
+		font-weight: 400;
+		color: rgba(255, 255, 255, 0.9);
+		margin: 0;
+		line-height: 1.6;
+		max-width: 800px;
+		margin: 0 auto;
+
+		@media (max-width: 768px) {
+			font-size: 1.15rem;
+		}
+
+		@media (max-width: 480px) {
+			font-size: 1rem;
 		}
 	}
 
 	&-section {
-		background: #000000;
-		border-radius: 12px;
-		padding: 2rem;
-		margin-bottom: 2rem;
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(0, 0, 0, 0.6);
+		backdrop-filter: blur(10px);
+		border-radius: 20px;
+		padding: 2.5rem;
+		margin-bottom: 2.5rem;
+		border: 1px solid rgba(139, 92, 246, 0.2);
+		position: relative;
+		overflow: hidden;
+		transition: all 0.3s ease;
+
+		&::before {
+			content: "";
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			height: 4px;
+			background: linear-gradient(90deg, #1e3a8a, #8b5cf6, #1e3a8a);
+			background-size: 200% 100%;
+			animation: shimmer 3s linear infinite;
+		}
+
+		&:hover {
+			border-color: rgba(139, 92, 246, 0.5);
+			transform: translateY(-4px);
+			box-shadow: 0 12px 40px rgba(139, 92, 246, 0.2);
+
+			.About-section-title {
+				color: #8b5cf6;
+			}
+		}
 
 		&-title {
-			font-size: 1.5rem;
-			font-weight: 600;
-			margin: 0 0 1rem 0;
+			font-size: 2rem;
+			font-weight: 700;
+			margin: 0 0 1.5rem 0;
 			color: #fff;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			transition: color 0.3s ease;
+
+			&::before {
+				content: "▶";
+				color: #8b5cf6;
+				font-size: 1.2rem;
+			}
+
+			@media (max-width: 768px) {
+				font-size: 1.75rem;
+			}
 		}
 
 		&-text {
-			font-size: 1rem;
-			line-height: 1.6;
-			color: rgba(255, 255, 255, 0.9);
-			margin: 0 0 1rem 0;
+			font-size: 1.05rem;
+			line-height: 1.7;
+			color: rgba(255, 255, 255, 0.85);
+			margin: 0 0 1.25rem 0;
 
 			&:last-child {
 				margin-bottom: 0;
 			}
 
 			strong {
-				color: #fff;
-				font-weight: 600;
+				color: #8b5cf6;
+				font-weight: 700;
+				font-size: 1.1em;
+			}
+
+			br {
+				display: block;
+				margin: 0.5rem 0;
+				content: "";
 			}
 		}
 
 		&-highlight {
-			background: #000000;
-			border: 1px solid rgba(102, 126, 234, 0.5);
+			background: rgba(30, 58, 138, 0.2);
+			border: 1px solid rgba(30, 58, 138, 0.5);
 		}
 
 		&-important {
-			background: #000000;
-			border: 1px solid rgba(255, 193, 7, 0.5);
+			background: rgba(139, 92, 246, 0.1);
+			border: 1px solid rgba(139, 92, 246, 0.4);
+		}
+
+		@media (max-width: 768px) {
+			padding: 2rem;
+			margin-bottom: 2rem;
+		}
+
+		@media (max-width: 480px) {
+			padding: 1.5rem;
 		}
 	}
 
 	&-button-container {
 		display: flex;
 		gap: 1rem;
-		margin-top: 1.5rem;
+		margin-top: 2rem;
 		flex-wrap: wrap;
 		align-items: center;
 
@@ -116,11 +222,71 @@
 			display: flex;
 		}
 
+		&.center {
+			justify-content: center;
+			margin-top: 2rem;
+			margin-bottom: 2rem;
+
+			button {
+				background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+				color: #ffffff;
+				font-size: 18px;
+				font-weight: 700;
+				padding: 16px 40px;
+				border: none;
+				border-radius: 12px;
+				cursor: pointer;
+				transition: all 0.3s ease;
+				white-space: nowrap;
+				min-width: auto;
+				box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+				position: relative;
+				overflow: hidden;
+
+				&::before {
+					content: "";
+					position: absolute;
+					top: 0;
+					left: -100%;
+					width: 100%;
+					height: 100%;
+					background: linear-gradient(
+						90deg,
+						transparent,
+						rgba(255, 255, 255, 0.3),
+						transparent
+					);
+					transition: left 0.5s ease;
+				}
+
+				&:hover {
+					background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+					transform: translateY(-3px);
+					box-shadow: 0 8px 30px rgba(139, 92, 246, 0.6);
+
+					&::before {
+						left: 100%;
+					}
+				}
+
+				&:active {
+					transform: translateY(-1px);
+				}
+			}
+		}
+
 		@media (max-width: 480px) {
 			flex-direction: column;
 
 			button {
 				width: 100%;
+			}
+
+			&.center button {
+				width: 100%;
+				max-width: 300px;
+				padding: 14px 32px;
+				font-size: 16px;
 			}
 		}
 	}
@@ -129,4 +295,14 @@
 // Override any global button styles if needed
 .About-button-container button {
 	min-width: 200px;
+}
+
+// Animations
+@keyframes shimmer {
+	0% {
+		background-position: -200% 0;
+	}
+	100% {
+		background-position: 200% 0;
+	}
 }

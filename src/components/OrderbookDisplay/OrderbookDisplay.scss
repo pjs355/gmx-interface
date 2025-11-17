@@ -370,13 +370,34 @@
 
     .orderbook-header {
       .header-top {
+        flex-direction: column; // Stack question above buttons
+        align-items: stretch; // Make both sections full width
+        gap: 12px; // Add spacing between question and buttons
+        
+        .header-left {
+          flex: none; // Remove flex growth
+          width: 100%; // Full width
+          
+          .header-title-section {
+            h3 {
+              font-size: 20px; // Slightly smaller on mobile
+            }
+          }
+        }
+        
         .header-right {
+          flex: none; // Remove flex growth
+          width: 100%; // Full width
+          justify-content: center; // Center the buttons
+          
           .orderbook-tabs {
             gap: 6px; // Increased gap between YES/NO buttons on mobile
+            width: 100%; // Full width for tabs
             
             .tab-button {
               padding: 10px 14px; // Slightly more padding on mobile
               font-size: 15px; // Slightly smaller font for better fit
+              flex: 1; // Make buttons equal width
             }
           }
         }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
+import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "./PredictionCard";
 import { LoadingState } from "./LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -11,6 +12,7 @@ import {
 	resolveUmbrellaEventDate,
 	startOfLocalDay,
 } from "../utils/eventDates";
+import { PromotionBar } from "@/components/PromotionBar";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -61,6 +63,7 @@ export default function FilteredPredictions({
 	filterType,
 }: FilteredPredictionsProps) {
 	const navigate = useNavigate();
+	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 
 	// Listen for reset filter event from header
@@ -429,12 +432,55 @@ export default function FilteredPredictions({
 			);
 		}
 	} else {
+		// Add carousel class for esports on mobile
+		const gridClassName =
+			filterType === "esports"
+				? "predictions-grid predictions-grid--carousel"
+				: "predictions-grid";
+
 		content = (
-			<div className="predictions-grid">
+			<div className={gridClassName}>
 				{filteredUmbrellas.length > 0 ? (
-					filteredUmbrellas.map((umbrella) =>
-						renderPredictionCard(umbrella)
-					)
+					<>
+						{filteredUmbrellas.map((umbrella) =>
+							renderPredictionCard(umbrella)
+						)}
+						{/* View All Card - Only visible on mobile for esports */}
+						{filterType === "esports" && (
+							<div
+								className="view-all-card-filtered"
+								onClick={() => {
+									// Scroll to top to show all markets
+									window.scrollTo({ top: 0, behavior: "smooth" });
+								}}
+							>
+								<div className="view-all-card-content">
+									<svg
+										className="view-all-card-icon"
+										width="48"
+										height="48"
+										viewBox="0 0 24 24"
+										fill="none"
+										xmlns="http://www.w3.org/2000/svg"
+									>
+										<path
+											d="M5 12H19M19 12L12 5M19 12L12 19"
+											stroke="currentColor"
+											strokeWidth="2"
+											strokeLinecap="round"
+											strokeLinejoin="round"
+										/>
+									</svg>
+									<h3 className="view-all-card-title">
+										See All Esports
+									</h3>
+									<p className="view-all-card-count">
+										{filteredUmbrellas.length} markets
+									</p>
+								</div>
+							</div>
+						)}
+					</>
 				) : (
 					<div className="no-markets-message no-markets-message--empty">
 						<p>
@@ -450,6 +496,8 @@ export default function FilteredPredictions({
 
 	return (
 		<div className="predictions-page page-layout">
+			{/* Show PromotionBar only for non-authenticated users */}
+			{!authenticated && <PromotionBar />}
 			<GameLinks
 				selectedGame={selectedGame}
 				onGameSelect={setSelectedGame}

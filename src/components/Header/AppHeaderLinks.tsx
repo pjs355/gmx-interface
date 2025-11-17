@@ -98,7 +98,7 @@ export function AppHeaderLinks({
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || num === undefined || !isFinite(num)) return "--";
 		return new Intl.NumberFormat("en-US", {
-			minimumFractionDigits: 2,
+			minimumFractionDigits: 0,
 			maximumFractionDigits: 2,
 		}).format(num);
 	};
@@ -202,11 +202,11 @@ export function AppHeaderLinks({
 						showRedirectModal={showRedirectModal}
 						isActive={(_match: any, location: any) => {
 							const path = location.pathname;
-							// Only active on exactly /predictions or /, but NOT /predictions/esports or any other /predictions/* route
-							return (path === "/predictions" || path === "/");
+							// Active on /predictions or /predictions/games, but NOT / (home) or /predictions/esports
+							return path === "/predictions" || path === "/predictions/games";
 						}}
 					>
-						Predictions
+						Gaming
 					</HeaderLink>
 				</div>
 				<div className="App-header-link-container">
@@ -240,7 +240,7 @@ export function AppHeaderLinks({
 							to="/get_test_usdc"
 							showRedirectModal={showRedirectModal}
 						>
-							Get Test USD
+							Referral
 						</HeaderLink>
 					</div>
 				)}

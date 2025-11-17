@@ -40,131 +40,67 @@ export default function Prizes() {
 				</div>
 			</div>
 
-			<div className="prizes-grid">
-				{/* Grand Prize Card */}
-				<div
-					style={{
-						width: "100%",
-						border: "2px solid #FFD700",
-						borderRadius: 16,
-						overflow: "hidden",
-						background: "#000000",
-					}}
-				>
-					{/* Image */}
-					<div style={{ position: "relative", width: "100%" }}>
-						<img
-							src={nintendoSwitch2Box}
-							alt="Nintendo Switch 2 Console"
-							style={{
-								width: "100%",
-								aspectRatio: "1 / 1",
-								objectFit: "cover",
-							}}
-						/>
-					</div>
-					{/* Card Content */}
-					<div style={{ padding: 24, textAlign: "center" }}>
-						<div
-							style={{
-								fontSize: 32,
-								fontWeight: 900,
-								color: "#FFD700",
-								letterSpacing: 0.5,
-								marginBottom: 12,
-							}}
-						>
-							Nintendo Switch 2
-						</div>
-						<div style={{ opacity: 0.85, fontSize: 16 }}>
-							1 winner. The ultimate portable console to level up
-							your game.
-						</div>
-					</div>
+		<div className="prizes-grid">
+			{/* Grand Prize Card */}
+			<div className="prize-card-modern prize-card-gold">
+				<div className="prize-card-image-container">
+					<img
+						src={nintendoSwitch2Box}
+						alt="Nintendo Switch 2 Console"
+						className="prize-card-image"
+					/>
 				</div>
-
-				{/* Second Place Card */}
-				<div
-					style={{
-						width: "100%",
-						border: "2px solid #C0C0C0",
-						borderRadius: 16,
-						overflow: "hidden",
-						background: "#000000",
-					}}
-				>
-					{/* Image */}
-					<div style={{ position: "relative", width: "100%" }}>
-						<img
-							src={steam50}
-							alt="$50 Steam Gift Card"
-							style={{
-								width: "100%",
-								aspectRatio: "1 / 1",
-								objectFit: "cover",
-							}}
-						/>
+				<div className="prize-card-content">
+					<div className="prize-card-title prize-card-title-gold">
+						Nintendo Switch 2
 					</div>
-					{/* Card Content */}
-					<div style={{ padding: 24, textAlign: "center" }}>
-						<div
-							style={{
-								fontSize: 28,
-								fontWeight: 900,
-								color: "#C0C0C0",
-								marginBottom: 12,
-							}}
-						>
-							3 × $50 Steam Gift Card
-						</div>
-						<div style={{ opacity: 0.85, fontSize: 16 }}>
-							Three winners. Load up your library with the latest
-							hits.
-						</div>
-					</div>
-				</div>
-
-				{/* Third Place Card */}
-				<div
-					style={{
-						width: "100%",
-						border: "2px solid #CD7F32",
-						borderRadius: 16,
-						overflow: "hidden",
-						background: "#000000",
-					}}
-				>
-					{/* Image */}
-					<div style={{ position: "relative", width: "100%" }}>
-						<img
-							src={steam20}
-							alt="$20 Steam Gift Card"
-							style={{
-								width: "100%",
-								aspectRatio: "1 / 1",
-								objectFit: "cover",
-							}}
-						/>
-					</div>
-					{/* Card Content */}
-					<div style={{ padding: 24, textAlign: "center" }}>
-						<div
-							style={{
-								fontSize: 28,
-								fontWeight: 900,
-								color: "#CD7F32",
-								marginBottom: 12,
-							}}
-						>
-							5 × $20 Steam Gift Card
-						</div>
-						<div style={{ opacity: 0.85, fontSize: 16 }}>
-							Five winners. Grab DLCs, indies, or stash for a
-							sale.
-						</div>
+					<div className="prize-card-description">
+						1 winner. The ultimate portable console to level up
+						your game.
 					</div>
 				</div>
 			</div>
+
+			{/* Second Place Card */}
+			<div className="prize-card-modern prize-card-silver">
+				<div className="prize-card-image-container">
+					<img
+						src={steam50}
+						alt="$50 Steam Gift Card"
+						className="prize-card-image"
+					/>
+				</div>
+				<div className="prize-card-content">
+					<div className="prize-card-title prize-card-title-silver">
+						3 × $50 Steam Gift Card
+					</div>
+					<div className="prize-card-description">
+						Three winners. Load up your library with the latest
+						hits.
+					</div>
+				</div>
+			</div>
+
+			{/* Third Place Card */}
+			<div className="prize-card-modern prize-card-bronze">
+				<div className="prize-card-image-container">
+					<img
+						src={steam20}
+						alt="$20 Steam Gift Card"
+						className="prize-card-image"
+					/>
+				</div>
+				<div className="prize-card-content">
+					<div className="prize-card-title prize-card-title-bronze">
+						5 × $20 Steam Gift Card
+					</div>
+					<div className="prize-card-description">
+						Five winners. Grab DLCs, indies, or stash for a
+						sale.
+					</div>
+				</div>
+			</div>
+		</div>
 
 			{/* Full Width Disclaimer Section */}
 			<div className="prizes-disclaimer-section">

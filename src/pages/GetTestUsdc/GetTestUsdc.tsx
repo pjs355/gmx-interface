@@ -255,8 +255,8 @@ export function GetTestUsdc() {
 		<div className="GetTestUsdc">
 			<div className="GetTestUsdc-content">
 				<div className="GetTestUsdc-cards">
-					{/* Test USD Claim Card */}
-					<div className="GetTestUsdc-card">
+					{/* Test USD Claim Card - Now handled by banner */}
+					{/* <div className="GetTestUsdc-card">
 						<h2 className="GetTestUsdc-card-title">
 							Get $500 of Test USD
 						</h2>
@@ -270,12 +270,12 @@ export function GetTestUsdc() {
 								{getButtonText()}
 							</Button>
 						</div>
-					</div>
+					</div> */}
 
 					{/* Referral Card */}
 					<div className="GetTestUsdc-card">
 						<h2 className="GetTestUsdc-card-title">
-							Referral Program
+							Get More Test USD
 						</h2>
 
 						{/* My Referral Code */}
@@ -297,7 +297,7 @@ export function GetTestUsdc() {
 								</Button>
 							</div>
 							<p className="GetTestUsdc-hint">
-								Share to earn 100 coins!
+								Share to earn $100!
 							</p>
 						</div>
 
@@ -332,12 +332,12 @@ export function GetTestUsdc() {
 										{isClaimingReferral
 											? "Claiming..."
 											: "Claim Bonus"}
-									</Button>
-								</div>
-								<p className="GetTestUsdc-hint">
-									You and your referrer get 100 coins each!
-								</p>
-								{referralError && (
+								</Button>
+							</div>
+							<p className="GetTestUsdc-hint">
+								You and your referrer get $100 each!
+							</p>
+							{referralError && (
 									<div className="GetTestUsdc-error">
 										{referralError}
 									</div>

@@ -1,0 +1,192 @@
+.progress-banner {
+	background: #000000;
+	width: 100vw;
+	position: relative;
+	left: 50%;
+	right: 50%;
+	margin-left: -50vw;
+	margin-right: -50vw;
+	margin-bottom: 0;
+	padding: 20px 0;
+	overflow: hidden;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	opacity: 1;
+	transition: opacity 0.3s ease-in-out;
+
+	&--loading {
+		opacity: 0.5;
+		pointer-events: none;
+		
+		.progress-banner-content,
+		.progress-banner-button {
+			opacity: 0.3;
+		}
+	}
+
+	&--loaded {
+		opacity: 1;
+		
+		.progress-banner-content,
+		.progress-banner-button {
+			opacity: 1;
+			transition: opacity 0.3s ease-in-out 0.1s;
+		}
+	}
+
+	&::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: linear-gradient(
+			45deg,
+			transparent 30%,
+			rgba(146, 133, 243, 0.1) 50%,
+			transparent 70%
+		);
+		animation: shimmer 3s ease-in-out infinite;
+		pointer-events: none;
+	}
+
+	// Tablet and Desktop: gradient background, no animation
+	@media (min-width: 769px) {
+		background: linear-gradient(to bottom right, #1a0a9e, #3d2f5a);
+		border-top: none;
+		border-bottom: none;
+
+		&::before {
+			display: none;
+		}
+	}
+}
+
+@keyframes shimmer {
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(100%);
+	}
+}
+
+.progress-banner-container {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	max-width: 1400px;
+	margin: 0 auto;
+	padding: 0 50px;
+	gap: 32px;
+	position: relative;
+	z-index: 1;
+}
+
+.progress-banner-content {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	position: relative;
+	z-index: 1;
+}
+
+.progress-banner-subtitle {
+	font-size: 16px;
+	font-weight: 600;
+	color: #ffffff;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.progress-banner-title {
+	font-size: 28px;
+	font-weight: 700;
+	color: #ffffff;
+	margin: 0;
+	line-height: 1.3;
+}
+
+.progress-banner-button {
+	background: #8b5cf6;
+	color: #ffffff;
+	font-size: 16px;
+	font-weight: 700;
+	padding: 12px 32px;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	white-space: nowrap;
+	position: relative;
+	z-index: 1;
+
+	&:hover:not(:disabled) {
+		background: #7c3aed;
+		transform: translateY(-2px);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+	}
+
+	&:active:not(:disabled) {
+		transform: translateY(0);
+	}
+
+	&:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+}
+
+// Responsive design
+@media (max-width: 1100px) {
+	.progress-banner-container {
+		padding: 0 16px;
+		gap: 24px;
+	}
+
+	.progress-banner-subtitle {
+		font-size: 15px;
+	}
+
+	.progress-banner-title {
+		font-size: 24px;
+	}
+
+	.progress-banner-button {
+		font-size: 15px;
+		padding: 10px 28px;
+	}
+}
+
+@media (max-width: 768px) {
+	.progress-banner {
+		padding: 16px 0;
+	}
+
+	.progress-banner-container {
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: 0 12px;
+		gap: 16px;
+	}
+
+	.progress-banner-content {
+		text-align: center;
+	}
+
+	.progress-banner-subtitle {
+		font-size: 14px;
+	}
+
+	.progress-banner-title {
+		font-size: 20px;
+	}
+
+	.progress-banner-button {
+		width: 100%;
+		max-width: 300px;
+	}
+}
+

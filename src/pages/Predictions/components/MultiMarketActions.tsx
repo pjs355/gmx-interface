@@ -16,12 +16,14 @@ interface MultiMarketActionsProps {
 		};
 	};
 	onNavigate: (question: PredictionMarket, position: "yes" | "no") => void;
+	onNavigateToUmbrella?: () => void;
 }
 
 export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 	umbrellaId,
 	multiMarketData,
 	onNavigate,
+	onNavigateToUmbrella,
 }) => {
 	const { allBooksPreview } = usePredictionData();
 	
@@ -60,6 +62,9 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 		
 		return marketsWithPrices.slice(0, 2); // Return top 2
 	}, [data, allBooksPreview, getLowestAsk]);
+
+	const totalMarkets = data?.questions?.length || 0;
+	const hasMoreMarkets = totalMarkets > 2;
 
 	return (
 		<div className="multi-market-actions">
@@ -168,6 +173,30 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 					</div>
 				);
 			})}
+			
+			{hasMoreMarkets && onNavigateToUmbrella && (
+				<div 
+					className="view-more-markets" 
+					onClick={onNavigateToUmbrella}
+				>
+					<span>View more</span>
+					<svg 
+						width="12" 
+						height="12" 
+						viewBox="0 0 12 12" 
+						fill="none"
+						xmlns="http://www.w3.org/2000/svg"
+					>
+						<path 
+							d="M3 4.5L6 7.5L9 4.5" 
+							stroke="currentColor" 
+							strokeWidth="1.5" 
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						/>
+					</svg>
+				</div>
+			)}
 		</div>
 	);
 };

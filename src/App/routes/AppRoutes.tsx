@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-// Removed useNavigate and useLocation imports - not used after cleanup
+import { useLocation } from "react-router-dom";
 import { ToastContainer, cssTransition } from "react-toastify";
 // Removed Hash import - not used
 
@@ -15,6 +15,8 @@ import { Header } from "components/Header/Header";
 import { SettingsModal } from "components/SettingsModal/SettingsModal";
 import { NotifyModal } from "components/NotifyModal/NotifyModal";
 import Footer from "components/Footer/Footer";
+import { ProgressBanner } from "components/ProgressBanner";
+import { CountdownBanner } from "components/CountdownBanner";
 
 import { MainRoutes } from "./MainRoutes";
 
@@ -27,7 +29,7 @@ const Zoom = cssTransition({
 });
 
 export function AppRoutes() {
-	// Removed location and navigate - not used after cleanup
+	const location = useLocation();
 
 	// Removed referral code logic - not needed for prediction markets
 
@@ -49,6 +51,12 @@ export function AppRoutes() {
 		console.log("Redirect to:", to);
 	}, []);
 
+	// Don't show ProgressBanner on Get Test USD page
+	const showProgressBanner = location.pathname !== "/get_test_usdc";
+	
+	// Don't show CountdownBanner on umbrella trading pages
+	const isUmbrellaPage = location.pathname.includes("/predictions/umbrella/");
+
 	return (
 		<>
 			<div className="App">
@@ -60,6 +68,8 @@ export function AppRoutes() {
 						openSettings={openSettings}
 						showRedirectModal={showRedirectModal}
 					/>
+					{showProgressBanner && <ProgressBanner />}
+					{!isUmbrellaPage && <CountdownBanner />}
 					<MainRoutes />
 					<Footer />
 				</div>

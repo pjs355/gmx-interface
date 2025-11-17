@@ -8,23 +8,13 @@ import { AppHeaderLinks } from "./AppHeaderLinks";
 import { AppHeaderUser } from "./AppHeaderUser";
 import { HomeHeaderLinks } from "./HomeHeaderLinks";
 import { isHomeSite } from "@/config/ui";
-import newLogo from "@/assets/img/new-logo.png";
 
 import "./Header.scss";
 
 const LogoImage = () => (
-	<>
-		<img
-			src={newLogo}
-			alt="LevelUp"
-			className="App-header-logo-image big"
-		/>
-		<img
-			src={newLogo}
-			alt="LevelUp"
-			className="App-header-logo-image small"
-		/>
-	</>
+	<span className="App-header-logo-text">
+		LevelUp
+	</span>
 );
 
 const MobileLogo = ({ onClick }: { onClick: () => void }) => (
