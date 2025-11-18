@@ -110,13 +110,9 @@ export async function fetchUserOrders(
 						// Use market data to determine position
 						const market = marketData.get(order.questionId);
 						if (!market) {
-							// Treat as legacy if market metadata isn't available
-							if (isLegacy(order)) {
-								return null;
-							}
-							throw new Error(
-								`No market data found for questionId: ${order.questionId}`
-							);
+							// Market data not found / Legacy
+							// Skip this order with a warning (similar to legacy orders)
+							return null;
 						}
 						if (order.tokenId === market.yesTokenId) {
 							position = "Yes";

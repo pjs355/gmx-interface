@@ -87,16 +87,20 @@ export default function Leaderboard() {
 	}, [getAccessToken]);
 
 	const getRankIcon = (position: number) => {
-		switch (position) {
-			case 1:
-				return rank1Icon;
-			case 2:
-				return rank2Icon;
-			case 3:
-				return rank3Icon;
-			default:
-				return null;
+		// Position 1: Gold
+		if (position === 1) {
+			return rank1Icon;
 		}
+		// Positions 2, 3, 4: Silver
+		if (position >= 2 && position <= 4) {
+			return rank2Icon;
+		}
+		// Positions 5, 6, 7, 8, 9: Bronze
+		if (position >= 5 && position <= 9) {
+			return rank3Icon;
+		}
+		// Everything else: no icon
+		return null;
 	};
 
 	return (

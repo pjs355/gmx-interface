@@ -302,6 +302,45 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 						});
 					}
 				);
+
+				// Also fetch ALL umbrellas (including inactive) to ensure we have market data
+				// for orders from inactive umbrellas
+				try {
+					const allUmbrellas =
+						await umbrellaDataService.fetchAllUmbrellas();
+					const allMarkets = await Promise.all(
+						allUmbrellas.map((u: any) =>
+							umbrellaDataService.fetchQuestionsForUmbrella(u, {
+								includeResolved: true,
+							})
+						)
+					);
+					allMarkets.flat().forEach((market: any) => {
+						const marketId =
+							market?._id ||
+							market?.questionId ||
+							market?.marketId;
+						if (
+							marketId &&
+							market?.yesTokenId &&
+							market?.noTokenId
+						) {
+							// Only add if not already in map (active markets take precedence)
+							if (!marketDataMap.has(marketId)) {
+								marketDataMap.set(marketId, {
+									yesTokenId: market.yesTokenId,
+									noTokenId: market.noTokenId,
+								});
+							}
+						}
+					});
+				} catch (error) {
+					// If fetching all umbrellas fails, continue with what we have
+					console.warn(
+						"Failed to fetch all umbrellas for market data map:",
+						error
+					);
+				}
 			} catch {
 				// Fallback to direct fetch if prediction data not ready
 				const umbrellasDirect =

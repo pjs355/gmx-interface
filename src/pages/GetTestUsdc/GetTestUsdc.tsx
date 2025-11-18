@@ -58,13 +58,21 @@ export function GetTestUsdc() {
 				const token = await getAccessToken();
 				if (!token) return;
 
+				if (!identityToken) {
+					if (!cancelled) setIsCheckingClaim(false);
+					return;
+				}
+
 				const res = await fetch(`${API_ROOT}/test-coins/check-claim`, {
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
 						Authorization: `Bearer ${token}`,
+						"privy-id-token": identityToken,
 					},
-					body: JSON.stringify({ smartWallet: resolvedAddress }),
+					body: JSON.stringify({
+						smartWallet: resolvedAddress,
+					}),
 				});
 
 				let claimed = false;
@@ -100,6 +108,7 @@ export function GetTestUsdc() {
 		wallet?.account,
 		wallet?.signerAddress,
 		API_ROOT,
+		identityToken,
 	]);
 
 	// Load referral data
@@ -164,6 +173,11 @@ export function GetTestUsdc() {
 				return;
 			}
 
+			if (!identityToken) {
+				console.error("No identity token available for claiming");
+				return;
+			}
+
 			console.log("Sending claim request with address:", smartWallet);
 
 			const response = await fetch(`${API_ROOT}/test-coins/claim`, {
@@ -171,8 +185,11 @@ export function GetTestUsdc() {
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${token}`,
+					"privy-id-token": identityToken,
 				},
-				body: JSON.stringify({ smartWallet }),
+				body: JSON.stringify({
+					smartWallet,
+				}),
 			});
 			const text = await response.text();
 			console.log(
@@ -332,12 +349,12 @@ export function GetTestUsdc() {
 										{isClaimingReferral
 											? "Claiming..."
 											: "Claim Bonus"}
-								</Button>
-							</div>
-							<p className="GetTestUsdc-hint">
-								You and your referrer get $100 each!
-							</p>
-							{referralError && (
+									</Button>
+								</div>
+								<p className="GetTestUsdc-hint">
+									You and your referrer get $100 each!
+								</p>
+								{referralError && (
 									<div className="GetTestUsdc-error">
 										{referralError}
 									</div>

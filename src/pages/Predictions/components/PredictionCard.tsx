@@ -508,10 +508,10 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			style={{ cursor: "pointer" }}
 		>
 			{/* Banner Image */}
-			<div 
-				className="prediction-banner" 
+			<div
+				className="prediction-banner"
 				onClick={navigateToUmbrella}
-				style={{ cursor: 'pointer' }}
+				style={{ cursor: "pointer" }}
 			>
 				{shouldShowImage ? (
 					<img
