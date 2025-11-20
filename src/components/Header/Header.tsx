@@ -24,7 +24,8 @@ const MobileLogo = ({ onClick }: { onClick: () => void }) => (
 );
 
 const DesktopLogo = () => (
-	<Link className="App-header-link-main" to="/">
+	// Temporarily redirecting to gaming page instead of home
+	<Link className="App-header-link-main" to="/predictions/games">
 		<LogoImage />
 	</Link>
 );
@@ -63,7 +64,8 @@ const HeaderLeft = ({
 	const HeaderContent = isHomeSite() ? HomeHeaderLinks : AppHeaderLinks;
 	return (
 		<div className="App-header-container-left">
-			{isMobile && <MobileLogo onClick={() => navigate("/")} />}
+			{/* Temporarily redirecting to gaming page instead of home */}
+			{isMobile && <MobileLogo onClick={() => navigate("/predictions/games")} />}
 			{!isMobile && <DesktopLogo />}
 			{!isMobile && (
 				<HeaderContent showRedirectModal={showRedirectModal} />

@@ -209,7 +209,8 @@ export function AppHeaderLinks({
 						Gaming
 					</HeaderLink>
 				</div>
-				<div className="App-header-link-container">
+				{/* Temporarily commented out - esports page disabled */}
+				{/* <div className="App-header-link-container">
 					<HeaderLink
 						qa="esports"
 						to="/predictions/esports"
@@ -220,7 +221,7 @@ export function AppHeaderLinks({
 					>
 						Esports
 					</HeaderLink>
-				</div>
+				</div> */}
 				<div className="App-header-link-container">
 					<HeaderLink
 						qa="prizes"

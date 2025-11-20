@@ -26,13 +26,16 @@ export function MainRoutes() {
 
 	return (
 		<Routes>
-			<Route path="/" element={<Home />} />
+			{/* Temporarily commented out - redirecting to gaming page */}
+			{/* <Route path="/" element={<Home />} /> */}
+			<Route path="/" element={<FilteredPredictions filterType="games" />} />
 
 			<Route path="/predictions" element={<Predictions />} />
-			<Route
+			{/* Temporarily commented out - esports page disabled */}
+			{/* <Route
 				path="/predictions/esports"
 				element={<FilteredPredictions filterType="esports" />}
-			/>
+			/> */}
 			<Route
 				path="/predictions/games"
 				element={<FilteredPredictions filterType="games" />}

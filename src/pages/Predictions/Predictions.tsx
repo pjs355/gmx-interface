@@ -12,6 +12,16 @@ import GameLinks from "./components/GameLinks";
 import { Search } from "./components/Search/Search";
 import { PromotionBar } from "@/components/PromotionBar";
 
+// Fisher-Yates shuffle algorithm for randomizing array order
+function shuffleArray<T>(array: T[]): T[] {
+	const shuffled = [...array];
+	for (let i = shuffled.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+	}
+	return shuffled;
+}
+
 export default function Predictions() {
 	const navigate = useNavigate();
 	const { authenticated } = useSignerContext();
@@ -115,27 +125,32 @@ export default function Predictions() {
 			return !hasEsportsTag;
 		});
 
-		if (!selectedGame) return nonEsportsUmbrellas;
+		let filtered = nonEsportsUmbrellas;
+		
+		if (selectedGame) {
+			// Find the selected tag by label
+			const selectedTag = tags.find((t) => t.label === selectedGame);
+			if (selectedTag) {
+				filtered = nonEsportsUmbrellas.filter((umbrella) => {
+					const children = (umbrella as any).children as
+						| Array<any>
+						| undefined;
+					if (!children || children.length === 0) return false;
+					return children.some((q) => {
+						const tagIds: string[] | undefined = (q &&
+							(q as any).tagIds) as any;
+						// MUST have tagIds array (skip questions with legacy tags only)
+						if (!Array.isArray(tagIds) || tagIds.length === 0) {
+							return false;
+						}
+						return tagIds.includes(selectedTag._id);
+					});
+				});
+			}
+		}
 
-		// Find the selected tag by label
-		const selectedTag = tags.find((t) => t.label === selectedGame);
-		if (!selectedTag) return nonEsportsUmbrellas;
-
-		return nonEsportsUmbrellas.filter((umbrella) => {
-			const children = (umbrella as any).children as
-				| Array<any>
-				| undefined;
-			if (!children || children.length === 0) return false;
-			return children.some((q) => {
-				const tagIds: string[] | undefined = (q &&
-					(q as any).tagIds) as any;
-				// MUST have tagIds array (skip questions with legacy tags only)
-				if (!Array.isArray(tagIds) || tagIds.length === 0) {
-					return false;
-				}
-				return tagIds.includes(selectedTag._id);
-			});
-		});
+		// Randomize the order of cards
+		return shuffleArray(filtered);
 	}, [umbrellas, selectedGame, tags, searchActive, searchResults]);
 
 	// Navigation functions

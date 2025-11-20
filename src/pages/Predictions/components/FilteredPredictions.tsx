@@ -16,6 +16,16 @@ import { PromotionBar } from "@/components/PromotionBar";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
+// Fisher-Yates shuffle algorithm for randomizing array order
+function shuffleArray<T>(array: T[]): T[] {
+	const shuffled = [...array];
+	for (let i = shuffled.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+	}
+	return shuffled;
+}
+
 function buildDayKey(date: Date): string {
 	const year = date.getFullYear();
 	const month = date.getMonth() + 1;
@@ -107,7 +117,7 @@ export default function FilteredPredictions({
 			(t) => normalizeTag(t.label) === "ESPORTS"
 		);
 
-		return activeUmbrellas
+		const filtered = activeUmbrellas
 			.filter((umbrella) => {
 				const children = (umbrella as any).children as
 					| Array<any>
@@ -156,6 +166,13 @@ export default function FilteredPredictions({
 					return tagIds.includes(selectedTag._id);
 				});
 			});
+
+		// Randomize order for games filter type (not esports)
+		if (filterType === "games") {
+			return shuffleArray(filtered);
+		}
+		
+		return filtered;
 	}, [umbrellas, filterType, selectedGame, tags]);
 
 	const calendarData = React.useMemo(() => {
