@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
-	resolveLogoWithPriority,
-	collectTagsFromUmbrella,
+	resolveLogoByTags,
 	resolveUmbrellaIconById,
+	getTagImageFromUmbrella,
+	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
+import { usePredictionData } from "@/context/PredictionDataContext";
 
 type MarketHeaderProps = {
 	umbrella: Umbrella;
@@ -16,6 +18,7 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 	umbrella,
 	titleRef,
 }) => {
+	const { tags } = usePredictionData();
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
@@ -23,27 +26,30 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 	const serverImage =
 		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
 
-	// Priority 2: Check for game logo based on tags
-	const gameLogo = resolveLogoWithPriority(
-		umbrella,
-		collectTagsFromUmbrella(umbrella)
-	);
+	// Priority 2: Check for tag imageUrl from tags
+	const tagImage = getTagImageFromUmbrella(umbrella, tags);
 
-	// Priority 3: Fallback to game controller
+	// Priority 3: Check for game logo based on tag labels
+	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
+	const gameLogo = resolveLogoByTags(tagLabels);
+
+	// Priority 4: Fallback to game controller
 	const fallbackLogo = gameLogo || gtaIcon;
 
 	// Determine initial source
-	const initialSrc = serverImage || fallbackLogo;
+	const initialSrc = serverImage || tagImage || fallbackLogo;
 
 	const handleError = () => {
-		if (!imageError && serverImage && gameLogo) {
-			// If server image fails, fall back to game logo
+		if (!imageError) {
 			setImageError(true);
-			setCurrentSrc(gameLogo);
-		} else if (!imageError && serverImage && !gameLogo) {
-			// If server image fails and no game logo, fall back to controller
-			setImageError(true);
-			setCurrentSrc(gtaIcon);
+			// Try fallback order: tagImage → gameLogo → gtaIcon
+			if (currentSrc !== tagImage && tagImage) {
+				setCurrentSrc(tagImage);
+			} else if (currentSrc !== gameLogo && gameLogo) {
+				setCurrentSrc(gameLogo);
+			} else {
+				setCurrentSrc(gtaIcon);
+			}
 		}
 	};
 
