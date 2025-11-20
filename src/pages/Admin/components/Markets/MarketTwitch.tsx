@@ -63,11 +63,10 @@ export default function MarketTwitch({
 					}}
 				/>
 				<span style={{ fontSize: 12, opacity: 0.8 }}>
-					Provide a full streaming URL (Twitch, Kick, etc.). Leave blank
-					if no stream is associated.
+					Provide a full streaming URL (Twitch, Kick, etc.). Leave
+					blank if no stream is associated.
 				</span>
 			</label>
 		</div>
 	);
 }
-

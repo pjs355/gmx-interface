@@ -366,7 +366,8 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 													opacity: 0.75,
 												}}
 											>
-												{streamPlatformLabel} {streamIndicator.label}
+												{streamPlatformLabel}{" "}
+												{streamIndicator.label}
 											</div>
 										</div>
 										<button

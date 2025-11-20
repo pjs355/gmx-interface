@@ -47,7 +47,7 @@ export function HomeHeaderLinks({
 			? [
 					{
 						label: t`Referral`,
-						link: "/get_test_usdc",
+						link: "/get-test-usdc",
 						isHomeLink: true,
 					},
 			  ]

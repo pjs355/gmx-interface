@@ -162,7 +162,7 @@ export function AppHeaderLinks({
 						</HeaderLink>
 						<HeaderLink
 							className="mobile-metric-box"
-							to="/get_test_usdc"
+							to="/get-test-usdc"
 							showRedirectModal={showRedirectModal}
 						>
 							<div className="flex flex-col items-center">
@@ -237,7 +237,7 @@ export function AppHeaderLinks({
 					<div className="App-header-link-container">
 						<HeaderLink
 							qa="get-test-usdc"
-							to="/get_test_usdc"
+							to="/get-test-usdc"
 							showRedirectModal={showRedirectModal}
 						>
 							Referral

@@ -486,7 +486,10 @@ export default function TeamLinker({
 										<button
 											type="button"
 											onClick={() =>
-												reorderCandidates(index, index - 1)
+												reorderCandidates(
+													index,
+													index - 1
+												)
 											}
 											disabled={index === 0}
 											className="team-linker__reorder-button"
@@ -496,10 +499,14 @@ export default function TeamLinker({
 										<button
 											type="button"
 											onClick={() =>
-												reorderCandidates(index, index + 1)
+												reorderCandidates(
+													index,
+													index + 1
+												)
 											}
 											disabled={
-												index === enrichedStates.length - 1
+												index ===
+												enrichedStates.length - 1
 											}
 											className="team-linker__reorder-button"
 										>

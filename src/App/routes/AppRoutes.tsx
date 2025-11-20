@@ -17,6 +17,7 @@ import { NotifyModal } from "components/NotifyModal/NotifyModal";
 import Footer from "components/Footer/Footer";
 import { ProgressBanner } from "components/ProgressBanner";
 import { CountdownBanner } from "components/CountdownBanner";
+import { RPGPanel } from "components/RPGPanel";
 
 import { MainRoutes } from "./MainRoutes";
 
@@ -52,7 +53,7 @@ export function AppRoutes() {
 	}, []);
 
 	// Don't show ProgressBanner on Get Test USD page
-	const showProgressBanner = location.pathname !== "/get_test_usdc";
+	const showProgressBanner = location.pathname !== "/get-test-usdc";
 	
 	// Don't show CountdownBanner on umbrella trading pages
 	const isUmbrellaPage = location.pathname.includes("/predictions/umbrella/");
@@ -68,6 +69,7 @@ export function AppRoutes() {
 						openSettings={openSettings}
 						showRedirectModal={showRedirectModal}
 					/>
+					<RPGPanel />
 					{showProgressBanner && <ProgressBanner />}
 					{!isUmbrellaPage && <CountdownBanner />}
 					<MainRoutes />

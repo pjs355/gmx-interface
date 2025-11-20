@@ -47,7 +47,7 @@ export function MainRoutes() {
 			<Route path="/profile" element={<Profile />} />
 			<Route path="/profile/developers" element={<Profile />} />
 			<Route path="/admin" element={<Admin />} />
-			<Route path="/get_test_usdc" element={<GetTestUsdc />} />
+			<Route path="/get-test-usdc" element={<GetTestUsdc />} />
 			<Route path="/positions" element={<Positions />} />
 			<Route path="/prizes" element={<Prizes />} />
 			<Route path="/about" element={<About />} />

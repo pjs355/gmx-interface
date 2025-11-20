@@ -30,6 +30,7 @@ import { PredictionDataProvider } from "context/PredictionDataContext";
 import { UserDataProvider } from "context/UserDataContext";
 import { BalanceProvider } from "context/BalanceContext";
 import { PortfolioProvider } from "context/PortfolioContext";
+import { RPGProvider } from "context/RPGContext";
 
 import App from "./app/App";
 import "./styles/globals.css";
@@ -64,7 +65,9 @@ createRoot(document.getElementById("root")!).render(
 							<UserDataProvider>
 								<BalanceProvider>
 									<PortfolioProvider>
-										<App />
+										<RPGProvider>
+											<App />
+										</RPGProvider>
 									</PortfolioProvider>
 								</BalanceProvider>
 							</UserDataProvider>

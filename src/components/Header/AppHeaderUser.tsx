@@ -240,7 +240,7 @@ export function AppHeaderUser({
 					{!small && (
 						<HeaderLink
 							className="header-metric-box mr-4"
-							to="/get_test_usdc"
+							to="/get-test-usdc"
 							showRedirectModal={showRedirectModal}
 						>
 							<div className="flex flex-col items-center">

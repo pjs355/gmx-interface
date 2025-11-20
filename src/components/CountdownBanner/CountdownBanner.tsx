@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./CountdownBanner.scss";
@@ -13,6 +13,7 @@ interface TimeLeft {
 
 export function CountdownBanner() {
 	const { getAccessToken } = usePrivy();
+	const { identityToken } = useIdentityToken();
 	const { account, authenticated } = useSignerContext();
 	const [timeLeft, setTimeLeft] = useState<TimeLeft | null>(null);
 	const [hasClaimedTestUsdc, setHasClaimedTestUsdc] = useState(false);
@@ -20,17 +21,32 @@ export function CountdownBanner() {
 
 	// Check if user has claimed test USDC
 	useEffect(() => {
+		// Don't run if identity token is not available
+		if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
+			setIsCheckingClaim(false);
+			return;
+		}
+
+		if (!account) {
+			setIsCheckingClaim(false);
+			return;
+		}
+
 		let cancelled = false;
 
 		async function checkClaim() {
-			if (!account) {
-				if (!cancelled) setIsCheckingClaim(false);
-				return;
-			}
-
 			try {
 				const token = await getAccessToken();
-				if (!token) return;
+				if (!token) {
+					if (!cancelled) setIsCheckingClaim(false);
+					return;
+				}
+
+				// Double-check identity token is still available
+				if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
+					if (!cancelled) setIsCheckingClaim(false);
+					return;
+				}
 
 				const API_ROOT = getPredictionApiBaseUrl();
 				const res = await fetch(`${API_ROOT}/test-coins/check-claim`, {
@@ -38,6 +54,7 @@ export function CountdownBanner() {
 					headers: {
 						"Content-Type": "application/json",
 						Authorization: `Bearer ${token}`,
+						"privy-id-token": identityToken,
 					},
 					body: JSON.stringify({ smartWallet: account }),
 				});
@@ -68,7 +85,7 @@ export function CountdownBanner() {
 		return () => {
 			cancelled = true;
 		};
-	}, [account, getAccessToken]);
+	}, [account, getAccessToken, identityToken]);
 
 	useEffect(() => {
 		const calculateTimeLeft = (): TimeLeft | null => {

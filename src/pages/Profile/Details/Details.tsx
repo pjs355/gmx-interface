@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useMedia } from "react-use";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { userService } from "@/services/api/userService";
 import "./Details.scss";
 
 interface UserDetails {
-	id: string;
+	id?: string;
+	userId?: string;
 	username?: string;
 	email?: string;
 	createdAt?: string;
 	lastLogin?: string;
 	walletAddress?: string;
-	// Add other user details as needed
+	exp?: number;
+	[key: string]: any;
 }
 
 export default function Details() {
@@ -24,7 +26,6 @@ export default function Details() {
 	const [isSaving, setIsSaving] = useState(false);
 	const [usernameError, setUsernameError] = useState<string | null>(null);
 	const [copySuccess, setCopySuccess] = useState(false);
-	const isMobile = useMedia("(max-width: 768px)");
 
 	// Extract email, phone, and smart wallet from Privy user object
 	const userEmail = user?.email?.address || null;
@@ -32,7 +33,7 @@ export default function Details() {
 	const smartWallet = user?.linkedAccounts?.find(
 		(account: any) => account.type === "smart_wallet"
 	);
-	const smartWalletAddress = smartWallet?.address || null;
+	const smartWalletAddress = (smartWallet as any)?.address || null;
 
 	const handleCopyAddress = async () => {
 		if (smartWalletAddress) {
@@ -72,9 +73,6 @@ export default function Details() {
 
 	const fetchUserDetails = async () => {
 		try {
-			const serverUrl = getPredictionApiBaseUrl();
-			const apiUrl = `${serverUrl}/profiles/me`;
-
 			const accessToken = await getAccessToken();
 			if (!accessToken) {
 				console.warn(
@@ -88,24 +86,11 @@ export default function Details() {
 				throw new Error("No identity token available");
 			}
 
-			const headers: Record<string, string> = {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${accessToken}`,
-				"privy-id-token": identityToken,
-			};
-
-			const response = await fetch(apiUrl, { method: "GET", headers });
-
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-
-			const result = await response.json();
-			console.log("User details response:", result);
-
-			if (result.success && result.data) {
-				setUserDetails(result.data);
-			}
+			const profile = await userService.getUserProfile(
+				accessToken,
+				identityToken
+			);
+			setUserDetails(profile);
 		} catch (error) {
 			console.error("Failed to fetch user details:", error);
 		} finally {
@@ -135,9 +120,6 @@ export default function Details() {
 		setUsernameError(null); // Clear any previous errors
 
 		try {
-			const serverUrl = getPredictionApiBaseUrl();
-			const apiUrl = `${serverUrl}/profiles/me`;
-
 			const accessToken = await getAccessToken();
 			if (!accessToken) {
 				throw new Error("No access token available");
@@ -147,35 +129,16 @@ export default function Details() {
 				throw new Error("No identity token available");
 			}
 
-			const headers: Record<string, string> = {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${accessToken}`,
-				"privy-id-token": identityToken,
-			};
+			const updatedProfile = await userService.updateUsername(
+				usernameValue.trim(),
+				accessToken,
+				identityToken
+			);
 
-			const response = await fetch(apiUrl, {
-				method: "PUT",
-				headers,
-				body: JSON.stringify({
-					username: usernameValue.trim(),
-				}),
-			});
-
-			const result = await response.json();
-			console.log("Username update response:", result);
-
-			if (result.success && result.data) {
-				setUserDetails(result.data);
-				setIsEditingUsername(false);
-				setUsernameValue("");
-				setUsernameError(null);
-			} else {
-				// Handle specific error messages from the backend
-				const errorMessage =
-					result.error ||
-					`Failed to update username (${response.status})`;
-				setUsernameError(errorMessage);
-			}
+			setUserDetails(updatedProfile);
+			setIsEditingUsername(false);
+			setUsernameValue("");
+			setUsernameError(null);
 		} catch (error) {
 			console.error("Failed to update username:", error);
 			const errorMessage =
@@ -279,7 +242,8 @@ export default function Details() {
 				<div className="Details-hint">
 					The username will be used when sharing markets as well as
 					for leaderboards.
-					<br />Username can only be changed once every 7 days.
+					<br />
+					Username can only be changed once every 7 days.
 				</div>
 			</div>
 
@@ -302,7 +266,9 @@ export default function Details() {
 			{/* Smart Wallet Address Display */}
 			{smartWalletAddress && (
 				<div className="Details-info-section">
-					<div className="Details-info-label">Smart Wallet Address (Base)</div>
+					<div className="Details-info-label">
+						Smart Wallet Address (Base)
+					</div>
 					<div className="Details-wallet-display">
 						<div className="Details-info-value Details-wallet-address">
 							{smartWalletAddress}

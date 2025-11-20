@@ -1,33 +1,51 @@
 import React, { useEffect, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { toast } from "react-toastify";
+import { useRPG } from "@/context/RPGContext";
 import "./ProgressBanner.scss";
 
 export function ProgressBanner() {
 	const { getAccessToken } = usePrivy();
+	const { identityToken } = useIdentityToken();
 	const { account, authenticated } = useSignerContext();
 	const wallet = useSignerContext();
 	const { refresh: refreshUserData } = useUserData();
+	const { refresh: refreshRPG } = useRPG();
 	const [hasClaimedTestUsdc, setHasClaimedTestUsdc] = useState(false);
 	const [isCheckingClaim, setIsCheckingClaim] = useState(true);
 	const [isClaiming, setIsClaiming] = useState(false);
 
 	// Check if user has claimed test USDC
 	useEffect(() => {
+		// Don't run if identity token is not available
+		if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
+			setIsCheckingClaim(false);
+			return;
+		}
+
+		if (!account) {
+			setIsCheckingClaim(false);
+			return;
+		}
+
 		let cancelled = false;
 
 		async function checkClaim() {
-			if (!account) {
-				if (!cancelled) setIsCheckingClaim(false);
-				return;
-			}
-
 			try {
 				const token = await getAccessToken();
-				if (!token) return;
+				if (!token) {
+					if (!cancelled) setIsCheckingClaim(false);
+					return;
+				}
+
+				// Double-check identity token is still available
+				if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
+					if (!cancelled) setIsCheckingClaim(false);
+					return;
+				}
 
 				const API_ROOT = getPredictionApiBaseUrl();
 				const res = await fetch(`${API_ROOT}/test-coins/check-claim`, {
@@ -35,6 +53,7 @@ export function ProgressBanner() {
 					headers: {
 						"Content-Type": "application/json",
 						Authorization: `Bearer ${token}`,
+						"privy-id-token": identityToken,
 					},
 					body: JSON.stringify({ smartWallet: account }),
 				});
@@ -65,7 +84,7 @@ export function ProgressBanner() {
 		return () => {
 			cancelled = true;
 		};
-	}, [account, getAccessToken]);
+	}, [account, getAccessToken, identityToken]);
 
 	const handleClaimClick = async () => {
 		try {
@@ -79,6 +98,12 @@ export function ProgressBanner() {
 				return;
 			}
 
+			if (!identityToken) {
+				console.error("No identity token available for claiming");
+				toast.error("Authentication error. Please try again.");
+				return;
+			}
+
 			console.log("Sending claim request with address:", smartWallet);
 
 			const API_ROOT = getPredictionApiBaseUrl();
@@ -87,6 +112,7 @@ export function ProgressBanner() {
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${token}`,
+					"privy-id-token": identityToken,
 				},
 				body: JSON.stringify({ smartWallet }),
 			});
@@ -99,10 +125,29 @@ export function ProgressBanner() {
 
 			// Trigger a re-check on success
 			if (response.ok) {
+				console.log("✅ Claim successful! Response:", text);
+				let responseData;
+				try {
+					responseData = JSON.parse(text);
+					console.log("✅ Claim response data:", responseData);
+				} catch (e) {
+					console.log("Response is not JSON:", text);
+				}
+				
 				// Mark as claimed and let the banner disappear
 				setHasClaimedTestUsdc(true);
 				// Refresh user data to update the cash balance in the header
 				await refreshUserData();
+				
+				// Wait a bit for server to process exp grant, then refresh RPG state
+				setTimeout(async () => {
+					try {
+						await refreshRPG();
+						console.log("✅ RPG state refreshed after claim (with delay)");
+					} catch (error) {
+						console.error("Failed to refresh RPG state:", error);
+					}
+				}, 500);
 			} else {
 				toast.error(`Failed to claim: ${text}`);
 			}
