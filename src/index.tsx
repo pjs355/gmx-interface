@@ -6,8 +6,8 @@ Sentry.init({
 	sendDefaultPii: true,
 });
 
-import mixpanel from "mixpanel-browser";
-mixpanel.init("0da2aa66dee9343cec64d0cdeb46562e", {
+import { initMixpanel } from "./utils/mixpanel";
+initMixpanel("0da2aa66dee9343cec64d0cdeb46562e", {
 	autocapture: true,
 	record_sessions_percent: 100,
 });
@@ -66,7 +66,7 @@ createRoot(document.getElementById("root")!).render(
 								<BalanceProvider>
 									<PortfolioProvider>
 										<RPGProvider>
-											<App />
+										<App />
 										</RPGProvider>
 									</PortfolioProvider>
 								</BalanceProvider>

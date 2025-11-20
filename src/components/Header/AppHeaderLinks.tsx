@@ -224,6 +224,18 @@ export function AppHeaderLinks({
 				</div> */}
 				<div className="App-header-link-container">
 					<HeaderLink
+						qa="leaderboard"
+						to="/leaderboard"
+						showRedirectModal={showRedirectModal}
+						isActive={(_match: any, location: any) =>
+							location.pathname === "/leaderboard"
+						}
+					>
+						Leaderboard
+					</HeaderLink>
+				</div>
+				<div className="App-header-link-container">
+					<HeaderLink
 						qa="prizes"
 						to="/prizes"
 						showRedirectModal={showRedirectModal}
@@ -257,7 +269,6 @@ export function AppHeaderLinks({
 						About
 					</HeaderLink>
 				</div>
-				{/* Intentionally no Leaderboard or Positions text links here. Portfolio and Cash are separate buttons in AppHeaderUser. */}
 				<div className="App-header-link-container">
 					{/* <HeaderLink qa="trade" to="/trade" showRedirectModal={showRedirectModal}>
             <Trans>Trade</Trans>

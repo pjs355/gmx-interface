@@ -5,7 +5,7 @@ import Tooltip from "components/Tooltip/Tooltip";
 import type { TradeBoxProps, TradeBoxState, ApprovalState } from './types';
 import './PredictionMarketTradeBox.scss';
 import { MyPositionsRow } from './MyPositionsRow';
-import mixpanel from "mixpanel-browser";
+import { mixpanelTrack } from "@/utils/mixpanel";
 // Helper function to calculate prices from orderbook
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -345,7 +345,7 @@ export default function PredictionMarketTradeBoxUI({
             value={amount ? (side === 'buy' && orderType === 'market' ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
             onFocus={() => {
               try {
-                mixpanel.track("AmountInputFocused", {
+                mixpanelTrack("AmountInputFocused", {
                   marketId: market?._id || market?.questionId,
                   marketName: market?.displayName || market?.question,
                   orderType: orderType,
@@ -517,7 +517,7 @@ export default function PredictionMarketTradeBoxUI({
         variant="primary"
         onClick={() => {
           try {
-            mixpanel.track("TradeButtonClicked", {
+            mixpanelTrack("TradeButtonClicked", {
               marketId: market?._id || market?.questionId,
               marketName: market?.displayName || market?.question,
               orderType: orderType,

@@ -50,6 +50,15 @@ export default defineConfig(({ mode }) => ({
 	},
 	server: {
 		port: 3010,
+		host: "0.0.0.0", // Allow external connections
+		strictPort: false,
+		hmr: false, // Disable HMR when using ngrok to avoid excessive requests
+		allowedHosts: [
+			"7b9a7d18e56b.ngrok-free.app",
+			".ngrok-free.app", // Allow all ngrok free domains
+			".ngrok.io", // Allow all ngrok domains
+			"localhost",
+		],
 		proxy: {
 			"/api": {
 				target: "https://prediction-api-production.up.railway.app",

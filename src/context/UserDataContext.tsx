@@ -8,7 +8,7 @@ import React, {
 	useState,
 } from "react";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
-import mixpanel from "mixpanel-browser";
+import { mixpanelIdentify, mixpanelPeopleSet } from "@/utils/mixpanel";
 import { Contract, JsonRpcProvider, formatUnits, ethers } from "ethers";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useSignerContext } from "context/SignerContext";
@@ -83,12 +83,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		if (mixpanelIdentifiedRef.current === user.id) return;
 		
 		try {
-			mixpanel.identify(user.id);
+			mixpanelIdentify(user.id);
 			
 			const email = user.email?.address || user.google?.email || user.twitter?.email || null;
 			const name = user.name || user.google?.name || user.twitter?.name || null;
 			
-			mixpanel.people.set({
+			mixpanelPeopleSet({
 				$name: name || undefined,
 				$email: email || undefined,
 				// Add any other user properties here

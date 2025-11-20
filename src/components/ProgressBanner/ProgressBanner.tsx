@@ -37,9 +37,9 @@ export function ProgressBanner() {
 			try {
 				const token = await getAccessToken();
 				if (!token) {
-					if (!cancelled) setIsCheckingClaim(false);
-					return;
-				}
+				if (!cancelled) setIsCheckingClaim(false);
+				return;
+			}
 
 				// Double-check identity token is still available
 				if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {

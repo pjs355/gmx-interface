@@ -6,6 +6,8 @@
 	bottom: 0;
 	left: 0;
 	right: 0;
+	pointer-events: auto;
+	touch-action: none;
 }
 
 .App-header {
@@ -47,33 +49,33 @@
 }
 
 .App-header-drawer {
-	background: #000000;
-	opacity: 1;
 	position: fixed;
-	z-index: 1001;
-	right: 0;
 	top: 0;
-	left: auto;
-	height: 100vh;
+	right: 0;
 	width: clamp(18rem, 92vw, 28rem);
-	overflow-y: auto;
-	-ms-overflow-style: none;
-	scrollbar-width: none;
+	height: 100vh;
+	z-index: 1001;
+	pointer-events: auto;
+	-webkit-transform: translateZ(0);
+	transform: translateZ(0);
 }
 
-.App-header-drawer::-webkit-scrollbar {
-	display: none;
+.App-header-drawer-scrollable {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
+	background: #000000;
 }
 
 .App-header-drawer .App-header-links {
 	display: flex;
 	flex-direction: column;
-	height: auto;
-	max-height: 100vh;
 	padding: 1rem 0;
-	align-items: stretch;
-	justify-content: flex-start;
-	overflow-y: visible;
 }
 
 .App-header-drawer .App-header-link-container {
@@ -123,6 +125,7 @@
 .App-header-mobile-metrics {
 	display: flex;
 	gap: 1rem;
+	width: 100%;
 	padding: 1rem 2rem;
 	margin-bottom: 1rem;
 }
@@ -285,7 +288,6 @@
 .App-header-link-container {
 	display: flex;
 	align-items: center;
-	height: 100%;
 	background: #000000;
 }
 

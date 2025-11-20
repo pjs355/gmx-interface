@@ -11,11 +11,7 @@ import { isHomeSite } from "@/config/ui";
 
 import "./Header.scss";
 
-const LogoImage = () => (
-	<span className="App-header-logo-text">
-		LevelUp
-	</span>
-);
+const LogoImage = () => <span className="App-header-logo-text">LevelUp</span>;
 
 const MobileLogo = ({ onClick }: { onClick: () => void }) => (
 	<div className="App-header-link-main clickable" onClick={onClick}>
@@ -65,7 +61,9 @@ const HeaderLeft = ({
 	return (
 		<div className="App-header-container-left">
 			{/* Temporarily redirecting to gaming page instead of home */}
-			{isMobile && <MobileLogo onClick={() => navigate("/predictions/games")} />}
+			{isMobile && (
+				<MobileLogo onClick={() => navigate("/predictions/games")} />
+			)}
 			{!isMobile && <DesktopLogo />}
 			{!isMobile && (
 				<HeaderContent showRedirectModal={showRedirectModal} />
@@ -109,19 +107,18 @@ const Drawer = ({
 }: DrawerProps) => {
 	const HeaderContent = isHomeSite() ? HomeHeaderLinks : AppHeaderLinks;
 	return (
-		<div
-			onClick={closeDrawer}
-			className="App-header-links-container App-header-drawer"
-		>
-			<HeaderContent
-				small
-				clickCloseIcon={closeDrawer}
-				showRedirectModal={showRedirectModal}
-				openSettings={openSettings}
-				disconnectAccountAndCloseSettings={
-					disconnectAccountAndCloseSettings
-				}
-			/>
+		<div className="App-header-drawer">
+			<div className="App-header-drawer-scrollable">
+				<HeaderContent
+					small
+					clickCloseIcon={closeDrawer}
+					showRedirectModal={showRedirectModal}
+					openSettings={openSettings}
+					disconnectAccountAndCloseSettings={
+						disconnectAccountAndCloseSettings
+					}
+				/>
+			</div>
 		</div>
 	);
 };
@@ -192,13 +189,6 @@ export function Header({
 		setIsDrawerVisible(!isDrawerVisible);
 	}, [isDrawerVisible]);
 
-	useEffect(() => {
-		document.body.style.overflow = isDrawerVisible ? "hidden" : "unset";
-		return () => {
-			document.body.style.overflow = "unset";
-		};
-	}, [isDrawerVisible]);
-
 	const closeDrawer = () => setIsDrawerVisible(false);
 	const closeSelectorModal = () => setIsNativeSelectorModalVisible(false);
 
@@ -210,7 +200,6 @@ export function Header({
 
 	return (
 		<>
-			<Backdrop isVisible={isDrawerVisible} onClick={toggleDrawer} />
 			<SelectorBackdrop
 				isVisible={isNativeSelectorModalVisible}
 				onClick={closeSelectorModal}

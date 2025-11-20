@@ -4,7 +4,7 @@ import Button from "components/Button/Button";
 import CountdownTimer from "components/CountdownTimer/CountdownTimer";
 import { SingleMarketActions } from "./SingleMarketActions";
 import { MultiMarketActions } from "./MultiMarketActions";
-import mixpanel from "mixpanel-browser";
+import { mixpanelTrack } from "@/utils/mixpanel";
 import type {
 	Umbrella,
 	UmbrellaTeamMapping,
@@ -348,7 +348,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				trackingData.marketType = "none";
 			}
 
-			mixpanel.track("PredictionCardClick", trackingData);
+			mixpanelTrack("PredictionCardClick", trackingData);
 		} catch (error) {
 			console.error("error", error);
 		}
@@ -358,7 +358,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const navigateToSingleMarket = (position: "yes" | "no") => {
 		try {
 			const question = singleMarketQuestions[umbrella._id];
-			mixpanel.track("PredictionCardWSideClick", {
+			mixpanelTrack("PredictionCardWSideClick", {
 				umbrellaId: umbrella._id,
 				umbrellaName: umbrella.displayName,
 				marketId: question?._id || question?.questionId,
@@ -377,7 +377,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		position: "yes" | "no"
 	) => {
 		try {
-			mixpanel.track("PredictionCardWSideClick", {
+			mixpanelTrack("PredictionCardWSideClick", {
 				umbrellaId: umbrella._id,
 				umbrellaName: umbrella.displayName,
 				marketId: question._id || question.questionId,
