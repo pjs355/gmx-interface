@@ -16,14 +16,23 @@ import { PromotionBar } from "@/components/PromotionBar";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
-// Fisher-Yates shuffle algorithm for randomizing array order
-function shuffleArray<T>(array: T[]): T[] {
-	const shuffled = [...array];
-	for (let i = shuffled.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-	}
-	return shuffled;
+// Sort umbrellas by trading activity (number of trades across all children markets)
+function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
+	return [...array].sort((a, b) => {
+		// Sum up historicalPrices.length from all children markets
+		const aChildren = (a as any).children || [];
+		const aTradeCount = aChildren.reduce((sum: number, child: any) => {
+			return sum + (child?.historicalPrices?.length ?? 0);
+		}, 0);
+		
+		const bChildren = (b as any).children || [];
+		const bTradeCount = bChildren.reduce((sum: number, child: any) => {
+			return sum + (child?.historicalPrices?.length ?? 0);
+		}, 0);
+		
+		// Sort in descending order (most trades first)
+		return bTradeCount - aTradeCount;
+	});
 }
 
 function buildDayKey(date: Date): string {
@@ -177,9 +186,9 @@ export default function FilteredPredictions({
 				});
 			});
 
-		// Randomize order for games filter type (not esports)
+		// Sort by trading activity for games filter type (not esports)
 		if (filterType === "games") {
-			return shuffleArray(filtered);
+			return sortByTradingActivity(filtered);
 		}
 		
 		return filtered;

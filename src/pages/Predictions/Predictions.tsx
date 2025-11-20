@@ -12,14 +12,23 @@ import GameLinks from "./components/GameLinks";
 import { Search } from "./components/Search/Search";
 import { PromotionBar } from "@/components/PromotionBar";
 
-// Fisher-Yates shuffle algorithm for randomizing array order
-function shuffleArray<T>(array: T[]): T[] {
-	const shuffled = [...array];
-	for (let i = shuffled.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-	}
-	return shuffled;
+// Sort umbrellas by trading activity (number of trades across all children markets)
+function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
+	return [...array].sort((a, b) => {
+		// Sum up historicalPrices.length from all children markets
+		const aChildren = (a as any).children || [];
+		const aTradeCount = aChildren.reduce((sum: number, child: any) => {
+			return sum + (child?.historicalPrices?.length ?? 0);
+		}, 0);
+		
+		const bChildren = (b as any).children || [];
+		const bTradeCount = bChildren.reduce((sum: number, child: any) => {
+			return sum + (child?.historicalPrices?.length ?? 0);
+		}, 0);
+		
+		// Sort in descending order (most trades first)
+		return bTradeCount - aTradeCount;
+	});
 }
 
 export default function Predictions() {
@@ -149,8 +158,8 @@ export default function Predictions() {
 			}
 		}
 
-		// Randomize the order of cards
-		return shuffleArray(filtered);
+		// Sort by trading activity (most trades first)
+		return sortByTradingActivity(filtered);
 	}, [umbrellas, selectedGame, tags, searchActive, searchResults]);
 
 	// Navigation functions
