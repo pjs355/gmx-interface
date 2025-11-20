@@ -11,9 +11,16 @@ const isLocalhost = () => {
 };
 
 // Wrapper for mixpanel that disables tracking on localhost
-export const mixpanelTrack = (eventName: string, properties?: Record<string, any>) => {
+export const mixpanelTrack = (
+	eventName: string,
+	properties?: Record<string, any>
+) => {
 	if (isLocalhost()) {
-		console.log("[Mixpanel - Disabled on localhost]", eventName, properties);
+		console.log(
+			"[Mixpanel - Disabled on localhost]",
+			eventName,
+			properties
+		);
 		return;
 	}
 	try {
@@ -37,7 +44,10 @@ export const mixpanelIdentify = (userId: string) => {
 
 export const mixpanelPeopleSet = (properties: Record<string, any>) => {
 	if (isLocalhost()) {
-		console.log("[Mixpanel - Disabled on localhost] people.set:", properties);
+		console.log(
+			"[Mixpanel - Disabled on localhost] people.set:",
+			properties
+		);
 		return;
 	}
 	try {
@@ -50,7 +60,9 @@ export const mixpanelPeopleSet = (properties: Record<string, any>) => {
 // Initialize mixpanel only if not on localhost
 export const initMixpanel = (token: string, options?: any) => {
 	if (isLocalhost()) {
-		console.log("[Mixpanel - Disabled on localhost] Initialization skipped");
+		console.log(
+			"[Mixpanel - Disabled on localhost] Initialization skipped"
+		);
 		return;
 	}
 	try {
@@ -59,4 +71,3 @@ export const initMixpanel = (token: string, options?: any) => {
 		console.error("error", error);
 	}
 };
-
