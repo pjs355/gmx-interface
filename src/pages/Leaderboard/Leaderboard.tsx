@@ -105,7 +105,7 @@ export default function Leaderboard() {
 
 	return (
 		<div className="Leaderboard">
-			<h1>Leaderboard</h1>
+			<h1>Top 25 Leaderboard</h1>
 			{loading && <div className="Leaderboard-loading">Loading…</div>}
 			{error && <div className="Leaderboard-error">{error}</div>}
 			{!loading && !error && (
@@ -122,7 +122,7 @@ export default function Leaderboard() {
 							Markets
 						</div>
 					</div>
-					{data.map((row, idx) => {
+					{data.slice(0, 25).map((row, idx) => {
 						const position = idx + 1;
 						const rankIcon = getRankIcon(position);
 						const isPositive = row.totalReturnUSD >= 0;
