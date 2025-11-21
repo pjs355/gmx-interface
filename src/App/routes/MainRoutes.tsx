@@ -15,6 +15,7 @@ import Positions from "pages/Positions/Positions";
 import Prizes from "pages/Prizes/Prizes";
 import TradeBoxTest from "pages/TradeBoxTest/TradeBoxTest";
 import About from "pages/About/About";
+import TestPage from "pages/Test/TestPage";
 
 export function MainRoutes() {
 	const { pathname } = useLocation();
@@ -58,6 +59,7 @@ export function MainRoutes() {
 				path="/test/tradebox/:umbrellaId"
 				element={<TradeBoxTest />}
 			/>
+			<Route path="/test" element={<TestPage />} />
 
 			<Route path="*" element={<PageNotFound />} />
 		</Routes>

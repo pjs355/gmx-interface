@@ -13,6 +13,7 @@ export interface TagPayload {
 	label: string;
 	slug?: string;
 	imageUrl?: string | null;
+	bannerImageUrl?: string | null;
 }
 
 class TagService {
