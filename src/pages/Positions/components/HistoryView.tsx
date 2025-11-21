@@ -67,6 +67,8 @@ export default function HistoryView({
 	orders: any[];
 	resolvedMarketsByUmbrella: Record<string, any[]>;
 }) {
+	const { umbrellas } = usePredictionData();
+	
 	// Filter resolved markets to only show those where user has trading history
 	const filteredResolvedMarkets = React.useMemo(() => {
 		const filtered: Array<{ umbrella: any; markets: any[] }> = [];
@@ -92,19 +94,24 @@ export default function HistoryView({
 						market._id || market.questionId || market.marketId;
 					if (!marketId) return;
 
-					// Check if user has any trading history for this market
-					const finalAmounts = getFinalAmount(orders, marketId);
-					const hasTradingHistory =
-						finalAmounts.yesShares > 0 || finalAmounts.noShares > 0;
-
-					console.log(
-						`🔍 HISTORY DEBUG: Market ${market.displayName} - hasTradingHistory: ${hasTradingHistory}, yesShares: ${finalAmounts.yesShares}, noShares: ${finalAmounts.noShares}`
+					// Check if user has any orders for this market (includes past trades even if position is closed/claimed)
+					const hasOrders = orders.some(
+						(order) => order.questionId === marketId
 					);
 
-					if (hasTradingHistory) {
-						// Create market data in the format expected by the component
+					console.log(
+						`🔍 HISTORY DEBUG: Market ${market.displayName} - hasOrders: ${hasOrders}`
+					);
+
+					if (hasOrders) {
+						// Get final amounts to display (will be 0 if claimed, but we still show the market)
+						const finalAmounts = getFinalAmount(orders, marketId);
 						const yesShares = finalAmounts.yesShares;
 						const noShares = finalAmounts.noShares;
+
+						console.log(
+							`🔍 HISTORY DEBUG: Market ${market.displayName} - yesShares: ${yesShares}, noShares: ${noShares}`
+						);
 
 						marketsWithHistory.push({
 							market,
@@ -115,17 +122,29 @@ export default function HistoryView({
 				});
 
 				if (marketsWithHistory.length > 0) {
-					// Create umbrella object
-					const umbrella = {
-						_id: umbrellaId,
-						displayName:
-							resolvedMarkets[0]?.umbrellaName ||
-							resolvedMarkets[0]?.displayName ||
-							`Umbrella ${umbrellaId}`,
-						createdAt: new Date().toISOString(),
-						updatedAt: new Date().toISOString(),
-						__v: 0,
-					};
+					// Find the actual umbrella object for this ID (with children/tagIds for images)
+					let umbrella = umbrellas.find((u) => u._id === umbrellaId);
+					
+					// If not found, create a basic umbrella object as fallback
+					if (!umbrella) {
+						console.log(
+							`🔍 HISTORY DEBUG: No umbrella found for ID ${umbrellaId}, creating fallback`
+						);
+						umbrella = {
+							_id: umbrellaId,
+							displayName:
+								resolvedMarkets[0]?.umbrellaName ||
+								`Umbrella ${umbrellaId.slice(0, 8)}...`,
+							children: [],
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+							__v: 0,
+						};
+					} else {
+						console.log(
+							`✅ HISTORY DEBUG: Found umbrella for ID ${umbrellaId}: ${umbrella.displayName}, children count: ${umbrella.children?.length || 0}`
+						);
+					}
 
 					filtered.push({ umbrella, markets: marketsWithHistory });
 					console.log(
@@ -140,7 +159,7 @@ export default function HistoryView({
 			filtered
 		);
 		return filtered;
-	}, [resolvedMarketsByUmbrella, orders]);
+	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
 
 	return (
 		<div className="flex flex-col gap-8">
@@ -177,7 +196,7 @@ export default function HistoryView({
 							Final Position
 						</div>
 						<div style={{ textAlign: "center" }}>
-							Settlement Payout
+							Outcome
 						</div>
 						<div style={{ textAlign: "center" }}>Total Cost</div>
 						<div style={{ textAlign: "center" }}>Total Payout</div>
@@ -251,16 +270,25 @@ export default function HistoryView({
 												""
 										).toLowerCase();
 
+										// Determine which sides the user traded on (check orders, not just current shares)
+										const userYesOrders = qid ? orders.filter(
+											(order) => order.questionId === qid && order.outcome?.toLowerCase() === "yes"
+										) : [];
+										const userNoOrders = qid ? orders.filter(
+											(order) => order.questionId === qid && order.outcome?.toLowerCase() === "no"
+										) : [];
+										
 										const rows: {
 											side: "Yes" | "No";
 											amount: string;
 										}[] = [];
-										if (yesNum > 0)
+										// Show a row if user has current shares OR has traded on that side
+										if (yesNum > 0 || userYesOrders.length > 0)
 											rows.push({
 												side: "Yes",
 												amount: yes,
 											});
-										if (noNum > 0)
+										if (noNum > 0 || userNoOrders.length > 0)
 											rows.push({
 												side: "No",
 												amount: no,
@@ -316,10 +344,6 @@ export default function HistoryView({
 											const settlementPayout = wasCorrect
 												? 1
 												: 0;
-											const settlementPayoutText =
-												settlementPayout === 1
-													? "$1"
-													: "$0";
 
 											// Calculate total payout: Final Position × Settlement Payout
 											const totalPayout =
@@ -426,6 +450,37 @@ export default function HistoryView({
 												.map((s: string) => s.trim())
 												.filter(Boolean);
 											const isVs = parts.length === 2;
+											
+											// Determine outcome text
+											const outcomeText = (() => {
+												if (isVs) {
+													// For VS markets, show the winning team name
+													return resolvedOutcome === "yes"
+														? parts[0]
+														: parts[1];
+												} else {
+													// For regular markets, show Yes or No
+													return resolvedOutcome === "yes"
+														? "Yes"
+														: "No";
+												}
+											})();
+											
+											// Determine outcome color
+											const outcomeColor = (() => {
+												if (isVs) {
+													// For VS markets: Green if user won, Red if user lost
+													return wasCorrect
+														? "#16a34a" // Green - user won
+														: "#ef4444"; // Red - user lost
+												} else {
+													// For regular markets: Yes = Green, No = Red
+													return resolvedOutcome === "yes"
+														? "#16a34a"
+														: "#ef4444";
+												}
+											})();
+											
 											return (
 												<div
 													key={`${
@@ -483,10 +538,11 @@ export default function HistoryView({
 													<div
 														style={{
 															textAlign: "center",
-															color: "#fff",
+															color: outcomeColor,
+															fontWeight: 600,
 														}}
 													>
-														{settlementPayoutText}
+														{outcomeText}
 													</div>
 													<div
 														style={{

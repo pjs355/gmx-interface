@@ -131,10 +131,11 @@ export function PredictionDataProvider({
 									"resolved"
 						  )
 						: [];
-					// Provide a cleaned umbrella copy with filtered children for pages that read umbrella.children
+					// Provide a cleaned umbrella copy - keep ORIGINAL children (with tagIds) for image resolution
+					// The original children are lightweight UmbrellaQuestion objects with tagIds, not full markets
 					const cleanedUmbrella = {
 						...umbrella,
-						children: filteredMarkets,
+						// Keep original children with tagIds for logo resolution, don't replace with filteredMarkets
 					};
 					return [
 						key as string,
@@ -165,7 +166,10 @@ export function PredictionDataProvider({
 					resolvedMarketsMap[key] = resolvedMarkets;
 				}
 
-				// Skip umbrellas that have no active markets left
+				// Always add umbrella to cleanedUmbrellas so getUmbrellaById works for resolved-only umbrellas
+				cleanedUmbrellas.push(cleanedUmbrella);
+
+				// Skip market data processing for umbrellas that have no active markets left
 				if (!Array.isArray(markets) || markets.length === 0) {
 					return;
 				}
@@ -183,7 +187,6 @@ export function PredictionDataProvider({
 				}
 				// Placeholder for orderbooks; keep empty object to avoid undefined lookups
 				orderbooks[key] = orderbooks[key] || {};
-				cleanedUmbrellas.push(cleanedUmbrella);
 			});
 
 			setUmbrellas(cleanedUmbrellas as any);
