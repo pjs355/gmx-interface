@@ -1,9 +1,7 @@
-import { FloatingPortal, autoUpdate, flip, shift, useFloating } from "@floating-ui/react";
-import { Menu } from "@headlessui/react";
 import { t } from "@lingui/macro";
 import cx from "classnames";
 import { BiChevronDown } from "react-icons/bi";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 import { NestedOption } from "./types";
 
@@ -23,25 +21,36 @@ export default function NestedTab<V extends string | number>({
   qa,
 }: Props<V>) {
   const [isOpen, setIsOpen] = useState(false);
-  
-  const { refs, floatingStyles } = useFloating({
-    middleware: [flip(), shift()],
-    placement: "bottom-end",
-    whileElementsMounted: autoUpdate,
-  });
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedSubOption = option.options.find((opt) => opt.value === selectedValue);
-
   const label = selectedSubOption ? selectedSubOption.label || selectedSubOption.value : t`More`;
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
   return (
-    <Menu as="div" className="Tab-option flex items-center justify-center gap-8">
-      <Menu.Button
-        as="div"
-        className={cx("flex cursor-pointer items-center justify-center text-white", commonOptionClassname)}
-        ref={refs.setReference}
+    <div className="Tab-option flex items-center justify-center gap-8">
+      <div
+        ref={dropdownRef}
+        className={cx("flex cursor-pointer items-center justify-center text-white relative", commonOptionClassname)}
         data-qa={qa ? `${qa}-tab-${option.label}` : undefined}
         onClick={() => setIsOpen(!isOpen)}
+        style={{ position: 'relative', display: 'inline-flex' }}
       >
         {label}
 
@@ -52,51 +61,53 @@ export default function NestedTab<V extends string | number>({
             transition: 'transform 0.2s ease-in-out'
           }}
         />
-      </Menu.Button>
-      <FloatingPortal>
-        <Menu.Items
-          as="div"
-          className="z-[1105] mt-8 rounded-4 border border-gray-800 bg-black outline-none trade-mode-menu"
-          ref={refs.setFloating}
-          style={{
-            ...floatingStyles,
-            backgroundColor: 'black',
-            borderRadius: 8,
-            paddingTop: 8,
-            paddingBottom: 8,
-            minWidth: 160,
-            zIndex: 9999,
-            position: 'absolute',
-          }}
-        >
-          {option.options.map((subOpt) => {
-            return (
-              <Menu.Item
-                as="div"
-                key={subOpt.value}
-                className={cx(
-                  "text-body-medium cursor-pointer text-white hover:text-white trade-mode-menu-item",
-                  { "text-white": subOpt.value === selectedValue }
-                )}
-                style={{
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  paddingTop: 12,
-                  paddingBottom: 12,
-                  paddingLeft: 16,
-                  paddingRight: 16,
-                  minHeight: 44,
-                  borderRadius: 6,
-                }}
-                onClick={() => onOptionClick?.(subOpt.value)}
-              >
-                {subOpt.label ?? subOpt.value}
-              </Menu.Item>
-            );
-          })}
-        </Menu.Items>
-      </FloatingPortal>
-    </Menu>
+        
+        {isOpen && (
+          <div
+            className="absolute z-[1105] rounded-lg border border-gray-800 bg-black outline-none trade-mode-menu"
+            style={{
+              backgroundColor: 'black',
+              borderRadius: 8,
+              paddingTop: 2,
+              paddingBottom: 2,
+              width: 'auto',
+              minWidth: '100%',
+              whiteSpace: 'nowrap',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              top: '100%',
+            }}
+          >
+            {option.options.map((subOpt) => {
+              return (
+                <div
+                  key={subOpt.value}
+                  className={cx(
+                    "text-body-medium cursor-pointer text-white hover:text-white trade-mode-menu-item",
+                    { "text-white": subOpt.value === selectedValue }
+                  )}
+                  style={{
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    paddingTop: 8,
+                    paddingBottom: 8,
+                    paddingLeft: 12,
+                    paddingRight: 12,
+                    borderRadius: 4,
+                  }}
+                  onClick={() => {
+                    onOptionClick?.(subOpt.value);
+                    setIsOpen(false);
+                  }}
+                >
+                  {subOpt.label ?? subOpt.value}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
