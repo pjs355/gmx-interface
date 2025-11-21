@@ -159,6 +159,21 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return null;
 	}, [tags]);
 
+	const dailyTagId = useMemo(() => {
+		for (let index = 0; index < tags.length; index += 1) {
+			const tag = tags[index];
+			const normalizedLabel = normalizeTagLabel(tag.label);
+			// Check both normalized label and slug
+			if (
+				normalizedLabel === "DAILY" ||
+				tag.slug?.toLowerCase() === "daily"
+			) {
+				return tag._id;
+			}
+		}
+		return null;
+	}, [tags]);
+
 	const isEsportsUmbrella = useMemo(() => {
 		if (esportsTagId === null) {
 			return false;
@@ -179,37 +194,24 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return false;
 	}, [esportsTagId, umbrella.children]);
 
-	const esportsTitleParts = useMemo(() => {
-		const result = {
-			headline: umbrella.displayName,
-			subtitle: "",
-		};
-		if (!isEsportsUmbrella) {
-			return result;
+	const isDailyUmbrella = useMemo(() => {
+		if (dailyTagId === null) {
+			return false;
 		}
-		const segments = umbrella.displayName.split("-").map((segment) => {
-			return segment.trim();
-		});
-		if (segments.length > 0) {
-			const primary = segments[0];
-			if (primary.length > 0) {
-				result.headline = primary;
-			}
+		// Use originalChildren if available (has tagIds), otherwise fall back to children
+		const children =
+			(umbrella as any).originalChildren || umbrella.children || [];
+		if (!Array.isArray(children) || children.length === 0) {
+			return false;
 		}
-		if (segments.length > 1) {
-			const remaining: string[] = [];
-			for (let index = 1; index < segments.length; index += 1) {
-				const candidate = segments[index];
-				if (candidate.length > 0) {
-					remaining.push(candidate);
-				}
-			}
-			if (remaining.length > 0) {
-				result.subtitle = remaining.join(" - ");
-			}
+		// Check if first child has daily tag
+		const firstChild = children[0];
+		const tagIds = firstChild?.tagIds;
+		if (Array.isArray(tagIds)) {
+			return tagIds.includes(dailyTagId);
 		}
-		return result;
-	}, [isEsportsUmbrella, umbrella.displayName]);
+		return false;
+	}, [dailyTagId, umbrella]);
 
 	const teamLogos = useMemo(() => {
 		const mappings = umbrella.teamMappings;
@@ -243,10 +245,14 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return resolved;
 	}, [umbrella.teamMappings, umbrella.game]);
 
-	const eventDate = useMemo(
-		() => resolveUmbrellaEventDate(umbrella),
-		[umbrella]
-	);
+	// Get eventDate for both esports and daily
+	const eventDate = useMemo(() => {
+		if (!isEsportsUmbrella && !isDailyUmbrella) {
+			return null;
+		}
+		return resolveUmbrellaEventDate(umbrella);
+	}, [isEsportsUmbrella, isDailyUmbrella, umbrella]);
+
 	const eventDateMs = useMemo(() => {
 		if (eventDate === null) {
 			return null;
@@ -254,8 +260,246 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return eventDate.getTime();
 	}, [eventDate]);
 
+	// Format date for daily markets: "Month, Day" (e.g., "January, 15")
+	// Use UTC date to avoid timezone conversion issues
+	const dailyDateText = useMemo(() => {
+		if (!isDailyUmbrella || !eventDate) {
+			return null;
+		}
+		// Get UTC date parts to avoid timezone conversion
+		const utcMonth = eventDate.getUTCMonth();
+		const utcDay = eventDate.getUTCDate();
+		const utcYear = eventDate.getUTCFullYear();
+		const utcDate = new Date(Date.UTC(utcYear, utcMonth, utcDay));
+		return utcDate.toLocaleDateString("en-US", {
+			month: "long",
+			day: "numeric",
+			timeZone: "UTC",
+		});
+	}, [isDailyUmbrella, eventDate]);
+
+	// Process title for daily markets: remove date patterns
+	const dailyTitleWithoutDate = useMemo(() => {
+		if (!isDailyUmbrella) {
+			return umbrella.displayName;
+		}
+		let title = umbrella.displayName;
+		// Remove common date patterns from title
+		if (eventDate) {
+			// Get UTC date parts (what should be displayed)
+			const utcMonth = eventDate.getUTCMonth(); // 0-11
+			const utcDay = eventDate.getUTCDate();
+			const utcYear = eventDate.getUTCFullYear();
+			const utcDate = new Date(Date.UTC(utcYear, utcMonth, utcDay));
+
+			// Also get local date parts (what might be in title from timezone conversion)
+			const month = eventDate.getMonth();
+			const day = eventDate.getDate();
+			const year = eventDate.getFullYear();
+
+			// Try to remove all possible date formats (both UTC and local)
+			const datePatterns = [
+				// UTC date formats (what should be displayed)
+				utcDate.toLocaleDateString("en-US", {
+					month: "long",
+					day: "numeric",
+					timeZone: "UTC",
+				}), // "January 15"
+				utcDate.toLocaleDateString("en-US", {
+					month: "long",
+					day: "numeric",
+					year: "numeric",
+					timeZone: "UTC",
+				}), // "January 15, 2024"
+				utcDate.toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+					timeZone: "UTC",
+				}), // "Nov 15"
+				utcDate.toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+					year: "numeric",
+					timeZone: "UTC",
+				}), // "Nov 15, 2024"
+				// Formats without spaces (e.g., "Nov20", "Nov20")
+				`${utcDate.toLocaleDateString("en-US", {
+					month: "short",
+					timeZone: "UTC",
+				})}${utcDay}`, // "Nov20"
+				`${utcDate.toLocaleDateString("en-US", {
+					month: "long",
+					timeZone: "UTC",
+				})}${utcDay}`, // "November20"
+				// Local date formats (what might be in title from timezone conversion)
+				eventDate.toLocaleDateString("en-US", {
+					month: "long",
+					day: "numeric",
+				}), // "January 15"
+				eventDate.toLocaleDateString("en-US", {
+					month: "long",
+					day: "numeric",
+					year: "numeric",
+				}), // "January 15, 2024"
+				eventDate.toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+				}), // "Nov 15"
+				eventDate.toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+					year: "numeric",
+				}), // "Nov 15, 2024"
+				// Formats without spaces (e.g., "Nov20")
+				`${eventDate.toLocaleDateString("en-US", {
+					month: "short",
+				})}${day}`, // "Nov20"
+				`${eventDate.toLocaleDateString("en-US", {
+					month: "long",
+				})}${day}`, // "November20"
+				// Numeric formats
+				eventDate.toLocaleDateString("en-US", {
+					month: "numeric",
+					day: "numeric",
+				}), // "1/15"
+				eventDate.toLocaleDateString("en-US", {
+					month: "numeric",
+					day: "numeric",
+					year: "numeric",
+				}), // "1/15/2024"
+				eventDate.toLocaleDateString("en-US", {
+					month: "2-digit",
+					day: "2-digit",
+				}), // "01/15"
+				eventDate.toLocaleDateString("en-US", {
+					month: "2-digit",
+					day: "2-digit",
+					year: "numeric",
+				}), // "01/15/2024"
+				// Manual patterns (both UTC and local)
+				`${month + 1}/${day}`,
+				`${month + 1}/${day}/${year}`,
+				`${utcMonth + 1}/${utcDay}`,
+				`${utcMonth + 1}/${utcDay}/${utcYear}`,
+				`${String(month + 1).padStart(2, "0")}/${String(day).padStart(
+					2,
+					"0"
+				)}`,
+				`${String(month + 1).padStart(2, "0")}/${String(day).padStart(
+					2,
+					"0"
+				)}/${year}`,
+				`${String(utcMonth + 1).padStart(2, "0")}/${String(
+					utcDay
+				).padStart(2, "0")}`,
+				`${String(utcMonth + 1).padStart(2, "0")}/${String(
+					utcDay
+				).padStart(2, "0")}/${utcYear}`,
+			];
+
+			// Remove each date pattern from the title (case-insensitive)
+			for (const pattern of datePatterns) {
+				if (pattern) {
+					// Escape special characters for regex
+					const escapedPattern = pattern.replace(
+						/[.*+?^${}()|[\]\\]/g,
+						"\\$&"
+					);
+					const regex = new RegExp(escapedPattern, "gi");
+					title = title.replace(regex, "");
+				}
+			}
+
+			// Clean up separators and extra spaces
+			// Remove patterns like " - January 15" or "January 15 - " or ", January 15"
+			title = title.replace(/\s*[-–—,]\s*$/, ""); // Remove trailing separator
+			title = title.replace(/^\s*[-–—,]\s*/, ""); // Remove leading separator
+			title = title.replace(/\s*[-–—,]\s+/g, " "); // Replace separator with space
+			title = title.replace(/\s+/g, " "); // Normalize multiple spaces to single space
+			title = title.trim();
+		}
+		return title || umbrella.displayName;
+	}, [isDailyUmbrella, umbrella.displayName, eventDate]);
+
+	// Process title parts for esports and daily markets
+	const esportsTitleParts = useMemo(() => {
+		const result = {
+			headline: isDailyUmbrella
+				? dailyTitleWithoutDate
+				: umbrella.displayName,
+			subtitle: "",
+		};
+		if (!isEsportsUmbrella) {
+			return result;
+		}
+		const segments = umbrella.displayName.split("-").map((segment) => {
+			return segment.trim();
+		});
+		if (segments.length > 0) {
+			const primary = segments[0];
+			if (primary.length > 0) {
+				result.headline = primary;
+			}
+		}
+		if (segments.length > 1) {
+			const remaining: string[] = [];
+			for (let index = 1; index < segments.length; index += 1) {
+				const candidate = segments[index];
+				if (candidate.length > 0) {
+					remaining.push(candidate);
+				}
+			}
+			if (remaining.length > 0) {
+				result.subtitle = remaining.join(" - ");
+			}
+		}
+		return result;
+	}, [
+		isEsportsUmbrella,
+		umbrella.displayName,
+		isDailyUmbrella,
+		dailyTitleWithoutDate,
+	]);
+
+	// For daily markets, calculate endDate as 23hrs 59min after eventDate
+	const endDate = useMemo(() => {
+		if (!isDailyUmbrella || eventDate === null) {
+			return null;
+		}
+		// Add 23 hours and 59 minutes
+		const end = new Date(eventDate);
+		end.setHours(end.getHours() + 23);
+		end.setMinutes(end.getMinutes() + 59);
+		return end;
+	}, [isDailyUmbrella, eventDate]);
+
+	const endDateMs = useMemo(() => {
+		if (endDate === null) {
+			return null;
+		}
+		return endDate.getTime();
+	}, [endDate]);
+
+	// Use endDate for daily, eventDate for esports
+	const countdownDate = useMemo(() => {
+		if (isDailyUmbrella && endDate !== null) {
+			return endDate;
+		}
+		if (isEsportsUmbrella && eventDate !== null) {
+			return eventDate;
+		}
+		return null;
+	}, [isDailyUmbrella, isEsportsUmbrella, endDate, eventDate]);
+
+	const countdownDateMs = useMemo(() => {
+		if (countdownDate === null) {
+			return null;
+		}
+		return countdownDate.getTime();
+	}, [countdownDate]);
+
 	useEffect(() => {
-		if (eventDateMs === null) {
+		if (countdownDateMs === null) {
 			return;
 		}
 		const interval = window.setInterval(() => {
@@ -264,7 +508,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return () => {
 			window.clearInterval(interval);
 		};
-	}, [eventDateMs]);
+	}, [countdownDateMs]);
 
 	// Set up image URLs when umbrella changes
 	useEffect(() => {
@@ -442,10 +686,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const showPlaceholderIcon = !shouldShowImage && !showTeamLogos;
 	const subtitleContent = isEsportsUmbrella ? esportsTitleParts.subtitle : "";
 	const shouldRenderSubtitle = subtitleContent.length > 0;
-	const hasEventDate = eventDateMs !== null;
+	const hasCountdown = countdownDateMs !== null;
 
+	// Live logic only for esports (based on eventDate)
 	let isLive = false;
-	if (eventDateMs !== null) {
+	if (isEsportsUmbrella && eventDateMs !== null) {
 		if (now >= eventDateMs) {
 			const elapsed = now - eventDateMs;
 			if (elapsed <= LIVE_WINDOW_MS) {
@@ -454,16 +699,26 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 	}
 
+	// Upcoming logic: for esports use eventDate, for daily use endDate
 	let isUpcoming = false;
-	if (eventDateMs !== null) {
+	if (isEsportsUmbrella && eventDateMs !== null) {
 		if (now < eventDateMs) {
+			isUpcoming = true;
+		}
+	} else if (isDailyUmbrella && endDateMs !== null) {
+		if (now < endDateMs) {
 			isUpcoming = true;
 		}
 	}
 
+	// Ended logic
 	let isEnded = false;
-	if (eventDateMs !== null) {
+	if (isEsportsUmbrella && eventDateMs !== null) {
 		if (!isLive && !isUpcoming) {
+			isEnded = true;
+		}
+	} else if (isDailyUmbrella && endDateMs !== null) {
+		if (now >= endDateMs) {
 			isEnded = true;
 		}
 	}
@@ -476,10 +731,22 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				<span className="prediction-live-text">Live</span>
 			</div>
 		);
-	} else if (isUpcoming) {
+	} else if (isDailyUmbrella && endDate !== null) {
+		// For daily markets, always show countdown timer if endDate exists
+		// CountdownTimer will handle showing "Ended" when time has passed
 		statusContent = (
 			<CountdownTimer
-				target={eventDate as Date}
+				target={endDate}
+				className="prediction-countdown"
+				expiredLabel="Ended"
+				showZeroDays={false}
+			/>
+		);
+	} else if (isUpcoming && countdownDate !== null) {
+		// For esports that are upcoming
+		statusContent = (
+			<CountdownTimer
+				target={countdownDate}
 				className="prediction-countdown"
 				expiredLabel="Ended"
 				showZeroDays={false}
@@ -568,6 +835,37 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 							transition: "color 0.2s ease",
 						}}
 					>
+						{isDailyUmbrella && dailyDateText ? (
+							<span
+								style={{
+									display: "block",
+									fontSize: "14px",
+									color: "#9ca3af",
+									marginBottom: "4px",
+									fontWeight: 400,
+								}}
+							>
+								{dailyDateText}
+								<span
+									style={{
+										display: "inline-block",
+										marginLeft: "8px",
+										marginTop: "-4px",
+										padding: "2px 8px",
+										fontSize: "0.75em",
+										fontWeight: 600,
+										color: "#000000",
+										backgroundColor: "#fbbf24",
+										borderRadius: "12px",
+										letterSpacing: "0.5px",
+										verticalAlign: "middle",
+										lineHeight: 1,
+									}}
+								>
+									Daily
+								</span>
+							</span>
+						) : null}
 						{shouldRenderSubtitle ? (
 							<span className="prediction-title-prefix">
 								{subtitleContent}
@@ -598,9 +896,10 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			>
 				{renderActions()}
 			</div>
-			{hasEventDate && statusContent !== null ? (
+			{statusContent !== null ? (
 				<div className="prediction-card-footer">
-					Starts In:&nbsp;&nbsp; {statusContent}
+					{isDailyUmbrella ? "Ends In:" : "Starts In:"}
+					&nbsp;&nbsp; {statusContent}
 				</div>
 			) : null}
 		</div>

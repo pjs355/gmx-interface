@@ -116,3 +116,33 @@
 		padding-right: 12px;
 	}
 }
+
+.PrivacyPolicy-modal {
+	background-color: #000000 !important;
+	border: 2px solid #ffffff !important;
+	width: 80% !important;
+	margin: 0 auto !important;
+}
+
+.PrivacyPolicy-modal .Modal-header-wrapper {
+	background-color: #000000;
+	margin: 0 !important;
+	padding: 2rem 2rem 0 2rem !important;
+}
+
+.PrivacyPolicy-modal .Modal-title {
+	color: #ffffff !important;
+	font-size: 2rem !important;
+	font-weight: 700 !important;
+}
+
+.PrivacyPolicy-modal .Modal-body {
+	margin: 0 !important;
+	padding: 2rem !important;
+}
+
+@media (max-width: 768px) {
+	.PrivacyPolicy-modal {
+		width: 90% !important;
+	}
+}

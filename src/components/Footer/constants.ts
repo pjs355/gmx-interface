@@ -11,6 +11,7 @@ type Link = {
 	link: string;
 	external?: boolean;
 	isAppLink?: boolean;
+	opensModal?: boolean;
 };
 
 type SocialLink = {
@@ -23,6 +24,7 @@ export function getFooterLinks(isHome: boolean) {
 	const FOOTER_LINKS: { home: Link[]; app: Link[] } = {
 		home: [],
 		app: [
+			{ label: "Privacy Policy", link: "privacy-policy", opensModal: true },
 			// { label: t`Media Kit`, link: "https://docs.gmx.io/docs/community/media-kit", external: true },
 			// { label: "Jobs", link: "/jobs" },
 		],
