@@ -102,17 +102,65 @@ export default function Prizes() {
 			</div>
 		</div>
 
-			{/* Full Width Disclaimer Section */}
-			<div className="prizes-disclaimer-section">
-				<div className="prizes-disclaimer-content">
-					<div className="prizes-disclaimer-title">
-						OFFICIAL RULES & ELIGIBILITY
-					</div>
-					<div>
-						Participants must be 18 years of age or older and reside in a jurisdiction where participation is legally permitted. Prizes, eligibility criteria, and distribution methods are subject to official contest rules and regulations. Any user suspected of cheating, fraud, or tampering with the contest in any way will be immediately disqualified and ineligible to receive any prizes. In the event that a winner is unable to receive a physical prize due to geographic restrictions, legal limitations, or any other reason beyond their control, the winner will be provided with the equivalent cash value of the prize. This promotion is in no way sponsored, endorsed, administered by, or associated with Nintendo Co., Ltd., Valve Corporation, or any of their respective subsidiaries or affiliates. All trademarks and product names are the property of their respective owners.
-					</div>
+		{/* Full Width Disclaimer Section */}
+		<div className="prizes-disclaimer-section">
+			<div className="prizes-disclaimer-content">
+				<div className="prizes-disclaimer-title">
+					Official Giveaway Rules and Terms
+				</div>
+				<div>
+					<p>
+						Participants must be 18 years of age or older and reside in a jurisdiction where participation is legally permitted. Entry is void where prohibited by law, including but not limited to countries or territories subject to U.S. or international sanctions, such as Cuba, Iran, North Korea, Syria, Russia, Belarus, and Crimea (Ukraine).
+					</p>
+					<p>
+						The LevelUp Beta Launch Giveaway ends on <strong>December 15, 2025, at 5:00 PM EST</strong>.
+						All prizes, eligibility criteria, and distribution methods are subject to these official contest rules.
+					</p>
+					
+					<h3>Determination of Winners</h3>
+					<p>
+						Winners are determined based on their prediction profit and loss during the competition period. The leaderboard ranks participants by highest overall profit ("Most Profitable Trader"). In the case of a tie, winners will be determined by the earliest submission time of their final prediction.
+					</p>
+					
+					<h3>Prize Information</h3>
+					<p>Prizes include:</p>
+					<ul>
+						<li>1 × Nintendo Switch 2</li>
+						<li>3 × $50 Steam Gift Cards</li>
+						<li>5 × $20 Steam Gift Cards</li>
+					</ul>
+					<p>
+						If a winner cannot receive a physical or digital prize due to legal restrictions, shipping limitations, or other factors beyond LevelUp's control, the winner will receive the cash equivalent of that prize at LevelUp's sole discretion. The cash equivalent will be sent to the winner's LevelUp wallet in the form of USDC on Base.
+					</p>
+					
+					<h3>Eligibility and Verification</h3>
+					<ul>
+						<li>Participants must have a verified LevelUp account with a valid email address.</li>
+						<li>The email associated with your LevelUp account must be used to claim any prize.</li>
+						<li>No other email address or third-party contact will be accepted for verification.</li>
+						<li>Winners must respond to LevelUp's prize notification email within 90 days of the competition's conclusion. Failure to respond within that timeframe will result in forfeiture of the prize.</li>
+					</ul>
+					<p>
+						Any user suspected of cheating, fraud, tampering, multiple account use, or automated participation will be disqualified and rendered ineligible to receive any prize.
+					</p>
+					
+					<h3>Legal and Liability Terms</h3>
+					<p>By entering, participants agree that LevelUp and its affiliates are not liable for:</p>
+					<ul>
+						<li>Technical issues, server downtime, or data errors affecting entries</li>
+						<li>Lost, misdirected, or undeliverable communications</li>
+						<li>Any damages, direct or consequential, arising from participation or prize use</li>
+					</ul>
+					<p>
+						LevelUp reserves the right to modify, suspend, or cancel the giveaway at any time if circumstances beyond its control compromise the fairness or integrity of the competition.
+					</p>
+					<p>
+						This promotion is in no way sponsored, endorsed, administered by, or associated with Nintendo Co., Ltd., Valve Corporation, or any of their subsidiaries or affiliates.
+						All trademarks and product names belong to their respective owners.
+					</p>
 				</div>
 			</div>
+		</div>
 		</div>
 	);
 }

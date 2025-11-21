@@ -121,6 +121,7 @@ export default function HistoryCardView({
 								resolvedMarkets[0]?.umbrellaName ||
 								`Umbrella ${umbrellaId.slice(0, 8)}...`,
 							children: [],
+							originalChildren: [], // For image resolution
 							createdAt: new Date().toISOString(),
 							updatedAt: new Date().toISOString(),
 							__v: 0,

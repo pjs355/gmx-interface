@@ -131,11 +131,12 @@ export function PredictionDataProvider({
 									"resolved"
 						  )
 						: [];
-					// Provide a cleaned umbrella copy - keep ORIGINAL children (with tagIds) for image resolution
-					// The original children are lightweight UmbrellaQuestion objects with tagIds, not full markets
+					// Provide a cleaned umbrella copy with filtered children for backward compatibility
+					// Store original children separately for image/tag resolution
 					const cleanedUmbrella = {
 						...umbrella,
-						// Keep original children with tagIds for logo resolution, don't replace with filteredMarkets
+						children: filteredMarkets, // Filtered for backward compatibility with existing components
+						originalChildren: markets, // Keep original unfiltered children for image resolution (has tagIds)
 					};
 					return [
 						key as string,

@@ -253,6 +253,7 @@ export default function Positions() {
 								firstMarket?.umbrellaName ||
 								`Umbrella ${umbrellaId.slice(0, 8)}...`, // Use umbrella ID, NOT market's displayName
 							children: resolvedMarkets,
+							originalChildren: resolvedMarkets, // For image resolution
 							createdAt: new Date().toISOString(),
 							updatedAt: new Date().toISOString(),
 							__v: 0,
