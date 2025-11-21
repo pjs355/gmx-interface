@@ -131,10 +131,12 @@ export function PredictionDataProvider({
 									"resolved"
 						  )
 						: [];
-					// Provide a cleaned umbrella copy with filtered children for pages that read umbrella.children
+					// Provide a cleaned umbrella copy with filtered children for backward compatibility
+					// Store original children separately for image/tag resolution
 					const cleanedUmbrella = {
 						...umbrella,
-						children: filteredMarkets,
+						children: filteredMarkets, // Filtered for backward compatibility with existing components
+						originalChildren: markets, // Keep original unfiltered children for image resolution (has tagIds)
 					};
 					return [
 						key as string,
@@ -165,7 +167,10 @@ export function PredictionDataProvider({
 					resolvedMarketsMap[key] = resolvedMarkets;
 				}
 
-				// Skip umbrellas that have no active markets left
+				// Always add umbrella to cleanedUmbrellas so getUmbrellaById works for resolved-only umbrellas
+				cleanedUmbrellas.push(cleanedUmbrella);
+
+				// Skip market data processing for umbrellas that have no active markets left
 				if (!Array.isArray(markets) || markets.length === 0) {
 					return;
 				}
@@ -183,7 +188,6 @@ export function PredictionDataProvider({
 				}
 				// Placeholder for orderbooks; keep empty object to avoid undefined lookups
 				orderbooks[key] = orderbooks[key] || {};
-				cleanedUmbrellas.push(cleanedUmbrella);
 			});
 
 			setUmbrellas(cleanedUmbrellas as any);

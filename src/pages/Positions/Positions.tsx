@@ -251,13 +251,17 @@ export default function Positions() {
 							_id: umbrellaId,
 							displayName:
 								firstMarket?.umbrellaName ||
-								firstMarket?.displayName ||
-								`Umbrella ${umbrellaId}`,
+								`Umbrella ${umbrellaId.slice(0, 8)}...`, // Use umbrella ID, NOT market's displayName
 							children: resolvedMarkets,
+							originalChildren: resolvedMarkets, // For image resolution
 							createdAt: new Date().toISOString(),
 							updatedAt: new Date().toISOString(),
 							__v: 0,
 						} as Umbrella;
+					} else {
+						console.log(
+							`✅ DEBUG: Found umbrella for ID ${umbrellaId}: ${umbrella.displayName}, children count: ${umbrella.children?.length || 0}`
+						);
 					}
 
 					console.log(

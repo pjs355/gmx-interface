@@ -94,7 +94,8 @@ export function resolveLogoWithPriority(
 
 export function collectTagsFromUmbrella(umbrella: any): string[] {
 	const collected: string[] = [];
-	const children: any[] | undefined = umbrella && (umbrella as any).children;
+	// Use originalChildren (unfiltered, has all tagIds) if available, otherwise fall back to children
+	const children: any[] | undefined = umbrella && ((umbrella as any).originalChildren || (umbrella as any).children);
 	if (!Array.isArray(children)) return collected;
 	
 	for (const child of children) {
@@ -129,7 +130,8 @@ export function getTagImageFromUmbrella(
 	umbrella: any,
 	tags: Array<{ _id: string; label: string; imageUrl?: string }>
 ): string | null {
-	const children: any[] | undefined = umbrella && (umbrella as any).children;
+	// Use originalChildren (unfiltered, has all tagIds) if available, otherwise fall back to children
+	const children: any[] | undefined = umbrella && ((umbrella as any).originalChildren || (umbrella as any).children);
 	if (!Array.isArray(children) || children.length === 0) return null;
 
 	// Check all children for tagIds
@@ -159,7 +161,8 @@ export function getTagLabelsFromUmbrella(
 	tags: Array<{ _id: string; label: string; imageUrl?: string }>
 ): string[] {
 	const labels: string[] = [];
-	const children: any[] | undefined = umbrella && (umbrella as any).children;
+	// Use originalChildren (unfiltered, has all tagIds) if available, otherwise fall back to children
+	const children: any[] | undefined = umbrella && ((umbrella as any).originalChildren || (umbrella as any).children);
 	if (!Array.isArray(children)) return labels;
 
 	for (const child of children) {

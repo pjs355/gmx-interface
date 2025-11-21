@@ -63,6 +63,7 @@ export default function HistoryCardView({
 	orders: any[];
 	resolvedMarketsByUmbrella: Record<string, any[]>;
 }) {
+	const { umbrellas } = usePredictionData();
 	const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
 	const toggleCard = (cardId: string) => {
@@ -89,11 +90,14 @@ export default function HistoryCardView({
 						market._id || market.questionId || market.marketId;
 					if (!marketId) return;
 
-					const finalAmounts = getFinalAmount(orders, marketId);
-					const hasTradingHistory =
-						finalAmounts.yesShares > 0 || finalAmounts.noShares > 0;
+					// Check if user has any orders for this market (includes past trades even if position is closed/claimed)
+					const hasOrders = orders.some(
+						(order) => order.questionId === marketId
+					);
 
-					if (hasTradingHistory) {
+					if (hasOrders) {
+						// Get final amounts to display (will be 0 if claimed, but we still show the market)
+						const finalAmounts = getFinalAmount(orders, marketId);
 						const yesShares = finalAmounts.yesShares;
 						const noShares = finalAmounts.noShares;
 
@@ -106,16 +110,23 @@ export default function HistoryCardView({
 				});
 
 				if (marketsWithHistory.length > 0) {
-					const umbrella = {
-						_id: umbrellaId,
-						displayName:
-							resolvedMarkets[0]?.umbrellaName ||
-							resolvedMarkets[0]?.displayName ||
-							`Umbrella ${umbrellaId}`,
-						createdAt: new Date().toISOString(),
-						updatedAt: new Date().toISOString(),
-						__v: 0,
-					};
+					// Find the actual umbrella object for this ID (with children/tagIds for images)
+					let umbrella = umbrellas.find((u) => u._id === umbrellaId);
+					
+					// If not found, create a basic umbrella object as fallback
+					if (!umbrella) {
+						umbrella = {
+							_id: umbrellaId,
+							displayName:
+								resolvedMarkets[0]?.umbrellaName ||
+								`Umbrella ${umbrellaId.slice(0, 8)}...`,
+							children: [],
+							originalChildren: [], // For image resolution
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+							__v: 0,
+						};
+					}
 
 					filtered.push({ umbrella, markets: marketsWithHistory });
 				}
@@ -123,7 +134,7 @@ export default function HistoryCardView({
 		);
 
 		return filtered;
-	}, [resolvedMarketsByUmbrella, orders]);
+	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
 
 	return (
 		<div className="flex flex-col gap-12">
@@ -164,13 +175,22 @@ export default function HistoryCardView({
 								(market as any).resolvedOutcome || ""
 							).toLowerCase();
 
+							// Determine which sides the user traded on (check orders, not just current shares)
+							const userYesOrders = qid ? orders.filter(
+								(order) => order.questionId === qid && order.outcome?.toLowerCase() === "yes"
+							) : [];
+							const userNoOrders = qid ? orders.filter(
+								(order) => order.questionId === qid && order.outcome?.toLowerCase() === "no"
+							) : [];
+							
 							const rows: {
 								side: "Yes" | "No";
 								amount: string;
 							}[] = [];
-							if (yesNum > 0)
+							// Show a row if user has current shares OR has traded on that side
+							if (yesNum > 0 || userYesOrders.length > 0)
 								rows.push({ side: "Yes", amount: yes });
-							if (noNum > 0)
+							if (noNum > 0 || userNoOrders.length > 0)
 								rows.push({ side: "No", amount: no });
 
 							return rows.map(({ side, amount }) => {
@@ -208,8 +228,6 @@ export default function HistoryCardView({
 										resolvedOutcome === "yes") ||
 									(side === "No" && resolvedOutcome === "no");
 								const settlementPayout = wasCorrect ? 1 : 0;
-								const settlementPayoutText =
-									settlementPayout === 1 ? "$1" : "$0";
 
 								const totalPayout =
 									finalShares * settlementPayout;
@@ -291,6 +309,36 @@ export default function HistoryCardView({
 									.map((s: string) => s.trim())
 									.filter(Boolean);
 								const isVs = parts.length === 2;
+								
+								// Determine outcome text
+								const outcomeText = (() => {
+									if (isVs) {
+										// For VS markets, show the winning team name
+										return resolvedOutcome === "yes"
+											? parts[0]
+											: parts[1];
+									} else {
+										// For regular markets, show Yes or No
+										return resolvedOutcome === "yes"
+											? "Yes"
+											: "No";
+									}
+								})();
+								
+								// Determine outcome color
+								const outcomeColor = (() => {
+									if (isVs) {
+										// For VS markets: Green if user won, Red if user lost
+										return wasCorrect
+											? "#16a34a" // Green - user won
+											: "#ef4444"; // Red - user lost
+									} else {
+										// For regular markets: Yes = Green, No = Red
+										return resolvedOutcome === "yes"
+											? "#16a34a"
+											: "#ef4444";
+									}
+								})();
 
 								return (
 									<div
@@ -487,18 +535,16 @@ export default function HistoryCardView({
 																fontSize: 13,
 															}}
 														>
-															Settlement Payout
+															Outcome
 														</span>
 														<span
 															style={{
-																color: "#fff",
+																color: outcomeColor,
 																fontSize: 13,
 																fontWeight: 600,
 															}}
 														>
-															{
-																settlementPayoutText
-															}
+															{outcomeText}
 														</span>
 													</div>
 													<div
