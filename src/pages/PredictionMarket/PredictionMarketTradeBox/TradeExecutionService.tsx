@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { predictionMarketService } from "@/services/api/predictionMarketService";
 import type { TradeExecutionParams } from "./types";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
@@ -14,6 +15,8 @@ export function useTradeExecutionService() {
 		ready,
 		refresh,
 	} = useSignerContext();
+	const { getAccessToken } = usePrivy();
+	const { identityToken } = useIdentityToken();
 
 	// Execute a trade (create order, sign, submit)
 	const executeTrade = useCallback(
@@ -355,10 +358,13 @@ export function useTradeExecutionService() {
 					hasSize: Boolean(signedOrder.size),
 				});
 
+				const accessToken = await getAccessToken();
 				const apiResult =
 					await predictionMarketService.submitOrderToAPI(
 						signedOrder,
-						params.marketId
+						params.marketId,
+						accessToken,
+						identityToken || undefined
 					);
 
 				console.log("✅ Order submitted to server:", apiResult);

@@ -137,7 +137,7 @@ export class PredictionMarketService {
 
 			// Submit to your local server
 			console.log("🌐 Submitting order to local server...");
-			const apiResult = await this.submitOrderToAPI(orderData);
+			const apiResult = await this.submitOrderToAPI(orderData, undefined, undefined, undefined);
 
 			console.log(
 				"✅ Order submitted to server successfully:",
@@ -452,7 +452,9 @@ export class PredictionMarketService {
 	// Method to submit order to your local server (PREDICTION MARKETS ONLY)
 	async submitOrderToAPI(
 		order: MarketOrder,
-		questionId?: string
+		questionId?: string,
+		accessToken?: string,
+		identityToken?: string
 	): Promise<any> {
 		console.log(
 			"🌐 Submitting order to API (PREDICTION MARKETS ONLY):",
@@ -478,11 +480,21 @@ export class PredictionMarketService {
 				: `${PRODUCTION_API}/orders`;
 			console.log("🌐 Using endpoint:", endpoint);
 
+			const headers: HeadersInit = {
+				"Content-Type": "application/json",
+			};
+
+			if (accessToken) {
+				headers["Authorization"] = `Bearer ${accessToken}`;
+			}
+
+			if (identityToken) {
+				headers["privy-id-token"] = identityToken;
+			}
+
 			const response = await fetch(endpoint, {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
+				headers,
 				body: JSON.stringify(order),
 			});
 

@@ -13,6 +13,11 @@ import ListSeries from "./components/Series/ListSeries";
 import AddSeries from "./components/Series/AddSeries";
 import ListTeams from "./components/Teams/ListTeams";
 import EditTeam from "./components/Teams/EditTeam";
+import ListProfiles from "./components/Profiles/ListProfiles";
+import ViewProfile from "./components/Profiles/ViewProfile";
+import Stats from "./components/Stats/Stats";
+import ListDailyGames from "./components/DailyGames/ListDailyGames";
+import AddDailyGame from "./components/DailyGames/AddDailyGame";
 import {
 	umbrellaDataService,
 	type Umbrella,
@@ -34,7 +39,12 @@ type AdminView =
 		| "series-list"
 		| "series-add"
 	| "teams-list"
-	| "teams-edit";
+	| "teams-edit"
+	| "profiles-list"
+	| "profiles-view"
+	| "stats"
+	| "daily-games-list"
+	| "daily-games-add";
 
 const DEFAULT_ADMIN_VIEW: AdminView = "markets-list";
 
@@ -50,6 +60,11 @@ const VALID_ADMIN_VIEWS: AdminView[] = [
 	"series-add",
 	"teams-list",
 	"teams-edit",
+	"profiles-list",
+	"profiles-view",
+	"stats",
+	"daily-games-list",
+	"daily-games-add",
 ] as const;
 
 function isValidAdminView(value: string | null): value is AdminView {
@@ -474,6 +489,122 @@ export default function Admin() {
 						</button>
 					</div>
 				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Profiles</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("profiles-list", {
+									umbrellaId: null,
+									teamId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "profiles-list"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							List
+						</button>
+					</div>
+				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Stats</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("stats", {
+									umbrellaId: null,
+									teamId: null,
+									profileId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "stats"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							View
+						</button>
+					</div>
+				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>
+						Daily Games
+					</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("daily-games-list", {
+									umbrellaId: null,
+									teamId: null,
+									profileId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "daily-games-list"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							List
+						</button>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("daily-games-add", {
+									umbrellaId: null,
+									teamId: null,
+									profileId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid white",
+								borderRadius: 6,
+								background:
+									view === "daily-games-add"
+										? "rgba(255,255,255,0.2)"
+										: "transparent",
+								color: "white",
+							}}
+						>
+							Add
+						</button>
+					</div>
+				</div>
 			</div>
 
 			{view === "markets-list" && (
@@ -568,6 +699,56 @@ export default function Admin() {
 						Select a team from the list to edit.
 					</div>
 				)
+			)}
+
+			{view === "profiles-list" && (
+				<ListProfiles
+					onView={(profileId) => {
+						updateView("profiles-view", { profileId });
+					}}
+				/>
+			)}
+
+			{view === "profiles-view" && (
+				<ViewProfile
+					profileId={searchParams.get("profileId") || ""}
+					onBack={() => {
+						updateView("profiles-list", { profileId: null });
+					}}
+				/>
+			)}
+
+			{view === "stats" && <Stats />}
+
+			{view === "daily-games-list" && (
+				<ListDailyGames
+					onAdd={() => {
+						updateView("daily-games-add", {
+							umbrellaId: null,
+							teamId: null,
+							profileId: null,
+						});
+					}}
+				/>
+			)}
+
+			{view === "daily-games-add" && (
+				<AddDailyGame
+					onCreated={() => {
+						updateView("daily-games-list", {
+							umbrellaId: null,
+							teamId: null,
+							profileId: null,
+						});
+					}}
+					onBack={() => {
+						updateView("daily-games-list", {
+							umbrellaId: null,
+							teamId: null,
+							profileId: null,
+						});
+					}}
+				/>
 			)}
 		</div>
 	);

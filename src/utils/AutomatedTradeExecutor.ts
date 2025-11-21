@@ -159,7 +159,9 @@ export class AutomatedTradeExecutor {
 		console.log("🌐 Submitting to API...");
 		const result = await predictionMarketService.submitOrderToAPI(
 			signedOrder,
-			market.questionId || market.marketId
+			market.questionId || market.marketId,
+			undefined,
+			undefined
 		);
 
 		console.log("✅ Trade executed:", result);
