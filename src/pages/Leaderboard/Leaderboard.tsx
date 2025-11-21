@@ -34,7 +34,7 @@ export default function Leaderboard() {
 					typeof getAccessToken === "function"
 						? await getAccessToken()
 						: undefined;
-				const url = `${base}/leaderboard`;
+				const url = `${base}/leaderboard?limit=1000`;
 				console.log("[Leaderboard] Fetching:", { base, url });
 				const resp = await fetch(url, {
 					headers: {
@@ -60,20 +60,91 @@ export default function Leaderboard() {
 					entries = json as any[];
 				}
 
-				const arr: LeaderboardEntry[] = entries.map((e: any) => ({
-					wallet: String(e.wallet || ""),
-					username: e.username ?? null,
-					totalReturnUSD: Number(e.totalReturnUSD || 0),
-					effectiveCostUSD: Number(e.effectiveCostUSD || 0),
-					totalReturnText: String(e.totalReturnText || ""),
-					numTrades: Number(e.numTrades || 0),
-					numMarkets: Number(e.numMarkets || 0),
-					updatedAt: String(e.updatedAt || ""),
-				}));
-				const sorted = [...arr].sort(
+				console.log(
+					"[Leaderboard] Raw entries from API:",
+					entries.length
+				);
+
+				// Map all entries
+				const allEntries: LeaderboardEntry[] = entries.map(
+					(e: any) => ({
+						wallet: String(e.wallet || ""),
+						username: e.username ?? null,
+						totalReturnUSD: Number(e.totalReturnUSD || 0),
+						effectiveCostUSD: Number(e.effectiveCostUSD || 0),
+						totalReturnText: String(e.totalReturnText || ""),
+						numTrades: Number(e.numTrades || 0),
+						numMarkets: Number(e.numMarkets || 0),
+						updatedAt: String(e.updatedAt || ""),
+					})
+				);
+
+				console.log(
+					"[Leaderboard] All mapped entries:",
+					allEntries.length
+				);
+				const negativeCount = allEntries.filter(
+					(e) => e.totalReturnUSD < 0
+				).length;
+				const positiveCount = allEntries.filter(
+					(e) => e.totalReturnUSD >= 0
+				).length;
+				console.log(
+					"[Leaderboard] Negative entries:",
+					negativeCount,
+					"Positive entries:",
+					positiveCount,
+					"Zero entries:",
+					allEntries.filter((e) => e.totalReturnUSD === 0).length
+				);
+				console.log(
+					"[Leaderboard] Entries with 0 trades:",
+					allEntries.filter((e) => e.numTrades === 0).length
+				);
+
+				// Filter out entries with 0 trades
+				const filteredEntries = allEntries.filter(
+					(entry) => entry.numTrades > 0
+				);
+
+				console.log(
+					"[Leaderboard] After filtering numTrades > 0:",
+					filteredEntries.length
+				);
+
+				// Sort by totalReturnUSD (descending)
+				const sorted = [...filteredEntries].sort(
 					(a, b) => b.totalReturnUSD - a.totalReturnUSD
 				);
-				if (mounted) setData(sorted);
+
+				console.log("[Leaderboard] After sorting:", sorted.length);
+				console.log(
+					"[Leaderboard] First 10 totalReturnUSD values:",
+					sorted.slice(0, 10).map((e) => ({
+						totalReturnUSD: e.totalReturnUSD,
+						numTrades: e.numTrades,
+						wallet: e.wallet.slice(0, 8),
+					}))
+				);
+				console.log(
+					"[Leaderboard] Last 10 totalReturnUSD values:",
+					sorted.slice(-10).map((e) => ({
+						totalReturnUSD: e.totalReturnUSD,
+						numTrades: e.numTrades,
+						wallet: e.wallet.slice(0, 8),
+					}))
+				);
+
+				// Limit to top 25 for frontend display
+				const top25 = sorted.slice(0, 25);
+				console.log(
+					"[Leaderboard] Showing top 25 entries (from",
+					sorted.length,
+					"total entries with trades):",
+					top25.length
+				);
+
+				if (mounted) setData(top25);
 			} catch (e: any) {
 				if (mounted) setError(e?.message || String(e));
 			} finally {
@@ -122,7 +193,7 @@ export default function Leaderboard() {
 							Markets
 						</div>
 					</div>
-					{data.slice(0, 25).map((row, idx) => {
+					{data.map((row, idx) => {
 						const position = idx + 1;
 						const rankIcon = getRankIcon(position);
 						const isPositive = row.totalReturnUSD >= 0;
