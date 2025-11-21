@@ -35,31 +35,6 @@ export default function Profile() {
 		}
 	}, [location.search]);
 
-	const linked = Array.isArray(user?.linkedAccounts)
-		? user!.linkedAccounts
-		: [];
-
-	function toDisplayString(input: any): string {
-		if (input == null) return "";
-		if (typeof input === "string") return input;
-		if (typeof input === "number" || typeof input === "boolean")
-			return String(input);
-		if (typeof input === "object") {
-			// Try common nested shapes
-			if (typeof input.address === "string") return input.address;
-			if (typeof input.email === "string") return input.email;
-			if (typeof input.id === "string") return input.id;
-			if (typeof input.subject === "string") return input.subject;
-			if (typeof input.issuer === "string") return input.issuer;
-			try {
-				return JSON.stringify(input);
-			} catch {
-				return String(input);
-			}
-		}
-		return String(input);
-	}
-
 	useEffect(() => {
 		let cancelled = false;
 		async function resolve() {
@@ -115,7 +90,9 @@ export default function Profile() {
 						variant="ghost"
 						onClick={() => setActiveSection("details")}
 						className={`side-btn ${
-							activeSection === "details" ? "selected primary" : ""
+							activeSection === "details"
+								? "selected primary"
+								: ""
 						}`}
 					>
 						Details
@@ -124,7 +101,9 @@ export default function Profile() {
 						variant="ghost"
 						onClick={() => setActiveSection("developers")}
 						className={`side-btn ${
-							activeSection === "developers" ? "selected primary" : ""
+							activeSection === "developers"
+								? "selected primary"
+								: ""
 						}`}
 					>
 						Developers
@@ -133,7 +112,9 @@ export default function Profile() {
 						variant="ghost"
 						onClick={() => setActiveSection("gaming-accounts")}
 						className={`side-btn ${
-							activeSection === "gaming-accounts" ? "selected primary" : ""
+							activeSection === "gaming-accounts"
+								? "selected primary"
+								: ""
 						}`}
 					>
 						Gaming Accounts
