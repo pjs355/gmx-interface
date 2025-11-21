@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useAnimatedDots } from "../../../../hooks/useAnimatedDots";
 
 export function useButtonState({
   authenticated,
@@ -16,6 +17,8 @@ export function useButtonState({
   checkSufficientShares,
   market,
 }: any) {
+  const animatedDots = useAnimatedDots(400);
+  
   return useMemo(() => {
     if (!authenticated) {
       return { text: "Log In or Sign Up", disabled: false, onClick: () => login() };
@@ -30,7 +33,7 @@ export function useButtonState({
       return { text: "Checking Approvals...", disabled: true, onClick: () => {} };
     }
     if (!approvalState.isApproved) {
-      return { text: approvalState.isApproving ? "Approving..." : "Approve Tokens", disabled: approvalState.isApproving, onClick: approveToken };
+      return { text: approvalState.isApproving ? `Approving${animatedDots}` : "Approve Trading", disabled: approvalState.isApproving, onClick: approveToken };
     }
     if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) {
       return { text: "Enter amount", disabled: true, onClick: () => {} };
@@ -65,7 +68,7 @@ export function useButtonState({
     }
     
     return { text: buttonText, disabled: false, onClick: handleTrade };
-  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market]);
+  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots]);
 }
 
 
