@@ -70,9 +70,9 @@ export default function Leaderboard() {
 					numMarkets: Number(e.numMarkets || 0),
 					updatedAt: String(e.updatedAt || ""),
 				}));
-				const sorted = [...arr].sort(
-					(a, b) => b.totalReturnUSD - a.totalReturnUSD
-				);
+				const sorted = [...arr]
+					.filter((entry) => entry.numTrades > 0)
+					.sort((a, b) => b.totalReturnUSD - a.totalReturnUSD);
 				if (mounted) setData(sorted);
 			} catch (e: any) {
 				if (mounted) setError(e?.message || String(e));
