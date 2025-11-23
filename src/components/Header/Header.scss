@@ -221,10 +221,18 @@ html.drawer-open {
 	text-decoration: none;
 	transition: background-color 0.15s ease-in-out;
 	flex: 1;
+	cursor: pointer;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
 }
 
 .mobile-metric-box:hover {
 	background-color: #2a2a2a;
+}
+
+.mobile-metric-box:active {
+	background-color: #333333;
+	transform: scale(0.98);
 }
 
 .mobile-metric-box .text-xs,

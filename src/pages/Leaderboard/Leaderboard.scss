@@ -211,4 +211,21 @@
 	&-empty {
 		opacity: 0.8;
 	}
+
+	&-my-account {
+		margin-top: 48px;
+		padding-top: 24px;
+
+		&-title {
+			font-size: 28px;
+			font-weight: 600;
+			margin: 0 0 12px 0;
+		}
+
+		&-divider {
+			height: 2px;
+			background: rgba(255, 255, 255, 0.2);
+			margin-bottom: 16px;
+		}
+	}
 }

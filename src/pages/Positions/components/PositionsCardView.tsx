@@ -259,184 +259,179 @@ export default function PositionsCardView({
 										marginBottom: 12,
 									}}
 								>
-									{/* Card Header */}
-									<div
-										style={{
-											padding: "16px",
-											background: "#0a0a0a",
-											borderBottom: "1px solid #2a2a2a",
-											display: "flex",
-											alignItems: "center",
-											gap: 12,
-										}}
-									>
-										<UmbrellaImage umbrella={umbrella} />
-										<div style={{ flex: 1 }}>
-											<div
-												style={{
-													color: "#888",
-													fontSize: 11,
-													textTransform: "uppercase",
-													letterSpacing: 0.6,
-													marginBottom: 4,
-												}}
-											>
-												{umbrella.displayName}
-											</div>
-											<div
-												style={{
-													color: "#fff",
-													fontSize: 16,
-													fontWeight: 600,
-												}}
-											>
-												{isVs ? (
-													<span>
-														{side === "Yes"
-															? primaryLabel
-															: secondaryLabel}
-													</span>
-												) : (
-													<>
-														<span>
-															{market.displayName ||
-																market.question}{" "}
-														</span>
-														<span
-															style={{
-																color:
-																	side ===
-																	"Yes"
-																		? "#16a34a"
-																		: "#ef4444",
-															}}
-														>
-															{side}
-														</span>
-													</>
-												)}
-											</div>
-										</div>
-									</div>
-
-									{/* Card Summary - Two Info Pieces */}
-									<div
-										onClick={() =>
-											navigateToTradingPage(
-												umbrella,
-												market,
-												side.toLowerCase() as
-													| "yes"
-													| "no"
-											)
-										}
-										style={{
-											padding: "16px",
-											display: "flex",
-											justifyContent: "space-between",
-											alignItems: "center",
-											cursor: "pointer",
-										}}
-									>
-										<div style={{ flex: 1 }}>
-											<div
-												style={{
-													color: "#888",
-													fontSize: 11,
-													textTransform: "uppercase",
-													letterSpacing: 0.6,
-													marginBottom: 4,
-												}}
-											>
-												Shares
-											</div>
-											<div
-												style={{
-													color: "#fff",
-													fontSize: 18,
-													fontWeight: 700,
-												}}
-											>
-												<span
-													className={
-														softLoading
-															? "soft-blur"
-															: undefined
-													}
-												>
-													{amount}
-												</span>
-											</div>
+								{/* Card Header */}
+								<div
+									onClick={() =>
+										navigateToTradingPage(
+											umbrella,
+											market,
+											side.toLowerCase() as
+												| "yes"
+												| "no"
+										)
+									}
+									style={{
+										padding: "16px",
+										background: "#0a0a0a",
+										borderBottom: "1px solid #2a2a2a",
+										display: "flex",
+										alignItems: "center",
+										gap: 12,
+										cursor: "pointer",
+									}}
+								>
+									<UmbrellaImage umbrella={umbrella} />
+									<div style={{ flex: 1 }}>
+										<div
+											style={{
+												color: "#888",
+												fontSize: 11,
+												textTransform: "uppercase",
+												letterSpacing: 0.6,
+												marginBottom: 4,
+											}}
+										>
+											{umbrella.displayName}
 										</div>
 										<div
 											style={{
-												flex: 1,
-												textAlign: "right",
+												color: "#fff",
+												fontSize: 16,
+												fontWeight: 600,
 											}}
 										>
-											<div
-												style={{
-													color: "#888",
-													fontSize: 11,
-													textTransform: "uppercase",
-													letterSpacing: 0.6,
-													marginBottom: 4,
-												}}
-											>
-												Market Value
-											</div>
-											<div
-												style={{
-													color: "#fff",
-													fontSize: 18,
-													fontWeight: 700,
-												}}
-											>
-												<span
-													className={
-														softLoading
-															? "soft-blur"
-															: undefined
-													}
-												>
-													{marketValue === null ||
-													marketValue === undefined ||
-													isNaN(marketValue)
-														? "—"
-														: formatCurrency(
-																marketValue
-														  )}
+											{isVs ? (
+												<span>
+													{side === "Yes"
+														? primaryLabel
+														: secondaryLabel}
 												</span>
-											</div>
+											) : (
+												<>
+													<span>
+														{market.displayName ||
+															market.question}{" "}
+													</span>
+													<span
+														style={{
+															color:
+																side ===
+																"Yes"
+																	? "#16a34a"
+																	: "#ef4444",
+														}}
+													>
+														{side}
+													</span>
+												</>
+											)}
 										</div>
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												toggleCard(cardId);
-											}}
+									</div>
+								</div>
+
+								{/* Card Summary - Two Info Pieces */}
+								<div
+									onClick={() => toggleCard(cardId)}
+									style={{
+										padding: "16px",
+										display: "flex",
+										justifyContent: "space-between",
+										alignItems: "center",
+										cursor: "pointer",
+										background: isExpanded ? "#0f0f0f" : "transparent",
+									}}
+								>
+									<div style={{ flex: 1 }}>
+										<div
 											style={{
-												marginLeft: 12,
-												background: "transparent",
-												border: "none",
 												color: "#888",
-												cursor: "pointer",
-												fontSize: 20,
-												padding: 0,
-												width: 24,
-												height: 24,
-												display: "flex",
-												alignItems: "center",
-												justifyContent: "center",
-												transition:
-													"transform 0.2s ease",
-												transform: isExpanded
-													? "rotate(180deg)"
-													: "rotate(0deg)",
+												fontSize: 11,
+												textTransform: "uppercase",
+												letterSpacing: 0.6,
+												marginBottom: 4,
 											}}
 										>
-											▼
-										</button>
+											Shares
+										</div>
+										<div
+											style={{
+												color: "#fff",
+												fontSize: 18,
+												fontWeight: 700,
+											}}
+										>
+											<span
+												className={
+													softLoading
+														? "soft-blur"
+														: undefined
+												}
+											>
+												{amount}
+											</span>
+										</div>
 									</div>
+									<div
+										style={{
+											flex: 1,
+											textAlign: "right",
+										}}
+									>
+										<div
+											style={{
+												color: "#888",
+												fontSize: 11,
+												textTransform: "uppercase",
+												letterSpacing: 0.6,
+												marginBottom: 4,
+											}}
+										>
+											Market Value
+										</div>
+										<div
+											style={{
+												color: "#fff",
+												fontSize: 18,
+												fontWeight: 700,
+											}}
+										>
+											<span
+												className={
+													softLoading
+														? "soft-blur"
+														: undefined
+												}
+											>
+												{marketValue === null ||
+												marketValue === undefined ||
+												isNaN(marketValue)
+													? "—"
+													: formatCurrency(
+															marketValue
+													  )}
+											</span>
+										</div>
+									</div>
+									<div
+										style={{
+											marginLeft: 12,
+											color: "#888",
+											fontSize: 20,
+											width: 24,
+											height: 24,
+											display: "flex",
+											alignItems: "center",
+											justifyContent: "center",
+											transition:
+												"transform 0.2s ease",
+											transform: isExpanded
+												? "rotate(180deg)"
+												: "rotate(0deg)",
+										}}
+									>
+										▼
+									</div>
+								</div>
 
 									{/* Expanded Details */}
 									{isExpanded && (

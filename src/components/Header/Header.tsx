@@ -218,8 +218,8 @@ export function Header({
 			document.body.classList.add('drawer-open');
 			document.body.style.top = `-${scrollY}px`;
 			
-			// Get the drawer scrollable element
-			const drawer = document.querySelector('.App-header-drawer-scrollable');
+			// Get the drawer element (entire drawer, not just scrollable)
+			const drawer = document.querySelector('.App-header-drawer');
 			
 			// Prevent wheel scroll on background (for mouse/laptop)
 			const preventWheelScroll = (e: WheelEvent) => {

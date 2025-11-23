@@ -156,9 +156,12 @@ export function AppHeaderLinks({
 							className="mobile-metric-box"
 							to="/positions"
 							showRedirectModal={showRedirectModal}
-							onClick={clickCloseIcon}
+							onClick={(e) => {
+								e.stopPropagation();
+								if (clickCloseIcon) clickCloseIcon();
+							}}
 						>
-							<div className="flex flex-col items-center">
+							<div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
 								<span className="text-xs font-bold text-white">
 									Portfolio
 								</span>
@@ -188,9 +191,12 @@ export function AppHeaderLinks({
 							className="mobile-metric-box"
 							to="/get-test-usdc"
 							showRedirectModal={showRedirectModal}
-							onClick={clickCloseIcon}
+							onClick={(e) => {
+								e.stopPropagation();
+								if (clickCloseIcon) clickCloseIcon();
+							}}
 						>
-							<div className="flex flex-col items-center">
+							<div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
 								<span className="text-xs font-bold text-white">
 									Cash
 								</span>

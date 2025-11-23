@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { usePrivy } from "@privy-io/react-auth";
+import { useSignerContext } from "@/context/SignerContext";
+import { useUserData } from "@/context/UserDataContext";
+import { usePredictionData } from "@/context/PredictionDataContext";
 import rank1Icon from "@/assets/img/rank1.svg";
 import rank2Icon from "@/assets/img/rank2.svg";
 import rank3Icon from "@/assets/img/rank3.svg";
@@ -18,7 +21,10 @@ type LeaderboardEntry = {
 };
 
 export default function Leaderboard() {
-	const { getAccessToken } = usePrivy();
+	const { getAccessToken, user } = usePrivy();
+	const { account } = useSignerContext();
+	const { orders, tokenBalances } = useUserData();
+	const { allBooksPreview } = usePredictionData();
 	const [data, setData] = useState<LeaderboardEntry[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -157,6 +163,124 @@ export default function Leaderboard() {
 		};
 	}, [getAccessToken]);
 
+	// Calculate user's account stats
+	const userStats = useMemo(() => {
+		if (!account) return null;
+		
+		// Show stats even with no orders (will show zeros)
+		if (!orders || orders.length === 0) {
+			return {
+				wallet: account,
+				username:
+					user?.email?.address ||
+					user?.google?.email ||
+					user?.twitter?.username ||
+					null,
+				totalReturnUSD: 0,
+				effectiveCostUSD: 0,
+				totalReturnText: "+$0.00 (+0%)",
+				numTrades: 0,
+				numMarkets: 0,
+				updatedAt: new Date().toISOString(),
+			};
+		}
+
+		// Calculate volume (total USDC spent on buys)
+		const totalVolume = orders
+			.filter((order) => order.filled && order.side === "buy")
+			.reduce((sum, order) => sum + order.usdcValue, 0);
+
+		// Calculate number of trades (filled orders)
+		const numTrades = orders.filter((order) => order.filled).length;
+
+		// Calculate number of unique markets
+		const uniqueMarkets = new Set(orders.map((order) => order.questionId));
+		const numMarkets = uniqueMarkets.size;
+
+		// Calculate P&L (current market value + realized P&L - cost)
+		let totalMarketValue = 0;
+		let totalCost = 0;
+
+		// Process all filled orders to calculate cost and realized P&L
+		const filledOrders = orders.filter((order) => order.filled);
+		
+		// Calculate total cost (buys - sells)
+		filledOrders.forEach((order) => {
+			if (order.side === "buy") {
+				totalCost += order.usdcValue;
+			} else {
+				// Subtract sell proceeds from cost (realized gains)
+				totalCost -= order.usdcValue;
+			}
+		});
+
+		// Calculate current market value of holdings
+		tokenBalances.forEach((balance, marketId) => {
+			const yesBalance = Number(balance.yesBalance);
+			const noBalance = Number(balance.noBalance);
+			
+			if (yesBalance > 0 || noBalance > 0) {
+				// Get prices from allBooksPreview
+				const preview = allBooksPreview[marketId];
+				const yesPrice = preview?.lowestAsk ?? null;
+				const noPrice =
+					preview?.highestBid !== null &&
+					preview?.highestBid !== undefined
+						? 1 - preview.highestBid
+						: null;
+
+				// Calculate market value
+				if (yesPrice !== null && yesBalance > 0) {
+					totalMarketValue += yesBalance * yesPrice;
+				}
+				if (noPrice !== null && noBalance > 0) {
+					totalMarketValue += noBalance * noPrice;
+				}
+			}
+		});
+
+		// Total return = market value - net cost
+		const totalReturn = totalMarketValue - totalCost;
+
+		// Format return text like leaderboard
+		const isPositive = totalReturn >= 0;
+		const sign = isPositive ? "+" : "-";
+		const absReturn = Math.abs(totalReturn);
+		const returnPct =
+			totalVolume > 0 ? (totalReturn / totalVolume) * 100 : 0;
+		const pctSign = returnPct >= 0 ? "+" : "-";
+		const totalReturnText = `${sign}$${absReturn.toLocaleString(
+			undefined,
+			{
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2,
+			}
+		)} (${pctSign}${Math.abs(returnPct).toFixed(0)}%)`;
+
+		return {
+			wallet: account,
+			username:
+				user?.email?.address ||
+				user?.google?.email ||
+				user?.twitter?.username ||
+				null,
+			totalReturnUSD: totalReturn,
+			effectiveCostUSD: totalVolume,
+			totalReturnText,
+			numTrades,
+			numMarkets,
+			updatedAt: new Date().toISOString(),
+		};
+	}, [account, orders, tokenBalances, allBooksPreview, user]);
+
+	// Debug logging
+	console.log("[Leaderboard] User stats:", {
+		account,
+		hasOrders: orders?.length > 0,
+		userStats,
+		ordersCount: orders?.length,
+	});
+
 	const getRankIcon = (position: number) => {
 		// Position 1: Gold
 		if (position === 1) {
@@ -256,6 +380,74 @@ export default function Leaderboard() {
 					)}
 				</div>
 			)}
+
+			{/* User's Account Stats */}
+			{!loading && !error && userStats && (() => {
+				console.log("[Leaderboard] Rendering My Account section with stats:", userStats);
+				return (
+				<div className="Leaderboard-my-account">
+					<h2 className="Leaderboard-my-account-title">My Account</h2>
+					<div className="Leaderboard-my-account-divider"></div>
+					<div className="Leaderboard-list">
+						{/* Desktop Headers */}
+						<div className="Leaderboard-header">
+							<div className="Leaderboard-header-username">
+								Username
+							</div>
+							<div className="Leaderboard-header-return">P&L</div>
+							<div className="Leaderboard-header-cost">
+								Volume
+							</div>
+							<div className="Leaderboard-header-trades">
+								Trades
+							</div>
+							<div className="Leaderboard-header-markets">
+								Markets
+							</div>
+						</div>
+						<div className="Leaderboard-entry">
+							<div className="Leaderboard-rank-username">
+								<div className="Leaderboard-rank">—</div>
+								<div className="Leaderboard-username">
+									{userStats.username &&
+									userStats.username.trim().length > 0
+										? userStats.username
+										: `${userStats.wallet.slice(
+												0,
+												6
+										  )}...${userStats.wallet.slice(-4)}`}
+								</div>
+							</div>
+							<div
+								className={`Leaderboard-return ${
+									userStats.totalReturnUSD >= 0
+										? "positive"
+										: "negative"
+								}`}
+							>
+								<span>{userStats.totalReturnText}</span>
+							</div>
+							<div className="Leaderboard-cost">
+								<span>
+									$
+									{Number(
+										userStats.effectiveCostUSD
+									).toLocaleString(undefined, {
+										maximumFractionDigits: 2,
+									})}
+								</span>
+							</div>
+							<div className="Leaderboard-trades">
+								<span>{userStats.numTrades}</span>
+							</div>
+							<div className="Leaderboard-markets">
+								<span>{userStats.numMarkets}</span>
+							</div>
+						</div>
+					</div>
+				</div>
+				);
+			})()}
 		</div>
 	);
 }
