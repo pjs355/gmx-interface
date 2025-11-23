@@ -44,7 +44,7 @@ export function AppHeaderLinks({
 
 	// Add portfolio data for mobile display
 	const { authenticated: active, account } = useSignerContext();
-	const { logout, user, getAccessToken, ready, authenticated } = usePrivy();
+	const { logout, login, user, getAccessToken, ready, authenticated } = usePrivy();
 	const { identityToken } = useIdentityToken();
 	const [, copyToClipboard] = useCopyToClipboard();
 	const navigate = useNavigate();
@@ -126,6 +126,29 @@ export function AppHeaderLinks({
 						</div>
 					</div>
 				)}
+				{/* Mobile Login/Signup Display - Only show when NOT connected */}
+				{small && !active && (
+					<div className="App-header-mobile-auth-buttons">
+						<button
+							className="mobile-auth-button login-button"
+							onClick={() => {
+								login();
+								if (clickCloseIcon) clickCloseIcon();
+							}}
+						>
+							Log In
+						</button>
+						<button
+							className="mobile-auth-button signup-button"
+							onClick={() => {
+								login();
+								if (clickCloseIcon) clickCloseIcon();
+							}}
+						>
+							Sign Up
+						</button>
+					</div>
+				)}
 				{/* Mobile Cash/Portfolio Display - Only show when connected */}
 				{small && active && (
 					<div className="App-header-mobile-metrics">
@@ -133,8 +156,12 @@ export function AppHeaderLinks({
 							className="mobile-metric-box"
 							to="/positions"
 							showRedirectModal={showRedirectModal}
+							onClick={(e) => {
+								e.stopPropagation();
+								if (clickCloseIcon) clickCloseIcon();
+							}}
 						>
-							<div className="flex flex-col items-center">
+							<div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
 								<span className="text-xs font-bold text-white">
 									Portfolio
 								</span>
@@ -164,8 +191,12 @@ export function AppHeaderLinks({
 							className="mobile-metric-box"
 							to="/get-test-usdc"
 							showRedirectModal={showRedirectModal}
+							onClick={(e) => {
+								e.stopPropagation();
+								if (clickCloseIcon) clickCloseIcon();
+							}}
 						>
-							<div className="flex flex-col items-center">
+							<div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
 								<span className="text-xs font-bold text-white">
 									Cash
 								</span>
@@ -200,6 +231,7 @@ export function AppHeaderLinks({
 						qa="predictions"
 						to="/predictions"
 						showRedirectModal={showRedirectModal}
+						onClick={small ? clickCloseIcon : undefined}
 						isActive={(_match: any, location: any) => {
 							const path = location.pathname;
 							// Active on /predictions or /predictions/games, but NOT / (home) or /predictions/esports
@@ -227,6 +259,7 @@ export function AppHeaderLinks({
 						qa="leaderboard"
 						to="/leaderboard"
 						showRedirectModal={showRedirectModal}
+						onClick={small ? clickCloseIcon : undefined}
 						isActive={(_match: any, location: any) =>
 							location.pathname === "/leaderboard"
 						}
@@ -239,6 +272,7 @@ export function AppHeaderLinks({
 						qa="prizes"
 						to="/prizes"
 						showRedirectModal={showRedirectModal}
+						onClick={small ? clickCloseIcon : undefined}
 						isActive={(_match: any, location: any) =>
 							location.pathname === "/prizes"
 						}
@@ -252,6 +286,7 @@ export function AppHeaderLinks({
 							qa="get-test-usdc"
 							to="/get-test-usdc"
 							showRedirectModal={showRedirectModal}
+							onClick={small ? clickCloseIcon : undefined}
 						>
 							Referral
 						</HeaderLink>
@@ -262,6 +297,7 @@ export function AppHeaderLinks({
 						qa="about"
 						to="/about"
 						showRedirectModal={showRedirectModal}
+						onClick={small ? clickCloseIcon : undefined}
 						isActive={(_match: any, location: any) =>
 							location.pathname === "/about"
 						}

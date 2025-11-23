@@ -174,6 +174,42 @@ export default function Prizes() {
 							wallet in the form of USDC on Base.
 						</p>
 
+						<h3>Test Funds</h3>
+						<ul>
+							<li>
+								Each verified participant will receive $500 in
+								test money (NOT REAL MONEY) to use during
+								the LevelUp Beta. NO REAL MONEY WILL BE USED AT ALL DURING THIS TIME. NO PAYMENTS WILL BE REQUIRED AT ANY TIME. 
+							</li>
+							<li>
+								This test balance has no real-world monetary
+								value and cannot be withdrawn, exchanged, or
+								redeemed for any currency, product, or service.
+							</li>
+							<li>
+								All predictions and rankings within the beta are
+								based solely on virtual test funds, and outcomes
+								do not represent or imply any real-money wagering
+								activity.
+							</li>
+						</ul>
+
+						<h3>Market Resolution and Timing</h3>
+						<ul>
+							<li>
+								Some prediction markets may remain unresolved at
+								the conclusion of the giveaway period due to
+								external factors such as pending data, incomplete
+								results, or delayed event outcomes.
+							</li>
+							<li>
+								In such cases, unresolved markets will not
+								contribute to the leaderboard calculation, and
+								participants accept this as an inherent risk of
+								the promotion.
+							</li>
+						</ul>
+
 						<h3>Eligibility and Verification</h3>
 						<ul>
 							<li>

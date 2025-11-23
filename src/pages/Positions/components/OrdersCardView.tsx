@@ -157,18 +157,26 @@ export default function OrdersCardView({
 											marginBottom: 12,
 										}}
 									>
-										{/* Card Header */}
-										<div
-											style={{
-												padding: "16px",
-												background: "#0a0a0a",
-												borderBottom:
-													"1px solid #2a2a2a",
-												display: "flex",
-												alignItems: "center",
-												gap: 12,
-											}}
-										>
+									{/* Card Header */}
+									<div
+										onClick={() =>
+											navigateToTradingPage(
+												umbrella,
+												market,
+												o.position.toLowerCase() as "yes" | "no"
+											)
+										}
+										style={{
+											padding: "16px",
+											background: "#0a0a0a",
+											borderBottom:
+												"1px solid #2a2a2a",
+											display: "flex",
+											alignItems: "center",
+											gap: 12,
+											cursor: "pointer",
+										}}
+									>
 											<UmbrellaImage
 												umbrella={umbrella}
 											/>
