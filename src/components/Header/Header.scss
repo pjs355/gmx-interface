@@ -1,5 +1,17 @@
+// Prevent body scroll when drawer is open
+body.drawer-open {
+	position: fixed !important;
+	width: 100% !important;
+	overflow: hidden !important;
+	overscroll-behavior: none !important;
+}
+
+html.drawer-open {
+	overflow: hidden !important;
+}
+
 .App-header-backdrop {
-	background-color: rgba(0, 0, 0, 0.3);
+	background-color: rgba(0, 0, 0, 0.5);
 	position: fixed;
 	z-index: 1000;
 	top: 0;
@@ -7,7 +19,7 @@
 	left: 0;
 	right: 0;
 	pointer-events: auto;
-	touch-action: none;
+	overscroll-behavior: none;
 }
 
 .App-header {
@@ -54,28 +66,53 @@
 	right: 0;
 	width: clamp(18rem, 92vw, 28rem);
 	height: 100vh;
+	height: 100dvh; /* Use dynamic viewport height for better mobile support */
 	z-index: 1001;
 	pointer-events: auto;
 	-webkit-transform: translateZ(0);
 	transform: translateZ(0);
+	overscroll-behavior: contain;
+	/* Ensure drawer is above backdrop */
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+}
+
+.App-header-drawer-close {
+	flex-shrink: 0;
+	height: 6.2rem;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 0.8rem 1rem;
+	background: #000000;
+	border-bottom: 1px solid #333333;
 }
 
 .App-header-drawer-scrollable {
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
+	flex: 1;
 	overflow-y: auto;
 	overflow-x: hidden;
 	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
 	background: #000000;
+	pointer-events: auto;
+	/* Ensure proper scroll behavior */
+	scroll-behavior: smooth;
+}
+
+/* Hide the duplicate close button that's rendered inside AppHeaderLinks */
+.App-header-drawer-scrollable .App-header-links-header {
+	display: none;
 }
 
 .App-header-drawer .App-header-links {
 	display: flex;
 	flex-direction: column;
 	padding: 1rem 0;
+	padding-bottom: 4rem;
+	/* Ensure content is tall enough to scroll for testing */
+	min-height: 100vh;
 }
 
 .App-header-drawer .App-header-link-container {
@@ -120,6 +157,50 @@
 .App-header-drawer .mobile-address-inline .inline-item:hover {
 	background: #1a1a1a;
 	color: #9285f3;
+}
+
+.App-header-mobile-auth-buttons {
+	display: flex;
+	gap: 1rem;
+	width: 100%;
+	padding: 1rem 2rem;
+	margin-bottom: 1rem;
+}
+
+.mobile-auth-button {
+	flex: 1;
+	padding: 12px 16px;
+	border-radius: 8px;
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	border: none;
+	transition: all 0.15s ease-in-out;
+	text-align: center;
+}
+
+.mobile-auth-button.login-button {
+	background-color: transparent;
+	color: #8b5cf6;
+	border: 1px solid #8b5cf6;
+}
+
+.mobile-auth-button.login-button:hover {
+	background-color: rgba(139, 92, 246, 0.1);
+	color: #9d6ff7;
+	border-color: #9d6ff7;
+}
+
+.mobile-auth-button.signup-button {
+	background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+	color: #ffffff;
+	border: none;
+}
+
+.mobile-auth-button.signup-button:hover {
+	background: linear-gradient(135deg, #9d6ff7 0%, #7477f2 100%);
+	transform: translateY(-1px);
+	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .App-header-mobile-metrics {
@@ -195,15 +276,16 @@
 	height: 6.2rem;
 	display: flex;
 	align-items: center;
-	z-index: 3;
+	z-index: 1;
 }
 
 .App-header-drawer .App-header-links-header {
-	position: sticky;
+	position: relative;
 	top: 0;
 	justify-content: flex-end;
 	padding: 0.8rem 1rem;
 	background: #000000;
+	flex-shrink: 0;
 }
 
 .App-header-drawer .mobile-cross-menu {

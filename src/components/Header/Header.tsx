@@ -1,6 +1,7 @@
 import cx from "classnames";
 import { useCallback, useEffect, useState } from "react";
 import { RiMenuLine } from "react-icons/ri";
+import { FiX } from "react-icons/fi";
 import { Link, useNavigate } from "react-router-dom";
 import { useMedia } from "react-use";
 
@@ -108,6 +109,14 @@ const Drawer = ({
 	const HeaderContent = isHomeSite() ? HomeHeaderLinks : AppHeaderLinks;
 	return (
 		<div className="App-header-drawer">
+			<div className="App-header-drawer-close">
+				<div
+					className="App-header-menu-icon-block"
+					onClick={closeDrawer}
+				>
+					<FiX className="App-header-menu-icon" />
+				</div>
+			</div>
 			<div className="App-header-drawer-scrollable">
 				<HeaderContent
 					small
@@ -162,14 +171,17 @@ const DrawerContainer = ({
 }: DrawerContainerProps) => {
 	if (!isVisible) return null;
 	return (
-		<Drawer
-			closeDrawer={closeDrawer}
-			showRedirectModal={showRedirectModal}
-			openSettings={openSettings}
-			disconnectAccountAndCloseSettings={
-				disconnectAccountAndCloseSettings
-			}
-		/>
+		<>
+			<Backdrop isVisible={isVisible} onClick={closeDrawer} />
+			<Drawer
+				closeDrawer={closeDrawer}
+				showRedirectModal={showRedirectModal}
+				openSettings={openSettings}
+				disconnectAccountAndCloseSettings={
+					disconnectAccountAndCloseSettings
+				}
+			/>
+		</>
 	);
 };
 
@@ -191,6 +203,70 @@ export function Header({
 
 	const closeDrawer = () => setIsDrawerVisible(false);
 	const closeSelectorModal = () => setIsNativeSelectorModalVisible(false);
+
+	// Lock body scroll when drawer is open
+	useEffect(() => {
+		if (isDrawerVisible) {
+			// Save current scroll position
+			const scrollY = window.scrollY;
+			
+			// Store scroll position
+			document.body.setAttribute('data-scroll-y', scrollY.toString());
+			
+			// Add class to both html and body for CSS-based scroll lock
+			document.documentElement.classList.add('drawer-open');
+			document.body.classList.add('drawer-open');
+			document.body.style.top = `-${scrollY}px`;
+			
+			// Get the drawer scrollable element
+			const drawer = document.querySelector('.App-header-drawer-scrollable');
+			
+			// Prevent wheel scroll on background (for mouse/laptop)
+			const preventWheelScroll = (e: WheelEvent) => {
+				const target = e.target as HTMLElement;
+				// Allow scrolling within the drawer
+				if (drawer && drawer.contains(target)) {
+					return;
+				}
+				// Prevent background scrolling
+				e.preventDefault();
+			};
+			
+			// Prevent touch scroll on background (for mobile)
+			const preventTouchScroll = (e: TouchEvent) => {
+				const target = e.target as HTMLElement;
+				// Allow scrolling within the drawer
+				if (drawer && drawer.contains(target)) {
+					return;
+				}
+				// Prevent background scrolling
+				e.preventDefault();
+			};
+			
+			// Add event listeners
+			document.addEventListener('wheel', preventWheelScroll, { passive: false });
+			document.addEventListener('touchmove', preventTouchScroll, { passive: false });
+			
+			return () => {
+				// Remove classes
+				document.documentElement.classList.remove('drawer-open');
+				document.body.classList.remove('drawer-open');
+				
+				// Restore scroll position
+				const scrollY = document.body.getAttribute('data-scroll-y');
+				document.body.removeAttribute('data-scroll-y');
+				document.body.style.top = '';
+				
+				if (scrollY) {
+					window.scrollTo(0, parseInt(scrollY, 10));
+				}
+				
+				// Remove event listeners
+				document.removeEventListener('wheel', preventWheelScroll);
+				document.removeEventListener('touchmove', preventTouchScroll);
+			};
+		}
+	}, [isDrawerVisible]);
 
 	const isHome = isHomeSite();
 	const drawerOpenSettings = isHome ? undefined : openSettings;

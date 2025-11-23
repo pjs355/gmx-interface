@@ -70,7 +70,10 @@ export function HomeHeaderLinks({
 					<div key={label} className="App-header-link-container">
 						{isHomeLink ? (
 							<HeaderLink
-								onClick={onClick}
+								onClick={(e) => {
+									if (onClick) onClick();
+									if (small && clickCloseIcon) clickCloseIcon();
+								}}
 								to={link}
 								showRedirectModal={showRedirectModal}
 							>
