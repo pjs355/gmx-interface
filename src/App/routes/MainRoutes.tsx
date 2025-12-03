@@ -13,6 +13,7 @@ import Profile from "pages/Profile/Profile";
 import Admin from "pages/Admin/Admin";
 import Positions from "pages/Positions/Positions";
 import Prizes from "pages/Prizes/Prizes";
+import Payments from "pages/Payments/Payments";
 import TradeBoxTest from "pages/TradeBoxTest/TradeBoxTest";
 import About from "pages/About/About";
 import TestPage from "pages/Test/TestPage";
@@ -54,6 +55,7 @@ export function MainRoutes() {
 			<Route path="/get-test-usdc" element={<GetTestUsdc />} />
 			<Route path="/positions" element={<Positions />} />
 			<Route path="/prizes" element={<Prizes />} />
+			<Route path="/payments" element={<Payments />} />
 			<Route path="/about" element={<About />} />
 			<Route
 				path="/test/tradebox/:umbrellaId"
