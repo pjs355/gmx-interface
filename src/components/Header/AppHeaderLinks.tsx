@@ -283,21 +283,6 @@ export function AppHeaderLinks({
 				{active && (
 					<div className="App-header-link-container">
 						<HeaderLink
-							qa="payments"
-							to="/payments"
-							showRedirectModal={showRedirectModal}
-							onClick={small ? clickCloseIcon : undefined}
-							isActive={(_match: any, location: any) =>
-								location.pathname === "/payments"
-							}
-						>
-							Payments
-						</HeaderLink>
-					</div>
-				)}
-				{active && (
-					<div className="App-header-link-container">
-						<HeaderLink
 							qa="get-test-usdc"
 							to="/get-test-usdc"
 							showRedirectModal={showRedirectModal}
