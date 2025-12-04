@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { ethers } from "ethers";
+import { DEBUG_ACCOUNT_OVERRIDE_KEY } from "config/localStorage";
 
 type SignerContextValue = {
   authenticated: boolean;
@@ -14,7 +15,24 @@ type SignerContextValue = {
   hasExternalWallet: boolean;
   ready: boolean; // true when computed for current auth/wallets state
   refresh: () => Promise<void>;
+  // Debug mode properties
+  isDebugMode: boolean; // true when DEBUG_ACCOUNT_OVERRIDE is set
+  debugAccount: string | undefined; // the override address (if set)
+  realAccount: string | undefined; // the actual logged-in account (even when spoofing)
 };
+
+// Helper to get debug account from localStorage
+function getDebugAccountOverride(): string | undefined {
+  try {
+    const override = localStorage.getItem(DEBUG_ACCOUNT_OVERRIDE_KEY);
+    if (override && override.startsWith('0x') && override.length === 42) {
+      return override;
+    }
+  } catch (e) {
+    // localStorage might be unavailable
+  }
+  return undefined;
+}
 
 const SignerContext = createContext<SignerContextValue | null>(null);
 
@@ -24,24 +42,39 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
   const [signer, setSigner] = useState<any | undefined>(undefined);
   const [signerAddress, setSignerAddress] = useState<string | undefined>(undefined);
   const [account, setAccount] = useState<string | undefined>(undefined);
+  const [realAccount, setRealAccount] = useState<string | undefined>(undefined);
   const [walletType, setWalletType] = useState<'smart' | 'embedded' | 'external' | 'none'>('none');
   const [hasSmartWallet, setHasSmartWallet] = useState<boolean>(false);
   const [hasEmbeddedWallet, setHasEmbeddedWallet] = useState<boolean>(false);
   const [hasExternalWallet, setHasExternalWallet] = useState<boolean>(false);
   const [ready, setReady] = useState(false);
+  
+  // Debug mode state
+  const [debugAccount, setDebugAccount] = useState<string | undefined>(getDebugAccountOverride);
+  const isDebugMode = Boolean(debugAccount);
 
   const resolveSigner = useCallback(async () => {
+    // Check for debug override on each resolve
+    const currentDebugOverride = getDebugAccountOverride();
+    setDebugAccount(currentDebugOverride);
+    
     // Single, authoritative resolution based on Privy state
     try {
       if (!authenticated) {
         setSigner(undefined);
         setSignerAddress(undefined);
-        setAccount(undefined);
+        setRealAccount(undefined);
+        // In debug mode, still allow viewing data even when not authenticated
+        setAccount(currentDebugOverride);
         setWalletType('none');
         setHasSmartWallet(false);
         setHasEmbeddedWallet(false);
         setHasExternalWallet(false);
         setReady(true);
+        
+        if (currentDebugOverride) {
+          console.warn('🔧 DEBUG MODE ACTIVE (unauthenticated): Viewing data for', currentDebugOverride);
+        }
         return;
       }
 
@@ -60,7 +93,15 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
 
       // Account (read address) priority: smart -> embedded -> external
       const unifiedAccount = smartAddress || embedded?.address || (!hasSmart ? external?.address : undefined) || undefined;
-      setAccount(unifiedAccount);
+      setRealAccount(unifiedAccount);
+      
+      // Apply debug override if present, otherwise use real account
+      if (currentDebugOverride) {
+        setAccount(currentDebugOverride);
+        console.warn('🔧 DEBUG MODE ACTIVE: Spoofing account', currentDebugOverride, '(real account:', unifiedAccount, ')');
+      } else {
+        setAccount(unifiedAccount);
+      }
 
       // Signer selection:
       // - If smart wallet exists, prefer embedded signer only; do NOT fall back to external
@@ -115,8 +156,12 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
     hasEmbeddedWallet,
     hasExternalWallet,
     ready,
-    refresh: resolveSigner
-  }), [authenticated, user, walletType, account, signer, signerAddress, hasSmartWallet, hasEmbeddedWallet, hasExternalWallet, ready, resolveSigner]);
+    refresh: resolveSigner,
+    // Debug mode properties
+    isDebugMode,
+    debugAccount,
+    realAccount,
+  }), [authenticated, user, walletType, account, signer, signerAddress, hasSmartWallet, hasEmbeddedWallet, hasExternalWallet, ready, resolveSigner, isDebugMode, debugAccount, realAccount]);
 
   return <SignerContext.Provider value={value}>{children}</SignerContext.Provider>;
 }
@@ -126,5 +171,59 @@ export function useSignerContext(): SignerContextValue {
   if (!ctx) throw new Error("useSignerContext must be used within a SignerProvider");
   return ctx;
 }
+
+// =============================================================================
+// DEBUG HELPER FUNCTIONS (accessible from browser console)
+// =============================================================================
+
+/**
+ * Spoof another user's account to view their portfolio (read-only)
+ * Usage from browser console: spoofAccount('0x...')
+ */
+(window as any).spoofAccount = (address: string) => {
+  if (!address) {
+    console.error('❌ Please provide a wallet address: spoofAccount("0x...")');
+    return;
+  }
+  if (!address.startsWith('0x') || address.length !== 42) {
+    console.error('❌ Invalid address format. Must be a 42-character hex address starting with 0x');
+    return;
+  }
+  localStorage.setItem(DEBUG_ACCOUNT_OVERRIDE_KEY, address);
+  console.log('✅ Debug account set to:', address);
+  console.log('🔄 Refresh the page to view their portfolio (read-only mode)');
+  console.log('💡 To clear: clearSpoof()');
+};
+
+/**
+ * Clear the spoofed account and return to normal mode
+ * Usage from browser console: clearSpoof()
+ */
+(window as any).clearSpoof = () => {
+  localStorage.removeItem(DEBUG_ACCOUNT_OVERRIDE_KEY);
+  console.log('✅ Debug account cleared. Refresh the page to return to your normal account.');
+};
+
+/**
+ * Check current spoof status
+ * Usage from browser console: checkSpoof()
+ */
+(window as any).checkSpoof = () => {
+  const current = localStorage.getItem(DEBUG_ACCOUNT_OVERRIDE_KEY);
+  if (current) {
+    console.log('🔧 DEBUG MODE ACTIVE');
+    console.log('   Spoofing account:', current);
+    console.log('   To clear: clearSpoof()');
+  } else {
+    console.log('✅ Normal mode (no account spoofing)');
+    console.log('   To spoof: spoofAccount("0x...")');
+  }
+};
+
+// Log available debug commands on load
+console.log('🛠️ Debug commands available:');
+console.log('   spoofAccount("0x...") - View another user\'s portfolio (read-only)');
+console.log('   clearSpoof() - Return to normal mode');
+console.log('   checkSpoof() - Check current spoof status');
 
 
