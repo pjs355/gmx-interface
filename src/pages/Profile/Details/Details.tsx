@@ -2,15 +2,15 @@ import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useMedia } from "react-use";
 import { userService } from "@/services/api/userService";
-import Modal from "components/Modal/Modal";
+// import Modal from "components/Modal/Modal";
 import "./Details.scss";
 
-interface EmailPreferences {
-	generalNotifications: boolean;
-	tradeConfirmations: boolean;
-	winningsNotifications: boolean;
-	levelUpAnnouncements: boolean;
-}
+// interface EmailPreferences {
+// 	generalNotifications: boolean;
+// 	tradeConfirmations: boolean;
+// 	winningsNotifications: boolean;
+// 	levelUpAnnouncements: boolean;
+// }
 
 interface UserDetails {
 	id?: string;
@@ -35,19 +35,19 @@ export default function Details() {
 	const [usernameError, setUsernameError] = useState<string | null>(null);
 	const [copySuccess, setCopySuccess] = useState(false);
 
-	// Email preferences state
-	const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
-		generalNotifications: true,
-		tradeConfirmations: true,
-		winningsNotifications: true,
-		levelUpAnnouncements: true,
-	});
-	const [isSavingPreferences, setIsSavingPreferences] = useState(false);
-	const [preferencesSaved, setPreferencesSaved] = useState(false);
+	// Email preferences state - COMMENTED OUT FOR NOW
+	// const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
+	// 	generalNotifications: true,
+	// 	tradeConfirmations: true,
+	// 	winningsNotifications: true,
+	// 	levelUpAnnouncements: true,
+	// });
+	// const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+	// const [preferencesSaved, setPreferencesSaved] = useState(false);
 
-	// Account deletion modal state
-	const [showDeleteModal, setShowDeleteModal] = useState(false);
-	const [acceptInput, setAcceptInput] = useState("");
+	// Account deletion modal state - COMMENTED OUT FOR NOW
+	// const [showDeleteModal, setShowDeleteModal] = useState(false);
+	// const [acceptInput, setAcceptInput] = useState("");
 
 	// Extract email, phone, and smart wallet from Privy user object
 	const userEmail = user?.email?.address || null;
@@ -206,41 +206,42 @@ export default function Details() {
 		if (e.key === "Escape" && isEditingUsername) handleCancelEdit();
 	};
 
-	const handlePreferenceChange = (key: keyof EmailPreferences) => {
-		setEmailPreferences((prev) => ({
-			...prev,
-			[key]: !prev[key],
-		}));
-		setPreferencesSaved(false);
-	};
+	// Email preference handlers - COMMENTED OUT FOR NOW
+	// const handlePreferenceChange = (key: keyof EmailPreferences) => {
+	// 	setEmailPreferences((prev) => ({
+	// 		...prev,
+	// 		[key]: !prev[key],
+	// 	}));
+	// 	setPreferencesSaved(false);
+	// };
 
-	const handleSavePreferences = async () => {
-		setIsSavingPreferences(true);
-		// Simulate saving - this will be hooked up to backend later
-		await new Promise((resolve) => setTimeout(resolve, 500));
-		setIsSavingPreferences(false);
-		setPreferencesSaved(true);
-		setTimeout(() => setPreferencesSaved(false), 3000);
-	};
+	// const handleSavePreferences = async () => {
+	// 	setIsSavingPreferences(true);
+	// 	// Simulate saving - this will be hooked up to backend later
+	// 	await new Promise((resolve) => setTimeout(resolve, 500));
+	// 	setIsSavingPreferences(false);
+	// 	setPreferencesSaved(true);
+	// 	setTimeout(() => setPreferencesSaved(false), 3000);
+	// };
 
-	// Account deletion handlers
-	const handleOpenDeleteModal = () => {
-		setAcceptInput("");
-		setShowDeleteModal(true);
-	};
+	// Account deletion handlers - COMMENTED OUT FOR NOW
+	// const handleOpenDeleteModal = () => {
+	// 	setAcceptInput("");
+	// 	setShowDeleteModal(true);
+	// };
 
-	const handleCloseDeleteModal = () => {
-		setAcceptInput("");
-		setShowDeleteModal(false);
-	};
+	// const handleCloseDeleteModal = () => {
+	// 	setAcceptInput("");
+	// 	setShowDeleteModal(false);
+	// };
 
-	const handleAcceptDeletion = () => {
-		// TODO: Hook this up to Privy account deletion later
-		console.log("Account deletion requested");
-		handleCloseDeleteModal();
-	};
+	// const handleAcceptDeletion = () => {
+	// 	// TODO: Hook this up to Privy account deletion later
+	// 	console.log("Account deletion requested");
+	// 	handleCloseDeleteModal();
+	// };
 
-	const isAcceptEnabled = acceptInput.toLowerCase() === "accept";
+	// const isAcceptEnabled = acceptInput.toLowerCase() === "accept";
 
 	const renderButtons = () => {
 		if (isEditingUsername) {
@@ -342,8 +343,8 @@ export default function Details() {
 				</div>
 			)}
 
-			{/* Email Preferences Section */}
-			<div className="Details-email-preferences">
+			{/* Email Preferences Section - COMMENTED OUT FOR NOW */}
+			{/* <div className="Details-email-preferences">
 				<div className="Details-section-title">Email Preferences</div>
 				<div className="Details-section-description">
 					Choose which email notifications you'd like to receive.
@@ -420,20 +421,20 @@ export default function Details() {
 						{isSavingPreferences ? "Saving..." : preferencesSaved ? "✓ Saved" : "Save Preferences"}
 					</button>
 				</div>
-			</div>
+			</div> */}
 
-			{/* Account Deletion Section */}
-			<div className="Details-account-deletion">
+			{/* Account Deletion Section - COMMENTED OUT FOR NOW */}
+			{/* <div className="Details-account-deletion">
 				<button
 					className="Details-delete-button"
 					onClick={handleOpenDeleteModal}
 				>
 					Request Account Deletion
 				</button>
-			</div>
+			</div> */}
 
-			{/* Account Deletion Confirmation Modal */}
-			<Modal
+			{/* Account Deletion Confirmation Modal - COMMENTED OUT FOR NOW */}
+			{/* <Modal
 				isVisible={showDeleteModal}
 				setIsVisible={setShowDeleteModal}
 				label="⚠️ Account Deletion Warning"
@@ -485,7 +486,7 @@ export default function Details() {
 						</button>
 					</div>
 				</div>
-			</Modal>
+			</Modal> */}
 		</div>
 	);
 }
