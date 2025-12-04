@@ -2,7 +2,15 @@ import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useMedia } from "react-use";
 import { userService } from "@/services/api/userService";
+import Modal from "components/Modal/Modal";
 import "./Details.scss";
+
+interface EmailPreferences {
+	generalNotifications: boolean;
+	tradeConfirmations: boolean;
+	winningsNotifications: boolean;
+	levelUpAnnouncements: boolean;
+}
 
 interface UserDetails {
 	id?: string;
@@ -26,6 +34,20 @@ export default function Details() {
 	const [isSaving, setIsSaving] = useState(false);
 	const [usernameError, setUsernameError] = useState<string | null>(null);
 	const [copySuccess, setCopySuccess] = useState(false);
+
+	// Email preferences state
+	const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
+		generalNotifications: true,
+		tradeConfirmations: true,
+		winningsNotifications: true,
+		levelUpAnnouncements: true,
+	});
+	const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+	const [preferencesSaved, setPreferencesSaved] = useState(false);
+
+	// Account deletion modal state
+	const [showDeleteModal, setShowDeleteModal] = useState(false);
+	const [acceptInput, setAcceptInput] = useState("");
 
 	// Extract email, phone, and smart wallet from Privy user object
 	const userEmail = user?.email?.address || null;
@@ -184,6 +206,42 @@ export default function Details() {
 		if (e.key === "Escape" && isEditingUsername) handleCancelEdit();
 	};
 
+	const handlePreferenceChange = (key: keyof EmailPreferences) => {
+		setEmailPreferences((prev) => ({
+			...prev,
+			[key]: !prev[key],
+		}));
+		setPreferencesSaved(false);
+	};
+
+	const handleSavePreferences = async () => {
+		setIsSavingPreferences(true);
+		// Simulate saving - this will be hooked up to backend later
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		setIsSavingPreferences(false);
+		setPreferencesSaved(true);
+		setTimeout(() => setPreferencesSaved(false), 3000);
+	};
+
+	// Account deletion handlers
+	const handleOpenDeleteModal = () => {
+		setAcceptInput("");
+		setShowDeleteModal(true);
+	};
+
+	const handleCloseDeleteModal = () => {
+		setAcceptInput("");
+		setShowDeleteModal(false);
+	};
+
+	const handleAcceptDeletion = () => {
+		// TODO: Hook this up to Privy account deletion later
+		console.log("Account deletion requested");
+		handleCloseDeleteModal();
+	};
+
+	const isAcceptEnabled = acceptInput.toLowerCase() === "accept";
+
 	const renderButtons = () => {
 		if (isEditingUsername) {
 			return (
@@ -283,6 +341,151 @@ export default function Details() {
 					</div>
 				</div>
 			)}
+
+			{/* Email Preferences Section */}
+			<div className="Details-email-preferences">
+				<div className="Details-section-title">Email Preferences</div>
+				<div className="Details-section-description">
+					Choose which email notifications you'd like to receive.
+				</div>
+
+				<div className="Details-preferences-list">
+					<label className="Details-preference-item">
+						<input
+							type="checkbox"
+							checked={emailPreferences.generalNotifications}
+							onChange={() => handlePreferenceChange("generalNotifications")}
+							className="Details-checkbox"
+						/>
+						<div className="Details-preference-content">
+							<span className="Details-preference-label">General Notifications</span>
+							<span className="Details-preference-description">
+								Important updates about your account and platform changes
+							</span>
+						</div>
+					</label>
+
+					<label className="Details-preference-item">
+						<input
+							type="checkbox"
+							checked={emailPreferences.tradeConfirmations}
+							onChange={() => handlePreferenceChange("tradeConfirmations")}
+							className="Details-checkbox"
+						/>
+						<div className="Details-preference-content">
+							<span className="Details-preference-label">Trade Confirmations</span>
+							<span className="Details-preference-description">
+								Receive confirmation emails when you place or complete trades
+							</span>
+						</div>
+					</label>
+
+					<label className="Details-preference-item">
+						<input
+							type="checkbox"
+							checked={emailPreferences.winningsNotifications}
+							onChange={() => handlePreferenceChange("winningsNotifications")}
+							className="Details-checkbox"
+						/>
+						<div className="Details-preference-content">
+							<span className="Details-preference-label">Winnings Notifications</span>
+							<span className="Details-preference-description">
+								Get notified when your predictions win and earnings are available
+							</span>
+						</div>
+					</label>
+
+					<label className="Details-preference-item">
+						<input
+							type="checkbox"
+							checked={emailPreferences.levelUpAnnouncements}
+							onChange={() => handlePreferenceChange("levelUpAnnouncements")}
+							className="Details-checkbox"
+						/>
+						<div className="Details-preference-content">
+							<span className="Details-preference-label">LevelUp Announcements</span>
+							<span className="Details-preference-description">
+								Stay updated with new features, promotions, and platform news
+							</span>
+						</div>
+					</label>
+				</div>
+
+				<div className="Details-preferences-actions">
+					<button
+						className="Details-button"
+						onClick={handleSavePreferences}
+						disabled={isSavingPreferences}
+					>
+						{isSavingPreferences ? "Saving..." : preferencesSaved ? "✓ Saved" : "Save Preferences"}
+					</button>
+				</div>
+			</div>
+
+			{/* Account Deletion Section */}
+			<div className="Details-account-deletion">
+				<button
+					className="Details-delete-button"
+					onClick={handleOpenDeleteModal}
+				>
+					Request Account Deletion
+				</button>
+			</div>
+
+			{/* Account Deletion Confirmation Modal */}
+			<Modal
+				isVisible={showDeleteModal}
+				setIsVisible={setShowDeleteModal}
+				label="⚠️ Account Deletion Warning"
+				className="delete-account-modal"
+			>
+				<div className="Details-delete-modal-content">
+					<div className="Details-delete-warning-text">
+						<p className="Details-delete-warning-title">
+							This action is permanent and irreversible.
+						</p>
+						<p className="Details-delete-warning-body">
+							If you have <strong>ANY</strong> outstanding positions, cash, or 
+							holdings in your account and your account is deleted, you will{" "}
+							<strong>NEVER</strong> under any circumstances be able to recover 
+							them after your account is deleted.
+						</p>
+						<p className="Details-delete-warning-body">
+							Please ensure you have withdrawn all funds and closed all positions 
+							before proceeding.
+						</p>
+					</div>
+
+					<div className="Details-delete-confirm-section">
+						<label className="Details-delete-confirm-label">
+							Type "Accept" to confirm you understand:
+						</label>
+						<input
+							type="text"
+							className="Details-delete-confirm-input"
+							value={acceptInput}
+							onChange={(e) => setAcceptInput(e.target.value)}
+							placeholder="Type Accept"
+						/>
+					</div>
+
+					<div className="Details-delete-modal-buttons">
+						<button
+							className="Details-delete-accept-button"
+							onClick={handleAcceptDeletion}
+							disabled={!isAcceptEnabled}
+						>
+							Accept
+						</button>
+						<button
+							className="Details-delete-nevermind-button"
+							onClick={handleCloseDeleteModal}
+						>
+							Nevermind
+						</button>
+					</div>
+				</div>
+			</Modal>
 		</div>
 	);
 }
