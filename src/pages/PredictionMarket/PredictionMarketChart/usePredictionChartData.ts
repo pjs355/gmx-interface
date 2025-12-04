@@ -20,28 +20,37 @@ export function usePredictionChartData({
 	isVsSingleMarket,
 }: UsePredictionChartDataArgs) {
 	const [data, setData] = useState<ChartDataPoint[]>([]);
-	const [timeWindowStart, setTimeWindowStart] = useState<number>(0);
-	const [timeWindowEnd, setTimeWindowEnd] = useState<number>(0);
+	// Use -1 as sentinel for "not initialized" vs 0 for "all time"
+	const [timeWindowStart, setTimeWindowStart] = useState<number>(-1);
+	const [timeWindowEnd, setTimeWindowEnd] = useState<number>(-1);
 
 	// Live orderbook logic disabled: focus on historical only
 
 	useEffect(() => {
 		const now = Math.floor(Date.now() / 1000);
-		const seconds =
-			timeRange === "1h"
-				? 3600
-				: timeRange === "1d"
-				? 86400
-				: timeRange === "1w"
-				? 604800
-				: 2592000;
-		setTimeWindowEnd(now);
-		setTimeWindowStart(now - seconds);
+		
+		if (timeRange === "all") {
+			// For "all", set timeWindowStart to 0 to include all historical data
+			setTimeWindowEnd(now);
+			setTimeWindowStart(0);
+		} else {
+			const seconds =
+				timeRange === "1h"
+					? 3600
+					: timeRange === "1d"
+					? 86400
+					: timeRange === "1w"
+					? 604800
+					: 86400; // default to 1d
+			setTimeWindowEnd(now);
+			setTimeWindowStart(now - seconds);
+		}
 	}, [timeRange]);
 
 	// Memoize ONLY the historical data processing (no orderbooks)
 	const historicalData = useMemo(() => {
-		if (!questionId || timeWindowStart === 0 || timeWindowEnd === 0) {
+		// Use -1 as sentinel for "not initialized"
+		if (!questionId || timeWindowStart === -1 || timeWindowEnd === -1) {
 			return [];
 		}
 
@@ -399,7 +408,7 @@ function formatDisplayTime(date: Date, range: TimeRange): string {
 				month: "numeric",
 				day: "numeric",
 			});
-		case "1m":
+		case "all":
 			return date.toLocaleDateString("en-US", {
 				month: "short",
 				day: "numeric",

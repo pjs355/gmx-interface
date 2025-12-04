@@ -14,13 +14,13 @@ interface PredictionMarketChartProps {
 	className?: string;
 }
 
-type TimeRange = "1h" | "1d" | "1w" | "1m";
+type TimeRange = "1h" | "1d" | "1w" | "all";
 
 const TIME_RANGES: { key: TimeRange; label: string; seconds: number }[] = [
 	{ key: "1h", label: "1H", seconds: 3600 },
 	{ key: "1d", label: "1D", seconds: 86400 },
 	{ key: "1w", label: "1W", seconds: 604800 },
-	{ key: "1m", label: "1M", seconds: 2592000 },
+	{ key: "all", label: "All", seconds: Infinity },
 ];
 
 const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
@@ -88,17 +88,27 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	const yesTeamColor: string = (activeMarket as any)?.yesColor || "#8b5cf6";
 	const noTeamColor: string = (activeMarket as any)?.noColor || "#3b82f6";
 
-	// Calculate data coverage for each time range
+	// Calculate data coverage from RAW historical data (not filtered chartData)
+	// This ensures we know the full extent of data even when viewing shorter time ranges
 	const dataSpan = useMemo(() => {
-		if (chartData.length < 2) return 0;
-		const timestamps = chartData
-			.map((d) => d.timestamp)
-			.filter((t) => t !== null && t !== undefined) as number[];
+		// Get raw historical data from activeMarket
+		const rawHistorical = activeMarket?.historicalPricesYes || [];
+		if (rawHistorical.length < 2) return 0;
+
+		const timestamps = rawHistorical
+			.map((d: any) => {
+				// Handle both ts (milliseconds) and timestamp (seconds) formats
+				if (d.ts) return Math.floor(d.ts / 1000);
+				if (d.timestamp) return d.timestamp;
+				return null;
+			})
+			.filter((t: number | null) => t !== null && t !== undefined) as number[];
+
 		if (timestamps.length < 2) return 0;
 		const oldest = Math.min(...timestamps);
 		const newest = Math.max(...timestamps);
 		return newest - oldest; // in seconds
-	}, [chartData]);
+	}, [activeMarket?.historicalPricesYes]);
 
 	// Determine which time ranges should be visible based on data coverage
 	const availableTimeRanges = useMemo(() => {
@@ -106,15 +116,15 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 			// Always show 1H and 1D
 			if (range.key === "1h" || range.key === "1d") return true;
 
-			// For 1W, require at least 75% coverage (5.25 days)
+			// For 1W, require at least 2 days of data (reasonable threshold to show weekly view)
 			if (range.key === "1w") {
-				const requiredSeconds = range.seconds * 0.75; // 75% of 7 days
+				const requiredSeconds = 2 * 86400; // 2 days minimum
 				return dataSpan >= requiredSeconds;
 			}
 
-			// For 1M, require at least 75% coverage (22.5 days)
-			if (range.key === "1m") {
-				const requiredSeconds = range.seconds * 0.75; // 75% of 30 days
+			// For All, require at least 1 week of data (otherwise it's redundant with 1W)
+			if (range.key === "all") {
+				const requiredSeconds = 7 * 86400; // 7 days minimum
 				return dataSpan >= requiredSeconds;
 			}
 
@@ -299,7 +309,10 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 							: 300
 					}
 					timeRangeSeconds={
-						TIME_RANGES.find((r) => r.key === timeRange)?.seconds
+						// For "all" time range, pass undefined to let the chart auto-scale
+						timeRange === "all"
+							? undefined
+							: TIME_RANGES.find((r) => r.key === timeRange)?.seconds
 					}
 				/>
 

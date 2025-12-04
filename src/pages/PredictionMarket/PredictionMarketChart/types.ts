@@ -1,4 +1,4 @@
-export type TimeRange = '1h' | '1d' | '1w' | '1m';
+export type TimeRange = '1h' | '1d' | '1w' | 'all';
 
 export interface ChartDataPoint {
   timestamp: number;

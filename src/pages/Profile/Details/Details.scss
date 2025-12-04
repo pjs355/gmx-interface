@@ -198,3 +198,263 @@
 	}
 }
 
+/* Email Preferences Section */
+.Details-email-preferences {
+	margin-top: 40px;
+	padding-top: 32px;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+	
+	@media (min-width: 769px) {
+		max-width: 50%;
+	}
+}
+
+.Details-section-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: white;
+	margin-bottom: 8px;
+}
+
+.Details-section-description {
+	font-size: 14px;
+	opacity: 0.7;
+	margin-bottom: 24px;
+	line-height: 1.5;
+}
+
+.Details-preferences-list {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.Details-preference-item {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 16px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.06);
+		border-color: rgba(139, 92, 246, 0.3);
+	}
+}
+
+.Details-checkbox {
+	width: 20px;
+	height: 20px;
+	min-width: 20px;
+	accent-color: #8b5cf6;
+	cursor: pointer;
+	
+	appearance: none;
+	-webkit-appearance: none;
+	background: rgba(255, 255, 255, 0.1);
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-radius: 4px;
+	position: relative;
+	transition: all 0.2s ease;
+
+	&:checked {
+		background: #8b5cf6;
+		border-color: #8b5cf6;
+
+		&::after {
+			content: '';
+			position: absolute;
+			left: 5px;
+			top: 2px;
+			width: 5px;
+			height: 10px;
+			border: solid white;
+			border-width: 0 2px 2px 0;
+			transform: rotate(45deg);
+		}
+	}
+
+	&:hover {
+		border-color: #8b5cf6;
+	}
+}
+
+.Details-preference-content {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.Details-preference-label {
+	font-size: 15px;
+	font-weight: 500;
+	color: rgba(255, 255, 255, 0.95);
+}
+
+.Details-preference-description {
+	font-size: 13px;
+	color: rgba(255, 255, 255, 0.6);
+	line-height: 1.4;
+}
+
+.Details-preferences-actions {
+	margin-top: 24px;
+	display: flex;
+	gap: 12px;
+
+	.Details-button {
+		min-width: 140px;
+	}
+}
+
+/* Account Deletion Section */
+.Details-account-deletion {
+	margin-top: 40px;
+	padding-top: 32px;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+	
+	@media (min-width: 769px) {
+		max-width: 50%;
+	}
+}
+
+.Details-delete-button {
+	padding: 12px 24px;
+	border-radius: 6px;
+	font-size: 14px;
+	font-weight: 500;
+	cursor: pointer;
+	border: 1px solid rgba(239, 68, 68, 0.5);
+	background: rgba(239, 68, 68, 0.1);
+	color: #ef4444;
+	transition: all 0.2s ease;
+
+	&:hover {
+		background: rgba(239, 68, 68, 0.2);
+		border-color: #ef4444;
+	}
+}
+
+/* Account Deletion Modal */
+.delete-account-modal {
+	.Modal-content {
+		max-width: 480px;
+		background: #1a1a1a !important;
+	}
+
+	.Modal-title {
+		color: #ef4444;
+		font-weight: 600;
+	}
+}
+
+.Details-delete-modal-content {
+	color: white;
+}
+
+.Details-delete-warning-text {
+	margin-bottom: 24px;
+}
+
+.Details-delete-warning-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #ef4444;
+	margin: 0 0 16px 0;
+}
+
+.Details-delete-warning-body {
+	font-size: 14px;
+	color: rgba(255, 255, 255, 0.85);
+	line-height: 1.6;
+	margin: 0 0 12px 0;
+
+	strong {
+		color: #ef4444;
+		font-weight: 600;
+	}
+}
+
+.Details-delete-confirm-section {
+	margin-bottom: 24px;
+}
+
+.Details-delete-confirm-label {
+	display: block;
+	font-size: 14px;
+	font-weight: 500;
+	color: rgba(255, 255, 255, 0.9);
+	margin-bottom: 8px;
+}
+
+.Details-delete-confirm-input {
+	width: 100%;
+	padding: 12px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.05);
+	color: white;
+	font-size: 14px;
+	box-sizing: border-box;
+	transition: border-color 0.2s ease;
+
+	&::placeholder {
+		color: rgba(255, 255, 255, 0.4);
+	}
+
+	&:focus {
+		outline: none;
+		border-color: rgba(239, 68, 68, 0.5);
+	}
+}
+
+.Details-delete-modal-buttons {
+	display: flex;
+	gap: 12px;
+}
+
+.Details-delete-accept-button {
+	flex: 1;
+	padding: 12px 24px;
+	border-radius: 6px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	border: none;
+	background: #ef4444;
+	color: white;
+	transition: all 0.2s ease;
+
+	&:hover:not(:disabled) {
+		background: #dc2626;
+	}
+
+	&:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+		background: rgba(239, 68, 68, 0.3);
+	}
+}
+
+.Details-delete-nevermind-button {
+	flex: 1;
+	padding: 12px 24px;
+	border-radius: 6px;
+	font-size: 14px;
+	font-weight: 500;
+	cursor: pointer;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	background: rgba(255, 255, 255, 0.1);
+	color: white;
+	transition: all 0.2s ease;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.15);
+		border-color: rgba(255, 255, 255, 0.5);
+	}
+}
+
