@@ -392,38 +392,55 @@ function PredictionMarketContent() {
 		}
 	}, [activeMarketOrderbook, activeMarket]);
 
-	// Helper to get lowestAsk from WebSocket orderbook data
-	const getLowestAsk = useCallback(
+	// Helper to calculate total volume from WebSocket orderbook data
+	// Volume = sum of all sizes in bids + asks
+	const getTotalVolume = useCallback(
 		(questionId: string) => {
 			const orderbook = questionOrderbooks[questionId];
-			if (!orderbook?.asks || orderbook.asks.length === 0) return null;
-			return Math.min(...orderbook.asks.map((a: any) => a.price));
+			if (!orderbook) return 0;
+
+			let totalVolume = 0;
+
+			// Sum ask sizes
+			if (orderbook.asks && Array.isArray(orderbook.asks)) {
+				for (const ask of orderbook.asks) {
+					if (typeof ask.size === "number") {
+						totalVolume += ask.size;
+					}
+				}
+			}
+
+			// Sum bid sizes
+			if (orderbook.bids && Array.isArray(orderbook.bids)) {
+				for (const bid of orderbook.bids) {
+					if (typeof bid.size === "number") {
+						totalVolume += bid.size;
+					}
+				}
+			}
+
+			return totalVolume;
 		},
 		[questionOrderbooks]
 	);
 
-	// Sort questions by highest Yes price using live WebSocket orderbook data
-	// Sort once when orderbooks are ready, then keep stable
+	// Sort questions by highest trading volume using live WebSocket orderbook data
+	// Markets with the most interest (highest volume) appear at the top
 	const sortedQuestions = useMemo(() => {
 		const sorted = [...questions].sort((a, b) => {
 			const questionIdA = a._id || a.questionId || a.marketId;
 			const questionIdB = b._id || b.questionId || b.marketId;
 
-			// Use live WebSocket orderbook data for accurate current prices
-			const yesPriceA = getLowestAsk(questionIdA);
-			const yesPriceB = getLowestAsk(questionIdB);
+			// Use live WebSocket orderbook data to calculate volume
+			const volumeA = getTotalVolume(questionIdA);
+			const volumeB = getTotalVolume(questionIdB);
 
-			// Sort by highest Yes price first (descending order)
-			// Handle null/undefined cases by putting them at the end
-			if (yesPriceA === null && yesPriceB === null) return 0;
-			if (yesPriceA === null) return 1;
-			if (yesPriceB === null) return -1;
-
-			return yesPriceB - yesPriceA;
+			// Sort by highest volume first (descending order)
+			return volumeB - volumeA;
 		});
 
 		return sorted;
-	}, [questions, orderbooksReady, getLowestAsk]); // Re-sort when orderbooks become ready
+	}, [questions, orderbooksReady, getTotalVolume]); // Re-sort when orderbooks become ready
 
 	// COMPLETELY ISOLATED CHART STATE - Never changes after initial load
 	// Chart state managed by useChartState hook

@@ -13,16 +13,47 @@ export const getBestAsk = (orderbook: any) => {
   return Math.min(...orderbook.asks.map((a: any) => a.price));
 };
 
-export const sortQuestionsByYesPriceDesc = (questions: any[], orderbooks: Record<string, any>) => {
+// Calculate total volume from orderbook (sum of all bid and ask sizes)
+export const getTotalVolume = (orderbook: any): number => {
+  if (!orderbook) return 0;
+
+  let totalVolume = 0;
+
+  // Sum ask sizes
+  if (orderbook.asks && Array.isArray(orderbook.asks)) {
+    for (const ask of orderbook.asks) {
+      if (typeof ask.size === "number") {
+        totalVolume += ask.size;
+      }
+    }
+  }
+
+  // Sum bid sizes
+  if (orderbook.bids && Array.isArray(orderbook.bids)) {
+    for (const bid of orderbook.bids) {
+      if (typeof bid.size === "number") {
+        totalVolume += bid.size;
+      }
+    }
+  }
+
+  return totalVolume;
+};
+
+// Sort questions by highest trading volume (descending)
+// Markets with the most interest appear at the top
+export const sortQuestionsByVolumeDesc = (questions: any[], orderbooks: Record<string, any>) => {
   return [...questions].sort((a, b) => {
     const obA = orderbooks[getMarketId(a)];
     const obB = orderbooks[getMarketId(b)];
-    const aAsk = getBestAsk(obA);
-    const bAsk = getBestAsk(obB);
-    if (aAsk === null && bAsk === null) return 0;
-    if (aAsk === null) return 1;
-    if (bAsk === null) return -1;
-    return bAsk - aAsk;
+    const volumeA = getTotalVolume(obA);
+    const volumeB = getTotalVolume(obB);
+    return volumeB - volumeA;
   });
+};
+
+// Legacy function - kept for backward compatibility but now sorts by volume
+export const sortQuestionsByYesPriceDesc = (questions: any[], orderbooks: Record<string, any>) => {
+  return sortQuestionsByVolumeDesc(questions, orderbooks);
 };
 

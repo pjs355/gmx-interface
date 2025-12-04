@@ -153,6 +153,9 @@ export default function GameLinks({
 	// Don't render anything while loading or if no tags have active markets
 	if (loading || tagsLoading || filteredTags.length === 0) return null;
 
+	// Special "New" pill identifier
+	const NEW_PILL_ID = "__NEW__";
+
 	return (
 		<div className="game-links-wrapper">
 			{canScrollLeft && (
@@ -171,6 +174,22 @@ export default function GameLinks({
 				aria-label="Game links"
 				ref={scrollRef}
 			>
+				{/* "New" pill - always first, sorts by creation date */}
+				<button
+					className={`game-link ${
+						selectedGame === NEW_PILL_ID ? "active" : ""
+					}`}
+					key={NEW_PILL_ID}
+					onClick={() => {
+						if (selectedGame === NEW_PILL_ID) {
+							onGameSelect(null);
+						} else {
+							onGameSelect(NEW_PILL_ID);
+						}
+					}}
+				>
+					New
+				</button>
 				{filteredTags.map((tag) => (
 					<button
 						className={`game-link ${

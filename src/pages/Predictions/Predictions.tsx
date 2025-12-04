@@ -31,6 +31,19 @@ function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	});
 }
 
+// Sort umbrellas by creation date (newest first)
+function sortByCreationDate(array: Umbrella[]): Umbrella[] {
+	return [...array].sort((a, b) => {
+		const aDate = new Date(a.createdAt || 0).getTime();
+		const bDate = new Date(b.createdAt || 0).getTime();
+		// Sort in descending order (newest first)
+		return bDate - aDate;
+	});
+}
+
+// Special identifier for the "New" pill
+const NEW_PILL_ID = "__NEW__";
+
 export default function Predictions() {
 	const navigate = useNavigate();
 	const { authenticated } = useSignerContext();
@@ -135,6 +148,11 @@ export default function Predictions() {
 		});
 
 		let filtered = nonEsportsUmbrellas;
+		
+		// Handle "New" pill - sort by creation date, no tag filtering
+		if (selectedGame === NEW_PILL_ID) {
+			return sortByCreationDate(filtered);
+		}
 		
 		if (selectedGame) {
 			// Find the selected tag by label

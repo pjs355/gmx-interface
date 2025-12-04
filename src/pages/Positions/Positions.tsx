@@ -508,13 +508,8 @@ export default function Positions() {
 										umbrellaPositions.length > 0;
 									const hasWinnings =
 										resolvedUmbrellaPositions.length > 0;
-									if (!hasPositions && !hasWinnings && !softLoading) {
-										return (
-											<p className="text-body">
-												No positions found.
-											</p>
-										);
-									}
+									
+									// Each tab handles its own empty state independently
 									if (activeTab === "positions") {
 										return (
 											<>
