@@ -116,7 +116,7 @@ export default function Details() {
 
 			// Initialize email preferences from profile or use defaults
 			if (profile.emailPreferences) {
-				setEmailPreferences(profile.emailPreferences);
+				// setEmailPreferences(profile.emailPreferences);
 			}
 		} catch (error) {
 			console.error("Failed to fetch user details:", error);
