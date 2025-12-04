@@ -27,41 +27,58 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 }) => {
 	const { allBooksPreview } = usePredictionData();
 	
-	// Helper to get lowestAsk from WebSocket orderbook data
-	const getLowestAsk = React.useCallback((questionId: string, orderbooks: any) => {
+	// Helper to calculate total volume from orderbook data
+	// Volume = sum of all sizes in bids + asks
+	const getTotalVolume = React.useCallback((questionId: string, orderbooks: any) => {
 		const orderbook = orderbooks[questionId];
-		if (!orderbook?.asks || orderbook.asks.length === 0) return null;
-		return Math.min(...orderbook.asks.map((a: any) => a.price));
+		if (!orderbook) return 0;
+
+		let totalVolume = 0;
+
+		// Sum ask sizes
+		if (orderbook.asks && Array.isArray(orderbook.asks)) {
+			for (const ask of orderbook.asks) {
+				if (typeof ask.size === "number") {
+					totalVolume += ask.size;
+				}
+			}
+		}
+
+		// Sum bid sizes
+		if (orderbook.bids && Array.isArray(orderbook.bids)) {
+			for (const bid of orderbook.bids) {
+				if (typeof bid.size === "number") {
+					totalVolume += bid.size;
+				}
+			}
+		}
+
+		return totalVolume;
 	}, []);
 	
-	// Get top 2 markets using allBooksPreview with WebSocket fallback
+	// Get top 2 markets by highest trading volume
 	const data = multiMarketData[umbrellaId];
 	const topMarkets = React.useMemo(() => {
 		if (!data) return [];
 		
 		const { questions, orderbooks } = data;
 		
-		// Calculate Yes prices from allBooksPreview (with WebSocket fallback) and sort by highest
-		const marketsWithPrices = questions.map(question => {
+		// Calculate volume and sort by highest volume first
+		const marketsWithVolume = questions.map(question => {
 			const questionId = question.questionId || question._id;
-			const preview = questionId ? allBooksPreview[questionId] : undefined;
-			// Try allBooksPreview first, fallback to WebSocket orderbook
-			const yesPrice = preview?.lowestAsk ?? getLowestAsk(questionId, orderbooks);
+			const volume = getTotalVolume(questionId, orderbooks);
 			
 			return {
 				question,
-				yesPrice,
+				volume,
 			};
 		}).sort((a, b) => {
-			// Sort by highest Yes price first, handle nulls by putting them at the end
-			if (a.yesPrice === null && b.yesPrice === null) return 0;
-			if (a.yesPrice === null) return 1;
-			if (b.yesPrice === null) return -1;
-			return b.yesPrice - a.yesPrice;
+			// Sort by highest volume first (descending order)
+			return b.volume - a.volume;
 		});
 		
-		return marketsWithPrices.slice(0, 2); // Return top 2
-	}, [data, allBooksPreview, getLowestAsk]);
+		return marketsWithVolume.slice(0, 2); // Return top 2
+	}, [data, getTotalVolume]);
 
 	const totalMarkets = data?.questions?.length || 0;
 	const hasMoreMarkets = totalMarkets > 2;
