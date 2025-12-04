@@ -1,23 +1,87 @@
-import React, { useState, useCallback, useMemo } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { useUserData } from "@/context/UserDataContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { useRPG } from "@/context/RPGContext";
 import "./ResolveNotification.scss";
 
 interface ResolveNotificationProps {
 	umbrellaId: string;
 }
 
+interface ResolveComment {
+	submittedBy: string;
+	resolveComment: string;
+	[key: string]: unknown;
+}
+
+interface UmbrellaWithResolveComments {
+	_id: string;
+	resolveComments?: ResolveComment[];
+	[key: string]: unknown;
+}
+
 export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 	const { authenticated, getAccessToken, login } = usePrivy();
+	const { identityToken } = useIdentityToken();
 	const { orders } = useUserData();
-	const { getQuestionsForUmbrella } = usePredictionData();
+	const { getQuestionsForUmbrella, getUmbrellaById, umbrellas } =
+		usePredictionData();
+	const { profile } = useRPG();
 	const [expanded, setExpanded] = useState(false);
 	const [resolveComment, setResolveComment] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [submitted, setSubmitted] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [hasAlreadySubmitted, setHasAlreadySubmitted] = useState(false);
+
+	// Get user profile ID from RPG context (MongoDB _id)
+	const userProfileId = useMemo(() => {
+		if (
+			profile &&
+			typeof profile._id === "string" &&
+			profile._id.length > 0
+		) {
+			return profile._id;
+		}
+		return null;
+	}, [profile]);
+
+	// Get umbrella data - depend on umbrellas array to ensure we get updates
+	const umbrella = useMemo(() => {
+		return getUmbrellaById(umbrellaId) as
+			| UmbrellaWithResolveComments
+			| undefined;
+	}, [umbrellaId, getUmbrellaById, umbrellas]);
+
+	// Check if user has already submitted a resolution request
+	useEffect(() => {
+		if (!userProfileId) {
+			setHasAlreadySubmitted(false);
+			return;
+		}
+
+		if (!umbrella) {
+			setHasAlreadySubmitted(false);
+			return;
+		}
+
+		const resolveComments = umbrella.resolveComments;
+
+		if (!Array.isArray(resolveComments) || resolveComments.length === 0) {
+			setHasAlreadySubmitted(false);
+			return;
+		}
+
+		const userHasSubmitted = resolveComments.some(
+			(comment: ResolveComment) => {
+				return comment.submittedBy === userProfileId;
+			}
+		);
+
+		setHasAlreadySubmitted(userHasSubmitted);
+	}, [userProfileId, umbrellaId, umbrella]);
 
 	// Check if user has orders for this umbrella
 	const hasOrders = useMemo(() => {
@@ -33,8 +97,38 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 		// Get all question IDs for this umbrella
 		const questionIds = new Set(
 			questions
-				.map((q: any) => q._id || q.questionId || q.marketId)
-				.filter(Boolean)
+				.map((q) => {
+					if (typeof q === "object" && q !== null) {
+						return (
+							(
+								q as {
+									_id?: string;
+									questionId?: string;
+									marketId?: string;
+								}
+							)._id ||
+							(
+								q as {
+									_id?: string;
+									questionId?: string;
+									marketId?: string;
+								}
+							).questionId ||
+							(
+								q as {
+									_id?: string;
+									questionId?: string;
+									marketId?: string;
+								}
+							).marketId
+						);
+					}
+					return null;
+				})
+				.filter(
+					(id): id is string =>
+						typeof id === "string" && id.length > 0
+				)
 		);
 
 		// Check if any order matches any question in this umbrella
@@ -72,6 +166,10 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				throw new Error("Authentication required");
 			}
 
+			if (!identityToken) {
+				throw new Error("Identity token required");
+			}
+
 			const API_BASE = getPredictionApiBaseUrl();
 			const response = await fetch(
 				`${API_BASE}/umbrellas/settlement-notification`,
@@ -80,6 +178,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 					headers: {
 						"Content-Type": "application/json",
 						Authorization: `Bearer ${token}`,
+						"privy-id-token": identityToken,
 					},
 					body: JSON.stringify({
 						umbrellaId,
@@ -113,6 +212,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 			const result = await response.json();
 			if (result.success) {
 				setSubmitted(true);
+				setHasAlreadySubmitted(true);
 				setResolveComment("");
 			} else {
 				throw new Error(
@@ -128,7 +228,14 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 		} finally {
 			setSubmitting(false);
 		}
-	}, [authenticated, getAccessToken, login, resolveComment, umbrellaId]);
+	}, [
+		authenticated,
+		getAccessToken,
+		login,
+		identityToken,
+		resolveComment,
+		umbrellaId,
+	]);
 
 	const handleTextareaChange = useCallback(
 		(e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -178,12 +285,11 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 								Log In
 							</button>
 						</div>
-					) : submitted ? (
+					) : hasAlreadySubmitted || submitted ? (
 						<div className="resolve-notification-success">
-							<p>✓ Notification submitted successfully!</p>
-							<p className="resolve-notification-success-note">
-								You have already submitted a notification for
-								this umbrella.
+							<p>
+								You have already submitted a resolution request
+								for this market.
 							</p>
 						</div>
 					) : (

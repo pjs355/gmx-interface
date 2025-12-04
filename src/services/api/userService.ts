@@ -3,10 +3,24 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 const API_BASE = getPredictionApiBaseUrl();
 
 export interface UserProfile {
-	userId?: string;
+	_id: string; // MongoDB ObjectId (as string on client)
+	userId: string; // Privy user ID
 	exp?: number;
 	username?: string;
-	[key: string]: any;
+	usernameLower?: string;
+	usernameUpdatedAt?: Date;
+	wallet?: string; // DEPRECATED: prefer linked_accounts
+	smart_wallet?: string; // DEPRECATED: prefer linked_accounts
+	linked_accounts?: unknown[];
+	referredBy?: string;
+	referralClaimedAt?: Date;
+	claimedTestUsdcExpReward?: boolean;
+	orderCount?: number;
+	filledOrderCount?: number;
+	fundEmailSent?: Date | null;
+	fundEmailSentCount?: number;
+	cs?: unknown;
+	[key: string]: unknown;
 }
 
 interface ApiResponse {
