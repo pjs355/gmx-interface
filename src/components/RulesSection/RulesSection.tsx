@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BiChevronDown } from 'react-icons/bi';
+import { ResolveNotification } from '@/pages/PredictionMarket/ResolveNotification';
 import './RulesSection.scss';
 
 interface Umbrella {
@@ -30,10 +31,26 @@ export default function RulesSection({ umbrella }: RulesSectionProps) {
       <h3 className="rules-header">Rules</h3>
       <div className="rules-content">
         <div className="rules-text">
-          {previewParagraphs.map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
-          {!isExpanded && remainingParagraphs.length > 0 && (
+          {/* Show preview paragraphs when collapsed */}
+          {!isExpanded && (
+            <>
+              {previewParagraphs.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </>
+          )}
+          
+          {/* Show all paragraphs when expanded */}
+          {isExpanded && (
+            <>
+              {paragraphs.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </>
+          )}
+          
+          {/* Always show expand/collapse button */}
+          {!isExpanded ? (
             <button 
               className="expand-button"
               onClick={() => setIsExpanded(true)}
@@ -47,12 +64,14 @@ export default function RulesSection({ umbrella }: RulesSectionProps) {
               />
               Show More
             </button>
-          )}
-          {isExpanded && remainingParagraphs.length > 0 && (
+          ) : (
             <>
-              {remainingParagraphs.map((paragraph, index) => (
-                <p key={index + 1}>{paragraph}</p>
-              ))}
+              {/* Settlement Notification - shown at bottom when rules are expanded */}
+              {umbrella && (
+                <div className="settlement-notification-wrapper">
+                  <ResolveNotification umbrellaId={umbrella._id} />
+                </div>
+              )}
               <button 
                 className="expand-button"
                 onClick={() => setIsExpanded(false)}

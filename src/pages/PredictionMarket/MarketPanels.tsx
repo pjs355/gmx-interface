@@ -6,7 +6,6 @@ import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarke
 import RulesSection from "components/RulesSection/RulesSection";
 import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
-import { ResolveNotification } from "./ResolveNotification";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getMarketId } from "./utils";
@@ -208,11 +207,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						)}
 					</div>
 
-					{/* Settlement Notification Section */}
-					{umbrella && (
-						<ResolveNotification umbrellaId={umbrella._id} />
-					)}
-
 					{/* Comments Section */}
 					{umbrella && (
 						<Comments
@@ -351,9 +345,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						</>
 					)}
 				</div>
-
-				{/* Settlement Notification Section */}
-				{umbrella && <ResolveNotification umbrellaId={umbrella._id} />}
 
 				{/* Comments Section */}
 				{umbrella && (

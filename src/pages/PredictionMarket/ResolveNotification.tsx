@@ -152,7 +152,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				onClick={() => setExpanded(!expanded)}
 				style={{ cursor: "pointer" }}
 			>
-				<h3>Settlement Notification</h3>
+				<h3>Propose Resolution</h3>
 				<span
 					className={`resolve-notification-arrow ${
 						expanded ? "expanded" : ""
@@ -164,11 +164,6 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 
 			{expanded && (
 				<div className="resolve-notification-content">
-					<p className="resolve-notification-description">
-						Submit a comment or link to proof if you believe this
-						market should be resolved.
-					</p>
-
 					{!authenticated ? (
 						<div className="resolve-notification-auth-prompt">
 							<p>
@@ -196,7 +191,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 							<textarea
 								value={resolveComment}
 								onChange={handleTextareaChange}
-								placeholder="Enter comment or link to proof..."
+								placeholder="Submit a comment or link to proof if you believe this market should be resolved."
 								rows={4}
 								className="resolve-notification-textarea"
 								disabled={submitting}
@@ -214,7 +209,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 							>
 								{submitting
 									? "Submitting..."
-									: "Submit Notification"}
+									: "Submit Resolution"}
 							</button>
 						</div>
 					)}
