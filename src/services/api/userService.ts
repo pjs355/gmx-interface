@@ -2,6 +2,13 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 const API_BASE = getPredictionApiBaseUrl();
 
+export interface EmailPreferences {
+	generalNotifications: boolean;
+	tradeConfirmations: boolean;
+	winningsNotifications: boolean;
+	levelUpAnnouncements: boolean;
+}
+
 export interface UserProfile {
 	_id: string; // MongoDB ObjectId (as string on client)
 	userId: string; // Privy user ID
@@ -19,6 +26,7 @@ export interface UserProfile {
 	filledOrderCount?: number;
 	fundEmailSent?: Date | null;
 	fundEmailSentCount?: number;
+	emailPreferences?: EmailPreferences;
 	cs?: unknown;
 	[key: string]: unknown;
 }

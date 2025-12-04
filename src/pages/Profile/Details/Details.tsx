@@ -113,6 +113,11 @@ export default function Details() {
 				identityToken
 			);
 			setUserDetails(profile);
+
+			// Initialize email preferences from profile or use defaults
+			if (profile.emailPreferences) {
+				setEmailPreferences(profile.emailPreferences);
+			}
 		} catch (error) {
 			console.error("Failed to fetch user details:", error);
 		} finally {
@@ -216,11 +221,32 @@ export default function Details() {
 
 	const handleSavePreferences = async () => {
 		setIsSavingPreferences(true);
-		// Simulate saving - this will be hooked up to backend later
-		await new Promise((resolve) => setTimeout(resolve, 500));
-		setIsSavingPreferences(false);
-		setPreferencesSaved(true);
-		setTimeout(() => setPreferencesSaved(false), 3000);
+
+		try {
+			const accessToken = await getAccessToken();
+			if (!accessToken) {
+				throw new Error("No access token available");
+			}
+
+			if (!identityToken) {
+				throw new Error("No identity token available");
+			}
+
+			const updatedProfile = await userService.updateUserProfile(
+				{ emailPreferences },
+				accessToken,
+				identityToken
+			);
+
+			setUserDetails(updatedProfile);
+			setPreferencesSaved(true);
+			setTimeout(() => setPreferencesSaved(false), 3000);
+		} catch (error) {
+			console.error("Failed to save email preferences:", error);
+			// TODO: Add user-facing error message
+		} finally {
+			setIsSavingPreferences(false);
+		}
 	};
 
 	// Account deletion handlers
@@ -354,13 +380,18 @@ export default function Details() {
 						<input
 							type="checkbox"
 							checked={emailPreferences.generalNotifications}
-							onChange={() => handlePreferenceChange("generalNotifications")}
+							onChange={() =>
+								handlePreferenceChange("generalNotifications")
+							}
 							className="Details-checkbox"
 						/>
 						<div className="Details-preference-content">
-							<span className="Details-preference-label">General Notifications</span>
+							<span className="Details-preference-label">
+								General Notifications
+							</span>
 							<span className="Details-preference-description">
-								Important updates about your account and platform changes
+								Important updates about your account and
+								platform changes
 							</span>
 						</div>
 					</label>
@@ -369,13 +400,18 @@ export default function Details() {
 						<input
 							type="checkbox"
 							checked={emailPreferences.tradeConfirmations}
-							onChange={() => handlePreferenceChange("tradeConfirmations")}
+							onChange={() =>
+								handlePreferenceChange("tradeConfirmations")
+							}
 							className="Details-checkbox"
 						/>
 						<div className="Details-preference-content">
-							<span className="Details-preference-label">Trade Confirmations</span>
+							<span className="Details-preference-label">
+								Trade Confirmations
+							</span>
 							<span className="Details-preference-description">
-								Receive confirmation emails when you place or complete trades
+								Receive confirmation emails when you place or
+								complete trades
 							</span>
 						</div>
 					</label>
@@ -384,13 +420,18 @@ export default function Details() {
 						<input
 							type="checkbox"
 							checked={emailPreferences.winningsNotifications}
-							onChange={() => handlePreferenceChange("winningsNotifications")}
+							onChange={() =>
+								handlePreferenceChange("winningsNotifications")
+							}
 							className="Details-checkbox"
 						/>
 						<div className="Details-preference-content">
-							<span className="Details-preference-label">Winnings Notifications</span>
+							<span className="Details-preference-label">
+								Winnings Notifications
+							</span>
 							<span className="Details-preference-description">
-								Get notified when your predictions win and earnings are available
+								Get notified when your predictions win and
+								earnings are available
 							</span>
 						</div>
 					</label>
@@ -399,13 +440,18 @@ export default function Details() {
 						<input
 							type="checkbox"
 							checked={emailPreferences.levelUpAnnouncements}
-							onChange={() => handlePreferenceChange("levelUpAnnouncements")}
+							onChange={() =>
+								handlePreferenceChange("levelUpAnnouncements")
+							}
 							className="Details-checkbox"
 						/>
 						<div className="Details-preference-content">
-							<span className="Details-preference-label">LevelUp Announcements</span>
+							<span className="Details-preference-label">
+								LevelUp Announcements
+							</span>
 							<span className="Details-preference-description">
-								Stay updated with new features, promotions, and platform news
+								Stay updated with new features, promotions, and
+								platform news
 							</span>
 						</div>
 					</label>
@@ -417,7 +463,11 @@ export default function Details() {
 						onClick={handleSavePreferences}
 						disabled={isSavingPreferences}
 					>
-						{isSavingPreferences ? "Saving..." : preferencesSaved ? "✓ Saved" : "Save Preferences"}
+						{isSavingPreferences
+							? "Saving..."
+							: preferencesSaved
+							? "✓ Saved"
+							: "Save Preferences"}
 					</button>
 				</div>
 			</div>
@@ -445,14 +495,15 @@ export default function Details() {
 							This action is permanent and irreversible.
 						</p>
 						<p className="Details-delete-warning-body">
-							If you have <strong>ANY</strong> outstanding positions, cash, or 
-							holdings in your account and your account is deleted, you will{" "}
-							<strong>NEVER</strong> under any circumstances be able to recover 
-							them after your account is deleted.
+							If you have <strong>ANY</strong> outstanding
+							positions, cash, or holdings in your account and
+							your account is deleted, you will{" "}
+							<strong>NEVER</strong> under any circumstances be
+							able to recover them after your account is deleted.
 						</p>
 						<p className="Details-delete-warning-body">
-							Please ensure you have withdrawn all funds and closed all positions 
-							before proceeding.
+							Please ensure you have withdrawn all funds and
+							closed all positions before proceeding.
 						</p>
 					</div>
 
