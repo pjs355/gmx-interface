@@ -68,25 +68,13 @@ export default function HistoryView({
 	resolvedMarketsByUmbrella: Record<string, any[]>;
 }) {
 	const { umbrellas } = usePredictionData();
-	
+
 	// Filter resolved markets to only show those where user has trading history
 	const filteredResolvedMarkets = React.useMemo(() => {
 		const filtered: Array<{ umbrella: any; markets: any[] }> = [];
 
-		console.log(
-			"🔍 HISTORY DEBUG: Processing resolved markets for history tab..."
-		);
-		console.log(
-			"🔍 HISTORY DEBUG: resolvedMarketsByUmbrella:",
-			resolvedMarketsByUmbrella
-		);
-
 		Object.entries(resolvedMarketsByUmbrella).forEach(
 			([umbrellaId, resolvedMarkets]) => {
-				console.log(
-					`🔍 HISTORY DEBUG: Processing umbrella ${umbrellaId} with ${resolvedMarkets.length} resolved markets`
-				);
-
 				const marketsWithHistory: any[] = [];
 
 				resolvedMarkets.forEach((market) => {
@@ -99,19 +87,11 @@ export default function HistoryView({
 						(order) => order.questionId === marketId
 					);
 
-					console.log(
-						`🔍 HISTORY DEBUG: Market ${market.displayName} - hasOrders: ${hasOrders}`
-					);
-
 					if (hasOrders) {
 						// Get final amounts to display (will be 0 if claimed, but we still show the market)
 						const finalAmounts = getFinalAmount(orders, marketId);
 						const yesShares = finalAmounts.yesShares;
 						const noShares = finalAmounts.noShares;
-
-						console.log(
-							`🔍 HISTORY DEBUG: Market ${market.displayName} - yesShares: ${yesShares}, noShares: ${noShares}`
-						);
 
 						marketsWithHistory.push({
 							market,
@@ -124,12 +104,9 @@ export default function HistoryView({
 				if (marketsWithHistory.length > 0) {
 					// Find the actual umbrella object for this ID (with children/tagIds for images)
 					let umbrella = umbrellas.find((u) => u._id === umbrellaId);
-					
+
 					// If not found, create a basic umbrella object as fallback
 					if (!umbrella) {
-						console.log(
-							`🔍 HISTORY DEBUG: No umbrella found for ID ${umbrellaId}, creating fallback`
-						);
 						umbrella = {
 							_id: umbrellaId,
 							displayName:
@@ -140,25 +117,14 @@ export default function HistoryView({
 							createdAt: new Date().toISOString(),
 							updatedAt: new Date().toISOString(),
 							__v: 0,
-						};
-					} else {
-						console.log(
-							`✅ HISTORY DEBUG: Found umbrella for ID ${umbrellaId}: ${umbrella.displayName}, children count: ${umbrella.children?.length || 0}`
-						);
+						} as any;
 					}
 
 					filtered.push({ umbrella, markets: marketsWithHistory });
-					console.log(
-						`🔍 HISTORY DEBUG: Added umbrella ${umbrella.displayName} with ${marketsWithHistory.length} markets with history`
-					);
 				}
 			}
 		);
 
-		console.log(
-			"🔍 HISTORY DEBUG: Final filtered resolved markets:",
-			filtered
-		);
 		return filtered;
 	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
 
@@ -196,9 +162,7 @@ export default function HistoryView({
 						<div style={{ textAlign: "center" }}>
 							Final Position
 						</div>
-						<div style={{ textAlign: "center" }}>
-							Outcome
-						</div>
+						<div style={{ textAlign: "center" }}>Outcome</div>
 						<div style={{ textAlign: "center" }}>Total Cost</div>
 						<div style={{ textAlign: "center" }}>Total Payout</div>
 						<div style={{ textAlign: "center" }}>
@@ -272,24 +236,42 @@ export default function HistoryView({
 										).toLowerCase();
 
 										// Determine which sides the user traded on (check orders, not just current shares)
-										const userYesOrders = qid ? orders.filter(
-											(order) => order.questionId === qid && order.outcome?.toLowerCase() === "yes"
-										) : [];
-										const userNoOrders = qid ? orders.filter(
-											(order) => order.questionId === qid && order.outcome?.toLowerCase() === "no"
-										) : [];
-										
+										const userYesOrders = qid
+											? orders.filter(
+													(order) =>
+														order.questionId ===
+															qid &&
+														order.outcome?.toLowerCase() ===
+															"yes"
+											  )
+											: [];
+										const userNoOrders = qid
+											? orders.filter(
+													(order) =>
+														order.questionId ===
+															qid &&
+														order.outcome?.toLowerCase() ===
+															"no"
+											  )
+											: [];
+
 										const rows: {
 											side: "Yes" | "No";
 											amount: string;
 										}[] = [];
 										// Show a row if user has current shares OR has traded on that side
-										if (yesNum > 0 || userYesOrders.length > 0)
+										if (
+											yesNum > 0 ||
+											userYesOrders.length > 0
+										)
 											rows.push({
 												side: "Yes",
 												amount: yes,
 											});
-										if (noNum > 0 || userNoOrders.length > 0)
+										if (
+											noNum > 0 ||
+											userNoOrders.length > 0
+										)
 											rows.push({
 												side: "No",
 												amount: no,
@@ -451,22 +433,24 @@ export default function HistoryView({
 												.map((s: string) => s.trim())
 												.filter(Boolean);
 											const isVs = parts.length === 2;
-											
+
 											// Determine outcome text
 											const outcomeText = (() => {
 												if (isVs) {
 													// For VS markets, show the winning team name
-													return resolvedOutcome === "yes"
+													return resolvedOutcome ===
+														"yes"
 														? parts[0]
 														: parts[1];
 												} else {
 													// For regular markets, show Yes or No
-													return resolvedOutcome === "yes"
+													return resolvedOutcome ===
+														"yes"
 														? "Yes"
 														: "No";
 												}
 											})();
-											
+
 											// Determine outcome color
 											const outcomeColor = (() => {
 												if (isVs) {
@@ -476,12 +460,13 @@ export default function HistoryView({
 														: "#ef4444"; // Red - user lost
 												} else {
 													// For regular markets: Yes = Green, No = Red
-													return resolvedOutcome === "yes"
+													return resolvedOutcome ===
+														"yes"
 														? "#16a34a"
 														: "#ef4444";
 												}
 											})();
-											
+
 											return (
 												<div
 													key={`${

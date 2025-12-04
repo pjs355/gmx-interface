@@ -5,6 +5,7 @@ import {
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
 import { tagService, type Tag } from "@/services/api/tagService";
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import CountdownTimer from "@/components/CountdownTimer/CountdownTimer";
 import streamLogo from "@/assets/img/twitch-logo.png";
 
@@ -18,6 +19,9 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 	const [loading, setLoading] = useState<boolean>(false);
 	const [query, setQuery] = useState<string>("");
 	const [tagMap, setTagMap] = useState<Record<string, string>>({});
+	const [notificationCounts, setNotificationCounts] = useState<
+		Record<string, number>
+	>({});
 	const { getAccessToken } = usePrivy();
 
 	useEffect(() => {
@@ -47,7 +51,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 				if (!token) {
 					return;
 				}
-				const tags = await tagService.fetchAllTags(token);
+				const tags = await tagService.fetchAllTags();
 				if (!mounted) {
 					return;
 				}
@@ -102,6 +106,71 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 			);
 		}
 	}, [zeroQuestionIds]);
+
+	// Fetch notification counts for all umbrellas
+	useEffect(() => {
+		let mounted = true;
+		async function fetchNotificationCounts() {
+			try {
+				const token =
+					typeof getAccessToken === "function"
+						? await getAccessToken()
+						: null;
+				if (!token) {
+					return;
+				}
+
+				const API_BASE = getPredictionApiBaseUrl();
+				const counts: Record<string, number> = {};
+
+				// Fetch counts for each umbrella
+				await Promise.all(
+					filtered.map(async (umbrella) => {
+						try {
+							const response = await fetch(
+								`${API_BASE}/admin/umbrellas/${umbrella._id}/settlement-notifications/count`,
+								{
+									headers: {
+										Authorization: `Bearer ${token}`,
+									},
+								}
+							);
+
+							if (response.ok) {
+								const data = await response.json();
+								if (
+									data.success &&
+									typeof data.count === "number"
+								) {
+									counts[umbrella._id] = data.count;
+								}
+							} else if (response.status === 404) {
+								// Endpoint doesn't exist yet, set count to 0
+								counts[umbrella._id] = 0;
+							}
+						} catch (error) {
+							// Silently fail - endpoint may not exist yet
+							counts[umbrella._id] = 0;
+						}
+					})
+				);
+
+				if (mounted) {
+					setNotificationCounts(counts);
+				}
+			} catch (error) {
+				// Silently fail - endpoint may not exist yet
+			}
+		}
+
+		if (filtered.length > 0) {
+			fetchNotificationCounts();
+		}
+
+		return () => {
+			mounted = false;
+		};
+	}, [filtered, getAccessToken]);
 
 	return (
 		<div style={{ color: "white" }}>
@@ -260,6 +329,24 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 												}}
 											>
 												Questions: 0
+											</div>
+										)}
+										{notificationCounts[u._id] !==
+											undefined && (
+											<div
+												style={{
+													fontSize: 12,
+													opacity: 0.8,
+													color:
+														notificationCounts[
+															u._id
+														] > 0
+															? "#fbbf24"
+															: undefined,
+												}}
+											>
+												Notifications:{" "}
+												{notificationCounts[u._id]}
 											</div>
 										)}
 									</div>

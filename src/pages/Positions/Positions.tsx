@@ -206,45 +206,19 @@ export default function Positions() {
 	// derive resolved winnings using dedicated resolved markets storage
 	const resolvedUmbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) {
-			console.log(
-				"🔍 DEBUG: No effective account, returning empty resolved positions"
-			);
 			return [];
 		}
 		const resolved: UmbrellaPositions[] = [];
 
-		console.log(
-			"🔍 DEBUG: Checking for resolved markets using dedicated storage..."
-		);
-		console.log(
-			"🔍 DEBUG: resolvedMarketsByUmbrella:",
-			resolvedMarketsByUmbrella
-		);
-		console.log(
-			"🔍 DEBUG: Object.keys(resolvedMarketsByUmbrella):",
-			Object.keys(resolvedMarketsByUmbrella)
-		);
-
 		// Process all umbrellas that have resolved markets
 		Object.entries(resolvedMarketsByUmbrella).forEach(
 			([umbrellaId, resolvedMarkets]) => {
-				console.log(
-					`🔍 DEBUG: Processing umbrella ID: ${umbrellaId} with ${resolvedMarkets.length} resolved markets`
-				);
-				console.log(
-					`🔍 DEBUG: Resolved markets data:`,
-					resolvedMarkets
-				);
-
 				if (resolvedMarkets.length > 0) {
 					// Find the umbrella object for this ID
 					let umbrella = umbrellas.find((u) => u._id === umbrellaId);
 
 					// If not found in umbrellas array, create a basic umbrella object from the resolved market data
 					if (!umbrella) {
-						console.log(
-							`🔍 DEBUG: No umbrella found for ID ${umbrellaId}, creating basic umbrella object`
-						);
 						// Get the first resolved market to extract umbrella info
 						const firstMarket = resolvedMarkets[0];
 						umbrella = {
@@ -258,15 +232,8 @@ export default function Positions() {
 							updatedAt: new Date().toISOString(),
 							__v: 0,
 						} as Umbrella;
-					} else {
-						console.log(
-							`✅ DEBUG: Found umbrella for ID ${umbrellaId}: ${umbrella.displayName}, children count: ${umbrella.children?.length || 0}`
-						);
 					}
 
-					console.log(
-						`🔍 DEBUG: Processing ${resolvedMarkets.length} resolved markets for ${umbrella.displayName}`
-					);
 					const res = resolvedMarkets
 						.map((m) => {
 							// Use MongoDB _id for balance lookup
@@ -276,9 +243,6 @@ export default function Positions() {
 								: undefined;
 							const yesBalance = tb ? Number(tb.yesBalance) : 0;
 							const noBalance = tb ? Number(tb.noBalance) : 0;
-							console.log(
-								`🔍 DEBUG: Market ${m?.displayName} - balanceId: ${balanceId}, yesBalance: ${yesBalance}, noBalance: ${noBalance}`
-							);
 							return { market: m, yesBalance, noBalance } as any;
 						})
 						// Filter to only show markets where user has winning positions AND haven't been claimed
@@ -288,9 +252,6 @@ export default function Positions() {
 							const isClaimed = claimedMarkets.has(balanceId);
 
 							if (isClaimed) {
-								console.log(
-									`🔍 DEBUG: Market ${mp.market?.displayName} - ALREADY CLAIMED, filtering out`
-								);
 								return false;
 							}
 
@@ -303,9 +264,6 @@ export default function Positions() {
 								outcome === "no" && mp.noBalance > 0;
 							const hasWinningPosition =
 								hasWinningYes || hasWinningNo;
-							console.log(
-								`🔍 DEBUG: Market ${mp.market?.displayName} - outcome: ${outcome}, hasWinningYes: ${hasWinningYes}, hasWinningNo: ${hasWinningNo}, hasWinningPosition: ${hasWinningPosition}`
-							);
 							return hasWinningPosition;
 						})
 						.map(
@@ -337,28 +295,14 @@ export default function Positions() {
 								} as MarketPosition)
 						);
 
-					console.log(
-						`🔍 DEBUG: Adding ${res.length} resolved markets to table for ${umbrella.displayName}`
-					);
-					console.log(`🔍 DEBUG: Processed markets data:`, res);
-
 					// Only add umbrella if it has qualifying markets (user has winning positions)
 					if (res.length > 0) {
 						resolved.push({ umbrella, markets: res });
-					} else {
-						console.log(
-							`🔍 DEBUG: Skipping umbrella ${umbrella.displayName} - no winning positions found`
-						);
 					}
 				}
 			}
 		);
 
-		console.log("🔍 DEBUG: Final resolvedUmbrellaPositions:", resolved);
-		console.log(
-			"🔍 DEBUG: Final resolvedUmbrellaPositions.length:",
-			resolved.length
-		);
 		return resolved;
 	}, [
 		effectiveAccount,
@@ -543,15 +487,6 @@ export default function Positions() {
 										);
 									}
 									if (activeTab === "positions") {
-										console.log(
-											"🔍 DEBUG: In positions tab, resolvedUmbrellaPositions.length:",
-											resolvedUmbrellaPositions.length
-										);
-										console.log(
-											"🔍 DEBUG: resolvedUmbrellaPositions:",
-											resolvedUmbrellaPositions
-										);
-
 										return (
 											<>
 												{isDataFullyLoaded &&
@@ -598,9 +533,6 @@ export default function Positions() {
 																							"no"
 																								? mp.noBalance.toString()
 																								: "0";
-																						console.log(
-																							`🔍 DEBUG: Transformed market ${mp.market?.displayName} - outcome: ${outcome}, yes: ${yes}, no: ${no}`
-																						);
 																						return {
 																							market: mp.market,
 																							yes,
@@ -610,10 +542,6 @@ export default function Positions() {
 																				),
 																		})
 																	);
-																console.log(
-																	"🔍 DEBUG: Transformed data for Resolved Positions:",
-																	transformedData
-																);
 																return !isMobile ? (
 																	<ResolvedPositionsTable
 																		umbrellaBalances={

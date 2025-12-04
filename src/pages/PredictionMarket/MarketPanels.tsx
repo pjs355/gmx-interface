@@ -6,6 +6,7 @@ import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarke
 import RulesSection from "components/RulesSection/RulesSection";
 import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
+import { ResolveNotification } from "./ResolveNotification";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getMarketId } from "./utils";
@@ -60,9 +61,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
 	const streamUrl =
-		typeof umbrella?.streamUrl === "string"
-			? umbrella.streamUrl
-			: "";
+		typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
 	const showStream = Boolean(umbrella?.streamEnabled) && streamUrl.length > 0;
 
 	// Debug: Uncomment to track MarketPanels re-renders
@@ -209,6 +208,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						)}
 					</div>
 
+					{/* Settlement Notification Section */}
+					{umbrella && (
+						<ResolveNotification umbrellaId={umbrella._id} />
+					)}
+
 					{/* Comments Section */}
 					{umbrella && (
 						<Comments
@@ -347,6 +351,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						</>
 					)}
 				</div>
+
+				{/* Settlement Notification Section */}
+				{umbrella && <ResolveNotification umbrellaId={umbrella._id} />}
 
 				{/* Comments Section */}
 				{umbrella && (
