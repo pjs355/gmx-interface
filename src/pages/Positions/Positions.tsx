@@ -44,7 +44,7 @@ type UmbrellaPositions = {
 
 export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
-	const { account } = useSignerContext();
+	const { account, isDebugMode, debugAccount, realAccount } = useSignerContext();
 	// unified balances via PortfolioContext
 	const {
 		portfolioTotal: portfolioTotalCtx,
@@ -494,6 +494,33 @@ export default function Positions() {
 
 	return (
 		<div className="positions-page page-layout">
+			{/* Debug Mode Banner */}
+			{isDebugMode && (
+				<div style={{
+					background: 'linear-gradient(90deg, #ff6b35, #f7931a)',
+					color: 'white',
+					padding: '12px 20px',
+					borderRadius: '8px',
+					marginBottom: '16px',
+					fontWeight: 'bold',
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'space-between',
+					flexWrap: 'wrap',
+					gap: '8px',
+				}}>
+					<div>
+						<span style={{ fontSize: '16px' }}>🔧 DEBUG MODE</span>
+						<span style={{ fontWeight: 'normal', marginLeft: '12px', fontSize: '14px' }}>
+							Viewing portfolio for: <code style={{ background: 'rgba(0,0,0,0.2)', padding: '2px 6px', borderRadius: '4px' }}>{debugAccount?.slice(0, 6)}...{debugAccount?.slice(-4)}</code>
+						</span>
+					</div>
+					<div style={{ fontSize: '12px', fontWeight: 'normal', opacity: 0.9 }}>
+						{realAccount && <>Your account: {realAccount.slice(0, 6)}...{realAccount.slice(-4)} | </>}
+						Run <code style={{ background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '3px' }}>clearSpoof()</code> in console to exit
+					</div>
+				</div>
+			)}
 			<div>
 				<div className="positions-header-group">
 					<PositionsHeader
@@ -535,7 +562,9 @@ export default function Positions() {
 										booksPreviewLoading;
 									const hasPositions =
 										umbrellaPositions.length > 0;
-									if (!hasPositions && !softLoading) {
+									const hasWinnings =
+										resolvedUmbrellaPositions.length > 0;
+									if (!hasPositions && !hasWinnings && !softLoading) {
 										return (
 											<p className="text-body">
 												No positions found.
@@ -662,46 +691,53 @@ export default function Positions() {
 															Positions
 														</h3>
 													)}
-												{!isMobile ? (
-													<PositionsTableView
-														umbrellaBalances={
-															umbrellaBalancesPositions
-														}
-														aggregates={aggregates}
-														spentByQid={spentByQid}
-														returnsByQid={
-															returnsByQid
-														}
-														getCurrentPriceForSide={
-															getCurrentPriceForSide
-														}
-														toCentsString={
-															toCentsString
-														}
-														softLoading={
-															softLoading
-														}
-													/>
+												{/* Show positions table if user has active positions, otherwise show message */}
+												{hasPositions ? (
+													!isMobile ? (
+														<PositionsTableView
+															umbrellaBalances={
+																umbrellaBalancesPositions
+															}
+															aggregates={aggregates}
+															spentByQid={spentByQid}
+															returnsByQid={
+																returnsByQid
+															}
+															getCurrentPriceForSide={
+																getCurrentPriceForSide
+															}
+															toCentsString={
+																toCentsString
+															}
+															softLoading={
+																softLoading
+															}
+														/>
+													) : (
+														<PositionsCardView
+															umbrellaBalances={
+																umbrellaBalancesPositions
+															}
+															aggregates={aggregates}
+															spentByQid={spentByQid}
+															returnsByQid={
+																returnsByQid
+															}
+															getCurrentPriceForSide={
+																getCurrentPriceForSide
+															}
+															toCentsString={
+																toCentsString
+															}
+															softLoading={
+																softLoading
+															}
+														/>
+													)
 												) : (
-													<PositionsCardView
-														umbrellaBalances={
-															umbrellaBalancesPositions
-														}
-														aggregates={aggregates}
-														spentByQid={spentByQid}
-														returnsByQid={
-															returnsByQid
-														}
-														getCurrentPriceForSide={
-															getCurrentPriceForSide
-														}
-														toCentsString={
-															toCentsString
-														}
-														softLoading={
-															softLoading
-														}
-													/>
+													<p className="text-body" style={{ color: '#888', marginTop: '16px' }}>
+														No current positions.
+													</p>
 												)}
 											</>
 										);

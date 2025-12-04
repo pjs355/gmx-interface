@@ -12,6 +12,12 @@ export const SELECTED_NETWORK_LOCAL_STORAGE_KEY = "SELECTED_NETWORK";
 export const LANGUAGE_LOCALSTORAGE_KEY = "LANGUAGE";
 export const SHOW_DEBUG_VALUES_KEY = "show-debug-values";
 
+// Debug: Override the account address for read-only debugging
+// Set this to another user's wallet address to view their portfolio (read-only)
+// Usage: localStorage.setItem('DEBUG_ACCOUNT_OVERRIDE', '0x...')
+// Clear: localStorage.removeItem('DEBUG_ACCOUNT_OVERRIDE')
+export const DEBUG_ACCOUNT_OVERRIDE_KEY = "DEBUG_ACCOUNT_OVERRIDE";
+
 export function useLocalStorageSerializeKey<T>(
 	key: string,
 	defaultValue: T,
