@@ -418,6 +418,20 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			title = title.replace(/\s+/g, " "); // Normalize multiple spaces to single space
 			title = title.trim();
 		}
+
+		// For player count markets, keep only up to "Player Count" and remove "24 Hour"
+		if (umbrella.displayName.includes("Player Count")) {
+			const playerCountIndex = title.indexOf("Player Count");
+			if (playerCountIndex !== -1) {
+				title = title.substring(
+					0,
+					playerCountIndex + "Player Count".length
+				);
+			}
+			title = title.replace(/24\s*Hour\s*/gi, "");
+			title = title.trim();
+		}
+
 		return title || umbrella.displayName;
 	}, [isDailyUmbrella, umbrella.displayName, eventDate]);
 
@@ -510,39 +524,53 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		};
 	}, [countdownDateMs]);
 
-	// Set up image URLs when umbrella changes
+	// Build image URL list with fallback priority
 	useEffect(() => {
 		const urls: string[] = [];
 
+		// 1. Custom image on umbrella
 		if (umbrella.image) {
 			urls.push(umbrella.image);
 		}
 
-		const resolvedBanner = resolveUmbrellaBannerById(umbrella._id);
-		if (resolvedBanner) {
-			urls.push(resolvedBanner);
+		// 2. Firebase banner by umbrella ID
+		const firebaseBanner = resolveUmbrellaBannerById(umbrella._id);
+		if (firebaseBanner) {
+			urls.push(firebaseBanner);
 		}
 
+		// 3. Game banner from umbrella.game field
 		const normalizedGame = normalizeGameName(umbrella.game);
-		if (normalizedGame) {
-			const gameBanner = gameBannerMap[normalizedGame];
-			if (gameBanner) {
-				urls.push(gameBanner);
+		if (normalizedGame && gameBannerMap[normalizedGame]) {
+			urls.push(gameBannerMap[normalizedGame]);
+		}
+
+		// 4. Game banner from tag slug
+		const children =
+			(umbrella as any).originalChildren || umbrella.children;
+		if (Array.isArray(children)) {
+			for (const child of children) {
+				const tagIds = child?.tagIds;
+				if (!Array.isArray(tagIds)) continue;
+				for (const tagId of tagIds) {
+					const tag = tags.find((t) => t._id === tagId);
+					if (!tag) continue;
+					const banner = gameBannerMap[tag.slug];
+					if (banner) {
+						urls.push(banner);
+					}
+				}
 			}
 		}
 
-		const alternativeUrls = getAlternativeImageUrls(umbrella._id);
-		if (Array.isArray(alternativeUrls) && alternativeUrls.length > 0) {
-			urls.push(...alternativeUrls);
-		}
+		// 5. Alternative Firebase URLs (different extensions)
+		urls.push(...getAlternativeImageUrls(umbrella._id));
 
-		const uniqueUrls = Array.from(
-			new Set(urls.filter(Boolean))
-		) as string[];
-		setImageUrls(uniqueUrls);
+		const unique = Array.from(new Set(urls.filter(Boolean))) as string[];
+		setImageUrls(unique);
 		setCurrentImageIndex(0);
 		setImageError(false);
-	}, [umbrella._id, umbrella.image, umbrella.game]);
+	}, [umbrella._id, umbrella.image, umbrella.game, umbrella.children, tags]);
 
 	const handleImageError = () => {
 		if (currentImageIndex < imageUrls.length - 1) {
@@ -642,11 +670,15 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			// Show Yes/No buttons for single market umbrellas
 			const orderbook = singleMarketOrderbooks[umbrella._id];
 			const question = singleMarketQuestions[umbrella._id];
+			const isDailyPlayerCount =
+				isDailyUmbrella &&
+				umbrella.displayName.includes("Player Count");
 			return (
 				<SingleMarketActions
 					orderbook={orderbook}
 					onNavigate={navigateToSingleMarket}
 					question={question}
+					isDailyPlayerCount={isDailyPlayerCount}
 				/>
 			);
 		} else if (umbrella.children && umbrella.children.length >= 2) {

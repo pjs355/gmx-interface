@@ -1,16 +1,12 @@
 import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useMedia } from "react-use";
-import { userService } from "@/services/api/userService";
-// import Modal from "components/Modal/Modal";
+import { userService, type EmailPreferences } from "@/services/api/userService";
+// import RPGPane from "../RPGPane/RPGPane";
+// import AchievementPane from "../AchievementPane/AchievementPane";
 import "./Details.scss";
 
-// interface EmailPreferences {
-// 	generalNotifications: boolean;
-// 	tradeConfirmations: boolean;
-// 	winningsNotifications: boolean;
-// 	levelUpAnnouncements: boolean;
-// }
+const isMobileBreakpoint = "(max-width: 768px)";
 
 interface UserDetails {
 	id?: string;
@@ -27,6 +23,7 @@ interface UserDetails {
 export default function Details() {
 	const { getAccessToken, ready, authenticated, user } = usePrivy();
 	const { identityToken } = useIdentityToken();
+	const isMobile = useMedia(isMobileBreakpoint);
 	const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isEditingUsername, setIsEditingUsername] = useState(false);
@@ -35,15 +32,15 @@ export default function Details() {
 	const [usernameError, setUsernameError] = useState<string | null>(null);
 	const [copySuccess, setCopySuccess] = useState(false);
 
-	// Email preferences state - COMMENTED OUT FOR NOW
-	// const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
-	// 	generalNotifications: true,
-	// 	tradeConfirmations: true,
-	// 	winningsNotifications: true,
-	// 	levelUpAnnouncements: true,
-	// });
-	// const [isSavingPreferences, setIsSavingPreferences] = useState(false);
-	// const [preferencesSaved, setPreferencesSaved] = useState(false);
+	// Email preferences state
+	const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
+		generalNotifications: true,
+		tradeConfirmations: true,
+		winningsNotifications: true,
+		levelUpAnnouncements: true,
+	});
+	const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+	const [preferencesSaved, setPreferencesSaved] = useState(false);
 
 	// Account deletion modal state - COMMENTED OUT FOR NOW
 	// const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -116,7 +113,7 @@ export default function Details() {
 
 			// Initialize email preferences from profile or use defaults
 			if (profile.emailPreferences) {
-				// setEmailPreferences(profile.emailPreferences);
+				setEmailPreferences(profile.emailPreferences);
 			}
 		} catch (error) {
 			console.error("Failed to fetch user details:", error);
@@ -211,23 +208,40 @@ export default function Details() {
 		if (e.key === "Escape" && isEditingUsername) handleCancelEdit();
 	};
 
-	// Email preference handlers - COMMENTED OUT FOR NOW
-	// const handlePreferenceChange = (key: keyof EmailPreferences) => {
-	// 	setEmailPreferences((prev) => ({
-	// 		...prev,
-	// 		[key]: !prev[key],
-	// 	}));
-	// 	setPreferencesSaved(false);
-	// };
+	// Email preference handlers
+	const handlePreferenceChange = (key: keyof EmailPreferences) => {
+		setEmailPreferences((prev) => ({
+			...prev,
+			[key]: !prev[key],
+		}));
+		setPreferencesSaved(false);
+	};
 
-	// const handleSavePreferences = async () => {
-	// 	setIsSavingPreferences(true);
-	// 	// Simulate saving - this will be hooked up to backend later
-	// 	await new Promise((resolve) => setTimeout(resolve, 500));
-	// 	setIsSavingPreferences(false);
-	// 	setPreferencesSaved(true);
-	// 	setTimeout(() => setPreferencesSaved(false), 3000);
-	// };
+	const handleSavePreferences = async () => {
+		setIsSavingPreferences(true);
+		try {
+			const accessToken = await getAccessToken();
+			if (!accessToken) {
+				throw new Error("No access token available");
+			}
+			if (!identityToken) {
+				throw new Error("No identity token available");
+			}
+
+			const updatedProfile = await userService.updateUserProfile(
+				{ emailPreferences },
+				accessToken,
+				identityToken
+			);
+			setUserDetails(updatedProfile);
+			setPreferencesSaved(true);
+			setTimeout(() => setPreferencesSaved(false), 3000);
+		} catch (error) {
+			console.error("Failed to save email preferences:", error);
+		} finally {
+			setIsSavingPreferences(false);
+		}
+	};
 
 	// Account deletion handlers - COMMENTED OUT FOR NOW
 	// const handleOpenDeleteModal = () => {
@@ -278,179 +292,220 @@ export default function Details() {
 
 	return (
 		<div className="Details">
-			<div className="Details-description">
-				View and manage your account information and settings.
+			<div
+				className="Details-two-pane"
+				style={{
+					display: "flex",
+					flexDirection: isMobile ? "column" : "row",
+					gap: "32px",
+				}}
+			>
+				{/* Left Pane - Account Details */}
+				<div className="Details-left-pane" style={{ flex: 1 }}>
+					<div className="Details-username-section">
+						<div className="Details-username-label">Username</div>
+						<div className="Details-username-controls">
+							<input
+								type="text"
+								className="Details-username-input"
+								value={inputValue}
+								onChange={(e) =>
+									setUsernameValue(e.target.value)
+								}
+								disabled={!isEditingUsername}
+								placeholder="Enter username"
+								onKeyDown={handleKeyDown}
+							/>
+							{renderButtons()}
+						</div>
+
+						{usernameError && (
+							<div className="Details-error">
+								<span>⚠️ {usernameError}</span>
+							</div>
+						)}
+
+						<div className="Details-hint">
+							Username will be displayed on leaderboard and
+							comments.
+							<br />
+							Username can only be changed once every 7 days.
+						</div>
+					</div>
+
+					{/* Email Display */}
+					{userEmail && (
+						<div className="Details-info-section">
+							<div className="Details-info-label">Email</div>
+							<div className="Details-info-value">
+								{userEmail}
+							</div>
+						</div>
+					)}
+
+					{/* Phone Display */}
+					{userPhone && (
+						<div className="Details-info-section">
+							<div className="Details-info-label">Phone</div>
+							<div className="Details-info-value">
+								{userPhone}
+							</div>
+						</div>
+					)}
+
+					{/* Smart Wallet Address Display */}
+					{smartWalletAddress && (
+						<div className="Details-info-section">
+							<div className="Details-info-label">
+								Smart Wallet Address (Base)
+							</div>
+							<div className="Details-wallet-display">
+								<div className="Details-info-value Details-wallet-address">
+									{smartWalletAddress}
+								</div>
+								<button
+									className="Details-copy-button"
+									onClick={handleCopyAddress}
+									title="Copy address"
+								>
+									{copySuccess ? "✓" : "Copy"}
+								</button>
+							</div>
+						</div>
+					)}
+				</div>
+
+				{/* Right Pane - Email Preferences */}
+				<div className="Details-right-pane" style={{ flex: 1 }}>
+					<div className="Details-email-preferences">
+						<div className="Details-section-title">
+							Email Preferences
+						</div>
+						<div className="Details-section-description">
+							Choose which email notifications you'd like to
+							receive.
+						</div>
+
+						<div className="Details-preferences-list">
+							<label className="Details-preference-item">
+								<input
+									type="checkbox"
+									checked={
+										emailPreferences.generalNotifications
+									}
+									onChange={() =>
+										handlePreferenceChange(
+											"generalNotifications"
+										)
+									}
+									className="Details-checkbox"
+								/>
+								<div className="Details-preference-content">
+									<span className="Details-preference-label">
+										General Notifications
+									</span>
+									<span className="Details-preference-description">
+										Important updates about your account and
+										platform changes
+									</span>
+								</div>
+							</label>
+
+							<label className="Details-preference-item">
+								<input
+									type="checkbox"
+									checked={
+										emailPreferences.tradeConfirmations
+									}
+									onChange={() =>
+										handlePreferenceChange(
+											"tradeConfirmations"
+										)
+									}
+									className="Details-checkbox"
+								/>
+								<div className="Details-preference-content">
+									<span className="Details-preference-label">
+										Trade Confirmations
+									</span>
+									<span className="Details-preference-description">
+										Receive confirmation emails when you
+										place or complete trades
+									</span>
+								</div>
+							</label>
+
+							<label className="Details-preference-item">
+								<input
+									type="checkbox"
+									checked={
+										emailPreferences.winningsNotifications
+									}
+									onChange={() =>
+										handlePreferenceChange(
+											"winningsNotifications"
+										)
+									}
+									className="Details-checkbox"
+								/>
+								<div className="Details-preference-content">
+									<span className="Details-preference-label">
+										Winnings Notifications
+									</span>
+									<span className="Details-preference-description">
+										Get notified when your predictions win
+										and earnings are available
+									</span>
+								</div>
+							</label>
+
+							<label className="Details-preference-item">
+								<input
+									type="checkbox"
+									checked={
+										emailPreferences.levelUpAnnouncements
+									}
+									onChange={() =>
+										handlePreferenceChange(
+											"levelUpAnnouncements"
+										)
+									}
+									className="Details-checkbox"
+								/>
+								<div className="Details-preference-content">
+									<span className="Details-preference-label">
+										LevelUp Announcements
+									</span>
+									<span className="Details-preference-description">
+										Stay updated with new features,
+										promotions, and platform news
+									</span>
+								</div>
+							</label>
+						</div>
+
+						<div className="Details-preferences-actions">
+							<button
+								className="Details-button"
+								onClick={handleSavePreferences}
+								disabled={isSavingPreferences}
+							>
+								{isSavingPreferences
+									? "Saving..."
+									: preferencesSaved
+									? "✓ Saved"
+									: "Save Preferences"}
+							</button>
+						</div>
+					</div>
+				</div>
 			</div>
 
-			<div className="Details-username-section">
-				<div className="Details-username-label">Username</div>
-				<div className="Details-username-controls">
-					<input
-						type="text"
-						className="Details-username-input"
-						value={inputValue}
-						onChange={(e) => setUsernameValue(e.target.value)}
-						disabled={!isEditingUsername}
-						placeholder="Enter username"
-						onKeyDown={handleKeyDown}
-					/>
-					{renderButtons()}
-				</div>
+			{/* RPG Experience Pane - COMMENTED OUT FOR NOW */}
+			{/* <RPGPane /> */}
 
-				{usernameError && (
-					<div className="Details-error">
-						<span>⚠️ {usernameError}</span>
-					</div>
-				)}
-
-				<div className="Details-hint">
-					The username will be used when sharing markets as well as
-					for leaderboards.
-					<br />
-					Username can only be changed once every 7 days.
-				</div>
-			</div>
-
-			{/* Email Display */}
-			{userEmail && (
-				<div className="Details-info-section">
-					<div className="Details-info-label">Email</div>
-					<div className="Details-info-value">{userEmail}</div>
-				</div>
-			)}
-
-			{/* Phone Display */}
-			{userPhone && (
-				<div className="Details-info-section">
-					<div className="Details-info-label">Phone</div>
-					<div className="Details-info-value">{userPhone}</div>
-				</div>
-			)}
-
-			{/* Smart Wallet Address Display */}
-			{smartWalletAddress && (
-				<div className="Details-info-section">
-					<div className="Details-info-label">
-						Smart Wallet Address (Base)
-					</div>
-					<div className="Details-wallet-display">
-						<div className="Details-info-value Details-wallet-address">
-							{smartWalletAddress}
-						</div>
-						<button
-							className="Details-copy-button"
-							onClick={handleCopyAddress}
-							title="Copy address"
-						>
-							{copySuccess ? "✓" : "Copy"}
-						</button>
-					</div>
-				</div>
-			)}
-
-			{/* Email Preferences Section - COMMENTED OUT FOR NOW */}
-			{/* <div className="Details-email-preferences">
-				<div className="Details-section-title">Email Preferences</div>
-				<div className="Details-section-description">
-					Choose which email notifications you'd like to receive.
-				</div>
-
-				<div className="Details-preferences-list">
-					<label className="Details-preference-item">
-						<input
-							type="checkbox"
-							checked={emailPreferences.generalNotifications}
-							onChange={() =>
-								handlePreferenceChange("generalNotifications")
-							}
-							className="Details-checkbox"
-						/>
-						<div className="Details-preference-content">
-							<span className="Details-preference-label">
-								General Notifications
-							</span>
-							<span className="Details-preference-description">
-								Important updates about your account and
-								platform changes
-							</span>
-						</div>
-					</label>
-
-					<label className="Details-preference-item">
-						<input
-							type="checkbox"
-							checked={emailPreferences.tradeConfirmations}
-							onChange={() =>
-								handlePreferenceChange("tradeConfirmations")
-							}
-							className="Details-checkbox"
-						/>
-						<div className="Details-preference-content">
-							<span className="Details-preference-label">
-								Trade Confirmations
-							</span>
-							<span className="Details-preference-description">
-								Receive confirmation emails when you place or
-								complete trades
-							</span>
-						</div>
-					</label>
-
-					<label className="Details-preference-item">
-						<input
-							type="checkbox"
-							checked={emailPreferences.winningsNotifications}
-							onChange={() =>
-								handlePreferenceChange("winningsNotifications")
-							}
-							className="Details-checkbox"
-						/>
-						<div className="Details-preference-content">
-							<span className="Details-preference-label">
-								Winnings Notifications
-							</span>
-							<span className="Details-preference-description">
-								Get notified when your predictions win and
-								earnings are available
-							</span>
-						</div>
-					</label>
-
-					<label className="Details-preference-item">
-						<input
-							type="checkbox"
-							checked={emailPreferences.levelUpAnnouncements}
-							onChange={() =>
-								handlePreferenceChange("levelUpAnnouncements")
-							}
-							className="Details-checkbox"
-						/>
-						<div className="Details-preference-content">
-							<span className="Details-preference-label">
-								LevelUp Announcements
-							</span>
-							<span className="Details-preference-description">
-								Stay updated with new features, promotions, and
-								platform news
-							</span>
-						</div>
-					</label>
-				</div>
-
-				<div className="Details-preferences-actions">
-					<button
-						className="Details-button"
-						onClick={handleSavePreferences}
-						disabled={isSavingPreferences}
-					>
-						{isSavingPreferences
-							? "Saving..."
-							: preferencesSaved
-							? "✓ Saved"
-							: "Save Preferences"}
-					</button>
-				</div>
-			</div> */}
+			{/* Achievements - COMMENTED OUT FOR NOW */}
+			{/* <AchievementPane userAchievements={userDetails?.achievements} /> */}
 
 			{/* Account Deletion Section - COMMENTED OUT FOR NOW */}
 			{/* <div className="Details-account-deletion">

@@ -1,0 +1,212 @@
+.RPGPane {
+	margin-top: 32px;
+	display: flex;
+	gap: 24px;
+}
+
+.RPGPane-left {
+	flex: 0 0 auto;
+	max-width: 400px;
+	width: 100%;
+	padding: 24px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+}
+
+.RPGPane-right {
+	flex: 1;
+	padding: 24px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+}
+
+.RPGPane-header {
+	margin-bottom: 16px;
+}
+
+.RPGPane-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: white;
+}
+
+.RPGPane-content {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.RPGPane-row {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.RPGPane-exp-section {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.RPGPane-avatar-container {
+	position: relative;
+	width: 64px;
+	height: 64px;
+	flex-shrink: 0;
+}
+
+.RPGPane-avatar {
+	width: 100%;
+	height: 100%;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.RPGPane-avatar-placeholder {
+	width: 100%;
+	height: 100%;
+	border-radius: 50%;
+	background: rgba(139, 92, 246, 0.3);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 24px;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.6);
+}
+
+.RPGPane-frame-overlay {
+	position: absolute;
+	top: -8px;
+	left: -8px;
+	width: calc(100% + 16px);
+	height: calc(100% + 16px);
+	object-fit: contain;
+	pointer-events: none;
+}
+
+.RPGPane-level-text {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.RPGPane-level {
+	font-size: 14px;
+	font-weight: 600;
+	color: white;
+}
+
+.RPGPane-rank {
+	font-size: 13px;
+	color: rgba(255, 255, 255, 0.6);
+}
+
+.RPGPane-exp-bar-container {
+	width: 100%;
+	height: 24px;
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+	overflow: hidden;
+	position: relative;
+}
+
+.RPGPane-exp-bar-fill {
+	height: 100%;
+	background: linear-gradient(90deg, #6a6ff5 0%, #8b5cf6 100%);
+	border-radius: 6px;
+	transition: width 0.3s ease;
+}
+
+.RPGPane-exp-bar-text {
+	position: absolute;
+	top: 50%;
+	left: 0;
+	right: 0;
+	transform: translateY(-50%);
+	font-size: 12px;
+	font-weight: 600;
+	color: white;
+	text-align: center;
+	z-index: 1;
+	pointer-events: none;
+}
+
+/* Prizes Section */
+.RPGPane-prizes {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.RPGPane-prize {
+	padding: 16px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 8px;
+	transition: all 0.2s ease;
+
+	&.unlocked {
+		border-color: rgba(139, 92, 246, 0.4);
+		background: rgba(139, 92, 246, 0.1);
+	}
+
+	&.locked {
+		opacity: 0.6;
+	}
+}
+
+.RPGPane-prize-name {
+	font-size: 15px;
+	font-weight: 600;
+	color: white;
+	margin-bottom: 4px;
+
+	.locked & {
+		color: rgba(255, 255, 255, 0.5);
+	}
+}
+
+.RPGPane-prize-description {
+	font-size: 13px;
+	color: rgba(255, 255, 255, 0.7);
+	line-height: 1.4;
+
+	.locked & {
+		color: rgba(255, 255, 255, 0.4);
+	}
+}
+
+.RPGPane-prize-requirement {
+	font-size: 12px;
+	color: rgba(255, 255, 255, 0.4);
+	margin-top: 8px;
+	font-style: italic;
+}
+
+/* Loading and Error States */
+.RPGPane-loading,
+.RPGPane-error {
+	padding: 16px;
+	text-align: center;
+	color: rgba(255, 255, 255, 0.6);
+	font-size: 14px;
+}
+
+.RPGPane-error {
+	color: #ef4444;
+}
+
+/* Mobile Styles */
+@media (max-width: 768px) {
+	.RPGPane {
+		flex-direction: column;
+	}
+
+	.RPGPane-left {
+		max-width: 100%;
+	}
+}
