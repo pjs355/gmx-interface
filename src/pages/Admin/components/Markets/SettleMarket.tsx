@@ -4,9 +4,17 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 interface SettleMarketProps {
 	questionId: string;
+	status?: string;
+	resolvedOutcome?: "yes" | "no" | null;
+	resolvedAt?: string;
 }
 
-export default function SettleMarket({ questionId }: SettleMarketProps) {
+export default function SettleMarket({
+	questionId,
+	status,
+	resolvedOutcome,
+	resolvedAt,
+}: SettleMarketProps) {
 	const { getAccessToken } = usePrivy();
 	const [settleOutcome, setSettleOutcome] = useState<"yes" | "no" | null>(
 		null
@@ -55,6 +63,78 @@ export default function SettleMarket({ questionId }: SettleMarketProps) {
 		} finally {
 			setSettling(false);
 		}
+	}
+
+	// If market is already resolved, show the result instead of settle buttons
+	const isResolved = status === "resolved" && resolvedOutcome;
+
+	if (isResolved) {
+		const formattedDate = resolvedAt
+			? new Date(resolvedAt).toLocaleString()
+			: "Unknown date";
+
+		return (
+			<div
+				style={{
+					display: "grid",
+					gap: 6,
+					marginTop: 8,
+					borderTop: "1px solid rgba(255,255,255,0.2)",
+					paddingTop: 12,
+					order: 2,
+				}}
+			>
+				<span>Settlement Status</span>
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 12,
+						padding: "12px 16px",
+						background: "rgba(255,255,255,0.05)",
+						borderRadius: 8,
+						border: `2px solid ${
+							resolvedOutcome === "yes" ? "#22c55e" : "#ef4444"
+						}`,
+					}}
+				>
+					<div
+						style={{
+							width: 12,
+							height: 12,
+							borderRadius: "50%",
+							background:
+								resolvedOutcome === "yes"
+									? "#22c55e"
+									: "#ef4444",
+						}}
+					/>
+					<div
+						style={{
+							display: "flex",
+							flexDirection: "column",
+							gap: 2,
+						}}
+					>
+						<span
+							style={{
+								fontWeight: 600,
+								fontSize: 16,
+								color:
+									resolvedOutcome === "yes"
+										? "#22c55e"
+										: "#ef4444",
+							}}
+						>
+							Settled: {resolvedOutcome.toUpperCase()}
+						</span>
+						<span style={{ fontSize: 12, opacity: 0.7 }}>
+							{formattedDate}
+						</span>
+					</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (
@@ -130,4 +210,3 @@ export default function SettleMarket({ questionId }: SettleMarketProps) {
 		</div>
 	);
 }
-

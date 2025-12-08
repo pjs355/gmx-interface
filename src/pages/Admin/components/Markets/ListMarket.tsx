@@ -18,6 +18,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [query, setQuery] = useState<string>("");
+	const [hideSettled, setHideSettled] = useState<boolean>(false);
 	const [tagMap, setTagMap] = useState<Record<string, string>>({});
 	const [notificationCounts, setNotificationCounts] = useState<
 		Record<string, number>
@@ -75,14 +76,26 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 	}, [getAccessToken]);
 
 	const filtered = useMemo(() => {
-		const base = query
+		let base = query
 			? umbrellas.filter((u) =>
 					u.displayName.toLowerCase().includes(query.toLowerCase())
 			  )
 			: umbrellas;
+
+		// If hideSettled is enabled, only show umbrellas with at least one unsettled child
+		if (hideSettled) {
+			base = base.filter((u) => {
+				const children = Array.isArray(u.children) ? u.children : [];
+				// Keep umbrella if it has at least one child that is NOT resolved
+				return children.some(
+					(child: any) => child.status !== "resolved"
+				);
+			});
+		}
+
 		console.log("ListMarket umbrellas:", base);
 		return base;
-	}, [umbrellas, query]);
+	}, [umbrellas, query, hideSettled]);
 
 	const zeroQuestionIds = useMemo(
 		() =>
@@ -180,6 +193,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 					alignItems: "center",
 					gap: 12,
 					marginBottom: 12,
+					flexWrap: "wrap",
 				}}
 			>
 				<input
@@ -195,6 +209,29 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 						minWidth: 260,
 					}}
 				/>
+				<label
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 6,
+						cursor: "pointer",
+						fontSize: 14,
+						userSelect: "none",
+					}}
+				>
+					<input
+						type="checkbox"
+						checked={hideSettled}
+						onChange={(e) => setHideSettled(e.target.checked)}
+						style={{
+							width: 16,
+							height: 16,
+							cursor: "pointer",
+							accentColor: "#22c55e",
+						}}
+					/>
+					<span>Hide fully settled</span>
+				</label>
 				{loading && <span style={{ opacity: 0.8 }}>Loading…</span>}
 			</div>
 

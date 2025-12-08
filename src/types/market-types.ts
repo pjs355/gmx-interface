@@ -72,6 +72,10 @@ export type QuestionDetails = {
 	yesColor?: string;
 	noColor?: string;
 	tagIds?: string[];
+	// Settlement fields
+	status?: string;
+	resolvedOutcome?: "yes" | "no" | null;
+	resolvedAt?: string;
 };
 
 export interface UmbrellaUpdatePayload {
