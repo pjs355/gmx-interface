@@ -43,18 +43,20 @@ function normalizeTagLabel(value: string): string {
 		.replace(/[^A-Z0-9]+/g, "_")
 		.replace(/^_+|_+$/g, "");
 }
-const gameBannerModules = import.meta.glob<string>(
+const gameBannerModules = import.meta.glob<{ default: string }>(
 	"../../../assets/game-banners/*",
-	{ eager: true, import: "default" }
+	{ eager: true }
 );
 
 const gameBannerMap: Record<string, string> = Object.entries(
 	gameBannerModules
-).reduce((acc, [path, url]) => {
+).reduce((acc, [path, module]) => {
 	const fileName = path
 		.split("/")
 		.pop()
 		?.replace(/\.[^.]+$/, "");
+	// Access the default export from the module
+	const url = module?.default;
 	if (fileName && typeof url === "string") {
 		acc[fileName] = url;
 	}

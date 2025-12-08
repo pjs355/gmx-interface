@@ -85,10 +85,14 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 				(question as any)?.question ||
 				""
 			).trim();
+			// Strip "Over" or "Under" prefix from the settlement number
+			const settlementNum = questionDisplay
+				.replace(/^(Over|Under)\s*/i, "")
+				.trim();
 			return {
 				yesLabel: "Over",
 				noLabel: "Under",
-				settlementNumber: questionDisplay,
+				settlementNumber: settlementNum || null,
 			};
 		}
 
@@ -152,8 +156,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 					style={{
 						textAlign: "center",
 						marginBottom: "8px",
-						fontSize: "14px",
-						color: "#a0a0a0",
+						fontSize: "20px",
+						fontWeight: 600,
+						color: "#ffffff",
 					}}
 				>
 					{settlementNumber}
