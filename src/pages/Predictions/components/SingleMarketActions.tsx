@@ -11,12 +11,14 @@ interface SingleMarketActionsProps {
 	orderbook: any;
 	onNavigate: (position: "yes" | "no") => void;
 	question: PredictionMarket;
+	isDailyPlayerCount?: boolean;
 }
 
 export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	orderbook,
 	onNavigate,
 	question,
+	isDailyPlayerCount = false,
 }) => {
 	const { allBooksPreview } = usePredictionData();
 	const questionId = question.questionId;
@@ -71,24 +73,51 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	};
 
 	// Derive team labels for single-market umbrellas with "vs" in the title
-	const deriveLabels = (): { yesLabel: string; noLabel: string } => {
+	const deriveLabels = (): {
+		yesLabel: string;
+		noLabel: string;
+		settlementNumber: string | null;
+	} => {
+		// For daily player count markets, use Over/Under
+		if (isDailyPlayerCount) {
+			const questionDisplay = (
+				question?.displayName ||
+				(question as any)?.question ||
+				""
+			).trim();
+			// Strip "Over" or "Under" prefix from the settlement number
+			const settlementNum = questionDisplay
+				.replace(/^(Over|Under)\s*/i, "")
+				.trim();
+			return {
+				yesLabel: "Over",
+				noLabel: "Under",
+				settlementNumber: settlementNum || null,
+			};
+		}
+
 		const raw = (
 			question?.displayName ||
 			(question as any)?.question ||
 			""
 		).trim();
-		if (!raw) return { yesLabel: "Yes", noLabel: "No" };
+		if (!raw)
+			return { yesLabel: "Yes", noLabel: "No", settlementNumber: null };
 		const parts = raw
 			.split(/\s*vs\.?\s*/i)
 			.map((s: any) => s.trim())
 			.filter(Boolean);
 		if (parts.length === 2) {
-			return { yesLabel: parts[0], noLabel: parts[1] };
+			return {
+				yesLabel: parts[0],
+				noLabel: parts[1],
+				settlementNumber: null,
+			};
 		}
-		return { yesLabel: "Yes", noLabel: "No" };
+		return { yesLabel: "Yes", noLabel: "No", settlementNumber: null };
 	};
 
-	const { yesLabel, noLabel } = deriveLabels();
+	const { yesLabel, noLabel, settlementNumber } = deriveLabels();
 
 	const isVsSingle = (() => {
 		const raw = (
@@ -121,6 +150,20 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			: 0;
 	return (
 		<div className="single-market-actions">
+			{settlementNumber && (
+				<div
+					className="settlement-number"
+					style={{
+						textAlign: "center",
+						marginBottom: "8px",
+						fontSize: "20px",
+						fontWeight: 600,
+						color: "#ffffff",
+					}}
+				>
+					{settlementNumber}
+				</div>
+			)}
 			<div className="single-market-buttons">
 				<Button
 					variant="secondary"
@@ -210,18 +253,20 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 				</Button>
 			</div>
 
-	<div className="payout-info">
-		<div className="payout-row">
-			<span className="payout-label">
-				$100 → <span style={{ color: "#22c55e" }}>${yesPayout}</span>
-			</span>
-		</div>
-		<div className="payout-row">
-			<span className="payout-label">
-				$100 → <span style={{ color: "#22c55e" }}>${noPayout}</span>
-			</span>
-		</div>
-	</div>
+			<div className="payout-info">
+				<div className="payout-row">
+					<span className="payout-label">
+						$100 →{" "}
+						<span style={{ color: "#22c55e" }}>${yesPayout}</span>
+					</span>
+				</div>
+				<div className="payout-row">
+					<span className="payout-label">
+						$100 →{" "}
+						<span style={{ color: "#22c55e" }}>${noPayout}</span>
+					</span>
+				</div>
+			</div>
 		</div>
 	);
 };

@@ -117,7 +117,12 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 						</div>
 					</div>
 
-					<SettleMarket questionId={details.questionId} />
+					<SettleMarket
+					questionId={details.questionId}
+					status={details.status}
+					resolvedOutcome={details.resolvedOutcome}
+					resolvedAt={details.resolvedAt}
+				/>
 					<div className="edit-save-question-section">
 						<button
 							type="button"

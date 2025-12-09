@@ -83,8 +83,8 @@ export default function Profile() {
 			{/* Account Details Header */}
 			<h1 className="profile-header">Account Details</h1>
 
-			{/* Profile Tabs - Same styling as Positions page */}
-			<div className="flex items-center justify-between">
+			{/* Profile Tabs - Commented out while features are disabled */}
+			{/* <div className="flex items-center justify-between">
 				<div className="flex gap-8 profile-tabs" role="tablist">
 					<Button
 						variant="ghost"
@@ -120,79 +120,10 @@ export default function Profile() {
 						Gaming Accounts
 					</Button>
 				</div>
-			</div>
+			</div> */}
 
 			<main className="profile-content-wrapper">
-				{activeSection === "details" ? (
-					<Details />
-				) : activeSection === "developers" ? (
-					<div
-						style={{
-							border: "1px solid rgba(255,255,255,0.2)",
-							borderRadius: 8,
-							padding: 32,
-							background: "rgba(255,255,255,0.03)",
-							textAlign: "center",
-						}}
-					>
-						<div
-							style={{
-								fontSize: 24,
-								fontWeight: 600,
-								marginBottom: 12,
-							}}
-						>
-							🚧 Under Construction
-						</div>
-						<div
-							style={{
-								opacity: 0.8,
-								maxWidth: 500,
-								margin: "0 auto",
-							}}
-						>
-							Developer tools and API documentation are coming
-							soon. Stay tuned for updates!
-						</div>
-					</div>
-				) : activeSection === "gaming-accounts" ? (
-					<div
-						style={{
-							border: "1px solid rgba(255,255,255,0.2)",
-							borderRadius: 8,
-							padding: 32,
-							background: "rgba(255,255,255,0.03)",
-							textAlign: "center",
-						}}
-					>
-						<div
-							style={{
-								fontSize: 24,
-								fontWeight: 600,
-								marginBottom: 12,
-							}}
-						>
-							🚧 Under Construction
-						</div>
-						<div
-							style={{
-								opacity: 0.8,
-								maxWidth: 500,
-								margin: "0 auto",
-							}}
-						>
-							Connect your gaming accounts to enhance your
-							experience. This feature is coming soon!
-						</div>
-					</div>
-				) : (
-					<div>
-						<h1>Profile</h1>
-						<div style={{ opacity: 0.8 }}>
-							Select a section from the sidebar.
-						</div>
-					</div>
-				)}
+				<Details />
 			</main>
 		</div>
 	);

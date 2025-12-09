@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
 			? [
 					sentryVitePlugin({
 						org: "prinx",
-						project: "javascript-react",
+						project: "levelup-interface",
 						authToken: process.env.SENTRY_AUTH_TOKEN,
 					}),
 			  ]

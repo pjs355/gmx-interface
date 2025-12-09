@@ -26,6 +26,7 @@ export interface RPGState {
 	};
 	loading: boolean;
 	error: string | null;
+	profile: UserProfile | null;
 }
 
 type RPGContextValue = {
@@ -40,6 +41,7 @@ type RPGContextValue = {
 	};
 	loading: boolean;
 	error: string | null;
+	profile: UserProfile | null;
 	addExp: (amount: number) => Promise<void>;
 	requestExpForClaim: () => Promise<void>;
 	refresh: () => Promise<void>;
@@ -55,6 +57,7 @@ const INITIAL_STATE: RPGState = {
 	progress: getProgressToNextLevel(0),
 	loading: true,
 	error: null,
+	profile: null,
 };
 
 const RPGContext = createContext<RPGContextValue | null>(null);
@@ -95,8 +98,8 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, []);
 
-	// Update state from exp
-	const updateStateFromExp = useCallback((exp: number) => {
+	// Update state from exp and optionally profile
+	const updateStateFromExp = useCallback((exp: number, profile?: UserProfile | null) => {
 		const levelConfig = getLevelFromExp(exp);
 		const progressData = getProgressToNextLevel(exp);
 
@@ -106,7 +109,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 			progress: progressData.progress,
 		};
 
-		const newState: RPGState = {
+		setState((prev) => ({
 			exp,
 			level: levelConfig.level,
 			frameAsset: levelConfig.frameAsset,
@@ -114,9 +117,8 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 			progress: newProgress,
 			loading: false,
 			error: null,
-		};
-
-		setState(newState);
+			profile: profile !== undefined ? profile : prev.profile,
+		}));
 	}, []);
 
 	// Load exp from server or cache
@@ -139,17 +141,20 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 				if (cachedExp > 0) {
 					await saveUserExp(totalExp, token, identityToken || undefined);
 					clearCachedExp();
+					// Update profile with new exp after saving
+					const updatedProfile = { ...profile, exp: totalExp };
+					updateStateFromExp(totalExp, updatedProfile);
+				} else {
+					updateStateFromExp(totalExp, profile);
 				}
-
-				updateStateFromExp(totalExp);
 			} else {
 				const cachedExp = getCachedExp();
-				updateStateFromExp(cachedExp);
+				updateStateFromExp(cachedExp, null);
 			}
 		} catch (error: any) {
 			console.error("error", error);
 			const cachedExp = getCachedExp();
-			updateStateFromExp(cachedExp);
+			updateStateFromExp(cachedExp, null);
 			setState((prev) => ({
 				...prev,
 				error: error?.message || "Failed to load exp",
@@ -164,7 +169,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 				// Cache for later
 				const currentCached = getCachedExp();
 				setCachedExp(currentCached + amount);
-				updateStateFromExp(currentCached + amount);
+				updateStateFromExp(currentCached + amount, null);
 				return;
 			}
 
@@ -181,7 +186,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 				// Fallback to cache
 				const currentCached = getCachedExp();
 				setCachedExp(currentCached + amount);
-				updateStateFromExp(currentCached + amount);
+				updateStateFromExp(currentCached + amount, null);
 			}
 		},
 		[authenticated, ready, getAccessToken, identityToken, getCachedExp, setCachedExp, updateStateFromExp, loadExp]
@@ -201,7 +206,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 
 			const profile = await requestExpForTestUsdcClaim(token, identityToken || undefined);
 			const exp = profile.exp || 0;
-			updateStateFromExp(exp);
+			updateStateFromExp(exp, profile);
 		} catch (error: any) {
 			console.error("error", error);
 		}
@@ -226,6 +231,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 		},
 		loading: state.loading,
 		error: state.error,
+		profile: state.profile,
 		addExp,
 		requestExpForClaim,
 		refresh: loadExp,

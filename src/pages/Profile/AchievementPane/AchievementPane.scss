@@ -1,0 +1,219 @@
+.AchievementPane {
+	margin-top: 24px;
+	padding: 24px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+}
+
+.AchievementPane-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+}
+
+.AchievementPane-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: white;
+}
+
+.AchievementPane-progress {
+	font-size: 14px;
+	color: rgba(255, 255, 255, 0.5);
+	padding: 4px 12px;
+	background: rgba(255, 255, 255, 0.05);
+	border-radius: 12px;
+}
+
+.AchievementPane-grid {
+	display: grid;
+	gap: 12px;
+}
+
+.AchievementPane-item {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 16px 8px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 2px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	min-height: 100px;
+	overflow: visible;
+
+	&:hover {
+		transform: translateY(-2px);
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	&.locked {
+		opacity: 0.4;
+		filter: grayscale(100%);
+
+		&:hover {
+			opacity: 0.6;
+			filter: grayscale(80%);
+		}
+	}
+
+	&.unlocked {
+		border-color: rgba(139, 92, 246, 0.5);
+		background: rgba(139, 92, 246, 0.1);
+
+		&:hover {
+			border-color: rgba(139, 92, 246, 0.8);
+			box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+		}
+	}
+
+	// Tier styling when unlocked
+	&.unlocked.tier-bronze {
+		border-color: rgba(205, 127, 50, 0.6);
+		background: linear-gradient(
+			135deg,
+			rgba(205, 127, 50, 0.15) 0%,
+			rgba(139, 69, 19, 0.1) 100%
+		);
+	}
+
+	&.unlocked.tier-silver {
+		border-color: rgba(192, 192, 192, 0.6);
+		background: linear-gradient(
+			135deg,
+			rgba(192, 192, 192, 0.15) 0%,
+			rgba(128, 128, 128, 0.1) 100%
+		);
+	}
+
+	&.unlocked.tier-gold {
+		border-color: rgba(255, 215, 0, 0.6);
+		background: linear-gradient(
+			135deg,
+			rgba(255, 215, 0, 0.15) 0%,
+			rgba(255, 165, 0, 0.1) 100%
+		);
+	}
+}
+
+.AchievementPane-icon {
+	font-size: 32px;
+	margin-bottom: 8px;
+	filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.AchievementPane-tier-badge {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	font-weight: 700;
+	color: #1a1a1a;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.AchievementPane-name {
+	font-size: 11px;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.9);
+	text-align: center;
+	line-height: 1.3;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
+	.locked & {
+		color: rgba(255, 255, 255, 0.5);
+	}
+}
+
+.AchievementPane-lock {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	font-size: 24px;
+	opacity: 0.3;
+	pointer-events: none;
+	z-index: 1;
+}
+
+/* Shimmer effect for unlocked achievements */
+.AchievementPane-item.unlocked::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: -100%;
+	width: 100%;
+	height: 100%;
+	background: linear-gradient(
+		90deg,
+		transparent,
+		rgba(255, 255, 255, 0.1),
+		transparent
+	);
+	animation: shimmer 3s infinite;
+	border-radius: 12px;
+	pointer-events: none;
+	z-index: 0;
+}
+
+@keyframes shimmer {
+	0% {
+		left: -100%;
+	}
+	50%,
+	100% {
+		left: 100%;
+	}
+}
+
+/* Glow pulse for recently unlocked */
+@keyframes glowPulse {
+	0%,
+	100% {
+		box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+	}
+	50% {
+		box-shadow: 0 0 25px rgba(139, 92, 246, 0.6);
+	}
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+	.AchievementPane {
+		padding: 16px;
+	}
+
+	.AchievementPane-item {
+		padding: 12px 6px;
+		min-height: 90px;
+	}
+
+	.AchievementPane-icon {
+		font-size: 28px;
+	}
+
+	.AchievementPane-name {
+		font-size: 10px;
+	}
+
+	.AchievementPane-tier-badge {
+		width: 16px;
+		height: 16px;
+		font-size: 8px;
+	}
+}
+
