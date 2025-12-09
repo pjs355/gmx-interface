@@ -869,37 +869,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 							transition: "color 0.2s ease",
 						}}
 					>
-						{isDailyUmbrella && dailyDateText ? (
-							<span
-								style={{
-									display: "block",
-									fontSize: "14px",
-									color: "#9ca3af",
-									marginBottom: "4px",
-									fontWeight: 400,
-								}}
-							>
-								{dailyDateText}
-								<span
-									style={{
-										display: "inline-block",
-										marginLeft: "8px",
-										marginTop: "-4px",
-										padding: "2px 8px",
-										fontSize: "0.75em",
-										fontWeight: 600,
-										color: "#000000",
-										backgroundColor: "#fbbf24",
-										borderRadius: "12px",
-										letterSpacing: "0.5px",
-										verticalAlign: "middle",
-										lineHeight: 1,
-									}}
-								>
-									Daily
-								</span>
-							</span>
-						) : null}
 						{shouldRenderSubtitle ? (
 							<span className="prediction-title-prefix">
 								{subtitleContent}
@@ -930,12 +899,31 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			>
 				{renderActions()}
 			</div>
-			{statusContent !== null ? (
-				<div className="prediction-card-footer">
-					{isDailyUmbrella ? "Ends In:" : "Starts In:"}
-					&nbsp;&nbsp; {statusContent}
-				</div>
-			) : null}
+		{statusContent !== null ? (
+			<div className="prediction-card-footer">
+				{isDailyUmbrella && (
+					<span
+						style={{
+							display: "inline-block",
+							marginRight: "12px",
+							padding: "2px 8px",
+							fontSize: "0.75em",
+							fontWeight: 600,
+							color: "#000000",
+							backgroundColor: "#fbbf24",
+							borderRadius: "12px",
+							letterSpacing: "0.5px",
+							verticalAlign: "middle",
+							lineHeight: 1,
+						}}
+					>
+						Daily
+					</span>
+				)}
+				{isDailyUmbrella ? "Ends In:" : "Starts In:"}
+				&nbsp;&nbsp; {statusContent}
+			</div>
+		) : null}
 		</div>
 	);
 };

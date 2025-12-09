@@ -161,7 +161,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						color: "#ffffff",
 					}}
 				>
-					{settlementNumber}
+					{settlementNumber} Players
 				</div>
 			)}
 			<div className="single-market-buttons">
