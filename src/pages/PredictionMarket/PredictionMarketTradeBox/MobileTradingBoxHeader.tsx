@@ -28,6 +28,25 @@ export default function MobileTradingBoxHeader({
 }: MobileTradingBoxHeaderProps) {
   const { selectedPosition, amount, side, orderType } = state;
 
+  // Check if this is an "Over {number}" market (daily player count style)
+  const overUnderMatch = useMemo(() => {
+    const title = (market?.displayName || market?.question || '').trim();
+    // Match "Over" followed by a number (with optional commas)
+    const match = title.match(/^Over\s+([\d,]+)/i);
+    if (match) {
+      return match[1]; // Return the number part
+    }
+    return null;
+  }, [market?.displayName, market?.question]);
+
+  // Derive labels: Over/Under for player count markets, Yes/No otherwise
+  const { yesLabel, noLabel } = useMemo(() => {
+    if (overUnderMatch) {
+      return { yesLabel: 'Over', noLabel: 'Under' };
+    }
+    return { yesLabel: 'Yes', noLabel: 'No' };
+  }, [overUnderMatch]);
+
   // Helper function to format numbers with commas
   const formatNumberWithCommas = (value: string): string => {
     if (!value) return '';
@@ -80,13 +99,13 @@ export default function MobileTradingBoxHeader({
               className={`position-btn-mobile ${selectedPosition === 'yes' ? 'active yes' : ''}`}
               onClick={() => onPositionChange('yes')}
             >
-              Yes
+              {yesLabel}
             </button>
             <button
               className={`position-btn-mobile ${selectedPosition === 'no' ? 'active no' : ''}`}
               onClick={() => onPositionChange('no')}
             >
-              No
+              {noLabel}
             </button>
           </div>
 
