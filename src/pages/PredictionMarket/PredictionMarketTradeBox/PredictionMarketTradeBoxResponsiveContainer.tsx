@@ -91,8 +91,28 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	const yesTeamColor: string = (market as any)?.yesColor || "#22c55e";
 	const noTeamColor: string = (market as any)?.noColor || "#ef4444";
 
+	// Check if this is an "Over {number}" market (daily player count style)
+	const overUnderMatch = useMemo(() => {
+		const title = (
+			market?.displayName ||
+			(market as any)?.question ||
+			""
+		).trim();
+		// Match "Over" followed by a number (with optional commas)
+		const match = title.match(/^Over\s+([\d,]+)/i);
+		if (match) {
+			return match[1]; // Return the number part
+		}
+		return null;
+	}, [market?.displayName, (market as any)?.question]);
+
 	const { yesTeamLabel: mobileYesLabel, noTeamLabel: mobileNoLabel } =
 		useMemo(() => {
+			// If it's an Over/Under market, use Over/Under labels
+			if (overUnderMatch) {
+				return { yesTeamLabel: "Over", noTeamLabel: "Under" };
+			}
+			
 			const title = (
 				market?.displayName ||
 				(market as any)?.question ||
@@ -114,6 +134,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			market?.displayName,
 			(market as any)?.question,
 			(market as any)?.umbrellaChildrenCount,
+			overUnderMatch,
 		]);
 
 	const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
