@@ -181,9 +181,12 @@ export default function GameLinks({
 					}`}
 					key={NEW_PILL_ID}
 					onClick={() => {
+						console.log('[GameLinks] New pill clicked, current selectedGame:', selectedGame);
 						if (selectedGame === NEW_PILL_ID) {
+							console.log('[GameLinks] Deselecting New pill');
 							onGameSelect(null);
 						} else {
+							console.log('[GameLinks] Selecting New pill, passing:', NEW_PILL_ID);
 							onGameSelect(NEW_PILL_ID);
 						}
 					}}
