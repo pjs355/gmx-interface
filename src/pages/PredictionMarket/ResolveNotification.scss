@@ -36,7 +36,6 @@
 .resolve-notification-content {
 	margin-top: 1rem;
 	padding-top: 1rem;
-	border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .resolve-notification-description {
@@ -82,8 +81,33 @@
 }
 
 .resolve-notification-success p {
-	margin: 0 0 0.5rem 0;
+	margin: 0;
 	font-weight: 600;
+}
+
+.resolve-notification-already-submitted {
+	padding: 1rem;
+	text-align: center;
+}
+
+.resolve-notification-already-submitted p {
+	margin: 0;
+	font-size: 0.875rem;
+	color: #9ca3af;
+}
+
+.resolve-notification-info {
+	padding: 1rem;
+	background: rgba(156, 163, 175, 0.1);
+	border: 1px solid rgba(156, 163, 175, 0.3);
+	border-radius: 6px;
+	color: #9ca3af;
+	text-align: center;
+}
+
+.resolve-notification-info p {
+	margin: 0;
+	font-size: 0.875rem;
 }
 
 .resolve-notification-success-note {
