@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
+import { useRPG } from "@/context/RPGContext";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { toast } from "react-toastify";
-import { useRPG } from "@/context/RPGContext";
 import "./ProgressBanner.scss";
 
 export function ProgressBanner() {
@@ -13,78 +13,18 @@ export function ProgressBanner() {
 	const { account, authenticated } = useSignerContext();
 	const wallet = useSignerContext();
 	const { refresh: refreshUserData } = useUserData();
-	const { refresh: refreshRPG } = useRPG();
-	const [hasClaimedTestUsdc, setHasClaimedTestUsdc] = useState(false);
-	const [isCheckingClaim, setIsCheckingClaim] = useState(true);
+	const { profile, loading: rpgLoading, refresh: refreshRPG } = useRPG();
 	const [isClaiming, setIsClaiming] = useState(false);
 
-	// Check if user has claimed test USDC
-	useEffect(() => {
-		// Don't run if identity token is not available
-		if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
-			setIsCheckingClaim(false);
-			return;
-		}
+	// Use profile from RPGContext - hasClaimedTestUsdc checks claimedwallets collection
+	const hasClaimedTestUsdc = (profile as any)?.hasClaimedTestUsdc ?? false;
 
-		if (!account) {
-			setIsCheckingClaim(false);
-			return;
-		}
-
-		let cancelled = false;
-
-		async function checkClaim() {
-			try {
-				const token = await getAccessToken();
-				if (!token) {
-				if (!cancelled) setIsCheckingClaim(false);
-				return;
-			}
-
-				// Double-check identity token is still available
-				if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
-					if (!cancelled) setIsCheckingClaim(false);
-					return;
-				}
-
-				const API_ROOT = getPredictionApiBaseUrl();
-				const res = await fetch(`${API_ROOT}/test-coins/check-claim`, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${token}`,
-						"privy-id-token": identityToken,
-					},
-					body: JSON.stringify({ smartWallet: account }),
-				});
-
-				let claimed = false;
-				try {
-					const data = await res.clone().json();
-					claimed = Boolean(
-						data?.claimed ??
-							data?.hasClaimed ??
-							data?.alreadyClaimed ??
-							data?.result?.claimed
-					);
-				} catch {
-					const text = await res.text();
-					claimed = /true|already/i.test(text);
-				}
-
-				if (!cancelled) setHasClaimedTestUsdc(claimed);
-			} catch (error) {
-				console.error("Error checking test USDC claim:", error);
-			} finally {
-				if (!cancelled) setIsCheckingClaim(false);
-			}
-		}
-
-		checkClaim();
-		return () => {
-			cancelled = true;
-		};
-	}, [account, getAccessToken, identityToken]);
+	// Debug logging
+	console.log('[ProgressBanner] Debug:', {
+		hasProfile: !!profile,
+		hasClaimedTestUsdc: (profile as any)?.hasClaimedTestUsdc,
+		rpgLoading,
+	});
 
 	const handleClaimClick = async () => {
 		try {
@@ -134,20 +74,12 @@ export function ProgressBanner() {
 					console.log("Response is not JSON:", text);
 				}
 				
-				// Mark as claimed and let the banner disappear
-				setHasClaimedTestUsdc(true);
 				// Refresh user data to update the cash balance in the header
 				await refreshUserData();
 				
-				// Wait a bit for server to process exp grant, then refresh RPG state
-				setTimeout(async () => {
-					try {
-						await refreshRPG();
-						console.log("✅ RPG state refreshed after claim (with delay)");
-					} catch (error) {
-						console.error("Failed to refresh RPG state:", error);
-					}
-				}, 500);
+				// Refresh RPG state to update profile (which includes claimedTestUsdcExpReward)
+				await refreshRPG();
+				console.log("✅ RPG state refreshed after claim");
 			} else {
 				toast.error(`Failed to claim: ${text}`);
 			}
@@ -171,7 +103,7 @@ export function ProgressBanner() {
 
 	// Show banner (with skeleton if still loading)
 	return (
-		<div className={`progress-banner ${isCheckingClaim ? 'progress-banner--loading' : 'progress-banner--loaded'}`}>
+		<div className={`progress-banner ${rpgLoading ? 'progress-banner--loading' : 'progress-banner--loaded'}`}>
 			<div className="progress-banner-container">
 				<div className="progress-banner-content">
 					<div className="progress-banner-subtitle">Welcome to LevelUp!</div>
@@ -182,7 +114,7 @@ export function ProgressBanner() {
 				<button
 					className="progress-banner-button"
 					onClick={handleClaimClick}
-					disabled={isClaiming || isCheckingClaim}
+					disabled={isClaiming || rpgLoading}
 				>
 					{isClaiming ? "Claiming..." : "Claim Test $"}
 				</button>
@@ -190,4 +122,3 @@ export function ProgressBanner() {
 		</div>
 	);
 }
-
