@@ -126,20 +126,27 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 		setState((prev) => ({ ...prev, loading: true, error: null }));
 
 		try {
-			if (authenticated && ready) {
+			// Wait for identity token before making authenticated requests
+			if (authenticated && ready && identityToken) {
 				const token = await getAccessToken();
 				if (!token) {
 					throw new Error("No access token available");
 				}
 
-				const profile = await getUserProfile(token, identityToken || undefined);
+				const profile = await getUserProfile(token, identityToken);
+				console.log('[RPGContext] Profile loaded:', {
+					hasProfile: !!profile,
+					hasClaimedTestUsdc: (profile as any)?.hasClaimedTestUsdc,
+					exp: profile?.exp,
+					userId: profile?.userId,
+				});
 				const exp = profile.exp || 0;
 
 				const cachedExp = getCachedExp();
 				const totalExp = exp + cachedExp;
 
 				if (cachedExp > 0) {
-					await saveUserExp(totalExp, token, identityToken || undefined);
+					await saveUserExp(totalExp, token, identityToken);
 					clearCachedExp();
 					// Update profile with new exp after saving
 					const updatedProfile = { ...profile, exp: totalExp };
@@ -147,10 +154,12 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 				} else {
 					updateStateFromExp(totalExp, profile);
 				}
-			} else {
+			} else if (!authenticated) {
+				// Not authenticated - use cached exp only
 				const cachedExp = getCachedExp();
 				updateStateFromExp(cachedExp, null);
 			}
+			// If authenticated but no identity token yet, don't update state - wait for token
 		} catch (error: any) {
 			console.error("error", error);
 			const cachedExp = getCachedExp();
@@ -165,8 +174,8 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 	// Add exp (incremental)
 	const addExp = useCallback(
 		async (amount: number) => {
-			if (!authenticated || !ready) {
-				// Cache for later
+			if (!authenticated || !ready || !identityToken) {
+				// Cache for later (not authenticated or no identity token yet)
 				const currentCached = getCachedExp();
 				setCachedExp(currentCached + amount);
 				updateStateFromExp(currentCached + amount, null);
@@ -179,7 +188,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 					throw new Error("No access token available");
 				}
 
-				await addUserExp(amount, token, identityToken || undefined);
+				await addUserExp(amount, token, identityToken);
 				await loadExp();
 			} catch (error: any) {
 				console.error("error", error);
@@ -194,7 +203,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 
 	// Request exp for test USDC claim (server-verified)
 	const requestExpForClaim = useCallback(async () => {
-		if (!authenticated || !ready) {
+		if (!authenticated || !ready || !identityToken) {
 			return;
 		}
 
@@ -204,7 +213,7 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 				throw new Error("No access token available");
 			}
 
-			const profile = await requestExpForTestUsdcClaim(token, identityToken || undefined);
+			const profile = await requestExpForTestUsdcClaim(token, identityToken);
 			const exp = profile.exp || 0;
 			updateStateFromExp(exp, profile);
 		} catch (error: any) {
@@ -212,12 +221,13 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, [authenticated, ready, getAccessToken, identityToken, updateStateFromExp]);
 
-	// Load exp when auth state changes
+	// Load exp when auth state changes (wait for identity token)
 	useEffect(() => {
-		if (ready) {
+		if (ready && (!authenticated || identityToken)) {
+			// Load if: ready AND (not authenticated OR have identity token)
 			loadExp();
 		}
-	}, [ready, authenticated, loadExp]);
+	}, [ready, authenticated, identityToken, loadExp]);
 
 	const value: RPGContextValue = {
 		exp: state.exp,

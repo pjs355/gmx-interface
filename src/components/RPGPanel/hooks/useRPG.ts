@@ -109,14 +109,15 @@ export function useRPG() {
 		setState((prev) => ({ ...prev, loading: true, error: null }));
 
 		try {
-			if (authenticated && ready) {
-				// User is authenticated - fetch from server
+			// Wait for identity token before making authenticated requests
+			if (authenticated && ready && identityToken) {
+				// User is authenticated with identity token - fetch from server
 				const token = await getAccessToken();
 				if (!token) {
 					throw new Error("No access token available");
 				}
 
-				const profile = await getUserProfile(token, identityToken || undefined);
+				const profile = await getUserProfile(token, identityToken);
 				console.log("🔍 User Profile after refresh:", profile);
 				console.log("🔍 User Profile exp:", profile.exp);
 				const exp = profile.exp || 0;
@@ -129,17 +130,18 @@ export function useRPG() {
 
 				if (cachedExp > 0) {
 					// Save merged exp to server
-					await saveUserExp(totalExp, token, identityToken || undefined);
+					await saveUserExp(totalExp, token, identityToken);
 					clearCachedExp();
 				}
 
 				console.log("🔄 Calling updateStateFromExp with:", totalExp);
 				updateStateFromExp(totalExp);
-			} else {
+			} else if (!authenticated) {
 				// User not authenticated - use cached exp
 				const cachedExp = getCachedExp();
 				updateStateFromExp(cachedExp);
 			}
+			// If authenticated but no identity token yet, don't update - wait for token
 		} catch (error: any) {
 			console.error("Failed to load exp:", error);
 			// Fallback to cached exp
@@ -158,18 +160,18 @@ export function useRPG() {
 			if (expToAdd <= 0) return;
 
 			try {
-				if (authenticated && ready) {
-					// User is authenticated - save to server
+				if (authenticated && ready && identityToken) {
+					// User is authenticated with identity token - save to server
 					const token = await getAccessToken();
 					if (!token) {
 						throw new Error("No access token available");
 					}
 
-					await addUserExp(expToAdd, token, identityToken || undefined);
+					await addUserExp(expToAdd, token, identityToken);
 					const newExp = state.exp + expToAdd;
 					updateStateFromExp(newExp);
 				} else {
-					// User not authenticated - cache it
+					// User not authenticated or no identity token - cache it
 					const newExp = state.exp + expToAdd;
 					saveCachedExp(newExp);
 					updateStateFromExp(newExp);
@@ -197,8 +199,8 @@ export function useRPG() {
 
 	// Request exp for test USDC claim (server-verified)
 	const requestExpForClaim = useCallback(async () => {
-		if (!authenticated || !ready) {
-			throw new Error("User must be authenticated to request exp for claim");
+		if (!authenticated || !ready || !identityToken) {
+			throw new Error("User must be authenticated with identity token to request exp for claim");
 		}
 
 		try {
@@ -207,10 +209,7 @@ export function useRPG() {
 				throw new Error("No access token available");
 			}
 
-			const profile = await requestExpForTestUsdcClaim(
-				token,
-				identityToken || undefined
-			);
+			const profile = await requestExpForTestUsdcClaim(token, identityToken);
 			const exp = profile.exp || 0;
 			updateStateFromExp(exp);
 		} catch (error: any) {
@@ -219,12 +218,13 @@ export function useRPG() {
 		}
 	}, [authenticated, ready, getAccessToken, identityToken, updateStateFromExp]);
 
-	// Load exp on mount and when auth state changes
+	// Load exp on mount and when auth state changes (wait for identity token)
 	useEffect(() => {
-		if (ready) {
+		if (ready && (!authenticated || identityToken)) {
+			// Load if: ready AND (not authenticated OR have identity token)
 			loadExp();
 		}
-	}, [ready, authenticated, loadExp]);
+	}, [ready, authenticated, identityToken, loadExp]);
 
 	// Always return a new object to ensure React detects changes
 	return {

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { useRPG } from "@/context/RPGContext";
 import "./CountdownBanner.scss";
 
 interface TimeLeft {
@@ -12,80 +11,12 @@ interface TimeLeft {
 }
 
 export function CountdownBanner() {
-	const { getAccessToken } = usePrivy();
-	const { identityToken } = useIdentityToken();
 	const { account, authenticated } = useSignerContext();
+	const { profile, loading: rpgLoading } = useRPG();
 	const [timeLeft, setTimeLeft] = useState<TimeLeft | null>(null);
-	const [hasClaimedTestUsdc, setHasClaimedTestUsdc] = useState(false);
-	const [isCheckingClaim, setIsCheckingClaim] = useState(true);
 
-	// Check if user has claimed test USDC
-	useEffect(() => {
-		// Don't run if identity token is not available
-		if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
-			setIsCheckingClaim(false);
-			return;
-		}
-
-		if (!account) {
-			setIsCheckingClaim(false);
-			return;
-		}
-
-		let cancelled = false;
-
-		async function checkClaim() {
-			try {
-				const token = await getAccessToken();
-				if (!token) {
-				if (!cancelled) setIsCheckingClaim(false);
-				return;
-			}
-
-				// Double-check identity token is still available
-				if (!identityToken || typeof identityToken !== "string" || identityToken.trim() === "") {
-					if (!cancelled) setIsCheckingClaim(false);
-					return;
-				}
-
-				const API_ROOT = getPredictionApiBaseUrl();
-				const res = await fetch(`${API_ROOT}/test-coins/check-claim`, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${token}`,
-						"privy-id-token": identityToken,
-					},
-					body: JSON.stringify({ smartWallet: account }),
-				});
-
-				let claimed = false;
-				try {
-					const data = await res.clone().json();
-					claimed = Boolean(
-						data?.claimed ??
-							data?.hasClaimed ??
-							data?.alreadyClaimed ??
-							data?.result?.claimed
-					);
-				} catch {
-					const text = await res.text();
-					claimed = /true|already/i.test(text);
-				}
-
-				if (!cancelled) setHasClaimedTestUsdc(claimed);
-			} catch (error) {
-				console.error("Error checking test USDC claim:", error);
-			} finally {
-				if (!cancelled) setIsCheckingClaim(false);
-			}
-		}
-
-		checkClaim();
-		return () => {
-			cancelled = true;
-		};
-	}, [account, getAccessToken, identityToken]);
+	// Use profile from RPGContext - hasClaimedTestUsdc checks claimedwallets collection
+	const hasClaimedTestUsdc = (profile as any)?.hasClaimedTestUsdc ?? false;
 
 	useEffect(() => {
 		const calculateTimeLeft = (): TimeLeft | null => {
@@ -123,12 +54,12 @@ export function CountdownBanner() {
 	}
 
 	// Only show banner if user HAS claimed test USDC
-	if (!isCheckingClaim && !hasClaimedTestUsdc) {
+	if (!rpgLoading && !hasClaimedTestUsdc) {
 		return null;
 	}
 
 	// Don't show banner if countdown has ended (only if we're done loading)
-	if (!isCheckingClaim && !timeLeft) {
+	if (!rpgLoading && !timeLeft) {
 		return null;
 	}
 
@@ -136,7 +67,7 @@ export function CountdownBanner() {
 	const displayTime = timeLeft || { days: 0, hours: 0, minutes: 0, seconds: 0 };
 
 	return (
-		<div className={`countdown-banner ${isCheckingClaim ? 'countdown-banner--loading' : 'countdown-banner--loaded'}`}>
+		<div className={`countdown-banner ${rpgLoading ? 'countdown-banner--loading' : 'countdown-banner--loaded'}`}>
 			<div className="countdown-banner-container">
 				<div className="countdown-banner-content">
 					<h3 className="countdown-banner-title">
@@ -174,4 +105,3 @@ export function CountdownBanner() {
 		</div>
 	);
 }
-
