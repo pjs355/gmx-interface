@@ -47,6 +47,10 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 	const [submitted, setSubmitted] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [hasAlreadySubmitted, setHasAlreadySubmitted] = useState(false);
+	const [viewState, setViewState] = useState<'form' | 'thankyou' | 'already'>('form');
+	
+	// Context is ready when we have the necessary data
+	const isContextReady = authenticated && identityToken;
 
 	// Get user profile ID from RPG context (MongoDB _id)
 	const userProfileId = useMemo(() => {
@@ -93,6 +97,9 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 		);
 
 		setHasAlreadySubmitted(userHasSubmitted);
+		if (userHasSubmitted) {
+			setViewState('already');
+		}
 	}, [userProfileId, umbrellaId, umbrella]);
 
 	// Check if user has orders for this umbrella
@@ -146,10 +153,10 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 		}
 	}, [viewState]);
 
-	const canSubmit = isContextReady && authenticated && resolveComment.trim().length > 0 && !submitting && viewState === 'form';
+	const canSubmit = isContextReady && resolveComment.trim().length > 0 && !submitting && viewState === 'form';
 
 	const handleSubmit = useCallback(async () => {
-		if (!canSubmit) return;
+		if (!isContextReady || !resolveComment.trim() || submitting || viewState !== 'form') return;
 
 		setSubmitting(true);
 		try {
@@ -221,12 +228,14 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 			setSubmitting(false);
 		}
 	}, [
-		authenticated,
+		isContextReady,
 		getAccessToken,
 		login,
 		identityToken,
 		resolveComment,
 		umbrellaId,
+		submitting,
+		viewState,
 	]);
 
 	const handleTextareaChange = useCallback(

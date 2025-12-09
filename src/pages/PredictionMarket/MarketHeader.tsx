@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
@@ -53,6 +53,27 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 		}
 	};
 
+	// Process title to remove dates for daily/player count markets
+	const displayTitle = useMemo(() => {
+		let title = umbrella.displayName;
+		
+		// Check if this is a player count market
+		if (title.includes("Player Count")) {
+			// Remove ISO date format (YYYY-MM-DD) from the end
+			title = title.replace(/\s+\d{4}-\d{2}-\d{2}\s*$/, "");
+			
+			// Remove other common date formats
+			// "December 9, 2025" or "Dec 9, 2025"
+			title = title.replace(/\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*$/, "");
+			// "12/9/2025" or "12-9-2025"
+			title = title.replace(/\s+\d{1,2}[-/]\d{1,2}[-/]\d{4}\s*$/, "");
+			
+			title = title.trim();
+		}
+		
+		return title || umbrella.displayName;
+	}, [umbrella.displayName]);
+
 	return (
 		<div className="market-header">
 			<div className="market-title-container">
@@ -67,7 +88,7 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 					className="mb-16 text-34 font-bold"
 					style={{ color: "white" }}
 				>
-					{umbrella.displayName}
+					{displayTitle}
 				</h1>
 				{umbrella.description && (
 					<p

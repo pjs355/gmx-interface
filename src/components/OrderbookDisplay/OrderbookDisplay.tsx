@@ -106,8 +106,28 @@ export default function OrderbookDisplay({
 		return Math.round(value * 100).toString();
 	};
 
+	// Check if this is an "Over {number}" market (daily player count style)
+	const overUnderMatch = useMemo(() => {
+		const title = (
+			market?.displayName ||
+			(market as any)?.question ||
+			""
+		).trim();
+		// Match "Over" followed by a number (with optional commas)
+		const match = title.match(/^Over\s+([\d,]+)/i);
+		if (match) {
+			return match[1]; // Return the number part
+		}
+		return null;
+	}, [market?.displayName, (market as any)?.question]);
+
 	// Derive team labels conditionally when umbrella has only one market and title contains "vs" (case-insensitive, optional period)
 	const { yesTeamLabel, noTeamLabel } = useMemo(() => {
+		// If it's an Over/Under market, use Over/Under labels
+		if (overUnderMatch) {
+			return { yesTeamLabel: "Over", noTeamLabel: "Under" };
+		}
+		
 		const title = (
 			market?.displayName ||
 			(market as any)?.question ||
@@ -129,7 +149,16 @@ export default function OrderbookDisplay({
 		market?.displayName,
 		(market as any)?.question,
 		(market as any)?.umbrellaChildrenCount,
+		overUnderMatch,
 	]);
+
+	// Transform the display title for Over/Under markets
+	const displayTitle = useMemo(() => {
+		if (overUnderMatch && customTitle) {
+			return `${overUnderMatch} Players`;
+		}
+		return customTitle;
+	}, [overUnderMatch, customTitle]);
 
 	const isVsSingle = useMemo(() => {
 		const title = (
@@ -188,7 +217,7 @@ export default function OrderbookDisplay({
 		return (
 			<div className="orderbook-display">
 				<div className="orderbook-header">
-					<h3>{customTitle || "Order Book"}</h3>
+					<h3>{displayTitle || "Order Book"}</h3>
 				</div>
 				<div className="orderbook-content">
 					<div className="loading-message">Loading orderbook...</div>
@@ -201,7 +230,7 @@ export default function OrderbookDisplay({
 		return (
 			<div className="orderbook-display">
 				<div className="orderbook-header">
-					<h3>{customTitle || "Order Book"}</h3>
+					<h3>{displayTitle || "Order Book"}</h3>
 				</div>
 				<div className="orderbook-content">
 					<div className="error-message">Error: {error}</div>
@@ -214,7 +243,7 @@ export default function OrderbookDisplay({
 		return (
 			<div className="orderbook-display">
 				<div className="orderbook-header">
-					<h3>{customTitle || "Order Book"}</h3>
+					<h3>{displayTitle || "Order Book"}</h3>
 				</div>
 				<div className="orderbook-content">
 					<div className="no-data-message">
@@ -463,7 +492,7 @@ export default function OrderbookDisplay({
 					{/* Left: Market Name */}
 					<div className="header-left">
 						<div className="header-title-section">
-							<h3>{customTitle || "Order Book"}</h3>
+							<h3>{displayTitle || "Order Book"}</h3>
 						</div>
 					</div>
 

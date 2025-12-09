@@ -128,8 +128,24 @@ export default function PredictionMarketTradeBoxUI({
   const yesTeamColor: string = (market as any)?.yesColor || '#22c55e';
   const noTeamColor: string = (market as any)?.noColor || '#ef4444';
 
+  // Check if this is an "Over {number}" market (daily player count style)
+  const overUnderMatch = useMemo(() => {
+    const title = (market?.displayName || (market as any)?.question || '').trim();
+    // Match "Over" followed by a number (with optional commas)
+    const match = title.match(/^Over\s+([\d,]+)/i);
+    if (match) {
+      return match[1]; // Return the number part
+    }
+    return null;
+  }, [market?.displayName, (market as any)?.question]);
+
   // Derive team labels conditionally based on market title and umbrella having a single market
   const { yesTeamLabel, noTeamLabel } = useMemo(() => {
+    // If it's an Over/Under market, use Over/Under labels
+    if (overUnderMatch) {
+      return { yesTeamLabel: 'Over', noTeamLabel: 'Under' };
+    }
+    
     const title = (market?.displayName || (market as any)?.question || '').trim();
     if (!title) return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
     const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
@@ -137,7 +153,15 @@ export default function PredictionMarketTradeBoxUI({
       return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
     }
     return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-  }, [market?.displayName, (market as any)?.question, (market as any)?.umbrellaChildrenCount]);
+  }, [market?.displayName, (market as any)?.question, (market as any)?.umbrellaChildrenCount, overUnderMatch]);
+
+  // Transform the display title for Over/Under markets
+  const displayMarketTitle = useMemo(() => {
+    if (overUnderMatch) {
+      return `${overUnderMatch} Players`;
+    }
+    return market.displayName || market.question;
+  }, [overUnderMatch, market.displayName, market.question]);
 
   const tabsOptions = [
     {
@@ -240,7 +264,7 @@ export default function PredictionMarketTradeBoxUI({
     <div className="prediction-market-tradebox">
       {/* Market Name Header */}
       <div className="market-name-header">
-        <h3>{market.displayName || market.question}</h3>
+        <h3>{displayMarketTitle}</h3>
       </div>
       
       <div className="tradebox-header">
