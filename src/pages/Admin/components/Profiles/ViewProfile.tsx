@@ -10,6 +10,7 @@ interface Order {
 	tokenId?: string;
 	umbrellaId?: string;
 	umbrellaDisplayName?: string;
+	questionDisplayName?: string;
 	side: "buy" | "sell";
 	position?: "Yes" | "No";
 	price?: number;
@@ -148,6 +149,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 			{
 				umbrellaId: string;
 				umbrellaName: string;
+				questionName: string;
 				yesTokenId: string;
 				noTokenId: string;
 			}
@@ -166,6 +168,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 					map.set(questionMongoId, {
 						umbrellaId: umbrella._id,
 						umbrellaName: umbrella.displayName,
+						questionName: question.displayName || question.question || umbrella.displayName,
 						yesTokenId: String(question.yesTokenId),
 						noTokenId: String(question.noTokenId),
 					});
@@ -212,6 +215,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 					position: position || order.position,
 					umbrellaId: umbrellaInfo.umbrellaId,
 					umbrellaDisplayName: umbrellaInfo.umbrellaName,
+					questionDisplayName: umbrellaInfo.questionName,
 				};
 			} else {
 				console.log(
@@ -420,7 +424,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 													color: "#aaa",
 												}}
 											>
-												Order ID
+												Market
 											</th>
 											<th
 												style={{
@@ -499,10 +503,11 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 												<td
 													style={{
 														padding: "8px",
-														fontSize: "12px",
+														fontSize: "13px",
+														maxWidth: "200px",
 													}}
 												>
-													{order.orderId || order._id}
+													{order.questionDisplayName || order.umbrellaDisplayName || "--"}
 												</td>
 												<td style={{ padding: "8px" }}>
 													<span

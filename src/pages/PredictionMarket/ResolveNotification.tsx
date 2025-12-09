@@ -6,6 +6,18 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { useRPG } from "@/context/RPGContext";
 import "./ResolveNotification.scss";
 
+// Animated loading dots
+function LoadingDots() {
+	const [dots, setDots] = useState('');
+	useEffect(() => {
+		const interval = setInterval(() => {
+			setDots(prev => prev.length >= 3 ? '' : prev + '.');
+		}, 400);
+		return () => clearInterval(interval);
+	}, []);
+	return <span>Loading{dots}</span>;
+}
+
 interface ResolveNotificationProps {
 	umbrellaId: string;
 }
@@ -85,16 +97,9 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 
 	// Check if user has orders for this umbrella
 	const hasOrders = useMemo(() => {
-		if (!orders || orders.length === 0) {
-			return false;
-		}
-
+		if (!orders || orders.length === 0) return false;
 		const questions = getQuestionsForUmbrella(umbrellaId);
-		if (!questions || questions.length === 0) {
-			return false;
-		}
-
-		// Get all question IDs for this umbrella
+		if (!questions || questions.length === 0) return false;
 		const questionIds = new Set(
 			questions
 				.map((q) => {
@@ -130,37 +135,24 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 						typeof id === "string" && id.length > 0
 				)
 		);
-
-		// Check if any order matches any question in this umbrella
 		return orders.some((order) => questionIds.has(order.questionId));
 	}, [orders, umbrellaId, getQuestionsForUmbrella]);
 
-	const canSubmit =
-		authenticated &&
-		resolveComment.trim().length > 0 &&
-		!submitting &&
-		!submitted;
+	// Timer: thank you for 15 seconds then switch to already
+	useEffect(() => {
+		if (viewState === 'thankyou') {
+			const timer = setTimeout(() => setViewState('already'), 15000);
+			return () => clearTimeout(timer);
+		}
+	}, [viewState]);
+
+	const canSubmit = isContextReady && authenticated && resolveComment.trim().length > 0 && !submitting && viewState === 'form';
 
 	const handleSubmit = useCallback(async () => {
-		if (!authenticated) {
-			login();
-			return;
-		}
+		if (!canSubmit) return;
 
-		if (typeof getAccessToken !== "function") {
-			setErrorMessage("Authentication unavailable. Please try again.");
-			return;
-		}
-
-		if (resolveComment.trim().length === 0) {
-			setErrorMessage("Please enter a comment or link to proof.");
-			return;
-		}
-
+		setSubmitting(true);
 		try {
-			setSubmitting(true);
-			setErrorMessage(null);
-
 			const token = await getAccessToken();
 			if (!token) {
 				throw new Error("Authentication required");
@@ -170,9 +162,8 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				throw new Error("Identity token required");
 			}
 
-			const API_BASE = getPredictionApiBaseUrl();
 			const response = await fetch(
-				`${API_BASE}/umbrellas/settlement-notification`,
+				`${getPredictionApiBaseUrl()}/umbrellas/settlement-notification`,
 				{
 					method: "POST",
 					headers: {
@@ -187,6 +178,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				}
 			);
 
+			// If response is NOT ok (any error), treat as already submitted
 			if (!response.ok) {
 				const errorText = await response.text();
 				let errorMsg = "Failed to submit notification";
@@ -214,17 +206,17 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				setSubmitted(true);
 				setHasAlreadySubmitted(true);
 				setResolveComment("");
-			} else {
-				throw new Error(
-					result.error || "Failed to submit notification"
-				);
+				setViewState('already');
+				setSubmitting(false);
+				return;
 			}
+
+			// Success - show thank you
+			setResolveComment("");
+			setViewState('thankyou');
 		} catch (error) {
-			const message =
-				error instanceof Error
-					? error.message
-					: "Failed to submit notification";
-			setErrorMessage(message);
+			// Any error = already submitted
+			setViewState('already');
 		} finally {
 			setSubmitting(false);
 		}
@@ -260,11 +252,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				style={{ cursor: "pointer" }}
 			>
 				<h3>Propose Resolution</h3>
-				<span
-					className={`resolve-notification-arrow ${
-						expanded ? "expanded" : ""
-					}`}
-				>
+				<span className={`resolve-notification-arrow ${expanded ? "expanded" : ""}`}>
 					▼
 				</span>
 			</div>

@@ -15,6 +15,7 @@ interface Profile {
 	createdAt?: string;
 	updatedAt?: string;
 	linked_accounts?: any[];
+	tradingVolume?: number;
 }
 
 interface ProfilesApiResponse {
@@ -117,7 +118,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 									borderBottom: "1px solid #333",
 								}}
 							>
-								User ID
+								Wallet Address
 							</th>
 							<th
 								style={{
@@ -144,6 +145,15 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 									borderBottom: "1px solid #333",
 								}}
 							>
+								Trading Volume
+							</th>
+							<th
+								style={{
+									padding: "12px",
+									textAlign: "left",
+									borderBottom: "1px solid #333",
+								}}
+							>
 								EXP
 							</th>
 							<th
@@ -162,74 +172,77 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 									borderBottom: "1px solid #333",
 								}}
 							>
-								Accounts
-							</th>
-							<th
-								style={{
-									padding: "12px",
-									textAlign: "left",
-									borderBottom: "1px solid #333",
-								}}
-							>
 								Actions
 							</th>
 						</tr>
 					</thead>
 					<tbody>
-						{profiles.map((profile) => (
-							<tr
-								key={profile._id}
-								style={{
-									borderBottom: "1px solid #333",
-								}}
-							>
-								<td style={{ padding: "12px" }}>
-									{profile.userId || profile._id}
-								</td>
-								<td style={{ padding: "12px" }}>
-									{profile.username || "--"}
-								</td>
-								<td style={{ padding: "12px" }}>
-									{profile.linked_accounts?.find(
-										(acc: any) => acc.type === "email"
-									)?.address || "--"}
-								</td>
-								<td style={{ padding: "12px" }}>
-									{profile.exp ?? 0}
-								</td>
-								<td style={{ padding: "12px" }}>
-									{profile.createdAt
-										? new Date(
-												profile.createdAt
-										  ).toLocaleDateString()
-										: "--"}
-								</td>
-								<td style={{ padding: "12px" }}>
-									{profile.linked_accounts?.length || 0}
-								</td>
-								<td style={{ padding: "12px" }}>
-									<button
-										type="button"
-										onClick={() => {
-											if (onView) {
-												onView(profile._id);
-											}
-										}}
-										style={{
-											padding: "6px 12px",
-											border: "1px solid rgba(255, 255, 255, 0.3)",
-											borderRadius: 4,
-											background: "rgba(106, 111, 245, 0.2)",
-											color: "white",
-											cursor: "pointer",
-											fontSize: "14px",
-										}}
-									>
-										View
-									</button>
-								</td>
-							</tr>
-						))}
+						{profiles.map((profile) => {
+							const smartWallet = profile.linked_accounts?.find(
+								(acc: any) => acc.type === "smart_wallet"
+							);
+							const walletAddress = smartWallet?.address || "--";
+							const truncatedAddress = walletAddress !== "--" 
+								? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+								: "--";
+							
+							return (
+								<tr
+									key={profile._id}
+									style={{
+										borderBottom: "1px solid #333",
+									}}
+								>
+									<td style={{ padding: "12px", fontFamily: "monospace", fontSize: "13px" }}>
+										{truncatedAddress}
+									</td>
+									<td style={{ padding: "12px" }}>
+										{profile.username || "--"}
+									</td>
+									<td style={{ padding: "12px" }}>
+										{profile.linked_accounts?.find(
+											(acc: any) => acc.type === "email"
+										)?.address || "--"}
+									</td>
+									<td style={{ padding: "12px" }}>
+										{profile.tradingVolume !== undefined
+											? `$${(profile.tradingVolume / 1000000).toFixed(2)}`
+											: "--"}
+									</td>
+									<td style={{ padding: "12px" }}>
+										{profile.exp ?? 0}
+									</td>
+									<td style={{ padding: "12px" }}>
+										{profile.createdAt
+											? new Date(
+													profile.createdAt
+											  ).toLocaleDateString()
+											: "--"}
+									</td>
+									<td style={{ padding: "12px" }}>
+										<button
+											type="button"
+											onClick={() => {
+												if (onView) {
+													onView(profile._id);
+												}
+											}}
+											style={{
+												padding: "6px 12px",
+												border: "1px solid rgba(255, 255, 255, 0.3)",
+												borderRadius: 4,
+												background: "rgba(106, 111, 245, 0.2)",
+												color: "white",
+												cursor: "pointer",
+												fontSize: "14px",
+											}}
+										>
+											View
+										</button>
+									</td>
+								</tr>
+							);
+						})}
 					</tbody>
 				</table>
 			)}
