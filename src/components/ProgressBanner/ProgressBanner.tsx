@@ -19,13 +19,6 @@ export function ProgressBanner() {
 	// Use profile from RPGContext - hasClaimedTestUsdc checks claimedwallets collection
 	const hasClaimedTestUsdc = (profile as any)?.hasClaimedTestUsdc ?? false;
 
-	// Debug logging
-	console.log('[ProgressBanner] Debug:', {
-		hasProfile: !!profile,
-		hasClaimedTestUsdc: (profile as any)?.hasClaimedTestUsdc,
-		rpgLoading,
-	});
-
 	const handleClaimClick = async () => {
 		try {
 			setIsClaiming(true);
@@ -44,8 +37,6 @@ export function ProgressBanner() {
 				return;
 			}
 
-			console.log("Sending claim request with address:", smartWallet);
-
 			const API_ROOT = getPredictionApiBaseUrl();
 			const response = await fetch(`${API_ROOT}/test-coins/claim`, {
 				method: "POST",
@@ -57,29 +48,13 @@ export function ProgressBanner() {
 				body: JSON.stringify({ smartWallet }),
 			});
 			const text = await response.text();
-			console.log(
-				"/api/test-coins/claim response:",
-				response.status,
-				text
-			);
 
-			// Trigger a re-check on success
 			if (response.ok) {
-				console.log("✅ Claim successful! Response:", text);
-				let responseData;
-				try {
-					responseData = JSON.parse(text);
-					console.log("✅ Claim response data:", responseData);
-				} catch (e) {
-					console.log("Response is not JSON:", text);
-				}
-				
 				// Refresh user data to update the cash balance in the header
 				await refreshUserData();
 				
-				// Refresh RPG state to update profile (which includes claimedTestUsdcExpReward)
+				// Refresh RPG state to update profile
 				await refreshRPG();
-				console.log("✅ RPG state refreshed after claim");
 			} else {
 				toast.error(`Failed to claim: ${text}`);
 			}

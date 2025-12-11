@@ -54,6 +54,7 @@ export default function Positions() {
 	const {
 		orders,
 		tokenBalances,
+		usdcLoading,
 		loading: userDataLoading,
 		refresh: refreshUserData,
 	} = useUserData();
@@ -474,13 +475,14 @@ export default function Positions() {
 						}
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
-						softLoading={
+						cashLoading={usdcLoading}
+						positionsLoading={
 							loading ||
 							predictionLoading ||
 							userDataLoading ||
-							portfolioLoading ||
 							booksPreviewLoading
 						}
+						portfolioLoading={portfolioLoading}
 					/>
 
 					<PositionsTabs

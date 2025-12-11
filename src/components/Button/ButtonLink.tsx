@@ -31,7 +31,8 @@ export default function ButtonLink({
 	...rest
 }: ButtonProps) {
 	const classNames = cx(className, { disabled: disabled });
-	if (to.startsWith("http") || to.startsWith("https")) {
+	const isExternalLink = to.startsWith("http") || to.startsWith("https") || to.startsWith("mailto:");
+	if (isExternalLink) {
 		const anchorProps = {
 			href: disabled ? undefined : to,
 			className: classNames,

@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { useSignerContext } from 'context/SignerContext';
-import { Contract, JsonRpcProvider, formatUnits } from 'ethers';
-import { CTF_ADDRESS } from 'config/addresses';
-import { DEFAULT_RPC_URL } from 'config/rpc';
+import {
+  subgraphService,
+  fromMicroUnits,
+} from '@/services/subgraph/subgraphService';
 
 // Global balance cache
 const balanceCache = new Map<string, string>();
@@ -22,6 +23,8 @@ const BalanceContext = createContext<BalanceContextType | null>(null);
 export function BalanceProvider({ children }: { children: React.ReactNode }) {
   const { account } = useSignerContext();
   const [isLoading, setIsLoading] = useState(false);
+  // Track if we've already fetched all balances from subgraph
+  const hasFetchedRef = useRef<string | null>(null);
 
   const getBalance = useCallback((tokenId: string): number => {
     if (!account) return 0;
@@ -33,46 +36,50 @@ export function BalanceProvider({ children }: { children: React.ReactNode }) {
   const refreshBalances = useCallback(async (tokenIds: string[]) => {
     if (!account || tokenIds.length === 0) return;
 
-    setIsLoading(true);
-    try {
-      // Check which balances we need to fetch
-      const uncachedTokenIds = tokenIds.filter(tokenId => {
-        const key = getCacheKey(account, tokenId);
-        return !balanceCache.has(key);
-      });
+    // Check which balances we need to fetch
+    const uncachedTokenIds = tokenIds.filter(tokenId => {
+      const key = getCacheKey(account, tokenId);
+      return !balanceCache.has(key);
+    });
 
-      if (uncachedTokenIds.length === 0) {
+    // If we've already fetched from subgraph for this account and all requested are cached, skip
+    if (uncachedTokenIds.length === 0) {
+      return;
+    }
+
+    // If we haven't fetched from subgraph yet for this account, fetch all balances at once
+    if (hasFetchedRef.current !== account) {
+      setIsLoading(true);
+      try {
+        console.log(`📊 [BalanceContext] Fetching all balances from subgraph for ${account}`);
+        
+        const subgraphAccount = await subgraphService.getUserAccount(account);
+        
+        if (subgraphAccount) {
+          // Cache all token balances from subgraph
+          for (const tb of subgraphAccount.tokenBalances) {
+            const key = getCacheKey(account, tb.tokenId);
+            const balance = fromMicroUnits(tb.balance);
+            balanceCache.set(key, balance);
+          }
+          console.log(`📊 [BalanceContext] Cached ${subgraphAccount.tokenBalances.length} token balances`);
+        }
+        
+        hasFetchedRef.current = account;
+      } catch (error) {
+        console.error('Error fetching balances from subgraph:', error);
+      } finally {
         setIsLoading(false);
-        return;
       }
+    }
 
-      // Get shared read-only provider
-      const provider = new JsonRpcProvider(DEFAULT_RPC_URL);
-
-      // Batch fetch all balances
-      const ctf = new Contract(CTF_ADDRESS, [
-        'function balanceOf(address account, uint256 id) view returns (uint256)',
-      ], provider);
-
-      const balancePromises = uncachedTokenIds.map(tokenId => 
-        ctf.balanceOf(account, tokenId).then(balance => ({
-          tokenId,
-          balance: formatUnits(balance, 6)
-        }))
-      );
-
-      const results = await Promise.all(balancePromises);
-      
-      // Cache results
-      results.forEach(({ tokenId, balance }) => {
-        const key = getCacheKey(account, tokenId);
-        balanceCache.set(key, balance);
-      });
-
-    } catch (error) {
-      console.error('Error fetching balances:', error);
-    } finally {
-      setIsLoading(false);
+    // After subgraph fetch, set any still-uncached tokens to 0
+    // (tokens that don't exist in subgraph = user has 0 balance)
+    for (const tokenId of uncachedTokenIds) {
+      const key = getCacheKey(account, tokenId);
+      if (!balanceCache.has(key)) {
+        balanceCache.set(key, '0');
+      }
     }
   }, [account]);
 

@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useMedia } from "react-use";
 import { userService, type EmailPreferences } from "@/services/api/userService";
-// import RPGPane from "../RPGPane/RPGPane";
-// import AchievementPane from "../AchievementPane/AchievementPane";
+import RPGPane from "../RPGPane/RPGPane";
+import AchievementPane from "../AchievementPane/AchievementPane";
 import "./Details.scss";
 
 const isMobileBreakpoint = "(max-width: 768px)";
@@ -501,11 +501,11 @@ export default function Details() {
 				</div>
 			</div>
 
-			{/* RPG Experience Pane - COMMENTED OUT FOR NOW */}
-			{/* <RPGPane /> */}
+			{/* RPG Experience Pane */}
+			<RPGPane />
 
-			{/* Achievements - COMMENTED OUT FOR NOW */}
-			{/* <AchievementPane userAchievements={userDetails?.achievements} /> */}
+			{/* Achievements */}
+			<AchievementPane userAchievements={userDetails?.achievements} />
 
 			{/* Account Deletion Section - COMMENTED OUT FOR NOW */}
 			{/* <div className="Details-account-deletion">

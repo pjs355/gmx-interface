@@ -102,9 +102,9 @@ export function About() {
 					Hit us up because we actually read every message.
 				</p>
 				<div className="About-button-container center">
-					<a href="mailto:brendan@levelup.markets">
-						<Button variant="primary">Contact Us</Button>
-					</a>
+					<Button variant="primary" to="mailto:brendan@levelup.markets">
+						Contact Us
+					</Button>
 				</div>
 			</div>
 			</div>

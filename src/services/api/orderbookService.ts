@@ -1,4 +1,4 @@
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { getOrderbookApiBaseUrl } from "@/config/predictionApiBase";
 export interface OrderbookEntry {
 	id?: string;
 	side?: "buy" | "sell";
@@ -54,9 +54,9 @@ export class OrderbookService {
 	private readonly CACHE_TTL_MS = 30000; // 30s
 
 	private getBaseUrl(): string {
-		const base = getPredictionApiBaseUrl();
+		const base = getOrderbookApiBaseUrl();
 		if (typeof base === "undefined" || base === null) {
-			throw new Error("Prediction API base URL is undefined");
+			throw new Error("Orderbook API base URL is undefined");
 		}
 		return base as string;
 	}
