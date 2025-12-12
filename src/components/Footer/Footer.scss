@@ -35,6 +35,13 @@
 	vertical-align: middle;
 }
 
+.Footer-logo-img {
+	height: 36px;
+	width: auto;
+	object-fit: contain;
+	vertical-align: middle;
+}
+
 .Footer-center {
 	display: flex;
 	align-items: center;
@@ -101,6 +108,10 @@
 @media (max-width: 600px) {
 	.Footer-logo-text {
 		font-size: 1.8rem;
+	}
+
+	.Footer-logo-img {
+		height: 30px;
 	}
 }
 

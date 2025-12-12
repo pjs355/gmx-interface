@@ -11,17 +11,43 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
   height?: number;
   timeRangeSeconds?: number; // Time range in seconds for fixed domain
 }) {
-  // Calculate fixed time domain
-  const now = Math.floor(Date.now() / 1000);
-  const domainStart = timeRangeSeconds ? now - timeRangeSeconds : undefined;
-  const domainEnd = now;
-  
-  // Generate tick positions for fixed intervals
-  const ticks = timeRangeSeconds && domainStart ? [
-    domainStart,
-    domainStart + Math.floor(timeRangeSeconds / 2),
-    domainEnd
-  ] : undefined;
+  // Calculate fixed time domain from data or use time range
+  const { domainStart, domainEnd, ticks } = useMemo(() => {
+    const now = Math.floor(Date.now() / 1000);
+    
+    if (timeRangeSeconds) {
+      // Fixed time range (1H, 1D, 1W)
+      const start = now - timeRangeSeconds;
+      const end = now;
+      
+      // Generate 5 evenly-spaced ticks
+      const tickCount = 5;
+      const tickInterval = timeRangeSeconds / (tickCount - 1);
+      const tickPositions = Array.from({ length: tickCount }, (_, i) => 
+        Math.floor(start + i * tickInterval)
+      );
+      
+      return { domainStart: start, domainEnd: end, ticks: tickPositions };
+    } else if (data.length > 0) {
+      // "All" time range - use data extent
+      const timestamps = data.map(d => d.timestamp).filter(t => t > 0);
+      const start = Math.min(...timestamps);
+      const end = Math.max(...timestamps);
+      const range = end - start;
+      
+      // Generate 5 evenly-spaced ticks
+      const tickCount = 5;
+      const tickInterval = range / (tickCount - 1);
+      const tickPositions = Array.from({ length: tickCount }, (_, i) => 
+        Math.floor(start + i * tickInterval)
+      );
+      
+      return { domainStart: start, domainEnd: end, ticks: tickPositions };
+    }
+    
+    // Fallback
+    return { domainStart: now - 86400, domainEnd: now, ticks: undefined };
+  }, [data, timeRangeSeconds]);
 
   // Calculate dynamic Y-axis domain based on data
   // "Hanging reload" - keep previous domain until new data is ready
@@ -121,27 +147,26 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
           <XAxis 
             dataKey="timestamp"
             type="number"
-            domain={timeRangeSeconds ? [domainStart, domainEnd] : ['auto', 'auto']}
+            domain={[domainStart, domainEnd]}
             ticks={ticks}
-            scale="time"
-            allowDataOverflow
+            scale="linear"
+            allowDataOverflow={false}
             axisLine={false} 
             tickLine={false} 
             tick={{ fill: '#ffffff', fontSize: 10 }} 
             tickFormatter={(timestamp) => {
               const date = new Date(timestamp * 1000);
               if (timeRangeSeconds && timeRangeSeconds <= 3600) {
-                // 1H - show time only
+                // 1H - show time only (HH:MM)
                 return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
               } else if (timeRangeSeconds && timeRangeSeconds <= 86400) {
-                // 1D - show date and time (compact format)
-                const month = date.getMonth() + 1;
-                const day = date.getDate();
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                return `${month}/${day} ${hours}:${minutes}`;
+                // 1D - show time only (HH:MM)
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+              } else if (timeRangeSeconds && timeRangeSeconds <= 604800) {
+                // 1W - show day and time
+                return date.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
               } else {
-                // 1W, All - show date only
+                // All - show date only
                 return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
               }
             }}
@@ -179,8 +204,8 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
             strokeWidth={2}
             dot={false} 
             connectNulls 
-            animationDuration={2000}
-            animationEasing="ease-in-out"
+            animationDuration={500}
+            animationEasing="ease-out"
             activeDot={{ r: 4, fill: isVsSingleMarket ? yesTeamColor : '#8b5cf6', stroke: '#ffffff', strokeWidth: 2 }} 
           />
           <Line 
@@ -191,8 +216,8 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
             strokeWidth={2}
             dot={false} 
             connectNulls 
-            animationDuration={2000}
-            animationEasing="ease-in-out"
+            animationDuration={500}
+            animationEasing="ease-out"
             activeDot={{ r: 4, fill: isVsSingleMarket ? noTeamColor : '#3b82f6', stroke: '#ffffff', strokeWidth: 2 }} 
           />
         </LineChart>

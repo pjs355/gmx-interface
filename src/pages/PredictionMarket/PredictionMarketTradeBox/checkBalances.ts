@@ -80,7 +80,8 @@ export function checkSufficientBalance(
 	orderType: "market" | "limit",
 	side: "buy" | "sell",
 	usdcBalance: number,
-	price?: string
+	price?: string,
+	marketOrderEstimatedCost?: number | null
 ): { hasSufficientBalance: boolean; requiredAmount: number } {
 	if (side !== "buy") {
 		return { hasSufficientBalance: true, requiredAmount: 0 };
@@ -92,23 +93,27 @@ export function checkSufficientBalance(
 	}
 
 	if (orderType === "market") {
-		// For market buy orders, amount is the USD amount they want to spend
+		// For market buy orders, use the pre-calculated estimated cost (includes 2% fee)
+		// If not available, fall back to the input amount
+		const requiredAmount = marketOrderEstimatedCost ?? amountNum;
 		return {
-			hasSufficientBalance: usdcBalance >= amountNum,
-			requiredAmount: amountNum,
+			hasSufficientBalance: usdcBalance >= requiredAmount,
+			requiredAmount: requiredAmount,
 		};
 	} else {
 		// For limit buy orders, amount is the number of shares
 		// The actual USD cost is: shares × price / 100 (price is in cents)
+		// Plus a 2% trading fee on top
 		const priceNum = Number(price);
 		if (!isFinite(priceNum) || priceNum <= 0) {
 			return { hasSufficientBalance: true, requiredAmount: 0 };
 		}
 		
-		const actualCost = amountNum * priceNum / 100; // Convert cents to dollars
+		const baseCost = amountNum * priceNum / 100; // Convert cents to dollars
+		const estimatedCost = baseCost * 1.02; // Add 2% trading fee
 		return {
-			hasSufficientBalance: usdcBalance >= actualCost,
-			requiredAmount: actualCost,
+			hasSufficientBalance: usdcBalance >= estimatedCost,
+			requiredAmount: estimatedCost,
 		};
 	}
 }

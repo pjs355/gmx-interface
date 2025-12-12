@@ -213,14 +213,57 @@ export default function OrderbookDisplay({
 					marketBestAsk === null ? null : 1 - marketBestAsk
 			  )}¢`;
 
-	if (loading) {
+	// Show a minimal collapsed state when loading (not full loading screen)
+	// This allows the header with prices to still be interactive
+	if (loading && !orderbook) {
 		return (
 			<div className="orderbook-display">
 				<div className="orderbook-header">
-					<h3>{displayTitle || "Order Book"}</h3>
-				</div>
-				<div className="orderbook-content">
-					<div className="loading-message">Loading orderbook...</div>
+					<div
+						className="header-top clickable-header collapsed"
+						onClick={() => {
+							// Allow clicking even while loading
+							if (market && onOrderbookToggle) {
+								const marketId = market._id || market.questionId || market.marketId;
+								if (!isActiveMarket && onMarketSwitch && activePosition) {
+									onMarketSwitch(market, activePosition);
+								}
+								onOrderbookToggle(marketId);
+							}
+						}}
+					>
+						<div className="header-left">
+							<div className="header-title-section">
+								<h3>{displayTitle || "Order Book"}</h3>
+							</div>
+						</div>
+						<div className="header-right">
+							<div className="orderbook-tabs">
+								<button
+									className={`tab-button trade-yes ${isActiveMarket && activePosition === "yes" ? "active-yes" : ""}`}
+									onClick={(e) => {
+										e.stopPropagation();
+										if (market && onMarketSwitch) {
+											onMarketSwitch(market, "yes");
+										}
+									}}
+								>
+									{yesTeamLabel} --¢
+								</button>
+								<button
+									className={`tab-button trade-no ${isActiveMarket && activePosition === "no" ? "active-no" : ""}`}
+									onClick={(e) => {
+										e.stopPropagation();
+										if (market && onMarketSwitch) {
+											onMarketSwitch(market, "no");
+										}
+									}}
+								>
+									{noTeamLabel} --¢
+								</button>
+							</div>
+						</div>
+					</div>
 				</div>
 			</div>
 		);

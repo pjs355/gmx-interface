@@ -46,7 +46,9 @@ export function useButtonState({
       );
       if (!hasLiquidity) return { text: "Not enough liquidity", disabled: true, onClick: () => {} };
     }
-    const balanceCheck = checkSufficientBalance(state.amount, state.orderType, state.side, usdcBalance, state.price);
+    // For market buy orders, pass the pre-calculated estimated cost (includes 2% trading fee)
+    const marketOrderEstimatedCost = state.orderType === "market" && state.side === "buy" ? state.estimatedCost : null;
+    const balanceCheck = checkSufficientBalance(state.amount, state.orderType, state.side, usdcBalance, state.price, marketOrderEstimatedCost);
     if (!balanceCheck.hasSufficientBalance) return { text: "Insufficient Balance", disabled: true, onClick: () => {} };
     const sharesCheck = checkSufficientShares(state.amount, state.orderType, state.side, state.selectedPosition, yesBalance, noBalance);
     if (!sharesCheck.hasSufficientShares) return { text: "Insufficient Shares", disabled: true, onClick: () => {} };

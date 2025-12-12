@@ -138,26 +138,45 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   // }, [account, checkApproval]);
 
   // Calculate contracts for market orders immediately when dependencies change
+  // For BUY orders, we use an effective budget of amount/1.02 to account for the 2% trading fee
+  // This ensures the total cost (including fee) doesn't exceed the user's input amount
   const calculatedMarketOrderData = useMemo(() => {
     // Only run if we have all required data and it's a market order
     if (state.orderType === "market" && state.amount && state.selectedPosition && orderbook) {
       const usdAmount = parseFloat(state.amount);
       if (!isNaN(usdAmount) && usdAmount > 0) {
+        // For BUY orders, use effective budget to account for 2% fee
+        // This ensures spent * 1.02 <= usdAmount
+        const effectiveBudget = state.side === 'buy' ? usdAmount / 1.02 : usdAmount;
+        
         const result = marketOrderHandler.calculateContractsForMarketOrder(
-          usdAmount,
+          effectiveBudget,
           state.selectedPosition,
           state.side
         );
         const contractsInt = Math.floor(result.contracts);
+        
+        // For BUY orders: remainingUsd is relative to effectiveBudget
+        // We need to calculate spent from the effective budget
+        const spent = state.side === 'buy' ? effectiveBudget - result.remainingUsd : 0;
+        const tradingFee = state.side === 'buy' ? spent * 0.02 : 0;
+        
         return {
           calculatedContracts: contractsInt,
           remainingUsd: result.remainingUsd,
+          // Additional fields for fee display
+          spent: spent,
+          tradingFee: tradingFee,
+          estimatedCost: spent + tradingFee,
         };
       }
     }
     return {
       calculatedContracts: null,
       remainingUsd: null,
+      spent: null,
+      tradingFee: null,
+      estimatedCost: null,
     };
   }, [state.amount, state.selectedPosition, state.orderType, state.side, orderbook, marketOrderHandler]);
 
@@ -528,6 +547,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         ...state,
         calculatedContracts: calculatedMarketOrderData.calculatedContracts,
         remainingUsd: calculatedMarketOrderData.remainingUsd,
+        spent: calculatedMarketOrderData.spent,
+        tradingFee: calculatedMarketOrderData.tradingFee,
+        estimatedCost: calculatedMarketOrderData.estimatedCost,
       }}
       onPositionChange={onPositionChangeWrapper}
       onAmountChange={handleAmountChange}

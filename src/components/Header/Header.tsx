@@ -11,8 +11,9 @@ import { HomeHeaderLinks } from "./HomeHeaderLinks";
 import { isHomeSite } from "@/config/ui";
 
 import "./Header.scss";
+import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
 
-const LogoImage = () => <span className="App-header-logo-text">LevelUp</span>;
+const LogoImage = () => <img src={levelUpLogo} alt="LevelUp" className="App-header-logo-img" />;
 
 const MobileLogo = ({ onClick }: { onClick: () => void }) => (
 	<div className="App-header-link-main clickable" onClick={onClick}>

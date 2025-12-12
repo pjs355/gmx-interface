@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { usePredictionChartData } from "./usePredictionChartData";
 import { SeriesChart } from "./SeriesChart";
 import { ChartTooltip } from "./ChartTooltip";
+import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
 import "./PredictionMarketChart.scss";
 
 // Display types handled in hook/types
@@ -289,6 +290,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 						</div>
 					)}
 				</div>
+				<img src={levelUpLogo} alt="LevelUp" className="chart-logo" />
 			</div>
 
 			{/* Chart */}

@@ -52,7 +52,7 @@ export default function PredictionMarketTradeBoxUI({
   buttonState,
   approvalState
 }: PredictionMarketTradeBoxUIProps) {
-  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd } = state;
+  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost } = state;
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
   const { calculateContractsForMarketOrder, getEffectivePrice } = useMarketOrderHandler(orderbook as any);
 
@@ -480,23 +480,19 @@ export default function PredictionMarketTradeBoxUI({
       {/* Bet Size / To Win - render only when a positive numeric value exists */}
       {(toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null) && (
         <div className="bet-size-section">
-          {/* Estimated Cost for market BUY orders */}
-          {oddsData !== null && calculatedContracts !== null && remainingUsd !== null && (
+          {/* Estimated Cost for market BUY orders (includes 2% trading fee) */}
+          {oddsData !== null && calculatedContracts !== null && estimatedCost !== null && tradingFee !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content="Your cost was reduced to give you an even dollar payout."
+                  content={`Your cost was reduced to give you an even dollar payout. Includes a fee of $${tradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`}
                   position="top"
                   withPortal={true}
                 >
                   <span className="bet-size-label">Estimated Cost</span>
                 </Tooltip>
                 <span className="bet-size-value estimated-cost-value">
-                  {(() => {
-                    const usdAmount = Number(amount);
-                    const spent = usdAmount - (remainingUsd as number);
-                    return `$ ${spent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                  })()}
+                  $ {estimatedCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -510,12 +506,18 @@ export default function PredictionMarketTradeBoxUI({
               </div>
             </div>
           )}
-          {/* Show Amount line for buy limit orders */}
+          {/* Show Estimated Cost line for buy limit orders (includes 2% trading fee) */}
           {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
-                <span className="bet-size-label">Amount</span>
-                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                <Tooltip
+                  content="Includes a 2% trading fee"
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Estimated Cost</span>
+                </Tooltip>
+                <span className="bet-size-value amount-value">$ {(limitOrderAmount * 1.02).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}

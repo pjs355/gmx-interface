@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { Tag } from "@/services/api/tagService";
 import { QuestionDetails } from "@/types/market-types";
 import SettleMarket from "../SettleMarket";
@@ -31,6 +31,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 	saveMessage,
 	saveError,
 }) => {
+	const [detailsExpanded, setDetailsExpanded] = useState(false);
+
 	if (!details && !loading && !error) {
 		return null;
 	}
@@ -115,6 +117,154 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 								})
 							)}
 						</div>
+					</div>
+
+					{/* Details Dropdown - Token Addresses */}
+					<div style={{ marginTop: 16 }}>
+						<button
+							type="button"
+							onClick={() => setDetailsExpanded(!detailsExpanded)}
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: 8,
+								padding: "8px 14px",
+								border: "1px solid rgba(255,255,255,0.2)",
+								borderRadius: 6,
+								background: detailsExpanded
+									? "rgba(59, 130, 246, 0.2)"
+									: "rgba(255,255,255,0.05)",
+								color: "white",
+								cursor: "pointer",
+								fontSize: 13,
+								fontWeight: 500,
+								transition: "all 0.2s ease",
+								width: "fit-content",
+							}}
+						>
+							<span
+								style={{
+									transform: detailsExpanded
+										? "rotate(90deg)"
+										: "rotate(0deg)",
+									transition: "transform 0.2s ease",
+									display: "inline-block",
+								}}
+							>
+								▶
+							</span>
+							Details
+						</button>
+						{detailsExpanded && (
+							<div
+								style={{
+									marginTop: 10,
+									padding: 14,
+									borderRadius: 8,
+									background: "rgba(0,0,0,0.3)",
+									border: "1px solid rgba(255,255,255,0.1)",
+								}}
+							>
+								<div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+									<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+										<span
+											style={{
+												background: "#22c55e",
+												color: "#000",
+												padding: "3px 8px",
+												borderRadius: 4,
+												fontWeight: 600,
+												minWidth: 40,
+												textAlign: "center",
+												fontSize: 12,
+											}}
+										>
+											YES
+										</span>
+										<code
+											style={{
+												background: "rgba(255,255,255,0.1)",
+												padding: "6px 10px",
+												borderRadius: 4,
+												fontFamily: "monospace",
+												fontSize: 12,
+												wordBreak: "break-all",
+												flex: 1,
+												color: "white",
+											}}
+										>
+											{details.yesTokenId || "N/A"}
+										</code>
+										<button
+											type="button"
+											onClick={() => {
+												navigator.clipboard.writeText(details.yesTokenId || "");
+											}}
+											style={{
+												padding: "6px 10px",
+												border: "1px solid rgba(255,255,255,0.2)",
+												borderRadius: 4,
+												background: "rgba(255,255,255,0.1)",
+												color: "white",
+												cursor: "pointer",
+												fontSize: 11,
+											}}
+											title="Copy YES Token ID"
+										>
+											Copy
+										</button>
+									</div>
+									<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+										<span
+											style={{
+												background: "#ef4444",
+												color: "#fff",
+												padding: "3px 8px",
+												borderRadius: 4,
+												fontWeight: 600,
+												minWidth: 40,
+												textAlign: "center",
+												fontSize: 12,
+											}}
+										>
+											NO
+										</span>
+										<code
+											style={{
+												background: "rgba(255,255,255,0.1)",
+												padding: "6px 10px",
+												borderRadius: 4,
+												fontFamily: "monospace",
+												fontSize: 12,
+												wordBreak: "break-all",
+												flex: 1,
+												color: "white",
+											}}
+										>
+											{details.noTokenId || "N/A"}
+										</code>
+										<button
+											type="button"
+											onClick={() => {
+												navigator.clipboard.writeText(details.noTokenId || "");
+											}}
+											style={{
+												padding: "6px 10px",
+												border: "1px solid rgba(255,255,255,0.2)",
+												borderRadius: 4,
+												background: "rgba(255,255,255,0.1)",
+												color: "white",
+												cursor: "pointer",
+												fontSize: 11,
+											}}
+											title="Copy NO Token ID"
+										>
+											Copy
+										</button>
+									</div>
+								</div>
+							</div>
+						)}
 					</div>
 
 					<SettleMarket

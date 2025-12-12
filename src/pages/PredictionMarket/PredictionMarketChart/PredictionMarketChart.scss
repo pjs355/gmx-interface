@@ -14,6 +14,13 @@
     flex-wrap: wrap;
     gap: 12px;
 
+    .chart-logo {
+      height: 32px;
+      width: auto;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
     .chart-titles {
       display: flex;
       flex-direction: row;
@@ -282,6 +289,10 @@
         flex-direction: row; // Keep header on a single row
         align-items: center;
         gap: 12px;
+
+        .chart-logo {
+          height: 24px;
+        }
 
         .chart-titles {
           flex-direction: row; // Keep markets side-by-side

@@ -351,6 +351,14 @@ html.drawer-open {
 	font-size: 1.8rem;
 }
 
+.App-header-logo-img {
+	height: 40px;
+	width: auto;
+	object-fit: contain;
+	vertical-align: middle;
+	cursor: pointer;
+}
+
 .App-header .a,
 .App-header a {
 	text-decoration: none;
@@ -482,6 +490,10 @@ html.drawer-open {
 		font-size: 2.1rem;
 	}
 
+	.App-header-logo-img {
+		height: 36px;
+	}
+
 	a.App-header-user-account {
 		margin-right: 0;
 	}
@@ -522,6 +534,10 @@ html.drawer-open {
 	.App-header .App-header-link-main {
 		padding: 0.155rem !important;
 		margin-left: 0rem !important;
+	}
+
+	.App-header-logo-img {
+		height: 30px;
 	}
 
 	.login-text-link {

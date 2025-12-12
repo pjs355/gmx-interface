@@ -7,7 +7,7 @@ import ExternalLink from "components/ExternalLink/ExternalLink";
 import { TrackingLink } from "components/TrackingLink/TrackingLink";
 import Modal from "components/Modal/Modal";
 
-// Removed logo import - using text instead
+import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
 
 import { SOCIAL_LINKS, getFooterLinks } from "./constants";
 import "./Footer.scss";
@@ -285,7 +285,7 @@ export default function Footer({
 			>
 				<div className="Footer-content">
 					<div className="Footer-left">
-						<span className="Footer-logo-text">LevelUp</span>
+						<img src={levelUpLogo} alt="LevelUp" className="Footer-logo-img" />
 					</div>
 					<div className="Footer-center">
 						{getFooterLinks(isHome).map(

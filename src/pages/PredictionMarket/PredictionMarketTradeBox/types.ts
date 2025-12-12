@@ -12,6 +12,10 @@ export interface TradeBoxState {
 	orderResult: OrderExecutionResult | null;
 	calculatedContracts: number | null;
 	remainingUsd: number | null;
+	// Trading fee fields for market orders
+	spent: number | null;
+	tradingFee: number | null;
+	estimatedCost: number | null;
 }
 
 export interface TradeBoxProps {
