@@ -35,6 +35,19 @@ function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	});
 }
 
+// Sort umbrellas by creation date (newest first)
+function sortByCreationDate(array: Umbrella[]): Umbrella[] {
+	return [...array].sort((a, b) => {
+		const aDate = new Date((a as any).createdAt || 0).getTime();
+		const bDate = new Date((b as any).createdAt || 0).getTime();
+		// Sort in descending order (newest first)
+		return bDate - aDate;
+	});
+}
+
+// Special identifier for the "New" pill
+const NEW_PILL_ID = "__NEW__";
+
 function buildDayKey(date: Date): string {
 	const year = date.getFullYear();
 	const month = date.getMonth() + 1;
@@ -164,7 +177,8 @@ export default function FilteredPredictions({
 			})
 			.filter((umbrella) => {
 				// Apply secondary game filter if selected
-				if (!selectedGame) return true;
+				// Skip tag filtering if "New" pill is selected (it just sorts, doesn't filter)
+				if (!selectedGame || selectedGame === NEW_PILL_ID) return true;
 
 				// Find the selected tag by label
 				const selectedTag = tags.find((t) => t.label === selectedGame);
@@ -185,6 +199,12 @@ export default function FilteredPredictions({
 					return tagIds.includes(selectedTag._id);
 				});
 			});
+
+		// Handle "New" pill - sort by creation date
+		if (selectedGame === NEW_PILL_ID) {
+			console.log('[FilteredPredictions] New pill selected, sorting by createdAt');
+			return sortByCreationDate(filtered);
+		}
 
 		// Sort by trading activity for games filter type (not esports)
 		if (filterType === "games") {
