@@ -182,6 +182,14 @@ let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL_MS = 200; // Minimum 200ms between requests
 
 /**
+ * Clear the in-memory subgraph cache and reset rate limiter.
+ */
+export function clearSubgraphCache(): void {
+	queryCache.clear();
+	lastRequestTime = 0;
+}
+
+/**
  * Sleep for a given number of milliseconds
  */
 function sleep(ms: number): Promise<void> {
