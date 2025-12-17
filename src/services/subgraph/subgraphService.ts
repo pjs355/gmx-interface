@@ -5,7 +5,7 @@
  * instead of making individual RPC calls. This significantly reduces
  * the number of blockchain calls and improves performance.
  *
- * Subgraph: https://api.studio.thegraph.com/query/1718616/levelup-subgraph/version/latest
+ * Studio URL (Free tier: 100k queries/month)
  */
 
 const SUBGRAPH_URL =
@@ -203,88 +203,36 @@ async function executeQuery<T>(
 	variables: Record<string, unknown>,
 	maxRetries: number = 3
 ): Promise<T> {
-	const cacheKey = getCacheKey(query, variables);
+	const startTime = performance.now();
 	
-	// Check cache first
-	const cached = queryCache.get(cacheKey);
-	if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-		console.log("[Subgraph] Cache hit");
-		return cached.data as T;
+	const response = await fetch(SUBGRAPH_URL, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({ query, variables }),
+	});
+
+	const duration = Math.round(performance.now() - startTime);
+
+	if (!response.ok) {
+		console.error(`[Subgraph] Request failed: ${response.status} (${duration}ms)`, {
+			status: response.status,
+			statusText: response.statusText,
+		});
+		throw new Error(`Subgraph request failed: ${response.status}`);
 	}
-
-	// Rate limiting: ensure minimum interval between requests
-	const now = Date.now();
-	const timeSinceLastRequest = now - lastRequestTime;
-	if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
-		await sleep(MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest);
-	}
-
-	let lastError: Error | null = null;
-	
-	for (let attempt = 0; attempt < maxRetries; attempt++) {
-		try {
-			lastRequestTime = Date.now();
-			
-			const response = await fetch(SUBGRAPH_URL, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ query, variables }),
-			});
-
-			// Handle rate limiting with exponential backoff
-			if (response.status === 429) {
-				const retryAfter = response.headers.get("Retry-After");
-				const waitTime = retryAfter 
-					? parseInt(retryAfter, 10) * 1000 
-					: Math.min(1000 * Math.pow(2, attempt), 10000); // Exponential backoff, max 10s
-				
-				console.warn(`[Subgraph] Rate limited (429). Retry ${attempt + 1}/${maxRetries} after ${waitTime}ms`);
-				await sleep(waitTime);
-				continue;
-			}
-
-			if (!response.ok) {
-				throw new Error(`Subgraph request failed: ${response.status}`);
-			}
 
 			const result = await response.json();
 
-			if (result.errors) {
-				console.error("Subgraph query errors:", result.errors);
-				throw new Error(`Subgraph query failed: ${result.errors[0]?.message}`);
-			}
-
-			// Cache successful response
-			queryCache.set(cacheKey, { data: result.data, timestamp: Date.now() });
-			
-			return result.data;
-		} catch (error) {
-			lastError = error as Error;
-			
-			// If it's not a rate limit error, don't retry
-			if (!lastError.message.includes("429")) {
-				// Still retry on network errors
-				if (attempt < maxRetries - 1) {
-					const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
-					console.warn(`[Subgraph] Request failed. Retry ${attempt + 1}/${maxRetries} after ${waitTime}ms:`, lastError.message);
-					await sleep(waitTime);
-					continue;
-				}
-			}
-		}
+	if (result.errors) {
+		console.error("[Subgraph] Query errors:", result.errors);
+		throw new Error(`Subgraph query failed: ${result.errors[0]?.message}`);
 	}
 
-	throw lastError || new Error("Subgraph request failed after retries");
-}
+	console.log(`[Subgraph] Query OK (${duration}ms)`, { variables });
 
-/**
- * Clear the query cache (useful when you need fresh data)
- */
-export function clearSubgraphCache(): void {
-	queryCache.clear();
-	console.log("[Subgraph] Cache cleared");
+	return result.data;
 }
 
 // ============================================================================
