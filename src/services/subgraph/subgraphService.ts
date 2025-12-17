@@ -5,7 +5,7 @@
  * instead of making individual RPC calls. This significantly reduces
  * the number of blockchain calls and improves performance.
  *
- * Subgraph: https://api.studio.thegraph.com/query/1718616/levelup-subgraph/version/latest
+ * Studio URL (Free tier: 100k queries/month)
  */
 
 const SUBGRAPH_URL =
@@ -176,6 +176,8 @@ async function executeQuery<T>(
 	query: string,
 	variables: Record<string, unknown>
 ): Promise<T> {
+	const startTime = performance.now();
+	
 	const response = await fetch(SUBGRAPH_URL, {
 		method: "POST",
 		headers: {
@@ -184,16 +186,24 @@ async function executeQuery<T>(
 		body: JSON.stringify({ query, variables }),
 	});
 
+	const duration = Math.round(performance.now() - startTime);
+
 	if (!response.ok) {
+		console.error(`[Subgraph] Request failed: ${response.status} (${duration}ms)`, {
+			status: response.status,
+			statusText: response.statusText,
+		});
 		throw new Error(`Subgraph request failed: ${response.status}`);
 	}
 
 	const result = await response.json();
 
 	if (result.errors) {
-		console.error("Subgraph query errors:", result.errors);
+		console.error("[Subgraph] Query errors:", result.errors);
 		throw new Error(`Subgraph query failed: ${result.errors[0]?.message}`);
 	}
+
+	console.log(`[Subgraph] Query OK (${duration}ms)`, { variables });
 
 	return result.data;
 }
