@@ -20,7 +20,7 @@ const BalanceContext = createContext<BalanceContextType | null>(null);
 
 export function BalanceProvider({ children }: { children: React.ReactNode }) {
   const { account } = useSignerContext();
-  const { tokenBalances, loading: userDataLoading, refresh: refreshUserData } = useUserData();
+  const { tokenBalances, loading: userDataLoading, refreshViaRpc } = useUserData();
   const [localCache, setLocalCache] = useState<Map<string, number>>(new Map());
 
   // Build a tokenId -> balance lookup from UserDataContext's tokenBalances
@@ -52,12 +52,11 @@ export function BalanceProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBalances = useCallback(async (_tokenIds: string[]) => {
     // Trigger a refresh of UserDataContext which will update tokenBalances
-    // This is now a no-op since we rely on UserDataContext's data
-    // If you need fresh data, call refreshUserData() directly
-    if (refreshUserData) {
-      await refreshUserData();
+    // Uses RPC for immediate updates (subgraph has 10-60 second indexing delay)
+    if (refreshViaRpc) {
+      await refreshViaRpc();
     }
-  }, [refreshUserData]);
+  }, [refreshViaRpc]);
 
   return (
     <BalanceContext.Provider value={{ 

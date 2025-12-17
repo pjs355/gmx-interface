@@ -6,6 +6,9 @@
  * the number of blockchain calls and improves performance.
  *
  * Studio URL (Free tier: 100k queries/month)
+ * 
+ * NOTE: Subgraph indexing has inherent delay (typically 10-60 seconds on Base).
+ * For real-time balance updates after trades, use RPC fallback or manual refresh.
  */
 
 const SUBGRAPH_URL =
@@ -175,11 +178,11 @@ export function fromMicroUnits(value: string): string {
 
 // Simple in-memory cache for subgraph responses
 const queryCache = new Map<string, { data: unknown; timestamp: number }>();
-const CACHE_TTL_MS = 30_000; // 30 seconds cache
+const CACHE_TTL_MS = 5_000; // 5 seconds cache (short TTL since subgraph can be delayed)
 
 // Rate limiting state
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL_MS = 200; // Minimum 200ms between requests
+const MIN_REQUEST_INTERVAL_MS = 100; // Minimum 100ms between requests
 
 /**
  * Clear the in-memory subgraph cache and reset rate limiter.
@@ -187,6 +190,7 @@ const MIN_REQUEST_INTERVAL_MS = 200; // Minimum 200ms between requests
 export function clearSubgraphCache(): void {
 	queryCache.clear();
 	lastRequestTime = 0;
+	console.log("[Subgraph] Cache cleared");
 }
 
 /**
@@ -204,13 +208,34 @@ function getCacheKey(query: string, variables: Record<string, unknown>): string 
 }
 
 /**
- * Execute a GraphQL query against the subgraph with retry logic for rate limiting
+ * Execute a GraphQL query against the subgraph with caching and rate limiting
  */
 async function executeQuery<T>(
 	query: string,
 	variables: Record<string, unknown>,
-	maxRetries: number = 3
+	skipCache: boolean = false
 ): Promise<T> {
+	const cacheKey = getCacheKey(query, variables);
+	const now = Date.now();
+
+	// Check cache first (unless skipCache is true)
+	if (!skipCache) {
+		const cached = queryCache.get(cacheKey);
+		if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
+			console.log(`[Subgraph] Cache HIT (age: ${now - cached.timestamp}ms)`, { variables });
+			return cached.data as T;
+		}
+	}
+
+	// Rate limiting - wait if we're making requests too fast
+	const timeSinceLastRequest = now - lastRequestTime;
+	if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+		const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+		console.log(`[Subgraph] Rate limiting, waiting ${waitTime}ms`);
+		await sleep(waitTime);
+	}
+
+	lastRequestTime = Date.now();
 	const startTime = performance.now();
 	
 	const response = await fetch(SUBGRAPH_URL, {
@@ -231,14 +256,17 @@ async function executeQuery<T>(
 		throw new Error(`Subgraph request failed: ${response.status}`);
 	}
 
-			const result = await response.json();
+	const result = await response.json();
 
 	if (result.errors) {
 		console.error("[Subgraph] Query errors:", result.errors);
 		throw new Error(`Subgraph query failed: ${result.errors[0]?.message}`);
 	}
 
-	console.log(`[Subgraph] Query OK (${duration}ms)`, { variables });
+	// Store in cache
+	queryCache.set(cacheKey, { data: result.data, timestamp: Date.now() });
+
+	console.log(`[Subgraph] Query OK (${duration}ms, cached)`, { variables });
 
 	return result.data;
 }

@@ -617,9 +617,9 @@ export default function PredictionMarketTradeBoxUI({
         <div className={`trade-notification ${orderResult.success ? 'success' : 'error'}`}>
           <div className="notification-content">
             {orderResult.success ? (
-              <div className="notification-text">Trade Executed Successfully!</div>
+              <div className="notification-text"> Order Submitted!</div>
             ) : (
-              <div className="notification-text">Trade Failed</div>
+              <div className="notification-text">Order Failed</div>
             )}
           </div>
         </div>

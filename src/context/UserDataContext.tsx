@@ -46,6 +46,7 @@ type UserDataContextValue = {
 	loading: boolean;
 	usingRpcFallback: boolean; // True when subgraph failed and using RPC
 	refresh: () => Promise<void>;
+	refreshViaRpc: () => Promise<void>; // Force RPC refresh (bypasses slow subgraph)
 	getTokenBalance: (marketId: string) => TokenBalance | null;
 	checkApproval: () => Promise<void>;
 	approveToken: () => Promise<void>;
@@ -765,7 +766,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	}, [account, umbrellas]); // Removed 'load' from dependencies to prevent circular dependency
 
 	// Refresh function that clears the skip-check refs to allow full reload
-	// Refresh function that clears the skip-check refs to allow full reload
 	const refresh = useCallback(async () => {
 		if (!account) return;
 		loadedForAccountRef.current = null;
@@ -781,6 +781,58 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		]);
 	}, [account, fetchUsdcBalanceRpc, fetchTokenBalancesFromSubgraph, load]);
 
+	// Force RPC refresh - bypasses subgraph entirely for immediate balance updates
+	// Use this after trades when subgraph indexing delay would show stale data
+	const refreshViaRpc = useCallback(async () => {
+		if (!account) return;
+		console.log("[UserDataContext] 🔄 Force RPC refresh requested...");
+		
+		usdcFetchedRef.current = null;
+		
+		// Build market data map from current context
+		const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
+		umbrellas.forEach(umbrella => {
+			const questions = getAllQuestionsForUmbrella(umbrella._id) || [];
+			questions.forEach((market: any) => {
+				const marketId = market._id || market.questionId || market.marketId;
+				if (marketId && market.yesTokenId && market.noTokenId) {
+					marketDataMap.set(marketId, {
+						yesTokenId: market.yesTokenId,
+						noTokenId: market.noTokenId,
+					});
+				}
+			});
+		});
+
+		// Also include resolved markets
+		Object.values(resolvedMarketsByUmbrella).forEach((markets: any[]) => {
+			markets.forEach((market: any) => {
+				const marketId = market._id || market.questionId || market.marketId;
+				if (marketId && market.yesTokenId && market.noTokenId) {
+					marketDataMap.set(marketId, {
+						yesTokenId: market.yesTokenId,
+						noTokenId: market.noTokenId,
+					});
+				}
+			});
+		});
+
+		try {
+			// Fetch both USDC and token balances via RPC in parallel
+			const [, rpcBalances] = await Promise.all([
+				fetchUsdcBalanceRpc(account),
+				fetchTokenBalancesFromRpc(account, marketDataMap),
+			]);
+
+			// Update state with RPC balances
+			setRawTokenBalances(rpcBalances);
+			setUsingRpcFallback(true);
+			console.log(`[UserDataContext] ✅ Force RPC refresh complete! Loaded ${rpcBalances.length} positions`);
+		} catch (error) {
+			console.error("[UserDataContext] Force RPC refresh failed:", error);
+		}
+	}, [account, umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchUsdcBalanceRpc, fetchTokenBalancesFromRpc]);
+
 	const value = useMemo<UserDataContextValue>(
 		() => ({
 			orders,
@@ -791,6 +843,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			loading,
 			usingRpcFallback,
 			refresh,
+			refreshViaRpc,
 			getTokenBalance,
 			checkApproval,
 			approveToken,
@@ -804,6 +857,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			loading,
 			usingRpcFallback,
 			refresh,
+			refreshViaRpc,
 			getTokenBalance,
 			checkApproval,
 			approveToken,

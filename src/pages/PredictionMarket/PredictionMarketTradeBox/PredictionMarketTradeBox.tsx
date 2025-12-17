@@ -11,7 +11,6 @@ import PredictionMarketTradeBoxResponsiveContainer from "./PredictionMarketTrade
 // Removed OrderbookContext import - using passed orderbook prop instead
 import { useUSDCBalance, checkSufficientBalance, useYesNoBalances, checkSufficientShares } from "./checkBalances";
 import { useUserData } from "context/UserDataContext";
-import { useBalances } from "context/BalanceContext";
 import { useButtonState } from "./hooks/useButtonState";
 import { useTradeState } from "./hooks/useTradeState";
 
@@ -37,8 +36,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
-  const { approvalState, /* checkApproval, */ approveToken, refresh } = useUserData();
-  const { refreshBalances } = useBalances();
+  const { approvalState, /* checkApproval, */ approveToken, refresh, refreshViaRpc } = useUserData();
 
   const { wallets: privyWallets } = usePrivyWallets();
 
@@ -319,8 +317,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
         if (frozenState.side === "buy") {
           const usdAmount = parseFloat(frozenState.amount);
+          // CRITICAL: Use effective budget (amount / 1.02) to match UI calculation
+          // This ensures the signed order matches what user saw in "Estimated Cost"
+          const effectiveBudget = usdAmount / 1.02;
+          
           const calc = marketOrderHandler.calculateContractsForMarketOrder(
-            usdAmount,
+            effectiveBudget,
             frozenState.selectedPosition,
             "buy"
           );
@@ -333,10 +335,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
           // For BUY market orders:
           // - calc.contracts = shares bought
-          // - calc.remainingUsd = leftover USD that wasn't spent
+          // - calc.remainingUsd = leftover USD that wasn't spent (relative to effectiveBudget)
           // - calc.maxPrice = HIGHEST price hit (worst case for signing)
           const sharesBought = orderAmount;
-          const usdSpent = usdAmount - calc.remainingUsd;
+          const usdSpent = effectiveBudget - calc.remainingUsd;
           const effectiveAvgPrice = usdSpent / sharesBought;
           const maxPrice = (calc as any).maxPrice;
           
@@ -350,7 +352,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           orderPrice = Math.round(maxPrice * 100) / 100;
           
           console.log("📊 Market BUY calculation:", {
-            usdAmount: usdAmount,
+            userInputAmount: usdAmount,
+            effectiveBudget: effectiveBudget,
             sharesBought: sharesBought,
             usdSpent: usdSpent,
             remainingUsd: calc.remainingUsd,
@@ -452,32 +455,23 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           price: "",
         }));
         
-        // Refresh balances after successful trade with a delay
-        // Wait 4 seconds to give blockchain time to process the transaction
+        // Refresh balances after successful trade
+        // Use RPC for immediate updates (subgraph has indexing delay of 10-60 seconds)
         setTimeout(async () => {
           try {
-            console.log("🔄 Starting balance refresh after 4 second delay...");
+            console.log("🔄 Starting balance refresh after 2 second delay...");
             
-            // First refresh the main user data (includes all token balances)
-            await refresh();
-            console.log("✅ User data refreshed");
-            
-            // Get the market's token IDs for this specific market
-            const yesTokenId = (market as any)?.yesTokenId;
-            const noTokenId = (market as any)?.noTokenId;
-            
-            // Then refresh the specific market token balances in BalanceContext
-            if (yesTokenId && noTokenId) {
-              await refreshBalances([yesTokenId, noTokenId]);
-              console.log("✅ Market token balances refreshed");
-            }
-            
+            // Use RPC refresh for immediate balance updates (bypasses slow subgraph)
+            // NOTE: Do NOT call refreshBalances() after this - it would fetch stale subgraph data
+            // and overwrite the fresh RPC data!
+            await refreshViaRpc();
+            console.log("✅ User data refreshed via RPC (immediate)");
             console.log("✅ All balances refreshed after successful trade");
           } catch (error) {
             console.error("❌ Error refreshing balances after trade:", error);
             // Don't fail the trade if balance refresh fails
           }
-        }, 4000); // 4 second delay
+        }, 2000); // 2 second delay (reduced from 4s since RPC is faster)
       }
     } catch (error: any) {
       setState((prev) => ({
