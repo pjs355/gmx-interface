@@ -705,6 +705,12 @@
 			color: #ffffff;
 		}
 
+		// Estimated Receive value (for sell orders) - white to match
+		.estimated-receive-value {
+			font-size: 16px; // match label size
+			color: #ffffff;
+		}
+
 		// Amount value should be white, not green
 		.amount-value {
 			font-size: 16px; // match label size

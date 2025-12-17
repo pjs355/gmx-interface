@@ -12,10 +12,14 @@ export interface TradeBoxState {
 	orderResult: OrderExecutionResult | null;
 	calculatedContracts: number | null;
 	remainingUsd: number | null;
-	// Trading fee fields for market orders
+	// Trading fee fields for market BUY orders
 	spent: number | null;
 	tradingFee: number | null;
 	estimatedCost: number | null;
+	// Trading fee fields for market SELL orders
+	grossReceive: number | null;
+	sellTradingFee: number | null;
+	netReceive: number | null;
 }
 
 export interface TradeBoxProps {

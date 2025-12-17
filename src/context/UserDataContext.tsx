@@ -16,7 +16,7 @@ import {
 	fetchUserOrders,
 	type ProcessedOrder,
 } from "@/services/api/simplifiedOrderService";
-import { CTF_ADDRESS, USDC_ADDRESS, EXCHANGE_ADDRESS } from "config/addresses";
+import { CTF_ADDRESS, USDC_ADDRESS, EXCHANGE_ADDRESS, FEE_WRAPPER_ADDRESS } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { usePredictionData } from "context/PredictionDataContext";
 import {
@@ -145,13 +145,15 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				provider
 			);
 
-			const [usdcAllowance, hasCtfApproval] = await Promise.all([
+			const [usdcAllowance, hasCtfApproval, feeWrapperAllowance] = await Promise.all([
 				usdcContract.allowance(account, EXCHANGE_ADDRESS),
 				ctfContract.isApprovedForAll(account, EXCHANGE_ADDRESS),
+				usdcContract.allowance(account, FEE_WRAPPER_ADDRESS),
 			]);
 
 			const hasUsdcApproval = usdcAllowance > 0n;
-			const isApproved = hasUsdcApproval && hasCtfApproval;
+			const hasFeeWrapperApproval = feeWrapperAllowance > 0n;
+			const isApproved = hasUsdcApproval && hasCtfApproval && hasFeeWrapperApproval;
 
 			setApprovalState({
 				isApproved,
@@ -704,9 +706,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			// Brief delay between transactions
 			await new Promise((r) => setTimeout(r, 1500));
 
-			// Approve USDC for fee collection address
-			const FEE_COLLECTION_ADDRESS = "0xf4cb13220544e1f151bCb5367Fb0A87e185f78Df";
-
+			// Approve USDC for fee wrapper (to collect trading fees)
 			if (useSmartWallet) {
 				const smartWalletClient = await getClientForChain({ id: 8453 });
 				if (!smartWalletClient)
@@ -715,7 +715,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				const usdcInterface = new ethers.Interface(usdcAbi);
 				const feeApprovalData = usdcInterface.encodeFunctionData(
 					"approve",
-					[FEE_COLLECTION_ADDRESS, ethers.MaxUint256]
+					[FEE_WRAPPER_ADDRESS, ethers.MaxUint256]
 				);
 
 				await smartWalletClient.sendTransaction({
@@ -734,7 +734,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 					signer
 				);
 				const tx = await usdcContract.approve(
-					FEE_COLLECTION_ADDRESS,
+					FEE_WRAPPER_ADDRESS,
 					ethers.MaxUint256
 				);
 				await tx.wait();

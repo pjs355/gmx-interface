@@ -1,5 +1,12 @@
 import { ethers } from "ethers";
-import { CTF_ADDRESS, EXCHANGE_ADDRESS, USDC_ADDRESS } from "config/addresses";
+import { 
+	CTF_ADDRESS, 
+	EXCHANGE_ADDRESS, 
+	USDC_ADDRESS,
+	FEE_WRAPPER_ADDRESS,
+	FEE_MODULE_ADDRESS,
+	FEE_RATE_BPS,
+} from "config/addresses";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 // Utility function to round dollar amounts based on buy/sell direction
@@ -18,6 +25,8 @@ const CONTRACTS = {
 	CTF: CTF_ADDRESS,
 	EXCHANGE: EXCHANGE_ADDRESS,
 	COLLATERAL: USDC_ADDRESS, // TestUSDC
+	FEE_WRAPPER: FEE_WRAPPER_ADDRESS, // For BUY orders
+	FEE_MODULE: FEE_MODULE_ADDRESS, // For SELL orders
 };
 
 const BASE_RPC =
@@ -292,7 +301,8 @@ export class PredictionMarketService {
 			takerAmount: side === "buy" ? tokenAmount : usdcAmount, // BUY: want tokens | SELL: want USDC
 			expiration,
 			nonce: 0, // Will be fetched from contract in real implementation
-			feeRateBps: 0,
+			// Fee system: BUY orders use FeeWrapper (feeRateBps: 0), SELL orders use FeeModule (feeRateBps: 200 = 2%)
+			feeRateBps: side === "buy" ? 0 : FEE_RATE_BPS,
 			side: side, // Use actual side parameter for consistency
 			signatureType: 3,
 			// Additional fields your server expects

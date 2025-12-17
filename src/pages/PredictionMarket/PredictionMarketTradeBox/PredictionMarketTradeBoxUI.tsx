@@ -52,9 +52,22 @@ export default function PredictionMarketTradeBoxUI({
   buttonState,
   approvalState
 }: PredictionMarketTradeBoxUIProps) {
-  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost } = state;
+  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive } = state;
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
   const { calculateContractsForMarketOrder, getEffectivePrice } = useMarketOrderHandler(orderbook as any);
+
+  // Fee calculation helper - MUST match backend exactly
+  // Backend uses: round UP to nearest cent (10000 micro-units)
+  const calculateFeeMatchingBackend = (amountInDollars: number): number => {
+    // Step 1: Convert to micro-units (USDC has 6 decimals)
+    const amountMicro = Math.floor(amountInDollars * 1_000_000);
+    // Step 2: Calculate 2% fee in micro-units
+    const feeBeforeRounding = Math.floor(amountMicro * 2 / 100);
+    // Step 3: Round UP to nearest cent (10000 micro-units)
+    const feeRoundedUp = Math.ceil(feeBeforeRounding / 10000) * 10000;
+    // Step 4: Convert back to dollars
+    return feeRoundedUp / 1_000_000;
+  };
 
   // Helper function to format numbers with commas
   const formatNumberWithCommas = (value: string): string => {
@@ -478,7 +491,7 @@ export default function PredictionMarketTradeBoxUI({
       )}
 
       {/* Bet Size / To Win - render only when a positive numeric value exists */}
-      {(toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null) && (
+      {(toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null || netReceive !== null) && (
         <div className="bet-size-section">
           {/* Estimated Cost for market BUY orders (includes 2% trading fee) */}
           {oddsData !== null && calculatedContracts !== null && estimatedCost !== null && tradingFee !== null && (
@@ -506,31 +519,66 @@ export default function PredictionMarketTradeBoxUI({
               </div>
             </div>
           )}
+          {/* Estimated Receive for market SELL orders (after 2% trading fee) */}
+          {/* Round DOWN to avoid showing more than user will actually receive */}
+          {orderType === 'market' && side === 'sell' && netReceive !== null && sellTradingFee !== null && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <Tooltip
+                  content={`Includes a fee of $${sellTradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`}
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Estimated Receive</span>
+                </Tooltip>
+                <span className="bet-size-value estimated-receive-value">
+                  $ {(Math.floor(netReceive * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          )}
           {/* Show Estimated Cost line for buy limit orders (includes 2% trading fee) */}
+          {/* Uses backend-matching fee calculation: round UP to nearest cent */}
           {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content="Includes a 2% trading fee"
+                  content="You may pay a fee up to 2% based on if your order is marked as a maker or taker. Makers pay 0% fees."
                   position="top"
                   withPortal={true}
                 >
                   <span className="bet-size-label">Estimated Cost</span>
                 </Tooltip>
-                <span className="bet-size-value amount-value">$ {(limitOrderAmount * 1.02).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="bet-size-value amount-value">$ {(limitOrderAmount + calculateFeeMatchingBackend(limitOrderAmount)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
+          {/* Show Estimated Receive line for sell limit orders (after 2% trading fee) */}
+          {/* Uses backend-matching fee calculation, then floor to avoid showing more than user receives */}
+          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <Tooltip
+                  content="You may pay a fee up to 2% based on if your order is marked as a maker or taker. Makers pay 0% fees."
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Estimated Receive</span>
+                </Tooltip>
+                <span className="bet-size-value amount-value">$ {(Math.floor((limitOrderAmount - calculateFeeMatchingBackend(limitOrderAmount)) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}
           
-          {/* Show To Win / Receive line */}
-          {toWinNumeric !== null && (
+          {/* Show To Win line for BUY orders only (SELL orders show Estimated Receive above) */}
+          {toWinNumeric !== null && side === 'buy' && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
-                <span className={`bet-size-label to-win-label`}>{side === 'sell' ? 'Receive' : 'To Win'}</span>
+                <span className={`bet-size-label to-win-label`}>To Win</span>
                 <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
               </div>
               {/* Small grey odds text under To Win for market buy orders only */}
-              {orderType === 'market' && side === 'buy' && oddsData && (
+              {orderType === 'market' && oddsData && (
                 <div className="bet-size-odds-subtext">Avg. odds {oddsData.pct}%</div>
               )}
             </div>

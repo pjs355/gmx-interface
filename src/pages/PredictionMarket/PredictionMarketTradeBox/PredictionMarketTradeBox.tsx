@@ -137,9 +137,27 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   //   }
   // }, [account, checkApproval]);
 
+  // Fee calculation helper - MUST match backend exactly
+  // Backend uses: round UP to nearest cent (10000 micro-units)
+  // Formula: Math.ceil(fee / 10000) * 10000, then convert to dollars
+  const calculateFeeMatchingBackend = (amountInDollars: number): number => {
+    // Step 1: Convert to micro-units (USDC has 6 decimals)
+    const amountMicro = Math.floor(amountInDollars * 1_000_000);
+    
+    // Step 2: Calculate 2% fee in micro-units
+    const feeBeforeRounding = Math.floor(amountMicro * 2 / 100);
+    
+    // Step 3: Round UP to nearest cent (10000 micro-units)
+    const feeRoundedUp = Math.ceil(feeBeforeRounding / 10000) * 10000;
+    
+    // Step 4: Convert back to dollars
+    return feeRoundedUp / 1_000_000;
+  };
+
   // Calculate contracts for market orders immediately when dependencies change
   // For BUY orders, we use an effective budget of amount/1.02 to account for the 2% trading fee
   // This ensures the total cost (including fee) doesn't exceed the user's input amount
+  // For SELL orders, fee is deducted from the USDC proceeds (2% of what they receive)
   const calculatedMarketOrderData = useMemo(() => {
     // Only run if we have all required data and it's a market order
     if (state.orderType === "market" && state.amount && state.selectedPosition && orderbook) {
@@ -156,19 +174,46 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         );
         const contractsInt = Math.floor(result.contracts);
         
-        // For BUY orders: remainingUsd is relative to effectiveBudget
-        // We need to calculate spent from the effective budget
-        const spent = state.side === 'buy' ? effectiveBudget - result.remainingUsd : 0;
-        const tradingFee = state.side === 'buy' ? spent * 0.02 : 0;
-        
-        return {
-          calculatedContracts: contractsInt,
-          remainingUsd: result.remainingUsd,
-          // Additional fields for fee display
-          spent: spent,
-          tradingFee: tradingFee,
-          estimatedCost: spent + tradingFee,
-        };
+        if (state.side === 'buy') {
+          // For BUY orders: remainingUsd is relative to effectiveBudget
+          // We need to calculate spent from the effective budget
+          const spent = effectiveBudget - result.remainingUsd;
+          // Use backend-matching fee calculation (rounds UP to nearest cent)
+          const tradingFee = calculateFeeMatchingBackend(spent);
+          
+          return {
+            calculatedContracts: contractsInt,
+            remainingUsd: result.remainingUsd,
+            // Additional fields for fee display (BUY)
+            spent: spent,
+            tradingFee: tradingFee,
+            estimatedCost: spent + tradingFee,
+            // SELL-specific fields (null for BUY)
+            grossReceive: null,
+            sellTradingFee: null,
+            netReceive: null,
+          };
+        } else {
+          // For SELL orders: remainingUsd contains total USDC received from selling
+          // Fee is 2% of that amount, deducted from proceeds
+          const grossReceive = result.remainingUsd;
+          // Use backend-matching fee calculation (rounds UP to nearest cent)
+          const sellTradingFee = calculateFeeMatchingBackend(grossReceive);
+          const netReceive = grossReceive - sellTradingFee;
+          
+          return {
+            calculatedContracts: contractsInt,
+            remainingUsd: result.remainingUsd,
+            // BUY-specific fields (null for SELL)
+            spent: null,
+            tradingFee: null,
+            estimatedCost: null,
+            // SELL-specific fields
+            grossReceive: grossReceive,
+            sellTradingFee: sellTradingFee,
+            netReceive: netReceive,
+          };
+        }
       }
     }
     return {
@@ -177,6 +222,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       spent: null,
       tradingFee: null,
       estimatedCost: null,
+      grossReceive: null,
+      sellTradingFee: null,
+      netReceive: null,
     };
   }, [state.amount, state.selectedPosition, state.orderType, state.side, orderbook, marketOrderHandler]);
 
@@ -547,9 +595,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         ...state,
         calculatedContracts: calculatedMarketOrderData.calculatedContracts,
         remainingUsd: calculatedMarketOrderData.remainingUsd,
+        // BUY order fee fields
         spent: calculatedMarketOrderData.spent,
         tradingFee: calculatedMarketOrderData.tradingFee,
         estimatedCost: calculatedMarketOrderData.estimatedCost,
+        // SELL order fee fields
+        grossReceive: calculatedMarketOrderData.grossReceive,
+        sellTradingFee: calculatedMarketOrderData.sellTradingFee,
+        netReceive: calculatedMarketOrderData.netReceive,
       }}
       onPositionChange={onPositionChangeWrapper}
       onAmountChange={handleAmountChange}
