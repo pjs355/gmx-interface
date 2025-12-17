@@ -4,6 +4,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { getTradingReturns, getFinalAmount } from "@/services/api/simplifiedOrderService";
 import rank1Icon from "@/assets/img/rank1.svg";
 import rank2Icon from "@/assets/img/rank2.svg";
 import rank3Icon from "@/assets/img/rank3.svg";
@@ -23,14 +24,15 @@ type LeaderboardEntry = {
 export default function Leaderboard() {
 	const { getAccessToken, user } = usePrivy();
 	const { account } = useSignerContext();
-	const { orders, tokenBalances } = useUserData();
-	const { allBooksPreview } = usePredictionData();
+	const { orders } = useUserData();
+	const { resolvedMarketsByUmbrella } = usePredictionData();
 	const [data, setData] = useState<LeaderboardEntry[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		let mounted = true;
+		console.log("[Leaderboard] ===== useEffect triggered, starting API fetch =====");
 		async function load() {
 			setLoading(true);
 			setError(null);
@@ -41,7 +43,7 @@ export default function Leaderboard() {
 						? await getAccessToken()
 						: undefined;
 				const url = `${base}/leaderboard?limit=1000`;
-				console.log("[Leaderboard] Fetching:", { base, url });
+				console.log("[Leaderboard] Fetching:", { base, url, hasToken: !!token });
 				const resp = await fetch(url, {
 					headers: {
 						...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -52,18 +54,36 @@ export default function Leaderboard() {
 					resp.status,
 					resp.statusText
 				);
-				const json = await resp.json().catch(() => ({} as any));
+				const json = await resp.json().catch((e) => {
+					console.error("[Leaderboard] JSON parse error:", e);
+					return {} as any;
+				});
+				console.log("[Leaderboard] Response JSON keys:", Object.keys(json || {}));
 				console.log("[Leaderboard] Response JSON:", json);
 				if (!resp.ok || json?.success === false) {
 					throw new Error(json?.error || `HTTP ${resp.status}`);
 				}
 				let entries: any[] = [];
 				if (json && json.data && Array.isArray(json.data.entries)) {
+					console.log("[Leaderboard] Found entries at json.data.entries");
 					entries = json.data.entries as any[];
 				} else if (json && Array.isArray(json.data)) {
+					console.log("[Leaderboard] Found entries at json.data");
 					entries = json.data as any[];
 				} else if (Array.isArray(json)) {
+					console.log("[Leaderboard] Found entries at json root");
 					entries = json as any[];
+				} else if (json && json.entries && Array.isArray(json.entries)) {
+					console.log("[Leaderboard] Found entries at json.entries");
+					entries = json.entries as any[];
+				} else {
+					console.warn("[Leaderboard] Could not find entries array in response structure:", {
+						hasData: !!json?.data,
+						dataIsArray: Array.isArray(json?.data),
+						hasDataEntries: !!json?.data?.entries,
+						hasEntries: !!json?.entries,
+						jsonType: typeof json
+					});
 				}
 
 				console.log(
@@ -163,7 +183,9 @@ export default function Leaderboard() {
 		};
 	}, [getAccessToken]);
 
-	// Calculate user's account stats
+	// Calculate user's account stats - REALIZED P&L ONLY
+	// This includes: (1) Trading P&L from buy-sell pairs, (2) Settlement P&L from resolved markets
+	// It does NOT include unrealized gains from open positions in live markets
 	const userStats = useMemo(() => {
 		if (!account) return null;
 		
@@ -185,11 +207,6 @@ export default function Leaderboard() {
 			};
 		}
 
-		// Calculate volume (total USDC spent on buys)
-		const totalVolume = orders
-			.filter((order) => order.filled && order.side === "buy")
-			.reduce((sum, order) => sum + order.usdcValue, 0);
-
 		// Calculate number of trades (filled orders)
 		const numTrades = orders.filter((order) => order.filled).length;
 
@@ -197,57 +214,101 @@ export default function Leaderboard() {
 		const uniqueMarkets = new Set(orders.map((order) => order.questionId));
 		const numMarkets = uniqueMarkets.size;
 
-		// Calculate P&L (current market value + realized P&L - cost)
-		let totalMarketValue = 0;
-		let totalCost = 0;
+		// Calculate total buy cost for volume display
+		const totalBuyCost = orders
+			.filter((order) => order.filled && order.side === "buy")
+			.reduce((sum, order) => sum + order.usdcValue, 0);
 
-		// Process all filled orders to calculate cost and realized P&L
-		const filledOrders = orders.filter((order) => order.filled);
-		
-		// Calculate total cost (buys - sells)
-		filledOrders.forEach((order) => {
-			if (order.side === "buy") {
-				totalCost += order.usdcValue;
-			} else {
-				// Subtract sell proceeds from cost (realized gains)
-				totalCost -= order.usdcValue;
-			}
+		// ============================================================
+		// REALIZED P&L CALCULATION (only closed positions)
+		// ============================================================
+		let totalRealizedPnL = 0;
+		const debugPnlInfo: Array<{
+			marketId: string;
+			tradingPnL: number;
+			settlementPnL: number;
+			isResolved: boolean;
+			resolvedOutcome: string | null;
+		}> = [];
+
+		// Get all unique market IDs the user has traded
+		const tradedMarketIds = new Set(
+			orders.filter((o) => o.filled).map((o) => o.questionId)
+		);
+
+		// Build a map of resolved markets for quick lookup
+		const resolvedMarketsMap = new Map<string, { outcome: string; market: any }>();
+		Object.values(resolvedMarketsByUmbrella).forEach((markets: any[]) => {
+			markets.forEach((market: any) => {
+				const marketId = market._id || market.questionId || market.marketId;
+				const outcome = String(market.resolvedOutcome || "").toLowerCase();
+				if (marketId && outcome) {
+					resolvedMarketsMap.set(marketId, { outcome, market });
+				}
+			});
 		});
 
-		// Calculate current market value of holdings
-		tokenBalances.forEach((balance, marketId) => {
-			const yesBalance = Number(balance.yesBalance);
-			const noBalance = Number(balance.noBalance);
-			
-			if (yesBalance > 0 || noBalance > 0) {
-				// Get prices from allBooksPreview
-				const preview = allBooksPreview[marketId];
-				const yesPrice = preview?.lowestAsk ?? null;
-				const noPrice =
-					preview?.highestBid !== null &&
-					preview?.highestBid !== undefined
-						? 1 - preview.highestBid
-						: null;
+		// Calculate P&L for each traded market
+		tradedMarketIds.forEach((marketId) => {
+			// 1. Calculate TRADING P&L (from buy-sell pairs using FIFO)
+			const tradingReturns = getTradingReturns(orders, marketId);
+			const tradingPnL = tradingReturns.yesPnL + tradingReturns.noPnL;
 
-				// Calculate market value
-				if (yesPrice !== null && yesBalance > 0) {
-					totalMarketValue += yesBalance * yesPrice;
-				}
-				if (noPrice !== null && noBalance > 0) {
-					totalMarketValue += noBalance * noPrice;
+			// 2. Calculate SETTLEMENT P&L (from resolved markets)
+			let settlementPnL = 0;
+			const resolved = resolvedMarketsMap.get(marketId);
+			const isResolved = !!resolved;
+
+			if (isResolved) {
+				// Get final position and cost for this market
+				const finalAmounts = getFinalAmount(orders, marketId);
+				
+				// Calculate settlement payout based on resolved outcome
+				// Winning side gets $1 per share, losing side gets $0
+				if (resolved.outcome === "yes") {
+					// YES won: YES shares get $1 each, NO shares get $0
+					const yesPayout = finalAmounts.yesShares * 1;
+					const noPayout = 0;
+					// Settlement P&L = Payout - Cost of remaining shares
+					settlementPnL = (yesPayout - finalAmounts.yesCost) + (noPayout - finalAmounts.noCost);
+				} else if (resolved.outcome === "no") {
+					// NO won: NO shares get $1 each, YES shares get $0
+					const yesPayout = 0;
+					const noPayout = finalAmounts.noShares * 1;
+					// Settlement P&L = Payout - Cost of remaining shares
+					settlementPnL = (yesPayout - finalAmounts.yesCost) + (noPayout - finalAmounts.noCost);
 				}
 			}
+
+			// Total P&L for this market = trading + settlement
+			const marketPnL = tradingPnL + settlementPnL;
+			totalRealizedPnL += marketPnL;
+
+			debugPnlInfo.push({
+				marketId: marketId.slice(0, 8) + '...',
+				tradingPnL,
+				settlementPnL,
+				isResolved,
+				resolvedOutcome: resolved?.outcome || null,
+			});
 		});
 
-		// Total return = market value - net cost
-		const totalReturn = totalMarketValue - totalCost;
+		// Debug logging
+		console.log("[Leaderboard Realized PnL Debug]", {
+			totalRealizedPnL,
+			totalBuyCost,
+			numTrades,
+			numMarkets: tradedMarketIds.size,
+			resolvedMarketsCount: resolvedMarketsMap.size,
+			debugPnlInfo
+		});
 
 		// Format return text like leaderboard
-		const isPositive = totalReturn >= 0;
+		const isPositive = totalRealizedPnL >= 0;
 		const sign = isPositive ? "+" : "-";
-		const absReturn = Math.abs(totalReturn);
+		const absReturn = Math.abs(totalRealizedPnL);
 		const returnPct =
-			totalVolume > 0 ? (totalReturn / totalVolume) * 100 : 0;
+			totalBuyCost > 0 ? (totalRealizedPnL / totalBuyCost) * 100 : 0;
 		const pctSign = returnPct >= 0 ? "+" : "-";
 		const totalReturnText = `${sign}$${absReturn.toLocaleString(
 			undefined,
@@ -264,14 +325,14 @@ export default function Leaderboard() {
 				user?.google?.email ||
 				user?.twitter?.username ||
 				null,
-			totalReturnUSD: totalReturn,
-			effectiveCostUSD: totalVolume,
+			totalReturnUSD: totalRealizedPnL,
+			effectiveCostUSD: totalBuyCost,
 			totalReturnText,
 			numTrades,
 			numMarkets,
 			updatedAt: new Date().toISOString(),
 		};
-	}, [account, orders, tokenBalances, allBooksPreview, user]);
+	}, [account, orders, user, resolvedMarketsByUmbrella]);
 
 	// Debug logging
 	console.log("[Leaderboard] User stats:", {
@@ -310,7 +371,7 @@ export default function Leaderboard() {
 						<div className="Leaderboard-header-username">
 							Username
 						</div>
-						<div className="Leaderboard-header-return">P&L</div>
+						<div className="Leaderboard-header-return">Realized P&L</div>
 						<div className="Leaderboard-header-cost">Volume</div>
 						<div className="Leaderboard-header-trades">Trades</div>
 						<div className="Leaderboard-header-markets">
@@ -394,7 +455,7 @@ export default function Leaderboard() {
 							<div className="Leaderboard-header-username">
 								Username
 							</div>
-							<div className="Leaderboard-header-return">P&L</div>
+							<div className="Leaderboard-header-return">Realized P&L</div>
 							<div className="Leaderboard-header-cost">
 								Volume
 							</div>

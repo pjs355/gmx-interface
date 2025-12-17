@@ -9,6 +9,7 @@ import {
 	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import TradeHistoryListMobile from "./TradeHistoryListMobile";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -65,6 +66,7 @@ export default function HistoryCardView({
 }) {
 	const { umbrellas } = usePredictionData();
 	const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+	const [expandedTradeHistory, setExpandedTradeHistory] = useState<Set<string>>(new Set());
 
 	const toggleCard = (cardId: string) => {
 		setExpandedCards((prev) => {
@@ -76,6 +78,42 @@ export default function HistoryCardView({
 			}
 			return newSet;
 		});
+	};
+
+	const toggleTradeHistory = (marketId: string) => {
+		setExpandedTradeHistory((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(marketId)) {
+				newSet.delete(marketId);
+			} else {
+				newSet.add(marketId);
+			}
+			return newSet;
+		});
+	};
+
+	// Count trades for a market
+	const getTradeCount = (marketId: string): number => {
+		return orders.filter(
+			(order) => order.questionId === marketId && order.filled
+		).length;
+	};
+
+	// Calculate Net Cash Flow for a specific market and side
+	const getNetCashFlow = (marketId: string, side: "Yes" | "No"): number => {
+		const sideOrders = orders.filter(
+			(order) =>
+				order.questionId === marketId &&
+				order.filled &&
+				order.position?.toLowerCase() === side.toLowerCase()
+		);
+		const cashOut = sideOrders
+			.filter((o) => o.side === "buy")
+			.reduce((sum, o) => sum + (o.usdcValue || 0), 0);
+		const cashIn = sideOrders
+			.filter((o) => o.side === "sell")
+			.reduce((sum, o) => sum + (o.usdcValue || 0), 0);
+		return cashIn - cashOut;
 	};
 
 	const filteredResolvedMarkets = React.useMemo(() => {
@@ -177,10 +215,10 @@ export default function HistoryCardView({
 
 							// Determine which sides the user traded on (check orders, not just current shares)
 							const userYesOrders = qid ? orders.filter(
-								(order) => order.questionId === qid && order.outcome?.toLowerCase() === "yes"
+								(order) => order.questionId === qid && order.position?.toLowerCase() === "yes"
 							) : [];
 							const userNoOrders = qid ? orders.filter(
-								(order) => order.questionId === qid && order.outcome?.toLowerCase() === "no"
+								(order) => order.questionId === qid && order.position?.toLowerCase() === "no"
 							) : [];
 							
 							const rows: {
@@ -193,416 +231,478 @@ export default function HistoryCardView({
 							if (noNum > 0 || userNoOrders.length > 0)
 								rows.push({ side: "No", amount: no });
 
-							return rows.map(({ side, amount }) => {
-								const cardId = `${umbrella._id}-${market._id}-${side}`;
-								const isExpanded = expandedCards.has(cardId);
+							const tradeCount = getTradeCount(qid);
+							const isTradeHistoryExpanded = expandedTradeHistory.has(qid);
 
-								const finalShares =
-									side === "Yes"
-										? finalAmounts.yesShares
-										: finalAmounts.noShares;
-								const finalCost =
-									side === "Yes"
-										? finalAmounts.yesCost
-										: finalAmounts.noCost;
+							return (
+								<React.Fragment key={qid}>
+									{rows.map(({ side, amount }, rowIndex) => {
+										const cardId = `${umbrella._id}-${market._id}-${side}`;
+										const isExpanded = expandedCards.has(cardId);
 
-								const finalPositionText =
-									finalShares > 0
-										? `${
-												finalShares % 1 === 0
-													? finalShares.toFixed(0)
-													: finalShares.toFixed(2)
-										  }`
-										: "—";
-								const totalCostText =
-									finalCost > 0
-										? `$${
-												finalCost % 1 === 0
-													? finalCost.toFixed(0)
-													: finalCost.toFixed(2)
-										  }`
-										: "—";
+										const finalShares =
+											side === "Yes"
+												? finalAmounts.yesShares
+												: finalAmounts.noShares;
+										
+										// Calculate Net Cash Flow for this side
+										const netCashFlow = getNetCashFlow(qid, side);
 
-								const wasCorrect =
-									(side === "Yes" &&
-										resolvedOutcome === "yes") ||
-									(side === "No" && resolvedOutcome === "no");
-								const settlementPayout = wasCorrect ? 1 : 0;
+										const finalPositionText =
+											finalShares > 0
+												? finalShares.toLocaleString("en-US", {
+														minimumFractionDigits: finalShares % 1 === 0 ? 0 : 2,
+														maximumFractionDigits: 2,
+												  })
+												: "—";
+										
+										// Format Total Cost (absolute value, white if negative/cost, green if positive/profit)
+										const totalCostText = (() => {
+											const absVal = Math.abs(netCashFlow);
+											const formatted = absVal.toLocaleString("en-US", {
+												minimumFractionDigits: absVal % 1 === 0 ? 0 : 2,
+												maximumFractionDigits: 2,
+											});
+											if (netCashFlow === 0) return "—";
+											return `$${formatted}`;
+										})();
+										// White if negative (cost), green if positive (profit)
+										const totalCostColor =
+											netCashFlow === 0
+												? "#fff"
+												: netCashFlow > 0
+												? "#22c55e"
+												: "#fff";
 
-								const totalPayout =
-									finalShares * settlementPayout;
-								const totalPayoutText =
-									totalPayout > 0
-										? `$${
-												totalPayout % 1 === 0
-													? totalPayout.toFixed(0)
-													: totalPayout.toFixed(2)
-										  }`
-										: "$0";
-								const totalPayoutColor =
-									totalPayout > 0 ? "#16a34a" : "#fff";
+										const wasCorrect =
+											(side === "Yes" &&
+												resolvedOutcome === "yes") ||
+											(side === "No" && resolvedOutcome === "no");
+										const settlementPayout = wasCorrect ? 1 : 0;
 
-								const effectiveCost = finalCost;
-								const baseReturn =
-									totalPayout === null ||
-									effectiveCost === null
-										? null
-										: totalPayout - effectiveCost;
-								const realizedLegPnl = (() => {
-									if (!qid) return 0;
-									const legPnls = returnsByQid[qid];
-									if (!legPnls) return 0;
-									return side === "Yes"
-										? legPnls.Yes || 0
-										: legPnls.No || 0;
-								})();
-								const totalReturn =
-									baseReturn === null
-										? null
-										: baseReturn + realizedLegPnl;
-								const totalReturnPct =
-									totalReturn !== null &&
-									effectiveCost &&
-									effectiveCost > 0
-										? (totalReturn / effectiveCost) * 100
-										: null;
-								const totalReturnColor =
-									totalReturn === null
-										? "#fff"
-										: totalReturn >= 0
-										? "#16a34a"
-										: "#ef4444";
-								const totalReturnText = (() => {
-									if (
-										totalReturn === null ||
-										!isFinite(totalReturn)
-									)
-										return "—";
-									const signUsd =
-										totalReturn >= 0 ? "+" : "-";
-									const usdPart = `$${
-										Math.abs(totalReturn) % 1 === 0
-											? Math.abs(totalReturn).toFixed(0)
-											: Math.abs(totalReturn).toFixed(2)
-									}`;
-									if (
-										totalReturnPct === null ||
-										!isFinite(totalReturnPct)
-									) {
-										return `${signUsd}${usdPart}`;
-									}
-									const signPct =
-										totalReturnPct >= 0 ? "+" : "-";
-									const pctPart = `${Math.round(
-										Math.abs(totalReturnPct)
-									)}%`;
-									return `${signUsd}${usdPart} (${signPct}${pctPart})`;
-								})();
+										const totalPayout =
+											finalShares * settlementPayout;
+										const totalPayoutText =
+											totalPayout > 0
+												? `$${totalPayout.toLocaleString("en-US", {
+														minimumFractionDigits: totalPayout % 1 === 0 ? 0 : 2,
+														maximumFractionDigits: 2,
+												  })}`
+												: "$0";
+										const totalPayoutColor =
+											totalPayout > 0 ? "#16a34a" : "#fff";
 
-								const title = (
-									market?.displayName ||
-									(market as any)?.question ||
-									""
-								).trim();
-								const parts = title
-									.split(/\s*vs\.?\s*/i)
-									.map((s: string) => s.trim())
-									.filter(Boolean);
-								const isVs = parts.length === 2;
-								
-								// Determine outcome text
-								const outcomeText = (() => {
-									if (isVs) {
-										// For VS markets, show the winning team name
-										return resolvedOutcome === "yes"
-											? parts[0]
-											: parts[1];
-									} else {
-										// For regular markets, show Yes or No
-										return resolvedOutcome === "yes"
-											? "Yes"
-											: "No";
-									}
-								})();
-								
-								// Determine outcome color
-								const outcomeColor = (() => {
-									if (isVs) {
-										// For VS markets: Green if user won, Red if user lost
-										return wasCorrect
-											? "#16a34a" // Green - user won
-											: "#ef4444"; // Red - user lost
-									} else {
-										// For regular markets: Yes = Green, No = Red
-										return resolvedOutcome === "yes"
-											? "#16a34a"
-											: "#ef4444";
-									}
-								})();
+										// Calculate total return using Net Cash Flow
+										const baseReturn =
+											totalPayout === null
+												? null
+												: totalPayout + netCashFlow;
+										const realizedLegPnl = (() => {
+											if (!qid) return 0;
+											const legPnls = returnsByQid[qid];
+											if (!legPnls) return 0;
+											return side === "Yes"
+												? legPnls.Yes || 0
+												: legPnls.No || 0;
+										})();
+										const totalReturn =
+											baseReturn === null
+												? null
+												: baseReturn + realizedLegPnl;
+										// Calculate return percentage based on cash spent
+										const cashSpent = netCashFlow < 0 ? Math.abs(netCashFlow) : 0;
+										const totalReturnPct =
+											totalReturn !== null &&
+											cashSpent > 0
+												? (totalReturn / cashSpent) * 100
+												: null;
+										const totalReturnColor =
+											totalReturn === null
+												? "#fff"
+												: totalReturn >= 0
+												? "#16a34a"
+												: "#ef4444";
+										const totalReturnText = (() => {
+											if (
+												totalReturn === null ||
+												!isFinite(totalReturn)
+											)
+												return "—";
+											const signUsd =
+												totalReturn >= 0 ? "+" : "-";
+											const absReturn = Math.abs(totalReturn);
+											const usdPart = `$${absReturn.toLocaleString("en-US", {
+												minimumFractionDigits: absReturn % 1 === 0 ? 0 : 2,
+												maximumFractionDigits: 2,
+											})}`;
+											if (
+												totalReturnPct === null ||
+												!isFinite(totalReturnPct)
+											) {
+												return `${signUsd}${usdPart}`;
+											}
+											const signPct =
+												totalReturnPct >= 0 ? "+" : "-";
+											const pctPart = `${Math.round(
+												Math.abs(totalReturnPct)
+											).toLocaleString("en-US")}%`;
+											return `${signUsd}${usdPart} (${signPct}${pctPart})`;
+										})();
 
-								return (
-									<div
-										key={cardId}
-										style={{
-											background: "#1a1a1a",
-											border: "1px solid #2a2a2a",
-											borderRadius: 12,
-											overflow: "hidden",
-											marginBottom: 12,
-										}}
-									>
-										{/* Card Header */}
-										<div
-											style={{
-												padding: "16px",
-												background: "#0a0a0a",
-												borderBottom:
-													"1px solid #2a2a2a",
-												display: "flex",
-												alignItems: "center",
-												gap: 12,
-											}}
-										>
-											<UmbrellaImage
-												umbrella={umbrella}
-											/>
-											<div style={{ flex: 1 }}>
-												<div
-													style={{
-														color: "#888",
-														fontSize: 11,
-														textTransform:
-															"uppercase",
-														letterSpacing: 0.6,
-														marginBottom: 4,
-													}}
-												>
-													{umbrella.displayName}
-												</div>
-												<div
-													style={{
-														color: "#fff",
-														fontSize: 16,
-														fontWeight: 600,
-													}}
-												>
-													{isVs ? (
-														<span>
-															{side === "Yes"
-																? parts[0]
-																: parts[1]}
-														</span>
-													) : (
-														<>
-															<span>
-																{market.displayName ||
-																	market.question}{" "}
-															</span>
-															<span
-																style={{
-																	color:
-																		side ===
-																		"Yes"
-																			? "#16a34a"
-																			: "#ef4444",
-																}}
-															>
-																{side}
-															</span>
-														</>
-													)}
-												</div>
-											</div>
-										</div>
+										const title = (
+											market?.displayName ||
+											(market as any)?.question ||
+											""
+										).trim();
+										const parts = title
+											.split(/\s*vs\.?\s*/i)
+											.map((s: string) => s.trim())
+											.filter(Boolean);
+										const isVs = parts.length === 2;
+										
+										// Determine outcome text
+										const outcomeText = (() => {
+											if (isVs) {
+												// For VS markets, show the winning team name
+												return resolvedOutcome === "yes"
+													? parts[0]
+													: parts[1];
+											} else {
+												// For regular markets, show Yes or No
+												return resolvedOutcome === "yes"
+													? "Yes"
+													: "No";
+											}
+										})();
+										
+										// Determine outcome color
+										const outcomeColor = (() => {
+											if (isVs) {
+												// For VS markets: Green if user won, Red if user lost
+												return wasCorrect
+													? "#16a34a" // Green - user won
+													: "#ef4444"; // Red - user lost
+											} else {
+												// For regular markets: Yes = Green, No = Red
+												return resolvedOutcome === "yes"
+													? "#16a34a"
+													: "#ef4444";
+											}
+										})();
 
-										{/* Card Summary - Two Info Pieces */}
-										<div
-											style={{
-												padding: "16px",
-												display: "flex",
-												justifyContent: "space-between",
-												alignItems: "center",
-											}}
-										>
-											<div style={{ flex: 1 }}>
-												<div
-													style={{
-														color: "#888",
-														fontSize: 11,
-														textTransform:
-															"uppercase",
-														letterSpacing: 0.6,
-														marginBottom: 4,
-													}}
-												>
-													Final Position
-												</div>
-												<div
-													style={{
-														color: "#fff",
-														fontSize: 18,
-														fontWeight: 700,
-													}}
-												>
-													{finalPositionText}
-												</div>
-											</div>
+										// Only show trade history button on first row for this market
+										const showTradeHistoryButton = rowIndex === 0;
+
+										return (
 											<div
+												key={cardId}
 												style={{
-													flex: 1,
-													textAlign: "right",
+													background: "#1a1a1a",
+													border: "1px solid #2a2a2a",
+													borderRadius: 12,
+													overflow: "hidden",
+													marginBottom: 12,
 												}}
 											>
+												{/* Card Header */}
 												<div
 													style={{
-														color: "#888",
-														fontSize: 11,
-														textTransform:
-															"uppercase",
-														letterSpacing: 0.6,
-														marginBottom: 4,
-													}}
-												>
-													Total Return
-												</div>
-												<div
-													style={{
-														color: totalReturnColor,
-														fontSize: 18,
-														fontWeight: 700,
-														whiteSpace: "nowrap",
-													}}
-												>
-													{totalReturnText}
-												</div>
-											</div>
-											<button
-												onClick={(e) => {
-													e.stopPropagation();
-													toggleCard(cardId);
-												}}
-												style={{
-													marginLeft: 12,
-													background: "transparent",
-													border: "none",
-													color: "#888",
-													cursor: "pointer",
-													fontSize: 20,
-													padding: 0,
-													width: 24,
-													height: 24,
-													display: "flex",
-													alignItems: "center",
-													justifyContent: "center",
-													transition:
-														"transform 0.2s ease",
-													transform: isExpanded
-														? "rotate(180deg)"
-														: "rotate(0deg)",
-												}}
-											>
-												▼
-											</button>
-										</div>
-
-										{/* Expanded Details */}
-										{isExpanded && (
-											<div
-												style={{
-													padding: "16px",
-													borderTop:
-														"1px solid #2a2a2a",
-													background: "#0f0f0f",
-												}}
-											>
-												<div
-													style={{
+														padding: "16px",
+														background: "#0a0a0a",
+														borderBottom:
+															"1px solid #2a2a2a",
 														display: "flex",
-														flexDirection: "column",
+														alignItems: "center",
 														gap: 12,
 													}}
 												>
-													<div
-														style={{
-															display: "flex",
-															justifyContent:
-																"space-between",
-														}}
-													>
-														<span
+													<UmbrellaImage
+														umbrella={umbrella}
+													/>
+													<div style={{ flex: 1 }}>
+														<div
 															style={{
 																color: "#888",
-																fontSize: 13,
+																fontSize: 11,
+																textTransform:
+																	"uppercase",
+																letterSpacing: 0.6,
+																marginBottom: 4,
 															}}
 														>
-															Outcome
-														</span>
-														<span
-															style={{
-																color: outcomeColor,
-																fontSize: 13,
-																fontWeight: 600,
-															}}
-														>
-															{outcomeText}
-														</span>
-													</div>
-													<div
-														style={{
-															display: "flex",
-															justifyContent:
-																"space-between",
-														}}
-													>
-														<span
-															style={{
-																color: "#888",
-																fontSize: 13,
-															}}
-														>
-															Total Cost
-														</span>
-														<span
+															{umbrella.displayName}
+														</div>
+														<div
 															style={{
 																color: "#fff",
-																fontSize: 13,
+																fontSize: 16,
 																fontWeight: 600,
 															}}
 														>
-															{totalCostText}
-														</span>
+															{isVs ? (
+																<span>
+																	{side === "Yes"
+																		? parts[0]
+																		: parts[1]}
+																</span>
+															) : (
+																<>
+																	<span>
+																		{market.displayName ||
+																			market.question}{" "}
+																	</span>
+																	<span
+																		style={{
+																			color:
+																				side ===
+																				"Yes"
+																					? "#16a34a"
+																					: "#ef4444",
+																		}}
+																	>
+																		{side}
+																	</span>
+																</>
+															)}
+														</div>
+													</div>
+												</div>
+
+												{/* Card Summary - Two Info Pieces */}
+												<div
+													onClick={() => toggleCard(cardId)}
+													style={{
+														padding: "16px",
+														display: "flex",
+														justifyContent: "space-between",
+														alignItems: "center",
+														cursor: "pointer",
+													}}
+												>
+													<div style={{ flex: 1 }}>
+														<div
+															style={{
+																color: "#888",
+																fontSize: 11,
+																textTransform:
+																	"uppercase",
+																letterSpacing: 0.6,
+																marginBottom: 4,
+															}}
+														>
+															Final Position
+														</div>
+														<div
+															style={{
+																color: "#fff",
+																fontSize: 18,
+																fontWeight: 700,
+															}}
+														>
+															{finalPositionText}
+														</div>
 													</div>
 													<div
 														style={{
-															display: "flex",
-															justifyContent:
-																"space-between",
+															flex: 1,
+															textAlign: "right",
 														}}
 													>
-														<span
+														<div
 															style={{
 																color: "#888",
-																fontSize: 13,
+																fontSize: 11,
+																textTransform:
+																	"uppercase",
+																letterSpacing: 0.6,
+																marginBottom: 4,
 															}}
 														>
-															Total Payout
-														</span>
-														<span
+															Total Return
+														</div>
+														<div
 															style={{
-																color: totalPayoutColor,
-																fontSize: 13,
-																fontWeight: 600,
+																color: totalReturnColor,
+																fontSize: 18,
+																fontWeight: 700,
+																whiteSpace: "nowrap",
 															}}
 														>
-															{totalPayoutText}
-														</span>
+															{totalReturnText}
+														</div>
 													</div>
+													<button
+														onClick={(e) => {
+															e.stopPropagation();
+															toggleCard(cardId);
+														}}
+														style={{
+															marginLeft: 12,
+															background: "transparent",
+															border: "none",
+															color: "#888",
+															cursor: "pointer",
+															fontSize: 20,
+															padding: 0,
+															width: 24,
+															height: 24,
+															display: "flex",
+															alignItems: "center",
+															justifyContent: "center",
+															transition:
+																"transform 0.2s ease",
+															transform: isExpanded
+																? "rotate(180deg)"
+																: "rotate(0deg)",
+														}}
+													>
+														▼
+													</button>
 												</div>
+
+												{/* Expanded Details */}
+												{isExpanded && (
+													<div
+														style={{
+															padding: "16px",
+															borderTop:
+																"1px solid #2a2a2a",
+															background: "#0f0f0f",
+														}}
+													>
+														<div
+															style={{
+																display: "flex",
+																flexDirection: "column",
+																gap: 12,
+															}}
+														>
+															<div
+																style={{
+																	display: "flex",
+																	justifyContent:
+																		"space-between",
+																}}
+															>
+																<span
+																	style={{
+																		color: "#888",
+																		fontSize: 13,
+																	}}
+																>
+																	Outcome
+																</span>
+																<span
+																	style={{
+																		color: outcomeColor,
+																		fontSize: 13,
+																		fontWeight: 600,
+																	}}
+																>
+																	{outcomeText}
+																</span>
+															</div>
+															<div
+																style={{
+																	display: "flex",
+																	justifyContent:
+																		"space-between",
+																}}
+															>
+																<span
+																	style={{
+																		color: "#888",
+																		fontSize: 13,
+																	}}
+																>
+																	Total Cost
+																</span>
+																<span
+																	style={{
+																		color: totalCostColor,
+																		fontSize: 13,
+																		fontWeight: 600,
+																	}}
+																>
+																	{totalCostText}
+																</span>
+															</div>
+															<div
+																style={{
+																	display: "flex",
+																	justifyContent:
+																		"space-between",
+																}}
+															>
+																<span
+																	style={{
+																		color: "#888",
+																		fontSize: 13,
+																	}}
+																>
+																	Total Payout
+																</span>
+																<span
+																	style={{
+																		color: totalPayoutColor,
+																		fontSize: 13,
+																		fontWeight: 600,
+																	}}
+																>
+																	{totalPayoutText}
+																</span>
+															</div>
+
+															{/* View Trades Link */}
+															{showTradeHistoryButton && tradeCount > 0 && (
+																<div
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		toggleTradeHistory(qid);
+																	}}
+																	style={{
+																		marginTop: 12,
+																		paddingTop: 12,
+																		borderTop: "1px solid #1f1f1f",
+																		display: "flex",
+																		alignItems: "center",
+																		justifyContent: "center",
+																		gap: 6,
+																		color: "#666",
+																		fontSize: 13,
+																		cursor: "pointer",
+																	}}
+																>
+																	<span>{isTradeHistoryExpanded ? "Hide" : "View"} {tradeCount} trade{tradeCount !== 1 ? "s" : ""}</span>
+																	<span
+																		style={{
+																			display: "inline-block",
+																			transition: "transform 0.2s ease",
+																			transform: isTradeHistoryExpanded ? "rotate(180deg)" : "rotate(0deg)",
+																			fontSize: 10,
+																		}}
+																	>
+																		▼
+																	</span>
+																</div>
+															)}
+														</div>
+													</div>
+												)}
+
+												{/* Trade History (shown when trade history is expanded) */}
+												{showTradeHistoryButton && isTradeHistoryExpanded && (
+													<TradeHistoryListMobile
+														orders={orders}
+														marketId={qid}
+														isExpanded={isTradeHistoryExpanded}
+													/>
+												)}
 											</div>
-										)}
-									</div>
-								);
-							});
+										);
+									})}
+								</React.Fragment>
+							);
 						})}
 					</div>
 				))

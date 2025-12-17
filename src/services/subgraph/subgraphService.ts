@@ -169,33 +169,122 @@ export function fromMicroUnits(value: string): string {
 	return `${integer}.${decimalStr}`;
 }
 
+// ============================================================================
+// Rate Limiting & Caching
+// ============================================================================
+
+// Simple in-memory cache for subgraph responses
+const queryCache = new Map<string, { data: unknown; timestamp: number }>();
+const CACHE_TTL_MS = 30_000; // 30 seconds cache
+
+// Rate limiting state
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL_MS = 200; // Minimum 200ms between requests
+
 /**
- * Execute a GraphQL query against the subgraph
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Generate a cache key for a query
+ */
+function getCacheKey(query: string, variables: Record<string, unknown>): string {
+	return `${query}::${JSON.stringify(variables)}`;
+}
+
+/**
+ * Execute a GraphQL query against the subgraph with retry logic for rate limiting
  */
 async function executeQuery<T>(
 	query: string,
-	variables: Record<string, unknown>
+	variables: Record<string, unknown>,
+	maxRetries: number = 3
 ): Promise<T> {
-	const response = await fetch(SUBGRAPH_URL, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({ query, variables }),
-	});
-
-	if (!response.ok) {
-		throw new Error(`Subgraph request failed: ${response.status}`);
+	const cacheKey = getCacheKey(query, variables);
+	
+	// Check cache first
+	const cached = queryCache.get(cacheKey);
+	if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+		console.log("[Subgraph] Cache hit");
+		return cached.data as T;
 	}
 
-	const result = await response.json();
-
-	if (result.errors) {
-		console.error("Subgraph query errors:", result.errors);
-		throw new Error(`Subgraph query failed: ${result.errors[0]?.message}`);
+	// Rate limiting: ensure minimum interval between requests
+	const now = Date.now();
+	const timeSinceLastRequest = now - lastRequestTime;
+	if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+		await sleep(MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest);
 	}
 
-	return result.data;
+	let lastError: Error | null = null;
+	
+	for (let attempt = 0; attempt < maxRetries; attempt++) {
+		try {
+			lastRequestTime = Date.now();
+			
+			const response = await fetch(SUBGRAPH_URL, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ query, variables }),
+			});
+
+			// Handle rate limiting with exponential backoff
+			if (response.status === 429) {
+				const retryAfter = response.headers.get("Retry-After");
+				const waitTime = retryAfter 
+					? parseInt(retryAfter, 10) * 1000 
+					: Math.min(1000 * Math.pow(2, attempt), 10000); // Exponential backoff, max 10s
+				
+				console.warn(`[Subgraph] Rate limited (429). Retry ${attempt + 1}/${maxRetries} after ${waitTime}ms`);
+				await sleep(waitTime);
+				continue;
+			}
+
+			if (!response.ok) {
+				throw new Error(`Subgraph request failed: ${response.status}`);
+			}
+
+			const result = await response.json();
+
+			if (result.errors) {
+				console.error("Subgraph query errors:", result.errors);
+				throw new Error(`Subgraph query failed: ${result.errors[0]?.message}`);
+			}
+
+			// Cache successful response
+			queryCache.set(cacheKey, { data: result.data, timestamp: Date.now() });
+			
+			return result.data;
+		} catch (error) {
+			lastError = error as Error;
+			
+			// If it's not a rate limit error, don't retry
+			if (!lastError.message.includes("429")) {
+				// Still retry on network errors
+				if (attempt < maxRetries - 1) {
+					const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
+					console.warn(`[Subgraph] Request failed. Retry ${attempt + 1}/${maxRetries} after ${waitTime}ms:`, lastError.message);
+					await sleep(waitTime);
+					continue;
+				}
+			}
+		}
+	}
+
+	throw lastError || new Error("Subgraph request failed after retries");
+}
+
+/**
+ * Clear the query cache (useful when you need fresh data)
+ */
+export function clearSubgraphCache(): void {
+	queryCache.clear();
+	console.log("[Subgraph] Cache cleared");
 }
 
 // ============================================================================
@@ -333,6 +422,7 @@ export const subgraphService = {
 	parseTokenBalances,
 	normalizeWalletAddress,
 	fromMicroUnits,
+	clearSubgraphCache,
 };
 
 export default subgraphService;

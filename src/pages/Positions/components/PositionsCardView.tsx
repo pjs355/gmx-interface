@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
 	resolveLogoByTags,
@@ -10,6 +11,7 @@ import {
 	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import TradeHistoryListMobile from "./TradeHistoryListMobile";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -73,6 +75,7 @@ export default function PositionsCardView({
 	getCurrentPriceForSide,
 	toCentsString,
 	softLoading = false,
+	orders = [],
 }: {
 	umbrellaBalances: any[];
 	aggregates: Record<string, any>;
@@ -84,9 +87,11 @@ export default function PositionsCardView({
 	) => number | null;
 	toCentsString: (n?: number | null) => string;
 	softLoading?: boolean;
+	orders?: ProcessedOrder[];
 }) {
 	const navigate = useNavigate();
 	const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+	const [expandedTradeHistory, setExpandedTradeHistory] = useState<Set<string>>(new Set());
 
 	const toggleCard = (cardId: string) => {
 		setExpandedCards((prev) => {
@@ -98,6 +103,28 @@ export default function PositionsCardView({
 			}
 			return newSet;
 		});
+	};
+
+	const toggleTradeHistory = (marketId: string) => {
+		setExpandedTradeHistory((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(marketId)) {
+				newSet.delete(marketId);
+			} else {
+				newSet.add(marketId);
+			}
+			return newSet;
+		});
+	};
+
+	// Helper to get trade count for a market and position
+	const getTradeCount = (marketId: string, position?: "Yes" | "No"): number => {
+		return orders.filter((order) => {
+			if (order.questionId !== marketId || !order.filled) return false;
+			// Case-insensitive comparison for position
+			if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
+			return true;
+		}).length;
 	};
 
 	const navigateToTradingPage = (
@@ -637,7 +664,50 @@ export default function PositionsCardView({
 														</span>
 													</span>
 												</div>
+												{/* View Trades Link */}
+												{getTradeCount(qid, side) > 0 && (
+													<div
+														onClick={(e) => {
+															e.stopPropagation();
+															toggleTradeHistory(`${qid}-${side}`);
+														}}
+														style={{
+															marginTop: 12,
+															paddingTop: 12,
+															borderTop: "1px solid #1f1f1f",
+															display: "flex",
+															alignItems: "center",
+															justifyContent: "center",
+															gap: 6,
+															color: "#666",
+															fontSize: 13,
+															cursor: "pointer",
+														}}
+													>
+														<span>{expandedTradeHistory.has(`${qid}-${side}`) ? "Hide" : "View"} {getTradeCount(qid, side)} trade{getTradeCount(qid, side) !== 1 ? "s" : ""}</span>
+														<span
+															style={{
+																display: "inline-block",
+																transition: "transform 0.2s ease",
+																transform: expandedTradeHistory.has(`${qid}-${side}`)
+																	? "rotate(180deg)"
+																	: "rotate(0deg)",
+																fontSize: 10,
+															}}
+														>
+															▼
+														</span>
+													</div>
+												)}
 											</div>
+											{expandedTradeHistory.has(`${qid}-${side}`) && (
+												<TradeHistoryListMobile
+													orders={orders}
+													marketId={qid}
+													isExpanded={expandedTradeHistory.has(`${qid}-${side}`)}
+													position={side}
+												/>
+											)}
 										</div>
 									)}
 								</div>

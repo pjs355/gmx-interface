@@ -23,6 +23,7 @@ import OrdersView from "./components/OrdersView";
 import OrdersCardView from "./components/OrdersCardView";
 import HistoryView from "./components/HistoryView";
 import HistoryCardView from "./components/HistoryCardView";
+import BalanceChecker from "./components/BalanceChecker";
 
 type MarketPosition = {
 	market: PredictionMarket;
@@ -57,6 +58,7 @@ export default function Positions() {
 		usdcLoading,
 		loading: userDataLoading,
 		refresh: refreshUserData,
+		usingRpcFallback,
 	} = useUserData();
 	const {
 		umbrellas,
@@ -466,6 +468,27 @@ export default function Positions() {
 					</div>
 				</div>
 			)}
+			{/* RPC Fallback Banner - Shown when subgraph is rate limited */}
+			{usingRpcFallback && (
+				<div style={{
+					background: 'linear-gradient(90deg, #f59e0b, #d97706)',
+					color: 'white',
+					padding: '10px 16px',
+					borderRadius: '8px',
+					marginBottom: '12px',
+					fontSize: '13px',
+					display: 'flex',
+					alignItems: 'center',
+					gap: '8px',
+				}}>
+					<span>⚡</span>
+					<span>Using direct RPC (subgraph was rate limited). Data may load slower.</span>
+				</div>
+			)}
+			{/* Balance Checker - Only visible in debug mode */}
+			{isDebugMode && debugAccount && (
+				<BalanceChecker debugAccount={debugAccount} />
+			)}
 			<div>
 				<div className="positions-header-group">
 					<PositionsHeader
@@ -637,6 +660,7 @@ export default function Positions() {
 															softLoading={
 																softLoading
 															}
+															orders={orders || []}
 														/>
 													) : (
 														<PositionsCardView
@@ -657,6 +681,7 @@ export default function Positions() {
 															softLoading={
 																softLoading
 															}
+															orders={orders || []}
 														/>
 													)
 												) : (

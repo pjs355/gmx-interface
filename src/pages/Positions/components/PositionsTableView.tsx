@@ -1,7 +1,9 @@
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
@@ -12,6 +14,7 @@ import {
 	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import TradeHistoryList from "./TradeHistoryList";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -75,6 +78,7 @@ export default function PositionsTableView({
 	getCurrentPriceForSide,
 	toCentsString,
 	softLoading = false,
+	orders = [],
 }: {
 	umbrellaBalances: any[];
 	aggregates: Record<string, any>;
@@ -86,8 +90,35 @@ export default function PositionsTableView({
 	) => number | null;
 	toCentsString: (n?: number | null) => string;
 	softLoading?: boolean;
+	orders?: ProcessedOrder[];
 }) {
 	const navigate = useNavigate();
+	
+	// Track which markets have their trade history expanded
+	const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
+
+	const toggleMarketExpansion = (marketId: string, e: React.MouseEvent) => {
+		e.stopPropagation(); // Prevent navigation
+		setExpandedMarkets((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(marketId)) {
+				newSet.delete(marketId);
+			} else {
+				newSet.add(marketId);
+			}
+			return newSet;
+		});
+	};
+
+	// Helper to get trade count for a market and position
+	const getTradeCount = (marketId: string, position?: "Yes" | "No"): number => {
+		return orders.filter((order) => {
+			if (order.questionId !== marketId || !order.filled) return false;
+			// Case-insensitive comparison for position
+			if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
+			return true;
+		}).length;
+	};
 
 	// Navigation function to go to trading page with specific market and position
 	const navigateToTradingPage = (
@@ -134,7 +165,7 @@ export default function PositionsTableView({
 					className="positions-header grid items-center px-12 py-10"
 					style={{
 						gridTemplateColumns:
-							"minmax(200px, 2fr) repeat(7, 1fr)",
+							"minmax(200px, 2fr) repeat(7, 1fr) 80px",
 						borderBottom: "1px solid #333333",
 						color: "#888",
 						fontSize: 12,
@@ -158,6 +189,7 @@ export default function PositionsTableView({
 							Total Return
 						</Tooltip>
 					</div>
+					<div style={{ textAlign: "center" }}>Trades</div>
 				</div>
 
 				<div className="flex flex-col">
@@ -167,7 +199,7 @@ export default function PositionsTableView({
 								className="grid px-12 py-10"
 								style={{
 									gridTemplateColumns:
-										"minmax(200px, 2fr) repeat(7, 1fr)",
+										"minmax(200px, 2fr) repeat(7, 1fr) 80px",
 									background: "#000000",
 									borderBottom: "1px solid #1f1f1f",
 									paddingTop: 16,
@@ -194,12 +226,12 @@ export default function PositionsTableView({
 									className="grid items-center px-12 py-12 position-row"
 									style={{
 										gridTemplateColumns:
-											"minmax(200px, 2fr) repeat(7, 1fr)",
+											"minmax(200px, 2fr) repeat(7, 1fr) 80px",
 										borderBottom: "1px solid #1f1f1f",
 										fontSize: 16,
 									}}
 								>
-									{Array.from({ length: 8 }).map((_, idx) => (
+									{Array.from({ length: 9 }).map((_, idx) => (
 										<div
 											key={idx}
 											style={{
@@ -348,15 +380,16 @@ export default function PositionsTableView({
 										  (market as any).question;
 									const secondaryLabel = isVs ? parts[1] : "";
 
+									const tradeCount = getTradeCount(qid, side);
+									const isExpanded = expandedMarkets.has(`${qid}-${side}`);
+
 									return (
+										<React.Fragment key={`${market._id}-${side.toLowerCase()}`}>
 										<div
-											key={`${
-												market._id
-											}-${side.toLowerCase()}`}
-											className="grid items-center px-12 py-12 position-row"
+											className={`grid items-center px-12 py-12 position-row ${isExpanded ? "expanded" : ""}`}
 											style={{
 												gridTemplateColumns:
-													"minmax(200px, 2fr) repeat(7, 1fr)",
+													"minmax(200px, 2fr) repeat(7, 1fr) 80px",
 												borderBottom:
 													"1px solid #1f1f1f",
 												fontSize: 16,
@@ -550,7 +583,50 @@ export default function PositionsTableView({
 													{totalReturnText}
 												</span>
 											</div>
+											<div
+												style={{
+													textAlign: "center",
+												}}
+												onMouseEnter={(e) => {
+													e.stopPropagation();
+													// Reset parent row background
+													const row = e.currentTarget.parentElement;
+													if (row) row.style.backgroundColor = "transparent";
+												}}
+											>
+												{tradeCount > 0 && (
+													<button
+														className={`expand-trades-btn ${isExpanded ? "expanded" : ""}`}
+														onClick={(e) => toggleMarketExpansion(`${qid}-${side}`, e)}
+														onMouseEnter={(e) => {
+															e.stopPropagation();
+															// Reset parent row background
+															const row = e.currentTarget.closest('.position-row');
+															if (row) (row as HTMLElement).style.backgroundColor = "transparent";
+														}}
+													>
+														<span>{tradeCount}</span>
+														<span
+															className="expand-icon"
+															style={{
+																transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+															}}
+														>
+															▼
+														</span>
+													</button>
+												)}
+											</div>
 										</div>
+										{isExpanded && (
+											<TradeHistoryList
+												orders={orders}
+												marketId={qid}
+												isExpanded={isExpanded}
+												position={side}
+											/>
+										)}
+										</React.Fragment>
 									);
 								});
 							})}

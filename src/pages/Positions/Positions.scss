@@ -118,3 +118,85 @@
 		background-position: 0 0;
 	}
 }
+
+/* Trade History Expand/Collapse Styles */
+.trade-history-container {
+	overflow: hidden;
+	animation: slideDown 0.25s ease-out;
+	margin-top: 32px;
+	margin-bottom: 32px;
+	margin-left: 12px;
+	margin-right: 12px;
+
+	@media (max-width: 768px) {
+		border-radius: 0;
+		margin-left: 0;
+		margin-right: 0;
+	}
+}
+
+.trade-history-mobile-container {
+	animation: slideDown 0.25s ease-out;
+	margin-top: 24px;
+}
+
+@keyframes slideDown {
+	from {
+		opacity: 0;
+		max-height: 0;
+		transform: translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		max-height: 2000px;
+		transform: translateY(0);
+	}
+}
+
+/* Expand button styles */
+.expand-trades-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	background: transparent;
+	border: 1px solid #333;
+	color: #888;
+	font-size: 12px;
+	cursor: pointer;
+	padding: 6px 10px;
+	border-radius: 6px;
+	transition: all 0.2s ease;
+
+	&:hover {
+		background: rgba(139, 92, 246, 0.25) !important;
+		border-color: #8b5cf6 !important;
+		color: #a78bfa !important;
+		transform: translateY(-1px);
+	}
+
+	&.expanded {
+		background: rgba(139, 92, 246, 0.15);
+		color: #a78bfa;
+		border-color: #8b5cf6;
+	}
+
+	.expand-icon {
+		display: inline-block;
+		transition: transform 0.2s ease;
+		font-size: 10px;
+	}
+}
+
+/* Row with expandable content */
+.position-row-expandable {
+	cursor: pointer;
+	
+	&:hover {
+		background: #1a1a1a;
+	}
+}
+
+/* Trade history row hover effect */
+.trade-history-row:hover {
+	background: #151515 !important;
+}

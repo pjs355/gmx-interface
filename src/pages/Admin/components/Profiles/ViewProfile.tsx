@@ -37,6 +37,9 @@ interface ProfileData {
 		address?: string;
 	}>;
 	orders?: Order[];
+	// Direct wallet properties (may exist alongside linked_accounts)
+	smart_wallet?: string;
+	wallet?: string;
 }
 
 interface ProfileApiResponse {
@@ -51,6 +54,33 @@ interface ProfileApiResponse {
 interface ViewProfileProps {
 	profileId: string;
 	onBack: () => void;
+}
+
+/**
+ * Get smart wallet address from profile, checking multiple sources
+ */
+function getSmartWalletAddress(profile: ProfileData | null): string | null {
+	if (!profile) return null;
+	
+	// First try linked_accounts
+	const linkedSmartWallet = profile.linked_accounts?.find(
+		(acc) => acc.type === "smart_wallet"
+	);
+	if (linkedSmartWallet?.address) {
+		return linkedSmartWallet.address;
+	}
+
+	// Then try direct smart_wallet property
+	if (profile.smart_wallet) {
+		return profile.smart_wallet;
+	}
+
+	// Fallback to wallet property
+	if (profile.wallet) {
+		return profile.wallet;
+	}
+
+	return null;
 }
 
 export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
@@ -325,6 +355,33 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 					← Back
 				</button>
 				<h2 style={{ margin: 0 }}>Profile Details</h2>
+				{(() => {
+					const smartWallet = getSmartWalletAddress(profile);
+					if (!smartWallet) return null;
+					return (
+						<button
+							type="button"
+							onClick={() => {
+								// Use the global spoofAccount function (same as console command)
+								(window as any).spoofAccount(smartWallet);
+								// Navigate to positions page with full reload
+								window.location.assign('/positions');
+							}}
+							style={{
+								padding: "8px 16px",
+								border: "1px solid #22c55e",
+								borderRadius: 6,
+								background: "rgba(34, 197, 94, 0.2)",
+								color: "#22c55e",
+								cursor: "pointer",
+								marginLeft: "auto",
+								fontWeight: 500,
+							}}
+						>
+							👤 View as User
+						</button>
+					);
+				})()}
 			</div>
 
 			<div
@@ -346,6 +403,18 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 						<strong>User ID:</strong> {profile.userId}
 					</div>
 				)}
+				{(() => {
+					const smartWallet = getSmartWalletAddress(profile);
+					if (!smartWallet) return null;
+					return (
+						<div style={{ marginBottom: 8 }}>
+							<strong>Smart Wallet:</strong>{" "}
+							<span style={{ fontFamily: "monospace", fontSize: "13px" }}>
+								{smartWallet}
+							</span>
+						</div>
+					);
+				})()}
 				{profile.linked_accounts?.find((acc) => acc.type === "email")
 					?.address && (
 					<div style={{ marginBottom: 8 }}>

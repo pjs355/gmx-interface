@@ -11,6 +11,7 @@ import {
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import TradeHistoryList from "./TradeHistoryList";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -68,6 +69,21 @@ export default function HistoryView({
 	resolvedMarketsByUmbrella: Record<string, any[]>;
 }) {
 	const { umbrellas } = usePredictionData();
+	
+	// Track which markets have their trade history expanded
+	const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
+
+	const toggleMarketExpansion = (marketId: string) => {
+		setExpandedMarkets((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(marketId)) {
+				newSet.delete(marketId);
+			} else {
+				newSet.add(marketId);
+			}
+			return newSet;
+		});
+	};
 
 	// Filter resolved markets to only show those where user has trading history
 	const filteredResolvedMarkets = React.useMemo(() => {
@@ -128,6 +144,31 @@ export default function HistoryView({
 		return filtered;
 	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
 
+	// Count trades for a market
+	const getTradeCount = (marketId: string): number => {
+		return orders.filter(
+			(order) => order.questionId === marketId && order.filled
+		).length;
+	};
+
+	// Calculate Net Cash Flow for a specific market and side
+	// Net Cash Flow = Cash In (sells) - Cash Out (buys)
+	const getNetCashFlow = (marketId: string, side: "Yes" | "No"): number => {
+		const sideOrders = orders.filter(
+			(order) =>
+				order.questionId === marketId &&
+				order.filled &&
+				order.position?.toLowerCase() === side.toLowerCase()
+		);
+		const cashOut = sideOrders
+			.filter((o) => o.side === "buy")
+			.reduce((sum, o) => sum + (o.usdcValue || 0), 0);
+		const cashIn = sideOrders
+			.filter((o) => o.side === "sell")
+			.reduce((sum, o) => sum + (o.usdcValue || 0), 0);
+		return cashIn - cashOut;
+	};
+
 	return (
 		<div className="flex flex-col gap-8">
 			{filteredResolvedMarkets.length === 0 ? (
@@ -150,7 +191,7 @@ export default function HistoryView({
 						className="grid items-center px-12 py-10"
 						style={{
 							gridTemplateColumns:
-								"minmax(200px, 2fr) repeat(5, 1fr)",
+								"minmax(200px, 2fr) repeat(5, 1fr) 80px",
 							borderBottom: "1px solid #333333",
 							color: "#888",
 							fontSize: 12,
@@ -173,6 +214,7 @@ export default function HistoryView({
 								Total Return
 							</Tooltip>
 						</div>
+						<div style={{ textAlign: "center" }}>Trades</div>
 					</div>
 
 					<div className="flex flex-col">
@@ -186,7 +228,7 @@ export default function HistoryView({
 										className="grid px-12 py-10"
 										style={{
 											gridTemplateColumns:
-												"minmax(200px, 2fr) repeat(5, 1fr)",
+												"minmax(200px, 2fr) repeat(5, 1fr) 80px",
 											background: "#000000",
 											borderBottom: "1px solid #1f1f1f",
 											paddingTop: 16,
@@ -241,8 +283,7 @@ export default function HistoryView({
 													(order) =>
 														order.questionId ===
 															qid &&
-														order.outcome?.toLowerCase() ===
-															"yes"
+														order.position?.toLowerCase() === "yes"
 											  )
 											: [];
 										const userNoOrders = qid
@@ -250,8 +291,7 @@ export default function HistoryView({
 													(order) =>
 														order.questionId ===
 															qid &&
-														order.outcome?.toLowerCase() ===
-															"no"
+														order.position?.toLowerCase() === "no"
 											  )
 											: [];
 
@@ -277,287 +317,338 @@ export default function HistoryView({
 												amount: no,
 											});
 
-										return rows.map(({ side, amount }) => {
-											// Get final position and cost for this leg
-											const finalShares =
-												side === "Yes"
-													? finalAmounts.yesShares
-													: finalAmounts.noShares;
-											const finalCost =
-												side === "Yes"
-													? finalAmounts.yesCost
-													: finalAmounts.noCost;
+										const tradeCount = getTradeCount(qid);
+										const isExpanded = expandedMarkets.has(qid);
 
-											// Format shares - remove unnecessary decimals; show just the number (no label)
-											const finalPositionText =
-												finalShares > 0
-													? `${
-															finalShares % 1 ===
-															0
-																? finalShares.toFixed(
-																		0
-																  )
-																: finalShares.toFixed(
-																		2
-																  )
-													  }`
-													: "—";
+										return (
+											<React.Fragment key={qid}>
+												{rows.map(({ side, amount }, rowIndex) => {
+													// Get final position for this leg
+													const finalShares =
+														side === "Yes"
+															? finalAmounts.yesShares
+															: finalAmounts.noShares;
+													
+													// Calculate Net Cash Flow for this side
+													const netCashFlow = getNetCashFlow(qid, side);
 
-											// Format USDC cost - remove unnecessary decimals
-											const totalCostText =
-												finalCost > 0
-													? `$${
-															finalCost % 1 === 0
-																? finalCost.toFixed(
-																		0
-																  )
-																: finalCost.toFixed(
-																		2
-																  )
-													  }`
-													: "—";
+													// Format shares with commas
+													const finalPositionText =
+														finalShares > 0
+															? finalShares.toLocaleString("en-US", {
+																	minimumFractionDigits: finalShares % 1 === 0 ? 0 : 2,
+																	maximumFractionDigits: 2,
+															  })
+															: "—";
 
-											// Calculate settlement payout: $1 if user was correct, $0 if wrong
-											const wasCorrect =
-												(side === "Yes" &&
-													resolvedOutcome ===
-														"yes") ||
-												(side === "No" &&
-													resolvedOutcome === "no");
-											const settlementPayout = wasCorrect
-												? 1
-												: 0;
+													// Format Total Cost (absolute value, white if negative/cost, green if positive/profit)
+													const totalCostText = (() => {
+														const absVal = Math.abs(netCashFlow);
+														const formatted = absVal.toLocaleString("en-US", {
+															minimumFractionDigits: absVal % 1 === 0 ? 0 : 2,
+															maximumFractionDigits: 2,
+														});
+														if (netCashFlow === 0) return "—";
+														return `$${formatted}`;
+													})();
+													// White if negative (cost), green if positive (profit)
+													const totalCostColor =
+														netCashFlow === 0
+															? "#fff"
+															: netCashFlow > 0
+															? "#22c55e"
+															: "#fff";
 
-											// Calculate total payout: Final Position × Settlement Payout
-											const totalPayout =
-												finalShares * settlementPayout;
-											const totalPayoutText =
-												totalPayout > 0
-													? `$${
-															totalPayout % 1 ===
-															0
-																? totalPayout.toFixed(
-																		0
-																  )
-																: totalPayout.toFixed(
-																		2
-																  )
-													  }`
-													: "$0";
-											const totalPayoutColor =
-												totalPayout > 0
-													? "#16a34a"
-													: "#fff"; // Green if positive, white if $0
+													// Calculate settlement payout: $1 if user was correct, $0 if wrong
+													const wasCorrect =
+														(side === "Yes" &&
+															resolvedOutcome ===
+																"yes") ||
+														(side === "No" &&
+															resolvedOutcome === "no");
+													const settlementPayout = wasCorrect
+														? 1
+														: 0;
 
-											// Calculate total return using same logic as positions tab
-											// baseReturn = totalPayout - effectiveCost (totalPayout is like marketValue)
-											const effectiveCost = finalCost;
-											const baseReturn =
-												totalPayout === null ||
-												effectiveCost === null
-													? null
-													: totalPayout -
-													  effectiveCost;
-											const realizedLegPnl = (() => {
-												if (!qid) return 0;
-												const legPnls =
-													returnsByQid[qid];
-												if (!legPnls) return 0;
-												return side === "Yes"
-													? legPnls.Yes || 0
-													: legPnls.No || 0;
-											})();
-											const totalReturn =
-												baseReturn === null
-													? null
-													: baseReturn +
-													  realizedLegPnl;
-											const totalReturnPct =
-												totalReturn !== null &&
-												effectiveCost &&
-												effectiveCost > 0
-													? (totalReturn /
-															effectiveCost) *
-													  100
-													: null;
-											const totalReturnColor =
-												totalReturn === null
-													? "#fff"
-													: totalReturn >= 0
-													? "#16a34a"
-													: "#ef4444";
-											const totalReturnText = (() => {
-												if (
-													totalReturn === null ||
-													!isFinite(totalReturn)
-												)
-													return "—";
-												const signUsd =
-													totalReturn >= 0
-														? "+"
-														: "-";
-												const usdPart = `$${
-													Math.abs(totalReturn) %
-														1 ===
-													0
-														? Math.abs(
-																totalReturn
-														  ).toFixed(0)
-														: Math.abs(
-																totalReturn
-														  ).toFixed(2)
-												}`;
-												if (
-													totalReturnPct === null ||
-													!isFinite(totalReturnPct)
-												) {
-													return `${signUsd}${usdPart}`;
-												}
-												const signPct =
-													totalReturnPct >= 0
-														? "+"
-														: "-";
-												const pctPart = `${Math.round(
-													Math.abs(totalReturnPct)
-												)}%`;
-												return `${signUsd}${usdPart} (${signPct}${pctPart})`;
-											})();
+													// Calculate total payout: Final Position × Settlement Payout
+													const totalPayout =
+														finalShares * settlementPayout;
+													const totalPayoutText =
+														totalPayout > 0
+															? `$${totalPayout.toLocaleString("en-US", {
+																	minimumFractionDigits: totalPayout % 1 === 0 ? 0 : 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: "$0";
+													const totalPayoutColor =
+														totalPayout > 0
+															? "#16a34a"
+															: "#fff"; // Green if positive, white if $0
 
-											const title = (
-												market?.displayName ||
-												(market as any)?.question ||
-												""
-											).trim();
-											const parts = title
-												.split(/\s*vs\.?\s*/i)
-												.map((s: string) => s.trim())
-												.filter(Boolean);
-											const isVs = parts.length === 2;
+													// Calculate total return using Net Cash Flow
+													// Total Return = Total Payout + Net Cash Flow (since net cash flow is already signed)
+													const baseReturn =
+														totalPayout === null
+															? null
+															: totalPayout + netCashFlow;
+													const realizedLegPnl = (() => {
+														if (!qid) return 0;
+														const legPnls =
+															returnsByQid[qid];
+														if (!legPnls) return 0;
+														return side === "Yes"
+															? legPnls.Yes || 0
+															: legPnls.No || 0;
+													})();
+													const totalReturn =
+														baseReturn === null
+															? null
+															: baseReturn +
+															  realizedLegPnl;
+													// Calculate return percentage based on cash spent (negative net cash flow = money spent)
+													const cashSpent = netCashFlow < 0 ? Math.abs(netCashFlow) : 0;
+													const totalReturnPct =
+														totalReturn !== null &&
+														cashSpent > 0
+															? (totalReturn / cashSpent) * 100
+															: null;
+													const totalReturnColor =
+														totalReturn === null
+															? "#fff"
+															: totalReturn >= 0
+															? "#16a34a"
+															: "#ef4444";
+													const totalReturnText = (() => {
+														if (
+															totalReturn === null ||
+															!isFinite(totalReturn)
+														)
+															return "—";
+														const signUsd =
+															totalReturn >= 0
+																? "+"
+																: "-";
+														const absReturn = Math.abs(totalReturn);
+														const usdPart = `$${absReturn.toLocaleString("en-US", {
+															minimumFractionDigits: absReturn % 1 === 0 ? 0 : 2,
+															maximumFractionDigits: 2,
+														})}`;
+														if (
+															totalReturnPct === null ||
+															!isFinite(totalReturnPct)
+														) {
+															return `${signUsd}${usdPart}`;
+														}
+														const signPct =
+															totalReturnPct >= 0
+																? "+"
+																: "-";
+														const pctPart = `${Math.round(
+															Math.abs(totalReturnPct)
+														).toLocaleString("en-US")}%`;
+														return `${signUsd}${usdPart} (${signPct}${pctPart})`;
+													})();
 
-											// Determine outcome text
-											const outcomeText = (() => {
-												if (isVs) {
-													// For VS markets, show the winning team name
-													return resolvedOutcome ===
-														"yes"
-														? parts[0]
-														: parts[1];
-												} else {
-													// For regular markets, show Yes or No
-													return resolvedOutcome ===
-														"yes"
-														? "Yes"
-														: "No";
-												}
-											})();
+													const title = (
+														market?.displayName ||
+														(market as any)?.question ||
+														""
+													).trim();
+													const parts = title
+														.split(/\s*vs\.?\s*/i)
+														.map((s: string) => s.trim())
+														.filter(Boolean);
+													const isVs = parts.length === 2;
 
-											// Determine outcome color
-											const outcomeColor = (() => {
-												if (isVs) {
-													// For VS markets: Green if user won, Red if user lost
-													return wasCorrect
-														? "#16a34a" // Green - user won
-														: "#ef4444"; // Red - user lost
-												} else {
-													// For regular markets: Yes = Green, No = Red
-													return resolvedOutcome ===
-														"yes"
-														? "#16a34a"
-														: "#ef4444";
-												}
-											})();
+													// Determine outcome text
+													const outcomeText = (() => {
+														if (isVs) {
+															// For VS markets, show the winning team name
+															return resolvedOutcome ===
+																"yes"
+																? parts[0]
+																: parts[1];
+														} else {
+															// For regular markets, show Yes or No
+															return resolvedOutcome ===
+																"yes"
+																? "Yes"
+																: "No";
+														}
+													})();
 
-											return (
-												<div
-													key={`${
-														market._id
-													}-${side.toLowerCase()}`}
-													className="grid items-center px-12 py-12"
-													style={{
-														gridTemplateColumns:
-															"minmax(200px, 2fr) repeat(5, 1fr)",
-														borderBottom:
-															"1px solid #1f1f1f",
-														fontSize: 16,
-													}}
-												>
-													<div
-														style={{
-															color: "#fff",
-															fontWeight: 600,
-														}}
-													>
-														{isVs ? (
-															<span>
-																{side === "Yes"
-																	? parts[0]
-																	: parts[1]}
-															</span>
-														) : (
-															<>
-																<span>
-																	{market.displayName ||
-																		market.question}{" "}
-																</span>
-																<span
-																	style={{
-																		color:
-																			side ===
-																			"Yes"
-																				? "#16a34a"
-																				: "#ef4444",
-																	}}
-																>
-																	{side}
-																</span>
-															</>
-														)}
-													</div>
-													<div
-														style={{
-															textAlign: "center",
-															color: "#fff",
-														}}
-													>
-														{finalPositionText}
-													</div>
-													<div
-														style={{
-															textAlign: "center",
-															color: outcomeColor,
-															fontWeight: 600,
-														}}
-													>
-														{outcomeText}
-													</div>
-													<div
-														style={{
-															textAlign: "center",
-															color: "#fff",
-														}}
-													>
-														{totalCostText}
-													</div>
-													<div
-														style={{
-															textAlign: "center",
-															color: totalPayoutColor,
-														}}
-													>
-														{totalPayoutText}
-													</div>
-													<div
-														style={{
-															textAlign: "center",
-															color: totalReturnColor,
-															fontWeight: "bold",
-														}}
-													>
-														{totalReturnText}
-													</div>
-												</div>
-											);
-										});
+													// Determine outcome color
+													const outcomeColor = (() => {
+														if (isVs) {
+															// For VS markets: Green if user won, Red if user lost
+															return wasCorrect
+																? "#16a34a" // Green - user won
+																: "#ef4444"; // Red - user lost
+														} else {
+															// For regular markets: Yes = Green, No = Red
+															return resolvedOutcome ===
+																"yes"
+																? "#16a34a"
+																: "#ef4444";
+														}
+													})();
+
+													// Only show expand button on first row for this market
+													const showExpandButton = rowIndex === 0;
+
+													return (
+														<div
+															key={`${
+																market._id
+															}-${side.toLowerCase()}`}
+															className="grid items-center px-12 py-12"
+															style={{
+																gridTemplateColumns:
+																	"minmax(200px, 2fr) repeat(5, 1fr) 80px",
+																borderBottom:
+																	"1px solid #1f1f1f",
+																fontSize: 16,
+																cursor: showExpandButton ? "pointer" : "default",
+																transition: "background 0.15s ease",
+															}}
+															onClick={showExpandButton ? () => toggleMarketExpansion(qid) : undefined}
+															onMouseEnter={(e) => {
+																if (showExpandButton) {
+																	e.currentTarget.style.background = "#1a1a1a";
+																}
+															}}
+															onMouseLeave={(e) => {
+																if (showExpandButton) {
+																	e.currentTarget.style.background = "transparent";
+																}
+															}}
+														>
+															<div
+																style={{
+																	color: "#fff",
+																	fontWeight: 600,
+																}}
+															>
+																{isVs ? (
+																	<span>
+																		{side === "Yes"
+																			? parts[0]
+																			: parts[1]}
+																	</span>
+																) : (
+																	<>
+																		<span>
+																			{market.displayName ||
+																				market.question}{" "}
+																		</span>
+																		<span
+																			style={{
+																				color:
+																					side ===
+																					"Yes"
+																						? "#16a34a"
+																						: "#ef4444",
+																			}}
+																		>
+																			{side}
+																		</span>
+																	</>
+																)}
+															</div>
+															<div
+																style={{
+																	textAlign: "center",
+																	color: "#fff",
+																}}
+															>
+																{finalPositionText}
+															</div>
+															<div
+																style={{
+																	textAlign: "center",
+																	color: outcomeColor,
+																	fontWeight: 600,
+																}}
+															>
+																{outcomeText}
+															</div>
+															<div
+																style={{
+																	textAlign: "center",
+																	color: totalCostColor,
+																	fontWeight: 500,
+																}}
+															>
+																{totalCostText}
+															</div>
+															<div
+																style={{
+																	textAlign: "center",
+																	color: totalPayoutColor,
+																}}
+															>
+																{totalPayoutText}
+															</div>
+															<div
+																style={{
+																	textAlign: "center",
+																	color: totalReturnColor,
+																	fontWeight: "bold",
+																}}
+															>
+																{totalReturnText}
+															</div>
+															{/* Expand/Collapse Button */}
+															<div
+																style={{
+																	textAlign: "center",
+																}}
+																onMouseEnter={(e) => {
+																	e.stopPropagation();
+																	// Reset parent row background
+																	const row = e.currentTarget.parentElement;
+																	if (row) (row as HTMLElement).style.backgroundColor = "transparent";
+																}}
+															>
+																{showExpandButton && tradeCount > 0 && (
+																	<button
+																		className={`expand-trades-btn ${isExpanded ? "expanded" : ""}`}
+																		onClick={(e) => {
+																			e.stopPropagation();
+																			toggleMarketExpansion(qid);
+																		}}
+																		onMouseEnter={(e) => {
+																			e.stopPropagation();
+																			// Reset parent row background
+																			const row = e.currentTarget.closest('.history-row');
+																			if (row) (row as HTMLElement).style.backgroundColor = "transparent";
+																		}}
+																	>
+																		<span>{tradeCount}</span>
+																		<span
+																			className="expand-icon"
+																			style={{
+																				transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+																			}}
+																		>
+																			▼
+																		</span>
+																	</button>
+																)}
+															</div>
+														</div>
+													);
+												})}
+												{/* Trade History Expansion */}
+												{isExpanded && (
+													<TradeHistoryList
+														orders={orders}
+														marketId={qid}
+														isExpanded={isExpanded}
+													/>
+												)}
+											</React.Fragment>
+										);
 									})}
 								</div>
 							)

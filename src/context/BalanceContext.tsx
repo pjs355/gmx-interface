@@ -1,16 +1,14 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useSignerContext } from 'context/SignerContext';
-import {
-  subgraphService,
-  fromMicroUnits,
-} from '@/services/subgraph/subgraphService';
+import { useUserData } from 'context/UserDataContext';
 
-// Global balance cache
-const balanceCache = new Map<string, string>();
-
-function getCacheKey(account: string, tokenId: string): string {
-  return `${account}:${tokenId}`;
-}
+/**
+ * BalanceContext - Provides token balance lookups
+ * 
+ * NOTE: This context now uses UserDataContext's tokenBalances instead of
+ * making separate subgraph calls. This prevents duplicate API requests
+ * and rate limiting issues.
+ */
 
 interface BalanceContextType {
   getBalance: (tokenId: string) => number;
@@ -22,69 +20,51 @@ const BalanceContext = createContext<BalanceContextType | null>(null);
 
 export function BalanceProvider({ children }: { children: React.ReactNode }) {
   const { account } = useSignerContext();
-  const [isLoading, setIsLoading] = useState(false);
-  // Track if we've already fetched all balances from subgraph
-  const hasFetchedRef = useRef<string | null>(null);
+  const { tokenBalances, loading: userDataLoading, refresh: refreshUserData } = useUserData();
+  const [localCache, setLocalCache] = useState<Map<string, number>>(new Map());
+
+  // Build a tokenId -> balance lookup from UserDataContext's tokenBalances
+  useEffect(() => {
+    if (!tokenBalances || tokenBalances.size === 0) return;
+
+    const newCache = new Map<string, number>();
+    
+    tokenBalances.forEach((balances, marketId) => {
+      // Map yesTokenId to yesBalance
+      if (balances.yesTokenId) {
+        const yesBalance = parseFloat(balances.yesBalance) || 0;
+        newCache.set(balances.yesTokenId, yesBalance);
+      }
+      // Map noTokenId to noBalance
+      if (balances.noTokenId) {
+        const noBalance = parseFloat(balances.noBalance) || 0;
+        newCache.set(balances.noTokenId, noBalance);
+      }
+    });
+
+    setLocalCache(newCache);
+  }, [tokenBalances]);
 
   const getBalance = useCallback((tokenId: string): number => {
     if (!account) return 0;
-    const key = getCacheKey(account, tokenId);
-    const cached = balanceCache.get(key);
-    return cached ? Number(cached) : 0;
-  }, [account]);
+    return localCache.get(tokenId) || 0;
+  }, [account, localCache]);
 
-  const refreshBalances = useCallback(async (tokenIds: string[]) => {
-    if (!account || tokenIds.length === 0) return;
-
-    // Check which balances we need to fetch
-    const uncachedTokenIds = tokenIds.filter(tokenId => {
-      const key = getCacheKey(account, tokenId);
-      return !balanceCache.has(key);
-    });
-
-    // If we've already fetched from subgraph for this account and all requested are cached, skip
-    if (uncachedTokenIds.length === 0) {
-      return;
+  const refreshBalances = useCallback(async (_tokenIds: string[]) => {
+    // Trigger a refresh of UserDataContext which will update tokenBalances
+    // This is now a no-op since we rely on UserDataContext's data
+    // If you need fresh data, call refreshUserData() directly
+    if (refreshUserData) {
+      await refreshUserData();
     }
-
-    // If we haven't fetched from subgraph yet for this account, fetch all balances at once
-    if (hasFetchedRef.current !== account) {
-      setIsLoading(true);
-      try {
-        console.log(`📊 [BalanceContext] Fetching all balances from subgraph for ${account}`);
-        
-        const subgraphAccount = await subgraphService.getUserAccount(account);
-        
-        if (subgraphAccount) {
-          // Cache all token balances from subgraph
-          for (const tb of subgraphAccount.tokenBalances) {
-            const key = getCacheKey(account, tb.tokenId);
-            const balance = fromMicroUnits(tb.balance);
-            balanceCache.set(key, balance);
-          }
-          console.log(`📊 [BalanceContext] Cached ${subgraphAccount.tokenBalances.length} token balances`);
-        }
-        
-        hasFetchedRef.current = account;
-      } catch (error) {
-        console.error('Error fetching balances from subgraph:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    // After subgraph fetch, set any still-uncached tokens to 0
-    // (tokens that don't exist in subgraph = user has 0 balance)
-    for (const tokenId of uncachedTokenIds) {
-      const key = getCacheKey(account, tokenId);
-      if (!balanceCache.has(key)) {
-        balanceCache.set(key, '0');
-      }
-    }
-  }, [account]);
+  }, [refreshUserData]);
 
   return (
-    <BalanceContext.Provider value={{ getBalance, refreshBalances, isLoading }}>
+    <BalanceContext.Provider value={{ 
+      getBalance, 
+      refreshBalances, 
+      isLoading: userDataLoading 
+    }}>
       {children}
     </BalanceContext.Provider>
   );
