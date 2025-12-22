@@ -18,5 +18,5 @@ export function getPredictionWebSocketUrl(): string {
 	// if (isLocal) {
 	// 	return "wss://prediction-api-production.up.railway.app";
 	// }
-	return "wss://prediction-api-production.up.railway.app";
+	return "ws://localhost:8080";
 }

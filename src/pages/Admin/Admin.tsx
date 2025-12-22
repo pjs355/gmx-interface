@@ -18,6 +18,7 @@ import ViewProfile from "./components/Profiles/ViewProfile";
 import Stats from "./components/Stats/Stats";
 import ListDailyGames from "./components/DailyGames/ListDailyGames";
 import AddDailyGame from "./components/DailyGames/AddDailyGame";
+import TradeTesting from "./components/TradeTesting/TradeTesting";
 import {
 	umbrellaDataService,
 	type Umbrella,
@@ -44,7 +45,8 @@ type AdminView =
 	| "profiles-view"
 	| "stats"
 	| "daily-games-list"
-	| "daily-games-add";
+	| "daily-games-add"
+	| "trade-testing";
 
 const DEFAULT_ADMIN_VIEW: AdminView = "markets-list";
 
@@ -65,6 +67,7 @@ const VALID_ADMIN_VIEWS: AdminView[] = [
 	"stats",
 	"daily-games-list",
 	"daily-games-add",
+	"trade-testing",
 ] as const;
 
 function isValidAdminView(value: string | null): value is AdminView {
@@ -279,7 +282,14 @@ export default function Admin() {
 	}
 
 	return (
-		<div style={{ padding: 24, color: "white" }}>
+		<div style={{ 
+			padding: 24, 
+			color: "white", 
+			backgroundColor: "#000000",
+			minHeight: "100vh",
+			position: "relative",
+			zIndex: 1,
+		}}>
 			<div
 				style={{
 					display: "flex",
@@ -605,6 +615,38 @@ export default function Admin() {
 						</button>
 					</div>
 				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>
+						Trade Testing
+					</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("trade-testing", {
+									umbrellaId: null,
+									teamId: null,
+									profileId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid #f59e0b",
+								borderRadius: 6,
+								background:
+									view === "trade-testing"
+										? "rgba(245,158,11,0.2)"
+										: "transparent",
+								color: "#f59e0b",
+							}}
+						>
+							🧪 Run Tests
+						</button>
+					</div>
+				</div>
 			</div>
 
 			{view === "markets-list" && (
@@ -750,6 +792,8 @@ export default function Admin() {
 					}}
 				/>
 			)}
+
+			{view === "trade-testing" && <TradeTesting />}
 		</div>
 	);
 }
