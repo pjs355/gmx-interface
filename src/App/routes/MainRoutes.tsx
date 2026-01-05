@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
-import GetTestUsdc from "pages/GetTestUsdc/GetTestUsdc.jsx";
+// Commented out for production - Get Test USDC page disabled
+// import GetTestUsdc from "pages/GetTestUsdc/GetTestUsdc.jsx";
 import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
 import Home from "pages/Home/Home";
 import Predictions from "pages/Predictions/Predictions";
@@ -12,8 +13,9 @@ import Leaderboard from "@/pages/Leaderboard/Leaderboard";
 import Profile from "pages/Profile/Profile";
 import Admin from "pages/Admin/Admin";
 import Positions from "pages/Positions/Positions";
-import Prizes from "pages/Prizes/Prizes";
-import Payments from "pages/Payments/Payments";
+// Commented out for production - prizes page disabled
+// import Prizes from "pages/Prizes/Prizes";
+import Transfers from "pages/Transfers/Transfers";
 import TradeBoxTest from "pages/TradeBoxTest/TradeBoxTest";
 import About from "pages/About/About";
 import TestPage from "pages/Test/TestPage";
@@ -48,15 +50,20 @@ export function MainRoutes() {
 			/>
 
 			<Route path="/leaderboard" element={<Leaderboard />} />
-			<Route path="/developers" element={<Profile />} />
+			{/* Commented out for production - developers page disabled */}
+			{/* <Route path="/developers" element={<Profile />} /> */}
 			<Route path="/profile" element={<Profile />} />
-			<Route path="/profile/developers" element={<Profile />} />
+			{/* Commented out for production - developers page disabled */}
+			{/* <Route path="/profile/developers" element={<Profile />} /> */}
 			<Route path="/admin" element={<Admin />} />
-			<Route path="/get-test-usdc" element={<GetTestUsdc />} />
+			{/* Commented out for production - Get Test USDC page disabled */}
+			{/* <Route path="/get-test-usdc" element={<GetTestUsdc />} /> */}
 			<Route path="/positions" element={<Positions />} />
-			<Route path="/prizes" element={<Prizes />} />
-			<Route path="/payments" element={<Payments />} />
+			{/* Commented out for production - prizes page disabled */}
+			{/* <Route path="/prizes" element={<Prizes />} /> */}
+			<Route path="/transfers" element={<Transfers />} />
 			<Route path="/about" element={<About />} />
+			{/* Admin-only test pages */}
 			<Route
 				path="/test/tradebox/:umbrellaId"
 				element={<TradeBoxTest />}

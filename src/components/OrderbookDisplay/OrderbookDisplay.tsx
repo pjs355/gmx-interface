@@ -200,18 +200,19 @@ export default function OrderbookDisplay({
 
 	// Calculate display prices following the same convention as trading box
 	// Flip prices based on buy/sell side (same logic as trade box)
+	const yesLabelPrice = side === "buy" ? marketBestAsk : marketBestBid;
+	const noLabelPrice = side === "buy"
+		? (marketBestBid === null ? null : 1 - marketBestBid)
+		: (marketBestAsk === null ? null : 1 - marketBestAsk);
+	
 	const yesLabel =
-		side === "buy"
-			? `${toCentsString(marketBestAsk)}¢`
-			: `${toCentsString(marketBestBid)}¢`;
+		yesLabelPrice !== null
+			? `${toCentsString(yesLabelPrice)}¢`
+			: "--";
 	const noLabel =
-		side === "buy"
-			? `${toCentsString(
-					marketBestBid === null ? null : 1 - marketBestBid
-			  )}¢`
-			: `${toCentsString(
-					marketBestAsk === null ? null : 1 - marketBestAsk
-			  )}¢`;
+		noLabelPrice !== null
+			? `${toCentsString(noLabelPrice)}¢`
+			: "--";
 
 	// Show a minimal collapsed state when loading (not full loading screen)
 	// This allows the header with prices to still be interactive
@@ -248,7 +249,7 @@ export default function OrderbookDisplay({
 										}
 									}}
 								>
-									{yesTeamLabel} --¢
+									{yesTeamLabel} --
 								</button>
 								<button
 									className={`tab-button trade-no ${isActiveMarket && activePosition === "no" ? "active-no" : ""}`}
@@ -259,7 +260,7 @@ export default function OrderbookDisplay({
 										}
 									}}
 								>
-									{noTeamLabel} --¢
+									{noTeamLabel} --
 								</button>
 							</div>
 						</div>

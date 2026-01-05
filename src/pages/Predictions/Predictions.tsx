@@ -286,8 +286,8 @@ export default function Predictions() {
 
 	return (
 		<div className="predictions-page page-layout">
-			{/* Show PromotionBar only for non-authenticated users */}
-			{!authenticated && <PromotionBar />}
+			{/* Commented out for production - users can use Get Started button in header */}
+			{/* {!authenticated && <PromotionBar />} */}
 			{/** <ImageBanner /> */}
 			{/* <Search
 				onSearchActive={handleSearchActive}

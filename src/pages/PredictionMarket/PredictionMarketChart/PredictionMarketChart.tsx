@@ -114,18 +114,12 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	// Determine which time ranges should be visible based on data coverage
 	const availableTimeRanges = useMemo(() => {
 		return TIME_RANGES.filter((range) => {
-			// Always show 1H and 1D
-			if (range.key === "1h" || range.key === "1d") return true;
+			// Always show 1H, 1D, and All
+			if (range.key === "1h" || range.key === "1d" || range.key === "all") return true;
 
 			// For 1W, require at least 2 days of data (reasonable threshold to show weekly view)
 			if (range.key === "1w") {
 				const requiredSeconds = 2 * 86400; // 2 days minimum
-				return dataSpan >= requiredSeconds;
-			}
-
-			// For All, require at least 1 week of data (otherwise it's redundant with 1W)
-			if (range.key === "all") {
-				const requiredSeconds = 7 * 86400; // 7 days minimum
 				return dataSpan >= requiredSeconds;
 			}
 

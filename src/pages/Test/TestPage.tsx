@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { usePrivy } from "@privy-io/react-auth";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "../Predictions/components/PredictionCard";
@@ -33,25 +34,54 @@ function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 
 export default function TestPage() {
 	const navigate = useNavigate();
+	const { getAccessToken } = usePrivy();
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [imagesReady, setImagesReady] = useState(false);
 	const [searchActive, setSearchActive] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<Umbrella[]>([]);
+	const [checkingAdmin, setCheckingAdmin] = useState(true);
 
-	// Restrict access to localhost only
+	// Restrict access to admins only (same as Admin page)
 	useEffect(() => {
-		const hostname = window.location.hostname;
-		const isLocalhost =
-			hostname === "localhost" ||
-			hostname === "127.0.0.1" ||
-			hostname === "[::1]";
-
-		if (!isLocalhost) {
-			navigate("/");
-		}
-	}, [navigate]);
+		let mounted = true;
+		(async () => {
+			try {
+				const token =
+					typeof getAccessToken === "function"
+						? await getAccessToken()
+						: undefined;
+				const resp = await fetch(
+					`${getPredictionApiBaseUrl()}/admin/session`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							...(token
+								? { Authorization: `Bearer ${token}` }
+								: {}),
+						},
+					}
+				);
+				if (!mounted) return;
+				if (resp.ok) {
+					setCheckingAdmin(false);
+					return;
+				}
+				// Not authorized → redirect
+				navigate("/predictions", { replace: true });
+			} catch (err) {
+				console.error("Admin check error:", err);
+				navigate("/predictions", { replace: true });
+			} finally {
+				if (mounted) setCheckingAdmin(false);
+			}
+		})();
+		return () => {
+			mounted = false;
+		};
+	}, [getAccessToken, navigate]);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -265,14 +295,22 @@ export default function TestPage() {
 		window.location.reload();
 	};
 
+	if (checkingAdmin) {
+		return (
+			<div style={{ padding: 24, color: "white" }}>
+				Checking admin session…
+			</div>
+		);
+	}
+
 	if (loading || error || !imagesReady) {
 		return <LoadingState error={error ?? null} onRetry={handleRetry} />;
 	}
 
 	return (
 		<div className="predictions-page page-layout">
-			{/* Show PromotionBar only for non-authenticated users */}
-			{!authenticated && <PromotionBar />}
+			{/* Commented out for production - users can use Get Started button in header */}
+			{/* {!authenticated && <PromotionBar />} */}
 			{/** <ImageBanner /> */}
 			{/* <Search
 				onSearchActive={handleSearchActive}

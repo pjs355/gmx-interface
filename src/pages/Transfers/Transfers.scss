@@ -1,0 +1,184 @@
+.transfers-page {
+	min-height: 100vh;
+	background: #000000 url(@/assets/img/lu-bg-tiles.png) repeat;
+	background-size: 300px 300px;
+	padding: 48px 24px;
+	color: white;
+
+	@media (max-width: 767px) {
+		padding: 24px 16px;
+	}
+}
+
+.transfers-container {
+	max-width: 480px;
+	margin: 0 auto;
+}
+
+// Header
+.transfers-header {
+	text-align: center;
+	margin-bottom: 32px;
+}
+
+.transfers-title {
+	font-size: 36px;
+	font-weight: 900;
+	margin: 0;
+	color: white;
+	letter-spacing: -0.5px;
+
+	@media (max-width: 767px) {
+		font-size: 28px;
+	}
+}
+
+// Portfolio Summary Section
+.transfers-summary-section {
+	background: rgba(20, 20, 25, 0.95);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 16px;
+	padding: 20px 24px;
+	margin-bottom: 24px;
+}
+
+.transfers-summary-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 14px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+	&:last-child {
+		border-bottom: none;
+		padding-bottom: 0;
+	}
+
+	&:first-child {
+		padding-top: 0;
+	}
+}
+
+.transfers-summary-label {
+	font-size: 16px;
+	color: rgba(255, 255, 255, 0.7);
+	font-weight: 500;
+}
+
+.transfers-summary-value {
+	font-size: 20px;
+	font-weight: 700;
+	color: white;
+
+	&.transfers-cash-value {
+		color: #8b5cf6;
+	}
+}
+
+.transfers-skeleton {
+	display: inline-block;
+	width: 90px;
+	height: 22px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.1);
+	animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+	0%, 100% {
+		opacity: 0.4;
+	}
+	50% {
+		opacity: 0.8;
+	}
+}
+
+// Action Buttons
+.transfers-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+
+	@media (min-width: 768px) {
+		flex-direction: row;
+	}
+}
+
+.transfers-btn {
+	flex: 1;
+	padding: 18px 24px;
+	border: none;
+	border-radius: 12px;
+	font-size: 16px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s ease;
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+}
+
+.transfers-btn-deposit {
+	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+	color: white;
+	box-shadow: 0 4px 20px rgba(139, 92, 246, 0.25);
+
+	&:hover:not(:disabled) {
+		transform: translateY(-2px);
+		box-shadow: 0 6px 24px rgba(139, 92, 246, 0.35);
+	}
+}
+
+.transfers-btn-withdraw {
+	background: rgba(30, 30, 35, 1);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: white;
+
+	&:hover:not(:disabled) {
+		background: rgba(40, 40, 48, 1);
+		border-color: rgba(139, 92, 246, 0.5);
+	}
+}
+
+// Auth Required
+.transfers-auth-required {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 80px 20px;
+	text-align: center;
+
+	h2 {
+		font-size: 24px;
+		font-weight: 700;
+		color: white;
+		margin: 0 0 12px 0;
+	}
+
+	p {
+		font-size: 15px;
+		color: rgba(255, 255, 255, 0.6);
+		margin: 0 0 28px 0;
+	}
+}
+
+.transfers-btn-primary {
+	padding: 14px 40px;
+	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+	border: none;
+	border-radius: 12px;
+	color: white;
+	font-size: 16px;
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: 0 4px 20px rgba(139, 92, 246, 0.25);
+	transition: all 0.2s ease;
+
+	&:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 6px 24px rgba(139, 92, 246, 0.35);
+	}
+}

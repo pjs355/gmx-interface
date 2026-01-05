@@ -267,7 +267,23 @@ export function AppHeaderLinks({
 						Leaderboard
 					</HeaderLink>
 				</div>
-				<div className="App-header-link-container">
+				{active && (
+					<div className="App-header-link-container">
+						<HeaderLink
+							qa="transfers"
+							to="/transfers"
+							showRedirectModal={showRedirectModal}
+							onClick={small ? clickCloseIcon : undefined}
+							isActive={(_match: any, location: any) =>
+								location.pathname === "/transfers"
+							}
+						>
+							Transfers
+						</HeaderLink>
+					</div>
+				)}
+				{/* Commented out for production - prizes page disabled */}
+				{/* <div className="App-header-link-container">
 					<HeaderLink
 						qa="prizes"
 						to="/prizes"
@@ -279,8 +295,9 @@ export function AppHeaderLinks({
 					>
 						Prizes
 					</HeaderLink>
-				</div>
-				{active && (
+				</div> */}
+				{/* Commented out for production - referral page disabled */}
+				{/* {active && (
 					<div className="App-header-link-container">
 						<HeaderLink
 							qa="get-test-usdc"
@@ -291,7 +308,7 @@ export function AppHeaderLinks({
 							Referral
 						</HeaderLink>
 					</div>
-				)}
+				)} */}
 				<div className="App-header-link-container">
 					<HeaderLink
 						qa="about"

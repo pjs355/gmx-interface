@@ -97,12 +97,14 @@ export default function PredictionMarketTradeBoxUI({
   // Flip prices based on buy/sell side:
   // - BUY: YES shows bestAsk (what you pay), NO shows (1 - bestBid) (what you pay)
   // - SELL: YES shows bestBid (what you receive), NO shows (1 - bestAsk) (what you receive)
-  const yesPriceCents = side === 'buy' 
-    ? toCentsString(bestAsk) 
-    : toCentsString(bestBid);
-  const noPriceCents = side === 'buy'
-    ? toCentsString(bestBid === null ? null : 1 - bestBid)
-    : toCentsString(bestAsk === null ? null : 1 - bestAsk);
+  const yesPrice = side === 'buy' ? bestAsk : bestBid;
+  const noPrice = side === 'buy'
+    ? (bestBid === null ? null : 1 - bestBid)
+    : (bestAsk === null ? null : 1 - bestAsk);
+  
+  // Format with ¢ only when price exists, otherwise just "--"
+  const yesPriceCents = yesPrice !== null ? `${toCentsString(yesPrice)}¢` : "--";
+  const noPriceCents = noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
 
   // Helpers for single vs markets coloring
   const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
@@ -335,7 +337,7 @@ export default function PredictionMarketTradeBoxUI({
             }
           }}
         >
-          {`${yesTeamLabel} ${yesPriceCents}¢`}
+          {`${yesTeamLabel} ${yesPriceCents}`}
         </Button>
         
         <Button
@@ -358,7 +360,7 @@ export default function PredictionMarketTradeBoxUI({
             }
           }}
         >
-          {`${noTeamLabel} ${noPriceCents}¢`}
+          {`${noTeamLabel} ${noPriceCents}`}
         </Button>
       </div>
 

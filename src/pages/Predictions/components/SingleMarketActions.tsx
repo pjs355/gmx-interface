@@ -33,9 +33,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 
 	const yesPriceCents =
 		yesPrice !== null && yesPrice !== undefined
-			? toCentsString(yesPrice)
-			: "—";
-	const noPriceCents = noPrice !== null ? toCentsString(noPrice) : "—";
+			? `${toCentsString(yesPrice)}¢`
+			: "--";
+	const noPriceCents = noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
 
 	const hexToRgba = (hex?: string, alpha: number = 0.3): string => {
 		if (!hex) return `rgba(0,0,0,${alpha})`;
@@ -206,7 +206,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 					}}
 				>
 					<strong>
-						{yesLabel} {yesPriceCents}¢
+						{yesLabel} {yesPriceCents}
 					</strong>
 				</Button>
 				<Button
@@ -248,7 +248,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 					}}
 				>
 					<strong>
-						{noLabel} {noPriceCents}¢
+						{noLabel} {noPriceCents}
 					</strong>
 				</Button>
 			</div>
@@ -256,14 +256,26 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			<div className="payout-info">
 				<div className="payout-row">
 					<span className="payout-label">
-						$100 →{" "}
-						<span style={{ color: "#22c55e" }}>${yesPayout}</span>
+						{yesPayout > 0 ? (
+							<>
+								$100 →{" "}
+								<span style={{ color: "#22c55e" }}>${yesPayout}</span>
+							</>
+						) : (
+							<span style={{ color: "#888" }}>0 shares available</span>
+						)}
 					</span>
 				</div>
 				<div className="payout-row">
 					<span className="payout-label">
-						$100 →{" "}
-						<span style={{ color: "#22c55e" }}>${noPayout}</span>
+						{noPayout > 0 ? (
+							<>
+								$100 →{" "}
+								<span style={{ color: "#22c55e" }}>${noPayout}</span>
+							</>
+						) : (
+							<span style={{ color: "#888" }}>0 shares available</span>
+						)}
 					</span>
 				</div>
 			</div>

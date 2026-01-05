@@ -44,7 +44,7 @@ export function useButtonState({
         state.selectedPosition,
         state.side
       );
-      if (!hasLiquidity) return { text: "Not enough liquidity", disabled: true, onClick: () => {} };
+      if (!hasLiquidity) return { text: "0 shares available. Place a limit order", disabled: true, onClick: () => {} };
     }
     // For market buy orders, pass the pre-calculated estimated cost (includes 2% trading fee)
     const marketOrderEstimatedCost = state.orderType === "market" && state.side === "buy" ? state.estimatedCost : null;

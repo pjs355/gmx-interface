@@ -542,8 +542,8 @@ export default function FilteredPredictions({
 
 	return (
 		<div className="predictions-page page-layout">
-			{/* Show PromotionBar only for non-authenticated users */}
-			{!authenticated && <PromotionBar />}
+			{/* Commented out for production - users can use Get Started button in header */}
+			{/* {!authenticated && <PromotionBar />} */}
 			<GameLinks
 				selectedGame={selectedGame}
 				onGameSelect={setSelectedGame}

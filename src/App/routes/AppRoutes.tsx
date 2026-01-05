@@ -16,8 +16,10 @@ import { SettingsModal } from "components/SettingsModal/SettingsModal";
 import { NotifyModal } from "components/NotifyModal/NotifyModal";
 import Footer from "components/Footer/Footer";
 import { ProgressBanner } from "components/ProgressBanner";
-import { CountdownBanner } from "components/CountdownBanner";
+// Commented out for production - Nintendo Switch countdown banner disabled
+// import { CountdownBanner } from "components/CountdownBanner";
 import { RPGPanel } from "components/RPGPanel";
+import { TransfersModal } from "components/TransfersModal";
 
 import { MainRoutes } from "./MainRoutes";
 
@@ -52,11 +54,8 @@ export function AppRoutes() {
 		console.log("Redirect to:", to);
 	}, []);
 
-	// Don't show ProgressBanner on Get Test USD page
-	const showProgressBanner = location.pathname !== "/get-test-usdc";
-	
-	// Don't show CountdownBanner on umbrella trading pages
-	const isUmbrellaPage = location.pathname.includes("/predictions/umbrella/");
+	// Don't show FundAccountBanner on Transfers page (they're already there to fund)
+	const showFundBanner = location.pathname !== "/transfers";
 
 	return (
 		<>
@@ -70,8 +69,8 @@ export function AppRoutes() {
 						showRedirectModal={showRedirectModal}
 					/>
 					<RPGPanel />
-					{showProgressBanner && <ProgressBanner />}
-					{!isUmbrellaPage && <CountdownBanner />}
+					{showFundBanner && <ProgressBanner />}
+					{/* CountdownBanner commented out for production */}
 					<MainRoutes />
 					<Footer />
 				</div>
@@ -94,6 +93,7 @@ export function AppRoutes() {
 				setIsSettingsVisible={setIsSettingsVisible}
 			/>
 			<NotifyModal />
+			<TransfersModal />
 		</>
 	);
 }

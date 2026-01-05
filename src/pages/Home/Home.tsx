@@ -276,8 +276,8 @@ export default function Home() {
 
 	return (
 		<div className="home-page page-layout">
-			{/* Show PromotionBar only for non-authenticated users */}
-			{!authenticated && <PromotionBar />}
+			{/* Commented out for production - users can use Get Started button in header */}
+			{/* {!authenticated && <PromotionBar />} */}
 
 			{/* Gaming Section */}
 			<div className="home-section">

@@ -1,6 +1,6 @@
 // import { Trans } from "@lingui/react";
-import { useEffect } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { useEffect, useCallback } from "react";
+import { usePrivy, useFundWallet } from "@privy-io/react-auth";
 // Removed useCallback - not used after cleanup
 
 // Removed BASE and getChainName - not used after cleanup
@@ -47,7 +47,18 @@ export function AppHeaderUser({
     // Simplified for prediction markets - centralized signer context
     const { authenticated: active, account } = useSignerContext();
 	const { login, user, authenticated } = usePrivy();
+	const { fundWallet } = useFundWallet();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
+
+	// Handle deposit - triggers Privy funding modal directly
+	const handleDeposit = useCallback(async () => {
+		if (!account) return;
+		try {
+			await fundWallet(account, { chain: { id: 8453 } }); // Base mainnet
+		} catch (err) {
+			console.error("Deposit error:", err);
+		}
+	}, [account, fundWallet]);
 
 	// Detect if user logged in with email (smart wallet) or external wallet
 	const hasSmartWallet = user?.linkedAccounts?.some(
@@ -206,12 +217,12 @@ export function AppHeaderUser({
 							</div>
 						</HeaderLink>
 					)}
-					{/* USDC Balance Display - Hidden on mobile */}
+					{/* USDC Balance Display - Hidden on mobile - Clicks open Privy deposit */}
 					{!small && (
-						<HeaderLink
+						<div
 							className="header-metric-box mr-4"
-							to="/get-test-usdc"
-							showRedirectModal={showRedirectModal}
+							onClick={handleDeposit}
+							style={{ cursor: "pointer" }}
 						>
 							<div className="flex flex-col items-center">
 								<span
@@ -231,7 +242,7 @@ export function AppHeaderUser({
 									)}
 								</span>
 							</div>
-						</HeaderLink>
+						</div>
 					)}
 
                     {!small && (

@@ -65,7 +65,8 @@ export function About() {
 				All free. All fair. All fun.
 			</p>
 		</div>
-		<div className="About-section">
+		{/* Commented out for production - prizes page disabled */}
+			{/* <div className="About-section">
 			<h2 className="About-section-title">Trading Competition Live Now</h2>
 				<p className="About-section-text">
 					The beta season is on. The best players are already climbing the leaderboard. And the top prize? A brand new Nintendo Switch 2.
@@ -79,15 +80,12 @@ export function About() {
 					Jump in now, make your picks, and prove you're built different.
 					No real money. Just ego, instinct, and a need for loot.
 				</p>
-			</div>
+			</div> */}
 			<div className="About-section">
-				<h2 className="About-section-title">What's Next</h2>
+				<h2 className="About-section-title">Start Trading</h2>
 				<p className="About-section-text">
-					We're ranking up fast.
-					After the competition wraps, we'll open full trading worldwide with real stakes, real wins, and new market types for every major release, esports event, and patch cycle.
-				</p>
-				<p className="About-section-text">
-					Want to be early?
+					We're live and ready for you to start trading predictions on your favorite games.
+					Fund your account and begin making predictions on major releases, esports events, and more.
 				</p>
 				<div className="About-button-container center">
 					<Link to="/predictions">

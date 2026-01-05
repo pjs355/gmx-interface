@@ -21,17 +21,59 @@ import { useTradeExecutionService } from "@/pages/PredictionMarket/PredictionMar
 import { useMarketOrderHandler } from "@/pages/PredictionMarket/PredictionMarketTradeBox/MarketOrderHandler";
 import { useYesNoBalances } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
 import type { TradeExecutionParams } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./TradeBoxTest.scss";
 
 export default function TradeBoxTest() {
 	const navigate = useNavigate();
 	const { umbrellaId } = useParams<{ umbrellaId: string }>();
-	const { authenticated, user } = usePrivy();
+	const { authenticated, user, getAccessToken } = usePrivy();
 	const { account, ready, signer, signerAddress } = useSignerContext(); // Get signer and account from context like production
 	const { wallets: privyWallets, ready: walletsReady } = usePrivyWallets(); // Same as production line 32
 	const userData = useUserData();
 	const balanceContext = useBalances();
 	const predictionData = usePredictionData();
+	const [checkingAdmin, setCheckingAdmin] = useState(true);
+
+	// Restrict access to admins only (same as Admin page)
+	useEffect(() => {
+		let mounted = true;
+		(async () => {
+			try {
+				const token =
+					typeof getAccessToken === "function"
+						? await getAccessToken()
+						: undefined;
+				const resp = await fetch(
+					`${getPredictionApiBaseUrl()}/admin/session`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							...(token
+								? { Authorization: `Bearer ${token}` }
+								: {}),
+						},
+					}
+				);
+				if (!mounted) return;
+				if (resp.ok) {
+					setCheckingAdmin(false);
+					return;
+				}
+				// Not authorized → redirect
+				navigate("/predictions", { replace: true });
+			} catch (err) {
+				console.error("Admin check error:", err);
+				navigate("/predictions", { replace: true });
+			} finally {
+				if (mounted) setCheckingAdmin(false);
+			}
+		})();
+		return () => {
+			mounted = false;
+		};
+	}, [getAccessToken, navigate]);
 
 	// Get the trade execution service - signer is stable after login!
 	const tradeExecutionService = useTradeExecutionService();
@@ -517,6 +559,15 @@ export default function TradeBoxTest() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [authenticated, ready, account]);
+
+	// Show loading while checking admin session
+	if (checkingAdmin) {
+		return (
+			<div style={{ padding: 24, color: "white" }}>
+				Checking admin session…
+			</div>
+		);
+	}
 
 	// Simple validation like other pages do
 	if (!umbrellaId) {

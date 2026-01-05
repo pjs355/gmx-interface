@@ -102,9 +102,9 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 
 				const yesCents =
 					yesPrice !== null && yesPrice !== undefined
-						? toCentsString(yesPrice)
-						: "—";
-				const noCents = noPrice !== null ? toCentsString(noPrice) : "—";
+						? `${toCentsString(yesPrice)}¢`
+						: "--";
+				const noCents = noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
 
 				return (
 					<div
@@ -151,7 +151,7 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 									e.currentTarget.style.boxShadow = "none";
 								}}
 							>
-								<strong>Yes {yesCents}¢</strong>
+								<strong>Yes {yesCents}</strong>
 							</Button>
 							<Button
 								variant="secondary"
@@ -184,7 +184,7 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 									e.currentTarget.style.boxShadow = "none";
 								}}
 							>
-								<strong>No {noCents}¢</strong>
+								<strong>No {noCents}</strong>
 							</Button>
 						</div>
 					</div>

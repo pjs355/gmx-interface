@@ -31,6 +31,7 @@ import { UserDataProvider } from "context/UserDataContext";
 import { BalanceProvider } from "context/BalanceContext";
 import { PortfolioProvider } from "context/PortfolioContext";
 import { RPGProvider } from "context/RPGContext";
+import { TransfersModalProvider } from "context/TransfersModalContext";
 
 import App from "./app/App";
 import "./styles/globals.css";
@@ -66,7 +67,9 @@ createRoot(document.getElementById("root")!).render(
 								<BalanceProvider>
 									<PortfolioProvider>
 										<RPGProvider>
-										<App />
+											<TransfersModalProvider>
+												<App />
+											</TransfersModalProvider>
 										</RPGProvider>
 									</PortfolioProvider>
 								</BalanceProvider>
