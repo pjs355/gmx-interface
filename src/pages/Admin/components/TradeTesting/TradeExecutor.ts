@@ -997,11 +997,10 @@ export class TradeExecutor {
 			console.log(`  - response.fill?.fee: ${response.fill?.fee}`);
 			console.log(`  - response.txHash: ${response.txHash || response.transactionHash || response.hash}`);
 			
-			// Fee contract addresses for reference:
-			// BUY fees: FeeWrapper at 0xf4cb13220544e1f151bCb5367Fb0A87e185f78Df
-			// SELL fees: FeeModule at 0x06d9BF59Bf94Ea43385C7CCAa44F2462649A3983
+			// Fee contract addresses from centralized config (config/addresses.ts)
+			// BUY fees: FeeWrapper | SELL fees: FeeModule
 			// Note: Actual fees may only be visible on-chain after tx is mined
-			console.log(`[TradeExecutor] Fee Contract: ${trade.side === 'buy' ? 'FeeWrapper (0xf4cb...78Df)' : 'FeeModule (0x06d9...3983)'}`);
+			console.log(`[TradeExecutor] Fee Contract: ${trade.side === 'buy' ? 'FeeWrapper' : 'FeeModule'}`);
 			console.log(`[TradeExecutor] =====================================`);
 
 			// Track limit orders to prevent self-crossing

@@ -3,14 +3,15 @@ import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useCallback, useMemo, useState } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import { CTF_ADDRESS, USDC_ADDRESS } from "@/config/addresses";
 
 // Base mainnet chain id
 const BASE_CHAIN_ID = 8453;
 
-// Contracts on Base
+// Contracts on Base (imported from centralized config)
 const CONTRACTS = {
-	CTF: "0xd51B2c739eE5Fe24Bd7d958C1EaE65572183530f",
-	COLLATERAL: "0x333C89b2857FA0EE8d9Bcb7328C8672A45637C65", // TestUSDC on Base in this environment
+	CTF: CTF_ADDRESS,
+	COLLATERAL: USDC_ADDRESS,
 };
 
 // Minimal ABI for redeem

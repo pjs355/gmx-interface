@@ -2,6 +2,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { OrderbookSnapshot } from "lib/orderbookService";
 import type { TestScenario } from "./TradeBoxTestRunner";
 import { predictionMarketService } from "lib/predictionMarketService";
+import { EXCHANGE_ADDRESS } from "@/config/addresses";
 
 /**
  * Automated trade executor that programmatically executes trades
@@ -103,7 +104,7 @@ export class AutomatedTradeExecutor {
 			name: "Polymarket CTF Exchange",
 			version: "1",
 			chainId: 8453,
-			verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", // EXCHANGE_ADDRESS
+			verifyingContract: EXCHANGE_ADDRESS,
 		};
 
 		const types = {

@@ -4,6 +4,7 @@ import { useSignerContext } from "@/context/SignerContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { useUserData } from "@/context/UserDataContext";
 import { getPredictionWebSocketUrl, getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { EXCHANGE_ADDRESS } from "@/config/addresses";
 import { MarketSelector } from "./MarketSelector";
 import { TradeExecutor, type TradeTestConfig, type TradeResult, type SettlementVerification } from "./TradeExecutor";
 import { TradeResultsLog } from "./TradeResultsLog";
@@ -450,12 +451,12 @@ export default function TradeTesting() {
 				};
 
 				// Sign the order
-				const domain = {
-					name: "Polymarket CTF Exchange",
-					version: "1",
-					chainId: 8453,
-					verifyingContract: "0xe29808927bF592e5B3F2068c5D7496C1dfA7dA11",
-				};
+			const domain = {
+				name: "Polymarket CTF Exchange",
+				version: "1",
+				chainId: 8453,
+				verifyingContract: EXCHANGE_ADDRESS,
+			};
 				const types = {
 					Order: [
 						{ name: "salt", type: "uint256" },
@@ -799,12 +800,12 @@ export default function TradeTesting() {
 		const signerAddress = await signer.getAddress();
 		const isSmart = account.toLowerCase() !== signerAddress.toLowerCase();
 
-		const domain = {
-			name: "Polymarket CTF Exchange",
-			version: "1",
-			chainId: 8453,
-			verifyingContract: "0xe29808927bF592e5B3F2068c5D7496C1dfA7dA11",
-		};
+			const domain = {
+				name: "Polymarket CTF Exchange",
+				version: "1",
+				chainId: 8453,
+				verifyingContract: EXCHANGE_ADDRESS,
+			};
 		const types = {
 			Order: [
 				{ name: "salt", type: "uint256" },
