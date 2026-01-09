@@ -115,7 +115,6 @@
 	transition: all 0.2s ease;
 
 	&:disabled {
-		opacity: 0.5;
 		cursor: not-allowed;
 	}
 }
@@ -132,13 +131,19 @@
 }
 
 .transfers-btn-withdraw {
-	background: rgba(30, 30, 35, 1);
+	background: #1e1e23;
 	border: 1px solid rgba(255, 255, 255, 0.15);
 	color: white;
 
 	&:hover:not(:disabled) {
-		background: rgba(40, 40, 48, 1);
+		background: #282830;
 		border-color: rgba(139, 92, 246, 0.5);
+	}
+
+	&:disabled {
+		background: #151518;
+		color: rgba(255, 255, 255, 0.4);
+		border-color: rgba(255, 255, 255, 0.08);
 	}
 }
 

@@ -41,6 +41,7 @@ export default function Details() {
 	});
 	const [isSavingPreferences, setIsSavingPreferences] = useState(false);
 	const [preferencesSaved, setPreferencesSaved] = useState(false);
+	const [emailPrefsExpanded, setEmailPrefsExpanded] = useState(false);
 
 	// Account deletion modal state - COMMENTED OUT FOR NOW
 	// const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -197,14 +198,21 @@ export default function Details() {
 		);
 	}
 
-	const inputValue = isEditingUsername
+	const hasUsername = !!userDetails.username;
+	const isSettingNewUsername = !hasUsername; // User doesn't have a username yet
+	const inputValue = isEditingUsername || isSettingNewUsername
 		? usernameValue
 		: userDetails.username || "";
 	const canSave = !isSaving && usernameValue.trim().length > 0;
 	const saveButtonText = isSaving ? "Saving..." : "Save";
+	
+	// Check if error is about the 7-day cooldown
+	const is7DayError = usernameError?.toLowerCase().includes("7 day") || 
+		usernameError?.toLowerCase().includes("once every") ||
+		usernameError?.toLowerCase().includes("cooldown");
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter" && isEditingUsername) handleSaveUsername();
+		if (e.key === "Enter" && (isEditingUsername || isSettingNewUsername)) handleSaveUsername();
 		if (e.key === "Escape" && isEditingUsername) handleCancelEdit();
 	};
 
@@ -263,7 +271,8 @@ export default function Details() {
 	// const isAcceptEnabled = acceptInput.toLowerCase() === "accept";
 
 	const renderButtons = () => {
-		if (isEditingUsername) {
+		// User is editing an existing username
+		if (isEditingUsername && hasUsername) {
 			return (
 				<>
 					<button
@@ -283,6 +292,19 @@ export default function Details() {
 				</>
 			);
 		}
+		// User doesn't have a username yet - show Save button
+		if (isSettingNewUsername) {
+			return (
+				<button
+					className="Details-button"
+					onClick={handleSaveUsername}
+					disabled={!canSave}
+				>
+					{saveButtonText}
+				</button>
+			);
+		}
+		// User has a username - show Edit button
 		return (
 			<button className="Details-button" onClick={handleEditUsername}>
 				Edit
@@ -312,7 +334,7 @@ export default function Details() {
 								onChange={(e) =>
 									setUsernameValue(e.target.value)
 								}
-								disabled={!isEditingUsername}
+								disabled={!isEditingUsername && !isSettingNewUsername}
 								placeholder="Enter username"
 								onKeyDown={handleKeyDown}
 							/>
@@ -320,24 +342,28 @@ export default function Details() {
 						</div>
 
 						{usernameError && (
-							<div className="Details-error">
+							<div className={`Details-error ${is7DayError ? 'Details-error-cooldown' : ''}`}>
 								<span>⚠️ {usernameError}</span>
+								{is7DayError && (
+									<span className="Details-cooldown-warning">
+										Username can only be changed once every 7 days.
+									</span>
+								)}
 							</div>
 						)}
 
-						<div className="Details-hint">
-							Username will be displayed on leaderboard and
-							comments.
-							<br />
-							Username can only be changed once every 7 days.
-						</div>
+						{!isSettingNewUsername && (
+							<div className="Details-hint">
+								Username will be displayed on leaderboard and comments.
+							</div>
+						)}
 					</div>
 
 					{/* Email Display */}
 					{userEmail && (
 						<div className="Details-info-section">
 							<div className="Details-info-label">Email</div>
-							<div className="Details-info-value">
+							<div className="Details-info-value Details-truncate" title={userEmail}>
 								{userEmail}
 							</div>
 						</div>
@@ -360,7 +386,7 @@ export default function Details() {
 								Smart Wallet Address (Base)
 							</div>
 							<div className="Details-wallet-display">
-								<div className="Details-info-value Details-wallet-address">
+								<div className="Details-info-value Details-wallet-address Details-truncate" title={smartWalletAddress}>
 									{smartWalletAddress}
 								</div>
 								<button
@@ -375,38 +401,40 @@ export default function Details() {
 					)}
 				</div>
 
-				{/* Right Pane - Email Preferences */}
-				<div className="Details-right-pane" style={{ flex: 1 }}>
-					<div className="Details-email-preferences">
-						<div className="Details-section-title">
-							Email Preferences
-						</div>
-						<div className="Details-section-description">
-							Choose which email notifications you'd like to
-							receive.
-						</div>
+			</div>
 
+			{/* RPG Experience Pane - COMMENTED OUT FOR NOW */}
+			{/* <RPGPane /> */}
+
+			{/* Achievements - COMMENTED OUT FOR NOW */}
+			{/* <AchievementPane userAchievements={userDetails?.achievements} /> */}
+
+			{/* Email Preferences - Collapsible */}
+			<div className="Details-email-preferences-collapsible">
+				<button
+					className="Details-email-prefs-header"
+					onClick={() => setEmailPrefsExpanded(!emailPrefsExpanded)}
+				>
+					<span>Email Preferences</span>
+					<span className={`Details-expand-icon ${emailPrefsExpanded ? 'expanded' : ''}`}>
+						▼
+					</span>
+				</button>
+
+				{emailPrefsExpanded && (
+					<div className="Details-email-prefs-content">
 						<div className="Details-preferences-list">
 							<label className="Details-preference-item">
 								<input
 									type="checkbox"
-									checked={
-										emailPreferences.generalNotifications
-									}
-									onChange={() =>
-										handlePreferenceChange(
-											"generalNotifications"
-										)
-									}
+									checked={emailPreferences.generalNotifications}
+									onChange={() => handlePreferenceChange("generalNotifications")}
 									className="Details-checkbox"
 								/>
 								<div className="Details-preference-content">
-									<span className="Details-preference-label">
-										General Notifications
-									</span>
+									<span className="Details-preference-label">General Notifications</span>
 									<span className="Details-preference-description">
-										Important updates about your account and
-										platform changes
+										Important updates about your account and platform changes
 									</span>
 								</div>
 							</label>
@@ -414,23 +442,14 @@ export default function Details() {
 							<label className="Details-preference-item">
 								<input
 									type="checkbox"
-									checked={
-										emailPreferences.tradeConfirmations
-									}
-									onChange={() =>
-										handlePreferenceChange(
-											"tradeConfirmations"
-										)
-									}
+									checked={emailPreferences.tradeConfirmations}
+									onChange={() => handlePreferenceChange("tradeConfirmations")}
 									className="Details-checkbox"
 								/>
 								<div className="Details-preference-content">
-									<span className="Details-preference-label">
-										Trade Confirmations
-									</span>
+									<span className="Details-preference-label">Trade Confirmations</span>
 									<span className="Details-preference-description">
-										Receive confirmation emails when you
-										place or complete trades
+										Receive confirmation emails when you place or complete trades
 									</span>
 								</div>
 							</label>
@@ -438,23 +457,14 @@ export default function Details() {
 							<label className="Details-preference-item">
 								<input
 									type="checkbox"
-									checked={
-										emailPreferences.winningsNotifications
-									}
-									onChange={() =>
-										handlePreferenceChange(
-											"winningsNotifications"
-										)
-									}
+									checked={emailPreferences.winningsNotifications}
+									onChange={() => handlePreferenceChange("winningsNotifications")}
 									className="Details-checkbox"
 								/>
 								<div className="Details-preference-content">
-									<span className="Details-preference-label">
-										Winnings Notifications
-									</span>
+									<span className="Details-preference-label">Winnings Notifications</span>
 									<span className="Details-preference-description">
-										Get notified when your predictions win
-										and earnings are available
+										Get notified when your predictions win and earnings are available
 									</span>
 								</div>
 							</label>
@@ -462,23 +472,14 @@ export default function Details() {
 							<label className="Details-preference-item">
 								<input
 									type="checkbox"
-									checked={
-										emailPreferences.levelUpAnnouncements
-									}
-									onChange={() =>
-										handlePreferenceChange(
-											"levelUpAnnouncements"
-										)
-									}
+									checked={emailPreferences.levelUpAnnouncements}
+									onChange={() => handlePreferenceChange("levelUpAnnouncements")}
 									className="Details-checkbox"
 								/>
 								<div className="Details-preference-content">
-									<span className="Details-preference-label">
-										LevelUp Announcements
-									</span>
+									<span className="Details-preference-label">LevelUp Announcements</span>
 									<span className="Details-preference-description">
-										Stay updated with new features,
-										promotions, and platform news
+										Stay updated with new features, promotions, and platform news
 									</span>
 								</div>
 							</label>
@@ -498,14 +499,8 @@ export default function Details() {
 							</button>
 						</div>
 					</div>
-				</div>
+				)}
 			</div>
-
-			{/* RPG Experience Pane */}
-			<RPGPane />
-
-			{/* Achievements */}
-			<AchievementPane userAchievements={userDetails?.achievements} />
 
 			{/* Account Deletion Section - COMMENTED OUT FOR NOW */}
 			{/* <div className="Details-account-deletion">

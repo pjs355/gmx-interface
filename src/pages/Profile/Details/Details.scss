@@ -3,6 +3,14 @@
 	color: white;
 }
 
+.Details-left-pane {
+	max-width: 360px;
+
+	@media (max-width: 768px) {
+		max-width: 100%;
+	}
+}
+
 .Details-title {
 	margin: 0 0 8px 0;
 	text-decoration: underline;
@@ -60,9 +68,20 @@
 	border: 1px solid #8b5cf6;
 	background: rgba(139, 92, 246, 0.1);
 	color: #8b5cf6;
+	outline: none;
+	transition: all 0.2s ease;
 
 	&:hover:not(:disabled) {
 		background: rgba(139, 92, 246, 0.2);
+	}
+
+	&:focus:not(:disabled) {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.4);
+	}
+
+	&:active:not(:disabled) {
+		background: rgba(139, 92, 246, 0.3);
 	}
 
 	&:disabled {
@@ -78,6 +97,14 @@
 		&:hover:not(:disabled) {
 			background: rgba(255, 255, 255, 0.15);
 		}
+
+		&:focus:not(:disabled) {
+			box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.4);
+		}
+
+		&:active:not(:disabled) {
+			background: rgba(255, 255, 255, 0.2);
+		}
 	}
 }
 
@@ -92,6 +119,18 @@
 		color: #ef4444;
 		font-size: 12px;
 	}
+
+	&.Details-error-cooldown {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+}
+
+.Details-cooldown-warning {
+	color: #ef4444 !important;
+	font-size: 12px !important;
+	font-weight: 500;
 }
 
 .Details-hint {
@@ -120,18 +159,28 @@
 	font-size: 14px;
 	color: rgba(255, 255, 255, 0.9);
 	word-break: break-all;
+
+	&.Details-truncate {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		word-break: normal;
+		max-width: 100%;
+	}
 }
 
 .Details-wallet-display {
 	display: flex;
 	gap: 8px;
 	align-items: center;
+	min-width: 0; // Allow flex children to shrink below content size
 }
 
 .Details-wallet-address {
 	font-family: monospace;
 	font-size: 13px;
 	flex: 1;
+	min-width: 0; // Allow truncation to work in flex container
 }
 
 .Details-copy-button {
@@ -145,14 +194,21 @@
 	white-space: nowrap;
 	flex-shrink: 0;
 	transition: all 0.2s ease;
+	outline: none;
 
 	&:hover {
 		background: rgba(139, 92, 246, 0.2);
 		transform: translateY(-1px);
 	}
 
+	&:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.4);
+	}
+
 	&:active {
 		transform: translateY(0);
+		background: rgba(139, 92, 246, 0.3);
 	}
 }
 
@@ -184,7 +240,54 @@
 	}
 }
 
-/* Email Preferences Section */
+/* Email Preferences Section - Collapsible */
+.Details-email-preferences-collapsible {
+	margin-top: 32px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.02);
+	overflow: hidden;
+	max-width: 360px;
+
+	@media (max-width: 768px) {
+		max-width: 100%;
+	}
+}
+
+.Details-email-prefs-header {
+	width: 100%;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 16px 20px;
+	background: transparent;
+	border: none;
+	color: rgba(255, 255, 255, 0.7);
+	font-size: 15px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.03);
+		color: white;
+	}
+}
+
+.Details-expand-icon {
+	font-size: 12px;
+	transition: transform 0.2s ease;
+
+	&.expanded {
+		transform: rotate(180deg);
+	}
+}
+
+.Details-email-prefs-content {
+	padding: 16px 20px 20px 20px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .Details-email-preferences {
 	margin: 0;
 	padding: 0;

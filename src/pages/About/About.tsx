@@ -16,6 +16,7 @@ export function About() {
 				Predict what happens next across esports, consoles, and your favorite titles. All for bragging rights, glory, and prizes.
 			</p>
 		</div>
+				{/* Video temporarily disabled
 				<div className="About-video-container">
 					<iframe
 						width="560"
@@ -27,64 +28,106 @@ export function About() {
 						allowFullScreen
 					></iframe>
 				</div>
+			*/}
+
+				{/* How It Works Section */}
 			<div className="About-section">
-				<h2 className="About-section-title">Welcome to Level Up</h2>
+					<h2 className="About-section-title">How It Works</h2>
+					
+					<div className="About-step">
+						<div className="About-step-number">1</div>
+						<div className="About-step-content">
+							<h3 className="About-step-title">Pick a Market</h3>
+							<p className="About-section-text">
+								Choose anything you have a take on, from Steam player peaks to award winners.
+							</p>
+						</div>
+					</div>
+
+					<div className="About-step">
+						<div className="About-step-number">2</div>
+						<div className="About-step-content">
+							<h3 className="About-step-title">Buy Shares</h3>
+							<p className="About-section-text">
+								Shares trade between 1 cent and 99 cents. That price is the market implied probability.
+								10 cents means the market is pricing the outcome at 10 percent.
+							</p>
+						</div>
+					</div>
+
+					<div className="About-step">
+						<div className="About-step-number">3</div>
+						<div className="About-step-content">
+							<h3 className="About-step-title">If You're Right, Your Shares Settle to $1</h3>
 				<p className="About-section-text">
-					LevelUp is where gamers flex their instincts.
-					Every trailer, every tournament, and every rumor is your chance to call the shots before anyone else.
-				</p>
+								When the outcome is confirmed, each correct share pays $1.
+							</p>
+							<div className="About-example">
+								<h4 className="About-example-title">Example</h4>
+								<ul className="About-example-list">
+									<li>Buy 10 shares at 10 cents</li>
+									<li>You spend $1</li>
+									<li>If you're right, you receive $10</li>
+								</ul>
+							</div>
+						</div>
+					</div>
+
+					<div className="About-step">
+						<div className="About-step-number">4</div>
+						<div className="About-step-content">
+							<h3 className="About-step-title">Market Resolves</h3>
 			<p className="About-section-text">
-				A place to turn hot takes into leaderboard wins. Whether it's who wins Valorant Champs or what price Steam Machine drops at, your predictions will earn you rank, XP, and bragging rights.
+								Once the real world result is confirmed using the market's listed source, we resolve the market. You can claim your winnings under your portfolio page.
 			</p>
 		</div>
-		<div className="About-section">
-			<h2 className="About-section-title">How It Works</h2>
-			<p className="About-section-text">
-				<strong>Pick a Market</strong><br />
-				Choose anything you've got a take on. From "Will GTA VI cost more than $80?" to "Who wins the next Valorant match?"
-			</p>
-			<p className="About-section-text">
-				<strong>Buy Shares in Your Prediction</strong><br />
-				Every bet (or "share") costs between 1¢ and 99¢.
-				That price = the odds.
-				If something's trading at 10¢, it means the market gives it about a 10% chance.
-			</p>
-			<p className="About-section-text">
-				When you buy, you're locking in that prediction.
-			</p>
-			<p className="About-section-text">
-				<strong>Win $1 Per Correct Share</strong><br />
-				When the event settles, each correct share pays out $1.
-				If you bought 10 shares at 10¢ each, that's $1 spent and if you're right, you win $10.
-			</p>
-			<p className="About-section-text">
-				<strong>We Settle Every Market</strong><br />
-				Once the real world result is confirmed (like official game data, Metacritic scores, or tournament outcomes), we resolve it and update the leaderboard.
-			</p>
-			<p className="About-section-text">
-				All free. All fair. All fun.
-			</p>
-		</div>
-		{/* Commented out for production - prizes page disabled */}
-			{/* <div className="About-section">
-			<h2 className="About-section-title">Trading Competition Live Now</h2>
-				<p className="About-section-text">
-					The beta season is on. The best players are already climbing the leaderboard. And the top prize? A brand new Nintendo Switch 2.
-				</p>
-				<div className="About-button-container center">
-					<Link to="/prizes">
-						<Button variant="primary">See Prizes</Button>
-					</Link>
+					</div>
 				</div>
-				<p className="About-section-text">
-					Jump in now, make your picks, and prove you're built different.
-					No real money. Just ego, instinct, and a need for loot.
-				</p>
-			</div> */}
+
+				{/* Funding Your Account Section */}
+				<div className="About-section">
+					<h2 className="About-section-title">Funding Your Account</h2>
+					<p className="About-section-text">
+						Adding funds is quick and happens right inside LevelUp. Your balance is held as USDC on Base. 
+					</p>
+					
+					<h3 className="About-subsection-title">Deposit Options</h3>
+					<ul className="About-list">
+						<li>Debit card</li>
+						<li>Apple Pay or Google Pay</li>
+						<li>Transfer from Coinbase</li>
+						<li>Send USDC on Base from a crypto wallet or another exchange</li>
+					</ul>
+
+					<div className="About-warning">
+						<h3 className="About-warning-title">⚠️ Sending from a Wallet or Exchange</h3>
+						<p className="About-section-text">
+							Only send USDC on Base to your LevelUp wallet address.  We have NO control over your wallet / funds so if you send a different asset or send USDC on a different network, funds may be lost permanently.
+						</p>
+					</div>
+				</div>
+
+				{/* Withdrawals Section */}
+				<div className="About-section">
+					<h2 className="About-section-title">Withdrawals</h2>
+					<p className="About-section-text">
+						For now, withdrawals are crypto only. You can withdraw USDC on Base to:
+					</p>
+					<ul className="About-list">
+						<li>Coinbase</li>
+						<li>A private crypto wallet that supports Base</li>
+						<li>Another exchange that supports USDC on Base</li>
+					</ul>
+					<p className="About-section-text">
+						We will be adding more withdrawal options soon.
+					</p>
+				</div>
+
+				{/* Start Trading Section */}
 			<div className="About-section">
 				<h2 className="About-section-title">Start Trading</h2>
 				<p className="About-section-text">
-					We're live and ready for you to start trading predictions on your favorite games.
+					LevelUp is live and ready for you to start trading predictions on your favorite games.
 					Fund your account and begin making predictions on major releases, esports events, and more.
 				</p>
 				<div className="About-button-container center">
@@ -93,6 +136,8 @@ export function About() {
 					</Link>
 				</div>
 			</div>
+
+				{/* Contact Section */}
 			<div className="About-section">
 				<h2 className="About-section-title">Got Ideas?</h2>
 				<p className="About-section-text">

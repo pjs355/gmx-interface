@@ -238,7 +238,7 @@ export function AppHeaderLinks({
 							return path === "/predictions" || path === "/predictions/games";
 						}}
 					>
-						Gaming
+						Markets
 					</HeaderLink>
 				</div>
 				{/* Temporarily commented out - esports page disabled */}
@@ -328,27 +328,33 @@ export function AppHeaderLinks({
           </HeaderLink> */}
 				</div>
 				{small && active && account && (
-					<div className="App-header-link-container mobile-address-dropdown">
-						<div className="mobile-address-inline">
-							<div className="address-line">
+					<>
+						<div className="App-header-link-container mobile-address-dropdown">
+							<div className="mobile-user-display">
 								{username
 									? `@${username}`
 									: isSmartWallet && userEmail
 									? userEmail
 									: shortenAddress(account as string, 13)}
 							</div>
-							<button
-								className="inline-item"
-								onClick={() => {
+						</div>
+						<div className="App-header-link-container">
+							<a
+								href="#"
+								onClick={(e) => {
+									e.preventDefault();
 									navigate("/profile");
 									if (clickCloseIcon) clickCloseIcon();
 								}}
 							>
 								Profile
-							</button>
-							<button
-								className="inline-item"
-								onClick={() => {
+							</a>
+						</div>
+						<div className="App-header-link-container">
+							<a
+								href="#"
+								onClick={(e) => {
+									e.preventDefault();
 									(
 										disconnectAccountAndCloseSettings ||
 										(() => {})
@@ -357,9 +363,9 @@ export function AppHeaderLinks({
 								}}
 							>
 								Sign out
-							</button>
+							</a>
 						</div>
-					</div>
+					</>
 				)}
 				{/* <div className="App-header-link-container">
           <HeaderLink qa="pools" to="/pools" showRedirectModal={showRedirectModal}>

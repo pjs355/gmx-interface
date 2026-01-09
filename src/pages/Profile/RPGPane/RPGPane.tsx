@@ -112,7 +112,7 @@ export default function RPGPane({ profilePicture }: RPGPaneProps) {
 				</div>
 			</div>
 
-			{/* Right Pane - Prizes */}
+			{/* Right Pane - Prizes (temporarily hidden)
 			<div className="RPGPane-right">
 				<div className="RPGPane-header">
 					<div className="RPGPane-title">Prizes</div>
@@ -144,6 +144,7 @@ export default function RPGPane({ profilePicture }: RPGPaneProps) {
 					})}
 				</div>
 			</div>
+			*/}
 		</div>
 	);
 }
