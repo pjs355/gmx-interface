@@ -7,20 +7,43 @@
  * Environment modes:
  * - TESTNET: Uses testnet contract addresses + localhost API (for local development)
  * - PRODUCTION: Uses live contract addresses + production API (for deployed app)
+ * 
+ * Priority order for environment detection:
+ * 1. VITE_ENVIRONMENT_MODE env variable (set by yarn dev prompt)
+ * 2. localStorage override (for manual testing in browser)
+ * 3. Auto-detect based on hostname (localhost = testnet, otherwise = production)
  */
 
 export type Environment = "testnet" | "production";
 
 /**
+ * Get the environment mode set at build/dev time via VITE_ENVIRONMENT_MODE
+ */
+function getBuildTimeEnvironment(): Environment | null {
+	const envMode = import.meta.env.VITE_ENVIRONMENT_MODE;
+	if (envMode === "testnet" || envMode === "production") {
+		return envMode;
+	}
+	return null;
+}
+
+/**
  * Determines the current environment.
  * 
  * Logic:
- * 1. Check localStorage override (for manual testing)
- * 2. Check if running on localhost → testnet
- * 3. Otherwise → production
+ * 1. Check VITE_ENVIRONMENT_MODE (set by dev script prompt)
+ * 2. Check localStorage override (for manual testing)
+ * 3. Check if running on localhost → testnet
+ * 4. Otherwise → production
  */
 export function getEnvironment(): Environment {
-	// Check for manual override in localStorage (useful for testing production locally)
+	// Priority 1: Build/dev time environment variable
+	const buildTimeEnv = getBuildTimeEnvironment();
+	if (buildTimeEnv) {
+		return buildTimeEnv;
+	}
+
+	// Priority 2: Manual override in localStorage (useful for testing)
 	if (typeof window !== "undefined") {
 		const override = localStorage.getItem("levelup_environment");
 		if (override === "testnet" || override === "production") {
@@ -28,7 +51,7 @@ export function getEnvironment(): Environment {
 		}
 	}
 
-	// Auto-detect based on hostname
+	// Priority 3: Auto-detect based on hostname
 	if (typeof window !== "undefined") {
 		const hostname = window.location.hostname;
 		if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -81,6 +104,14 @@ export function clearEnvironmentOverride(): void {
  */
 export function getEnvironmentLabel(): string {
 	const env = getEnvironment();
+	
+	// Check if set via dev script
+	const buildTimeEnv = getBuildTimeEnvironment();
+	if (buildTimeEnv) {
+		return `${env.toUpperCase()} (dev mode)`;
+	}
+	
+	// Check if manually overridden via localStorage
 	const isOverridden = typeof window !== "undefined" && 
 		localStorage.getItem("levelup_environment") !== null;
 	

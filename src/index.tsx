@@ -1,3 +1,7 @@
+// MUST be first - suppress console.log in production before any other code runs
+import { initConsoleSuppress } from "./utils/suppressConsole";
+initConsoleSuppress();
+
 import * as Sentry from "@sentry/react";
 Sentry.init({
 	dsn: "https://014a3809164e437ea9fa07f4dc0d3f32@o4508413424893952.ingest.us.sentry.io/4510275102703616",

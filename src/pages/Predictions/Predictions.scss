@@ -9,7 +9,8 @@
 	width: 100%;
 	padding-left: 50px;
 	padding-right: 50px;
-	padding-top: 10px;
+	padding-top: 50px;
+	padding-bottom: 50px;
 
 	// Promotion bar should extend full width (only used when shown on predictions page for non-authenticated users)
 	.promotion-bar {
@@ -890,6 +891,8 @@
 	.predictions-page {
 		padding-left: 16px;
 		padding-right: 16px;
+		padding-top: 16px;
+		padding-bottom: 16px;
 	}
 
 	.game-links-wrapper {
@@ -925,6 +928,8 @@
 	.predictions-page {
 		padding-left: 8px;
 		padding-right: 8px;
+		padding-top: 8px;
+		padding-bottom: 8px;
 	}
 
 	.game-links-wrapper {

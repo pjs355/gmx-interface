@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
+import { useFundWallet } from "@privy-io/react-auth";
 // import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 // import { ethers } from "ethers";
 import type { TradeBoxProps, TradeExecutionParams } from "./types";
@@ -39,9 +40,23 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { approvalState, /* checkApproval, */ approveToken, refresh, refreshViaRpc } = useUserData();
 
   const { wallets: privyWallets } = usePrivyWallets();
+  const { fundWallet } = useFundWallet();
 
   // Use passed orderbook directly (no longer using OrderbookContext)
   const orderbook = propOrderbook ?? null;
+
+  // Handle deposit - opens Privy's fund wallet modal
+  const handleAddFunds = useCallback(async () => {
+    if (!account) return;
+    try {
+      await fundWallet(account, { chain: { id: 8453 } }); // Base mainnet
+      // Refresh balances after deposit modal closes
+      refresh();
+    } catch (err) {
+      console.error("Deposit error:", err);
+      // User likely cancelled - no need to show error
+    }
+  }, [account, fundWallet, refresh]);
 
   // Custom hooks for different order types
   const marketOrderHandler = useMarketOrderHandler(orderbook);
@@ -579,6 +594,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     checkSufficientBalance,
     checkSufficientShares,
     market,
+    handleAddFunds,
   });
 
   return (

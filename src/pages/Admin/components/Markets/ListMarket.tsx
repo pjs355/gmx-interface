@@ -14,15 +14,34 @@ interface ListMarketProps {
 	refreshKey?: number;
 }
 
+interface ResolveComment {
+	submittedBy: string;
+	resolveComment?: string;
+	comment?: string;
+	message?: string;
+	text?: string;
+	submittedAt?: string;
+	createdAt?: string;
+	username?: string;
+}
+
+interface NotificationData {
+	count: number;
+	comments: ResolveComment[];
+}
+
 export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [query, setQuery] = useState<string>("");
 	const [hideSettled, setHideSettled] = useState<boolean>(false);
 	const [tagMap, setTagMap] = useState<Record<string, string>>({});
-	const [notificationCounts, setNotificationCounts] = useState<
-		Record<string, number>
+	const [notificationData, setNotificationData] = useState<
+		Record<string, NotificationData>
 	>({});
+	const [expandedNotifications, setExpandedNotifications] = useState<
+		Set<string>
+	>(new Set());
 	const { getAccessToken } = usePrivy();
 
 	useEffect(() => {
@@ -120,70 +139,35 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 		}
 	}, [zeroQuestionIds]);
 
-	// Fetch notification counts for all umbrellas
+	// Build notification data from umbrella's resolveComments field
 	useEffect(() => {
-		let mounted = true;
-		async function fetchNotificationCounts() {
-			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: null;
-				if (!token) {
-					return;
-				}
+		const data: Record<string, NotificationData> = {};
 
-				const API_BASE = getPredictionApiBaseUrl();
-				const counts: Record<string, number> = {};
+		filtered.forEach((umbrella) => {
+			// Access resolveComments directly from umbrella object
+			const umbrellaData = umbrella as any;
+			const comments = umbrellaData.resolveComments || [];
+			
+			data[umbrella._id] = {
+				count: comments.length,
+				comments: comments,
+			};
+		});
 
-				// Fetch counts for each umbrella
-				await Promise.all(
-					filtered.map(async (umbrella) => {
-						try {
-							const response = await fetch(
-								`${API_BASE}/admin/umbrellas/${umbrella._id}/settlement-notifications/count`,
-								{
-									headers: {
-										Authorization: `Bearer ${token}`,
-									},
-								}
-							);
+		setNotificationData(data);
+	}, [filtered]);
 
-							if (response.ok) {
-								const data = await response.json();
-								if (
-									data.success &&
-									typeof data.count === "number"
-								) {
-									counts[umbrella._id] = data.count;
-								}
-							} else if (response.status === 404) {
-								// Endpoint doesn't exist yet, set count to 0
-								counts[umbrella._id] = 0;
-							}
-						} catch (error) {
-							// Silently fail - endpoint may not exist yet
-							counts[umbrella._id] = 0;
-						}
-					})
-				);
-
-				if (mounted) {
-					setNotificationCounts(counts);
-				}
-			} catch (error) {
-				// Silently fail - endpoint may not exist yet
+	const toggleNotifications = (umbrellaId: string) => {
+		setExpandedNotifications((prev) => {
+			const next = new Set(prev);
+			if (next.has(umbrellaId)) {
+				next.delete(umbrellaId);
+			} else {
+				next.add(umbrellaId);
 			}
-		}
-
-		if (filtered.length > 0) {
-			fetchNotificationCounts();
-		}
-
-		return () => {
-			mounted = false;
-		};
-	}, [filtered, getAccessToken]);
+			return next;
+		});
+	};
 
 	return (
 		<div style={{ color: "white" }}>
@@ -281,14 +265,22 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 					const streamIndicator = hasStream
 						? { symbol: "✓", color: "#22c55e", label: "Connected" }
 						: { symbol: "!", color: "#ef4444", label: "Missing" };
+					const hasNotifications = (notificationData[u._id]?.count || 0) > 0;
 					return (
 						<div
 							key={u._id}
 							style={{
-								border: "1px solid rgba(255,255,255,0.2)",
+								border: hasNotifications
+									? "2px solid #fbbf24"
+									: "1px solid rgba(255,255,255,0.2)",
 								borderRadius: 8,
 								padding: 12,
-								background: "rgba(255,255,255,0.03)",
+								background: hasNotifications
+									? "rgba(251, 191, 36, 0.08)"
+									: "rgba(255,255,255,0.03)",
+								boxShadow: hasNotifications
+									? "0 0 12px rgba(251, 191, 36, 0.3)"
+									: "none",
 							}}
 						>
 							<div
@@ -368,22 +360,55 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 												Questions: 0
 											</div>
 										)}
-										{notificationCounts[u._id] !==
+										{notificationData[u._id] !==
 											undefined && (
 											<div
+												onClick={() =>
+													notificationData[u._id]
+														?.count > 0 &&
+													toggleNotifications(u._id)
+												}
 												style={{
 													fontSize: 12,
 													opacity: 0.8,
 													color:
-														notificationCounts[
-															u._id
-														] > 0
+														notificationData[u._id]
+															?.count > 0
 															? "#fbbf24"
 															: undefined,
+													cursor:
+														notificationData[u._id]
+															?.count > 0
+															? "pointer"
+															: "default",
+													display: "flex",
+													alignItems: "center",
+													gap: 4,
 												}}
 											>
-												Notifications:{" "}
-												{notificationCounts[u._id]}
+												<span>
+													📋 Notifications:{" "}
+													{notificationData[u._id]
+														?.count || 0}
+												</span>
+												{notificationData[u._id]
+													?.count > 0 && (
+													<span
+														style={{
+															fontSize: 10,
+															transition:
+																"transform 0.2s",
+															transform:
+																expandedNotifications.has(
+																	u._id
+																)
+																	? "rotate(180deg)"
+																	: "rotate(0deg)",
+														}}
+													>
+														▼
+													</span>
+												)}
 											</div>
 										)}
 									</div>
@@ -512,6 +537,121 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 										</button>
 									</div>
 								</div>
+								{/* Expanded Notifications Section */}
+								{expandedNotifications.has(u._id) &&
+									notificationData[u._id]?.comments?.length >
+										0 && (
+										<div
+											style={{
+												marginTop: 12,
+												padding: 12,
+												borderRadius: 8,
+												background:
+													"rgba(251, 191, 36, 0.1)",
+												border: "1px solid rgba(251, 191, 36, 0.3)",
+											}}
+										>
+											<div
+												style={{
+													fontWeight: 600,
+													marginBottom: 8,
+													color: "#fbbf24",
+													fontSize: 13,
+												}}
+											>
+												Resolution Requests
+											</div>
+											<div
+												style={{
+													display: "flex",
+													flexDirection: "column",
+													gap: 8,
+												}}
+											>
+												{notificationData[
+													u._id
+												]?.comments.map(
+													(
+														comment: ResolveComment,
+														idx: number
+													) => (
+														<div
+															key={idx}
+															style={{
+																padding: 10,
+																borderRadius: 6,
+																background:
+																	"rgba(0,0,0,0.3)",
+																border: "1px solid rgba(255,255,255,0.1)",
+															}}
+														>
+															<div
+																style={{
+																	fontSize: 11,
+																	opacity: 0.7,
+																	marginBottom: 4,
+																	display:
+																		"flex",
+																	justifyContent:
+																		"space-between",
+																	flexWrap:
+																		"wrap",
+																	gap: 8,
+																}}
+															>
+																<span>
+																	👤{" "}
+																	{comment.username ||
+																		comment.submittedBy ||
+																		"Unknown User"}
+																</span>
+																{(comment.submittedAt || comment.createdAt) && (
+																	<span>
+																		{new Date(
+																			comment.submittedAt || comment.createdAt || ""
+																		).toLocaleString()}
+																	</span>
+																)}
+															</div>
+															<div
+																style={{
+																	fontSize: 13,
+																	color: "#fff",
+																	whiteSpace:
+																		"pre-wrap",
+																	wordBreak:
+																		"break-word",
+																	marginTop: 4,
+																}}
+															>
+																{comment.resolveComment ||
+																	comment.comment ||
+																	comment.message ||
+																	comment.text ||
+																	"(No comment text)"}
+															</div>
+															{/* Debug: Show raw data if no known field matches */}
+															{!comment.resolveComment &&
+																!comment.comment &&
+																!comment.message &&
+																!comment.text && (
+																<div
+																	style={{
+																		fontSize: 10,
+																		opacity: 0.5,
+																		marginTop: 4,
+																		fontFamily: "monospace",
+																	}}
+																>
+																	Raw: {JSON.stringify(comment)}
+																</div>
+															)}
+														</div>
+													)
+												)}
+											</div>
+										</div>
+									)}
 								{children.length === 0 && (
 									<div
 										style={{

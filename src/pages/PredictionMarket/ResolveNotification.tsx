@@ -195,7 +195,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 						"You must have at least one order for this market to submit a notification.";
 				} else if (response.status === 409) {
 					errorMsg =
-						"You have already submitted a notification for this umbrella.";
+						"You have already submitted a notification for this market.";
 				} else {
 					try {
 						const errorJson = JSON.parse(errorText);
@@ -285,8 +285,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 					) : hasAlreadySubmitted || submitted ? (
 						<div className="resolve-notification-success">
 							<p>
-								You have already submitted a resolution request
-								for this market.
+								Thank you for submitting a resolution request.
 							</p>
 						</div>
 					) : (

@@ -144,10 +144,14 @@ export default function HistoryView({
 		return filtered;
 	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
 
-	// Count trades for a market
-	const getTradeCount = (marketId: string): number => {
+	// Count trades for a market and side
+	const getTradeCount = (marketId: string, side?: "Yes" | "No"): number => {
 		return orders.filter(
-			(order) => order.questionId === marketId && order.filled
+			(order) => {
+				if (order.questionId !== marketId || !order.filled) return false;
+				if (side && order.position?.toLowerCase() !== side.toLowerCase()) return false;
+				return true;
+			}
 		).length;
 	};
 
@@ -317,20 +321,25 @@ export default function HistoryView({
 												amount: no,
 											});
 
-										const tradeCount = getTradeCount(qid);
-										const isExpanded = expandedMarkets.has(qid);
+										// Trade counts are now per-side
+										const yesTradeCount = getTradeCount(qid, "Yes");
+										const noTradeCount = getTradeCount(qid, "No");
 
 										return (
 											<React.Fragment key={qid}>
-												{rows.map(({ side, amount }, rowIndex) => {
-													// Get final position for this leg
-													const finalShares =
-														side === "Yes"
-															? finalAmounts.yesShares
-															: finalAmounts.noShares;
-													
-													// Calculate Net Cash Flow for this side
-													const netCashFlow = getNetCashFlow(qid, side);
+											{rows.map(({ side, amount }) => {
+												// Get final position for this leg
+												const finalShares =
+													side === "Yes"
+														? finalAmounts.yesShares
+														: finalAmounts.noShares;
+												
+												// Calculate Net Cash Flow for this side
+												const netCashFlow = getNetCashFlow(qid, side);
+												
+												// Trade count and expansion state per side
+												const tradeCount = side === "Yes" ? yesTradeCount : noTradeCount;
+												const isExpanded = expandedMarkets.has(`${qid}-${side}`);
 
 													// Format shares with commas
 													const finalPositionText =
@@ -493,14 +502,9 @@ export default function HistoryView({
 														}
 													})();
 
-													// Only show expand button on first row for this market
-													const showExpandButton = rowIndex === 0;
-
-													return (
+												return (
+													<React.Fragment key={`${market._id}-${side.toLowerCase()}`}>
 														<div
-															key={`${
-																market._id
-															}-${side.toLowerCase()}`}
 															className="grid items-center px-12 py-12"
 															style={{
 																gridTemplateColumns:
@@ -508,17 +512,17 @@ export default function HistoryView({
 																borderBottom:
 																	"1px solid #1f1f1f",
 																fontSize: 16,
-																cursor: showExpandButton ? "pointer" : "default",
+																cursor: tradeCount > 0 ? "pointer" : "default",
 																transition: "background 0.15s ease",
 															}}
-															onClick={showExpandButton ? () => toggleMarketExpansion(qid) : undefined}
+															onClick={tradeCount > 0 ? () => toggleMarketExpansion(`${qid}-${side}`) : undefined}
 															onMouseEnter={(e) => {
-																if (showExpandButton) {
+																if (tradeCount > 0) {
 																	e.currentTarget.style.background = "#1a1a1a";
 																}
 															}}
 															onMouseLeave={(e) => {
-																if (showExpandButton) {
+																if (tradeCount > 0) {
 																	e.currentTarget.style.background = "transparent";
 																}
 															}}
@@ -610,12 +614,12 @@ export default function HistoryView({
 																	if (row) (row as HTMLElement).style.backgroundColor = "transparent";
 																}}
 															>
-																{showExpandButton && tradeCount > 0 && (
+																{tradeCount > 0 && (
 																	<button
 																		className={`expand-trades-btn ${isExpanded ? "expanded" : ""}`}
 																		onClick={(e) => {
 																			e.stopPropagation();
-																			toggleMarketExpansion(qid);
+																			toggleMarketExpansion(`${qid}-${side}`);
 																		}}
 																		onMouseEnter={(e) => {
 																			e.stopPropagation();
@@ -637,16 +641,18 @@ export default function HistoryView({
 																)}
 															</div>
 														</div>
-													);
-												})}
-												{/* Trade History Expansion */}
-												{isExpanded && (
-													<TradeHistoryList
-														orders={orders}
-														marketId={qid}
-														isExpanded={isExpanded}
-													/>
-												)}
+														{/* Trade History Expansion - per side */}
+														{isExpanded && (
+															<TradeHistoryList
+																orders={orders}
+																marketId={qid}
+																isExpanded={isExpanded}
+																position={side}
+															/>
+														)}
+													</React.Fragment>
+												);
+											})}
 											</React.Fragment>
 										);
 									})}

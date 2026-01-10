@@ -22,6 +22,8 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		text: string;
 		disabled: boolean;
 		onClick: () => void;
+		isSweepingBook?: boolean;
+		availableShares?: number;
 	};
 	approvalState: ApprovalState;
 }

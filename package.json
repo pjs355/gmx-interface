@@ -4,7 +4,9 @@
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"dev": "vite",
+		"dev": "node scripts/dev-prompt.js",
+		"dev:live": "VITE_ENVIRONMENT_MODE=production vite",
+		"dev:test": "VITE_ENVIRONMENT_MODE=testnet vite",
 		"build": "NODE_OPTIONS=--max-old-space-size=8192 vite build",
 		"build:production": "NODE_OPTIONS=--max-old-space-size=8192 vite build --mode sourcemaps && yarn upload-sourcemaps",
 		"upload-sourcemaps": "sentry-cli sourcemaps upload --org prinx --project levelup-interface --release ${RAILWAY_GIT_COMMIT_SHA:-local} ./dist",

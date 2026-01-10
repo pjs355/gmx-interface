@@ -254,7 +254,8 @@ export function AppHeaderLinks({
 						Esports
 					</HeaderLink>
 				</div> */}
-				<div className="App-header-link-container">
+				{/* Commented out for production - leaderboard page disabled */}
+				{/* <div className="App-header-link-container">
 					<HeaderLink
 						qa="leaderboard"
 						to="/leaderboard"
@@ -266,7 +267,7 @@ export function AppHeaderLinks({
 					>
 						Leaderboard
 					</HeaderLink>
-				</div>
+				</div> */}
 				{active && (
 					<div className="App-header-link-container">
 						<HeaderLink

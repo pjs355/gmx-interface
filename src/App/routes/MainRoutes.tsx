@@ -8,7 +8,8 @@ import Home from "pages/Home/Home";
 import Predictions from "pages/Predictions/Predictions";
 import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";
 import PredictionMarket from "@/pages/PredictionMarket/PredictionMarket";
-import Leaderboard from "@/pages/Leaderboard/Leaderboard";
+// Commented out for production - leaderboard page disabled
+// import Leaderboard from "@/pages/Leaderboard/Leaderboard";
 // Removed Developers import - not used in routes (using Profile instead)
 import Profile from "pages/Profile/Profile";
 import Admin from "pages/Admin/Admin";
@@ -49,7 +50,8 @@ export function MainRoutes() {
 				element={<PredictionMarket />}
 			/>
 
-			<Route path="/leaderboard" element={<Leaderboard />} />
+			{/* Commented out for production - leaderboard page disabled */}
+			{/* <Route path="/leaderboard" element={<Leaderboard />} /> */}
 			{/* Commented out for production - developers page disabled */}
 			{/* <Route path="/developers" element={<Profile />} /> */}
 			<Route path="/profile" element={<Profile />} />

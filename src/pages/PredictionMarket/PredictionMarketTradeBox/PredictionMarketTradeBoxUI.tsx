@@ -35,6 +35,8 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
     text: string;
     disabled: boolean;
     onClick: () => void;
+    isSweepingBook?: boolean;
+    availableShares?: number;
   };
   approvalState: ApprovalState;
 }
@@ -449,6 +451,17 @@ export default function PredictionMarketTradeBoxUI({
           />
         </div>
         
+        {/* Warning when sweeping the book (trying to buy more than available) */}
+        {buttonState.isSweepingBook && orderType === 'market' && selectedPosition && (
+          <div className="sweep-warning" style={{ 
+            fontSize: '12px', 
+            color: '#f59e0b', 
+            marginTop: '6px',
+            fontWeight: 500
+          }}>
+            Only {buttonState.availableShares} {selectedPosition === 'yes' ? 'Yes' : 'No'} shares are available
+          </div>
+        )}
 
       </div>
       

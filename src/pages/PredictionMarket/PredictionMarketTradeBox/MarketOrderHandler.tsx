@@ -150,6 +150,55 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
     return (usdAmount - remainingUsd) / contracts;
   }, []);
 
+  // Get available liquidity info for a given position and side
+  const getAvailableLiquidity = useCallback((position: 'yes' | 'no', side: 'buy' | 'sell'): { 
+    maxSharesAvailable: number; 
+    maxUsdValue: number; 
+    hasAnyLiquidity: boolean;
+  } => {
+    if (!orderbook) {
+      return { maxSharesAvailable: 0, maxUsdValue: 0, hasAnyLiquidity: false };
+    }
+    
+    // For SELL orders, liquidity comes from bids (people willing to buy)
+    // For BUY orders, liquidity comes from asks (people willing to sell)
+    const relevantOrders = side === 'buy' 
+      ? (position === 'yes' ? orderbook.asks : orderbook.bids)
+      : (position === 'yes' ? orderbook.bids : orderbook.asks);
+    
+    if (!relevantOrders || !Array.isArray(relevantOrders)) {
+      return { maxSharesAvailable: 0, maxUsdValue: 0, hasAnyLiquidity: false };
+    }
+    
+    let maxSharesAvailable = 0;
+    let maxUsdValue = 0;
+    
+    for (const order of relevantOrders) {
+      const orderPrice = order.price;
+      const costPerContract = position === 'no' ? (1 - orderPrice) : orderPrice;
+      
+      // Handle nested orders structure - sum up all available size at this price level
+      let totalAvailableSize = 0;
+      if (order.orders && Array.isArray(order.orders)) {
+        totalAvailableSize = order.orders.reduce((sum, nestedOrder) => {
+          const orderSize = nestedOrder.size || nestedOrder.makerQty || nestedOrder.origSize || 0;
+          return sum + orderSize;
+        }, 0);
+      } else {
+        totalAvailableSize = order.size || 0;
+      }
+      
+      maxSharesAvailable += Math.floor(totalAvailableSize);
+      maxUsdValue += totalAvailableSize * costPerContract;
+    }
+    
+    return { 
+      maxSharesAvailable, 
+      maxUsdValue, 
+      hasAnyLiquidity: maxSharesAvailable > 0 
+    };
+  }, [orderbook]);
+
   // Check if there's sufficient liquidity by calculating max possible buyout
   const hasSufficientLiquidity = useCallback((usdAmount: number, position: 'yes' | 'no', side: 'buy' | 'sell'): boolean => {
     if (!orderbook || !usdAmount || usdAmount <= 0) return false;
@@ -198,6 +247,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
   return {
     calculateContractsForMarketOrder,
     getEffectivePrice,
-    hasSufficientLiquidity
+    hasSufficientLiquidity,
+    getAvailableLiquidity
   };
 }

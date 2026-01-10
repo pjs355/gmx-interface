@@ -621,124 +621,99 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			const useExternalWallet =
 				Boolean(externalWallet) && !useSmartWallet;
 
-			// Approve USDC
+			// ABIs for approval calls
 			const usdcAbi = [
 				"function approve(address spender, uint256 amount) returns (bool)",
 			];
-
-			if (useSmartWallet) {
-				const smartWalletClient = await getClientForChain({ id: 8453 });
-				if (!smartWalletClient)
-					throw new Error("No smart wallet client available");
-
-				const usdcInterface = new ethers.Interface(usdcAbi);
-				const approvalData = usdcInterface.encodeFunctionData(
-					"approve",
-					[EXCHANGE_ADDRESS, ethers.MaxUint256]
-				);
-
-				await smartWalletClient.sendTransaction({
-					to: USDC_ADDRESS as `0x${string}`,
-					data: approvalData as `0x${string}`,
-					value: 0n,
-				});
-			} else if (useExternalWallet && externalWallet) {
-				const eip1193 = await externalWallet.getEthereumProvider();
-				const provider = new ethers.BrowserProvider(eip1193 as any);
-				const signer = await provider.getSigner();
-
-				const usdcContract = new ethers.Contract(
-					USDC_ADDRESS,
-					usdcAbi,
-					signer
-				);
-				const tx = await usdcContract.approve(
-					EXCHANGE_ADDRESS,
-					ethers.MaxUint256
-				);
-				await tx.wait();
-			} else {
-				throw new Error("No compatible wallet found");
-			}
-
-			// Brief delay between transactions
-			await new Promise((r) => setTimeout(r, 1500));
-
-			// Approve CTF (ERC1155) operator
 			const ctfAbi = [
 				"function setApprovalForAll(address operator, bool approved)",
 			];
 
 			if (useSmartWallet) {
-				const smartWalletClient = await getClientForChain({ id: 8453 });
-				if (!smartWalletClient)
-					throw new Error("No smart wallet client available");
-
-				const ctfInterface = new ethers.Interface(ctfAbi);
-				const ctfData = ctfInterface.encodeFunctionData(
-					"setApprovalForAll",
-					[EXCHANGE_ADDRESS, true]
-				);
-
-				await smartWalletClient.sendTransaction({
-					to: CTF_ADDRESS as `0x${string}`,
-					data: ctfData as `0x${string}`,
-					value: 0n,
-				});
-			} else if (useExternalWallet && externalWallet) {
-				const eip1193 = await externalWallet.getEthereumProvider();
-				const provider = new ethers.BrowserProvider(eip1193 as any);
-				const signer = await provider.getSigner();
-
-				const ctfContract = new ethers.Contract(
-					CTF_ADDRESS,
-					ctfAbi,
-					signer
-				);
-				const tx = await ctfContract.setApprovalForAll(
-					EXCHANGE_ADDRESS,
-					true
-				);
-				await tx.wait();
-			} else {
-				throw new Error("No compatible wallet found");
-			}
-
-			// Brief delay between transactions
-			await new Promise((r) => setTimeout(r, 1500));
-
-			// Approve USDC for fee wrapper (to collect trading fees)
-			if (useSmartWallet) {
+				// BATCHED APPROVAL: Single signature for all 3 approvals
 				const smartWalletClient = await getClientForChain({ id: 8453 });
 				if (!smartWalletClient)
 					throw new Error("No smart wallet client available");
 
 				const usdcInterface = new ethers.Interface(usdcAbi);
-				const feeApprovalData = usdcInterface.encodeFunctionData(
+				const ctfInterface = new ethers.Interface(ctfAbi);
+
+				// Encode all 3 approval calls
+				const usdcExchangeApproval = usdcInterface.encodeFunctionData(
+					"approve",
+					[EXCHANGE_ADDRESS, ethers.MaxUint256]
+				);
+				const ctfApproval = ctfInterface.encodeFunctionData(
+					"setApprovalForAll",
+					[EXCHANGE_ADDRESS, true]
+				);
+				const usdcFeeWrapperApproval = usdcInterface.encodeFunctionData(
 					"approve",
 					[FEE_WRAPPER_ADDRESS, ethers.MaxUint256]
 				);
 
+				// Send all 3 approvals as a batch - user only signs once!
+				console.log("🔐 Sending batched approval transaction (3 approvals in 1 signature)...");
 				await smartWalletClient.sendTransaction({
-					to: USDC_ADDRESS as `0x${string}`,
-					data: feeApprovalData as `0x${string}`,
-					value: 0n,
+					calls: [
+						{
+							to: USDC_ADDRESS as `0x${string}`,
+							data: usdcExchangeApproval as `0x${string}`,
+							value: 0n,
+						},
+						{
+							to: CTF_ADDRESS as `0x${string}`,
+							data: ctfApproval as `0x${string}`,
+							value: 0n,
+						},
+						{
+							to: USDC_ADDRESS as `0x${string}`,
+							data: usdcFeeWrapperApproval as `0x${string}`,
+							value: 0n,
+						},
+					],
 				});
+				console.log("✅ Batched approval complete!");
+
 			} else if (useExternalWallet && externalWallet) {
+				// External wallets (MetaMask, etc.) don't support batching
+				// Execute sequentially without delays for faster UX
 				const eip1193 = await externalWallet.getEthereumProvider();
 				const provider = new ethers.BrowserProvider(eip1193 as any);
 				const signer = await provider.getSigner();
 
+				console.log("🔐 Approving USDC for Exchange...");
 				const usdcContract = new ethers.Contract(
 					USDC_ADDRESS,
 					usdcAbi,
 					signer
 				);
-				const tx = await usdcContract.approve(
+				const tx1 = await usdcContract.approve(
+					EXCHANGE_ADDRESS,
+					ethers.MaxUint256
+				);
+				await tx1.wait();
+
+				console.log("🔐 Approving CTF for Exchange...");
+				const ctfContract = new ethers.Contract(
+					CTF_ADDRESS,
+					ctfAbi,
+					signer
+				);
+				const tx2 = await ctfContract.setApprovalForAll(
+					EXCHANGE_ADDRESS,
+					true
+				);
+				await tx2.wait();
+
+				console.log("🔐 Approving USDC for Fee Wrapper...");
+				const tx3 = await usdcContract.approve(
 					FEE_WRAPPER_ADDRESS,
 					ethers.MaxUint256
 				);
-				await tx.wait();
+				await tx3.wait();
+				console.log("✅ All approvals complete!");
+
 			} else {
 				throw new Error("No compatible wallet found");
 			}

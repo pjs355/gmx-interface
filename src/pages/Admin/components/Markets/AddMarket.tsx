@@ -60,7 +60,7 @@ export default function AddMarket({
 
 	const [form, setForm] = useState<AddMarketForm>({
 		oracle: "",
-		seedAmount: "50",
+		seedAmount: "1",
 		selectedUmbrellaId: "",
 		umbrellaDisplayName: initialUmbrellaDisplayName,
 		umbrellaRule: "",
@@ -364,7 +364,7 @@ export default function AddMarket({
 					<input
 						value={form.seedAmount}
 						onChange={(e) => update("seedAmount", e.target.value)}
-						placeholder="50"
+						placeholder="1"
 						style={{
 							padding: 8,
 							color: "cyan",

@@ -92,10 +92,14 @@ export default function HistoryCardView({
 		});
 	};
 
-	// Count trades for a market
-	const getTradeCount = (marketId: string): number => {
+	// Count trades for a market and side
+	const getTradeCount = (marketId: string, side?: "Yes" | "No"): number => {
 		return orders.filter(
-			(order) => order.questionId === marketId && order.filled
+			(order) => {
+				if (order.questionId !== marketId || !order.filled) return false;
+				if (side && order.position?.toLowerCase() !== side.toLowerCase()) return false;
+				return true;
+			}
 		).length;
 	};
 
@@ -231,14 +235,15 @@ export default function HistoryCardView({
 							if (noNum > 0 || userNoOrders.length > 0)
 								rows.push({ side: "No", amount: no });
 
-							const tradeCount = getTradeCount(qid);
-							const isTradeHistoryExpanded = expandedTradeHistory.has(qid);
-
 							return (
 								<React.Fragment key={qid}>
-									{rows.map(({ side, amount }, rowIndex) => {
+									{rows.map(({ side, amount }) => {
 										const cardId = `${umbrella._id}-${market._id}-${side}`;
 										const isExpanded = expandedCards.has(cardId);
+										
+										// Trade count and expansion state per side
+										const tradeCount = getTradeCount(qid, side);
+										const isTradeHistoryExpanded = expandedTradeHistory.has(`${qid}-${side}`);
 
 										const finalShares =
 											side === "Yes"
@@ -389,9 +394,6 @@ export default function HistoryCardView({
 													: "#ef4444";
 											}
 										})();
-
-										// Only show trade history button on first row for this market
-										const showTradeHistoryButton = rowIndex === 0;
 
 										return (
 											<div
@@ -654,11 +656,11 @@ export default function HistoryCardView({
 															</div>
 
 															{/* View Trades Link */}
-															{showTradeHistoryButton && tradeCount > 0 && (
+															{tradeCount > 0 && (
 																<div
 																	onClick={(e) => {
 																		e.stopPropagation();
-																		toggleTradeHistory(qid);
+																		toggleTradeHistory(`${qid}-${side}`);
 																	}}
 																	style={{
 																		marginTop: 12,
@@ -690,14 +692,15 @@ export default function HistoryCardView({
 													</div>
 												)}
 
-												{/* Trade History (shown when trade history is expanded) */}
-												{showTradeHistoryButton && isTradeHistoryExpanded && (
-													<TradeHistoryListMobile
-														orders={orders}
-														marketId={qid}
-														isExpanded={isTradeHistoryExpanded}
-													/>
-												)}
+											{/* Trade History (shown when trade history is expanded) - per side */}
+											{isTradeHistoryExpanded && (
+												<TradeHistoryListMobile
+													orders={orders}
+													marketId={qid}
+													isExpanded={isTradeHistoryExpanded}
+													position={side}
+												/>
+											)}
 											</div>
 										);
 									})}

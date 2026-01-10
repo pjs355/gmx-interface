@@ -55,7 +55,8 @@ export function AppRoutes() {
 	}, []);
 
 	// Don't show FundAccountBanner on Transfers page (they're already there to fund)
-	const showFundBanner = location.pathname !== "/transfers";
+	// Also hide on Admin page (admins don't need to see it)
+	const showFundBanner = location.pathname !== "/transfers" && location.pathname !== "/admin";
 
 	return (
 		<>
