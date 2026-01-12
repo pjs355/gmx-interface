@@ -47,7 +47,11 @@ interface UmbrellaApiResponse {
 }
 
 class UmbrellaDataService {
-	private readonly API_BASE_URL = getPredictionApiBaseUrl();
+	// NOTE: API_BASE_URL is now fetched dynamically via getter to prevent
+	// stale URL caching issues that caused production bugs
+	private get API_BASE_URL(): string {
+		return getPredictionApiBaseUrl();
+	}
 	private umbrellasCache: Umbrella[] | null = null;
 	// Separate caches for active-only and all (including resolved)
 	private questionsCacheActive = new Map<string, PredictionMarket[]>();

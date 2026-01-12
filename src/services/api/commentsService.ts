@@ -30,10 +30,10 @@ export type DeleteCommentInput = {
 };
 
 class CommentsService {
-	private readonly baseUrl: string;
-
-	constructor() {
-		this.baseUrl = getPredictionApiBaseUrl();
+	// NOTE: baseUrl is now fetched dynamically via getter to prevent
+	// stale URL caching issues that caused production bugs
+	private get baseUrl(): string {
+		return getPredictionApiBaseUrl();
 	}
 
 	async list(umbrellaId: string): Promise<UmbrellaComment[]> {

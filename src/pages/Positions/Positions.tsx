@@ -58,7 +58,6 @@ export default function Positions() {
 		usdcLoading,
 		loading: userDataLoading,
 		refresh: refreshUserData,
-		usingRpcFallback,
 	} = useUserData();
 	const {
 		umbrellas,
@@ -466,23 +465,6 @@ export default function Positions() {
 						{realAccount && <>Your account: {realAccount.slice(0, 6)}...{realAccount.slice(-4)} | </>}
 						Run <code style={{ background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '3px' }}>clearSpoof()</code> in console to exit
 					</div>
-				</div>
-			)}
-			{/* RPC Fallback Banner - Shown when subgraph is rate limited */}
-			{usingRpcFallback && (
-				<div style={{
-					background: 'linear-gradient(90deg, #f59e0b, #d97706)',
-					color: 'white',
-					padding: '10px 16px',
-					borderRadius: '8px',
-					marginBottom: '12px',
-					fontSize: '13px',
-					display: 'flex',
-					alignItems: 'center',
-					gap: '8px',
-				}}>
-					<span>⚡</span>
-					<span>Using direct RPC (subgraph was rate limited). Data may load slower.</span>
 				</div>
 			)}
 			{/* Balance Checker - Only visible in debug mode */}

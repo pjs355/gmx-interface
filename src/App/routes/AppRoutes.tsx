@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { useLocation } from "react-router-dom";
 import { ToastContainer, cssTransition } from "react-toastify";
 // Removed Hash import - not used
 
@@ -15,7 +14,8 @@ import { Header } from "components/Header/Header";
 import { SettingsModal } from "components/SettingsModal/SettingsModal";
 import { NotifyModal } from "components/NotifyModal/NotifyModal";
 import Footer from "components/Footer/Footer";
-import { ProgressBanner } from "components/ProgressBanner";
+// ProgressBanner removed - welcome/fund banner no longer needed
+// import { ProgressBanner } from "components/ProgressBanner";
 // Commented out for production - Nintendo Switch countdown banner disabled
 // import { CountdownBanner } from "components/CountdownBanner";
 import { RPGPanel } from "components/RPGPanel";
@@ -32,10 +32,6 @@ const Zoom = cssTransition({
 });
 
 export function AppRoutes() {
-	const location = useLocation();
-
-	// Removed referral code logic - not needed for prediction markets
-
 	const [isSettingsVisible, setIsSettingsVisible] = useState(false);
 
 	const openSettings = useCallback(() => {
@@ -54,10 +50,6 @@ export function AppRoutes() {
 		console.log("Redirect to:", to);
 	}, []);
 
-	// Don't show FundAccountBanner on Transfers page (they're already there to fund)
-	// Also hide on Admin page (admins don't need to see it)
-	const showFundBanner = location.pathname !== "/transfers" && location.pathname !== "/admin";
-
 	return (
 		<>
 			<div className="App">
@@ -70,7 +62,7 @@ export function AppRoutes() {
 						showRedirectModal={showRedirectModal}
 					/>
 					<RPGPanel />
-					{showFundBanner && <ProgressBanner />}
+					{/* ProgressBanner removed - welcome/fund banner no longer needed */}
 					{/* CountdownBanner commented out for production */}
 					<MainRoutes />
 					<Footer />

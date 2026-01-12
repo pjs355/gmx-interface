@@ -258,8 +258,6 @@ export default function HistoryView({
 									</div>
 
 									{markets.map(({ market, yes, no }) => {
-										const yesNum = Number(yes);
-										const noNum = Number(no);
 										const qid =
 											market._id ||
 											market.questionId ||
@@ -281,49 +279,25 @@ export default function HistoryView({
 												""
 										).toLowerCase();
 
-										// Determine which sides the user traded on (check orders, not just current shares)
-										const userYesOrders = qid
-											? orders.filter(
-													(order) =>
-														order.questionId ===
-															qid &&
-														order.position?.toLowerCase() === "yes"
-											  )
-											: [];
-										const userNoOrders = qid
-											? orders.filter(
-													(order) =>
-														order.questionId ===
-															qid &&
-														order.position?.toLowerCase() === "no"
-											  )
-											: [];
+										// Trade counts per-side (only counts FILLED trades)
+										const yesTradeCount = getTradeCount(qid, "Yes");
+										const noTradeCount = getTradeCount(qid, "No");
 
+										// Only show rows for sides where user has FILLED trades
 										const rows: {
 											side: "Yes" | "No";
 											amount: string;
 										}[] = [];
-										// Show a row if user has current shares OR has traded on that side
-										if (
-											yesNum > 0 ||
-											userYesOrders.length > 0
-										)
+										if (yesTradeCount > 0)
 											rows.push({
 												side: "Yes",
 												amount: yes,
 											});
-										if (
-											noNum > 0 ||
-											userNoOrders.length > 0
-										)
+										if (noTradeCount > 0)
 											rows.push({
 												side: "No",
 												amount: no,
 											});
-
-										// Trade counts are now per-side
-										const yesTradeCount = getTradeCount(qid, "Yes");
-										const noTradeCount = getTradeCount(qid, "No");
 
 										return (
 											<React.Fragment key={qid}>

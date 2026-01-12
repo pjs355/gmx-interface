@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { ethers, Contract, JsonRpcProvider, formatUnits } from "ethers";
 import { DEBUG_ACCOUNT_OVERRIDE_KEY } from "config/localStorage";
-import { CTF_ADDRESS, USDC_ADDRESS } from "config/addresses";
+import { getCTFAddress, getUSDCAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { subgraphService, fromMicroUnits } from "@/services/subgraph/subgraphService";
 
@@ -264,7 +264,7 @@ async function fetchTokenBalanceRpc(
   tokenId: string
 ): Promise<string> {
   const ctfContract = new Contract(
-    CTF_ADDRESS,
+    getCTFAddress(),
     ["function balanceOf(address account, uint256 id) view returns (uint256)"],
     provider
   );
@@ -287,7 +287,7 @@ async function fetchUsdcBalanceRpc(
   walletAddress: string
 ): Promise<string> {
   const usdcContract = new Contract(
-    USDC_ADDRESS,
+    getUSDCAddress(),
     [
       "function balanceOf(address account) view returns (uint256)",
       "function decimals() view returns (uint8)"

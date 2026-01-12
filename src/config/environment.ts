@@ -30,11 +30,13 @@ function getBuildTimeEnvironment(): Environment | null {
 /**
  * Determines the current environment.
  * 
- * Logic:
+ * Logic (PRODUCTION SAFE - no localStorage override):
  * 1. Check VITE_ENVIRONMENT_MODE (set by dev script prompt)
- * 2. Check localStorage override (for manual testing)
- * 3. Check if running on localhost → testnet
- * 4. Otherwise → production
+ * 2. Check if running on localhost → testnet
+ * 3. Otherwise → production (ALWAYS for deployed environments)
+ * 
+ * NOTE: localStorage override was REMOVED to prevent accidental
+ * environment switching in production which caused critical bugs.
  */
 export function getEnvironment(): Environment {
 	// Priority 1: Build/dev time environment variable
@@ -43,15 +45,8 @@ export function getEnvironment(): Environment {
 		return buildTimeEnv;
 	}
 
-	// Priority 2: Manual override in localStorage (useful for testing)
-	if (typeof window !== "undefined") {
-		const override = localStorage.getItem("levelup_environment");
-		if (override === "testnet" || override === "production") {
-			return override;
-		}
-	}
-
-	// Priority 3: Auto-detect based on hostname
+	// Priority 2: Auto-detect based on hostname
+	// Only localhost gets testnet - deployed sites ALWAYS get production
 	if (typeof window !== "undefined") {
 		const hostname = window.location.hostname;
 		if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -59,7 +54,7 @@ export function getEnvironment(): Environment {
 		}
 	}
 
-	// Default to production for deployed environments
+	// Default to production for deployed environments - NO EXCEPTIONS
 	return "production";
 }
 
@@ -78,25 +73,27 @@ export function isProduction(): boolean {
 }
 
 /**
- * Manually set the environment (persists in localStorage)
- * Useful for testing production config locally or vice versa
+ * Manually set the environment - DISABLED IN PRODUCTION
+ * This function is only useful for local development.
+ * On production, environment changes are NOT allowed for security.
+ * @deprecated Use VITE_ENVIRONMENT_MODE for environment switching
  */
-export function setEnvironment(env: Environment): void {
-	if (typeof window !== "undefined") {
-		localStorage.setItem("levelup_environment", env);
-		// Reload to apply changes across all modules
-		window.location.reload();
-	}
+export function setEnvironment(_env: Environment): void {
+	// DISABLED - environment switching caused critical production bugs
+	// Environment is now determined solely by hostname and build-time config
+	console.warn("setEnvironment is disabled. Environment is determined by hostname.");
 }
 
 /**
- * Clear the manual environment override (revert to auto-detection)
+ * Clear the manual environment override - DISABLED IN PRODUCTION
+ * @deprecated No longer needed since localStorage override is disabled
  */
 export function clearEnvironmentOverride(): void {
+	// DISABLED - clean up any leftover localStorage just in case
 	if (typeof window !== "undefined") {
 		localStorage.removeItem("levelup_environment");
-		window.location.reload();
 	}
+	console.warn("clearEnvironmentOverride is disabled. Environment is determined by hostname.");
 }
 
 /**
@@ -111,13 +108,6 @@ export function getEnvironmentLabel(): string {
 		return `${env.toUpperCase()} (dev mode)`;
 	}
 	
-	// Check if manually overridden via localStorage
-	const isOverridden = typeof window !== "undefined" && 
-		localStorage.getItem("levelup_environment") !== null;
-	
-	if (isOverridden) {
-		return `${env.toUpperCase()} (manual override)`;
-	}
 	return env.toUpperCase();
 }
 

@@ -35,18 +35,42 @@ const PRODUCTION = {
 // =============================================================================
 // ENVIRONMENT-AWARE EXPORTS
 // These automatically return the correct address based on current environment
+// NOTE: These are now FUNCTIONS to prevent stale address caching that caused
+// critical production bugs (testnet addresses leaking to production)
 // =============================================================================
 
 function getAddresses() {
 	return isTestnet() ? TESTNET : PRODUCTION;
 }
 
-// Dynamic getters that respect current environment
-export const CTF_ADDRESS = (() => getAddresses().CTF_ADDRESS)();
-export const USDC_ADDRESS = (() => getAddresses().USDC_ADDRESS)();
-export const EXCHANGE_ADDRESS = (() => getAddresses().EXCHANGE_ADDRESS)();
-export const FEE_WRAPPER_ADDRESS = (() => getAddresses().FEE_WRAPPER_ADDRESS)();
-export const FEE_MODULE_ADDRESS = (() => getAddresses().FEE_MODULE_ADDRESS)();
+// CRITICAL: These MUST be getters that re-evaluate each time, NOT cached values
+// The previous IIFE pattern cached addresses at module load time, causing bugs
+export function getCTFAddress(): string {
+	return getAddresses().CTF_ADDRESS;
+}
+export function getUSDCAddress(): string {
+	return getAddresses().USDC_ADDRESS;
+}
+export function getExchangeAddress(): string {
+	return getAddresses().EXCHANGE_ADDRESS;
+}
+export function getFeeWrapperAddress(): string {
+	return getAddresses().FEE_WRAPPER_ADDRESS;
+}
+export function getFeeModuleAddress(): string {
+	return getAddresses().FEE_MODULE_ADDRESS;
+}
+
+// Legacy exports for backward compatibility
+// IMPORTANT: Since environment is now locked to production for deployed sites,
+// these const values are safe. They're evaluated once at module load, but
+// environment detection now only checks hostname (production) or VITE env (dev).
+// The localStorage override that caused bugs has been removed.
+export const CTF_ADDRESS = getCTFAddress();
+export const USDC_ADDRESS = getUSDCAddress();
+export const EXCHANGE_ADDRESS = getExchangeAddress();
+export const FEE_WRAPPER_ADDRESS = getFeeWrapperAddress();
+export const FEE_MODULE_ADDRESS = getFeeModuleAddress();
 
 // Alias for backward compatibility
 export const COLLATERAL_ADDRESS = USDC_ADDRESS;

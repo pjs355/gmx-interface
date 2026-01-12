@@ -1,6 +1,10 @@
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
-const API_BASE = getPredictionApiBaseUrl();
+// NOTE: API_BASE is now fetched dynamically in each function to prevent
+// stale URL caching issues that caused production bugs
+function getApiBase(): string {
+	return getPredictionApiBaseUrl();
+}
 
 export interface EmailPreferences {
 	generalNotifications: boolean;
@@ -56,7 +60,7 @@ class UserService {
 			headers["privy-id-token"] = identityToken;
 		}
 
-		const response = await fetch(`${API_BASE}/profiles/me`, {
+		const response = await fetch(`${getApiBase()}/profiles/me`, {
 			method: "GET",
 			headers,
 		});
@@ -94,7 +98,7 @@ class UserService {
 			headers["privy-id-token"] = identityToken;
 		}
 
-		const response = await fetch(`${API_BASE}/profiles/me`, {
+		const response = await fetch(`${getApiBase()}/profiles/me`, {
 			method: "PUT",
 			headers,
 			body: JSON.stringify(updates),
@@ -177,7 +181,7 @@ class UserService {
 			headers["privy-id-token"] = identityToken;
 		}
 
-		const response = await fetch(`${API_BASE}/profiles/exp/claim-test-usdc`, {
+		const response = await fetch(`${getApiBase()}/profiles/exp/claim-test-usdc`, {
 			method: "POST",
 			headers,
 		});

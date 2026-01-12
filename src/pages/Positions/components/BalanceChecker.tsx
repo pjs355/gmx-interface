@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { Contract, JsonRpcProvider, formatUnits } from "ethers";
-import { CTF_ADDRESS } from "config/addresses";
+import { getCTFAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { subgraphService, fromMicroUnits } from "@/services/subgraph/subgraphService";
 import { usePredictionData } from "context/PredictionDataContext";
@@ -63,7 +63,7 @@ export default function BalanceChecker({ debugAccount }: BalanceCheckerProps) {
 		try {
 			const provider = new JsonRpcProvider(DEFAULT_RPC_URL);
 			const ctf = new Contract(
-				CTF_ADDRESS,
+				getCTFAddress(),
 				["function balanceOf(address, uint256) view returns (uint256)"],
 				provider
 			);

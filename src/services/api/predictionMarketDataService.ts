@@ -65,7 +65,11 @@ export interface PandaScoreMatch {
 }
 
 class PredictionMarketDataService {
-	private readonly API_BASE_URL = getPredictionApiBaseUrl();
+	// NOTE: API_BASE_URL is now fetched dynamically via getter to prevent
+	// stale URL caching issues that caused production bugs
+	private get API_BASE_URL(): string {
+		return getPredictionApiBaseUrl();
+	}
 
 	async fetchAllMarkets(): Promise<PredictionMarket[]> {
 		try {

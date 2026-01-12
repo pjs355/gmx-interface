@@ -198,8 +198,6 @@ export default function HistoryCardView({
 				filteredResolvedMarkets.map(({ umbrella, markets }) => (
 					<div key={umbrella._id} className="umbrella-card">
 						{markets.map(({ market, yes, no }) => {
-							const yesNum = Number(yes);
-							const noNum = Number(no);
 							const qid =
 								market._id ||
 								market.questionId ||
@@ -217,22 +215,17 @@ export default function HistoryCardView({
 								(market as any).resolvedOutcome || ""
 							).toLowerCase();
 
-							// Determine which sides the user traded on (check orders, not just current shares)
-							const userYesOrders = qid ? orders.filter(
-								(order) => order.questionId === qid && order.position?.toLowerCase() === "yes"
-							) : [];
-							const userNoOrders = qid ? orders.filter(
-								(order) => order.questionId === qid && order.position?.toLowerCase() === "no"
-							) : [];
+							// Only show rows for sides where user has FILLED trades
+							const yesTradeCount = getTradeCount(qid, "Yes");
+							const noTradeCount = getTradeCount(qid, "No");
 							
 							const rows: {
 								side: "Yes" | "No";
 								amount: string;
 							}[] = [];
-							// Show a row if user has current shares OR has traded on that side
-							if (yesNum > 0 || userYesOrders.length > 0)
+							if (yesTradeCount > 0)
 								rows.push({ side: "Yes", amount: yes });
-							if (noNum > 0 || userNoOrders.length > 0)
+							if (noTradeCount > 0)
 								rows.push({ side: "No", amount: no });
 
 							return (
@@ -241,8 +234,8 @@ export default function HistoryCardView({
 										const cardId = `${umbrella._id}-${market._id}-${side}`;
 										const isExpanded = expandedCards.has(cardId);
 										
-										// Trade count and expansion state per side
-										const tradeCount = getTradeCount(qid, side);
+										// Trade count for this side
+										const tradeCount = side === "Yes" ? yesTradeCount : noTradeCount;
 										const isTradeHistoryExpanded = expandedTradeHistory.has(`${qid}-${side}`);
 
 										const finalShares =

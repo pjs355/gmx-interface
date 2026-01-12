@@ -49,7 +49,11 @@ export interface OrderAggregates {
 	};
 }
 
-const API_BASE_URL = getPredictionApiBaseUrl();
+// NOTE: API_BASE_URL is now fetched dynamically in each function to prevent
+// stale URL caching issues that caused production bugs
+function getApiBaseUrl(): string {
+	return getPredictionApiBaseUrl();
+}
 
 // Map tokenId to position based on known patterns or database lookup
 // For now, we'll use a simple heuristic or require the API to provide this
@@ -60,7 +64,7 @@ export async function fetchUserOrders(
 	marketData?: Map<string, { yesTokenId: string; noTokenId: string }>
 ): Promise<ProcessedOrder[]> {
 	try {
-		const response = await fetch(`${API_BASE_URL}/orders/${account}`);
+		const response = await fetch(`${getApiBaseUrl()}/orders/${account}`);
 		if (!response.ok) {
 			throw new Error(`Failed to fetch orders: ${response.status}`);
 		}
@@ -313,7 +317,7 @@ export async function cancelOrder(
 	if (!orderId) return { success: false, error: "Missing orderId" };
 	try {
 		const res = await fetch(
-			`${API_BASE_URL}/orders/cancel/${encodeURIComponent(orderId)}`,
+			`${getApiBaseUrl()}/orders/cancel/${encodeURIComponent(orderId)}`,
 			{
 				method: "POST",
 				headers: { "Content-Type": "application/json" },

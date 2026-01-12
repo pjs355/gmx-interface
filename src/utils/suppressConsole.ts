@@ -63,9 +63,6 @@ export function initConsoleSuppress() {
     
     // Keep console.warn and console.error for critical issues
     // These are important for debugging production problems
-    // Uncomment the lines below if you want to suppress ALL console output:
-    // console.warn = noop;
-    // console.error = noop;
     
     // Log once that we've suppressed console (this will be the only log)
     originalConsole.log('[Production] Console logging suppressed');

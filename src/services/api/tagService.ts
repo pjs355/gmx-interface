@@ -17,9 +17,17 @@ export interface TagPayload {
 }
 
 class TagService {
-	private readonly API_BASE_URL = getPredictionApiBaseUrl();
-	private readonly publicTagsUrl = `${getPredictionApiBaseUrl()}/tags`;
-	private readonly adminTagsUrl = `${getPredictionApiBaseUrl()}/admin/tags`;
+	// NOTE: URLs are now fetched dynamically via getters to prevent
+	// stale URL caching issues that caused production bugs
+	private get API_BASE_URL(): string {
+		return getPredictionApiBaseUrl();
+	}
+	private get publicTagsUrl(): string {
+		return `${getPredictionApiBaseUrl()}/tags`;
+	}
+	private get adminTagsUrl(): string {
+		return `${getPredictionApiBaseUrl()}/admin/tags`;
+	}
 	private tagsCache: Tag[] | null = null;
 
 	/**

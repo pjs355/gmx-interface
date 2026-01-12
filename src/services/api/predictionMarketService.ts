@@ -32,7 +32,10 @@ const CONTRACTS = {
 const BASE_RPC =
 	"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih";
 
-const PRODUCTION_API = getPredictionApiBaseUrl(); // PREDICTION MARKETS ONLY - separate from perps
+// NOTE: API URL is now fetched dynamically to prevent stale URL caching issues
+function getProductionApi(): string {
+	return getPredictionApiBaseUrl(); // PREDICTION MARKETS ONLY - separate from perps
+}
 
 // NO HARDCODED TOKENS - All token IDs must come from market data API
 // This ensures single source of truth and prevents wrong trades
@@ -468,7 +471,7 @@ export class PredictionMarketService {
 	): Promise<any> {
 		console.log(
 			"🌐 Submitting order to API (PREDICTION MARKETS ONLY):",
-			PRODUCTION_API
+			getProductionApi()
 		);
 		console.log("📤 Order payload:", JSON.stringify(order, null, 2));
 		console.log("🔍 Question ID for endpoint:", questionId);
@@ -486,8 +489,8 @@ export class PredictionMarketService {
 		try {
 			// Use questionId in the endpoint if provided, otherwise fall back to /orders
 			const endpoint = questionId
-				? `${PRODUCTION_API}/orders/${questionId}`
-				: `${PRODUCTION_API}/orders`;
+				? `${getProductionApi()}/orders/${questionId}`
+				: `${getProductionApi()}/orders`;
 			console.log("🌐 Using endpoint:", endpoint);
 
 			const headers: HeadersInit = {
@@ -541,9 +544,9 @@ export class PredictionMarketService {
 		// Fetch real market data from server - no fallbacks, no mocks
 		console.log(
 			"🌐 Fetching market data from:",
-			`${PRODUCTION_API}/markets/${marketId}`
+			`${getProductionApi()}/markets/${marketId}`
 		);
-		const response = await fetch(`${PRODUCTION_API}/markets/${marketId}`);
+		const response = await fetch(`${getProductionApi()}/markets/${marketId}`);
 
 		if (!response.ok) {
 			throw new Error(

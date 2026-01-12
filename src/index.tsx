@@ -2,6 +2,13 @@
 import { initConsoleSuppress } from "./utils/suppressConsole";
 initConsoleSuppress();
 
+// CRITICAL: Clean up any lingering environment override in localStorage
+// This prevents a production bug where test markets could leak to real users
+// Environment is now determined solely by hostname (production) or VITE_ENVIRONMENT_MODE (dev)
+if (typeof window !== "undefined") {
+	localStorage.removeItem("levelup_environment");
+}
+
 import * as Sentry from "@sentry/react";
 Sentry.init({
 	dsn: "https://014a3809164e437ea9fa07f4dc0d3f32@o4508413424893952.ingest.us.sentry.io/4510275102703616",

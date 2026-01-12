@@ -4,7 +4,7 @@ import { predictionMarketService } from "@/services/api/predictionMarketService"
 import type { TradeExecutionParams } from "./types";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
 import { useSignerContext } from "context/SignerContext";
-import { EXCHANGE_ADDRESS } from "config/addresses";
+import { getExchangeAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 
 export function useTradeExecutionService() {
@@ -195,7 +195,7 @@ export function useTradeExecutionService() {
 						(activeSigner as any).provider ??
 						new ethers.JsonRpcProvider(DEFAULT_RPC_URL);
 					const ex = new ethers.Contract(
-						EXCHANGE_ADDRESS,
+						getExchangeAddress(),
 						abi,
 						provider
 					);
@@ -216,7 +216,7 @@ export function useTradeExecutionService() {
 					name: "Polymarket CTF Exchange",
 					version: "1",
 					chainId: 8453, // Base chain ID
-					verifyingContract: EXCHANGE_ADDRESS, // EXCHANGE contract
+					verifyingContract: getExchangeAddress(), // EXCHANGE contract
 				};
 
 				const types = {

@@ -16,7 +16,7 @@ import {
 	fetchUserOrders,
 	type ProcessedOrder,
 } from "@/services/api/simplifiedOrderService";
-import { CTF_ADDRESS, USDC_ADDRESS, EXCHANGE_ADDRESS, FEE_WRAPPER_ADDRESS } from "config/addresses";
+import { getCTFAddress, getUSDCAddress, getExchangeAddress, getFeeWrapperAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { usePredictionData } from "context/PredictionDataContext";
 import {
@@ -132,14 +132,14 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			const provider = getReadProvider();
 
 			const usdcContract = new Contract(
-				USDC_ADDRESS,
+				getUSDCAddress(),
 				[
 					"function allowance(address owner, address spender) view returns (uint256)",
 				],
 				provider
 			);
 			const ctfContract = new Contract(
-				CTF_ADDRESS,
+				getCTFAddress(),
 				[
 					"function isApprovedForAll(address owner, address operator) view returns (bool)",
 				],
@@ -147,9 +147,9 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			);
 
 			const [usdcAllowance, hasCtfApproval, feeWrapperAllowance] = await Promise.all([
-				usdcContract.allowance(account, EXCHANGE_ADDRESS),
-				ctfContract.isApprovedForAll(account, EXCHANGE_ADDRESS),
-				usdcContract.allowance(account, FEE_WRAPPER_ADDRESS),
+				usdcContract.allowance(account, getExchangeAddress()),
+				ctfContract.isApprovedForAll(account, getExchangeAddress()),
+				usdcContract.allowance(account, getFeeWrapperAddress()),
 			]);
 
 			const hasUsdcApproval = usdcAllowance > 0n;
@@ -201,7 +201,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		try {
 			const provider = getReadProvider();
 			const erc20 = new Contract(
-				USDC_ADDRESS,
+				getUSDCAddress(),
 				[
 					"function balanceOf(address account) view returns (uint256)",
 					"function decimals() view returns (uint8)",
@@ -236,7 +236,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		
 		const provider = getReadProvider();
 		const ctfContract = new Contract(
-			CTF_ADDRESS,
+			getCTFAddress(),
 			["function balanceOf(address account, uint256 id) view returns (uint256)"],
 			provider
 		);
@@ -302,7 +302,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				return;
 			}
 
-			// Store raw token balances for later mapping (NOT usdc - that comes from RPC)
+				// Store raw token balances for later mapping (NOT usdc - that comes from RPC)
 			console.log(`[UserDataContext] Loaded ${subgraphAccount.tokenBalances.length} token balances for ${walletAddress}`);
 			setRawTokenBalances(subgraphAccount.tokenBalances);
 			subgraphFetchedRef.current = walletAddress;
@@ -319,10 +319,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			try {
 				// Build market data map from current context
 				const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
+				// CRITICAL: Always use _id as the key for consistency with Positions.tsx lookups
 				umbrellas.forEach(umbrella => {
 					const questions = getAllQuestionsForUmbrella(umbrella._id) || [];
 					questions.forEach((market: any) => {
-						const marketId = market._id || market.questionId || market.marketId;
+						const marketId = market._id; // ALWAYS use _id only
 						if (marketId && market.yesTokenId && market.noTokenId) {
 							marketDataMap.set(marketId, {
 								yesTokenId: market.yesTokenId,
@@ -335,7 +336,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				// Also include resolved markets
 				Object.values(resolvedMarketsByUmbrella).forEach((markets: any[]) => {
 					markets.forEach((market: any) => {
-						const marketId = market._id || market.questionId || market.marketId;
+						const marketId = market._id; // ALWAYS use _id only
 						if (marketId && market.yesTokenId && market.noTokenId) {
 							marketDataMap.set(marketId, {
 								yesTokenId: market.yesTokenId,
@@ -379,6 +380,18 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			usdcFetchedRef.current = null;
 		}
 	}, [account, fetchUsdcBalanceRpc, fetchTokenBalancesFromSubgraph]);
+
+	// RETRY: If initial balance fetch failed (no market data yet), retry when umbrellas load
+	// This handles the case where subgraph fails in production and RPC fallback needs market data
+	useEffect(() => {
+		if (!account) return;
+		if (!Array.isArray(umbrellas) || umbrellas.length === 0) return;
+		// Only retry if we haven't successfully fetched yet (ref is null from failed attempt)
+		if (subgraphFetchedRef.current !== null) return;
+		
+		console.log("[UserDataContext] Retrying balance fetch now that umbrellas are loaded...");
+		fetchTokenBalancesFromSubgraph(account, true);
+	}, [account, umbrellas, fetchTokenBalancesFromSubgraph]);
 
 	/**
 	 * Map raw token balances to market IDs once market data is available.
@@ -459,11 +472,13 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			>();
 
 			// Process active markets from context (already loaded)
+			// CRITICAL: Always use _id as the key since Positions.tsx looks up by _id
+			// Using inconsistent keys (questionId, marketId) caused resolved markets to not show
 			umbrellas.forEach((u: any) => {
 				const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
 				marketsForUmb.forEach((market: any) => {
-					const marketId =
-						market?._id || market?.questionId || market?.marketId;
+					// ALWAYS prefer _id for consistency with Positions.tsx lookups
+					const marketId = market?._id;
 					if (marketId && market?.yesTokenId && market?.noTokenId) {
 						marketDataMap.set(marketId, {
 							yesTokenId: market.yesTokenId,
@@ -476,8 +491,8 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			// Process resolved markets from context (already loaded)
 			Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
 				resolvedMarkets.forEach((market: any) => {
-					const marketId =
-						market?._id || market?.questionId || market?.marketId;
+					// ALWAYS prefer _id for consistency with Positions.tsx lookups
+					const marketId = market?._id;
 					if (marketId && market?.yesTokenId && market?.noTokenId) {
 						marketDataMap.set(marketId, {
 							yesTokenId: market.yesTokenId,
@@ -641,15 +656,15 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				// Encode all 3 approval calls
 				const usdcExchangeApproval = usdcInterface.encodeFunctionData(
 					"approve",
-					[EXCHANGE_ADDRESS, ethers.MaxUint256]
+					[getExchangeAddress(), ethers.MaxUint256]
 				);
 				const ctfApproval = ctfInterface.encodeFunctionData(
 					"setApprovalForAll",
-					[EXCHANGE_ADDRESS, true]
+					[getExchangeAddress(), true]
 				);
 				const usdcFeeWrapperApproval = usdcInterface.encodeFunctionData(
 					"approve",
-					[FEE_WRAPPER_ADDRESS, ethers.MaxUint256]
+					[getFeeWrapperAddress(), ethers.MaxUint256]
 				);
 
 				// Send all 3 approvals as a batch - user only signs once!
@@ -657,17 +672,17 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				await smartWalletClient.sendTransaction({
 					calls: [
 						{
-							to: USDC_ADDRESS as `0x${string}`,
+							to: getUSDCAddress() as `0x${string}`,
 							data: usdcExchangeApproval as `0x${string}`,
 							value: 0n,
 						},
 						{
-							to: CTF_ADDRESS as `0x${string}`,
+							to: getCTFAddress() as `0x${string}`,
 							data: ctfApproval as `0x${string}`,
 							value: 0n,
 						},
 						{
-							to: USDC_ADDRESS as `0x${string}`,
+							to: getUSDCAddress() as `0x${string}`,
 							data: usdcFeeWrapperApproval as `0x${string}`,
 							value: 0n,
 						},
@@ -684,31 +699,31 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
 				console.log("🔐 Approving USDC for Exchange...");
 				const usdcContract = new ethers.Contract(
-					USDC_ADDRESS,
+					getUSDCAddress(),
 					usdcAbi,
 					signer
 				);
 				const tx1 = await usdcContract.approve(
-					EXCHANGE_ADDRESS,
+					getExchangeAddress(),
 					ethers.MaxUint256
 				);
 				await tx1.wait();
 
 				console.log("🔐 Approving CTF for Exchange...");
 				const ctfContract = new ethers.Contract(
-					CTF_ADDRESS,
+					getCTFAddress(),
 					ctfAbi,
 					signer
 				);
 				const tx2 = await ctfContract.setApprovalForAll(
-					EXCHANGE_ADDRESS,
+					getExchangeAddress(),
 					true
 				);
 				await tx2.wait();
 
 				console.log("🔐 Approving USDC for Fee Wrapper...");
 				const tx3 = await usdcContract.approve(
-					FEE_WRAPPER_ADDRESS,
+					getFeeWrapperAddress(),
 					ethers.MaxUint256
 				);
 				await tx3.wait();
@@ -766,10 +781,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		
 		// Build market data map from current context
 		const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
+		// CRITICAL: Always use _id as the key for consistency with Positions.tsx lookups
 		umbrellas.forEach(umbrella => {
 			const questions = getAllQuestionsForUmbrella(umbrella._id) || [];
 			questions.forEach((market: any) => {
-				const marketId = market._id || market.questionId || market.marketId;
+				const marketId = market._id; // ALWAYS use _id only
 				if (marketId && market.yesTokenId && market.noTokenId) {
 					marketDataMap.set(marketId, {
 						yesTokenId: market.yesTokenId,
@@ -782,7 +798,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		// Also include resolved markets
 		Object.values(resolvedMarketsByUmbrella).forEach((markets: any[]) => {
 			markets.forEach((market: any) => {
-				const marketId = market._id || market.questionId || market.marketId;
+				const marketId = market._id; // ALWAYS use _id only
 				if (marketId && market.yesTokenId && market.noTokenId) {
 					marketDataMap.set(marketId, {
 						yesTokenId: market.yesTokenId,

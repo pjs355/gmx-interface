@@ -27,7 +27,7 @@
  * 
  * IMPORTANT:
  * - USDC has 6 decimals (not 18 like ETH)
- * - Uses USDC_ADDRESS from config/addresses.ts
+ * - Uses getUSDCAddress() from config/addresses.ts
  * - Refreshes user data after successful withdrawal
  * 
  * CREATED: Jan 2026 - Replaced old Payments page
@@ -41,7 +41,7 @@ import { useTransfersModal } from "@/context/TransfersModalContext";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
-import { USDC_ADDRESS } from "@/config/addresses";
+import { getUSDCAddress } from "@/config/addresses";
 import "./TransfersModal.scss";
 
 type ModalView = "withdraw" | "review" | "submitted";
@@ -148,7 +148,7 @@ export function TransfersModal() {
 			]);
 
 			console.log("TRANSFER DEBUG:", {
-				to: USDC_ADDRESS,
+				to: getUSDCAddress(),
 				recipient: recipientAddress,
 				amount: withdrawAmount,
 				amountWei: amountWei.toString(),
@@ -169,7 +169,7 @@ export function TransfersModal() {
 				}
 
 				const tx = await smartWalletClient.sendTransaction({
-					to: USDC_ADDRESS as `0x${string}`,
+					to: getUSDCAddress() as `0x${string}`,
 					data: transferData as `0x${string}`,
 					value: 0n,
 				});
@@ -182,7 +182,7 @@ export function TransfersModal() {
 				}
 
 				const tx = await signer.sendTransaction({
-					to: USDC_ADDRESS,
+					to: getUSDCAddress(),
 					data: transferData,
 					value: 0,
 				});

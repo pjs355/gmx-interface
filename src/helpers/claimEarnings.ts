@@ -3,16 +3,19 @@ import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useCallback, useMemo, useState } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { CTF_ADDRESS, USDC_ADDRESS } from "@/config/addresses";
+import { getCTFAddress, getUSDCAddress } from "@/config/addresses";
 
 // Base mainnet chain id
 const BASE_CHAIN_ID = 8453;
 
-// Contracts on Base (imported from centralized config)
-const CONTRACTS = {
-	CTF: CTF_ADDRESS,
-	COLLATERAL: USDC_ADDRESS,
-};
+// NOTE: Contract addresses are now fetched dynamically to prevent
+// stale address caching that caused production bugs
+function getContracts() {
+	return {
+		CTF: getCTFAddress(),
+		COLLATERAL: getUSDCAddress(),
+	};
+}
 
 // Minimal ABI for redeem
 const CTF_ABI = [
@@ -48,7 +51,7 @@ export function useClaimEarnings() {
 
 			// Encode redeemPositions for YES index set only (market resolved as YES)
 			const redeemYes = iface.encodeFunctionData("redeemPositions", [
-				CONTRACTS.COLLATERAL,
+				getContracts().COLLATERAL,
 				ethers.ZeroHash,
 				HARDCODED_CONDITION_ID,
 				[YES_INDEX_SET],
@@ -67,7 +70,7 @@ export function useClaimEarnings() {
 					);
 
 				const tx = await smartWalletClient.sendTransaction({
-					to: CONTRACTS.CTF as `0x${string}`,
+					to: getContracts().CTF as `0x${string}`,
 					data: redeemYes as `0x${string}`,
 					value: 0n,
 				});
@@ -77,7 +80,7 @@ export function useClaimEarnings() {
 				if (!signer) throw new Error("No signer available");
 
 				const tx = await signer.sendTransaction({
-					to: CONTRACTS.CTF,
+					to: getContracts().CTF,
 					data: redeemYes,
 					value: 0,
 				});
@@ -138,14 +141,14 @@ export function useClaimEarningsForMarket(
 
 			// Encode redeemPositions for the winning index set
 			const redeemData = iface.encodeFunctionData("redeemPositions", [
-				CONTRACTS.COLLATERAL,
+				getContracts().COLLATERAL,
 				ethers.ZeroHash, // parentCollectionId (zero for direct positions)
 				market.conditionId,
 				[indexSet],
 			]);
 
 			console.log("CLAIM DEBUG: Redeem data:", {
-				collateralToken: CONTRACTS.COLLATERAL,
+				collateralToken: getContracts().COLLATERAL,
 				parentCollectionId: ethers.ZeroHash,
 				conditionId: market.conditionId,
 				indexSets: [indexSet],
@@ -166,7 +169,7 @@ export function useClaimEarningsForMarket(
 					);
 
 				const tx = await smartWalletClient.sendTransaction({
-					to: CONTRACTS.CTF as `0x${string}`,
+					to: getContracts().CTF as `0x${string}`,
 					data: redeemData as `0x${string}`,
 					value: 0n,
 				});
@@ -177,7 +180,7 @@ export function useClaimEarningsForMarket(
 				if (!signer) throw new Error("No signer available");
 
 				const tx = await signer.sendTransaction({
-					to: CONTRACTS.CTF,
+					to: getContracts().CTF,
 					data: redeemData,
 					value: 0,
 				});

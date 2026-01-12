@@ -5,14 +5,18 @@
  * instead of making individual RPC calls. This significantly reduces
  * the number of blockchain calls and improves performance.
  *
- * Studio URL (Free tier: 100k queries/month)
+ * The subgraph indexes BOTH testnet and production CTF contracts.
  * 
  * NOTE: Subgraph indexing has inherent delay (typically 10-60 seconds on Base).
  * For real-time balance updates after trades, use RPC fallback or manual refresh.
  */
 
-const SUBGRAPH_URL =
-	"https://api.studio.thegraph.com/query/1718616/levelup-subgraph/version/latest";
+// Subgraph URL - indexes BOTH testnet and production CTF contracts
+const SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1718616/levelup-subgraph/version/latest";
+
+function getSubgraphUrl(): string {
+	return SUBGRAPH_URL;
+}
 
 // ============================================================================
 // Types
@@ -62,12 +66,14 @@ export interface UserTransfers {
 // GraphQL Queries
 // ============================================================================
 
+// Paginated query - The Graph has a max of 1000 items per query
+// We'll paginate to fetch ALL token balances regardless of count
 const GET_USER_ACCOUNT_QUERY = `
-  query GetUserAccount($wallet: ID!) {
+  query GetUserAccount($wallet: ID!, $first: Int!, $skip: Int!) {
     account(id: $wallet) {
       id
       usdcBalance
-      tokenBalances {
+      tokenBalances(first: $first, skip: $skip) {
         tokenId
         balance
       }
@@ -215,6 +221,7 @@ async function executeQuery<T>(
 	variables: Record<string, unknown>,
 	skipCache: boolean = false
 ): Promise<T> {
+	const subgraphUrl = getSubgraphUrl();
 	const cacheKey = getCacheKey(query, variables);
 	const now = Date.now();
 
@@ -238,7 +245,7 @@ async function executeQuery<T>(
 	lastRequestTime = Date.now();
 	const startTime = performance.now();
 	
-	const response = await fetch(SUBGRAPH_URL, {
+	const response = await fetch(subgraphUrl, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -276,7 +283,8 @@ async function executeQuery<T>(
 // ============================================================================
 
 /**
- * Fetch a user's account including USDC balance and all token positions
+ * Fetch a user's account including USDC balance and ALL token positions
+ * Uses pagination to fetch unlimited token balances (The Graph limits to 1000 per query)
  *
  * @param walletAddress - The user's wallet address (will be normalized to lowercase)
  * @returns Account data or null if account doesn't exist in subgraph
@@ -285,13 +293,52 @@ export async function getUserAccount(
 	walletAddress: string
 ): Promise<SubgraphAccount | null> {
 	const normalizedAddress = normalizeWalletAddress(walletAddress);
-
-	const data = await executeQuery<{ account: SubgraphAccount | null }>(
+	const PAGE_SIZE = 1000; // Max allowed by The Graph
+	
+	// First page - also gets account info
+	const firstPage = await executeQuery<{ account: SubgraphAccount | null }>(
 		GET_USER_ACCOUNT_QUERY,
-		{ wallet: normalizedAddress }
+		{ wallet: normalizedAddress, first: PAGE_SIZE, skip: 0 }
 	);
 
-	return data.account;
+	if (!firstPage.account) {
+		return null;
+	}
+
+	const allTokenBalances: TokenBalance[] = [...firstPage.account.tokenBalances];
+	let lastPageSize = firstPage.account.tokenBalances.length;
+	
+	// If we got a full page, there might be more - keep paginating
+	let skip = PAGE_SIZE;
+	while (lastPageSize === PAGE_SIZE) {
+		console.log(`[Subgraph] Fetching page ${skip / PAGE_SIZE + 1} (skip: ${skip})...`);
+		
+		const nextPage = await executeQuery<{ account: SubgraphAccount | null }>(
+			GET_USER_ACCOUNT_QUERY,
+			{ wallet: normalizedAddress, first: PAGE_SIZE, skip }
+		);
+		
+		if (!nextPage.account || nextPage.account.tokenBalances.length === 0) {
+			break;
+		}
+		
+		allTokenBalances.push(...nextPage.account.tokenBalances);
+		lastPageSize = nextPage.account.tokenBalances.length;
+		skip += PAGE_SIZE;
+		
+		// Safety limit - 10,000 tokens should be more than enough
+		if (skip >= 10000) {
+			console.warn(`[Subgraph] Hit pagination safety limit at ${skip} tokens`);
+			break;
+		}
+	}
+
+	console.log(`[Subgraph] Fetched ${allTokenBalances.length} total token balances for ${walletAddress}`);
+
+	return {
+		...firstPage.account,
+		tokenBalances: allTokenBalances,
+	};
 }
 
 /**
