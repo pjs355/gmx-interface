@@ -83,6 +83,9 @@ export function usePredictionChartData({
 	// Use -1 as sentinel for "not initialized" vs 0 for "all time"
 	const [timeWindowStart, setTimeWindowStart] = useState<number>(-1);
 	const [timeWindowEnd, setTimeWindowEnd] = useState<number>(-1);
+	// Track cache version to trigger re-renders when historical data is refreshed
+	const [cacheVersion, setCacheVersion] = useState(0);
+	const lastCacheCountRef = useRef<number>(0);
 
 	// Live orderbook logic disabled: focus on historical only
 
@@ -125,20 +128,26 @@ export function usePredictionChartData({
 		}
 
 		try {
-			// Get historical data - prefer from activeMarket.historicalPricesYes, fallback to service
-			const primaryHistorical =
-				activeMarket?.historicalPricesYes ||
-				predictionMarketDataService.getHistoricalPrices(questionId) ||
-				[];
+			// Get historical data - prefer whichever source has MORE data points
+			// This ensures we use the freshest data after trades update the cache
+			const marketHistorical = activeMarket?.historicalPricesYes || [];
+			const cachedHistorical = predictionMarketDataService.getHistoricalPrices(questionId) || [];
+			
+			// Use the source with more data points (cache may have fresher data after trades)
+			const primaryHistorical = cachedHistorical.length >= marketHistorical.length
+				? cachedHistorical
+				: marketHistorical;
+			
 			const secondId = secondMarket?._id || secondMarket?.questionId;
-			const secondHistorical =
-				secondId && !isVsSingleMarket
-					? secondMarket?.historicalPricesYes ||
-					  predictionMarketDataService.getHistoricalPrices(
-							secondId
-					  ) ||
-					  []
-					: [];
+			const secondMarketHistorical = secondMarket?.historicalPricesYes || [];
+			const secondCachedHistorical = secondId && !isVsSingleMarket
+				? predictionMarketDataService.getHistoricalPrices(secondId) || []
+				: [];
+			const secondHistorical = secondId && !isVsSingleMarket
+				? (secondCachedHistorical.length >= secondMarketHistorical.length
+					? secondCachedHistorical
+					: secondMarketHistorical)
+				: [];
 
 			// Normalize and sort historical data (convert ms to seconds)
 			const normalizePrices = (prices: any[]): Array<{ ts: number; price: number }> => {
@@ -218,6 +227,7 @@ export function usePredictionChartData({
 		activeMarket?.historicalPricesYes,
 		secondMarket,
 		isVsSingleMarket,
+		cacheVersion, // Re-run when cache is updated
 	]);
 
 	// Update data when historical data changes - instant loading
@@ -307,25 +317,48 @@ export function usePredictionChartData({
 	}, [questionOrderbooks, questionId, secondMarket, isVsSingleMarket]);
 
 	// Consolidated cache monitoring - check once when questionId changes and periodically
+	// Also detect when cache has new data to trigger chart updates
 	useEffect(() => {
 		if (!questionId) return;
 
-		const checkCacheAndRefresh = () => {
+		const checkCacheAndRefresh = async () => {
 			const cachedData =
 				predictionMarketDataService.getCachedMarketData(questionId);
+			
+			// Check if cache has more data than last time
+			const cachedHistorical = predictionMarketDataService.getHistoricalPrices(questionId) || [];
+			const currentCacheCount = cachedHistorical.length;
+			
+			if (currentCacheCount > lastCacheCountRef.current) {
+				// New data in cache - trigger re-render
+				lastCacheCountRef.current = currentCacheCount;
+				setCacheVersion((v) => v + 1);
+			}
+			
 			if (!cachedData) {
 				// Cache expired, trigger refresh (silent background update)
-				predictionMarketDataService
-					.refreshHistoricalData(questionId)
-					.catch(console.warn);
+				try {
+					await predictionMarketDataService.refreshHistoricalData(questionId);
+					// After refresh, check if we got new data
+					const newCachedHistorical = predictionMarketDataService.getHistoricalPrices(questionId) || [];
+					if (newCachedHistorical.length > lastCacheCountRef.current) {
+						lastCacheCountRef.current = newCachedHistorical.length;
+						setCacheVersion((v) => v + 1);
+					}
+				} catch {
+					// Silent fail
+				}
 			}
 		};
+
+		// Reset cache count when questionId changes
+		lastCacheCountRef.current = 0;
 
 		// Check immediately when questionId changes
 		checkCacheAndRefresh();
 
-		// Set up periodic cache monitoring (every 5 minutes to reduce update frequency)
-		const interval = setInterval(checkCacheAndRefresh, 5 * 60 * 1000);
+		// Set up periodic cache monitoring (every 10 seconds to detect post-trade updates)
+		const interval = setInterval(checkCacheAndRefresh, 10 * 1000);
 
 		return () => clearInterval(interval);
 	}, [questionId]);

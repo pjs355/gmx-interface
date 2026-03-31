@@ -22,6 +22,9 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
+	// Priority 0: Polymarket icon from Data API (synthetic umbrellas)
+	const polyIcon = umbrella?._polyIcon || null;
+
 	// Priority 1: Check for server image (ic_{umbrellaID})
 	const serverImage =
 		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
@@ -36,13 +39,11 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 	// Priority 4: Fallback to game controller
 	const fallbackLogo = gameLogo || gtaIcon;
 
-	// Determine initial source
-	const initialSrc = serverImage || tagImage || fallbackLogo;
+	const initialSrc = polyIcon || serverImage || tagImage || fallbackLogo;
 
 	const handleError = () => {
 		if (!imageError) {
 			setImageError(true);
-			// Try fallback order: tagImage → gameLogo → gtaIcon
 			if (currentSrc !== tagImage && tagImage) {
 				setCurrentSrc(tagImage);
 			} else if (currentSrc !== gameLogo && gameLogo) {
@@ -256,7 +257,7 @@ export default function PositionsTableView({
 								</div>
 							)}
 
-							{markets.map(({ market, yes, no }: any) => {
+							{markets.map(({ market, yes, no, venue }: any) => {
 								const yesNum = Number(yes);
 								const noNum = Number(no);
 								const rows: {
@@ -445,6 +446,20 @@ export default function PositionsTableView({
 															{side}
 														</span>
 													</>
+												)}
+												{venue && (
+													<span style={{
+														marginLeft: 6,
+														fontSize: 11,
+														color: "#666",
+														fontWeight: 400,
+													}}>
+														({venue === "polymarket"
+															? "Polymarket"
+															: venue === "predictfun"
+																? "Predict.fun"
+																: "LevelUp"})
+													</span>
 												)}
 											</div>
 											<div

@@ -24,6 +24,15 @@ import OrdersCardView from "./components/OrdersCardView";
 import HistoryView from "./components/HistoryView";
 import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
+import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { usePredictOrders } from "@/trading/predict/usePredictOrders";
+import { computePredictCostByToken, mapPredictOrdersToVenueOrders } from "@/trading/predict/predictOrdersApi";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useQuery } from "@tanstack/react-query";
+import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+import type { VenueId, VenueOrder } from "@/types/trading/venuePosition";
 
 type MarketPosition = {
 	market: PredictionMarket;
@@ -36,6 +45,7 @@ type MarketPosition = {
 	totalValue: number;
 	orders: ProcessedOrder[];
 	aggregates: OrderAggregates;
+	venue?: VenueId;
 };
 
 type UmbrellaPositions = {
@@ -45,7 +55,7 @@ type UmbrellaPositions = {
 
 export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
-	const { account, isDebugMode, debugAccount, realAccount } = useSignerContext();
+	const { account, signerAddress, isDebugMode, debugAccount, realAccount } = useSignerContext();
 	// unified balances via PortfolioContext
 	const {
 		portfolioTotal: portfolioTotalCtx,
@@ -68,6 +78,10 @@ export default function Positions() {
 		allBooksPreview,
 		booksPreviewLoading,
 	} = usePredictionData();
+
+	const { polymarketSafe } = useFundingAddresses();
+	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
+	const allPolyPositions = (polyPositionsQuery.data ?? []); // active + settled
 
 	// Check if all data is loaded before showing resolved positions
 	const isDataFullyLoaded =
@@ -97,6 +111,118 @@ export default function Positions() {
 	// Effective account comes from unified resolver (smart -> embedded -> external)
 	const effectiveAccount = account || null;
 
+	// Predict.fun positions are tied to the embedded EOA (BNB chain), not the smart wallet
+	const predictPositionsQuery = usePredictPositions(signerAddress ?? effectiveAccount);
+	const allPredictPositions = predictPositionsQuery.data ?? [];
+
+	// Predict.fun orders (filled for cost basis, open for Orders tab)
+	const { filledOrders: predictFilledOrders, openOrders: predictOpenOrders } =
+		usePredictOrders(Boolean(effectiveAccount));
+
+	// Cost basis lookup from filled Predict.fun orders
+	const predictCostLookup = useMemo(
+		() => computePredictCostByToken(predictFilledOrders),
+		[predictFilledOrders]
+	);
+
+	// Fetch market details for each unique Predict.fun marketId (settlement detection)
+	const predictMarketIds = useMemo(() => {
+		const ids = new Set<number>();
+		for (const p of allPredictPositions) {
+			if (p.numericMarketId) ids.add(p.numericMarketId);
+		}
+		for (const o of predictOpenOrders) {
+			ids.add(o.marketId);
+		}
+		return Array.from(ids);
+	}, [allPredictPositions, predictOpenOrders]);
+
+	const privateApi = usePrivateApiClient();
+	const predictMarketsQuery = useQuery({
+		queryKey: ["predict-market-details", predictMarketIds],
+		enabled: predictMarketIds.length > 0,
+		staleTime: 60_000,
+		queryFn: async () => {
+			const results = await Promise.allSettled(
+				predictMarketIds.map((id) => privateApi.getPredictMarket(id))
+			);
+			const map = new Map<number, PredictMarketDetail>();
+			results.forEach((r, i) => {
+				if (r.status === "fulfilled") map.set(predictMarketIds[i], r.value);
+			});
+			return map;
+		},
+	});
+	const predictMarketDetails = predictMarketsQuery.data ?? new Map<number, PredictMarketDetail>();
+
+	// Enrich positions with settlement status and cost basis
+	const { predictPositions, predictWinnings, predictHistory } = useMemo(() => {
+		const active: typeof allPredictPositions = [];
+		const won: typeof allPredictPositions = [];
+		const lost: typeof allPredictPositions = [];
+
+		for (const pos of allPredictPositions) {
+			const detail = pos.numericMarketId
+				? predictMarketDetails.get(pos.numericMarketId)
+				: undefined;
+
+			// Enrich with cost from filled orders
+			const costEntry = predictCostLookup.get(pos.tokenId);
+			const enriched = { ...pos };
+			if (costEntry) {
+				enriched.avgPrice = costEntry.avgPrice;
+				enriched.cost = costEntry.totalCost;
+				enriched.pnl = enriched.currentValue - costEntry.totalCost;
+				enriched.pnlPercent =
+					costEntry.totalCost > 0
+						? ((enriched.currentValue - costEntry.totalCost) / costEntry.totalCost) * 100
+						: null;
+			}
+
+			if (detail?.status === "RESOLVED") {
+				enriched.marketStatus = "RESOLVED";
+				const outcomeMatch = detail.outcomes?.find(
+					(o) => o.onChainId === pos.tokenId
+				);
+				enriched.outcomeResult = (outcomeMatch?.status as "WON" | "LOST") ?? null;
+
+				if (enriched.outcomeResult === "WON") {
+					won.push(enriched);
+				} else {
+					lost.push(enriched);
+				}
+			} else {
+				enriched.marketStatus = detail?.status ?? undefined;
+				active.push(enriched);
+			}
+		}
+
+		return { predictPositions: active, predictWinnings: won, predictHistory: lost };
+	}, [allPredictPositions, predictMarketDetails, predictCostLookup]);
+
+	// Polymarket: separate active vs settled positions
+	const { activePolyPositions, polyWinnings, polyHistory } = useMemo(() => {
+		const active: typeof allPolyPositions = [];
+		const won: typeof allPolyPositions = [];
+		const lost: typeof allPolyPositions = [];
+
+		for (const pos of allPolyPositions) {
+			if (pos.redeemable && pos.currentValue > 0) {
+				won.push(pos);
+			} else if (pos.redeemable && pos.currentValue <= 0) {
+				lost.push(pos);
+			} else if (pos.currentPrice !== null && pos.currentPrice <= 0.01 && pos.shares > 0) {
+				lost.push(pos);
+			} else {
+				active.push(pos);
+			}
+		}
+
+		return { activePolyPositions: active, polyWinnings: won, polyHistory: lost };
+	}, [allPolyPositions]);
+
+	const polyPositions = activePolyPositions;
+
 	// Callback to handle successful claims
 	const handleClaimSuccess = useCallback(
 		(marketId: string, umbrellaId: string) => {
@@ -122,11 +248,15 @@ export default function Positions() {
 		[refreshUserData]
 	);
 
-	// derive active positions
+	// derive active positions (LevelUp + Polymarket merged under umbrellas)
 	const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) return [];
 
-		return umbrellas
+		// Track which Polymarket tokenIds got matched to an umbrella
+		const matchedPolyTokenIds = new Set<string>();
+		const matchedPredictTokenIds = new Set<string>();
+
+		const levelUpUmbrellas: UmbrellaPositions[] = umbrellas
 			.map((umbrella) => {
 				const markets =
 					(getQuestionsForUmbrella(
@@ -134,35 +264,29 @@ export default function Positions() {
 					) as PredictionMarket[]) || [];
 				const processedMarkets: MarketPosition[] = markets
 					.map((market) => {
-						// TWO DIFFERENT IDS:
-						// 1. MongoDB _id for tokenBalances lookup
 						const balanceId = market._id;
-						// 2. Transaction hash questionId for price lookup
 						const priceId = market.questionId || market._id;
 
-						// Get balances using MongoDB _id
 						const tb = balanceId
 							? tokenBalances.get(balanceId)
 							: undefined;
 						const yesBalance = tb ? Number(tb.yesBalance) : 0;
 						const noBalance = tb ? Number(tb.noBalance) : 0;
 
-						// Get prices using questionId (transaction hash) - EXACTLY like home page
 						const preview = priceId
 							? allBooksPreview[priceId]
 							: undefined;
-						const yesPrice = preview?.lowestAsk ?? null; // Yes price = lowestAsk
+						const yesPrice = preview?.lowestAsk ?? null;
 						const noPrice =
 							preview?.highestBid !== null &&
 							preview?.highestBid !== undefined
-								? 1 - preview.highestBid // No price = 1 - highestBid
+								? 1 - preview.highestBid
 								: null;
 
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;
 						const totalValue = yesValue + noValue;
 
-						// Orders might use either ID, so check both
 						const marketOrders = (orders || []).filter(
 							(order) =>
 								order.questionId === priceId ||
@@ -170,7 +294,7 @@ export default function Positions() {
 						);
 						const aggregates = getOrderAggregates(
 							orders || [],
-							balanceId // Use balance ID for order lookups
+							balanceId
 						);
 
 						return {
@@ -184,6 +308,7 @@ export default function Positions() {
 							totalValue,
 							orders: marketOrders,
 							aggregates,
+							venue: "levelup" as VenueId,
 						};
 					})
 					.filter(
@@ -193,9 +318,256 @@ export default function Positions() {
 				const activeMarkets = processedMarkets.filter(
 					(mp) => (mp.market as any).status !== "resolved"
 				);
-				return { umbrella, markets: activeMarkets };
+
+				// Try to match Polymarket positions to this umbrella's markets
+				const polyMatches: MarketPosition[] = [];
+				for (const pv of polyPositions) {
+					if (matchedPolyTokenIds.has(pv.tokenId)) continue;
+					const matchTitle = umbrella.displayName?.toLowerCase() ?? "";
+					const polyTitle = pv.marketTitle?.toLowerCase() ?? "";
+					if (
+						polyTitle.includes(matchTitle) ||
+						matchTitle.includes(polyTitle.replace(/\s*\(.*\)/, ""))
+					) {
+						matchedPolyTokenIds.add(pv.tokenId);
+						const isYes = pv.outcome.toLowerCase() === "yes" ||
+							(pv.outcome.toLowerCase() !== "no" && polyTitle.toLowerCase().includes(pv.outcome.toLowerCase()));
+						polyMatches.push({
+							market: {
+								_id: `poly-${pv.tokenId.slice(0, 12)}`,
+								displayName: pv.marketTitle,
+								questionId: pv.conditionId,
+							} as unknown as PredictionMarket,
+							yesBalance: isYes ? pv.shares : 0,
+							noBalance: isYes ? 0 : pv.shares,
+							yesPrice: isYes ? pv.currentPrice : null,
+							noPrice: isYes ? null : pv.currentPrice,
+							yesValue: isYes ? pv.currentValue : 0,
+							noValue: isYes ? 0 : pv.currentValue,
+							totalValue: pv.currentValue,
+							orders: [],
+							aggregates: {
+								Yes: {
+									totalSize: isYes ? pv.shares : 0,
+									totalValue: isYes ? (pv.cost ?? 0) : 0,
+									avgPrice: isYes ? pv.avgPrice : null,
+									count: 0,
+								},
+								No: {
+									totalSize: isYes ? 0 : pv.shares,
+									totalValue: isYes ? 0 : (pv.cost ?? 0),
+									avgPrice: isYes ? null : pv.avgPrice,
+									count: 0,
+								},
+							},
+							venue: "polymarket",
+						});
+					}
+				}
+
+				const predictMatches: MarketPosition[] = [];
+				for (const pv of predictPositions) {
+					if (matchedPredictTokenIds.has(pv.tokenId)) continue;
+					const matchTitle = umbrella.displayName?.toLowerCase() ?? "";
+					const predTitle = pv.marketTitle?.toLowerCase() ?? "";
+					if (
+						predTitle.includes(matchTitle) ||
+						matchTitle.includes(predTitle.replace(/\s*\(.*\)/, ""))
+					) {
+						matchedPredictTokenIds.add(pv.tokenId);
+						const isYes =
+							pv.outcome.toLowerCase() === "yes" ||
+							(pv.outcome.toLowerCase() !== "no" &&
+								predTitle.includes(pv.outcome.toLowerCase()));
+
+						// Use live prices from the corresponding LevelUp market's orderbook when available
+						let liveYesPrice: number | null = null;
+						let liveNoPrice: number | null = null;
+						for (const luMarket of markets) {
+							const priceId = luMarket.questionId || luMarket._id;
+							const preview = priceId ? allBooksPreview[priceId] : undefined;
+							if (preview) {
+								liveYesPrice = preview.lowestAsk ?? null;
+								liveNoPrice = preview.highestBid !== null && preview.highestBid !== undefined
+									? 1 - preview.highestBid
+									: null;
+								break;
+							}
+						}
+
+						const yesPrice = isYes ? (liveYesPrice ?? pv.currentPrice) : null;
+						const noPrice = isYes ? null : (liveNoPrice ?? pv.currentPrice);
+						const yesValue = yesPrice !== null ? pv.shares * yesPrice : (isYes ? pv.currentValue : 0);
+						const noValue = noPrice !== null ? pv.shares * noPrice : (isYes ? 0 : pv.currentValue);
+
+						predictMatches.push({
+							market: {
+								_id: `predict-${pv.tokenId.slice(0, 12)}`,
+								displayName: pv.marketTitle,
+								questionId: pv.conditionId ?? pv.tokenId,
+							} as unknown as PredictionMarket,
+							yesBalance: isYes ? pv.shares : 0,
+							noBalance: isYes ? 0 : pv.shares,
+							yesPrice,
+							noPrice,
+							yesValue,
+							noValue,
+							totalValue: yesValue + noValue,
+							orders: [],
+							aggregates: {
+								Yes: {
+									totalSize: isYes ? pv.shares : 0,
+									totalValue: isYes ? (pv.cost ?? 0) : 0,
+									avgPrice: isYes ? pv.avgPrice : null,
+									count: 0,
+								},
+								No: {
+									totalSize: isYes ? 0 : pv.shares,
+									totalValue: isYes ? 0 : (pv.cost ?? 0),
+									avgPrice: isYes ? null : pv.avgPrice,
+									count: 0,
+								},
+							},
+							venue: "predictfun",
+						});
+					}
+				}
+
+				return {
+					umbrella,
+					markets: [...activeMarkets, ...polyMatches, ...predictMatches],
+				};
 			})
 			.filter((umbrella) => umbrella.markets.length > 0);
+
+		// Unmatched Polymarket positions become their own umbrella groups
+		const unmatchedPoly = polyPositions.filter(
+			(pv) => !matchedPolyTokenIds.has(pv.tokenId)
+		);
+		const polyByEvent = new Map<string, typeof unmatchedPoly>();
+		for (const pv of unmatchedPoly) {
+			const key = pv.eventSlug || pv.marketTitle;
+			const arr = polyByEvent.get(key) ?? [];
+			arr.push(pv);
+			polyByEvent.set(key, arr);
+		}
+
+		const polyUmbrellas: UmbrellaPositions[] = [];
+		for (const [eventKey, positions] of polyByEvent) {
+			const first = positions[0];
+			const syntheticUmbrella = {
+				_id: `poly-event-${eventKey}`,
+				displayName: first.marketTitle,
+				children: [],
+				originalChildren: [],
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				__v: 0,
+				_polyIcon: first.iconUrl,
+			} as unknown as Umbrella;
+
+			const markets: MarketPosition[] = positions.map((pv) => {
+				const isYes = pv.outcome.toLowerCase() === "yes" ||
+					(pv.outcome.toLowerCase() !== "no");
+				return {
+					market: {
+						_id: `poly-${pv.tokenId.slice(0, 12)}`,
+						displayName: pv.marketTitle,
+						questionId: pv.conditionId,
+					} as unknown as PredictionMarket,
+					yesBalance: isYes ? pv.shares : 0,
+					noBalance: isYes ? 0 : pv.shares,
+					yesPrice: isYes ? pv.currentPrice : null,
+					noPrice: isYes ? null : pv.currentPrice,
+					yesValue: isYes ? pv.currentValue : 0,
+					noValue: isYes ? 0 : pv.currentValue,
+					totalValue: pv.currentValue,
+					orders: [],
+					aggregates: {
+						Yes: {
+							totalSize: isYes ? pv.shares : 0,
+							totalValue: isYes ? (pv.cost ?? 0) : 0,
+							avgPrice: isYes ? pv.avgPrice : null,
+							count: 0,
+						},
+						No: {
+							totalSize: isYes ? 0 : pv.shares,
+							totalValue: isYes ? 0 : (pv.cost ?? 0),
+							avgPrice: isYes ? null : pv.avgPrice,
+							count: 0,
+						},
+					},
+					venue: "polymarket" as VenueId,
+				};
+			});
+
+			polyUmbrellas.push({ umbrella: syntheticUmbrella, markets });
+		}
+
+		const unmatchedPredict = predictPositions.filter(
+			(pv) => !matchedPredictTokenIds.has(pv.tokenId)
+		);
+		const predictByMarket = new Map<string, typeof unmatchedPredict>();
+		for (const pv of unmatchedPredict) {
+			const key = pv.marketTitle || pv.tokenId;
+			const arr = predictByMarket.get(key) ?? [];
+			arr.push(pv);
+			predictByMarket.set(key, arr);
+		}
+
+		const predictUmbrellas: UmbrellaPositions[] = [];
+		for (const [, positions] of predictByMarket) {
+			const first = positions[0];
+			const syntheticUmbrella = {
+				_id: `predict-market-${first.tokenId.slice(0, 10)}`,
+				displayName: first.marketTitle,
+				children: [],
+				originalChildren: [],
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				__v: 0,
+			} as unknown as Umbrella;
+
+			const markets: MarketPosition[] = positions.map((pv) => {
+				const isYes =
+					pv.outcome.toLowerCase() === "yes" ||
+					pv.outcome.toLowerCase() !== "no";
+				return {
+					market: {
+						_id: `predict-${pv.tokenId.slice(0, 12)}`,
+						displayName: pv.marketTitle,
+						questionId: pv.conditionId ?? pv.tokenId,
+					} as unknown as PredictionMarket,
+					yesBalance: isYes ? pv.shares : 0,
+					noBalance: isYes ? 0 : pv.shares,
+					yesPrice: isYes ? pv.currentPrice : null,
+					noPrice: isYes ? null : pv.currentPrice,
+					yesValue: isYes ? pv.currentValue : 0,
+					noValue: isYes ? 0 : pv.currentValue,
+					totalValue: pv.currentValue,
+					orders: [],
+					aggregates: {
+						Yes: {
+							totalSize: isYes ? pv.shares : 0,
+							totalValue: isYes ? (pv.cost ?? 0) : 0,
+							avgPrice: isYes ? pv.avgPrice : null,
+							count: 0,
+						},
+						No: {
+							totalSize: isYes ? 0 : pv.shares,
+							totalValue: isYes ? 0 : (pv.cost ?? 0),
+							avgPrice: isYes ? null : pv.avgPrice,
+							count: 0,
+						},
+					},
+					venue: "predictfun" as VenueId,
+				};
+			});
+
+			predictUmbrellas.push({ umbrella: syntheticUmbrella, markets });
+		}
+
+		return [...levelUpUmbrellas, ...polyUmbrellas, ...predictUmbrellas];
 	}, [
 		effectiveAccount,
 		umbrellas,
@@ -203,6 +575,8 @@ export default function Positions() {
 		tokenBalances,
 		orders,
 		allBooksPreview,
+		polyPositions,
+		predictPositions,
 	]);
 
 	// derive resolved winnings using dedicated resolved markets storage
@@ -305,6 +679,105 @@ export default function Positions() {
 			}
 		);
 
+		// Append Predict.fun winnings as synthetic umbrella groups
+		const predictByMarketTitle = new Map<string, typeof predictWinnings>();
+		for (const pv of predictWinnings) {
+			const key = pv.marketTitle || pv.tokenId;
+			const arr = predictByMarketTitle.get(key) ?? [];
+			arr.push(pv);
+			predictByMarketTitle.set(key, arr);
+		}
+		for (const [, positions] of predictByMarketTitle) {
+			const first = positions[0];
+			const syntheticUmbrella = {
+				_id: `predict-win-${first.tokenId.slice(0, 10)}`,
+				displayName: first.marketTitle,
+				children: [],
+				originalChildren: [],
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				__v: 0,
+			} as unknown as Umbrella;
+
+			const markets: MarketPosition[] = positions.map((pv) => {
+				const isYes =
+					pv.outcome.toLowerCase() === "yes" ||
+					pv.outcome.toLowerCase() !== "no";
+				const mDetail = pv.numericMarketId ? predictMarketDetails.get(pv.numericMarketId) : undefined;
+				return {
+					market: {
+						_id: `predict-win-${pv.tokenId.slice(0, 12)}`,
+						displayName: pv.marketTitle,
+						questionId: pv.conditionId ?? pv.tokenId,
+						conditionId: pv.conditionId,
+						resolvedOutcome: isYes ? "yes" : "no",
+						_venue: "predictfun",
+						_isNegRisk: mDetail?.isNegRisk ?? false,
+						_isYieldBearing: mDetail?.isYieldBearing ?? false,
+					} as unknown as PredictionMarket,
+					yesBalance: isYes ? pv.shares : 0,
+					noBalance: isYes ? 0 : pv.shares,
+					yesPrice: null,
+					noPrice: null,
+					yesValue: 0,
+					noValue: 0,
+					totalValue: 0,
+					orders: [],
+					aggregates: { Yes: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 }, No: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 } },
+					venue: "predictfun" as VenueId,
+				};
+			});
+			if (markets.length > 0) resolved.push({ umbrella: syntheticUmbrella, markets });
+		}
+
+		// Append Polymarket winnings
+		const polyWinByEvent = new Map<string, typeof polyWinnings>();
+		for (const pv of polyWinnings) {
+			const key = pv.eventSlug || pv.marketTitle;
+			const arr = polyWinByEvent.get(key) ?? [];
+			arr.push(pv);
+			polyWinByEvent.set(key, arr);
+		}
+		for (const [, positions] of polyWinByEvent) {
+			const first = positions[0];
+			const syntheticUmbrella = {
+				_id: `poly-win-${first.tokenId.slice(0, 10)}`,
+				displayName: first.marketTitle,
+				children: [],
+				originalChildren: [],
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				__v: 0,
+				_polyIcon: first.iconUrl,
+			} as unknown as Umbrella;
+
+			const markets: MarketPosition[] = positions.map((pv) => {
+				const isYes = pv.outcome.toLowerCase() === "yes" ||
+					pv.outcome.toLowerCase() !== "no";
+				return {
+					market: {
+						_id: `poly-win-${pv.tokenId.slice(0, 12)}`,
+						displayName: pv.marketTitle,
+						questionId: pv.conditionId,
+						conditionId: pv.conditionId,
+						resolvedOutcome: isYes ? "yes" : "no",
+						_venue: "polymarket",
+					} as unknown as PredictionMarket,
+					yesBalance: isYes ? pv.shares : 0,
+					noBalance: isYes ? 0 : pv.shares,
+					yesPrice: null,
+					noPrice: null,
+					yesValue: 0,
+					noValue: 0,
+					totalValue: 0,
+					orders: [],
+					aggregates: { Yes: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 }, No: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 } },
+					venue: "polymarket" as VenueId,
+				};
+			});
+			if (markets.length > 0) resolved.push({ umbrella: syntheticUmbrella, markets });
+		}
+
 		return resolved;
 	}, [
 		effectiveAccount,
@@ -312,6 +785,9 @@ export default function Positions() {
 		umbrellas,
 		tokenBalances,
 		claimedMarkets,
+		predictWinnings,
+		polyWinnings,
+		predictMarketDetails,
 	]);
 
 	// Calculate totals
@@ -335,23 +811,44 @@ export default function Positions() {
 		return `${Math.round(value * 100)}¢`;
 	};
 
+	// Build a price lookup for Polymarket positions (keyed by synthetic market _id)
+	const polyPriceMap = useMemo(() => {
+		const map: Record<string, { yesPrice: number | null; noPrice: number | null }> = {};
+		for (const up of umbrellaPositions) {
+			for (const mp of up.markets) {
+				if (mp.venue === "polymarket" || mp.venue === "predictfun") {
+					map[mp.market._id] = {
+						yesPrice: mp.yesPrice,
+						noPrice: mp.noPrice,
+					};
+				}
+			}
+		}
+		return map;
+	}, [umbrellaPositions]);
+
 	const getCurrentPriceForSide = (
 		market: PredictionMarket,
 		side: "Yes" | "No"
 	): number | null => {
-		// USE questionId for price lookups (transaction hash) - EXACTLY like home page
+		const marketId = market._id;
+
+		// For Polymarket positions, use the pre-computed prices
+		const polyPrices = polyPriceMap[marketId];
+		if (polyPrices) {
+			return side === "Yes" ? polyPrices.yesPrice : polyPrices.noPrice;
+		}
+
 		const questionId = market.questionId || market._id;
 		if (!questionId) return null;
-
-		// Get prices from allBooksPreview (EXACTLY like home page cards)
 		const preview = questionId ? allBooksPreview[questionId] : undefined;
 
 		if (side === "Yes") {
-			return preview?.lowestAsk ?? null; // Yes price = lowestAsk
+			return preview?.lowestAsk ?? null;
 		} else {
 			return preview?.highestBid !== null &&
 				preview?.highestBid !== undefined
-				? 1 - preview.highestBid // No price = 1 - highestBid
+				? 1 - preview.highestBid
 				: null;
 		}
 	};
@@ -364,6 +861,7 @@ export default function Positions() {
 			market: mp.market,
 			yes: mp.yesBalance.toString(),
 			no: mp.noBalance.toString(),
+			venue: mp.venue ?? "levelup",
 		})),
 	}));
 
@@ -378,6 +876,49 @@ export default function Positions() {
 			})),
 		})
 	);
+
+	// Build venue orders for the Orders tab (Predict.fun open orders on live markets only)
+	const venueOrders: VenueOrder[] = useMemo(() => {
+		if (predictOpenOrders.length === 0) return [];
+
+		// Build lookup maps for market titles and outcome names from positions + market details
+		const titleLookup = new Map<number, string>();
+		const outcomeLookup = new Map<string, string>();
+		for (const p of allPredictPositions) {
+			if (p.numericMarketId) titleLookup.set(p.numericMarketId, p.marketTitle);
+			outcomeLookup.set(p.tokenId, p.outcome);
+		}
+		for (const [id, detail] of predictMarketDetails) {
+			if (!titleLookup.has(id)) titleLookup.set(id, detail.title);
+			for (const o of detail.outcomes ?? []) {
+				if (!outcomeLookup.has(o.onChainId)) outcomeLookup.set(o.onChainId, o.name);
+			}
+		}
+
+		// Filter to live markets only
+		const liveOrders = predictOpenOrders.filter((o) => {
+			const detail = predictMarketDetails.get(o.marketId);
+			if (!detail) return true; // if we don't have detail, assume live
+			return detail.status !== "RESOLVED" && detail.status !== "REMOVED" &&
+				detail.tradingStatus !== "CLOSED";
+		});
+
+		return mapPredictOrdersToVenueOrders(liveOrders, titleLookup, outcomeLookup);
+	}, [predictOpenOrders, allPredictPositions, predictMarketDetails]);
+
+	// Combine Predict.fun + Polymarket lost/resolved positions for the History tab
+	const venueHistory = useMemo(() => {
+		const items: typeof allPredictPositions = [];
+		items.push(...predictHistory);
+		for (const pos of polyHistory) {
+			items.push({
+				...pos,
+				outcomeResult: "LOST",
+				marketStatus: "RESOLVED",
+			});
+		}
+		return items;
+	}, [predictHistory, polyHistory]);
 
 	const returnsByQid = useMemo(() => {
 		const map: Record<string, { Yes: number; No: number }> = {};
@@ -674,43 +1215,47 @@ export default function Positions() {
 											</>
 										);
 									}
-									if (activeTab === "orders") {
-										return !isMobile ? (
-											<OrdersView
-												umbrellaBalances={
-													umbrellaBalancesOrders
-												}
-												orders={orders || []}
-											/>
-										) : (
-											<OrdersCardView
-												umbrellaBalances={
-													umbrellaBalancesOrders
-												}
-												orders={orders || []}
-											/>
-										);
-									}
+								if (activeTab === "orders") {
 									return !isMobile ? (
-										<HistoryView
+										<OrdersView
 											umbrellaBalances={
-												umbrellaBalancesPositions
+												umbrellaBalancesOrders
 											}
-											returnsByQid={returnsByQid}
 											orders={orders || []}
-											resolvedMarketsByUmbrella={
-												resolvedMarketsByUmbrella
-											}
+											venueOrders={venueOrders}
 										/>
 									) : (
-										<HistoryCardView
-											returnsByQid={returnsByQid}
-											orders={orders || []}
-											resolvedMarketsByUmbrella={
-												resolvedMarketsByUmbrella
+										<OrdersCardView
+											umbrellaBalances={
+												umbrellaBalancesOrders
 											}
+											orders={orders || []}
+											venueOrders={venueOrders}
 										/>
 									);
+								}
+								return !isMobile ? (
+									<HistoryView
+										umbrellaBalances={
+											umbrellaBalancesPositions
+										}
+										returnsByQid={returnsByQid}
+										orders={orders || []}
+										resolvedMarketsByUmbrella={
+											resolvedMarketsByUmbrella
+										}
+										venueHistory={venueHistory}
+									/>
+								) : (
+									<HistoryCardView
+										returnsByQid={returnsByQid}
+										orders={orders || []}
+										resolvedMarketsByUmbrella={
+											resolvedMarketsByUmbrella
+										}
+										venueHistory={venueHistory}
+									/>
+								);
 								})()
 							)}
 						</>

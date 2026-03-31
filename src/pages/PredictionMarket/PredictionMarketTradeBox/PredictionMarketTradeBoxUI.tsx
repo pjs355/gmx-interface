@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
+import { Link } from "react-router-dom";
 import Button from "components/Button/Button";
 import Tabs from "components/Tabs/Tabs";
 import Tooltip from "components/Tooltip/Tooltip";
-import type { TradeBoxProps, TradeBoxState, ApprovalState } from './types';
+import type { TradeBoxProps, TradeBoxState, ApprovalState, TradingVenue, MarketOrderCalculation } from './types';
+import type { OrderbookSnapshot } from '@/services/api/orderbookService';
 import './PredictionMarketTradeBox.scss';
 import { MyPositionsRow } from './MyPositionsRow';
 import { mixpanelTrack } from "@/utils/mixpanel";
-// Helper function to calculate prices from orderbook
+import { calculateFeeMatchingBackend } from './feeLevelUp';
+
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
   
@@ -20,16 +23,25 @@ const calculateOrderbookPrices = (orderbook: any) => {
     
   return { bestAsk, bestBid };
 };
-import { useMarketOrderHandler } from './MarketOrderHandler';
-// import Tooltip from "components/Tooltip/Tooltip";
 
 interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
+  /** Book-walk functions from the parent's single useMarketOrderHandler instance. */
+  calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
+  getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
   state: TradeBoxState;
   onPositionChange: (position: 'yes' | 'no') => void;
   onAmountChange: (amount: string) => void;
   onPriceChange: (price: string) => void;
+  onTradingVenueChange: (venue: TradingVenue) => void;
   onOrderTypeChange: (orderType: 'market' | 'limit') => void;
   onSideChange: (side: 'buy' | 'sell') => void;
+  /** Shown under the venue tabs when Polymarket is selected (setup / monitor status). */
+  polymarketVenueHint?: string | null;
+  predictVenueHint?: string | null;
+  predictVenueBookHints?: {
+    yes: OrderbookSnapshot | null;
+    no: OrderbookSnapshot | null;
+  } | null;
   onTrade: () => void;
   buttonState: {
     text: string;
@@ -41,6 +53,18 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   approvalState: ApprovalState;
 }
 
+/** Same nested shape as Market/Limit (`label` matches first option, like Market/Market). */
+const venueDropdownOptions = [
+  {
+    label: "LevelUp",
+    options: [
+      { value: "levelup" as const, label: "LevelUp" },
+      { value: "polymarket" as const, label: "Polymarket" },
+      { value: "predictfun" as const, label: "Predict.fun" },
+    ],
+  },
+];
+
 export default function PredictionMarketTradeBoxUI({
   market,
   orderbook,
@@ -48,28 +72,27 @@ export default function PredictionMarketTradeBoxUI({
   onPositionChange,
   onAmountChange,
   onPriceChange,
+  onTradingVenueChange,
   onOrderTypeChange,
   onSideChange,
+  polymarketVenueHint,
+  predictVenueHint,
+  predictVenueBookHints,
   onTrade,
   buttonState,
-  approvalState
+  approvalState,
+  calculateContractsForMarketOrder,
+  getEffectivePrice,
 }: PredictionMarketTradeBoxUIProps) {
-  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive } = state;
+  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
-  const { calculateContractsForMarketOrder, getEffectivePrice } = useMarketOrderHandler(orderbook as any);
-
-  // Fee calculation helper - MUST match backend exactly
-  // Backend uses: round UP to nearest cent (10000 micro-units)
-  const calculateFeeMatchingBackend = (amountInDollars: number): number => {
-    // Step 1: Convert to micro-units (USDC has 6 decimals)
-    const amountMicro = Math.floor(amountInDollars * 1_000_000);
-    // Step 2: Calculate 2% fee in micro-units
-    const feeBeforeRounding = Math.floor(amountMicro * 2 / 100);
-    // Step 3: Round UP to nearest cent (10000 micro-units)
-    const feeRoundedUp = Math.ceil(feeBeforeRounding / 10000) * 10000;
-    // Step 4: Convert back to dollars
-    return feeRoundedUp / 1_000_000;
-  };
+  const predictHints = predictVenueBookHints;
+  const yesHintPrices = predictHints?.yes
+    ? calculateOrderbookPrices(predictHints.yes)
+    : null;
+  const noHintPrices = predictHints?.no
+    ? calculateOrderbookPrices(predictHints.no)
+    : null;
 
   // Helper function to format numbers with commas
   const formatNumberWithCommas = (value: string): string => {
@@ -99,8 +122,19 @@ export default function PredictionMarketTradeBoxUI({
   // Flip prices based on buy/sell side:
   // - BUY: YES shows bestAsk (what you pay), NO shows (1 - bestBid) (what you pay)
   // - SELL: YES shows bestBid (what you receive), NO shows (1 - bestAsk) (what you receive)
-  const yesPrice = side === 'buy' ? bestAsk : bestBid;
-  const noPrice = side === 'buy'
+  // Predict.fun: monitor hints are per-outcome native books (no 1−p complement between legs).
+  const yesPrice =
+    tradingVenue === "predictfun" && yesHintPrices
+      ? side === "buy"
+        ? yesHintPrices.bestAsk
+        : yesHintPrices.bestBid
+      : side === 'buy' ? bestAsk : bestBid;
+  const noPrice =
+    tradingVenue === "predictfun" && noHintPrices
+      ? side === "buy"
+        ? noHintPrices.bestAsk
+        : noHintPrices.bestBid
+      : side === 'buy'
     ? (bestBid === null ? null : 1 - bestBid)
     : (bestAsk === null ? null : 1 - bestAsk);
   
@@ -180,14 +214,14 @@ export default function PredictionMarketTradeBoxUI({
     return market.displayName || market.question;
   }, [overUnderMatch, market.displayName, market.question]);
 
-  const tabsOptions = [
+  const orderTypeDropdownOptions = [
     {
       label: "Market",
       options: [
-        { value: 'market', label: 'Market' },
-        { value: 'limit', label: 'Limit' }
-      ]
-    }
+        { value: "market" as const, label: "Market" },
+        { value: "limit" as const, label: "Limit" },
+      ],
+    },
   ];
 
   // Compute values for limit orders
@@ -244,14 +278,25 @@ export default function PredictionMarketTradeBoxUI({
     if (!amount || !selectedPosition) return null;
     const usdAmount = Number(amount);
     if (!Number.isFinite(usdAmount) || usdAmount <= 0) return null;
-    const { contracts, remainingUsd } = calculateContractsForMarketOrder(usdAmount, selectedPosition, 'buy');
+    const walkUsd = tradingVenue === "levelup" ? usdAmount / 1.02 : usdAmount; // Polymarket + Predict: full notional
+    const { contracts, remainingUsd } = calculateContractsForMarketOrder(walkUsd, selectedPosition, 'buy');
     if (!contracts || contracts <= 0) return null;
-    const avgPrice = getEffectivePrice(usdAmount, contracts, remainingUsd);
+    const avgPrice = getEffectivePrice(walkUsd, contracts, remainingUsd);
     if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
     // Determine reference current market price for comparison
-    const referencePrice = selectedPosition === 'yes'
-      ? (bestAsk ?? null)
-      : (bestBid === null || bestBid === undefined ? null : (1 - bestBid));
+    const referencePrice = (() => {
+      if (tradingVenue === "predictfun" && predictHints) {
+        const hp =
+          selectedPosition === "yes" ? yesHintPrices : noHintPrices;
+        if (!hp) return null;
+        return selectedPosition === "yes"
+          ? hp.bestAsk ?? null
+          : hp.bestAsk ?? null;
+      }
+      return selectedPosition === 'yes'
+        ? (bestAsk ?? null)
+        : (bestBid === null || bestBid === undefined ? null : (1 - bestBid));
+    })();
     const pct = Math.round(avgPrice * 100);
     if (!Number.isFinite(pct) || pct < 0) return null;
     const isUpdated = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
@@ -261,7 +306,7 @@ export default function PredictionMarketTradeBoxUI({
       ? Math.round(referencePrice * 100)
       : null;
     return { pct, avgPrice, isUpdated, fromPct };
-  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, getEffectivePrice, bestAsk, bestBid]);
+  }, [orderType, side, amount, selectedPosition, tradingVenue, calculateContractsForMarketOrder, getEffectivePrice, bestAsk, bestBid, predictHints, yesHintPrices, noHintPrices]);
 
   // Compute Avg Price (¢) for market SELL orders using weighted average sale price
   const sellAvgCents = useMemo(() => {
@@ -279,11 +324,39 @@ export default function PredictionMarketTradeBoxUI({
 
   return (
     <div className="prediction-market-tradebox">
-      {/* Market Name Header */}
+      {/* Title + venue dropdown (same control pattern as Market / Limit) */}
       <div className="market-name-header">
-        <h3>{displayMarketTitle}</h3>
+        <h3 className="market-name-header__title">{displayMarketTitle}</h3>
+        <div className="market-name-header__venue trade-mode-selector">
+          <Tabs
+            options={venueDropdownOptions}
+            regularOptionClassname="py-10"
+            type="inline"
+            selectedValue={state.tradingVenue}
+            onChange={(value) =>
+              onTradingVenueChange(value as TradingVenue)
+            }
+            qa="trade-venue"
+          />
+        </div>
       </div>
-      
+      {state.tradingVenue === "polymarket" && polymarketVenueHint ? (
+        <p className="trade-venue-hint">
+          {polymarketVenueHint}{" "}
+          <Link to="/trading" className="trade-venue-hint__link">
+            Open Trading
+          </Link>
+        </p>
+      ) : null}
+      {state.tradingVenue === "predictfun" && predictVenueHint ? (
+        <p className="trade-venue-hint">
+          {predictVenueHint}{" "}
+          <Link to="/trading" className="trade-venue-hint__link">
+            Open Trading
+          </Link>
+        </p>
+      ) : null}
+
       <div className="tradebox-header">
         {/* Buy/Sell Toggle moved to header */}
         <div className="side-selector">
@@ -305,7 +378,7 @@ export default function PredictionMarketTradeBoxUI({
         </div>
         <div className="trade-mode-selector">
           <Tabs
-            options={tabsOptions}
+            options={orderTypeDropdownOptions}
             regularOptionClassname="py-10"
             type="inline"
             selectedValue={orderType}
@@ -513,11 +586,17 @@ export default function PredictionMarketTradeBoxUI({
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content={`Your cost was reduced to give you an even dollar payout. Includes a fee of $${tradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`}
+                  content={
+                    (tradingFee ?? 0) > 0
+                      ? `Your cost was reduced to give you an even dollar payout. Includes a fee of $${tradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
+                      : tradingVenue === "predictfun"
+                        ? "Estimated USDT spent against the Predict.fun REST orderbook for this outcome. Fees use the market feeRateBps."
+                      : "Estimated USDC spent against the Polymarket book shown. Additional protocol or taker fees may apply at execution."
+                  }
                   position="top"
                   withPortal={true}
                 >
-                  <span className="bet-size-label">Estimated Cost</span>
+                  <span className="bet-size-label">{tradingVenue === "predictfun" ? "Estimated Cost (USDT)" : "Estimated Cost"}</span>
                 </Tooltip>
                 <span className="bet-size-value estimated-cost-value">
                   $ {estimatedCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -540,11 +619,17 @@ export default function PredictionMarketTradeBoxUI({
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content={`Includes a fee of $${sellTradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`}
+                  content={
+                    (sellTradingFee ?? 0) > 0
+                      ? `Includes a fee of $${sellTradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
+                      : tradingVenue === "predictfun"
+                        ? "Estimated USDT received against the Predict.fun book. Fees use the market feeRateBps."
+                      : "Estimated USDC received against the Polymarket book shown. Additional fees may apply at execution."
+                  }
                   position="top"
                   withPortal={true}
                 >
-                  <span className="bet-size-label">Estimated Receive</span>
+                  <span className="bet-size-label">{tradingVenue === "predictfun" ? "Estimated Receive (USDT)" : "Estimated Receive"}</span>
                 </Tooltip>
                 <span className="bet-size-value estimated-receive-value">
                   $ {(Math.floor(netReceive * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -554,7 +639,7 @@ export default function PredictionMarketTradeBoxUI({
           )}
           {/* Show Estimated Cost line for buy limit orders (includes 2% trading fee) */}
           {/* Uses backend-matching fee calculation: round UP to nearest cent */}
-          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && (
+          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && tradingVenue === "levelup" && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
@@ -568,9 +653,35 @@ export default function PredictionMarketTradeBoxUI({
               </div>
             </div>
           )}
-          {/* Show Estimated Receive line for sell limit orders (after 2% trading fee) */}
-          {/* Uses backend-matching fee calculation, then floor to avoid showing more than user receives */}
-          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && (
+          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && tradingVenue === "polymarket" && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <Tooltip
+                  content="Notional USDC if the full limit fills at your price. Polymarket protocol or maker/taker fees may apply at execution."
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Est. notional</span>
+                </Tooltip>
+                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
+          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && tradingVenue === "predictfun" && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <Tooltip
+                  content="Notional USDT on BNB if the full limit fills at your price. Predict.fun fees use feeRateBps from the market."
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Est. notional (USDT)</span>
+                </Tooltip>
+                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
+          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && tradingVenue === "levelup" && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
@@ -581,6 +692,34 @@ export default function PredictionMarketTradeBoxUI({
                   <span className="bet-size-label">Estimated Receive</span>
                 </Tooltip>
                 <span className="bet-size-value amount-value">$ {(Math.floor((limitOrderAmount - calculateFeeMatchingBackend(limitOrderAmount)) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
+          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && tradingVenue === "polymarket" && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <Tooltip
+                  content="Notional USDC if the full limit fills at your price. Fees may apply at execution."
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Est. notional</span>
+                </Tooltip>
+                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
+          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && tradingVenue === "predictfun" && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <Tooltip
+                  content="Notional USDT on BNB if the full limit fills at your price."
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label">Est. notional (USDT)</span>
+                </Tooltip>
+                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}
@@ -612,8 +751,26 @@ export default function PredictionMarketTradeBoxUI({
               orderType: orderType,
               side: side,
               selectedPosition: selectedPosition,
+              tradingVenue: state.tradingVenue,
               amount: amount,
               price: price,
+              limitPriceProb:
+                orderType === "limit" && price
+                  ? Number(price) / 100
+                  : null,
+              derivedAvgFillPriceFromBook:
+                orderType === "market" && oddsData
+                  ? oddsData.avgPrice
+                  : null,
+              derivedAvgFillCents:
+                orderType === "market" && oddsData
+                  ? Math.round(oddsData.avgPrice * 100)
+                  : null,
+              marketSellAvgCents:
+                orderType === "market" && side === "sell"
+                  ? sellAvgCents
+                  : null,
+              estContracts: state.calculatedContracts,
               buttonText: buttonState.text,
             });
           } catch (error) {
@@ -634,7 +791,11 @@ export default function PredictionMarketTradeBoxUI({
             {orderResult.success ? (
               <div className="notification-text"> Order Submitted!</div>
             ) : (
-              <div className="notification-text">Order Failed</div>
+              <div className="notification-text">
+                {orderResult.error
+                  ? `Order failed: ${orderResult.error}`
+                  : "Order Failed"}
+              </div>
             )}
           </div>
         </div>

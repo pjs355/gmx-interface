@@ -42,7 +42,14 @@ import { usePortfolio } from "@/context/PortfolioContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { useTransfersModal } from "@/context/TransfersModalContext";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { TransfersBridgePanel } from "./TransfersBridgePanel";
 import "./Transfers.scss";
+
+function formatAddress(value: string | undefined): string {
+	if (!value?.trim()) return "—";
+	return value.trim();
+}
 
 export default function Transfers() {
 	const { login, authenticated } = usePrivy();
@@ -51,6 +58,7 @@ export default function Transfers() {
 	const { refresh: refreshUserData } = useUserData();
 	const { fundWallet } = useFundWallet();
 	const { openModal: openWithdrawModal } = useTransfersModal();
+	const funding = useFundingAddresses();
 
 	// Format currency helper
 	const formatCurrency = useCallback((value: number | null): string => {
@@ -131,8 +139,7 @@ export default function Transfers() {
 					</div>
 				</div>
 
-				{/* Action Buttons */}
-				<div className="transfers-actions">
+				<div className="transfers-actions transfers-actions--below-summary">
 					<button
 						className="transfers-btn transfers-btn-deposit"
 						onClick={handleDeposit}
@@ -147,6 +154,49 @@ export default function Transfers() {
 						Withdraw Funds
 					</button>
 				</div>
+
+				<TransfersBridgePanel />
+
+				<section className="transfers-addresses" aria-label="Your wallet addresses">
+					<h2 className="transfers-addresses__title">Your addresses</h2>
+					<p className="transfers-addresses__sub">
+						Polygon shows your Polymarket Safe when linked, otherwise your
+						embedded signer. BNB Chain is your embedded wallet (same EOA).
+					</p>
+					<div className="transfers-addresses__row">
+						<span className="transfers-addresses__label">Polygon</span>
+						<code className="transfers-addresses__value">
+							{funding.isLoading &&
+							!(funding.polymarketSafe ?? funding.polygonSigner) ? (
+								<span className="transfers-skeleton transfers-skeleton--address" />
+							) : (
+								formatAddress(
+									funding.polymarketSafe ?? funding.polygonSigner
+								)
+							)}
+						</code>
+					</div>
+					<div className="transfers-addresses__row">
+						<span className="transfers-addresses__label">Base (smart wallet)</span>
+						<code className="transfers-addresses__value">
+							{funding.isLoading && !funding.baseSmartWallet ? (
+								<span className="transfers-skeleton transfers-skeleton--address" />
+							) : (
+								formatAddress(funding.baseSmartWallet)
+							)}
+						</code>
+					</div>
+					<div className="transfers-addresses__row">
+						<span className="transfers-addresses__label">BNB Chain</span>
+						<code className="transfers-addresses__value">
+							{funding.isLoading && !funding.embeddedEoa ? (
+								<span className="transfers-skeleton transfers-skeleton--address" />
+							) : (
+								formatAddress(funding.embeddedEoa)
+							)}
+						</code>
+					</div>
+				</section>
 			</div>
 		</div>
 	);

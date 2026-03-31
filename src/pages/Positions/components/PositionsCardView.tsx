@@ -19,27 +19,23 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
-	// Priority 1: Check for server image (ic_{umbrellaID})
+	const polyIcon = umbrella?._polyIcon || null;
+
 	const serverImage =
 		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
 
-	// Priority 2: Check for tag imageUrl from tags
 	const tagImage = getTagImageFromUmbrella(umbrella, tags);
 
-	// Priority 3: Check for game logo based on tag labels
 	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 	const gameLogo = resolveLogoByTags(tagLabels);
 
-	// Priority 4: Fallback to game controller
 	const fallbackLogo = gameLogo || gtaIcon;
 
-	// Determine initial source
-	const initialSrc = serverImage || tagImage || fallbackLogo;
+	const initialSrc = polyIcon || serverImage || tagImage || fallbackLogo;
 
 	const handleError = () => {
 		if (!imageError) {
 			setImageError(true);
-			// Try fallback order: tagImage → gameLogo → gtaIcon
 			if (currentSrc !== tagImage && tagImage) {
 				setCurrentSrc(tagImage);
 			} else if (currentSrc !== gameLogo && gameLogo) {
@@ -158,7 +154,7 @@ export default function PositionsCardView({
 		<div className="flex flex-col gap-12">
 			{umbrellaBalances.map(({ umbrella, markets }: any) => (
 				<div key={umbrella._id} className="umbrella-card">
-					{markets.map(({ market, yes, no }: any) => {
+					{markets.map(({ market, yes, no, venue }: any) => {
 						const yesNum = Number(yes);
 						const noNum = Number(no);
 						const rows: { side: "Yes" | "No"; amount: string }[] =
@@ -351,6 +347,20 @@ export default function PositionsCardView({
 														{side}
 													</span>
 												</>
+											)}
+											{venue && (
+												<span style={{
+													marginLeft: 6,
+													fontSize: 11,
+													color: "#666",
+													fontWeight: 400,
+												}}>
+													({venue === "polymarket"
+														? "Polymarket"
+														: venue === "predictfun"
+															? "Predict.fun"
+															: "LevelUp"})
+												</span>
 											)}
 										</div>
 									</div>

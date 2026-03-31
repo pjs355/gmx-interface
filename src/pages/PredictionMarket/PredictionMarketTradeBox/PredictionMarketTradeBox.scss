@@ -13,22 +13,108 @@
 	}
 
 	.market-name-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
 		text-align: left;
 		margin-bottom: 12px;
-		margin-top: 0px !important; // Reduced from 30px
+		margin-top: 0px !important;
 
-		h3 {
+		.market-name-header__title {
 			margin: 0;
 			font-size: 20px;
 			font-weight: 600;
 			color: #ffffff;
-			// Allow long titles to wrap without stretching the container
 			white-space: normal;
 			word-break: break-word;
 			overflow-wrap: anywhere;
 			overflow: visible;
 			text-overflow: clip;
+			flex: 1;
+			min-width: 0;
 		}
+
+		&__venue.trade-mode-selector {
+			flex-shrink: 0;
+		}
+	}
+
+	/* One block for Market/Limit + LevelUp/Polymarket (NestedTab + any portal menus) */
+	.trade-mode-selector {
+		.Tab.Tab__inline {
+			background: transparent;
+			border: none;
+		}
+
+		.Tab-option > div {
+			color: #ffffff !important;
+		}
+
+		.Tab-option > div:hover {
+			color: #ffffff !important;
+		}
+
+		.menu-items,
+		[data-headlessui-portal],
+		div[class*="z-"] {
+			position: absolute !important;
+			right: 0 !important;
+			top: 4.3rem !important;
+			min-width: 12rem !important;
+			width: 100% !important;
+			transform-origin: top right !important;
+			border-radius: 0.4rem !important;
+			overflow: hidden !important;
+			background: #1a1a1a !important;
+			border: 1px solid var(--color-stroke-primary) !important;
+			list-style: none !important;
+			cursor: pointer !important;
+			outline: none !important;
+			z-index: 1000 !important;
+		}
+
+		.menu-item,
+		[data-headlessui-portal] > div,
+		div[class*="z-"] > div,
+		.p-8,
+		.text-body-medium {
+			display: flex !important;
+			align-items: center !important;
+			color: #ffffff !important;
+			padding: 0.85rem 0.8rem !important;
+			font-size: var(--font-size-body-medium) !important;
+			border-radius: 0.4rem !important;
+			min-height: 44px !important;
+		}
+
+		.menu-item:hover,
+		[data-headlessui-portal] > div:hover,
+		div[class*="z-"] > div:hover,
+		.p-8:hover,
+		.text-body-medium:hover {
+			background: #808aff14 !important;
+			border-radius: 0.4rem !important;
+			opacity: 1 !important;
+			color: #ffffff !important;
+		}
+
+		div[class*="z-"] {
+			background: black !important;
+		}
+	}
+
+	.trade-venue-hint {
+		margin: -4px 0 12px;
+		font-size: 13px;
+		line-height: 1.45;
+		color: rgba(255, 255, 255, 0.55);
+	}
+
+	.trade-venue-hint__link {
+		color: #a78bfa;
+		text-decoration: underline;
+		white-space: nowrap;
 	}
 
 	.tradebox-header {
@@ -89,73 +175,6 @@
 					height: 36px; // Maintain fixed height
 				}
 			}
-		}
-
-		.trade-mode-selector {
-			.Tab.Tab__inline {
-				background: transparent;
-				border: none;
-			}
-		}
-
-		// Additional specific targeting for the trade mode selector
-		.trade-mode-selector .Tab-option > div {
-			color: #ffffff !important;
-		}
-
-		.trade-mode-selector .Tab-option > div:hover {
-			color: #ffffff !important;
-		}
-
-		// Style the dropdown menu similar to AddressDropdown
-		.trade-mode-selector .menu-items,
-		.trade-mode-selector [data-headlessui-portal],
-		.trade-mode-selector div[class*="z-"] {
-			position: absolute !important;
-			right: 0 !important;
-			top: 4.3rem !important;
-			min-width: 12rem !important;
-			width: 100% !important;
-			transform-origin: top right !important;
-			border-radius: 0.4rem !important;
-			overflow: hidden !important;
-			background: #1a1a1a !important;
-			border: 1px solid var(--color-stroke-primary) !important;
-			list-style: none !important;
-			cursor: pointer !important;
-			outline: none !important;
-			z-index: 1000 !important;
-		}
-
-		// Style dropdown items similar to AddressDropdown
-		.trade-mode-selector .menu-item,
-		.trade-mode-selector [data-headlessui-portal] > div,
-		.trade-mode-selector div[class*="z-"] > div,
-		.trade-mode-selector .p-8,
-		.trade-mode-selector .text-body-medium {
-			display: flex !important;
-			align-items: center !important;
-			color: #ffffff !important;
-			padding: 0.85rem 0.8rem !important;
-			font-size: var(--font-size-body-medium) !important;
-			border-radius: 0.4rem !important;
-			min-height: 44px !important;
-		}
-
-		.trade-mode-selector .menu-item:hover,
-		.trade-mode-selector [data-headlessui-portal] > div:hover,
-		.trade-mode-selector div[class*="z-"] > div:hover,
-		.trade-mode-selector .p-8:hover,
-		.trade-mode-selector .text-body-medium:hover {
-			background: #808aff14 !important;
-			border-radius: 0.4rem !important;
-			opacity: 1 !important;
-			color: #ffffff !important;
-		}
-
-		// Target any div inside the trade mode selector that might be the dropdown
-		.trade-mode-selector div[class*="z-"] {
-			background: black !important;
 		}
 	}
 }
@@ -1085,5 +1104,30 @@
 				color: #ef4444;
 			}
 		}
+	}
+}
+
+.execution-gate-banner {
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: rgba(252, 211, 77, 0.12);
+	border: 1px solid rgba(252, 211, 77, 0.35);
+	font-size: 13px;
+	line-height: 1.4;
+
+	&__heading {
+		font-weight: 600;
+		margin-bottom: 6px;
+	}
+
+	&__reasons {
+		margin: 0 0 8px 16px;
+		padding: 0;
+	}
+
+	&__link {
+		color: #fcd34d;
+		font-weight: 600;
 	}
 }

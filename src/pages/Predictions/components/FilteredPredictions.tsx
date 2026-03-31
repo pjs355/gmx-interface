@@ -166,16 +166,6 @@ export default function FilteredPredictions({
 				}
 			})
 			.filter((umbrella) => {
-				// For esports, filter out umbrellas with status "finished"
-				if (filterType === "esports") {
-					const status = (umbrella as any).status;
-					if (typeof status === "string" && status === "finished") {
-						return false;
-					}
-				}
-				return true;
-			})
-			.filter((umbrella) => {
 				// Apply secondary game filter if selected
 				// Skip tag filtering if "New" pill is selected (it just sorts, doesn't filter)
 				if (!selectedGame || selectedGame === NEW_PILL_ID) return true;

@@ -7,6 +7,7 @@
  * Environment modes:
  * - TESTNET: Uses testnet contract addresses + localhost API (for local development)
  * - PRODUCTION: Uses live contract addresses + production API (for deployed app)
+ * - LOCAL-PRODUCTION: Uses live contract addresses + localhost API (for local backend with real contracts)
  * 
  * Priority order for environment detection:
  * 1. VITE_ENVIRONMENT_MODE env variable (set by yarn dev prompt)
@@ -14,14 +15,14 @@
  * 3. Auto-detect based on hostname (localhost = testnet, otherwise = production)
  */
 
-export type Environment = "testnet" | "production";
+export type Environment = "testnet" | "production" | "local-production";
 
 /**
  * Get the environment mode set at build/dev time via VITE_ENVIRONMENT_MODE
  */
 function getBuildTimeEnvironment(): Environment | null {
 	const envMode = import.meta.env.VITE_ENVIRONMENT_MODE;
-	if (envMode === "testnet" || envMode === "production") {
+	if (envMode === "testnet" || envMode === "production" || envMode === "local-production") {
 		return envMode;
 	}
 	return null;
@@ -66,10 +67,19 @@ export function isTestnet(): boolean {
 }
 
 /**
- * Check if currently in production mode
+ * Check if currently in production mode (includes local-production for contract selection)
  */
 export function isProduction(): boolean {
-	return getEnvironment() === "production";
+	const env = getEnvironment();
+	return env === "production" || env === "local-production";
+}
+
+/**
+ * Check if the API should point to localhost (testnet or local-production)
+ */
+export function isLocalApi(): boolean {
+	const env = getEnvironment();
+	return env === "testnet" || env === "local-production";
 }
 
 /**

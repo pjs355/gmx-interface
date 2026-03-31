@@ -101,6 +101,10 @@ export type AddressKeys = keyof typeof ADDRESSES;
 export const TESTNET_ADDRESSES = TESTNET;
 export const PRODUCTION_ADDRESSES = PRODUCTION;
 
+/** BNB Smart Chain mainnet — USDT BEP-20 (18 decimals). Matches server LI.FI BSC stable config. */
+export const BSC_MAINNET_USDT_ADDRESS =
+	"0x55d398326f99059fF775485246999027B3197955" as const;
+
 /**
  * Get addresses for a specific environment (bypasses auto-detection)
  */

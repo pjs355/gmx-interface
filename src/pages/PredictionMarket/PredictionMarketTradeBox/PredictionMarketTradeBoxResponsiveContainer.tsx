@@ -6,7 +6,15 @@ import {
 	useIsCurtainOpen,
 	useCurtainActions,
 } from "./PredictionCurtain";
-import type { TradeBoxProps, TradeBoxState, ApprovalState } from "./types";
+import type { ReactNode } from "react";
+import type {
+	TradeBoxProps,
+	TradeBoxState,
+	ApprovalState,
+	TradingVenue,
+	MarketOrderCalculation,
+} from "./types";
+import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import Button from "components/Button/Button";
 
 interface PredictionMarketTradeBoxResponsiveContainerProps
@@ -16,6 +24,13 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	onAmountChange: (amount: string) => void;
 	onPriceChange: (price: string) => void;
 	onOrderTypeChange: (orderType: "market" | "limit") => void;
+	onTradingVenueChange: (venue: TradingVenue) => void;
+	polymarketVenueHint?: string | null;
+	predictVenueHint?: string | null;
+	predictVenueBookHints?: {
+		yes: OrderbookSnapshot | null;
+		no: OrderbookSnapshot | null;
+	} | null;
 	onSideChange: (side: "buy" | "sell") => void;
 	onTrade: () => void;
 	buttonState: {
@@ -26,6 +41,9 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		availableShares?: number;
 	};
 	approvalState: ApprovalState;
+	executionGateBanner?: ReactNode;
+	calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
+	getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -36,10 +54,17 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	onAmountChange,
 	onPriceChange,
 	onOrderTypeChange,
+	onTradingVenueChange,
+	polymarketVenueHint,
+	predictVenueHint,
+	predictVenueBookHints,
 	onSideChange,
 	onTrade,
 	buttonState,
 	approvalState,
+	executionGateBanner,
+	calculateContractsForMarketOrder,
+	getEffectivePrice,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -61,18 +86,56 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		return Math.max(...orderbook.bids.map((b: any) => b.price));
 	}, [orderbook]);
 
-	// Flip prices based on buy/sell side (same logic as PredictionMarketTradeBoxUI)
+	// Flip prices based on buy/sell side (Predict.fun: per-outcome monitor hints are native books)
 	const yesPriceCents = useMemo(() => {
+		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.yes) {
+			const h = predictVenueBookHints.yes;
+			const ba =
+				h.asks && h.asks.length > 0
+					? Math.min(...h.asks.map((a: { price: number }) => a.price))
+					: null;
+			const bb =
+				h.bids && h.bids.length > 0
+					? Math.max(...h.bids.map((b: { price: number }) => b.price))
+					: null;
+			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
+		}
 		return state.side === "buy"
 			? calcCents(bestAsk as any)
 			: calcCents(bestBid as any);
-	}, [bestAsk, bestBid, calcCents, state.side]);
+	}, [
+		state.tradingVenue,
+		state.side,
+		predictVenueBookHints,
+		bestAsk,
+		bestBid,
+		calcCents,
+	]);
 
 	const noPriceCents = useMemo(() => {
+		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.no) {
+			const h = predictVenueBookHints.no;
+			const ba =
+				h.asks && h.asks.length > 0
+					? Math.min(...h.asks.map((a: { price: number }) => a.price))
+					: null;
+			const bb =
+				h.bids && h.bids.length > 0
+					? Math.max(...h.bids.map((b: { price: number }) => b.price))
+					: null;
+			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
+		}
 		return state.side === "buy"
 			? calcCents(bestBid === null ? null : 1 - (bestBid as any))
 			: calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
-	}, [bestBid, bestAsk, calcCents, state.side]);
+	}, [
+		state.tradingVenue,
+		state.side,
+		predictVenueBookHints,
+		bestBid,
+		bestAsk,
+		calcCents,
+	]);
 
 	// Dynamic color logic for single VS markets
 	const isVsSingle = useMemo(() => {
@@ -170,22 +233,29 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				style={{ backgroundColor: "black", marginBottom: "80px" }}
 				data-qa="prediction-tradebox"
 			>
-				<PredictionMarketTradeBoxUI
-					market={market}
-					orderbook={orderbook}
-					state={state}
-					onPositionChange={onPositionChange}
-					onAmountChange={onAmountChange}
-					onPriceChange={onPriceChange}
-					onOrderTypeChange={onOrderTypeChange}
-					onSideChange={onSideChange}
-					onTrade={onTrade}
-					buttonState={buttonState}
-					approvalState={approvalState}
-				/>
-			</div>
-		);
-	}
+				{executionGateBanner}
+			<PredictionMarketTradeBoxUI
+				market={market}
+				orderbook={orderbook}
+				state={state}
+				onPositionChange={onPositionChange}
+				onAmountChange={onAmountChange}
+				onPriceChange={onPriceChange}
+				onTradingVenueChange={onTradingVenueChange}
+				onOrderTypeChange={onOrderTypeChange}
+				onSideChange={onSideChange}
+				polymarketVenueHint={polymarketVenueHint}
+				predictVenueHint={predictVenueHint}
+				predictVenueBookHints={predictVenueBookHints}
+				onTrade={onTrade}
+				buttonState={buttonState}
+				approvalState={approvalState}
+				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
+				getEffectivePrice={getEffectivePrice}
+			/>
+		</div>
+	);
+}
 
 	return (
 		<PredictionCurtain
@@ -291,6 +361,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		>
 			<div className="curtain-content-inner">
 				<div className="curtain-drag-handle"></div>
+				{executionGateBanner}
 				<button
 					className="curtain-close-btn"
 					aria-label="Close trading panel"
@@ -298,20 +369,26 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				>
 					▾
 				</button>
-				<PredictionMarketTradeBoxUI
-					market={market}
-					orderbook={orderbook}
-					state={state}
-					onPositionChange={onPositionChange}
-					onAmountChange={onAmountChange}
-					onPriceChange={onPriceChange}
-					onOrderTypeChange={onOrderTypeChange}
-					onSideChange={onSideChange}
-					onTrade={onTrade}
-					buttonState={buttonState}
-					approvalState={approvalState}
-				/>
-			</div>
-		</PredictionCurtain>
+			<PredictionMarketTradeBoxUI
+				market={market}
+				orderbook={orderbook}
+				state={state}
+				onPositionChange={onPositionChange}
+				onAmountChange={onAmountChange}
+				onPriceChange={onPriceChange}
+				onTradingVenueChange={onTradingVenueChange}
+				onOrderTypeChange={onOrderTypeChange}
+				onSideChange={onSideChange}
+				polymarketVenueHint={polymarketVenueHint}
+				predictVenueHint={predictVenueHint}
+				predictVenueBookHints={predictVenueBookHints}
+				onTrade={onTrade}
+				buttonState={buttonState}
+				approvalState={approvalState}
+				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
+				getEffectivePrice={getEffectivePrice}
+			/>
+		</div>
+	</PredictionCurtain>
 	);
 }

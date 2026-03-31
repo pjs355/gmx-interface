@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-// import { usePrivy } from "@privy-io/react-auth";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { VenueOrder } from "@/types/trading/venuePosition";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
 	resolveLogoByTags,
@@ -61,11 +62,14 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 export default function OrdersView({
 	umbrellaBalances,
 	orders,
+	venueOrders = [],
 }: {
 	umbrellaBalances: any[];
 	orders: ProcessedOrder[];
+	venueOrders?: VenueOrder[];
 }) {
 	const navigate = useNavigate();
+	const privateApi = usePrivateApiClient();
 
 	// Navigation function to go to trading page with specific market and position
 	const navigateToTradingPage = (
@@ -398,34 +402,109 @@ export default function OrdersView({
 					);
 				})}
 
-				{umbrellaBalances.length > 0 &&
-					Object.keys(ordersByMarket).length === 0 && (
-						<div
-							className="grid items-center px-12 py-12"
+			{/* Venue orders (Predict.fun, etc.) */}
+			{venueOrders.filter((vo) => !removedIds.has(vo.orderId)).map((vo) => (
+				<div
+					key={`venue-${vo.orderId}`}
+					className="grid items-center px-12 py-12 order-row"
+					style={{
+						gridTemplateColumns: "minmax(200px, 2fr) repeat(4, 1fr)",
+						borderBottom: "1px solid #1f1f1f",
+						fontSize: 16,
+						transition: "background-color 0.2s ease",
+					}}
+					onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#2a2a2a"; }}
+					onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+				>
+					<div style={{ color: "#fff", fontWeight: 600 }}>
+						{vo.marketTitle}
+						{" "}
+						<span style={{ color: vo.position === "Yes" ? "#16a34a" : "#ef4444" }}>
+							{vo.position}
+						</span>
+						<span style={{ color: "#888", fontSize: 12, marginLeft: 6 }}>
+							({vo.venue === "predictfun" ? "Predict.fun" : vo.venue})
+						</span>
+					</div>
+					<div style={{ textAlign: "center", color: vo.side === "buy" ? "#16a34a" : "#ef4444" }}>
+						{vo.side === "buy" ? "Buy" : "Sell"}
+					</div>
+					<div style={{ textAlign: "center", color: "#fff" }}>
+						{`${Math.round(vo.price * 100)}¢`}
+					</div>
+					<div style={{ textAlign: "center", color: "#fff" }}>
+						{Math.round(vo.size)}
+					</div>
+					<div style={{ textAlign: "center" }}>
+						<button
+							type="button"
 							style={{
-								gridTemplateColumns:
-									"minmax(200px, 2fr) repeat(4, 1fr)",
-								borderBottom: "1px solid #1f1f1f",
+								background: "#ef4444",
+								color: "#fff",
+								border: "none",
+								borderRadius: 6,
+								padding: "6px 12px",
+								cursor: cancelingIds.has(vo.orderId) ? "default" : "pointer",
+								opacity: cancelingIds.has(vo.orderId) ? 0.7 : 1,
+							}}
+							onClick={async (e) => {
+								e.stopPropagation();
+								if (cancelingIds.has(vo.orderId)) return;
+								setCancelingIds((prev) => new Set(prev).add(vo.orderId));
+								try {
+									if (vo.venue === "predictfun" && vo.rawOrder) {
+										await privateApi.removePredictOrders({ orders: [vo.rawOrder] });
+									}
+								} catch (err) {
+									console.error("Cancel venue order error:", err);
+								} finally {
+									setTimeout(() => {
+										setRemovedIds((prev) => new Set(prev).add(vo.orderId));
+										setCancelingIds((prev) => {
+											const ns = new Set(prev);
+											ns.delete(vo.orderId);
+											return ns;
+										});
+									}, 3000);
+								}
 							}}
 						>
-							<div style={{ color: "#fff", fontWeight: 600 }}>
-								No open orders found
-							</div>
-							<div style={{ textAlign: "center", color: "#fff" }}>
-								—
-							</div>
-							<div style={{ textAlign: "center", color: "#fff" }}>
-								—
-							</div>
-							<div style={{ textAlign: "center", color: "#fff" }}>
-								—
-							</div>
-							<div style={{ textAlign: "center", color: "#fff" }}>
-								—
-							</div>
+							{cancelingIds.has(vo.orderId)
+								? `Canceling${".".repeat((tick % 3) + 1)}`
+								: "Cancel"}
+						</button>
+					</div>
+				</div>
+			))}
+
+			{Object.keys(ordersByMarket).length === 0 &&
+				venueOrders.filter((vo) => !removedIds.has(vo.orderId)).length === 0 && (
+					<div
+						className="grid items-center px-12 py-12"
+						style={{
+							gridTemplateColumns:
+								"minmax(200px, 2fr) repeat(4, 1fr)",
+							borderBottom: "1px solid #1f1f1f",
+						}}
+					>
+						<div style={{ color: "#fff", fontWeight: 600 }}>
+							No open orders found
 						</div>
-					)}
-			</div>
+						<div style={{ textAlign: "center", color: "#fff" }}>
+							—
+						</div>
+						<div style={{ textAlign: "center", color: "#fff" }}>
+							—
+						</div>
+						<div style={{ textAlign: "center", color: "#fff" }}>
+							—
+						</div>
+						<div style={{ textAlign: "center", color: "#fff" }}>
+							—
+						</div>
+					</div>
+				)}
+		</div>
 		</div>
 	);
 }

@@ -1,5 +1,38 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+	/** Optional Polygon mainnet JSON-RPC URL (Infura, Alchemy, etc.); falls back to a public node */
+	readonly VITE_POLYGON_RPC_URL?: string;
+	/**
+	 * Optional public prediction API base (umbrellas, markets, tags, order WS).
+	 * Yarn dev [3] uses Railway for catalogs by default; private API defaults to localhost (see privateApiBase).
+	 */
+	readonly VITE_PREDICTION_API_BASE_URL?: string;
+	/** Override private API host (Polymarket, account-overview, funding). Dev [3] defaults to http://localhost:8080 */
+	readonly VITE_PRIVATE_API_BASE?: string;
+	/** Set to "true" to enable trading shell execution gate network calls */
+	readonly VITE_TRADING_SHELL_ENABLED?: string;
+	readonly VITE_ODDS_WS_BASE?: string;
+	readonly VITE_ODDS_MONITOR_TOKEN?: string;
+	/** Injected in vite.config from process.env.MONITOR_TOKEN (not read from .env). */
+	readonly VITE_ODDS_MONITOR_FROM_SHELL?: string;
+	/** "true" when Amsterdam CLOB proxy is active (set by yarn dev prompt) */
+	readonly VITE_POLYMARKET_CLOB_PROXY?: string;
+	/** Amsterdam Railway /proxy URL (server-side only, used by Vite plugin) */
+	readonly VITE_POLY_PROXY_URL?: string;
+	/** Bearer token for Amsterdam Railway /proxy (server-side only) */
+	readonly VITE_POLY_PROXY_TOKEN?: string;
+	/**
+	 * Predict order tunnel upstream (vite + browser). LIVE: optional (defaults prod Railway in vite). TEST/DEV: if set, browser
+	 * also tunnels order POST (EU egress); must be a URL your Amsterdam /proxy can reach (not localhost).
+	 */
+	readonly VITE_AMSTERDAM_PROXY_LEVELUP_API_URL?: string;
+	/** "true" → request Privy gas sponsorship on BSC; omit or false → you pay BNB gas */
+	readonly VITE_PRIVY_SPONSOR_BSC_GAS?: string;
+	/** Optional Predict smart-wallet deposit address (maker/signer for orders) */
+	readonly VITE_PREDICT_ACCOUNT_ADDRESS?: string;
+}
+
 // Image module declarations
 declare module "*.png" {
   const value: string;

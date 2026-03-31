@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getFinalAmount } from "@/services/api/simplifiedOrderService";
+import type { VenuePosition } from "@/types/trading/venuePosition";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
 	resolveLogoByTags,
@@ -59,10 +60,12 @@ export default function HistoryCardView({
 	returnsByQid,
 	orders,
 	resolvedMarketsByUmbrella,
+	venueHistory = [],
 }: {
 	returnsByQid: Record<string, { Yes: number; No: number }>;
 	orders: any[];
 	resolvedMarketsByUmbrella: Record<string, any[]>;
+	venueHistory?: VenuePosition[];
 }) {
 	const { umbrellas } = usePredictionData();
 	const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
@@ -178,9 +181,11 @@ export default function HistoryCardView({
 		return filtered;
 	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
 
+	const hasAnyHistory = filteredResolvedMarkets.length > 0 || venueHistory.length > 0;
+
 	return (
 		<div className="flex flex-col gap-12">
-			{filteredResolvedMarkets.length === 0 ? (
+			{!hasAnyHistory ? (
 				<div
 					style={{
 						textAlign: "center",
@@ -195,7 +200,8 @@ export default function HistoryCardView({
 					</p>
 				</div>
 			) : (
-				filteredResolvedMarkets.map(({ umbrella, markets }) => (
+				<>
+				{filteredResolvedMarkets.map(({ umbrella, markets }) => (
 					<div key={umbrella._id} className="umbrella-card">
 						{markets.map(({ market, yes, no }) => {
 							const qid =
@@ -701,7 +707,74 @@ export default function HistoryCardView({
 							);
 						})}
 					</div>
-				))
+				))}
+
+				{/* Venue history cards (Predict.fun / Polymarket resolved) */}
+				{venueHistory.map((pos) => {
+					const isWon = pos.outcomeResult === "WON";
+					const returnVal = pos.pnl;
+					const returnColor = returnVal === null ? "#fff" : returnVal >= 0 ? "#16a34a" : "#ef4444";
+					const venueLabel = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue;
+
+					return (
+						<div
+							key={`vh-${pos.tokenId}`}
+							style={{
+								background: "#1a1a1a",
+								border: "1px solid #2a2a2a",
+								borderRadius: 12,
+								overflow: "hidden",
+								marginBottom: 12,
+							}}
+						>
+							<div
+								style={{
+									padding: "16px",
+									background: "#0a0a0a",
+									borderBottom: "1px solid #2a2a2a",
+									display: "flex",
+									alignItems: "center",
+									gap: 12,
+								}}
+							>
+								<div style={{ flex: 1 }}>
+									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+										{venueLabel}
+									</div>
+									<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
+										{pos.marketTitle}{" "}
+										<span style={{ color: isWon ? "#16a34a" : "#ef4444" }}>
+											{pos.outcome}
+										</span>
+									</div>
+								</div>
+							</div>
+							<div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+								<div style={{ flex: 1 }}>
+									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Result</div>
+									<div style={{ color: isWon ? "#16a34a" : "#ef4444", fontSize: 18, fontWeight: 700 }}>
+										{pos.outcomeResult ?? "Lost"}
+									</div>
+								</div>
+								<div style={{ flex: 1, textAlign: "center" }}>
+									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Cost</div>
+									<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
+										{pos.cost !== null ? `$${pos.cost.toFixed(2)}` : "—"}
+									</div>
+								</div>
+								<div style={{ flex: 1, textAlign: "right" }}>
+									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Return</div>
+									<div style={{ color: returnColor, fontSize: 18, fontWeight: 700, whiteSpace: "nowrap" }}>
+										{returnVal !== null && isFinite(returnVal)
+											? `${returnVal >= 0 ? "+" : "-"}$${Math.abs(returnVal).toFixed(2)}`
+											: "—"}
+									</div>
+								</div>
+							</div>
+						</div>
+					);
+				})}
+				</>
 			)}
 		</div>
 	);

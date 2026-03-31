@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getFinalAmount } from "@/services/api/simplifiedOrderService";
+import type { VenuePosition } from "@/types/trading/venuePosition";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
 	resolveLogoByTags,
@@ -62,11 +63,13 @@ export default function HistoryView({
 	returnsByQid,
 	orders,
 	resolvedMarketsByUmbrella,
+	venueHistory = [],
 }: {
 	umbrellaBalances: any[];
 	returnsByQid: Record<string, { Yes: number; No: number }>;
 	orders: any[];
 	resolvedMarketsByUmbrella: Record<string, any[]>;
+	venueHistory?: VenuePosition[];
 }) {
 	const { umbrellas } = usePredictionData();
 	
@@ -173,9 +176,11 @@ export default function HistoryView({
 		return cashIn - cashOut;
 	};
 
+	const hasAnyHistory = filteredResolvedMarkets.length > 0 || venueHistory.length > 0;
+
 	return (
 		<div className="flex flex-col gap-8">
-			{filteredResolvedMarkets.length === 0 ? (
+			{!hasAnyHistory ? (
 				<div
 					style={{
 						textAlign: "center",
@@ -190,6 +195,8 @@ export default function HistoryView({
 					</p>
 				</div>
 			) : (
+				<>
+				{filteredResolvedMarkets.length === 0 ? null : (
 				<ScrollableTable minWidth="700px">
 					<div
 						className="grid items-center px-12 py-10"
@@ -635,6 +642,75 @@ export default function HistoryView({
 						)}
 					</div>
 				</ScrollableTable>
+				)}
+
+				{/* Venue history (Predict.fun / Polymarket resolved positions) */}
+				{venueHistory.length > 0 && (
+					<ScrollableTable minWidth="700px">
+						<div
+							className="grid items-center px-12 py-10"
+							style={{
+								gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr)",
+								borderBottom: "1px solid #333333",
+								color: "#888",
+								fontSize: 12,
+								textTransform: "uppercase",
+								letterSpacing: 0.6,
+								marginTop: filteredResolvedMarkets.length > 0 ? 24 : 0,
+							}}
+						>
+							<div>Market</div>
+							<div style={{ textAlign: "center" }}>Position</div>
+							<div style={{ textAlign: "center" }}>Result</div>
+							<div style={{ textAlign: "center" }}>Cost</div>
+							<div style={{ textAlign: "center" }}>Shares</div>
+							<div style={{ textAlign: "center" }}>Return</div>
+						</div>
+						<div className="flex flex-col">
+							{venueHistory.map((pos) => {
+								const isWon = pos.outcomeResult === "WON";
+								const returnVal = pos.pnl;
+								const returnColor = returnVal === null ? "#fff" : returnVal >= 0 ? "#16a34a" : "#ef4444";
+								const venueLabel = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue;
+
+								return (
+									<div
+										key={`vh-${pos.tokenId}`}
+										className="grid items-center px-12 py-12"
+										style={{
+											gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr)",
+											borderBottom: "1px solid #1f1f1f",
+											fontSize: 16,
+										}}
+									>
+										<div style={{ color: "#fff", fontWeight: 600 }}>
+											{pos.marketTitle}
+											<span style={{ color: "#888", fontSize: 12, marginLeft: 6 }}>({venueLabel})</span>
+										</div>
+										<div style={{ textAlign: "center", color: "#fff" }}>
+											{pos.outcome}
+										</div>
+										<div style={{ textAlign: "center", color: isWon ? "#16a34a" : "#ef4444", fontWeight: 600 }}>
+											{pos.outcomeResult ?? "Lost"}
+										</div>
+										<div style={{ textAlign: "center", color: "#fff" }}>
+											{pos.cost !== null ? `$${pos.cost.toFixed(2)}` : "—"}
+										</div>
+										<div style={{ textAlign: "center", color: "#fff" }}>
+											{pos.shares > 0 ? Math.round(pos.shares).toLocaleString() : "—"}
+										</div>
+										<div style={{ textAlign: "center", color: returnColor, fontWeight: "bold" }}>
+											{returnVal !== null && isFinite(returnVal)
+												? `${returnVal >= 0 ? "+" : "-"}$${Math.abs(returnVal).toFixed(2)}`
+												: "—"}
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					</ScrollableTable>
+				)}
+				</>
 			)}
 		</div>
 	);

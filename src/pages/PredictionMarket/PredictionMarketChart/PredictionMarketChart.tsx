@@ -358,6 +358,20 @@ const PredictionMarketChart = React.memo(
 		if (!prevProps.questionOrderbooks && nextProps.questionOrderbooks)
 			return false;
 
+		// CRITICAL: Re-render when historical price data changes
+		// This ensures the chart updates after new trades are made
+		const prevHistoricalLength = prevProps.activeMarket?.historicalPricesYes?.length ?? 0;
+		const nextHistoricalLength = nextProps.activeMarket?.historicalPricesYes?.length ?? 0;
+		if (prevHistoricalLength !== nextHistoricalLength) return false;
+
+		// Also check if the latest price has changed (for same-length arrays)
+		if (prevHistoricalLength > 0 && nextHistoricalLength > 0) {
+			const prevLatest = prevProps.activeMarket?.historicalPricesYes?.[prevHistoricalLength - 1];
+			const nextLatest = nextProps.activeMarket?.historicalPricesYes?.[nextHistoricalLength - 1];
+			if (prevLatest?.price !== nextLatest?.price) return false;
+			if (prevLatest?.ts !== nextLatest?.ts) return false;
+		}
+
 		return true; // Props are equal, skip re-render
 	}
 );

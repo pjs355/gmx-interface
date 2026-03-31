@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useFundWallet } from "@privy-io/react-auth";
@@ -14,6 +16,38 @@ import { useUSDCBalance, checkSufficientBalance, useYesNoBalances, checkSufficie
 import { useUserData } from "context/UserDataContext";
 import { useButtonState } from "./hooks/useButtonState";
 import { useTradeState } from "./hooks/useTradeState";
+import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
+import { getPrivateApiErrorMessage } from "@/services/privateApi";
+import { calculateFeeMatchingBackend } from "./feeLevelUp";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import { usePolymarketExecutionGate } from "@/trading/hooks/usePolymarketExecutionGate";
+import { usePolymarketClobTradingSession } from "@/trading/polymarket/usePolymarketClobTradingSession";
+import {
+	polyOrderbookForPosition,
+	polyOutcomeTokenId,
+} from "@/trading/polymarket/polyOutcomeTokenId";
+import { monitorBookToOrderbookSnapshot } from "@/trading/polymarket/monitorOrderbookAdapter";
+import { usePredictTradingSession } from "@/trading/predict/usePredictTradingSession";
+import { usePredictMarketDetail } from "@/trading/predict/usePredictMarketDetail";
+import { usePredictOrderbook } from "@/trading/predict/usePredictOrderbook";
+import { predictBookToOrderbookSnapshot } from "@/trading/predict/predictBookToOrderbookSnapshot";
+import {
+	predictMarketNumericId,
+	predictOrderbookForPosition,
+	predictOutcomeSide,
+} from "@/trading/predict/predictOutcome";
+import {
+	predictOutcomeTokenId,
+} from "@/trading/predict/predictMarketApi";
+import { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
+import { usePredictUsdtBalance, usePredictOutcomeShareOnChain } from "@/trading/predict/usePredictBnbBalances";
+import {
+	bboFromSnapshot,
+	logPolymarketTradePreflight,
+} from "@/trading/polymarket/polymarketOrderDebug";
+import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
+import { Side, type TickSize } from "@polymarket/clob-client";
+import { getYesNoTeamLabels } from "./teamLabels";
 
 interface PredictionMarketTradeBoxProps extends TradeBoxProps {}
 
@@ -29,9 +63,9 @@ export interface PredictionMarketTradeBoxHandle {
 }
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }, ref) => {
 
-  const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange } = useTradeState(initialPosition);
+  const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTradingVenueChange } = useTradeState(initialPosition);
   // const { client: smartClient, getClientForChain } = useSmartWallets();
   const { account } = useSignerContext();
   const { login, authenticated } = usePrivy();
@@ -42,8 +76,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { wallets: privyWallets } = usePrivyWallets();
   const { fundWallet } = useFundWallet();
 
-  // Use passed orderbook directly (no longer using OrderbookContext)
-  const orderbook = propOrderbook ?? null;
+  /** LevelUp REST orderbook (signing + execution always uses this for LevelUp venue). */
+  const levelUpOrderbook = propOrderbook ?? null;
 
   // Handle deposit - opens Privy's fund wallet modal
   const handleAddFunds = useCallback(async () => {
@@ -58,76 +92,370 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
   }, [account, fundWallet, refresh]);
 
-  // Custom hooks for different order types
-  const marketOrderHandler = useMarketOrderHandler(orderbook);
-  // const limitOrderHandler = useLimitOrderHandler(orderbook);
   const tradeExecutionService = useTradeExecutionService();
+  const executionGate = usePolymarketExecutionGate();
+  const {
+    enabled: oddsMonitorEnabled,
+    connected: oddsMonitorConnected,
+    appState: oddsAppState,
+  } = useOddsMonitor();
+
+  const pandaId = pandascoreMatchId?.trim() ?? "";
+  const matchedMonitor = useMemo(() => {
+    if (!pandaId || !oddsAppState?.markets?.length) return null;
+    return (
+      oddsAppState.markets.find((m) => String(m.pandaMatchId) === pandaId) ??
+      null
+    );
+  }, [oddsAppState?.markets, pandaId]);
+
+  const queryClient = useQueryClient();
+
+  const { yesTeamLabel, noTeamLabel } = useMemo(
+    () => getYesNoTeamLabels(market),
+    [market]
+  );
+
+  const predictVenueActive = state.tradingVenue === "predictfun";
+
+  const predictNumericId = useMemo(() => {
+    if (!predictVenueActive || !matchedMonitor || !state.selectedPosition) {
+      return null;
+    }
+    return predictMarketNumericId(
+      matchedMonitor,
+      state.selectedPosition,
+      yesTeamLabel,
+      noTeamLabel
+    );
+  }, [
+    predictVenueActive,
+    matchedMonitor,
+    state.selectedPosition,
+    yesTeamLabel,
+    noTeamLabel,
+  ]);
+
+  const predictMarketQuery = usePredictMarketDetail(
+    predictNumericId,
+    predictVenueActive
+  );
+  const predictOrderbookQuery = usePredictOrderbook(
+    predictNumericId,
+    predictVenueActive
+  );
+  const predictMarketDetail = predictMarketQuery.data ?? null;
+
+  const predictSession = usePredictTradingSession(
+    predictVenueActive && authenticated && Boolean(pandaId) && Boolean(predictNumericId)
+  );
+
+  /**
+   * On-chain USDT / CTF approvals for Predict.fun are signed from the **Privy embedded EOA**
+   * on BSC (`setApprovals`). `account` from SignerContext is often the Base **smart wallet**,
+   * so using it here makes approval checks look failed even after txs succeeded.
+   * If `VITE_PREDICT_ACCOUNT_ADDRESS` is set, use that as the token/allowance owner (Predict deposit).
+   */
+  const predictApprovalSubject = useMemo(() => {
+    const fromEnv = import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS?.trim();
+    if (fromEnv) return fromEnv;
+    const embedded = (privyWallets || []).find(
+      (w) =>
+        (w as { walletClientType?: string }).walletClientType === "privy" ||
+        (w as { connectorType?: string }).connectorType === "privy"
+    ) as { address?: string } | undefined;
+    if (embedded?.address) return embedded.address;
+    return account ?? null;
+  }, [privyWallets, account]);
+
+  const predictApprovalsQuery = usePredictApprovalsStatus(
+    predictApprovalSubject,
+    predictMarketDetail?.isNegRisk ?? false,
+    predictMarketDetail?.isYieldBearing ?? false,
+    predictVenueActive && Boolean(predictApprovalSubject) && Boolean(predictMarketDetail)
+  );
+
+  const predictUsdtQuery = usePredictUsdtBalance(
+    predictApprovalSubject,
+    predictVenueActive && authenticated && Boolean(predictApprovalSubject)
+  );
+  const predictUsdtBalance = predictUsdtQuery.data ?? 0;
+
+  const predictTokenIdForPosition = useMemo(() => {
+    if (!state.selectedPosition) return null;
+    if (matchedMonitor?.predictFun) {
+      const ab = predictOutcomeSide(
+        matchedMonitor,
+        state.selectedPosition,
+        yesTeamLabel,
+        noTeamLabel
+      );
+      const pf = matchedMonitor.predictFun;
+      const fromMonitor =
+        ab === "A" ? pf.tokenIdA : pf.tokenIdB ?? pf.tokenIdA;
+      if (fromMonitor) return fromMonitor;
+    }
+    if (!predictMarketDetail) return null;
+    try {
+      return predictOutcomeTokenId(
+        predictMarketDetail,
+        state.selectedPosition,
+        yesTeamLabel,
+        noTeamLabel
+      );
+    } catch {
+      return null;
+    }
+  }, [
+    matchedMonitor,
+    predictMarketDetail,
+    state.selectedPosition,
+    yesTeamLabel,
+    noTeamLabel,
+  ]);
+
+  const predictShareQuery = usePredictOutcomeShareOnChain(
+    predictApprovalSubject,
+    predictTokenIdForPosition,
+    predictMarketDetail?.isNegRisk ?? false,
+    predictMarketDetail?.isYieldBearing ?? false,
+    predictVenueActive &&
+      authenticated &&
+      Boolean(predictTokenIdForPosition)
+  );
+  const predictSellShareBalance = predictShareQuery.data ?? null;
+
+  const predictVenueBookHints = useMemo(() => {
+    if (!predictVenueActive || !matchedMonitor) return null;
+    return {
+      yes: monitorBookToOrderbookSnapshot(
+        predictOrderbookForPosition(
+          matchedMonitor,
+          "yes",
+          yesTeamLabel,
+          noTeamLabel
+        )
+      ),
+      no: monitorBookToOrderbookSnapshot(
+        predictOrderbookForPosition(
+          matchedMonitor,
+          "no",
+          yesTeamLabel,
+          noTeamLabel
+        )
+      ),
+    };
+  }, [
+    predictVenueActive,
+    matchedMonitor,
+    yesTeamLabel,
+    noTeamLabel,
+  ]);
+
+  /** LevelUp REST for LevelUp; Polymarket monitor; Predict.fun REST for selected outcome market. */
+  const effectiveOrderbook = useMemo(() => {
+    if (state.tradingVenue === "levelup") {
+      return levelUpOrderbook;
+    }
+    if (state.tradingVenue === "predictfun") {
+      const snap = predictBookToOrderbookSnapshot(
+        predictOrderbookQuery.data ?? undefined
+      );
+      return snap;
+    }
+    if (!matchedMonitor) return null;
+    const polyRaw = polyOrderbookForPosition(
+      matchedMonitor,
+      state.selectedPosition ?? "yes",
+      yesTeamLabel,
+      noTeamLabel
+    );
+    return monitorBookToOrderbookSnapshot(polyRaw);
+  }, [
+    state.tradingVenue,
+    state.selectedPosition,
+    levelUpOrderbook,
+    matchedMonitor,
+    yesTeamLabel,
+    noTeamLabel,
+    predictOrderbookQuery.data,
+  ]);
+
+  const marketOrderHandler = useMarketOrderHandler(effectiveOrderbook);
+
+  const orderbookWalkPosition =
+    state.tradingVenue === "predictfun"
+      ? "yes"
+      : state.selectedPosition ?? "yes";
+
+  const calculateContractsForMarketOrderUi = useCallback(
+    (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") =>
+      marketOrderHandler.calculateContractsForMarketOrder(
+        usdAmount,
+        state.tradingVenue === "predictfun" ? "yes" : position,
+        side
+      ),
+    [marketOrderHandler, state.tradingVenue]
+  );
+
+  const polyClob = usePolymarketClobTradingSession({
+    enabled:
+      authenticated &&
+      Boolean(pandaId) &&
+      state.tradingVenue === "polymarket",
+  });
+
+  const polymarketVenueHint = useMemo(() => {
+    if (state.tradingVenue !== "polymarket") return null;
+    if (!pandaId) {
+      return "Polymarket CLOB needs a PandaScore match on this umbrella.";
+    }
+    if (!oddsMonitorEnabled) {
+      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
+    }
+    if (!oddsMonitorConnected) {
+      return "Connecting to odds monitor…";
+    }
+    if (!matchedMonitor) {
+      return "No monitor row for this match — Poly books may not be linked yet.";
+    }
+    if (polyClob.loading || polyClob.polyAccountLoading) {
+      return "Preparing Polymarket CLOB…";
+    }
+    if (!polyClob.ready) {
+      return (
+        polyClob.blockedReason ||
+        polyClob.error ||
+        "Complete Polymarket setup to trade (Safe, approvals, builder sign)."
+      );
+    }
+    return null;
+  }, [
+    state.tradingVenue,
+    pandaId,
+    oddsMonitorEnabled,
+    oddsMonitorConnected,
+    matchedMonitor,
+    polyClob.loading,
+    polyClob.polyAccountLoading,
+    polyClob.ready,
+    polyClob.blockedReason,
+    polyClob.error,
+  ]);
+
+  const predictHasMarketIds = useMemo(() => {
+    if (!matchedMonitor?.predictFun) return false;
+    const a = matchedMonitor.predictFun.marketIdA;
+    const b = matchedMonitor.predictFun.marketIdB ?? a;
+    return (a != null && a !== "") || (b != null && b !== "");
+  }, [matchedMonitor]);
+
+  const predictVenueHint = useMemo(() => {
+    if (state.tradingVenue !== "predictfun") return null;
+    if (!pandaId) {
+      return "Predict.fun needs a PandaScore match on this umbrella.";
+    }
+    if (!oddsMonitorEnabled) {
+      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
+    }
+    if (!oddsMonitorConnected) {
+      return "Connecting to odds monitor…";
+    }
+    if (!matchedMonitor) {
+      return "No monitor row — Predict.fun ids may not be linked yet.";
+    }
+    if (!predictHasMarketIds) {
+      return "This monitor row has no Predict.fun market ids.";
+    }
+    if (predictMarketQuery.isLoading || predictOrderbookQuery.isLoading) {
+      return "Loading Predict.fun market…";
+    }
+    if (!predictNumericId) {
+      return "Could not resolve Predict.fun market id for this side.";
+    }
+    if (predictMarketQuery.isError) {
+      return "Failed to load Predict.fun market from API.";
+    }
+    if (predictSession.loading) {
+      return "Preparing Predict.fun wallet on BNB…";
+    }
+    if (!predictSession.ready) {
+      return (
+        predictSession.blockedReason ||
+        predictSession.error ||
+        "Complete Predict.fun setup (BNB, USDT, API key if mainnet)."
+      );
+    }
+    return null;
+  }, [
+    state.tradingVenue,
+    pandaId,
+    oddsMonitorEnabled,
+    oddsMonitorConnected,
+    matchedMonitor,
+    predictHasMarketIds,
+    predictNumericId,
+    predictMarketQuery.isLoading,
+    predictMarketQuery.isError,
+    predictOrderbookQuery.isLoading,
+    predictSession.loading,
+    predictSession.ready,
+    predictSession.blockedReason,
+    predictSession.error,
+  ]);
+
+  const predictTrading = useMemo(
+    () => ({
+      hasPandascoreLink: Boolean(pandaId),
+      hasMonitorMatch: Boolean(matchedMonitor),
+      hasPredictMarketIds: predictHasMarketIds,
+      ready: predictSession.ready && Boolean(predictMarketDetail),
+      loading:
+        predictSession.loading ||
+        predictMarketQuery.isLoading ||
+        predictOrderbookQuery.isLoading,
+      blockedReason:
+        predictSession.blockedReason ||
+        predictSession.error ||
+        (predictMarketQuery.isError ? "Predict market API error" : null),
+    }),
+    [
+      pandaId,
+      matchedMonitor,
+      predictHasMarketIds,
+      predictSession.ready,
+      predictSession.loading,
+      predictSession.blockedReason,
+      predictSession.error,
+      predictMarketDetail,
+      predictMarketQuery.isLoading,
+      predictMarketQuery.isError,
+      predictOrderbookQuery.isLoading,
+    ]
+  );
+
+  const polymarketTrading = useMemo(
+    () => ({
+      hasPandascoreLink: Boolean(pandaId),
+      hasMonitorMatch: Boolean(matchedMonitor),
+      ready: polyClob.ready,
+      loading: polyClob.loading || polyClob.polyAccountLoading,
+      blockedReason: polyClob.blockedReason || polyClob.error,
+    }),
+    [
+      pandaId,
+      matchedMonitor,
+      polyClob.ready,
+      polyClob.loading,
+      polyClob.polyAccountLoading,
+      polyClob.blockedReason,
+      polyClob.error,
+    ]
+  );
+
   const usdcBalance = useUSDCBalance();
   const { yesBalance, noBalance } = useYesNoBalances(market);
 
-  // Commented out approval checking - always approve instead
-  // const checkApproval = useCallback(async () => {
-  //   if (!account) return;
-  //   console.log("🔍 Checking approval for account:", account);
-  //   setApprovalState((prev) => ({ ...prev, isChecking: true }));
-
-  //   try {
-  //     // Check actual approval status using smart wallet
-  //     console.log("🔍 Checking actual approval status...");
-
-  //     let isApproved = false;
-
-  //     try {
-  //       // Create a simple provider that can make read calls
-  //       const { ethers } = await import("ethers");
-
-
-  //       // Check USDC allowance for CTF contract
-  //       const usdcContract = new ethers.Contract(
-  //         NEW_FAKE_USDC_ADDRESS,
-  //         ["function allowance(address owner, address spender) view returns (uint256)"],
-  //         provider
-  //       );
-
-  //       const usdcAllowance = await usdcContract.allowance(account, CTF_ADDRESS);
-  //       const hasUsdcApproval = usdcAllowance > ethers.parseUnits("1000000", 6); // Check if approved for 1M+ USDC
-
-  //       console.log("🔍 USDC allowance for CTF:", ethers.formatUnits(usdcAllowance, 6));
-
-  //       // Check CTF approval for EXCHANGE contract
-  //       const ctfContract = new ethers.Contract(
-  //         CTF_ADDRESS,
-  //         ["function isApprovedForAll(address owner, address operator) view returns (bool)"],
-  //         provider
-  //       );
-
-  //       const ctfApproval = await ctfContract.isApprovedForAll(account, EXCHANGE_ADDRESS);
-
-  //       console.log("🔍 CTF approval for EXCHANGE:", ctfApproval);
-
-  //       // Both approvals must be present
-  //       isApproved = hasUsdcApproval && ctfApproval;
-
-  //       console.log("🔍 Overall approval status:", isApproved);
-  //     } catch (error) {
-  //       console.error("Error checking approval status:", error);
-  //       // If we can't check, assume approval is needed
-  //       isApproved = false;
-  //     }
-
-  //     setApprovalState((prev) => ({
-  //       ...prev,
-  //       isApproved,
-  //       isChecking: false,
-  //     }));
-  //   } catch (error) {
-  //     console.error("Error checking approval:", error);
-  //     setApprovalState((prev) => ({ ...prev, isChecking: false }));
-  //   }
-  // }, [account]);
-
-
-  // Event handlers with state change logging
   // Notify parent when position changes
   const onPositionChangeWrapper = useCallback((position: "yes" | "no") => {
     handlePositionChange(position);
@@ -140,93 +468,67 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     onSideChangeCallback?.(side);
   }, [handleSideChange, onSideChangeCallback]);
 
-  // Approval is now handled globally in UserDataContext
-
-  // Function to manually refresh approval status (useful for users to check after approval)
-  // const refreshApprovalStatus = useCallback(() => {
-  //   if (account) {
-  //     console.log("🔄 Manually refreshing approval status...");
-  //     checkApproval();
-  //   }
-  // }, [account, checkApproval]);
-
-  // Fee calculation helper - MUST match backend exactly
-  // Backend uses: round UP to nearest cent (10000 micro-units)
-  // Formula: Math.ceil(fee / 10000) * 10000, then convert to dollars
-  const calculateFeeMatchingBackend = (amountInDollars: number): number => {
-    // Step 1: Convert to micro-units (USDC has 6 decimals)
-    const amountMicro = Math.floor(amountInDollars * 1_000_000);
-    
-    // Step 2: Calculate 2% fee in micro-units
-    const feeBeforeRounding = Math.floor(amountMicro * 2 / 100);
-    
-    // Step 3: Round UP to nearest cent (10000 micro-units)
-    const feeRoundedUp = Math.ceil(feeBeforeRounding / 10000) * 10000;
-    
-    // Step 4: Convert back to dollars
-    return feeRoundedUp / 1_000_000;
-  };
-
-  // Calculate contracts for market orders immediately when dependencies change
-  // For BUY orders, we use an effective budget of amount/1.02 to account for the 2% trading fee
-  // This ensures the total cost (including fee) doesn't exceed the user's input amount
-  // For SELL orders, fee is deducted from the USDC proceeds (2% of what they receive)
+  // Market-order sizing: walks effectiveOrderbook, applies LevelUp 2% fee only for that venue.
   const calculatedMarketOrderData = useMemo(() => {
-    // Only run if we have all required data and it's a market order
-    if (state.orderType === "market" && state.amount && state.selectedPosition && orderbook) {
+    const applyLevelUpFees = state.tradingVenue === "levelup";
+
+    if (
+      state.orderType === "market" &&
+      state.amount &&
+      state.selectedPosition &&
+      effectiveOrderbook
+    ) {
       const usdAmount = parseFloat(state.amount);
       if (!isNaN(usdAmount) && usdAmount > 0) {
-        // For BUY orders, use effective budget to account for 2% fee
-        // This ensures spent * 1.02 <= usdAmount
-        const effectiveBudget = state.side === 'buy' ? usdAmount / 1.02 : usdAmount;
-        
+        const effectiveBudget =
+          state.side === "buy"
+            ? applyLevelUpFees
+              ? usdAmount / 1.02
+              : usdAmount
+            : usdAmount;
+
         const result = marketOrderHandler.calculateContractsForMarketOrder(
           effectiveBudget,
-          state.selectedPosition,
+          orderbookWalkPosition,
           state.side
         );
         const contractsInt = Math.floor(result.contracts);
-        
-        if (state.side === 'buy') {
-          // For BUY orders: remainingUsd is relative to effectiveBudget
-          // We need to calculate spent from the effective budget
+
+        if (state.side === "buy") {
           const spent = effectiveBudget - result.remainingUsd;
-          // Use backend-matching fee calculation (rounds UP to nearest cent)
-          const tradingFee = calculateFeeMatchingBackend(spent);
-          
+          const tradingFee = applyLevelUpFees
+            ? calculateFeeMatchingBackend(spent)
+            : 0;
+          const estimatedCost = spent + tradingFee;
+
           return {
             calculatedContracts: contractsInt,
             remainingUsd: result.remainingUsd,
-            // Additional fields for fee display (BUY)
-            spent: spent,
-            tradingFee: tradingFee,
-            estimatedCost: spent + tradingFee,
-            // SELL-specific fields (null for BUY)
+            spent,
+            tradingFee,
+            estimatedCost,
             grossReceive: null,
             sellTradingFee: null,
             netReceive: null,
           };
-        } else {
-          // For SELL orders: remainingUsd contains total USDC received from selling
-          // Fee is 2% of that amount, deducted from proceeds
-          const grossReceive = result.remainingUsd;
-          // Use backend-matching fee calculation (rounds UP to nearest cent)
-          const sellTradingFee = calculateFeeMatchingBackend(grossReceive);
-          const netReceive = grossReceive - sellTradingFee;
-          
-          return {
-            calculatedContracts: contractsInt,
-            remainingUsd: result.remainingUsd,
-            // BUY-specific fields (null for SELL)
-            spent: null,
-            tradingFee: null,
-            estimatedCost: null,
-            // SELL-specific fields
-            grossReceive: grossReceive,
-            sellTradingFee: sellTradingFee,
-            netReceive: netReceive,
-          };
         }
+
+        const grossReceive = result.remainingUsd;
+        const sellTradingFee = applyLevelUpFees
+          ? calculateFeeMatchingBackend(grossReceive)
+          : 0;
+        const netReceive = grossReceive - sellTradingFee;
+
+        return {
+          calculatedContracts: contractsInt,
+          remainingUsd: result.remainingUsd,
+          spent: null,
+          tradingFee: null,
+          estimatedCost: null,
+          grossReceive,
+          sellTradingFee,
+          netReceive,
+        };
       }
     }
     return {
@@ -239,13 +541,368 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       sellTradingFee: null,
       netReceive: null,
     };
-  }, [state.amount, state.selectedPosition, state.orderType, state.side, orderbook, marketOrderHandler]);
+  }, [
+    state.tradingVenue,
+    state.amount,
+    state.selectedPosition,
+    state.orderType,
+    state.side,
+    effectiveOrderbook,
+    marketOrderHandler,
+    orderbookWalkPosition,
+  ]);
 
   // Note: calculatedMarketOrderData is passed directly to UI component, no need for useEffect
+
+  const handlePredictApprove = useCallback(async () => {
+    try {
+      await predictSession.setApprovals();
+      await queryClient.invalidateQueries({ queryKey: ["predict-approvals"] });
+    } catch (e) {
+      console.error(e);
+    }
+  }, [predictSession, queryClient]);
 
   // Handle trade execution
   const handleTrade = useCallback(async () => {
     if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) return;
+
+    if (state.tradingVenue === "predictfun") {
+      if (!account) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "No wallet connected. Please connect your wallet first.",
+          },
+        }));
+        return;
+      }
+      if (!pandaId || !matchedMonitor) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              "Predict.fun needs a linked esports match and odds monitor row.",
+          },
+        }));
+        return;
+      }
+      if (!predictNumericId || !predictMarketDetail) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              predictMarketQuery.isError || predictOrderbookQuery.isError
+                ? "Could not load Predict.fun market or orderbook."
+                : "Predict.fun market is not linked for this selection.",
+          },
+        }));
+        return;
+      }
+      if (!predictSession.ready) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              predictSession.blockedReason ||
+              predictSession.error ||
+              "Predict.fun session not ready.",
+          },
+        }));
+        return;
+      }
+      if (predictApprovalsQuery.data !== true) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "Approve Predict.fun contracts on BNB first.",
+          },
+        }));
+        return;
+      }
+
+      setState((prev) => ({ ...prev, isLoading: true, orderResult: null }));
+
+      try {
+        const tokenId = predictTokenIdForPosition;
+        if (!tokenId) {
+          throw new Error("Could not resolve Predict.fun outcome token id.");
+        }
+        if (state.orderType === "limit") {
+          const priceCents = parseFloat(state.price);
+          if (!Number.isFinite(priceCents) || priceCents < 1 || priceCents > 99) {
+            throw new Error("Limit price must be 1–99 cents.");
+          }
+          await predictSession.placeLimitOrder({
+            market: predictMarketDetail,
+            tokenId,
+            side: state.side,
+            priceCents,
+            sizeShares: state.amount.trim(),
+          });
+        } else if (state.side === "buy") {
+          const usd = parseFloat(state.amount);
+          if (!Number.isFinite(usd) || usd <= 0) {
+            throw new Error("Invalid USDT amount.");
+          }
+          await predictSession.placeMarketOrder({
+            marketId: predictNumericId,
+            market: predictMarketDetail,
+            tokenId,
+            side: state.side,
+            amount: state.amount.trim(),
+            book: predictOrderbookQuery.data ?? undefined,
+          });
+        } else {
+          const shares = parseFloat(state.amount);
+          if (!Number.isFinite(shares) || shares <= 0) {
+            throw new Error("Invalid shares.");
+          }
+          await predictSession.placeMarketOrder({
+            marketId: predictNumericId,
+            market: predictMarketDetail,
+            tokenId,
+            side: state.side,
+            amount: state.amount.trim(),
+            book: predictOrderbookQuery.data ?? undefined,
+          });
+        }
+        setState((prev) => ({
+          ...prev,
+          orderResult: { success: true },
+          amount: "",
+          price: "",
+        }));
+        await queryClient.invalidateQueries({
+          queryKey: ["predict-outcome-shares"],
+        });
+        await queryClient.invalidateQueries({ queryKey: ["predict-usdt-balance"] });
+      } catch (error: unknown) {
+        if (import.meta.env.DEV) {
+          console.error("[Predict.fun trade]", error);
+        }
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: getPrivateApiErrorMessage(error),
+          },
+        }));
+      } finally {
+        setState((prev) => ({ ...prev, isLoading: false }));
+      }
+      return;
+    }
+
+    if (state.tradingVenue === "polymarket") {
+      if (!account) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "No wallet connected. Please connect your wallet first.",
+          },
+        }));
+        return;
+      }
+      if (!pandaId || !matchedMonitor) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              "Polymarket CLOB needs a linked esports match and odds monitor row.",
+          },
+        }));
+        return;
+      }
+      if (!polyClob.ready) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              polyClob.blockedReason ||
+              polyClob.error ||
+              "Polymarket CLOB is not ready.",
+          },
+        }));
+        return;
+      }
+
+      setState((prev) => ({ ...prev, isLoading: true, orderResult: null }));
+
+      try {
+        const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market);
+        const tokenId = polyOutcomeTokenId(
+          matchedMonitor,
+          state.selectedPosition,
+          yesTeamLabel,
+          noTeamLabel
+        );
+        if (!tokenId) {
+          throw new Error("Could not resolve Polymarket outcome token.");
+        }
+
+        const tickStyle =
+          matchedMonitor.polyTickSize != null
+            ? (matchedMonitor.polyTickSize as TickSize)
+            : undefined;
+        const negRisk =
+          matchedMonitor.polyNegRisk != null
+            ? Boolean(matchedMonitor.polyNegRisk)
+            : undefined;
+        const side = state.side === "buy" ? Side.BUY : Side.SELL;
+
+        const { bestAsk: dbgAsk, bestBid: dbgBid } =
+          bboFromSnapshot(effectiveOrderbook);
+        let derivedAvgPriceFromBookWalk: number | null = null;
+        if (
+          state.orderType === "market" &&
+          calculatedMarketOrderData.calculatedContracts != null &&
+          calculatedMarketOrderData.calculatedContracts > 0
+        ) {
+          if (state.side === "buy") {
+            /* Polymarket branch: same budget as calculatedMarketOrderData (no LevelUp 1.02). */
+            const walkUsd = parseFloat(state.amount);
+            derivedAvgPriceFromBookWalk = marketOrderHandler.getEffectivePrice(
+              walkUsd,
+              calculatedMarketOrderData.calculatedContracts,
+              calculatedMarketOrderData.remainingUsd ?? 0
+            );
+          } else {
+            const gr = calculatedMarketOrderData.grossReceive;
+            const cc = calculatedMarketOrderData.calculatedContracts;
+            if (gr != null && cc > 0) {
+              derivedAvgPriceFromBookWalk = gr / cc;
+            }
+          }
+        }
+        const limitPriceProbIfLimit =
+          state.orderType === "limit"
+            ? (() => {
+                const c = parseFloat(state.price) / 100;
+                return Number.isFinite(c) ? c : null;
+              })()
+            : null;
+
+        logPolymarketTradePreflight({
+          marketId: market?.marketId ?? market?._id ?? market?.questionId,
+          marketName:
+            market?.displayName ?? (market as { question?: string }).question,
+          pandascoreMatchId: pandaId || undefined,
+          orderType: state.orderType,
+          side: state.side,
+          selectedPosition: state.selectedPosition,
+          inputAmount: state.amount,
+          limitPriceCentsInput: state.price,
+          limitPriceProbIfLimit,
+          derivedAvgPriceFromBookWalk,
+          volumeTokenId: tokenId,
+          safeAddress: polyClob.safeAddress,
+          eoaAddress: polyClob.eoaAddress,
+          book: { bestAsk: dbgAsk, bestBid: dbgBid },
+          sizing: {
+            calculatedContracts: calculatedMarketOrderData.calculatedContracts,
+            remainingUsd: calculatedMarketOrderData.remainingUsd,
+            spent: calculatedMarketOrderData.spent,
+            estimatedCost: calculatedMarketOrderData.estimatedCost,
+            grossReceive: calculatedMarketOrderData.grossReceive,
+            netReceive: calculatedMarketOrderData.netReceive,
+          },
+          builderSignUrl: getPrivateApiAbsoluteUrl("/polymarket/builder/sign"),
+          clobHost: "https://clob.polymarket.com",
+        });
+
+        if (state.orderType === "limit") {
+          const size = parseFloat(state.amount);
+          const price = parseFloat(state.price) / 100;
+          if (!Number.isFinite(size) || size <= 0) {
+            throw new Error("Invalid size.");
+          }
+          if (!Number.isFinite(price) || price <= 0 || price >= 1) {
+            throw new Error("Limit price must be between 0 and 1 (use cents in the box).");
+          }
+          await polyClob.placeLimitOrder({
+            tokenId,
+            price,
+            size,
+            side,
+            tickStyle,
+            negRisk,
+          });
+        } else if (state.side === "buy") {
+          const usd = parseFloat(state.amount);
+          if (!Number.isFinite(usd) || usd <= 0) {
+            throw new Error("Invalid USDC amount.");
+          }
+          await polyClob.placeMarketOrder({
+            tokenId,
+            amount: usd,
+            side,
+            tickStyle,
+            negRisk,
+          });
+        } else {
+          const shares = parseFloat(state.amount);
+          if (!Number.isFinite(shares) || shares <= 0) {
+            throw new Error("Invalid shares.");
+          }
+          await polyClob.placeMarketOrder({
+            tokenId,
+            amount: shares,
+            side,
+            tickStyle,
+            negRisk,
+          });
+        }
+
+        setState((prev) => ({
+          ...prev,
+          orderResult: { success: true },
+          amount: "",
+          price: "",
+        }));
+      } catch (error: unknown) {
+        if (import.meta.env.DEV) {
+          console.error("[Polymarket trade] order failed — full error below", {
+            orderType: state.orderType,
+            side: state.side,
+            selectedPosition: state.selectedPosition,
+            amount: state.amount,
+            price: state.price,
+          });
+          console.error(error);
+        }
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: getPrivateApiErrorMessage(error),
+          },
+        }));
+      } finally {
+        setState((prev) => ({ ...prev, isLoading: false }));
+      }
+      return;
+    }
+
+    if (executionGate.blocked) {
+      setState((prev) => ({
+        ...prev,
+        orderResult: {
+          success: false,
+          error:
+            "Trading is blocked for your account. Complete setup on the Trading page.",
+        },
+      }));
+      return;
+    }
 
     // Check if wallet is connected
     if (!account) {
@@ -323,12 +980,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       
       if (frozenState.orderType === "market") {
         // Helper: derive top-of-book prices (do not mutate orderbook)
-        const bestAsk = orderbook?.asks && orderbook.asks.length > 0
-          ? Math.min(...orderbook.asks.map((a: any) => a.price))
-          : null;
-        const bestBid = orderbook?.bids && orderbook.bids.length > 0
-          ? Math.max(...orderbook.bids.map((b: any) => b.price))
-          : null;
+        const bestAsk =
+          levelUpOrderbook?.asks && levelUpOrderbook.asks.length > 0
+            ? Math.min(...levelUpOrderbook.asks.map((a: any) => a.price))
+            : null;
+        const bestBid =
+          levelUpOrderbook?.bids && levelUpOrderbook.bids.length > 0
+            ? Math.max(...levelUpOrderbook.bids.map((b: any) => b.price))
+            : null;
 
         if (frozenState.side === "buy") {
           const usdAmount = parseFloat(frozenState.amount);
@@ -487,6 +1146,22 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             // Don't fail the trade if balance refresh fails
           }
         }, 2000); // 2 second delay (reduced from 4s since RPC is faster)
+        
+        // Refresh historical price data for the chart after successful trade
+        // This ensures the chart reflects the new trade price
+        setTimeout(async () => {
+          try {
+            const marketId = market._id || market.questionId || market.marketId;
+            if (marketId) {
+              console.log("📊 Refreshing historical price data for chart...");
+              await predictionMarketDataService.refreshHistoricalData(marketId);
+              console.log("✅ Historical price data refreshed");
+            }
+          } catch (error) {
+            console.error("❌ Error refreshing historical data:", error);
+            // Don't fail if historical refresh fails - it's not critical
+          }
+        }, 3000); // 3 second delay to allow backend to process the trade
       }
     } catch (error: any) {
       setState((prev) => ({
@@ -499,7 +1174,48 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     } finally {
       setState((prev) => ({ ...prev, isLoading: false }));
     }
-  }, [state, account, market, tradeExecutionService]);
+  }, [
+    state.selectedPosition,
+    state.amount,
+    state.price,
+    state.orderType,
+    state.side,
+    state.tradingVenue,
+    account,
+    market,
+    tradeExecutionService,
+    executionGate.blocked,
+    pandaId,
+    matchedMonitor,
+    polyClob.ready,
+    polyClob.blockedReason,
+    polyClob.error,
+    polyClob.placeLimitOrder,
+    polyClob.placeMarketOrder,
+    polyClob.safeAddress,
+    polyClob.eoaAddress,
+    levelUpOrderbook,
+    effectiveOrderbook,
+    calculatedMarketOrderData,
+    marketOrderHandler,
+    privyWallets,
+    refreshViaRpc,
+    predictSession.ready,
+    predictSession.blockedReason,
+    predictSession.error,
+    predictSession.placeLimitOrder,
+    predictSession.placeMarketOrder,
+    predictNumericId,
+    predictMarketDetail,
+    yesTeamLabel,
+    noTeamLabel,
+    predictApprovalsQuery.data,
+    predictMarketQuery.isError,
+    predictOrderbookQuery.isError,
+    predictOrderbookQuery.data,
+    queryClient,
+    predictTokenIdForPosition,
+  ]);
 
   // Auto-dismiss order result after 4 seconds
   useEffect(() => {
@@ -529,7 +1245,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       handleSideChange(side);
     },
     executeTrade: async () => {
-      // Validation checks - same as button would do
       if (!authenticated) {
         throw new Error("Not authenticated - please log in with Privy");
       }
@@ -538,6 +1253,18 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       }
       if (state.isLoading) {
         throw new Error("Already processing a trade");
+      }
+      if (state.tradingVenue === "polymarket" || state.tradingVenue === "predictfun") {
+        if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) {
+          throw new Error("Missing required fields: position, amount, or price");
+        }
+        await handleTrade();
+        return;
+      }
+      if (executionGate.blocked) {
+        throw new Error(
+          "Trading is blocked - complete setup on the Trading page."
+        );
       }
       if (!approvalState.isApproved) {
         throw new Error("Tokens not approved - please approve first");
@@ -563,7 +1290,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           state.side, 
           state.selectedPosition, 
           yesBalance, 
-          noBalance
+          noBalance,
+          null
         );
         
         console.log("🔍 Shares check result:", sharesCheck);
@@ -576,7 +1304,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       await handleTrade();
     },
     getState: () => state,
-  }), [handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTrade, state, authenticated, account, approvalState, yesBalance, noBalance]);
+  }), [handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTrade, state, authenticated, account, approvalState, yesBalance, noBalance, executionGate.blocked]);
 
   // Button state logic
   const buttonState = useButtonState({
@@ -595,12 +1323,58 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     checkSufficientShares,
     market,
     handleAddFunds,
+    polymarketTrading,
+    orderbookWalkPosition,
+    predictTrading,
+    predictApproval: predictVenueActive
+      ? {
+          isApproved: predictApprovalsQuery.data === true,
+          isChecking:
+            Boolean(predictMarketDetail) &&
+            (predictApprovalsQuery.isLoading || predictApprovalsQuery.isFetching),
+          approve: handlePredictApprove,
+          isApproving: predictSession.loading,
+        }
+      : undefined,
+    predictUsdtBalance,
+    predictSellShareBalance,
   });
+
+  const buttonStateForUi = useMemo(() => {
+    if (state.tradingVenue === "levelup" && executionGate.blocked) {
+      return {
+        ...buttonState,
+        text: "Complete trading setup",
+        disabled: true,
+        onClick: () => {},
+      };
+    }
+    return buttonState;
+  }, [executionGate.blocked, buttonState, state.tradingVenue]);
+
+  const executionGateBanner =
+    state.tradingVenue === "levelup" &&
+    executionGate.blocked &&
+    executionGate.messages.length ? (
+      <div className="execution-gate-banner">
+        <div className="execution-gate-banner__heading">
+          Polymarket trading is not enabled for your account yet.
+        </div>
+        <ul className="execution-gate-banner__reasons">
+          {executionGate.messages.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
+        <Link to="/trading" className="execution-gate-banner__link">
+          Open Trading &amp; venues
+        </Link>
+      </div>
+    ) : null;
 
   return (
     <PredictionMarketTradeBoxResponsiveContainer
       market={market}
-      orderbook={orderbook}
+      orderbook={effectiveOrderbook}
       state={{
         ...state,
         calculatedContracts: calculatedMarketOrderData.calculatedContracts,
@@ -617,11 +1391,18 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       onPositionChange={onPositionChangeWrapper}
       onAmountChange={handleAmountChange}
       onPriceChange={handlePriceChange}
+      onTradingVenueChange={handleTradingVenueChange}
       onOrderTypeChange={handleOrderTypeChange}
       onSideChange={onSideChangeWrapper}
+      polymarketVenueHint={polymarketVenueHint}
+      predictVenueHint={predictVenueHint}
+      predictVenueBookHints={predictVenueBookHints}
       onTrade={handleTrade}
-      buttonState={buttonState}
+      buttonState={buttonStateForUi}
       approvalState={approvalState}
+      executionGateBanner={executionGateBanner}
+      calculateContractsForMarketOrder={calculateContractsForMarketOrderUi}
+      getEffectivePrice={marketOrderHandler.getEffectivePrice}
     />
   );
 });

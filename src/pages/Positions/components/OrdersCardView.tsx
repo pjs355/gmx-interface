@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { VenueOrder } from "@/types/trading/venuePosition";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
 	resolveLogoByTags,
@@ -60,11 +62,14 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 export default function OrdersCardView({
 	umbrellaBalances,
 	orders,
+	venueOrders = [],
 }: {
 	umbrellaBalances: any[];
 	orders: ProcessedOrder[];
+	venueOrders?: VenueOrder[];
 }) {
 	const navigate = useNavigate();
+	const privateApi = usePrivateApiClient();
 
 	const navigateToTradingPage = (
 		umbrella: Umbrella,
@@ -437,18 +442,108 @@ export default function OrdersCardView({
 				);
 			})}
 
-			{umbrellaBalances.length > 0 &&
-				Object.keys(ordersByMarket).length === 0 && (
-					<div
-						style={{
-							textAlign: "center",
-							padding: "40px",
-							color: "#888",
-						}}
-					>
-						<p>No open orders found</p>
+		{/* Venue orders (Predict.fun, etc.) */}
+		{venueOrders.filter((vo) => !removedIds.has(vo.orderId)).map((vo) => (
+			<div
+				key={`venue-${vo.orderId}`}
+				style={{
+					background: "#1a1a1a",
+					border: "1px solid #2a2a2a",
+					borderRadius: 12,
+					overflow: "hidden",
+					marginBottom: 12,
+				}}
+			>
+				<div
+					style={{
+						padding: "16px",
+						background: "#0a0a0a",
+						borderBottom: "1px solid #2a2a2a",
+						display: "flex",
+						alignItems: "center",
+						gap: 12,
+					}}
+				>
+					<div style={{ flex: 1 }}>
+						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+							{vo.venue === "predictfun" ? "Predict.fun" : vo.venue}
+						</div>
+						<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
+							{vo.marketTitle}{" "}
+							<span style={{ color: vo.position === "Yes" ? "#16a34a" : "#ef4444" }}>
+								{vo.position}
+							</span>{" "}
+							<span style={{ color: vo.side === "buy" ? "#16a34a" : "#ef4444" }}>
+								{vo.side === "buy" ? "Buy" : "Sell"}
+							</span>
+						</div>
 					</div>
-				)}
-		</div>
+				</div>
+				<div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+					<div style={{ flex: 1 }}>
+						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Price</div>
+						<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{`${Math.round(vo.price * 100)}¢`}</div>
+					</div>
+					<div style={{ flex: 1, textAlign: "center" }}>
+						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Shares</div>
+						<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{Math.round(vo.size)}</div>
+					</div>
+					<div style={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
+						<button
+							type="button"
+							style={{
+								background: "#ef4444",
+								color: "#fff",
+								border: "none",
+								borderRadius: 6,
+								padding: "8px 16px",
+								cursor: cancelingIds.has(vo.orderId) ? "default" : "pointer",
+								opacity: cancelingIds.has(vo.orderId) ? 0.7 : 1,
+								fontWeight: 600,
+								fontSize: 13,
+								whiteSpace: "nowrap",
+							}}
+							onClick={async (e) => {
+								e.stopPropagation();
+								if (cancelingIds.has(vo.orderId)) return;
+								setCancelingIds((prev) => new Set(prev).add(vo.orderId));
+								try {
+									if (vo.venue === "predictfun" && vo.rawOrder) {
+										await privateApi.removePredictOrders({ orders: [vo.rawOrder] });
+									}
+								} catch (err) {
+									console.error("Cancel venue order error:", err);
+								} finally {
+									setTimeout(() => {
+										setRemovedIds((prev) => new Set(prev).add(vo.orderId));
+										setCancelingIds((prev) => {
+											const ns = new Set(prev);
+											ns.delete(vo.orderId);
+											return ns;
+										});
+									}, 3000);
+								}
+							}}
+						>
+							{cancelingIds.has(vo.orderId) ? `Canceling${".".repeat((tick % 3) + 1)}` : "Cancel"}
+						</button>
+					</div>
+				</div>
+			</div>
+		))}
+
+		{Object.keys(ordersByMarket).length === 0 &&
+			venueOrders.filter((vo) => !removedIds.has(vo.orderId)).length === 0 && (
+				<div
+					style={{
+						textAlign: "center",
+						padding: "40px",
+						color: "#888",
+					}}
+				>
+					<p>No open orders found</p>
+				</div>
+			)}
+	</div>
 	);
 }

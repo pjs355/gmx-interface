@@ -2,7 +2,10 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { OrderbookSnapshot } from "lib/orderbookService";
 import type { OrderExecutionResult } from "lib/predictionMarketService";
 
+export type TradingVenue = "levelup" | "polymarket" | "predictfun";
+
 export interface TradeBoxState {
+	tradingVenue: TradingVenue;
 	selectedPosition: "yes" | "no" | null;
 	amount: string;
 	price: string;
@@ -25,6 +28,8 @@ export interface TradeBoxState {
 export interface TradeBoxProps {
 	market: PredictionMarket;
 	orderbook?: OrderbookSnapshot | null;
+	/** PandaScore match id on the umbrella — required for Polymarket CLOB on esports. */
+	pandascoreMatchId?: string;
 	initialPosition?: "yes" | "no";
 	onPositionChange?: (position: "yes" | "no") => void;
 	onSideChange?: (side: "buy" | "sell") => void;

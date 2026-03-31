@@ -1,0 +1,102 @@
+.esports-venue-books {
+	padding: 16px 0 0;
+	font-size: 0.9rem;
+	color: rgba(255, 255, 255, 0.88);
+}
+
+.esports-venue-books__table-wrap {
+	overflow-x: auto;
+	margin-top: 4px;
+	border: 1px solid #4b5563;
+	border-radius: 6px;
+	background: #000;
+}
+
+.esports-venue-books__table {
+	width: 100%;
+	min-width: 280px;
+	border-collapse: collapse;
+	font-variant-numeric: tabular-nums;
+}
+
+.esports-venue-books__th,
+.esports-venue-books__td {
+	border: 1px solid #4b5563;
+	padding: 10px 12px;
+	text-align: left;
+	vertical-align: middle;
+}
+
+.esports-venue-books__th {
+	background: rgba(255, 255, 255, 0.06);
+	font-size: 1.05rem;
+	font-weight: 700;
+	color: #fff;
+}
+
+.esports-venue-books__th--venue {
+	width: 28%;
+	min-width: 5.5rem;
+}
+
+.esports-venue-books__th--team {
+	width: 36%;
+	max-width: 12rem;
+}
+
+.esports-venue-books__th-text {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 100%;
+}
+
+.esports-venue-books__td--label {
+	font-weight: 500;
+	color: rgba(255, 255, 255, 0.75);
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.esports-venue-books__td--num {
+	text-align: right;
+	font-weight: 500;
+}
+
+.esports-venue-books__td--avgcell {
+	color: #fff !important;
+	font-weight: 800;
+}
+
+.esports-venue-books__td--empty {
+	color: rgba(255, 255, 255, 0.35);
+}
+
+.esports-venue-books__muted {
+	margin: 0;
+	color: rgba(255, 255, 255, 0.5);
+	line-height: 1.5;
+}
+
+.esports-venue-books__muted code {
+	font-size: 0.85em;
+	padding: 1px 4px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.esports-venue-books__status {
+	margin: 0;
+	color: rgba(255, 255, 255, 0.65);
+}
+
+.esports-venue-books__error,
+.esports-venue-books__warn {
+	margin: 8px 0 0;
+	font-size: 0.85rem;
+	color: #fca5a5;
+}
+
+.esports-venue-books__warn {
+	color: #fcd34d;
+}

@@ -9,7 +9,7 @@ import {
 	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
 import { triggerFireworksForElement } from "../utils/Fireworks";
-import { useClaimEarningsForMarket } from "@/helpers/claimEarnings";
+import { useClaimForVenue } from "@/helpers/claimEarnings";
 import { usePredictionData } from "@/context/PredictionDataContext";
 
 // Component to handle image with proper fallback
@@ -304,7 +304,7 @@ function ClaimButton({
 	umbrellaId: string;
 }) {
 	const btnRef = React.useRef<HTMLButtonElement | null>(null);
-	const { claim, isClaiming, error } = useClaimEarningsForMarket(
+	const { claim, isClaiming, error } = useClaimForVenue(
 		market,
 		resolvedOutcome
 	);
@@ -312,40 +312,26 @@ function ClaimButton({
 	const handleClick = async () => {
 		if (isClaiming) return;
 
-		// Trigger fireworks immediately on click
 		if (btnRef.current) {
 			triggerFireworksForElement(btnRef.current);
-			console.log(
-				"🎉 FIREWORKS: Triggered immediately on click for",
-				market.displayName
-			);
 		}
 
 		try {
-			console.log(
-				"🎯 CLAIM BUTTON: Starting claim for market:",
-				market.displayName
-			);
 			const success = await claim();
 
 			if (success) {
-				console.log(
-					"✅ CLAIM SUCCESS: Transaction completed for",
-					market.displayName
-				);
-				// Call the success callback to remove the market from the view
 				const marketId =
 					market._id || market.questionId || market.marketId;
 				if (onClaimSuccess && marketId) {
 					onClaimSuccess(marketId, umbrellaId);
 				}
-			} else if (error) {
-				console.error("❌ CLAIM FAILED:", error);
 			}
 		} catch (err) {
-			console.error("❌ CLAIM ERROR:", err);
+			console.error("CLAIM ERROR:", err);
 		}
 	};
+
+	const label = isClaiming ? "Claiming..." : "Claim";
 
 	return (
 		<button
@@ -391,8 +377,7 @@ function ClaimButton({
 			onClick={handleClick}
 			title={error ? `Error: ${error}` : undefined}
 		>
-			{isClaiming ? "Claiming..." : "Claim Winnings"}
+			{label}
 		</button>
 	);
 }
-

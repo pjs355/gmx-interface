@@ -29,15 +29,17 @@ import { SmartWalletsProvider } from "@privy-io/react-auth/smart-wallets";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter as Router } from "react-router-dom";
-import { base } from "viem/chains";
+import { base, bsc, polygon } from "viem/chains";
 
 const baseOverride = addRpcUrlOverrideToChain(
 	base,
 	"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih"
 );
 
+import WalletProvider from "@/services/wallets/WalletProvider";
 import { SignerProvider } from "context/SignerContext";
 import { PredictionDataProvider } from "context/PredictionDataContext";
+import { OddsMonitorProvider } from "context/OddsMonitorContext";
 import { UserDataProvider } from "context/UserDataContext";
 import { BalanceProvider } from "context/BalanceContext";
 import { PortfolioProvider } from "context/PortfolioContext";
@@ -54,6 +56,7 @@ createRoot(document.getElementById("root")!).render(
 				appId="cmb7ccvbd011hl50m62vf8epr"
 				config={{
 					defaultChain: baseOverride,
+					supportedChains: [baseOverride, polygon, bsc],
 					appearance: {
 						accentColor: "#6A6FF5",
 						theme: "dark",
@@ -63,7 +66,12 @@ createRoot(document.getElementById("root")!).render(
 					},
 					loginMethods: ["email", "google", "wallet"],
 					embeddedWallets: {
-						createOnLogin: "users-without-wallets",
+						ethereum: {
+							createOnLogin: "users-without-wallets",
+						},
+						solana: {
+							createOnLogin: "users-without-wallets",
+						},
 						requireUserPasswordOnCreate: false,
 					},
 					mfa: {
@@ -72,21 +80,25 @@ createRoot(document.getElementById("root")!).render(
 				}}
 			>
 				<SmartWalletsProvider>
-					<PredictionDataProvider>
-						<SignerProvider>
-							<UserDataProvider>
-								<BalanceProvider>
-									<PortfolioProvider>
-										<RPGProvider>
-											<TransfersModalProvider>
-												<App />
-											</TransfersModalProvider>
-										</RPGProvider>
-									</PortfolioProvider>
-								</BalanceProvider>
-							</UserDataProvider>
-						</SignerProvider>
-					</PredictionDataProvider>
+					<WalletProvider>
+						<PredictionDataProvider>
+							<OddsMonitorProvider>
+								<SignerProvider>
+									<UserDataProvider>
+										<BalanceProvider>
+											<PortfolioProvider>
+												<RPGProvider>
+													<TransfersModalProvider>
+														<App />
+													</TransfersModalProvider>
+												</RPGProvider>
+											</PortfolioProvider>
+										</BalanceProvider>
+									</UserDataProvider>
+								</SignerProvider>
+							</OddsMonitorProvider>
+						</PredictionDataProvider>
+					</WalletProvider>
 				</SmartWalletsProvider>
 			</PrivyProvider>
 		</Router>

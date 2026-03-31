@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 
 export function useTradeState(initialPosition?: "yes" | "no") {
   const [state, setState] = useState({
+    tradingVenue: "levelup" as "levelup" | "polymarket" | "predictfun",
     selectedPosition: initialPosition || "yes",
     amount: "",
     price: "",
@@ -34,8 +35,11 @@ export function useTradeState(initialPosition?: "yes" | "no") {
   const handleSideChange = useCallback((side: "buy" | "sell") => {
     setState((prev) => ({ ...prev, side }));
   }, []);
+  const handleTradingVenueChange = useCallback((tradingVenue: "levelup" | "polymarket" | "predictfun") => {
+    setState((prev) => ({ ...prev, tradingVenue }));
+  }, []);
 
-  return { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange } as const;
+  return { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTradingVenueChange } as const;
 }
 
 

@@ -20,6 +20,7 @@ import Transfers from "pages/Transfers/Transfers";
 import TradeBoxTest from "pages/TradeBoxTest/TradeBoxTest";
 import About from "pages/About/About";
 import TestPage from "pages/Test/TestPage";
+import TradingShellPage from "@/pages/TradingShell/TradingShellPage";
 
 export function MainRoutes() {
 	const { pathname } = useLocation();
@@ -31,16 +32,14 @@ export function MainRoutes() {
 
 	return (
 		<Routes>
-			{/* Temporarily commented out - redirecting to gaming page */}
-			{/* <Route path="/" element={<Home />} /> */}
-			<Route path="/" element={<FilteredPredictions filterType="games" />} />
+			{/* Home page shows esports markets */}
+			<Route path="/" element={<FilteredPredictions filterType="esports" />} />
 
 			<Route path="/predictions" element={<Predictions />} />
-			{/* Temporarily commented out - esports page disabled */}
-			{/* <Route
+			<Route
 				path="/predictions/esports"
 				element={<FilteredPredictions filterType="esports" />}
-			/> */}
+			/>
 			<Route
 				path="/predictions/games"
 				element={<FilteredPredictions filterType="games" />}
@@ -55,6 +54,7 @@ export function MainRoutes() {
 			{/* Commented out for production - developers page disabled */}
 			{/* <Route path="/developers" element={<Profile />} /> */}
 			<Route path="/profile" element={<Profile />} />
+			<Route path="/trading" element={<TradingShellPage />} />
 			{/* Commented out for production - developers page disabled */}
 			{/* <Route path="/profile/developers" element={<Profile />} /> */}
 			<Route path="/admin" element={<Admin />} />

@@ -1,0 +1,379 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	ClobClient,
+	Chain,
+	OrderType,
+	type ApiKeyCreds,
+	type CreateOrderOptions,
+	type Side,
+	type TickSize,
+} from "@polymarket/clob-client";
+import { SignatureType } from "@polymarket/order-utils";
+import { usePrivy } from "@privy-io/react-auth";
+import { createLevelUpBuilderConfig } from "./levelUpBuilderConfig";
+import { ethers5JsonRpcSignerFromEip1193 } from "./ethers5FromEip1193";
+import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
+import { useAccountOverview } from "@/trading/hooks/useAccountOverview";
+import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
+import { usePolymarketBuilder } from "@/trading/hooks/usePolymarketBuilder";
+import { useTradingWallets } from "@/trading/useWallets";
+import type { GetToken } from "@/services/privateApi/client";
+import {
+	ensurePolymarketClobOrderSuccess,
+	summarizeClobResultForLog,
+} from "./polymarketClobOrderResult";
+import {
+	logPolymarketOrderSuccessResponse,
+	wrapEip1193ForPolymarketDevLogging,
+	type Eip1193Like,
+} from "./polymarketOrderDebug";
+
+const CLOB_HOST =
+	import.meta.env.VITE_POLYMARKET_CLOB_PROXY === "true"
+		? "/polymarket-clob"
+		: "https://clob.polymarket.com";
+
+const DEV = import.meta.env.DEV;
+
+const CREDS_STORAGE_PREFIX = "levelup:pm-clob-creds:";
+
+function credsStorageKey(eoa: string, safe: string): string {
+	return `${CREDS_STORAGE_PREFIX}${eoa.toLowerCase()}:${safe.toLowerCase()}`;
+}
+
+function readStoredCreds(eoa: string, safe: string): ApiKeyCreds | null {
+	try {
+		const raw = sessionStorage.getItem(credsStorageKey(eoa, safe));
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as Partial<ApiKeyCreds>;
+		if (
+			typeof parsed.key === "string" &&
+			typeof parsed.secret === "string" &&
+			typeof parsed.passphrase === "string"
+		) {
+			return {
+				key: parsed.key,
+				secret: parsed.secret,
+				passphrase: parsed.passphrase,
+			};
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+function writeStoredCreds(eoa: string, safe: string, creds: ApiKeyCreds): void {
+	try {
+		sessionStorage.setItem(
+			credsStorageKey(eoa, safe),
+			JSON.stringify(creds)
+		);
+	} catch {
+		/* ignore quota / private mode */
+	}
+}
+
+function formatBlockedReason(
+	requiredNextAction: unknown,
+	safe: string | undefined,
+	eoaReady: boolean
+): string | null {
+	if (!eoaReady) {
+		return "Sign in and open your embedded wallet to trade on Polymarket.";
+	}
+	if (!safe) {
+		return "Polymarket Safe not found. Use Transfers to link your Safe, or deploy it from there.";
+	}
+	if (requiredNextAction == null) return null;
+	if (typeof requiredNextAction === "string") {
+		return requiredNextAction;
+	}
+	if (typeof requiredNextAction === "object" && requiredNextAction) {
+		const o = requiredNextAction as { label?: string; step?: string; detail?: string };
+		return o.label || o.step || o.detail || null;
+	}
+	return null;
+}
+
+export type UsePolymarketClobTradingSessionOptions = {
+	enabled?: boolean;
+	profileId?: string;
+};
+
+export type PlaceClobLimitOrderArgs = {
+	tokenId: string;
+	price: number;
+	size: number;
+	side: Side;
+	/** When omitted, resolved from the CLOB for this token. */
+	tickStyle?: TickSize;
+	/** When omitted, resolved from the CLOB for this token. */
+	negRisk?: boolean;
+};
+
+export type PlaceClobMarketOrderArgs = {
+	tokenId: string;
+	/** BUY: USDC to spend; SELL: shares to sell */
+	amount: number;
+	side: Side;
+	tickStyle?: TickSize;
+	negRisk?: boolean;
+	orderType?: OrderType.FOK | OrderType.FAK;
+};
+
+export function usePolymarketClobTradingSession(
+	options: UsePolymarketClobTradingSessionOptions = {}
+) {
+	const { enabled = true, profileId: profileIdOpt } = options;
+	const { authenticated, ready: privyReady, getAccessToken } = usePrivy();
+	const profileQuery = useCurrentProfile({
+		enabled: enabled && authenticated,
+	});
+	const profileId = profileIdOpt ?? profileQuery.data?._id;
+	const overviewQuery = useAccountOverview(profileId);
+	const poly = usePolymarketBuilder({
+		enabled: enabled && authenticated,
+		profileId,
+	});
+	/** Same resolution as Transfers (`useFundingAddresses`): overview venue + polymarket account. */
+	const wallets = useTradingWallets(overviewQuery.data, poly.data);
+	const eoa = usePolymarketEoaWalletClient();
+
+	const getToken: GetToken = useCallback(async () => {
+		if (typeof getAccessToken !== "function") return null;
+		return getAccessToken();
+	}, [getAccessToken]);
+
+	const eip1193ForSigner = eoa.eip1193Provider;
+	const eip1193 = useMemo(
+		() =>
+			eip1193ForSigner
+				? wrapEip1193ForPolymarketDevLogging(
+						eip1193ForSigner as Eip1193Like
+					)
+				: null,
+		[eip1193ForSigner]
+	);
+	const eoaAddress = eoa.address;
+	const safe = wallets.polymarketSafe;
+
+	const blockedReason = useMemo(() => {
+		if (!enabled) return null;
+		if (!privyReady || !authenticated) return "Sign in to trade.";
+		if (authenticated && poly.isFetching && !poly.isFetched) {
+			return "Loading Polymarket account…";
+		}
+		if (profileId && overviewQuery.isLoading && !safe) {
+			return "Loading Polymarket account…";
+		}
+		/* Once Safe + signer match Transfers, try CLOB — don’t block on stale requiredNextAction. */
+		if (safe && eoa.ready) {
+			return null;
+		}
+		return formatBlockedReason(poly.requiredNextAction, safe, Boolean(eoa.ready));
+	}, [
+		enabled,
+		privyReady,
+		authenticated,
+		poly.isFetching,
+		poly.isFetched,
+		poly.requiredNextAction,
+		safe,
+		eoa.ready,
+		profileId,
+		overviewQuery.isLoading,
+	]);
+
+	const canInit = Boolean(
+		enabled &&
+			privyReady &&
+			authenticated &&
+			poly.isFetched &&
+			eoaAddress &&
+			eip1193 &&
+			safe &&
+			!eoa.error
+	);
+
+	const [clobClient, setClobClient] = useState<ClobClient | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const genRef = useRef(0);
+
+	const refresh = useCallback(() => {
+		setClobClient(null);
+		setError(null);
+		eoa.refresh();
+		void poly.refetch();
+	}, [eoa, poly]);
+
+	useEffect(() => {
+		if (!canInit || !eoaAddress || !eip1193 || !safe) {
+			setClobClient(null);
+			setLoading(false);
+			setError(null);
+			return;
+		}
+
+		const gen = ++genRef.current;
+		let cancelled = false;
+
+		(async () => {
+			setLoading(true);
+			setError(null);
+			try {
+				const signer = ethers5JsonRpcSignerFromEip1193(
+					eip1193 as Eip1193Like,
+					eoaAddress
+				);
+
+				let creds = readStoredCreds(eoaAddress, safe);
+				const credsClient = new ClobClient(CLOB_HOST, Chain.POLYGON, signer);
+				if (!creds) {
+					creds = await credsClient.createOrDeriveApiKey();
+					writeStoredCreds(eoaAddress, safe, creds);
+				}
+
+				const builderConfig = await createLevelUpBuilderConfig(getToken);
+				/* `ClobClient` bundles an older `@polymarket/builder-signing-sdk`; root uses ^1.x for the relayer. */
+				const tradingClient = new ClobClient(
+					CLOB_HOST,
+					Chain.POLYGON,
+					signer as never,
+					creds,
+					SignatureType.POLY_GNOSIS_SAFE,
+					safe,
+					undefined,
+					undefined,
+					builderConfig as never
+				);
+
+				if (cancelled || gen !== genRef.current) return;
+				setClobClient(tradingClient);
+				setError(null);
+			} catch (e) {
+				if (cancelled || gen !== genRef.current) return;
+				setClobClient(null);
+				if (DEV) {
+					// eslint-disable-next-line no-console
+					console.error(
+						"[Polymarket CLOB] session init failed — check builder POST /polymarket/builder/sign, API keys, and wallet",
+						e
+					);
+				}
+				setError(e instanceof Error ? e.message : "CLOB session error");
+			} finally {
+				if (!cancelled && gen === genRef.current) {
+					setLoading(false);
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [canInit, eoaAddress, eip1193, safe, getToken]);
+
+	const placeLimitOrder = useCallback(
+		async (args: PlaceClobLimitOrderArgs) => {
+			if (!clobClient) {
+				throw new Error("CLOB client is not ready.");
+			}
+			const tickSize =
+				args.tickStyle ??
+				((await clobClient.getTickSize(args.tokenId)) as TickSize);
+			const negRisk =
+				args.negRisk ?? (await clobClient.getNegRisk(args.tokenId));
+			const orderOpts: CreateOrderOptions = { tickSize, negRisk };
+			if (DEV) {
+				// eslint-disable-next-line no-console
+				console.info("[Polymarket CLOB] posting limit order", {
+					tokenId: args.tokenId,
+					price: args.price,
+					size: args.size,
+					side: args.side,
+					tickSize,
+					negRisk,
+				});
+			}
+			const result = await clobClient.createAndPostOrder(
+				{
+					tokenID: args.tokenId,
+					price: args.price,
+					size: args.size,
+					side: args.side,
+				},
+				orderOpts,
+				OrderType.GTC
+			);
+			if (DEV) {
+				// eslint-disable-next-line no-console
+				console.info("[Polymarket CLOB] limit order response", summarizeClobResultForLog(result));
+			}
+			ensurePolymarketClobOrderSuccess(result, "limit order");
+			logPolymarketOrderSuccessResponse(result);
+			return result;
+		},
+		[clobClient]
+	);
+
+	const placeMarketOrder = useCallback(
+		async (args: PlaceClobMarketOrderArgs) => {
+			if (!clobClient) {
+				throw new Error("CLOB client is not ready.");
+			}
+			const tickSize =
+				args.tickStyle ??
+				((await clobClient.getTickSize(args.tokenId)) as TickSize);
+			const negRisk =
+				args.negRisk ?? (await clobClient.getNegRisk(args.tokenId));
+			const orderOpts: CreateOrderOptions = { tickSize, negRisk };
+			const t = args.orderType ?? OrderType.FOK;
+			if (DEV) {
+				// eslint-disable-next-line no-console
+				console.info("[Polymarket CLOB] posting market order", {
+					tokenId: args.tokenId,
+					amount: args.amount,
+					side: args.side,
+					orderType: t,
+					tickSize,
+					negRisk,
+				});
+			}
+			const result = await clobClient.createAndPostMarketOrder(
+				{
+					tokenID: args.tokenId,
+					amount: args.amount,
+					side: args.side,
+				},
+				orderOpts,
+				t
+			);
+			if (DEV) {
+				// eslint-disable-next-line no-console
+				console.info("[Polymarket CLOB] market order response", summarizeClobResultForLog(result));
+			}
+			ensurePolymarketClobOrderSuccess(result, "market order");
+			logPolymarketOrderSuccessResponse(result);
+			return result;
+		},
+		[clobClient]
+	);
+
+	const ready = Boolean(clobClient && !loading && !error);
+
+	return {
+		clobClient,
+		loading,
+		error,
+		blockedReason: blockedReason || (eoa.error as string | null),
+		ready,
+		safeAddress: safe,
+		eoaAddress,
+		refresh,
+		placeLimitOrder,
+		placeMarketOrder,
+		polyAccountLoading: poly.isLoading,
+	};
+}

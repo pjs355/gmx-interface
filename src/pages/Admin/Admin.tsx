@@ -19,6 +19,7 @@ import Stats from "./components/Stats/Stats";
 import ListDailyGames from "./components/DailyGames/ListDailyGames";
 import AddDailyGame from "./components/DailyGames/AddDailyGame";
 import TradeTesting from "./components/TradeTesting/TradeTesting";
+import AdminWallet from "./components/Wallet/AdminWallet";
 import {
 	umbrellaDataService,
 	type Umbrella,
@@ -46,7 +47,8 @@ type AdminView =
 	| "stats"
 	| "daily-games-list"
 	| "daily-games-add"
-	| "trade-testing";
+	| "trade-testing"
+	| "wallet";
 
 const DEFAULT_ADMIN_VIEW: AdminView = "markets-list";
 
@@ -68,6 +70,7 @@ const VALID_ADMIN_VIEWS: AdminView[] = [
 	"daily-games-list",
 	"daily-games-add",
 	"trade-testing",
+	"wallet",
 ] as const;
 
 function isValidAdminView(value: string | null): value is AdminView {
@@ -647,6 +650,38 @@ export default function Admin() {
 						</button>
 					</div>
 				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>
+						Wallet
+					</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("wallet", {
+									umbrellaId: null,
+									teamId: null,
+									profileId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid #8b5cf6",
+								borderRadius: 6,
+								background:
+									view === "wallet"
+										? "rgba(139,92,246,0.2)"
+										: "transparent",
+								color: "#8b5cf6",
+							}}
+						>
+							💰 Seeder Wallet
+						</button>
+					</div>
+				</div>
 			</div>
 
 			{view === "markets-list" && (
@@ -794,6 +829,8 @@ export default function Admin() {
 			)}
 
 			{view === "trade-testing" && <TradeTesting />}
+
+			{view === "wallet" && <AdminWallet />}
 		</div>
 	);
 }

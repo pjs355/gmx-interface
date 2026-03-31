@@ -6,6 +6,7 @@ import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarke
 import RulesSection from "components/RulesSection/RulesSection";
 import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
+import { EsportsVenueBooksPanel } from "@/components/EsportsVenueBooksPanel/EsportsVenueBooksPanel";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getMarketId } from "./utils";
@@ -56,9 +57,13 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 	// Track buy/sell side state
 	const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
-
 	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
+	const pandascoreMatchId =
+		typeof umbrella?.pandascore_matchId === "string"
+			? umbrella.pandascore_matchId.trim()
+			: "";
+	const showCrossVenueBooks = Boolean(pandascoreMatchId);
 	const streamUrl =
 		typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
 	const showStream = Boolean(umbrella?.streamEnabled) && streamUrl.length > 0;
@@ -88,6 +93,49 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			  }
 			: undefined;
 	}, [chartState.secondaryMarket, umbrella?.children?.length]);
+
+	const orderbookColumnContent = (
+		<>
+			{sortedQuestions.map((question, index) => {
+				if (!question) return null;
+				const orderBookId = getMarketId(question) || `${index}`;
+				return (
+					<div key={orderBookId} className="question-orderbook">
+						<OrderbookDisplay
+							orderbook={questionOrderbooks[orderBookId]}
+							loading={!questionOrderbooks[orderBookId]}
+							error={null}
+							onRefresh={() => fetchAllOrderbooks(sortedQuestions)}
+							customTitle={
+								question.displayName || (question as any).question
+							}
+							market={
+								{
+									...(question as any),
+									umbrellaChildrenCount: umbrella?.children?.length || 0,
+								} as any
+							}
+							onMarketSwitch={onMarketSwitch}
+							onMarketSwitchWithOrderbook={onMarketSwitchWithOrderbook}
+							onOrderbookToggle={onOrderbookToggle}
+							isActiveMarket={
+								getMarketId(activeMarket) === getMarketId(question)
+							}
+							activePosition={activePosition}
+							isCollapsed={openOrderbookId !== orderBookId}
+							side={tradeSide}
+						/>
+					</div>
+				);
+			})}
+			{showCrossVenueBooks ? (
+				<div className="orderbook-section__cross-venue">
+					<EsportsVenueBooksPanel pandascoreMatchId={pandascoreMatchId} />
+				</div>
+			) : null}
+			<RulesSection umbrella={umbrella} />
+		</>
+	);
 
 	return (
 		<div className="prediction-market-content">
@@ -136,69 +184,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 					<div className="orderbook-section">
 						{hasQuestions && orderbooksReady ? (
-							<>
-								{sortedQuestions.map((question, index) => {
-									if (!question) return null;
-									const orderBookId =
-										getMarketId(question) || `${index}`;
-									return (
-										<div
-											key={orderBookId}
-											className="question-orderbook"
-										>
-											<OrderbookDisplay
-												orderbook={
-													questionOrderbooks[
-														orderBookId
-													]
-												}
-												loading={
-													!questionOrderbooks[
-														orderBookId
-													]
-												}
-												error={null}
-												onRefresh={() =>
-													fetchAllOrderbooks(
-														sortedQuestions
-													)
-												}
-												customTitle={
-													question.displayName ||
-													(question as any).question
-												}
-												market={
-													{
-														...(question as any),
-														umbrellaChildrenCount:
-															umbrella?.children
-																?.length || 0,
-													} as any
-												}
-												onMarketSwitch={onMarketSwitch}
-												onMarketSwitchWithOrderbook={
-													onMarketSwitchWithOrderbook
-												}
-												onOrderbookToggle={
-													onOrderbookToggle
-												}
-												isActiveMarket={
-													getMarketId(
-														activeMarket
-													) === getMarketId(question)
-												}
-												activePosition={activePosition}
-												isCollapsed={
-													openOrderbookId !==
-													orderBookId
-												}
-												side={tradeSide}
-											/>
-										</div>
-									);
-								})}
-								<RulesSection umbrella={umbrella} />
-							</>
+							orderbookColumnContent
 						) : (
 							<>
 								<OrderbookSkeleton />
@@ -228,6 +214,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							}
 							orderbook={
 								questionOrderbooks[getMarketId(activeMarket)]
+							}
+							pandascoreMatchId={
+								pandascoreMatchId || undefined
 							}
 							initialPosition={activePosition}
 							onPositionChange={onPositionChange}
@@ -281,63 +270,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 				<div className="orderbook-section-mobile">
 					{hasQuestions && orderbooksReady ? (
-						<>
-							{sortedQuestions.map((question, index) => {
-								if (!question) return null;
-								const orderBookId =
-									getMarketId(question) || `${index}`;
-								return (
-									<div
-										key={orderBookId}
-										className="question-orderbook"
-									>
-										<OrderbookDisplay
-											orderbook={
-												questionOrderbooks[orderBookId]
-											}
-											loading={
-												!questionOrderbooks[orderBookId]
-											}
-											error={null}
-											onRefresh={() =>
-												fetchAllOrderbooks(
-													sortedQuestions
-												)
-											}
-											customTitle={
-												question.displayName ||
-												(question as any).question
-											}
-											market={
-												{
-													...(question as any),
-													umbrellaChildrenCount:
-														umbrella?.children
-															?.length || 0,
-												} as any
-											}
-											onMarketSwitch={onMarketSwitch}
-											onMarketSwitchWithOrderbook={
-												onMarketSwitchWithOrderbook
-											}
-											onOrderbookToggle={
-												onOrderbookToggle
-											}
-											isActiveMarket={
-												getMarketId(activeMarket) ===
-												getMarketId(question)
-											}
-											activePosition={activePosition}
-											isCollapsed={
-												openOrderbookId !== orderBookId
-											}
-											side={tradeSide}
-										/>
-									</div>
-								);
-							})}
-							<RulesSection umbrella={umbrella} />
-						</>
+						orderbookColumnContent
 					) : (
 						<>
 							<OrderbookSkeleton />
@@ -367,6 +300,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							}
 							orderbook={
 								questionOrderbooks[getMarketId(activeMarket)]
+							}
+							pandascoreMatchId={
+								pandascoreMatchId || undefined
 							}
 							initialPosition={activePosition}
 							onPositionChange={onPositionChange}

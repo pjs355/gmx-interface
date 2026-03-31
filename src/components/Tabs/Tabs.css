@@ -31,8 +31,9 @@
   border-radius: 10px !important;
 }
 
-/* Reduce spacing for Market/Limit/More tabs */
-.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option {
+/* Reduce spacing for Market/Limit + venue dropdowns */
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option,
+.Tab.Tab__inline[data-qa="trade-venue"] .Tab-option {
   margin-right: 1px !important;
 }
 
@@ -136,33 +137,37 @@
   transform: translateY(0);
 }
 
-/* Minimal, text-only style for trade mode (Market / Limit) */
-.Tab.Tab__inline[data-qa="trade-mode"] {
+/* Minimal, text-only style: Market/Limit + LevelUp/Polymarket (same control) */
+.Tab.Tab__inline[data-qa="trade-mode"],
+.Tab.Tab__inline[data-qa="trade-venue"] {
   overflow: visible;
 }
 
-.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option {
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option,
+.Tab.Tab__inline[data-qa="trade-venue"] .Tab-option {
   margin-right: 1.6rem !important;
-  padding: 2px 16px !important; /* more side padding, no background */
+  padding: 2px 16px !important;
   min-height: 0 !important;
   background: transparent !important;
   border: none !important;
   border-radius: 0 !important;
-  font-size: 1.2rem !important; /* bring down text size */
+  font-size: 1.2rem !important;
   font-weight: 600 !important;
-  color: #e5e7eb !important; /* slate-200 */
+  color: #e5e7eb !important;
   transform: none !important;
 }
 
-.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option.active {
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option.active,
+.Tab.Tab__inline[data-qa="trade-venue"] .Tab-option.active {
   color: #ffffff !important;
   font-weight: 700 !important;
   background: transparent !important;
   border: none !important;
 }
 
-.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option:not(.active):hover {
-  color: #f3f4f6 !important; /* slate-100 */
+.Tab.Tab__inline[data-qa="trade-mode"] .Tab-option:not(.active):hover,
+.Tab.Tab__inline[data-qa="trade-venue"] .Tab-option:not(.active):hover {
+  color: #f3f4f6 !important;
   transform: none !important;
 }
 

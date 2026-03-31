@@ -226,34 +226,34 @@ export function AppHeaderLinks({
             <Trans>Discover</Trans>
           </HeaderLink> */}
 				</div>
-				<div className="App-header-link-container">
-					<HeaderLink
-						qa="predictions"
-						to="/predictions"
-						showRedirectModal={showRedirectModal}
-						onClick={small ? clickCloseIcon : undefined}
-						isActive={(_match: any, location: any) => {
-							const path = location.pathname;
-							// Active on /predictions or /predictions/games, but NOT / (home) or /predictions/esports
-							return path === "/predictions" || path === "/predictions/games";
-						}}
-					>
-						Markets
-					</HeaderLink>
-				</div>
-				{/* Temporarily commented out - esports page disabled */}
-				{/* <div className="App-header-link-container">
-					<HeaderLink
-						qa="esports"
-						to="/predictions/esports"
-						showRedirectModal={showRedirectModal}
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/predictions/esports"
-						}
-					>
-						Esports
-					</HeaderLink>
-				</div> */}
+			<div className="App-header-link-container">
+				<HeaderLink
+					qa="esports"
+					to="/"
+					showRedirectModal={showRedirectModal}
+					onClick={small ? clickCloseIcon : undefined}
+					isActive={(_match: any, location: any) => {
+						const path = location.pathname;
+						return path === "/" || path === "/predictions/esports";
+					}}
+				>
+					Esports
+				</HeaderLink>
+			</div>
+			<div className="App-header-link-container">
+				<HeaderLink
+					qa="predictions"
+					to="/predictions/games"
+					showRedirectModal={showRedirectModal}
+					onClick={small ? clickCloseIcon : undefined}
+					isActive={(_match: any, location: any) => {
+						const path = location.pathname;
+						return path === "/predictions" || path === "/predictions/games";
+					}}
+				>
+					Markets
+				</HeaderLink>
+			</div>
 				{/* Commented out for production - leaderboard page disabled */}
 				{/* <div className="App-header-link-container">
 					<HeaderLink

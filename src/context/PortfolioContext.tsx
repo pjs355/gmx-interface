@@ -9,6 +9,10 @@ import React, {
 import { usePredictionData } from "context/PredictionDataContext";
 import { useUserData } from "context/UserDataContext";
 import { useSignerContext } from "context/SignerContext";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
+import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
+import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 
 type PortfolioContextValue = {
 	portfolioTotal: number | null;
@@ -36,6 +40,38 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		tokenBalances,
 		loading: userDataLoading,
 	} = useUserData();
+
+	// Polymarket Safe USDC.e + Predict BSC USDT (venue cash balances)
+	const { polymarketSafe, embeddedEoa } = useFundingAddresses();
+	const bridgeBalances = useBridgeFundingBalances({
+		baseSmartWallet: undefined,
+		polymarketSafe,
+		embeddedEoa,
+		enabled: Boolean(polymarketSafe || embeddedEoa),
+	});
+	const polySafeUsdcE = bridgeBalances.data?.polygonUsdcEHuman
+		? Number(bridgeBalances.data.polygonUsdcEHuman)
+		: 0;
+	const bscUsdtCash = bridgeBalances.data?.bscUsdtHuman
+		? Number(bridgeBalances.data.bscUsdtHuman)
+		: 0;
+	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
+	const polyPositionsTotal = useMemo(() => {
+		if (!polyPositionsQuery.data) return 0;
+		return polyPositionsQuery.data.reduce(
+			(sum, p) => sum + (p.currentValue ?? 0),
+			0
+		);
+	}, [polyPositionsQuery.data]);
+
+	const predictPositionsQuery = usePredictPositions(account ?? null);
+	const predictPositionsTotal = useMemo(() => {
+		if (!predictPositionsQuery.data) return 0;
+		return predictPositionsQuery.data.reduce(
+			(sum, p) => sum + (p.currentValue ?? 0),
+			0
+		);
+	}, [predictPositionsQuery.data]);
 
 	// Track separate loading states
 	const [hasInitialCashLoad, setHasInitialCashLoad] = React.useState(false);
@@ -95,15 +131,17 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		(userDataLoading && tokenBalances.size === 0) ||
 		booksPreviewLoading;
 
-	// Stable cash balance: do not drop to 0 when upstream temporarily returns null
+	// Stable cash balance: LevelUp Base USDC + Polymarket Safe USDC.e + Predict BSC USDT
 	const cashBalance = useMemo(() => {
-		if (usdcBalance === null || usdcBalance === undefined) {
-			return lastCashRef.current;
+		const baseCash =
+			usdcBalance === null || usdcBalance === undefined
+				? lastCashRef.current
+				: Number(usdcBalance) || 0;
+		if (usdcBalance !== null && usdcBalance !== undefined) {
+			lastCashRef.current = baseCash;
 		}
-		const val = Number(usdcBalance) || 0;
-		lastCashRef.current = val;
-		return val;
-	}, [usdcBalance]);
+		return baseCash + polySafeUsdcE + bscUsdtCash;
+	}, [usdcBalance, polySafeUsdcE, bscUsdtCash]);
 
 	const compute = useCallback(() => {
 		if (!account) {
@@ -160,6 +198,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				positions += yv + nv;
 			});
 
+			// Include Polymarket + Predict.fun positions value (off-chain venue APIs)
+			positions += polyPositionsTotal + predictPositionsTotal;
+
 			// Smoothing: avoid snap-to-zero during transient loads
 			const prevCash = lastCashRef.current;
 			const prevPositions = lastPositionsRef.current;
@@ -167,13 +208,15 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			let nextPositions = positions;
 			if (
 				(pricedMarkets === 0 || markets.length === 0) &&
-				prevPositions > 0
+				prevPositions > 0 &&
+				polyPositionsTotal === 0 &&
+				predictPositionsTotal === 0
 			) {
 				nextPositions = prevPositions;
 			}
 			const effectiveCash =
 				usdcBalance === null || usdcBalance === undefined
-					? prevCash
+					? prevCash + polySafeUsdcE + bscUsdtCash
 					: nextCash;
 			const nextTotal = effectiveCash + nextPositions;
 			setPortfolioTotal((current) => {
@@ -200,6 +243,10 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		allBooksPreview,
 		booksPreviewLoading,
 		userDataLoading,
+		polyPositionsTotal,
+		predictPositionsTotal,
+		polySafeUsdcE,
+		bscUsdtCash,
 	]);
 
 	useEffect(() => {
@@ -208,16 +255,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			return;
 		}
 		
-		// For users with no tokens, compute immediately even if prices are loading
 		const hasNoTokens = tokenBalances.size === 0 && !userDataLoading;
 		
-		// Don't compute until prices are loaded, UNLESS user has no tokens
 		if (booksPreviewLoading && !hasNoTokens) {
 			return;
 		}
-		// Compute once on mount and whenever holdings or cash change.
 		compute();
-		// Recompute once more shortly after to include freshly loaded prices
 		const t = setTimeout(compute, 500);
 		return () => clearTimeout(t);
 	}, [
@@ -229,6 +272,10 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		booksPreviewLoading,
 		userDataLoading,
 		compute,
+		polyPositionsTotal,
+		predictPositionsTotal,
+		polySafeUsdcE,
+		bscUsdtCash,
 	]);
 
 	const value = useMemo<PortfolioContextValue>(
