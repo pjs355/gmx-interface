@@ -2,9 +2,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useWallets } from "@privy-io/react-auth";
+import { useSendTransaction as useSolanaSendTransaction } from "@privy-io/react-auth/solana";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import { getAddress, isAddress } from "viem";
 import { bsc } from "viem/chains";
+import { Connection, VersionedTransaction } from "@solana/web3.js";
 import { isPrivyEmbeddedWallet } from "@/trading/polymarket/privyEmbeddedWallet";
 import { useUserData } from "@/context/UserDataContext";
 import { getPrivateApiErrorMessage } from "@/services/privateApi";
@@ -26,16 +28,19 @@ import { PRIVY_SPONSOR_BSC_GAS } from "@/config/privyBscGas";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import { getBridgeQuoteFingerprint } from "@/trading/lifi/quoteDisplay";
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
+import { SOLANA_RPC_URL } from "@/config/rpc";
+import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import type { LifiQuoteResponse } from "@/types/trading";
 
 const BASE = 8453;
 const POLYGON = 137;
 const BNB = bsc.id;
+const SOLANA_LIFI_CHAIN_ID = 1151111081099710;
 
 /** UI endpoint ↔ on-chain funding account (matches Transfers dropdowns). */
-export type BridgeEndpoint = "levelup" | "polymarket" | "bnb";
+export type BridgeEndpoint = "levelup" | "polymarket" | "bnb" | "solana";
 
-const BRIDGE_ENDPOINT_ORDER: BridgeEndpoint[] = ["levelup", "polymarket", "bnb"];
+const BRIDGE_ENDPOINT_ORDER: BridgeEndpoint[] = ["levelup", "polymarket", "bnb", "solana"];
 
 /** When From and To would match, switch the other field to a different endpoint (all three chains supported). */
 function distinctBridgeEndpoint(exclude: BridgeEndpoint): BridgeEndpoint {
@@ -99,6 +104,8 @@ function chainForEndpoint(e: BridgeEndpoint): number {
 			return POLYGON;
 		case "bnb":
 			return BNB;
+		case "solana":
+			return SOLANA_LIFI_CHAIN_ID;
 	}
 }
 
@@ -108,6 +115,7 @@ function addressForEndpoint(
 		baseSmartWallet?: string;
 		polymarketSafe?: string;
 		embeddedEoa?: string;
+		solanaAddress?: string;
 	}
 ): string | undefined {
 	switch (e) {
@@ -117,6 +125,8 @@ function addressForEndpoint(
 			return funding.polymarketSafe;
 		case "bnb":
 			return funding.embeddedEoa;
+		case "solana":
+			return funding.solanaAddress;
 	}
 }
 
@@ -127,6 +137,7 @@ export function routeHasRequiredAddresses(
 		baseSmartWallet?: string;
 		polymarketSafe?: string;
 		embeddedEoa?: string;
+		solanaAddress?: string;
 	}
 ): boolean {
 	if (from === to) return false;
@@ -134,6 +145,7 @@ export function routeHasRequiredAddresses(
 	if (ends.has("levelup") && !funding.baseSmartWallet) return false;
 	if (ends.has("polymarket") && !funding.polymarketSafe) return false;
 	if (ends.has("bnb") && !funding.embeddedEoa) return false;
+	if (ends.has("solana") && !funding.solanaAddress) return false;
 	return true;
 }
 
@@ -144,6 +156,7 @@ export function useBridgeFlow() {
 		baseSmartWallet: funding.baseSmartWallet,
 		polymarketSafe: funding.polymarketSafe,
 		embeddedEoa: funding.embeddedEoa,
+		solanaAddress: funding.solanaAddress,
 		enabled: !funding.isLoading,
 	});
 	const { refresh: refreshUserData } = useUserData();
@@ -152,6 +165,19 @@ export function useBridgeFlow() {
 	const { getClientForChain } = useSmartWallets();
 	const { wallets } = useWallets();
 	const relay = usePolymarketRelay();
+	const { sendTransaction: privySolanaSendTx } = useSolanaSendTransaction();
+
+	const solanaSigner = useMemo<SolanaSignerCapable>(
+		() => ({
+			signAndSendTransaction: async (serializedTx: Uint8Array) => {
+				const tx = VersionedTransaction.deserialize(serializedTx);
+				const conn = new Connection(SOLANA_RPC_URL);
+				const receipt = await privySolanaSendTx({ transaction: tx, connection: conn });
+				return receipt.signature;
+			},
+		}),
+		[privySolanaSendTx]
+	);
 
 	const [fromEndpoint, setFromEndpoint] = useState<BridgeEndpoint>("levelup");
 	const [toEndpoint, setToEndpoint] = useState<BridgeEndpoint>("polymarket");
@@ -220,6 +246,8 @@ export function useBridgeFlow() {
 				return fundingBalances.data?.polygonUsdcEHuman ?? null;
 			case "bnb":
 				return fundingBalances.data?.bscUsdtHuman ?? null;
+			case "solana":
+				return fundingBalances.data?.solanaUsdcHuman ?? null;
 			default:
 				return null;
 		}
@@ -315,30 +343,40 @@ export function useBridgeFlow() {
 		}
 	}, []);
 
+	const routeIncludesSolana =
+		fromEndpoint === "solana" || toEndpoint === "solana";
+
 	const executeQuoteFetch = useCallback(
 		async (options?: { silent?: boolean }) => {
 			if (!routeHasRequiredAddresses(fromEndpoint, toEndpoint, funding)) return;
 			const rawFrom = addressForEndpoint(fromEndpoint, funding);
 			const rawTo = addressForEndpoint(toEndpoint, funding);
 			if (!rawFrom || !rawTo) return;
-			if (!isAddress(rawFrom) || !isAddress(rawTo)) {
-				if (!options?.silent) {
-					setError("Invalid wallet address for this route. Refresh and try again.");
-					setPhase("error");
-				}
-				return;
-			}
+
 			let fromAddr: string;
 			let toAddr: string;
-			try {
-				fromAddr = getAddress(rawFrom);
-				toAddr = getAddress(rawTo);
-			} catch {
-				if (!options?.silent) {
-					setError("Invalid wallet address for this route.");
-					setPhase("error");
+
+			if (routeIncludesSolana) {
+				fromAddr = rawFrom;
+				toAddr = rawTo;
+			} else {
+				if (!isAddress(rawFrom) || !isAddress(rawTo)) {
+					if (!options?.silent) {
+						setError("Invalid wallet address for this route. Refresh and try again.");
+						setPhase("error");
+					}
+					return;
 				}
-				return;
+				try {
+					fromAddr = getAddress(rawFrom);
+					toAddr = getAddress(rawTo);
+				} catch {
+					if (!options?.silent) {
+						setError("Invalid wallet address for this route.");
+						setPhase("error");
+					}
+					return;
+				}
 			}
 
 			const gen = ++quoteGenRef.current;
@@ -388,7 +426,9 @@ export function useBridgeFlow() {
 			funding.baseSmartWallet,
 			funding.polymarketSafe,
 			funding.embeddedEoa,
+			funding.solanaAddress,
 			applyDepositSlippage,
+			routeIncludesSolana,
 			quoteMutation.mutateAsync,
 		]
 	);
@@ -435,6 +475,7 @@ export function useBridgeFlow() {
 		funding.baseSmartWallet,
 		funding.polymarketSafe,
 		funding.embeddedEoa,
+		funding.solanaAddress,
 		executeQuoteFetch,
 		routeOk,
 		isAmountValid,
@@ -468,6 +509,7 @@ export function useBridgeFlow() {
 		funding.baseSmartWallet,
 		funding.polymarketSafe,
 		funding.embeddedEoa,
+		funding.solanaAddress,
 		executeQuoteFetch,
 	]);
 
@@ -541,6 +583,7 @@ export function useBridgeFlow() {
 			const { txHashes } = await executeLifiSteps(quote.steps, getSignerForChain, {
 				allowanceOwnerByChainId,
 				...(polygonRelay ? { polygonRelay } : {}),
+				...(routeIncludesSolana ? { solanaSigner } : {}),
 			});
 			const statusTxHash = pickTxHashForLifiStatusPoll(txHashes, quote, fromChain);
 			if (!statusTxHash) throw new Error("No transaction hash returned from wallet");
@@ -589,8 +632,10 @@ export function useBridgeFlow() {
 		fromChain,
 		toChain,
 		needsPolymarketRelay,
+		routeIncludesSolana,
 		relay,
 		getSignerForChain,
+		solanaSigner,
 		allowanceOwnerByChainId,
 		api,
 		refreshUserData,

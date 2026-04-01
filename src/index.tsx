@@ -1,4 +1,7 @@
-// MUST be first - suppress console.log in production before any other code runs
+// MUST be first: Buffer + process (readable-stream@2 / hash-base) before any other imports
+import "./polyfills/node-runtime-globals";
+
+// MUST be second - suppress console.log in production before any other code runs
 import { initConsoleSuppress } from "./utils/suppressConsole";
 initConsoleSuppress();
 

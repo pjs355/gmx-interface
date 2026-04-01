@@ -13,6 +13,8 @@ import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import TradeHistoryList from "./TradeHistoryList";
+import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -176,6 +178,24 @@ export default function HistoryView({
 		return cashIn - cashOut;
 	};
 
+	// Group venue history by marketTitle for umbrella-style rendering
+	const venueUmbrellas = React.useMemo(() => {
+		const groups = new Map<string, VenuePosition[]>();
+		for (const pos of venueHistory) {
+			const key =
+				stripUmbrellaDisplayPrefix(pos.marketTitle) || pos.marketTitle;
+			const list = groups.get(key) ?? [];
+			list.push(pos);
+			groups.set(key, list);
+		}
+		return Array.from(groups.entries()).map(([title, positions]) => ({
+			title,
+			venueLabel: positions[0].venue === "predictfun" ? "Predict.fun" : positions[0].venue === "polymarket" ? "Polymarket" : positions[0].venue,
+			iconUrl: positions[0].iconUrl,
+			positions,
+		}));
+	}, [venueHistory]);
+
 	const hasAnyHistory = filteredResolvedMarkets.length > 0 || venueHistory.length > 0;
 
 	return (
@@ -195,8 +215,6 @@ export default function HistoryView({
 					</p>
 				</div>
 			) : (
-				<>
-				{filteredResolvedMarkets.length === 0 ? null : (
 				<ScrollableTable minWidth="700px">
 					<div
 						className="grid items-center px-12 py-10"
@@ -229,8 +247,12 @@ export default function HistoryView({
 					</div>
 
 					<div className="flex flex-col">
+						{/* LevelUp umbrella blocks */}
 						{filteredResolvedMarkets.map(
-							({ umbrella, markets }) => (
+							({ umbrella, markets }) => {
+								const singleMarketUnderUmbrella =
+									markets.length === 1;
+								return (
 								<div
 									key={umbrella._id}
 									className="umbrella-block"
@@ -260,7 +282,9 @@ export default function HistoryView({
 											<UmbrellaImage
 												umbrella={umbrella}
 											/>
-											{umbrella.displayName}
+											{stripUmbrellaDisplayPrefix(
+												umbrella.displayName
+											)}
 										</div>
 									</div>
 
@@ -520,6 +544,17 @@ export default function HistoryView({
 																			? parts[0]
 																			: parts[1]}
 																	</span>
+																) : singleMarketUnderUmbrella ? (
+																	<span
+																		style={{
+																			color:
+																				side === "Yes"
+																					? "#16a34a"
+																					: "#ef4444",
+																		}}
+																	>
+																		{side}
+																	</span>
 																) : (
 																	<>
 																		<span>
@@ -638,79 +673,170 @@ export default function HistoryView({
 										);
 									})}
 								</div>
-							)
+							);
+							}
 						)}
-					</div>
-				</ScrollableTable>
-				)}
 
-				{/* Venue history (Predict.fun / Polymarket resolved positions) */}
-				{venueHistory.length > 0 && (
-					<ScrollableTable minWidth="700px">
-						<div
-							className="grid items-center px-12 py-10"
-							style={{
-								gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr)",
-								borderBottom: "1px solid #333333",
-								color: "#888",
-								fontSize: 12,
-								textTransform: "uppercase",
-								letterSpacing: 0.6,
-								marginTop: filteredResolvedMarkets.length > 0 ? 24 : 0,
-							}}
-						>
-							<div>Market</div>
-							<div style={{ textAlign: "center" }}>Position</div>
-							<div style={{ textAlign: "center" }}>Result</div>
-							<div style={{ textAlign: "center" }}>Cost</div>
-							<div style={{ textAlign: "center" }}>Shares</div>
-							<div style={{ textAlign: "center" }}>Return</div>
-						</div>
-						<div className="flex flex-col">
-							{venueHistory.map((pos) => {
-								const isWon = pos.outcomeResult === "WON";
-								const returnVal = pos.pnl;
-								const returnColor = returnVal === null ? "#fff" : returnVal >= 0 ? "#16a34a" : "#ef4444";
-								const venueLabel = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue;
-
-								return (
+						{/* Venue umbrella blocks (Polymarket / Predict.fun) */}
+						{venueUmbrellas.map(({ title, venueLabel, iconUrl, positions }) => (
+							<div key={`venue-${title}`} className="umbrella-block">
+								{/* Umbrella header */}
+								<div
+									className="grid px-12 py-10"
+									style={{
+										gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
+										background: "#000000",
+										borderBottom: "1px solid #1f1f1f",
+										paddingTop: 16,
+										paddingBottom: 16,
+									}}
+								>
 									<div
-										key={`vh-${pos.tokenId}`}
-										className="grid items-center px-12 py-12"
 										style={{
-											gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr)",
-											borderBottom: "1px solid #1f1f1f",
-											fontSize: 16,
+											gridColumn: "1 / -1",
+											fontWeight: 700,
+											color: "#dedede",
+											fontSize: 20,
+											display: "flex",
+											alignItems: "center",
+											gap: "12px",
 										}}
 									>
-										<div style={{ color: "#fff", fontWeight: 600 }}>
-											{pos.marketTitle}
-											<span style={{ color: "#888", fontSize: 12, marginLeft: 6 }}>({venueLabel})</span>
-										</div>
-										<div style={{ textAlign: "center", color: "#fff" }}>
-											{pos.outcome}
-										</div>
-										<div style={{ textAlign: "center", color: isWon ? "#16a34a" : "#ef4444", fontWeight: 600 }}>
-											{pos.outcomeResult ?? "Lost"}
-										</div>
-										<div style={{ textAlign: "center", color: "#fff" }}>
-											{pos.cost !== null ? `$${pos.cost.toFixed(2)}` : "—"}
-										</div>
-										<div style={{ textAlign: "center", color: "#fff" }}>
-											{pos.shares > 0 ? Math.round(pos.shares).toLocaleString() : "—"}
-										</div>
-										<div style={{ textAlign: "center", color: returnColor, fontWeight: "bold" }}>
-											{returnVal !== null && isFinite(returnVal)
-												? `${returnVal >= 0 ? "+" : "-"}$${Math.abs(returnVal).toFixed(2)}`
-												: "—"}
-										</div>
+										{iconUrl ? (
+											<img
+												src={iconUrl}
+												alt={title}
+												width={48}
+												height={48}
+												style={{
+													display: "block",
+													background: "#000",
+													borderRadius: 8,
+													objectFit: "contain",
+												}}
+											/>
+										) : (
+											<div style={{ width: 48, height: 48, borderRadius: 8, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#888" }}>
+												{venueLabel.slice(0, 2)}
+											</div>
+										)}
+										{stripUmbrellaDisplayPrefix(title)}
+										<span style={{ color: "#888", fontSize: 14, fontWeight: 400 }}>({venueLabel})</span>
 									</div>
-								);
-							})}
-						</div>
-					</ScrollableTable>
-				)}
-				</>
+								</div>
+
+								{/* Outcome rows */}
+								{positions.map((pos) => {
+									const singleInGroup = positions.length === 1;
+									const isWon = pos.outcomeResult === "WON";
+									const safeCost = (pos.cost != null && isFinite(pos.cost)) ? pos.cost : null;
+									const safeShares = (pos.shares != null && isFinite(pos.shares)) ? pos.shares : 0;
+
+									const finalPositionText = safeShares > 0
+										? safeShares.toLocaleString("en-US", {
+											minimumFractionDigits: safeShares % 1 === 0 ? 0 : 2,
+											maximumFractionDigits: 2,
+										})
+										: "—";
+
+									const outcomeColor = isWon ? "#16a34a" : "#ef4444";
+
+									const totalCostText = (() => {
+										if (safeCost === null || safeCost === 0) return "—";
+										const formatted = safeCost.toLocaleString("en-US", {
+											minimumFractionDigits: safeCost % 1 === 0 ? 0 : 2,
+											maximumFractionDigits: 2,
+										});
+										return `$${formatted}`;
+									})();
+									const totalCostColor = "#fff";
+
+									const totalPayout = (() => {
+										if (isWon) {
+											if (safeCost !== null && pos.pnl != null && isFinite(pos.pnl)) {
+												return safeCost + pos.pnl;
+											}
+											return safeShares;
+										}
+										return 0;
+									})();
+									const totalPayoutText = totalPayout > 0
+										? `$${totalPayout.toLocaleString("en-US", {
+											minimumFractionDigits: totalPayout % 1 === 0 ? 0 : 2,
+											maximumFractionDigits: 2,
+										})}`
+										: "$0";
+									const totalPayoutColor = totalPayout > 0 ? "#16a34a" : "#fff";
+
+									const totalReturn = (() => {
+										if (pos.pnl != null && isFinite(pos.pnl)) return pos.pnl;
+										if (safeCost !== null) return totalPayout - safeCost;
+										return null;
+									})();
+									const totalReturnPct = (totalReturn != null && safeCost != null && safeCost > 0)
+										? (totalReturn / safeCost) * 100
+										: null;
+									const totalReturnColor = totalReturn === null
+										? "#fff"
+										: totalReturn >= 0 ? "#16a34a" : "#ef4444";
+									const totalReturnText = (() => {
+										if (totalReturn === null || !isFinite(totalReturn)) return "—";
+										const sign = totalReturn >= 0 ? "+" : "-";
+										const absReturn = Math.abs(totalReturn);
+										const usdPart = `$${absReturn.toLocaleString("en-US", {
+											minimumFractionDigits: absReturn % 1 === 0 ? 0 : 2,
+											maximumFractionDigits: 2,
+										})}`;
+										if (totalReturnPct === null || !isFinite(totalReturnPct)) {
+											return `${sign}${usdPart}`;
+										}
+										const pctSign = totalReturnPct >= 0 ? "+" : "-";
+										const pctPart = `${Math.round(Math.abs(totalReturnPct)).toLocaleString("en-US")}%`;
+										return `${sign}${usdPart} (${pctSign}${pctPart})`;
+									})();
+
+									return (
+										<div
+											key={`vh-${pos.tokenId}`}
+											className="grid items-center px-12 py-12"
+											style={{
+												gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
+												borderBottom: "1px solid #1f1f1f",
+												fontSize: 16,
+											}}
+										>
+											<div style={{ color: "#fff", fontWeight: 600 }}>
+												{getVenueHistoryMarketColumnLabel(
+													pos.marketTitle,
+													pos,
+													singleInGroup
+												)}
+											</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>
+												{finalPositionText}
+											</div>
+											<div style={{ textAlign: "center", color: outcomeColor, fontWeight: 600 }}>
+												{pos.outcomeResult ?? "Lost"}
+											</div>
+											<div style={{ textAlign: "center", color: totalCostColor, fontWeight: 500 }}>
+												{totalCostText}
+											</div>
+											<div style={{ textAlign: "center", color: totalPayoutColor }}>
+												{totalPayoutText}
+											</div>
+											<div style={{ textAlign: "center", color: totalReturnColor, fontWeight: "bold" }}>
+												{totalReturnText}
+											</div>
+											<div style={{ textAlign: "center", color: "#555" }}>
+												—
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						))}
+					</div>
+				</ScrollableTable>
 			)}
 		</div>
 	);

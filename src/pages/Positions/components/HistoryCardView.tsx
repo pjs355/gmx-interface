@@ -11,6 +11,8 @@ import {
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
+import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -204,6 +206,7 @@ export default function HistoryCardView({
 				{filteredResolvedMarkets.map(({ umbrella, markets }) => (
 					<div key={umbrella._id} className="umbrella-card">
 						{markets.map(({ market, yes, no }) => {
+							const singleMarketUnderUmbrella = markets.length === 1;
 							const qid =
 								market._id ||
 								market.questionId ||
@@ -431,7 +434,9 @@ export default function HistoryCardView({
 																marginBottom: 4,
 															}}
 														>
-															{umbrella.displayName}
+															{stripUmbrellaDisplayPrefix(
+															umbrella.displayName
+														)}
 														</div>
 														<div
 															style={{
@@ -445,6 +450,17 @@ export default function HistoryCardView({
 																	{side === "Yes"
 																		? parts[0]
 																		: parts[1]}
+																</span>
+															) : singleMarketUnderUmbrella ? (
+																<span
+																	style={{
+																		color:
+																			side === "Yes"
+																				? "#16a34a"
+																				: "#ef4444",
+																	}}
+																>
+																	{side}
 																</span>
 															) : (
 																<>
@@ -712,9 +728,42 @@ export default function HistoryCardView({
 				{/* Venue history cards (Predict.fun / Polymarket resolved) */}
 				{venueHistory.map((pos) => {
 					const isWon = pos.outcomeResult === "WON";
-					const returnVal = pos.pnl;
-					const returnColor = returnVal === null ? "#fff" : returnVal >= 0 ? "#16a34a" : "#ef4444";
 					const venueLabel = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue;
+					const safeCost = (pos.cost != null && isFinite(pos.cost)) ? pos.cost : null;
+					const safeShares = (pos.shares != null && isFinite(pos.shares)) ? pos.shares : 0;
+
+					const totalPayout = (() => {
+						if (isWon) {
+							if (safeCost !== null && pos.pnl != null && isFinite(pos.pnl)) return safeCost + pos.pnl;
+							return safeShares;
+						}
+						return 0;
+					})();
+
+					const totalReturn = (() => {
+						if (pos.pnl != null && isFinite(pos.pnl)) return pos.pnl;
+						if (safeCost !== null) return totalPayout - safeCost;
+						return null;
+					})();
+					const totalReturnPct = (totalReturn != null && safeCost != null && safeCost > 0)
+						? (totalReturn / safeCost) * 100 : null;
+					const totalReturnColor = totalReturn === null ? "#fff" : totalReturn >= 0 ? "#16a34a" : "#ef4444";
+
+					const fmtCost = safeCost !== null && safeCost !== 0
+						? `$${safeCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+						: "—";
+					const fmtPayout = totalPayout > 0
+						? `$${totalPayout.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+						: "$0";
+					const fmtReturn = (() => {
+						if (totalReturn === null || !isFinite(totalReturn)) return "—";
+						const sign = totalReturn >= 0 ? "+" : "-";
+						const usd = `$${Math.abs(totalReturn).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+						if (totalReturnPct === null || !isFinite(totalReturnPct))
+							return `${sign}${usd}`;
+						const pSign = totalReturnPct >= 0 ? "+" : "-";
+						return `${sign}${usd} (${pSign}${Math.round(Math.abs(totalReturnPct))}%)`;
+					})();
 
 					return (
 						<div
@@ -742,32 +791,41 @@ export default function HistoryCardView({
 										{venueLabel}
 									</div>
 									<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
-										{pos.marketTitle}{" "}
-										<span style={{ color: isWon ? "#16a34a" : "#ef4444" }}>
-											{pos.outcome}
-										</span>
+										{stripUmbrellaDisplayPrefix(pos.marketTitle)}
+									</div>
+									<div
+										style={{
+											color: isWon ? "#16a34a" : "#ef4444",
+											fontSize: 15,
+											fontWeight: 600,
+											marginTop: 4,
+										}}
+									>
+										{getVenueHistoryMarketColumnLabel(
+											pos.marketTitle,
+											pos,
+											true
+										)}
 									</div>
 								</div>
 							</div>
-							<div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-								<div style={{ flex: 1 }}>
-									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Result</div>
-									<div style={{ color: isWon ? "#16a34a" : "#ef4444", fontSize: 18, fontWeight: 700 }}>
-										{pos.outcomeResult ?? "Lost"}
-									</div>
-								</div>
-								<div style={{ flex: 1, textAlign: "center" }}>
-									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Cost</div>
+							<div style={{ padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+								<div>
+									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Cost</div>
 									<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
-										{pos.cost !== null ? `$${pos.cost.toFixed(2)}` : "—"}
+										{fmtCost}
 									</div>
 								</div>
-								<div style={{ flex: 1, textAlign: "right" }}>
-									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Return</div>
-									<div style={{ color: returnColor, fontSize: 18, fontWeight: 700, whiteSpace: "nowrap" }}>
-										{returnVal !== null && isFinite(returnVal)
-											? `${returnVal >= 0 ? "+" : "-"}$${Math.abs(returnVal).toFixed(2)}`
-											: "—"}
+								<div style={{ textAlign: "center" }}>
+									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Payout</div>
+									<div style={{ color: totalPayout > 0 ? "#16a34a" : "#fff", fontSize: 18, fontWeight: 700 }}>
+										{fmtPayout}
+									</div>
+								</div>
+								<div style={{ textAlign: "right" }}>
+									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Return</div>
+									<div style={{ color: totalReturnColor, fontSize: 18, fontWeight: 700, whiteSpace: "nowrap" }}>
+										{fmtReturn}
 									</div>
 								</div>
 							</div>

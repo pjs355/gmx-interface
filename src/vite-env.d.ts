@@ -31,6 +31,11 @@ interface ImportMetaEnv {
 	readonly VITE_PRIVY_SPONSOR_BSC_GAS?: string;
 	/** Optional Predict smart-wallet deposit address (maker/signer for orders) */
 	readonly VITE_PREDICT_ACCOUNT_ADDRESS?: string;
+	/**
+	 * Override path for Predict match events proxy (default `/api/predict/orders/matches`).
+	 * Set if your server mounts e.g. `/predict/orders/matches` without the `/api` prefix.
+	 */
+	readonly VITE_PREDICT_ORDER_MATCHES_PATH?: string;
 }
 
 // Image module declarations

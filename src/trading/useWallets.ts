@@ -23,6 +23,20 @@ function readSmartWalletFromUser(user: unknown): string | undefined {
 	return smart?.address;
 }
 
+/** Match DFlow / Profile: Privy exposes Solana on linkedAccounts before wallets() may list it */
+function readSolanaAddressFromUser(user: unknown): string | undefined {
+	const linked = (user as { linkedAccounts?: unknown[] } | null)?.linkedAccounts;
+	if (!Array.isArray(linked)) return undefined;
+	const sol = linked.find(
+		(a) =>
+			(a as { type?: string; chainType?: string })?.type === "wallet" &&
+			(a as { chainType?: string })?.chainType === "solana"
+	) as { address?: string } | undefined;
+	return typeof sol?.address === "string" && sol.address.trim()
+		? sol.address.trim()
+		: undefined;
+}
+
 /**
  * Single normalized view of wallet roles (Privy + server read model).
  */
@@ -70,6 +84,7 @@ export function useTradingWallets(
 			(w) => String(w.chainFamily ?? "").toLowerCase() === "solana"
 		);
 
+		const solFromLinked = readSolanaAddressFromUser(user);
 		return {
 			baseSmartWallet,
 			embeddedEoa,
@@ -77,7 +92,8 @@ export function useTradingWallets(
 			polygonSigner: embeddedEoa,
 			solanaAddress:
 				solWallet?.address ??
-				(typeof solOverview?.address === "string" ? solOverview.address : undefined),
+				(typeof solOverview?.address === "string" ? solOverview.address : undefined) ??
+				solFromLinked,
 		};
 	}, [user, wallets, accountOverview, polymarketAccount]);
 }

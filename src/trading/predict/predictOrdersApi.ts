@@ -42,6 +42,40 @@ export type TokenCostEntry = {
 	avgPrice: number;
 };
 
+/** Canonical token id string for Map keys (matches positions `onChainId` ↔ orders `tokenId`). */
+export function normalizePredictTokenId(
+	tokenId: string | number | bigint | undefined | null
+): string {
+	if (tokenId === undefined || tokenId === null) return "";
+	const s = String(tokenId).trim();
+	if (!s) return "";
+	try {
+		return BigInt(s).toString();
+	} catch {
+		return s.toLowerCase();
+	}
+}
+
+export function isPredictBuySide(side: unknown): boolean {
+	if (side === 0 || side === "0") return true;
+	const n = typeof side === "string" ? Number(side) : Number(side);
+	if (n === 0) return true;
+	if (typeof side === "string" && side.toUpperCase() === "BUY") return true;
+	return false;
+}
+
+/**
+ * Cost lookup using the same key normalization as {@link computePredictCostByToken}.
+ */
+export function getPredictCostForToken(
+	map: Map<string, TokenCostEntry>,
+	tokenId: string | undefined | null
+): TokenCostEntry | undefined {
+	const k = normalizePredictTokenId(tokenId ?? "");
+	if (!k) return undefined;
+	return map.get(k);
+}
+
 /**
  * From a list of FILLED BUY orders, compute per-tokenId cost basis.
  * BUY: side=0, makerAmount=USDT spent (wei), takerAmount=shares received (wei).
@@ -52,11 +86,13 @@ export function computePredictCostByToken(
 	const map = new Map<string, TokenCostEntry>();
 
 	for (const row of filledOrders) {
-		if (row.order.side !== 0) continue; // only BUY
-		const tokenId = row.order.tokenId;
+		if (!row?.order) continue;
+		if (!isPredictBuySide(row.order.side)) continue;
+		const tokenId = normalizePredictTokenId(row.order.tokenId);
+		if (!tokenId) continue;
 		const cost = Number(row.order.makerAmount) / 1e18;
 		const shares = Number(row.order.takerAmount) / 1e18;
-		if (shares <= 0) continue;
+		if (!Number.isFinite(cost) || !Number.isFinite(shares) || shares <= 0) continue;
 
 		const existing = map.get(tokenId);
 		if (existing) {
@@ -82,7 +118,7 @@ export function mapPredictOrdersToVenueOrders(
 	outcomeLookup: Map<string, string>
 ): VenueOrder[] {
 	return rows.map((row) => {
-		const isBuy = row.order.side === 0;
+		const isBuy = isPredictBuySide(row.order.side);
 		const makerAmt = Number(row.order.makerAmount) / 1e18;
 		const takerAmt = Number(row.order.takerAmount) / 1e18;
 		const price = isBuy
@@ -90,7 +126,8 @@ export function mapPredictOrdersToVenueOrders(
 			: makerAmt > 0 ? takerAmt / makerAmt : 0;
 		const size = isBuy ? takerAmt : makerAmt;
 
-		const outcomeName = outcomeLookup.get(row.order.tokenId) ?? "Yes";
+		const tid = normalizePredictTokenId(row.order.tokenId);
+		const outcomeName = outcomeLookup.get(tid) ?? outcomeLookup.get(row.order.tokenId) ?? "Yes";
 		const position: "Yes" | "No" =
 			outcomeName.toLowerCase() === "no" ? "No" : "Yes";
 
@@ -103,7 +140,7 @@ export function mapPredictOrdersToVenueOrders(
 			price,
 			size,
 			filled: row.status === "FILLED",
-			tokenId: row.order.tokenId,
+			tokenId: normalizePredictTokenId(row.order.tokenId) || row.order.tokenId,
 			marketId: String(row.marketId),
 			rawOrder: row.order,
 		};

@@ -42,6 +42,7 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
     yes: OrderbookSnapshot | null;
     no: OrderbookSnapshot | null;
   } | null;
+  dflowVenueHint?: string | null;
   onTrade: () => void;
   buttonState: {
     text: string;
@@ -61,6 +62,7 @@ const venueDropdownOptions = [
       { value: "levelup" as const, label: "LevelUp" },
       { value: "polymarket" as const, label: "Polymarket" },
       { value: "predictfun" as const, label: "Predict.fun" },
+      { value: "dflow" as const, label: "DFlow" },
     ],
   },
 ];
@@ -78,6 +80,7 @@ export default function PredictionMarketTradeBoxUI({
   polymarketVenueHint,
   predictVenueHint,
   predictVenueBookHints,
+  dflowVenueHint,
   onTrade,
   buttonState,
   approvalState,
@@ -353,6 +356,14 @@ export default function PredictionMarketTradeBoxUI({
           {predictVenueHint}{" "}
           <Link to="/trading" className="trade-venue-hint__link">
             Open Trading
+          </Link>
+        </p>
+      ) : null}
+      {state.tradingVenue === "dflow" && dflowVenueHint ? (
+        <p className="trade-venue-hint">
+          {dflowVenueHint}{" "}
+          <Link to="/profile" className="trade-venue-hint__link">
+            Open Profile
           </Link>
         </p>
       ) : null}

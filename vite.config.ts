@@ -2,6 +2,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 import path from "path";
 import http from "http";
 import https from "https";
@@ -247,6 +248,16 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [
+			// Solana + transitive deps (e.g. readable-stream via hash-base) expect Node `Buffer` and `process`
+			// (`process.version.slice` in _stream_writable.js when `process.version` is missing).
+			nodePolyfills({
+				// readable-stream@2 + hash-base need `global`, full `process`, and `Buffer` at module init
+				globals: {
+					Buffer: true,
+					global: true,
+					process: true,
+				},
+			}),
 			react({
 				babel: {
 					plugins: ["macros"],

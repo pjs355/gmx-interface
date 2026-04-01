@@ -8,11 +8,14 @@ import type {
 } from "@/types/trading";
 import { BSC_RPC_URL, DEFAULT_RPC_URL, POLYGON_RPC_URL } from "@/config/rpc";
 import { waitRelay } from "@/trading/polymarket/safeActions";
-import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
+import type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 
-export type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
+export type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/** LI.FI chain ID for Solana mainnet. */
+const SOLANA_LIFI_CHAIN_ID = 1151111081099710;
 
 export type ExecuteLifiStepsOptions = {
 	/**
@@ -30,6 +33,11 @@ export type ExecuteLifiStepsOptions = {
 	polygonRelay?: {
 		client: RelayClient;
 	};
+	/**
+	 * When set, steps on Solana (1151111081099710) are signed and sent via this signer.
+	 * The step's `transactionRequest.data` should be a base64-encoded Solana transaction.
+	 */
+	solanaSigner?: SolanaSignerCapable;
 };
 
 function toHexData(data: string | undefined): `0x${string}` | undefined {
@@ -192,14 +200,29 @@ export async function executeLifiSteps(
 				`LI.FI step ${i} has no transactionRequest — aborting to avoid partial execution`
 			);
 		}
-		if (!tr.to || !ETH_ADDRESS_RE.test(tr.to)) {
+		const chainId = tr.chainId ?? step.chainId;
+		if (chainId == null) {
+			throw new Error(`LI.FI step ${i} missing chainId`);
+		}
+		if (chainId !== SOLANA_LIFI_CHAIN_ID && (!tr.to || !ETH_ADDRESS_RE.test(tr.to))) {
 			throw new Error(
 				`LI.FI step ${i} has invalid 'to' address: ${tr.to ?? "(missing)"}`
 			);
 		}
-		const chainId = tr.chainId ?? step.chainId;
-		if (chainId == null) {
-			throw new Error(`LI.FI step ${i} missing chainId`);
+
+		if (chainId === SOLANA_LIFI_CHAIN_ID) {
+			const sol = options?.solanaSigner;
+			if (!sol) {
+				throw new Error(`LI.FI step ${i} targets Solana but no solanaSigner is configured.`);
+			}
+			const txData = tr.data;
+			if (!txData) {
+				throw new Error(`LI.FI Solana step ${i} has no transaction data.`);
+			}
+			const txBytes = Uint8Array.from(atob(txData), (c) => c.charCodeAt(0));
+			const sig = await sol.signAndSendTransaction(txBytes);
+			if (sig) txHashes.push(sig);
+			continue;
 		}
 
 		if (relay && chainId === polygon.id) {

@@ -162,6 +162,8 @@ export default function Transfers() {
 					<p className="transfers-addresses__sub">
 						Polygon shows your Polymarket Safe when linked, otherwise your
 						embedded signer. BNB Chain is your embedded wallet (same EOA).
+						Solana is your Privy Solana wallet — used for DFlow / Kalshi and LI.FI
+						routes on Solana.
 					</p>
 					<div className="transfers-addresses__row">
 						<span className="transfers-addresses__label">Polygon</span>
@@ -193,6 +195,18 @@ export default function Transfers() {
 								<span className="transfers-skeleton transfers-skeleton--address" />
 							) : (
 								formatAddress(funding.embeddedEoa)
+							)}
+						</code>
+					</div>
+					<div className="transfers-addresses__row">
+						<span className="transfers-addresses__label">
+							Solana (DFlow &amp; LI.FI)
+						</span>
+						<code className="transfers-addresses__value">
+							{funding.isLoading && !funding.solanaAddress ? (
+								<span className="transfers-skeleton transfers-skeleton--address" />
+							) : (
+								formatAddress(funding.solanaAddress)
 							)}
 						</code>
 					</div>

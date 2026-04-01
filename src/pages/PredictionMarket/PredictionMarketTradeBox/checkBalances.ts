@@ -82,7 +82,7 @@ export function checkSufficientBalance(
 	usdcBalance: number,
 	price?: string,
 	marketOrderEstimatedCost?: number | null,
-	tradingVenue: "levelup" | "polymarket" | "predictfun" = "levelup"
+	tradingVenue: "levelup" | "polymarket" | "predictfun" | "dflow" = "levelup"
 ): { hasSufficientBalance: boolean; requiredAmount: number } {
 	if (side !== "buy") {
 		return { hasSufficientBalance: true, requiredAmount: 0 };

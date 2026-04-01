@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
+import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import "./EsportsVenueBooksPanel.scss";
 
 function bestAskProb(book: OrderbookData | null | undefined): number | null {
@@ -30,11 +31,15 @@ function buildVenueRows(m: MatchedMarket): VenueRowModel[] {
 			askB: bestAskProb(m.polyPriceB),
 		},
 		{
-			id: "kalshi",
-			label: "Kalshi",
-			linked: Boolean(m.kalshi),
-			askA: m.kalshi ? bestAskProb(m.kalshiPriceA) : null,
-			askB: m.kalshi ? bestAskProb(m.kalshiPriceB) : null,
+			id: "dflow",
+			label: "DFlow",
+			linked: Boolean(getDflowKalshiMonitorLink(m)),
+			askA: getDflowKalshiMonitorLink(m)
+				? bestAskProb(m.dflowPriceA ?? m.kalshiPriceA)
+				: null,
+			askB: getDflowKalshiMonitorLink(m)
+				? bestAskProb(m.dflowPriceB ?? m.kalshiPriceB)
+				: null,
 		},
 		{
 			id: "limitless",
@@ -152,15 +157,15 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
 		);
 	}
 
-	const kh = appState?.kalshiHealth;
+	const dh = appState?.dflowHealth ?? appState?.kalshiHealth;
 	const lh = appState?.limitlessHealth;
 	const pf = appState?.predictFunHealth;
 
 	return (
 		<div className="esports-venue-books">
-			{kh?.lastError ? (
+			{dh?.lastError ? (
 				<p className="esports-venue-books__warn">
-					<strong>Kalshi</strong> — {kh.lastError}
+					<strong>DFlow</strong> — {dh.lastError}
 				</p>
 			) : null}
 			{lh?.lastError ? (

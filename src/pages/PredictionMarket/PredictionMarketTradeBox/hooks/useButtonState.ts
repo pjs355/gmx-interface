@@ -48,6 +48,8 @@ export function useButtonState({
     | undefined,
   predictUsdtBalance = undefined as number | undefined,
   predictSellShareBalance = undefined as number | null | undefined,
+  dflowProofVerified = undefined as boolean | undefined,
+  dflowProofLoading = undefined as boolean | undefined,
 }: any): ButtonStateResult {
   const animatedDots = useAnimatedDots(400);
   
@@ -132,6 +134,51 @@ export function useButtonState({
       }
       return {
         text: `${buttonText} (Polymarket)`,
+        disabled: false,
+        onClick: handleTrade,
+      };
+    }
+
+    if (state.tradingVenue === "dflow") {
+      if (dflowProofLoading) {
+        return { text: "Checking DFlow KYC…", disabled: true, onClick: () => {} };
+      }
+      if (dflowProofVerified === false) {
+        return {
+          text: "Complete Proof KYC (Profile)",
+          disabled: true,
+          onClick: () => {},
+        };
+      }
+      if (
+        !state.selectedPosition ||
+        !state.amount ||
+        (state.orderType === "limit" && !state.price)
+      ) {
+        return { text: "Enter amount", disabled: true, onClick: () => {} };
+      }
+      const actionText = state.side === "buy" ? "Buy" : "Sell";
+      let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
+      if (market) {
+        const title = (
+          market?.displayName ||
+          (market as any)?.question ||
+          ""
+        ).trim();
+        const parts = title
+          .split(/\s*vs\.?\s*/i)
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+        const isVsSingle =
+          parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1;
+        if (isVsSingle) {
+          const teamName =
+            state.selectedPosition === "yes" ? parts[0] : parts[1];
+          buttonText = `${actionText} ${teamName}`;
+        }
+      }
+      return {
+        text: `${buttonText} (DFlow)`,
         disabled: false,
         onClick: handleTrade,
       };
@@ -336,7 +383,7 @@ export function useButtonState({
     }
     
     return { text: buttonText, disabled: false, onClick: handleTrade, isSweepingBook, availableShares };
-  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance]);
+  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance, dflowProofVerified, dflowProofLoading]);
 }
 
 

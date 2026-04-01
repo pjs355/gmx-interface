@@ -15,6 +15,8 @@ export const RPC_URLS = {
 	BASE_PUBLIC_NODE: "https://base-rpc.publicnode.com",
 	POLYGON_PUBLIC_NODE: "https://polygon-bor-rpc.publicnode.com",
 	BSC_PUBLIC_NODE: "https://bsc-rpc.publicnode.com",
+	/** PublicNode — browser-origin calls often get 403 from api.mainnet-beta.solana.com. */
+	SOLANA_PUBLIC_NODE: "https://solana-rpc.publicnode.com",
 } as const;
 
 // Default RPC URL for Base mainnet (primary)
@@ -45,6 +47,19 @@ const viteBscRpc =
 
 /** BNB Smart Chain — LI.FI allowance reads, bridge BNB balance */
 export const BSC_RPC_URL = viteBscRpc ?? RPC_URLS.BSC_PUBLIC_NODE;
+
+const viteSolanaRpc =
+	typeof import.meta.env !== "undefined" &&
+	typeof import.meta.env.VITE_SOLANA_RPC_URL === "string" &&
+	import.meta.env.VITE_SOLANA_RPC_URL.trim() !== ""
+		? import.meta.env.VITE_SOLANA_RPC_URL.trim()
+		: null;
+
+/**
+ * Solana mainnet — USDC SPL balance reads, DFlow/Kalshi funding.
+ * Prefer `VITE_SOLANA_RPC_URL` (Helius / Alchemy / QuickNode) in production — public RPCs can rate-limit or block.
+ */
+export const SOLANA_RPC_URL = viteSolanaRpc ?? RPC_URLS.SOLANA_PUBLIC_NODE;
 
 // All available Base RPC URLs for round-robin/fallback
 export const ALL_RPC_URLS = [

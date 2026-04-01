@@ -11,6 +11,8 @@ import {
 	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 
 // Component to handle image with proper fallback
@@ -152,9 +154,22 @@ export default function PositionsCardView({
 
 	return (
 		<div className="flex flex-col gap-12">
-			{umbrellaBalances.map(({ umbrella, markets }: any) => (
+			{umbrellaBalances.map(({ umbrella, markets }: any) => {
+				const singleMarketUnderUmbrella = markets.length === 1;
+				const umbrellaHeaderLabel = stripUmbrellaDisplayPrefix(
+					umbrella.displayName
+				);
+				return (
 				<div key={umbrella._id} className="umbrella-card">
-					{markets.map(({ market, yes, no, venue }: any) => {
+					{markets.map(
+						({
+							market,
+							yes,
+							no,
+							venue,
+							predictOutcomeLabelYes,
+							predictOutcomeLabelNo,
+						}: any) => {
 						const yesNum = Number(yes);
 						const noNum = Number(no);
 						const rows: { side: "Yes" | "No"; amount: string }[] =
@@ -271,6 +286,17 @@ export default function PositionsCardView({
 								  (market as any).question;
 							const secondaryLabel = isVs ? parts[1] : "";
 
+							const predictRowLabel =
+								venue === "predictfun"
+									? getPredictPositionRowLabel(
+											title,
+											side === "Yes"
+												? predictOutcomeLabelYes
+												: predictOutcomeLabelNo,
+											side
+									  )
+									: null;
+
 							return (
 								<div
 									key={cardId}
@@ -314,7 +340,7 @@ export default function PositionsCardView({
 												marginBottom: 4,
 											}}
 										>
-											{umbrella.displayName}
+											{umbrellaHeaderLabel}
 										</div>
 										<div
 											style={{
@@ -323,11 +349,24 @@ export default function PositionsCardView({
 												fontWeight: 600,
 											}}
 										>
-											{isVs ? (
+											{venue === "predictfun" ? (
+												<span>{predictRowLabel}</span>
+											) : isVs ? (
 												<span>
 													{side === "Yes"
 														? primaryLabel
 														: secondaryLabel}
+												</span>
+											) : singleMarketUnderUmbrella ? (
+												<span
+													style={{
+														color:
+															side === "Yes"
+																? "#16a34a"
+																: "#ef4444",
+													}}
+												>
+													{side}
 												</span>
 											) : (
 												<>
@@ -725,7 +764,8 @@ export default function PositionsCardView({
 						});
 					})}
 				</div>
-			))}
+				);
+			})}
 		</div>
 	);
 }

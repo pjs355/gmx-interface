@@ -14,6 +14,8 @@ import {
 	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import TradeHistoryList from "./TradeHistoryList";
 
 // Component to handle image with proper fallback
@@ -194,7 +196,9 @@ export default function PositionsTableView({
 				</div>
 
 				<div className="flex flex-col">
-					{umbrellaBalances.map(({ umbrella, markets }: any) => (
+					{umbrellaBalances.map(({ umbrella, markets }: any) => {
+						const singleMarketUnderUmbrella = markets.length === 1;
+						return (
 						<div key={umbrella._id} className="umbrella-block">
 							<div
 								className="grid px-12 py-10"
@@ -219,7 +223,7 @@ export default function PositionsTableView({
 									}}
 								>
 									<UmbrellaImage umbrella={umbrella} />
-									{umbrella.displayName}
+									{stripUmbrellaDisplayPrefix(umbrella.displayName)}
 								</div>
 							</div>
 							{softLoading && markets.length === 0 && (
@@ -257,7 +261,15 @@ export default function PositionsTableView({
 								</div>
 							)}
 
-							{markets.map(({ market, yes, no, venue }: any) => {
+							{markets.map(
+								({
+									market,
+									yes,
+									no,
+									venue,
+									predictOutcomeLabelYes,
+									predictOutcomeLabelNo,
+								}: any) => {
 								const yesNum = Number(yes);
 								const noNum = Number(no);
 								const rows: {
@@ -381,6 +393,17 @@ export default function PositionsTableView({
 										  (market as any).question;
 									const secondaryLabel = isVs ? parts[1] : "";
 
+									const predictRowLabel =
+										venue === "predictfun"
+											? getPredictPositionRowLabel(
+													title,
+													side === "Yes"
+														? predictOutcomeLabelYes
+														: predictOutcomeLabelNo,
+													side
+											  )
+											: null;
+
 									const tradeCount = getTradeCount(qid, side);
 									const isExpanded = expandedMarkets.has(`${qid}-${side}`);
 
@@ -422,11 +445,24 @@ export default function PositionsTableView({
 													fontWeight: 600,
 												}}
 											>
-												{isVs ? (
+												{venue === "predictfun" ? (
+													<span>{predictRowLabel}</span>
+												) : isVs ? (
 													<span>
 														{side === "Yes"
 															? primaryLabel
 															: secondaryLabel}
+													</span>
+												) : singleMarketUnderUmbrella ? (
+													<span
+														style={{
+															color:
+																side === "Yes"
+																	? "#16a34a"
+																	: "#ef4444",
+														}}
+													>
+														{side}
 													</span>
 												) : (
 													<>
@@ -646,7 +682,8 @@ export default function PositionsTableView({
 								});
 							})}
 						</div>
-					))}
+						);
+					})}
 				</div>
 			</ScrollableTable>
 		</div>

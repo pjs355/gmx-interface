@@ -26,6 +26,11 @@ import {
 	polyOrderbookForPosition,
 	polyOutcomeTokenId,
 } from "@/trading/polymarket/polyOutcomeTokenId";
+import {
+	dflowKalshiOrderbookForPosition,
+	hasDflowKalshiMonitorLink,
+	getDflowKalshiMonitorLink,
+} from "@/trading/dflow/monitorDflowBooks";
 import { monitorBookToOrderbookSnapshot } from "@/trading/polymarket/monitorOrderbookAdapter";
 import { usePredictTradingSession } from "@/trading/predict/usePredictTradingSession";
 import { usePredictMarketDetail } from "@/trading/predict/usePredictMarketDetail";
@@ -48,6 +53,9 @@ import {
 import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
 import { Side, type TickSize } from "@polymarket/clob-client";
 import { getYesNoTeamLabels } from "./teamLabels";
+import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
 
 interface PredictionMarketTradeBoxProps extends TradeBoxProps {}
 
@@ -92,6 +100,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
   }, [account, fundWallet, refresh]);
 
+  const dflowProof = useDflowProofStatus();
+  const privateApi = usePrivateApiClient();
+
   const tradeExecutionService = useTradeExecutionService();
   const executionGate = usePolymarketExecutionGate();
   const {
@@ -108,6 +119,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       null
     );
   }, [oddsAppState?.markets, pandaId]);
+
+  const dflowLink = useMemo(
+    () => (matchedMonitor ? getDflowKalshiMonitorLink(matchedMonitor) : undefined),
+    [matchedMonitor]
+  );
+  const dflowMintQuery = useDflowMintResolver(
+    dflowLink?.eventTicker,
+    state.tradingVenue === "dflow" ? dflowLink?.tickerA : null
+  );
 
   const queryClient = useQueryClient();
 
@@ -264,6 +284,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return snap;
     }
     if (!matchedMonitor) return null;
+    if (state.tradingVenue === "dflow") {
+      const dflowRaw = dflowKalshiOrderbookForPosition(
+        matchedMonitor,
+        state.selectedPosition ?? "yes",
+        yesTeamLabel,
+        noTeamLabel
+      );
+      return monitorBookToOrderbookSnapshot(dflowRaw);
+    }
     const polyRaw = polyOrderbookForPosition(
       matchedMonitor,
       state.selectedPosition ?? "yes",
@@ -403,6 +432,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictSession.blockedReason,
     predictSession.error,
   ]);
+
+  const dflowVenueHint = useMemo(() => {
+    if (state.tradingVenue !== "dflow") return null;
+    if (!hasDflowKalshiMonitorLink(matchedMonitor)) {
+      return "No DFlow market linked for this match on the odds monitor.";
+    }
+    return null;
+  }, [state.tradingVenue, matchedMonitor]);
 
   const predictTrading = useMemo(
     () => ({
@@ -566,6 +603,93 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   // Handle trade execution
   const handleTrade = useCallback(async () => {
     if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) return;
+
+    if (state.tradingVenue === "dflow") {
+      if (!hasDflowKalshiMonitorLink(matchedMonitor)) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "No DFlow market linked for this match on the odds monitor.",
+          },
+        }));
+        return;
+      }
+
+      if (!dflowProof.isVerified) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "Proof KYC not verified. Complete verification on the Profile page, then refresh.",
+          },
+        }));
+        return;
+      }
+
+      setState((prev) => ({ ...prev, isLoading: true, orderResult: null }));
+      try {
+        const link = matchedMonitor?.dflow ?? matchedMonitor?.kalshi;
+        if (!link) throw new Error("DFlow monitor link missing");
+
+        // Resolve Solana SPL mints: prefer monitor-provided, else metadata API lookup
+        const monitorYes = link.yesMintA;
+        const monitorNo = link.noMintA;
+        const resolvedYes = monitorYes ?? dflowMintQuery.data?.yesMint;
+        const resolvedNo = monitorNo ?? dflowMintQuery.data?.noMint;
+
+        if (!resolvedYes || !resolvedNo) {
+          throw new Error(
+            dflowMintQuery.isLoading
+              ? "Resolving DFlow outcome mints… try again in a moment."
+              : "Could not resolve DFlow outcome mints for this market. The market may not be active on DFlow."
+          );
+        }
+
+        const outputMint =
+          state.selectedPosition === "yes" ? resolvedYes : resolvedNo;
+
+        const usdAmount = parseFloat(state.amount);
+        if (isNaN(usdAmount) || usdAmount <= 0) throw new Error("Invalid amount");
+
+        // DFlow amounts are in USDC base units (6 decimals)
+        const amountBaseUnits = Math.round(usdAmount * 1_000_000).toString();
+
+        const orderResult = await privateApi.getDflowOrder({
+          inputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          outputMint,
+          amount: amountBaseUnits,
+        });
+
+        if (orderResult.code || orderResult.msg) {
+          throw new Error(orderResult.msg ?? orderResult.code ?? "DFlow order failed");
+        }
+
+        if (!orderResult.transaction) {
+          throw new Error("DFlow returned no transaction to sign. Check KYC or market status.");
+        }
+
+        // TODO: decode base64 tx → Privy Solana signTransaction → send to Solana RPC
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: true,
+            message: `DFlow order received (${orderResult.outAmount ?? "?"} outcome tokens). Solana signing coming soon.`,
+          },
+        }));
+      } catch (error: unknown) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: getPrivateApiErrorMessage(error),
+          },
+        }));
+      } finally {
+        setState((prev) => ({ ...prev, isLoading: false }));
+      }
+      return;
+    }
 
     if (state.tradingVenue === "predictfun") {
       if (!account) {
@@ -1215,6 +1339,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictOrderbookQuery.data,
     queryClient,
     predictTokenIdForPosition,
+    dflowProof.isVerified,
+    dflowMintQuery.data,
+    dflowMintQuery.isLoading,
+    privateApi,
   ]);
 
   // Auto-dismiss order result after 4 seconds
@@ -1254,7 +1382,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       if (state.isLoading) {
         throw new Error("Already processing a trade");
       }
-      if (state.tradingVenue === "polymarket" || state.tradingVenue === "predictfun") {
+      if (state.tradingVenue === "polymarket" || state.tradingVenue === "predictfun" || state.tradingVenue === "dflow") {
         if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) {
           throw new Error("Missing required fields: position, amount, or price");
         }
@@ -1338,6 +1466,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       : undefined,
     predictUsdtBalance,
     predictSellShareBalance,
+    dflowProofVerified: dflowProof.isVerified,
+    dflowProofLoading: dflowProof.isLoading,
   });
 
   const buttonStateForUi = useMemo(() => {
@@ -1397,6 +1527,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       polymarketVenueHint={polymarketVenueHint}
       predictVenueHint={predictVenueHint}
       predictVenueBookHints={predictVenueBookHints}
+      dflowVenueHint={dflowVenueHint}
       onTrade={handleTrade}
       buttonState={buttonStateForUi}
       approvalState={approvalState}

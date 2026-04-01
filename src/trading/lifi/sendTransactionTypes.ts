@@ -9,3 +9,8 @@ export type SendTransactionCapable = {
 		sponsor?: boolean;
 	}) => Promise<{ hash?: string } | `0x${string}`>;
 };
+
+/** Minimal signer for LI.FI Solana steps (Privy Solana embedded wallet). */
+export type SolanaSignerCapable = {
+	signAndSendTransaction: (serializedTx: Uint8Array) => Promise<string>;
+};

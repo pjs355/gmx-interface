@@ -7,7 +7,7 @@
  * which exchange the shares live on.
  */
 
-export type VenueId = "levelup" | "polymarket" | "predictfun"; // extensible union
+export type VenueId = "levelup" | "polymarket" | "predictfun" | "dflow";
 
 export interface VenuePosition {
 	venue: VenueId;

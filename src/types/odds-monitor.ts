@@ -53,11 +53,33 @@ export interface MatchedMarket {
 	polyTickSize?: PolymarketClobTickSize | null;
 	/** Neg-risk market flag from UIServer, if present. */
 	polyNegRisk?: boolean | null;
+	/**
+	 * DFlow (tokenized Kalshi) — preferred monitor keys when aggregator sources DFlow.
+	 * Same structure as legacy `kalshi` linkage below.
+	 */
+	dflow?: {
+		tickerA: string;
+		tickerB?: string;
+		eventTicker: string;
+		/** Solana SPL mint for the YES outcome of side A (from DFlow Metadata `accounts.*.yesMint`). */
+		yesMintA?: string;
+		noMintA?: string;
+		yesMintB?: string;
+		noMintB?: string;
+	};
+	dflowPriceA?: OrderbookData | null;
+	dflowPriceB?: OrderbookData | null;
+	/** @deprecated Prefer `dflow`; kept until all monitors emit DFlow keys only. */
 	kalshi?: {
 		tickerA: string;
 		tickerB?: string;
 		eventTicker: string;
+		yesMintA?: string;
+		noMintA?: string;
+		yesMintB?: string;
+		noMintB?: string;
 	};
+	/** @deprecated Prefer `dflowPriceA` / `dflowPriceB`. */
 	kalshiPriceA?: OrderbookData | null;
 	kalshiPriceB?: OrderbookData | null;
 	limitless?: {
@@ -100,6 +122,13 @@ export interface OddsMonitorAppState {
 		isHealthy: boolean;
 		connected?: boolean;
 	};
+	/** DFlow feed health (replaces Kalshi in the aggregator). */
+	dflowHealth?: {
+		connected: boolean;
+		marketsWithDflow?: number;
+		lastError?: string | null;
+	};
+	/** @deprecated Prefer `dflowHealth` when present. */
 	kalshiHealth?: {
 		connected: boolean;
 		marketsWithKalshi: number;

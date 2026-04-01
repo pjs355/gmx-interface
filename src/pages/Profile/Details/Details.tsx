@@ -4,6 +4,7 @@ import { useMedia } from "react-use";
 import { userService, type EmailPreferences } from "@/services/api/userService";
 import RPGPane from "../RPGPane/RPGPane";
 import AchievementPane from "../AchievementPane/AchievementPane";
+import DflowProofSection from "./DflowProofSection";
 import "./Details.scss";
 
 const isMobileBreakpoint = "(max-width: 768px)";
@@ -399,6 +400,8 @@ export default function Details() {
 							</div>
 						</div>
 					)}
+
+					<DflowProofSection />
 				</div>
 
 			</div>

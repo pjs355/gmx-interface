@@ -17,6 +17,32 @@
     <meta name="twitter:title" content="LevelUp Predictions" />
     <meta name="twitter:description" content="Prediction market for everything video games" />
     <meta name="twitter:image" content="/src/assets/img/og-image.png" />
+    <script>
+      // Must run before ANY other script (Twitch embed, ES modules, Vite prebundled deps).
+      // readable-stream@2 (via hash-base/crypto-browserify) does:
+      //   !process.browser && process.version.slice(0, 5)
+      // If process.browser is falsy the RHS evaluates; if process.version is
+      // undefined the app crashes. Setting process.browser = true short-circuits
+      // the check entirely.
+      ;(function () {
+        if (typeof globalThis.process === 'undefined') {
+          globalThis.process = {};
+        }
+        var p = globalThis.process;
+        if (typeof p.version !== 'string') p.version = '';
+        if (!p.browser) p.browser = true;
+        if (!p.env) p.env = {};
+        if (typeof p.nextTick !== 'function') {
+          p.nextTick = function (fn) {
+            var args = Array.prototype.slice.call(arguments, 1);
+            Promise.resolve().then(function () { fn.apply(null, args); });
+          };
+        }
+      })();
+      if (typeof globalThis.global === 'undefined') {
+        globalThis.global = globalThis;
+      }
+    </script>
     <script src="https://embed.twitch.tv/embed/v1.js"></script>
   </head>
   <body>

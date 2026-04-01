@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useMedia } from "react-use";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -26,9 +26,18 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
+import { usePolymarketTradeHistory } from "@/trading/polymarket/usePolymarketTradeHistory";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { usePredictOrders } from "@/trading/predict/usePredictOrders";
-import { computePredictCostByToken, mapPredictOrdersToVenueOrders } from "@/trading/predict/predictOrdersApi";
+import { usePredictOrderMatches } from "@/trading/predict/usePredictOrderMatches";
+import { usePredictEnsureAuth } from "@/trading/predict/usePredictEnsureAuth";
+import {
+	computePredictCostByToken,
+	getPredictCostForToken,
+	mapPredictOrdersToVenueOrders,
+	normalizePredictTokenId,
+} from "@/trading/predict/predictOrdersApi";
+import { computePredictCostByTokenFromMatches } from "@/trading/predict/predictMatchesApi";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useQuery } from "@tanstack/react-query";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
@@ -46,6 +55,10 @@ type MarketPosition = {
 	orders: ProcessedOrder[];
 	aggregates: OrderAggregates;
 	venue?: VenueId;
+	/** Predict.fun: API `outcome.name` for the Yes leg (if any shares). */
+	predictOutcomeLabelYes?: string;
+	/** Predict.fun: API `outcome.name` for the No leg (if any shares). */
+	predictOutcomeLabelNo?: string;
 };
 
 type UmbrellaPositions = {
@@ -81,7 +94,8 @@ export default function Positions() {
 
 	const { polymarketSafe } = useFundingAddresses();
 	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
-	const allPolyPositions = (polyPositionsQuery.data ?? []); // active + settled
+	const allPolyPositions = (polyPositionsQuery.data ?? []);
+	const polyTradeHistoryQuery = usePolymarketTradeHistory(polymarketSafe); // active + settled
 
 	// Check if all data is loaded before showing resolved positions
 	const isDataFullyLoaded =
@@ -116,14 +130,81 @@ export default function Positions() {
 	const allPredictPositions = predictPositionsQuery.data ?? [];
 
 	// Predict.fun orders (filled for cost basis, open for Orders tab)
-	const { filledOrders: predictFilledOrders, openOrders: predictOpenOrders } =
-		usePredictOrders(Boolean(effectiveAccount));
+	const {
+		filledOrders: predictFilledOrders,
+		openOrders: predictOpenOrders,
+		filledError: predictFilledError,
+		filledFetched: predictFilledFetched,
+	} = usePredictOrders(true);
 
-	// Cost basis lookup from filled Predict.fun orders
-	const predictCostLookup = useMemo(
-		() => computePredictCostByToken(predictFilledOrders),
-		[predictFilledOrders]
+	/** Match events use the same signer priority as auth: Predict account env, else embedded EOA. */
+	const predictSignerRawForMatches = useMemo(
+		() =>
+			import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS?.trim() ||
+			signerAddress ||
+			effectiveAccount ||
+			null,
+		[signerAddress, effectiveAccount]
 	);
+
+	const predictMatchesQuery = usePredictOrderMatches({
+		signerAddress: predictSignerRawForMatches,
+		enabled:
+			Boolean(predictSignerRawForMatches?.startsWith("0x")) &&
+			allPredictPositions.length > 0 &&
+			predictFilledFetched &&
+			predictFilledOrders.length === 0,
+	});
+
+	// Auto-authenticate with Predict.fun when positions exist and we might need
+	// order history for cost/avg. Start as soon as positions load — do not wait
+	// for `filledFetched`; the first GET /orders can otherwise run before the
+	// backend has a Predict session (empty []), then auth runs only after that.
+	// Still skip when we already have filled rows (happy path).
+	const needsPredictAuth =
+		allPredictPositions.length > 0 &&
+		(predictFilledError ||
+			predictFilledOrders.length === 0 ||
+			!predictFilledFetched);
+	usePredictEnsureAuth(needsPredictAuth);
+
+	// Cost basis: FILLED orders (JWT), else order match events (API key / signerAddress).
+	const predictCostLookup = useMemo(() => {
+		const fromOrders = computePredictCostByToken(predictFilledOrders);
+		if (fromOrders.size > 0) return fromOrders;
+		const rows = predictMatchesQuery.data ?? [];
+		const filter = predictMatchesQuery.filterSigner;
+		if (rows.length === 0 || !filter) return fromOrders;
+		return computePredictCostByTokenFromMatches(filter, rows);
+	}, [
+		predictFilledOrders,
+		predictMatchesQuery.data,
+		predictMatchesQuery.filterSigner,
+	]);
+
+	// Debug: Predict.fun cost-basis pipeline
+	useEffect(() => {
+		console.log("[Predict Debug] positions:", allPredictPositions.length,
+			"| filledOrders:", predictFilledOrders.length,
+			"| matchEvents:", predictMatchesQuery.data?.length ?? 0,
+			"| filledError:", predictFilledError,
+			"| filledFetched:", predictFilledFetched,
+			"| needsAuth:", needsPredictAuth,
+			"| costLookup keys:", [...predictCostLookup.keys()]);
+		if (predictCostLookup.size > 0) {
+			for (const [tokenId, entry] of predictCostLookup) {
+				console.log(`  [CostLookup] ${tokenId.slice(0, 10)}… → avg=$${entry.avgPrice.toFixed(4)}, cost=$${entry.totalCost.toFixed(4)}, shares=${entry.totalShares.toFixed(4)}`);
+			}
+		}
+	}, [
+		allPredictPositions.length,
+		predictFilledOrders.length,
+		predictMatchesQuery.data?.length,
+		predictFilledError,
+		predictFilledFetched,
+		needsPredictAuth,
+		predictCostLookup,
+	]);
 
 	// Fetch market details for each unique Predict.fun marketId (settlement detection)
 	const predictMarketIds = useMemo(() => {
@@ -167,7 +248,7 @@ export default function Positions() {
 				: undefined;
 
 			// Enrich with cost from filled orders
-			const costEntry = predictCostLookup.get(pos.tokenId);
+			const costEntry = getPredictCostForToken(predictCostLookup, pos.tokenId);
 			const enriched = { ...pos };
 			if (costEntry) {
 				enriched.avgPrice = costEntry.avgPrice;
@@ -182,7 +263,7 @@ export default function Positions() {
 			if (detail?.status === "RESOLVED") {
 				enriched.marketStatus = "RESOLVED";
 				const outcomeMatch = detail.outcomes?.find(
-					(o) => o.onChainId === pos.tokenId
+					(o) => normalizePredictTokenId(o.onChainId) === pos.tokenId
 				);
 				enriched.outcomeResult = (outcomeMatch?.status as "WON" | "LOST") ?? null;
 
@@ -429,6 +510,8 @@ export default function Positions() {
 								},
 							},
 							venue: "predictfun",
+							predictOutcomeLabelYes: isYes ? pv.outcome : undefined,
+							predictOutcomeLabelNo: isYes ? undefined : pv.outcome,
 						});
 					}
 				}
@@ -561,6 +644,8 @@ export default function Positions() {
 						},
 					},
 					venue: "predictfun" as VenueId,
+					predictOutcomeLabelYes: isYes ? pv.outcome : undefined,
+					predictOutcomeLabelNo: isYes ? undefined : pv.outcome,
 				};
 			});
 
@@ -725,6 +810,8 @@ export default function Positions() {
 					orders: [],
 					aggregates: { Yes: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 }, No: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 } },
 					venue: "predictfun" as VenueId,
+					predictOutcomeLabelYes: isYes ? pv.outcome : undefined,
+					predictOutcomeLabelNo: isYes ? undefined : pv.outcome,
 				};
 			});
 			if (markets.length > 0) resolved.push({ umbrella: syntheticUmbrella, markets });
@@ -862,6 +949,8 @@ export default function Positions() {
 			yes: mp.yesBalance.toString(),
 			no: mp.noBalance.toString(),
 			venue: mp.venue ?? "levelup",
+			predictOutcomeLabelYes: mp.predictOutcomeLabelYes,
+			predictOutcomeLabelNo: mp.predictOutcomeLabelNo,
 		})),
 	}));
 
@@ -886,12 +975,13 @@ export default function Positions() {
 		const outcomeLookup = new Map<string, string>();
 		for (const p of allPredictPositions) {
 			if (p.numericMarketId) titleLookup.set(p.numericMarketId, p.marketTitle);
-			outcomeLookup.set(p.tokenId, p.outcome);
+			outcomeLookup.set(normalizePredictTokenId(p.tokenId), p.outcome);
 		}
 		for (const [id, detail] of predictMarketDetails) {
 			if (!titleLookup.has(id)) titleLookup.set(id, detail.title);
 			for (const o of detail.outcomes ?? []) {
-				if (!outcomeLookup.has(o.onChainId)) outcomeLookup.set(o.onChainId, o.name);
+				const ok = normalizePredictTokenId(o.onChainId);
+				if (!outcomeLookup.has(ok)) outcomeLookup.set(ok, o.name);
 			}
 		}
 
@@ -906,19 +996,67 @@ export default function Positions() {
 		return mapPredictOrdersToVenueOrders(liveOrders, titleLookup, outcomeLookup);
 	}, [predictOpenOrders, allPredictPositions, predictMarketDetails]);
 
-	// Combine Predict.fun + Polymarket lost/resolved positions for the History tab
+	// Combine Predict.fun + Polymarket resolved positions for the History tab
 	const venueHistory = useMemo(() => {
 		const items: typeof allPredictPositions = [];
-		items.push(...predictHistory);
+		const seen = new Set<string>();
+
+		// Predict.fun resolved positions (both won and lost)
+		for (const pos of predictWinnings) {
+			if (!seen.has(pos.tokenId)) {
+				seen.add(pos.tokenId);
+				items.push({ ...pos, outcomeResult: "WON", marketStatus: "RESOLVED" });
+			}
+		}
+		for (const pos of predictHistory) {
+			if (!seen.has(pos.tokenId)) {
+				seen.add(pos.tokenId);
+				items.push(pos);
+			}
+		}
+
+		// Polymarket resolved positions from the positions API (both won and lost)
+		for (const pos of polyWinnings) {
+			if (!seen.has(pos.tokenId)) {
+				seen.add(pos.tokenId);
+				items.push({ ...pos, outcomeResult: "WON", marketStatus: "RESOLVED" });
+			}
+		}
 		for (const pos of polyHistory) {
+			if (!seen.has(pos.tokenId)) {
+				seen.add(pos.tokenId);
+				items.push({ ...pos, outcomeResult: "LOST", marketStatus: "RESOLVED" });
+			}
+		}
+
+		// Polymarket trade history from activity API covers trades that dropped
+		// from the positions endpoint after redemption
+		const polyTrades = polyTradeHistoryQuery.data ?? [];
+		for (const trade of polyTrades) {
+			if (seen.has(trade.tokenId)) continue;
+			seen.add(trade.tokenId);
 			items.push({
-				...pos,
-				outcomeResult: "LOST",
+				...trade,
+				outcomeResult: trade.outcomeResult ?? ((trade.pnl !== null && trade.pnl > 0) ? "WON" : "LOST"),
 				marketStatus: "RESOLVED",
 			});
 		}
+
 		return items;
-	}, [predictHistory, polyHistory]);
+	}, [predictWinnings, predictHistory, polyWinnings, polyHistory, polyTradeHistoryQuery.data]);
+
+	// Debug: venue history pipeline
+	useEffect(() => {
+		console.log("[VenueHistory Debug] polyTradeHistory:", polyTradeHistoryQuery.data?.length ?? 0,
+			"| polyWinnings:", polyWinnings.length,
+			"| polyHistory:", polyHistory.length,
+			"| predictWinnings:", predictWinnings.length,
+			"| predictHistory:", predictHistory.length,
+			"| total venueHistory:", venueHistory.length);
+		for (const pos of venueHistory) {
+			console.log(`  [VH] "${pos.marketTitle}" venue=${pos.venue} outcome=${pos.outcome} result=${pos.outcomeResult} cost=${pos.cost} shares=${pos.shares} pnl=${pos.pnl} avgPrice=${pos.avgPrice}`);
+		}
+	}, [venueHistory, polyTradeHistoryQuery.data, polyWinnings.length, polyHistory.length, predictWinnings.length, predictHistory.length]);
 
 	const returnsByQid = useMemo(() => {
 		const map: Record<string, { Yes: number; No: number }> = {};

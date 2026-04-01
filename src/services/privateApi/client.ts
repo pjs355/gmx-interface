@@ -8,10 +8,11 @@ import {
 	mapPredictPositionRows,
 	type PredictPositionRow,
 } from "@/trading/predict/predictPositionsApi";
-import type {
-	PredictOrderRow,
-	PredictOrdersResponse,
-} from "@/trading/predict/predictOrdersApi";
+import type { PredictOrderRow } from "@/trading/predict/predictOrdersApi";
+import {
+	normalizePredictMatchesList,
+	type PredictMatchEventRow,
+} from "@/trading/predict/predictMatchesApi";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import type {
 	AccountOverview,
@@ -28,7 +29,91 @@ import type {
 } from "@/types/trading";
 import { PrivateApiError } from "./errors";
 
+// ── DFlow / Kalshi types (narrow; no full OpenAPI mirror) ──────────
+
+export type DflowProofState = {
+	solanaWalletAddress: string | null;
+	identityVerified: boolean;
+	ownershipProofValid: boolean;
+	verifiedAt: string | null;
+	lastError: string | null;
+};
+
+export type DflowAccountResponse = {
+	venueRegistered: boolean;
+	venueStatus: "active" | "suspended" | "disconnected" | "not_registered";
+	proofState: DflowProofState;
+};
+
+export type DflowAccountSyncBody = {
+	solanaWalletAddress?: string;
+	lastError?: string;
+};
+
+export type DflowVerifyResponse =
+	| { verified: true; solanaWalletAddress: string }
+	| {
+			verified: false;
+			solanaWalletAddress: string;
+			proofMessage: string;
+			timestamp: number;
+			proofRedirectBase: string;
+	  };
+
+export type DflowEventsResponse = {
+	events: unknown[];
+	cursor?: string;
+};
+
+export type DflowOrderParams = {
+	inputMint: string;
+	outputMint: string;
+	amount: string;
+	slippageBps?: string;
+	predictionMarketSlippageBps?: string;
+	destinationWallet?: string;
+	prioritizationFeeLamports?: string;
+	predictionMarketInitPayer?: string;
+	revertWallet?: string;
+	allowSyncExec?: string;
+	allowAsyncExec?: string;
+};
+
+export type DflowOrderResponse = {
+	transaction?: string;
+	outAmount?: string;
+	minOutAmount?: string;
+	code?: string;
+	msg?: string;
+	[key: string]: unknown;
+};
+
+function dflowOrderParamsToQuery(params: DflowOrderParams): URLSearchParams {
+	const q = new URLSearchParams();
+	q.set("inputMint", params.inputMint);
+	q.set("outputMint", params.outputMint);
+	q.set("amount", params.amount);
+	if (params.slippageBps) q.set("slippageBps", params.slippageBps);
+	if (params.predictionMarketSlippageBps)
+		q.set("predictionMarketSlippageBps", params.predictionMarketSlippageBps);
+	if (params.destinationWallet)
+		q.set("destinationWallet", params.destinationWallet);
+	if (params.prioritizationFeeLamports)
+		q.set("prioritizationFeeLamports", params.prioritizationFeeLamports);
+	if (params.predictionMarketInitPayer)
+		q.set("predictionMarketInitPayer", params.predictionMarketInitPayer);
+	if (params.revertWallet) q.set("revertWallet", params.revertWallet);
+	if (params.allowSyncExec) q.set("allowSyncExec", params.allowSyncExec);
+	if (params.allowAsyncExec) q.set("allowAsyncExec", params.allowAsyncExec);
+	return q;
+}
+
+// ───────────────────────────────────────────────────────────────────
+
 export type GetToken = () => Promise<string | null | undefined>;
+
+/** Sync JWT for `privy-id-token`; helps private API hydrate linked wallets (e.g. Solana for DFlow). */
+export type GetIdentityToken = () => string | null | undefined;
 
 async function parseJsonSafe(response: Response): Promise<unknown> {
 	const text = await response.text();
@@ -45,6 +130,56 @@ function unwrapEnvelope<T>(raw: unknown): T {
 		return (raw as { data: T }).data;
 	}
 	return raw as T;
+}
+
+function isPredictOrderRowShape(x: unknown): x is PredictOrderRow {
+	if (!x || typeof x !== "object") return false;
+	const r = x as Record<string, unknown>;
+	return (
+		typeof r.id === "string" &&
+		r.order != null &&
+		typeof r.order === "object"
+	);
+}
+
+/** Predict `GET /v1/orders` payloads after optional LevelUp `{ data: … }` unwrap — still may be `{ success, cursor, data: rows }`. */
+function normalizePredictOrdersList(raw: unknown): PredictOrderRow[] {
+	if (Array.isArray(raw)) {
+		if (raw.length === 0) return [];
+		if (isPredictOrderRowShape(raw[0])) return raw as PredictOrderRow[];
+		return [];
+	}
+	if (!raw || typeof raw !== "object") return [];
+	const o = raw as Record<string, unknown>;
+	if (Array.isArray(o.data)) {
+		const arr = o.data as unknown[];
+		if (arr.length === 0) return [];
+		if (isPredictOrderRowShape(arr[0])) return o.data as PredictOrderRow[];
+	}
+	const inner = o.data;
+	if (inner && typeof inner === "object") {
+		const mid = inner as Record<string, unknown>;
+		if (Array.isArray(mid.data)) return mid.data as PredictOrderRow[];
+		if (Array.isArray(mid.orders)) return mid.orders as PredictOrderRow[];
+		if (Array.isArray(mid.results)) return mid.results as PredictOrderRow[];
+		if (Array.isArray(mid.items)) return mid.items as PredictOrderRow[];
+	}
+	if (Array.isArray(o.orders)) return o.orders as PredictOrderRow[];
+	if (Array.isArray(o.results)) return o.results as PredictOrderRow[];
+	if (Array.isArray(o.items)) return o.items as PredictOrderRow[];
+	/** Last resort: first nested array whose elements look like order rows */
+	const stack: unknown[] = [raw];
+	while (stack.length) {
+		const cur = stack.pop();
+		if (!cur || typeof cur !== "object") continue;
+		for (const v of Object.values(cur)) {
+			if (Array.isArray(v) && v.length > 0 && isPredictOrderRowShape(v[0])) {
+				return v as PredictOrderRow[];
+			}
+			if (v && typeof v === "object") stack.push(v);
+		}
+	}
+	return [];
 }
 
 /** Best-effort message from LevelUp / Express / Nest / Predict-shaped error bodies. */
@@ -123,7 +258,10 @@ function pickPredictAuthMessage(unwrapped: unknown): string | null {
 	return null;
 }
 
-export function createPrivateApiClient(getToken: GetToken) {
+export function createPrivateApiClient(
+	getToken: GetToken,
+	getIdentityToken?: GetIdentityToken
+) {
 	async function authorizedFetch(
 		path: string,
 		init: RequestInit = {}
@@ -134,6 +272,10 @@ export function createPrivateApiClient(getToken: GetToken) {
 		}
 		const headers = new Headers(init.headers);
 		headers.set("Authorization", `Bearer ${token}`);
+		const idTok = getIdentityToken?.();
+		if (typeof idTok === "string" && idTok.trim() !== "") {
+			headers.set("privy-id-token", idTok.trim());
+		}
 		if (!headers.has("Content-Type") && init.body) {
 			headers.set("Content-Type", "application/json");
 		}
@@ -281,8 +423,70 @@ export function createPrivateApiClient(getToken: GetToken) {
 			params.set("first", "200");
 			const qs = params.toString();
 			const res = await authorizedFetch(`/api/predict/orders?${qs}`);
-			const body = await readJson<PredictOrdersResponse>(res);
-			return Array.isArray(body) ? body : (body as any)?.data ?? body ?? [];
+			const body = await readJson<unknown>(res);
+			const rows = normalizePredictOrdersList(body);
+			// Only warn in dev when the wire shape looks wrong — not when API legitimately returns [].
+			if (
+				import.meta.env.DEV &&
+				rows.length === 0 &&
+				body != null &&
+				!(Array.isArray(body) && body.length === 0)
+			) {
+				try {
+					const s = JSON.stringify(body);
+					console.warn(
+						"[PrivateApi] getPredictOrders: 0 parsed rows; unexpected shape:",
+						s.length > 800 ? `${s.slice(0, 800)}…` : s
+					);
+				} catch {
+					console.warn(
+						"[PrivateApi] getPredictOrders: parse yielded 0 rows (unserializable body)"
+					);
+				}
+			}
+			return rows;
+		},
+
+		/**
+		 * Proxies `GET /v1/orders/matches` (API key only server-side).
+		 * `signerAddress` must be checksummed if your backend validates it.
+		 */
+		async getPredictOrderMatches(params: {
+			first?: string;
+			after?: string;
+			signerAddress?: string;
+			marketId?: string;
+			categoryId?: string;
+			minValueUsdtWei?: string;
+			isSignerMaker?: "true" | "false";
+		}): Promise<PredictMatchEventRow[]> {
+			const q = new URLSearchParams();
+			if (params.first) q.set("first", params.first);
+			if (params.after) q.set("after", params.after);
+			if (params.signerAddress) q.set("signerAddress", params.signerAddress);
+			if (params.marketId) q.set("marketId", params.marketId);
+			if (params.categoryId) q.set("categoryId", params.categoryId);
+			if (params.minValueUsdtWei) q.set("minValueUsdtWei", params.minValueUsdtWei);
+			if (params.isSignerMaker) q.set("isSignerMaker", params.isSignerMaker);
+			const qs = q.toString();
+			const rawPath =
+				import.meta.env.VITE_PREDICT_ORDER_MATCHES_PATH?.trim() ||
+				"/api/predict/orders/matches";
+			const matchesPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+			const res = await authorizedFetch(
+				`${matchesPath}${qs ? `?${qs}` : ""}`
+			);
+			if (import.meta.env.DEV && res.status === 404) {
+				console.warn(
+					"[PrivateApi] getPredictOrderMatches:",
+					res.status,
+					"— nothing is listening at",
+					matchesPath,
+					"on your private API. Deploy/register GET /api/predict/orders/matches (or set VITE_PREDICT_ORDER_MATCHES_PATH to your mount)."
+				);
+			}
+			const body = await readJson<unknown>(res);
+			return normalizePredictMatchesList(body);
 		},
 
 		async removePredictOrders(
@@ -312,6 +516,56 @@ export function createPrivateApiClient(getToken: GetToken) {
 				);
 			}
 			return { orderId: data.orderId ?? "", orderHash: data.orderHash };
+		},
+
+		// ── DFlow / Kalshi (Solana via Proof KYC) ──────────────────────
+
+		async getDflowAccount(): Promise<DflowAccountResponse> {
+			const res = await authorizedFetch("/api/dflow/account");
+			return readJson<DflowAccountResponse>(res);
+		},
+
+		async postDflowAccountSync(body: DflowAccountSyncBody): Promise<void> {
+			const res = await authorizedFetch("/api/dflow/account/sync", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			await readJson<unknown>(res);
+		},
+
+		async getDflowVerify(): Promise<DflowVerifyResponse> {
+			const res = await authorizedFetch("/api/dflow/verify");
+			return readJson<DflowVerifyResponse>(res);
+		},
+
+		async getDflowEvents(
+			params?: Record<string, string>
+		): Promise<DflowEventsResponse> {
+			const q = new URLSearchParams(params);
+			const res = await authorizedFetch(
+				`/api/dflow/events?${q.toString()}`
+			);
+			return readJson<DflowEventsResponse>(res);
+		},
+
+		async getDflowOrderQuote(
+			params: DflowOrderParams
+		): Promise<DflowOrderResponse> {
+			const q = dflowOrderParamsToQuery(params);
+			const res = await authorizedFetch(
+				`/api/dflow/order/quote?${q.toString()}`
+			);
+			return readJson<DflowOrderResponse>(res);
+		},
+
+		async getDflowOrder(
+			params: DflowOrderParams
+		): Promise<DflowOrderResponse> {
+			const q = dflowOrderParamsToQuery(params);
+			const res = await authorizedFetch(
+				`/api/dflow/order?${q.toString()}`
+			);
+			return readJson<DflowOrderResponse>(res);
 		},
 	};
 }

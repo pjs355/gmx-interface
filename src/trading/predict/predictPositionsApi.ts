@@ -1,4 +1,5 @@
 import type { VenuePosition } from "@/types/trading/venuePosition";
+import { normalizePredictTokenId } from "./predictOrdersApi";
 
 export type PredictPositionRow = {
 	id: string;
@@ -31,7 +32,7 @@ function toVenuePosition(row: PredictPositionRow): VenuePosition {
 		currentValue,
 		pnl: null,
 		pnlPercent: null,
-		tokenId: row.outcome.onChainId,
+		tokenId: normalizePredictTokenId(row.outcome.onChainId),
 		conditionId: row.market.conditionId,
 		numericMarketId: row.market.id,
 	};

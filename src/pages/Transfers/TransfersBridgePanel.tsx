@@ -6,6 +6,7 @@ const ENDPOINT_OPTIONS: { value: BridgeEndpoint; label: string }[] = [
 	{ value: "levelup", label: "LevelUp (Base)" },
 	{ value: "polymarket", label: "Polymarket (Polygon)" },
 	{ value: "bnb", label: "Predict (BNB)" },
+	{ value: "solana", label: "DFlow (Solana)" },
 ];
 
 export function TransfersBridgePanel() {
@@ -21,16 +22,19 @@ export function TransfersBridgePanel() {
 		balances.isLoading
 	);
 	const bnbUsd = formatWalletUsd(balances.data?.bscUsdtHuman ?? null, balances.isLoading);
+	const solanaUsd = formatWalletUsd(balances.data?.solanaUsdcHuman ?? null, balances.isLoading);
 
 	const fromBalanceDisplay = balanceForEndpoint(flow.fromEndpoint, {
 		levelup: levelupUsd,
 		polymarket: polymarketUsd,
 		bnb: bnbUsd,
+		solana: solanaUsd,
 	});
 	const toBalanceDisplay = balanceForEndpoint(flow.toEndpoint, {
 		levelup: levelupUsd,
 		polymarket: polymarketUsd,
 		bnb: bnbUsd,
+		solana: solanaUsd,
 	});
 
 	const showOverviewDegraded =
@@ -62,8 +66,8 @@ export function TransfersBridgePanel() {
 		<section className="transfers-bridge" aria-label="Stablecoin transfer between chains">
 			<h2 className="transfers-bridge__title">Transfer funds</h2>
 			<p className="transfers-bridge__sub">
-				Move USDC between Base and Polygon, or USDT on BNB (Predict), via LI.FI. Amount is always in the
-				source chain&apos;s stablecoin.
+				Move USDC between Base, Polygon, and Solana, or USDT on BNB (Predict), via LI.FI. Amount is
+				always in the source chain&apos;s stablecoin.
 			</p>
 
 			{flow.funding.isLoading || flow.relay.polymarketLoading ? (
@@ -273,7 +277,7 @@ function formatWalletUsd(humanBalance: string | null | undefined, isLoading: boo
 
 function balanceForEndpoint(
 	e: BridgeEndpoint,
-	map: { levelup: string; polymarket: string; bnb: string }
+	map: { levelup: string; polymarket: string; bnb: string; solana: string }
 ): string {
 	switch (e) {
 		case "levelup":
@@ -282,5 +286,7 @@ function balanceForEndpoint(
 			return map.polymarket;
 		case "bnb":
 			return map.bnb;
+		case "solana":
+			return map.solana;
 	}
 }

@@ -31,6 +31,7 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		yes: OrderbookSnapshot | null;
 		no: OrderbookSnapshot | null;
 	} | null;
+	dflowVenueHint?: string | null;
 	onSideChange: (side: "buy" | "sell") => void;
 	onTrade: () => void;
 	buttonState: {
@@ -58,6 +59,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	polymarketVenueHint,
 	predictVenueHint,
 	predictVenueBookHints,
+	dflowVenueHint,
 	onSideChange,
 	onTrade,
 	buttonState,
@@ -247,6 +249,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				polymarketVenueHint={polymarketVenueHint}
 				predictVenueHint={predictVenueHint}
 				predictVenueBookHints={predictVenueBookHints}
+				dflowVenueHint={dflowVenueHint}
 				onTrade={onTrade}
 				buttonState={buttonState}
 				approvalState={approvalState}
@@ -382,6 +385,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				polymarketVenueHint={polymarketVenueHint}
 				predictVenueHint={predictVenueHint}
 				predictVenueBookHints={predictVenueBookHints}
+				dflowVenueHint={dflowVenueHint}
 				onTrade={onTrade}
 				buttonState={buttonState}
 				approvalState={approvalState}

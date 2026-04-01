@@ -105,6 +105,10 @@ export const PRODUCTION_ADDRESSES = PRODUCTION;
 export const BSC_MAINNET_USDT_ADDRESS =
 	"0x55d398326f99059fF775485246999027B3197955" as const;
 
+/** Solana mainnet — USDC SPL token mint (6 decimals). */
+export const SOLANA_USDC_MINT =
+	"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as const;
+
 /**
  * Get addresses for a specific environment (bypasses auto-detection)
  */
