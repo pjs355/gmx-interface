@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { getFinalAmount } from "@/services/api/simplifiedOrderService";
+import { getFinalAmount, type ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
-import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { stripUmbrellaDisplayPrefix, titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
 
 // Component to handle image with proper fallback
@@ -125,6 +125,36 @@ export default function HistoryCardView({
 		return cashIn - cashOut;
 	};
 
+	const venueHistorySyntheticOrders = useMemo(() => {
+		const synth: ProcessedOrder[] = [];
+		for (const pos of venueHistory) {
+			if (pos.shares <= 0) continue;
+			const venueName = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue === "dflow" ? "DFlow" : pos.venue;
+			const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || (pos.outcome.toLowerCase() !== "no") ? "Yes" : "No";
+			synth.push({
+				orderId: `synth-vh-${pos.tokenId}`,
+				questionId: pos.tokenId,
+				tokenId: pos.tokenId,
+				side: "buy",
+				position,
+				price: pos.avgPrice ?? 0,
+				size: pos.shares,
+				filled: true,
+				filledAt: null,
+				createdAt: new Date().toISOString(),
+				usdcValue: pos.cost ?? pos.shares * (pos.avgPrice ?? 0),
+				tokenValue: pos.shares,
+				venue: venueName,
+			});
+		}
+		return synth;
+	}, [venueHistory]);
+
+	const allOrders = useMemo(() =>
+		[...orders, ...venueHistorySyntheticOrders],
+		[orders, venueHistorySyntheticOrders]
+	);
+
 	const filteredResolvedMarkets = React.useMemo(() => {
 		const filtered: Array<{ umbrella: any; markets: any[] }> = [];
 
@@ -182,6 +212,19 @@ export default function HistoryCardView({
 
 		return filtered;
 	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
+
+	const venueUmbrellaMap = useMemo(() => {
+		const map = new Map<string, any>();
+		for (const pos of venueHistory) {
+			if (map.has(pos.tokenId)) continue;
+			const venueTitle = stripUmbrellaDisplayPrefix(pos.marketTitle) || pos.marketTitle;
+			const matched = umbrellas.find((u) =>
+				u.displayName && titlesMatchVenue(u.displayName, venueTitle)
+			);
+			if (matched) map.set(pos.tokenId, matched);
+		}
+		return map;
+	}, [venueHistory, umbrellas]);
 
 	const hasAnyHistory = filteredResolvedMarkets.length > 0 || venueHistory.length > 0;
 
@@ -725,113 +768,140 @@ export default function HistoryCardView({
 					</div>
 				))}
 
-				{/* Venue history cards (Predict.fun / Polymarket resolved) */}
-				{venueHistory.map((pos) => {
-					const isWon = pos.outcomeResult === "WON";
-					const venueLabel = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue;
-					const safeCost = (pos.cost != null && isFinite(pos.cost)) ? pos.cost : null;
-					const safeShares = (pos.shares != null && isFinite(pos.shares)) ? pos.shares : 0;
+			{/* Venue history cards (resolved) */}
+			{venueHistory.map((pos) => {
+				const isWon = pos.outcomeResult === "WON";
+				const safeCost = (pos.cost != null && isFinite(pos.cost)) ? pos.cost : null;
+				const safeShares = (pos.shares != null && isFinite(pos.shares)) ? pos.shares : 0;
 
-					const totalPayout = (() => {
-						if (isWon) {
-							if (safeCost !== null && pos.pnl != null && isFinite(pos.pnl)) return safeCost + pos.pnl;
-							return safeShares;
-						}
-						return 0;
-					})();
+				const totalPayout = (() => {
+					if (isWon) {
+						if (safeCost !== null && pos.pnl != null && isFinite(pos.pnl)) return safeCost + pos.pnl;
+						return safeShares;
+					}
+					return 0;
+				})();
 
-					const totalReturn = (() => {
-						if (pos.pnl != null && isFinite(pos.pnl)) return pos.pnl;
-						if (safeCost !== null) return totalPayout - safeCost;
-						return null;
-					})();
-					const totalReturnPct = (totalReturn != null && safeCost != null && safeCost > 0)
-						? (totalReturn / safeCost) * 100 : null;
-					const totalReturnColor = totalReturn === null ? "#fff" : totalReturn >= 0 ? "#16a34a" : "#ef4444";
+				const totalReturn = (() => {
+					if (pos.pnl != null && isFinite(pos.pnl)) return pos.pnl;
+					if (safeCost !== null) return totalPayout - safeCost;
+					return null;
+				})();
+				const totalReturnPct = (totalReturn != null && safeCost != null && safeCost > 0)
+					? (totalReturn / safeCost) * 100 : null;
+				const totalReturnColor = totalReturn === null ? "#fff" : totalReturn >= 0 ? "#16a34a" : "#ef4444";
 
-					const fmtCost = safeCost !== null && safeCost !== 0
-						? `$${safeCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-						: "—";
-					const fmtPayout = totalPayout > 0
-						? `$${totalPayout.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-						: "$0";
-					const fmtReturn = (() => {
-						if (totalReturn === null || !isFinite(totalReturn)) return "—";
-						const sign = totalReturn >= 0 ? "+" : "-";
-						const usd = `$${Math.abs(totalReturn).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-						if (totalReturnPct === null || !isFinite(totalReturnPct))
-							return `${sign}${usd}`;
-						const pSign = totalReturnPct >= 0 ? "+" : "-";
-						return `${sign}${usd} (${pSign}${Math.round(Math.abs(totalReturnPct))}%)`;
-					})();
+				const fmtCost = safeCost !== null && safeCost !== 0
+					? `$${safeCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+					: "—";
+				const fmtPayout = totalPayout > 0
+					? `$${totalPayout.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+					: "$0";
+				const fmtReturn = (() => {
+					if (totalReturn === null || !isFinite(totalReturn)) return "—";
+					const sign = totalReturn >= 0 ? "+" : "-";
+					const usd = `$${Math.abs(totalReturn).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+					if (totalReturnPct === null || !isFinite(totalReturnPct))
+						return `${sign}${usd}`;
+					const pSign = totalReturnPct >= 0 ? "+" : "-";
+					return `${sign}${usd} (${pSign}${Math.round(Math.abs(totalReturnPct))}%)`;
+				})();
 
-					return (
+				const venueTradeKey = `vh-${pos.tokenId}`;
+				const isVenueExpanded = expandedTradeHistory.has(venueTradeKey);
+				const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || (pos.outcome.toLowerCase() !== "no") ? "Yes" : "No";
+
+				return (
+					<div
+						key={venueTradeKey}
+						style={{
+							background: "#1a1a1a",
+							border: "1px solid #2a2a2a",
+							borderRadius: 12,
+							overflow: "hidden",
+							marginBottom: 12,
+						}}
+					>
 						<div
-							key={`vh-${pos.tokenId}`}
 							style={{
-								background: "#1a1a1a",
-								border: "1px solid #2a2a2a",
-								borderRadius: 12,
-								overflow: "hidden",
-								marginBottom: 12,
+								padding: "16px",
+								background: "#0a0a0a",
+								borderBottom: "1px solid #2a2a2a",
+								display: "flex",
+								alignItems: "center",
+								gap: 12,
+								cursor: "pointer",
 							}}
+							onClick={() => toggleTradeHistory(venueTradeKey)}
 						>
-							<div
-								style={{
-									padding: "16px",
-									background: "#0a0a0a",
-									borderBottom: "1px solid #2a2a2a",
-									display: "flex",
-									alignItems: "center",
-									gap: 12,
-								}}
-							>
-								<div style={{ flex: 1 }}>
-									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
-										{venueLabel}
-									</div>
-									<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
-										{stripUmbrellaDisplayPrefix(pos.marketTitle)}
-									</div>
-									<div
-										style={{
-											color: isWon ? "#16a34a" : "#ef4444",
-											fontSize: 15,
-											fontWeight: 600,
-											marginTop: 4,
-										}}
-									>
-										{getVenueHistoryMarketColumnLabel(
-											pos.marketTitle,
-											pos,
-											true
-										)}
-									</div>
+							{(() => {
+								const matched = venueUmbrellaMap.get(pos.tokenId);
+								if (matched) return <UmbrellaImage umbrella={matched} />;
+								if (pos.iconUrl) return (
+									<img src={pos.iconUrl} alt={pos.marketTitle} width={40} height={40}
+										style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }} />
+								);
+								return null;
+							})()}
+							<div style={{ flex: 1 }}>
+								<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
+									{stripUmbrellaDisplayPrefix(pos.marketTitle)}
+								</div>
+								<div
+									style={{
+										color: isWon ? "#16a34a" : "#ef4444",
+										fontSize: 15,
+										fontWeight: 600,
+										marginTop: 4,
+									}}
+								>
+									{getVenueHistoryMarketColumnLabel(
+										pos.marketTitle,
+										pos,
+										true
+									)}
 								</div>
 							</div>
-							<div style={{ padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-								<div>
-									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Cost</div>
-									<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
-										{fmtCost}
-									</div>
+							<button
+								className={`expand-trades-btn ${isVenueExpanded ? "expanded" : ""}`}
+								onClick={(e) => { e.stopPropagation(); toggleTradeHistory(venueTradeKey); }}
+								style={{ background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: 12 }}
+							>
+								<span>1</span>
+								<span style={{ marginLeft: 4, display: "inline-block", transform: isVenueExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
+							</button>
+						</div>
+						<div style={{ padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+							<div>
+								<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Cost</div>
+								<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
+									{fmtCost}
 								</div>
-								<div style={{ textAlign: "center" }}>
-									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Payout</div>
-									<div style={{ color: totalPayout > 0 ? "#16a34a" : "#fff", fontSize: 18, fontWeight: 700 }}>
-										{fmtPayout}
-									</div>
+							</div>
+							<div style={{ textAlign: "center" }}>
+								<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Payout</div>
+								<div style={{ color: totalPayout > 0 ? "#16a34a" : "#fff", fontSize: 18, fontWeight: 700 }}>
+									{fmtPayout}
 								</div>
-								<div style={{ textAlign: "right" }}>
-									<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Return</div>
-									<div style={{ color: totalReturnColor, fontSize: 18, fontWeight: 700, whiteSpace: "nowrap" }}>
-										{fmtReturn}
-									</div>
+							</div>
+							<div style={{ textAlign: "right" }}>
+								<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Return</div>
+								<div style={{ color: totalReturnColor, fontSize: 18, fontWeight: 700, whiteSpace: "nowrap" }}>
+									{fmtReturn}
 								</div>
 							</div>
 						</div>
-					);
-				})}
+						{isVenueExpanded && (
+							<TradeHistoryListMobile
+								orders={allOrders}
+								marketId={pos.tokenId}
+								isExpanded={isVenueExpanded}
+								position={position}
+							/>
+						)}
+					</div>
+				);
+			})}
 				</>
 			)}
 		</div>

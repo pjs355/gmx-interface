@@ -13,6 +13,7 @@ import { usePredictionData } from "context/PredictionDataContext";
 import { MarketPanels } from "./MarketPanels";
 import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
+import { useMatchSettled } from "./useMatchSettled";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
 
@@ -55,6 +56,7 @@ function PredictionMarketContent() {
 		umbrellas,
 		getUmbrellaById,
 		getQuestionsForUmbrella,
+		getResolvedQuestionsForUmbrella,
 		getOrderbookForQuestion,
 		refreshOrderbook,
 		allBooksPreview,
@@ -83,14 +85,19 @@ function PredictionMarketContent() {
 		setUmbrella(umbrellaFromContext);
 		const qs = getQuestionsForUmbrella(umbrellaFromContext._id);
 		if (!qs || qs.length === 0) {
-			// Don't redirect if context is still loading - data might not be fetched yet
 			if (!contextLoading) {
+				// Check if markets are resolved before redirecting
+				const resolvedQs = getResolvedQuestionsForUmbrella(umbrellaFromContext._id);
+				if (resolvedQs.length > 0) {
+					setQuestions([]);
+					setLoading(false);
+					return;
+				}
 				setQuestions([]);
 				setLoading(false);
 				navigate("/predictions", { replace: true });
 				return;
 			}
-			// Context is still loading, wait for data
 			return;
 		}
 		const sanitized = (qs as any[]).filter(
@@ -515,6 +522,15 @@ function PredictionMarketContent() {
 		questionOrderbooks
 	);
 
+	const pandascoreMatchIdRaw =
+		typeof umbrella?.pandascore_matchId === "string"
+			? umbrella.pandascore_matchId.trim()
+			: "";
+	const settledInfo = useMatchSettled(
+		umbrella?._id,
+		pandascoreMatchIdRaw || undefined
+	);
+
 	// Only show error page if umbrella fails to load
 	if (loading && !umbrella) {
 		return (
@@ -596,6 +612,7 @@ function PredictionMarketContent() {
 				fetchAllOrderbooks={fetchAllOrderbooks}
 				chartState={chartOnlyState}
 				orderbooksReady={orderbooksReady}
+				settledInfo={settledInfo}
 			/>
 		</div>
 		</PredictionCurtainProvider>

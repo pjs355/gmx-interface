@@ -164,90 +164,95 @@ export default function TradeHistoryListMobile({
 								</span>
 							</div>
 
-							{/* Bottom row: Details */}
-							<div
-								style={{
-									display: "grid",
-									gridTemplateColumns: "1fr 1fr 1fr",
-									gap: 8,
-								}}
-							>
-								<div>
-									<div
-										style={{
-											color: "#666",
-											fontSize: 10,
-											textTransform: "uppercase",
-											marginBottom: 2,
-										}}
-									>
-										Shares
-									</div>
-									<div
-										style={{
-											color: isBuy ? "#22c55e" : "#f87171",
-											fontSize: 14,
-											fontWeight: 600,
-										}}
-									>
-										{formatQuantity(shareChange, true)}
-									</div>
+						{/* Bottom row: Details */}
+						<div
+							style={{
+								display: "grid",
+								gridTemplateColumns: "1fr 1fr 1fr",
+								gap: 8,
+							}}
+						>
+							<div>
+								<div
+									style={{
+										color: "#666",
+										fontSize: 10,
+										textTransform: "uppercase",
+										marginBottom: 2,
+									}}
+								>
+									Shares
 								</div>
-								<div style={{ textAlign: "center" }}>
-									<div
-										style={{
-											color: "#666",
-											fontSize: 10,
-											textTransform: "uppercase",
-											marginBottom: 2,
-											display: "flex",
-											alignItems: "center",
-											justifyContent: "center",
-											gap: 4,
-										}}
-									>
-										Avg Price
-										<Tooltip
-											content="Average execution price"
-											position="top"
-											closeOnDoubleClick
-										>
-											<span style={{ 
-												fontSize: 10, 
-												color: "#888",
-												cursor: "pointer",
-												padding: "2px 4px",
-											}}>
-												ⓘ
-											</span>
-										</Tooltip>
-									</div>
-									<div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>
-										{formatPrice(order.price)}
-									</div>
-								</div>
-								<div style={{ textAlign: "right" }}>
-									<div
-										style={{
-											color: "#666",
-											fontSize: 10,
-											textTransform: "uppercase",
-											marginBottom: 2,
-										}}
-									>
-										Cash Flow
-									</div>
-									<div
-										style={{
-											color: cashFlow >= 0 ? "#22c55e" : "#f87171",
-											fontSize: 14,
-											fontWeight: 700,
-										}}
-									>
-										{formatCurrency(cashFlow, true)}
-									</div>
+								<div
+									style={{
+										color: isBuy ? "#22c55e" : "#f87171",
+										fontSize: 14,
+										fontWeight: 600,
+									}}
+								>
+									{formatQuantity(shareChange, true)}
 								</div>
 							</div>
+							<div style={{ textAlign: "center" }}>
+								<div
+									style={{
+										color: "#666",
+										fontSize: 10,
+										textTransform: "uppercase",
+										marginBottom: 2,
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "center",
+										gap: 4,
+									}}
+								>
+									Avg Price
+									<Tooltip
+										content="Average execution price"
+										position="top"
+										closeOnDoubleClick
+									>
+										<span style={{ 
+											fontSize: 10, 
+											color: "#888",
+											cursor: "pointer",
+											padding: "2px 4px",
+										}}>
+											ⓘ
+										</span>
+									</Tooltip>
+								</div>
+								<div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>
+									{formatPrice(order.price)}
+								</div>
+							</div>
+							<div style={{ textAlign: "right" }}>
+								<div
+									style={{
+										color: "#666",
+										fontSize: 10,
+										textTransform: "uppercase",
+										marginBottom: 2,
+									}}
+								>
+									Cash Flow
+								</div>
+								<div
+									style={{
+										color: cashFlow >= 0 ? "#22c55e" : "#f87171",
+										fontSize: 14,
+										fontWeight: 700,
+									}}
+								>
+									{formatCurrency(cashFlow, true)}
+								</div>
+							</div>
+						</div>
+						{/* Market venue */}
+						<div style={{ marginTop: 8, textAlign: "right" }}>
+							<span style={{ color: "#666", fontSize: 10, textTransform: "uppercase" }}>Market: </span>
+							<span style={{ color: "#888", fontSize: 12 }}>{order.venue ?? "LevelUp"}</span>
+						</div>
 						</div>
 					);
 				})}

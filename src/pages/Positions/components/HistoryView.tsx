@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { getFinalAmount } from "@/services/api/simplifiedOrderService";
+import { getFinalAmount, type ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
 import {
@@ -13,7 +13,7 @@ import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import TradeHistoryList from "./TradeHistoryList";
-import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { stripUmbrellaDisplayPrefix, titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
 
 // Component to handle image with proper fallback
@@ -188,13 +188,44 @@ export default function HistoryView({
 			list.push(pos);
 			groups.set(key, list);
 		}
-		return Array.from(groups.entries()).map(([title, positions]) => ({
-			title,
-			venueLabel: positions[0].venue === "predictfun" ? "Predict.fun" : positions[0].venue === "polymarket" ? "Polymarket" : positions[0].venue,
-			iconUrl: positions[0].iconUrl,
-			positions,
-		}));
+		return Array.from(groups.entries()).map(([title, positions]) => {
+			const iconUrl = positions[0].iconUrl;
+			const matched = umbrellas.find((u) =>
+				u.displayName && titlesMatchVenue(u.displayName, title)
+			);
+			return { title, iconUrl, positions, matchedUmbrella: matched ?? null };
+		});
+	}, [venueHistory, umbrellas]);
+
+	const venueHistorySyntheticOrders = useMemo(() => {
+		const synth: ProcessedOrder[] = [];
+		for (const pos of venueHistory) {
+			if (pos.shares <= 0) continue;
+			const venueName = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue === "dflow" ? "DFlow" : pos.venue;
+			const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || (pos.outcome.toLowerCase() !== "no") ? "Yes" : "No";
+			synth.push({
+				orderId: `synth-vh-${pos.tokenId}`,
+				questionId: pos.tokenId,
+				tokenId: pos.tokenId,
+				side: "buy",
+				position,
+				price: pos.avgPrice ?? 0,
+				size: pos.shares,
+				filled: true,
+				filledAt: null,
+				createdAt: new Date().toISOString(),
+				usdcValue: pos.cost ?? pos.shares * (pos.avgPrice ?? 0),
+				tokenValue: pos.shares,
+				venue: venueName,
+			});
+		}
+		return synth;
 	}, [venueHistory]);
+
+	const allOrders = useMemo(() =>
+		[...orders, ...venueHistorySyntheticOrders],
+		[orders, venueHistorySyntheticOrders]
+	);
 
 	const hasAnyHistory = filteredResolvedMarkets.length > 0 || venueHistory.length > 0;
 
@@ -677,164 +708,199 @@ export default function HistoryView({
 							}
 						)}
 
-						{/* Venue umbrella blocks (Polymarket / Predict.fun) */}
-						{venueUmbrellas.map(({ title, venueLabel, iconUrl, positions }) => (
-							<div key={`venue-${title}`} className="umbrella-block">
-								{/* Umbrella header */}
-								<div
-									className="grid px-12 py-10"
-									style={{
-										gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
-										background: "#000000",
-										borderBottom: "1px solid #1f1f1f",
-										paddingTop: 16,
-										paddingBottom: 16,
-									}}
-								>
-									<div
+				{/* Venue umbrella blocks (Polymarket / Predict.fun / DFlow) */}
+				{venueUmbrellas.map(({ title, iconUrl, positions, matchedUmbrella }) => (
+					<div key={`venue-${title}`} className="umbrella-block">
+						{/* Umbrella header */}
+						<div
+							className="grid px-12 py-10"
+							style={{
+								gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
+								background: "#000000",
+								borderBottom: "1px solid #1f1f1f",
+								paddingTop: 16,
+								paddingBottom: 16,
+							}}
+						>
+							<div
+								style={{
+									gridColumn: "1 / -1",
+									fontWeight: 700,
+									color: "#dedede",
+									fontSize: 20,
+									display: "flex",
+									alignItems: "center",
+									gap: "12px",
+								}}
+							>
+								{matchedUmbrella ? (
+									<UmbrellaImage umbrella={matchedUmbrella} />
+								) : iconUrl ? (
+									<img
+										src={iconUrl}
+										alt={title}
+										width={48}
+										height={48}
 										style={{
-											gridColumn: "1 / -1",
-											fontWeight: 700,
-											color: "#dedede",
-											fontSize: 20,
-											display: "flex",
-											alignItems: "center",
-											gap: "12px",
+											display: "block",
+											background: "#000",
+											borderRadius: 8,
+											objectFit: "contain",
 										}}
-									>
-										{iconUrl ? (
-											<img
-												src={iconUrl}
-												alt={title}
-												width={48}
-												height={48}
-												style={{
-													display: "block",
-													background: "#000",
-													borderRadius: 8,
-													objectFit: "contain",
-												}}
-											/>
-										) : (
-											<div style={{ width: 48, height: 48, borderRadius: 8, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#888" }}>
-												{venueLabel.slice(0, 2)}
-											</div>
-										)}
-										{stripUmbrellaDisplayPrefix(title)}
-										<span style={{ color: "#888", fontSize: 14, fontWeight: 400 }}>({venueLabel})</span>
+									/>
+								) : (
+									<div style={{ width: 48, height: 48, borderRadius: 8, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#888" }}>
+										📊
 									</div>
-								</div>
-
-								{/* Outcome rows */}
-								{positions.map((pos) => {
-									const singleInGroup = positions.length === 1;
-									const isWon = pos.outcomeResult === "WON";
-									const safeCost = (pos.cost != null && isFinite(pos.cost)) ? pos.cost : null;
-									const safeShares = (pos.shares != null && isFinite(pos.shares)) ? pos.shares : 0;
-
-									const finalPositionText = safeShares > 0
-										? safeShares.toLocaleString("en-US", {
-											minimumFractionDigits: safeShares % 1 === 0 ? 0 : 2,
-											maximumFractionDigits: 2,
-										})
-										: "—";
-
-									const outcomeColor = isWon ? "#16a34a" : "#ef4444";
-
-									const totalCostText = (() => {
-										if (safeCost === null || safeCost === 0) return "—";
-										const formatted = safeCost.toLocaleString("en-US", {
-											minimumFractionDigits: safeCost % 1 === 0 ? 0 : 2,
-											maximumFractionDigits: 2,
-										});
-										return `$${formatted}`;
-									})();
-									const totalCostColor = "#fff";
-
-									const totalPayout = (() => {
-										if (isWon) {
-											if (safeCost !== null && pos.pnl != null && isFinite(pos.pnl)) {
-												return safeCost + pos.pnl;
-											}
-											return safeShares;
-										}
-										return 0;
-									})();
-									const totalPayoutText = totalPayout > 0
-										? `$${totalPayout.toLocaleString("en-US", {
-											minimumFractionDigits: totalPayout % 1 === 0 ? 0 : 2,
-											maximumFractionDigits: 2,
-										})}`
-										: "$0";
-									const totalPayoutColor = totalPayout > 0 ? "#16a34a" : "#fff";
-
-									const totalReturn = (() => {
-										if (pos.pnl != null && isFinite(pos.pnl)) return pos.pnl;
-										if (safeCost !== null) return totalPayout - safeCost;
-										return null;
-									})();
-									const totalReturnPct = (totalReturn != null && safeCost != null && safeCost > 0)
-										? (totalReturn / safeCost) * 100
-										: null;
-									const totalReturnColor = totalReturn === null
-										? "#fff"
-										: totalReturn >= 0 ? "#16a34a" : "#ef4444";
-									const totalReturnText = (() => {
-										if (totalReturn === null || !isFinite(totalReturn)) return "—";
-										const sign = totalReturn >= 0 ? "+" : "-";
-										const absReturn = Math.abs(totalReturn);
-										const usdPart = `$${absReturn.toLocaleString("en-US", {
-											minimumFractionDigits: absReturn % 1 === 0 ? 0 : 2,
-											maximumFractionDigits: 2,
-										})}`;
-										if (totalReturnPct === null || !isFinite(totalReturnPct)) {
-											return `${sign}${usdPart}`;
-										}
-										const pctSign = totalReturnPct >= 0 ? "+" : "-";
-										const pctPart = `${Math.round(Math.abs(totalReturnPct)).toLocaleString("en-US")}%`;
-										return `${sign}${usdPart} (${pctSign}${pctPart})`;
-									})();
-
-									return (
-										<div
-											key={`vh-${pos.tokenId}`}
-											className="grid items-center px-12 py-12"
-											style={{
-												gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
-												borderBottom: "1px solid #1f1f1f",
-												fontSize: 16,
-											}}
-										>
-											<div style={{ color: "#fff", fontWeight: 600 }}>
-												{getVenueHistoryMarketColumnLabel(
-													pos.marketTitle,
-													pos,
-													singleInGroup
-												)}
-											</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>
-												{finalPositionText}
-											</div>
-											<div style={{ textAlign: "center", color: outcomeColor, fontWeight: 600 }}>
-												{pos.outcomeResult ?? "Lost"}
-											</div>
-											<div style={{ textAlign: "center", color: totalCostColor, fontWeight: 500 }}>
-												{totalCostText}
-											</div>
-											<div style={{ textAlign: "center", color: totalPayoutColor }}>
-												{totalPayoutText}
-											</div>
-											<div style={{ textAlign: "center", color: totalReturnColor, fontWeight: "bold" }}>
-												{totalReturnText}
-											</div>
-											<div style={{ textAlign: "center", color: "#555" }}>
-												—
-											</div>
-										</div>
-									);
-								})}
+								)}
+								{stripUmbrellaDisplayPrefix(title)}
 							</div>
-						))}
+						</div>
+
+							{/* Outcome rows */}
+							{positions.map((pos) => {
+								const singleInGroup = positions.length === 1;
+								const isWon = pos.outcomeResult === "WON";
+								const safeCost = (pos.cost != null && isFinite(pos.cost)) ? pos.cost : null;
+								const safeShares = (pos.shares != null && isFinite(pos.shares)) ? pos.shares : 0;
+
+								const finalPositionText = safeShares > 0
+									? safeShares.toLocaleString("en-US", {
+										minimumFractionDigits: safeShares % 1 === 0 ? 0 : 2,
+										maximumFractionDigits: 2,
+									})
+									: "—";
+
+								const outcomeColor = isWon ? "#16a34a" : "#ef4444";
+
+								const totalCostText = (() => {
+									if (safeCost === null || safeCost === 0) return "—";
+									const formatted = safeCost.toLocaleString("en-US", {
+										minimumFractionDigits: safeCost % 1 === 0 ? 0 : 2,
+										maximumFractionDigits: 2,
+									});
+									return `$${formatted}`;
+								})();
+								const totalCostColor = "#fff";
+
+								const totalPayout = (() => {
+									if (isWon) {
+										if (safeCost !== null && pos.pnl != null && isFinite(pos.pnl)) {
+											return safeCost + pos.pnl;
+										}
+										return safeShares;
+									}
+									return 0;
+								})();
+								const totalPayoutText = totalPayout > 0
+									? `$${totalPayout.toLocaleString("en-US", {
+										minimumFractionDigits: totalPayout % 1 === 0 ? 0 : 2,
+										maximumFractionDigits: 2,
+									})}`
+									: "$0";
+								const totalPayoutColor = totalPayout > 0 ? "#16a34a" : "#fff";
+
+								const totalReturn = (() => {
+									if (pos.pnl != null && isFinite(pos.pnl)) return pos.pnl;
+									if (safeCost !== null) return totalPayout - safeCost;
+									return null;
+								})();
+								const totalReturnPct = (totalReturn != null && safeCost != null && safeCost > 0)
+									? (totalReturn / safeCost) * 100
+									: null;
+								const totalReturnColor = totalReturn === null
+									? "#fff"
+									: totalReturn >= 0 ? "#16a34a" : "#ef4444";
+								const totalReturnText = (() => {
+									if (totalReturn === null || !isFinite(totalReturn)) return "—";
+									const sign = totalReturn >= 0 ? "+" : "-";
+									const absReturn = Math.abs(totalReturn);
+									const usdPart = `$${absReturn.toLocaleString("en-US", {
+										minimumFractionDigits: absReturn % 1 === 0 ? 0 : 2,
+										maximumFractionDigits: 2,
+									})}`;
+									if (totalReturnPct === null || !isFinite(totalReturnPct)) {
+										return `${sign}${usdPart}`;
+									}
+									const pctSign = totalReturnPct >= 0 ? "+" : "-";
+									const pctPart = `${Math.round(Math.abs(totalReturnPct)).toLocaleString("en-US")}%`;
+									return `${sign}${usdPart} (${pctSign}${pctPart})`;
+								})();
+
+								const venueTradeKey = `vh-${pos.tokenId}`;
+								const isVenueExpanded = expandedMarkets.has(venueTradeKey);
+								const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || (pos.outcome.toLowerCase() !== "no") ? "Yes" : "No";
+
+								return (
+									<React.Fragment key={venueTradeKey}>
+									<div
+										className="grid items-center px-12 py-12"
+										style={{
+											gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
+											borderBottom: "1px solid #1f1f1f",
+											fontSize: 16,
+											cursor: "pointer",
+											transition: "background 0.15s ease",
+										}}
+										onClick={() => toggleMarketExpansion(venueTradeKey)}
+										onMouseEnter={(e) => { e.currentTarget.style.background = "#1a1a1a"; }}
+										onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+									>
+										<div style={{ color: "#fff", fontWeight: 600 }}>
+											{getVenueHistoryMarketColumnLabel(
+												pos.marketTitle,
+												pos,
+												singleInGroup
+											)}
+										</div>
+										<div style={{ textAlign: "center", color: "#fff" }}>
+											{finalPositionText}
+										</div>
+										<div style={{ textAlign: "center", color: outcomeColor, fontWeight: 600 }}>
+											{pos.outcomeResult ?? "Lost"}
+										</div>
+										<div style={{ textAlign: "center", color: totalCostColor, fontWeight: 500 }}>
+											{totalCostText}
+										</div>
+										<div style={{ textAlign: "center", color: totalPayoutColor }}>
+											{totalPayoutText}
+										</div>
+										<div style={{ textAlign: "center", color: totalReturnColor, fontWeight: "bold" }}>
+											{totalReturnText}
+										</div>
+										<div style={{ textAlign: "center" }}>
+											<button
+												className={`expand-trades-btn ${isVenueExpanded ? "expanded" : ""}`}
+												onClick={(e) => {
+													e.stopPropagation();
+													toggleMarketExpansion(venueTradeKey);
+												}}
+											>
+												<span>1</span>
+												<span
+													className="expand-icon"
+													style={{
+														transform: isVenueExpanded ? "rotate(180deg)" : "rotate(0deg)",
+													}}
+												>
+													▼
+												</span>
+											</button>
+										</div>
+									</div>
+									{isVenueExpanded && (
+										<TradeHistoryList
+											orders={allOrders}
+											marketId={pos.tokenId}
+											isExpanded={isVenueExpanded}
+											position={position}
+										/>
+									)}
+									</React.Fragment>
+								);
+							})}
+						</div>
+					))}
 					</div>
 				</ScrollableTable>
 			)}

@@ -387,20 +387,7 @@ export default function PositionsCardView({
 													</span>
 												</>
 											)}
-											{venue && (
-												<span style={{
-													marginLeft: 6,
-													fontSize: 11,
-													color: "#666",
-													fontWeight: 400,
-												}}>
-													({venue === "polymarket"
-														? "Polymarket"
-														: venue === "predictfun"
-															? "Predict.fun"
-															: "LevelUp"})
-												</span>
-											)}
+										
 										</div>
 									</div>
 								</div>
@@ -438,13 +425,13 @@ export default function PositionsCardView({
 										>
 											<span
 												className={
-													softLoading
-														? "soft-blur"
-														: undefined
-												}
-											>
-												{amount}
-											</span>
+											softLoading
+													? "soft-blur"
+													: undefined
+											}
+										>
+											{parseFloat(Number(amount).toFixed(2))}
+										</span>
 										</div>
 									</div>
 									<div

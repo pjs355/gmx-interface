@@ -122,24 +122,35 @@ export default function PredictionMarketTradeBoxUI({
     return Math.round(value * 100).toString();
   };
 
-  // Flip prices based on buy/sell side:
-  // - BUY: YES shows bestAsk (what you pay), NO shows (1 - bestBid) (what you pay)
-  // - SELL: YES shows bestBid (what you receive), NO shows (1 - bestAsk) (what you receive)
-  // Predict.fun: monitor hints are per-outcome native books (no 1−p complement between legs).
+  // For polymarket/dflow the effective orderbook is the *selected* outcome's native
+  // book.  When the user selects NO, bestAsk/bestBid come from the NO book, so we
+  // must swap the display formulas: the NO button shows the book directly while the
+  // YES button shows the 1−p complement.  LevelUp always uses a single YES book.
+  // Predict.fun uses separate per-outcome monitor hints so no complement is needed.
+  const bookRepresentsNo =
+    (tradingVenue === "polymarket" || tradingVenue === "dflow") &&
+    selectedPosition === "no";
+
   const yesPrice =
     tradingVenue === "predictfun" && yesHintPrices
       ? side === "buy"
         ? yesHintPrices.bestAsk
         : yesHintPrices.bestBid
-      : side === 'buy' ? bestAsk : bestBid;
+      : bookRepresentsNo
+        ? side === 'buy'
+          ? (bestBid === null ? null : 1 - bestBid)
+          : (bestAsk === null ? null : 1 - bestAsk)
+        : side === 'buy' ? bestAsk : bestBid;
   const noPrice =
     tradingVenue === "predictfun" && noHintPrices
       ? side === "buy"
         ? noHintPrices.bestAsk
         : noHintPrices.bestBid
-      : side === 'buy'
-    ? (bestBid === null ? null : 1 - bestBid)
-    : (bestAsk === null ? null : 1 - bestAsk);
+      : bookRepresentsNo
+        ? side === 'buy' ? bestAsk : bestBid
+        : side === 'buy'
+          ? (bestBid === null ? null : 1 - bestBid)
+          : (bestAsk === null ? null : 1 - bestAsk);
   
   // Format with ¢ only when price exists, otherwise just "--"
   const yesPriceCents = yesPrice !== null ? `${toCentsString(yesPrice)}¢` : "--";
@@ -286,15 +297,18 @@ export default function PredictionMarketTradeBoxUI({
     if (!contracts || contracts <= 0) return null;
     const avgPrice = getEffectivePrice(walkUsd, contracts, remainingUsd);
     if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
-    // Determine reference current market price for comparison
+    // Determine reference current market price for comparison.
+    // For poly/dflow/predict the effective book is already the selected outcome's
+    // native book, so bestAsk is the direct price to buy that outcome.
     const referencePrice = (() => {
       if (tradingVenue === "predictfun" && predictHints) {
         const hp =
           selectedPosition === "yes" ? yesHintPrices : noHintPrices;
         if (!hp) return null;
-        return selectedPosition === "yes"
-          ? hp.bestAsk ?? null
-          : hp.bestAsk ?? null;
+        return hp.bestAsk ?? null;
+      }
+      if (tradingVenue === "polymarket" || tradingVenue === "dflow") {
+        return bestAsk ?? null;
       }
       return selectedPosition === 'yes'
         ? (bestAsk ?? null)

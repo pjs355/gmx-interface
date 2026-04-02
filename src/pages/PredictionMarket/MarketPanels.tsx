@@ -9,6 +9,7 @@ import { Comments } from "./Comments/Comments";
 import { EsportsVenueBooksPanel } from "@/components/EsportsVenueBooksPanel/EsportsVenueBooksPanel";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
 import {
 	ChartSkeleton,
@@ -36,6 +37,7 @@ type PanelsProps = {
 		frozenOrderbooks: Record<string, any>;
 	};
 	orderbooksReady: boolean;
+	settledInfo?: SettledInfo | null;
 };
 
 export const MarketPanels: React.FC<PanelsProps> = ({
@@ -52,6 +54,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	fetchAllOrderbooks,
 	chartState,
 	orderbooksReady,
+	settledInfo,
 }) => {
 	useMedia("(max-width: 1100px)");
 
@@ -128,11 +131,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					</div>
 				);
 			})}
-			{showCrossVenueBooks ? (
-				<div className="orderbook-section__cross-venue">
-					<EsportsVenueBooksPanel pandascoreMatchId={pandascoreMatchId} />
-				</div>
-			) : null}
+		{showCrossVenueBooks && !settledInfo ? (
+			<div className="orderbook-section__cross-venue">
+				<EsportsVenueBooksPanel pandascoreMatchId={pandascoreMatchId} />
+			</div>
+		) : null}
 			<RulesSection umbrella={umbrella} />
 		</>
 	);
@@ -202,30 +205,41 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					)}
 				</div>
 
-				<div className="right-panel">
-					{hasQuestions && orderbooksReady && activeMarket ? (
-						<PredictionMarketTradeBox
-							market={
-								{
-									...(activeMarket as any),
-									umbrellaChildrenCount:
-										umbrella?.children?.length || 0,
-								} as any
-							}
-							orderbook={
-								questionOrderbooks[getMarketId(activeMarket)]
-							}
-							pandascoreMatchId={
-								pandascoreMatchId || undefined
-							}
-							initialPosition={activePosition}
-							onPositionChange={onPositionChange}
-							onSideChange={setTradeSide}
-						/>
-					) : (
-						<TradeBoxSkeleton />
-					)}
-				</div>
+			<div className="right-panel">
+				{settledInfo ? (
+					<div className="prediction-market-tradebox match-settled-banner">
+						<div className="match-settled-banner__content">
+							<div className="match-settled-banner__label">
+								Match Settled
+							</div>
+							<div className="match-settled-banner__winner">
+								{settledInfo.winnerName} Won!
+							</div>
+						</div>
+					</div>
+				) : hasQuestions && orderbooksReady && activeMarket ? (
+					<PredictionMarketTradeBox
+						market={
+							{
+								...(activeMarket as any),
+								umbrellaChildrenCount:
+									umbrella?.children?.length || 0,
+							} as any
+						}
+						orderbook={
+							questionOrderbooks[getMarketId(activeMarket)]
+						}
+						pandascoreMatchId={
+							pandascoreMatchId || undefined
+						}
+						initialPosition={activePosition}
+						onPositionChange={onPositionChange}
+						onSideChange={setTradeSide}
+					/>
+				) : (
+					<TradeBoxSkeleton />
+				)}
+			</div>
 			</div>
 
 			{/* Mobile Layout */}
@@ -287,33 +301,46 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					/>
 				)}
 
-				{/* Mobile Trading Container - Fixed at bottom */}
-				{hasQuestions && orderbooksReady && activeMarket ? (
-					<div className="mobile-trading-container">
-						<PredictionMarketTradeBox
-							market={
-								{
-									...(activeMarket as any),
-									umbrellaChildrenCount:
-										umbrella?.children?.length || 0,
-								} as any
-							}
-							orderbook={
-								questionOrderbooks[getMarketId(activeMarket)]
-							}
-							pandascoreMatchId={
-								pandascoreMatchId || undefined
-							}
-							initialPosition={activePosition}
-							onPositionChange={onPositionChange}
-							onSideChange={setTradeSide}
-						/>
+			{/* Mobile Trading Container - Fixed at bottom */}
+			{settledInfo ? (
+				<div className="mobile-trading-container">
+					<div className="prediction-market-tradebox match-settled-banner">
+						<div className="match-settled-banner__content">
+							<div className="match-settled-banner__label">
+								Match Settled
+							</div>
+							<div className="match-settled-banner__winner">
+								{settledInfo.winnerName} Won!
+							</div>
+						</div>
 					</div>
-				) : (
-					<div className="mobile-trading-container">
-						<TradeBoxSkeleton />
-					</div>
-				)}
+				</div>
+			) : hasQuestions && orderbooksReady && activeMarket ? (
+				<div className="mobile-trading-container">
+					<PredictionMarketTradeBox
+						market={
+							{
+								...(activeMarket as any),
+								umbrellaChildrenCount:
+									umbrella?.children?.length || 0,
+							} as any
+						}
+						orderbook={
+							questionOrderbooks[getMarketId(activeMarket)]
+						}
+						pandascoreMatchId={
+							pandascoreMatchId || undefined
+						}
+						initialPosition={activePosition}
+						onPositionChange={onPositionChange}
+						onSideChange={setTradeSide}
+					/>
+				</div>
+			) : (
+				<div className="mobile-trading-container">
+					<TradeBoxSkeleton />
+				</div>
+			)}
 			</div>
 		</div>
 	);

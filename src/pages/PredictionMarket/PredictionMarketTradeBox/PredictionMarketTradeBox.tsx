@@ -56,6 +56,10 @@ import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
+import { useSignTransaction } from "@privy-io/react-auth/solana";
+import { Connection, VersionedTransaction } from "@solana/web3.js";
+import { SOLANA_RPC_URL } from "@/config/rpc";
+import { SOLANA_USDC_MINT } from "@/config/addresses";
 
 interface PredictionMarketTradeBoxProps extends TradeBoxProps {}
 
@@ -83,6 +87,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const { wallets: privyWallets } = usePrivyWallets();
   const { fundWallet } = useFundWallet();
+  const { signTransaction: privySolanaSign } = useSignTransaction();
 
   /** LevelUp REST orderbook (signing + execution always uses this for LevelUp venue). */
   const levelUpOrderbook = propOrderbook ?? null;
@@ -312,16 +317,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const marketOrderHandler = useMarketOrderHandler(effectiveOrderbook);
 
+  // For polymarket/dflow/predictfun the effectiveOrderbook is already the selected
+  // outcome's native book, so the MarketOrderHandler should walk it as "yes" (no
+  // inversion).  Only LevelUp uses a single unified YES book where position matters.
   const orderbookWalkPosition =
-    state.tradingVenue === "predictfun"
-      ? "yes"
-      : state.selectedPosition ?? "yes";
+    state.tradingVenue === "levelup"
+      ? state.selectedPosition ?? "yes"
+      : "yes";
 
   const calculateContractsForMarketOrderUi = useCallback(
     (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") =>
       marketOrderHandler.calculateContractsForMarketOrder(
         usdAmount,
-        state.tradingVenue === "predictfun" ? "yes" : position,
+        state.tradingVenue === "levelup" ? position : "yes",
         side
       ),
     [marketOrderHandler, state.tradingVenue]
@@ -638,6 +646,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         const resolvedYes = monitorYes ?? dflowMintQuery.data?.yesMint;
         const resolvedNo = monitorNo ?? dflowMintQuery.data?.noMint;
 
+        if (import.meta.env.DEV) {
+          console.debug("[DFlow] mint resolution", {
+            monitorYes, monitorNo,
+            fallback: dflowMintQuery.data,
+            resolvedYes, resolvedNo,
+          });
+        }
+
         if (!resolvedYes || !resolvedNo) {
           throw new Error(
             dflowMintQuery.isLoading
@@ -656,7 +672,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         const amountBaseUnits = Math.round(usdAmount * 1_000_000).toString();
 
         const orderResult = await privateApi.getDflowOrder({
-          inputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          inputMint: SOLANA_USDC_MINT,
           outputMint,
           amount: amountBaseUnits,
         });
@@ -669,14 +685,31 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           throw new Error("DFlow returned no transaction to sign. Check KYC or market status.");
         }
 
-        // TODO: decode base64 tx → Privy Solana signTransaction → send to Solana RPC
+        const txBytes = Buffer.from(orderResult.transaction, "base64");
+        const transaction = VersionedTransaction.deserialize(txBytes);
+        const connection = new Connection(SOLANA_RPC_URL, "confirmed");
+
+        // Sign via Privy (no simulation), then send ourselves with skipPreflight
+        const signedTx = await privySolanaSign({
+          transaction,
+          connection,
+        }) as VersionedTransaction;
+
+        const sig = await connection.sendRawTransaction(
+          signedTx.serialize(),
+          { skipPreflight: true, maxRetries: 3 },
+        );
+
         setState((prev) => ({
           ...prev,
           orderResult: {
             success: true,
-            message: `DFlow order received (${orderResult.outAmount ?? "?"} outcome tokens). Solana signing coming soon.`,
+            message: `DFlow order confirmed (${orderResult.outAmount ?? "?"} outcome tokens). Tx: ${sig.slice(0, 8)}…`,
           },
         }));
+        if (import.meta.env.DEV) {
+          console.log(`[DFlow] Solscan: https://solscan.io/tx/${sig}`);
+        }
       } catch (error: unknown) {
         setState((prev) => ({
           ...prev,
@@ -1343,6 +1376,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowMintQuery.data,
     dflowMintQuery.isLoading,
     privateApi,
+    privySolanaSign,
   ]);
 
   // Auto-dismiss order result after 4 seconds

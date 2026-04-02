@@ -483,20 +483,7 @@ export default function PositionsTableView({
 														</span>
 													</>
 												)}
-												{venue && (
-													<span style={{
-														marginLeft: 6,
-														fontSize: 11,
-														color: "#666",
-														fontWeight: 400,
-													}}>
-														({venue === "polymarket"
-															? "Polymarket"
-															: venue === "predictfun"
-																? "Predict.fun"
-																: "LevelUp"})
-													</span>
-												)}
+											
 											</div>
 											<div
 												style={{
@@ -529,7 +516,7 @@ export default function PositionsTableView({
 															: undefined
 													}
 												>
-													{amount}
+													{parseFloat(Number(amount).toFixed(2))}
 												</span>
 											</div>
 											<div

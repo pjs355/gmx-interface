@@ -28,6 +28,7 @@ import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePolymarketTradeHistory } from "@/trading/polymarket/usePolymarketTradeHistory";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
 import { usePredictOrders } from "@/trading/predict/usePredictOrders";
 import { usePredictOrderMatches } from "@/trading/predict/usePredictOrderMatches";
 import { usePredictEnsureAuth } from "@/trading/predict/usePredictEnsureAuth";
@@ -42,6 +43,7 @@ import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useQuery } from "@tanstack/react-query";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import type { VenueId, VenueOrder } from "@/types/trading/venuePosition";
+import { titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 
 type MarketPosition = {
 	market: PredictionMarket;
@@ -61,10 +63,160 @@ type MarketPosition = {
 	predictOutcomeLabelNo?: string;
 };
 
+function buildSyntheticOrder(
+	questionId: string,
+	venue: string,
+	position: "Yes" | "No",
+	shares: number,
+	avgPrice: number | null,
+	cost: number | null,
+): ProcessedOrder {
+	const price = avgPrice ?? 0;
+	const usdcValue = cost ?? shares * price;
+	return {
+		orderId: `synthetic-${venue.toLowerCase()}-${questionId}-${position}`,
+		questionId,
+		tokenId: questionId,
+		side: "buy",
+		position,
+		price,
+		size: shares,
+		filled: true,
+		filledAt: null,
+		createdAt: new Date().toISOString(),
+		usdcValue,
+		tokenValue: shares,
+		venue,
+	};
+}
+
+function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[] {
+	if (markets.length <= 1) return markets;
+
+	const luMarket = markets.find((m) => m.venue === "levelup") ?? markets[0];
+	const primaryMarket = luMarket.market;
+
+	let totalYesShares = 0;
+	let totalYesCost = 0;
+	let totalNoShares = 0;
+	let totalNoCost = 0;
+	let bestYesPrice: number | null = null;
+	let bestNoPrice: number | null = null;
+	let yesValue = 0;
+	let noValue = 0;
+	const allOrders: ProcessedOrder[] = [];
+	let predictOutcomeLabelYes: string | undefined;
+	let predictOutcomeLabelNo: string | undefined;
+
+	for (const mp of markets) {
+		totalYesShares += mp.yesBalance;
+		totalNoShares += mp.noBalance;
+		totalYesCost += mp.aggregates.Yes.totalValue;
+		totalNoCost += mp.aggregates.No.totalValue;
+		yesValue += mp.yesValue;
+		noValue += mp.noValue;
+
+		if (mp.yesPrice !== null && bestYesPrice === null) bestYesPrice = mp.yesPrice;
+		if (mp.noPrice !== null && bestNoPrice === null) bestNoPrice = mp.noPrice;
+
+		allOrders.push(...mp.orders);
+
+		if (mp.predictOutcomeLabelYes) predictOutcomeLabelYes = mp.predictOutcomeLabelYes;
+		if (mp.predictOutcomeLabelNo) predictOutcomeLabelNo = mp.predictOutcomeLabelNo;
+	}
+
+	const yesAvg = totalYesShares > 0 ? totalYesCost / totalYesShares : null;
+	const noAvg = totalNoShares > 0 ? totalNoCost / totalNoShares : null;
+
+	const blendedYesPrice = totalYesShares > 0 && yesValue > 0
+		? yesValue / totalYesShares
+		: bestYesPrice;
+	const blendedNoPrice = totalNoShares > 0 && noValue > 0
+		? noValue / totalNoShares
+		: bestNoPrice;
+
+	return [{
+		market: primaryMarket,
+		yesBalance: totalYesShares,
+		noBalance: totalNoShares,
+		yesPrice: blendedYesPrice,
+		noPrice: blendedNoPrice,
+		yesValue,
+		noValue,
+		totalValue: yesValue + noValue,
+		orders: allOrders,
+		aggregates: {
+			Yes: { totalSize: totalYesShares, totalValue: totalYesCost, avgPrice: yesAvg, count: 0 },
+			No: { totalSize: totalNoShares, totalValue: totalNoCost, avgPrice: noAvg, count: 0 },
+		},
+		venue: undefined,
+		predictOutcomeLabelYes,
+		predictOutcomeLabelNo,
+	}];
+}
+
 type UmbrellaPositions = {
 	umbrella: Umbrella;
 	markets: MarketPosition[];
 };
+
+const GENERIC_SUB_MARKET_TITLES = new Set([
+	"match winner",
+	"map winner",
+	"winner",
+	"over/under",
+	"total",
+	"moneyline",
+]);
+
+function isGenericSubMarketTitle(title: string): boolean {
+	return GENERIC_SUB_MARKET_TITLES.has(title.trim().toLowerCase());
+}
+
+function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
+	return (
+		<div style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 0" }}>
+			{widths.map((w, i) => (
+				<span
+					key={i}
+					className="skeleton-box"
+					style={{ width: w, height, borderRadius: 4 }}
+				/>
+			))}
+		</div>
+	);
+}
+
+function PortfolioSkeleton() {
+	return (
+		<div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+			{Array.from({ length: 5 }).map((_, i) => (
+				<div
+					key={i}
+					style={{
+						borderBottom: "1px solid #1a1a1a",
+						padding: "12px 0",
+						display: "flex",
+						alignItems: "center",
+						gap: 16,
+					}}
+				>
+					<span
+						className="skeleton-box"
+						style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }}
+					/>
+					<div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+						<span
+							className="skeleton-box"
+							style={{ width: `${60 - i * 8}%`, maxWidth: 280, height: 16, borderRadius: 4 }}
+						/>
+						<SkeletonRow widths={[60, 50, 70, 80, 70, 90]} height={14} />
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
 
 export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
@@ -92,18 +244,12 @@ export default function Positions() {
 		booksPreviewLoading,
 	} = usePredictionData();
 
-	const { polymarketSafe } = useFundingAddresses();
+	const { polymarketSafe, solanaAddress } = useFundingAddresses();
 	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
 	const allPolyPositions = (polyPositionsQuery.data ?? []);
 	const polyTradeHistoryQuery = usePolymarketTradeHistory(polymarketSafe); // active + settled
 
-	// Check if all data is loaded before showing resolved positions
-	const isDataFullyLoaded =
-		!predictionLoading &&
-		!userDataLoading &&
-		!portfolioLoading &&
-		!booksPreviewLoading;
-	// removed setPortfolioTotal – portfolio is computed in context
+	// venueQueriesSettled + isDataFullyLoaded are defined below, after all venue hooks
 
 	const [loading] = useState(false);
 	const [error] = useState<string | null>(null);
@@ -219,6 +365,24 @@ export default function Positions() {
 	}, [allPredictPositions, predictOpenOrders]);
 
 	const privateApi = usePrivateApiClient();
+
+	// DFlow positions (Solana Token-2022 outcome tokens)
+	const dflowPositionsQuery = useDflowPositions(solanaAddress, privateApi);
+	const allDflowPositions = dflowPositionsQuery.data ?? [];
+
+	const venueQueriesSettled =
+		!polyPositionsQuery.isLoading &&
+		!predictPositionsQuery.isLoading &&
+		!dflowPositionsQuery.isLoading &&
+		!polyTradeHistoryQuery.isLoading;
+
+	const isDataFullyLoaded =
+		!predictionLoading &&
+		!userDataLoading &&
+		!portfolioLoading &&
+		!booksPreviewLoading &&
+		venueQueriesSettled;
+
 	const predictMarketsQuery = useQuery({
 		queryKey: ["predict-market-details", predictMarketIds],
 		enabled: predictMarketIds.length > 0,
@@ -247,9 +411,12 @@ export default function Positions() {
 				? predictMarketDetails.get(pos.numericMarketId)
 				: undefined;
 
-			// Enrich with cost from filled orders
+			// Enrich title: prefer the full event question over generic sub-market names like "Match Winner"
 			const costEntry = getPredictCostForToken(predictCostLookup, pos.tokenId);
 			const enriched = { ...pos };
+			if (detail?.question && isGenericSubMarketTitle(enriched.marketTitle)) {
+				enriched.marketTitle = detail.question;
+			}
 			if (costEntry) {
 				enriched.avgPrice = costEntry.avgPrice;
 				enriched.cost = costEntry.totalCost;
@@ -290,9 +457,7 @@ export default function Positions() {
 		for (const pos of allPolyPositions) {
 			if (pos.redeemable && pos.currentValue > 0) {
 				won.push(pos);
-			} else if (pos.redeemable && pos.currentValue <= 0) {
-				lost.push(pos);
-			} else if (pos.currentPrice !== null && pos.currentPrice <= 0.01 && pos.shares > 0) {
+			} else if (pos.redeemable) {
 				lost.push(pos);
 			} else {
 				active.push(pos);
@@ -303,6 +468,27 @@ export default function Positions() {
 	}, [allPolyPositions]);
 
 	const polyPositions = activePolyPositions;
+
+	// DFlow: separate active vs finalized positions
+	const { dflowPositions, dflowWinnings, dflowHistory } = useMemo(() => {
+		const active: typeof allDflowPositions = [];
+		const won: typeof allDflowPositions = [];
+		const lost: typeof allDflowPositions = [];
+
+		for (const pos of allDflowPositions) {
+			if (pos.marketStatus === "FINALIZED") {
+				if (pos.outcomeResult === "WON") {
+					won.push(pos);
+				} else {
+					lost.push(pos);
+				}
+			} else {
+				active.push(pos);
+			}
+		}
+
+		return { dflowPositions: active, dflowWinnings: won, dflowHistory: lost };
+	}, [allDflowPositions]);
 
 	// Callback to handle successful claims
 	const handleClaimSuccess = useCallback(
@@ -333,9 +519,10 @@ export default function Positions() {
 	const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) return [];
 
-		// Track which Polymarket tokenIds got matched to an umbrella
+		// Track which venue tokenIds got matched to an umbrella
 		const matchedPolyTokenIds = new Set<string>();
 		const matchedPredictTokenIds = new Set<string>();
+		const matchedDflowTokenIds = new Set<string>();
 
 		const levelUpUmbrellas: UmbrellaPositions[] = umbrellas
 			.map((umbrella) => {
@@ -378,6 +565,7 @@ export default function Positions() {
 							balanceId
 						);
 
+						const taggedOrders = marketOrders.map((o) => o.venue ? o : { ...o, venue: "LevelUp" });
 						return {
 							market,
 							yesBalance,
@@ -387,7 +575,7 @@ export default function Positions() {
 							yesValue,
 							noValue,
 							totalValue,
-							orders: marketOrders,
+							orders: taggedOrders,
 							aggregates,
 							venue: "levelup" as VenueId,
 						};
@@ -403,58 +591,55 @@ export default function Positions() {
 				// Try to match Polymarket positions to this umbrella's markets
 				const polyMatches: MarketPosition[] = [];
 				for (const pv of polyPositions) {
-					if (matchedPolyTokenIds.has(pv.tokenId)) continue;
-					const matchTitle = umbrella.displayName?.toLowerCase() ?? "";
+				if (matchedPolyTokenIds.has(pv.tokenId)) continue;
 					const polyTitle = pv.marketTitle?.toLowerCase() ?? "";
-					if (
-						polyTitle.includes(matchTitle) ||
-						matchTitle.includes(polyTitle.replace(/\s*\(.*\)/, ""))
-					) {
+					if (titlesMatchVenue(umbrella.displayName ?? "", pv.marketTitle ?? "")) {
 						matchedPolyTokenIds.add(pv.tokenId);
 						const isYes = pv.outcome.toLowerCase() === "yes" ||
 							(pv.outcome.toLowerCase() !== "no" && polyTitle.toLowerCase().includes(pv.outcome.toLowerCase()));
-						polyMatches.push({
-							market: {
-								_id: `poly-${pv.tokenId.slice(0, 12)}`,
-								displayName: pv.marketTitle,
-								questionId: pv.conditionId,
-							} as unknown as PredictionMarket,
-							yesBalance: isYes ? pv.shares : 0,
-							noBalance: isYes ? 0 : pv.shares,
-							yesPrice: isYes ? pv.currentPrice : null,
-							noPrice: isYes ? null : pv.currentPrice,
-							yesValue: isYes ? pv.currentValue : 0,
-							noValue: isYes ? 0 : pv.currentValue,
-							totalValue: pv.currentValue,
-							orders: [],
-							aggregates: {
-								Yes: {
-									totalSize: isYes ? pv.shares : 0,
-									totalValue: isYes ? (pv.cost ?? 0) : 0,
-									avgPrice: isYes ? pv.avgPrice : null,
-									count: 0,
-								},
-								No: {
-									totalSize: isYes ? 0 : pv.shares,
-									totalValue: isYes ? 0 : (pv.cost ?? 0),
-									avgPrice: isYes ? null : pv.avgPrice,
-									count: 0,
-								},
+					const polyQid = `poly-${pv.tokenId.slice(0, 12)}`;
+					const polySide: "Yes" | "No" = isYes ? "Yes" : "No";
+					const polySyntheticOrder = (pv.shares > 0 && (pv.avgPrice || pv.cost))
+						? [buildSyntheticOrder(polyQid, "Polymarket", polySide, pv.shares, pv.avgPrice, pv.cost)]
+						: [];
+					polyMatches.push({
+						market: {
+							_id: polyQid,
+							displayName: pv.marketTitle,
+							questionId: pv.conditionId,
+						} as unknown as PredictionMarket,
+						yesBalance: isYes ? pv.shares : 0,
+						noBalance: isYes ? 0 : pv.shares,
+						yesPrice: isYes ? pv.currentPrice : null,
+						noPrice: isYes ? null : pv.currentPrice,
+						yesValue: isYes ? pv.currentValue : 0,
+						noValue: isYes ? 0 : pv.currentValue,
+						totalValue: pv.currentValue,
+						orders: polySyntheticOrder,
+						aggregates: {
+							Yes: {
+								totalSize: isYes ? pv.shares : 0,
+								totalValue: isYes ? (pv.cost ?? 0) : 0,
+								avgPrice: isYes ? pv.avgPrice : null,
+								count: 0,
 							},
-							venue: "polymarket",
-						});
+							No: {
+								totalSize: isYes ? 0 : pv.shares,
+								totalValue: isYes ? 0 : (pv.cost ?? 0),
+								avgPrice: isYes ? null : pv.avgPrice,
+								count: 0,
+							},
+						},
+						venue: "polymarket",
+					});
 					}
 				}
 
 				const predictMatches: MarketPosition[] = [];
 				for (const pv of predictPositions) {
-					if (matchedPredictTokenIds.has(pv.tokenId)) continue;
-					const matchTitle = umbrella.displayName?.toLowerCase() ?? "";
+				if (matchedPredictTokenIds.has(pv.tokenId)) continue;
 					const predTitle = pv.marketTitle?.toLowerCase() ?? "";
-					if (
-						predTitle.includes(matchTitle) ||
-						matchTitle.includes(predTitle.replace(/\s*\(.*\)/, ""))
-					) {
+					if (titlesMatchVenue(umbrella.displayName ?? "", pv.marketTitle ?? "")) {
 						matchedPredictTokenIds.add(pv.tokenId);
 						const isYes =
 							pv.outcome.toLowerCase() === "yes" ||
@@ -481,45 +666,101 @@ export default function Positions() {
 						const yesValue = yesPrice !== null ? pv.shares * yesPrice : (isYes ? pv.currentValue : 0);
 						const noValue = noPrice !== null ? pv.shares * noPrice : (isYes ? 0 : pv.currentValue);
 
-						predictMatches.push({
-							market: {
-								_id: `predict-${pv.tokenId.slice(0, 12)}`,
-								displayName: pv.marketTitle,
-								questionId: pv.conditionId ?? pv.tokenId,
-							} as unknown as PredictionMarket,
-							yesBalance: isYes ? pv.shares : 0,
-							noBalance: isYes ? 0 : pv.shares,
-							yesPrice,
-							noPrice,
-							yesValue,
-							noValue,
-							totalValue: yesValue + noValue,
-							orders: [],
-							aggregates: {
-								Yes: {
-									totalSize: isYes ? pv.shares : 0,
-									totalValue: isYes ? (pv.cost ?? 0) : 0,
-									avgPrice: isYes ? pv.avgPrice : null,
-									count: 0,
-								},
-								No: {
-									totalSize: isYes ? 0 : pv.shares,
-									totalValue: isYes ? 0 : (pv.cost ?? 0),
-									avgPrice: isYes ? null : pv.avgPrice,
-									count: 0,
-								},
+					const predQid = `predict-${pv.tokenId.slice(0, 12)}`;
+					const predSide: "Yes" | "No" = isYes ? "Yes" : "No";
+					const predSyntheticOrder = (pv.shares > 0 && (pv.avgPrice || pv.cost))
+						? [buildSyntheticOrder(predQid, "Predict.fun", predSide, pv.shares, pv.avgPrice, pv.cost)]
+						: [];
+					predictMatches.push({
+						market: {
+							_id: predQid,
+							displayName: pv.marketTitle,
+							questionId: pv.conditionId ?? pv.tokenId,
+						} as unknown as PredictionMarket,
+						yesBalance: isYes ? pv.shares : 0,
+						noBalance: isYes ? 0 : pv.shares,
+						yesPrice,
+						noPrice,
+						yesValue,
+						noValue,
+						totalValue: yesValue + noValue,
+						orders: predSyntheticOrder,
+						aggregates: {
+							Yes: {
+								totalSize: isYes ? pv.shares : 0,
+								totalValue: isYes ? (pv.cost ?? 0) : 0,
+								avgPrice: isYes ? pv.avgPrice : null,
+								count: 0,
 							},
-							venue: "predictfun",
-							predictOutcomeLabelYes: isYes ? pv.outcome : undefined,
-							predictOutcomeLabelNo: isYes ? undefined : pv.outcome,
-						});
+							No: {
+								totalSize: isYes ? 0 : pv.shares,
+								totalValue: isYes ? 0 : (pv.cost ?? 0),
+								avgPrice: isYes ? null : pv.avgPrice,
+								count: 0,
+							},
+						},
+						venue: "predictfun",
+						predictOutcomeLabelYes: isYes ? pv.outcome : undefined,
+						predictOutcomeLabelNo: isYes ? undefined : pv.outcome,
+					});
 					}
 				}
 
-				return {
-					umbrella,
-					markets: [...activeMarkets, ...polyMatches, ...predictMatches],
-				};
+				const dflowMatches: MarketPosition[] = [];
+				for (const dv of dflowPositions) {
+				if (matchedDflowTokenIds.has(dv.tokenId)) continue;
+					const dflowTitle = dv.marketTitle?.toLowerCase() ?? "";
+					if (titlesMatchVenue(umbrella.displayName ?? "", dv.marketTitle ?? "")) {
+						matchedDflowTokenIds.add(dv.tokenId);
+						const isYes =
+							dv.outcome.toLowerCase() === "yes" ||
+							(dv.outcome.toLowerCase() !== "no" &&
+								dflowTitle.includes(dv.outcome.toLowerCase()));
+
+					const dflowQid = `dflow-${dv.tokenId.slice(0, 12)}`;
+					const dflowSide: "Yes" | "No" = isYes ? "Yes" : "No";
+					const dflowSyntheticOrder = (dv.shares > 0 && (dv.avgPrice || dv.cost))
+						? [buildSyntheticOrder(dflowQid, "DFlow", dflowSide, dv.shares, dv.avgPrice, dv.cost)]
+						: [];
+					dflowMatches.push({
+						market: {
+							_id: dflowQid,
+							displayName: dv.marketTitle,
+							questionId: dv.tokenId,
+						} as unknown as PredictionMarket,
+						yesBalance: isYes ? dv.shares : 0,
+						noBalance: isYes ? 0 : dv.shares,
+						yesPrice: isYes ? dv.currentPrice : null,
+						noPrice: isYes ? null : dv.currentPrice,
+						yesValue: isYes ? dv.currentValue : 0,
+						noValue: isYes ? 0 : dv.currentValue,
+						totalValue: dv.currentValue,
+						orders: dflowSyntheticOrder,
+						aggregates: {
+							Yes: {
+								totalSize: isYes ? dv.shares : 0,
+								totalValue: isYes ? (dv.cost ?? 0) : 0,
+								avgPrice: isYes ? dv.avgPrice : null,
+								count: 0,
+							},
+							No: {
+								totalSize: isYes ? 0 : dv.shares,
+								totalValue: isYes ? 0 : (dv.cost ?? 0),
+								avgPrice: isYes ? null : dv.avgPrice,
+								count: 0,
+							},
+						},
+						venue: "dflow",
+					});
+					}
+				}
+
+			const allMarkets = [...activeMarkets, ...polyMatches, ...predictMatches, ...dflowMatches];
+			const mergedMarkets = mergeMarketPositions(allMarkets);
+			return {
+				umbrella,
+				markets: mergedMarkets,
+			};
 			})
 			.filter((umbrella) => umbrella.markets.length > 0);
 
@@ -549,12 +790,17 @@ export default function Positions() {
 				_polyIcon: first.iconUrl,
 			} as unknown as Umbrella;
 
-			const markets: MarketPosition[] = positions.map((pv) => {
+			const rawMarkets: MarketPosition[] = positions.map((pv) => {
 				const isYes = pv.outcome.toLowerCase() === "yes" ||
 					(pv.outcome.toLowerCase() !== "no");
+				const qid = `poly-${pv.tokenId.slice(0, 12)}`;
+				const side: "Yes" | "No" = isYes ? "Yes" : "No";
+				const synthOrder = (pv.shares > 0 && (pv.avgPrice || pv.cost))
+					? [buildSyntheticOrder(qid, "Polymarket", side, pv.shares, pv.avgPrice, pv.cost)]
+					: [];
 				return {
 					market: {
-						_id: `poly-${pv.tokenId.slice(0, 12)}`,
+						_id: qid,
 						displayName: pv.marketTitle,
 						questionId: pv.conditionId,
 					} as unknown as PredictionMarket,
@@ -565,7 +811,7 @@ export default function Positions() {
 					yesValue: isYes ? pv.currentValue : 0,
 					noValue: isYes ? 0 : pv.currentValue,
 					totalValue: pv.currentValue,
-					orders: [],
+					orders: synthOrder,
 					aggregates: {
 						Yes: {
 							totalSize: isYes ? pv.shares : 0,
@@ -584,7 +830,7 @@ export default function Positions() {
 				};
 			});
 
-			polyUmbrellas.push({ umbrella: syntheticUmbrella, markets });
+			polyUmbrellas.push({ umbrella: syntheticUmbrella, markets: mergeMarketPositions(rawMarkets) });
 		}
 
 		const unmatchedPredict = predictPositions.filter(
@@ -611,13 +857,18 @@ export default function Positions() {
 				__v: 0,
 			} as unknown as Umbrella;
 
-			const markets: MarketPosition[] = positions.map((pv) => {
+			const rawMarkets: MarketPosition[] = positions.map((pv) => {
 				const isYes =
 					pv.outcome.toLowerCase() === "yes" ||
 					pv.outcome.toLowerCase() !== "no";
+				const qid = `predict-${pv.tokenId.slice(0, 12)}`;
+				const side: "Yes" | "No" = isYes ? "Yes" : "No";
+				const synthOrder = (pv.shares > 0 && (pv.avgPrice || pv.cost))
+					? [buildSyntheticOrder(qid, "Predict.fun", side, pv.shares, pv.avgPrice, pv.cost)]
+					: [];
 				return {
 					market: {
-						_id: `predict-${pv.tokenId.slice(0, 12)}`,
+						_id: qid,
 						displayName: pv.marketTitle,
 						questionId: pv.conditionId ?? pv.tokenId,
 					} as unknown as PredictionMarket,
@@ -628,7 +879,7 @@ export default function Positions() {
 					yesValue: isYes ? pv.currentValue : 0,
 					noValue: isYes ? 0 : pv.currentValue,
 					totalValue: pv.currentValue,
-					orders: [],
+					orders: synthOrder,
 					aggregates: {
 						Yes: {
 							totalSize: isYes ? pv.shares : 0,
@@ -649,10 +900,79 @@ export default function Positions() {
 				};
 			});
 
-			predictUmbrellas.push({ umbrella: syntheticUmbrella, markets });
+			predictUmbrellas.push({ umbrella: syntheticUmbrella, markets: mergeMarketPositions(rawMarkets) });
 		}
 
-		return [...levelUpUmbrellas, ...polyUmbrellas, ...predictUmbrellas];
+		// Unmatched DFlow positions become their own umbrella groups
+		const unmatchedDflow = dflowPositions.filter(
+			(dv) => !matchedDflowTokenIds.has(dv.tokenId)
+		);
+		const dflowByMarket = new Map<string, typeof unmatchedDflow>();
+		for (const dv of unmatchedDflow) {
+			const key = dv.marketTitle || dv.tokenId;
+			const arr = dflowByMarket.get(key) ?? [];
+			arr.push(dv);
+			dflowByMarket.set(key, arr);
+		}
+
+		const dflowUmbrellas: UmbrellaPositions[] = [];
+		for (const [, positions] of dflowByMarket) {
+			const first = positions[0];
+			const syntheticUmbrella = {
+				_id: `dflow-market-${first.tokenId.slice(0, 10)}`,
+				displayName: first.marketTitle,
+				children: [],
+				originalChildren: [],
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				__v: 0,
+			} as unknown as Umbrella;
+
+			const rawMarkets: MarketPosition[] = positions.map((dv) => {
+				const isYes =
+					dv.outcome.toLowerCase() === "yes" ||
+					dv.outcome.toLowerCase() !== "no";
+				const qid = `dflow-${dv.tokenId.slice(0, 12)}`;
+				const side: "Yes" | "No" = isYes ? "Yes" : "No";
+				const synthOrder = (dv.shares > 0 && (dv.avgPrice || dv.cost))
+					? [buildSyntheticOrder(qid, "DFlow", side, dv.shares, dv.avgPrice, dv.cost)]
+					: [];
+				return {
+					market: {
+						_id: qid,
+						displayName: dv.marketTitle,
+						questionId: dv.tokenId,
+					} as unknown as PredictionMarket,
+					yesBalance: isYes ? dv.shares : 0,
+					noBalance: isYes ? 0 : dv.shares,
+					yesPrice: isYes ? dv.currentPrice : null,
+					noPrice: isYes ? null : dv.currentPrice,
+					yesValue: isYes ? dv.currentValue : 0,
+					noValue: isYes ? 0 : dv.currentValue,
+					totalValue: dv.currentValue,
+					orders: synthOrder,
+					aggregates: {
+						Yes: {
+							totalSize: isYes ? dv.shares : 0,
+							totalValue: isYes ? (dv.cost ?? 0) : 0,
+							avgPrice: isYes ? dv.avgPrice : null,
+							count: 0,
+						},
+						No: {
+							totalSize: isYes ? 0 : dv.shares,
+							totalValue: isYes ? 0 : (dv.cost ?? 0),
+							avgPrice: isYes ? null : dv.avgPrice,
+							count: 0,
+						},
+					},
+					venue: "dflow" as VenueId,
+				};
+			});
+
+			dflowUmbrellas.push({ umbrella: syntheticUmbrella, markets: mergeMarketPositions(rawMarkets) });
+		}
+
+		return [...levelUpUmbrellas, ...polyUmbrellas, ...predictUmbrellas, ...dflowUmbrellas];
 	}, [
 		effectiveAccount,
 		umbrellas,
@@ -662,6 +982,7 @@ export default function Positions() {
 		allBooksPreview,
 		polyPositions,
 		predictPositions,
+		dflowPositions,
 	]);
 
 	// derive resolved winnings using dedicated resolved markets storage
@@ -865,6 +1186,53 @@ export default function Positions() {
 			if (markets.length > 0) resolved.push({ umbrella: syntheticUmbrella, markets });
 		}
 
+		// Append DFlow winnings
+		const dflowWinByMarket = new Map<string, typeof dflowWinnings>();
+		for (const dv of dflowWinnings) {
+			const key = dv.marketTitle || dv.tokenId;
+			const arr = dflowWinByMarket.get(key) ?? [];
+			arr.push(dv);
+			dflowWinByMarket.set(key, arr);
+		}
+		for (const [, positions] of dflowWinByMarket) {
+			const first = positions[0];
+			const syntheticUmbrella = {
+				_id: `dflow-win-${first.tokenId.slice(0, 10)}`,
+				displayName: first.marketTitle,
+				children: [],
+				originalChildren: [],
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				__v: 0,
+			} as unknown as Umbrella;
+
+			const markets: MarketPosition[] = positions.map((dv) => {
+				const isYes =
+					dv.outcome.toLowerCase() === "yes" ||
+					dv.outcome.toLowerCase() !== "no";
+				return {
+					market: {
+						_id: `dflow-win-${dv.tokenId.slice(0, 12)}`,
+						displayName: dv.marketTitle,
+						questionId: dv.tokenId,
+						resolvedOutcome: isYes ? "yes" : "no",
+						_venue: "dflow",
+					} as unknown as PredictionMarket,
+					yesBalance: isYes ? dv.shares : 0,
+					noBalance: isYes ? 0 : dv.shares,
+					yesPrice: null,
+					noPrice: null,
+					yesValue: 0,
+					noValue: 0,
+					totalValue: 0,
+					orders: [],
+					aggregates: { Yes: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 }, No: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 } },
+					venue: "dflow" as VenueId,
+				};
+			});
+			if (markets.length > 0) resolved.push({ umbrella: syntheticUmbrella, markets });
+		}
+
 		return resolved;
 	}, [
 		effectiveAccount,
@@ -875,6 +1243,7 @@ export default function Positions() {
 		predictWinnings,
 		polyWinnings,
 		predictMarketDetails,
+		dflowWinnings,
 	]);
 
 	// Calculate totals
@@ -903,7 +1272,7 @@ export default function Positions() {
 		const map: Record<string, { yesPrice: number | null; noPrice: number | null }> = {};
 		for (const up of umbrellaPositions) {
 			for (const mp of up.markets) {
-				if (mp.venue === "polymarket" || mp.venue === "predictfun") {
+				if (mp.venue === "polymarket" || mp.venue === "predictfun" || mp.venue === "dflow") {
 					map[mp.market._id] = {
 						yesPrice: mp.yesPrice,
 						noPrice: mp.noPrice,
@@ -953,6 +1322,21 @@ export default function Positions() {
 			predictOutcomeLabelNo: mp.predictOutcomeLabelNo,
 		})),
 	}));
+
+	const combinedOrders = useMemo(() => {
+		const synth: ProcessedOrder[] = [];
+		for (const up of umbrellaPositions) {
+			for (const mp of up.markets) {
+				const qid = mp.market._id || mp.market.questionId || (mp.market as any).marketId;
+				for (const order of mp.orders) {
+					if (order.venue && order.venue !== "LevelUp") {
+						synth.push({ ...order, questionId: qid });
+					}
+				}
+			}
+		}
+		return [...(orders || []).map((o) => o.venue ? o : { ...o, venue: "LevelUp" }), ...synth];
+	}, [orders, umbrellaPositions]);
 
 	// For Orders tab (all markets under umbrellas; OrdersView will filter to those that have open orders)
 	const umbrellaBalancesOrders = allUmbrellas.map(
@@ -1029,6 +1413,11 @@ export default function Positions() {
 			}
 		}
 
+		// Exclude active positions so they never leak into history
+		for (const pos of polyPositions) seen.add(pos.tokenId);
+		for (const pos of predictPositions) seen.add(pos.tokenId);
+		for (const pos of dflowPositions) seen.add(pos.tokenId);
+
 		// Polymarket trade history from activity API covers trades that dropped
 		// from the positions endpoint after redemption
 		const polyTrades = polyTradeHistoryQuery.data ?? [];
@@ -1042,8 +1431,22 @@ export default function Positions() {
 			});
 		}
 
+		// DFlow resolved positions
+		for (const pos of dflowWinnings) {
+			if (!seen.has(pos.tokenId)) {
+				seen.add(pos.tokenId);
+				items.push({ ...pos, outcomeResult: "WON", marketStatus: "RESOLVED" });
+			}
+		}
+		for (const pos of dflowHistory) {
+			if (!seen.has(pos.tokenId)) {
+				seen.add(pos.tokenId);
+				items.push(pos);
+			}
+		}
+
 		return items;
-	}, [predictWinnings, predictHistory, polyWinnings, polyHistory, polyTradeHistoryQuery.data]);
+	}, [predictWinnings, predictHistory, polyWinnings, polyHistory, polyTradeHistoryQuery.data, dflowWinnings, dflowHistory, polyPositions, predictPositions, dflowPositions]);
 
 	// Debug: venue history pipeline
 	useEffect(() => {
@@ -1160,12 +1563,13 @@ export default function Positions() {
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
 						cashLoading={usdcLoading}
-						positionsLoading={
-							loading ||
-							predictionLoading ||
-							userDataLoading ||
-							booksPreviewLoading
-						}
+					positionsLoading={
+						loading ||
+						predictionLoading ||
+						userDataLoading ||
+						booksPreviewLoading ||
+						!venueQueriesSettled
+					}
 						portfolioLoading={portfolioLoading}
 					/>
 
@@ -1185,217 +1589,209 @@ export default function Positions() {
 								<p className="error-message">{error}</p>
 							) : (
 								(() => {
-									const softLoading =
-										loading ||
-										predictionLoading ||
-										userDataLoading ||
-										booksPreviewLoading;
-									const hasPositions =
-										umbrellaPositions.length > 0;
-									const hasWinnings =
-										resolvedUmbrellaPositions.length > 0;
-									
-									// Each tab handles its own empty state independently
-									if (activeTab === "positions") {
-										return (
-											<>
-												{isDataFullyLoaded &&
-													resolvedUmbrellaPositions.length >
-														0 && (
-														<div className="mb-24">
-															<h3
-																className="mb-6 text-20 font-bold"
-																style={{
-																	color: "#ffffff",
-																	fontSize: 34,
-																}}
-															>
-																Winnings
-															</h3>
-															{(() => {
-																const transformedData =
-																	resolvedUmbrellaPositions.map(
-																		(
-																			up
-																		) => ({
-																			umbrella:
-																				up.umbrella,
-																			markets:
-																				up.markets.map(
-																					(
-																						mp
-																					) => {
-																						const outcome =
-																							String(
-																								(
-																									mp.market as any
-																								)
-																									.resolvedOutcome ||
-																									""
-																							).toLowerCase();
-																						const yes =
-																							outcome ===
-																							"yes"
-																								? mp.yesBalance.toString()
-																								: "0";
-																						const no =
-																							outcome ===
-																							"no"
-																								? mp.noBalance.toString()
-																								: "0";
-																						return {
-																							market: mp.market,
-																							yes,
-																							no,
-																						};
-																					}
-																				),
-																		})
-																	);
-																return !isMobile ? (
-																	<ResolvedPositionsTable
-																		umbrellaBalances={
-																			transformedData
-																		}
-																		toCentsString={
-																			toCentsString
-																		}
-																		softLoading={
-																			softLoading
-																		}
-																		onClaimSuccess={
-																			handleClaimSuccess
-																		}
-																	/>
-																) : (
-																	<ResolvedPositionsCardView
-																		umbrellaBalances={
-																			transformedData
-																		}
-																		toCentsString={
-																			toCentsString
-																		}
-																		softLoading={
-																			softLoading
-																		}
-																		onClaimSuccess={
-																			handleClaimSuccess
-																		}
-																	/>
-																);
-															})()}
-														</div>
-													)}
-												{isDataFullyLoaded &&
-													resolvedUmbrellaPositions.length >
-														0 && (
-														<h3
-															className="mb-6 text-20 font-bold"
-															style={{
-																color: "#ffffff",
-																fontSize: 34,
-																marginTop: 40,
-															}}
-														>
-															Positions
-														</h3>
-													)}
-												{/* Show positions table if user has active positions, otherwise show message */}
-												{hasPositions ? (
-													!isMobile ? (
-														<PositionsTableView
-															umbrellaBalances={
-																umbrellaBalancesPositions
-															}
-															aggregates={aggregates}
-															spentByQid={spentByQid}
-															returnsByQid={
-																returnsByQid
-															}
-															getCurrentPriceForSide={
-																getCurrentPriceForSide
-															}
-															toCentsString={
-																toCentsString
-															}
-															softLoading={
-																softLoading
-															}
-															orders={orders || []}
-														/>
-													) : (
-														<PositionsCardView
-															umbrellaBalances={
-																umbrellaBalancesPositions
-															}
-															aggregates={aggregates}
-															spentByQid={spentByQid}
-															returnsByQid={
-																returnsByQid
-															}
-															getCurrentPriceForSide={
-																getCurrentPriceForSide
-															}
-															toCentsString={
-																toCentsString
-															}
-															softLoading={
-																softLoading
-															}
-															orders={orders || []}
-														/>
-													)
-												) : (
-													<p className="text-body" style={{ color: '#888', marginTop: '16px' }}>
-														No current positions.
-													</p>
-												)}
-											</>
-										);
-									}
-								if (activeTab === "orders") {
-									return !isMobile ? (
-										<OrdersView
-											umbrellaBalances={
-												umbrellaBalancesOrders
-											}
-											orders={orders || []}
-											venueOrders={venueOrders}
-										/>
-									) : (
-										<OrdersCardView
-											umbrellaBalances={
-												umbrellaBalancesOrders
-											}
-											orders={orders || []}
-											venueOrders={venueOrders}
-										/>
+							const softLoading =
+								loading ||
+								predictionLoading ||
+								userDataLoading ||
+								booksPreviewLoading ||
+								!venueQueriesSettled;
+
+								if (softLoading) {
+									return <PortfolioSkeleton />;
+								}
+
+								const hasPositions =
+									umbrellaPositions.length > 0;
+								
+								if (activeTab === "positions") {
+									return (
+										<>
+											{resolvedUmbrellaPositions.length >
+												0 && (
+												<div className="mb-24">
+													<h3
+														className="mb-6 text-20 font-bold"
+														style={{
+															color: "#ffffff",
+															fontSize: 34,
+														}}
+													>
+														Winnings
+													</h3>
+													{(() => {
+														const transformedData =
+															resolvedUmbrellaPositions.map(
+																(
+																	up
+																) => ({
+																	umbrella:
+																		up.umbrella,
+																	markets:
+																		up.markets.map(
+																			(
+																				mp
+																			) => {
+																				const outcome =
+																					String(
+																						(
+																							mp.market as any
+																						)
+																							.resolvedOutcome ||
+																							""
+																					).toLowerCase();
+																				const yes =
+																					outcome ===
+																					"yes"
+																						? mp.yesBalance.toString()
+																						: "0";
+																				const no =
+																					outcome ===
+																					"no"
+																						? mp.noBalance.toString()
+																						: "0";
+																				return {
+																					market: mp.market,
+																					yes,
+																					no,
+																				};
+																			}
+																		),
+																})
+															);
+														return !isMobile ? (
+															<ResolvedPositionsTable
+																umbrellaBalances={
+																	transformedData
+																}
+																toCentsString={
+																	toCentsString
+																}
+																softLoading={false}
+																onClaimSuccess={
+																	handleClaimSuccess
+																}
+															/>
+														) : (
+															<ResolvedPositionsCardView
+																umbrellaBalances={
+																	transformedData
+																}
+																toCentsString={
+																	toCentsString
+																}
+																softLoading={false}
+																onClaimSuccess={
+																	handleClaimSuccess
+																}
+															/>
+														);
+													})()}
+												</div>
+											)}
+											{resolvedUmbrellaPositions.length >
+												0 && (
+												<h3
+													className="mb-6 text-20 font-bold"
+													style={{
+														color: "#ffffff",
+														fontSize: 34,
+														marginTop: 40,
+													}}
+												>
+													Positions
+												</h3>
+											)}
+											{hasPositions ? (
+												!isMobile ? (
+												<PositionsTableView
+													umbrellaBalances={
+														umbrellaBalancesPositions
+													}
+													aggregates={aggregates}
+													spentByQid={spentByQid}
+													returnsByQid={
+														returnsByQid
+													}
+													getCurrentPriceForSide={
+														getCurrentPriceForSide
+													}
+													toCentsString={
+														toCentsString
+													}
+													softLoading={false}
+													orders={combinedOrders}
+												/>
+											) : (
+												<PositionsCardView
+													umbrellaBalances={
+														umbrellaBalancesPositions
+													}
+													aggregates={aggregates}
+													spentByQid={spentByQid}
+													returnsByQid={
+														returnsByQid
+													}
+													getCurrentPriceForSide={
+															getCurrentPriceForSide
+														}
+														toCentsString={
+															toCentsString
+														}
+													softLoading={false}
+													orders={combinedOrders}
+												/>
+											)
+										) : (
+											<p className="text-body" style={{ color: '#888', marginTop: '16px' }}>
+												No current positions.
+												</p>
+											)}
+										</>
 									);
 								}
+							if (activeTab === "orders") {
 								return !isMobile ? (
-									<HistoryView
+									<OrdersView
 										umbrellaBalances={
-											umbrellaBalancesPositions
+											umbrellaBalancesOrders
 										}
-										returnsByQid={returnsByQid}
 										orders={orders || []}
-										resolvedMarketsByUmbrella={
-											resolvedMarketsByUmbrella
-										}
-										venueHistory={venueHistory}
+										venueOrders={venueOrders}
 									/>
 								) : (
-									<HistoryCardView
-										returnsByQid={returnsByQid}
-										orders={orders || []}
-										resolvedMarketsByUmbrella={
-											resolvedMarketsByUmbrella
+									<OrdersCardView
+										umbrellaBalances={
+											umbrellaBalancesOrders
 										}
-										venueHistory={venueHistory}
+										orders={orders || []}
+										venueOrders={venueOrders}
 									/>
 								);
-								})()
-							)}
+							}
+						return !isMobile ? (
+							<HistoryView
+								umbrellaBalances={
+									umbrellaBalancesPositions
+								}
+								returnsByQid={returnsByQid}
+								orders={combinedOrders}
+								resolvedMarketsByUmbrella={
+									resolvedMarketsByUmbrella
+								}
+								venueHistory={venueHistory}
+							/>
+						) : (
+							<HistoryCardView
+								returnsByQid={returnsByQid}
+								orders={combinedOrders}
+								resolvedMarketsByUmbrella={
+									resolvedMarketsByUmbrella
+								}
+								venueHistory={venueHistory}
+							/>
+							);
+							})()
+						)}
 						</>
 					)}
 				</div>

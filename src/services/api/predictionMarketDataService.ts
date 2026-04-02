@@ -47,6 +47,7 @@ export interface PandaScoreMatch {
 	name: string;
 	status?: string;
 	scheduled_at?: string | null;
+	winner?: PandaMatchTeam | null;
 	tournament?: {
 		id: number;
 		name: string;

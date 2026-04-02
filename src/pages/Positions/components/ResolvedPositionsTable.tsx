@@ -206,7 +206,7 @@ export default function ResolvedPositionsTable({
 									resolvedOutcome === "yes" ? "Yes" : "No";
 								const parts = title
 									.split(/\s*vs\.?\s*/i)
-									.map((s: string) => s.trim())
+									.map((s: string) => s.replace(/^[^:]+:\s*/, "").trim())
 									.filter(Boolean);
 								const isVs = parts.length === 2;
 								const yesColor = "#16a34a";
@@ -255,6 +255,15 @@ export default function ResolvedPositionsTable({
 													</span>
 												</>
 											)}
+											<span style={{ marginLeft: 6, fontSize: 11, color: "#666", fontWeight: 400 }}>
+												({(market as any)._venue === "polymarket"
+													? "Polymarket"
+													: (market as any)._venue === "predictfun"
+														? "Predict.fun"
+														: (market as any)._venue === "dflow"
+															? "DFlow"
+															: "LevelUp"})
+											</span>
 										</div>
 										<div
 											style={{
@@ -269,7 +278,7 @@ export default function ResolvedPositionsTable({
 														: undefined
 												}
 											>
-												{winningShares}
+												{parseFloat(winningShares.toFixed(2))}
 											</span>
 										</div>
 										<div

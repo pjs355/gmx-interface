@@ -47,6 +47,10 @@ export interface MatchedMarket {
 	pandaOddsB?: number | null;
 	pandaOddsTimestamp?: number | null;
 	marketStatus?: "active" | "suspended" | "settled" | null;
+	winner?: {
+		name: string;
+		acronym?: string;
+	};
 	polyPriceA?: OrderbookData | null;
 	polyPriceB?: OrderbookData | null;
 	/** When set on the wire, used for `createAndPostOrder` options instead of a round-trip. */

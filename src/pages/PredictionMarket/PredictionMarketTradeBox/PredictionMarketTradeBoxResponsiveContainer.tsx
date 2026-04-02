@@ -88,7 +88,13 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		return Math.max(...orderbook.bids.map((b: any) => b.price));
 	}, [orderbook]);
 
-	// Flip prices based on buy/sell side (Predict.fun: per-outcome monitor hints are native books)
+	// For polymarket/dflow, the effective orderbook is the selected outcome's native
+	// book.  When "no" is selected, swap the display formulas so the NO button shows
+	// the book directly while YES shows the 1−p complement.
+	const bookRepresentsNo =
+		(state.tradingVenue === "polymarket" || state.tradingVenue === "dflow") &&
+		state.selectedPosition === "no";
+
 	const yesPriceCents = useMemo(() => {
 		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.yes) {
 			const h = predictVenueBookHints.yes;
@@ -102,16 +108,23 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
 		}
+		if (bookRepresentsNo) {
+			return state.side === "buy"
+				? calcCents(bestBid === null ? null : 1 - (bestBid as any))
+				: calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
+		}
 		return state.side === "buy"
 			? calcCents(bestAsk as any)
 			: calcCents(bestBid as any);
 	}, [
 		state.tradingVenue,
 		state.side,
+		state.selectedPosition,
 		predictVenueBookHints,
 		bestAsk,
 		bestBid,
 		calcCents,
+		bookRepresentsNo,
 	]);
 
 	const noPriceCents = useMemo(() => {
@@ -127,16 +140,23 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
 		}
+		if (bookRepresentsNo) {
+			return state.side === "buy"
+				? calcCents(bestAsk as any)
+				: calcCents(bestBid as any);
+		}
 		return state.side === "buy"
 			? calcCents(bestBid === null ? null : 1 - (bestBid as any))
 			: calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
 	}, [
 		state.tradingVenue,
 		state.side,
+		state.selectedPosition,
 		predictVenueBookHints,
 		bestBid,
 		bestAsk,
 		calcCents,
+		bookRepresentsNo,
 	]);
 
 	// Dynamic color logic for single VS markets
