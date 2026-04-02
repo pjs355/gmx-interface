@@ -44,7 +44,7 @@ function numFromApi(v: unknown): number {
 
 /** Shares (outcome tokens) for a TRADE or REDEEM activity row */
 function activityShares(row: PolymarketActivityRow): number {
-	const r = row as Record<string, unknown>;
+	const r = row as unknown as Record<string, unknown>;
 	return (
 		numFromApi(r.size) ||
 		numFromApi(r.tokens) ||
@@ -54,7 +54,7 @@ function activityShares(row: PolymarketActivityRow): number {
 
 /** USDC moved in the activity (spent/received/redeemed) */
 function activityUsdc(row: PolymarketActivityRow): number {
-	const r = row as Record<string, unknown>;
+	const r = row as unknown as Record<string, unknown>;
 	return (
 		numFromApi(r.usdcSize) ||
 		numFromApi(r.cash) ||
@@ -140,11 +140,11 @@ async function fetchPolymarketTradeHistory(
 		if (!agg) {
 			agg = {
 				conditionId: row.conditionId,
-				asset: row.asset,
-				title: row.title,
+				asset: row.asset ?? "",
+				title: row.title ?? "",
 				outcome: row.outcome,
-				eventSlug: row.eventSlug,
-				icon: row.icon,
+				eventSlug: row.eventSlug ?? "",
+				icon: row.icon ?? "",
 				totalBought: 0,
 				totalSold: 0,
 				totalSpent: 0,
@@ -156,13 +156,13 @@ async function fetchPolymarketTradeHistory(
 			byKey.set(key, agg);
 		}
 		if (row.side === "BUY") {
-			agg.totalBought += tok;
-			agg.totalSpent += usd;
-			agg.netShares += tok;
+			agg!.totalBought += tok;
+			agg!.totalSpent += usd;
+			agg!.netShares += tok;
 		} else {
-			agg.totalSold += tok;
-			agg.totalReceived += usd;
-			agg.netShares -= tok;
+			agg!.totalSold += tok;
+			agg!.totalReceived += usd;
+			agg!.netShares -= tok;
 		}
 	}
 

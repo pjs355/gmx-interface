@@ -116,7 +116,7 @@ export default function MarketQuestions({
 		async function loadTags() {
 			try {
 				const token = await getAccessToken();
-				const tags = await tagService.fetchAllTags(token || undefined);
+				const tags = await tagService.fetchAllTags();
 				if (mounted) setAvailableTags(tags);
 			} catch (err) {
 				console.error("error", err);

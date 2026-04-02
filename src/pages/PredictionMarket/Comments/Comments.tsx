@@ -61,11 +61,7 @@ function buildTokenOptions(markets: PredictionMarket[]): TokenOption[] {
 		if (typeof yesToken === "string" && yesToken.length > 0) {
 			options.push({
 				value: yesToken,
-				label: t({
-					id: "comments.option.yes",
-					message: "Yes on {market}",
-					values: { market: marketLabel },
-				}),
+				label: t`Yes on ${marketLabel}`,
 				marketId: getMarketIdentifier(market),
 				side: "yes",
 			});
@@ -73,11 +69,7 @@ function buildTokenOptions(markets: PredictionMarket[]): TokenOption[] {
 		if (typeof noToken === "string" && noToken.length > 0) {
 			options.push({
 				value: noToken,
-				label: t({
-					id: "comments.option.no",
-					message: "No on {market}",
-					values: { market: marketLabel },
-				}),
+				label: t`No on ${marketLabel}`,
 				marketId: getMarketIdentifier(market),
 				side: "no",
 			});

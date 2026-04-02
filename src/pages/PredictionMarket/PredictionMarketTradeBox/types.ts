@@ -1,6 +1,6 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import type { OrderbookSnapshot } from "lib/orderbookService";
-import type { OrderExecutionResult } from "lib/predictionMarketService";
+import type { OrderbookSnapshot } from "@/services/api/orderbookService";
+import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
 
 export type TradingVenue = "levelup" | "polymarket" | "predictfun" | "dflow";
 

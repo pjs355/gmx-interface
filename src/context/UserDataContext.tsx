@@ -93,8 +93,8 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		try {
 			mixpanelIdentify(user.id);
 			
-			const email = user.email?.address || user.google?.email || user.twitter?.email || null;
-			const name = user.name || user.google?.name || user.twitter?.name || null;
+			const email = user.email?.address || user.google?.email || (user.twitter as any)?.email || null;
+			const name = (user as any).name || user.google?.name || (user.twitter as any)?.name || null;
 			
 			mixpanelPeopleSet({
 				$name: name || undefined,

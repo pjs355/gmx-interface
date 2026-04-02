@@ -1,4 +1,4 @@
-import type { OrderbookSnapshot } from "lib/orderbookService";
+import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { TestScenario } from "./TradeBoxTestRunner";
 
 /**

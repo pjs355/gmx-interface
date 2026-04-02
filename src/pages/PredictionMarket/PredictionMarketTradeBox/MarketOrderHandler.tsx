@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { OrderbookSnapshot } from 'lib/orderbookService';
+import type { OrderbookSnapshot } from '@/services/api/orderbookService';
 import type { MarketOrderCalculation } from './types';
 
 export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {

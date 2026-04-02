@@ -182,8 +182,8 @@ export function RPGPanel({ userImageUrl }: RPGPanelProps) {
 		const email =
 			user?.email?.address ||
 			user?.google?.email ||
-			user?.twitter?.email ||
-			user?.discord?.email ||
+			(user?.twitter as any)?.email ||
+			(user?.discord as any)?.email ||
 			"";
 
 		if (email && email.length > 0) {

@@ -43,7 +43,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 					typeof getAccessToken === "function"
 						? await getAccessToken()
 						: undefined;
-				const tags = await tagService.fetchAllTags(token || undefined);
+				const tags = await tagService.fetchAllTags();
 				if (mounted) {
 					setAvailableTags(tags);
 				}

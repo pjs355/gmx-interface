@@ -20,7 +20,7 @@ export async function signTypedData({ signer, domain, types, typedData }: SignTy
   // filter inputs
   for (const [key, value] of Object.entries(domain)) {
     if (value === undefined) {
-      delete domain[key];
+      delete (domain as Record<string, unknown>)[key];
     }
   }
 

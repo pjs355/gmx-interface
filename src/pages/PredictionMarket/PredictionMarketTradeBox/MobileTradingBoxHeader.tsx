@@ -23,6 +23,7 @@ export default function MobileTradingBoxHeader({
   onSideChange,
   onPositionChange,
   onAmountChange,
+  onOrderTypeChange,
   onTrade,
   buttonState
 }: MobileTradingBoxHeaderProps) {

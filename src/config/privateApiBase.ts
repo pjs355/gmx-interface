@@ -29,7 +29,7 @@ import { API_URL_CONFIG, getPredictionApiBaseUrl } from "@/config/predictionApiB
  */
 export function isAmsterdamPrivateApiProxyEnabled(): boolean {
 	const v = import.meta.env.VITE_POLYMARKET_CLOB_PROXY;
-	return v === true || String(v ?? "").trim() === "true";
+	return String(v ?? "").trim() === "true";
 }
 
 /** Predict.fun: only order POST may use the Amsterdam tunnel. */

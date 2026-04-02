@@ -32,6 +32,7 @@ export interface Umbrella {
 	streamUrl?: string;
 	streamEnabled?: boolean;
 	children: UmbrellaQuestion[];
+	originalChildren?: UmbrellaQuestion[];
 	createdAt: string;
 	updatedAt: string;
 	__v: number;

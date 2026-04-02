@@ -1,4 +1,5 @@
-import { ChainId } from "config/chains";
+import { CHAIN_ID } from "config/chains";
+type ChainId = typeof CHAIN_ID;
 import { SELECTED_NETWORK_LOCAL_STORAGE_KEY } from "config/localStorage";
 import { UncheckedJsonRpcSigner } from "@/services/rpc/UncheckedJsonRpcSigner";
 import { base } from "viem/chains";

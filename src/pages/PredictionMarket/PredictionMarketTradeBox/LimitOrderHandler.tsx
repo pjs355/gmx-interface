@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { OrderbookSnapshot } from 'lib/orderbookService';
+import type { OrderbookSnapshot } from '@/services/api/orderbookService';
 
 export function useLimitOrderHandler(orderbook: OrderbookSnapshot | null) {
   // Validate limit order parameters

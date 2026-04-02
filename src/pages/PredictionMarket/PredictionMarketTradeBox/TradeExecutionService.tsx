@@ -363,7 +363,7 @@ export function useTradeExecutionService() {
 					await predictionMarketService.submitOrderToAPI(
 						signedOrder,
 						params.marketId,
-						accessToken,
+						accessToken ?? undefined,
 						identityToken || undefined
 					);
 

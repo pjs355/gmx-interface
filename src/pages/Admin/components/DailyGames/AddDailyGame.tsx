@@ -36,7 +36,7 @@ export default function AddDailyGame({
 					typeof getAccessToken === "function"
 						? await getAccessToken()
 						: undefined;
-				const tags = await tagService.fetchAllTags(token || undefined);
+				const tags = await tagService.fetchAllTags();
 				if (mounted) {
 					setAvailableTags(tags);
 					// Find and auto-select the "daily" tag by slug

@@ -7,6 +7,7 @@ import RulesSection from "components/RulesSection/RulesSection";
 import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
 import { EsportsVenueBooksPanel } from "@/components/EsportsVenueBooksPanel/EsportsVenueBooksPanel";
+import { ExchangePriceChart } from "./ExchangePriceChart";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getMarketId } from "./utils";
@@ -180,29 +181,33 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						) : (
 							<ChartSkeleton />
 						)}
-					</div>
+				</div>
 
-					<div className="orderbook-section">
-						{hasQuestions && orderbooksReady ? (
-							orderbookColumnContent
-						) : (
-							<>
-								<OrderbookSkeleton />
-								<OrderbookSkeleton />
-							</>
-						)}
-					</div>
+				{activeMarket?.conditionId && (
+					<ExchangePriceChart conditionId={activeMarket.conditionId} />
+				)}
 
-					{/* Comments Section */}
-					{umbrella && (
-						<Comments
-							umbrellaId={umbrella._id}
-							markets={sortedQuestions as PredictionMarket[]}
-						/>
+				<div className="orderbook-section">
+					{hasQuestions && orderbooksReady ? (
+						orderbookColumnContent
+					) : (
+						<>
+							<OrderbookSkeleton />
+							<OrderbookSkeleton />
+						</>
 					)}
 				</div>
 
-				<div className="right-panel">
+				{/* Comments Section */}
+				{umbrella && (
+					<Comments
+						umbrellaId={umbrella._id}
+						markets={sortedQuestions as PredictionMarket[]}
+					/>
+				)}
+			</div>
+
+			<div className="right-panel">
 					{hasQuestions && orderbooksReady && activeMarket ? (
 						<PredictionMarketTradeBox
 							market={
@@ -230,7 +235,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 			{/* Mobile Layout */}
 			<div className="mobile-layout">
-				{showStream && (
+			{showStream && (
 					<div className="stream-section-mobile">
 						<StreamEmbed streamUrl={streamUrl} height="360" />
 					</div>
@@ -267,6 +272,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						<ChartSkeleton />
 					)}
 				</div>
+
+				{activeMarket?.conditionId && (
+					<ExchangePriceChart conditionId={activeMarket.conditionId} />
+				)}
 
 				<div className="orderbook-section-mobile">
 					{hasQuestions && orderbooksReady ? (

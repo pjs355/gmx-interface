@@ -55,7 +55,7 @@ export async function runBatchTestOrders(args: {
 			try {
 				// eslint-disable-next-line no-console
 				console.log("🧪 Submitting test order:", params);
-				const res = await executeTrade(params, undefined);
+				const res = await executeTrade(params as any, undefined);
 				if (!res?.success) {
 					// eslint-disable-next-line no-console
 					console.warn("⚠️ Test order failed:", res?.error);

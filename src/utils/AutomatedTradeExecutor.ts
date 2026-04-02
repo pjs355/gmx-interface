@@ -1,7 +1,7 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import type { OrderbookSnapshot } from "lib/orderbookService";
+import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { TestScenario } from "./TradeBoxTestRunner";
-import { predictionMarketService } from "lib/predictionMarketService";
+import { predictionMarketService } from "@/services/api/predictionMarketService";
 import { EXCHANGE_ADDRESS } from "@/config/addresses";
 
 /**
