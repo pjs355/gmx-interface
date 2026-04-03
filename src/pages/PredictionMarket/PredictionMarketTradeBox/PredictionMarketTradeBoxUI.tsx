@@ -24,11 +24,18 @@ const calculateOrderbookPrices = (orderbook: any) => {
   return { bestAsk, bestBid };
 };
 
+interface StableButtonPrices {
+  yesBestAsk: number | null; yesBestBid: number | null;
+  noBestAsk: number | null; noBestBid: number | null;
+}
+
 interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   /** Book-walk functions from the parent's single useMarketOrderHandler instance. */
   calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
   getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
   state: TradeBoxState;
+  /** Position-independent prices for button labels (external venues only). */
+  stableButtonPrices?: StableButtonPrices | null;
   onPositionChange: (position: 'yes' | 'no') => void;
   onAmountChange: (amount: string) => void;
   onPriceChange: (price: string) => void;
@@ -70,6 +77,7 @@ const venueDropdownOptions = [
 export default function PredictionMarketTradeBoxUI({
   market,
   orderbook,
+  stableButtonPrices,
   state,
   onPositionChange,
   onAmountChange,
@@ -122,24 +130,29 @@ export default function PredictionMarketTradeBoxUI({
     return Math.round(value * 100).toString();
   };
 
-  // Flip prices based on buy/sell side:
-  // - BUY: YES shows bestAsk (what you pay), NO shows (1 - bestBid) (what you pay)
-  // - SELL: YES shows bestBid (what you receive), NO shows (1 - bestAsk) (what you receive)
-  // Predict.fun: monitor hints are per-outcome native books (no 1−p complement between legs).
-  const yesPrice =
-    tradingVenue === "predictfun" && yesHintPrices
-      ? side === "buy"
-        ? yesHintPrices.bestAsk
-        : yesHintPrices.bestBid
-      : side === 'buy' ? bestAsk : bestBid;
-  const noPrice =
-    tradingVenue === "predictfun" && noHintPrices
-      ? side === "buy"
-        ? noHintPrices.bestAsk
-        : noHintPrices.bestBid
-      : side === 'buy'
-    ? (bestBid === null ? null : 1 - bestBid)
-    : (bestAsk === null ? null : 1 - bestAsk);
+  // Button label prices: use stableButtonPrices (position-independent) for external
+  // venues, fall back to effective orderbook for LevelUp.
+  // BUY: shows bestAsk (cost to buy), SELL: shows bestBid (proceeds from selling).
+  const yesPrice = (() => {
+    if (tradingVenue === "predictfun" && yesHintPrices) {
+      return side === "buy" ? yesHintPrices.bestAsk : yesHintPrices.bestBid;
+    }
+    if (stableButtonPrices) {
+      return side === "buy" ? stableButtonPrices.yesBestAsk : stableButtonPrices.yesBestBid;
+    }
+    return side === "buy" ? bestAsk : bestBid;
+  })();
+  const noPrice = (() => {
+    if (tradingVenue === "predictfun" && noHintPrices) {
+      return side === "buy" ? noHintPrices.bestAsk : noHintPrices.bestBid;
+    }
+    if (stableButtonPrices) {
+      return side === "buy" ? stableButtonPrices.noBestAsk : stableButtonPrices.noBestBid;
+    }
+    return side === "buy"
+      ? (bestBid === null ? null : 1 - bestBid)
+      : (bestAsk === null ? null : 1 - bestAsk);
+  })();
   
   // Format with ¢ only when price exists, otherwise just "--"
   const yesPriceCents = yesPrice !== null ? `${toCentsString(yesPrice)}¢` : "--";
@@ -195,19 +208,20 @@ export default function PredictionMarketTradeBoxUI({
 
   // Derive team labels conditionally based on market title and umbrella having a single market
   const { yesTeamLabel, noTeamLabel } = useMemo(() => {
-    // If it's an Over/Under market, use Over/Under labels
     if (overUnderMatch) {
       return { yesTeamLabel: 'Over', noTeamLabel: 'Under' };
     }
-    
+    const isSingle = (market as any)?.umbrellaChildrenCount === 1;
+    if (!isSingle) return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
+
     const title = (market?.displayName || (market as any)?.question || '').trim();
-    if (!title) return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-    if (parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1) {
-      return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
-    }
-    return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-  }, [market?.displayName, (market as any)?.question, (market as any)?.umbrellaChildrenCount, overUnderMatch]);
+    const tryVs = (s: string) => {
+      if (!s) return null;
+      const parts = s.split(/\s*vs\.?\s*/i).map((p: string) => p.trim()).filter(Boolean);
+      return parts.length === 2 ? { yesTeamLabel: parts[0], noTeamLabel: parts[1] } : null;
+    };
+    return tryVs(title) || tryVs(((market as any)?.umbrellaDisplayName || '').trim()) || { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
+  }, [market?.displayName, (market as any)?.question, (market as any)?.umbrellaChildrenCount, (market as any)?.umbrellaDisplayName, overUnderMatch]);
 
   // Transform the display title for Over/Under markets
   const displayMarketTitle = useMemo(() => {

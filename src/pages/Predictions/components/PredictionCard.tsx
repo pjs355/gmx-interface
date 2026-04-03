@@ -448,25 +448,15 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		if (!isEsportsUmbrella) {
 			return result;
 		}
-		const segments = umbrella.displayName.split("-").map((segment) => {
-			return segment.trim();
-		});
-		if (segments.length > 0) {
-			const primary = segments[0];
-			if (primary.length > 0) {
-				result.headline = primary;
+		const lastDash = umbrella.displayName.lastIndexOf(" - ");
+		if (lastDash !== -1) {
+			const teams = umbrella.displayName.slice(0, lastDash).trim();
+			const marketType = umbrella.displayName.slice(lastDash + 3).trim();
+			if (teams.length > 0) {
+				result.headline = teams;
 			}
-		}
-		if (segments.length > 1) {
-			const remaining: string[] = [];
-			for (let index = 1; index < segments.length; index += 1) {
-				const candidate = segments[index];
-				if (candidate.length > 0) {
-					remaining.push(candidate);
-				}
-			}
-			if (remaining.length > 0) {
-				result.subtitle = remaining.join(" - ");
+			if (marketType.length > 0) {
+				result.subtitle = marketType;
 			}
 		}
 		return result;

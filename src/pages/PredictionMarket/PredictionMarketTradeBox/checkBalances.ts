@@ -60,7 +60,6 @@ export function useYesNoBalances(market: {
 			const cachedNo = balanceCache.get(noKey);
 			const yesBal = cachedYes ? Number(cachedYes) : 0;
 			const noBal = cachedNo ? Number(cachedNo) : 0;
-			console.log(`No Balance for Tokens`);
 			setYesBalance(yesBal);
 			setNoBalance(noBal);
 		}

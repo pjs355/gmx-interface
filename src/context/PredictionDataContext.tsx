@@ -18,8 +18,8 @@ import { usePrivy } from "@privy-io/react-auth";
 type MarketLite = any;
 
 type BookPreview = {
-	lowestAsk: number | null;
-	highestBid: number | null;
+	lowestAskA: number | null;
+	lowestAskB: number | null;
 };
 
 type PredictionDataContextValue = {
@@ -375,8 +375,8 @@ export function PredictionDataProvider({
 							const qId = item.questionId;
 							if (qId) {
 								previewMap[qId] = {
-									lowestAsk: item.lowestAsk ?? null,
-									highestBid: item.highestBid ?? null,
+									lowestAskA: item.lowestAskA ?? null,
+									lowestAskB: item.lowestAskB ?? null,
 								};
 							}
 						});

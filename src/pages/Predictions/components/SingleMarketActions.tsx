@@ -24,12 +24,8 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const questionId = question.questionId;
 	const preview = questionId ? allBooksPreview[questionId] : undefined;
 
-	// Use preview data for prices (lowestAsk = Yes price, highestBid for No calculation)
-	const yesPrice = preview?.lowestAsk;
-	const noPrice =
-		preview?.highestBid !== null && preview?.highestBid !== undefined
-			? 1 - preview.highestBid
-			: null;
+	const yesPrice = preview?.lowestAskA ?? null;
+	const noPrice = preview?.lowestAskB ?? null;
 
 	const yesPriceCents =
 		yesPrice !== null && yesPrice !== undefined
@@ -143,10 +139,8 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			? Math.round(betAmount / yesPrice)
 			: 0;
 	const noPayout =
-		preview?.highestBid !== null &&
-		preview?.highestBid !== undefined &&
-		preview.highestBid < 1
-			? Math.round(betAmount / (1 - preview.highestBid))
+		noPrice !== null && noPrice > 0
+			? Math.round(betAmount / noPrice)
 			: 0;
 	return (
 		<div className="single-market-actions">

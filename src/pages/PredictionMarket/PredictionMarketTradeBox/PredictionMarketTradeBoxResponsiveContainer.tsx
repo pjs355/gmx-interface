@@ -17,9 +17,15 @@ import type {
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import Button from "components/Button/Button";
 
+export interface StableButtonPrices {
+	yesBestAsk: number | null; yesBestBid: number | null;
+	noBestAsk: number | null; noBestBid: number | null;
+}
+
 interface PredictionMarketTradeBoxResponsiveContainerProps
 	extends TradeBoxProps {
 	state: TradeBoxState;
+	stableButtonPrices?: StableButtonPrices | null;
 	onPositionChange: (position: "yes" | "no") => void;
 	onAmountChange: (amount: string) => void;
 	onPriceChange: (price: string) => void;
@@ -50,6 +56,7 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 export default function PredictionMarketTradeBoxResponsiveContainer({
 	market,
 	orderbook,
+	stableButtonPrices,
 	state,
 	onPositionChange,
 	onAmountChange,
@@ -175,32 +182,24 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 
 	const { yesTeamLabel: mobileYesLabel, noTeamLabel: mobileNoLabel } =
 		useMemo(() => {
-			// If it's an Over/Under market, use Over/Under labels
 			if (overUnderMatch) {
 				return { yesTeamLabel: "Over", noTeamLabel: "Under" };
 			}
-			
-			const title = (
-				market?.displayName ||
-				(market as any)?.question ||
-				""
-			).trim();
-			if (!title) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-			const parts = title
-				.split(/\s*vs\.?\s*/i)
-				.map((s: string) => s.trim())
-				.filter(Boolean);
-			if (
-				parts.length === 2 &&
-				(market as any)?.umbrellaChildrenCount === 1
-			) {
-				return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
-			}
-			return { yesTeamLabel: "Yes", noTeamLabel: "No" };
+			const isSingle = (market as any)?.umbrellaChildrenCount === 1;
+			if (!isSingle) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
+
+			const tryVs = (s: string) => {
+				if (!s) return null;
+				const parts = s.split(/\s*vs\.?\s*/i).map((p: string) => p.trim()).filter(Boolean);
+				return parts.length === 2 ? { yesTeamLabel: parts[0], noTeamLabel: parts[1] } : null;
+			};
+			const title = (market?.displayName || (market as any)?.question || "").trim();
+			return tryVs(title) || tryVs(((market as any)?.umbrellaDisplayName || "").trim()) || { yesTeamLabel: "Yes", noTeamLabel: "No" };
 		}, [
 			market?.displayName,
 			(market as any)?.question,
 			(market as any)?.umbrellaChildrenCount,
+			(market as any)?.umbrellaDisplayName,
 			overUnderMatch,
 		]);
 
@@ -236,26 +235,27 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				data-qa="prediction-tradebox"
 			>
 				{executionGateBanner}
-			<PredictionMarketTradeBoxUI
-				market={market}
-				orderbook={orderbook}
-				state={state}
-				onPositionChange={onPositionChange}
-				onAmountChange={onAmountChange}
-				onPriceChange={onPriceChange}
-				onTradingVenueChange={onTradingVenueChange}
-				onOrderTypeChange={onOrderTypeChange}
-				onSideChange={onSideChange}
-				polymarketVenueHint={polymarketVenueHint}
-				predictVenueHint={predictVenueHint}
-				predictVenueBookHints={predictVenueBookHints}
-				dflowVenueHint={dflowVenueHint}
-				onTrade={onTrade}
-				buttonState={buttonState}
-				approvalState={approvalState}
-				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
-				getEffectivePrice={getEffectivePrice}
-			/>
+		<PredictionMarketTradeBoxUI
+			market={market}
+			orderbook={orderbook}
+			stableButtonPrices={stableButtonPrices}
+			state={state}
+			onPositionChange={onPositionChange}
+			onAmountChange={onAmountChange}
+			onPriceChange={onPriceChange}
+			onTradingVenueChange={onTradingVenueChange}
+			onOrderTypeChange={onOrderTypeChange}
+			onSideChange={onSideChange}
+			polymarketVenueHint={polymarketVenueHint}
+			predictVenueHint={predictVenueHint}
+			predictVenueBookHints={predictVenueBookHints}
+			dflowVenueHint={dflowVenueHint}
+			onTrade={onTrade}
+			buttonState={buttonState}
+			approvalState={approvalState}
+			calculateContractsForMarketOrder={calculateContractsForMarketOrder}
+			getEffectivePrice={getEffectivePrice}
+		/>
 		</div>
 	);
 }
@@ -372,26 +372,27 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				>
 					▾
 				</button>
-			<PredictionMarketTradeBoxUI
-				market={market}
-				orderbook={orderbook}
-				state={state}
-				onPositionChange={onPositionChange}
-				onAmountChange={onAmountChange}
-				onPriceChange={onPriceChange}
-				onTradingVenueChange={onTradingVenueChange}
-				onOrderTypeChange={onOrderTypeChange}
-				onSideChange={onSideChange}
-				polymarketVenueHint={polymarketVenueHint}
-				predictVenueHint={predictVenueHint}
-				predictVenueBookHints={predictVenueBookHints}
-				dflowVenueHint={dflowVenueHint}
-				onTrade={onTrade}
-				buttonState={buttonState}
-				approvalState={approvalState}
-				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
-				getEffectivePrice={getEffectivePrice}
-			/>
+		<PredictionMarketTradeBoxUI
+			market={market}
+			orderbook={orderbook}
+			stableButtonPrices={stableButtonPrices}
+			state={state}
+			onPositionChange={onPositionChange}
+			onAmountChange={onAmountChange}
+			onPriceChange={onPriceChange}
+			onTradingVenueChange={onTradingVenueChange}
+			onOrderTypeChange={onOrderTypeChange}
+			onSideChange={onSideChange}
+			polymarketVenueHint={polymarketVenueHint}
+			predictVenueHint={predictVenueHint}
+			predictVenueBookHints={predictVenueBookHints}
+			dflowVenueHint={dflowVenueHint}
+			onTrade={onTrade}
+			buttonState={buttonState}
+			approvalState={approvalState}
+			calculateContractsForMarketOrder={calculateContractsForMarketOrder}
+			getEffectivePrice={getEffectivePrice}
+		/>
 		</div>
 	</PredictionCurtain>
 	);

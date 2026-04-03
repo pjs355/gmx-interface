@@ -19,7 +19,16 @@ const IDENTIFIER_POLL_MS = 30_000;
 
 function teamToOrderbook(team: VenuePriceTeam | undefined): OrderbookData | null {
 	if (!team) return null;
-	return { bestBid: team.bestBid, bestAsk: team.bestAsk };
+	return {
+		bestBid: team.bestBid,
+		bestAsk: team.bestAsk,
+		bids: team.bids,
+		asks: team.asks,
+		bidLevels: team.bidLevels,
+		askLevels: team.askLevels,
+		totalBidLiquidity: team.totalBidLiquidity,
+		totalAskLiquidity: team.totalAskLiquidity,
+	};
 }
 
 function buildMatchedMarket(

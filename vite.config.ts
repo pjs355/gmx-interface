@@ -49,6 +49,8 @@ export default defineConfig(({ mode }) => ({
 			utils: path.resolve(__dirname, "./src/utils"),
 			img: path.resolve(__dirname, "./src/img"),
 			styles: path.resolve(__dirname, "./src/styles"),
+			crypto: path.resolve(__dirname, "./src/polyfills/crypto-hmac-shim.ts"),
+			"node:crypto": path.resolve(__dirname, "./src/polyfills/crypto-hmac-shim.ts"),
 		},
 	},
 	server: {

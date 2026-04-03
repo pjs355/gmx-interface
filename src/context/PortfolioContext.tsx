@@ -183,12 +183,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 
 				// Get prices using questionId (transaction hash) - EXACTLY like home page
 				const preview = allBooksPreview[priceId];
-				const yp = preview?.lowestAsk ?? null; // Yes price = lowestAsk
-				const np =
-					preview?.highestBid !== null &&
-					preview?.highestBid !== undefined
-						? 1 - preview.highestBid // No price = 1 - highestBid
-						: null;
+				const yp = preview?.lowestAskA ?? null;
+				const np = preview?.lowestAskB ?? null;
 
 				if (typeof yp === "number" || typeof np === "number") {
 					pricedMarkets += 1;

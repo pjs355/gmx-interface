@@ -19,6 +19,16 @@ type VenueRowModel = {
 	askB: number | null;
 };
 
+function hasAnyPrice(snap: VenuePriceSnapshot | undefined): boolean {
+	if (!snap) return false;
+	return (
+		snap.teamA?.bestAsk !== null ||
+		snap.teamA?.bestBid !== null ||
+		snap.teamB?.bestAsk !== null ||
+		snap.teamB?.bestBid !== null
+	);
+}
+
 function buildVenueRows(
 	snapshots: VenuePriceSnapshot[],
 	identifier: MatchedMarketExchange | null,
@@ -29,34 +39,34 @@ function buildVenueRows(
 	const poly = byVenue.get("polymarket");
 	const dflow = byVenue.get("dflow") ?? byVenue.get("kalshi");
 	const limitless = byVenue.get("limitless");
-	const predictFun = byVenue.get("predictfun");
+	const predictFun = byVenue.get("predict.fun");
 
 	return [
 		{
 			id: "poly",
 			label: "Polymarket",
-			linked: Boolean(identifier?.polyConditionId),
+			linked: Boolean(identifier?.polyConditionId) || hasAnyPrice(poly),
 			askA: bestAskProb(poly?.teamA),
 			askB: bestAskProb(poly?.teamB),
 		},
 		{
 			id: "dflow",
 			label: "DFlow",
-			linked: Boolean(identifier?.dflow ?? identifier?.kalshi),
+			linked: Boolean(identifier?.dflow ?? identifier?.kalshi) || hasAnyPrice(dflow),
 			askA: bestAskProb(dflow?.teamA),
 			askB: bestAskProb(dflow?.teamB),
 		},
 		{
 			id: "limitless",
 			label: "Limitless",
-			linked: Boolean(limitless),
+			linked: Boolean(limitless) || hasAnyPrice(limitless),
 			askA: bestAskProb(limitless?.teamA),
 			askB: bestAskProb(limitless?.teamB),
 		},
 		{
 			id: "predictFun",
 			label: "Predict.fun",
-			linked: Boolean(identifier?.predictFun),
+			linked: Boolean(identifier?.predictFun) || hasAnyPrice(predictFun),
 			askA: bestAskProb(predictFun?.teamA),
 			askB: bestAskProb(predictFun?.teamB),
 		},

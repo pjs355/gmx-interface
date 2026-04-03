@@ -112,9 +112,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							}
 							market={
 								{
-									...(question as any),
-									umbrellaChildrenCount: umbrella?.children?.length || 0,
-								} as any
+								...(question as any),
+								umbrellaChildrenCount: umbrella?.children?.length || 0,
+								umbrellaDisplayName: umbrella?.displayName || "",
+							} as any
 							}
 							onMarketSwitch={onMarketSwitch}
 							onMarketSwitchWithOrderbook={onMarketSwitchWithOrderbook}
@@ -212,10 +213,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						<PredictionMarketTradeBox
 							market={
 								{
-									...(activeMarket as any),
-									umbrellaChildrenCount:
-										umbrella?.children?.length || 0,
-								} as any
+								...(activeMarket as any),
+								umbrellaChildrenCount:
+									umbrella?.children?.length || 0,
+								umbrellaDisplayName:
+									umbrella?.displayName || "",
+							} as any
 							}
 							orderbook={
 								questionOrderbooks[getMarketId(activeMarket)]
@@ -302,10 +305,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						<PredictionMarketTradeBox
 							market={
 								{
-									...(activeMarket as any),
-									umbrellaChildrenCount:
-										umbrella?.children?.length || 0,
-								} as any
+								...(activeMarket as any),
+								umbrellaChildrenCount:
+									umbrella?.children?.length || 0,
+								umbrellaDisplayName:
+									umbrella?.displayName || "",
+							} as any
 							}
 							orderbook={
 								questionOrderbooks[getMarketId(activeMarket)]

@@ -426,11 +426,8 @@ export default function AdminWallet() {
 						const noBalance = tb ? Number(tb.noBalance) : 0;
 
 						const preview = priceId ? allBooksPreview[priceId] : undefined;
-						const yesPrice = preview?.lowestAsk ?? null;
-						const noPrice =
-							preview?.highestBid !== null && preview?.highestBid !== undefined
-								? 1 - preview.highestBid
-								: null;
+						const yesPrice = preview?.lowestAskA ?? null;
+						const noPrice = preview?.lowestAskB ?? null;
 
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;

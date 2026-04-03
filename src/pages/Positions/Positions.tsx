@@ -357,12 +357,8 @@ export default function Positions() {
 						const preview = priceId
 							? allBooksPreview[priceId]
 							: undefined;
-						const yesPrice = preview?.lowestAsk ?? null;
-						const noPrice =
-							preview?.highestBid !== null &&
-							preview?.highestBid !== undefined
-								? 1 - preview.highestBid
-								: null;
+						const yesPrice = preview?.lowestAskA ?? null;
+						const noPrice = preview?.lowestAskB ?? null;
 
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;
@@ -468,10 +464,8 @@ export default function Positions() {
 							const priceId = luMarket.questionId || luMarket._id;
 							const preview = priceId ? allBooksPreview[priceId] : undefined;
 							if (preview) {
-								liveYesPrice = preview.lowestAsk ?? null;
-								liveNoPrice = preview.highestBid !== null && preview.highestBid !== undefined
-									? 1 - preview.highestBid
-									: null;
+								liveYesPrice = preview.lowestAskA ?? null;
+								liveNoPrice = preview.lowestAskB ?? null;
 								break;
 							}
 						}
@@ -931,12 +925,9 @@ export default function Positions() {
 		const preview = questionId ? allBooksPreview[questionId] : undefined;
 
 		if (side === "Yes") {
-			return preview?.lowestAsk ?? null;
+			return preview?.lowestAskA ?? null;
 		} else {
-			return preview?.highestBid !== null &&
-				preview?.highestBid !== undefined
-				? 1 - preview.highestBid
-				: null;
+			return preview?.lowestAskB ?? null;
 		}
 	};
 

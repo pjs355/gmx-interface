@@ -92,13 +92,8 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 					? allBooksPreview[questionId]
 					: undefined;
 
-				// Use preview data for prices (lowestAsk = Yes price, highestBid for No calculation)
-				const yesPrice = preview?.lowestAsk;
-				const noPrice =
-					preview?.highestBid !== null &&
-					preview?.highestBid !== undefined
-						? 1 - preview.highestBid
-						: null;
+				const yesPrice = preview?.lowestAskA ?? null;
+				const noPrice = preview?.lowestAskB ?? null;
 
 				const yesCents =
 					yesPrice !== null && yesPrice !== undefined

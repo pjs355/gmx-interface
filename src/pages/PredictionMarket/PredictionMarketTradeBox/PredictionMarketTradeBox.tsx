@@ -272,6 +272,32 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     noTeamLabel,
   ]);
 
+  /** Position-independent button prices for external venues (poly/dflow). */
+  const stableButtonPrices = useMemo<{
+    yesBestAsk: number | null; yesBestBid: number | null;
+    noBestAsk: number | null; noBestBid: number | null;
+  } | null>(() => {
+    if (state.tradingVenue === "levelup" || state.tradingVenue === "predictfun") return null;
+    if (!matchedMonitor) return null;
+
+    const bookFn = state.tradingVenue === "dflow"
+      ? dflowKalshiOrderbookForPosition
+      : polyOrderbookForPosition;
+
+    const yesSnap = monitorBookToOrderbookSnapshot(bookFn(matchedMonitor, "yes", yesTeamLabel, noTeamLabel));
+    const noSnap = monitorBookToOrderbookSnapshot(bookFn(matchedMonitor, "no", yesTeamLabel, noTeamLabel));
+
+    const bestAskFrom = (s: typeof yesSnap) => s?.asks?.length ? Math.min(...s.asks.map(a => a.price)) : null;
+    const bestBidFrom = (s: typeof yesSnap) => s?.bids?.length ? Math.max(...s.bids.map(b => b.price)) : null;
+
+    return {
+      yesBestAsk: bestAskFrom(yesSnap),
+      yesBestBid: bestBidFrom(yesSnap),
+      noBestAsk: bestAskFrom(noSnap),
+      noBestBid: bestBidFrom(noSnap),
+    };
+  }, [state.tradingVenue, matchedMonitor, yesTeamLabel, noTeamLabel]);
+
   /** LevelUp REST for LevelUp; Polymarket monitor; Predict.fun REST for selected outcome market. */
   const effectiveOrderbook = useMemo(() => {
     if (state.tradingVenue === "levelup") {
@@ -313,15 +339,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const marketOrderHandler = useMarketOrderHandler(effectiveOrderbook);
 
   const orderbookWalkPosition =
-    state.tradingVenue === "predictfun"
-      ? "yes"
-      : state.selectedPosition ?? "yes";
+    state.tradingVenue === "levelup"
+      ? state.selectedPosition ?? "yes"
+      : "yes";
 
   const calculateContractsForMarketOrderUi = useCallback(
     (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") =>
       marketOrderHandler.calculateContractsForMarketOrder(
         usdAmount,
-        state.tradingVenue === "predictfun" ? "yes" : position,
+        state.tradingVenue === "levelup" ? position : "yes",
         side
       ),
     [marketOrderHandler, state.tradingVenue]
@@ -1505,6 +1531,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     <PredictionMarketTradeBoxResponsiveContainer
       market={market}
       orderbook={effectiveOrderbook}
+      stableButtonPrices={stableButtonPrices}
       state={{
         ...state,
         calculatedContracts: calculatedMarketOrderData.calculatedContracts,
