@@ -1,15 +1,13 @@
-import { useMemo } from "react";
-import { useOddsMonitor } from "@/context/OddsMonitorContext";
-import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import { useEffect, useMemo } from "react";
+import { useVenuePrices } from "@/context/VenuePriceContext";
+import type { VenuePriceSnapshot, VenuePriceTeam } from "@/types/venue-prices";
+import { fetchMatchedMarkets, type MatchedMarketExchange } from "@/services/api/matchDataService";
+import { useState } from "react";
 import "./EsportsVenueBooksPanel.scss";
 
-function bestAskProb(book: OrderbookData | null | undefined): number | null {
-	if (!book || book.bestAsk === null || book.bestAsk === undefined) {
-		return null;
-	}
-	const p =
-		typeof book.bestAsk === "number" ? book.bestAsk : Number(book.bestAsk);
+function bestAskProb(team: VenuePriceTeam | undefined): number | null {
+	if (!team || team.bestAsk === null || team.bestAsk === undefined) return null;
+	const p = typeof team.bestAsk === "number" ? team.bestAsk : Number(team.bestAsk);
 	return Number.isFinite(p) ? p : null;
 }
 
@@ -21,47 +19,52 @@ type VenueRowModel = {
 	askB: number | null;
 };
 
-function buildVenueRows(m: MatchedMarket): VenueRowModel[] {
+function buildVenueRows(
+	snapshots: VenuePriceSnapshot[],
+	identifier: MatchedMarketExchange | null,
+): VenueRowModel[] {
+	const byVenue = new Map<string, VenuePriceSnapshot>();
+	for (const s of snapshots) byVenue.set(s.venue, s);
+
+	const poly = byVenue.get("polymarket");
+	const dflow = byVenue.get("dflow") ?? byVenue.get("kalshi");
+	const limitless = byVenue.get("limitless");
+	const predictFun = byVenue.get("predictfun");
+
 	return [
 		{
 			id: "poly",
 			label: "Polymarket",
-			linked: true,
-			askA: bestAskProb(m.polyPriceA),
-			askB: bestAskProb(m.polyPriceB),
+			linked: Boolean(identifier?.polyConditionId),
+			askA: bestAskProb(poly?.teamA),
+			askB: bestAskProb(poly?.teamB),
 		},
 		{
 			id: "dflow",
 			label: "DFlow",
-			linked: Boolean(getDflowKalshiMonitorLink(m)),
-			askA: getDflowKalshiMonitorLink(m)
-				? bestAskProb(m.dflowPriceA ?? m.kalshiPriceA)
-				: null,
-			askB: getDflowKalshiMonitorLink(m)
-				? bestAskProb(m.dflowPriceB ?? m.kalshiPriceB)
-				: null,
+			linked: Boolean(identifier?.dflow ?? identifier?.kalshi),
+			askA: bestAskProb(dflow?.teamA),
+			askB: bestAskProb(dflow?.teamB),
 		},
 		{
 			id: "limitless",
 			label: "Limitless",
-			linked: Boolean(m.limitless),
-			askA: m.limitless ? bestAskProb(m.limitlessPriceA) : null,
-			askB: m.limitless ? bestAskProb(m.limitlessPriceB) : null,
+			linked: Boolean(limitless),
+			askA: bestAskProb(limitless?.teamA),
+			askB: bestAskProb(limitless?.teamB),
 		},
 		{
 			id: "predictFun",
 			label: "Predict.fun",
-			linked: Boolean(m.predictFun),
-			askA: m.predictFun ? bestAskProb(m.predictFunPriceA) : null,
-			askB: m.predictFun ? bestAskProb(m.predictFunPriceB) : null,
+			linked: Boolean(identifier?.predictFun),
+			askA: bestAskProb(predictFun?.teamA),
+			askB: bestAskProb(predictFun?.teamB),
 		},
 	];
 }
 
 function meanProb(values: (number | null)[]): number | null {
-	const nums = values.filter(
-		(v): v is number => v !== null && Number.isFinite(v)
-	);
+	const nums = values.filter((v): v is number => v !== null && Number.isFinite(v));
 	if (!nums.length) return null;
 	return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
@@ -89,44 +92,51 @@ type Props = {
 };
 
 export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
-	const { enabled, connected, appState, lastWsError } = useOddsMonitor();
+	const { enabled, connected, prices, lastWsError, subscribe, unsubscribe } = useVenuePrices();
 
-	const matched = useMemo((): MatchedMarket | null => {
-		if (!appState?.markets?.length) return null;
-		const id = String(pandascoreMatchId);
-		return (
-			appState.markets.find((m) => String(m.pandaMatchId) === id) ?? null
-		);
-	}, [appState?.markets, pandascoreMatchId]);
+	useEffect(() => {
+		const id = pandascoreMatchId?.trim();
+		if (!id || !connected) return;
+		subscribe(id);
+		return () => unsubscribe(id);
+	}, [pandascoreMatchId, connected, subscribe, unsubscribe]);
+
+	const [identifier, setIdentifier] = useState<MatchedMarketExchange | null>(null);
+	useEffect(() => {
+		const id = pandascoreMatchId?.trim();
+		if (!id) return;
+		fetchMatchedMarkets()
+			.then((markets) => {
+				const found = markets.find((m) => String(m.pandaMatchId) === id);
+				setIdentifier(found ?? null);
+			})
+			.catch((err) => {
+				console.error("error", err);
+			});
+	}, [pandascoreMatchId]);
+
+	const snapshots = useMemo((): VenuePriceSnapshot[] => {
+		const id = pandascoreMatchId?.trim();
+		if (!id) return [];
+		return prices.get(id) ?? [];
+	}, [prices, pandascoreMatchId]);
 
 	const { venueRows, avgA, avgB } = useMemo(() => {
-		if (!matched) {
-			return {
-				venueRows: [] as VenueRowModel[],
-				avgA: null as number | null,
-				avgB: null as number | null,
-			};
-		}
-		const rows = buildVenueRows(matched);
+		const rows = buildVenueRows(snapshots, identifier);
 		const avgAVal = meanProb(rows.map((r) => (r.linked ? r.askA : null)));
 		const avgBVal = meanProb(rows.map((r) => (r.linked ? r.askB : null)));
+		return { venueRows: rows, avgA: avgAVal, avgB: avgBVal };
+	}, [snapshots, identifier]);
 
-		return {
-			venueRows: rows,
-			avgA: avgAVal,
-			avgB: avgBVal,
-		};
-	}, [matched]);
+	const teamA = identifier?.pandaTeamA ?? "Team A";
+	const teamB = identifier?.pandaTeamB ?? "Team B";
 
 	if (!enabled) {
 		return (
 			<div className="esports-venue-books">
 				<p className="esports-venue-books__muted">
-					Cross-venue odds are not configured. Set{" "}
-					<code>VITE_ODDS_WS_BASE</code> if needed. For auth, use the same
-					secret as the monitor: <code>MONITOR_TOKEN</code> in the shell that
-					starts Vite, or <code>VITE_ODDS_MONITOR_TOKEN</code> in{" "}
-					<code>.env</code>, then restart the dev server.
+					Cross-venue prices are not available. The venue price WebSocket is
+					not configured.
 				</p>
 			</div>
 		);
@@ -136,7 +146,7 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
 		return (
 			<div className="esports-venue-books">
 				<p className="esports-venue-books__status">
-					Connecting to odds monitor…
+					Connecting to venue prices…
 				</p>
 				{lastWsError ? (
 					<p className="esports-venue-books__error">{lastWsError}</p>
@@ -145,40 +155,19 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
 		);
 	}
 
-	if (!matched) {
+	if (!identifier) {
 		return (
 			<div className="esports-venue-books">
 				<p className="esports-venue-books__muted">
-					No monitor row for PandaScore match{" "}
-					<code>{pandascoreMatchId}</code>. The match may not be linked on
-					the odds server yet.
+					No matched market for PandaScore match{" "}
+					<code>{pandascoreMatchId}</code>.
 				</p>
 			</div>
 		);
 	}
 
-	const dh = appState?.dflowHealth ?? appState?.kalshiHealth;
-	const lh = appState?.limitlessHealth;
-	const pf = appState?.predictFunHealth;
-
 	return (
 		<div className="esports-venue-books">
-			{dh?.lastError ? (
-				<p className="esports-venue-books__warn">
-					<strong>DFlow</strong> — {dh.lastError}
-				</p>
-			) : null}
-			{lh?.lastError ? (
-				<p className="esports-venue-books__warn">
-					<strong>Limitless</strong> — {lh.lastError}
-				</p>
-			) : null}
-			{pf?.enabled && pf.lastError ? (
-				<p className="esports-venue-books__warn">
-					<strong>Predict.fun</strong> — {pf.lastError}
-				</p>
-			) : null}
-
 			<div className="esports-venue-books__table-wrap">
 				<table className="esports-venue-books__table">
 					<thead>
@@ -191,20 +180,16 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
 							<th
 								scope="col"
 								className="esports-venue-books__th esports-venue-books__th--team"
-								title={matched.pandaTeamA}
+								title={teamA}
 							>
-								<span className="esports-venue-books__th-text">
-									{matched.pandaTeamA}
-								</span>
+								<span className="esports-venue-books__th-text">{teamA}</span>
 							</th>
 							<th
 								scope="col"
 								className="esports-venue-books__th esports-venue-books__th--team"
-								title={matched.pandaTeamB}
+								title={teamB}
 							>
-								<span className="esports-venue-books__th-text">
-									{matched.pandaTeamB}
-								</span>
+								<span className="esports-venue-books__th-text">{teamB}</span>
 							</th>
 						</tr>
 					</thead>
@@ -214,7 +199,7 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
 								scope="row"
 								className="esports-venue-books__td esports-venue-books__td--label esports-venue-books__td--avgcell"
 							>
-								Average Odds
+								Average Price
 							</th>
 							<td className="esports-venue-books__td esports-venue-books__td--num esports-venue-books__td--avgcell">
 								{formatAvgProb(avgA)}
@@ -231,14 +216,10 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
 								>
 									{row.label}
 								</th>
-								<td
-									className={askCellClass(row.linked, row.askA)}
-								>
+								<td className={askCellClass(row.linked, row.askA)}>
 									{formatAskCell(row.linked, row.askA)}
 								</td>
-								<td
-									className={askCellClass(row.linked, row.askB)}
-								>
+								<td className={askCellClass(row.linked, row.askB)}>
 									{formatAskCell(row.linked, row.askB)}
 								</td>
 							</tr>

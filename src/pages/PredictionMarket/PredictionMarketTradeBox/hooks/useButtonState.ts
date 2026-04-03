@@ -83,7 +83,7 @@ export function useButtonState({
       }
       if (!pt.hasMonitorMatch) {
         return {
-          text: "Polymarket: odds monitor has no row",
+          text: "Polymarket: no matched market",
           disabled: true,
           onClick: () => {},
         };
@@ -195,7 +195,7 @@ export function useButtonState({
       }
       if (!pt.hasMonitorMatch) {
         return {
-          text: "Predict.fun: odds monitor has no row",
+          text: "Predict.fun: no matched market",
           disabled: true,
           onClick: () => {},
         };

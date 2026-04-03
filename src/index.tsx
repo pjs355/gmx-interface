@@ -42,6 +42,7 @@ const baseOverride = addRpcUrlOverrideToChain(
 import WalletProvider from "@/services/wallets/WalletProvider";
 import { SignerProvider } from "context/SignerContext";
 import { PredictionDataProvider } from "context/PredictionDataContext";
+import { VenuePriceProvider } from "context/VenuePriceContext";
 import { OddsMonitorProvider } from "context/OddsMonitorContext";
 import { UserDataProvider } from "context/UserDataContext";
 import { BalanceProvider } from "context/BalanceContext";
@@ -84,9 +85,10 @@ createRoot(document.getElementById("root")!).render(
 			>
 				<SmartWalletsProvider>
 					<WalletProvider>
-						<PredictionDataProvider>
-							<OddsMonitorProvider>
-								<SignerProvider>
+					<PredictionDataProvider>
+						<VenuePriceProvider>
+						<OddsMonitorProvider>
+							<SignerProvider>
 									<UserDataProvider>
 										<BalanceProvider>
 											<PortfolioProvider>
@@ -98,9 +100,10 @@ createRoot(document.getElementById("root")!).render(
 											</PortfolioProvider>
 										</BalanceProvider>
 									</UserDataProvider>
-								</SignerProvider>
-							</OddsMonitorProvider>
-						</PredictionDataProvider>
+							</SignerProvider>
+						</OddsMonitorProvider>
+						</VenuePriceProvider>
+					</PredictionDataProvider>
 					</WalletProvider>
 				</SmartWalletsProvider>
 			</PrivyProvider>

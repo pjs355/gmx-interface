@@ -340,13 +340,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return "Polymarket CLOB needs a PandaScore match on this umbrella.";
     }
     if (!oddsMonitorEnabled) {
-      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
+      return "Venue price feed is not configured.";
     }
     if (!oddsMonitorConnected) {
-      return "Connecting to odds monitor…";
+      return "Connecting to venue prices…";
     }
     if (!matchedMonitor) {
-      return "No monitor row for this match — Poly books may not be linked yet.";
+      return "No matched market for this match — Poly books may not be linked yet.";
     }
     if (polyClob.loading || polyClob.polyAccountLoading) {
       return "Preparing Polymarket CLOB…";
@@ -385,13 +385,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return "Predict.fun needs a PandaScore match on this umbrella.";
     }
     if (!oddsMonitorEnabled) {
-      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
+      return "Venue price feed is not configured.";
     }
     if (!oddsMonitorConnected) {
-      return "Connecting to odds monitor…";
+      return "Connecting to venue prices…";
     }
     if (!matchedMonitor) {
-      return "No monitor row — Predict.fun ids may not be linked yet.";
+      return "No matched market — Predict.fun ids may not be linked yet.";
     }
     if (!predictHasMarketIds) {
       return "This monitor row has no Predict.fun market ids.";
@@ -436,7 +436,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const dflowVenueHint = useMemo(() => {
     if (state.tradingVenue !== "dflow") return null;
     if (!hasDflowKalshiMonitorLink(matchedMonitor)) {
-      return "No DFlow market linked for this match on the odds monitor.";
+      return "No DFlow market linked for this match.";
     }
     return null;
   }, [state.tradingVenue, matchedMonitor]);
@@ -610,7 +610,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           ...prev,
           orderResult: {
             success: false,
-            error: "No DFlow market linked for this match on the odds monitor.",
+            error: "No DFlow market linked for this match.",
           },
         }));
         return;
@@ -708,7 +708,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           orderResult: {
             success: false,
             error:
-              "Predict.fun needs a linked esports match and odds monitor row.",
+              "Predict.fun needs a linked esports match and matched market.",
           },
         }));
         return;
@@ -840,7 +840,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           orderResult: {
             success: false,
             error:
-              "Polymarket CLOB needs a linked esports match and odds monitor row.",
+              "Polymarket CLOB needs a linked esports match and matched market.",
           },
         }));
         return;

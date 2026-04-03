@@ -12,9 +12,11 @@ interface ImportMetaEnv {
 	readonly VITE_PRIVATE_API_BASE?: string;
 	/** Set to "true" to enable trading shell execution gate network calls */
 	readonly VITE_TRADING_SHELL_ENABLED?: string;
+	/** @deprecated Poly-Proxy odds WebSocket removed; live venue prices now come from predictions-api. */
 	readonly VITE_ODDS_WS_BASE?: string;
+	/** @deprecated Poly-Proxy odds monitor auth removed. */
 	readonly VITE_ODDS_MONITOR_TOKEN?: string;
-	/** Injected in vite.config from process.env.MONITOR_TOKEN (not read from .env). */
+	/** @deprecated */
 	readonly VITE_ODDS_MONITOR_FROM_SHELL?: string;
 	/** "true" when Amsterdam CLOB proxy is active (set by yarn dev prompt) */
 	readonly VITE_POLYMARKET_CLOB_PROXY?: string;

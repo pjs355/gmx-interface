@@ -94,26 +94,6 @@ export function getOrderbookApiBaseUrl(forceLocal: boolean = false): string {
 }
 
 // =============================================================================
-// MATCH DATA (Poly-Proxy UIServer — exchange identifiers for charts)
-// =============================================================================
-const MATCH_DATA_URLS = {
-	testnet: "http://localhost:3002",
-	production: "https://patriotic-sheepdog.up.railway.app",
-} as const;
-
-/**
- * Get the base URL for the Poly-Proxy UIServer (match data / exchange IDs).
- * Override with `VITE_MATCH_DATA_BASE_URL`.
- */
-export function getMatchDataBaseUrl(): string {
-	const raw = import.meta.env.VITE_MATCH_DATA_BASE_URL;
-	if (typeof raw === "string" && raw.trim() !== "") {
-		return normalizeApiBase(raw);
-	}
-	return isLocalApi() ? MATCH_DATA_URLS.testnet : MATCH_DATA_URLS.production;
-}
-
-// =============================================================================
 // DIRECT ACCESS (for debugging/special cases)
 // =============================================================================
 export const API_URL_CONFIG = API_URLS;
