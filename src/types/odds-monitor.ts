@@ -1,4 +1,4 @@
-/** Books-focused subset of Amsterdam monitor AppState (WebSocket). */
+/** Books-focused subset of odds monitor AppState (WebSocket). */
 
 /** Polymarket CLOB tick size strings when the UIServer includes them on a row. */
 export type PolymarketClobTickSize =
@@ -11,6 +11,8 @@ export interface OrderbookLevel {
 	price: number;
 	size: number;
 }
+
+export type SnapshotStatus = "live" | "no_liquidity" | "awaiting_data";
 
 export interface OrderbookData {
 	bestBid: number | null;
@@ -26,6 +28,13 @@ export interface OrderbookData {
 	lastUpdated?: number;
 	wsUpdateCount?: number;
 	lastWsUpdate?: number;
+	snapshotStatus?: SnapshotStatus;
+}
+
+export interface VenueStatusInfo {
+	venue: string;
+	matched: boolean;
+	connectionState: string;
 }
 
 export interface MatchedMarket {
@@ -113,6 +122,7 @@ export interface MatchedMarket {
 	};
 	predictFunPriceA?: OrderbookData | null;
 	predictFunPriceB?: OrderbookData | null;
+	venueStatuses?: VenueStatusInfo[];
 }
 
 export interface OddsMonitorAppState {

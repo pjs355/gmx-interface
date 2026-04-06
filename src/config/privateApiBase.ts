@@ -1,5 +1,5 @@
 /**
- * Base URL for authenticated “private” trading / account routes.
+ * Base URL for authenticated "private" trading / account routes.
  * Override when the API host differs from the public prediction API.
  *
  * `local-production` (yarn dev → [3]): public market catalog uses Railway via
@@ -10,10 +10,10 @@
  * **Predict 403 (geo)**: Predict.fun sees the **egress of whoever calls their API** — usually your
  * `localhost:8080` process (US). That is a **backend/network** concern (EU-hosted API, or outbound HTTP
  * proxy / VPN on the predictions service). The frontend can only send the order to a **different host**
- * (Amsterdam `/proxy` → `VITE_AMSTERDAM_PROXY_LEVELUP_API_URL`) so the **server at that URL** runs in NL/EU.
+ * (Railway `/proxy` → `VITE_AMSTERDAM_PROXY_LEVELUP_API_URL`) so the **server at that URL** runs in NL/EU.
  * Tunneling to ngrok→laptop still calls Predict from your IP unless the backend uses its own EU proxy.
  *
- * Amsterdam + CLOB flag: **LIVE** always tunnels order POST via `/private-api-proxy`. **TEST/DEV** tunnel
+ * Railway CLOB flag: **LIVE** always tunnels order POST via `/private-api-proxy`. **TEST/DEV** tunnel
  * orders only if you set **`VITE_AMSTERDAM_PROXY_LEVELUP_API_URL`** (EU/API base the Railway proxy can reach).
  * Otherwise orders go to `getPrivateApiBaseUrl()` (local). Umbrella/catalog URLs unchanged (`predictionApiBase.ts`).
  *
@@ -25,20 +25,20 @@ import { getEnvironment } from "@/config/environment";
 import { API_URL_CONFIG, getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 /**
- * Same dev flag as Polymarket CLOB Amsterdam tunnel (`yarn dev` prompt sets it).
+ * Dev flag for the Polymarket CLOB Railway tunnel (`yarn dev` prompt sets it).
  */
-export function isAmsterdamPrivateApiProxyEnabled(): boolean {
+export function isClobProxyEnabled(): boolean {
 	const v = import.meta.env.VITE_POLYMARKET_CLOB_PROXY;
 	return v === true || String(v ?? "").trim() === "true";
 }
 
-/** Predict.fun: only order POST may use the Amsterdam tunnel. */
+/** Predict.fun: only order POST may use the Railway tunnel. */
 function isPredictOrdersTunnelPath(path: string): boolean {
 	const pathname = (path.split("?")[0] ?? "").split("#")[0] ?? "";
 	return pathname === "/api/predict/orders";
 }
 
-function hasExplicitAmsterdamPredictApiTarget(): boolean {
+function hasExplicitPredictProxyTarget(): boolean {
 	const u = import.meta.env.VITE_AMSTERDAM_PROXY_LEVELUP_API_URL;
 	return typeof u === "string" && u.trim().length > 0;
 }
@@ -47,20 +47,20 @@ function hasExplicitAmsterdamPredictApiTarget(): boolean {
  * Order POST uses `/private-api-proxy` when CLOB proxy is on and: **LIVE**, or **TEST/DEV** with
  * `VITE_AMSTERDAM_PROXY_LEVELUP_API_URL` set (EU-reachable API the /proxy fetches).
  */
-export function shouldTunnelPredictOrdersThroughAmsterdam(): boolean {
-	if (!isAmsterdamPrivateApiProxyEnabled()) return false;
+export function shouldTunnelPredictOrders(): boolean {
+	if (!isClobProxyEnabled()) return false;
 	if (getEnvironment() === "production") return true;
-	return hasExplicitAmsterdamPredictApiTarget();
+	return hasExplicitPredictProxyTarget();
 }
 
 /**
  * Path or absolute URL for `fetch` to the LevelUp private API.
- * See `shouldTunnelPredictOrdersThroughAmsterdam` for when `/api/predict/orders` is tunneled.
+ * See `shouldTunnelPredictOrders` for when `/api/predict/orders` is tunneled.
  */
 export function getPrivateApiRequestUrl(path: string): string {
 	const p = path.startsWith("/") ? path : `/${path}`;
 	if (
-		shouldTunnelPredictOrdersThroughAmsterdam() &&
+		shouldTunnelPredictOrders() &&
 		isPredictOrdersTunnelPath(p)
 	) {
 		return `/private-api-proxy${p}`;
@@ -81,15 +81,15 @@ export function getPrivateApiAbsoluteUrl(path: string): string {
 /** Dev logging: where private API traffic is going. */
 export function getPrivateApiRoutingDescription(): string {
 	const base = getPrivateApiBaseUrl();
-	if (!isAmsterdamPrivateApiProxyEnabled()) return base;
+	if (!isClobProxyEnabled()) return base;
 	const origin =
 		typeof window !== "undefined"
 			? window.location.origin
 			: "http://localhost:3010";
-	if (shouldTunnelPredictOrdersThroughAmsterdam()) {
+	if (shouldTunnelPredictOrders()) {
 		return `Predict POST /api/predict/orders → ${origin}/private-api-proxy; other → ${base}`;
 	}
-	return `Amsterdam CLOB on; Predict orders → ${base} (set VITE_AMSTERDAM_PROXY_LEVELUP_API_URL to tunnel from TEST/DEV)`;
+	return `CLOB proxy on; Predict orders → ${base} (set VITE_AMSTERDAM_PROXY_LEVELUP_API_URL to tunnel from TEST/DEV)`;
 }
 
 export function getPrivateApiBaseUrl(): string {

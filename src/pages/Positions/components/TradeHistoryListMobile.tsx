@@ -4,27 +4,21 @@ import Tooltip from "components/Tooltip/Tooltip";
 
 interface TradeHistoryListMobileProps {
 	orders: ProcessedOrder[];
-	marketId: string;
+	marketId: string | string[];
 	isExpanded: boolean;
-	position?: "Yes" | "No"; // Optional: filter by position (Yes/No)
+	position?: "Yes" | "No";
 }
 
-/**
- * TradeHistoryListMobile - Mobile component that displays all trades for a specific market
- * Displays in a card-based layout optimized for mobile screens
- */
 export default function TradeHistoryListMobile({
 	orders,
 	marketId,
 	isExpanded,
 	position,
 }: TradeHistoryListMobileProps) {
-	// Filter orders for this specific market and only show filled orders
-	// If position is provided, also filter by Yes/No
+	const ids = Array.isArray(marketId) ? marketId : [marketId];
 	const marketOrders = orders
 		.filter((order) => {
-			if (order.questionId !== marketId || !order.filled) return false;
-			// Case-insensitive comparison for position
+			if (!ids.includes(order.questionId) || !order.filled) return false;
 			if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
 			return true;
 		})

@@ -15,6 +15,7 @@ import type {
 	MarketOrderCalculation,
 } from "./types";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
+import type { RoutePlan, RouteExecution } from "@/trading/sor";
 import Button from "components/Button/Button";
 
 interface PredictionMarketTradeBoxResponsiveContainerProps
@@ -32,6 +33,7 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		no: OrderbookSnapshot | null;
 	} | null;
 	dflowVenueHint?: string | null;
+	matchedVenues?: Set<string>;
 	onSideChange: (side: "buy" | "sell") => void;
 	onTrade: () => void;
 	buttonState: {
@@ -43,13 +45,26 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	};
 	approvalState: ApprovalState;
 	executionGateBanner?: ReactNode;
+	walletAddress?: string;
+	usdcBalance?: number;
 	calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
 	getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
+	sorRoute: { route: RoutePlan | null; isLoading: boolean; error: string | null; isStale: boolean };
+	sorExecution: {
+		execution: RouteExecution | null;
+		isExecuting: boolean;
+		remainingBudget: number | null;
+		requestReroute: () => Promise<number | null>;
+		acceptResult: () => Promise<void>;
+	};
+	sorRouteExpired: boolean;
+	handleSorExecute: () => void;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
 	market,
 	orderbook,
+	pandascoreMatchId,
 	state,
 	onPositionChange,
 	onAmountChange,
@@ -60,13 +75,20 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	predictVenueHint,
 	predictVenueBookHints,
 	dflowVenueHint,
+	matchedVenues,
 	onSideChange,
 	onTrade,
 	buttonState,
 	approvalState,
 	executionGateBanner,
+	walletAddress,
+	usdcBalance,
 	calculateContractsForMarketOrder,
 	getEffectivePrice,
+	sorRoute,
+	sorExecution,
+	sorRouteExpired,
+	handleSorExecute,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -259,6 +281,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			<PredictionMarketTradeBoxUI
 				market={market}
 				orderbook={orderbook}
+				pandascoreMatchId={pandascoreMatchId}
 				state={state}
 				onPositionChange={onPositionChange}
 				onAmountChange={onAmountChange}
@@ -270,11 +293,18 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				predictVenueHint={predictVenueHint}
 				predictVenueBookHints={predictVenueBookHints}
 				dflowVenueHint={dflowVenueHint}
+				matchedVenues={matchedVenues}
 				onTrade={onTrade}
 				buttonState={buttonState}
 				approvalState={approvalState}
+				walletAddress={walletAddress}
+				usdcBalance={usdcBalance}
 				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
 				getEffectivePrice={getEffectivePrice}
+				sorRoute={sorRoute}
+				sorExecution={sorExecution}
+				sorRouteExpired={sorRouteExpired}
+				handleSorExecute={handleSorExecute}
 			/>
 		</div>
 	);
@@ -395,6 +425,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			<PredictionMarketTradeBoxUI
 				market={market}
 				orderbook={orderbook}
+				pandascoreMatchId={pandascoreMatchId}
 				state={state}
 				onPositionChange={onPositionChange}
 				onAmountChange={onAmountChange}
@@ -406,11 +437,18 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				predictVenueHint={predictVenueHint}
 				predictVenueBookHints={predictVenueBookHints}
 				dflowVenueHint={dflowVenueHint}
+				matchedVenues={matchedVenues}
 				onTrade={onTrade}
 				buttonState={buttonState}
 				approvalState={approvalState}
+				walletAddress={walletAddress}
+				usdcBalance={usdcBalance}
 				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
 				getEffectivePrice={getEffectivePrice}
+				sorRoute={sorRoute}
+				sorExecution={sorExecution}
+				sorRouteExpired={sorRouteExpired}
+				handleSorExecute={handleSorExecute}
 			/>
 		</div>
 	</PredictionCurtain>

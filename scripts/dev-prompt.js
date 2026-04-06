@@ -60,19 +60,19 @@ rl.question(`${COLORS.magenta}Enter choice (1, 2, or 3): ${COLORS.reset}`, (answ
   }
 
   console.log(`
-${COLORS.bright}Amsterdam Railway proxy (EU egress):${COLORS.reset}
+${COLORS.bright}Railway proxy (EU egress):${COLORS.reset}
   ${COLORS.cyan}[y]${COLORS.reset} ${COLORS.dim}→ CLOB via /proxy; Predict orders via /proxy on LIVE [1], or TEST/DEV if .env sets VITE_AMSTERDAM_PROXY_LEVELUP_API_URL (EU API)${COLORS.reset}
   ${COLORS.dim}[n]${COLORS.reset} ${COLORS.dim}→ Direct CLOB; private API → localhost / VITE_PRIVATE_API_BASE${COLORS.reset}
 `);
 
-  rl.question(`${COLORS.cyan}Use Amsterdam proxy? (y/n): ${COLORS.reset}`, (proxyAnswer) => {
+  rl.question(`${COLORS.cyan}Use Railway proxy? (y/n): ${COLORS.reset}`, (proxyAnswer) => {
     rl.close();
 
     const useProxy = proxyAnswer.trim().toLowerCase().startsWith('y');
     if (useProxy) {
-      console.log(`${COLORS.cyan}✓ Amsterdam proxy: CLOB + Predict orders (LIVE; TEST/DEV if tunnel URL set)${COLORS.reset}\n`);
+      console.log(`${COLORS.cyan}✓ Railway proxy: CLOB + Predict orders (LIVE; TEST/DEV if tunnel URL set)${COLORS.reset}\n`);
     } else {
-      console.log(`${COLORS.dim}✓ Direct routing (no Amsterdam proxy)${COLORS.reset}\n`);
+      console.log(`${COLORS.dim}✓ Direct routing (no Railway proxy)${COLORS.reset}\n`);
     }
 
     const vite = spawn('npx', ['vite'], {

@@ -4,26 +4,21 @@ import Tooltip from "components/Tooltip/Tooltip";
 
 interface TradeHistoryListProps {
 	orders: ProcessedOrder[];
-	marketId: string;
+	marketId: string | string[];
 	isExpanded: boolean;
-	position?: "Yes" | "No"; // Filter by Yes or No trades
+	position?: "Yes" | "No";
 }
 
-/**
- * TradeHistoryList - Desktop component that displays all trades for a specific market
- * Shows: Date, Type (Buy/Sell), Side (Yes/No), Shares, Price, Cash Flow
- */
 export default function TradeHistoryList({
 	orders,
 	marketId,
 	isExpanded,
 	position,
 }: TradeHistoryListProps) {
-	// Filter orders for this specific market and only show filled orders
-	// If position is provided, also filter by Yes/No (case-insensitive)
+	const ids = Array.isArray(marketId) ? marketId : [marketId];
 	const marketOrders = orders
 		.filter((order) => {
-			if (order.questionId !== marketId || !order.filled) return false;
+			if (!ids.includes(order.questionId) || !order.filled) return false;
 			if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
 			return true;
 		})

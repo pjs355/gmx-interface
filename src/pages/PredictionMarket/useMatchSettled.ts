@@ -11,7 +11,7 @@ export interface SettledInfo {
 
 /**
  * Determines whether a match is settled by checking three sources in priority order:
- * 1. Odds monitor WebSocket — Amsterdam keeps finished matches with status:"finished" + winner
+ * 1. Odds monitor WebSocket — keeps finished matches with status:"finished" + winner
  * 2. Resolved markets in the prediction data context (LevelUp backend has settled)
  * 3. PandaScore API fallback (requires admin auth, may fail silently)
  */

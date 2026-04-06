@@ -8,7 +8,7 @@ import http from "http";
 import https from "https";
 
 /**
- * Dev-only: tunnels browser requests through Amsterdam Railway `/proxy` (EU egress).
+ * Dev-only: tunnels browser requests through Railway `/proxy` (EU egress).
  *
  * - `/polymarket-clob/*` → `https://clob.polymarket.com/*` (geo + CLOB signing)
  * - `/private-api-proxy/*` → **LIVE only**: `POST /api/predict/orders` to Railway EU upstream (default prod API).
@@ -18,7 +18,7 @@ import https from "https";
  * Railway /proxy expects: POST { url, method, headers?, body? }
  * Railway /proxy returns: { status, data, ... }
  */
-function amsterdamRailwayDevProxyPlugin(
+function railwayDevProxyPlugin(
 	proxyUrl: string,
 	proxyToken: string,
 	levelupApiOrigin: string
@@ -26,7 +26,7 @@ function amsterdamRailwayDevProxyPlugin(
 	const apiBase = levelupApiOrigin.replace(/\/$/, "");
 
 	return {
-		name: "amsterdam-railway-dev-proxy",
+		name: "railway-dev-proxy",
 		configureServer(server) {
 			server.middlewares.use((req, res, next) => {
 				const url = req.url ?? "";
@@ -175,7 +175,7 @@ function amsterdamRailwayDevProxyPlugin(
 
 					proxyReq.on("error", (err: Error) => {
 						console.error(
-							"[amsterdam-railway-dev-proxy] upstream error:",
+							"[railway-dev-proxy] upstream error:",
 							err.message
 						);
 						res.statusCode = 502;
@@ -197,11 +197,6 @@ function amsterdamRailwayDevProxyPlugin(
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
 	const viteEnv = loadEnv(mode, process.cwd(), "VITE_");
-	/** Same name as Amsterdam UIServer: prefer shell MONITOR_TOKEN, then .env VITE_ODDS_MONITOR_TOKEN. */
-	const levelupOddsMonitorToken =
-		process.env.MONITOR_TOKEN?.trim() ||
-		viteEnv.VITE_ODDS_MONITOR_TOKEN?.trim() ||
-		"";
 
 	/** Must match client (`import.meta.env`): `.env` is in `viteEnv`, not always on `process.env`. */
 	const clobProxyFlag =
@@ -231,7 +226,7 @@ export default defineConfig(({ mode }) => {
 			.trim()
 			.replace(/\/$/, "") || "http://localhost:8080";
 
-	const amsterdamPrivateApiExplicit = (
+	const predictProxyExplicit = (
 		process.env.VITE_AMSTERDAM_PROXY_LEVELUP_API_URL ||
 		viteEnv.VITE_AMSTERDAM_PROXY_LEVELUP_API_URL ||
 		""
@@ -239,9 +234,9 @@ export default defineConfig(({ mode }) => {
 		.trim()
 		.replace(/\/$/, "");
 
-	/** Predict order POST upstream for Amsterdam envelope; LIVE defaults to prod Railway unless overridden. */
-	const amsterdamPrivateApiTarget =
-		amsterdamPrivateApiExplicit ||
+	/** Predict order POST upstream for Railway proxy; LIVE defaults to prod Railway unless overridden. */
+	const predictProxyTarget =
+		predictProxyExplicit ||
 		(isLocalOrderEnv
 			? privateApiHostDefault
 			: "https://prediction-api-production.up.railway.app");
@@ -276,10 +271,10 @@ export default defineConfig(({ mode }) => {
 				: []),
 			...(clobProxyEnabled
 				? [
-						amsterdamRailwayDevProxyPlugin(
+						railwayDevProxyPlugin(
 							clobProxyUrl,
 							clobProxyToken,
-							amsterdamPrivateApiTarget
+							predictProxyTarget
 						),
 				  ]
 				: []),
@@ -287,10 +282,6 @@ export default defineConfig(({ mode }) => {
 		define: {
 			global: "globalThis",
 			"process.env": {},
-			// MONITOR_TOKEN / .env merged at dev-server start — import.meta form is reliably replaced in the client.
-			"import.meta.env.VITE_ODDS_MONITOR_FROM_SHELL": JSON.stringify(
-				levelupOddsMonitorToken
-			),
 		},
 		optimizeDeps: {
 			exclude: ["@base-org/account"],

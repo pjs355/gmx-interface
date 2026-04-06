@@ -2,7 +2,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { OrderbookSnapshot } from "lib/orderbookService";
 import type { OrderExecutionResult } from "lib/predictionMarketService";
 
-export type TradingVenue = "levelup" | "polymarket" | "predictfun" | "dflow";
+export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow";
 
 export interface TradeBoxState {
 	tradingVenue: TradingVenue;

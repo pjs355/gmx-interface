@@ -12,19 +12,17 @@ interface ImportMetaEnv {
 	readonly VITE_PRIVATE_API_BASE?: string;
 	/** Set to "true" to enable trading shell execution gate network calls */
 	readonly VITE_TRADING_SHELL_ENABLED?: string;
+	/** Override venue-prices WebSocket base URL (e.g. ws://localhost:8080). Path /ws/venue-prices is appended automatically. */
 	readonly VITE_ODDS_WS_BASE?: string;
-	readonly VITE_ODDS_MONITOR_TOKEN?: string;
-	/** Injected in vite.config from process.env.MONITOR_TOKEN (not read from .env). */
-	readonly VITE_ODDS_MONITOR_FROM_SHELL?: string;
-	/** "true" when Amsterdam CLOB proxy is active (set by yarn dev prompt) */
+	/** "true" when CLOB proxy is active (set by yarn dev prompt) */
 	readonly VITE_POLYMARKET_CLOB_PROXY?: string;
-	/** Amsterdam Railway /proxy URL (server-side only, used by Vite plugin) */
+	/** Railway /proxy URL (server-side only, used by Vite plugin) */
 	readonly VITE_POLY_PROXY_URL?: string;
-	/** Bearer token for Amsterdam Railway /proxy (server-side only) */
+	/** Bearer token for Railway /proxy (server-side only) */
 	readonly VITE_POLY_PROXY_TOKEN?: string;
 	/**
 	 * Predict order tunnel upstream (vite + browser). LIVE: optional (defaults prod Railway in vite). TEST/DEV: if set, browser
-	 * also tunnels order POST (EU egress); must be a URL your Amsterdam /proxy can reach (not localhost).
+	 * also tunnels order POST (EU egress); must be a URL your Railway /proxy can reach (not localhost).
 	 */
 	readonly VITE_AMSTERDAM_PROXY_LEVELUP_API_URL?: string;
 	/** "true" → request Privy gas sponsorship on BSC; omit or false → you pay BNB gas */

@@ -1,62 +1,33 @@
 import React, { useState, useMemo } from "react";
-import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getFinalAmount, type ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { VenuePosition } from "@/types/trading/venuePosition";
-import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
-import {
-	resolveLogoByTags,
-	resolveUmbrellaIconById,
-	getTagImageFromUmbrella,
-	getTagLabelsFromUmbrella,
-} from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
+import UmbrellaImage from "./UmbrellaImage";
 import { stripUmbrellaDisplayPrefix, titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
+import { getTradeCount, getNetCashFlow } from "../utils/positionHelpers";
 
-// Component to handle image with proper fallback
-function UmbrellaImage({ umbrella }: { umbrella: any }) {
-	const { tags } = usePredictionData();
-	const [imageError, setImageError] = useState(false);
-	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
+type UnifiedBlock = {
+	id: string;
+	umbrella: any;
+	luMarkets: Array<{ market: any; yes: string; no: string }>;
+	venuePositions: VenuePosition[];
+};
 
-	const serverImage =
-		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
-	const tagImage = getTagImageFromUmbrella(umbrella, tags);
-	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
-	const gameLogo = resolveLogoByTags(tagLabels);
-	const fallbackLogo = gameLogo || gtaIcon;
-	const initialSrc = serverImage || tagImage || fallbackLogo;
-
-	const handleError = () => {
-		if (!imageError) {
-			setImageError(true);
-			if (currentSrc !== tagImage && tagImage) {
-				setCurrentSrc(tagImage);
-			} else if (currentSrc !== gameLogo && gameLogo) {
-				setCurrentSrc(gameLogo);
-			} else {
-				setCurrentSrc(gtaIcon);
-			}
-		}
-	};
-
-	return (
-		<img
-			src={currentSrc || initialSrc}
-			alt="umbrella"
-			width={40}
-			height={40}
-			style={{
-				display: "block",
-				background: "#000",
-				borderRadius: 8,
-				objectFit: "contain",
-			}}
-			onError={handleError}
-		/>
-	);
-}
+type MergedHistoryRow = {
+	side: "Yes" | "No";
+	label: string;
+	finalPosition: number;
+	outcomeText: string;
+	outcomeColor: string;
+	totalCost: number;
+	totalPayout: number;
+	totalReturn: number;
+	totalReturnPct: number | null;
+	tradeCount: number;
+	marketIds: string[];
+};
 
 export default function HistoryCardView({
 	returnsByQid,
@@ -73,56 +44,10 @@ export default function HistoryCardView({
 	const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 	const [expandedTradeHistory, setExpandedTradeHistory] = useState<Set<string>>(new Set());
 
-	const toggleCard = (cardId: string) => {
-		setExpandedCards((prev) => {
-			const newSet = new Set(prev);
-			if (newSet.has(cardId)) {
-				newSet.delete(cardId);
-			} else {
-				newSet.add(cardId);
-			}
-			return newSet;
-		});
-	};
-
-	const toggleTradeHistory = (marketId: string) => {
-		setExpandedTradeHistory((prev) => {
-			const newSet = new Set(prev);
-			if (newSet.has(marketId)) {
-				newSet.delete(marketId);
-			} else {
-				newSet.add(marketId);
-			}
-			return newSet;
-		});
-	};
-
-	// Count trades for a market and side
-	const getTradeCount = (marketId: string, side?: "Yes" | "No"): number => {
-		return orders.filter(
-			(order) => {
-				if (order.questionId !== marketId || !order.filled) return false;
-				if (side && order.position?.toLowerCase() !== side.toLowerCase()) return false;
-				return true;
-			}
-		).length;
-	};
-
-	// Calculate Net Cash Flow for a specific market and side
-	const getNetCashFlow = (marketId: string, side: "Yes" | "No"): number => {
-		const sideOrders = orders.filter(
-			(order) =>
-				order.questionId === marketId &&
-				order.filled &&
-				order.position?.toLowerCase() === side.toLowerCase()
-		);
-		const cashOut = sideOrders
-			.filter((o) => o.side === "buy")
-			.reduce((sum, o) => sum + (o.usdcValue || 0), 0);
-		const cashIn = sideOrders
-			.filter((o) => o.side === "sell")
-			.reduce((sum, o) => sum + (o.usdcValue || 0), 0);
-		return cashIn - cashOut;
+	const toggle = (set: Set<string>, id: string) => {
+		const n = new Set(set);
+		if (n.has(id)) n.delete(id); else n.add(id);
+		return n;
 	};
 
 	const venueHistorySyntheticOrders = useMemo(() => {
@@ -130,780 +55,272 @@ export default function HistoryCardView({
 		for (const pos of venueHistory) {
 			if (pos.shares <= 0) continue;
 			const venueName = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue === "dflow" ? "DFlow" : pos.venue;
-			const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || (pos.outcome.toLowerCase() !== "no") ? "Yes" : "No";
+			const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || pos.outcome.toLowerCase() !== "no" ? "Yes" : "No";
 			synth.push({
-				orderId: `synth-vh-${pos.tokenId}`,
-				questionId: pos.tokenId,
-				tokenId: pos.tokenId,
-				side: "buy",
-				position,
-				price: pos.avgPrice ?? 0,
-				size: pos.shares,
-				filled: true,
-				filledAt: null,
-				createdAt: new Date().toISOString(),
-				usdcValue: pos.cost ?? pos.shares * (pos.avgPrice ?? 0),
-				tokenValue: pos.shares,
-				venue: venueName,
+				orderId: `synth-vh-${pos.tokenId}`, questionId: pos.tokenId, tokenId: pos.tokenId,
+				side: "buy", position, price: pos.avgPrice ?? 0, size: pos.shares,
+				filled: true, filledAt: null, createdAt: new Date().toISOString(),
+				usdcValue: pos.cost ?? pos.shares * (pos.avgPrice ?? 0), tokenValue: pos.shares, venue: venueName,
 			});
 		}
 		return synth;
 	}, [venueHistory]);
 
-	const allOrders = useMemo(() =>
-		[...orders, ...venueHistorySyntheticOrders],
-		[orders, venueHistorySyntheticOrders]
-	);
+	const allOrders = useMemo(() => [...orders, ...venueHistorySyntheticOrders], [orders, venueHistorySyntheticOrders]);
 
-	const filteredResolvedMarkets = React.useMemo(() => {
-		const filtered: Array<{ umbrella: any; markets: any[] }> = [];
+	const unifiedBlocks: UnifiedBlock[] = useMemo(() => {
+		const blocks = new Map<string, UnifiedBlock>();
 
-		Object.entries(resolvedMarketsByUmbrella).forEach(
-			([umbrellaId, resolvedMarkets]) => {
-				const marketsWithHistory: any[] = [];
+		Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
+			const marketsWithHistory: Array<{ market: any; yes: string; no: string }> = [];
+			resolvedMarkets.forEach((market: any) => {
+				const mid = market._id || market.questionId || market.marketId;
+				if (!mid) return;
+				if (orders.some((o: any) => o.questionId === mid)) {
+					const fa = getFinalAmount(orders, mid);
+					marketsWithHistory.push({ market, yes: fa.yesShares.toString(), no: fa.noShares.toString() });
+				}
+			});
+			if (marketsWithHistory.length === 0) return;
 
-				resolvedMarkets.forEach((market) => {
-					const marketId =
-						market._id || market.questionId || market.marketId;
-					if (!marketId) return;
+			let umb = umbrellas.find((u) => u._id === umbrellaId);
+			if (!umb) {
+				umb = {
+					_id: umbrellaId,
+					displayName: resolvedMarkets[0]?.umbrellaName || `Umbrella ${umbrellaId.slice(0, 8)}...`,
+					children: [], originalChildren: [],
+					createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), __v: 0,
+				} as any;
+			}
+			blocks.set(umbrellaId, { id: umbrellaId, umbrella: umb, luMarkets: marketsWithHistory, venuePositions: [] });
+		});
 
-					// Check if user has any orders for this market (includes past trades even if position is closed/claimed)
-					const hasOrders = orders.some(
-						(order) => order.questionId === marketId
-					);
+		const matchedTokenIds = new Set<string>();
+		for (const pos of venueHistory) {
+			const matched = umbrellas.find((u) => u.displayName && titlesMatchVenue(u.displayName, pos.marketTitle ?? ""));
+			if (matched && blocks.has(matched._id)) {
+				blocks.get(matched._id)!.venuePositions.push(pos);
+				matchedTokenIds.add(pos.tokenId);
+			}
+		}
 
-					if (hasOrders) {
-						// Get final amounts to display (will be 0 if claimed, but we still show the market)
-						const finalAmounts = getFinalAmount(orders, marketId);
-						const yesShares = finalAmounts.yesShares;
-						const noShares = finalAmounts.noShares;
+		const unmatchedByTitle = new Map<string, VenuePosition[]>();
+		for (const pos of venueHistory) {
+			if (matchedTokenIds.has(pos.tokenId)) continue;
+			const key = stripUmbrellaDisplayPrefix(pos.marketTitle) || pos.marketTitle;
+			const arr = unmatchedByTitle.get(key) ?? [];
+			arr.push(pos);
+			unmatchedByTitle.set(key, arr);
+		}
+		for (const [title, positions] of unmatchedByTitle) {
+			const matched = umbrellas.find((u) => u.displayName && titlesMatchVenue(u.displayName, title));
+			const synth = matched ?? {
+				_id: `venue-hist-${title.slice(0, 20)}`, displayName: title,
+				children: [], originalChildren: [],
+				createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), __v: 0,
+				_polyIcon: positions[0].iconUrl,
+			} as any;
+			blocks.set(synth._id, { id: synth._id, umbrella: synth, luMarkets: [], venuePositions: positions });
+		}
 
-						marketsWithHistory.push({
-							market,
-							yes: yesShares.toString(),
-							no: noShares.toString(),
-						});
+		return Array.from(blocks.values());
+	}, [resolvedMarketsByUmbrella, orders, umbrellas, venueHistory]);
+
+	const mergedRowsByBlock = useMemo(() => {
+		return unifiedBlocks.map((block) => {
+			const sideBuckets: Record<"Yes" | "No", {
+				finalPosition: number; totalCost: number; totalPayout: number; totalReturn: number;
+				hasData: boolean; tradeCount: number; marketIds: string[];
+				label: string; outcomeText: string; outcomeColor: string;
+			}> = {
+				Yes: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "", outcomeColor: "#fff" },
+				No: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "", outcomeColor: "#fff" },
+			};
+
+			for (const { market } of block.luMarkets) {
+				const qid = market._id || market.questionId || market.marketId;
+				if (!qid) continue;
+				const fa = getFinalAmount(orders, qid);
+				const resolved = String((market as any).resolvedOutcome || "").toLowerCase();
+				const title = (market?.displayName || (market as any)?.question || "").trim();
+				const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
+				const isVs = parts.length === 2;
+
+				for (const side of ["Yes", "No"] as const) {
+					const tc = getTradeCount(orders, qid, side);
+					if (tc === 0) continue;
+					const bucket = sideBuckets[side];
+					bucket.hasData = true;
+					bucket.marketIds.push(qid);
+
+					const finalShares = side === "Yes" ? fa.yesShares : fa.noShares;
+					bucket.finalPosition += finalShares;
+
+					const ncf = getNetCashFlow(orders, qid, side);
+					const cashSpent = ncf < 0 ? Math.abs(ncf) : 0;
+					bucket.totalCost += cashSpent;
+
+					const correct = (side === "Yes" && resolved === "yes") || (side === "No" && resolved === "no");
+					const payout = finalShares * (correct ? 1 : 0);
+					bucket.totalPayout += payout;
+
+					const base = payout + ncf;
+					const leg = returnsByQid[qid]?.[side] ?? 0;
+					bucket.totalReturn += base + leg;
+
+					bucket.tradeCount += tc;
+
+					if (!bucket.label) {
+						bucket.label = isVs ? (side === "Yes" ? parts[0] : parts[1]) : side;
 					}
-				});
-
-				if (marketsWithHistory.length > 0) {
-					// Find the actual umbrella object for this ID (with children/tagIds for images)
-					let umbrella = umbrellas.find((u) => u._id === umbrellaId);
-					
-					// If not found, create a basic umbrella object as fallback
-					if (!umbrella) {
-						umbrella = {
-							_id: umbrellaId,
-							displayName:
-								resolvedMarkets[0]?.umbrellaName ||
-								`Umbrella ${umbrellaId.slice(0, 8)}...`,
-							children: [],
-							originalChildren: [], // For image resolution
-							createdAt: new Date().toISOString(),
-							updatedAt: new Date().toISOString(),
-							__v: 0,
-						};
+					if (!bucket.outcomeText) {
+						bucket.outcomeText = isVs ? (resolved === "yes" ? parts[0] : parts[1]) : (resolved === "yes" ? "Yes" : "No");
+						bucket.outcomeColor = correct ? "#16a34a" : "#ef4444";
 					}
-
-					filtered.push({ umbrella, markets: marketsWithHistory });
 				}
 			}
+
+			for (const pos of block.venuePositions) {
+				const side: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || pos.outcome.toLowerCase() !== "no" ? "Yes" : "No";
+				const bucket = sideBuckets[side];
+				bucket.hasData = true;
+				bucket.marketIds.push(pos.tokenId);
+
+				const safeShares = pos.shares != null && isFinite(pos.shares) ? pos.shares : 0;
+				bucket.finalPosition += safeShares;
+
+				const safeCost = pos.cost != null && isFinite(pos.cost) ? pos.cost : 0;
+				bucket.totalCost += safeCost;
+
+				const isWon = pos.outcomeResult === "WON";
+				const payout = isWon ? (pos.pnl != null && isFinite(pos.pnl) && pos.cost != null ? pos.cost + pos.pnl : safeShares) : 0;
+				bucket.totalPayout += payout;
+
+				const ret = pos.pnl != null && isFinite(pos.pnl) ? pos.pnl : payout - safeCost;
+				bucket.totalReturn += ret;
+
+				bucket.tradeCount += 1;
+
+				if (!bucket.label) {
+					const singleInGroup = block.venuePositions.length === 1 && block.luMarkets.length === 0;
+					bucket.label = getVenueHistoryMarketColumnLabel(pos.marketTitle, pos, singleInGroup);
+				}
+				if (!bucket.outcomeText) {
+					bucket.outcomeText = pos.outcomeResult === "WON" ? "WON" : "LOST";
+					bucket.outcomeColor = pos.outcomeResult === "WON" ? "#16a34a" : "#ef4444";
+				}
+			}
+
+			const rows: MergedHistoryRow[] = [];
+			for (const side of ["Yes", "No"] as const) {
+				const b = sideBuckets[side];
+				if (!b.hasData) continue;
+				const retPct = b.totalCost > 0 ? (b.totalReturn / b.totalCost) * 100 : null;
+				rows.push({
+					side, label: b.label || side,
+					finalPosition: b.finalPosition, outcomeText: b.outcomeText, outcomeColor: b.outcomeColor,
+					totalCost: b.totalCost, totalPayout: b.totalPayout, totalReturn: b.totalReturn,
+					totalReturnPct: retPct, tradeCount: b.tradeCount, marketIds: b.marketIds,
+				});
+			}
+			return { block, rows };
+		});
+	}, [unifiedBlocks, orders, returnsByQid]);
+
+	if (unifiedBlocks.length === 0) {
+		return (
+			<div style={{ textAlign: "center", padding: "40px", color: "#888" }}>
+				<p>No resolved markets with trading history found.</p>
+				<p style={{ fontSize: "14px", marginTop: "8px" }}>Only resolved markets where you have trading history will appear here.</p>
+			</div>
 		);
-
-		return filtered;
-	}, [resolvedMarketsByUmbrella, orders, umbrellas]);
-
-	const venueUmbrellaMap = useMemo(() => {
-		const map = new Map<string, any>();
-		for (const pos of venueHistory) {
-			if (map.has(pos.tokenId)) continue;
-			const venueTitle = stripUmbrellaDisplayPrefix(pos.marketTitle) || pos.marketTitle;
-			const matched = umbrellas.find((u) =>
-				u.displayName && titlesMatchVenue(u.displayName, venueTitle)
-			);
-			if (matched) map.set(pos.tokenId, matched);
-		}
-		return map;
-	}, [venueHistory, umbrellas]);
-
-	const hasAnyHistory = filteredResolvedMarkets.length > 0 || venueHistory.length > 0;
+	}
 
 	return (
 		<div className="flex flex-col gap-12">
-			{!hasAnyHistory ? (
-				<div
-					style={{
-						textAlign: "center",
-						padding: "40px",
-						color: "#888",
-					}}
-				>
-					<p>No resolved markets with trading history found.</p>
-					<p style={{ fontSize: "14px", marginTop: "8px" }}>
-						Only resolved markets where you have trading history
-						will appear here.
-					</p>
-				</div>
-			) : (
-				<>
-				{filteredResolvedMarkets.map(({ umbrella, markets }) => (
-					<div key={umbrella._id} className="umbrella-card">
-						{markets.map(({ market, yes, no }) => {
-							const singleMarketUnderUmbrella = markets.length === 1;
-							const qid =
-								market._id ||
-								market.questionId ||
-								market.marketId;
+			{mergedRowsByBlock.map(({ block, rows }) => {
+				const umbrellaHeaderLabel = stripUmbrellaDisplayPrefix(block.umbrella.displayName);
+				return (
+					<div key={block.id} className="umbrella-card">
+						{rows.map((row) => {
+							const cardId = `${block.id}-${row.side}`;
+							const isDetailOpen = expandedCards.has(cardId);
+							const thKey = `${block.id}-${row.side}-th`;
+							const isThExpanded = expandedTradeHistory.has(thKey);
 
-							const finalAmounts = qid
-								? getFinalAmount(orders, qid)
-								: {
-										yesShares: 0,
-										noShares: 0,
-										yesCost: 0,
-										noCost: 0,
-								  };
-							const resolvedOutcome = String(
-								(market as any).resolvedOutcome || ""
-							).toLowerCase();
-
-							// Only show rows for sides where user has FILLED trades
-							const yesTradeCount = getTradeCount(qid, "Yes");
-							const noTradeCount = getTradeCount(qid, "No");
-							
-							const rows: {
-								side: "Yes" | "No";
-								amount: string;
-							}[] = [];
-							if (yesTradeCount > 0)
-								rows.push({ side: "Yes", amount: yes });
-							if (noTradeCount > 0)
-								rows.push({ side: "No", amount: no });
+							const retC = row.totalReturn >= 0 ? "#16a34a" : "#ef4444";
+							const retT = (() => {
+								const s = row.totalReturn >= 0 ? "+" : "-";
+								const u = `$${Math.abs(row.totalReturn).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+								if (row.totalReturnPct === null || !isFinite(row.totalReturnPct)) return `${s}${u}`;
+								const sp = row.totalReturnPct >= 0 ? "+" : "-";
+								return `${s}${u} (${sp}${Math.round(Math.abs(row.totalReturnPct))}%)`;
+							})();
 
 							return (
-								<React.Fragment key={qid}>
-									{rows.map(({ side, amount }) => {
-										const cardId = `${umbrella._id}-${market._id}-${side}`;
-										const isExpanded = expandedCards.has(cardId);
-										
-										// Trade count for this side
-										const tradeCount = side === "Yes" ? yesTradeCount : noTradeCount;
-										const isTradeHistoryExpanded = expandedTradeHistory.has(`${qid}-${side}`);
-
-										const finalShares =
-											side === "Yes"
-												? finalAmounts.yesShares
-												: finalAmounts.noShares;
-										
-										// Calculate Net Cash Flow for this side
-										const netCashFlow = getNetCashFlow(qid, side);
-
-										const finalPositionText =
-											finalShares > 0
-												? finalShares.toLocaleString("en-US", {
-														minimumFractionDigits: finalShares % 1 === 0 ? 0 : 2,
-														maximumFractionDigits: 2,
-												  })
-												: "—";
-										
-										// Format Total Cost (absolute value, white if negative/cost, green if positive/profit)
-										const totalCostText = (() => {
-											const absVal = Math.abs(netCashFlow);
-											const formatted = absVal.toLocaleString("en-US", {
-												minimumFractionDigits: absVal % 1 === 0 ? 0 : 2,
-												maximumFractionDigits: 2,
-											});
-											if (netCashFlow === 0) return "—";
-											return `$${formatted}`;
-										})();
-										// White if negative (cost), green if positive (profit)
-										const totalCostColor =
-											netCashFlow === 0
-												? "#fff"
-												: netCashFlow > 0
-												? "#22c55e"
-												: "#fff";
-
-										const wasCorrect =
-											(side === "Yes" &&
-												resolvedOutcome === "yes") ||
-											(side === "No" && resolvedOutcome === "no");
-										const settlementPayout = wasCorrect ? 1 : 0;
-
-										const totalPayout =
-											finalShares * settlementPayout;
-										const totalPayoutText =
-											totalPayout > 0
-												? `$${totalPayout.toLocaleString("en-US", {
-														minimumFractionDigits: totalPayout % 1 === 0 ? 0 : 2,
-														maximumFractionDigits: 2,
-												  })}`
-												: "$0";
-										const totalPayoutColor =
-											totalPayout > 0 ? "#16a34a" : "#fff";
-
-										// Calculate total return using Net Cash Flow
-										const baseReturn =
-											totalPayout === null
-												? null
-												: totalPayout + netCashFlow;
-										const realizedLegPnl = (() => {
-											if (!qid) return 0;
-											const legPnls = returnsByQid[qid];
-											if (!legPnls) return 0;
-											return side === "Yes"
-												? legPnls.Yes || 0
-												: legPnls.No || 0;
-										})();
-										const totalReturn =
-											baseReturn === null
-												? null
-												: baseReturn + realizedLegPnl;
-										// Calculate return percentage based on cash spent
-										const cashSpent = netCashFlow < 0 ? Math.abs(netCashFlow) : 0;
-										const totalReturnPct =
-											totalReturn !== null &&
-											cashSpent > 0
-												? (totalReturn / cashSpent) * 100
-												: null;
-										const totalReturnColor =
-											totalReturn === null
-												? "#fff"
-												: totalReturn >= 0
-												? "#16a34a"
-												: "#ef4444";
-										const totalReturnText = (() => {
-											if (
-												totalReturn === null ||
-												!isFinite(totalReturn)
-											)
-												return "—";
-											const signUsd =
-												totalReturn >= 0 ? "+" : "-";
-											const absReturn = Math.abs(totalReturn);
-											const usdPart = `$${absReturn.toLocaleString("en-US", {
-												minimumFractionDigits: absReturn % 1 === 0 ? 0 : 2,
-												maximumFractionDigits: 2,
-											})}`;
-											if (
-												totalReturnPct === null ||
-												!isFinite(totalReturnPct)
-											) {
-												return `${signUsd}${usdPart}`;
-											}
-											const signPct =
-												totalReturnPct >= 0 ? "+" : "-";
-											const pctPart = `${Math.round(
-												Math.abs(totalReturnPct)
-											).toLocaleString("en-US")}%`;
-											return `${signUsd}${usdPart} (${signPct}${pctPart})`;
-										})();
-
-										const title = (
-											market?.displayName ||
-											(market as any)?.question ||
-											""
-										).trim();
-										const parts = title
-											.split(/\s*vs\.?\s*/i)
-											.map((s: string) => s.trim())
-											.filter(Boolean);
-										const isVs = parts.length === 2;
-										
-										// Determine outcome text
-										const outcomeText = (() => {
-											if (isVs) {
-												// For VS markets, show the winning team name
-												return resolvedOutcome === "yes"
-													? parts[0]
-													: parts[1];
-											} else {
-												// For regular markets, show Yes or No
-												return resolvedOutcome === "yes"
-													? "Yes"
-													: "No";
-											}
-										})();
-										
-										// Determine outcome color
-										const outcomeColor = (() => {
-											if (isVs) {
-												// For VS markets: Green if user won, Red if user lost
-												return wasCorrect
-													? "#16a34a" // Green - user won
-													: "#ef4444"; // Red - user lost
-											} else {
-												// For regular markets: Yes = Green, No = Red
-												return resolvedOutcome === "yes"
-													? "#16a34a"
-													: "#ef4444";
-											}
-										})();
-
-										return (
-											<div
-												key={cardId}
-												style={{
-													background: "#1a1a1a",
-													border: "1px solid #2a2a2a",
-													borderRadius: 12,
-													overflow: "hidden",
-													marginBottom: 12,
-												}}
-											>
-												{/* Card Header */}
-												<div
-													style={{
-														padding: "16px",
-														background: "#0a0a0a",
-														borderBottom:
-															"1px solid #2a2a2a",
-														display: "flex",
-														alignItems: "center",
-														gap: 12,
-													}}
-												>
-													<UmbrellaImage
-														umbrella={umbrella}
-													/>
-													<div style={{ flex: 1 }}>
-														<div
-															style={{
-																color: "#888",
-																fontSize: 11,
-																textTransform:
-																	"uppercase",
-																letterSpacing: 0.6,
-																marginBottom: 4,
-															}}
-														>
-															{stripUmbrellaDisplayPrefix(
-															umbrella.displayName
-														)}
-														</div>
-														<div
-															style={{
-																color: "#fff",
-																fontSize: 16,
-																fontWeight: 600,
-															}}
-														>
-															{isVs ? (
-																<span>
-																	{side === "Yes"
-																		? parts[0]
-																		: parts[1]}
-																</span>
-															) : singleMarketUnderUmbrella ? (
-																<span
-																	style={{
-																		color:
-																			side === "Yes"
-																				? "#16a34a"
-																				: "#ef4444",
-																	}}
-																>
-																	{side}
-																</span>
-															) : (
-																<>
-																	<span>
-																		{market.displayName ||
-																			market.question}{" "}
-																	</span>
-																	<span
-																		style={{
-																			color:
-																				side ===
-																				"Yes"
-																					? "#16a34a"
-																					: "#ef4444",
-																		}}
-																	>
-																		{side}
-																	</span>
-																</>
-															)}
-														</div>
-													</div>
-												</div>
-
-												{/* Card Summary - Two Info Pieces */}
-												<div
-													onClick={() => toggleCard(cardId)}
-													style={{
-														padding: "16px",
-														display: "flex",
-														justifyContent: "space-between",
-														alignItems: "center",
-														cursor: "pointer",
-													}}
-												>
-													<div style={{ flex: 1 }}>
-														<div
-															style={{
-																color: "#888",
-																fontSize: 11,
-																textTransform:
-																	"uppercase",
-																letterSpacing: 0.6,
-																marginBottom: 4,
-															}}
-														>
-															Final Position
-														</div>
-														<div
-															style={{
-																color: "#fff",
-																fontSize: 18,
-																fontWeight: 700,
-															}}
-														>
-															{finalPositionText}
-														</div>
-													</div>
-													<div
-														style={{
-															flex: 1,
-															textAlign: "right",
-														}}
-													>
-														<div
-															style={{
-																color: "#888",
-																fontSize: 11,
-																textTransform:
-																	"uppercase",
-																letterSpacing: 0.6,
-																marginBottom: 4,
-															}}
-														>
-															Total Return
-														</div>
-														<div
-															style={{
-																color: totalReturnColor,
-																fontSize: 18,
-																fontWeight: 700,
-																whiteSpace: "nowrap",
-															}}
-														>
-															{totalReturnText}
-														</div>
-													</div>
-													<button
-														onClick={(e) => {
-															e.stopPropagation();
-															toggleCard(cardId);
-														}}
-														style={{
-															marginLeft: 12,
-															background: "transparent",
-															border: "none",
-															color: "#888",
-															cursor: "pointer",
-															fontSize: 20,
-															padding: 0,
-															width: 24,
-															height: 24,
-															display: "flex",
-															alignItems: "center",
-															justifyContent: "center",
-															transition:
-																"transform 0.2s ease",
-															transform: isExpanded
-																? "rotate(180deg)"
-																: "rotate(0deg)",
-														}}
-													>
-														▼
-													</button>
-												</div>
-
-												{/* Expanded Details */}
-												{isExpanded && (
-													<div
-														style={{
-															padding: "16px",
-															borderTop:
-																"1px solid #2a2a2a",
-															background: "#0f0f0f",
-														}}
-													>
-														<div
-															style={{
-																display: "flex",
-																flexDirection: "column",
-																gap: 12,
-															}}
-														>
-															<div
-																style={{
-																	display: "flex",
-																	justifyContent:
-																		"space-between",
-																}}
-															>
-																<span
-																	style={{
-																		color: "#888",
-																		fontSize: 13,
-																	}}
-																>
-																	Outcome
-																</span>
-																<span
-																	style={{
-																		color: outcomeColor,
-																		fontSize: 13,
-																		fontWeight: 600,
-																	}}
-																>
-																	{outcomeText}
-																</span>
-															</div>
-															<div
-																style={{
-																	display: "flex",
-																	justifyContent:
-																		"space-between",
-																}}
-															>
-																<span
-																	style={{
-																		color: "#888",
-																		fontSize: 13,
-																	}}
-																>
-																	Total Cost
-																</span>
-																<span
-																	style={{
-																		color: totalCostColor,
-																		fontSize: 13,
-																		fontWeight: 600,
-																	}}
-																>
-																	{totalCostText}
-																</span>
-															</div>
-															<div
-																style={{
-																	display: "flex",
-																	justifyContent:
-																		"space-between",
-																}}
-															>
-																<span
-																	style={{
-																		color: "#888",
-																		fontSize: 13,
-																	}}
-																>
-																	Total Payout
-																</span>
-																<span
-																	style={{
-																		color: totalPayoutColor,
-																		fontSize: 13,
-																		fontWeight: 600,
-																	}}
-																>
-																	{totalPayoutText}
-																</span>
-															</div>
-
-															{/* View Trades Link */}
-															{tradeCount > 0 && (
-																<div
-																	onClick={(e) => {
-																		e.stopPropagation();
-																		toggleTradeHistory(`${qid}-${side}`);
-																	}}
-																	style={{
-																		marginTop: 12,
-																		paddingTop: 12,
-																		borderTop: "1px solid #1f1f1f",
-																		display: "flex",
-																		alignItems: "center",
-																		justifyContent: "center",
-																		gap: 6,
-																		color: "#666",
-																		fontSize: 13,
-																		cursor: "pointer",
-																	}}
-																>
-																	<span>{isTradeHistoryExpanded ? "Hide" : "View"} {tradeCount} trade{tradeCount !== 1 ? "s" : ""}</span>
-																	<span
-																		style={{
-																			display: "inline-block",
-																			transition: "transform 0.2s ease",
-																			transform: isTradeHistoryExpanded ? "rotate(180deg)" : "rotate(0deg)",
-																			fontSize: 10,
-																		}}
-																	>
-																		▼
-																	</span>
-																</div>
-															)}
-														</div>
-													</div>
-												)}
-
-											{/* Trade History (shown when trade history is expanded) - per side */}
-											{isTradeHistoryExpanded && (
-												<TradeHistoryListMobile
-													orders={orders}
-													marketId={qid}
-													isExpanded={isTradeHistoryExpanded}
-													position={side}
-												/>
-											)}
+								<div key={cardId} style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+									{/* Card Header */}
+									<div style={{ padding: "16px", background: "#0a0a0a", borderBottom: "1px solid #2a2a2a", display: "flex", alignItems: "center", gap: 12 }}>
+										<UmbrellaImage umbrella={block.umbrella} size={40} />
+										<div style={{ flex: 1 }}>
+											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+												{umbrellaHeaderLabel}
 											</div>
-										);
-									})}
-								</React.Fragment>
+											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>{row.label}</div>
+										</div>
+									</div>
+
+									{/* Summary row */}
+									<div
+										onClick={() => setExpandedCards((p) => toggle(p, cardId))}
+										style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: isDetailOpen ? "#0f0f0f" : "transparent" }}
+									>
+										<div style={{ flex: 1 }}>
+											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Outcome</div>
+											<div style={{ color: row.outcomeColor, fontSize: 16, fontWeight: 700 }}>{row.outcomeText}</div>
+										</div>
+										<div style={{ flex: 1, textAlign: "right" }}>
+											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Return</div>
+											<div style={{ color: retC, fontSize: 16, fontWeight: 500 }}>{retT}</div>
+										</div>
+										<div style={{ marginLeft: 12, color: "#888", fontSize: 20, width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.2s ease", transform: isDetailOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+											▼
+										</div>
+									</div>
+
+									{/* Expanded details */}
+									{isDetailOpen && (
+										<div style={{ padding: "16px", borderTop: "1px solid #2a2a2a", background: "#0f0f0f", display: "flex", flexDirection: "column", gap: 12 }}>
+											<div style={{ display: "flex", justifyContent: "space-between" }}>
+												<span style={{ color: "#888", fontSize: 13 }}>Position</span>
+												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.finalPosition > 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
+											</div>
+											<div style={{ display: "flex", justifyContent: "space-between" }}>
+												<span style={{ color: "#888", fontSize: 13 }}>Cost</span>
+												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.totalCost > 0 ? `$${row.totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}</span>
+											</div>
+											<div style={{ display: "flex", justifyContent: "space-between" }}>
+												<span style={{ color: "#888", fontSize: 13 }}>Payout</span>
+												<span style={{ color: row.totalPayout > 0 ? "#16a34a" : "#fff", fontSize: 13, fontWeight: 600 }}>{row.totalPayout > 0 ? `$${row.totalPayout.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "$0"}</span>
+											</div>
+											{row.tradeCount > 0 && (
+												<div
+													onClick={(e) => { e.stopPropagation(); setExpandedTradeHistory((p) => toggle(p, thKey)); }}
+													style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #1f1f1f", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: "#666", fontSize: 13, cursor: "pointer" }}
+												>
+													<span>{isThExpanded ? "Hide" : "View"} {row.tradeCount} trade{row.tradeCount !== 1 ? "s" : ""}</span>
+													<span style={{ transition: "transform 0.2s", transform: isThExpanded ? "rotate(180deg)" : "rotate(0deg)", fontSize: 10 }}>▼</span>
+												</div>
+											)}
+											{isThExpanded && <TradeHistoryListMobile orders={allOrders} marketId={row.marketIds} isExpanded={true} position={row.side} />}
+										</div>
+									)}
+								</div>
 							);
 						})}
 					</div>
-				))}
-
-			{/* Venue history cards (resolved) */}
-			{venueHistory.map((pos) => {
-				const isWon = pos.outcomeResult === "WON";
-				const safeCost = (pos.cost != null && isFinite(pos.cost)) ? pos.cost : null;
-				const safeShares = (pos.shares != null && isFinite(pos.shares)) ? pos.shares : 0;
-
-				const totalPayout = (() => {
-					if (isWon) {
-						if (safeCost !== null && pos.pnl != null && isFinite(pos.pnl)) return safeCost + pos.pnl;
-						return safeShares;
-					}
-					return 0;
-				})();
-
-				const totalReturn = (() => {
-					if (pos.pnl != null && isFinite(pos.pnl)) return pos.pnl;
-					if (safeCost !== null) return totalPayout - safeCost;
-					return null;
-				})();
-				const totalReturnPct = (totalReturn != null && safeCost != null && safeCost > 0)
-					? (totalReturn / safeCost) * 100 : null;
-				const totalReturnColor = totalReturn === null ? "#fff" : totalReturn >= 0 ? "#16a34a" : "#ef4444";
-
-				const fmtCost = safeCost !== null && safeCost !== 0
-					? `$${safeCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-					: "—";
-				const fmtPayout = totalPayout > 0
-					? `$${totalPayout.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-					: "$0";
-				const fmtReturn = (() => {
-					if (totalReturn === null || !isFinite(totalReturn)) return "—";
-					const sign = totalReturn >= 0 ? "+" : "-";
-					const usd = `$${Math.abs(totalReturn).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-					if (totalReturnPct === null || !isFinite(totalReturnPct))
-						return `${sign}${usd}`;
-					const pSign = totalReturnPct >= 0 ? "+" : "-";
-					return `${sign}${usd} (${pSign}${Math.round(Math.abs(totalReturnPct))}%)`;
-				})();
-
-				const venueTradeKey = `vh-${pos.tokenId}`;
-				const isVenueExpanded = expandedTradeHistory.has(venueTradeKey);
-				const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || (pos.outcome.toLowerCase() !== "no") ? "Yes" : "No";
-
-				return (
-					<div
-						key={venueTradeKey}
-						style={{
-							background: "#1a1a1a",
-							border: "1px solid #2a2a2a",
-							borderRadius: 12,
-							overflow: "hidden",
-							marginBottom: 12,
-						}}
-					>
-						<div
-							style={{
-								padding: "16px",
-								background: "#0a0a0a",
-								borderBottom: "1px solid #2a2a2a",
-								display: "flex",
-								alignItems: "center",
-								gap: 12,
-								cursor: "pointer",
-							}}
-							onClick={() => toggleTradeHistory(venueTradeKey)}
-						>
-							{(() => {
-								const matched = venueUmbrellaMap.get(pos.tokenId);
-								if (matched) return <UmbrellaImage umbrella={matched} />;
-								if (pos.iconUrl) return (
-									<img src={pos.iconUrl} alt={pos.marketTitle} width={40} height={40}
-										style={{ display: "block", background: "#000", borderRadius: 8, objectFit: "contain" }} />
-								);
-								return null;
-							})()}
-							<div style={{ flex: 1 }}>
-								<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
-									{stripUmbrellaDisplayPrefix(pos.marketTitle)}
-								</div>
-								<div
-									style={{
-										color: isWon ? "#16a34a" : "#ef4444",
-										fontSize: 15,
-										fontWeight: 600,
-										marginTop: 4,
-									}}
-								>
-									{getVenueHistoryMarketColumnLabel(
-										pos.marketTitle,
-										pos,
-										true
-									)}
-								</div>
-							</div>
-							<button
-								className={`expand-trades-btn ${isVenueExpanded ? "expanded" : ""}`}
-								onClick={(e) => { e.stopPropagation(); toggleTradeHistory(venueTradeKey); }}
-								style={{ background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: 12 }}
-							>
-								<span>1</span>
-								<span style={{ marginLeft: 4, display: "inline-block", transform: isVenueExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</span>
-							</button>
-						</div>
-						<div style={{ padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-							<div>
-								<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Cost</div>
-								<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
-									{fmtCost}
-								</div>
-							</div>
-							<div style={{ textAlign: "center" }}>
-								<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Payout</div>
-								<div style={{ color: totalPayout > 0 ? "#16a34a" : "#fff", fontSize: 18, fontWeight: 700 }}>
-									{fmtPayout}
-								</div>
-							</div>
-							<div style={{ textAlign: "right" }}>
-								<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Total Return</div>
-								<div style={{ color: totalReturnColor, fontSize: 18, fontWeight: 700, whiteSpace: "nowrap" }}>
-									{fmtReturn}
-								</div>
-							</div>
-						</div>
-						{isVenueExpanded && (
-							<TradeHistoryListMobile
-								orders={allOrders}
-								marketId={pos.tokenId}
-								isExpanded={isVenueExpanded}
-								position={position}
-							/>
-						)}
-					</div>
 				);
 			})}
-				</>
-			)}
 		</div>
 	);
 }

@@ -1,76 +1,15 @@
-import React, { useState } from "react";
+import React from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
-import {
-	resolveLogoByTags,
-	resolveUmbrellaIconById,
-	getTagImageFromUmbrella,
-	getTagLabelsFromUmbrella,
-} from "@/helpers/gameLogoResolver";
 import { triggerFireworksForElement } from "../utils/Fireworks";
 import { useClaimForVenue } from "@/helpers/claimEarnings";
 import ScrollableTable from "@/components/ScrollableTable/ScrollableTable";
-import { usePredictionData } from "@/context/PredictionDataContext";
-
-// Component to handle image with proper fallback
-function UmbrellaImage({ umbrella }: { umbrella: any }) {
-	const { tags } = usePredictionData();
-	const [imageError, setImageError] = useState(false);
-	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
-
-	// Priority 1: Check for server image (ic_{umbrellaID})
-	const serverImage =
-		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
-
-	// Priority 2: Check for tag imageUrl from tags
-	const tagImage = getTagImageFromUmbrella(umbrella, tags);
-
-	// Priority 3: Check for game logo based on tag labels
-	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
-	const gameLogo = resolveLogoByTags(tagLabels);
-
-	// Priority 4: Fallback to game controller
-	const fallbackLogo = gameLogo || gtaIcon;
-
-	// Determine initial source
-	const initialSrc = serverImage || tagImage || fallbackLogo;
-
-	const handleError = () => {
-		if (!imageError) {
-			setImageError(true);
-			// Try fallback order: tagImage → gameLogo → gtaIcon
-			if (currentSrc !== tagImage && tagImage) {
-				setCurrentSrc(tagImage);
-			} else if (currentSrc !== gameLogo && gameLogo) {
-				setCurrentSrc(gameLogo);
-			} else {
-				setCurrentSrc(gtaIcon);
-			}
-		}
-	};
-
-	return (
-		<img
-			src={currentSrc || initialSrc}
-			alt="umbrella"
-			width={48}
-			height={48}
-			style={{
-				display: "block",
-				background: "#000",
-				borderRadius: 8,
-				objectFit: "contain",
-			}}
-			onError={handleError}
-		/>
-	);
-}
+import UmbrellaImage from "./UmbrellaImage";
+import { formatCurrency } from "../utils/formatCurrency";
 
 export default function ResolvedPositionsTable({
 	umbrellaBalances,
 	toCentsString,
-	softLoading = false,
 	onClaimSuccess,
 }: {
 	umbrellaBalances: Array<{
@@ -78,19 +17,8 @@ export default function ResolvedPositionsTable({
 		markets: Array<{ market: PredictionMarket; yes: string; no: string }>;
 	}>;
 	toCentsString: (n?: number | null) => string;
-	softLoading?: boolean;
 	onClaimSuccess?: (marketId: string, umbrellaId: string) => void;
 }) {
-	const formatCurrency = (value?: number | null): string => {
-		if (value === null || value === undefined || !isFinite(value))
-			return "—";
-		const isInt = Math.abs(value % 1) < 1e-9;
-		const formatted = isInt 
-			? value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-			: value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		return `$${formatted}`;
-	};
-
 	return (
 		<div className="flex flex-col gap-8">
 			<ScrollableTable minWidth="600px">
@@ -143,40 +71,6 @@ export default function ResolvedPositionsTable({
 								</div>
 							</div>
 
-							{softLoading && markets.length === 0 && (
-								<div
-									className="grid items-center px-12 py-12 position-row"
-									style={{
-										gridTemplateColumns:
-											"minmax(200px, 2fr) repeat(3, 1fr) 1fr",
-										borderBottom: "1px solid #1f1f1f",
-										fontSize: 16,
-									}}
-								>
-									{Array.from({ length: 5 }).map((_, idx) => (
-										<div
-											key={idx}
-											style={{
-												textAlign:
-													idx === 0
-														? undefined
-														: "center",
-												color: "#fff",
-											}}
-										>
-											<span
-												className="skeleton-box"
-												style={{
-													display: "inline-block",
-													width: idx === 0 ? 220 : 80,
-													height: 16,
-													borderRadius: 4,
-												}}
-											/>
-										</div>
-									))}
-								</div>
-							)}
 
 							{markets.map(({ market, yes, no }) => {
 								const title = (
@@ -271,13 +165,7 @@ export default function ResolvedPositionsTable({
 												color: "#fff",
 											}}
 										>
-											<span
-												className={
-													softLoading
-														? "soft-blur"
-														: undefined
-												}
-											>
+											<span>
 												{parseFloat(winningShares.toFixed(2))}
 											</span>
 										</div>
@@ -287,13 +175,7 @@ export default function ResolvedPositionsTable({
 												color: "#fff",
 											}}
 										>
-											<span
-												className={
-													softLoading
-														? "soft-blur"
-														: undefined
-												}
-											>
+											<span>
 												$1
 											</span>
 										</div>
@@ -305,13 +187,7 @@ export default function ResolvedPositionsTable({
 												fontSize: 20,
 											}}
 										>
-											<span
-												className={
-													softLoading
-														? "soft-blur"
-														: undefined
-												}
-											>
+											<span>
 												{formatCurrency(totalPayout)}
 											</span>
 										</div>

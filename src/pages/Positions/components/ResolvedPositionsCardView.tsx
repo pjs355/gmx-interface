@@ -1,65 +1,14 @@
-import React, { useState } from "react";
+import React from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
-import {
-	resolveLogoByTags,
-	resolveUmbrellaIconById,
-	getTagImageFromUmbrella,
-	getTagLabelsFromUmbrella,
-} from "@/helpers/gameLogoResolver";
 import { triggerFireworksForElement } from "../utils/Fireworks";
 import { useClaimForVenue } from "@/helpers/claimEarnings";
-import { usePredictionData } from "@/context/PredictionDataContext";
-
-// Component to handle image with proper fallback
-function UmbrellaImage({ umbrella }: { umbrella: any }) {
-	const { tags } = usePredictionData();
-	const [imageError, setImageError] = useState(false);
-	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
-
-	const serverImage =
-		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
-	const tagImage = getTagImageFromUmbrella(umbrella, tags);
-	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
-	const gameLogo = resolveLogoByTags(tagLabels);
-	const fallbackLogo = gameLogo || gtaIcon;
-	const initialSrc = serverImage || tagImage || fallbackLogo;
-
-	const handleError = () => {
-		if (!imageError) {
-			setImageError(true);
-			if (currentSrc !== tagImage && tagImage) {
-				setCurrentSrc(tagImage);
-			} else if (currentSrc !== gameLogo && gameLogo) {
-				setCurrentSrc(gameLogo);
-			} else {
-				setCurrentSrc(gtaIcon);
-			}
-		}
-	};
-
-	return (
-		<img
-			src={currentSrc || initialSrc}
-			alt="umbrella"
-			width={40}
-			height={40}
-			style={{
-				display: "block",
-				background: "#000",
-				borderRadius: 8,
-				objectFit: "contain",
-			}}
-			onError={handleError}
-		/>
-	);
-}
+import UmbrellaImage from "./UmbrellaImage";
+import { formatCurrency } from "../utils/formatCurrency";
 
 export default function ResolvedPositionsCardView({
 	umbrellaBalances,
 	toCentsString,
-	softLoading = false,
 	onClaimSuccess,
 }: {
 	umbrellaBalances: Array<{
@@ -67,19 +16,8 @@ export default function ResolvedPositionsCardView({
 		markets: Array<{ market: PredictionMarket; yes: string; no: string }>;
 	}>;
 	toCentsString: (n?: number | null) => string;
-	softLoading?: boolean;
 	onClaimSuccess?: (marketId: string, umbrellaId: string) => void;
 }) {
-	const formatCurrency = (value?: number | null): string => {
-		if (value === null || value === undefined || !isFinite(value))
-			return "—";
-		const isInt = Math.abs(value % 1) < 1e-9;
-		const formatted = isInt 
-			? value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-			: value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		return `$${formatted}`;
-	};
-
 	return (
 		<div className="flex flex-col gap-12">
 			{umbrellaBalances.map(({ umbrella, markets }) => (
@@ -234,13 +172,7 @@ export default function ResolvedPositionsCardView({
 													fontWeight: 700,
 												}}
 											>
-												<span
-													className={
-														softLoading
-															? "soft-blur"
-															: undefined
-													}
-												>
+												<span>
 													{parseFloat(winningShares.toFixed(2))}
 												</span>
 											</div>
@@ -269,13 +201,7 @@ export default function ResolvedPositionsCardView({
 													fontWeight: 700,
 												}}
 											>
-												<span
-													className={
-														softLoading
-															? "soft-blur"
-															: undefined
-													}
-												>
+												<span>
 													{formatCurrency(totalPayout)}
 												</span>
 											</div>
