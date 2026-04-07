@@ -1,18 +1,20 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIdentityToken } from "@privy-io/react-auth";
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	getLevelFromExp,
 	getProgressToNextLevel,
 	CACHED_EXP_KEY,
 } from "@/components/RPGPanel/config/rpgConfig";
 import {
-	getUserProfile,
 	saveUserExp,
 	addUserExp,
 	requestExpForTestUsdcClaim,
 	type UserProfile,
 } from "@/components/RPGPanel/services/rpgService";
+import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
+import { tradingQueryKeys } from "@/trading/queryKeys";
 
 export interface RPGState {
 	exp: number;
@@ -47,7 +49,6 @@ type RPGContextValue = {
 	refresh: () => Promise<void>;
 };
 
-// Initialize with level 1 config
 const level1Config = getLevelFromExp(0);
 const INITIAL_STATE: RPGState = {
 	exp: 0,
@@ -65,117 +66,103 @@ const RPGContext = createContext<RPGContextValue | null>(null);
 export function RPGProvider({ children }: { children: React.ReactNode }) {
 	const { authenticated, getAccessToken, ready } = usePrivy();
 	const { identityToken } = useIdentityToken();
+	const queryClient = useQueryClient();
 	const [state, setState] = useState<RPGState>(INITIAL_STATE);
+	const cachedExpSyncedRef = useRef(false);
 
-	// Load cached exp from localStorage
+	// Shared profile from React Query (same cache as header, PortfolioContext, etc.)
+	const profileQuery = useCurrentProfile();
+
 	const getCachedExp = useCallback((): number => {
 		try {
 			const cached = localStorage.getItem(CACHED_EXP_KEY);
-			if (cached) {
-				return parseInt(cached, 10) || 0;
-			}
-		} catch (error) {
-			console.error("Failed to get cached exp:", error);
-		}
+			if (cached) return parseInt(cached, 10) || 0;
+		} catch {}
 		return 0;
 	}, []);
 
-	// Save cached exp to localStorage
 	const setCachedExp = useCallback((exp: number): void => {
 		try {
 			localStorage.setItem(CACHED_EXP_KEY, exp.toString());
-		} catch (error) {
-			console.error("Failed to set cached exp:", error);
-		}
+		} catch {}
 	}, []);
 
-	// Clear cached exp from localStorage
 	const clearCachedExp = useCallback((): void => {
 		try {
 			localStorage.removeItem(CACHED_EXP_KEY);
-		} catch (error) {
-			console.error("Failed to clear cached exp:", error);
-		}
+		} catch {}
 	}, []);
 
-	// Update state from exp and optionally profile
 	const updateStateFromExp = useCallback((exp: number, profile?: UserProfile | null) => {
 		const levelConfig = getLevelFromExp(exp);
 		const progressData = getProgressToNextLevel(exp);
-
-		const newProgress = {
-			current: progressData.current,
-			next: progressData.next,
-			progress: progressData.progress,
-		};
 
 		setState((prev) => ({
 			exp,
 			level: levelConfig.level,
 			frameAsset: levelConfig.frameAsset,
 			frameName: levelConfig.frameName,
-			progress: newProgress,
+			progress: {
+				current: progressData.current,
+				next: progressData.next,
+				progress: progressData.progress,
+			},
 			loading: false,
 			error: null,
 			profile: profile !== undefined ? profile : prev.profile,
 		}));
 	}, []);
 
-	// Load exp from server or cache
-	const loadExp = useCallback(async () => {
-		setState((prev) => ({ ...prev, loading: true, error: null }));
+	// Derive RPG state from the shared profile query instead of a separate fetch.
+	// Also handle syncing cached (offline) exp on first load.
+	useEffect(() => {
+		if (profileQuery.isLoading) return;
 
-		try {
-			// Wait for identity token before making authenticated requests
-			if (authenticated && ready && identityToken) {
-				const token = await getAccessToken();
-				if (!token) {
-					throw new Error("No access token available");
-				}
+		if (profileQuery.data) {
+			const profile = profileQuery.data as UserProfile;
+			const serverExp = profile.exp || 0;
+			const cachedExp = getCachedExp();
 
-				const profile = await getUserProfile(token, identityToken);
-				console.log('[RPGContext] Profile loaded:', {
-					hasProfile: !!profile,
-					hasClaimedTestUsdc: (profile as any)?.hasClaimedTestUsdc,
-					exp: profile?.exp,
-					userId: profile?.userId,
-				});
-				const exp = profile.exp || 0;
-
-				const cachedExp = getCachedExp();
-				const totalExp = exp + cachedExp;
-
-				if (cachedExp > 0) {
-					await saveUserExp(totalExp, token, identityToken);
-					clearCachedExp();
-					// Update profile with new exp after saving
-					const updatedProfile = { ...profile, exp: totalExp };
-					updateStateFromExp(totalExp, updatedProfile);
-				} else {
-					updateStateFromExp(totalExp, profile);
-				}
-			} else if (!authenticated) {
-				// Not authenticated - use cached exp only
-				const cachedExp = getCachedExp();
-				updateStateFromExp(cachedExp, null);
+			if (cachedExp > 0 && !cachedExpSyncedRef.current) {
+				const totalExp = serverExp + cachedExp;
+				// Optimistically show the merged total immediately
+				updateStateFromExp(totalExp, profile);
+				(async () => {
+					try {
+						const token = await getAccessToken();
+						if (token && identityToken) {
+							await saveUserExp(totalExp, token, identityToken);
+							clearCachedExp();
+							// Mark synced only after server confirms
+							cachedExpSyncedRef.current = true;
+							queryClient.invalidateQueries({ queryKey: tradingQueryKeys.profileMe });
+						}
+					} catch {
+						// Leave cachedExpSyncedRef false so next profile update retries
+					}
+				})();
+			} else {
+				updateStateFromExp(serverExp, profile);
 			}
-			// If authenticated but no identity token yet, don't update state - wait for token
-		} catch (error: any) {
-			console.error("error", error);
+		} else if (profileQuery.isError) {
+			// Profile query failed -- fall back to cached exp
 			const cachedExp = getCachedExp();
 			updateStateFromExp(cachedExp, null);
-			setState((prev) => ({
-				...prev,
-				error: error?.message || "Failed to load exp",
-			}));
+			setState((prev) => ({ ...prev, error: "Failed to load profile" }));
+		} else if (!authenticated) {
+			const cachedExp = getCachedExp();
+			updateStateFromExp(cachedExp, null);
 		}
-	}, [authenticated, ready, getAccessToken, identityToken, getCachedExp, clearCachedExp, updateStateFromExp]);
+	}, [profileQuery.isLoading, profileQuery.isError, profileQuery.data, authenticated, getCachedExp, clearCachedExp, getAccessToken, identityToken, updateStateFromExp, queryClient]);
 
-	// Add exp (incremental)
-	const addExp = useCallback(
+	// Reset sync flag on logout
+	useEffect(() => {
+		if (!authenticated) cachedExpSyncedRef.current = false;
+	}, [authenticated]);
+
+	const addExpFn = useCallback(
 		async (amount: number) => {
 			if (!authenticated || !ready || !identityToken) {
-				// Cache for later (not authenticated or no identity token yet)
 				const currentCached = getCachedExp();
 				setCachedExp(currentCached + amount);
 				updateStateFromExp(currentCached + amount, null);
@@ -184,68 +171,56 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 
 			try {
 				const token = await getAccessToken();
-				if (!token) {
-					throw new Error("No access token available");
-				}
+				if (!token) throw new Error("No access token available");
 
 				await addUserExp(amount, token, identityToken);
-				await loadExp();
+				queryClient.invalidateQueries({ queryKey: tradingQueryKeys.profileMe });
 			} catch (error: any) {
 				console.error("error", error);
-				// Fallback to cache
 				const currentCached = getCachedExp();
 				setCachedExp(currentCached + amount);
 				updateStateFromExp(currentCached + amount, null);
 			}
 		},
-		[authenticated, ready, getAccessToken, identityToken, getCachedExp, setCachedExp, updateStateFromExp, loadExp]
+		[authenticated, ready, getAccessToken, identityToken, getCachedExp, setCachedExp, updateStateFromExp, queryClient]
 	);
 
-	// Request exp for test USDC claim (server-verified)
 	const requestExpForClaim = useCallback(async () => {
-		if (!authenticated || !ready || !identityToken) {
-			return;
-		}
+		if (!authenticated || !ready || !identityToken) return;
 
 		try {
 			const token = await getAccessToken();
-			if (!token) {
-				throw new Error("No access token available");
-			}
+			if (!token) throw new Error("No access token available");
 
 			const profile = await requestExpForTestUsdcClaim(token, identityToken);
 			const exp = profile.exp || 0;
 			updateStateFromExp(exp, profile);
+			queryClient.invalidateQueries({ queryKey: tradingQueryKeys.profileMe });
 		} catch (error: any) {
 			console.error("error", error);
 		}
-	}, [authenticated, ready, getAccessToken, identityToken, updateStateFromExp]);
+	}, [authenticated, ready, getAccessToken, identityToken, updateStateFromExp, queryClient]);
 
-	// Load exp when auth state changes (wait for identity token)
-	useEffect(() => {
-		if (ready && (!authenticated || identityToken)) {
-			// Load if: ready AND (not authenticated OR have identity token)
-			loadExp();
-		}
-	}, [ready, authenticated, identityToken, loadExp]);
+	const refresh = useCallback(async () => {
+		queryClient.invalidateQueries({ queryKey: tradingQueryKeys.profileMe });
+	}, [queryClient]);
 
-	const value: RPGContextValue = {
-		exp: state.exp,
-		level: state.level,
-		frameAsset: state.frameAsset,
-		frameName: state.frameName,
-		progress: {
-			current: state.progress.current,
-			next: state.progress.next,
-			progress: state.progress.progress,
-		},
-		loading: state.loading,
-		error: state.error,
-		profile: state.profile,
-		addExp,
-		requestExpForClaim,
-		refresh: loadExp,
-	};
+	const value = useMemo<RPGContextValue>(
+		() => ({
+			exp: state.exp,
+			level: state.level,
+			frameAsset: state.frameAsset,
+			frameName: state.frameName,
+			progress: state.progress,
+			loading: state.loading,
+			error: state.error,
+			profile: state.profile,
+			addExp: addExpFn,
+			requestExpForClaim,
+			refresh,
+		}),
+		[state, addExpFn, requestExpForClaim, refresh]
+	);
 
 	return <RPGContext.Provider value={value}>{children}</RPGContext.Provider>;
 }
@@ -257,4 +232,3 @@ export function useRPG(): RPGContextValue {
 	}
 	return context;
 }
-

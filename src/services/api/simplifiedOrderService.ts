@@ -30,6 +30,7 @@ export interface ProcessedOrder {
 	createdAt: string;
 	usdcValue: number; // Total USDC value
 	tokenValue: number; // Total token value
+	venue?: string;
 }
 
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";

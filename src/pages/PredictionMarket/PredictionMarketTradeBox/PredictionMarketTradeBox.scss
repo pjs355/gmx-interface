@@ -1131,3 +1131,34 @@
 		font-weight: 600;
 	}
 }
+
+.match-settled-banner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 220px;
+
+	&__content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+		text-align: center;
+		padding: 32px 16px;
+	}
+
+	&__label {
+		font-size: 14px;
+		font-weight: 500;
+		color: #9ca3af;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+
+	&__winner {
+		font-size: 36px;
+		font-weight: 700;
+		color: #22c55e;
+		line-height: 1.2;
+	}
+}

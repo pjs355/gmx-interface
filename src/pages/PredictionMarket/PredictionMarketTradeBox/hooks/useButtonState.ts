@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useAnimatedDots } from "../../../../hooks/useAnimatedDots";
+import { getVenueConfig } from "@/config/venueConfig";
 
 export interface ButtonStateResult {
   text: string;
@@ -50,6 +51,19 @@ export function useButtonState({
   predictSellShareBalance = undefined as number | null | undefined,
   dflowProofVerified = undefined as boolean | undefined,
   dflowProofLoading = undefined as boolean | undefined,
+  sorState = undefined as
+    | {
+        route: any;
+        isLoading: boolean;
+        error: string | null;
+        isExecuting: boolean;
+        routeExpired: boolean;
+        handleExecute: () => void;
+        venuePositions?: { venue: string; shares: number }[];
+        totalAvailableCash?: number;
+        handleAddFunds?: () => void;
+      }
+    | undefined,
 }: any): ButtonStateResult {
   const animatedDots = useAnimatedDots(400);
   
@@ -62,6 +76,60 @@ export function useButtonState({
     }
     if (state.isLoading) {
       return { text: "Processing...", disabled: true, onClick: () => {} };
+    }
+
+    if (state.tradingVenue === "all") {
+      if (!state.selectedPosition || !state.amount) {
+        return { text: "Enter amount", disabled: true, onClick: () => {} };
+      }
+      if (state.side === "sell") {
+        const totalHeld = (sorState?.venuePositions ?? []).reduce((s, p) => s + p.shares, 0);
+        if (totalHeld <= 0) {
+          return { text: "No shares to sell", disabled: true, onClick: () => {} };
+        }
+      }
+      if (sorState?.isExecuting) {
+        return { text: "Executing…", disabled: true, onClick: () => {} };
+      }
+      if (sorState?.isLoading && !sorState?.route) {
+        return { text: "Computing route…", disabled: true, onClick: () => {} };
+      }
+      if (sorState?.error && !sorState?.route) {
+        return { text: "Route unavailable", disabled: true, onClick: () => {} };
+      }
+      if (sorState?.routeExpired) {
+        return { text: "Route expired — refreshing…", disabled: true, onClick: () => {} };
+      }
+      if (!sorState?.route) {
+        return { text: "Enter amount", disabled: true, onClick: () => {} };
+      }
+      const actionText = state.side === "buy" ? "Buy" : "Sell";
+      let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
+      if (market) {
+        const title = (market?.displayName || (market as any)?.question || "").trim();
+        const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
+        const isVsSingle = parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1;
+        if (isVsSingle) {
+          const teamName = state.selectedPosition === "yes" ? parts[0] : parts[1];
+          buttonText = `${actionText} ${teamName}`;
+        }
+      }
+
+      const cash = sorState.totalAvailableCash ?? 0;
+      const needed = sorState.route.totalCost ?? 0;
+      if (state.side === "buy" && needed > cash && sorState.handleAddFunds) {
+        return {
+          text: "Deposit to Trade",
+          disabled: false,
+          onClick: sorState.handleAddFunds,
+        };
+      }
+
+      return {
+        text: `${buttonText} (Smart Route)`,
+        disabled: false,
+        onClick: sorState.handleExecute,
+      };
     }
 
     if (state.tradingVenue === "polymarket") {
@@ -326,10 +394,8 @@ export function useButtonState({
       // For SELL orders: compare shares to max available shares
       if (state.side === "buy") {
         const usdAmount = parseFloat(state.amount);
-        const effectiveBudget =
-          state.tradingVenue === "levelup"
-            ? usdAmount / 1.02
-            : usdAmount;
+        const vc = getVenueConfig(state.tradingVenue);
+        const effectiveBudget = vc.effectiveBuyBudget(usdAmount);
         isSweepingBook = effectiveBudget > liquidityInfo.maxUsdValue + 0.01;
       } else {
         const sharesRequested = parseFloat(state.amount);
@@ -337,7 +403,6 @@ export function useButtonState({
       }
     }
     
-    // For market buy orders, pass the pre-calculated estimated cost (includes 2% trading fee on LevelUp)
     const marketOrderEstimatedCost = state.orderType === "market" && state.side === "buy" ? state.estimatedCost : null;
     const stableBal =
       state.tradingVenue === "predictfun" &&
@@ -383,7 +448,7 @@ export function useButtonState({
     }
     
     return { text: buttonText, disabled: false, onClick: handleTrade, isSweepingBook, availableShares };
-  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance, dflowProofVerified, dflowProofLoading]);
+  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance, dflowProofVerified, dflowProofLoading, sorState]);
 }
 
 

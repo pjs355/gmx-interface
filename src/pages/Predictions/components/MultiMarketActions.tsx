@@ -92,8 +92,14 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 					? allBooksPreview[questionId]
 					: undefined;
 
-				const yesPrice = preview?.lowestAskA ?? null;
-				const noPrice = preview?.lowestAskB ?? null;
+			// Best price across all venues, falling back to LevelUp-only orderbook price
+			const yesPrice =
+				preview?.bestYesPrice ??
+				preview?.lowestAsk ??
+				(preview?.bestNoPrice != null ? 1 - preview.bestNoPrice : null);
+			const noPrice =
+				preview?.bestNoPrice ??
+				(yesPrice != null ? 1 - yesPrice : null);
 
 				const yesCents =
 					yesPrice !== null && yesPrice !== undefined

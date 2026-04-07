@@ -13,6 +13,8 @@ import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 
 type PortfolioContextValue = {
 	portfolioTotal: number | null;
@@ -41,13 +43,30 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		loading: userDataLoading,
 	} = useUserData();
 
-	// Polymarket Safe USDC.e + Predict BSC USDT (venue cash balances)
-	const { polymarketSafe, embeddedEoa } = useFundingAddresses();
+	// Defer venue queries until after the initial paint so the homepage renders fast.
+	// USDC cash shows immediately; venue cash/positions fill in after first frame.
+	const [venueReady, setVenueReady] = React.useState(false);
+	React.useEffect(() => {
+		let timeoutId: ReturnType<typeof setTimeout> | null = null;
+		const rafId = requestAnimationFrame(() => {
+			timeoutId = setTimeout(() => setVenueReady(true), 0);
+		});
+		return () => {
+			cancelAnimationFrame(rafId);
+			if (timeoutId !== null) clearTimeout(timeoutId);
+		};
+	}, []);
+
+	const { polymarketSafe, embeddedEoa, solanaAddress } = useFundingAddresses();
+
+	const venueEnabled = venueReady && Boolean(polymarketSafe || embeddedEoa || solanaAddress);
+
 	const bridgeBalances = useBridgeFundingBalances({
 		baseSmartWallet: undefined,
-		polymarketSafe,
-		embeddedEoa,
-		enabled: Boolean(polymarketSafe || embeddedEoa),
+		polymarketSafe: venueEnabled ? polymarketSafe : null,
+		embeddedEoa: venueEnabled ? embeddedEoa : null,
+		solanaAddress: venueEnabled ? solanaAddress : null,
+		enabled: venueEnabled,
 	});
 	const polySafeUsdcE = bridgeBalances.data?.polygonUsdcEHuman
 		? Number(bridgeBalances.data.polygonUsdcEHuman)
@@ -55,7 +74,11 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const bscUsdtCash = bridgeBalances.data?.bscUsdtHuman
 		? Number(bridgeBalances.data.bscUsdtHuman)
 		: 0;
-	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
+	const solanaUsdcCash = bridgeBalances.data?.solanaUsdcHuman
+		? Number(bridgeBalances.data.solanaUsdcHuman)
+		: 0;
+
+	const polyPositionsQuery = usePolymarketPositions(venueReady ? polymarketSafe : null);
 	const polyPositionsTotal = useMemo(() => {
 		if (!polyPositionsQuery.data) return 0;
 		return polyPositionsQuery.data.reduce(
@@ -64,7 +87,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		);
 	}, [polyPositionsQuery.data]);
 
-	const predictPositionsQuery = usePredictPositions(account ?? null);
+	const predictPositionsQuery = usePredictPositions(venueReady ? (account ?? null) : null);
 	const predictPositionsTotal = useMemo(() => {
 		if (!predictPositionsQuery.data) return 0;
 		return predictPositionsQuery.data.reduce(
@@ -72,6 +95,16 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			0
 		);
 	}, [predictPositionsQuery.data]);
+
+	const privateApi = usePrivateApiClient();
+	const dflowPositionsQuery = useDflowPositions(venueReady ? solanaAddress : null, privateApi);
+	const dflowPositionsTotal = useMemo(() => {
+		if (!dflowPositionsQuery.data) return 0;
+		return dflowPositionsQuery.data.reduce(
+			(sum, p) => sum + (p.currentValue ?? 0),
+			0
+		);
+	}, [dflowPositionsQuery.data]);
 
 	// Track separate loading states
 	const [hasInitialCashLoad, setHasInitialCashLoad] = React.useState(false);
@@ -140,8 +173,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		if (usdcBalance !== null && usdcBalance !== undefined) {
 			lastCashRef.current = baseCash;
 		}
-		return baseCash + polySafeUsdcE + bscUsdtCash;
-	}, [usdcBalance, polySafeUsdcE, bscUsdtCash]);
+		return baseCash + polySafeUsdcE + bscUsdtCash + solanaUsdcCash;
+	}, [usdcBalance, polySafeUsdcE, bscUsdtCash, solanaUsdcCash]);
 
 	const compute = useCallback(() => {
 		if (!account) {
@@ -194,8 +227,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				positions += yv + nv;
 			});
 
-			// Include Polymarket + Predict.fun positions value (off-chain venue APIs)
-			positions += polyPositionsTotal + predictPositionsTotal;
+			// Include Polymarket + Predict.fun + DFlow positions value (off-chain venue APIs)
+			positions += polyPositionsTotal + predictPositionsTotal + dflowPositionsTotal;
 
 			// Smoothing: avoid snap-to-zero during transient loads
 			const prevCash = lastCashRef.current;
@@ -206,13 +239,14 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				(pricedMarkets === 0 || markets.length === 0) &&
 				prevPositions > 0 &&
 				polyPositionsTotal === 0 &&
-				predictPositionsTotal === 0
+				predictPositionsTotal === 0 &&
+				dflowPositionsTotal === 0
 			) {
 				nextPositions = prevPositions;
 			}
 			const effectiveCash =
 				usdcBalance === null || usdcBalance === undefined
-					? prevCash + polySafeUsdcE + bscUsdtCash
+					? prevCash + polySafeUsdcE + bscUsdtCash + solanaUsdcCash
 					: nextCash;
 			const nextTotal = effectiveCash + nextPositions;
 			setPortfolioTotal((current) => {
@@ -241,8 +275,10 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		userDataLoading,
 		polyPositionsTotal,
 		predictPositionsTotal,
+		dflowPositionsTotal,
 		polySafeUsdcE,
 		bscUsdtCash,
+		solanaUsdcCash,
 	]);
 
 	useEffect(() => {
@@ -270,8 +306,10 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		compute,
 		polyPositionsTotal,
 		predictPositionsTotal,
+		dflowPositionsTotal,
 		polySafeUsdcE,
 		bscUsdtCash,
+		solanaUsdcCash,
 	]);
 
 	const value = useMemo<PortfolioContextValue>(

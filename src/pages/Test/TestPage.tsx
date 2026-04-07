@@ -13,21 +13,18 @@ import GameLinks from "../Predictions/components/GameLinks";
 import { Search } from "../Predictions/components/Search/Search";
 import { PromotionBar } from "@/components/PromotionBar";
 
-// Sort umbrellas by trading activity (number of trades across all children markets)
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
-		// Sum up historicalPrices.length from all children markets
 		const aChildren = (a as any).children || [];
 		const aTradeCount = aChildren.reduce((sum: number, child: any) => {
-			return sum + (child?.historicalPrices?.length ?? 0);
+			return sum + (child?.tradeCount ?? child?.historicalPrices?.length ?? 0);
 		}, 0);
-		
+
 		const bChildren = (b as any).children || [];
 		const bTradeCount = bChildren.reduce((sum: number, child: any) => {
-			return sum + (child?.historicalPrices?.length ?? 0);
+			return sum + (child?.tradeCount ?? child?.historicalPrices?.length ?? 0);
 		}, 0);
-		
-		// Sort in descending order (most trades first)
+
 		return bTradeCount - aTradeCount;
 	});
 }

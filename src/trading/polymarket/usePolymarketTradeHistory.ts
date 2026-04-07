@@ -111,17 +111,6 @@ async function fetchPolymarketTradeHistory(
 		fetchActivityPage(safeAddress, "REDEEM", 500, 5),
 	]);
 
-	if (import.meta.env.DEV && (trades.length > 0 || redeems.length > 0)) {
-		console.log(
-			"[PolyTradeHistory]",
-			trades.length,
-			"trades,",
-			redeems.length,
-			"redeems for",
-			safeAddress
-		);
-	}
-
 	if (trades.length === 0 && redeems.length === 0) return [];
 
 	// Track which conditionId+outcome had a REDEEM (user won and redeemed)

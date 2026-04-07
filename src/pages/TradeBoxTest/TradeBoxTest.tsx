@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { useUserData } from "context/UserDataContext";
-import { useBalances } from "context/BalanceContext";
+import { BalanceProvider, useBalances } from "context/BalanceContext";
 import { usePredictionData } from "context/PredictionDataContext";
 import { OrderbookService } from "@/services/api/orderbookService";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
@@ -25,6 +25,14 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./TradeBoxTest.scss";
 
 export default function TradeBoxTest() {
+	return (
+		<BalanceProvider>
+			<TradeBoxTestInner />
+		</BalanceProvider>
+	);
+}
+
+function TradeBoxTestInner() {
 	const navigate = useNavigate();
 	const { umbrellaId } = useParams<{ umbrellaId: string }>();
 	const { authenticated, user, getAccessToken } = usePrivy();

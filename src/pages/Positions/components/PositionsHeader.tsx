@@ -7,6 +7,8 @@ export default function PositionsHeader({
 	cashLoading = false,
 	positionsLoading = false,
 	portfolioLoading = false,
+	/** When true (positions page still loading), keep Portfolio, Positions $, and Cash in skeleton to avoid layout shift. */
+	summariesLocked = false,
 }: {
 	portfolioTotal: number;
 	positionsTotalValue: number;
@@ -14,15 +16,19 @@ export default function PositionsHeader({
 	cashLoading?: boolean;
 	positionsLoading?: boolean;
 	portfolioLoading?: boolean;
+	summariesLocked?: boolean;
 }) {
-	// Show skeleton if explicitly loading OR if value is 0 during initial load
-	// This prevents showing misleading "$0" before data arrives
+	const lockAll = summariesLocked === true;
 	const showCashSkeleton =
-		cashLoading || (usdcBalance === 0 && portfolioLoading);
+		lockAll || cashLoading || (usdcBalance === 0 && portfolioLoading);
 	const showPositionsSkeleton =
-		positionsLoading || (positionsTotalValue === 0 && portfolioLoading);
+		lockAll ||
+		positionsLoading ||
+		(positionsTotalValue === 0 && portfolioLoading);
 	const showPortfolioSkeleton =
-		portfolioLoading || (portfolioTotal === 0 && positionsLoading);
+		lockAll ||
+		portfolioLoading ||
+		(portfolioTotal === 0 && positionsLoading);
 	return (
 		<div className="mb-36">
 			{/* Desktop layout (unchanged) */}
@@ -47,6 +53,9 @@ export default function PositionsHeader({
 								color: "#fff",
 								fontSize: 36,
 								fontWeight: 900,
+								minHeight: 44,
+								display: "flex",
+								alignItems: "center",
 							}}
 						>
 							{showPortfolioSkeleton ? (
@@ -55,7 +64,7 @@ export default function PositionsHeader({
 									style={{
 										display: "inline-block",
 										width: 160,
-										height: 28,
+										height: 32,
 										borderRadius: 6,
 									}}
 								/>
@@ -86,6 +95,9 @@ export default function PositionsHeader({
 								color: "#fff",
 								fontSize: 20,
 								fontWeight: 700,
+								minHeight: 28,
+								display: "flex",
+								alignItems: "center",
 							}}
 						>
 							{showPositionsSkeleton ? (
@@ -94,7 +106,7 @@ export default function PositionsHeader({
 									style={{
 										display: "inline-block",
 										width: 120,
-										height: 18,
+										height: 22,
 										borderRadius: 4,
 									}}
 								/>
@@ -128,6 +140,9 @@ export default function PositionsHeader({
 								color: "#fff",
 								fontSize: 20,
 								fontWeight: 700,
+								minHeight: 28,
+								display: "flex",
+								alignItems: "center",
 							}}
 						>
 							{showCashSkeleton ? (
@@ -136,7 +151,7 @@ export default function PositionsHeader({
 									style={{
 										display: "inline-block",
 										width: 100,
-										height: 18,
+										height: 22,
 										borderRadius: 4,
 									}}
 								/>
@@ -174,7 +189,14 @@ export default function PositionsHeader({
 						Portfolio
 					</div>
 					<div
-						style={{ color: "#fff", fontSize: 36, fontWeight: 900 }}
+						style={{
+							color: "#fff",
+							fontSize: 36,
+							fontWeight: 900,
+							minHeight: 44,
+							display: "flex",
+							alignItems: "center",
+						}}
 					>
 						{showPortfolioSkeleton ? (
 							<span
@@ -182,7 +204,7 @@ export default function PositionsHeader({
 								style={{
 									display: "inline-block",
 									width: 160,
-									height: 28,
+									height: 32,
 									borderRadius: 6,
 								}}
 							/>
@@ -214,6 +236,9 @@ export default function PositionsHeader({
 								color: "#fff",
 								fontSize: 20,
 								fontWeight: 700,
+								minHeight: 28,
+								display: "flex",
+								alignItems: "center",
 							}}
 						>
 							{showPositionsSkeleton ? (
@@ -222,7 +247,7 @@ export default function PositionsHeader({
 									style={{
 										display: "inline-block",
 										width: 120,
-										height: 18,
+										height: 22,
 										borderRadius: 4,
 									}}
 								/>
@@ -256,6 +281,9 @@ export default function PositionsHeader({
 								color: "#fff",
 								fontSize: 20,
 								fontWeight: 700,
+								minHeight: 28,
+								display: "flex",
+								alignItems: "center",
 							}}
 						>
 							{showCashSkeleton ? (
@@ -264,7 +292,7 @@ export default function PositionsHeader({
 									style={{
 										display: "inline-block",
 										width: 100,
-										height: 18,
+										height: 22,
 										borderRadius: 4,
 									}}
 								/>

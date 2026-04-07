@@ -23,7 +23,7 @@ function toVenuePosition(row: PredictPositionRow): VenuePosition {
 	const currentPrice = shares > 0 ? currentValue / shares : null;
 	return {
 		venue: "predictfun",
-		marketTitle: row.market.title || row.market.question,
+		marketTitle: row.market.question || row.market.title,
 		outcome: row.outcome.name,
 		shares,
 		avgPrice: null,

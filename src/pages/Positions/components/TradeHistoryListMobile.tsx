@@ -4,27 +4,24 @@ import Tooltip from "components/Tooltip/Tooltip";
 
 interface TradeHistoryListMobileProps {
 	orders: ProcessedOrder[];
-	marketId: string;
+	marketId: string | string[];
 	isExpanded: boolean;
-	position?: "Yes" | "No"; // Optional: filter by position (Yes/No)
+	position?: "Yes" | "No";
+	/** For vs / esports markets, show team name (e.g. Keyd) instead of Yes/No */
+	positionDisplayLabel?: string;
 }
 
-/**
- * TradeHistoryListMobile - Mobile component that displays all trades for a specific market
- * Displays in a card-based layout optimized for mobile screens
- */
 export default function TradeHistoryListMobile({
 	orders,
 	marketId,
 	isExpanded,
 	position,
+	positionDisplayLabel,
 }: TradeHistoryListMobileProps) {
-	// Filter orders for this specific market and only show filled orders
-	// If position is provided, also filter by Yes/No
+	const ids = Array.isArray(marketId) ? marketId : [marketId];
 	const marketOrders = orders
 		.filter((order) => {
-			if (order.questionId !== marketId || !order.filled) return false;
-			// Case-insensitive comparison for position
+			if (!ids.includes(order.questionId) || !order.filled) return false;
 			if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
 			return true;
 		})
@@ -112,6 +109,7 @@ export default function TradeHistoryListMobile({
 				{displayOrders.map((order) => {
 					const isBuy = order.side === "buy";
 					const isYes = order.position === "Yes";
+					const sideText = positionDisplayLabel?.trim() || order.position;
 					const cashFlow = isBuy ? -order.usdcValue : order.usdcValue;
 					const shareChange = isBuy ? order.tokenValue : -order.tokenValue;
 
@@ -145,7 +143,7 @@ export default function TradeHistoryListMobile({
 									>
 										{isBuy ? "Buy" : "Sell"}
 									</span>
-								{/* Yes/No with faded background */}
+								{/* Team / Yes/No with faded background */}
 								<span
 									style={{
 										color: isYes ? "#22c55e" : "#f87171",
@@ -156,7 +154,7 @@ export default function TradeHistoryListMobile({
 										borderRadius: 4,
 									}}
 								>
-									{order.position}
+									{sideText}
 								</span>
 								</div>
 								<span style={{ color: "#666", fontSize: 11 }}>
@@ -164,90 +162,95 @@ export default function TradeHistoryListMobile({
 								</span>
 							</div>
 
-							{/* Bottom row: Details */}
-							<div
-								style={{
-									display: "grid",
-									gridTemplateColumns: "1fr 1fr 1fr",
-									gap: 8,
-								}}
-							>
-								<div>
-									<div
-										style={{
-											color: "#666",
-											fontSize: 10,
-											textTransform: "uppercase",
-											marginBottom: 2,
-										}}
-									>
-										Shares
-									</div>
-									<div
-										style={{
-											color: isBuy ? "#22c55e" : "#f87171",
-											fontSize: 14,
-											fontWeight: 600,
-										}}
-									>
-										{formatQuantity(shareChange, true)}
-									</div>
+						{/* Bottom row: Details */}
+						<div
+							style={{
+								display: "grid",
+								gridTemplateColumns: "1fr 1fr 1fr",
+								gap: 8,
+							}}
+						>
+							<div>
+								<div
+									style={{
+										color: "#666",
+										fontSize: 10,
+										textTransform: "uppercase",
+										marginBottom: 2,
+									}}
+								>
+									Shares
 								</div>
-								<div style={{ textAlign: "center" }}>
-									<div
-										style={{
-											color: "#666",
-											fontSize: 10,
-											textTransform: "uppercase",
-											marginBottom: 2,
-											display: "flex",
-											alignItems: "center",
-											justifyContent: "center",
-											gap: 4,
-										}}
-									>
-										Avg Price
-										<Tooltip
-											content="Average execution price"
-											position="top"
-											closeOnDoubleClick
-										>
-											<span style={{ 
-												fontSize: 10, 
-												color: "#888",
-												cursor: "pointer",
-												padding: "2px 4px",
-											}}>
-												ⓘ
-											</span>
-										</Tooltip>
-									</div>
-									<div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>
-										{formatPrice(order.price)}
-									</div>
-								</div>
-								<div style={{ textAlign: "right" }}>
-									<div
-										style={{
-											color: "#666",
-											fontSize: 10,
-											textTransform: "uppercase",
-											marginBottom: 2,
-										}}
-									>
-										Cash Flow
-									</div>
-									<div
-										style={{
-											color: cashFlow >= 0 ? "#22c55e" : "#f87171",
-											fontSize: 14,
-											fontWeight: 700,
-										}}
-									>
-										{formatCurrency(cashFlow, true)}
-									</div>
+								<div
+									style={{
+										color: isBuy ? "#22c55e" : "#f87171",
+										fontSize: 14,
+										fontWeight: 600,
+									}}
+								>
+									{formatQuantity(shareChange, true)}
 								</div>
 							</div>
+							<div style={{ textAlign: "center" }}>
+								<div
+									style={{
+										color: "#666",
+										fontSize: 10,
+										textTransform: "uppercase",
+										marginBottom: 2,
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "center",
+										gap: 4,
+									}}
+								>
+									Avg Price
+									<Tooltip
+										content="Average execution price"
+										position="top"
+										closeOnDoubleClick
+									>
+										<span style={{ 
+											fontSize: 10, 
+											color: "#888",
+											cursor: "pointer",
+											padding: "2px 4px",
+										}}>
+											ⓘ
+										</span>
+									</Tooltip>
+								</div>
+								<div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>
+									{formatPrice(order.price)}
+								</div>
+							</div>
+							<div style={{ textAlign: "right" }}>
+								<div
+									style={{
+										color: "#666",
+										fontSize: 10,
+										textTransform: "uppercase",
+										marginBottom: 2,
+									}}
+								>
+									Cash Flow
+								</div>
+								<div
+									style={{
+										color: cashFlow >= 0 ? "#22c55e" : "#f87171",
+										fontSize: 14,
+										fontWeight: 700,
+									}}
+								>
+									{formatCurrency(cashFlow, true)}
+								</div>
+							</div>
+						</div>
+						{/* Market venue */}
+						<div style={{ marginTop: 8, textAlign: "right" }}>
+							<span style={{ color: "#666", fontSize: 10, textTransform: "uppercase" }}>Market: </span>
+							<span style={{ color: "#888", fontSize: 12 }}>{order.venue ?? "LevelUp"}</span>
+						</div>
 						</div>
 					);
 				})}

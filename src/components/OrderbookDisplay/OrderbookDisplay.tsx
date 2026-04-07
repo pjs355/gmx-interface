@@ -21,6 +21,8 @@ const calculateOrderbookPrices = (orderbook: OrderbookSnapshot | null) => {
 
 	return { bestAsk, bestBid };
 };
+import { shortenTeamLabelForButton } from "@/helpers/predictionUtils";
+import { getYesNoTeamLabels } from "@/pages/PredictionMarket/PredictionMarketTradeBox/teamLabels";
 import DepthBar from "./DepthBar";
 import "./OrderbookDisplay.scss";
 
@@ -41,6 +43,7 @@ interface OrderbookDisplayProps {
 	activePosition?: "yes" | "no";
 	isCollapsed?: boolean;
 	side?: "buy" | "sell";
+	umbrellaDisplayName?: string;
 }
 
 export default function OrderbookDisplay({
@@ -57,6 +60,7 @@ export default function OrderbookDisplay({
 	activePosition,
 	isCollapsed = true,
 	side = "buy",
+	umbrellaDisplayName,
 }: OrderbookDisplayProps) {
 	const [activeTab, setActiveTab] = useState<"yes" | "no">("yes");
 	const { openCurtain } = useCurtainActions();
@@ -121,36 +125,17 @@ export default function OrderbookDisplay({
 		return null;
 	}, [market?.displayName, (market as any)?.question]);
 
-	// Derive team labels conditionally when umbrella has only one market and title contains "vs" (case-insensitive, optional period)
 	const { yesTeamLabel, noTeamLabel } = useMemo(() => {
-		// If it's an Over/Under market, use Over/Under labels
-		if (overUnderMatch) {
-			return { yesTeamLabel: "Over", noTeamLabel: "Under" };
-		}
-		
-		const title = (
-			market?.displayName ||
-			(market as any)?.question ||
-			""
-		).trim();
-		if (!title) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-		const parts = title
-			.split(/\s*vs\.?\s*/i)
-			.map((s: any) => s.trim())
-			.filter(Boolean);
-		if (
-			parts.length === 2 &&
-			(market as any)?.umbrellaChildrenCount === 1
-		) {
-			return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
-		}
-		return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-	}, [
-		market?.displayName,
-		(market as any)?.question,
-		(market as any)?.umbrellaChildrenCount,
-		overUnderMatch,
-	]);
+		if (!market) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
+		const { yesTeamLabel: y, noTeamLabel: n } = getYesNoTeamLabels(
+			market,
+			umbrellaDisplayName,
+		);
+		return {
+			yesTeamLabel: shortenTeamLabelForButton(y),
+			noTeamLabel: shortenTeamLabelForButton(n),
+		};
+	}, [market, umbrellaDisplayName]);
 
 	// Transform the display title for Over/Under markets
 	const displayTitle = useMemo(() => {
@@ -161,23 +146,23 @@ export default function OrderbookDisplay({
 	}, [overUnderMatch, customTitle]);
 
 	const isVsSingle = useMemo(() => {
-		const title = (
+		if (!market || (market as any)?.umbrellaChildrenCount !== 1) return false;
+		const mt = (
 			market?.displayName ||
 			(market as any)?.question ||
 			""
 		).trim();
-		const parts = title
+		if (mt.match(/^Over\s+/i)) return false;
+		const raw =
+			(umbrellaDisplayName || "")
+				.replace(/\s*-\s*Match Winner$/i, "")
+				.trim() || mt;
+		const parts = raw
 			.split(/\s*vs\.?\s*/i)
-			.map((s: any) => s.trim())
+			.map((s: string) => s.trim())
 			.filter(Boolean);
-		return (
-			parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1
-		);
-	}, [
-		market?.displayName,
-		(market as any)?.question,
-		(market as any)?.umbrellaChildrenCount,
-	]);
+		return parts.length === 2;
+	}, [market, umbrellaDisplayName]);
 
 	const yesColor: string = (market as any)?.yesColor || "#8b5cf6";
 	const noColor: string = (market as any)?.noColor || "#3b82f6";
@@ -599,7 +584,28 @@ export default function OrderbookDisplay({
 										: undefined
 								}
 							>
-								{yesTeamLabel} {yesLabel}
+								<span
+									style={{
+										display: "inline-flex",
+										alignItems: "center",
+										gap: 6,
+										maxWidth: "100%",
+										minWidth: 0,
+										justifyContent: "center",
+									}}
+								>
+									<span
+										style={{
+											minWidth: 0,
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+											whiteSpace: "nowrap",
+										}}
+									>
+										{yesTeamLabel}
+									</span>
+									<span style={{ flexShrink: 0 }}>{yesLabel}</span>
+								</span>
 							</button>
 							<button
 								className={`tab-button trade-no ${
@@ -657,7 +663,28 @@ export default function OrderbookDisplay({
 										: undefined
 								}
 							>
-								{noTeamLabel} {noLabel}
+								<span
+									style={{
+										display: "inline-flex",
+										alignItems: "center",
+										gap: 6,
+										maxWidth: "100%",
+										minWidth: 0,
+										justifyContent: "center",
+									}}
+								>
+									<span
+										style={{
+											minWidth: 0,
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+											whiteSpace: "nowrap",
+										}}
+									>
+										{noTeamLabel}
+									</span>
+									<span style={{ flexShrink: 0 }}>{noLabel}</span>
+								</span>
 							</button>
 						</div>
 					</div>

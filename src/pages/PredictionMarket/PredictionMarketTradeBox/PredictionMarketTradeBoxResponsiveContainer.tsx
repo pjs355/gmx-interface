@@ -15,7 +15,9 @@ import type {
 	MarketOrderCalculation,
 } from "./types";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
+import type { RoutePlan, RouteExecution } from "@/trading/sor";
 import Button from "components/Button/Button";
+import { getYesNoTeamLabels } from "./teamLabels";
 
 export interface StableButtonPrices {
 	yesBestAsk: number | null; yesBestBid: number | null;
@@ -38,6 +40,7 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		no: OrderbookSnapshot | null;
 	} | null;
 	dflowVenueHint?: string | null;
+	matchedVenues?: Set<string>;
 	onSideChange: (side: "buy" | "sell") => void;
 	onTrade: () => void;
 	buttonState: {
@@ -49,14 +52,28 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	};
 	approvalState: ApprovalState;
 	executionGateBanner?: ReactNode;
+	walletAddress?: string;
+	usdcBalance?: number;
 	calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
 	getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
+	sorRoute: { route: RoutePlan | null; isLoading: boolean; error: string | null; isStale: boolean };
+	sorExecution: {
+		execution: RouteExecution | null;
+		isExecuting: boolean;
+		remainingBudget: number | null;
+		requestReroute: () => Promise<number | null>;
+		acceptResult: () => Promise<void>;
+	};
+	sorRouteExpired: boolean;
+	handleSorExecute: () => void;
+	crossBuyYes: number | null;
+	crossBuyNo: number | null;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
 	market,
 	orderbook,
-	stableButtonPrices,
+	pandascoreMatchId,
 	state,
 	onPositionChange,
 	onAmountChange,
@@ -67,13 +84,23 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	predictVenueHint,
 	predictVenueBookHints,
 	dflowVenueHint,
+	matchedVenues,
 	onSideChange,
 	onTrade,
 	buttonState,
 	approvalState,
 	executionGateBanner,
+	walletAddress,
+	usdcBalance,
 	calculateContractsForMarketOrder,
 	getEffectivePrice,
+	sorRoute,
+	sorExecution,
+	sorRouteExpired,
+	handleSorExecute,
+	umbrellaDisplayName,
+	crossBuyYes,
+	crossBuyNo,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -95,8 +122,22 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		return Math.max(...orderbook.bids.map((b: any) => b.price));
 	}, [orderbook]);
 
-	// Flip prices based on buy/sell side (Predict.fun: per-outcome monitor hints are native books)
+	// For polymarket/dflow, the effective orderbook is the selected outcome's native
+	// book.  When "no" is selected, swap the display formulas so the NO button shows
+	// the book directly while YES shows the 1−p complement.
+	const bookRepresentsNo =
+		(state.tradingVenue === "polymarket" || state.tradingVenue === "dflow") &&
+		state.selectedPosition === "no";
+
 	const yesPriceCents = useMemo(() => {
+		if (
+			state.tradingVenue === "all" &&
+			state.side === "buy" &&
+			crossBuyYes != null &&
+			Number.isFinite(crossBuyYes)
+		) {
+			return calcCents(crossBuyYes);
+		}
 		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.yes) {
 			const h = predictVenueBookHints.yes;
 			const ba =
@@ -109,19 +150,35 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
 		}
+		if (bookRepresentsNo) {
+			return state.side === "buy"
+				? calcCents(bestBid === null ? null : 1 - (bestBid as any))
+				: calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
+		}
 		return state.side === "buy"
 			? calcCents(bestAsk as any)
 			: calcCents(bestBid as any);
 	}, [
 		state.tradingVenue,
 		state.side,
+		state.selectedPosition,
 		predictVenueBookHints,
 		bestAsk,
 		bestBid,
 		calcCents,
+		bookRepresentsNo,
+		crossBuyYes,
 	]);
 
 	const noPriceCents = useMemo(() => {
+		if (
+			state.tradingVenue === "all" &&
+			state.side === "buy" &&
+			crossBuyNo != null &&
+			Number.isFinite(crossBuyNo)
+		) {
+			return calcCents(crossBuyNo);
+		}
 		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.no) {
 			const h = predictVenueBookHints.no;
 			const ba =
@@ -134,74 +191,53 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
 		}
+		if (bookRepresentsNo) {
+			return state.side === "buy"
+				? calcCents(bestAsk as any)
+				: calcCents(bestBid as any);
+		}
 		return state.side === "buy"
 			? calcCents(bestBid === null ? null : 1 - (bestBid as any))
 			: calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
 	}, [
 		state.tradingVenue,
 		state.side,
+		state.selectedPosition,
 		predictVenueBookHints,
 		bestBid,
 		bestAsk,
 		calcCents,
+		bookRepresentsNo,
+		crossBuyNo,
 	]);
 
-	// Dynamic color logic for single VS markets
 	const isVsSingle = useMemo(() => {
-		const title = (
+		if (!market || (market as any)?.umbrellaChildrenCount !== 1) return false;
+		const mt = (
 			market?.displayName ||
 			(market as any)?.question ||
 			""
 		).trim();
-		const parts = title
+		if (mt.match(/^Over\s+/i)) return false;
+		const raw =
+			(umbrellaDisplayName || "")
+				.replace(/\s*-\s*Match Winner$/i, "")
+				.trim() || mt;
+		const parts = raw
 			.split(/\s*vs\.?\s*/i)
 			.map((s: string) => s.trim())
 			.filter(Boolean);
-		return (
-			parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1
-		);
-	}, [market]);
+		return parts.length === 2;
+	}, [market, umbrellaDisplayName]);
 
 	const yesTeamColor: string = (market as any)?.yesColor || "#22c55e";
 	const noTeamColor: string = (market as any)?.noColor || "#ef4444";
 
-	// Check if this is an "Over {number}" market (daily player count style)
-	const overUnderMatch = useMemo(() => {
-		const title = (
-			market?.displayName ||
-			(market as any)?.question ||
-			""
-		).trim();
-		// Match "Over" followed by a number (with optional commas)
-		const match = title.match(/^Over\s+([\d,]+)/i);
-		if (match) {
-			return match[1]; // Return the number part
-		}
-		return null;
-	}, [market?.displayName, (market as any)?.question]);
-
 	const { yesTeamLabel: mobileYesLabel, noTeamLabel: mobileNoLabel } =
-		useMemo(() => {
-			if (overUnderMatch) {
-				return { yesTeamLabel: "Over", noTeamLabel: "Under" };
-			}
-			const isSingle = (market as any)?.umbrellaChildrenCount === 1;
-			if (!isSingle) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-
-			const tryVs = (s: string) => {
-				if (!s) return null;
-				const parts = s.split(/\s*vs\.?\s*/i).map((p: string) => p.trim()).filter(Boolean);
-				return parts.length === 2 ? { yesTeamLabel: parts[0], noTeamLabel: parts[1] } : null;
-			};
-			const title = (market?.displayName || (market as any)?.question || "").trim();
-			return tryVs(title) || tryVs(((market as any)?.umbrellaDisplayName || "").trim()) || { yesTeamLabel: "Yes", noTeamLabel: "No" };
-		}, [
-			market?.displayName,
-			(market as any)?.question,
-			(market as any)?.umbrellaChildrenCount,
-			(market as any)?.umbrellaDisplayName,
-			overUnderMatch,
-		]);
+		useMemo(
+			() => getYesNoTeamLabels(market, umbrellaDisplayName),
+			[market, umbrellaDisplayName],
+		);
 
 	const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
 		if (!hex) return `rgba(0,0,0,${alpha})`;
@@ -235,27 +271,37 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				data-qa="prediction-tradebox"
 			>
 				{executionGateBanner}
-		<PredictionMarketTradeBoxUI
-			market={market}
-			orderbook={orderbook}
-			stableButtonPrices={stableButtonPrices}
-			state={state}
-			onPositionChange={onPositionChange}
-			onAmountChange={onAmountChange}
-			onPriceChange={onPriceChange}
-			onTradingVenueChange={onTradingVenueChange}
-			onOrderTypeChange={onOrderTypeChange}
-			onSideChange={onSideChange}
-			polymarketVenueHint={polymarketVenueHint}
-			predictVenueHint={predictVenueHint}
-			predictVenueBookHints={predictVenueBookHints}
-			dflowVenueHint={dflowVenueHint}
-			onTrade={onTrade}
-			buttonState={buttonState}
-			approvalState={approvalState}
-			calculateContractsForMarketOrder={calculateContractsForMarketOrder}
-			getEffectivePrice={getEffectivePrice}
-		/>
+			<PredictionMarketTradeBoxUI
+				market={market}
+				orderbook={orderbook}
+				pandascoreMatchId={pandascoreMatchId}
+				umbrellaDisplayName={umbrellaDisplayName}
+				crossBuyYes={crossBuyYes}
+				crossBuyNo={crossBuyNo}
+				state={state}
+				onPositionChange={onPositionChange}
+				onAmountChange={onAmountChange}
+				onPriceChange={onPriceChange}
+				onTradingVenueChange={onTradingVenueChange}
+				onOrderTypeChange={onOrderTypeChange}
+				onSideChange={onSideChange}
+				polymarketVenueHint={polymarketVenueHint}
+				predictVenueHint={predictVenueHint}
+				predictVenueBookHints={predictVenueBookHints}
+				dflowVenueHint={dflowVenueHint}
+				matchedVenues={matchedVenues}
+				onTrade={onTrade}
+				buttonState={buttonState}
+				approvalState={approvalState}
+				walletAddress={walletAddress}
+				usdcBalance={usdcBalance}
+				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
+				getEffectivePrice={getEffectivePrice}
+				sorRoute={sorRoute}
+				sorExecution={sorExecution}
+				sorRouteExpired={sorRouteExpired}
+				handleSorExecute={handleSorExecute}
+			/>
 		</div>
 	);
 }
@@ -372,27 +418,37 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				>
 					▾
 				</button>
-		<PredictionMarketTradeBoxUI
-			market={market}
-			orderbook={orderbook}
-			stableButtonPrices={stableButtonPrices}
-			state={state}
-			onPositionChange={onPositionChange}
-			onAmountChange={onAmountChange}
-			onPriceChange={onPriceChange}
-			onTradingVenueChange={onTradingVenueChange}
-			onOrderTypeChange={onOrderTypeChange}
-			onSideChange={onSideChange}
-			polymarketVenueHint={polymarketVenueHint}
-			predictVenueHint={predictVenueHint}
-			predictVenueBookHints={predictVenueBookHints}
-			dflowVenueHint={dflowVenueHint}
-			onTrade={onTrade}
-			buttonState={buttonState}
-			approvalState={approvalState}
-			calculateContractsForMarketOrder={calculateContractsForMarketOrder}
-			getEffectivePrice={getEffectivePrice}
-		/>
+			<PredictionMarketTradeBoxUI
+				market={market}
+				orderbook={orderbook}
+				pandascoreMatchId={pandascoreMatchId}
+				umbrellaDisplayName={umbrellaDisplayName}
+				crossBuyYes={crossBuyYes}
+				crossBuyNo={crossBuyNo}
+				state={state}
+				onPositionChange={onPositionChange}
+				onAmountChange={onAmountChange}
+				onPriceChange={onPriceChange}
+				onTradingVenueChange={onTradingVenueChange}
+				onOrderTypeChange={onOrderTypeChange}
+				onSideChange={onSideChange}
+				polymarketVenueHint={polymarketVenueHint}
+				predictVenueHint={predictVenueHint}
+				predictVenueBookHints={predictVenueBookHints}
+				dflowVenueHint={dflowVenueHint}
+				matchedVenues={matchedVenues}
+				onTrade={onTrade}
+				buttonState={buttonState}
+				approvalState={approvalState}
+				walletAddress={walletAddress}
+				usdcBalance={usdcBalance}
+				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
+				getEffectivePrice={getEffectivePrice}
+				sorRoute={sorRoute}
+				sorExecution={sorExecution}
+				sorRouteExpired={sorRouteExpired}
+				handleSorExecute={handleSorExecute}
+			/>
 		</div>
 	</PredictionCurtain>
 	);

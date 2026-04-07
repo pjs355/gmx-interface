@@ -1,8 +1,8 @@
 import React from "react";
 import Button from "components/Button/Button";
 import {
-	calculateOrderbookPrices,
 	toCentsString,
+	shortenTeamLabelForButton,
 } from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
@@ -12,6 +12,7 @@ interface SingleMarketActionsProps {
 	onNavigate: (position: "yes" | "no") => void;
 	question: PredictionMarket;
 	isDailyPlayerCount?: boolean;
+	umbrellaDisplayName?: string;
 }
 
 export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
@@ -19,13 +20,22 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	onNavigate,
 	question,
 	isDailyPlayerCount = false,
+	umbrellaDisplayName,
 }) => {
 	const { allBooksPreview } = usePredictionData();
-	const questionId = question.questionId;
+	const questionId = question?.questionId;
 	const preview = questionId ? allBooksPreview[questionId] : undefined;
 
-	const yesPrice = preview?.lowestAskA ?? null;
-	const noPrice = preview?.lowestAskB ?? null;
+	// Best price across all venues, falling back to LevelUp-only orderbook price
+	const yesPrice =
+		preview?.bestYesPrice ??
+		preview?.lowestAsk ??
+		(preview?.bestNoPrice != null ? 1 - preview.bestNoPrice : null);
+	// NO must complement the same effective YES price (not only bestYesPrice), or we show "--"
+	// when bestYesPrice is null but lowestAsk is set
+	const noPrice =
+		preview?.bestNoPrice ??
+		(yesPrice != null ? 1 - yesPrice : null);
 
 	const yesPriceCents =
 		yesPrice !== null && yesPrice !== undefined
@@ -92,11 +102,17 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			};
 		}
 
-		const raw = (
-			question?.displayName ||
-			(question as any)?.question ||
-			""
-		).trim();
+		// Try umbrella name first (strip trailing " - Match Winner" etc.), then question name
+		const umbrellaCleaned = (umbrellaDisplayName || "")
+			.replace(/\s*-\s*Match Winner$/i, "")
+			.trim();
+		const raw =
+			umbrellaCleaned ||
+			(
+				question?.displayName ||
+				(question as any)?.question ||
+				""
+			).trim();
 		if (!raw)
 			return { yesLabel: "Yes", noLabel: "No", settlementNumber: null };
 		const parts = raw
@@ -116,11 +132,16 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const { yesLabel, noLabel, settlementNumber } = deriveLabels();
 
 	const isVsSingle = (() => {
-		const raw = (
-			question?.displayName ||
-			(question as any)?.question ||
-			""
-		).trim();
+		const umbrellaCleaned = (umbrellaDisplayName || "")
+			.replace(/\s*-\s*Match Winner$/i, "")
+			.trim();
+		const raw =
+			umbrellaCleaned ||
+			(
+				question?.displayName ||
+				(question as any)?.question ||
+				""
+			).trim();
 		const parts = raw
 			.split(/\s*vs\.?\s*/i)
 			.map((s: any) => s.trim())
@@ -132,16 +153,13 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const yesTextColor = getContrastingTextColor(yesColor);
 	const noTextColor = getContrastingTextColor(noColor);
 
-	// Calculate payouts for $100 bet using preview data
-	const betAmount = 100;
-	const yesPayout =
-		yesPrice !== null && yesPrice !== undefined && yesPrice > 0
-			? Math.round(betAmount / yesPrice)
-			: 0;
-	const noPayout =
-		noPrice !== null && noPrice > 0
-			? Math.round(betAmount / noPrice)
-			: 0;
+	const yesDisplayLabel = isVsSingle
+		? shortenTeamLabelForButton(yesLabel)
+		: yesLabel;
+	const noDisplayLabel = isVsSingle
+		? shortenTeamLabelForButton(noLabel)
+		: noLabel;
+
 	return (
 		<div className="single-market-actions">
 			{settlementNumber && (
@@ -199,8 +217,27 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						}
 					}}
 				>
-					<strong>
-						{yesLabel} {yesPriceCents}
+					<strong
+						style={{
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							gap: "6px",
+							width: "100%",
+							minWidth: 0,
+						}}
+					>
+						<span
+							style={{
+								minWidth: 0,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{yesDisplayLabel}
+						</span>
+						<span style={{ flexShrink: 0 }}>{yesPriceCents}</span>
 					</strong>
 				</Button>
 				<Button
@@ -241,37 +278,29 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						}
 					}}
 				>
-					<strong>
-						{noLabel} {noPriceCents}
+					<strong
+						style={{
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							gap: "6px",
+							width: "100%",
+							minWidth: 0,
+						}}
+					>
+						<span
+							style={{
+								minWidth: 0,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{noDisplayLabel}
+						</span>
+						<span style={{ flexShrink: 0 }}>{noPriceCents}</span>
 					</strong>
 				</Button>
-			</div>
-
-			<div className="payout-info">
-				<div className="payout-row">
-					<span className="payout-label">
-						{yesPayout > 0 ? (
-							<>
-								$100 →{" "}
-								<span style={{ color: "#22c55e" }}>${yesPayout}</span>
-							</>
-						) : (
-							<span style={{ color: "#888" }}>0 shares available</span>
-						)}
-					</span>
-				</div>
-				<div className="payout-row">
-					<span className="payout-label">
-						{noPayout > 0 ? (
-							<>
-								$100 →{" "}
-								<span style={{ color: "#22c55e" }}>${noPayout}</span>
-							</>
-						) : (
-							<span style={{ color: "#888" }}>0 shares available</span>
-						)}
-					</span>
-				</div>
 			</div>
 		</div>
 	);

@@ -10,6 +10,7 @@ import { EsportsVenueBooksPanel } from "@/components/EsportsVenueBooksPanel/Espo
 import { ExchangePriceChart } from "./ExchangePriceChart";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
 import {
 	ChartSkeleton,
@@ -37,6 +38,7 @@ type PanelsProps = {
 		frozenOrderbooks: Record<string, any>;
 	};
 	orderbooksReady: boolean;
+	settledInfo?: SettledInfo | null;
 };
 
 export const MarketPanels: React.FC<PanelsProps> = ({
@@ -53,6 +55,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	fetchAllOrderbooks,
 	chartState,
 	orderbooksReady,
+	settledInfo,
 }) => {
 	useMedia("(max-width: 1100px)");
 
@@ -60,6 +63,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
 	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
+	const settledView = Boolean(settledInfo);
 	const pandascoreMatchId =
 		typeof umbrella?.pandascore_matchId === "string"
 			? umbrella.pandascore_matchId.trim()
@@ -95,7 +99,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			: undefined;
 	}, [chartState.secondaryMarket, umbrella?.children?.length]);
 
-	const orderbookColumnContent = (
+	const orderbookColumnContent = settledView ? (
+		<RulesSection umbrella={umbrella} />
+	) : (
 		<>
 			{sortedQuestions.map((question, index) => {
 				if (!question) return null;
@@ -117,6 +123,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 								umbrellaDisplayName: umbrella?.displayName || "",
 							} as any
 							}
+							umbrellaDisplayName={umbrella.displayName}
 							onMarketSwitch={onMarketSwitch}
 							onMarketSwitchWithOrderbook={onMarketSwitchWithOrderbook}
 							onOrderbookToggle={onOrderbookToggle}
@@ -139,6 +146,21 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		</>
 	);
 
+	const orderbookSectionBody =
+		settledView || (hasQuestions && orderbooksReady) ? (
+			orderbookColumnContent
+		) : (
+			<>
+				<OrderbookSkeleton />
+				<OrderbookSkeleton />
+			</>
+		);
+
+	// Chart only needs active markets + orderbooks; settledView does not change this condition
+	const showChartBlock = hasQuestions && orderbooksReady;
+	const showChartPlaceholder =
+		!showChartBlock && !(settledView && !hasQuestions);
+
 	return (
 		<div className="prediction-market-content">
 			{/* Desktop Layout */}
@@ -150,7 +172,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						</div>
 					)}
 					<div className="chart-section">
-						{hasQuestions && orderbooksReady ? (
+						{showChartBlock ? (
 							<div
 								className="ExchangeChart"
 								style={{
@@ -179,14 +201,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 									/>
 								</div>
 							</div>
-						) : (
+						) : showChartPlaceholder ? (
 							<ChartSkeleton />
-						)}
-				</div>
+						) : null}
+					</div>
 
-				{activeMarket?.conditionId && (
-					<ExchangePriceChart conditionId={activeMarket.conditionId} />
-				)}
+					<div className="orderbook-section">{orderbookSectionBody}</div>
 
 				<div className="orderbook-section">
 					{hasQuestions && orderbooksReady ? (
@@ -199,41 +219,39 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					)}
 				</div>
 
-				{/* Comments Section */}
-				{umbrella && (
-					<Comments
-						umbrellaId={umbrella._id}
-						markets={sortedQuestions as PredictionMarket[]}
-					/>
-				)}
-			</div>
-
 			<div className="right-panel">
-					{hasQuestions && orderbooksReady && activeMarket ? (
-						<PredictionMarketTradeBox
-							market={
-								{
+				{settledInfo ? (
+					<div className="prediction-market-tradebox match-settled-banner">
+						<div className="match-settled-banner__content">
+							<div className="match-settled-banner__winner">
+								{settledInfo.winnerName} has won!
+							</div>
+						</div>
+					</div>
+				) : hasQuestions && orderbooksReady && activeMarket ? (
+					<PredictionMarketTradeBox
+						market={
+							{
 								...(activeMarket as any),
 								umbrellaChildrenCount:
 									umbrella?.children?.length || 0,
-								umbrellaDisplayName:
-									umbrella?.displayName || "",
 							} as any
-							}
-							orderbook={
-								questionOrderbooks[getMarketId(activeMarket)]
-							}
-							pandascoreMatchId={
-								pandascoreMatchId || undefined
-							}
-							initialPosition={activePosition}
-							onPositionChange={onPositionChange}
-							onSideChange={setTradeSide}
-						/>
-					) : (
-						<TradeBoxSkeleton />
-					)}
-				</div>
+						}
+						orderbook={
+							questionOrderbooks[getMarketId(activeMarket)]
+						}
+						pandascoreMatchId={
+							pandascoreMatchId || undefined
+						}
+						umbrellaDisplayName={umbrella.displayName}
+						initialPosition={activePosition}
+						onPositionChange={onPositionChange}
+						onSideChange={setTradeSide}
+					/>
+				) : (
+					<TradeBoxSkeleton />
+				)}
+			</div>
 			</div>
 
 			{/* Mobile Layout */}
@@ -244,7 +262,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					</div>
 				)}
 				<div className="chart-section-mobile">
-					{hasQuestions && orderbooksReady ? (
+					{showChartBlock ? (
 						<div
 							className="ExchangeChart"
 							style={{
@@ -271,25 +289,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 								/>
 							</div>
 						</div>
-					) : (
+					) : showChartPlaceholder ? (
 						<ChartSkeleton />
-					)}
+					) : null}
 				</div>
 
-				{activeMarket?.conditionId && (
-					<ExchangePriceChart conditionId={activeMarket.conditionId} />
-				)}
-
-				<div className="orderbook-section-mobile">
-					{hasQuestions && orderbooksReady ? (
-						orderbookColumnContent
-					) : (
-						<>
-							<OrderbookSkeleton />
-							<OrderbookSkeleton />
-						</>
-					)}
-				</div>
+				<div className="orderbook-section-mobile">{orderbookSectionBody}</div>
 
 				{/* Comments Section */}
 				{umbrella && (
@@ -299,35 +304,44 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					/>
 				)}
 
-				{/* Mobile Trading Container - Fixed at bottom */}
-				{hasQuestions && orderbooksReady && activeMarket ? (
-					<div className="mobile-trading-container">
-						<PredictionMarketTradeBox
-							market={
-								{
+			{/* Mobile Trading Container - Fixed at bottom */}
+			{settledInfo ? (
+				<div className="mobile-trading-container">
+					<div className="prediction-market-tradebox match-settled-banner">
+						<div className="match-settled-banner__content">
+							<div className="match-settled-banner__winner">
+								{settledInfo.winnerName} has won!
+							</div>
+						</div>
+					</div>
+				</div>
+			) : hasQuestions && orderbooksReady && activeMarket ? (
+				<div className="mobile-trading-container">
+					<PredictionMarketTradeBox
+						market={
+							{
 								...(activeMarket as any),
 								umbrellaChildrenCount:
 									umbrella?.children?.length || 0,
-								umbrellaDisplayName:
-									umbrella?.displayName || "",
 							} as any
-							}
-							orderbook={
-								questionOrderbooks[getMarketId(activeMarket)]
-							}
-							pandascoreMatchId={
-								pandascoreMatchId || undefined
-							}
-							initialPosition={activePosition}
-							onPositionChange={onPositionChange}
-							onSideChange={setTradeSide}
-						/>
-					</div>
-				) : (
-					<div className="mobile-trading-container">
-						<TradeBoxSkeleton />
-					</div>
-				)}
+						}
+						orderbook={
+							questionOrderbooks[getMarketId(activeMarket)]
+						}
+						pandascoreMatchId={
+							pandascoreMatchId || undefined
+						}
+						umbrellaDisplayName={umbrella.displayName}
+						initialPosition={activePosition}
+						onPositionChange={onPositionChange}
+						onSideChange={setTradeSide}
+					/>
+				</div>
+			) : (
+				<div className="mobile-trading-container">
+					<TradeBoxSkeleton />
+				</div>
+			)}
 			</div>
 		</div>
 	);

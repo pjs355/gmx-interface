@@ -24,7 +24,7 @@ export default function NestedTab<V extends string | number>({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedSubOption = option.options.find((opt) => opt.value === selectedValue);
-  const label = selectedSubOption ? selectedSubOption.label || selectedSubOption.value : t`More`;
+  const label = selectedSubOption ? selectedSubOption.label || selectedSubOption.value : (option.label || t`More`);
 
   // Close dropdown when clicking outside
   useEffect(() => {

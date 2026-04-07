@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { Link } from "react-router-dom";
 import Button from "components/Button/Button";
 import Tabs from "components/Tabs/Tabs";
@@ -8,7 +8,10 @@ import type { OrderbookSnapshot } from '@/services/api/orderbookService';
 import './PredictionMarketTradeBox.scss';
 import { MyPositionsRow } from './MyPositionsRow';
 import { mixpanelTrack } from "@/utils/mixpanel";
-import { calculateFeeMatchingBackend } from './feeLevelUp';
+import { getVenueConfig } from '@/config/venueConfig';
+import type { RoutePlan, RouteExecution } from "@/trading/sor";
+import { VENUE_DISPLAY_NAMES, VENUE_COLORS } from "@/trading/sor";
+import { getYesNoTeamLabels } from "./teamLabels";
 
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -34,8 +37,8 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
   getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
   state: TradeBoxState;
-  /** Position-independent prices for button labels (external venues only). */
-  stableButtonPrices?: StableButtonPrices | null;
+  walletAddress?: string;
+  usdcBalance?: number;
   onPositionChange: (position: 'yes' | 'no') => void;
   onAmountChange: (amount: string) => void;
   onPriceChange: (price: string) => void;
@@ -50,6 +53,7 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
     no: OrderbookSnapshot | null;
   } | null;
   dflowVenueHint?: string | null;
+  matchedVenues?: Set<string>;
   onTrade: () => void;
   buttonState: {
     text: string;
@@ -59,25 +63,27 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
     availableShares?: number;
   };
   approvalState: ApprovalState;
+  sorRoute: { route: RoutePlan | null; isLoading: boolean; error: string | null; isStale: boolean };
+  sorExecution: {
+    execution: RouteExecution | null;
+    isExecuting: boolean;
+    remainingBudget: number | null;
+    requestReroute: () => Promise<number | null>;
+    acceptResult: () => Promise<void>;
+    resetExecution: () => void;
+  };
+  sorRouteExpired: boolean;
+  totalAvailableCash?: number;
+  handleSorExecute: () => void;
+  crossBuyYes: number | null;
+  crossBuyNo: number | null;
 }
-
-/** Same nested shape as Market/Limit (`label` matches first option, like Market/Market). */
-const venueDropdownOptions = [
-  {
-    label: "LevelUp",
-    options: [
-      { value: "levelup" as const, label: "LevelUp" },
-      { value: "polymarket" as const, label: "Polymarket" },
-      { value: "predictfun" as const, label: "Predict.fun" },
-      { value: "dflow" as const, label: "DFlow" },
-    ],
-  },
-];
 
 export default function PredictionMarketTradeBoxUI({
   market,
   orderbook,
-  stableButtonPrices,
+  pandascoreMatchId,
+  umbrellaDisplayName,
   state,
   onPositionChange,
   onAmountChange,
@@ -89,14 +95,41 @@ export default function PredictionMarketTradeBoxUI({
   predictVenueHint,
   predictVenueBookHints,
   dflowVenueHint,
+  matchedVenues,
   onTrade,
   buttonState,
   approvalState,
+  walletAddress,
+  usdcBalance,
   calculateContractsForMarketOrder,
   getEffectivePrice,
+  sorRoute,
+  sorExecution,
+  sorRouteExpired,
+  handleSorExecute,
+  totalAvailableCash,
+  crossBuyYes,
+  crossBuyNo,
 }: PredictionMarketTradeBoxUIProps) {
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
+  const venueConfig = getVenueConfig(tradingVenue);
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
+
+  const venueDropdownOptions = useMemo(() => {
+    const all: { value: string; label: string }[] = [
+      { value: "levelup", label: "LevelUp" },
+      { value: "polymarket", label: "Polymarket" },
+      { value: "predictfun", label: "Predict.fun" },
+      { value: "dflow", label: "DFlow" },
+    ];
+    const venues = matchedVenues
+      ? all.filter((v) => v.value === "levelup" || matchedVenues.has(v.value))
+      : all;
+    if (pandascoreMatchId && venues.length > 1) {
+      venues.unshift({ value: "all", label: "All" });
+    }
+    return [{ label: "Venue", options: venues }];
+  }, [pandascoreMatchId, matchedVenues]);
   const predictHints = predictVenueBookHints;
   const yesHintPrices = predictHints?.yes
     ? calculateOrderbookPrices(predictHints.yes)
@@ -130,29 +163,49 @@ export default function PredictionMarketTradeBoxUI({
     return Math.round(value * 100).toString();
   };
 
-  // Button label prices: use stableButtonPrices (position-independent) for external
-  // venues, fall back to effective orderbook for LevelUp.
-  // BUY: shows bestAsk (cost to buy), SELL: shows bestBid (proceeds from selling).
-  const yesPrice = (() => {
-    if (tradingVenue === "predictfun" && yesHintPrices) {
-      return side === "buy" ? yesHintPrices.bestAsk : yesHintPrices.bestBid;
-    }
-    if (stableButtonPrices) {
-      return side === "buy" ? stableButtonPrices.yesBestAsk : stableButtonPrices.yesBestBid;
-    }
-    return side === "buy" ? bestAsk : bestBid;
-  })();
-  const noPrice = (() => {
-    if (tradingVenue === "predictfun" && noHintPrices) {
-      return side === "buy" ? noHintPrices.bestAsk : noHintPrices.bestBid;
-    }
-    if (stableButtonPrices) {
-      return side === "buy" ? stableButtonPrices.noBestAsk : stableButtonPrices.noBestBid;
-    }
-    return side === "buy"
-      ? (bestBid === null ? null : 1 - bestBid)
-      : (bestAsk === null ? null : 1 - bestAsk);
-  })();
+  // For polymarket/dflow the effective orderbook is the *selected* outcome's native
+  // book.  When the user selects NO, bestAsk/bestBid come from the NO book, so we
+  // must swap the display formulas: the NO button shows the book directly while the
+  // YES button shows the 1−p complement.  LevelUp always uses a single YES book.
+  // Predict.fun uses separate per-outcome monitor hints so no complement is needed.
+  const bookRepresentsNo =
+    (tradingVenue === "polymarket" || tradingVenue === "dflow") &&
+    selectedPosition === "no";
+
+  const yesPrice =
+    tradingVenue === "all" &&
+    side === "buy" &&
+    crossBuyYes != null &&
+    Number.isFinite(crossBuyYes)
+      ? crossBuyYes
+      : tradingVenue === "predictfun" && yesHintPrices
+        ? side === "buy"
+          ? yesHintPrices.bestAsk
+          : yesHintPrices.bestBid
+        : bookRepresentsNo
+          ? side === "buy"
+            ? (bestBid === null ? null : 1 - bestBid)
+            : (bestAsk === null ? null : 1 - bestAsk)
+          : side === "buy"
+            ? bestAsk
+            : bestBid;
+  const noPrice =
+    tradingVenue === "all" &&
+    side === "buy" &&
+    crossBuyNo != null &&
+    Number.isFinite(crossBuyNo)
+      ? crossBuyNo
+      : tradingVenue === "predictfun" && noHintPrices
+        ? side === "buy"
+          ? noHintPrices.bestAsk
+          : noHintPrices.bestBid
+        : bookRepresentsNo
+          ? side === "buy"
+            ? bestAsk
+            : bestBid
+          : side === "buy"
+            ? (bestBid === null ? null : 1 - bestBid)
+            : (bestAsk === null ? null : 1 - bestAsk);
   
   // Format with ¢ only when price exists, otherwise just "--"
   const yesPriceCents = yesPrice !== null ? `${toCentsString(yesPrice)}¢` : "--";
@@ -187,41 +240,33 @@ export default function PredictionMarketTradeBoxUI({
   };
 
   const isVsSingle = useMemo(() => {
-    const title = (market?.displayName || (market as any)?.question || '').trim();
-    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-    return parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1;
-  }, [market]);
+    if (!market || (market as any)?.umbrellaChildrenCount !== 1) return false;
+    const mt = (market?.displayName || (market as any)?.question || "").trim();
+    if (mt.match(/^Over\s+/i)) return false;
+    const raw =
+      (umbrellaDisplayName || "")
+        .replace(/\s*-\s*Match Winner$/i, "")
+        .trim() || mt;
+    const parts = raw
+      .split(/\s*vs\.?\s*/i)
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    return parts.length === 2;
+  }, [market, umbrellaDisplayName]);
 
   const yesTeamColor: string = (market as any)?.yesColor || '#22c55e';
   const noTeamColor: string = (market as any)?.noColor || '#ef4444';
 
-  // Check if this is an "Over {number}" market (daily player count style)
   const overUnderMatch = useMemo(() => {
     const title = (market?.displayName || (market as any)?.question || '').trim();
-    // Match "Over" followed by a number (with optional commas)
     const match = title.match(/^Over\s+([\d,]+)/i);
-    if (match) {
-      return match[1]; // Return the number part
-    }
-    return null;
+    return match ? match[1] : null;
   }, [market?.displayName, (market as any)?.question]);
 
-  // Derive team labels conditionally based on market title and umbrella having a single market
-  const { yesTeamLabel, noTeamLabel } = useMemo(() => {
-    if (overUnderMatch) {
-      return { yesTeamLabel: 'Over', noTeamLabel: 'Under' };
-    }
-    const isSingle = (market as any)?.umbrellaChildrenCount === 1;
-    if (!isSingle) return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-
-    const title = (market?.displayName || (market as any)?.question || '').trim();
-    const tryVs = (s: string) => {
-      if (!s) return null;
-      const parts = s.split(/\s*vs\.?\s*/i).map((p: string) => p.trim()).filter(Boolean);
-      return parts.length === 2 ? { yesTeamLabel: parts[0], noTeamLabel: parts[1] } : null;
-    };
-    return tryVs(title) || tryVs(((market as any)?.umbrellaDisplayName || '').trim()) || { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-  }, [market?.displayName, (market as any)?.question, (market as any)?.umbrellaChildrenCount, (market as any)?.umbrellaDisplayName, overUnderMatch]);
+  const { yesTeamLabel, noTeamLabel } = useMemo(
+    () => getYesNoTeamLabels(market, umbrellaDisplayName),
+    [market, umbrellaDisplayName],
+  );
 
   // Transform the display title for Over/Under markets
   const displayMarketTitle = useMemo(() => {
@@ -231,15 +276,13 @@ export default function PredictionMarketTradeBoxUI({
     return market.displayName || market.question;
   }, [overUnderMatch, market.displayName, market.question]);
 
-  const orderTypeDropdownOptions = [
-    {
-      label: "Market",
-      options: [
-        { value: "market" as const, label: "Market" },
-        { value: "limit" as const, label: "Limit" },
-      ],
-    },
-  ];
+  const orderTypeDropdownOptions = useMemo(() => {
+    const options: { value: "market" | "limit"; label: string }[] = [
+      { value: "market", label: "Market" },
+      { value: "limit", label: "Limit" },
+    ];
+    return [{ label: "Market", options }];
+  }, []);
 
   // Compute values for limit orders
   const limitOrderAmount = (() => {
@@ -256,59 +299,64 @@ export default function PredictionMarketTradeBoxUI({
     return Number.isFinite(shares) && shares > 0 ? shares : null;
   })();
 
-  // Compute numeric value for To Win / Receive; hide if null/NaN/0
+  const limitOrderFee = (() => {
+    if (orderType !== 'limit' || !amount || !price) return 0;
+    const shares = Number(amount);
+    const cents = Number(price);
+    if (!Number.isFinite(shares) || !Number.isFinite(cents) || shares <= 0 || cents <= 0) return 0;
+    return venueConfig.estimateFee({ contracts: shares, price: cents / 100, side });
+  })();
+
+  // "To Win" = total payout if the position wins. Each contract pays $1.
   const toWinNumeric = (() => {
+    if (tradingVenue === "all") return null;
     if (!amount || !selectedPosition) return null;
-    
+
     if (orderType === 'limit') {
       if (side === 'sell') {
-        // For sell limit orders: shares × cents = total value received
         return limitOrderAmount;
-      } else {
-        // For buy limit orders: to win = shares amount
-        return limitOrderToWin;
       }
+      if (limitOrderToWin == null) return null;
+      return Number.isFinite(limitOrderToWin) && limitOrderToWin > 0 ? limitOrderToWin : null;
     }
-    
-    // Market order calculations (existing logic)
+
     if (calculatedContracts === null) return null;
     if (side === 'sell') {
       const v = remainingUsd;
       const num = v !== undefined && v !== null ? Number(v) : NaN;
       return Number.isFinite(num) && num > 0 ? num : null;
     }
-    // buy side calculation
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return null;
-    const rem = remainingUsd ?? 0;
-    const avgPrice = (amt - rem) / calculatedContracts; // local only
-    
-    // For both YES and NO positions, if we win we get $1 per contract
-    // So the total payout is just the number of contracts we bought
-    const totalPayout = calculatedContracts * 1; // We get $1 per contract if we win
-    return Number.isFinite(totalPayout) && totalPayout > 0 ? totalPayout : null;
+    // Market buy: payout = $1 × contracts
+    const profit = calculatedContracts;
+    return Number.isFinite(profit) && profit > 0 ? profit : null;
   })();
 
   // Compute Odds % for market BUY orders using weighted average fill price
   const oddsData = useMemo(() => {
+    if (tradingVenue === "all") return null;
     if (orderType !== 'market' || side !== 'buy') return null;
     if (!amount || !selectedPosition) return null;
     const usdAmount = Number(amount);
     if (!Number.isFinite(usdAmount) || usdAmount <= 0) return null;
-    const walkUsd = tradingVenue === "levelup" ? usdAmount / 1.02 : usdAmount; // Polymarket + Predict: full notional
+    const walkUsd = venueConfig.effectiveBuyBudget(usdAmount, {
+      approxPrice: bestAsk ?? undefined,
+    });
     const { contracts, remainingUsd } = calculateContractsForMarketOrder(walkUsd, selectedPosition, 'buy');
     if (!contracts || contracts <= 0) return null;
     const avgPrice = getEffectivePrice(walkUsd, contracts, remainingUsd);
     if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
-    // Determine reference current market price for comparison
+    // Determine reference current market price for comparison.
+    // For poly/dflow/predict the effective book is already the selected outcome's
+    // native book, so bestAsk is the direct price to buy that outcome.
     const referencePrice = (() => {
       if (tradingVenue === "predictfun" && predictHints) {
         const hp =
           selectedPosition === "yes" ? yesHintPrices : noHintPrices;
         if (!hp) return null;
-        return selectedPosition === "yes"
-          ? hp.bestAsk ?? null
-          : hp.bestAsk ?? null;
+        return hp.bestAsk ?? null;
+      }
+      if (tradingVenue === "polymarket" || tradingVenue === "dflow") {
+        return bestAsk ?? null;
       }
       return selectedPosition === 'yes'
         ? (bestAsk ?? null)
@@ -381,9 +429,9 @@ export default function PredictionMarketTradeBoxUI({
           </Link>
         </p>
       ) : null}
+      
 
       <div className="tradebox-header">
-        {/* Buy/Sell Toggle moved to header */}
         <div className="side-selector">
           <Button
             variant={side === 'buy' ? 'primary' : 'secondary'}
@@ -399,18 +447,20 @@ export default function PredictionMarketTradeBoxUI({
             className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
           >
             Sell
-        </Button>
+          </Button>
         </div>
-        <div className="trade-mode-selector">
-          <Tabs
-            options={orderTypeDropdownOptions}
-            regularOptionClassname="py-10"
-            type="inline"
-            selectedValue={orderType}
-            onChange={(value) => onOrderTypeChange(value as 'market' | 'limit')}
-            qa="trade-mode"
-          />
-        </div>
+        {tradingVenue !== "all" && (
+          <div className="trade-mode-selector">
+            <Tabs
+              options={orderTypeDropdownOptions}
+              regularOptionClassname="py-10"
+              type="inline"
+              selectedValue={orderType}
+              onChange={(value) => onOrderTypeChange(value as 'market' | 'limit')}
+              qa="trade-mode"
+            />
+          </div>
+        )}
       </div>
       
       <div className="tradebox-separator" />
@@ -469,19 +519,43 @@ export default function PredictionMarketTradeBoxUI({
         <MyPositionsRow market={market as any} />
       </div>
 
+      {/* DFlow does not support limit orders — show message instead of inputs */}
+      {state.tradingVenue === "dflow" && orderType === "limit" ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '200px',
+          padding: '32px 24px',
+          textAlign: 'center',
+        }}>
+          <p style={{
+            fontSize: '18px',
+            fontWeight: 600,
+            color: '#94a3b8',
+            lineHeight: 1.4,
+            margin: 0,
+          }}>
+            Kalshi via DFlow does not support limit orders at this time
+          </p>
+        </div>
+      ) : (
+      <>
       {/* Amount Input */}
       <div className="input-section">
         <div className="input-label">
-          {orderType === 'market' 
-            ? (side === 'sell' ? 'Shares' : 'Amount')
-            : 'Shares'
+          {tradingVenue === "all"
+            ? "Amount"
+            : orderType === 'market'
+              ? (side === 'sell' ? 'Shares' : 'Amount')
+              : 'Shares'
           }
         </div>
         <div className={`input-container prediction-input-container ${(!amount || amount === '') ? 'empty-input' : ''}`}>
           {/* Show $ symbol when there's a value, use placeholder when empty */}
           <input
             type="text"
-            value={amount ? (side === 'buy' && orderType === 'market' ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
+            value={amount ? ((tradingVenue === "all" || (side === 'buy' && orderType === 'market')) ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
             onFocus={() => {
               try {
                 mixpanelTrack("AmountInputFocused", {
@@ -501,13 +575,13 @@ export default function PredictionMarketTradeBoxUI({
               // Remove $ and commas for processing
               const cleanValue = value.replace(/[$,\s]/g, '');
               
-              // For limit orders and market sell orders, only allow whole numbers (no decimals)
-              if (orderType === 'limit' || (orderType === 'market' && side === 'sell')) {
-                // Block any decimal points for limit orders and market sell orders
+              // LevelUp requires whole shares; other venues allow fractional
+              const forceWholeShares = venueConfig.requiresWholeShares &&
+                (orderType === 'limit' || (orderType === 'market' && side === 'sell'));
+              if (forceWholeShares) {
                 if (cleanValue.includes('.')) {
                   return;
                 }
-                // Only allow digits for limit orders and market sell orders
                 if (!/^\d*$/.test(cleanValue)) {
                   return;
                 }
@@ -533,8 +607,10 @@ export default function PredictionMarketTradeBoxUI({
               const isDecimal = char === '.';
               const isControlKey = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(char);
               
-              // For limit orders and market sell orders, block decimal points
-              if ((orderType === 'limit' || (orderType === 'market' && side === 'sell')) && isDecimal) {
+              // Only block decimals when venue requires whole shares and input is shares
+              const blockDecimal = venueConfig.requiresWholeShares &&
+                (orderType === 'limit' || (orderType === 'market' && side === 'sell'));
+              if (blockDecimal && isDecimal) {
                 e.preventDefault();
                 return;
               }
@@ -544,7 +620,7 @@ export default function PredictionMarketTradeBoxUI({
                 e.preventDefault();
               }
             }}
-            placeholder={(side === 'buy' && orderType === 'market') ? '$0' : '0'}
+            placeholder={(tradingVenue === "all" || (side === 'buy' && orderType === 'market')) ? '$0' : '0'}
             className={`trade-input prediction-trade-input`}
           />
         </div>
@@ -603,28 +679,174 @@ export default function PredictionMarketTradeBoxUI({
         </div>
       )}
 
-      {/* Bet Size / To Win - render only when a positive numeric value exists */}
-      {(toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null || netReceive !== null) && (
+      {/* SOR route breakdown when venue is "all" */}
+      {tradingVenue === "all" && (
+        <div className="bet-size-section" style={{ opacity: sorRoute.isStale && !sorRoute.isLoading ? 0.7 : 1, transition: "opacity 0.2s" }}>
+          {sorRoute.isLoading && !sorRoute.route && (
+            <div className="bet-size-info">
+              <style>{`@keyframes sorPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
+              <div className="bet-size-main-row" style={{ justifyContent: "center", gap: 8 }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: "#6366f1", animation: "sorPulse 1.5s infinite", display: "inline-block" }} />
+                <span style={{ color: "#9ca3af", fontSize: 13 }}>Computing optimal route…</span>
+              </div>
+            </div>
+          )}
+          {sorRoute.error && !sorRoute.route && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <span style={{ color: "#ef4444", fontSize: 12 }}>Route unavailable: {sorRoute.error}</span>
+              </div>
+            </div>
+          )}
+          {sorRoute.route && (() => {
+            const isSell = sorRoute.route.side === "sell";
+            return (
+            <>
+              {sorRoute.route.legs.map((leg, idx) => {
+                const venue = leg.venue as keyof typeof VENUE_COLORS;
+                return (
+                  <div key={`${leg.venue}-${idx}`} className="bet-size-info">
+                    <div className="bet-size-main-row" style={{ fontSize: 12 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: VENUE_COLORS[venue], flexShrink: 0 }} />
+                        {VENUE_DISPLAY_NAMES[venue]}
+                      </span>
+                      <span style={{ color: "#d1d5db" }}>
+                        {isSell ? "sell " : ""}{leg.shares % 1 === 0 ? String(leg.shares) : leg.shares.toFixed(1)} @ {(leg.avgPrice * 100).toFixed(0)}¢
+                        <span style={{ color: "#9ca3af", marginLeft: 6 }}>fee ${leg.fee.toFixed(2)}</span>
+                        {!isSell && leg.bridge && (
+                          <span style={{ color: "#f59e0b", marginLeft: 6 }}>bridge ${leg.bridge.estimatedCost.toFixed(2)}</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {isSell && sorRoute.route.totalShares > 0 && (
+                <div className="bet-size-info">
+                  <div className="bet-size-main-row">
+                    <span className="bet-size-label">Shares to Sell</span>
+                    <span className="bet-size-value">
+                      {sorRoute.route.totalShares % 1 === 0 ? String(sorRoute.route.totalShares) : sorRoute.route.totalShares.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="bet-size-info">
+                <div className="bet-size-main-row">
+                  <span className="bet-size-label">{isSell ? "Estimated Proceeds" : "Estimated Cost"}</span>
+                  <span className={`bet-size-value ${isSell ? "estimated-receive-value" : "estimated-cost-value"}`}>
+                    $ {sorRoute.route.totalCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+              {sorRoute.route.totalFees > 0 && (
+                <div className="bet-size-info">
+                  <div className="bet-size-main-row">
+                    <Tooltip
+                      content={`Venue fees: $${sorRoute.route.totalFees.toFixed(2)}${!isSell && sorRoute.route.totalBridgeCost > 0 ? ` · Bridge: $${sorRoute.route.totalBridgeCost.toFixed(2)}` : ""}`}
+                      position="top"
+                      withPortal={true}
+                    >
+                      <span className="bet-size-label" style={{ color: "#94a3b8", fontSize: "12px" }}>Fee (Smart Route)</span>
+                    </Tooltip>
+                    <span className="bet-size-value" style={{ color: "#94a3b8", fontSize: "12px" }}>
+                      $ {(sorRoute.route.totalFees + (isSell ? 0 : sorRoute.route.totalBridgeCost)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {!isSell && sorRoute.route.totalShares > 0 && (
+                <div className="bet-size-info">
+                  <div className="bet-size-main-row">
+                    <span className="bet-size-label to-win-label">To Win</span>
+                    <span className="bet-size-value">
+                      $ {sorRoute.route.totalShares.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="bet-size-odds-subtext">
+                    Avg. odds {(sorRoute.route.totalCost / sorRoute.route.totalShares * 100).toFixed(0)}%
+                  </div>
+                </div>
+              )}
+              {sorRoute.route.savingsVsSingleVenue.percentImprovement > 5 && (
+                <div className="bet-size-info">
+                  <div style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, padding: "4px 0" }}>
+                    Smart Route: {isSell ? "" : "+"}{sorRoute.route.savingsVsSingleVenue.extraShares % 1 === 0
+                      ? String(Math.abs(sorRoute.route.savingsVsSingleVenue.extraShares))
+                      : Math.abs(sorRoute.route.savingsVsSingleVenue.extraShares).toFixed(1)} {isSell ? "fewer shares sold" : "shares"}
+                    {" "}({sorRoute.route.savingsVsSingleVenue.percentImprovement >= 0 ? "+" : ""}{sorRoute.route.savingsVsSingleVenue.percentImprovement.toFixed(1)}%)
+                    {" "}vs {VENUE_DISPLAY_NAMES[sorRoute.route.singleVenueBest.venue as keyof typeof VENUE_DISPLAY_NAMES]} alone
+                  </div>
+                </div>
+              )}
+              {sorRoute.route.insufficientLiquidity && (
+                <div className="bet-size-info">
+                  <div style={{ fontSize: 12, color: "#f59e0b", fontWeight: 500, padding: "4px 0" }}>
+                    {isSell ? "Not enough bids to reach your proceeds target" : "Not enough asks to fill your order"}
+                  </div>
+                </div>
+              )}
+              {!isSell && typeof totalAvailableCash === "number" && sorRoute.route.totalCost > totalAvailableCash && (() => {
+                const shortfall = sorRoute.route.totalCost - totalAvailableCash;
+                return (
+                  <div className="bet-size-info">
+                    <div style={{ fontSize: 12, padding: "6px 0" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "#94a3b8" }}>
+                        <span>Available cash</span>
+                        <span>$ {totalAvailableCash.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "#f59e0b", fontWeight: 500, marginTop: 2 }}>
+                        <span>Deposit needed</span>
+                        <span>$ {shortfall.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Bet Size / To Win for single-venue orders */}
+      {tradingVenue !== "all" && (toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null || netReceive !== null) && (
         <div className="bet-size-section">
-          {/* Estimated Cost for market BUY orders (includes 2% trading fee) */}
+          {/* Estimated Cost for market BUY orders */}
           {oddsData !== null && calculatedContracts !== null && estimatedCost !== null && tradingFee !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content={
-                    (tradingFee ?? 0) > 0
-                      ? `Your cost was reduced to give you an even dollar payout. Includes a fee of $${tradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
-                      : tradingVenue === "predictfun"
-                        ? "Estimated USDT spent against the Predict.fun REST orderbook for this outcome. Fees use the market feeRateBps."
-                      : "Estimated USDC spent against the Polymarket book shown. Additional protocol or taker fees may apply at execution."
-                  }
+                  content={venueConfig.feeTooltip}
                   position="top"
                   withPortal={true}
                 >
-                  <span className="bet-size-label">{tradingVenue === "predictfun" ? "Estimated Cost (USDT)" : "Estimated Cost"}</span>
+                  <span className="bet-size-label">
+                    {`Estimated Cost${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
+                  </span>
                 </Tooltip>
                 <span className="bet-size-value estimated-cost-value">
                   $ {estimatedCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          )}
+          {/* Fee row for market BUY orders */}
+          {oddsData !== null && calculatedContracts !== null && tradingFee !== null && tradingFee > 0 && (
+            <div className="bet-size-info">
+              <div className="bet-size-main-row">
+                <Tooltip
+                  content={venueConfig.feeTooltip}
+                  position="top"
+                  withPortal={true}
+                >
+                  <span className="bet-size-label" style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    Fee ({venueConfig.feeDescription})
+                  </span>
+                </Tooltip>
+                <span className="bet-size-value" style={{ color: '#94a3b8', fontSize: '12px' }}>
+                  $ {tradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
                 </span>
               </div>
             </div>
@@ -638,23 +860,18 @@ export default function PredictionMarketTradeBoxUI({
               </div>
             </div>
           )}
-          {/* Estimated Receive for market SELL orders (after 2% trading fee) */}
-          {/* Round DOWN to avoid showing more than user will actually receive */}
+          {/* Estimated Receive for market SELL orders */}
           {orderType === 'market' && side === 'sell' && netReceive !== null && sellTradingFee !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content={
-                    (sellTradingFee ?? 0) > 0
-                      ? `Includes a fee of $${sellTradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
-                      : tradingVenue === "predictfun"
-                        ? "Estimated USDT received against the Predict.fun book. Fees use the market feeRateBps."
-                      : "Estimated USDC received against the Polymarket book shown. Additional fees may apply at execution."
-                  }
+                  content={venueConfig.feeTooltip}
                   position="top"
                   withPortal={true}
                 >
-                  <span className="bet-size-label">{tradingVenue === "predictfun" ? "Estimated Receive (USDT)" : "Estimated Receive"}</span>
+                  <span className="bet-size-label">
+                    {`Estimated Receive${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
+                  </span>
                 </Tooltip>
                 <span className="bet-size-value estimated-receive-value">
                   $ {(Math.floor(netReceive * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -662,89 +879,59 @@ export default function PredictionMarketTradeBoxUI({
               </div>
             </div>
           )}
-          {/* Show Estimated Cost line for buy limit orders (includes 2% trading fee) */}
-          {/* Uses backend-matching fee calculation: round UP to nearest cent */}
-          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && tradingVenue === "levelup" && (
+          {/* Fee row for market SELL orders */}
+          {orderType === 'market' && side === 'sell' && sellTradingFee !== null && sellTradingFee > 0 && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content="You may pay a fee up to 2% based on if your order is marked as a maker or taker. Makers pay 0% fees."
+                  content={venueConfig.feeTooltip}
                   position="top"
                   withPortal={true}
                 >
-                  <span className="bet-size-label">Estimated Cost</span>
+                  <span className="bet-size-label" style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    Fee ({venueConfig.feeDescription})
+                  </span>
                 </Tooltip>
-                <span className="bet-size-value amount-value">$ {(limitOrderAmount + calculateFeeMatchingBackend(limitOrderAmount)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="bet-size-value" style={{ color: '#94a3b8', fontSize: '12px' }}>
+                  $ {sellTradingFee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                </span>
               </div>
             </div>
           )}
-          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && tradingVenue === "polymarket" && (
+          {/* Limit order cost/receive — unified across all venues */}
+          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content="Notional USDC if the full limit fills at your price. Polymarket protocol or maker/taker fees may apply at execution."
+                  content={venueConfig.feeTooltip}
                   position="top"
                   withPortal={true}
                 >
-                  <span className="bet-size-label">Est. notional</span>
+                  <span className="bet-size-label">
+                    {limitOrderFee > 0 ? "Estimated Cost" : `Est. notional${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
+                  </span>
                 </Tooltip>
-                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="bet-size-value amount-value">
+                  $ {(limitOrderAmount + limitOrderFee).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           )}
-          {orderType === 'limit' && side === 'buy' && limitOrderAmount !== null && tradingVenue === "predictfun" && (
+          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <Tooltip
-                  content="Notional USDT on BNB if the full limit fills at your price. Predict.fun fees use feeRateBps from the market."
+                  content={venueConfig.feeTooltip}
                   position="top"
                   withPortal={true}
                 >
-                  <span className="bet-size-label">Est. notional (USDT)</span>
+                  <span className="bet-size-label">
+                    {limitOrderFee > 0 ? "Estimated Receive" : `Est. notional${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
+                  </span>
                 </Tooltip>
-                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-          )}
-          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && tradingVenue === "levelup" && (
-            <div className="bet-size-info">
-              <div className="bet-size-main-row">
-                <Tooltip
-                  content="You may pay a fee up to 2% based on if your order is marked as a maker or taker. Makers pay 0% fees."
-                  position="top"
-                  withPortal={true}
-                >
-                  <span className="bet-size-label">Estimated Receive</span>
-                </Tooltip>
-                <span className="bet-size-value amount-value">$ {(Math.floor((limitOrderAmount - calculateFeeMatchingBackend(limitOrderAmount)) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-          )}
-          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && tradingVenue === "polymarket" && (
-            <div className="bet-size-info">
-              <div className="bet-size-main-row">
-                <Tooltip
-                  content="Notional USDC if the full limit fills at your price. Fees may apply at execution."
-                  position="top"
-                  withPortal={true}
-                >
-                  <span className="bet-size-label">Est. notional</span>
-                </Tooltip>
-                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-          )}
-          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && tradingVenue === "predictfun" && (
-            <div className="bet-size-info">
-              <div className="bet-size-main-row">
-                <Tooltip
-                  content="Notional USDT on BNB if the full limit fills at your price."
-                  position="top"
-                  withPortal={true}
-                >
-                  <span className="bet-size-label">Est. notional (USDT)</span>
-                </Tooltip>
-                <span className="bet-size-value amount-value">$ {limitOrderAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="bet-size-value amount-value">
+                  $ {(Math.floor((limitOrderAmount - limitOrderFee) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           )}
@@ -754,7 +941,7 @@ export default function PredictionMarketTradeBoxUI({
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <span className={`bet-size-label to-win-label`}>To Win</span>
-                <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                <span className="bet-size-value">$ {toWinNumeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               {/* Small grey odds text under To Win for market buy orders only */}
               {orderType === 'market' && oddsData && (
@@ -808,6 +995,110 @@ export default function PredictionMarketTradeBoxUI({
       >
         {buttonState.text}
       </Button>
+      </>
+      )}
+
+      {/* SOR execution result */}
+      {tradingVenue === "all" && sorExecution.execution && !sorExecution.isExecuting && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "8px 12px",
+            borderRadius: 6,
+            fontSize: 12,
+            backgroundColor:
+              sorExecution.execution.status === "complete"
+                ? "rgba(34, 197, 94, 0.08)"
+                : sorExecution.execution.status === "partial"
+                  ? "rgba(245, 158, 11, 0.08)"
+                  : "rgba(239, 68, 68, 0.08)",
+            color:
+              sorExecution.execution.status === "complete"
+                ? "#22c55e"
+                : sorExecution.execution.status === "partial"
+                  ? "#f59e0b"
+                  : "#ef4444",
+          }}
+        >
+          {sorExecution.execution.status === "complete" && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{side === "sell" ? "Sold" : "Filled"}: {sorExecution.execution.totalFilledShares} shares{side === "sell" && sorExecution.execution.totalSpent > 0 ? ` — received $${sorExecution.execution.totalSpent.toFixed(2)}` : ""}</span>
+              <button
+                type="button"
+                onClick={() => sorExecution.resetExecution()}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  backgroundColor: "transparent",
+                  color: "#9ca3af",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+          {sorExecution.execution.status === "partial" && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{side === "sell" ? "Partially sold" : "Partially filled"}: {sorExecution.execution.totalFilledShares} shares</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => sorExecution.requestReroute()}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 4,
+                    border: "1px solid #f59e0b",
+                    backgroundColor: "transparent",
+                    color: "#f59e0b",
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  Re-route {sorExecution.remainingBudget != null ? `$${sorExecution.remainingBudget.toFixed(2)}` : "remaining"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sorExecution.acceptResult()}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 4,
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    backgroundColor: "transparent",
+                    color: "#9ca3af",
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  Keep as-is
+                </button>
+              </div>
+            </div>
+          )}
+          {sorExecution.execution.status === "failed" && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{side === "sell" ? "Execution failed. Shares remain in your accounts." : "Execution failed. Funds remain in your wallets."}</span>
+              <button
+                type="button"
+                onClick={() => sorExecution.resetExecution()}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  backgroundColor: "transparent",
+                  color: "#9ca3af",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Small Popup Notification */}
       {orderResult && (

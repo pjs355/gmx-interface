@@ -60,9 +60,36 @@ export type DflowVerifyResponse =
 			proofRedirectBase: string;
 	  };
 
+export type DflowMarketAccountInfo = {
+	marketLedger: string;
+	yesMint: string;
+	noMint: string;
+	isInitialized: boolean;
+	redemptionStatus?: string | null;
+	scalarOutcomePct?: number | null;
+};
+
+export type DflowMarketWire = {
+	ticker: string;
+	eventTicker: string;
+	status: string;
+	title: string;
+	accounts: Record<string, DflowMarketAccountInfo>;
+	[key: string]: unknown;
+};
+
+export type DflowEventWire = {
+	ticker: string;
+	seriesTicker: string;
+	title: string;
+	subtitle: string;
+	markets?: DflowMarketWire[] | null;
+	[key: string]: unknown;
+};
+
 export type DflowEventsResponse = {
-	events: unknown[];
-	cursor?: string;
+	events: DflowEventWire[];
+	cursor?: number | null;
 };
 
 export type DflowOrderParams = {
@@ -86,6 +113,39 @@ export type DflowOrderResponse = {
 	code?: string;
 	msg?: string;
 	[key: string]: unknown;
+};
+
+/** Market detail from `POST /api/v1/markets/batch` (DFlow Metadata API). */
+export type DflowBatchMarket = {
+	ticker: string;
+	eventTicker: string;
+	title: string;
+	subtitle: string;
+	yesSubTitle: string;
+	noSubTitle: string;
+	status: string;
+	result: string;
+	yesAsk: string | null;
+	yesBid: string | null;
+	noAsk: string | null;
+	noBid: string | null;
+	accounts: Record<string, DflowMarketAccountInfo>;
+};
+
+/** A single on-chain fill from `GET /api/v1/onchain-trades`. */
+export type DflowOnchainTrade = {
+	id: number;
+	wallet: string;
+	inputMint: string;
+	outputMint: string;
+	inputAmount: number;
+	outputAmount: number;
+	usdPricePerContract: number | null;
+	contracts: number | null;
+	side: "yes" | "no" | null;
+	marketTicker: string | null;
+	transactionSignature: string;
+	createdAt: number;
 };
 
 function dflowOrderParamsToQuery(params: DflowOrderParams): URLSearchParams {
@@ -566,6 +626,36 @@ export function createPrivateApiClient(
 				`/api/dflow/order?${q.toString()}`
 			);
 			return readJson<DflowOrderResponse>(res);
+		},
+
+		async postDflowFilterOutcomeMints(
+			addresses: string[]
+		): Promise<string[]> {
+			const res = await authorizedFetch("/api/dflow/filter_outcome_mints", {
+				method: "POST",
+				body: JSON.stringify({ addresses }),
+			});
+			return readJson<string[]>(res);
+		},
+
+		async postDflowMarketsBatch(
+			mints: string[]
+		): Promise<DflowBatchMarket[]> {
+			const res = await authorizedFetch("/api/dflow/markets/batch", {
+				method: "POST",
+				body: JSON.stringify({ mints }),
+			});
+			return readJson<DflowBatchMarket[]>(res);
+		},
+
+		async getDflowOnchainTrades(
+			wallet: string
+		): Promise<DflowOnchainTrade[]> {
+			const q = new URLSearchParams({ wallet });
+			const res = await authorizedFetch(
+				`/api/dflow/onchain-trades?${q.toString()}`
+			);
+			return readJson<DflowOnchainTrade[]>(res);
 		},
 	};
 }

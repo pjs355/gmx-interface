@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
+import type { TradingVenue } from "@/config/venueConfig";
 
-export function useTradeState(initialPosition?: "yes" | "no") {
+export function useTradeState(initialPosition?: "yes" | "no", initialVenue?: TradingVenue) {
   const [state, setState] = useState({
-    tradingVenue: "levelup" as "levelup" | "polymarket" | "predictfun" | "dflow",
+    tradingVenue: (initialVenue || "levelup") as TradingVenue,
     selectedPosition: initialPosition || "yes",
     amount: "",
     price: "",
@@ -35,11 +36,13 @@ export function useTradeState(initialPosition?: "yes" | "no") {
   const handleSideChange = useCallback((side: "buy" | "sell") => {
     setState((prev) => ({ ...prev, side }));
   }, []);
-  const handleTradingVenueChange = useCallback((tradingVenue: "levelup" | "polymarket" | "predictfun" | "dflow") => {
-    setState((prev) => ({ ...prev, tradingVenue }));
+  const handleTradingVenueChange = useCallback((tradingVenue: TradingVenue) => {
+    setState((prev) => ({
+      ...prev,
+      tradingVenue,
+      ...(tradingVenue === "all" ? { orderType: "market" as const } : {}),
+    }));
   }, []);
 
   return { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTradingVenueChange } as const;
 }
-
-

@@ -59,7 +59,7 @@ export function usePredictOrders(enabled = true) {
 					);
 				}
 			}
-			if (rows.length > 0) {
+			if (import.meta.env.DEV && rows.length > 0) {
 				console.log("[PredictOrders] Fetched", rows.length, "filled orders for cost basis");
 			}
 			return rows;

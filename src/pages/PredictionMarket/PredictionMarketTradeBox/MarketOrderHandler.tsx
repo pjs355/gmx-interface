@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import type { OrderbookSnapshot } from '@/services/api/orderbookService';
 import type { MarketOrderCalculation } from './types';
 
-export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
+export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null, wholeSharesOnly: boolean = true) {
   // Calculate contracts for market orders using step-clearing approach
   const calculateContractsForMarketOrder = useCallback((usdAmount: number, position: 'yes' | 'no', side: 'buy' | 'sell'): MarketOrderCalculation => {
     if (!orderbook || !usdAmount || usdAmount <= 0) {
@@ -11,8 +11,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
     
     // For SELL orders, usdAmount represents shares, not USD
     if (side === 'sell') {
-      // Whole shares only
-      const sharesToSell = Math.floor(usdAmount);
+      const sharesToSell = wholeSharesOnly ? Math.floor(usdAmount) : usdAmount;
       let remainingShares = sharesToSell;
       let totalUsdReceived = 0;
       let maxPriceSeen = 0;
@@ -40,9 +39,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
         } else {
           availableSize = order.size || 0;
         }
-        // Only whole shares can be sold
-        const availableWhole = Math.floor(availableSize);
-        // How many shares we can sell at this price level
+        const availableWhole = wholeSharesOnly ? Math.floor(availableSize) : availableSize;
         const sharesAtThisPrice = Math.min(availableWhole, remainingShares);
         
         if (sharesAtThisPrice > 0) {
@@ -110,8 +107,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
         totalAvailableSize = order.size || 0;
       }
       
-      // Only whole shares at each price level
-      const availableWhole = Math.floor(totalAvailableSize);
+      const availableWhole = wholeSharesOnly ? Math.floor(totalAvailableSize) : totalAvailableSize;
       if (availableWhole <= 0 || p_cents <= 0) { i++; continue; }
 
       const row_total_cents = availableWhole * p_cents;
@@ -124,8 +120,9 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
         i++;
         continue;
       } else {
-        // Partial fill: take as many whole shares as budget allows
-        const affordableShares = Math.floor(remaining_cents / p_cents);
+        const affordableShares = wholeSharesOnly
+          ? Math.floor(remaining_cents / p_cents)
+          : remaining_cents / p_cents;
         const takeShares = Math.min(availableWhole, Math.max(0, affordableShares));
         if (takeShares > 0) {
           const cost_cents = takeShares * p_cents;
@@ -137,12 +134,11 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
       }
     }
     
-    // Convert back to USD; contracts are whole shares already
     const total_contracts = filled_shares;
     const remaining_usd = remaining_cents / 100.0;
     
     return { contracts: total_contracts, remainingUsd: remaining_usd, maxPrice: maxPriceSeen };
-  }, [orderbook]);
+  }, [orderbook, wholeSharesOnly]);
 
   // Get effective price for market orders
   const getEffectivePrice = useCallback((usdAmount: number, contracts: number, remainingUsd: number): number => {
@@ -188,8 +184,9 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
         totalAvailableSize = order.size || 0;
       }
       
-      maxSharesAvailable += Math.floor(totalAvailableSize);
-      maxUsdValue += totalAvailableSize * costPerContract;
+      const effectiveSize = wholeSharesOnly ? Math.floor(totalAvailableSize) : totalAvailableSize;
+      maxSharesAvailable += effectiveSize;
+      maxUsdValue += effectiveSize * costPerContract;
     }
     
     return { 
@@ -197,7 +194,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
       maxUsdValue, 
       hasAnyLiquidity: maxSharesAvailable > 0 
     };
-  }, [orderbook]);
+  }, [orderbook, wholeSharesOnly]);
 
   // Check if there's sufficient liquidity by calculating max possible buyout
   const hasSufficientLiquidity = useCallback((usdAmount: number, position: 'yes' | 'no', side: 'buy' | 'sell'): boolean => {
@@ -242,7 +239,7 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null) {
     
     // Input amount must be less than or equal to max possible buyout (allow small tolerance for rounding)
     return usdAmount <= maxBuyoutUsd + 0.01; // Allow up to 1 cent tolerance
-  }, [orderbook]);
+  }, [orderbook, wholeSharesOnly]);
 
   return {
     calculateContractsForMarketOrder,

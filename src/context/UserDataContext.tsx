@@ -47,6 +47,7 @@ type UserDataContextValue = {
 	usingRpcFallback: boolean; // True when subgraph failed and using RPC
 	refresh: () => Promise<void>;
 	refreshViaRpc: () => Promise<void>; // Force RPC refresh (bypasses slow subgraph)
+	loadOrders: () => Promise<void>; // Lazy: call when orders are needed (e.g. Positions page)
 	getTokenBalance: (marketId: string) => TokenBalance | null;
 	checkApproval: () => Promise<void>;
 	approveToken: () => Promise<void>;
@@ -449,6 +450,38 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	// Track if we've already loaded for this account to prevent StrictMode double-load
 	const loadedForAccountRef = useRef<string | null>(null);
 
+	// Build market data map from context (shared between load and loadOrders)
+	const buildMarketDataMap = useCallback(() => {
+		const marketDataMap = new Map<
+			string,
+			{ yesTokenId: string; noTokenId: string }
+		>();
+		umbrellas.forEach((u: any) => {
+			const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
+			marketsForUmb.forEach((market: any) => {
+				const marketId = market?._id;
+				if (marketId && market?.yesTokenId && market?.noTokenId) {
+					marketDataMap.set(marketId, {
+						yesTokenId: market.yesTokenId,
+						noTokenId: market.noTokenId,
+					});
+				}
+			});
+		});
+		Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
+			resolvedMarkets.forEach((market: any) => {
+				const marketId = market?._id;
+				if (marketId && market?.yesTokenId && market?.noTokenId) {
+					marketDataMap.set(marketId, {
+						yesTokenId: market.yesTokenId,
+						noTokenId: market.noTokenId,
+					});
+				}
+			});
+		});
+		return marketDataMap;
+	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella]);
+
 	const load = useCallback(async () => {
 		if (!account) {
 			setOrders([]);
@@ -458,132 +491,44 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			return;
 		}
 
-		// Skip if we've already loaded for this account (prevents StrictMode double-load)
 		if (loadedForAccountRef.current === account) return;
 		loadedForAccountRef.current = account;
 
 		setLoading(true);
 		try {
-			// Build market data map from already-loaded context data
-			// No additional API calls needed - subgraph already has the balances
-			const marketDataMap = new Map<
-				string,
-				{ yesTokenId: string; noTokenId: string }
-			>();
+			const marketDataMap = buildMarketDataMap();
+			filteredMarketDataMapRef.current = marketDataMap;
 
-			// Process active markets from context (already loaded)
-			// CRITICAL: Always use _id as the key since Positions.tsx looks up by _id
-			// Using inconsistent keys (questionId, marketId) caused resolved markets to not show
-			umbrellas.forEach((u: any) => {
-				const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
-				marketsForUmb.forEach((market: any) => {
-					// ALWAYS prefer _id for consistency with Positions.tsx lookups
-					const marketId = market?._id;
-					if (marketId && market?.yesTokenId && market?.noTokenId) {
-						marketDataMap.set(marketId, {
-							yesTokenId: market.yesTokenId,
-							noTokenId: market.noTokenId,
-						});
-					}
-				});
-			});
-
-			// Process resolved markets from context (already loaded)
-			Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
-				resolvedMarkets.forEach((market: any) => {
-					// ALWAYS prefer _id for consistency with Positions.tsx lookups
-					const marketId = market?._id;
-					if (marketId && market?.yesTokenId && market?.noTokenId) {
-						marketDataMap.set(marketId, {
-							yesTokenId: market.yesTokenId,
-							noTokenId: market.noTokenId,
-						});
-					}
-				});
-			});
-
-			// Fetch user orders FIRST to determine which markets to check balances for
-			const userOrders = await fetchUserOrders(account, marketDataMap);
-			setOrders(userOrders);
-
-			// Extract unique market IDs from user's order history
-			const tradedMarketIds = new Set(
-				userOrders.map((order) => order.questionId)
-			);
-
-			// Filter marketDataMap to only include markets the user has traded
-			const filteredMarketDataMap = new Map<
-				string,
-				{ yesTokenId: string; noTokenId: string }
-			>();
-			tradedMarketIds.forEach((marketId) => {
-				const marketData = marketDataMap.get(marketId as string);
-				if (marketData) {
-					filteredMarketDataMap.set(marketId, marketData);
-				}
-			});
-
-			// Store the filtered map and immediately map any existing subgraph balances
-			filteredMarketDataMapRef.current = filteredMarketDataMap;
+			// Map any already-available subgraph balances to market IDs
 			const currentRawBalances = rawTokenBalancesRef.current;
 			if (currentRawBalances.length > 0) {
-				// Create reverse lookup: tokenId -> { marketId, isYes }
-				const tokenToMarket = new Map<string, { marketId: string; isYes: boolean }>();
-				for (const [marketId, { yesTokenId, noTokenId }] of filteredMarketDataMap.entries()) {
-					tokenToMarket.set(yesTokenId, { marketId, isYes: true });
-					tokenToMarket.set(noTokenId, { marketId, isYes: false });
-				}
-
-				// Build result map
-				const result = new Map<
-					string,
-					{ yesTokenId: string; noTokenId: string; yesBalance: string; noBalance: string }
-				>();
-
-				// Initialize markets with zero balances
-				for (const [marketId, { yesTokenId, noTokenId }] of filteredMarketDataMap.entries()) {
-					result.set(marketId, {
-						yesTokenId,
-						noTokenId,
-						yesBalance: "0.000000",
-						noBalance: "0.000000",
-					});
-				}
-
-				// Fill in actual balances
-				for (const tb of currentRawBalances) {
-					const mapping = tokenToMarket.get(tb.tokenId);
-					if (!mapping) continue;
-
-					const existing = result.get(mapping.marketId);
-					if (!existing) continue;
-
-					const balanceFormatted = fromMicroUnits(tb.balance);
-					if (mapping.isYes) {
-						existing.yesBalance = balanceFormatted;
-					} else {
-						existing.noBalance = balanceFormatted;
-					}
-				}
-
-				setTokenBalances(result);
+				setTokenBalances(mapTokenBalancesToMarkets(currentRawBalances, marketDataMap));
 			}
-
-			// Check approval (this still uses RPC for now)
-			await checkApproval();
 		} finally {
 			setLoading(false);
 		}
-		// Note: rawTokenBalances is intentionally NOT in deps to prevent re-triggering load
-		// when subgraph data arrives. The mapping is handled by the separate effect below.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [
 		account,
-		checkApproval,
-		umbrellas,
-		getAllQuestionsForUmbrella,
-		resolvedMarketsByUmbrella,
+		buildMarketDataMap,
+		mapTokenBalancesToMarkets,
 	]);
+
+	// Lazy order loading -- called by Positions page or other consumers that need orders
+	const ordersLoadedRef = useRef<string | null>(null);
+	const loadOrders = useCallback(async () => {
+		if (!account) return;
+		if (ordersLoadedRef.current === account) return;
+		ordersLoadedRef.current = account;
+
+		const marketDataMap = buildMarketDataMap();
+		try {
+			const userOrders = await fetchUserOrders(account, marketDataMap);
+			setOrders(userOrders);
+		} catch (err) {
+			console.error("Failed to load orders:", err);
+		}
+	}, [account, buildMarketDataMap]);
 
 	// Effect to map subgraph balances when they arrive AFTER market data is ready
 	// (handles the case where subgraph is slower than market data loading)
@@ -759,14 +704,13 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	const refresh = useCallback(async () => {
 		if (!account) return;
 		loadedForAccountRef.current = null;
+		ordersLoadedRef.current = null;
 		subgraphFetchedRef.current = null;
 		usdcFetchedRef.current = null;
-		// Clear subgraph cache to ensure fresh data
 		subgraphService.clearSubgraphCache();
-		// Refetch USDC via RPC, token positions via subgraph, and reload orders/approvals
 		await Promise.all([
 			fetchUsdcBalanceRpc(account),
-			fetchTokenBalancesFromSubgraph(account, true), // Force refresh
+			fetchTokenBalancesFromSubgraph(account, true),
 			load(),
 		]);
 	}, [account, fetchUsdcBalanceRpc, fetchTokenBalancesFromSubgraph, load]);
@@ -835,6 +779,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			usingRpcFallback,
 			refresh,
 			refreshViaRpc,
+			loadOrders,
 			getTokenBalance,
 			checkApproval,
 			approveToken,
@@ -849,6 +794,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			usingRpcFallback,
 			refresh,
 			refreshViaRpc,
+			loadOrders,
 			getTokenBalance,
 			checkApproval,
 			approveToken,
