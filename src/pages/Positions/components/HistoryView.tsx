@@ -4,11 +4,18 @@ import type { VenuePosition } from "@/types/trading/venuePosition";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import TradeHistoryList from "./TradeHistoryList";
 import UmbrellaImage from "./UmbrellaImage";
 import { stripUmbrellaDisplayPrefix, titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
 import { getTradeCount, getNetCashFlow } from "../utils/positionHelpers";
+import {
+	resolveCanonicalMatchWinner,
+	shortTeamDisplayName,
+	winnerLabelFromLevelUpTitle,
+	winnerLabelFromVenuePosition,
+} from "../utils/historyOutcomeWinner";
 
 type UnifiedHistoryBlock = {
 	id: string;
@@ -45,6 +52,8 @@ export default function HistoryView({
 	venueHistory?: VenuePosition[];
 }) {
 	const { umbrellas } = usePredictionData();
+	const { appState } = useOddsMonitor();
+	const matchedMarkets = appState?.markets ?? null;
 	const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
 
 	const toggleMarketExpansion = (key: string) => {
@@ -135,13 +144,25 @@ export default function HistoryView({
 
 	const mergedRowsByBlock = useMemo(() => {
 		return unifiedBlocks.map((block) => {
+			const resolvedList = resolvedMarketsByUmbrella[block.id] ?? [];
+			const luSample = block.luMarkets[0]?.market ?? null;
+			const blockCanonical = resolveCanonicalMatchWinner({
+				umbrella: block.umbrella,
+				matchedMarkets,
+				resolvedMarketsForUmbrella: resolvedList,
+				luSampleMarket: luSample,
+			});
+			const blockOutcomeShort = blockCanonical
+				? shortTeamDisplayName(blockCanonical)
+				: null;
+
 			const sideBuckets: Record<"Yes" | "No", {
 				finalPosition: number; totalCost: number; totalPayout: number; totalReturn: number;
 				hasData: boolean; tradeCount: number; marketIds: string[];
-				label: string; outcomeText: string; outcomeColor: string;
+				label: string; outcomeText: string;
 			}> = {
-				Yes: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "", outcomeColor: "#fff" },
-				No: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "", outcomeColor: "#fff" },
+				Yes: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "" },
+				No: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "" },
 			};
 
 			for (const { market } of block.luMarkets) {
@@ -178,11 +199,12 @@ export default function HistoryView({
 					bucket.tradeCount += tc;
 
 					if (!bucket.label) {
-						bucket.label = isVs ? (side === "Yes" ? parts[0] : parts[1]) : side;
+						bucket.label = isVs
+							? shortTeamDisplayName(side === "Yes" ? parts[0] : parts[1])
+							: side;
 					}
 					if (!bucket.outcomeText) {
-						bucket.outcomeText = isVs ? (resolved === "yes" ? parts[0] : parts[1]) : (resolved === "yes" ? "Yes" : "No");
-						bucket.outcomeColor = correct ? "#16a34a" : "#ef4444";
+						bucket.outcomeText = winnerLabelFromLevelUpTitle(title, resolved);
 					}
 				}
 			}
@@ -213,8 +235,7 @@ export default function HistoryView({
 					bucket.label = getVenueHistoryMarketColumnLabel(pos.marketTitle, pos, singleInGroup);
 				}
 				if (!bucket.outcomeText) {
-					bucket.outcomeText = pos.outcomeResult === "WON" ? "WON" : "LOST";
-					bucket.outcomeColor = pos.outcomeResult === "WON" ? "#16a34a" : "#ef4444";
+					bucket.outcomeText = winnerLabelFromVenuePosition(pos);
 				}
 			}
 
@@ -223,16 +244,22 @@ export default function HistoryView({
 				const b = sideBuckets[side];
 				if (!b.hasData) continue;
 				const retPct = b.totalCost > 0 ? (b.totalReturn / b.totalCost) * 100 : null;
+				const outcomeColor = b.totalReturn >= 0 ? "#16a34a" : "#ef4444";
+				const fallbackOutcome = b.outcomeText
+					? shortTeamDisplayName(b.outcomeText)
+					: "—";
 				rows.push({
 					side, label: b.label || side,
-					finalPosition: b.finalPosition, outcomeText: b.outcomeText, outcomeColor: b.outcomeColor,
+					finalPosition: b.finalPosition,
+					outcomeText: blockOutcomeShort ?? fallbackOutcome,
+					outcomeColor,
 					totalCost: b.totalCost, totalPayout: b.totalPayout, totalReturn: b.totalReturn,
 					totalReturnPct: retPct, tradeCount: b.tradeCount, marketIds: b.marketIds,
 				});
 			}
 			return { block, rows };
 		});
-	}, [unifiedBlocks, orders, returnsByQid]);
+	}, [unifiedBlocks, orders, returnsByQid, resolvedMarketsByUmbrella, matchedMarkets]);
 
 	if (unifiedBlocks.length === 0) {
 		return (
@@ -329,7 +356,15 @@ export default function HistoryView({
 												)}
 											</div>
 										</div>
-										{isExp && <TradeHistoryList orders={allOrders} marketId={row.marketIds} isExpanded={isExp} position={row.side} />}
+										{isExp && (
+											<TradeHistoryList
+												orders={allOrders}
+												marketId={row.marketIds}
+												isExpanded={isExp}
+												position={row.side}
+												positionDisplayLabel={row.label}
+											/>
+										)}
 									</React.Fragment>
 								);
 							})}

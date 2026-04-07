@@ -30,6 +30,8 @@ export interface TradeBoxProps {
 	orderbook?: OrderbookSnapshot | null;
 	/** PandaScore match id on the umbrella — required for Polymarket CLOB on esports. */
 	pandascoreMatchId?: string;
+	/** Umbrella list title — used to derive "Team A vs Team B" when question is only "Match Winner". */
+	umbrellaDisplayName?: string;
 	initialPosition?: "yes" | "no";
 	onPositionChange?: (position: "yes" | "no") => void;
 	onSideChange?: (side: "buy" | "sell") => void;

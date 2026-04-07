@@ -55,6 +55,7 @@ import {
 import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
 import { Side, type TickSize } from "@polymarket/clob-client";
 import { getYesNoTeamLabels } from "./teamLabels";
+import { usePredictionData } from "context/PredictionDataContext";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
@@ -73,7 +74,9 @@ import type { ChainBalance, VenuePositionEntry, SorOutcome } from "@/trading/sor
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { useDflowOutcomeBalance } from "@/trading/dflow/useDflowOutcomeBalance";
 
-interface PredictionMarketTradeBoxProps extends TradeBoxProps {}
+export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
+	umbrellaDisplayName?: string;
+}
 
 // Exposed methods for testing
 export interface PredictionMarketTradeBoxHandle {
@@ -87,7 +90,7 @@ export interface PredictionMarketTradeBoxHandle {
 }
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, pandascoreMatchId, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }, ref) => {
 
   const pandaId = pandascoreMatchId?.trim() ?? "";
   const multiVenueEnabled = Boolean(pandaId);
@@ -99,7 +102,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
-  const { approvalState, /* checkApproval, */ approveToken, refresh, refreshViaRpc } = useUserData();
+  const { approvalState, checkApproval, approveToken, refresh, refreshViaRpc } = useUserData();
+
+  // Lazy approval check: deferred from startup, runs when trade box mounts
+  useEffect(() => {
+    if (account) checkApproval();
+  }, [account, checkApproval]);
 
   const { wallets: privyWallets } = usePrivyWallets();
   const { fundWallet } = useFundWallet();
@@ -181,10 +189,25 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   const queryClient = useQueryClient();
+  const { allBooksPreview } = usePredictionData();
+
+  const crossBuyPrices = useMemo(() => {
+    const qid = market?.questionId || market?._id;
+    const p = qid ? allBooksPreview[qid] : undefined;
+    if (!p) return { crossBuyYes: null as number | null, crossBuyNo: null as number | null };
+    const crossBuyYes =
+      p.bestYesPrice ??
+      p.lowestAsk ??
+      (p.bestNoPrice != null ? 1 - p.bestNoPrice : null);
+    const crossBuyNo =
+      p.bestNoPrice ??
+      (crossBuyYes != null ? 1 - crossBuyYes : null);
+    return { crossBuyYes, crossBuyNo };
+  }, [market, allBooksPreview]);
 
   const { yesTeamLabel, noTeamLabel } = useMemo(
-    () => getYesNoTeamLabels(market),
-    [market]
+    () => getYesNoTeamLabels(market, umbrellaDisplayName),
+    [market, umbrellaDisplayName]
   );
 
   const predictVenueActive = state.tradingVenue === "predictfun";
@@ -579,11 +602,34 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const usdcBalance = useUSDCBalance();
   const { yesBalance, noBalance } = useYesNoBalances(market);
 
-  // Notify parent when position changes
+  // Notify parent when position changes; SOR ("all") buy: sync reference limit cents to cross-venue best
   const onPositionChangeWrapper = useCallback((position: "yes" | "no") => {
     handlePositionChange(position);
     onPositionChange?.(position);
-  }, [handlePositionChange, onPositionChange]);
+    if (state.tradingVenue === "all") {
+      const px = position === "yes" ? crossBuyPrices.crossBuyYes : crossBuyPrices.crossBuyNo;
+      if (px != null && Number.isFinite(px)) {
+        handlePriceChange(String(Math.round(px * 100)));
+      }
+    }
+  }, [handlePositionChange, onPositionChange, state.tradingVenue, crossBuyPrices.crossBuyYes, crossBuyPrices.crossBuyNo, handlePriceChange]);
+
+  useEffect(() => {
+    if (state.tradingVenue !== "all" || !state.selectedPosition) return;
+    const px =
+      state.selectedPosition === "yes"
+        ? crossBuyPrices.crossBuyYes
+        : crossBuyPrices.crossBuyNo;
+    if (px != null && Number.isFinite(px)) {
+      handlePriceChange(String(Math.round(px * 100)));
+    }
+  }, [
+    state.tradingVenue,
+    state.selectedPosition,
+    crossBuyPrices.crossBuyYes,
+    crossBuyPrices.crossBuyNo,
+    handlePriceChange,
+  ]);
 
   // Notify parent when side changes (buy/sell)
   const onSideChangeWrapper = useCallback((side: "buy" | "sell") => {
@@ -992,7 +1038,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       setState((prev) => ({ ...prev, isLoading: true, orderResult: null }));
 
       try {
-        const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market);
+        const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market, umbrellaDisplayName);
         const tokenId = polyOutcomeTokenId(
           matchedMonitor,
           state.selectedPosition,
@@ -1630,7 +1676,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     const noMint = dflowLink.noMintA ?? dflowMintQuery.data?.noMint;
     if (!yesMint || !noMint) return null;
     try {
-      const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market);
+      const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market, umbrellaDisplayName);
       const resolvedSide = polyOutcomeSide(matchedMonitor, state.selectedPosition, yesTeamLabel, noTeamLabel);
       return resolvedSide === "A" ? yesMint : noMint;
     } catch {
@@ -1652,7 +1698,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
     if (polyPositionsQuery.data && matchedMonitor) {
       try {
-        const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market);
+        const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market, umbrellaDisplayName);
         const tokenId = polyOutcomeTokenId(matchedMonitor, state.selectedPosition, yesTeamLabel, noTeamLabel);
         const pos = polyPositionsQuery.data.find((p) => p.tokenId === tokenId);
         if (pos && pos.shares > 0) entries.push({ venue: "polymarket", shares: pos.shares });
@@ -1681,12 +1727,18 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowOutcomeBalQuery.data,
   ]);
 
+  // --- SOR: total cash across all chains (for affordability check, not route constraint) ---
+  const totalAvailableCash = useMemo(
+    () => sorWalletBalances.reduce((sum, b) => sum + b.balance, 0),
+    [sorWalletBalances],
+  );
+
   // --- SOR route computation + execution (active when venue is "all") ---
   const sorRouteEnabled = state.tradingVenue === "all"
     && !!state.selectedPosition
     && parseFloat(state.amount) > 0
     && (state.side === "buy"
-      ? sorWalletBalances.length > 0
+      ? true
       : sorVenuePositions.length > 0);
 
   const sorRouteOutcome: SorOutcome | undefined = state.selectedPosition
@@ -1796,6 +1848,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       routeExpired: sorRouteExpired,
       handleExecute: handleSorExecute,
       venuePositions: sorVenuePositions,
+      totalAvailableCash,
+      handleAddFunds,
     },
   });
 
@@ -1834,6 +1888,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     <PredictionMarketTradeBoxResponsiveContainer
       market={market}
       orderbook={effectiveOrderbook}
+      umbrellaDisplayName={umbrellaDisplayName}
+      crossBuyYes={crossBuyPrices.crossBuyYes}
+      crossBuyNo={crossBuyPrices.crossBuyNo}
       state={{
         ...state,
         calculatedContracts: calculatedMarketOrderData.calculatedContracts,
@@ -1870,6 +1927,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       sorExecution={sorExecution}
       sorRouteExpired={sorRouteExpired}
       handleSorExecute={handleSorExecute}
+      totalAvailableCash={totalAvailableCash}
     />
   );
 });

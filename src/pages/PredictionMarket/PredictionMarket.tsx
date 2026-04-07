@@ -528,7 +528,14 @@ function PredictionMarketContent() {
 			: "";
 	const settledInfo = useMatchSettled(
 		umbrella?._id,
-		pandascoreMatchIdRaw || undefined
+		pandascoreMatchIdRaw || undefined,
+		umbrella
+			? {
+					pandascore_matchId: umbrella.pandascore_matchId,
+					displayName: umbrella.displayName,
+					teamMappings: umbrella.teamMappings,
+				}
+			: null
 	);
 
 	// Only show error page if umbrella fails to load

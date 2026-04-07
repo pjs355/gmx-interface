@@ -44,8 +44,8 @@ import { SignerProvider } from "context/SignerContext";
 import { PredictionDataProvider } from "context/PredictionDataContext";
 import { OddsMonitorProvider } from "context/OddsMonitorContext";
 import { UserDataProvider } from "context/UserDataContext";
-import { BalanceProvider } from "context/BalanceContext";
 import { PortfolioProvider } from "context/PortfolioContext";
+import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
 import { TransfersModalProvider } from "context/TransfersModalContext";
 
@@ -88,15 +88,15 @@ createRoot(document.getElementById("root")!).render(
 							<OddsMonitorProvider>
 								<SignerProvider>
 									<UserDataProvider>
-										<BalanceProvider>
-											<PortfolioProvider>
+										<PortfolioProvider>
+											<PositionsPageMetricsGateProvider>
 												<RPGProvider>
 													<TransfersModalProvider>
 														<App />
 													</TransfersModalProvider>
 												</RPGProvider>
-											</PortfolioProvider>
-										</BalanceProvider>
+											</PositionsPageMetricsGateProvider>
+										</PortfolioProvider>
 									</UserDataProvider>
 								</SignerProvider>
 							</OddsMonitorProvider>

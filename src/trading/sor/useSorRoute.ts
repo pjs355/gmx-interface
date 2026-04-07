@@ -14,6 +14,7 @@ import type {
 
 const DEBOUNCE_MS = 300;
 const AUTO_REFRESH_MS = 3_000;
+const REQUEST_TIMEOUT_MS = 8_000;
 
 export interface UseSorRouteInput {
 	questionId: string | undefined;
@@ -63,6 +64,9 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	const fetchCountRef = useRef(0);
 	const isLoadingRef = useRef(false);
 
+	const prevOutcomeRef = useRef(input.outcome);
+	const prevSideRef = useRef(input.side);
+
 	const { questionId, outcome, side, amount, walletBalances, venuePositions, enabled, polyFeeRate, predictFunFeeRateBps, targetVenue } = input;
 
 	const canFetch =
@@ -70,9 +74,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		!!questionId &&
 		!!outcome &&
 		amount > 0 &&
-		(side === "buy"
-			? (walletBalances?.length ?? 0) > 0
-			: (venuePositions?.length ?? 0) > 0);
+		(side === "sell" ? (venuePositions?.length ?? 0) > 0 : true);
 
 	const doFetch = useCallback(async () => {
 		if (!canFetch || !questionId || !outcome) return;
@@ -80,6 +82,8 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		abortRef.current?.abort();
 		const controller = new AbortController();
 		abortRef.current = controller;
+
+		const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
 		const fetchId = ++fetchCountRef.current;
 		setIsLoading(true);
@@ -96,24 +100,51 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			...(targetVenue ? { targetVenue } : {}),
 		};
 
+		if (import.meta.env.DEV) {
+			console.log("[SOR] Route request →", {
+				amount,
+				side,
+				outcome,
+				walletBalances: side === "buy" ? walletBalances : undefined,
+				venuePositions: side === "sell" ? venuePositions : undefined,
+			});
+		}
+
 		try {
 			const result: SorRouteResult = await apiClient.getRoute(request, controller.signal);
 
 			if (fetchCountRef.current !== fetchId) return;
 
 			if (result.success) {
+				if (import.meta.env.DEV) {
+					console.log("[SOR] Route response ←", {
+						totalCost: result.route.totalCost,
+						totalShares: result.route.totalShares,
+						legs: result.route.legs.length,
+						insufficientLiquidity: result.route.insufficientLiquidity,
+						remainder: result.route.remainder,
+					});
+				}
 				setRoute(result.route);
 				setError(null);
 				setIsStale(false);
-		} else {
-			setRoute(null);
-			setError(result.error ?? "Unknown error");
-		}
+			} else {
+				setRoute(null);
+				setError(result.error ?? "Unknown error");
+			}
 		} catch (err) {
 			if (fetchCountRef.current !== fetchId) return;
-			if (err instanceof DOMException && err.name === "AbortError") return;
+			if (err instanceof DOMException && err.name === "AbortError") {
+				if (fetchCountRef.current === fetchId) {
+					setError("Route request timed out");
+					setIsLoading(false);
+					isLoadingRef.current = false;
+				}
+				return;
+			}
 			setError(err instanceof Error ? err.message : "Failed to compute route");
 		} finally {
+			clearTimeout(timeoutId);
 			if (fetchCountRef.current === fetchId) {
 				setIsLoading(false);
 				isLoadingRef.current = false;
@@ -130,23 +161,32 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		}
 
 		if (debounceRef.current) clearTimeout(debounceRef.current);
+
+		const outcomeChanged = prevOutcomeRef.current !== outcome;
+		const sideChanged = prevSideRef.current !== side;
+		prevOutcomeRef.current = outcome;
+		prevSideRef.current = side;
+
 		setIsStale(true);
 
-		debounceRef.current = setTimeout(() => {
+		if (outcomeChanged || sideChanged) {
 			doFetch();
-		}, DEBOUNCE_MS);
+		} else {
+			debounceRef.current = setTimeout(() => {
+				doFetch();
+			}, DEBOUNCE_MS);
+		}
 
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current);
 		};
-	}, [canFetch, doFetch]);
+	}, [canFetch, doFetch, outcome, side]);
 
 	useEffect(() => {
 		if (!canFetch || !route) return;
 
 		refreshRef.current = setInterval(() => {
 			if (!isLoadingRef.current) {
-				setIsStale(true);
 				doFetch();
 			}
 		}, AUTO_REFRESH_MS);

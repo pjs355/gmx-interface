@@ -47,62 +47,136 @@ interface UmbrellaApiResponse {
 }
 
 class UmbrellaDataService {
-	// NOTE: API_BASE_URL is now fetched dynamically via getter to prevent
-	// stale URL caching issues that caused production bugs
+	private static CACHE_KEY = "umbrellas_cache_v1";
+	private static CACHE_TS_KEY = "umbrellas_cache_ts";
+	private static STALE_TTL_MS = 5 * 60 * 1000; // treat cache as stale after 5 min
+
 	private get API_BASE_URL(): string {
 		return getPredictionApiBaseUrl();
 	}
 	private umbrellasCache: Umbrella[] | null = null;
-	// Separate caches for active-only and all (including resolved)
 	private questionsCacheActive = new Map<string, PredictionMarket[]>();
 	private questionsCacheAll = new Map<string, PredictionMarket[]>();
+	private refreshInFlight = false;
+	private onRefreshListeners: Array<(data: Umbrella[]) => void> = [];
+
+	onRefresh(listener: (data: Umbrella[]) => void): () => void {
+		this.onRefreshListeners.push(listener);
+		return () => {
+			this.onRefreshListeners = this.onRefreshListeners.filter(
+				(l) => l !== listener
+			);
+		};
+	}
 
 	invalidateCache() {
 		this.umbrellasCache = null;
 		this.questionsCacheActive.clear();
 		this.questionsCacheAll.clear();
+		try {
+			localStorage.removeItem(UmbrellaDataService.CACHE_KEY);
+			localStorage.removeItem(UmbrellaDataService.CACHE_TS_KEY);
+		} catch {}
 	}
 
-	/**
-	 * Fetch all umbrellas from the server
-	 */
+	private readLocalStorageCache(): Umbrella[] | null {
+		try {
+			const raw = localStorage.getItem(UmbrellaDataService.CACHE_KEY);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+		} catch {}
+		return null;
+	}
+
+	private writeLocalStorageCache(data: Umbrella[]): void {
+		try {
+			localStorage.setItem(
+				UmbrellaDataService.CACHE_KEY,
+				JSON.stringify(data)
+			);
+			localStorage.setItem(
+				UmbrellaDataService.CACHE_TS_KEY,
+				String(Date.now())
+			);
+		} catch {}
+	}
+
+	private async fetchFromNetwork(): Promise<Umbrella[]> {
+		const t0 = performance.now();
+		const response = await fetch(`${this.API_BASE_URL}/umbrellas`);
+		const t1 = performance.now();
+
+		if (!response.ok) {
+			throw new Error(
+				`HTTP error! status: ${response.status} - ${response.statusText}`
+			);
+		}
+
+		const apiResponse: UmbrellaApiResponse = await response.json();
+		const t2 = performance.now();
+
+		if (!apiResponse.success || !Array.isArray(apiResponse.data)) {
+			throw new Error("Invalid API response structure");
+		}
+
+		console.log(
+			`[Perf] /umbrellas: network=${Math.round(t1 - t0)}ms, parse=${Math.round(t2 - t1)}ms, count=${apiResponse.data.length}`
+		);
+
+		this.umbrellasCache = apiResponse.data;
+		this.writeLocalStorageCache(apiResponse.data);
+		return apiResponse.data;
+	}
+
+	private refreshInBackground(): void {
+		if (this.refreshInFlight) return;
+		this.refreshInFlight = true;
+		this.fetchFromNetwork()
+			.then((data) => {
+				for (const listener of this.onRefreshListeners) {
+					try {
+						listener(data);
+					} catch {}
+				}
+			})
+			.catch((err) => {
+				console.error("[SWR] Background refresh failed:", err);
+			})
+			.finally(() => {
+				this.refreshInFlight = false;
+			});
+	}
+
 	async fetchAllUmbrellas(): Promise<Umbrella[]> {
 		try {
 			if (this.umbrellasCache && this.umbrellasCache.length > 0) {
 				return this.umbrellasCache;
 			}
-			// Quiet fetch start log to keep console clean
 
-			const response = await fetch(`${this.API_BASE_URL}/umbrellas`);
-
-			if (!response.ok) {
-				console.error("❌ HTTP Error Details:", {
-					status: response.status,
-					statusText: response.statusText,
-					url: response.url,
-					headers: Object.fromEntries(response.headers.entries()),
-				});
-				throw new Error(
-					`HTTP error! status: ${response.status} - ${response.statusText}`
+			// Serve stale localStorage cache instantly, refresh in background
+			const stale = this.readLocalStorageCache();
+			if (stale) {
+				this.umbrellasCache = stale;
+				console.log(
+					`[SWR] Serving ${stale.length} umbrellas from localStorage cache`
 				);
+				this.refreshInBackground();
+				return stale;
 			}
 
-			const apiResponse: UmbrellaApiResponse = await response.json();
-
-			if (!apiResponse.success || !Array.isArray(apiResponse.data)) {
-				console.error(
-					"❌ Unexpected API response structure:",
-					apiResponse
-				);
-				throw new Error("Invalid API response structure");
-			}
-
-			this.umbrellasCache = apiResponse.data;
-			return this.umbrellasCache;
+			// No cache at all -- must wait for network
+			return await this.fetchFromNetwork();
 		} catch (error) {
 			console.error("❌ Error fetching umbrellas:", error);
 
-			// Fallback to sample data for testing
+			// Last resort: try localStorage even if it's very old
+			const fallback = this.readLocalStorageCache();
+			if (fallback) {
+				this.umbrellasCache = fallback;
+				return fallback;
+			}
+
 			const sample: Umbrella[] = [];
 			this.umbrellasCache = sample;
 			return sample;

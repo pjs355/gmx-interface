@@ -33,8 +33,7 @@
  * CREATED: Jan 2026 - Replaced old Payments page
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { ethers } from "ethers";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import Modal from "@/components/Modal/Modal";
 import { useTransfersModal } from "@/context/TransfersModalContext";
@@ -72,8 +71,14 @@ export function TransfersModal() {
 	const [error, setError] = useState<string | null>(null);
 	const [txHash, setTxHash] = useState<string | null>(null);
 
-	// Interface for encoding function calls
-	const iface = useMemo(() => new ethers.Interface(USDC_ABI), []);
+	// Lazy-load ethers to keep it out of the initial bundle
+	const ethersRef = useRef<typeof import("ethers") | null>(null);
+	const getEthers = useCallback(async () => {
+		if (!ethersRef.current) {
+			ethersRef.current = await import("ethers");
+		}
+		return ethersRef.current;
+	}, []);
 
 	// Reset state when modal closes
 	useEffect(() => {
@@ -138,10 +143,10 @@ export function TransfersModal() {
 		setTxHash(null);
 
 		try {
-			// Convert amount to USDC units (6 decimals)
-			const amountWei = ethers.parseUnits(withdrawAmount, 6);
+			const ethersModule = await getEthers();
+			const amountWei = ethersModule.parseUnits(withdrawAmount, 6);
 
-			// Encode the transfer function call
+			const iface = new ethersModule.Interface(USDC_ABI);
 			const transferData = iface.encodeFunctionData("transfer", [
 				recipientAddress,
 				amountWei,
@@ -204,7 +209,7 @@ export function TransfersModal() {
 		} finally {
 			setIsSubmitting(false);
 		}
-	}, [account, hasSmartWallet, signer, getClientForChain, recipientAddress, withdrawAmount, iface, refreshUserData]);
+	}, [account, hasSmartWallet, signer, getClientForChain, recipientAddress, withdrawAmount, getEthers, refreshUserData]);
 
 	// Handle done - close modal
 	const handleDone = useCallback(() => {

@@ -681,6 +681,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					onNavigate={navigateToSingleMarket}
 					question={question}
 					isDailyPlayerCount={isDailyPlayerCount}
+					umbrellaDisplayName={umbrella.displayName}
 				/>
 			);
 		} else if (umbrella.children && umbrella.children.length >= 2) {

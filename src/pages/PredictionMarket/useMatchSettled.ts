@@ -3,6 +3,16 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
 import { usePrivy } from "@privy-io/react-auth";
+import {
+	pickResolvedWinnerFromMarkets,
+	resolveCanonicalMatchWinner,
+	type UmbrellaForHistoryWinner,
+} from "@/pages/Positions/utils/historyOutcomeWinner";
+
+function isGenericYesNoWinnerLabel(name: string): boolean {
+	const t = name.trim().toLowerCase();
+	return t === "yes" || t === "no";
+}
 
 export interface SettledInfo {
 	isSettled: boolean;
@@ -17,14 +27,23 @@ export interface SettledInfo {
  */
 export function useMatchSettled(
 	umbrellaId: string | undefined,
-	pandascoreMatchId: string | undefined
+	pandascoreMatchId: string | undefined,
+	umbrellaForWinner?: UmbrellaForHistoryWinner | null
 ): SettledInfo | null {
 	const { getResolvedQuestionsForUmbrella } = usePredictionData();
 	const { appState: oddsAppState } = useOddsMonitor();
 	const { getAccessToken } = usePrivy();
-	const [pandaWinner, setPandaWinner] = useState<string | null>(null);
+	const [pandaWinnerForMatch, setPandaWinnerForMatch] = useState<{
+		pandaId: string;
+		name: string;
+	} | null>(null);
 
 	const pandaId = pandascoreMatchId?.trim() ?? "";
+
+	const pandaWinner =
+		pandaWinnerForMatch?.pandaId === pandaId
+			? pandaWinnerForMatch.name
+			: null;
 
 	// Source 1: Odds monitor — instant, no API call
 	const monitorInfo = useMemo<SettledInfo | null>(() => {
@@ -46,16 +65,41 @@ export function useMatchSettled(
 		const resolved = getResolvedQuestionsForUmbrella(umbrellaId);
 		if (resolved.length === 0) return null;
 
-		const winner = resolved.find(
-			(q: any) => q.resolvedOutcome === "yes"
+		const umbrellaTitle = umbrellaForWinner?.displayName?.trim();
+		const fromPick = pickResolvedWinnerFromMarkets(
+			resolved,
+			umbrellaTitle || undefined,
 		);
-		if (!winner) return null;
+		if (fromPick && !isGenericYesNoWinnerLabel(fromPick)) {
+			return { isSettled: true, winnerName: fromPick };
+		}
 
-		return {
-			isSettled: true,
-			winnerName: (winner as any).displayName || "Winner",
+		const umbrellaArg: UmbrellaForHistoryWinner = {
+			pandascore_matchId: umbrellaForWinner?.pandascore_matchId ?? pandaId,
+			displayName: umbrellaTitle || undefined,
+			teamMappings: umbrellaForWinner?.teamMappings,
 		};
-	}, [umbrellaId, monitorInfo, getResolvedQuestionsForUmbrella]);
+		const fromCanonical = resolveCanonicalMatchWinner({
+			umbrella: umbrellaArg,
+			matchedMarkets: oddsAppState?.markets,
+			resolvedMarketsForUmbrella: resolved,
+			luSampleMarket: resolved[0],
+		});
+		if (fromCanonical) {
+			return { isSettled: true, winnerName: fromCanonical };
+		}
+
+		return null;
+	}, [
+		umbrellaId,
+		monitorInfo,
+		pandaId,
+		getResolvedQuestionsForUmbrella,
+		oddsAppState?.markets,
+		umbrellaForWinner?.pandascore_matchId,
+		umbrellaForWinner?.displayName,
+		umbrellaForWinner?.teamMappings,
+	]);
 
 	// Source 3: PandaScore API fallback (only if sources 1+2 found nothing)
 	useEffect(() => {
@@ -73,11 +117,13 @@ export function useMatchSettled(
 					);
 				if (cancelled) return;
 				if (match?.status === "finished" && match.winner) {
-					setPandaWinner(
-						match.winner.name ||
+					setPandaWinnerForMatch({
+						pandaId,
+						name:
+							match.winner.name ||
 							match.winner.acronym ||
-							"Winner"
-					);
+							"Winner",
+					});
 				}
 			} catch {
 				// Admin-only endpoint — fail silently for regular users

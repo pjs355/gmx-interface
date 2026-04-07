@@ -17,6 +17,7 @@ import type {
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { RoutePlan, RouteExecution } from "@/trading/sor";
 import Button from "components/Button/Button";
+import { getYesNoTeamLabels } from "./teamLabels";
 
 interface PredictionMarketTradeBoxResponsiveContainerProps
 	extends TradeBoxProps {
@@ -59,6 +60,8 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	};
 	sorRouteExpired: boolean;
 	handleSorExecute: () => void;
+	crossBuyYes: number | null;
+	crossBuyNo: number | null;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -89,6 +92,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	sorExecution,
 	sorRouteExpired,
 	handleSorExecute,
+	umbrellaDisplayName,
+	crossBuyYes,
+	crossBuyNo,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -118,6 +124,14 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		state.selectedPosition === "no";
 
 	const yesPriceCents = useMemo(() => {
+		if (
+			state.tradingVenue === "all" &&
+			state.side === "buy" &&
+			crossBuyYes != null &&
+			Number.isFinite(crossBuyYes)
+		) {
+			return calcCents(crossBuyYes);
+		}
 		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.yes) {
 			const h = predictVenueBookHints.yes;
 			const ba =
@@ -147,9 +161,18 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		bestBid,
 		calcCents,
 		bookRepresentsNo,
+		crossBuyYes,
 	]);
 
 	const noPriceCents = useMemo(() => {
+		if (
+			state.tradingVenue === "all" &&
+			state.side === "buy" &&
+			crossBuyNo != null &&
+			Number.isFinite(crossBuyNo)
+		) {
+			return calcCents(crossBuyNo);
+		}
 		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.no) {
 			const h = predictVenueBookHints.no;
 			const ba =
@@ -179,72 +202,36 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		bestAsk,
 		calcCents,
 		bookRepresentsNo,
+		crossBuyNo,
 	]);
 
-	// Dynamic color logic for single VS markets
 	const isVsSingle = useMemo(() => {
-		const title = (
+		if (!market || (market as any)?.umbrellaChildrenCount !== 1) return false;
+		const mt = (
 			market?.displayName ||
 			(market as any)?.question ||
 			""
 		).trim();
-		const parts = title
+		if (mt.match(/^Over\s+/i)) return false;
+		const raw =
+			(umbrellaDisplayName || "")
+				.replace(/\s*-\s*Match Winner$/i, "")
+				.trim() || mt;
+		const parts = raw
 			.split(/\s*vs\.?\s*/i)
 			.map((s: string) => s.trim())
 			.filter(Boolean);
-		return (
-			parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1
-		);
-	}, [market]);
+		return parts.length === 2;
+	}, [market, umbrellaDisplayName]);
 
 	const yesTeamColor: string = (market as any)?.yesColor || "#22c55e";
 	const noTeamColor: string = (market as any)?.noColor || "#ef4444";
 
-	// Check if this is an "Over {number}" market (daily player count style)
-	const overUnderMatch = useMemo(() => {
-		const title = (
-			market?.displayName ||
-			(market as any)?.question ||
-			""
-		).trim();
-		// Match "Over" followed by a number (with optional commas)
-		const match = title.match(/^Over\s+([\d,]+)/i);
-		if (match) {
-			return match[1]; // Return the number part
-		}
-		return null;
-	}, [market?.displayName, (market as any)?.question]);
-
 	const { yesTeamLabel: mobileYesLabel, noTeamLabel: mobileNoLabel } =
-		useMemo(() => {
-			// If it's an Over/Under market, use Over/Under labels
-			if (overUnderMatch) {
-				return { yesTeamLabel: "Over", noTeamLabel: "Under" };
-			}
-			
-			const title = (
-				market?.displayName ||
-				(market as any)?.question ||
-				""
-			).trim();
-			if (!title) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-			const parts = title
-				.split(/\s*vs\.?\s*/i)
-				.map((s: string) => s.trim())
-				.filter(Boolean);
-			if (
-				parts.length === 2 &&
-				(market as any)?.umbrellaChildrenCount === 1
-			) {
-				return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
-			}
-			return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-		}, [
-			market?.displayName,
-			(market as any)?.question,
-			(market as any)?.umbrellaChildrenCount,
-			overUnderMatch,
-		]);
+		useMemo(
+			() => getYesNoTeamLabels(market, umbrellaDisplayName),
+			[market, umbrellaDisplayName],
+		);
 
 	const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
 		if (!hex) return `rgba(0,0,0,${alpha})`;
@@ -282,6 +269,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				market={market}
 				orderbook={orderbook}
 				pandascoreMatchId={pandascoreMatchId}
+				umbrellaDisplayName={umbrellaDisplayName}
+				crossBuyYes={crossBuyYes}
+				crossBuyNo={crossBuyNo}
 				state={state}
 				onPositionChange={onPositionChange}
 				onAmountChange={onAmountChange}
@@ -426,6 +416,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				market={market}
 				orderbook={orderbook}
 				pandascoreMatchId={pandascoreMatchId}
+				umbrellaDisplayName={umbrellaDisplayName}
+				crossBuyYes={crossBuyYes}
+				crossBuyNo={crossBuyNo}
 				state={state}
 				onPositionChange={onPositionChange}
 				onAmountChange={onAmountChange}

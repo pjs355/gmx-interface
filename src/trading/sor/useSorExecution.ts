@@ -115,6 +115,7 @@ export function useSorExecution(
 	const [isExecuting, setIsExecuting] = useState(false);
 	const [remainingBudget, setRemainingBudget] = useState<number | null>(null);
 	const routeRef = useRef<RoutePlan | null>(null);
+	const executingRef = useRef(false);
 	const mountedRef = useRef(true);
 	useEffect(() => { return () => { mountedRef.current = false; }; }, []);
 
@@ -156,6 +157,8 @@ export function useSorExecution(
 
 	const execute = useCallback(
 		async (route: RoutePlan) => {
+			if (executingRef.current) return;
+			executingRef.current = true;
 			routeRef.current = route;
 			setIsExecuting(true);
 			setRemainingBudget(null);
@@ -256,9 +259,10 @@ export function useSorExecution(
 					errorExec.status = "failed";
 				}
 				if (mountedRef.current) setExecution(errorExec);
-			} finally {
-				if (mountedRef.current) setIsExecuting(false);
-			}
+		} finally {
+			executingRef.current = false;
+			if (mountedRef.current) setIsExecuting(false);
+		}
 		},
 		[apiClient, executeLegWithRetry, executeBridge, trySyncBackend],
 	);
@@ -299,6 +303,7 @@ export function useSorExecution(
 	}, [apiClient]);
 
 	const resetExecution = useCallback(() => {
+		executingRef.current = false;
 		setExecution(null);
 		setIsExecuting(false);
 		setRemainingBudget(null);

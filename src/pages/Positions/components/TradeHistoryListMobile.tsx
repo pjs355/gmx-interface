@@ -7,6 +7,8 @@ interface TradeHistoryListMobileProps {
 	marketId: string | string[];
 	isExpanded: boolean;
 	position?: "Yes" | "No";
+	/** For vs / esports markets, show team name (e.g. Keyd) instead of Yes/No */
+	positionDisplayLabel?: string;
 }
 
 export default function TradeHistoryListMobile({
@@ -14,6 +16,7 @@ export default function TradeHistoryListMobile({
 	marketId,
 	isExpanded,
 	position,
+	positionDisplayLabel,
 }: TradeHistoryListMobileProps) {
 	const ids = Array.isArray(marketId) ? marketId : [marketId];
 	const marketOrders = orders
@@ -106,6 +109,7 @@ export default function TradeHistoryListMobile({
 				{displayOrders.map((order) => {
 					const isBuy = order.side === "buy";
 					const isYes = order.position === "Yes";
+					const sideText = positionDisplayLabel?.trim() || order.position;
 					const cashFlow = isBuy ? -order.usdcValue : order.usdcValue;
 					const shareChange = isBuy ? order.tokenValue : -order.tokenValue;
 
@@ -139,7 +143,7 @@ export default function TradeHistoryListMobile({
 									>
 										{isBuy ? "Buy" : "Sell"}
 									</span>
-								{/* Yes/No with faded background */}
+								{/* Team / Yes/No with faded background */}
 								<span
 									style={{
 										color: isYes ? "#22c55e" : "#f87171",
@@ -150,7 +154,7 @@ export default function TradeHistoryListMobile({
 										borderRadius: 4,
 									}}
 								>
-									{order.position}
+									{sideText}
 								</span>
 								</div>
 								<span style={{ color: "#666", fontSize: 11 }}>

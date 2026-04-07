@@ -92,13 +92,14 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 					? allBooksPreview[questionId]
 					: undefined;
 
-				// Use preview data for prices (lowestAsk = Yes price, highestBid for No calculation)
-				const yesPrice = preview?.lowestAsk;
-				const noPrice =
-					preview?.highestBid !== null &&
-					preview?.highestBid !== undefined
-						? 1 - preview.highestBid
-						: null;
+			// Best price across all venues, falling back to LevelUp-only orderbook price
+			const yesPrice =
+				preview?.bestYesPrice ??
+				preview?.lowestAsk ??
+				(preview?.bestNoPrice != null ? 1 - preview.bestNoPrice : null);
+			const noPrice =
+				preview?.bestNoPrice ??
+				(yesPrice != null ? 1 - yesPrice : null);
 
 				const yesCents =
 					yesPrice !== null && yesPrice !== undefined

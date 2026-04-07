@@ -5,6 +5,7 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
 import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
+import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
@@ -112,7 +113,9 @@ export default function PositionsCardView({
 						if (venue === "predictfun") {
 							bucket.label = getPredictPositionRowLabel(title, side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo, side) || side;
 						} else if (isVs) {
-							bucket.label = side === "Yes" ? parts[0] : parts[1];
+							bucket.label = shortTeamDisplayName(
+								side === "Yes" ? parts[0] : parts[1],
+							);
 						} else {
 							bucket.label = side;
 						}
@@ -250,7 +253,13 @@ export default function PositionsCardView({
 												)}
 											</div>
 											{isThExpanded && (
-												<TradeHistoryListMobile orders={orders} marketId={row.marketIds} isExpanded={isThExpanded} position={row.side} />
+												<TradeHistoryListMobile
+													orders={orders}
+													marketId={row.marketIds}
+													isExpanded={isThExpanded}
+													position={row.side}
+													positionDisplayLabel={row.label}
+												/>
 											)}
 										</div>
 									)}

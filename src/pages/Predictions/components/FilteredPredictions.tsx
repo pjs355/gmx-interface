@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
@@ -19,18 +19,16 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 // Sort umbrellas by trading activity (number of trades across all children markets)
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
-		// Sum up historicalPrices.length from all children markets
 		const aChildren = (a as any).children || [];
 		const aTradeCount = aChildren.reduce((sum: number, child: any) => {
-			return sum + (child?.historicalPrices?.length ?? 0);
+			return sum + (child?.tradeCount ?? child?.historicalPrices?.length ?? 0);
 		}, 0);
-		
+
 		const bChildren = (b as any).children || [];
 		const bTradeCount = bChildren.reduce((sum: number, child: any) => {
-			return sum + (child?.historicalPrices?.length ?? 0);
+			return sum + (child?.tradeCount ?? child?.historicalPrices?.length ?? 0);
 		}, 0);
-		
-		// Sort in descending order (most trades first)
+
 		return bTradeCount - aTradeCount;
 	});
 }
@@ -91,12 +89,40 @@ interface FilteredPredictionsProps {
 	filterType: "esports" | "games";
 }
 
+const INITIAL_VISIBLE = 20;
+const LOAD_MORE_COUNT = 20;
+
 export default function FilteredPredictions({
 	filterType,
 }: FilteredPredictionsProps) {
 	const navigate = useNavigate();
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
+	const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+	const sentinelRef = useRef<HTMLDivElement>(null);
+
+	// Reset visible count when filters change
+	useEffect(() => {
+		setVisibleCount(INITIAL_VISIBLE);
+	}, [selectedGame, filterType]);
+
+	// IntersectionObserver to load more cards on scroll
+	const loadMore = useCallback(() => {
+		setVisibleCount((prev) => prev + LOAD_MORE_COUNT);
+	}, []);
+
+	useEffect(() => {
+		const sentinel = sentinelRef.current;
+		if (!sentinel) return;
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				if (entry.isIntersecting) loadMore();
+			},
+			{ rootMargin: "400px" }
+		);
+		observer.observe(sentinel);
+		return () => observer.disconnect();
+	}, [loadMore]);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -216,7 +242,6 @@ export default function FilteredPredictions({
 		type CalendarDay = { date: Date; events: CalendarEvent[] };
 
 		const upcomingMap = new Map<string, CalendarDay>();
-		const pastMap = new Map<string, CalendarDay>();
 		const unscheduled: Umbrella[] = [];
 
 		for (let index = 0; index < filteredUmbrellas.length; index += 1) {
@@ -234,18 +259,12 @@ export default function FilteredPredictions({
 				eventDate,
 			};
 
+			// Only include today and future — skip events from past days
 			if (dayStart.getTime() >= todayStartMs) {
 				let day = upcomingMap.get(key);
 				if (!day) {
 					day = { date: dayStart, events: [] };
 					upcomingMap.set(key, day);
-				}
-				day.events.push(event);
-			} else {
-				let day = pastMap.get(key);
-				if (!day) {
-					day = { date: dayStart, events: [] };
-					pastMap.set(key, day);
 				}
 				day.events.push(event);
 			}
@@ -268,17 +287,10 @@ export default function FilteredPredictions({
 				return day;
 			});
 
-		const pastDays = Array.from(pastMap.values())
-			.sort(sortByDate)
-			.map((day) => {
-				sortByEventTime(day.events);
-				return day;
-			});
-
 		return {
 			todayStartMs,
 			upcomingDays,
-			pastDays,
+			pastDays: [],
 			unscheduled,
 		};
 	}, [filteredUmbrellas, filterType]);
@@ -327,6 +339,16 @@ export default function FilteredPredictions({
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
+	// Compute total event count for calendar (must be before early return to satisfy Rules of Hooks)
+	const calendarTotalCount = React.useMemo(() => {
+		if (!calendarData) return 0;
+		let count = 0;
+		for (const day of calendarData.upcomingDays) count += day.events.length;
+		count += calendarData.unscheduled.length;
+		for (const day of calendarData.pastDays) count += day.events.length;
+		return count;
+	}, [calendarData]);
+
 	const handleRetry = () => {
 		window.location.reload();
 	};
@@ -358,6 +380,10 @@ export default function FilteredPredictions({
 
 	let content: React.ReactNode = null;
 
+	const hasMoreItems = shouldUseCalendar
+		? visibleCount < calendarTotalCount
+		: visibleCount < filteredUmbrellas.length;
+
 	if (shouldUseCalendar && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
 		const hasPast = calendarData.pastDays.length > 0;
@@ -375,118 +401,139 @@ export default function FilteredPredictions({
 				</div>
 			);
 		} else {
-			content = (
-				<div className="prediction-calendar">
-					{calendarData.upcomingDays.map((day) => {
-						const label = formatDayLabel(
-							day.date,
-							calendarData.todayStartMs
-						);
-	return (
-							<section
-								key={`upcoming-${buildDayKey(day.date)}`}
-								className="prediction-calendar-day"
-							>
-								<header className="prediction-calendar-header">
-									<div className="prediction-calendar-title">
-										<span className="prediction-calendar-primary">
-											{label.primary}
-										</span>
-										<span className="prediction-calendar-secondary">
-											{label.secondary}
-										</span>
-									</div>
-								</header>
-								<div className="predictions-grid prediction-calendar-grid">
-									{day.events.map((event) =>
-										renderPredictionCard(event.umbrella)
-									)}
-								</div>
-							</section>
-						);
-					})}
+			// Progressive rendering: only render up to visibleCount cards across all day groups
+			let rendered = 0;
+			const calendarSections: React.ReactNode[] = [];
 
-					{hasUnscheduled ? (
-						<section className="prediction-calendar-day prediction-calendar-day--unscheduled">
+			for (const day of calendarData.upcomingDays) {
+				if (rendered >= visibleCount) break;
+				const remaining = visibleCount - rendered;
+				const eventsToShow = day.events.slice(0, remaining);
+				rendered += eventsToShow.length;
+
+				const label = formatDayLabel(day.date, calendarData.todayStartMs);
+				calendarSections.push(
+					<section
+						key={`upcoming-${buildDayKey(day.date)}`}
+						className="prediction-calendar-day"
+					>
+						<header className="prediction-calendar-header">
+							<div className="prediction-calendar-title">
+								<span className="prediction-calendar-primary">
+									{label.primary}
+								</span>
+								<span className="prediction-calendar-secondary">
+									{label.secondary}
+								</span>
+							</div>
+						</header>
+						<div className="predictions-grid prediction-calendar-grid">
+							{eventsToShow.map((event) =>
+								renderPredictionCard(event.umbrella)
+							)}
+						</div>
+					</section>
+				);
+			}
+
+			if (rendered < visibleCount && hasUnscheduled) {
+				const remaining = visibleCount - rendered;
+				const unscheduledToShow = calendarData.unscheduled.slice(0, remaining);
+				rendered += unscheduledToShow.length;
+
+				calendarSections.push(
+					<section
+						key="unscheduled"
+						className="prediction-calendar-day prediction-calendar-day--unscheduled"
+					>
+						<header className="prediction-calendar-header">
+							<div className="prediction-calendar-title">
+								<span className="prediction-calendar-primary">
+									To Be Scheduled
+								</span>
+								<span className="prediction-calendar-secondary">
+									Event date not provided
+								</span>
+							</div>
+						</header>
+						<div className="predictions-grid prediction-calendar-grid">
+							{unscheduledToShow.map((umbrellaItem) =>
+								renderPredictionCard(umbrellaItem)
+							)}
+						</div>
+					</section>
+				);
+			}
+
+			if (rendered < visibleCount && hasPast) {
+				const pastSections: React.ReactNode[] = [];
+				for (const day of calendarData.pastDays) {
+					if (rendered >= visibleCount) break;
+					const remaining = visibleCount - rendered;
+					const eventsToShow = day.events.slice(0, remaining);
+					rendered += eventsToShow.length;
+
+					const label = formatDayLabel(day.date, calendarData.todayStartMs);
+					pastSections.push(
+						<section
+							key={`past-${buildDayKey(day.date)}`}
+							className="prediction-calendar-day prediction-calendar-day--past"
+						>
 							<header className="prediction-calendar-header">
 								<div className="prediction-calendar-title">
 									<span className="prediction-calendar-primary">
-										To Be Scheduled
+										{label.primary}
 									</span>
 									<span className="prediction-calendar-secondary">
-										Event date not provided
+										{label.secondary}
 									</span>
 								</div>
 							</header>
 							<div className="predictions-grid prediction-calendar-grid">
-								{calendarData.unscheduled.map(
-									(umbrellaItem) =>
-										renderPredictionCard(umbrellaItem)
+								{eventsToShow.map((event) =>
+									renderPredictionCard(event.umbrella)
 								)}
 							</div>
 						</section>
-					) : null}
-
-					{hasPast ? (
-						<section className="prediction-calendar-archive">
+					);
+				}
+				if (pastSections.length > 0) {
+					calendarSections.push(
+						<section key="past-archive" className="prediction-calendar-archive">
 							<h3 className="prediction-calendar-archive-title">
 								Recent Events
 							</h3>
-							{calendarData.pastDays.map((day) => {
-								const label = formatDayLabel(
-									day.date,
-									calendarData.todayStartMs
-								);
-								return (
-									<section
-										key={`past-${buildDayKey(day.date)}`}
-										className="prediction-calendar-day prediction-calendar-day--past"
-									>
-										<header className="prediction-calendar-header">
-											<div className="prediction-calendar-title">
-												<span className="prediction-calendar-primary">
-													{label.primary}
-												</span>
-												<span className="prediction-calendar-secondary">
-													{label.secondary}
-												</span>
-											</div>
-										</header>
-										<div className="predictions-grid prediction-calendar-grid">
-											{day.events.map((event) =>
-												renderPredictionCard(
-													event.umbrella
-												)
-											)}
-										</div>
-									</section>
-								);
-							})}
+							{pastSections}
 						</section>
-					) : null}
+					);
+				}
+			}
+
+			content = (
+				<div className="prediction-calendar">
+					{calendarSections}
 				</div>
 			);
 		}
 	} else {
-		// Add carousel class for esports on mobile
 		const gridClassName =
 			filterType === "esports"
 				? "predictions-grid predictions-grid--carousel"
 				: "predictions-grid";
 
+		const visibleUmbrellas = filteredUmbrellas.slice(0, visibleCount);
+
 		content = (
 			<div className={gridClassName}>
-				{filteredUmbrellas.length > 0 ? (
+				{visibleUmbrellas.length > 0 ? (
 					<>
-						{filteredUmbrellas.map((umbrella) =>
+						{visibleUmbrellas.map((umbrella) =>
 							renderPredictionCard(umbrella)
 						)}
-						{/* View All Card - Only visible on mobile for esports */}
-						{filterType === "esports" && (
+						{filterType === "esports" && !hasMoreItems && (
 							<div
 								className="view-all-card-filtered"
 								onClick={() => {
-									// Scroll to top to show all markets
 									window.scrollTo({ top: 0, behavior: "smooth" });
 								}}
 							>
@@ -542,6 +589,13 @@ export default function FilteredPredictions({
 				filterType={filterType}
 			/>
 			{content}
+			{hasMoreItems && (
+				<div
+					ref={sentinelRef}
+					style={{ height: 1, width: "100%" }}
+					aria-hidden
+				/>
+			)}
 		</div>
 	);
 }

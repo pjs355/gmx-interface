@@ -43,14 +43,30 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		loading: userDataLoading,
 	} = useUserData();
 
-	// Polymarket Safe USDC.e + Predict BSC USDT + Solana USDC (venue cash balances)
+	// Defer venue queries until after the initial paint so the homepage renders fast.
+	// USDC cash shows immediately; venue cash/positions fill in after first frame.
+	const [venueReady, setVenueReady] = React.useState(false);
+	React.useEffect(() => {
+		let timeoutId: ReturnType<typeof setTimeout> | null = null;
+		const rafId = requestAnimationFrame(() => {
+			timeoutId = setTimeout(() => setVenueReady(true), 0);
+		});
+		return () => {
+			cancelAnimationFrame(rafId);
+			if (timeoutId !== null) clearTimeout(timeoutId);
+		};
+	}, []);
+
 	const { polymarketSafe, embeddedEoa, solanaAddress } = useFundingAddresses();
+
+	const venueEnabled = venueReady && Boolean(polymarketSafe || embeddedEoa || solanaAddress);
+
 	const bridgeBalances = useBridgeFundingBalances({
 		baseSmartWallet: undefined,
-		polymarketSafe,
-		embeddedEoa,
-		solanaAddress,
-		enabled: Boolean(polymarketSafe || embeddedEoa || solanaAddress),
+		polymarketSafe: venueEnabled ? polymarketSafe : null,
+		embeddedEoa: venueEnabled ? embeddedEoa : null,
+		solanaAddress: venueEnabled ? solanaAddress : null,
+		enabled: venueEnabled,
 	});
 	const polySafeUsdcE = bridgeBalances.data?.polygonUsdcEHuman
 		? Number(bridgeBalances.data.polygonUsdcEHuman)
@@ -62,7 +78,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		? Number(bridgeBalances.data.solanaUsdcHuman)
 		: 0;
 
-	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
+	const polyPositionsQuery = usePolymarketPositions(venueReady ? polymarketSafe : null);
 	const polyPositionsTotal = useMemo(() => {
 		if (!polyPositionsQuery.data) return 0;
 		return polyPositionsQuery.data.reduce(
@@ -71,7 +87,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		);
 	}, [polyPositionsQuery.data]);
 
-	const predictPositionsQuery = usePredictPositions(account ?? null);
+	const predictPositionsQuery = usePredictPositions(venueReady ? (account ?? null) : null);
 	const predictPositionsTotal = useMemo(() => {
 		if (!predictPositionsQuery.data) return 0;
 		return predictPositionsQuery.data.reduce(
@@ -81,7 +97,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	}, [predictPositionsQuery.data]);
 
 	const privateApi = usePrivateApiClient();
-	const dflowPositionsQuery = useDflowPositions(solanaAddress, privateApi);
+	const dflowPositionsQuery = useDflowPositions(venueReady ? solanaAddress : null, privateApi);
 	const dflowPositionsTotal = useMemo(() => {
 		if (!dflowPositionsQuery.data) return 0;
 		return dflowPositionsQuery.data.reduce(

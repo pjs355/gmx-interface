@@ -8,6 +8,7 @@ import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
 import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
 import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
+import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryList from "./TradeHistoryList";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
@@ -132,7 +133,9 @@ export default function PositionsTableView({
 						if (venue === "predictfun") {
 							bucket.label = getPredictPositionRowLabel(title, side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo, side) || side;
 						} else if (isVs) {
-							bucket.label = side === "Yes" ? parts[0] : parts[1];
+							bucket.label = shortTeamDisplayName(
+								side === "Yes" ? parts[0] : parts[1],
+							);
 						} else {
 							bucket.label = side;
 						}
@@ -283,7 +286,13 @@ export default function PositionsTableView({
 											</div>
 										</div>
 										{isExpanded && (
-											<TradeHistoryList orders={orders} marketId={row.marketIds} isExpanded={isExpanded} position={row.side} />
+											<TradeHistoryList
+												orders={orders}
+												marketId={row.marketIds}
+												isExpanded={isExpanded}
+												position={row.side}
+												positionDisplayLabel={row.label}
+											/>
 										)}
 									</React.Fragment>
 								);

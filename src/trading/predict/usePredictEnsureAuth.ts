@@ -28,10 +28,6 @@ export function usePredictEnsureAuth(shouldAuth: boolean) {
 	);
 
 	useEffect(() => {
-		console.log("[PredictEnsureAuth] Check: shouldAuth=", shouldAuth,
-			"authenticated=", authenticated, "attempted=", attempted.current,
-			"wallets=", wallets?.length ?? 0);
-
 		if (!shouldAuth || !authenticated || attempted.current) return;
 
 		const embedded = (wallets || []).find(
@@ -46,15 +42,12 @@ export function usePredictEnsureAuth(shouldAuth: boolean) {
 
 		attempted.current = true;
 		setState("pending");
-		console.log("[PredictEnsureAuth] Starting auto-auth flow...");
 
 		(async () => {
 			const ethereum = await embedded.getEthereumProvider!();
-			console.log("[PredictEnsureAuth] Got ethereum provider");
 
 			const { message } = await api.getPredictAuthMessage();
 			if (!message) throw new Error("No auth message returned from backend");
-			console.log("[PredictEnsureAuth] Got auth message, signing...");
 
 			let signature: string;
 			let signer: string;
@@ -69,17 +62,14 @@ export function usePredictEnsureAuth(shouldAuth: boolean) {
 				);
 				signature = await builder.signPredictAccountMessage(message);
 				signer = predictAccount;
-				console.log("[PredictEnsureAuth] Signed via Smart Account:", signer.slice(0, 10));
 			} else {
 				const provider = new BrowserProvider(ethereum);
 				const ethSigner = await provider.getSigner();
 				signer = await ethSigner.getAddress();
 				signature = await ethSigner.signMessage(message);
-				console.log("[PredictEnsureAuth] Signed via EOA:", signer.slice(0, 10));
 			}
 
 			await api.completePredictAuth({ signer, message, signature });
-			console.log("[PredictEnsureAuth] Auth complete, refetching predict-orders...");
 
 			await queryClient.refetchQueries({
 				queryKey: ["predict-orders"],
@@ -87,7 +77,6 @@ export function usePredictEnsureAuth(shouldAuth: boolean) {
 			});
 
 			setState("done");
-			console.log("[PredictEnsureAuth] Session established, orders refetch finished");
 		})().catch((err) => {
 			console.warn("[PredictEnsureAuth] Auto-auth failed:", err?.message ?? err);
 			setState("error");

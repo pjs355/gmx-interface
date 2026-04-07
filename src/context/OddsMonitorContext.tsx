@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { getOddsWebSocketUrl } from "@/config/oddsMonitorBase";
 import { useOddsMonitorWebSocket } from "@/hooks/useOddsMonitorWebSocket";
 import type { OddsMonitorAppState } from "@/types/odds-monitor";
@@ -12,6 +13,8 @@ export type OddsMonitorContextValue = {
 	sendGetState: () => void;
 };
 
+const ODDS_MONITOR_ROUTES = ["/predictions/umbrella/", "/positions"];
+
 const OddsMonitorContext = createContext<OddsMonitorContextValue | null>(null);
 
 export function OddsMonitorProvider({
@@ -19,7 +22,15 @@ export function OddsMonitorProvider({
 }: {
 	children: React.ReactNode;
 }) {
-	const wsUrl = useMemo(() => getOddsWebSocketUrl(), []);
+	const { pathname } = useLocation();
+	const baseWsUrl = useMemo(() => getOddsWebSocketUrl(), []);
+
+	// Only open the WebSocket on routes that actually consume odds data
+	const needsOddsData = ODDS_MONITOR_ROUTES.some((route) =>
+		pathname.startsWith(route)
+	);
+	const wsUrl = needsOddsData ? baseWsUrl : null;
+
 	const { connected, appState, lastWsError, enabled, sendGetState } =
 		useOddsMonitorWebSocket(wsUrl);
 

@@ -1,31 +1,84 @@
-import { useEffect } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Component, lazy, Suspense, useEffect, type ErrorInfo, type ReactNode } from "react";
+import { Route, Routes, useLocation } from "react-router-dom";
 
-// Commented out for production - Get Test USDC page disabled
-// import GetTestUsdc from "pages/GetTestUsdc/GetTestUsdc.jsx";
-import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
-import Home from "pages/Home/Home";
-import Predictions from "pages/Predictions/Predictions";
+import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
+
+// Eager: homepage and listing pages (most common entry points)
 import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";
-import PredictionMarket from "@/pages/PredictionMarket/PredictionMarket";
-// Commented out for production - leaderboard page disabled
-// import Leaderboard from "@/pages/Leaderboard/Leaderboard";
-// Removed Developers import - not used in routes (using Profile instead)
-import Profile from "pages/Profile/Profile";
-import Admin from "pages/Admin/Admin";
-import Positions from "pages/Positions/Positions";
-// Commented out for production - prizes page disabled
-// import Prizes from "pages/Prizes/Prizes";
-import Transfers from "pages/Transfers/Transfers";
-import TradeBoxTest from "pages/TradeBoxTest/TradeBoxTest";
-import About from "pages/About/About";
-import TestPage from "pages/Test/TestPage";
-import TradingShellPage from "@/pages/TradingShell/TradingShellPage";
+import Predictions from "pages/Predictions/Predictions";
+import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
+
+// Lazy: everything else is code-split into separate chunks
+const PredictionMarket = lazy(() => import("@/pages/PredictionMarket/PredictionMarket"));
+const Profile = lazy(() => import("pages/Profile/Profile"));
+const Admin = lazy(() => import("pages/Admin/Admin"));
+const Positions = lazy(() => import("pages/Positions/Positions"));
+const Transfers = lazy(() => import("pages/Transfers/Transfers"));
+const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
+const About = lazy(() => import("pages/About/About"));
+const TestPage = lazy(() => import("pages/Test/TestPage"));
+const TradingShellPage = lazy(() => import("@/pages/TradingShell/TradingShellPage"));
+
+// Error boundary for lazy chunk load failures (network errors, deploy cache busts)
+class ChunkErrorBoundary extends Component<
+	{ children: ReactNode },
+	{ hasError: boolean }
+> {
+	state = { hasError: false };
+
+	static getDerivedStateFromError() {
+		return { hasError: true };
+	}
+
+	componentDidCatch(error: Error, info: ErrorInfo) {
+		// ChunkLoadError / TypeError from dynamic import() -- reload once to pick up new assets
+		if (
+			error.name === "ChunkLoadError" ||
+			error.message?.includes("Failed to fetch dynamically imported module")
+		) {
+			window.location.reload();
+			return;
+		}
+		console.error("LazyPage error:", error, info);
+	}
+
+	render() {
+		if (this.state.hasError) {
+			return (
+				<div style={{ padding: 32, textAlign: "center" }}>
+					<p>Something went wrong loading this page.</p>
+					<button
+						onClick={() => window.location.reload()}
+						style={{
+							marginTop: 12,
+							padding: "8px 20px",
+							borderRadius: 8,
+							border: "1px solid rgba(255,255,255,0.2)",
+							background: "transparent",
+							color: "white",
+							cursor: "pointer",
+						}}
+					>
+						Reload
+					</button>
+				</div>
+			);
+		}
+		return this.props.children;
+	}
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+	return (
+		<ChunkErrorBoundary>
+			<Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+		</ChunkErrorBoundary>
+	);
+}
 
 export function MainRoutes() {
 	const { pathname } = useLocation();
 
-	// new page should be scrolled to top
 	useEffect(() => {
 		window.scrollTo(0, 0);
 	}, [pathname]);
@@ -46,31 +99,21 @@ export function MainRoutes() {
 			/>
 			<Route
 				path="/predictions/umbrella/:umbrellaId"
-				element={<PredictionMarket />}
+				element={<LazyPage><PredictionMarket /></LazyPage>}
 			/>
 
-			{/* Commented out for production - leaderboard page disabled */}
-			{/* <Route path="/leaderboard" element={<Leaderboard />} /> */}
-			{/* Commented out for production - developers page disabled */}
-			{/* <Route path="/developers" element={<Profile />} /> */}
-			<Route path="/profile" element={<Profile />} />
-			<Route path="/trading" element={<TradingShellPage />} />
-			{/* Commented out for production - developers page disabled */}
-			{/* <Route path="/profile/developers" element={<Profile />} /> */}
-			<Route path="/admin" element={<Admin />} />
-			{/* Commented out for production - Get Test USDC page disabled */}
-			{/* <Route path="/get-test-usdc" element={<GetTestUsdc />} /> */}
-			<Route path="/positions" element={<Positions />} />
-			{/* Commented out for production - prizes page disabled */}
-			{/* <Route path="/prizes" element={<Prizes />} /> */}
-			<Route path="/transfers" element={<Transfers />} />
-			<Route path="/about" element={<About />} />
+			<Route path="/profile" element={<LazyPage><Profile /></LazyPage>} />
+			<Route path="/trading" element={<LazyPage><TradingShellPage /></LazyPage>} />
+			<Route path="/admin" element={<LazyPage><Admin /></LazyPage>} />
+			<Route path="/positions" element={<LazyPage><Positions /></LazyPage>} />
+			<Route path="/transfers" element={<LazyPage><Transfers /></LazyPage>} />
+			<Route path="/about" element={<LazyPage><About /></LazyPage>} />
 			{/* Admin-only test pages */}
 			<Route
 				path="/test/tradebox/:umbrellaId"
-				element={<TradeBoxTest />}
+				element={<LazyPage><TradeBoxTest /></LazyPage>}
 			/>
-			<Route path="/test" element={<TestPage />} />
+			<Route path="/test" element={<LazyPage><TestPage /></LazyPage>} />
 
 			<Route path="*" element={<PageNotFound />} />
 		</Routes>

@@ -20,6 +20,8 @@ type MarketLite = any;
 type BookPreview = {
 	lowestAsk: number | null;
 	highestBid: number | null;
+	bestYesPrice: number | null;
+	bestNoPrice: number | null;
 };
 
 type PredictionDataContextValue = {
@@ -107,11 +109,15 @@ export function PredictionDataProvider({
 	const [tagsLoading, setTagsLoading] = useState(true);
 	const [error, setError] = useState<string | undefined>(undefined);
 
+	const hasDataRef = React.useRef(false);
 	const load = useCallback(async () => {
-		setLoading(true);
+		// Only show loading spinner on initial load, not on SWR background refresh
+		if (!hasDataRef.current) setLoading(true);
 		setError(undefined);
+		const t0 = performance.now();
 		try {
 			const umbrellas = await umbrellaDataService.fetchAllUmbrellas();
+			console.log(`[Perf] PredictionDataContext.load() umbrella fetch + processing: ${Math.round(performance.now() - t0)}ms`);
 			const entries = await Promise.all(
 				umbrellas.map(async (umbrella: any) => {
 					const markets = umbrella.children;
@@ -197,8 +203,7 @@ export function PredictionDataProvider({
 			setSingleMarketQuestions(singleQuestions);
 			setSingleMarketOrderbooks(orderbooks);
 			setMultiMarketData(multiData);
-
-			// Kick off orderbook and historical data fetches in background
+			hasDataRef.current = true;
 		} catch (e: any) {
 			setError(e?.message || "Failed to load markets");
 		} finally {
@@ -314,6 +319,14 @@ export function PredictionDataProvider({
 		load();
 	}, [load]);
 
+	// Re-process when background SWR refresh delivers fresh umbrella data
+	useEffect(() => {
+		const unsubscribe = umbrellaDataService.onRefresh(() => {
+			load();
+		});
+		return unsubscribe;
+	}, [load]);
+
 	// Fetch tags from tagService
 	useEffect(() => {
 		let mounted = true;
@@ -343,6 +356,7 @@ export function PredictionDataProvider({
 	// Fetch lightweight orderbook preview for all markets
 	useEffect(() => {
 		const fetchAllBooksPreview = async () => {
+			if (document.visibilityState === "hidden") return;
 			try {
 				if (typeof window !== "undefined") {
 					const currentPath = window.location?.pathname ?? "";
@@ -350,6 +364,7 @@ export function PredictionDataProvider({
 						return;
 					}
 				}
+				const t0 = performance.now();
 				const baseUrl = getPredictionApiBaseUrl();
 				const response = await fetch(
 					`${baseUrl}/api/all-books-preview`
@@ -368,21 +383,24 @@ export function PredictionDataProvider({
 							return;
 						}
 					}
-					// Transform array into object keyed by questionId
 					const previewMap: Record<string, BookPreview> = {};
 					if (Array.isArray(json.data)) {
 						json.data.forEach((item: any) => {
 							const qId = item.questionId;
 							if (qId) {
 								previewMap[qId] = {
-									lowestAsk: item.lowestAsk ?? null,
+									lowestAsk: item.lowestAskA ?? item.lowestAsk ?? null,
 									highestBid: item.highestBid ?? null,
+									bestYesPrice: item.bestYesPrice ?? null,
+									bestNoPrice:
+										item.bestNoPrice ?? item.lowestAskB ?? null,
 								};
 							}
 						});
 					}
 					setAllBooksPreview(previewMap);
-					setBooksPreviewLoading(false); // Mark as loaded
+					setBooksPreviewLoading(false);
+					console.log(`[Perf] /api/all-books-preview: ${Math.round(performance.now() - t0)}ms, ${Object.keys(previewMap).length} markets`);
 				}
 			} catch (err) {
 				console.error(
@@ -390,14 +408,36 @@ export function PredictionDataProvider({
 					"Failed to fetch all-books-preview:",
 					err
 				);
-				setBooksPreviewLoading(false); // Mark as loaded even on error
+				setBooksPreviewLoading(false);
 			}
 		};
 
 		fetchAllBooksPreview();
-		// Refresh every 30 seconds
-		const interval = setInterval(fetchAllBooksPreview, 30000);
-		return () => clearInterval(interval);
+
+		// Poll every 30s, but pause when tab is hidden
+		let intervalId: ReturnType<typeof setInterval> | null = setInterval(fetchAllBooksPreview, 30000);
+
+		const handleVisibility = () => {
+			if (document.visibilityState === "visible") {
+				// Tab became visible: fetch immediately + restart interval
+				fetchAllBooksPreview();
+				if (!intervalId) {
+					intervalId = setInterval(fetchAllBooksPreview, 30000);
+				}
+			} else {
+				// Tab hidden: stop polling
+				if (intervalId) {
+					clearInterval(intervalId);
+					intervalId = null;
+				}
+			}
+		};
+
+		document.addEventListener("visibilitychange", handleVisibility);
+		return () => {
+			if (intervalId) clearInterval(intervalId);
+			document.removeEventListener("visibilitychange", handleVisibility);
+		};
 	}, []);
 
 	const value = useMemo<PredictionDataContextValue>(

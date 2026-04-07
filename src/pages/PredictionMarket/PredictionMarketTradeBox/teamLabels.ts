@@ -1,22 +1,24 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 
-export function getYesNoTeamLabels(market: PredictionMarket): {
-	yesTeamLabel: string;
-	noTeamLabel: string;
-} {
-	const title = (
+/** Prefer umbrella title (e.g. "A vs B - Match Winner"); Over/Under uses market title only. */
+export function getYesNoTeamLabels(
+	market: PredictionMarket,
+	umbrellaDisplayName?: string,
+): { yesTeamLabel: string; noTeamLabel: string } {
+	const marketTitle = (
 		market?.displayName ||
 		(market as { question?: string }).question ||
 		""
 	).trim();
-
-	const overMatch = title.match(/^Over\s+([\d,]+)/i);
-	if (overMatch) {
+	if (marketTitle.match(/^Over\s+([\d,]+)/i)) {
 		return { yesTeamLabel: "Over", noTeamLabel: "Under" };
 	}
-
-	if (!title) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-	const parts = title
+	const raw =
+		(umbrellaDisplayName || "")
+			.replace(/\s*-\s*Match Winner$/i, "")
+			.trim() || marketTitle;
+	if (!raw) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
+	const parts = raw
 		.split(/\s*vs\.?\s*/i)
 		.map((s: string) => s.trim())
 		.filter(Boolean);

@@ -62,6 +62,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
 	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
+	const settledView = Boolean(settledInfo);
 	const pandascoreMatchId =
 		typeof umbrella?.pandascore_matchId === "string"
 			? umbrella.pandascore_matchId.trim()
@@ -97,7 +98,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			: undefined;
 	}, [chartState.secondaryMarket, umbrella?.children?.length]);
 
-	const orderbookColumnContent = (
+	const orderbookColumnContent = settledView ? (
+		<RulesSection umbrella={umbrella} />
+	) : (
 		<>
 			{sortedQuestions.map((question, index) => {
 				if (!question) return null;
@@ -118,6 +121,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 									umbrellaChildrenCount: umbrella?.children?.length || 0,
 								} as any
 							}
+							umbrellaDisplayName={umbrella.displayName}
 							onMarketSwitch={onMarketSwitch}
 							onMarketSwitchWithOrderbook={onMarketSwitchWithOrderbook}
 							onOrderbookToggle={onOrderbookToggle}
@@ -131,14 +135,29 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					</div>
 				);
 			})}
-		{showCrossVenueBooks && !settledInfo ? (
-			<div className="orderbook-section__cross-venue">
-				<EsportsVenueBooksPanel pandascoreMatchId={pandascoreMatchId} />
-			</div>
-		) : null}
+			{showCrossVenueBooks ? (
+				<div className="orderbook-section__cross-venue">
+					<EsportsVenueBooksPanel pandascoreMatchId={pandascoreMatchId} />
+				</div>
+			) : null}
 			<RulesSection umbrella={umbrella} />
 		</>
 	);
+
+	const orderbookSectionBody =
+		settledView || (hasQuestions && orderbooksReady) ? (
+			orderbookColumnContent
+		) : (
+			<>
+				<OrderbookSkeleton />
+				<OrderbookSkeleton />
+			</>
+		);
+
+	// Chart only needs active markets + orderbooks; settledView does not change this condition
+	const showChartBlock = hasQuestions && orderbooksReady;
+	const showChartPlaceholder =
+		!showChartBlock && !(settledView && !hasQuestions);
 
 	return (
 		<div className="prediction-market-content">
@@ -151,7 +170,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						</div>
 					)}
 					<div className="chart-section">
-						{hasQuestions && orderbooksReady ? (
+						{showChartBlock ? (
 							<div
 								className="ExchangeChart"
 								style={{
@@ -180,21 +199,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 									/>
 								</div>
 							</div>
-						) : (
+						) : showChartPlaceholder ? (
 							<ChartSkeleton />
-						)}
+						) : null}
 					</div>
 
-					<div className="orderbook-section">
-						{hasQuestions && orderbooksReady ? (
-							orderbookColumnContent
-						) : (
-							<>
-								<OrderbookSkeleton />
-								<OrderbookSkeleton />
-							</>
-						)}
-					</div>
+					<div className="orderbook-section">{orderbookSectionBody}</div>
 
 					{/* Comments Section */}
 					{umbrella && (
@@ -209,11 +219,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				{settledInfo ? (
 					<div className="prediction-market-tradebox match-settled-banner">
 						<div className="match-settled-banner__content">
-							<div className="match-settled-banner__label">
-								Match Settled
-							</div>
 							<div className="match-settled-banner__winner">
-								{settledInfo.winnerName} Won!
+								{settledInfo.winnerName} has won!
 							</div>
 						</div>
 					</div>
@@ -232,6 +239,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						pandascoreMatchId={
 							pandascoreMatchId || undefined
 						}
+						umbrellaDisplayName={umbrella.displayName}
 						initialPosition={activePosition}
 						onPositionChange={onPositionChange}
 						onSideChange={setTradeSide}
@@ -250,7 +258,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					</div>
 				)}
 				<div className="chart-section-mobile">
-					{hasQuestions && orderbooksReady ? (
+					{showChartBlock ? (
 						<div
 							className="ExchangeChart"
 							style={{
@@ -277,21 +285,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 								/>
 							</div>
 						</div>
-					) : (
+					) : showChartPlaceholder ? (
 						<ChartSkeleton />
-					)}
+					) : null}
 				</div>
 
-				<div className="orderbook-section-mobile">
-					{hasQuestions && orderbooksReady ? (
-						orderbookColumnContent
-					) : (
-						<>
-							<OrderbookSkeleton />
-							<OrderbookSkeleton />
-						</>
-					)}
-				</div>
+				<div className="orderbook-section-mobile">{orderbookSectionBody}</div>
 
 				{/* Comments Section */}
 				{umbrella && (
@@ -306,11 +305,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				<div className="mobile-trading-container">
 					<div className="prediction-market-tradebox match-settled-banner">
 						<div className="match-settled-banner__content">
-							<div className="match-settled-banner__label">
-								Match Settled
-							</div>
 							<div className="match-settled-banner__winner">
-								{settledInfo.winnerName} Won!
+								{settledInfo.winnerName} has won!
 							</div>
 						</div>
 					</div>
@@ -331,6 +327,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						pandascoreMatchId={
 							pandascoreMatchId || undefined
 						}
+						umbrellaDisplayName={umbrella.displayName}
 						initialPosition={activePosition}
 						onPositionChange={onPositionChange}
 						onSideChange={setTradeSide}

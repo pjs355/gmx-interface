@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { type Umbrella } from "@/services/api/umbrellaDataService";
@@ -156,7 +156,13 @@ export default function usePositionsData() {
 		usdcLoading,
 		loading: userDataLoading,
 		refresh: refreshUserData,
+		loadOrders,
 	} = useUserData();
+
+	// Lazy-load orders when Positions page mounts (deferred from startup)
+	useEffect(() => {
+		loadOrders();
+	}, [loadOrders]);
 	const {
 		umbrellas,
 		getQuestionsForUmbrella,
@@ -260,11 +266,12 @@ export default function usePositionsData() {
 	const predictMarketDetails = predictMarketsQuery.data ?? new Map<number, PredictMarketDetail>();
 
 	// --- Atomic loading gate: wait for ALL data including enrichment ---
+	// Polymarket activity API can paginate many pages — do not block Positions/Orders skeleton on it.
+	// History tab waits separately via `polyTradeHistoryLoading` (see Positions.tsx).
 	const venueQueriesSettled =
 		!polyPositionsQuery.isLoading &&
 		!predictPositionsQuery.isLoading &&
-		!dflowPositionsQuery.isLoading &&
-		!polyTradeHistoryQuery.isLoading;
+		!dflowPositionsQuery.isLoading;
 
 	const isDataFullyLoaded =
 		!predictionLoading &&
@@ -341,8 +348,13 @@ export default function usePositionsData() {
 	}, [allDflowPositions]);
 
 	const handleClaimSuccess = useCallback(
-		(marketId: string, _umbrellaId: string) => {
-			setClaimedMarkets((prev) => new Set([...prev, marketId]));
+		(marketId: string | string[], _umbrellaId: string) => {
+			const ids = Array.isArray(marketId) ? marketId : [marketId];
+			setClaimedMarkets((prev) => {
+				const next = new Set(prev);
+				for (const id of ids) next.add(id);
+				return next;
+			});
 			refreshUserData();
 		},
 		[refreshUserData],
@@ -592,7 +604,7 @@ export default function usePositionsData() {
 						predictOutcomeLabelYes: venue === "predictfun" && isYes ? pv.outcome : undefined,
 						predictOutcomeLabelNo: venue === "predictfun" && !isYes ? pv.outcome : undefined,
 					};
-				});
+				}).filter((mp) => !claimedMarkets.has((mp.market as any)._id));
 				if (markets.length > 0) resolved.push({ umbrella: synth, markets });
 			}
 		};
@@ -809,6 +821,9 @@ export default function usePositionsData() {
 		}, {} as Record<string, { Yes: number; No: number }>);
 	}, [umbrellaPositions]);
 
+	const polyTradeHistoryLoading =
+		Boolean(polymarketSafe) && polyTradeHistoryQuery.isPending;
+
 	return {
 		account,
 		effectiveAccount,
@@ -816,6 +831,7 @@ export default function usePositionsData() {
 		debugAccount,
 		realAccount,
 		isDataFullyLoaded,
+		polyTradeHistoryLoading,
 		portfolioLoading,
 		portfolioTotalCtx,
 		cashBalanceCtx,

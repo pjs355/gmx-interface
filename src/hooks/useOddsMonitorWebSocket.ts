@@ -212,6 +212,7 @@ export function useOddsMonitorWebSocket(
 	const marketsRef = useRef<Map<string, MatchedMarket>>(new Map());
 	const venueStatusRef = useRef<Map<string, VenueStatusInfo[]>>(new Map());
 	const mappingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const mappingFetchInflightRef = useRef<Promise<void> | null>(null);
 
 	const clearReconnectTimer = () => {
 		if (reconnectTimerRef.current !== null) {
@@ -232,8 +233,16 @@ export function useOddsMonitorWebSocket(
 		setAppState({ timestamp: Date.now(), markets });
 	}, []);
 
+	const verboseVenueMappings =
+		import.meta.env.DEV && import.meta.env.VITE_VERBOSE_VENUE_MONITOR === "true";
+
 	const fetchMappings = useCallback(async () => {
-		try {
+		if (mappingFetchInflightRef.current) {
+			await mappingFetchInflightRef.current;
+			return;
+		}
+		const run = (async () => {
+			try {
 			const url = getMatchedMarketsUrl();
 			if (import.meta.env.DEV) console.log("[venue-monitor] Fetching mappings from", url);
 			const res = await fetch(url);
@@ -248,8 +257,8 @@ export function useOddsMonitorWebSocket(
 			}
 			if (import.meta.env.DEV) console.log("[venue-monitor] Loaded", items.length, "matched markets");
 
-			// ── Debug: dump each umbrella's venue mapping detail ──
-			if (import.meta.env.DEV) {
+			// Heavy: per-item groups + console.table. Opt-in via VITE_VERBOSE_VENUE_MONITOR=true
+			if (verboseVenueMappings) {
 				console.group(`[venue-monitor] 🔍 Umbrella Matched-Markets Breakdown (${items.length} items)`);
 				for (const item of items) {
 					const em = item.exchangeMatching;
@@ -380,10 +389,15 @@ export function useOddsMonitorWebSocket(
 
 			marketsRef.current = next;
 			publishState();
-		} catch (err) {
-			if (import.meta.env.DEV) console.error("[venue-monitor] Mappings fetch error:", err);
-		}
-	}, [publishState]);
+			} catch (err) {
+				if (import.meta.env.DEV) console.error("[venue-monitor] Mappings fetch error:", err);
+			}
+		})();
+		mappingFetchInflightRef.current = run.finally(() => {
+			mappingFetchInflightRef.current = null;
+		});
+		await run;
+	}, [publishState, verboseVenueMappings]);
 
 	const sendGetState = useCallback(() => {
 		// Legacy compatibility; triggers a fresh mapping fetch

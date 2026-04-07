@@ -1,3 +1,5 @@
+import { shortTeamDisplayName } from "@/pages/Positions/utils/historyOutcomeWinner";
+
 /**
  * Human-readable row label for Predict.fun positions on the Positions page.
  * Prefer API outcome name when it’s a real team/title; otherwise map Yes/No to
@@ -25,16 +27,17 @@ export function getPredictPositionRowLabel(
 		outcomeLower === "no" ||
 		(outcome.length > 0 && /\bmatch winner\b/i.test(outcome));
 
+	let raw: string;
 	if (outcome && !isGenericOutcome) {
-		return outcome;
+		raw = outcome;
+	} else if (vsParts.length === 2) {
+		raw = side === "Yes" ? vsParts[0]! : vsParts[1]!;
+	} else if (outcome) {
+		raw = outcome;
+	} else {
+		raw = side;
 	}
-
-	if (vsParts.length === 2) {
-		return side === "Yes" ? vsParts[0]! : vsParts[1]!;
-	}
-
-	if (outcome) return outcome;
-	return side;
+	return shortTeamDisplayName(raw);
 }
 
 function inferYesNoFromVenueOutcome(outcome: string): "Yes" | "No" | null {

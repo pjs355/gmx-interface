@@ -1,26 +1,17 @@
-// import { t } from "@lingui/macro";
-// import { Trans } from "@lingui/react";
-// Removed useLingui - not used after cleanup
-// import { useCallback, useState } from "react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FiX } from "react-icons/fi";
-// Removed useNotifyModalState - not used after cleanup
-// Removed userAnalytics imports - not needed for prediction markets
-
-// Removed ExternalLink - not used in this component
 
 import { HeaderLink } from "./HeaderLink";
-// import ModalWithPortal from "../Modal/ModalWithPortal";
-// Removed LanguageModalContent - not needed for prediction markets
 import { useSignerContext } from "context/SignerContext";
-import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
+import { usePrivy } from "@privy-io/react-auth";
 import { useCopyToClipboard } from "react-use";
 import { useNavigate } from "react-router-dom";
 import ExternalLink from "components/ExternalLink/ExternalLink";
 import { shortenAddress } from "@/services/wallets/shortenAddress";
 import { usePortfolio } from "context/PortfolioContext";
+import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
 import { isHomeSite } from "config/ui";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 
 import "./Header.scss";
 
@@ -44,53 +35,24 @@ export function AppHeaderLinks({
 
 	// Add portfolio data for mobile display
 	const { authenticated: active, account } = useSignerContext();
-	const { logout, login, user, getAccessToken, ready, authenticated } = usePrivy();
-	const { identityToken } = useIdentityToken();
+	const { logout, login, user } = usePrivy();
 	const [, copyToClipboard] = useCopyToClipboard();
 	const navigate = useNavigate();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
 		usePortfolio();
-	const [username, setUsername] = useState<string | null>(null);
+	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
+	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
+	const showCashMetricSkeleton = cashLoading || blockHeaderMetrics;
 
-	// Detect if user logged in with email (smart wallet) or external wallet
+	// Shared profile query -- avoids duplicate /profiles/me fetches
+	const profileQuery = useCurrentProfile();
+	const username = profileQuery.data?.username ?? null;
+
 	const hasSmartWallet = user?.linkedAccounts?.some(
 		(acct: any) => acct?.type === "smart_wallet"
 	);
 	const userEmail = user?.email?.address || user?.google?.email;
 	const isSmartWallet = Boolean(hasSmartWallet && userEmail);
-
-	// Fetch username from profile API
-	useEffect(() => {
-		if (!ready || !authenticated || !identityToken) return;
-
-		const fetchUsername = async () => {
-			try {
-				const serverUrl = getPredictionApiBaseUrl();
-				const apiUrl = `${serverUrl}/profiles/me`;
-				const accessToken = await getAccessToken();
-				
-				if (!accessToken) return;
-
-				const headers: Record<string, string> = {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${accessToken}`,
-					"privy-id-token": identityToken,
-				};
-
-				const response = await fetch(apiUrl, { method: "GET", headers });
-				if (!response.ok) return;
-
-				const result = await response.json();
-				if (result.success && result.data?.username) {
-					setUsername(result.data.username);
-				}
-			} catch (error) {
-				console.error("Failed to fetch username for mobile menu:", error);
-			}
-		};
-
-		fetchUsername();
-	}, [ready, authenticated, identityToken, getAccessToken]);
 
 	const formatCurrency = (
 		value: number | string | null | undefined
@@ -165,8 +127,11 @@ export function AppHeaderLinks({
 								<span className="text-xs font-bold text-white">
 									Portfolio
 								</span>
-								<span className="text-sm font-normal text-white">
-									{portfolioLoading ? (
+								<span
+									className="text-sm font-normal text-white"
+									style={{ minHeight: 20, display: "inline-flex", alignItems: "center" }}
+								>
+									{showPortfolioMetricSkeleton ? (
 										<span
 											className="skeleton-box"
 											style={{
@@ -200,8 +165,11 @@ export function AppHeaderLinks({
 								<span className="text-xs font-bold text-white">
 									Cash
 								</span>
-								<span className="text-sm font-normal text-white">
-									{cashLoading ? (
+								<span
+									className="text-sm font-normal text-white"
+									style={{ minHeight: 20, display: "inline-flex", alignItems: "center" }}
+								>
+									{showCashMetricSkeleton ? (
 										<span
 											className="skeleton-box"
 											style={{

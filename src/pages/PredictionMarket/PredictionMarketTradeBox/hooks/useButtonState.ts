@@ -60,6 +60,8 @@ export function useButtonState({
         routeExpired: boolean;
         handleExecute: () => void;
         venuePositions?: { venue: string; shares: number }[];
+        totalAvailableCash?: number;
+        handleAddFunds?: () => void;
       }
     | undefined,
 }: any): ButtonStateResult {
@@ -112,6 +114,17 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
+
+      const cash = sorState.totalAvailableCash ?? 0;
+      const needed = sorState.route.totalCost ?? 0;
+      if (state.side === "buy" && needed > cash && sorState.handleAddFunds) {
+        return {
+          text: "Deposit to Trade",
+          disabled: false,
+          onClick: sorState.handleAddFunds,
+        };
+      }
+
       return {
         text: `${buttonText} (Smart Route)`,
         disabled: false,

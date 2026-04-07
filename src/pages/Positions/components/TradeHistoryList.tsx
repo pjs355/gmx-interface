@@ -7,6 +7,8 @@ interface TradeHistoryListProps {
 	marketId: string | string[];
 	isExpanded: boolean;
 	position?: "Yes" | "No";
+	/** For vs / esports markets, show team name (e.g. Keyd) instead of Yes/No */
+	positionDisplayLabel?: string;
 }
 
 export default function TradeHistoryList({
@@ -14,6 +16,7 @@ export default function TradeHistoryList({
 	marketId,
 	isExpanded,
 	position,
+	positionDisplayLabel,
 }: TradeHistoryListProps) {
 	const ids = Array.isArray(marketId) ? marketId : [marketId];
 	const marketOrders = orders
@@ -172,7 +175,7 @@ export default function TradeHistoryList({
 						{isBuy ? "Buy" : "Sell"}
 					</div>
 
-					{/* Side (Yes/No) - simple text */}
+					{/* Side: team name for vs markets, else Yes/No */}
 					<div
 						style={{
 							textAlign: "center",
@@ -180,7 +183,7 @@ export default function TradeHistoryList({
 							color: isYes ? "#22c55e" : "#f87171",
 						}}
 					>
-						{order.position}
+						{positionDisplayLabel?.trim() || order.position}
 					</div>
 
 					{/* Shares with +/- */}

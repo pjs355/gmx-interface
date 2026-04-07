@@ -24,6 +24,7 @@ import ConnectWalletButton from "../Common/ConnectWalletButton";
 
 import "./Header.scss";
 import { usePortfolio as usePortfolioContext } from "context/PortfolioContext";
+import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
 
 type Props = {
 	openSettings: () => void;
@@ -49,6 +50,9 @@ export function AppHeaderUser({
 	const { login, user, authenticated } = usePrivy();
 	const { fundWallet } = useFundWallet();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
+	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
+	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
+	const showCashMetricSkeleton = cashLoading || blockHeaderMetrics;
 
 	// Handle deposit - triggers Privy funding modal directly
 	const handleDeposit = useCallback(async () => {
@@ -204,9 +208,9 @@ export function AppHeaderUser({
 								</span>
 								<span
 									className="text-sm font-normal text-white"
-									style={{ color: "white" }}
+									style={{ color: "white", minHeight: 20, display: "inline-flex", alignItems: "center" }}
 								>
-									{portfolioLoading ? (
+									{showPortfolioMetricSkeleton ? (
 										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
 									) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
 										"--"
@@ -233,9 +237,9 @@ export function AppHeaderUser({
 								</span>
 								<span
 									className="text-sm font-normal text-white"
-									style={{ color: "white" }}
+									style={{ color: "white", minHeight: 20, display: "inline-flex", alignItems: "center" }}
 								>
-									{cashLoading ? (
+									{showCashMetricSkeleton ? (
 										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
 									) : (
 										`$${formatCurrency(cashBalance)}`

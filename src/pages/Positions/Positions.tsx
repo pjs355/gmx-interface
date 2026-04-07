@@ -12,6 +12,8 @@ import HistoryView from "./components/HistoryView";
 import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import usePositionsData from "./hooks/usePositionsData";
+import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
+import { useEffect } from "react";
 import { toCentsString } from "./utils/formatCurrency";
 
 function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
@@ -59,6 +61,7 @@ export default function Positions() {
 		debugAccount,
 		realAccount,
 		isDataFullyLoaded,
+		polyTradeHistoryLoading,
 		portfolioLoading,
 		portfolioTotalCtx,
 		cashBalanceCtx,
@@ -81,6 +84,20 @@ export default function Positions() {
 		activeTab,
 		setActiveTab,
 	} = data;
+
+	const showContentSkeleton =
+		!isDataFullyLoaded ||
+		(activeTab === "history" && polyTradeHistoryLoading);
+
+	const { setBlockHeaderMetrics } = usePositionsPageMetricsGate();
+	useEffect(() => {
+		if (!account) {
+			setBlockHeaderMetrics(false);
+			return;
+		}
+		setBlockHeaderMetrics(showContentSkeleton);
+		return () => setBlockHeaderMetrics(false);
+	}, [account, showContentSkeleton, setBlockHeaderMetrics]);
 
 	const renderPositionsTab = () => {
 		const hasPositions = umbrellaPositions.length > 0;
@@ -228,8 +245,9 @@ export default function Positions() {
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
 						cashLoading={usdcLoading}
-						positionsLoading={!isDataFullyLoaded}
+						positionsLoading={showContentSkeleton}
 						portfolioLoading={portfolioLoading}
+						summariesLocked={Boolean(account) && showContentSkeleton}
 					/>
 					<PositionsTabs activeTab={activeTab} setActiveTab={setActiveTab} />
 				</div>
@@ -238,7 +256,7 @@ export default function Positions() {
 					{!account && <p className="text-body">Log in to view balances.</p>}
 					{account && (
 						<>
-							{!isDataFullyLoaded ? (
+							{showContentSkeleton ? (
 								<PortfolioSkeleton />
 							) : activeTab === "positions" ? (
 								renderPositionsTab()

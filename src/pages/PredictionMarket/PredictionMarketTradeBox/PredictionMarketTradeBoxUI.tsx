@@ -11,6 +11,7 @@ import { mixpanelTrack } from "@/utils/mixpanel";
 import { getVenueConfig } from '@/config/venueConfig';
 import type { RoutePlan, RouteExecution } from "@/trading/sor";
 import { VENUE_DISPLAY_NAMES, VENUE_COLORS } from "@/trading/sor";
+import { getYesNoTeamLabels } from "./teamLabels";
 
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -67,13 +68,17 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
     resetExecution: () => void;
   };
   sorRouteExpired: boolean;
+  totalAvailableCash?: number;
   handleSorExecute: () => void;
+  crossBuyYes: number | null;
+  crossBuyNo: number | null;
 }
 
 export default function PredictionMarketTradeBoxUI({
   market,
   orderbook,
   pandascoreMatchId,
+  umbrellaDisplayName,
   state,
   onPositionChange,
   onAmountChange,
@@ -97,6 +102,9 @@ export default function PredictionMarketTradeBoxUI({
   sorExecution,
   sorRouteExpired,
   handleSorExecute,
+  totalAvailableCash,
+  crossBuyYes,
+  crossBuyNo,
 }: PredictionMarketTradeBoxUIProps) {
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
   const venueConfig = getVenueConfig(tradingVenue);
@@ -160,25 +168,39 @@ export default function PredictionMarketTradeBoxUI({
     selectedPosition === "no";
 
   const yesPrice =
-    tradingVenue === "predictfun" && yesHintPrices
-      ? side === "buy"
-        ? yesHintPrices.bestAsk
-        : yesHintPrices.bestBid
-      : bookRepresentsNo
-        ? side === 'buy'
-          ? (bestBid === null ? null : 1 - bestBid)
-          : (bestAsk === null ? null : 1 - bestAsk)
-        : side === 'buy' ? bestAsk : bestBid;
+    tradingVenue === "all" &&
+    side === "buy" &&
+    crossBuyYes != null &&
+    Number.isFinite(crossBuyYes)
+      ? crossBuyYes
+      : tradingVenue === "predictfun" && yesHintPrices
+        ? side === "buy"
+          ? yesHintPrices.bestAsk
+          : yesHintPrices.bestBid
+        : bookRepresentsNo
+          ? side === "buy"
+            ? (bestBid === null ? null : 1 - bestBid)
+            : (bestAsk === null ? null : 1 - bestAsk)
+          : side === "buy"
+            ? bestAsk
+            : bestBid;
   const noPrice =
-    tradingVenue === "predictfun" && noHintPrices
-      ? side === "buy"
-        ? noHintPrices.bestAsk
-        : noHintPrices.bestBid
-      : bookRepresentsNo
-        ? side === 'buy' ? bestAsk : bestBid
-        : side === 'buy'
-          ? (bestBid === null ? null : 1 - bestBid)
-          : (bestAsk === null ? null : 1 - bestAsk);
+    tradingVenue === "all" &&
+    side === "buy" &&
+    crossBuyNo != null &&
+    Number.isFinite(crossBuyNo)
+      ? crossBuyNo
+      : tradingVenue === "predictfun" && noHintPrices
+        ? side === "buy"
+          ? noHintPrices.bestAsk
+          : noHintPrices.bestBid
+        : bookRepresentsNo
+          ? side === "buy"
+            ? bestAsk
+            : bestBid
+          : side === "buy"
+            ? (bestBid === null ? null : 1 - bestBid)
+            : (bestAsk === null ? null : 1 - bestAsk);
   
   // Format with ¢ only when price exists, otherwise just "--"
   const yesPriceCents = yesPrice !== null ? `${toCentsString(yesPrice)}¢` : "--";
@@ -213,40 +235,33 @@ export default function PredictionMarketTradeBoxUI({
   };
 
   const isVsSingle = useMemo(() => {
-    const title = (market?.displayName || (market as any)?.question || '').trim();
-    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-    return parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1;
-  }, [market]);
+    if (!market || (market as any)?.umbrellaChildrenCount !== 1) return false;
+    const mt = (market?.displayName || (market as any)?.question || "").trim();
+    if (mt.match(/^Over\s+/i)) return false;
+    const raw =
+      (umbrellaDisplayName || "")
+        .replace(/\s*-\s*Match Winner$/i, "")
+        .trim() || mt;
+    const parts = raw
+      .split(/\s*vs\.?\s*/i)
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    return parts.length === 2;
+  }, [market, umbrellaDisplayName]);
 
   const yesTeamColor: string = (market as any)?.yesColor || '#22c55e';
   const noTeamColor: string = (market as any)?.noColor || '#ef4444';
 
-  // Check if this is an "Over {number}" market (daily player count style)
   const overUnderMatch = useMemo(() => {
     const title = (market?.displayName || (market as any)?.question || '').trim();
-    // Match "Over" followed by a number (with optional commas)
     const match = title.match(/^Over\s+([\d,]+)/i);
-    if (match) {
-      return match[1]; // Return the number part
-    }
-    return null;
+    return match ? match[1] : null;
   }, [market?.displayName, (market as any)?.question]);
 
-  // Derive team labels conditionally based on market title and umbrella having a single market
-  const { yesTeamLabel, noTeamLabel } = useMemo(() => {
-    // If it's an Over/Under market, use Over/Under labels
-    if (overUnderMatch) {
-      return { yesTeamLabel: 'Over', noTeamLabel: 'Under' };
-    }
-    
-    const title = (market?.displayName || (market as any)?.question || '').trim();
-    if (!title) return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-    if (parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1) {
-      return { yesTeamLabel: parts[0], noTeamLabel: parts[1] };
-    }
-    return { yesTeamLabel: 'Yes', noTeamLabel: 'No' };
-  }, [market?.displayName, (market as any)?.question, (market as any)?.umbrellaChildrenCount, overUnderMatch]);
+  const { yesTeamLabel, noTeamLabel } = useMemo(
+    () => getYesNoTeamLabels(market, umbrellaDisplayName),
+    [market, umbrellaDisplayName],
+  );
 
   // Transform the display title for Over/Under markets
   const displayMarketTitle = useMemo(() => {
@@ -767,6 +782,23 @@ export default function PredictionMarketTradeBoxUI({
                   </div>
                 </div>
               )}
+              {!isSell && typeof totalAvailableCash === "number" && sorRoute.route.totalCost > totalAvailableCash && (() => {
+                const shortfall = sorRoute.route.totalCost - totalAvailableCash;
+                return (
+                  <div className="bet-size-info">
+                    <div style={{ fontSize: 12, padding: "6px 0" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "#94a3b8" }}>
+                        <span>Available cash</span>
+                        <span>$ {totalAvailableCash.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "#f59e0b", fontWeight: 500, marginTop: 2 }}>
+                        <span>Deposit needed</span>
+                        <span>$ {shortfall.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </>
             );
           })()}
