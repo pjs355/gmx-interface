@@ -1,2 +1,0 @@
-export { PromotionBar } from "./PromotionBar";
-

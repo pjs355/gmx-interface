@@ -6,7 +6,6 @@ import { PredictionCard } from "../Predictions/components/PredictionCard";
 import { LoadingState } from "../Predictions/components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { PromotionBar } from "@/components/PromotionBar";
 import { resolveUmbrellaEventDate } from "../Predictions/utils/eventDates";
 import "./Home.scss";
 
@@ -276,9 +275,6 @@ export default function Home() {
 
 	return (
 		<div className="home-page page-layout">
-			{/* Commented out for production - users can use Get Started button in header */}
-			{/* {!authenticated && <PromotionBar />} */}
-
 			{/* Gaming Section */}
 			<div className="home-section">
 				<div className="home-section-header">

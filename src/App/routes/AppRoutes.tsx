@@ -14,10 +14,6 @@ import { Header } from "components/Header/Header";
 import { SettingsModal } from "components/SettingsModal/SettingsModal";
 import { NotifyModal } from "components/NotifyModal/NotifyModal";
 import Footer from "components/Footer/Footer";
-// ProgressBanner removed - welcome/fund banner no longer needed
-// import { ProgressBanner } from "components/ProgressBanner";
-// Commented out for production - Nintendo Switch countdown banner disabled
-// import { CountdownBanner } from "components/CountdownBanner";
 import { RPGPanel } from "components/RPGPanel";
 import { TransfersModal } from "components/TransfersModal";
 

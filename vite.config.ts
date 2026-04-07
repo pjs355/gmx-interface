@@ -303,27 +303,12 @@ export default defineConfig(({ mode }) => {
 				crypto: path.resolve(__dirname, "./src/polyfills/crypto-hmac-shim.ts"),
 			},
 		},
-	},
-	css: {
-		preprocessorOptions: {
-			scss: {
-				api: "modern-compiler",
-				silenceDeprecations: ["legacy-js-api"],
-			},
-		},
-	},
-	build: {
-		outDir: "dist",
-		sourcemap: mode === "sourcemaps" ? "hidden" : false,
-		rollupOptions: {
-			output: {
-				manualChunks: {
-					"react-vendor": ["react", "react-dom", "react-router-dom"],
-					firebase: ["firebase/app", "firebase/storage"],
-					ethers: ["ethers"],
-					crypto: ["viem", "@noble/curves", "@noble/hashes"],
+		css: {
+			preprocessorOptions: {
+				scss: {
+					api: "modern-compiler",
+					silenceDeprecations: ["legacy-js-api"],
 				},
-				sourcemapExcludeSources: true,
 			},
 		},
 		build: {

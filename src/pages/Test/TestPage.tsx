@@ -11,7 +11,6 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "../Predictions/Predictions.scss";
 import GameLinks from "../Predictions/components/GameLinks";
 import { Search } from "../Predictions/components/Search/Search";
-import { PromotionBar } from "@/components/PromotionBar";
 
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
@@ -306,8 +305,6 @@ export default function TestPage() {
 
 	return (
 		<div className="predictions-page page-layout">
-			{/* Commented out for production - users can use Get Started button in header */}
-			{/* {!authenticated && <PromotionBar />} */}
 			{/** <ImageBanner /> */}
 			{/* <Search
 				onSearchActive={handleSearchActive}

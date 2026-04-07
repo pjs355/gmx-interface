@@ -251,20 +251,6 @@ export function AppHeaderLinks({
 						</HeaderLink>
 					</div>
 				)}
-				{/* Commented out for production - prizes page disabled */}
-				{/* <div className="App-header-link-container">
-					<HeaderLink
-						qa="prizes"
-						to="/prizes"
-						showRedirectModal={showRedirectModal}
-						onClick={small ? clickCloseIcon : undefined}
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/prizes"
-						}
-					>
-						Prizes
-					</HeaderLink>
-				</div> */}
 				{/* Commented out for production - referral page disabled */}
 				{/* {active && (
 					<div className="App-header-link-container">

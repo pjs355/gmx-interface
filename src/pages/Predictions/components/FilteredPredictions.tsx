@@ -12,7 +12,6 @@ import {
 	resolveUmbrellaEventDate,
 	startOfLocalDay,
 } from "../utils/eventDates";
-import { PromotionBar } from "@/components/PromotionBar";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -579,8 +578,6 @@ export default function FilteredPredictions({
 
 	return (
 		<div className="predictions-page page-layout">
-			{/* Commented out for production - users can use Get Started button in header */}
-			{/* {!authenticated && <PromotionBar />} */}
 			<GameLinks
 				selectedGame={selectedGame}
 				onGameSelect={setSelectedGame}
