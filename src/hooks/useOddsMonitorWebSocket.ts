@@ -11,6 +11,7 @@ import { getMatchedMarketsUrl } from "@/config/oddsMonitorBase";
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
 const MAPPING_REFRESH_MS = 5 * 60_000;
+const MAX_RECONNECT_ATTEMPTS = 8;
 
 function nextReconnectDelayMs(attempt: number): number {
 	const exp = Math.min(MAX_BACKOFF_MS, INITIAL_BACKOFF_MS * Math.pow(2, attempt));
@@ -486,7 +487,9 @@ export function useOddsMonitorWebSocket(
 				};
 
 				ws.onerror = () => {
-					if (import.meta.env.DEV) console.error("[venue-monitor] WebSocket error");
+					if (reconnectAttemptRef.current === 0) {
+						if (import.meta.env.DEV) console.warn("[venue-monitor] WebSocket error (suppressing further logs)");
+					}
 					setLastWsError("WebSocket error");
 				};
 
@@ -500,6 +503,13 @@ export function useOddsMonitorWebSocket(
 
 					const attempt = reconnectAttemptRef.current;
 					reconnectAttemptRef.current = attempt + 1;
+
+					if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+						if (import.meta.env.DEV) console.warn("[venue-monitor] Max reconnect attempts reached, giving up");
+						setLastWsError("Venue prices WebSocket unavailable");
+						return;
+					}
+
 					reconnectTimerRef.current = setTimeout(connect, nextReconnectDelayMs(attempt));
 				};
 			} catch {
@@ -507,6 +517,13 @@ export function useOddsMonitorWebSocket(
 				if (shouldConnectRef.current && wsUrl) {
 					const attempt = reconnectAttemptRef.current;
 					reconnectAttemptRef.current = attempt + 1;
+
+					if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+						if (import.meta.env.DEV) console.warn("[venue-monitor] Max reconnect attempts reached, giving up");
+						setLastWsError("Venue prices WebSocket unavailable");
+						return;
+					}
+
 					reconnectTimerRef.current = setTimeout(connect, nextReconnectDelayMs(attempt));
 				}
 			}

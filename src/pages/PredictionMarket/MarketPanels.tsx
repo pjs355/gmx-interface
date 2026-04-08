@@ -7,10 +7,14 @@ import RulesSection from "components/RulesSection/RulesSection";
 import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
 import { EsportsVenueBooksPanel } from "@/components/EsportsVenueBooksPanel/EsportsVenueBooksPanel";
+import { VenueOrderbooksPanel } from "@/components/VenueOrderbooksPanel/VenueOrderbooksPanel";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { TradingVenue } from "./PredictionMarketTradeBox/types";
 import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import { useDirectVenueBooks } from "@/trading/venue-books";
 import {
 	ChartSkeleton,
 	TradeBoxSkeleton,
@@ -60,6 +64,18 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 	// Track buy/sell side state
 	const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
+	const [activeTab, setActiveTab] = useState<"basic" | "orderbooks">("basic");
+	const [venueForTradeBox, setVenueForTradeBox] = useState<TradingVenue | undefined>(undefined);
+
+	// Direct venue WS connections (Polymarket + DFlow from browser)
+	const { appState: oddsAppState } = useOddsMonitor();
+	const matchedForVenueBooks = React.useMemo(() => {
+		const pandaId = typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
+		if (!pandaId || !oddsAppState?.markets?.length) return null;
+		return oddsAppState.markets.find((m) => String(m.pandaMatchId) === pandaId) ?? null;
+	}, [oddsAppState?.markets, umbrella?.pandascore_matchId]);
+	const directBooks = useDirectVenueBooks(matchedForVenueBooks);
+
 	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
 	const settledView = Boolean(settledInfo);
@@ -98,9 +114,28 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			: undefined;
 	}, [chartState.secondaryMarket, umbrella?.children?.length]);
 
-	const orderbookColumnContent = settledView ? (
-		<RulesSection umbrella={umbrella} />
-	) : (
+	const firstQuestion = sortedQuestions[0] ?? null;
+	const firstQuestionId = firstQuestion ? (getMarketId(firstQuestion) || "0") : "";
+	const levelUpOrderbook = firstQuestionId ? questionOrderbooks[firstQuestionId] : null;
+
+	const tabSwitcher = showCrossVenueBooks && !settledView ? (
+		<div className="venue-tab-switcher">
+			<button
+				className={`venue-tab-btn${activeTab === "basic" ? " venue-tab-btn--active" : ""}`}
+				onClick={() => setActiveTab("basic")}
+			>
+				Basic
+			</button>
+			<button
+				className={`venue-tab-btn${activeTab === "orderbooks" ? " venue-tab-btn--active" : ""}`}
+				onClick={() => setActiveTab("orderbooks")}
+			>
+				Orderbooks
+			</button>
+		</div>
+	) : null;
+
+	const defaultOrderbookContent = (
 		<>
 			{sortedQuestions.map((question, index) => {
 				if (!question) return null;
@@ -135,13 +170,45 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					</div>
 				);
 			})}
-			{showCrossVenueBooks ? (
-				<div className="orderbook-section__cross-venue">
-					<EsportsVenueBooksPanel pandascoreMatchId={pandascoreMatchId} />
-				</div>
-			) : null}
 			<RulesSection umbrella={umbrella} />
 		</>
+	);
+
+	const orderbookColumnContent = settledView ? (
+		<RulesSection umbrella={umbrella} />
+	) : showCrossVenueBooks ? (
+		activeTab === "basic" ? (
+			<>
+				<div className="orderbook-section__cross-venue">
+					<EsportsVenueBooksPanel
+						pandascoreMatchId={pandascoreMatchId}
+						levelUpOrderbook={levelUpOrderbook}
+						directBooks={directBooks}
+					/>
+				</div>
+				<RulesSection umbrella={umbrella} />
+			</>
+		) : (
+			<>
+				<VenueOrderbooksPanel
+					pandascoreMatchId={pandascoreMatchId}
+					levelUpOrderbook={levelUpOrderbook}
+					market={firstQuestion ? {
+						...(firstQuestion as any),
+						umbrellaChildrenCount: umbrella?.children?.length || 0,
+					} as any : undefined}
+					umbrellaDisplayName={umbrella.displayName}
+					onMarketSwitch={onMarketSwitch}
+					onVenueSelect={setVenueForTradeBox}
+					activePosition={activePosition}
+					side={tradeSide}
+					directBooks={directBooks}
+				/>
+				<RulesSection umbrella={umbrella} />
+			</>
+		)
+	) : (
+		defaultOrderbookContent
 	);
 
 	const orderbookSectionBody =
@@ -204,7 +271,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						) : null}
 					</div>
 
-					<div className="orderbook-section">{orderbookSectionBody}</div>
+					<div className="venue-books-container">
+						{tabSwitcher}
+						<div className="orderbook-section">{orderbookSectionBody}</div>
+					</div>
 
 					{/* Comments Section */}
 					{umbrella && (
@@ -243,6 +313,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						initialPosition={activePosition}
 						onPositionChange={onPositionChange}
 						onSideChange={setTradeSide}
+						venueOverride={venueForTradeBox}
 					/>
 				) : (
 					<TradeBoxSkeleton />
@@ -290,7 +361,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					) : null}
 				</div>
 
-				<div className="orderbook-section-mobile">{orderbookSectionBody}</div>
+				<div className="venue-books-container">
+					{tabSwitcher}
+					<div className="orderbook-section-mobile">{orderbookSectionBody}</div>
+				</div>
 
 				{/* Comments Section */}
 				{umbrella && (
@@ -331,6 +405,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						initialPosition={activePosition}
 						onPositionChange={onPositionChange}
 						onSideChange={setTradeSide}
+						venueOverride={venueForTradeBox}
 					/>
 				</div>
 			) : (

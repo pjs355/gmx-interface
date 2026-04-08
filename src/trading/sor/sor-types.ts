@@ -179,7 +179,7 @@ export const CHAIN_LIFI_IDS: Record<SorChain, number> = {
 export const VENUE_DISPLAY_NAMES: Record<SorVenue, string> = {
 	levelup: "LevelUp",
 	polymarket: "Polymarket",
-	dflow: "DFlow",
+	dflow: "Kalshi",
 	predictfun: "Predict.fun",
 };
 

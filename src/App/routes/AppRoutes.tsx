@@ -20,8 +20,14 @@ import Footer from "components/Footer/Footer";
 // import { CountdownBanner } from "components/CountdownBanner";
 import { RPGPanel } from "components/RPGPanel";
 import { TransfersModal } from "components/TransfersModal";
+import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 
 import { MainRoutes } from "./MainRoutes";
+
+function BackgroundPrefetch() {
+	useDflowProofStatus();
+	return null;
+}
 
 const Zoom = cssTransition({
 	enter: "zoomIn",
@@ -52,6 +58,7 @@ export function AppRoutes() {
 
 	return (
 		<>
+			<BackgroundPrefetch />
 			<div className="App">
 				<div className="App-content">
 					<Header

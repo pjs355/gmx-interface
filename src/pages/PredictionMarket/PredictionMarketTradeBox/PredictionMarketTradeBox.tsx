@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useEffect, useState, useRef, forwardRef, useImperativeHandle } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+// Link import removed — executionGateBanner no longer rendered
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useFundWallet } from "@privy-io/react-auth";
@@ -90,7 +90,7 @@ export interface PredictionMarketTradeBoxHandle {
 }
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride }, ref) => {
 
   const pandaId = pandascoreMatchId?.trim() ?? "";
   const multiVenueEnabled = Boolean(pandaId);
@@ -115,6 +115,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   /** LevelUp REST orderbook (signing + execution always uses this for LevelUp venue). */
   const levelUpOrderbook = propOrderbook ?? null;
+
+  // Ref to hold the latest SOR route for use in handleTrade (defined before useSorRoute)
+  const sorRouteRef = useRef<any>(null);
 
   // Handle deposit - opens Privy's fund wallet modal
   const handleAddFunds = useCallback(async () => {
@@ -545,7 +548,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const dflowVenueHint = useMemo(() => {
     if (state.tradingVenue !== "dflow") return null;
     if (!hasDflowKalshiMonitorLink(matchedMonitor)) {
-      return "No DFlow market linked for this match on the odds monitor.";
+      return "No Kalshi market linked for this match on the odds monitor.";
     }
     return null;
   }, [state.tradingVenue, matchedMonitor]);
@@ -761,7 +764,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           ...prev,
           orderResult: {
             success: false,
-            error: "No DFlow market linked for this match on the odds monitor.",
+            error: "No Kalshi market linked for this match on the odds monitor.",
           },
         }));
         return;
@@ -781,7 +784,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       setState((prev) => ({ ...prev, isLoading: true, orderResult: null }));
       try {
         const link = matchedMonitor?.dflow ?? matchedMonitor?.kalshi;
-        if (!link) throw new Error("DFlow monitor link missing");
+        if (!link) throw new Error("Kalshi monitor link missing");
 
         // Resolve Solana SPL mints: prefer monitor-provided, else metadata API lookup
         const monitorYes = link.yesMintA;
@@ -800,8 +803,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         if (!resolvedYes || !resolvedNo) {
           throw new Error(
             dflowMintQuery.isLoading
-              ? "Resolving DFlow outcome mints… try again in a moment."
-              : "Could not resolve DFlow outcome mints for this market. The market may not be active on DFlow."
+              ? "Resolving Kalshi outcome mints… try again in a moment."
+              : "Could not resolve Kalshi outcome mints for this market. The market may not be active on Kalshi."
           );
         }
 
@@ -821,11 +824,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         });
 
         if (orderResult.code || orderResult.msg) {
-          throw new Error(orderResult.msg ?? orderResult.code ?? "DFlow order failed");
+          throw new Error(orderResult.msg ?? orderResult.code ?? "Kalshi order failed");
         }
 
         if (!orderResult.transaction) {
-          throw new Error("DFlow returned no transaction to sign. Check KYC or market status.");
+          throw new Error("Kalshi returned no transaction to sign. Check KYC or market status.");
         }
 
         const txBytes = Buffer.from(orderResult.transaction, "base64");
@@ -847,7 +850,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           ...prev,
           orderResult: {
             success: true,
-            message: `DFlow order confirmed (${orderResult.outAmount ?? "?"} outcome tokens). Tx: ${sig.slice(0, 8)}…`,
+            message: `Kalshi order confirmed (${orderResult.outAmount ?? "?"} outcome tokens). Tx: ${sig.slice(0, 8)}…`,
           },
         }));
         if (import.meta.env.DEV) {
@@ -1279,6 +1282,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       let orderPrice: number;
       
       if (frozenState.orderType === "market") {
+        // Prefer SOR route data for signing when available (server-side book walk).
+        // Falls back to local book walk if SOR hasn't returned yet.
+        const frozenSorRoute = sorRouteRef.current;
+        const sorLeg = frozenSorRoute?.legs?.[0];
+
         // Helper: derive top-of-book prices (do not mutate orderbook)
         const bestAsk =
           levelUpOrderbook?.asks && levelUpOrderbook.asks.length > 0
@@ -1291,50 +1299,52 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
         if (frozenState.side === "buy") {
           const usdAmount = parseFloat(frozenState.amount);
-          // CRITICAL: Use effective budget (amount / 1.02) to match UI calculation
-          // This ensures the signed order matches what user saw in "Estimated Cost"
-          const effectiveBudget = usdAmount / 1.02;
-          
-          const calc = marketOrderHandler.calculateContractsForMarketOrder(
-            effectiveBudget,
-            frozenState.selectedPosition,
-            "buy"
-          );
-          // Ensure whole-share execution
-          orderAmount = Math.floor(calc.contracts);
 
-          if (!orderAmount || !isFinite(orderAmount) || orderAmount <= 0) {
-            throw new Error("Unable to compute contracts for market buy order");
-          }
+          // Try SOR route first (server-side book walk with maxPrice)
+          if (sorLeg && frozenSorRoute) {
+            orderAmount = Math.floor(frozenSorRoute.totalShares);
+            // maxPrice from SOR (needs backend addition); fall back to avgPrice * 1.05 slippage buffer
+            const sorMaxPrice = (sorLeg as any).maxPrice;
+            orderPrice = sorMaxPrice && isFinite(sorMaxPrice) && sorMaxPrice > 0
+              ? Math.round(sorMaxPrice * 100) / 100
+              : Math.round(sorLeg.avgPrice * 1.05 * 100) / 100;
 
-          // For BUY market orders:
-          // - calc.contracts = shares bought
-          // - calc.remainingUsd = leftover USD that wasn't spent (relative to effectiveBudget)
-          // - calc.maxPrice = HIGHEST price hit (worst case for signing)
-          const sharesBought = orderAmount;
-          const usdSpent = effectiveBudget - calc.remainingUsd;
-          const effectiveAvgPrice = usdSpent / sharesBought;
-          const maxPrice = (calc as any).maxPrice;
-          
-          // Use MAXIMUM price for signing (conservative/worst case)
-          // Sign at highest price to guarantee we pay at most this much
-          if (!maxPrice || !isFinite(maxPrice) || maxPrice <= 0) {
-            throw new Error("Unable to determine maximum price for market buy order");
+            if (!orderAmount || !isFinite(orderAmount) || orderAmount <= 0) {
+              throw new Error("SOR returned no shares for market buy order");
+            }
+
+            console.log("[Signing] Using SOR route for BUY:", {
+              shares: orderAmount,
+              signingPrice: orderPrice,
+              sorAvgPrice: sorLeg.avgPrice,
+              sorMaxPrice,
+            });
+          } else {
+            // DEPRECATED FALLBACK: local book walk
+            const effectiveBudget = usdAmount / 1.02;
+            const calc = marketOrderHandler.calculateContractsForMarketOrder(
+              effectiveBudget,
+              frozenState.selectedPosition,
+              "buy"
+            );
+            orderAmount = Math.floor(calc.contracts);
+
+            if (!orderAmount || !isFinite(orderAmount) || orderAmount <= 0) {
+              throw new Error("Unable to compute contracts for market buy order");
+            }
+
+            const maxPrice = (calc as any).maxPrice;
+            if (!maxPrice || !isFinite(maxPrice) || maxPrice <= 0) {
+              throw new Error("Unable to determine maximum price for market buy order");
+            }
+            orderPrice = Math.round(maxPrice * 100) / 100;
+
+            console.log("[Signing] Fallback to book walk for BUY:", {
+              shares: orderAmount,
+              signingPrice: orderPrice,
+              maxPrice,
+            });
           }
-          
-          // Round to 2 decimal places to avoid floating point precision errors
-          orderPrice = Math.round(maxPrice * 100) / 100;
-          
-          console.log("📊 Market BUY calculation:", {
-            userInputAmount: usdAmount,
-            effectiveBudget: effectiveBudget,
-            sharesBought: sharesBought,
-            usdSpent: usdSpent,
-            remainingUsd: calc.remainingUsd,
-            maxPrice: maxPrice,
-            effectiveAvgPrice: effectiveAvgPrice,
-            signingPrice: orderPrice
-          });
         } else {
           // SELL market uses shares input directly
           orderAmount = parseFloat(frozenState.amount);
@@ -1342,55 +1352,53 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             throw new Error("Invalid shares for market sell order");
           }
 
-          // Calculate minimum price from all price levels for signing
-          const sellCalc = marketOrderHandler.calculateContractsForMarketOrder(
-            orderAmount,
-            frozenState.selectedPosition,
-            "sell"
-          );
-          
-          // For SELL market orders:
-          // - sellCalc.contracts = shares actually sold (may be less than requested!)
-          // - sellCalc.remainingUsd = total USD received (NOT remaining!)
-          // - sellCalc.minPrice = LOWEST price hit (conservative for signing)
-          const sharesSold = sellCalc.contracts;
-          const totalUsdReceived = sellCalc.remainingUsd;
-          const minPrice = (sellCalc as any).minPrice;
-          
-          if (!sharesSold || sharesSold <= 0) {
-            throw new Error("Unable to sell shares - insufficient orderbook liquidity");
+          // Try SOR route first
+          if (sorLeg && frozenSorRoute) {
+            const sorMinPrice = (sorLeg as any).minPrice;
+            orderPrice = sorMinPrice && isFinite(sorMinPrice) && sorMinPrice > 0
+              ? Math.round(sorMinPrice * 100) / 100
+              : Math.round(sorLeg.avgPrice * 0.95 * 100) / 100;
+
+            // Use actual shares sold from SOR
+            const sorShares = Math.floor(frozenSorRoute.totalShares);
+            if (sorShares > 0) {
+              orderAmount = sorShares;
+            }
+
+            console.log("[Signing] Using SOR route for SELL:", {
+              shares: orderAmount,
+              signingPrice: orderPrice,
+              sorAvgPrice: sorLeg.avgPrice,
+              sorMinPrice,
+            });
+          } else {
+            // DEPRECATED FALLBACK: local book walk
+            const sellCalc = marketOrderHandler.calculateContractsForMarketOrder(
+              orderAmount,
+              frozenState.selectedPosition,
+              "sell"
+            );
+
+            const sharesSold = sellCalc.contracts;
+            const minPrice = (sellCalc as any).minPrice;
+
+            if (!sharesSold || sharesSold <= 0) {
+              throw new Error("Unable to sell shares - insufficient orderbook liquidity");
+            }
+
+            orderAmount = sharesSold;
+
+            if (!minPrice || !isFinite(minPrice) || minPrice <= 0) {
+              throw new Error("Unable to determine minimum price for market sell order");
+            }
+            orderPrice = Math.round(minPrice * 100) / 100;
+
+            console.log("[Signing] Fallback to book walk for SELL:", {
+              shares: orderAmount,
+              signingPrice: orderPrice,
+              minPrice,
+            });
           }
-          
-          // CRITICAL: Use actual shares sold, not requested amount
-          // This handles cases where orderbook can't fill the full amount
-          orderAmount = sharesSold;
-          
-          // Use MINIMUM price for signing (conservative/worst case)
-          // Sign at lowest price to guarantee at least this much back
-          // This allows fills at minPrice OR BETTER (higher prices)
-          if (!minPrice || !isFinite(minPrice) || minPrice <= 0) {
-            throw new Error("Unable to determine minimum price for market sell order");
-          }
-          
-          // Round to 2 decimal places to avoid floating point precision errors
-          orderPrice = Math.round(minPrice * 100) / 100;
-          
-          const effectiveAvgPrice = totalUsdReceived / sharesSold;
-          
-          console.log("📊 Market SELL calculation:", {
-            sharesRequested: parseFloat(frozenState.amount),
-            sharesSold: sharesSold,
-            totalUsdReceived: totalUsdReceived,
-            minPrice: minPrice,
-            maxPrice: (sellCalc as any).maxPrice,
-            effectiveAvgPrice: effectiveAvgPrice,
-            signingPrice: orderPrice,
-            finalOrderAmount: orderAmount,
-            signatureAmount: orderAmount,
-            signaturePrice: orderPrice,
-            signatureTotalUSD: orderAmount * orderPrice,
-            actualTotalUSD: totalUsdReceived
-          });
         }
       } else {
         // LIMIT orders use shares input directly and provided price
@@ -1733,9 +1741,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     [sorWalletBalances],
   );
 
-  // --- SOR route computation + execution (active when venue is "all") ---
-  const sorRouteEnabled = state.tradingVenue === "all"
-    && !!state.selectedPosition
+  // --- SOR route computation + execution (active for ALL venues, not just "all") ---
+  const sorRouteEnabled = !!state.selectedPosition
     && parseFloat(state.amount) > 0
     && (state.side === "buy"
       ? true
@@ -1744,6 +1751,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const sorRouteOutcome: SorOutcome | undefined = state.selectedPosition
     ? (state.selectedPosition === "yes" ? "A" : "B")
     : undefined;
+
+  const sorTargetVenue = state.tradingVenue !== "all" ? state.tradingVenue : undefined;
 
   const sorRoute = useSorRoute({
     questionId: market?._id || (market as any)?.questionId,
@@ -1754,7 +1763,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     venuePositions: state.side === "sell" ? sorVenuePositions : undefined,
     enabled: sorRouteEnabled,
     polyFeeRate: 0.03,
+    targetVenue: sorTargetVenue,
   });
+
+  // Keep ref in sync so handleTrade (defined above) can access latest SOR data
+  sorRouteRef.current = sorRoute.route;
 
   const sorExecution = useSorExecution({
     executeLeg: sorExecutor.executeLeg,
@@ -1805,6 +1818,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pandaId]);
+
+  useEffect(() => {
+    if (venueOverride && venueOverride !== state.tradingVenue) {
+      handleTradingVenueChange(venueOverride);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [venueOverride]);
 
   // Button state logic
   const buttonState = useButtonState({
@@ -1865,45 +1885,68 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     return buttonState;
   }, [executionGate.blocked, buttonState, state.tradingVenue]);
 
-  const executionGateBanner =
-    state.tradingVenue === "levelup" &&
-    executionGate.blocked &&
-    executionGate.messages.length ? (
-      <div className="execution-gate-banner">
-        <div className="execution-gate-banner__heading">
-          Polymarket trading is not enabled for your account yet.
-        </div>
-        <ul className="execution-gate-banner__reasons">
-          {executionGate.messages.map((m) => (
-            <li key={m}>{m}</li>
-          ))}
-        </ul>
-        <Link to="/trading" className="execution-gate-banner__link">
-          Open Trading &amp; venues
-        </Link>
-      </div>
-    ) : null;
+  // executionGateBanner removed — internal plumbing not shown to users
+  const executionGateBanner = null;
 
   return (
     <PredictionMarketTradeBoxResponsiveContainer
       market={market}
       orderbook={effectiveOrderbook}
+      pandascoreMatchId={pandascoreMatchId}
       umbrellaDisplayName={umbrellaDisplayName}
       crossBuyYes={crossBuyPrices.crossBuyYes}
       crossBuyNo={crossBuyPrices.crossBuyNo}
-      state={{
-        ...state,
-        calculatedContracts: calculatedMarketOrderData.calculatedContracts,
-        remainingUsd: calculatedMarketOrderData.remainingUsd,
-        // BUY order fee fields
-        spent: calculatedMarketOrderData.spent,
-        tradingFee: calculatedMarketOrderData.tradingFee,
-        estimatedCost: calculatedMarketOrderData.estimatedCost,
-        // SELL order fee fields
-        grossReceive: calculatedMarketOrderData.grossReceive,
-        sellTradingFee: calculatedMarketOrderData.sellTradingFee,
-        netReceive: calculatedMarketOrderData.netReceive,
-      }}
+      state={(() => {
+        // When SOR route is available for single-venue trades, overlay its data
+        const sr = sorRoute.route;
+        const hasSorData = sr && sr.legs.length > 0 && state.tradingVenue !== "all";
+        const bookData = calculatedMarketOrderData;
+
+        if (hasSorData && state.orderType === "market") {
+          const leg = sr.legs[0];
+          const sorContracts = Math.floor(sr.totalShares);
+          const sorCost = sr.totalCost;
+          const sorFee = sr.totalFees;
+
+          if (state.side === "buy") {
+            return {
+              ...state,
+              calculatedContracts: sorContracts || bookData.calculatedContracts,
+              remainingUsd: bookData.remainingUsd,
+              spent: sorCost > 0 ? sorCost - sorFee : bookData.spent,
+              tradingFee: sorFee || bookData.tradingFee,
+              estimatedCost: sorCost || bookData.estimatedCost,
+              grossReceive: null,
+              sellTradingFee: null,
+              netReceive: null,
+            };
+          }
+          // Sell
+          return {
+            ...state,
+            calculatedContracts: sorContracts || bookData.calculatedContracts,
+            remainingUsd: bookData.remainingUsd,
+            spent: null,
+            tradingFee: null,
+            estimatedCost: null,
+            grossReceive: leg.cost || bookData.grossReceive,
+            sellTradingFee: sorFee || bookData.sellTradingFee,
+            netReceive: (leg.cost ? leg.cost - sorFee : null) || bookData.netReceive,
+          };
+        }
+
+        return {
+          ...state,
+          calculatedContracts: bookData.calculatedContracts,
+          remainingUsd: bookData.remainingUsd,
+          spent: bookData.spent,
+          tradingFee: bookData.tradingFee,
+          estimatedCost: bookData.estimatedCost,
+          grossReceive: bookData.grossReceive,
+          sellTradingFee: bookData.sellTradingFee,
+          netReceive: bookData.netReceive,
+        };
+      })()}
       onPositionChange={onPositionChangeWrapper}
       onAmountChange={handleAmountChange}
       onPriceChange={handlePriceChange}

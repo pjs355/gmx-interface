@@ -127,7 +127,7 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 
 	dflow: {
 		id: "dflow",
-		displayName: "DFlow",
+		displayName: "Kalshi",
 		collateral: "USDC",
 		chain: "solana",
 		supportsLimitOrders: false,
@@ -143,7 +143,7 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 		},
 		feeDescription: "~8% probability-weighted",
 		feeTooltip:
-			"DFlow Frost-tier fee: roundup(0.07 × C × p × (1−p)) + 0.01 × C × p × (1−p). Fee is in contracts, shown as USDC equivalent.",
+			"Kalshi Frost-tier fee: roundup(0.07 × C × p × (1−p)) + 0.01 × C × p × (1−p). Fee is in contracts, shown as USDC equivalent.",
 	},
 };
 

@@ -615,11 +615,21 @@
 		}
 	}
 
+	@keyframes betSizePulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.45; }
+	}
+
 	.bet-size-section {
 		background: black !important;
 		border: none;
 		border-radius: 8px;
 		padding: 12px;
+		transition: opacity 0.15s ease;
+
+		&--recalculating {
+			animation: betSizePulse 1.2s ease-in-out infinite;
+		}
 		margin-bottom: 20px;
 
 		.bet-size-info,

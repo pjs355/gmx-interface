@@ -35,6 +35,8 @@ export interface TradeBoxProps {
 	initialPosition?: "yes" | "no";
 	onPositionChange?: (position: "yes" | "no") => void;
 	onSideChange?: (side: "buy" | "sell") => void;
+	/** When set externally (e.g. from Orderbooks tab), syncs the trade box to this venue. */
+	venueOverride?: TradingVenue;
 }
 
 export interface MarketOrderCalculation {
