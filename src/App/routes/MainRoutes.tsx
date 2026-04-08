@@ -17,7 +17,7 @@ const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));
 const TestPage = lazy(() => import("pages/Test/TestPage"));
-const TradingShellPage = lazy(() => import("@/pages/TradingShell/TradingShellPage"));
+
 
 // Error boundary for lazy chunk load failures (network errors, deploy cache busts)
 class ChunkErrorBoundary extends Component<
@@ -103,7 +103,6 @@ export function MainRoutes() {
 			/>
 
 			<Route path="/profile" element={<LazyPage><Profile /></LazyPage>} />
-			<Route path="/trading" element={<LazyPage><TradingShellPage /></LazyPage>} />
 			<Route path="/admin" element={<LazyPage><Admin /></LazyPage>} />
 			<Route path="/positions" element={<LazyPage><Positions /></LazyPage>} />
 			<Route path="/transfers" element={<LazyPage><Transfers /></LazyPage>} />

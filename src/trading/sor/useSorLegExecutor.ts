@@ -242,14 +242,14 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				// ─── DFlow / Kalshi (Solana, USDC) ────────
 				case "dflow": {
 					if (!dflowProofVerified) {
-						return { filled: false, filledShares: 0, error: "DFlow KYC not verified. Complete verification on the Profile page." };
+						return { filled: false, filledShares: 0, error: "Kalshi KYC not verified. Complete verification on the Profile page." };
 					}
 					const outcomeMint =
 						leg.outcome === "A"
 							? leg.venueMarketIds.dflowYesMintA
 							: leg.venueMarketIds.dflowYesMintB;
 					if (!outcomeMint) {
-						return { filled: false, filledShares: 0, error: "Missing DFlow outcome mint" };
+						return { filled: false, filledShares: 0, error: "Missing Kalshi outcome mint" };
 					}
 
 					const inputMint = side === "buy" ? SOLANA_USDC_MINT : outcomeMint;
@@ -265,10 +265,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					});
 
 					if (orderResult.code || orderResult.msg) {
-						return { filled: false, filledShares: 0, error: orderResult.msg ?? orderResult.code ?? "DFlow order failed" };
+						return { filled: false, filledShares: 0, error: orderResult.msg ?? orderResult.code ?? "Kalshi order failed" };
 					}
 					if (!orderResult.transaction) {
-						throw new Error("DFlow returned no transaction to sign");
+						throw new Error("Kalshi returned no transaction to sign");
 					}
 
 					const txBytes = Buffer.from(orderResult.transaction, "base64");

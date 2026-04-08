@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { Link } from "react-router-dom";
+
 import Button from "components/Button/Button";
 import Tabs from "components/Tabs/Tabs";
 import Tooltip from "components/Tooltip/Tooltip";
@@ -120,13 +120,13 @@ export default function PredictionMarketTradeBoxUI({
       { value: "levelup", label: "LevelUp" },
       { value: "polymarket", label: "Polymarket" },
       { value: "predictfun", label: "Predict.fun" },
-      { value: "dflow", label: "DFlow" },
+      { value: "dflow", label: "Kalshi" },
     ];
     const venues = matchedVenues
       ? all.filter((v) => v.value === "levelup" || matchedVenues.has(v.value))
       : all;
     if (pandascoreMatchId && venues.length > 1) {
-      venues.unshift({ value: "all", label: "All" });
+      venues.unshift({ value: "all", label: "All Markets" });
     }
     return [{ label: "Venue", options: venues }];
   }, [pandascoreMatchId, matchedVenues]);
@@ -331,13 +331,33 @@ export default function PredictionMarketTradeBoxUI({
     return Number.isFinite(profit) && profit > 0 ? profit : null;
   })();
 
-  // Compute Odds % for market BUY orders using weighted average fill price
+  // Compute Odds % for market BUY orders using weighted average fill price.
+  // Prefers SOR route data (server-side book walk) when available; falls back to local book walk.
   const oddsData = useMemo(() => {
     if (tradingVenue === "all") return null;
     if (orderType !== 'market' || side !== 'buy') return null;
     if (!amount || !selectedPosition) return null;
     const usdAmount = Number(amount);
     if (!Number.isFinite(usdAmount) || usdAmount <= 0) return null;
+
+    // Prefer SOR route data when available (server-side book walk)
+    if (sorRoute.route && sorRoute.route.legs.length > 0) {
+      const leg = sorRoute.route.legs[0];
+      const avgPrice = leg.avgPrice;
+      if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
+      const referencePrice = bestAsk ?? null;
+      const pct = Math.round(avgPrice * 100);
+      if (!Number.isFinite(pct) || pct < 0) return null;
+      const isUpdated = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
+        ? avgPrice > referencePrice * 1.1
+        : false;
+      const fromPct = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
+        ? Math.round(referencePrice * 100)
+        : null;
+      return { pct, avgPrice, isUpdated, fromPct };
+    }
+
+    // DEPRECATED: Fallback to client-side book walk while SOR loads
     const walkUsd = venueConfig.effectiveBuyBudget(usdAmount, {
       approxPrice: bestAsk ?? undefined,
     });
@@ -345,9 +365,6 @@ export default function PredictionMarketTradeBoxUI({
     if (!contracts || contracts <= 0) return null;
     const avgPrice = getEffectivePrice(walkUsd, contracts, remainingUsd);
     if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
-    // Determine reference current market price for comparison.
-    // For poly/dflow/predict the effective book is already the selected outcome's
-    // native book, so bestAsk is the direct price to buy that outcome.
     const referencePrice = (() => {
       if (tradingVenue === "predictfun" && predictHints) {
         const hp =
@@ -371,21 +388,32 @@ export default function PredictionMarketTradeBoxUI({
       ? Math.round(referencePrice * 100)
       : null;
     return { pct, avgPrice, isUpdated, fromPct };
-  }, [orderType, side, amount, selectedPosition, tradingVenue, calculateContractsForMarketOrder, getEffectivePrice, bestAsk, bestBid, predictHints, yesHintPrices, noHintPrices]);
+  }, [orderType, side, amount, selectedPosition, tradingVenue, calculateContractsForMarketOrder, getEffectivePrice, bestAsk, bestBid, predictHints, yesHintPrices, noHintPrices, sorRoute.route]);
 
-  // Compute Avg Price (¢) for market SELL orders using weighted average sale price
+  // Compute Avg Price (¢) for market SELL orders using weighted average sale price.
+  // Prefers SOR route data when available.
   const sellAvgCents = useMemo(() => {
     if (orderType !== 'market' || side !== 'sell') return null;
     if (!amount || !selectedPosition) return null;
     const shares = Number(amount);
     if (!Number.isFinite(shares) || shares <= 0) return null;
+
+    // Prefer SOR route data
+    if (sorRoute.route && sorRoute.route.legs.length > 0) {
+      const leg = sorRoute.route.legs[0];
+      const avgPrice = leg.avgPrice;
+      if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
+      return Math.round(avgPrice * 100);
+    }
+
+    // DEPRECATED: Fallback to client-side book walk
     const { contracts, remainingUsd } = calculateContractsForMarketOrder(shares, selectedPosition, 'sell');
     if (!contracts || contracts <= 0) return null;
-    const avgPrice = remainingUsd / contracts; // remainingUsd holds total USD received for sell path
+    const avgPrice = remainingUsd / contracts;
     if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
     const cents = Math.round(avgPrice * 100);
     return cents;
-  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder]);
+  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, sorRoute.route]);
 
   return (
     <div className="prediction-market-tradebox">
@@ -405,30 +433,7 @@ export default function PredictionMarketTradeBoxUI({
           />
         </div>
       </div>
-      {state.tradingVenue === "polymarket" && polymarketVenueHint ? (
-        <p className="trade-venue-hint">
-          {polymarketVenueHint}{" "}
-          <Link to="/trading" className="trade-venue-hint__link">
-            Open Trading
-          </Link>
-        </p>
-      ) : null}
-      {state.tradingVenue === "predictfun" && predictVenueHint ? (
-        <p className="trade-venue-hint">
-          {predictVenueHint}{" "}
-          <Link to="/trading" className="trade-venue-hint__link">
-            Open Trading
-          </Link>
-        </p>
-      ) : null}
-      {state.tradingVenue === "dflow" && dflowVenueHint ? (
-        <p className="trade-venue-hint">
-          {dflowVenueHint}{" "}
-          <Link to="/profile" className="trade-venue-hint__link">
-            Open Profile
-          </Link>
-        </p>
-      ) : null}
+      {/* Venue hint messages removed — internal status not shown to users */}
       
 
       <div className="tradebox-header">
@@ -536,7 +541,7 @@ export default function PredictionMarketTradeBoxUI({
             lineHeight: 1.4,
             margin: 0,
           }}>
-            Kalshi via DFlow does not support limit orders at this time
+            Kalshi does not support limit orders at this time
           </p>
         </div>
       ) : (
@@ -681,7 +686,7 @@ export default function PredictionMarketTradeBoxUI({
 
       {/* SOR route breakdown when venue is "all" */}
       {tradingVenue === "all" && (
-        <div className="bet-size-section" style={{ opacity: sorRoute.isStale && !sorRoute.isLoading ? 0.7 : 1, transition: "opacity 0.2s" }}>
+        <div className={`bet-size-section${sorRoute.isLoading ? " bet-size-section--recalculating" : ""}`}>
           {sorRoute.isLoading && !sorRoute.route && (
             <div className="bet-size-info">
               <style>{`@keyframes sorPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
@@ -812,7 +817,7 @@ export default function PredictionMarketTradeBoxUI({
 
       {/* Bet Size / To Win for single-venue orders */}
       {tradingVenue !== "all" && (toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null || netReceive !== null) && (
-        <div className="bet-size-section">
+        <div className={`bet-size-section${sorRoute.isLoading ? " bet-size-section--recalculating" : ""}`}>
           {/* Estimated Cost for market BUY orders */}
           {oddsData !== null && calculatedContracts !== null && estimatedCost !== null && tradingFee !== null && (
             <div className="bet-size-info">

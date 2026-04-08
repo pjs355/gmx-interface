@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAnimatedDots } from "../../../../hooks/useAnimatedDots";
 import { getVenueConfig } from "@/config/venueConfig";
 
@@ -66,6 +67,7 @@ export function useButtonState({
     | undefined,
 }: any): ButtonStateResult {
   const animatedDots = useAnimatedDots(400);
+  const navigate = useNavigate();
   
   return useMemo(() => {
     if (!authenticated) {
@@ -98,7 +100,7 @@ export function useButtonState({
         return { text: "Route unavailable", disabled: true, onClick: () => {} };
       }
       if (sorState?.routeExpired) {
-        return { text: "Route expired — refreshing…", disabled: true, onClick: () => {} };
+        return { text: "Refreshing Odds…", disabled: true, onClick: () => {} };
       }
       if (!sorState?.route) {
         return { text: "Enter amount", disabled: true, onClick: () => {} };
@@ -126,7 +128,7 @@ export function useButtonState({
       }
 
       return {
-        text: `${buttonText} (Smart Route)`,
+        text: buttonText,
         disabled: false,
         onClick: sorState.handleExecute,
       };
@@ -201,7 +203,7 @@ export function useButtonState({
         }
       }
       return {
-        text: `${buttonText} (Polymarket)`,
+        text: buttonText,
         disabled: false,
         onClick: handleTrade,
       };
@@ -209,13 +211,13 @@ export function useButtonState({
 
     if (state.tradingVenue === "dflow") {
       if (dflowProofLoading) {
-        return { text: "Checking DFlow KYC…", disabled: true, onClick: () => {} };
+        return { text: "Checking Kalshi KYC…", disabled: true, onClick: () => {} };
       }
       if (dflowProofVerified === false) {
         return {
-          text: "Complete Proof KYC (Profile)",
-          disabled: true,
-          onClick: () => {},
+          text: "Complete Proof KYC →",
+          disabled: false,
+          onClick: () => navigate("/profile"),
         };
       }
       if (
@@ -246,7 +248,7 @@ export function useButtonState({
         }
       }
       return {
-        text: `${buttonText} (DFlow)`,
+        text: buttonText,
         disabled: false,
         onClick: handleTrade,
       };
@@ -347,7 +349,7 @@ export function useButtonState({
         }
       }
       return {
-        text: `${buttonText} (Predict.fun)`,
+        text: buttonText,
         disabled: false,
         onClick: handleTrade,
       };
@@ -448,7 +450,7 @@ export function useButtonState({
     }
     
     return { text: buttonText, disabled: false, onClick: handleTrade, isSweepingBook, availableShares };
-  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance, dflowProofVerified, dflowProofLoading, sorState]);
+  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance, dflowProofVerified, dflowProofLoading, sorState, navigate]);
 }
 
 

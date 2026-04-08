@@ -28,6 +28,7 @@ import "./OrderbookDisplay.scss";
 
 interface OrderbookDisplayProps {
 	orderbook: OrderbookSnapshot | null;
+	noSideOrderbook?: OrderbookSnapshot | null;
 	loading: boolean;
 	error: string | null;
 	onRefresh?: () => void;
@@ -48,6 +49,7 @@ interface OrderbookDisplayProps {
 
 export default function OrderbookDisplay({
 	orderbook,
+	noSideOrderbook,
 	loading,
 	error,
 	onRefresh,
@@ -183,12 +185,17 @@ export default function OrderbookDisplay({
 		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 	};
 
-	// Calculate display prices following the same convention as trading box
-	// Flip prices based on buy/sell side (same logic as trade box)
+	const { bestBid: noBestBid, bestAsk: noBestAsk } = useMemo(() => {
+		if (noSideOrderbook) return calculateOrderbookPrices(noSideOrderbook);
+		return { bestBid: null, bestAsk: null };
+	}, [noSideOrderbook]);
+
 	const yesLabelPrice = side === "buy" ? marketBestAsk : marketBestBid;
-	const noLabelPrice = side === "buy"
-		? (marketBestBid === null ? null : 1 - marketBestBid)
-		: (marketBestAsk === null ? null : 1 - marketBestAsk);
+	const noLabelPrice = noSideOrderbook
+		? (side === "buy" ? noBestAsk : noBestBid)
+		: (side === "buy"
+			? (marketBestBid === null ? null : 1 - marketBestBid)
+			: (marketBestAsk === null ? null : 1 - marketBestAsk));
 	
 	const yesLabel =
 		yesLabelPrice !== null
@@ -233,6 +240,25 @@ export default function OrderbookDisplay({
 											onMarketSwitch(market, "yes");
 										}
 									}}
+									onMouseEnter={(e) => {
+										if (isVsSingle) {
+											e.currentTarget.style.border = `2px solid ${yesColor}`;
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (isVsSingle) {
+											e.currentTarget.style.border = `2px solid ${hexToRgba(yesColor, 0.35)}`;
+										}
+									}}
+									style={
+										isVsSingle
+											? {
+													background: hexToRgba(yesColor, 0.35),
+													color: "#ffffff",
+													border: `2px solid ${hexToRgba(yesColor, 0.35)}`,
+											  }
+											: undefined
+									}
 								>
 									{yesTeamLabel} --
 								</button>
@@ -244,6 +270,25 @@ export default function OrderbookDisplay({
 											onMarketSwitch(market, "no");
 										}
 									}}
+									onMouseEnter={(e) => {
+										if (isVsSingle) {
+											e.currentTarget.style.border = `2px solid ${noColor}`;
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (isVsSingle) {
+											e.currentTarget.style.border = `2px solid ${hexToRgba(noColor, 0.35)}`;
+										}
+									}}
+									style={
+										isVsSingle
+											? {
+													background: hexToRgba(noColor, 0.35),
+													color: "#ffffff",
+													border: `2px solid ${hexToRgba(noColor, 0.35)}`,
+											  }
+											: undefined
+									}
 								>
 									{noTeamLabel} --
 								</button>
@@ -393,27 +438,39 @@ export default function OrderbookDisplay({
 	// Sort bids (buy orders) by price descending (highest bid first)
 	const sortedBids = flattenedBids.sort((a, b) => b.price - a.price);
 
-	// Create inverted data for NO tab (bids become asks, asks become bids, prices inverted)
-	const invertedAsks = flattenedBids
-		.map((bid) => ({
-			...bid,
-			price: 1 - bid.price, // Invert price: 0.6 becomes 0.4
-			id: `inverted-${bid.id}`,
-		}))
-		.sort((a, b) => a.price - b.price)
-		.reverse(); // Sort ascending for asks, then reverse to show best ask at bottom
+	// NO tab data: use separate noSideOrderbook when available, otherwise invert the primary book
+	const noTabAsks = (() => {
+		if (noSideOrderbook) {
+			return flattenAndConsolidateOrders(noSideOrderbook.asks || [])
+				.sort((a, b) => a.price - b.price)
+				.reverse();
+		}
+		return flattenedBids
+			.map((bid) => ({
+				...bid,
+				price: 1 - bid.price,
+				id: `inverted-${bid.id}`,
+			}))
+			.sort((a, b) => a.price - b.price)
+			.reverse();
+	})();
 
-	const invertedBids = flattenedAsks
-		.map((ask) => ({
-			...ask,
-			price: 1 - ask.price, // Invert price: 0.4 becomes 0.6
-			id: `inverted-${ask.id}`,
-		}))
-		.sort((a, b) => b.price - a.price); // Sort descending for bids
+	const noTabBids = (() => {
+		if (noSideOrderbook) {
+			return flattenAndConsolidateOrders(noSideOrderbook.bids || [])
+				.sort((a, b) => b.price - a.price);
+		}
+		return flattenedAsks
+			.map((ask) => ({
+				...ask,
+				price: 1 - ask.price,
+				id: `inverted-${ask.id}`,
+			}))
+			.sort((a, b) => b.price - a.price);
+	})();
 
-	// Use appropriate data based on active tab - load all orders
-	const displayAsks = activeTab === "yes" ? sortedAsks : invertedAsks;
-	const displayBids = activeTab === "yes" ? sortedBids : invertedBids;
+	const displayAsks = activeTab === "yes" ? sortedAsks : noTabAsks;
+	const displayBids = activeTab === "yes" ? sortedBids : noTabBids;
 
 	// Get best prices and spread based on active tab
 	const bestAsk =

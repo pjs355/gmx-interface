@@ -23,7 +23,7 @@
 .esports-venue-books__td {
 	border: 1px solid #4b5563;
 	padding: 10px 12px;
-	text-align: left;
+	text-align: center;
 	vertical-align: middle;
 }
 
@@ -59,13 +59,18 @@
 }
 
 .esports-venue-books__td--num {
-	text-align: right;
+	text-align: center;
 	font-weight: 500;
 }
 
 .esports-venue-books__td--avgcell {
 	color: #fff !important;
 	font-weight: 800;
+}
+
+.esports-venue-books__td--best {
+	color: #22c55e !important;
+	font-weight: 700;
 }
 
 .esports-venue-books__td--empty {
