@@ -152,10 +152,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							}
 							market={
 								{
-								...(question as any),
-								umbrellaChildrenCount: umbrella?.children?.length || 0,
-								umbrellaDisplayName: umbrella?.displayName || "",
-							} as any
+									...(question as any),
+									umbrellaChildrenCount: umbrella?.children?.length || 0,
+								} as any
 							}
 							umbrellaDisplayName={umbrella.displayName}
 							onMarketSwitch={onMarketSwitch}
@@ -324,7 +323,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 			{/* Mobile Layout */}
 			<div className="mobile-layout">
-			{showStream && (
+				{showStream && (
 					<div className="stream-section-mobile">
 						<StreamEmbed streamUrl={streamUrl} height="360" />
 					</div>

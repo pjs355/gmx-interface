@@ -267,9 +267,7 @@ export default defineConfig(({ mode }) => {
 				  ]
 				: []),
 		],
-		define: {
-			global: "globalThis",
-		},
+		define: {},
 		optimizeDeps: {
 			exclude: ["@base-org/account"],
 		},

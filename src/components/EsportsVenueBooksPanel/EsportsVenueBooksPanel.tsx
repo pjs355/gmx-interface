@@ -30,6 +30,10 @@ function bestAskProb(book: OrderbookData | null | undefined): number | null {
 	return null;
 }
 
+function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | undefined {
+	return book?.snapshotStatus;
+}
+
 type VenueRowModel = {
 	id: string;
 	label: string;
@@ -92,9 +96,11 @@ function buildVenueRows(m: MatchedMarket, directBooks?: DirectVenueBooks | null)
 		{
 			id: "predictFun",
 			label: "Predict.fun",
-			linked: Boolean(identifier?.predictFun),
-			askA: bestAskProb(predictFun?.teamA),
-			askB: bestAskProb(predictFun?.teamB),
+			linked: Boolean(m.predictFun),
+			askA: m.predictFun ? bestAskProb(m.predictFunPriceA) : null,
+			askB: m.predictFun ? bestAskProb(m.predictFunPriceB) : null,
+			statusA: bookStatus(m.predictFunPriceA),
+			statusB: bookStatus(m.predictFunPriceB),
 		},
 	];
 }
@@ -317,6 +323,10 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId, levelUpOrderbook, di
 			</div>
 		);
 	}
+
+	const dh = appState?.dflowHealth ?? appState?.kalshiHealth;
+	const lh = appState?.limitlessHealth;
+	const pf = appState?.predictFunHealth;
 
 	return (
 		<div className="esports-venue-books">

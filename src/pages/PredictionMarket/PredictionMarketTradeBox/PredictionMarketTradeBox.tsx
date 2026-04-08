@@ -352,32 +352,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     noTeamLabel,
   ]);
 
-  /** Position-independent button prices for external venues (poly/dflow). */
-  const stableButtonPrices = useMemo<{
-    yesBestAsk: number | null; yesBestBid: number | null;
-    noBestAsk: number | null; noBestBid: number | null;
-  } | null>(() => {
-    if (state.tradingVenue === "levelup" || state.tradingVenue === "predictfun") return null;
-    if (!matchedMonitor) return null;
-
-    const bookFn = state.tradingVenue === "dflow"
-      ? dflowKalshiOrderbookForPosition
-      : polyOrderbookForPosition;
-
-    const yesSnap = monitorBookToOrderbookSnapshot(bookFn(matchedMonitor, "yes", yesTeamLabel, noTeamLabel));
-    const noSnap = monitorBookToOrderbookSnapshot(bookFn(matchedMonitor, "no", yesTeamLabel, noTeamLabel));
-
-    const bestAskFrom = (s: typeof yesSnap) => s?.asks?.length ? Math.min(...s.asks.map(a => a.price)) : null;
-    const bestBidFrom = (s: typeof yesSnap) => s?.bids?.length ? Math.max(...s.bids.map(b => b.price)) : null;
-
-    return {
-      yesBestAsk: bestAskFrom(yesSnap),
-      yesBestBid: bestBidFrom(yesSnap),
-      noBestAsk: bestAskFrom(noSnap),
-      noBestBid: bestBidFrom(noSnap),
-    };
-  }, [state.tradingVenue, matchedMonitor, yesTeamLabel, noTeamLabel]);
-
   /** LevelUp REST for LevelUp; Polymarket monitor; Predict.fun REST for selected outcome market. */
   const effectiveOrderbook = useMemo(() => {
     if (state.tradingVenue === "all") {
@@ -474,13 +448,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return "Polymarket CLOB needs a PandaScore match on this umbrella.";
     }
     if (!oddsMonitorEnabled) {
-      return "Venue price feed is not configured.";
+      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
     }
     if (!oddsMonitorConnected) {
-      return "Connecting to venue prices…";
+      return "Connecting to odds monitor…";
     }
     if (!matchedMonitor) {
-      return "No matched market for this match — Poly books may not be linked yet.";
+      return "No monitor row for this match — Poly books may not be linked yet.";
     }
     if (polyClob.loading || polyClob.polyAccountLoading) {
       return "Preparing Polymarket CLOB…";
@@ -519,13 +493,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return "Predict.fun needs a PandaScore match on this umbrella.";
     }
     if (!oddsMonitorEnabled) {
-      return "Venue price feed is not configured.";
+      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
     }
     if (!oddsMonitorConnected) {
-      return "Connecting to venue prices…";
+      return "Connecting to odds monitor…";
     }
     if (!matchedMonitor) {
-      return "No matched market — Predict.fun ids may not be linked yet.";
+      return "No monitor row — Predict.fun ids may not be linked yet.";
     }
     if (!predictHasMarketIds) {
       return "This monitor row has no Predict.fun market ids.";
@@ -913,7 +887,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           orderResult: {
             success: false,
             error:
-              "Predict.fun needs a linked esports match and matched market.",
+              "Predict.fun needs a linked esports match and odds monitor row.",
           },
         }));
         return;
@@ -1045,7 +1019,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           orderResult: {
             success: false,
             error:
-              "Polymarket CLOB needs a linked esports match and matched market.",
+              "Polymarket CLOB needs a linked esports match and odds monitor row.",
           },
         }));
         return;
