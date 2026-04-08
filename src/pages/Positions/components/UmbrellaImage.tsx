@@ -1,5 +1,5 @@
 import { useState } from "react";
-import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
+import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	resolveLogoByTags,
 	resolveUmbrellaIconById,

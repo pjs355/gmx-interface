@@ -9,6 +9,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare yarn@3.1.0 --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG CACHE_BUST
 RUN NODE_OPTIONS=--max-old-space-size=8192 yarn build
 
 FROM nginx:alpine

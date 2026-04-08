@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
+import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	resolveLogoByTags,
 	resolveUmbrellaIconById,

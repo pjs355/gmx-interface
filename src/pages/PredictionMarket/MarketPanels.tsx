@@ -207,16 +207,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					</div>
 
 					<div className="orderbook-section">{orderbookSectionBody}</div>
-
-				<div className="orderbook-section">
-					{hasQuestions && orderbooksReady ? (
-						orderbookColumnContent
-					) : (
-						<>
-							<OrderbookSkeleton />
-							<OrderbookSkeleton />
-						</>
-					)}
 				</div>
 
 			<div className="right-panel">

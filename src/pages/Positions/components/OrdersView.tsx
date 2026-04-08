@@ -6,7 +6,7 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { VenueOrder } from "@/types/trading/venuePosition";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
+import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	resolveLogoByTags,
 	resolveUmbrellaIconById,

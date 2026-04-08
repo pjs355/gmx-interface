@@ -1,17 +1,14 @@
-import { useMemo } from "react";
-import { useOddsMonitor } from "@/context/OddsMonitorContext";
-import type { MatchedMarket, OrderbookData, SnapshotStatus } from "@/types/odds-monitor";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import { useEffect, useMemo, useState } from "react";
+import { useVenuePrices } from "@/context/VenuePriceContext";
+import type { SnapshotStatus } from "@/types/odds-monitor";
+import type { VenuePriceTeam, VenuePriceSnapshot } from "@/types/venue-prices";
+import { fetchMatchedMarkets, type MatchedMarketExchange } from "@/services/api/matchDataService";
 import "./EsportsVenueBooksPanel.scss";
 
 function bestAskProb(team: VenuePriceTeam | undefined): number | null {
 	if (!team || team.bestAsk === null || team.bestAsk === undefined) return null;
 	const p = typeof team.bestAsk === "number" ? team.bestAsk : Number(team.bestAsk);
 	return Number.isFinite(p) ? p : null;
-}
-
-function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | undefined {
-	return book?.snapshotStatus;
 }
 
 type VenueRowModel = {
@@ -43,49 +40,29 @@ function buildVenueRows(
 
 	const poly = byVenue.get("polymarket");
 	const dflow = byVenue.get("dflow") ?? byVenue.get("kalshi");
-	const limitless = byVenue.get("limitless");
 	const predictFun = byVenue.get("predict.fun");
 
 	return [
 		{
 			id: "poly",
 			label: "Polymarket",
-			linked: Boolean(m.polyConditionId || m.polyTokenIdA),
-			askA: bestAskProb(m.polyPriceA),
-			askB: bestAskProb(m.polyPriceB),
-			statusA: bookStatus(m.polyPriceA),
-			statusB: bookStatus(m.polyPriceB),
+			linked: Boolean(identifier?.polyConditionId || identifier?.polyTokenIdA),
+			askA: bestAskProb(poly?.teamA),
+			askB: bestAskProb(poly?.teamB),
 		},
 		{
 			id: "dflow",
 			label: "DFlow",
-			linked: Boolean(getDflowKalshiMonitorLink(m)),
-			askA: getDflowKalshiMonitorLink(m)
-				? bestAskProb(m.dflowPriceA ?? m.kalshiPriceA)
-				: null,
-			askB: getDflowKalshiMonitorLink(m)
-				? bestAskProb(m.dflowPriceB ?? m.kalshiPriceB)
-				: null,
-			statusA: bookStatus(m.dflowPriceA ?? m.kalshiPriceA),
-			statusB: bookStatus(m.dflowPriceB ?? m.kalshiPriceB),
-		},
-		{
-			id: "limitless",
-			label: "Limitless",
-			linked: Boolean(m.limitless),
-			askA: m.limitless ? bestAskProb(m.limitlessPriceA) : null,
-			askB: m.limitless ? bestAskProb(m.limitlessPriceB) : null,
-			statusA: bookStatus(m.limitlessPriceA),
-			statusB: bookStatus(m.limitlessPriceB),
+			linked: Boolean(identifier?.dflow || identifier?.kalshi),
+			askA: bestAskProb(dflow?.teamA),
+			askB: bestAskProb(dflow?.teamB),
 		},
 		{
 			id: "predictFun",
 			label: "Predict.fun",
-			linked: Boolean(m.predictFun),
-			askA: m.predictFun ? bestAskProb(m.predictFunPriceA) : null,
-			askB: m.predictFun ? bestAskProb(m.predictFunPriceB) : null,
-			statusA: bookStatus(m.predictFunPriceA),
-			statusB: bookStatus(m.predictFunPriceB),
+			linked: Boolean(identifier?.predictFun),
+			askA: bestAskProb(predictFun?.teamA),
+			askB: bestAskProb(predictFun?.teamB),
 		},
 	];
 }
@@ -163,16 +140,11 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId }: Props) {
 	}, [prices, pandascoreMatchId]);
 
 	const { venueRows, avgA, avgB } = useMemo(() => {
-		if (!matched) {
-			return {
-				venueRows: [] as VenueRowModel[],
-				avgA: null as number | null,
-				avgB: null as number | null,
-			};
-		}
-		const rows = buildVenueRows(matched).filter((r) => r.linked);
+		const rows = buildVenueRows(snapshots, identifier).filter((r) => r.linked);
 		const avgAVal = meanProb(rows.map((r) => r.askA));
 		const avgBVal = meanProb(rows.map((r) => r.askB));
+		return { venueRows: rows, avgA: avgAVal, avgB: avgBVal };
+	}, [snapshots, identifier]);
 
 	const teamA = identifier?.pandaTeamA ?? "Team A";
 	const teamB = identifier?.pandaTeamB ?? "Team B";

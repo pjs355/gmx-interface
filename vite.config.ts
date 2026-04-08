@@ -1,5 +1,5 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "path";
@@ -241,16 +241,6 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [
-			// Solana + transitive deps (e.g. readable-stream via hash-base) expect Node `Buffer` and `process`
-			// (`process.version.slice` in _stream_writable.js when `process.version` is missing).
-			nodePolyfills({
-				// readable-stream@2 + hash-base need `global`, full `process`, and `Buffer` at module init
-				globals: {
-					Buffer: true,
-					global: true,
-					process: true,
-				},
-			}),
 			react({
 				babel: {
 					plugins: ["macros"],
@@ -279,7 +269,6 @@ export default defineConfig(({ mode }) => {
 		],
 		define: {
 			global: "globalThis",
-			"process.env": {},
 		},
 		optimizeDeps: {
 			exclude: ["@base-org/account"],
@@ -299,8 +288,8 @@ export default defineConfig(({ mode }) => {
 				utils: path.resolve(__dirname, "./src/utils"),
 				img: path.resolve(__dirname, "./src/img"),
 				styles: path.resolve(__dirname, "./src/styles"),
-				// Lightweight browser shim: @polymarket/clob-client only needs crypto.createHmac
 				crypto: path.resolve(__dirname, "./src/polyfills/crypto-hmac-shim.ts"),
+				"node:crypto": path.resolve(__dirname, "./src/polyfills/crypto-hmac-shim.ts"),
 			},
 		},
 		css: {
@@ -314,20 +303,6 @@ export default defineConfig(({ mode }) => {
 		build: {
 			outDir: "dist",
 			sourcemap: mode === "sourcemaps" ? "hidden" : false,
-			rollupOptions: {
-				output: {
-					manualChunks: {
-						"react-vendor": ["react", "react-dom", "react-router-dom"],
-						privy: ["@privy-io/react-auth"],
-						charts: ["recharts"],
-						"ethers-vendor": ["ethers"],
-						"viem-vendor": ["viem"],
-						"solana-vendor": ["@solana/web3.js", "@solana/spl-token"],
-						"trading-sdks": ["@polymarket/clob-client", "@polymarket/builder-relayer-client", "@polymarket/builder-signing-sdk", "@predictdotfun/sdk"],
-					},
-					sourcemapExcludeSources: true,
-				},
-			},
 		},
 	};
 });

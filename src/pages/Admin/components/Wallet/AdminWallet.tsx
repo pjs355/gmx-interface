@@ -8,7 +8,7 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { subgraphService, fromMicroUnits } from "@/services/subgraph/subgraphService";
 import { fetchUserOrders, type ProcessedOrder, getFinalAmount } from "@/services/api/simplifiedOrderService";
 import ScrollableTable from "@/components/ScrollableTable/ScrollableTable";
-import gtaIcon from "@/assets/img/ic_gtaVI_24.svg";
+import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	resolveLogoByTags,
 	resolveUmbrellaIconById,
