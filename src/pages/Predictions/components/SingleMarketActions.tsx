@@ -3,6 +3,8 @@ import Button from "components/Button/Button";
 import {
 	toCentsString,
 	shortenTeamLabelForButton,
+	hexToRgba,
+	getContrastingTextColor,
 } from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
@@ -13,6 +15,9 @@ interface SingleMarketActionsProps {
 	question: PredictionMarket;
 	isDailyPlayerCount?: boolean;
 	umbrellaDisplayName?: string;
+	/** When set from OddsMonitor venue-prices, overrides listing preview for that side */
+	liveVenueYesPrice?: number | null;
+	liveVenueNoPrice?: number | null;
 }
 
 export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
@@ -21,62 +26,27 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	question,
 	isDailyPlayerCount = false,
 	umbrellaDisplayName,
+	liveVenueYesPrice,
+	liveVenueNoPrice,
 }) => {
 	const { allBooksPreview } = usePredictionData();
 	const questionId = question?.questionId;
 	const preview = questionId ? allBooksPreview[questionId] : undefined;
 
-	// Best price across all venues, falling back to LevelUp-only orderbook price
 	const yesPrice =
-		preview?.bestYesPrice ??
-		preview?.lowestAsk ??
-		(preview?.bestNoPrice != null ? 1 - preview.bestNoPrice : null);
-	// NO must complement the same effective YES price (not only bestYesPrice), or we show "--"
-	// when bestYesPrice is null but lowestAsk is set
+		typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice)
+			? liveVenueYesPrice
+			: (preview?.bestYesPrice ?? preview?.lowestAsk ?? null);
 	const noPrice =
-		preview?.bestNoPrice ??
-		(yesPrice != null ? 1 - yesPrice : null);
+		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
+			? liveVenueNoPrice
+			: (preview?.bestNoPrice ?? null);
 
 	const yesPriceCents =
 		yesPrice !== null && yesPrice !== undefined
 			? `${toCentsString(yesPrice)}¢`
 			: "--";
 	const noPriceCents = noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
-
-	const hexToRgba = (hex?: string, alpha: number = 0.3): string => {
-		if (!hex) return `rgba(0,0,0,${alpha})`;
-		const cleaned = hex.replace("#", "");
-		const full =
-			cleaned.length === 3
-				? cleaned
-						.split("")
-						.map((c) => c + c)
-						.join("")
-				: cleaned;
-		const r = parseInt(full.substring(0, 2), 16) || 0;
-		const g = parseInt(full.substring(2, 4), 16) || 0;
-		const b = parseInt(full.substring(4, 6), 16) || 0;
-		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-	};
-
-	const getContrastingTextColor = (hex?: string): string => {
-		if (!hex) return "#ffffff";
-		let cleaned = hex.trim().replace("#", "");
-		if (cleaned.length === 3) {
-			cleaned = cleaned
-				.split("")
-				.map((c) => c + c)
-				.join("");
-		}
-		if (cleaned.length !== 6) {
-			return "#ffffff";
-		}
-		const r = parseInt(cleaned.substring(0, 2), 16) / 255;
-		const g = parseInt(cleaned.substring(2, 4), 16) / 255;
-		const b = parseInt(cleaned.substring(4, 6), 16) / 255;
-		const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-		return luminance > 0.6 ? "#000000" : "#ffffff";
-	};
 
 	// Derive team labels for single-market umbrellas with "vs" in the title
 	const deriveLabels = (): {

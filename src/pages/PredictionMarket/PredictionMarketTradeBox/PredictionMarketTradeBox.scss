@@ -754,6 +754,94 @@
 			margin-top: 4px;
 			text-align: left;
 		}
+
+		// SOR "All venues" expandable route details
+		.sor-details-wrap {
+			margin-top: 2px;
+		}
+
+		.sor-details-toggle {
+			display: block;
+			width: 100%;
+			padding: 4px 0;
+			margin: 0;
+			border: none;
+			background: transparent;
+			cursor: pointer;
+			font-family: inherit;
+			text-align: left;
+			color: #ffffff;
+			font-size: 12px;
+			font-weight: 400;
+		}
+
+		.sor-details-toggle-inline {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		.sor-details-toggle-label {
+			color: #ffffff;
+			font-size: 12px;
+		}
+
+		.sor-details-chevron {
+			display: inline-block;
+			width: 0;
+			height: 0;
+			border-left: 4px solid transparent;
+			border-right: 4px solid transparent;
+			border-top: 5px solid #ffffff;
+			transition: transform 0.15s ease;
+			flex-shrink: 0;
+		}
+
+		.sor-details-chevron--open {
+			transform: rotate(180deg);
+		}
+
+		.sor-details-panel {
+			padding: 6px 0 4px 0;
+			margin-top: 2px;
+		}
+
+		.sor-details-split-hint {
+			font-size: 11px;
+			color: #9ca3af;
+			line-height: 1.35;
+			margin-bottom: 8px;
+		}
+
+		.sor-details-row--leg {
+			margin-bottom: 6px;
+			font-size: 12px;
+			color: #d1d5db;
+		}
+
+		.sor-details-leg-text {
+			color: #d1d5db;
+		}
+
+		.sor-details-row--fee {
+			display: flex;
+			justify-content: flex-start;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 4px 6px;
+			margin-top: 6px;
+			font-size: 12px;
+			color: #d1d5db;
+		}
+
+		.sor-details-fee-label {
+			color: #d1d5db;
+		}
+
+		.sor-details-fee-value {
+			color: #d1d5db;
+			white-space: nowrap;
+		}
 	}
 
 	.order-result {

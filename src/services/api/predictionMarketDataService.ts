@@ -217,28 +217,27 @@ class PredictionMarketDataService {
 	 */
 	async refreshHistoricalData(questionId: string): Promise<boolean> {
 		try {
-			// Quiet historical refresh start log
 			const market = await this.fetchMarketById(questionId);
 
-			if (
-				market &&
-				market.historicalPrices &&
-				market.historicalPrices.length > 0
-			) {
+			if (!market) return false;
+
+			const prices =
+				(market.historicalPrices?.length ? market.historicalPrices : null) ??
+				(market.historicalPricesYes?.length ? market.historicalPricesYes : null);
+
+			if (prices && prices.length > 0) {
 				this.storeHistoricalPrices(
 					market._id || market.questionId,
-					market.historicalPrices as unknown as Array<{
+					prices as unknown as Array<{
 						timestamp?: number;
 						ts?: number;
 						price: number;
 						volume?: number;
 					}>
 				);
-				// Quiet historical refresh success log
 				return true;
 			}
 
-			// Quiet no historical data log
 			return false;
 		} catch (error) {
 			console.error(

@@ -207,7 +207,7 @@ export function useClaimForVenue(
 
 			if (!embedded?.getEthereumProvider)
 				throw new Error(
-					"Embedded wallet required for Predict.fun claims on BNB"
+					"Embedded wallet required for Predict claims on BNB"
 				);
 
 			const ethereum = await embedded.getEthereumProvider();
@@ -228,7 +228,7 @@ export function useClaimForVenue(
 				[YES_INDEX_SET, NO_INDEX_SET],
 			]);
 
-			console.log("CLAIM DEBUG: Predict.fun redeem on BNB", {
+			console.log("CLAIM DEBUG: Predict redeem on BNB", {
 				ctf: ctfAddress,
 				collateral,
 				conditionId: market.conditionId,

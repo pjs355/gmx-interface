@@ -2,7 +2,11 @@ import React, { createContext, useContext, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { getOddsWebSocketUrl } from "@/config/oddsMonitorBase";
 import { useOddsMonitorWebSocket } from "@/hooks/useOddsMonitorWebSocket";
-import type { OddsMonitorAppState } from "@/types/odds-monitor";
+import type { MatchedMarket, OddsMonitorAppState } from "@/types/odds-monitor";
+import {
+	VenuePandaSubscriptionProvider,
+	useVenuePandaSubscription,
+} from "@/context/VenuePandaSubscriptionContext";
 
 export type OddsMonitorContextValue = {
 	enabled: boolean;
@@ -13,26 +17,25 @@ export type OddsMonitorContextValue = {
 	sendGetState: () => void;
 };
 
-const ODDS_MONITOR_ROUTES = ["/predictions/umbrella/", "/positions"];
-
 const OddsMonitorContext = createContext<OddsMonitorContextValue | null>(null);
 
-export function OddsMonitorProvider({
+function routeNeedsOddsMonitor(pathname: string): boolean {
+	if (pathname === "/") return true;
+	if (pathname.startsWith("/predictions/umbrella/")) return true;
+	if (pathname.startsWith("/positions")) return true;
+	return false;
+}
+
+function OddsMonitorInner({
 	children,
+	wsUrl,
 }: {
 	children: React.ReactNode;
+	wsUrl: string | null;
 }) {
-	const { pathname } = useLocation();
-	const baseWsUrl = useMemo(() => getOddsWebSocketUrl(), []);
-
-	// Only open the WebSocket on routes that actually consume odds data
-	const needsOddsData = ODDS_MONITOR_ROUTES.some((route) =>
-		pathname.startsWith(route)
-	);
-	const wsUrl = needsOddsData ? baseWsUrl : null;
-
+	const { activePandaMatchIds } = useVenuePandaSubscription();
 	const { connected, appState, lastWsError, enabled, sendGetState } =
-		useOddsMonitorWebSocket(wsUrl);
+		useOddsMonitorWebSocket(wsUrl, activePandaMatchIds);
 
 	const value = useMemo(
 		(): OddsMonitorContextValue => ({
@@ -40,10 +43,10 @@ export function OddsMonitorProvider({
 			connected,
 			appState,
 			lastWsError,
-			wsUrl: null,
+			wsUrl,
 			sendGetState,
 		}),
-		[enabled, connected, appState, lastWsError, sendGetState],
+		[enabled, connected, appState, lastWsError, wsUrl, sendGetState],
 	);
 
 	return (
@@ -53,10 +56,38 @@ export function OddsMonitorProvider({
 	);
 }
 
+export function OddsMonitorProvider({
+	children,
+}: {
+	children: React.ReactNode;
+}) {
+	const { pathname } = useLocation();
+	const baseWsUrl = useMemo(() => getOddsWebSocketUrl(), []);
+	const wsUrl = routeNeedsOddsMonitor(pathname) ? baseWsUrl : null;
+
+	return (
+		<VenuePandaSubscriptionProvider>
+			<OddsMonitorInner wsUrl={wsUrl}>{children}</OddsMonitorInner>
+		</VenuePandaSubscriptionProvider>
+	);
+}
+
 export function useOddsMonitor(): OddsMonitorContextValue {
 	const ctx = useContext(OddsMonitorContext);
 	if (!ctx) {
 		throw new Error("useOddsMonitor must be used within OddsMonitorProvider");
 	}
 	return ctx;
+}
+
+/** Live venue BBO rows for one PandaScore match from the shared odds monitor store. */
+export function useMatchVenuePrices(
+	pandaMatchId: string | null | undefined,
+): MatchedMarket | null {
+	const { appState } = useOddsMonitor();
+	return useMemo(() => {
+		const id = String(pandaMatchId ?? "").trim();
+		if (!id || !appState?.markets?.length) return null;
+		return appState.markets.find((m) => String(m.pandaMatchId) === id) ?? null;
+	}, [appState?.markets, appState?.timestamp, pandaMatchId]);
 }

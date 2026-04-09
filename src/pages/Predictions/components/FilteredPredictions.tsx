@@ -12,8 +12,29 @@ import {
 	resolveUmbrellaEventDate,
 	startOfLocalDay,
 } from "../utils/eventDates";
+import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
+
+type CalendarEvent = { umbrella: Umbrella; eventDate: Date };
+
+function getPlayOrderTier(eventMs: number, now: number): number {
+	if (now < eventMs) return 1; // upcoming
+	if (now >= eventMs && now - eventMs <= LIVE_WINDOW_MS) return 0; // live
+	return 2; // ended
+}
+
+function sortCalendarEventsByPlayOrder(events: CalendarEvent[], now: number): void {
+	events.sort((left, right) => {
+		const leftMs = left.eventDate.getTime();
+		const rightMs = right.eventDate.getTime();
+		const leftTier = getPlayOrderTier(leftMs, now);
+		const rightTier = getPlayOrderTier(rightMs, now);
+		if (leftTier !== rightTier) return leftTier - rightTier;
+		return leftMs - rightMs;
+	});
+}
 
 // Sort umbrellas by trading activity (number of trades across all children markets)
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
@@ -85,11 +106,53 @@ function formatDayLabel(
 }
 
 interface FilteredPredictionsProps {
-	filterType: "esports" | "games";
+	filterType: "esports" | "games" | "all";
 }
 
 const INITIAL_VISIBLE = 20;
 const LOAD_MORE_COUNT = 20;
+
+type CalendarDataForVisibility = {
+	upcomingDays: { events: CalendarEvent[] }[];
+	unscheduled: Umbrella[];
+	pastDays: { events: CalendarEvent[] }[];
+};
+
+/** Same umbrella ordering as rendered cards (calendar vs flat grid), capped by `visibleCount`. */
+function collectVisibleUmbrellas(
+	shouldUseCalendar: boolean,
+	calendarData: CalendarDataForVisibility | null,
+	filteredUmbrellas: Umbrella[],
+	visibleCount: number,
+): Umbrella[] {
+	if (!shouldUseCalendar || !calendarData) {
+		return filteredUmbrellas.slice(0, visibleCount);
+	}
+	const out: Umbrella[] = [];
+	let rendered = 0;
+	for (const day of calendarData.upcomingDays) {
+		if (rendered >= visibleCount) break;
+		const remaining = visibleCount - rendered;
+		const slice = day.events.slice(0, remaining);
+		for (const e of slice) out.push(e.umbrella);
+		rendered += slice.length;
+	}
+	if (rendered < visibleCount && calendarData.unscheduled.length) {
+		const remaining = visibleCount - rendered;
+		out.push(...calendarData.unscheduled.slice(0, remaining));
+		rendered += Math.min(remaining, calendarData.unscheduled.length);
+	}
+	if (rendered < visibleCount && calendarData.pastDays.length) {
+		for (const day of calendarData.pastDays) {
+			if (rendered >= visibleCount) break;
+			const remaining = visibleCount - rendered;
+			const slice = day.events.slice(0, remaining);
+			for (const e of slice) out.push(e.umbrella);
+			rendered += slice.length;
+		}
+	}
+	return out;
+}
 
 export default function FilteredPredictions({
 	filterType,
@@ -183,12 +246,14 @@ export default function FilteredPredictions({
 				});
 
 				// Filter based on filterType
+				if (filterType === "all") {
+					return true;
+				}
 				if (filterType === "esports") {
 					return hasEsportsTag;
-				} else {
-					// games
-					return !hasEsportsTag;
 				}
+				// games
+				return !hasEsportsTag;
 			})
 			.filter((umbrella) => {
 				// Apply secondary game filter if selected
@@ -221,23 +286,23 @@ export default function FilteredPredictions({
 			return sortByCreationDate(filtered);
 		}
 
-		// Sort by trading activity for games filter type (not esports)
+		// Sort by trading activity for games-only flat grid (home "all" uses calendar ordering)
 		if (filterType === "games") {
 			return sortByTradingActivity(filtered);
 		}
-		
+
 		return filtered;
 	}, [umbrellas, filterType, selectedGame, tags]);
 
 	const calendarData = React.useMemo(() => {
-		if (filterType !== "esports") {
+		if (filterType === "games") {
 			return null;
 		}
 
 		const todayStart = startOfLocalDay(new Date());
 		const todayStartMs = todayStart.getTime();
+		const now = Date.now();
 
-		type CalendarEvent = { umbrella: Umbrella; eventDate: Date };
 		type CalendarDay = { date: Date; events: CalendarEvent[] };
 
 		const upcomingMap = new Map<string, CalendarDay>();
@@ -271,25 +336,20 @@ export default function FilteredPredictions({
 
 		const sortByDate = (a: CalendarDay, b: CalendarDay) =>
 			a.date.getTime() - b.date.getTime();
-		const sortByEventTime = (events: CalendarEvent[]) => {
-			events.sort((left, right) => {
-				return (
-					left.eventDate.getTime() - right.eventDate.getTime()
-				);
-			});
-		};
 
 		const upcomingDays = Array.from(upcomingMap.values())
 			.sort(sortByDate)
 			.map((day) => {
-				sortByEventTime(day.events);
+				sortCalendarEventsByPlayOrder(day.events, now);
 				return day;
 			});
+
+		const pastDays: CalendarDay[] = [];
 
 		return {
 			todayStartMs,
 			upcomingDays,
-			pastDays: [],
+			pastDays,
 			unscheduled,
 		};
 	}, [filteredUmbrellas, filterType]);
@@ -348,6 +408,44 @@ export default function FilteredPredictions({
 		return count;
 	}, [calendarData]);
 
+	const shouldUseCalendar = filterType === "esports" || filterType === "all";
+	const { subscribePandaMatchId, unsubscribePandaMatchId } =
+		useVenuePandaSubscription();
+
+	const visibleUmbrellasForVenueWs = React.useMemo(
+		() =>
+			collectVisibleUmbrellas(
+				shouldUseCalendar,
+				shouldUseCalendar ? calendarData : null,
+				filteredUmbrellas,
+				visibleCount,
+			),
+		[
+			shouldUseCalendar,
+			calendarData,
+			filteredUmbrellas,
+			visibleCount,
+		],
+	);
+
+	const visiblePandaIdsKey = React.useMemo(() => {
+		const ids = new Set<string>();
+		for (const u of visibleUmbrellasForVenueWs) {
+			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
+			const pid = typeof raw === "string" ? raw.trim() : "";
+			if (pid) ids.add(pid);
+		}
+		return [...ids].sort().join("\0");
+	}, [visibleUmbrellasForVenueWs]);
+
+	useEffect(() => {
+		const ids = visiblePandaIdsKey ? visiblePandaIdsKey.split("\0") : [];
+		for (const id of ids) subscribePandaMatchId(id);
+		return () => {
+			for (const id of ids) unsubscribePandaMatchId(id);
+		};
+	}, [visiblePandaIdsKey, subscribePandaMatchId, unsubscribePandaMatchId]);
+
 	const handleRetry = () => {
 		window.location.reload();
 	};
@@ -369,13 +467,18 @@ export default function FilteredPredictions({
 		return <LoadingState error={error || null} onRetry={handleRetry} />;
 	}
 
-	const pageTitle = filterType === "esports" ? "Esports" : "Games";
+	const pageTitle =
+		filterType === "esports"
+			? "Esports"
+			: filterType === "games"
+				? "Games"
+				: "Markets";
 	const noMarketsMessage =
 		filterType === "esports"
 			? "No current esports markets"
-			: "No current games markets";
-
-	const shouldUseCalendar = filterType === "esports";
+			: filterType === "games"
+				? "No current games markets"
+				: "No current markets";
 
 	let content: React.ReactNode = null;
 

@@ -37,6 +37,10 @@ export interface TradeBoxProps {
 	onSideChange?: (side: "buy" | "sell") => void;
 	/** When set externally (e.g. from Orderbooks tab), syncs the trade box to this venue. */
 	venueOverride?: TradingVenue;
+	/** Cross-venue best YES price from unified trading page prices (WS-first). */
+	crossBuyYes?: number | null;
+	/** Cross-venue best NO price from unified trading page prices (WS-first). */
+	crossBuyNo?: number | null;
 }
 
 export interface MarketOrderCalculation {

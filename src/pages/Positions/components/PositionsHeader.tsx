@@ -19,8 +19,8 @@ export default function PositionsHeader({
 	summariesLocked?: boolean;
 }) {
 	const lockAll = summariesLocked === true;
-	const showCashSkeleton =
-		lockAll || cashLoading || (usdcBalance === 0 && portfolioLoading);
+	// Cash is Base USDC from UserDataContext — already fetched app-wide; do not hide it behind portfolio gate.
+	const showCashSkeleton = cashLoading;
 	const showPositionsSkeleton =
 		lockAll ||
 		positionsLoading ||

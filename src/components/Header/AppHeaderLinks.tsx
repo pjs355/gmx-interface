@@ -196,19 +196,25 @@ export function AppHeaderLinks({
 				</div>
 			<div className="App-header-link-container">
 				<HeaderLink
-					qa="esports"
+					qa="markets"
 					to="/"
 					showRedirectModal={showRedirectModal}
 					onClick={small ? clickCloseIcon : undefined}
 					isActive={(_match: any, location: any) => {
 						const path = location.pathname;
-						return path === "/" || path === "/predictions/esports";
+						return (
+							path === "/" ||
+							path === "/predictions" ||
+							path === "/predictions/esports" ||
+							path === "/predictions/games"
+						);
 					}}
 				>
-					Esports
+					Markets
 				</HeaderLink>
 			</div>
-			<div className="App-header-link-container">
+			{/* Second Markets tab (games-only list) disabled — all markets on home */}
+			{/* <div className="App-header-link-container">
 				<HeaderLink
 					qa="predictions"
 					to="/predictions/games"
@@ -221,7 +227,7 @@ export function AppHeaderLinks({
 				>
 					Markets
 				</HeaderLink>
-			</div>
+			</div> */}
 				{/* Commented out for production - leaderboard page disabled */}
 				{/* <div className="App-header-link-container">
 					<HeaderLink

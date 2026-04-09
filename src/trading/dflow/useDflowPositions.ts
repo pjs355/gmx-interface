@@ -24,10 +24,14 @@ const connection = new Connection(SOLANA_RPC_URL, "confirmed");
  *   5. Map to VenuePosition[]
  *
  * Mirrors `usePolymarketPositions` / `usePredictPositions` patterns.
+ *
+ * Pass `enabled: false` when Kalshi/Proof is not verified — no DFlow trades are possible,
+ * so Solana RPC + on-chain trade fetches can be skipped.
  */
 export function useDflowPositions(
 	solanaAddress: string | null | undefined,
-	api: PrivateApiClient
+	api: PrivateApiClient,
+	options?: { enabled?: boolean }
 ) {
 	const owner = useMemo(
 		() =>
@@ -35,19 +39,33 @@ export function useDflowPositions(
 		[solanaAddress]
 	);
 
+	const extraEnabled = options?.enabled ?? true;
+
 	return useQuery<VenuePosition[]>({
 		queryKey: ["dflow-positions", solanaAddress ?? null],
-		enabled: Boolean(owner),
+		enabled: Boolean(owner) && extraEnabled,
 		staleTime: 60_000,
 		gcTime: 5 * 60_000,
 		queryFn: async () => {
 			if (!owner || !solanaAddress) return [];
 
+			const debugPerf = import.meta.env.DEV && import.meta.env.VITE_DEBUG_DFLOW_PERF === "1";
+			const t0 = debugPerf ? performance.now() : 0;
+			const mark = (label: string) => {
+				if (debugPerf) {
+					console.log(
+						`[DFlowPerf] ${label}: ${(performance.now() - t0).toFixed(0)}ms`,
+					);
+				}
+			};
+
 			const tokens = await fetchWalletToken2022Accounts(connection, owner);
+			mark("tokenAccounts");
 			if (tokens.length === 0) return [];
 
 			const allMints = tokens.map((t) => t.mint);
 			const outcomeMints = await api.postDflowFilterOutcomeMints(allMints);
+			mark("filterOutcomeMints");
 			const outcomeTokens = tokens.filter((t) =>
 				outcomeMints.includes(t.mint)
 			);
@@ -57,10 +75,13 @@ export function useDflowPositions(
 				api.postDflowMarketsBatch(outcomeMints),
 				api.getDflowOnchainTrades(solanaAddress),
 			]);
+			mark("marketsBatch+onchainTrades");
 
 			const matched = matchTokensToMarkets(outcomeTokens, markets);
 			const costMap = buildCostMap(trades);
-			return toVenuePositions(matched, costMap);
+			const out = toVenuePositions(matched, costMap);
+			mark("mapToVenuePositions");
+			return out;
 		},
 	});
 }

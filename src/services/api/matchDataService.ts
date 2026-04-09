@@ -1,11 +1,13 @@
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { getMatchedMarketsUrl } from "@/config/oddsMonitorBase";
+import type { MatchedMarketsDflowWire } from "@/types/matchedMarketsDflowWire";
 
 export interface MatchedMarketExchange {
 	pandaMatchId: string;
-	polyConditionId: string;
+	umbrellaId?: string;
+	polyConditionId?: string;
 	polySlug?: string;
-	polyTokenIdA: string;
-	polyTokenIdB: string;
+	polyTokenIdA?: string;
+	polyTokenIdB?: string;
 	polyTickSize?: string;
 	polyNegRisk?: boolean;
 	pandaTeamA: string;
@@ -19,11 +21,7 @@ export interface MatchedMarketExchange {
 		tickerB?: string;
 		eventTicker: string;
 	};
-	dflow?: {
-		tickerA: string;
-		tickerB?: string;
-		eventTicker: string;
-	};
+	dflow?: MatchedMarketsDflowWire;
 	predictFun?: {
 		marketIdA?: string;
 		marketIdB?: string;
@@ -55,11 +53,7 @@ interface RemoteMatchedMarket {
 			tickerB?: string;
 			eventTicker: string;
 		};
-		dflow?: {
-			tickerA: string;
-			tickerB?: string;
-			eventTicker: string;
-		};
+		dflow?: MatchedMarketsDflowWire;
 		predictFun?: {
 			marketIdA?: string;
 			marketIdB?: string;
@@ -70,25 +64,31 @@ interface RemoteMatchedMarket {
 }
 
 function remoteToExchange(remote: RemoteMatchedMarket): MatchedMarketExchange | null {
-	const poly = remote.exchangeMatching?.polymarket;
-	if (!poly) return null;
+	const em = remote.exchangeMatching;
+	if (!em) return null;
+
+	const hasAnyExchange = em.polymarket || em.kalshi || em.dflow || em.predictFun;
+	if (!hasAnyExchange) return null;
+
+	const poly = em.polymarket;
 
 	return {
 		pandaMatchId: remote.pandaMatchId,
-		polyConditionId: poly.conditionId,
-		polySlug: poly.slug,
-		polyTokenIdA: poly.tokenIdA,
-		polyTokenIdB: poly.tokenIdB,
-		polyTickSize: poly.tickSize,
-		polyNegRisk: poly.negRisk,
+		umbrellaId: remote.umbrellaId,
+		polyConditionId: poly?.conditionId,
+		polySlug: poly?.slug,
+		polyTokenIdA: poly?.tokenIdA,
+		polyTokenIdB: poly?.tokenIdB,
+		polyTickSize: poly?.tickSize,
+		polyNegRisk: poly?.negRisk,
 		pandaTeamA: remote.pandaTeamA ?? "Team A",
 		pandaTeamB: remote.pandaTeamB ?? "Team B",
 		game: remote.game,
 		status: remote.status,
 		startTime: remote.eventDate ? new Date(remote.eventDate).getTime() : undefined,
-		kalshi: remote.exchangeMatching.kalshi,
-		dflow: remote.exchangeMatching.dflow,
-		predictFun: remote.exchangeMatching.predictFun,
+		kalshi: em.kalshi,
+		dflow: em.dflow,
+		predictFun: em.predictFun,
 	};
 }
 
@@ -102,8 +102,7 @@ export async function fetchMatchedMarkets(): Promise<MatchedMarketExchange[]> {
 		return cachedMarkets;
 	}
 
-	const baseUrl = getPredictionApiBaseUrl();
-	const res = await fetch(`${baseUrl}/matched-markets`);
+	const res = await fetch(getMatchedMarketsUrl());
 	if (!res.ok) {
 		throw new Error(`matchDataService: GET /matched-markets returned ${res.status}`);
 	}
@@ -120,6 +119,13 @@ export async function findMatchedMarketByConditionId(
 ): Promise<MatchedMarketExchange | undefined> {
 	const markets = await fetchMatchedMarkets();
 	return markets.find((m) => m.polyConditionId === conditionId);
+}
+
+export async function findMatchedMarketByUmbrellaId(
+	umbrellaId: string,
+): Promise<MatchedMarketExchange | undefined> {
+	const markets = await fetchMatchedMarkets();
+	return markets.find((m) => m.umbrellaId === umbrellaId);
 }
 
 export function clearMatchDataCache(): void {

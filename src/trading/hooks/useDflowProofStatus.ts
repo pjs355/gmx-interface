@@ -36,6 +36,8 @@ export function useDflowProofStatus() {
 		proofState: proofState ?? null,
 		isLoading: query.isLoading,
 		isError: query.isError,
+		isFetched: query.isFetched,
+		isSuccess: query.isSuccess,
 		data: query.data ?? null,
 	};
 }

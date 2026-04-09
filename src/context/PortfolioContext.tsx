@@ -9,7 +9,9 @@ import React, {
 import { usePredictionData } from "context/PredictionDataContext";
 import { useUserData } from "context/UserDataContext";
 import { useSignerContext } from "context/SignerContext";
+import { usePrivy } from "@privy-io/react-auth";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
@@ -34,6 +36,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const {
 		umbrellas,
 		getQuestionsForUmbrella,
+		resolvedMarketsByUmbrella,
 		allBooksPreview,
 		booksPreviewLoading,
 	} = usePredictionData();
@@ -58,6 +61,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const { polymarketSafe, embeddedEoa, solanaAddress } = useFundingAddresses();
+	const { authenticated } = usePrivy();
+	const dflowProof = useDflowProofStatus();
+	const solanaLinked = Boolean(solanaAddress?.trim());
 
 	const venueEnabled = venueReady && Boolean(polymarketSafe || embeddedEoa || solanaAddress);
 
@@ -97,7 +103,17 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	}, [predictPositionsQuery.data]);
 
 	const privateApi = usePrivateApiClient();
-	const dflowPositionsQuery = useDflowPositions(venueReady ? solanaAddress : null, privateApi);
+	const dflowRpcEnabled =
+		venueReady &&
+		solanaLinked &&
+		Boolean(authenticated) &&
+		dflowProof.isFetched &&
+		dflowProof.isVerified;
+	const dflowPositionsQuery = useDflowPositions(
+		venueReady ? solanaAddress : null,
+		privateApi,
+		{ enabled: dflowRpcEnabled },
+	);
 	const dflowPositionsTotal = useMemo(() => {
 		if (!dflowPositionsQuery.data) return 0;
 		return dflowPositionsQuery.data.reduce(
@@ -105,6 +121,29 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			0
 		);
 	}, [dflowPositionsQuery.data]);
+
+	// Resolved LevelUp markets live in resolvedMarketsByUmbrella (not getQuestionsForUmbrella).
+	// Each winning share is worth $1 at settlement — same economics as the Winnings table.
+	const levelUpResolvedWinningsTotal = useMemo(() => {
+		let sum = 0;
+		for (const resolvedMarkets of Object.values(resolvedMarketsByUmbrella)) {
+			if (!Array.isArray(resolvedMarkets)) continue;
+			for (const m of resolvedMarkets) {
+				const balanceId = (m as { _id?: string })?._id;
+				if (!balanceId) continue;
+				const tb = tokenBalances.get(balanceId);
+				if (!tb) continue;
+				const outcome = String(
+					(m as { resolvedOutcome?: string }).resolvedOutcome || "",
+				).toLowerCase();
+				const y = Number(tb.yesBalance) || 0;
+				const n = Number(tb.noBalance) || 0;
+				if (outcome === "yes" && y > 0) sum += y;
+				else if (outcome === "no" && n > 0) sum += n;
+			}
+		}
+		return sum;
+	}, [resolvedMarketsByUmbrella, tokenBalances]);
 
 	// Track separate loading states
 	const [hasInitialCashLoad, setHasInitialCashLoad] = React.useState(false);
@@ -158,11 +197,19 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const cashLoading =
 		!hasInitialCashLoad &&
 		(usdcBalance === null || usdcBalance === undefined);
+	const dflowBlockingPortfolio =
+		Boolean(account) &&
+		solanaLinked &&
+		Boolean(authenticated) &&
+		(!dflowProof.isFetched ||
+			(dflowProof.isVerified && dflowPositionsQuery.isLoading));
+
 	// Portfolio is loading if we haven't loaded it yet OR if balances/prices are still being fetched
 	const portfolioLoading =
 		!hasInitialPortfolioLoad ||
 		(userDataLoading && tokenBalances.size === 0) ||
-		booksPreviewLoading;
+		booksPreviewLoading ||
+		dflowBlockingPortfolio;
 
 	// Stable cash balance: LevelUp Base USDC + Polymarket Safe USDC.e + Predict BSC USDT
 	const cashBalance = useMemo(() => {
@@ -214,10 +261,15 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				const yes = Number(tb.yesBalance) || 0;
 				const no = Number(tb.noBalance) || 0;
 
-				// Get prices using questionId (transaction hash) - EXACTLY like home page
+				// Align with BookPreview from PredictionDataContext + Positions usePositionsData
 				const preview = allBooksPreview[priceId];
-				const yp = preview?.lowestAskA ?? null;
-				const np = preview?.lowestAskB ?? null;
+				const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
+				const np =
+					typeof preview?.bestNoPrice === "number"
+						? preview.bestNoPrice
+						: preview?.highestBid != null && preview?.highestBid !== undefined
+							? 1 - preview.highestBid
+							: null;
 
 				if (typeof yp === "number" || typeof np === "number") {
 					pricedMarkets += 1;
@@ -244,6 +296,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			) {
 				nextPositions = prevPositions;
 			}
+			// Always include claimable LevelUp settlement value (not in active market list / preview).
+			nextPositions += levelUpResolvedWinningsTotal;
 			const effectiveCash =
 				usdcBalance === null || usdcBalance === undefined
 					? prevCash + polySafeUsdcE + bscUsdtCash + solanaUsdcCash
@@ -276,6 +330,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		polyPositionsTotal,
 		predictPositionsTotal,
 		dflowPositionsTotal,
+		levelUpResolvedWinningsTotal,
 		polySafeUsdcE,
 		bscUsdtCash,
 		solanaUsdcCash,
@@ -307,6 +362,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		polyPositionsTotal,
 		predictPositionsTotal,
 		dflowPositionsTotal,
+		levelUpResolvedWinningsTotal,
 		polySafeUsdcE,
 		bscUsdtCash,
 		solanaUsdcCash,

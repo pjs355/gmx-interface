@@ -402,7 +402,7 @@ export default function OrdersView({
 					);
 				})}
 
-			{/* Venue orders (Predict.fun, etc.) */}
+			{/* Venue orders (Predict, etc.) */}
 			{venueOrders.filter((vo) => !removedIds.has(vo.orderId)).map((vo) => (
 				<div
 					key={`venue-${vo.orderId}`}
@@ -423,7 +423,7 @@ export default function OrdersView({
 							{vo.position}
 						</span>
 						<span style={{ color: "#888", fontSize: 12, marginLeft: 6 }}>
-							({vo.venue === "predictfun" ? "Predict.fun" : vo.venue})
+							({vo.venue === "predictfun" ? "Predict" : vo.venue})
 						</span>
 					</div>
 					<div style={{ textAlign: "center", color: vo.side === "buy" ? "#16a34a" : "#ef4444" }}>

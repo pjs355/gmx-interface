@@ -35,9 +35,14 @@ const EMPTY: DirectVenueBooks = {
  * mapping incoming books to side A / side B using the MatchedMarket identifiers.
  *
  * Predict.fun stays on the server's /ws/venue-prices (API key required).
- * LevelUp's own book already connects directly via /orderbook/:questionId.
+ * LevelUp's own book already connects directly via multiplex `/ws` on the trading page.
  */
-export function useDirectVenueBooks(matched: MatchedMarket | null): DirectVenueBooks {
+export function useDirectVenueBooks(
+	matched: MatchedMarket | null,
+	options?: { disabled?: boolean },
+): DirectVenueBooks {
+	const disabled = Boolean(options?.disabled);
+
 	const [polyBookA, setPolyBookA] = useState<OrderbookSnapshot | null>(null);
 	const [polyBookB, setPolyBookB] = useState<OrderbookSnapshot | null>(null);
 	const [dflowBookA, setDflowBookA] = useState<OrderbookSnapshot | null>(null);
@@ -78,6 +83,16 @@ export function useDirectVenueBooks(matched: MatchedMarket | null): DirectVenueB
 	}, []);
 
 	useEffect(() => {
+		if (disabled) {
+			setPolyBookA(null);
+			setPolyBookB(null);
+			setPolyConnected(false);
+			setPolyFailed(false);
+			polyClientRef.current?.disconnect();
+			polyClientRef.current = null;
+			return;
+		}
+
 		if (!polyTokenIdA && !polyTokenIdB) {
 			setPolyBookA(null);
 			setPolyBookB(null);
@@ -113,7 +128,7 @@ export function useDirectVenueBooks(matched: MatchedMarket | null): DirectVenueB
 			client.disconnect();
 			polyClientRef.current = null;
 		};
-	}, [polyTokenIdA, polyTokenIdB, handlePolyBook]);
+	}, [disabled, polyTokenIdA, polyTokenIdB, handlePolyBook]);
 
 	// --- DFlow WS ---
 	const dflowClientRef = useRef<DflowBookClient | null>(null);
@@ -129,6 +144,16 @@ export function useDirectVenueBooks(matched: MatchedMarket | null): DirectVenueB
 	}, []);
 
 	useEffect(() => {
+		if (disabled) {
+			setDflowBookA(null);
+			setDflowBookB(null);
+			setDflowConnected(false);
+			setDflowFallback(false);
+			dflowClientRef.current?.disconnect();
+			dflowClientRef.current = null;
+			return;
+		}
+
 		if (!dflowTickerA && !dflowTickerB) {
 			setDflowBookA(null);
 			setDflowBookB(null);
@@ -171,9 +196,9 @@ export function useDirectVenueBooks(matched: MatchedMarket | null): DirectVenueB
 			client.disconnect();
 			dflowClientRef.current = null;
 		};
-	}, [dflowTickerA, dflowTickerB, handleDflowBook]);
+	}, [disabled, dflowTickerA, dflowTickerB, handleDflowBook]);
 
-	if (!matched) return EMPTY;
+	if (!matched || disabled) return EMPTY;
 
 	return {
 		polyBookA,

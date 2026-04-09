@@ -2,6 +2,32 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAnimatedDots } from "../../../../hooks/useAnimatedDots";
 import { getVenueConfig } from "@/config/venueConfig";
+import { getSorBuyCashShortfall, type RoutePlan } from "@/trading/sor";
+
+type SorStateForDeposit = {
+	route: RoutePlan | null;
+	isLoading: boolean;
+	isStale?: boolean;
+	routeExpired: boolean;
+	totalAvailableCash?: number;
+	handleAddFunds?: () => void;
+};
+
+function trySorDepositToTrade(side: "buy" | "sell", sorState: SorStateForDeposit | undefined): ButtonStateResult | null {
+	if (!sorState?.handleAddFunds) return null;
+	const gap = getSorBuyCashShortfall(sorState.route, sorState.totalAvailableCash, {
+		routeExpired: sorState.routeExpired,
+		isLoading: sorState.isLoading,
+		isStale: sorState.isStale ?? false,
+		side,
+	});
+	if (!gap) return null;
+	return {
+		text: "Deposit to Trade",
+		disabled: false,
+		onClick: sorState.handleAddFunds,
+	};
+}
 
 export interface ButtonStateResult {
   text: string;
@@ -56,6 +82,7 @@ export function useButtonState({
     | {
         route: any;
         isLoading: boolean;
+        isStale: boolean;
         error: string | null;
         isExecuting: boolean;
         routeExpired: boolean;
@@ -85,7 +112,10 @@ export function useButtonState({
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
       if (state.side === "sell") {
-        const totalHeld = (sorState?.venuePositions ?? []).reduce((s, p) => s + p.shares, 0);
+        const totalHeld = (sorState?.venuePositions ?? []).reduce(
+          (sum: number, pos: { venue: string; shares: number }) => sum + pos.shares,
+          0,
+        );
         if (totalHeld <= 0) {
           return { text: "No shares to sell", disabled: true, onClick: () => {} };
         }
@@ -94,7 +124,7 @@ export function useButtonState({
         return { text: "Executing…", disabled: true, onClick: () => {} };
       }
       if (sorState?.isLoading && !sorState?.route) {
-        return { text: "Computing route…", disabled: true, onClick: () => {} };
+        return { text: "Finding best odds...", disabled: true, onClick: () => {} };
       }
       if (sorState?.error && !sorState?.route) {
         return { text: "Route unavailable", disabled: true, onClick: () => {} };
@@ -117,9 +147,13 @@ export function useButtonState({
         }
       }
 
-      const cash = sorState.totalAvailableCash ?? 0;
-      const needed = sorState.route.totalCost ?? 0;
-      if (state.side === "buy" && needed > cash && sorState.handleAddFunds) {
+      const sorAllBuyDeposit = getSorBuyCashShortfall(sorState.route, sorState.totalAvailableCash, {
+        routeExpired: sorState.routeExpired,
+        isLoading: sorState.isLoading,
+        isStale: sorState.isStale,
+        side: state.side,
+      });
+      if (sorAllBuyDeposit && sorState.handleAddFunds) {
         return {
           text: "Deposit to Trade",
           disabled: false,
@@ -202,6 +236,8 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
+      const sorBuyDeposit = trySorDepositToTrade(state.side, sorState);
+      if (sorBuyDeposit) return sorBuyDeposit;
       return {
         text: buttonText,
         disabled: false,
@@ -247,6 +283,8 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
+      const sorDflowDeposit = trySorDepositToTrade(state.side, sorState);
+      if (sorDflowDeposit) return sorDflowDeposit;
       return {
         text: buttonText,
         disabled: false,
@@ -258,28 +296,28 @@ export function useButtonState({
       const pt = predictTrading;
       if (!pt?.hasPandascoreLink) {
         return {
-          text: "Predict.fun: esports match not linked",
+          text: "Predict: esports match not linked",
           disabled: true,
           onClick: () => {},
         };
       }
       if (!pt.hasMonitorMatch) {
         return {
-          text: "Predict.fun: no matched market",
+          text: "Predict: no matched market",
           disabled: true,
           onClick: () => {},
         };
       }
       if (!pt.hasPredictMarketIds) {
         return {
-          text: "Predict.fun: market ids not linked",
+          text: "Predict: market ids not linked",
           disabled: true,
           onClick: () => {},
         };
       }
       if (pt.loading && !pt.ready) {
         return {
-          text: "Preparing Predict.fun…",
+          text: "Preparing Predict…",
           disabled: true,
           onClick: () => {},
         };
@@ -287,8 +325,8 @@ export function useButtonState({
       if (!pt.ready) {
         return {
           text: pt.blockedReason
-            ? "Predict.fun setup required"
-            : "Predict.fun unavailable",
+            ? "Predict setup required"
+            : "Predict unavailable",
           disabled: true,
           onClick: () => {},
         };
@@ -317,15 +355,17 @@ export function useButtonState({
       ) {
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
+      const sorPredictDeposit = trySorDepositToTrade(state.side, sorState);
+      if (sorPredictDeposit) return sorPredictDeposit;
       const balRaw =
         typeof predictUsdtBalance === "number" && Number.isFinite(predictUsdtBalance)
           ? predictUsdtBalance
           : 0;
       if (balRaw <= 0 && state.side === "buy") {
         return {
-          text: "Fund USDT on BNB",
-          disabled: true,
-          onClick: () => {},
+          text: "Add funds on Base (bridge to BNB for Predict)",
+          disabled: false,
+          onClick: handleAddFunds,
         };
       }
       const actionText = state.side === "buy" ? "Buy" : "Sell";
@@ -403,6 +443,11 @@ export function useButtonState({
         const sharesRequested = parseFloat(state.amount);
         isSweepingBook = sharesRequested > availableShares;
       }
+    }
+
+    if (state.tradingVenue === "levelup") {
+      const sorLuDeposit = trySorDepositToTrade(state.side, sorState);
+      if (sorLuDeposit) return sorLuDeposit;
     }
     
     const marketOrderEstimatedCost = state.orderType === "market" && state.side === "buy" ? state.estimatedCost : null;

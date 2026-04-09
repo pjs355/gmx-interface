@@ -1,11 +1,11 @@
 import { Component, lazy, Suspense, useEffect, type ErrorInfo, type ReactNode } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
 
 // Eager: homepage and listing pages (most common entry points)
 import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";
-import Predictions from "pages/Predictions/Predictions";
+// import Predictions from "pages/Predictions/Predictions";
 import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
 
 // Lazy: everything else is code-split into separate chunks
@@ -85,18 +85,22 @@ export function MainRoutes() {
 
 	return (
 		<Routes>
-			{/* Home page shows esports markets */}
-			<Route path="/" element={<FilteredPredictions filterType="esports" />} />
+			{/* Home: all markets (esports + non-esports) */}
+			<Route path="/" element={<FilteredPredictions filterType="all" />} />
 
-			<Route path="/predictions" element={<Predictions />} />
-			<Route
+			{/* Standalone predictions list + split routes disabled; redirect to home */}
+			{/* <Route path="/predictions" element={<Predictions />} /> */}
+			<Route path="/predictions" element={<Navigate to="/" replace />} />
+			{/* <Route
 				path="/predictions/esports"
 				element={<FilteredPredictions filterType="esports" />}
-			/>
-			<Route
+			/> */}
+			<Route path="/predictions/esports" element={<Navigate to="/" replace />} />
+			{/* <Route
 				path="/predictions/games"
 				element={<FilteredPredictions filterType="games" />}
-			/>
+			/> */}
+			<Route path="/predictions/games" element={<Navigate to="/" replace />} />
 			<Route
 				path="/predictions/umbrella/:umbrellaId"
 				element={<LazyPage><PredictionMarket /></LazyPage>}

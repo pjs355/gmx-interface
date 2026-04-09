@@ -105,7 +105,7 @@ export function AppHeaderUser({
 					>
 						<HeaderLink
 							className="default-btn"
-							to="/predictions"
+							to="/"
 							showRedirectModal={showRedirectModal}
 						>
 							Launch App
@@ -182,7 +182,7 @@ export function AppHeaderUser({
 				>
 					<HeaderLink
 						className="default-btn"
-						to="/predictions"
+						to="/"
 						showRedirectModal={showRedirectModal}
 					>
 						Launch App

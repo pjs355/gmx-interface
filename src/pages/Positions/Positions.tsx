@@ -13,7 +13,8 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import usePositionsData from "./hooks/usePositionsData";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
+import { markPositionsPageMount } from "./utils/portfolioPerfLog";
 import { toCentsString } from "./utils/formatCurrency";
 
 function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
@@ -28,7 +29,7 @@ function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: numbe
 
 function PortfolioSkeleton() {
 	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+		<div className="positions-portfolio-skeleton" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 			{Array.from({ length: 5 }).map((_, i) => (
 				<div
 					key={i}
@@ -53,6 +54,11 @@ function PortfolioSkeleton() {
 
 export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
+
+	useLayoutEffect(() => {
+		markPositionsPageMount();
+	}, []);
+
 	const data = usePositionsData();
 
 	const {
@@ -61,6 +67,8 @@ export default function Positions() {
 		debugAccount,
 		realAccount,
 		isDataFullyLoaded,
+		isPositionsTabContentReady,
+		dflowPositionsStripPending,
 		polyTradeHistoryLoading,
 		portfolioLoading,
 		portfolioTotalCtx,
@@ -88,6 +96,11 @@ export default function Positions() {
 	const showContentSkeleton =
 		!isDataFullyLoaded ||
 		(activeTab === "history" && polyTradeHistoryLoading);
+
+	const showTabBodySkeleton =
+		activeTab === "positions"
+			? !isPositionsTabContentReady
+			: showContentSkeleton;
 
 	const { setBlockHeaderMetrics } = usePositionsPageMetricsGate();
 	useEffect(() => {
@@ -166,6 +179,39 @@ export default function Positions() {
 					<p className="text-body" style={{ color: "#888", marginTop: "16px" }}>
 						No current positions.
 					</p>
+				)}
+				{dflowPositionsStripPending && (
+					<div className="positions-portfolio-skeleton" style={{ marginTop: 12 }}>
+						{Array.from({ length: 2 }).map((_, i) => (
+							<div
+								key={i}
+								style={{
+									borderBottom: "1px solid #1a1a1a",
+									padding: "12px 0",
+									display: "flex",
+									alignItems: "center",
+									gap: 16,
+								}}
+							>
+								<span
+									className="skeleton-box"
+									style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }}
+								/>
+								<div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+									<span
+										className="skeleton-box"
+										style={{
+											width: `${60 - i * 8}%`,
+											maxWidth: 280,
+											height: 16,
+											borderRadius: 4,
+										}}
+									/>
+									<SkeletonRow widths={[60, 50, 70, 80, 70, 90]} height={14} />
+								</div>
+							</div>
+						))}
+					</div>
 				)}
 			</>
 		);
@@ -256,7 +302,7 @@ export default function Positions() {
 					{!account && <p className="text-body">Log in to view balances.</p>}
 					{account && (
 						<>
-							{showContentSkeleton ? (
+							{showTabBodySkeleton ? (
 								<PortfolioSkeleton />
 							) : activeTab === "positions" ? (
 								renderPositionsTab()

@@ -41,7 +41,7 @@ export function usePredictOrderMatches(opts: UsePredictOrderMatchesOptions) {
 				first: "200",
 				signerAddress: filterSigner!,
 			}),
-		meta: { errorMessage: "Predict.fun order matches" },
+		meta: { errorMessage: "Predict order matches" },
 	});
 
 	return {

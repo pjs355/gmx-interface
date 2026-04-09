@@ -64,7 +64,7 @@ export function usePredictOrders(enabled = true) {
 			}
 			return rows;
 		},
-		meta: { errorMessage: "Predict.fun filled orders" },
+		meta: { errorMessage: "Predict filled orders" },
 	});
 
 	const openQuery = useQuery<PredictOrderRow[]>({
@@ -73,7 +73,7 @@ export function usePredictOrders(enabled = true) {
 		staleTime: 15_000,
 		retry: 1,
 		queryFn: () => api.getPredictOrders("OPEN"),
-		meta: { errorMessage: "Predict.fun open orders" },
+		meta: { errorMessage: "Predict open orders" },
 	});
 
 	// Surface auth errors so the UI can react

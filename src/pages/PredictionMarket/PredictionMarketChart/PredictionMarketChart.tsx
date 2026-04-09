@@ -1,39 +1,58 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import { usePredictionChartData } from "./usePredictionChartData";
-import { SeriesChart } from "./SeriesChart";
-import { ChartTooltip } from "./ChartTooltip";
+import { useMultiExchangeChartData } from "./useMultiExchangeChartData";
+import { ExchangeOverlayChart, VENUE_COLORS, VENUE_LABELS } from "./SeriesChart";
+import { getYesNoTeamLabels } from "../PredictionMarketTradeBox/teamLabels";
+import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
+import type { TimeRange } from "./types";
+import type { MergedExchangePoint } from "./types";
 import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
 import "./PredictionMarketChart.scss";
 
-// Display types handled in hook/types
-
 interface PredictionMarketChartProps {
 	questionId: string;
+	umbrellaId?: string;
+	/** PandaScore match id for live venue BBO overlay on the chart */
+	pandaMatchId?: string;
+	umbrellaDisplayName?: string;
 	activeMarket?: any;
-	secondMarket?: any; // Add second market prop
-	questionOrderbooks?: { [questionId: string]: any }; // Add orderbooks for live prices
+	secondMarket?: any;
+	questionOrderbooks?: { [questionId: string]: any };
 	className?: string;
 }
-
-type TimeRange = "1h" | "1d" | "1w" | "all";
 
 const TIME_RANGES: { key: TimeRange; label: string; seconds: number }[] = [
 	{ key: "1h", label: "1H", seconds: 3600 },
 	{ key: "1d", label: "1D", seconds: 86400 },
-	{ key: "1w", label: "1W", seconds: 604800 },
-	{ key: "all", label: "All", seconds: Infinity },
+	// { key: "all", label: "All", seconds: Infinity }, // disabled for now — too much data
 ];
+
+const CHART_HEIGHT = typeof window !== "undefined" && window.innerWidth <= 768 ? 240 : 300;
+
+const DEFAULT_ENABLED = new Set(["bestOdds"]);
 
 const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	questionId,
+	umbrellaId,
+	pandaMatchId,
+	umbrellaDisplayName,
 	activeMarket,
 	secondMarket,
 	questionOrderbooks,
 	className = "",
 }) => {
 	const [timeRange, setTimeRange] = useState<TimeRange>("1d");
+	const [enabledVenues, setEnabledVenues] = useState<Set<string>>(DEFAULT_ENABLED);
 
-	// Resolve question id from prop or activeMarket first
+	const toggleVenue = useCallback((venue: string) => {
+		setEnabledVenues((prev) => {
+			const next = new Set(prev);
+			if (next.has(venue)) next.delete(venue);
+			else next.add(venue);
+			return next;
+		});
+	}, []);
+
 	const effectiveQuestionId = useMemo(
 		() =>
 			questionId ||
@@ -41,27 +60,36 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 			activeMarket?.questionId ||
 			activeMarket?.marketId ||
 			"",
-		[questionId, activeMarket]
+		[questionId, activeMarket],
 	);
 
-	// Detect single-market VS condition and derive team labels
+	const conditionId = activeMarket?.conditionId as string | undefined;
+
 	const isVsSingleMarket = useMemo(() => {
-		const title = (
-			activeMarket?.displayName ||
-			activeMarket?.question ||
-			""
-		).trim();
+		const title = (activeMarket?.displayName || activeMarket?.question || "").trim();
 		const hasVs = /\svs\.?\s/i.test(title);
 		const single = (activeMarket as any)?.umbrellaChildrenCount === 1;
 		return Boolean(single && hasVs);
 	}, [activeMarket]);
 
-	const {
-		data: chartData,
-		timeWindowStart,
-		timeWindowEnd,
-		setTimeWindowEnd,
-	} = usePredictionChartData({
+	const { yesTeamLabel: teamAName, noTeamLabel: teamBName } = useMemo(
+		() => getYesNoTeamLabels(activeMarket, umbrellaDisplayName),
+		[activeMarket, umbrellaDisplayName],
+	);
+
+	const teamAColor: string = (activeMarket as any)?.yesColor || "#22c55e";
+	const teamBColor: string = (activeMarket as any)?.noColor || "#ef4444";
+
+	const chartTeamAColor = useMemo(
+		() => getChartStrokeColorForDarkBg(teamAColor),
+		[teamAColor],
+	);
+	const chartTeamBColor = useMemo(
+		() => getChartStrokeColorForDarkBg(teamBColor),
+		[teamBColor],
+	);
+
+	const { data: levelUpChartData } = usePredictionChartData({
 		questionId: effectiveQuestionId,
 		activeMarket,
 		secondMarket,
@@ -70,140 +98,73 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		isVsSingleMarket,
 	});
 
-	const { teamOneLabel, teamTwoLabel } = useMemo(() => {
-		const title = (
-			activeMarket?.displayName ||
-			activeMarket?.question ||
-			""
-		).trim();
-		const parts = title
-			.split(/\s*vs\.?\s*/i)
-			.map((s: string) => s.trim())
-			.filter(Boolean);
-		if (isVsSingleMarket && parts.length === 2) {
-			return { teamOneLabel: parts[0], teamTwoLabel: parts[1] };
-		}
-		return { teamOneLabel: null as any, teamTwoLabel: null as any };
-	}, [activeMarket, isVsSingleMarket]);
-
-	const yesTeamColor: string = (activeMarket as any)?.yesColor || "#8b5cf6";
-	const noTeamColor: string = (activeMarket as any)?.noColor || "#3b82f6";
-
-	// Calculate data coverage from RAW historical data (not filtered chartData)
-	// This ensures we know the full extent of data even when viewing shorter time ranges
-	const dataSpan = useMemo(() => {
-		// Get raw historical data from activeMarket
-		const rawHistorical = activeMarket?.historicalPricesYes || [];
-		if (rawHistorical.length < 2) return 0;
-
-		const timestamps = rawHistorical
-			.map((d: any) => {
-				// Handle both ts (milliseconds) and timestamp (seconds) formats
-				if (d.ts) return Math.floor(d.ts / 1000);
-				if (d.timestamp) return d.timestamp;
-				return null;
-			})
-			.filter((t: number | null) => t !== null && t !== undefined) as number[];
-
-		if (timestamps.length < 2) return 0;
-		const oldest = Math.min(...timestamps);
-		const newest = Math.max(...timestamps);
-		return newest - oldest; // in seconds
-	}, [activeMarket?.historicalPricesYes]);
-
-	// Determine which time ranges should be visible based on data coverage
-	const availableTimeRanges = useMemo(() => {
-		return TIME_RANGES.filter((range) => {
-			// Always show 1H, 1D, and All
-			if (range.key === "1h" || range.key === "1d" || range.key === "all") return true;
-
-			// For 1W, require at least 2 days of data (reasonable threshold to show weekly view)
-			if (range.key === "1w") {
-				const requiredSeconds = 2 * 86400; // 2 days minimum
-				return dataSpan >= requiredSeconds;
-			}
-
-			return true;
-		});
-	}, [dataSpan]);
-
-	// Remove container readiness check - charts should load immediately
-
-	// Compute primary market best bid for synthesized NO live indicator
-	const primaryLiveBestBid = null as number | null;
-
-	// Derive live prices and timestamps directly from frozen orderbooks
-	// Live UI indicators disabled for now
-	const computedLiveBestAsk = null as number | null;
-
-	const computedSecondLiveBestAsk = null as number | null;
-
-	// Live price computations handled via useMemo from orderbooks above
-
-	// Time window updates are handled in usePredictionChartData
-
-	// Historical data refresh is handled in the hook
-
-	// Chart data preparation handled in usePredictionChartData
-
-	// Removed 30-second interval refresh - WebSocket updates provide real-time data
-	// and the interval was causing unnecessary re-renders and chart animations
-
-	// display time handled in hook
-
-	const formatTooltipTime = (timestamp: number): string => {
-		const date = new Date(timestamp * 1000);
-		return date.toLocaleString("en-US", {
-			month: "short",
-			day: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: true,
-		});
-	};
-
-	// Tooltip content is created after titles are defined below
-
-	// Handle time range changes - allow immediate switching
-	const handleTimeRangeChange = (newTimeRange: TimeRange) => {
-		if (newTimeRange !== timeRange) {
-			setTimeRange(newTimeRange);
-		}
-	};
-
-	const currentPrimaryPrice =
-		chartData.length > 0
-			? chartData.filter((d) => d.percentage !== null).slice(-1)[0]
-					?.percentage || 0
-			: 0;
-
-	const currentSecondPrice =
-		chartData.length > 0
-			? chartData.filter((d) => d.secondPercentage !== null).slice(-1)[0]
-					?.secondPercentage || 0
-			: 0;
-
-	const primaryMarketTitle =
-		isVsSingleMarket && teamOneLabel
-			? teamOneLabel
-			: activeMarket?.displayName ||
-			  activeMarket?.question ||
-			  "Primary Market";
-	const secondMarketTitle =
-		(secondMarket
-			? secondMarket?.displayName || secondMarket?.question
-			: isVsSingleMarket && teamTwoLabel
-			? teamTwoLabel
-			: null) || "Second Market";
-
-	const TooltipContent = ChartTooltip({
-		primaryTitle: primaryMarketTitle,
-		secondaryTitle: secondMarket ? secondMarketTitle : null,
-		isVsSingleMarket,
-		formatTime: formatTooltipTime,
+	const exchangeChart = useMultiExchangeChartData({
+		conditionId,
+		umbrellaId,
+		pandaMatchId,
+		levelUpChartData,
+		timeRange,
 	});
 
-	// Guard: do not render chart until we have a valid question id and data
+	// Stale-while-loading: keep showing previous data while new range loads
+	const staleRef = useRef<{ data: MergedExchangePoint[] }>({ data: [] });
+
+	if (!exchangeChart.loading && exchangeChart.data.length > 0) {
+		staleRef.current = { data: exchangeChart.data };
+	}
+
+	const displayData = exchangeChart.data.length > 0 ? exchangeChart.data : staleRef.current.data;
+
+	/** Best odds per side (merged min-YES like the chart); fill A/B independently, then LevelUp fallback. */
+	const headerBestOdds = useMemo(() => {
+		let teamA: number | null = null;
+		let teamB: number | null = null;
+		const merged = displayData;
+		for (let i = merged.length - 1; i >= 0; i--) {
+			const p = merged[i];
+			if (teamA === null && p?.bestOdds != null && Number.isFinite(p.bestOdds)) {
+				teamA = p.bestOdds;
+			}
+			if (teamB === null && p?.bestOddsB != null && Number.isFinite(p.bestOddsB)) {
+				teamB = p.bestOddsB;
+			}
+			if (teamA !== null && teamB !== null) break;
+		}
+		const lu = levelUpChartData;
+		for (let i = lu.length - 1; i >= 0; i--) {
+			const p = lu[i];
+			if (teamA === null && p?.percentage != null && Number.isFinite(p.percentage)) {
+				teamA = p.percentage;
+			}
+			if (
+				teamB === null &&
+				p?.secondPercentage != null &&
+				Number.isFinite(p.secondPercentage)
+			) {
+				teamB = p.secondPercentage;
+			}
+			if (teamA !== null && teamB !== null) break;
+		}
+		return { teamA, teamB };
+	}, [displayData, levelUpChartData]);
+
+	const headerLive = useMemo(() => {
+		const p = levelUpChartData[levelUpChartData.length - 1];
+		if (!p) return { primary: false, secondary: false };
+		return { primary: Boolean(p.isLive), secondary: Boolean(p.secondIsLive) };
+	}, [levelUpChartData]);
+
+	const availableVenues = useMemo(() => {
+		const venues: string[] = ["bestOdds"];
+		if (exchangeChart.hasLevelUp) venues.push("levelUp");
+		if (exchangeChart.hasPolymarket) venues.push("polymarket");
+		if (exchangeChart.hasKalshi) venues.push("kalshi");
+		if (exchangeChart.hasPredictFun) venues.push("predictFun");
+		return venues;
+	}, [exchangeChart.hasLevelUp, exchangeChart.hasPolymarket, exchangeChart.hasKalshi, exchangeChart.hasPredictFun]);
+
+	const marketTitle = activeMarket?.displayName || activeMarket?.question || "Market";
+
 	if (!effectiveQuestionId) {
 		return (
 			<div className={`prediction-market-chart ${className}`}>
@@ -216,111 +177,143 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		);
 	}
 
-	// Show chart even with 0 data points - let Recharts handle empty state gracefully
-	// We only skip rendering if we don't have a valid question ID yet
+	const timeRangeSecondsForChart =
+		timeRange === "all" ? undefined : TIME_RANGES.find((r) => r.key === timeRange)?.seconds;
 
 	return (
 		<div className={`prediction-market-chart ${className}`}>
-			{/* Chart Header */}
 			<div className="chart-header">
 				<div className="chart-titles">
-					<div className="market-info primary-market">
-						<h3>{primaryMarketTitle}</h3>
-						<div className="current-price">
-							<span
-								className="price-value primary-price"
-								style={
-									isVsSingleMarket
-										? { color: yesTeamColor }
-										: undefined
-								}
-							>
-								{Math.round(currentPrimaryPrice)}%
-							</span>
-							{computedLiveBestAsk !== null && (
-								<span
-									className="live-indicator primary-indicator"
-									style={
-										isVsSingleMarket
-											? { color: yesTeamColor }
-											: undefined
-									}
-								>
-									●
-								</span>
-							)}
-						</div>
-					</div>
-
-					{(secondMarket || isVsSingleMarket) && (
-						<div className="market-info second-market">
-							<h3>{secondMarketTitle}</h3>
-							<div className="current-price">
-								<span
-									className="price-value second-price"
-									style={
-										isVsSingleMarket
-											? { color: noTeamColor }
-											: undefined
-									}
-								>
-									{Math.round(currentSecondPrice)}%
-								</span>
-								{(secondMarket
-									? computedSecondLiveBestAsk !== null
-									: primaryLiveBestBid !== null) && (
+					{headerBestOdds.teamA != null && headerBestOdds.teamB != null ? (
+						<>
+							<div className="market-info primary-market">
+								<h3>{teamAName}</h3>
+								<div className="current-price">
 									<span
-										className="live-indicator second-indicator"
+										className="price-value primary-price"
 										style={
 											isVsSingleMarket
-												? { color: noTeamColor }
+												? { color: chartTeamAColor }
 												: undefined
 										}
 									>
-										●
+										{Math.round(headerBestOdds.teamA)}%
 									</span>
-								)}
+									{headerLive.primary && (
+										<span
+											className="live-indicator primary-indicator"
+											style={
+												isVsSingleMarket
+													? { color: chartTeamAColor }
+													: undefined
+											}
+										>
+											●
+										</span>
+									)}
+								</div>
 							</div>
+							<div className="market-info second-market">
+								<h3>{teamBName}</h3>
+								<div className="current-price">
+									<span
+										className="price-value second-price"
+										style={
+											isVsSingleMarket
+												? { color: chartTeamBColor }
+												: undefined
+										}
+									>
+										{Math.round(headerBestOdds.teamB)}%
+									</span>
+									{headerLive.secondary && (
+										<span
+											className="live-indicator second-indicator"
+											style={
+												isVsSingleMarket
+													? { color: chartTeamBColor }
+													: undefined
+											}
+										>
+											●
+										</span>
+									)}
+								</div>
+							</div>
+						</>
+					) : (
+						<div className="market-info primary-market">
+							<h3>{marketTitle}</h3>
+							{headerBestOdds.teamA != null && (
+								<div className="current-price">
+									<span className="price-value primary-price">
+										{Math.round(headerBestOdds.teamA)}%
+									</span>
+									{headerLive.primary && (
+										<span className="live-indicator primary-indicator">●</span>
+									)}
+								</div>
+							)}
 						</div>
 					)}
 				</div>
-				<img src={levelUpLogo} alt="LevelUp" className="chart-logo" />
+
+				<div className="chart-header-right">
+					<img src={levelUpLogo} alt="LevelUp" className="chart-logo" />
+				</div>
 			</div>
 
-			{/* Chart */}
 			<div
 				className="chart-container"
 				style={{ minWidth: 0, minHeight: 280 }}
 			>
-				<SeriesChart
-					data={chartData as any}
-					yesTeamColor={yesTeamColor}
-					noTeamColor={noTeamColor}
-					isVsSingleMarket={isVsSingleMarket}
-					tooltip={<TooltipContent />}
-					height={
-						typeof window !== "undefined" &&
-						window.innerWidth <= 768
-							? 240
-							: 300
-					}
-					timeRangeSeconds={
-						// For "all" time range, pass undefined to let the chart auto-scale
-						timeRange === "all"
-							? undefined
-							: TIME_RANGES.find((r) => r.key === timeRange)?.seconds
-					}
-				/>
+				{exchangeChart.loading && (
+					<div className="chart-spinner-overlay">
+						<div className="chart-spinner" />
+					</div>
+				)}
+				{exchangeChart.error && !exchangeChart.loading && displayData.length === 0 && (
+					<div className="exchange-chart-empty">{exchangeChart.error}</div>
+				)}
+				{displayData.length > 0 && (
+					<ExchangeOverlayChart
+						data={displayData}
+						enabledVenues={enabledVenues}
+						teamAName={teamAName}
+						teamBName={teamBName}
+						teamAColor={chartTeamAColor}
+						teamBColor={chartTeamBColor}
+						height={CHART_HEIGHT}
+						timeRangeSeconds={timeRangeSecondsForChart}
+					/>
+				)}
 
-				{/* Time Range Selector - Bottom Right */}
+				<div className="venue-checkbox-bar">
+					{availableVenues.map((venue) => {
+						const dotStyle = venue === "bestOdds"
+							? {
+									background: `linear-gradient(135deg, ${chartTeamAColor} 50%, ${chartTeamBColor} 50%)`,
+								}
+							: { backgroundColor: VENUE_COLORS[venue] };
+						return (
+							<button
+								key={venue}
+								className={`venue-chip${enabledVenues.has(venue) ? " active" : ""}`}
+								onClick={() => toggleVenue(venue)}
+							>
+								<span className="venue-dot" style={dotStyle} />
+								{VENUE_LABELS[venue] ?? venue}
+							</button>
+						);
+					})}
+				</div>
+
 				<div className="time-range-selector bottom-right">
-					{availableTimeRanges.map((range) => (
+					{TIME_RANGES.map((range) => (
 						<button
 							key={range.key}
-							className={`time-range-btn ${
-								timeRange === range.key ? "active" : ""
-							}`}
-							onClick={() => handleTimeRangeChange(range.key)}
+							className={`time-range-btn ${timeRange === range.key ? "active" : ""}`}
+							onClick={() => setTimeRange(range.key)}
 						>
 							{range.label}
 						</button>
@@ -331,49 +324,71 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	);
 };
 
-// Memoize to prevent re-renders when props haven't changed
-const PredictionMarketChart = React.memo(
+const PredictionMarketChart = React.memo<PredictionMarketChartProps>(
 	PredictionMarketChartComponent,
 	(prevProps, nextProps) => {
-		// Only re-render if these specific values change
 		const prevQuestionId =
-			prevProps.questionId ||
-			prevProps.activeMarket?._id ||
-			prevProps.activeMarket?.questionId;
+			prevProps.questionId || prevProps.activeMarket?._id || prevProps.activeMarket?.questionId;
 		const nextQuestionId =
-			nextProps.questionId ||
-			nextProps.activeMarket?._id ||
-			nextProps.activeMarket?.questionId;
-
-		const prevSecondId =
-			prevProps.secondMarket?._id || prevProps.secondMarket?.questionId;
-		const nextSecondId =
-			nextProps.secondMarket?._id || nextProps.secondMarket?.questionId;
+			nextProps.questionId || nextProps.activeMarket?._id || nextProps.activeMarket?.questionId;
 
 		if (prevQuestionId !== nextQuestionId) return false;
+
+		if (prevProps.umbrellaId !== nextProps.umbrellaId) return false;
+
+		if (prevProps.pandaMatchId !== nextProps.pandaMatchId) return false;
+
+		if (prevProps.activeMarket?.conditionId !== nextProps.activeMarket?.conditionId) {
+			return false;
+		}
+
+		const prevSecondId = prevProps.secondMarket?._id || prevProps.secondMarket?.questionId;
+		const nextSecondId = nextProps.secondMarket?._id || nextProps.secondMarket?.questionId;
 		if (prevSecondId !== nextSecondId) return false;
 
-		// For orderbooks, only check if they exist, not their contents
-		// The hook will handle orderbook updates internally
-		if (!prevProps.questionOrderbooks && nextProps.questionOrderbooks)
-			return false;
+		// Live orderbook updates drive chart tail; reference change must re-render.
+		if (prevProps.questionOrderbooks !== nextProps.questionOrderbooks) return false;
 
-		// CRITICAL: Re-render when historical price data changes
-		// This ensures the chart updates after new trades are made
-		const prevHistoricalLength = prevProps.activeMarket?.historicalPricesYes?.length ?? 0;
-		const nextHistoricalLength = nextProps.activeMarket?.historicalPricesYes?.length ?? 0;
+		const prevHistoricalLength =
+			(prevProps.activeMarket?.historicalPricesYes?.length ?? 0) ||
+			(prevProps.activeMarket?.historicalPrices?.length ?? 0);
+		const nextHistoricalLength =
+			(nextProps.activeMarket?.historicalPricesYes?.length ?? 0) ||
+			(nextProps.activeMarket?.historicalPrices?.length ?? 0);
 		if (prevHistoricalLength !== nextHistoricalLength) return false;
 
-		// Also check if the latest price has changed (for same-length arrays)
 		if (prevHistoricalLength > 0 && nextHistoricalLength > 0) {
-			const prevLatest = prevProps.activeMarket?.historicalPricesYes?.[prevHistoricalLength - 1];
-			const nextLatest = nextProps.activeMarket?.historicalPricesYes?.[nextHistoricalLength - 1];
+			const prevArr =
+				prevProps.activeMarket?.historicalPricesYes ?? prevProps.activeMarket?.historicalPrices;
+			const nextArr =
+				nextProps.activeMarket?.historicalPricesYes ?? nextProps.activeMarket?.historicalPrices;
+			const prevLatest = prevArr?.[prevHistoricalLength - 1];
+			const nextLatest = nextArr?.[nextHistoricalLength - 1];
 			if (prevLatest?.price !== nextLatest?.price) return false;
 			if (prevLatest?.ts !== nextLatest?.ts) return false;
 		}
 
-		return true; // Props are equal, skip re-render
-	}
+		const prevSecondHist =
+			(prevProps.secondMarket?.historicalPricesYes?.length ?? 0) ||
+			(prevProps.secondMarket?.historicalPrices?.length ?? 0);
+		const nextSecondHist =
+			(nextProps.secondMarket?.historicalPricesYes?.length ?? 0) ||
+			(nextProps.secondMarket?.historicalPrices?.length ?? 0);
+		if (prevSecondHist !== nextSecondHist) return false;
+
+		if (prevSecondHist > 0 && nextSecondHist > 0) {
+			const prevArr =
+				prevProps.secondMarket?.historicalPricesYes ?? prevProps.secondMarket?.historicalPrices;
+			const nextArr =
+				nextProps.secondMarket?.historicalPricesYes ?? nextProps.secondMarket?.historicalPrices;
+			const prevLatest = prevArr?.[prevSecondHist - 1];
+			const nextLatest = nextArr?.[nextSecondHist - 1];
+			if (prevLatest?.price !== nextLatest?.price) return false;
+			if (prevLatest?.ts !== nextLatest?.ts) return false;
+		}
+
+		return true;
+	},
 );
 
 export default PredictionMarketChart;

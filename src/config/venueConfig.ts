@@ -10,14 +10,14 @@ export interface FeeEstimateParams {
 	/** Fill price as probability 0–1 */
 	price: number;
 	side: "buy" | "sell";
-	/** Per-market basis-point rate (Predict.fun) */
+	/** Per-market basis-point rate (Predict) */
 	feeRateBps?: number;
 	/** Category-level taker rate (Polymarket) */
 	feeRate?: number;
 }
 
 export interface EffectiveBudgetParams {
-	/** Per-market basis-point rate (Predict.fun) */
+	/** Per-market basis-point rate (Predict) */
 	feeRateBps?: number;
 	/** Approximate fill price 0–1 (used by venues with price-dependent fees) */
 	approxPrice?: number;
@@ -106,7 +106,7 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 
 	predictfun: {
 		id: "predictfun",
-		displayName: "Predict.fun",
+		displayName: "Predict",
 		collateral: "USDT",
 		chain: "bnb",
 		supportsLimitOrders: true,
@@ -122,7 +122,7 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 		},
 		feeDescription: "Market fee",
 		feeTooltip:
-			"Predict.fun fee is per-market (feeRateBps from API): contracts × price × feeRateBps / 10 000.",
+			"Predict fee is per-market (feeRateBps from API): contracts × price × feeRateBps / 10 000.",
 	},
 
 	dflow: {

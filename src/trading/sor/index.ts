@@ -35,4 +35,14 @@ export {
 	CHAIN_LIFI_IDS,
 	VENUE_DISPLAY_NAMES,
 	VENUE_COLORS,
+	getExecutionShortfallBannerText,
 } from "./sor-types";
+
+export {
+	sorChainDisplayName,
+	formatSorUsd2,
+	derivedBridgeUsdForDisplay,
+	buildFundsTransferTooltip,
+	getSorBuyCashShortfall,
+} from "./sorUiUtils";
+export type { SorBuyCashShortfall, SorCashGateInput } from "./sorUiUtils";

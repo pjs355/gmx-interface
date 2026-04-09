@@ -1,4 +1,4 @@
-export type TimeRange = '1h' | '1d' | '1w' | 'all';
+export type TimeRange = '1h' | '1d' | 'all';
 
 export interface ChartDataPoint {
   timestamp: number;
@@ -13,4 +13,18 @@ export interface ChartDataPoint {
   secondIsLive?: boolean;
 }
 
-
+export interface MergedExchangePoint {
+  timestamp: number;
+  // Team A
+  levelUp?: number;
+  polymarket?: number;
+  kalshi?: number;
+  predictFun?: number;
+  bestOdds?: number;
+  // Team B (vs markets only, computed as 100 - TeamA)
+  levelUpB?: number;
+  polymarketB?: number;
+  kalshiB?: number;
+  predictFunB?: number;
+  bestOddsB?: number;
+}

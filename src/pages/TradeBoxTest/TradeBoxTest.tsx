@@ -70,10 +70,10 @@ function TradeBoxTestInner() {
 					return;
 				}
 				// Not authorized → redirect
-				navigate("/predictions", { replace: true });
+				navigate("/", { replace: true });
 			} catch (err) {
 				console.error("Admin check error:", err);
-				navigate("/predictions", { replace: true });
+				navigate("/", { replace: true });
 			} finally {
 				if (mounted) setCheckingAdmin(false);
 			}
@@ -584,7 +584,7 @@ function TradeBoxTestInner() {
 				<div className="test-header">
 					<h1>Trade Box Test Page</h1>
 					<p className="error">No market ID provided.</p>
-					<button onClick={() => navigate("/predictions")}>
+					<button onClick={() => navigate("/")}>
 						Go to Predictions
 					</button>
 				</div>

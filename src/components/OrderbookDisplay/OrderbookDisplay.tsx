@@ -21,7 +21,12 @@ const calculateOrderbookPrices = (orderbook: OrderbookSnapshot | null) => {
 
 	return { bestAsk, bestBid };
 };
-import { shortenTeamLabelForButton } from "@/helpers/predictionUtils";
+import {
+	shortenTeamLabelForButton,
+	hexToRgba,
+	getContrastingTextColor,
+	mixHexOnBlack,
+} from "@/helpers/predictionUtils";
 import { getYesNoTeamLabels } from "@/pages/PredictionMarket/PredictionMarketTradeBox/teamLabels";
 import DepthBar from "./DepthBar";
 import "./OrderbookDisplay.scss";
@@ -169,21 +174,22 @@ export default function OrderbookDisplay({
 	const yesColor: string = (market as any)?.yesColor || "#8b5cf6";
 	const noColor: string = (market as any)?.noColor || "#3b82f6";
 
-	const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
-		if (!hex) return `rgba(0,0,0,${alpha})`;
-		const cleaned = hex.replace("#", "");
-		const full =
-			cleaned.length === 3
-				? cleaned
-						.split("")
-						.map((c) => c + c)
-						.join("")
-				: cleaned;
-		const r = parseInt(full.substring(0, 2), 16) || 0;
-		const g = parseInt(full.substring(2, 4), 16) || 0;
-		const b = parseInt(full.substring(4, 6), 16) || 0;
-		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-	};
+	const yesTextOnSolid = useMemo(
+		() => getContrastingTextColor(yesColor),
+		[yesColor],
+	);
+	const yesTextOnTint = useMemo(
+		() => getContrastingTextColor(mixHexOnBlack(yesColor, 0.35)),
+		[yesColor],
+	);
+	const noTextOnSolid = useMemo(
+		() => getContrastingTextColor(noColor),
+		[noColor],
+	);
+	const noTextOnTint = useMemo(
+		() => getContrastingTextColor(mixHexOnBlack(noColor, 0.35)),
+		[noColor],
+	);
 
 	const { bestBid: noBestBid, bestAsk: noBestAsk } = useMemo(() => {
 		if (noSideOrderbook) return calculateOrderbookPrices(noSideOrderbook);
@@ -253,8 +259,11 @@ export default function OrderbookDisplay({
 									style={
 										isVsSingle
 											? {
-													background: hexToRgba(yesColor, 0.35),
-													color: "#ffffff",
+													background: hexToRgba(
+														yesColor,
+														0.35,
+													),
+													color: yesTextOnTint,
 													border: `2px solid ${hexToRgba(yesColor, 0.35)}`,
 											  }
 											: undefined
@@ -283,8 +292,11 @@ export default function OrderbookDisplay({
 									style={
 										isVsSingle
 											? {
-													background: hexToRgba(noColor, 0.35),
-													color: "#ffffff",
+													background: hexToRgba(
+														noColor,
+														0.35,
+													),
+													color: noTextOnTint,
 													border: `2px solid ${hexToRgba(noColor, 0.35)}`,
 											  }
 											: undefined
@@ -628,7 +640,10 @@ export default function OrderbookDisplay({
 																yesColor,
 																0.35
 														  ),
-												color: "#ffffff",
+												color:
+													activeTab === "yes"
+														? yesTextOnSolid
+														: yesTextOnTint,
 												border: `2px solid ${
 													activeTab === "yes"
 														? yesColor
@@ -707,7 +722,10 @@ export default function OrderbookDisplay({
 																noColor,
 																0.35
 														  ),
-												color: "#ffffff",
+												color:
+													activeTab === "no"
+														? noTextOnSolid
+														: noTextOnTint,
 												border: `2px solid ${
 													activeTab === "no"
 														? noColor

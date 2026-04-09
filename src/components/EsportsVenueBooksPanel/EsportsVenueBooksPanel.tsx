@@ -1,109 +1,9 @@
-import { useMemo } from "react";
-import { useOddsMonitor } from "@/context/OddsMonitorContext";
-import type { MatchedMarket, OrderbookData, SnapshotStatus } from "@/types/odds-monitor";
-import type { OrderbookSnapshot } from "@/services/api/orderbookService";
-import type { DirectVenueBooks } from "@/trading/venue-books";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
-import { useVenueBbo } from "@/hooks/useVenueBbo";
-import type { VenueBboResponse } from "@/hooks/useVenueBbo";
+import type { SnapshotStatus } from "@/types/odds-monitor";
+import type { TradingPagePrices, VenueRowModel } from "@/hooks/useTradingPagePrices";
 import "./EsportsVenueBooksPanel.scss";
 
 const MIN_VALID_PRICE = 0.005;
 const MAX_VALID_PRICE = 0.995;
-
-function bestAskProb(book: OrderbookData | null | undefined): number | null {
-	if (!book) return null;
-
-	if (book.bestAsk !== null && book.bestAsk !== undefined) {
-		const p = typeof book.bestAsk === "number" ? book.bestAsk : Number(book.bestAsk);
-		if (Number.isFinite(p) && p >= MIN_VALID_PRICE && p <= MAX_VALID_PRICE) return p;
-	}
-
-	if (book.asks?.length) {
-		let min = Infinity;
-		for (const a of book.asks) {
-			if (a.size > 0 && a.price >= MIN_VALID_PRICE && a.price <= MAX_VALID_PRICE && a.price < min) min = a.price;
-		}
-		if (min !== Infinity) return min;
-	}
-
-	return null;
-}
-
-function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | undefined {
-	return book?.snapshotStatus;
-}
-
-type VenueRowModel = {
-	id: string;
-	label: string;
-	linked: boolean;
-	askA: number | null;
-	askB: number | null;
-	statusA?: SnapshotStatus;
-	statusB?: SnapshotStatus;
-};
-
-function bestAskFromSnapshot(snap: OrderbookSnapshot | null | undefined): number | null {
-	if (!snap?.asks?.length) return null;
-	let min = Infinity;
-	for (const a of snap.asks) {
-		if (a.size > 0 && a.price >= MIN_VALID_PRICE && a.price <= MAX_VALID_PRICE && a.price < min) min = a.price;
-	}
-	return min === Infinity ? null : min;
-}
-
-function buildVenueRows(m: MatchedMarket, directBooks?: DirectVenueBooks | null): VenueRowModel[] {
-	const polyAskA = bestAskProb(m.polyPriceA) ?? bestAskFromSnapshot(directBooks?.polyBookA);
-	const polyAskB = bestAskProb(m.polyPriceB) ?? bestAskFromSnapshot(directBooks?.polyBookB);
-
-	const dflowLinked = Boolean(getDflowKalshiMonitorLink(m));
-	const dflowAskA = dflowLinked
-		? (bestAskProb(m.dflowPriceA ?? m.kalshiPriceA) ?? bestAskFromSnapshot(directBooks?.dflowBookA))
-		: null;
-	const dflowAskB = dflowLinked
-		? (bestAskProb(m.dflowPriceB ?? m.kalshiPriceB) ?? bestAskFromSnapshot(directBooks?.dflowBookB))
-		: null;
-
-	return [
-		{
-			id: "poly",
-			label: "Polymarket",
-			linked: Boolean(m.polyConditionId || m.polyTokenIdA),
-			askA: polyAskA,
-			askB: polyAskB,
-			statusA: bookStatus(m.polyPriceA),
-			statusB: bookStatus(m.polyPriceB),
-		},
-		{
-			id: "dflow",
-			label: "Kalshi",
-			linked: dflowLinked,
-			askA: dflowAskA,
-			askB: dflowAskB,
-			statusA: bookStatus(m.dflowPriceA ?? m.kalshiPriceA),
-			statusB: bookStatus(m.dflowPriceB ?? m.kalshiPriceB),
-		},
-		{
-			id: "limitless",
-			label: "Limitless",
-			linked: Boolean(m.limitless),
-			askA: m.limitless ? bestAskProb(m.limitlessPriceA) : null,
-			askB: m.limitless ? bestAskProb(m.limitlessPriceB) : null,
-			statusA: bookStatus(m.limitlessPriceA),
-			statusB: bookStatus(m.limitlessPriceB),
-		},
-		{
-			id: "predictFun",
-			label: "Predict.fun",
-			linked: Boolean(m.predictFun),
-			askA: m.predictFun ? bestAskProb(m.predictFunPriceA) : null,
-			askB: m.predictFun ? bestAskProb(m.predictFunPriceB) : null,
-			statusA: bookStatus(m.predictFunPriceA),
-			statusB: bookStatus(m.predictFunPriceB),
-		},
-	];
-}
 
 function formatAskCell(
 	linked: boolean,
@@ -137,147 +37,27 @@ function askCellClass(
 	return base;
 }
 
-function isValidPrice(p: number): boolean {
-	return p >= MIN_VALID_PRICE && p <= MAX_VALID_PRICE;
-}
-
-function computeLevelUpRow(orderbook: OrderbookSnapshot | null | undefined): { askA: number | null; askB: number | null } {
-	if (!orderbook) return { askA: null, askB: null };
-	const posAsks = orderbook.asks?.filter((a) => a.size > 0 && isValidPrice(a.price)) ?? [];
-	const bestAsk = posAsks.length > 0
-		? Math.min(...posAsks.map((a) => a.price))
-		: null;
-	const posBids = orderbook.bids?.filter((b) => b.size > 0 && isValidPrice(b.price)) ?? [];
-	const bestBid = posBids.length > 0
-		? Math.max(...posBids.map((b) => b.price))
-		: null;
-	const askB = bestBid !== null ? 1 - bestBid : null;
-	return {
-		askA: bestAsk,
-		askB: askB !== null && isValidPrice(askB) ? askB : null,
-	};
-}
-
-const VENUE_LABEL_MAP: Record<string, string> = {
-	polymarket: "Polymarket",
-	dflow: "Kalshi",
-	predictfun: "Predict.fun",
-	limitless: "Limitless",
-};
-
-function buildVenueRowsFromRest(
-	bbo: VenueBboResponse,
-	levelUpOrderbook: OrderbookSnapshot | null | undefined,
-): { rows: VenueRowModel[]; teamA: string; teamB: string } {
-	const luPrices = computeLevelUpRow(levelUpOrderbook);
-	const luRestA = bbo.levelup.bestAskA && isValidPrice(bbo.levelup.bestAskA) ? bbo.levelup.bestAskA : null;
-	const luRestB = bbo.levelup.bestAskB && isValidPrice(bbo.levelup.bestAskB) ? bbo.levelup.bestAskB : null;
-	const luRow: VenueRowModel = {
-		id: "levelup",
-		label: "LevelUp",
-		linked: luPrices.askA !== null || luPrices.askB !== null || luRestA !== null,
-		askA: luPrices.askA ?? luRestA,
-		askB: luPrices.askB ?? luRestB,
-	};
-
-	const venueRows: VenueRowModel[] = bbo.venues
-		.filter((v) => v.linked)
-		.map((v) => ({
-			id: v.venue,
-			label: VENUE_LABEL_MAP[v.venue] ?? v.venue,
-			linked: true,
-			askA: v.bestAskA && isValidPrice(v.bestAskA) ? v.bestAskA : null,
-			askB: v.bestAskB && isValidPrice(v.bestAskB) ? v.bestAskB : null,
-			statusA: v.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined,
-			statusB: v.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined,
-		}));
-
-	const rows = luRow.linked ? [luRow, ...venueRows] : venueRows;
-	return { rows, teamA: bbo.pandaTeamA, teamB: bbo.pandaTeamB };
-}
-
 type Props = {
-	pandascoreMatchId: string;
-	levelUpOrderbook?: OrderbookSnapshot | null;
-	directBooks?: DirectVenueBooks | null;
+	tradingPagePrices: TradingPagePrices;
 };
 
-export function EsportsVenueBooksPanel({ pandascoreMatchId, levelUpOrderbook, directBooks }: Props) {
-	const { enabled, connected, appState, lastWsError } = useOddsMonitor();
+export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
+	const {
+		venueRows,
+		bestAIdx,
+		bestBIdx,
+		teamA,
+		teamB,
+		source,
+		wsEnabled,
+		wsConnected,
+		isLoading,
+		restError,
+		matched,
+		appState,
+	} = tradingPagePrices;
 
-	const restBbo = useVenueBbo(pandascoreMatchId, true);
-
-	const matched = useMemo((): MatchedMarket | null => {
-		if (!appState?.markets?.length) return null;
-		const id = String(pandascoreMatchId);
-		return (
-			appState.markets.find((m) => String(m.pandaMatchId) === id) ?? null
-		);
-	}, [appState?.markets, pandascoreMatchId]);
-
-	const hasDirectBookPrices = Boolean(
-		directBooks?.polyBookA?.asks?.length || directBooks?.polyBookB?.asks?.length
-		|| directBooks?.dflowBookA?.asks?.length || directBooks?.dflowBookB?.asks?.length
-	);
-	const wsHasVenuePrices = connected && matched && (
-		matched.polyPriceA !== null || matched.dflowPriceA !== null
-		|| matched.predictFunPriceA !== null || matched.limitlessPriceA !== null
-		|| hasDirectBookPrices
-	);
-
-	const { venueRows, bestAIdx, bestBIdx, teamA, teamB } = useMemo(() => {
-		function computeBest(rows: VenueRowModel[]) {
-			let bestA = Infinity;
-			let bestAIndex = -1;
-			let bestB = Infinity;
-			let bestBIndex = -1;
-			rows.forEach((r, i) => {
-				if (r.askA !== null && isValidPrice(r.askA) && r.askA < bestA) { bestA = r.askA; bestAIndex = i; }
-				if (r.askB !== null && isValidPrice(r.askB) && r.askB < bestB) { bestB = r.askB; bestBIndex = i; }
-			});
-			return { bestAIdx: bestAIndex, bestBIdx: bestBIndex };
-		}
-
-		if (wsHasVenuePrices && matched) {
-			const externalRows = buildVenueRows(matched, directBooks).filter((r) => r.linked);
-			const luPrices = computeLevelUpRow(levelUpOrderbook);
-			const luRow: VenueRowModel = {
-				id: "levelup",
-				label: "LevelUp",
-				linked: luPrices.askA !== null || luPrices.askB !== null,
-				askA: luPrices.askA,
-				askB: luPrices.askB,
-			};
-			const rows = luRow.linked ? [luRow, ...externalRows] : externalRows;
-			const { bestAIdx: bA, bestBIdx: bB } = computeBest(rows);
-			return { venueRows: rows, bestAIdx: bA, bestBIdx: bB, teamA: matched.pandaTeamA, teamB: matched.pandaTeamB };
-		}
-
-		if (restBbo.data) {
-			const { rows, teamA: rTeamA, teamB: rTeamB } = buildVenueRowsFromRest(restBbo.data, levelUpOrderbook);
-			const { bestAIdx: bA, bestBIdx: bB } = computeBest(rows);
-			return { venueRows: rows, bestAIdx: bA, bestBIdx: bB, teamA: rTeamA, teamB: rTeamB };
-		}
-
-		if (connected && matched) {
-			const externalRows = buildVenueRows(matched, directBooks).filter((r) => r.linked);
-			const luPrices = computeLevelUpRow(levelUpOrderbook);
-			const luRow: VenueRowModel = {
-				id: "levelup",
-				label: "LevelUp",
-				linked: luPrices.askA !== null || luPrices.askB !== null,
-				askA: luPrices.askA,
-				askB: luPrices.askB,
-			};
-			const rows = luRow.linked ? [luRow, ...externalRows] : externalRows;
-			const { bestAIdx: bA, bestBIdx: bB } = computeBest(rows);
-			return { venueRows: rows, bestAIdx: bA, bestBIdx: bB, teamA: matched.pandaTeamA, teamB: matched.pandaTeamB };
-		}
-
-		return { venueRows: [] as VenueRowModel[], bestAIdx: -1, bestBIdx: -1, teamA: "", teamB: "" };
-	}, [wsHasVenuePrices, connected, matched, levelUpOrderbook, restBbo.data, directBooks]);
-
-	if (!enabled) {
+	if (!wsEnabled) {
 		return (
 			<div className="esports-venue-books">
 				<p className="esports-venue-books__muted">
@@ -290,14 +70,14 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId, levelUpOrderbook, di
 	}
 
 	if (venueRows.length === 0) {
-		if (restBbo.isLoading) {
+		if (isLoading) {
 			return (
 				<div className="esports-venue-books">
 					<p className="esports-venue-books__status">Loading venue prices…</p>
 				</div>
 			);
 		}
-		if (restBbo.error && !connected) {
+		if (restError && !wsConnected) {
 			return (
 				<div className="esports-venue-books">
 					<p className="esports-venue-books__muted">
@@ -306,12 +86,11 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId, levelUpOrderbook, di
 				</div>
 			);
 		}
-		if (connected && !matched) {
+		if (wsConnected && !matched) {
 			return (
 				<div className="esports-venue-books">
 					<p className="esports-venue-books__muted">
-						No monitor row for PandaScore match{" "}
-						<code>{pandascoreMatchId}</code>. The match may not be linked on
+						No monitor row for this match. The match may not be linked on
 						the odds server yet.
 					</p>
 				</div>
@@ -342,7 +121,7 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId, levelUpOrderbook, di
 			) : null}
 			{pf?.enabled && pf.lastError ? (
 				<p className="esports-venue-books__warn">
-					<strong>Predict.fun</strong> — {pf.lastError}
+					<strong>Predict</strong> — {pf.lastError}
 				</p>
 			) : null}
 
@@ -376,7 +155,7 @@ export function EsportsVenueBooksPanel({ pandascoreMatchId, levelUpOrderbook, di
 						</tr>
 					</thead>
 					<tbody>
-					{venueRows.map((row, idx) => (
+					{venueRows.map((row: VenueRowModel, idx: number) => (
 						<tr key={row.id} className="esports-venue-books__tr">
 							<th
 								scope="row"

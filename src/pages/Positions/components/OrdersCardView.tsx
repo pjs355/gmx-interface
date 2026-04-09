@@ -442,7 +442,7 @@ export default function OrdersCardView({
 				);
 			})}
 
-		{/* Venue orders (Predict.fun, etc.) */}
+		{/* Venue orders (Predict, etc.) */}
 		{venueOrders.filter((vo) => !removedIds.has(vo.orderId)).map((vo) => (
 			<div
 				key={`venue-${vo.orderId}`}
@@ -466,7 +466,7 @@ export default function OrdersCardView({
 				>
 					<div style={{ flex: 1 }}>
 						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
-							{vo.venue === "predictfun" ? "Predict.fun" : vo.venue}
+							{vo.venue === "predictfun" ? "Predict" : vo.venue}
 						</div>
 						<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
 							{vo.marketTitle}{" "}

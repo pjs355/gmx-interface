@@ -1,5 +1,7 @@
 /** Books-focused subset of odds monitor AppState (WebSocket). */
 
+import type { MatchedMarketsDflowWire } from "./matchedMarketsDflowWire";
+
 /** Polymarket CLOB tick size strings when the UIServer includes them on a row. */
 export type PolymarketClobTickSize =
 	| "0.1"
@@ -68,16 +70,11 @@ export interface MatchedMarket {
 	polyNegRisk?: boolean | null;
 	/**
 	 * DFlow (tokenized Kalshi) — preferred monitor keys when aggregator sources DFlow.
-	 * Same structure as legacy `kalshi` linkage below.
+	 * REST rows include {@link MatchedMarketsDflowWire}; monitor/metadata may add no-mints only.
 	 */
-	dflow?: {
-		tickerA: string;
-		tickerB?: string;
-		eventTicker: string;
-		/** Solana SPL mint for the YES outcome of side A (from DFlow Metadata `accounts.*.yesMint`). */
-		yesMintA?: string;
+	dflow?: MatchedMarketsDflowWire & {
+		/** Not on GET /matched-markets umbrella doc; from monitor or client resolution. */
 		noMintA?: string;
-		yesMintB?: string;
 		noMintB?: string;
 	};
 	dflowPriceA?: OrderbookData | null;
@@ -122,6 +119,9 @@ export interface MatchedMarket {
 	};
 	predictFunPriceA?: OrderbookData | null;
 	predictFunPriceB?: OrderbookData | null;
+	/** LevelUp internal book from venue-prices WebSocket (`venue: "levelup"`). */
+	levelUpPriceA?: OrderbookData | null;
+	levelUpPriceB?: OrderbookData | null;
 	venueStatuses?: VenueStatusInfo[];
 }
 

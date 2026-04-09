@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import type { RoutePlan } from "./sor-types";
-import { VENUE_DISPLAY_NAMES, VENUE_COLORS } from "./sor-types";
+import {
+	VENUE_DISPLAY_NAMES,
+	VENUE_COLORS,
+	getExecutionShortfallBannerText,
+} from "./sor-types";
 
 interface SorRouteDisplayProps {
 	route: RoutePlan | null;
@@ -48,8 +52,6 @@ function ExpiryCountdown({ expiresAt }: { expiresAt: number }) {
 	return <span style={{ color: remaining <= 2 ? "#f59e0b" : "#9ca3af" }}>Expires {remaining}s</span>;
 }
 
-const pulseKeyframes = `@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`;
-
 export function SorRouteDisplay({
 	route,
 	isLoading,
@@ -88,20 +90,13 @@ export function SorRouteDisplay({
 	}
 
 	if (!route && isLoading) {
-		return (
-			<div style={styles.container}>
-				<style>{pulseKeyframes}</style>
-				<div style={styles.loadingBar}>
-					<div style={styles.loadingPulse} />
-					<span style={{ color: "#9ca3af", fontSize: 13 }}>Computing optimal route...</span>
-				</div>
-			</div>
-		);
+		return null;
 	}
 
 	if (!route) return null;
 
 	const hasSavings = route.savingsVsSingleVenue.percentImprovement > 5;
+	const shortfallBanner = getExecutionShortfallBannerText(route);
 
 	return (
 		<div style={{ ...styles.container, opacity: isStale && !isLoading ? 0.7 : 1 }}>
@@ -136,6 +131,11 @@ export function SorRouteDisplay({
 						Smart Route: +{formatShares(route.savingsVsSingleVenue.extraShares)} shares
 						({formatPercent(route.savingsVsSingleVenue.percentImprovement)}) vs{" "}
 						{VENUE_DISPLAY_NAMES[route.singleVenueBest.venue]} alone
+					</div>
+				)}
+				{shortfallBanner && (
+					<div style={styles.shortfallBanner} role="status">
+						{shortfallBanner}
 					</div>
 				)}
 			</div>
@@ -266,6 +266,14 @@ const styles: Record<string, React.CSSProperties> = {
 		borderRadius: 4,
 		backgroundColor: "rgba(34, 197, 94, 0.1)",
 	},
+	shortfallBanner: {
+		fontSize: 12,
+		color: "#93c5fd",
+		lineHeight: 1.45,
+		padding: "6px 8px",
+		borderRadius: 4,
+		backgroundColor: "rgba(59, 130, 246, 0.12)",
+	},
 	legsContainer: {
 		display: "flex",
 		flexDirection: "column",
@@ -373,19 +381,6 @@ const styles: Record<string, React.CSSProperties> = {
 		fontSize: 11,
 		fontWeight: 700,
 		flexShrink: 0,
-	},
-	loadingBar: {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		padding: "8px 0",
-	},
-	loadingPulse: {
-		width: 12,
-		height: 12,
-		borderRadius: "50%",
-		backgroundColor: "#6366f1",
-		animation: "pulse 1.5s infinite",
 	},
 	refreshIndicator: {
 		fontSize: 11,

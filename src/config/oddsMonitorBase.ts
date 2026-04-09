@@ -3,7 +3,8 @@
  * Replaces the old Amsterdam odds monitor. No token required.
  */
 
-import { getEnvironment, isLocalApi } from "./environment";
+import { isLocalApi } from "./environment";
+import { getPrivateApiBaseUrl } from "./privateApiBase";
 import { getPredictionApiBaseUrl } from "./predictionApiBase";
 
 const WS_PATH = "/ws/venue-prices";
@@ -66,4 +67,23 @@ export function getMatchedMarketsUrl(): string {
 	}
 	const apiBase = getPredictionApiBaseUrl().replace(/\/$/, "");
 	return `${apiBase}/matched-markets`;
+}
+
+/**
+ * Base URL for Predict.fun proxy routes (`/api/predict/...`), including timeseries.
+ *
+ * In Vite dev + browser: return "" so requests use same origin as the app (e.g. :3010) and
+ * `vite.config` `server.proxy` forwards `/api/predict` to :8080 — avoids cross-origin/CORS
+ * when the UI and API are on different ports.
+ *
+ * Non-browser / prod: full host from private API (or localhost for local API mode).
+ */
+export function getPredictTimeseriesApiBaseUrl(): string {
+	if (import.meta.env.DEV && typeof window !== "undefined") {
+		return "";
+	}
+	if (isLocalApi()) {
+		return "http://localhost:8080";
+	}
+	return getPrivateApiBaseUrl();
 }

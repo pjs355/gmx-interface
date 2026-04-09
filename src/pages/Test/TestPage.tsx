@@ -66,10 +66,10 @@ export default function TestPage() {
 					return;
 				}
 				// Not authorized → redirect
-				navigate("/predictions", { replace: true });
+				navigate("/", { replace: true });
 			} catch (err) {
 				console.error("Admin check error:", err);
-				navigate("/predictions", { replace: true });
+				navigate("/", { replace: true });
 			} finally {
 				if (mounted) setCheckingAdmin(false);
 			}

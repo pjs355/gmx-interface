@@ -56,6 +56,8 @@ export interface RouteLeg {
 	estimatedTimeSeconds: number;
 	bridge: RouteLegBridge | null;
 	minSharesAtSlippage: number;
+	/** When set by SOR, use as limit price for LevelUp legs (slippage cap). */
+	maxPrice?: number;
 	venueMarketIds: VenueMarketIds;
 }
 
@@ -70,6 +72,15 @@ export interface VenueRequirements {
 	needsClobSession?: boolean;
 	needsPredictAuth?: boolean;
 	needsProxyWallet?: boolean;
+	executionReady?: boolean;
+	blockingReasons?: string[];
+}
+
+/** Buy routes: optimal plan includes venues the user cannot execute yet. */
+export interface ExecutionShortfall {
+	executableTotalShares: number;
+	extraSharesIfFullyReady: number;
+	venuesBlocking: SorVenue[];
 }
 
 export interface RoutePlan {
@@ -95,6 +106,7 @@ export interface RoutePlan {
 	venuesConsidered: SorVenue[];
 	venuesExcluded: SorVenue[];
 	venueRequirements: Partial<Record<SorVenue, VenueRequirements>>;
+	executionShortfall?: ExecutionShortfall;
 	hmac: string;
 	expiresAt: number;
 	computedInMs: number;
@@ -180,7 +192,7 @@ export const VENUE_DISPLAY_NAMES: Record<SorVenue, string> = {
 	levelup: "LevelUp",
 	polymarket: "Polymarket",
 	dflow: "Kalshi",
-	predictfun: "Predict.fun",
+	predictfun: "Predict",
 };
 
 export const VENUE_COLORS: Record<SorVenue, string> = {
@@ -189,3 +201,30 @@ export const VENUE_COLORS: Record<SorVenue, string> = {
 	dflow: "#f59e0b",
 	predictfun: "#ec4899",
 };
+
+const EXEC_SHORTFALL_EPS = 0.01;
+
+function formatShortfallShares(n: number): string {
+	return n % 1 === 0 ? String(Math.round(n)) : n.toFixed(1);
+}
+
+/** User-facing line for the “missed opportunity” banner (buy + executionShortfall). */
+export function getExecutionShortfallBannerText(route: RoutePlan): string | null {
+	if (route.side !== "buy" || !route.executionShortfall) return null;
+	const { extraSharesIfFullyReady, executableTotalShares, venuesBlocking } =
+		route.executionShortfall;
+	if (extraSharesIfFullyReady <= EXEC_SHORTFALL_EPS) return null;
+
+	const plus = formatShortfallShares(extraSharesIfFullyReady);
+	const today = formatShortfallShares(executableTotalShares);
+
+	const onlyDflow =
+		venuesBlocking.length === 1 && venuesBlocking[0] === "dflow";
+	const setupLead = onlyDflow
+		? "Complete Kalshi (DFlow) verification"
+		: venuesBlocking.length > 0
+			? `Complete setup on ${venuesBlocking.map((v) => VENUE_DISPLAY_NAMES[v]).join(", ")}`
+			: "Complete venue setup";
+
+	return `${setupLead} to unlock about +${plus} more shares on this route. With your connected venues you’d get about ${today} shares today.`;
+}

@@ -18,6 +18,10 @@ import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { RoutePlan, RouteExecution } from "@/trading/sor";
 import Button from "components/Button/Button";
 import { getYesNoTeamLabels } from "./teamLabels";
+import {
+	hexToRgba,
+	getContrastingTextColor,
+} from "@/helpers/predictionUtils";
 
 export interface StableButtonPrices {
 	yesBestAsk: number | null; yesBestBid: number | null;
@@ -233,27 +237,20 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	const yesTeamColor: string = (market as any)?.yesColor || "#22c55e";
 	const noTeamColor: string = (market as any)?.noColor || "#ef4444";
 
+	const yesCurtainTextSolid = useMemo(
+		() => getContrastingTextColor(yesTeamColor),
+		[yesTeamColor],
+	);
+	const noCurtainTextSolid = useMemo(
+		() => getContrastingTextColor(noTeamColor),
+		[noTeamColor],
+	);
+
 	const { yesTeamLabel: mobileYesLabel, noTeamLabel: mobileNoLabel } =
 		useMemo(
 			() => getYesNoTeamLabels(market, umbrellaDisplayName),
 			[market, umbrellaDisplayName],
 		);
-
-	const hexToRgba = (hex?: string, alpha: number = 0.35): string => {
-		if (!hex) return `rgba(0,0,0,${alpha})`;
-		const cleaned = hex.replace("#", "");
-		const full =
-			cleaned.length === 3
-				? cleaned
-						.split("")
-						.map((c) => c + c)
-						.join("")
-				: cleaned;
-		const r = parseInt(full.substring(0, 2), 16) || 0;
-		const g = parseInt(full.substring(2, 4), 16) || 0;
-		const b = parseInt(full.substring(4, 6), 16) || 0;
-		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-	};
 
 	const openWithPosition = useCallback(
 		(position: "yes" | "no") => {
@@ -326,7 +323,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 									background: isVsSingle
 										? yesTeamColor
 										: "rgba(34, 197, 94, 0.1)",
-									color: isVsSingle ? "#ffffff" : "#22c55e",
+									color: isVsSingle
+										? yesCurtainTextSolid
+										: "#22c55e",
 									border: `2px solid ${
 										isVsSingle ? yesTeamColor : "#22c55e"
 									}`,
@@ -336,6 +335,10 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 										isVsSingle
 											? yesTeamColor
 											: "rgba(34, 197, 94, 0.2)";
+									if (isVsSingle) {
+										e.currentTarget.style.color =
+											yesCurtainTextSolid;
+									}
 									e.currentTarget.style.transform =
 										"translateY(-1px)";
 									e.currentTarget.style.boxShadow = isVsSingle
@@ -350,6 +353,10 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 										isVsSingle
 											? yesTeamColor
 											: "rgba(34, 197, 94, 0.1)";
+									if (isVsSingle) {
+										e.currentTarget.style.color =
+											yesCurtainTextSolid;
+									}
 									e.currentTarget.style.transform =
 										"translateY(0)";
 									e.currentTarget.style.boxShadow = "none";
@@ -371,7 +378,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 									background: isVsSingle
 										? noTeamColor
 										: "rgba(239, 68, 68, 0.1)",
-									color: isVsSingle ? "#ffffff" : "#ef4444",
+									color: isVsSingle
+										? noCurtainTextSolid
+										: "#ef4444",
 									border: `2px solid ${
 										isVsSingle ? noTeamColor : "#ef4444"
 									}`,
@@ -381,6 +390,10 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 										isVsSingle
 											? noTeamColor
 											: "rgba(239, 68, 68, 0.2)";
+									if (isVsSingle) {
+										e.currentTarget.style.color =
+											noCurtainTextSolid;
+									}
 									e.currentTarget.style.transform =
 										"translateY(-1px)";
 									e.currentTarget.style.boxShadow = isVsSingle
@@ -395,6 +408,10 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 										isVsSingle
 											? noTeamColor
 											: "rgba(239, 68, 68, 0.1)";
+									if (isVsSingle) {
+										e.currentTarget.style.color =
+											noCurtainTextSolid;
+									}
 									e.currentTarget.style.transform =
 										"translateY(0)";
 									e.currentTarget.style.boxShadow = "none";

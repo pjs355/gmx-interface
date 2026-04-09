@@ -18,9 +18,11 @@ class PredictionMarketCache {
 	 * Store prediction market data in cache
 	 */
 	setMarketData(market: PredictionMarket): void {
-		const historicalPrices = this.transformHistoricalPrices(
-			market.historicalPrices || []
-		);
+		const rawPrices =
+			(market.historicalPrices?.length ? market.historicalPrices : null) ??
+			(market.historicalPricesYes?.length ? market.historicalPricesYes : null) ??
+			[];
+		const historicalPrices = this.transformHistoricalPrices(rawPrices);
 
 		// Use consistent key - prefer _id, fallback to questionId, then marketId
 		const cacheKey = market._id || market.questionId || market.marketId;

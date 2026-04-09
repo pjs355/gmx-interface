@@ -8,7 +8,7 @@ interface GameLinksProps {
 	onGameSelect: (game: string | null) => void;
 	umbrellas?: Umbrella[];
 	loading?: boolean;
-	filterType?: "esports" | "games";
+	filterType?: "esports" | "games" | "all";
 }
 
 export default function GameLinks({
@@ -89,12 +89,14 @@ export default function GameLinks({
 					});
 
 					// Filter based on filterType
+					if (filterType === "all") {
+						return true;
+					}
 					if (filterType === "esports") {
 						return hasEsportsTag;
-					} else {
-						// games
-						return !hasEsportsTag;
 					}
+					// games
+					return !hasEsportsTag;
 			  })
 			: activeUmbrellas;
 

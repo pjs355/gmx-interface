@@ -45,7 +45,21 @@ function buildVenueEntries(
 ): VenueEntry[] {
 	const entries: VenueEntry[] = [];
 
-	if (levelUpOrderbook) {
+	const wsBookA = monitorBookToSnapshot(matched.levelUpPriceA);
+	const wsBookB = monitorBookToSnapshot(matched.levelUpPriceB);
+	const hasWsLevelUp = Boolean(
+		(wsBookA && ((wsBookA.asks?.length ?? 0) > 0 || (wsBookA.bids?.length ?? 0) > 0))
+		|| (wsBookB && ((wsBookB.asks?.length ?? 0) > 0 || (wsBookB.bids?.length ?? 0) > 0)),
+	);
+	if (hasWsLevelUp) {
+		entries.push({
+			id: "levelup",
+			label: "LevelUp",
+			bookA: wsBookA ?? levelUpOrderbook,
+			bookB: wsBookB,
+			restricted: false,
+		});
+	} else if (levelUpOrderbook) {
 		entries.push({
 			id: "levelup",
 			label: "LevelUp",
@@ -95,7 +109,7 @@ function buildVenueEntries(
 	if (matched.predictFun) {
 		entries.push({
 			id: "predictFun",
-			label: "Predict.fun",
+			label: "Predict",
 			bookA: monitorBookToSnapshot(matched.predictFunPriceA),
 			bookB: monitorBookToSnapshot(matched.predictFunPriceB),
 			restricted: false,
@@ -169,7 +183,7 @@ export function VenueOrderbooksPanel({
 				if (!v.bookA) return false;
 				const asks = v.bookA.asks ?? [];
 				const bids = v.bookA.bids ?? [];
-				return asks.some((e) => e.size > 0) || bids.some((e) => e.size > 0);
+				return asks.some((e) => (e.size ?? 0) > 0) || bids.some((e) => (e.size ?? 0) > 0);
 			});
 			if (withLiquidity) {
 				setOpenVenueId(withLiquidity.id);

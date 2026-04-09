@@ -55,7 +55,6 @@ import {
 import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
 import { Side, type TickSize } from "@polymarket/clob-client";
 import { getYesNoTeamLabels } from "./teamLabels";
-import { usePredictionData } from "context/PredictionDataContext";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
@@ -90,7 +89,7 @@ export interface PredictionMarketTradeBoxHandle {
 }
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo }, ref) => {
 
   const pandaId = pandascoreMatchId?.trim() ?? "";
   const multiVenueEnabled = Boolean(pandaId);
@@ -192,21 +191,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   const queryClient = useQueryClient();
-  const { allBooksPreview } = usePredictionData();
 
-  const crossBuyPrices = useMemo(() => {
-    const qid = market?.questionId || market?._id;
-    const p = qid ? allBooksPreview[qid] : undefined;
-    if (!p) return { crossBuyYes: null as number | null, crossBuyNo: null as number | null };
-    const crossBuyYes =
-      p.bestYesPrice ??
-      p.lowestAsk ??
-      (p.bestNoPrice != null ? 1 - p.bestNoPrice : null);
-    const crossBuyNo =
-      p.bestNoPrice ??
-      (crossBuyYes != null ? 1 - crossBuyYes : null);
-    return { crossBuyYes, crossBuyNo };
-  }, [market, allBooksPreview]);
+  const crossBuyPrices = useMemo(() => ({
+    crossBuyYes: propCrossBuyYes ?? null,
+    crossBuyNo: propCrossBuyNo ?? null,
+  }), [propCrossBuyYes, propCrossBuyNo]);
 
   const { yesTeamLabel, noTeamLabel } = useMemo(
     () => getYesNoTeamLabels(market, umbrellaDisplayName),
@@ -251,7 +240,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   /**
-   * On-chain USDT / CTF approvals for Predict.fun are signed from the **Privy embedded EOA**
+   * On-chain USDT / CTF approvals for Predict are signed from the **Privy embedded EOA**
    * on BSC (`setApprovals`). `account` from SignerContext is often the Base **smart wallet**,
    * so using it here makes approval checks look failed even after txs succeeded.
    * If `VITE_PREDICT_ACCOUNT_ADDRESS` is set, use that as the token/allowance owner (Predict deposit).
@@ -352,7 +341,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     noTeamLabel,
   ]);
 
-  /** LevelUp REST for LevelUp; Polymarket monitor; Predict.fun REST for selected outcome market. */
+  /** LevelUp REST for LevelUp; Polymarket monitor; Predict REST for selected outcome market. */
   const effectiveOrderbook = useMemo(() => {
     if (state.tradingVenue === "all") {
       return levelUpOrderbook;
@@ -413,9 +402,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const venueConfig = getVenueConfig(state.tradingVenue);
   const marketOrderHandler = useMarketOrderHandler(effectiveOrderbook, venueConfig.requiresWholeShares);
 
-  // LevelUp and single-market Predict.fun use a unified YES-native book where the
+  // LevelUp and single-market Predict use a unified YES-native book where the
   // walker must invert for NO (walk bids, cost = 1 − bid_price).  Multi-market
-  // Predict.fun, Polymarket, and DFlow each fetch an outcome-native book, so always
+  // Predict, Polymarket, and DFlow each fetch an outcome-native book, so always
   // walk as "yes".
   const orderbookWalkPosition =
     (state.tradingVenue === "levelup" || isPredictSingleMarket)
@@ -490,7 +479,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const predictVenueHint = useMemo(() => {
     if (state.tradingVenue !== "predictfun") return null;
     if (!pandaId) {
-      return "Predict.fun needs a PandaScore match on this umbrella.";
+      return "Predict needs a PandaScore match on this umbrella.";
     }
     if (!oddsMonitorEnabled) {
       return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
@@ -499,32 +488,32 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return "Connecting to odds monitor…";
     }
     if (!matchedMonitor) {
-      return "No monitor row — Predict.fun ids may not be linked yet.";
+      return "No monitor row — Predict ids may not be linked yet.";
     }
     if (!predictHasMarketIds) {
-      return "This monitor row has no Predict.fun market ids.";
+      return "This monitor row has no Predict market ids.";
     }
     if (
       (predictMarketQuery.isLoading || predictOrderbookQuery.isLoading) &&
       !matchedMonitor?.predictFunPriceA &&
       !matchedMonitor?.predictFunPriceB
     ) {
-      return "Loading Predict.fun market…";
+      return "Loading Predict market…";
     }
     if (!predictNumericId) {
-      return "Could not resolve Predict.fun market id for this side.";
+      return "Could not resolve Predict market id for this side.";
     }
     if (predictMarketQuery.isError) {
-      return "Failed to load Predict.fun market from API.";
+      return "Failed to load Predict market from API.";
     }
     if (predictSession.loading) {
-      return "Preparing Predict.fun wallet on BNB…";
+      return "Preparing Predict wallet on BNB…";
     }
     if (!predictSession.ready) {
       return (
         predictSession.blockedReason ||
         predictSession.error ||
-        "Complete Predict.fun setup (BNB, USDT, API key if mainnet)."
+        "Complete Predict setup (BNB, USDT, API key if mainnet)."
       );
     }
     return null;
@@ -887,7 +876,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           orderResult: {
             success: false,
             error:
-              "Predict.fun needs a linked esports match and odds monitor row.",
+              "Predict needs a linked esports match and odds monitor row.",
           },
         }));
         return;
@@ -899,8 +888,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             success: false,
             error:
               predictMarketQuery.isError || predictOrderbookQuery.isError
-                ? "Could not load Predict.fun market or orderbook."
-                : "Predict.fun market is not linked for this selection.",
+                ? "Could not load Predict market or orderbook."
+                : "Predict market is not linked for this selection.",
           },
         }));
         return;
@@ -913,7 +902,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             error:
               predictSession.blockedReason ||
               predictSession.error ||
-              "Predict.fun session not ready.",
+              "Predict session not ready.",
           },
         }));
         return;
@@ -923,7 +912,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           ...prev,
           orderResult: {
             success: false,
-            error: "Approve Predict.fun contracts on BNB first.",
+            error: "Approve Predict contracts on BNB first.",
           },
         }));
         return;
@@ -934,7 +923,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       try {
         const tokenId = predictTokenIdForPosition;
         if (!tokenId) {
-          throw new Error("Could not resolve Predict.fun outcome token id.");
+          throw new Error("Could not resolve Predict outcome token id.");
         }
         if (state.orderType === "limit") {
           const priceCents = parseFloat(state.price);
@@ -987,7 +976,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         await queryClient.invalidateQueries({ queryKey: ["predict-usdt-balance"] });
       } catch (error: unknown) {
         if (import.meta.env.DEV) {
-          console.error("[Predict.fun trade]", error);
+          console.error("[Predict trade]", error);
         }
         setState((prev) => ({
           ...prev,
@@ -1863,6 +1852,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     sorState: {
       route: sorRoute.route,
       isLoading: sorRoute.isLoading,
+      isStale: sorRoute.isStale,
       error: sorRoute.error,
       isExecuting: sorExecution.isExecuting,
       routeExpired: sorRouteExpired,

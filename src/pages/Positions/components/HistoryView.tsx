@@ -128,7 +128,7 @@ export default function HistoryView({
 		const synth: ProcessedOrder[] = [];
 		for (const pos of venueHistory) {
 			if (pos.shares <= 0) continue;
-			const venueName = pos.venue === "predictfun" ? "Predict.fun" : pos.venue === "polymarket" ? "Polymarket" : pos.venue === "dflow" ? "Kalshi" : pos.venue;
+			const venueName = pos.venue === "predictfun" ? "Predict" : pos.venue === "polymarket" ? "Polymarket" : pos.venue === "dflow" ? "Kalshi" : pos.venue;
 			const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || pos.outcome.toLowerCase() !== "no" ? "Yes" : "No";
 			synth.push({
 				orderId: `synth-vh-${pos.tokenId}`, questionId: pos.tokenId, tokenId: pos.tokenId,

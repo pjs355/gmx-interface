@@ -114,7 +114,23 @@ class UmbrellaDataService {
 			);
 		}
 
-		const apiResponse: UmbrellaApiResponse = await response.json();
+		const rawText = await response.text();
+		const apiResponse: UmbrellaApiResponse = await new Promise(
+			(resolve, reject) => {
+				const parse = () => {
+					try {
+						resolve(JSON.parse(rawText) as UmbrellaApiResponse);
+					} catch (e) {
+						reject(e);
+					}
+				};
+				if (typeof requestIdleCallback !== "undefined") {
+					requestIdleCallback(parse, { timeout: 3000 });
+				} else {
+					queueMicrotask(parse);
+				}
+			},
+		);
 		const t2 = performance.now();
 
 		if (!apiResponse.success || !Array.isArray(apiResponse.data)) {

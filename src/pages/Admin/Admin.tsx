@@ -263,10 +263,10 @@ export default function Admin() {
 					return;
 				}
 				// Not authorized → redirect
-				navigate("/predictions", { replace: true });
+				navigate("/", { replace: true });
 			} catch (err) {
 				console.error("error", err);
-				navigate("/predictions", { replace: true });
+				navigate("/", { replace: true });
 			} finally {
 				if (mounted) setChecking(false);
 			}

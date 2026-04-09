@@ -16,6 +16,8 @@ import {
 } from "@/helpers/umbrellaBanners";
 import { resolveTeamLogo } from "@/config/team-map";
 import { usePredictionData } from "context/PredictionDataContext";
+import { useMatchVenuePrices } from "@/context/OddsMonitorContext";
+import { listingBestYesNoFromMatched } from "@/utils/listingVenuePrices";
 import { resolveUmbrellaEventDate } from "../utils/eventDates";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -149,6 +151,18 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	if (typeof umbrella.displayName !== "string") {
 		throw new Error("umbrella displayName missing");
 	}
+
+	const pandascoreMatchIdForVenues =
+		typeof umbrella.pandascore_matchId === "string"
+			? umbrella.pandascore_matchId.trim()
+			: "";
+	const matchedVenueRow = useMatchVenuePrices(
+		pandascoreMatchIdForVenues || null,
+	);
+	const listingVenueYesNo = useMemo(
+		() => listingBestYesNoFromMatched(matchedVenueRow),
+		[matchedVenueRow],
+	);
 
 	const esportsTagId = useMemo(() => {
 		for (let index = 0; index < tags.length; index += 1) {
@@ -672,6 +686,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					question={question}
 					isDailyPlayerCount={isDailyPlayerCount}
 					umbrellaDisplayName={umbrella.displayName}
+					liveVenueYesPrice={listingVenueYesNo.yes ?? undefined}
+					liveVenueNoPrice={listingVenueYesNo.no ?? undefined}
 				/>
 			);
 		} else if (umbrella.children && umbrella.children.length >= 2) {
@@ -682,6 +698,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					multiMarketData={multiMarketData}
 					onNavigate={navigateToMultiMarket}
 					onNavigateToUmbrella={navigateToUmbrella}
+					liveVenueYesPrice={listingVenueYesNo.yes ?? undefined}
+					liveVenueNoPrice={listingVenueYesNo.no ?? undefined}
 				/>
 			);
 		} else {

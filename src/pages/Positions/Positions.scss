@@ -97,6 +97,21 @@
 	}
 }
 
+/* Whole-table skeleton: very subtle breathing so the block feels “loading” */
+.positions-portfolio-skeleton {
+	animation: positionsPortfolioSkeletonPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes positionsPortfolioSkeletonPulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.94;
+	}
+}
+
 /* Subtle skeleton shimmer for loading placeholders */
 .skeleton-box {
 	display: inline-block;

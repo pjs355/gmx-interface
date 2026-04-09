@@ -36,7 +36,8 @@ export function useVenueBbo(pandascoreMatchId: string | null | undefined, enable
 		queryKey: ["venue-bbo", pandascoreMatchId],
 		queryFn: () => fetchVenueBbo(pandascoreMatchId!),
 		enabled: enabled && Boolean(pandascoreMatchId),
-		refetchInterval: 10_000,
+		/** Poll only while venue-prices WS is down or stale — not on a 10s loop when live WS is primary. */
+		refetchInterval: enabled ? 10_000 : false,
 		staleTime: 3_000,
 		retry: 2,
 	});

@@ -1,4 +1,5 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { type Umbrella } from "@/services/api/umbrellaDataService";
@@ -23,12 +24,20 @@ import {
 	getPredictCostForToken,
 	mapPredictOrdersToVenueOrders,
 	normalizePredictTokenId,
+	type PredictOrderRow,
 } from "@/trading/predict/predictOrdersApi";
 import { computePredictCostByTokenFromMatches } from "@/trading/predict/predictMatchesApi";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { useQuery } from "@tanstack/react-query";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
-import type { VenueId, VenueOrder } from "@/types/trading/venuePosition";
+import type { VenueId, VenueOrder, VenuePosition } from "@/types/trading/venuePosition";
+import {
+	logPortfolioLoadState,
+	logPortfolioReadySnapshot,
+	portfolioPerfEnabled,
+	truncateWallet,
+} from "../utils/portfolioPerfLog";
 import { titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import {
 	type MarketPosition,
@@ -38,6 +47,50 @@ import {
 	mergeMarketPositions,
 	buildSyntheticUmbrella,
 } from "../utils/positionHelpers";
+
+/** History rows for Predict tokens that only appear in FILLED orders (no current position). */
+function predictFilledOrdersToVenueHistoryRows(
+	filledOrders: PredictOrderRow[],
+	seen: Set<string>,
+	costLookup: Map<string, { totalCost: number; totalShares: number; avgPrice: number }>,
+	marketDetails: Map<number, PredictMarketDetail>,
+): VenuePosition[] {
+	const firstRowByToken = new Map<string, PredictOrderRow>();
+	for (const row of filledOrders) {
+		if (row.status !== "FILLED" || !row?.order) continue;
+		const tid = normalizePredictTokenId(row.order.tokenId);
+		if (!tid || seen.has(tid) || firstRowByToken.has(tid)) continue;
+		firstRowByToken.set(tid, row);
+	}
+	const out: VenuePosition[] = [];
+	for (const [tokenId, row] of firstRowByToken) {
+		const costEntry = costLookup.get(tokenId);
+		if (!costEntry || costEntry.totalShares <= 0) continue;
+		const detail = marketDetails.get(row.marketId);
+		const outcomeName =
+			detail?.outcomes?.find(
+				(o) => normalizePredictTokenId(o.onChainId) === tokenId,
+			)?.name ?? "Yes";
+		out.push({
+			venue: "predictfun",
+			marketTitle:
+				detail?.question ?? detail?.title ?? `Market #${row.marketId}`,
+			outcome: outcomeName,
+			shares: costEntry.totalShares,
+			avgPrice: costEntry.avgPrice,
+			currentPrice: null,
+			cost: costEntry.totalCost,
+			currentValue: 0,
+			pnl: null,
+			pnlPercent: null,
+			tokenId,
+			numericMarketId: row.marketId,
+			conditionId: detail?.conditionId,
+			marketStatus: "CLOSED",
+		});
+	}
+	return out;
+}
 
 function buildVenueMarketPosition(
 	pv: any,
@@ -174,6 +227,9 @@ export default function usePositionsData() {
 	} = usePredictionData();
 
 	const { polymarketSafe, solanaAddress } = useFundingAddresses();
+	const { authenticated } = usePrivy();
+	const dflowProof = useDflowProofStatus();
+	const solanaLinked = Boolean(solanaAddress?.trim());
 	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
 	const allPolyPositions = polyPositionsQuery.data ?? [];
 	const polyTradeHistoryQuery = usePolymarketTradeHistory(polymarketSafe);
@@ -193,12 +249,17 @@ export default function usePositionsData() {
 	const predictPositionsQuery = usePredictPositions(signerAddress ?? effectiveAccount);
 	const allPredictPositions = predictPositionsQuery.data ?? [];
 
+	const predictOrdersEnabled =
+		(predictPositionsQuery.isSuccess && (predictPositionsQuery.data?.length ?? 0) > 0) ||
+		activeTab === "orders" ||
+		activeTab === "history";
+
 	const {
 		filledOrders: predictFilledOrders,
 		openOrders: predictOpenOrders,
 		filledError: predictFilledError,
 		filledFetched: predictFilledFetched,
-	} = usePredictOrders(true);
+	} = usePredictOrders(predictOrdersEnabled);
 
 	const predictSignerRawForMatches = useMemo(
 		() =>
@@ -219,7 +280,7 @@ export default function usePositionsData() {
 	});
 
 	const needsPredictAuth =
-		allPredictPositions.length > 0 &&
+		(allPredictPositions.length > 0 || activeTab === "history") &&
 		(predictFilledError || predictFilledOrders.length === 0 || !predictFilledFetched);
 	usePredictEnsureAuth(needsPredictAuth);
 
@@ -232,6 +293,8 @@ export default function usePositionsData() {
 		return computePredictCostByTokenFromMatches(filter, rows);
 	}, [predictFilledOrders, predictMatchesQuery.data, predictMatchesQuery.filterSigner]);
 
+	const privateApi = usePrivateApiClient();
+
 	const predictMarketIds = useMemo(() => {
 		const ids = new Set<number>();
 		for (const p of allPredictPositions) {
@@ -240,12 +303,20 @@ export default function usePositionsData() {
 		for (const o of predictOpenOrders) {
 			ids.add(o.marketId);
 		}
+		for (const row of predictFilledOrders) {
+			ids.add(row.marketId);
+		}
 		return Array.from(ids);
-	}, [allPredictPositions, predictOpenOrders]);
+	}, [allPredictPositions, predictOpenOrders, predictFilledOrders]);
 
-	const privateApi = usePrivateApiClient();
-
-	const dflowPositionsQuery = useDflowPositions(solanaAddress, privateApi);
+	const dflowRpcEnabled =
+		solanaLinked &&
+		Boolean(authenticated) &&
+		dflowProof.isFetched &&
+		dflowProof.isVerified;
+	const dflowPositionsQuery = useDflowPositions(solanaAddress, privateApi, {
+		enabled: dflowRpcEnabled,
+	});
 	const allDflowPositions = dflowPositionsQuery.data ?? [];
 
 	const predictMarketsQuery = useQuery({
@@ -268,18 +339,44 @@ export default function usePositionsData() {
 	// --- Atomic loading gate: wait for ALL data including enrichment ---
 	// Polymarket activity API can paginate many pages — do not block Positions/Orders skeleton on it.
 	// History tab waits separately via `polyTradeHistoryLoading` (see Positions.tsx).
+	const dflowVenueSettled =
+		!solanaLinked ||
+		!Boolean(authenticated) ||
+		(dflowProof.isFetched &&
+			(!dflowProof.isVerified || !dflowPositionsQuery.isLoading));
+
 	const venueQueriesSettled =
 		!polyPositionsQuery.isLoading &&
 		!predictPositionsQuery.isLoading &&
-		!dflowPositionsQuery.isLoading;
+		dflowVenueSettled;
 
+	const venueQueriesSettledForPositionsBody =
+		!polyPositionsQuery.isLoading && !predictPositionsQuery.isLoading;
+
+	// `predictMarketsQuery` stays in this gate on purpose: without market details, Predict rows
+	// would all appear under active Positions first, then jump to Winnings when RESOLVED — bad UX.
+	// If perf logs show this dominates, prefer backend batching or accept that tradeoff explicitly.
 	const isDataFullyLoaded =
 		!predictionLoading &&
 		!userDataLoading &&
 		!portfolioLoading &&
-		!booksPreviewLoading &&
 		venueQueriesSettled &&
 		(predictMarketIds.length === 0 || !predictMarketsQuery.isLoading);
+
+	/** Positions tab body can render without waiting on DFlow RPC; header stays on `isDataFullyLoaded`. */
+	const isPositionsTabContentReady =
+		!predictionLoading &&
+		!userDataLoading &&
+		!portfolioLoading &&
+		venueQueriesSettledForPositionsBody &&
+		(predictMarketIds.length === 0 || !predictMarketsQuery.isLoading);
+
+	const dflowPositionsStripPending =
+		solanaLinked &&
+		Boolean(authenticated) &&
+		dflowProof.isFetched &&
+		dflowProof.isVerified &&
+		dflowPositionsQuery.isLoading;
 
 	// --- Enrich + split venue positions ---
 	const { predictPositions, predictWinnings, predictHistory } = useMemo(() => {
@@ -476,7 +573,7 @@ export default function usePositionsData() {
 				};
 
 				const polyMatches = matchVenuePositions(polyPositions, matchedPolyTokenIds, "polymarket", "Polymarket", "poly");
-				const predictMatches = matchVenuePositions(predictPositions, matchedPredictTokenIds, "predictfun", "Predict.fun", "predict");
+				const predictMatches = matchVenuePositions(predictPositions, matchedPredictTokenIds, "predictfun", "Predict", "predict");
 				const dflowMatches = matchVenuePositions(dflowPositions, matchedDflowTokenIds, "dflow", "DFlow", "dflow");
 
 				const allMarkets = [...activeMarkets, ...polyMatches, ...predictMatches, ...dflowMatches];
@@ -489,7 +586,7 @@ export default function usePositionsData() {
 			(p) => p.eventSlug || p.marketTitle, "poly-event",
 		);
 		const predictUmbrellas = buildUnmatchedVenueUmbrellas(
-			predictPositions, matchedPredictTokenIds, "predictfun", "Predict.fun", "predict",
+			predictPositions, matchedPredictTokenIds, "predictfun", "Predict", "predict",
 			(p) => p.marketTitle || p.tokenId, "predict-market",
 		);
 		const dflowUmbrellas = buildUnmatchedVenueUmbrellas(
@@ -626,6 +723,161 @@ export default function usePositionsData() {
 			0,
 		);
 	}, [umbrellaPositions]);
+
+	const portfolioPerfFingerprintRef = useRef("");
+	const portfolioReadyLoggedRef = useRef(false);
+
+	useEffect(() => {
+		if (!portfolioPerfEnabled() || !effectiveAccount) return;
+
+		const previewKeyCount = Object.keys(allBooksPreview).length;
+		const fingerprint = [
+			predictionLoading,
+			userDataLoading,
+			portfolioLoading,
+			booksPreviewLoading,
+			polyPositionsQuery.isLoading,
+			predictPositionsQuery.isLoading,
+			dflowPositionsQuery.isLoading,
+			predictMarketsQuery.isLoading,
+			isDataFullyLoaded,
+			isPositionsTabContentReady,
+			dflowPositionsStripPending,
+			predictMarketIds.length,
+			umbrellas.length,
+			tokenBalances.size,
+			previewKeyCount,
+			predictOrdersEnabled,
+		].join("|");
+
+		if (fingerprint !== portfolioPerfFingerprintRef.current) {
+			portfolioPerfFingerprintRef.current = fingerprint;
+			logPortfolioLoadState({
+				predictionLoading,
+				userDataLoading,
+				portfolioLoading,
+				booksPreviewLoading,
+				polyLoading: polyPositionsQuery.isLoading,
+				predictLoading: predictPositionsQuery.isLoading,
+				dflowLoading: dflowPositionsQuery.isLoading,
+				predictMarketsLoading: predictMarketsQuery.isLoading,
+				isDataFullyLoaded,
+				umbrellaCount: umbrellas.length,
+				tokenBalancesSize: tokenBalances.size,
+				previewKeys: previewKeyCount,
+				polyPos: allPolyPositions.length,
+				predictPos: allPredictPositions.length,
+				dflowPos: allDflowPositions.length,
+				predictMarketIds: predictMarketIds.length,
+				predictOrdersEnabled,
+				isPositionsTabContentReady,
+				dflowPositionsStripPending,
+			});
+		}
+
+		if (isDataFullyLoaded && !portfolioReadyLoggedRef.current) {
+			portfolioReadyLoggedRef.current = true;
+
+			const previewSampleKeys = Object.keys(allBooksPreview).slice(0, 3);
+			const previewSample = Object.fromEntries(
+				previewSampleKeys.map((k) => [k.slice(0, 12) + "…", allBooksPreview[k]]),
+			);
+
+			const polyVenueSum = allPolyPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+			const predictVenueSum = allPredictPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+			const dflowVenueSum = allDflowPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+
+			let levelUpBookSum = 0;
+			const levelUpSamples: Array<Record<string, unknown>> = [];
+			for (const u of umbrellas) {
+				const markets = (getQuestionsForUmbrella(u._id) as PredictionMarket[]) || [];
+				for (const m of markets) {
+					const balanceId = m._id;
+					const priceId = m.questionId || m._id;
+					if (!balanceId || !priceId) continue;
+					const tb = tokenBalances.get(balanceId);
+					if (!tb) continue;
+					const yes = Number(tb.yesBalance) || 0;
+					const no = Number(tb.noBalance) || 0;
+					if (yes === 0 && no === 0) continue;
+					const preview = allBooksPreview[priceId] as
+						| {
+								lowestAsk?: number | null;
+								bestYesPrice?: number | null;
+								bestNoPrice?: number | null;
+								highestBid?: number | null;
+						  }
+						| undefined;
+					const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
+					const np =
+						typeof preview?.bestNoPrice === "number"
+							? preview.bestNoPrice
+							: preview?.highestBid != null && preview?.highestBid !== undefined
+								? 1 - preview.highestBid
+								: null;
+					const rowVal =
+						(typeof yp === "number" ? yes * yp : 0) + (typeof np === "number" ? no * np : 0);
+					levelUpBookSum += rowVal;
+					if (levelUpSamples.length < 2) {
+						levelUpSamples.push({
+							priceIdShort: String(priceId).slice(0, 10) + "…",
+							yes,
+							no,
+							yp,
+							np,
+							rowVal,
+							previewKeys: preview ? Object.keys(preview) : [],
+						});
+					}
+				}
+			}
+
+			logPortfolioReadySnapshot({
+				wallet: truncateWallet(effectiveAccount),
+				portfolioTotalCtx,
+				cashBalanceCtx,
+				positionsTotalValue,
+				venueNotional: { polyVenueSum, predictVenueSum, dflowVenueSum },
+				levelUpBookSumFromPreview: levelUpBookSum,
+				levelUpSamples,
+				previewSample,
+			});
+		}
+
+		if (!isDataFullyLoaded) {
+			portfolioReadyLoggedRef.current = false;
+		}
+	}, [
+		effectiveAccount,
+		predictionLoading,
+		userDataLoading,
+		portfolioLoading,
+		booksPreviewLoading,
+		polyPositionsQuery.isLoading,
+		predictPositionsQuery.isLoading,
+		dflowPositionsQuery.isLoading,
+		predictMarketsQuery.isLoading,
+		isDataFullyLoaded,
+		isPositionsTabContentReady,
+		dflowPositionsStripPending,
+		predictMarketIds.length,
+		umbrellas,
+		tokenBalances,
+		allBooksPreview,
+		allPolyPositions,
+		allPredictPositions,
+		allDflowPositions,
+		getQuestionsForUmbrella,
+		portfolioTotalCtx,
+		cashBalanceCtx,
+		positionsTotalValue,
+		predictOrdersEnabled,
+	]);
+
+	useEffect(() => {
+		portfolioReadyLoggedRef.current = false;
+		portfolioPerfFingerprintRef.current = "";
+	}, [effectiveAccount]);
 
 	const polyPriceMap = useMemo(() => {
 		const map: Record<string, { yesPrice: number | null; noPrice: number | null }> = {};
@@ -768,11 +1020,23 @@ export default function usePositionsData() {
 			if (!seen.has(pos.tokenId)) { seen.add(pos.tokenId); items.push(pos); }
 		}
 
+		const predictFilledHistory = predictFilledOrdersToVenueHistoryRows(
+			predictFilledOrders,
+			seen,
+			predictCostLookup,
+			predictMarketDetails,
+		);
+		for (const p of predictFilledHistory) {
+			seen.add(p.tokenId);
+			items.push(p);
+		}
+
 		return items;
 	}, [
 		predictWinnings, predictHistory, polyWinnings, polyHistory,
 		polyTradeHistoryQuery.data, dflowWinnings, dflowHistory,
 		polyPositions, predictPositions, dflowPositions,
+		predictFilledOrders, predictCostLookup, predictMarketDetails,
 	]);
 
 	const returnsByQid = useMemo(() => {
@@ -831,6 +1095,8 @@ export default function usePositionsData() {
 		debugAccount,
 		realAccount,
 		isDataFullyLoaded,
+		isPositionsTabContentReady,
+		dflowPositionsStripPending,
 		polyTradeHistoryLoading,
 		portfolioLoading,
 		portfolioTotalCtx,

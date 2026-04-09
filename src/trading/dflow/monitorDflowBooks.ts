@@ -1,14 +1,10 @@
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
+import type { MatchedMarketsDflowWire } from "@/types/matchedMarketsDflowWire";
 import { polyOutcomeSide } from "@/trading/polymarket/polyOutcomeTokenId";
 
 /** Same wire shape from the odds monitor for Kalshi tickers or DFlow (tokenized Kalshi). */
-export type DflowKalshiMonitorLink = {
-	tickerA: string;
-	tickerB?: string;
-	eventTicker: string;
-	yesMintA?: string;
+export type DflowKalshiMonitorLink = MatchedMarketsDflowWire & {
 	noMintA?: string;
-	yesMintB?: string;
 	noMintB?: string;
 };
 

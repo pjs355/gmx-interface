@@ -3,6 +3,9 @@ import Button from "components/Button/Button";
 import {
 	toCentsString,
 	truncateMarketName,
+	hexToRgba,
+	getContrastingTextColor,
+	mixHexOnBlack,
 } from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
@@ -17,6 +20,9 @@ interface MultiMarketActionsProps {
 	};
 	onNavigate: (question: PredictionMarket, position: "yes" | "no") => void;
 	onNavigateToUmbrella?: () => void;
+	/** When set from OddsMonitor venue-prices, overrides listing preview for both rows */
+	liveVenueYesPrice?: number | null;
+	liveVenueNoPrice?: number | null;
 }
 
 export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
@@ -24,6 +30,8 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 	multiMarketData,
 	onNavigate,
 	onNavigateToUmbrella,
+	liveVenueYesPrice,
+	liveVenueNoPrice,
 }) => {
 	const { allBooksPreview } = usePredictionData();
 	
@@ -92,20 +100,43 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 					? allBooksPreview[questionId]
 					: undefined;
 
-			// Best price across all venues, falling back to LevelUp-only orderbook price
 			const yesPrice =
-				preview?.bestYesPrice ??
-				preview?.lowestAsk ??
-				(preview?.bestNoPrice != null ? 1 - preview.bestNoPrice : null);
+				typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice)
+					? liveVenueYesPrice
+					: (preview?.bestYesPrice ?? preview?.lowestAsk ?? null);
 			const noPrice =
-				preview?.bestNoPrice ??
-				(yesPrice != null ? 1 - yesPrice : null);
+				typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
+					? liveVenueNoPrice
+					: (preview?.bestNoPrice ?? null);
 
 				const yesCents =
 					yesPrice !== null && yesPrice !== undefined
 						? `${toCentsString(yesPrice)}¢`
 						: "--";
 				const noCents = noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
+
+				const rawYes = (question as any)?.yesColor;
+				const rawNo = (question as any)?.noColor;
+				const yesColor =
+					typeof rawYes === "string" && rawYes.trim() !== ""
+						? rawYes.trim()
+						: "#22c55e";
+				const noColor =
+					typeof rawNo === "string" && rawNo.trim() !== ""
+						? rawNo.trim()
+						: "#ef4444";
+				const yesTextIdle = getContrastingTextColor(
+					mixHexOnBlack(yesColor, 0.1),
+				);
+				const yesTextHover = getContrastingTextColor(
+					mixHexOnBlack(yesColor, 0.2),
+				);
+				const noTextIdle = getContrastingTextColor(
+					mixHexOnBlack(noColor, 0.1),
+				);
+				const noTextHover = getContrastingTextColor(
+					mixHexOnBlack(noColor, 0.2),
+				);
 
 				return (
 					<div
@@ -125,9 +156,9 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 								className="action-button yes-button"
 								onClick={() => onNavigate(question, "yes")}
 								style={{
-									background: "rgba(34, 197, 94, 0.1)",
-									color: "#22c55e",
-									border: "2px solid #22c55e",
+									background: hexToRgba(yesColor, 0.1),
+									color: yesTextIdle,
+									border: `2px solid ${yesColor}`,
 									marginRight: "8px",
 									fontSize: "16px",
 									padding: "10px 16px",
@@ -138,15 +169,16 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 								}}
 								onMouseEnter={(e) => {
 									e.currentTarget.style.background =
-										"rgba(34, 197, 94, 0.2)";
+										hexToRgba(yesColor, 0.2);
+									e.currentTarget.style.color = yesTextHover;
 									e.currentTarget.style.transform =
 										"translateY(-1px)";
-									e.currentTarget.style.boxShadow =
-										"0 4px 8px rgba(34, 197, 94, 0.3)";
+									e.currentTarget.style.boxShadow = `0 4px 8px ${hexToRgba(yesColor, 0.3)}`;
 								}}
 								onMouseLeave={(e) => {
 									e.currentTarget.style.background =
-										"rgba(34, 197, 94, 0.1)";
+										hexToRgba(yesColor, 0.1);
+									e.currentTarget.style.color = yesTextIdle;
 									e.currentTarget.style.transform =
 										"translateY(0)";
 									e.currentTarget.style.boxShadow = "none";
@@ -159,9 +191,9 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 								className="action-button no-button"
 								onClick={() => onNavigate(question, "no")}
 								style={{
-									background: "rgba(239, 68, 68, 0.1)",
-									color: "#ef4444",
-									border: "2px solid #ef4444",
+									background: hexToRgba(noColor, 0.1),
+									color: noTextIdle,
+									border: `2px solid ${noColor}`,
 									fontSize: "16px",
 									padding: "10px 16px",
 									minHeight: "42px",
@@ -171,15 +203,16 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 								}}
 								onMouseEnter={(e) => {
 									e.currentTarget.style.background =
-										"rgba(239, 68, 68, 0.2)";
+										hexToRgba(noColor, 0.2);
+									e.currentTarget.style.color = noTextHover;
 									e.currentTarget.style.transform =
 										"translateY(-1px)";
-									e.currentTarget.style.boxShadow =
-										"0 4px 8px rgba(239, 68, 68, 0.3)";
+									e.currentTarget.style.boxShadow = `0 4px 8px ${hexToRgba(noColor, 0.3)}`;
 								}}
 								onMouseLeave={(e) => {
 									e.currentTarget.style.background =
-										"rgba(239, 68, 68, 0.1)";
+										hexToRgba(noColor, 0.1);
+									e.currentTarget.style.color = noTextIdle;
 									e.currentTarget.style.transform =
 										"translateY(0)";
 									e.currentTarget.style.boxShadow = "none";

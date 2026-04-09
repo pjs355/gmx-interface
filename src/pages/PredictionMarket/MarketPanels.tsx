@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useMedia } from "react-use";
 import PredictionMarketChart from "./PredictionMarketChart";
 import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
@@ -12,9 +12,13 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { TradingVenue } from "./PredictionMarketTradeBox/types";
 import type { SettledInfo } from "./useMatchSettled";
-import { getMarketId } from "./utils";
+import { getMarketId, hasUsableOrderbookSnapshot } from "./utils";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 import { useDirectVenueBooks } from "@/trading/venue-books";
+import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import type { OrderbookData } from "@/types/odds-monitor";
+import { useTradingPagePrices } from "@/hooks/useTradingPagePrices";
 import {
 	ChartSkeleton,
 	TradeBoxSkeleton,
@@ -40,7 +44,6 @@ type PanelsProps = {
 		secondaryMarket: any | null;
 		frozenOrderbooks: Record<string, any>;
 	};
-	orderbooksReady: boolean;
 	settledInfo?: SettledInfo | null;
 };
 
@@ -57,7 +60,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	onPositionChange,
 	fetchAllOrderbooks,
 	chartState,
-	orderbooksReady,
 	settledInfo,
 }) => {
 	useMedia("(max-width: 1100px)");
@@ -67,22 +69,61 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const [activeTab, setActiveTab] = useState<"basic" | "orderbooks">("basic");
 	const [venueForTradeBox, setVenueForTradeBox] = useState<TradingVenue | undefined>(undefined);
 
-	// Direct venue WS connections (Polymarket + DFlow from browser)
-	const { appState: oddsAppState } = useOddsMonitor();
-	const matchedForVenueBooks = React.useMemo(() => {
-		const pandaId = typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
-		if (!pandaId || !oddsAppState?.markets?.length) return null;
-		return oddsAppState.markets.find((m) => String(m.pandaMatchId) === pandaId) ?? null;
-	}, [oddsAppState?.markets, umbrella?.pandascore_matchId]);
-	const directBooks = useDirectVenueBooks(matchedForVenueBooks);
-
-	// Check if we have questions (umbrella loaded)
-	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
-	const settledView = Boolean(settledInfo);
 	const pandascoreMatchId =
 		typeof umbrella?.pandascore_matchId === "string"
 			? umbrella.pandascore_matchId.trim()
 			: "";
+
+	const { subscribePandaMatchId, unsubscribePandaMatchId } =
+		useVenuePandaSubscription();
+	useEffect(() => {
+		if (!pandascoreMatchId) return;
+		subscribePandaMatchId(pandascoreMatchId);
+		return () => unsubscribePandaMatchId(pandascoreMatchId);
+	}, [pandascoreMatchId, subscribePandaMatchId, unsubscribePandaMatchId]);
+
+	function orderbookDataHasDepth(book: OrderbookData | null | undefined): boolean {
+		if (!book) return false;
+		const asks = book.asks?.some((a) => (a.size ?? 0) > 0);
+		const bids = book.bids?.some((b) => (b.size ?? 0) > 0);
+		return Boolean(asks || bids);
+	}
+
+	// Direct venue WS connections (Polymarket + DFlow from browser)
+	const { appState: oddsAppState } = useOddsMonitor();
+	const matchedForVenueBooks = React.useMemo(() => {
+		if (!pandascoreMatchId || !oddsAppState?.markets?.length) return null;
+		return oddsAppState.markets.find((m) => String(m.pandaMatchId) === pandascoreMatchId) ?? null;
+	}, [oddsAppState?.markets, pandascoreMatchId]);
+
+	const serverVenueDepthParity = React.useMemo(() => {
+		const m = matchedForVenueBooks;
+		if (!m) return false;
+		const polyLinked = Boolean(m.polyConditionId || m.polyTokenIdA);
+		const polyOk =
+			!polyLinked ||
+			(orderbookDataHasDepth(m.polyPriceA) && orderbookDataHasDepth(m.polyPriceB));
+		const dflowLinked = Boolean(getDflowKalshiMonitorLink(m));
+		const dflowOk =
+			!dflowLinked ||
+			(orderbookDataHasDepth(m.dflowPriceA ?? m.kalshiPriceA) &&
+				orderbookDataHasDepth(m.dflowPriceB ?? m.kalshiPriceB));
+		return polyOk && dflowOk;
+	}, [matchedForVenueBooks]);
+
+	const directBooks = useDirectVenueBooks(matchedForVenueBooks, {
+		disabled: serverVenueDepthParity,
+	});
+
+	const firstQuestion = sortedQuestions[0] ?? null;
+	const firstQuestionId = firstQuestion ? (getMarketId(firstQuestion) || "0") : "";
+	const levelUpOrderbook = firstQuestionId ? questionOrderbooks[firstQuestionId] : null;
+
+	const tradingPagePrices = useTradingPagePrices(pandascoreMatchId, levelUpOrderbook, directBooks);
+
+	// Check if we have questions (umbrella loaded)
+	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
+	const settledView = Boolean(settledInfo);
 	const showCrossVenueBooks = Boolean(pandascoreMatchId);
 	const streamUrl =
 		typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
@@ -113,10 +154,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			  }
 			: undefined;
 	}, [chartState.secondaryMarket, umbrella?.children?.length]);
-
-	const firstQuestion = sortedQuestions[0] ?? null;
-	const firstQuestionId = firstQuestion ? (getMarketId(firstQuestion) || "0") : "";
-	const levelUpOrderbook = firstQuestionId ? questionOrderbooks[firstQuestionId] : null;
 
 	const tabSwitcher = showCrossVenueBooks && !settledView ? (
 		<div className="venue-tab-switcher">
@@ -181,9 +218,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			<>
 				<div className="orderbook-section__cross-venue">
 					<EsportsVenueBooksPanel
-						pandascoreMatchId={pandascoreMatchId}
-						levelUpOrderbook={levelUpOrderbook}
-						directBooks={directBooks}
+						tradingPagePrices={tradingPagePrices}
 					/>
 				</div>
 				<RulesSection umbrella={umbrella} />
@@ -212,7 +247,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	);
 
 	const orderbookSectionBody =
-		settledView || (hasQuestions && orderbooksReady) ? (
+		settledView || hasQuestions ? (
 			orderbookColumnContent
 		) : (
 			<>
@@ -221,10 +256,65 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			</>
 		);
 
-	// Chart only needs active markets + orderbooks; settledView does not change this condition
-	const showChartBlock = hasQuestions && orderbooksReady;
+	const chartQuestionId =
+		chartState.primaryQuestionId ||
+		getMarketId(chartState.primaryMarket) ||
+		(hasQuestions ? getMarketId(sortedQuestions[0]) : "");
+	const primaryChartOrderbook = chartQuestionId
+		? questionOrderbooks[chartQuestionId]
+		: undefined;
+	// Chart only needs a usable snapshot for the primary chart market; settledView does not change this condition
+	const showChartBlock =
+		hasQuestions && hasUsableOrderbookSnapshot(primaryChartOrderbook);
 	const showChartPlaceholder =
 		!showChartBlock && !(settledView && !hasQuestions);
+
+	// Order inside .venue-books-container: chart → tabs → "Prediction Market Odds" → tab body (e.g. esports table).
+	const chartAtTopOfVenueBooks = showChartBlock ? (
+		<div
+			className="ExchangeChart venue-books-chart"
+			style={{
+				display: "flex",
+				flexDirection: "column",
+				minHeight: 300,
+			}}
+		>
+			<div
+				className="prediction-market-chart-shell flex grow flex-col overflow-visible rounded-4 bg-black"
+				style={{ minHeight: 300 }}
+			>
+				<PredictionMarketChart
+					questionId={
+						chartState.primaryQuestionId ||
+						chartState.primaryMarket?._id ||
+						chartState.primaryMarket?.questionId ||
+						chartState.primaryMarket?.marketId ||
+						""
+					}
+					umbrellaId={umbrella?._id}
+					pandaMatchId={pandascoreMatchId || undefined}
+					umbrellaDisplayName={umbrella?.displayName}
+					activeMarket={chartPrimaryMarket}
+					secondMarket={chartSecondaryMarket}
+					questionOrderbooks={questionOrderbooks}
+				/>
+			</div>
+		</div>
+	) : showChartPlaceholder ? (
+		<div className="venue-books-chart-skeleton">
+			<ChartSkeleton />
+		</div>
+	) : null;
+
+	const venueBooksSectionTitle =
+		showCrossVenueBooks && activeTab === "orderbooks"
+			? "Prediction Market Orderbooks"
+			: "Prediction Market Odds";
+
+	const predictionMarketOddsHeading =
+		showChartBlock || showChartPlaceholder ? (
+			<h3 className="prediction-market-odds-heading">{venueBooksSectionTitle}</h3>
+		) : null;
 
 	return (
 		<div className="prediction-market-content">
@@ -236,43 +326,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							<StreamEmbed streamUrl={streamUrl} height="720" />
 						</div>
 					)}
-					<div className="chart-section">
-						{showChartBlock ? (
-							<div
-								className="ExchangeChart"
-								style={{
-									display: "flex",
-									flexDirection: "column",
-									minHeight: 300,
-								}}
-							>
-								<div
-									className="flex grow flex-col overflow-visible rounded-4 bg-black"
-									style={{ minHeight: 300 }}
-								>
-									<PredictionMarketChart
-										questionId={
-											chartState.primaryQuestionId ||
-											chartState.primaryMarket?._id ||
-											chartState.primaryMarket
-												?.questionId ||
-											chartState.primaryMarket
-												?.marketId ||
-											""
-										}
-										activeMarket={chartPrimaryMarket}
-										secondMarket={chartSecondaryMarket}
-										questionOrderbooks={questionOrderbooks}
-									/>
-								</div>
-							</div>
-						) : showChartPlaceholder ? (
-							<ChartSkeleton />
-						) : null}
-					</div>
 
 					<div className="venue-books-container">
+						{chartAtTopOfVenueBooks}
 						{tabSwitcher}
+						{predictionMarketOddsHeading}
 						<div className="orderbook-section">{orderbookSectionBody}</div>
 					</div>
 
@@ -294,7 +352,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							</div>
 						</div>
 					</div>
-				) : hasQuestions && orderbooksReady && activeMarket ? (
+				) : activeMarket &&
+				  hasUsableOrderbookSnapshot(
+						questionOrderbooks[getMarketId(activeMarket)],
+				  ) ? (
 					<PredictionMarketTradeBox
 						market={
 							{
@@ -314,6 +375,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						onPositionChange={onPositionChange}
 						onSideChange={setTradeSide}
 						venueOverride={venueForTradeBox}
+						crossBuyYes={tradingPagePrices.bestYesPrice}
+						crossBuyNo={tradingPagePrices.bestNoPrice}
 					/>
 				) : (
 					<TradeBoxSkeleton />
@@ -328,41 +391,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						<StreamEmbed streamUrl={streamUrl} height="360" />
 					</div>
 				)}
-				<div className="chart-section-mobile">
-					{showChartBlock ? (
-						<div
-							className="ExchangeChart"
-							style={{
-								display: "flex",
-								flexDirection: "column",
-								minHeight: 300,
-							}}
-						>
-							<div
-								className="flex grow flex-col overflow-visible rounded-4 bg-black"
-								style={{ minHeight: 300 }}
-							>
-								<PredictionMarketChart
-									questionId={
-										chartState.primaryQuestionId ||
-										chartState.primaryMarket?._id ||
-										chartState.primaryMarket?.questionId ||
-										chartState.primaryMarket?.marketId ||
-										""
-									}
-									activeMarket={chartPrimaryMarket}
-									secondMarket={chartSecondaryMarket}
-									questionOrderbooks={questionOrderbooks}
-								/>
-							</div>
-						</div>
-					) : showChartPlaceholder ? (
-						<ChartSkeleton />
-					) : null}
-				</div>
-
 				<div className="venue-books-container">
+					{chartAtTopOfVenueBooks}
 					{tabSwitcher}
+					{predictionMarketOddsHeading}
 					<div className="orderbook-section-mobile">{orderbookSectionBody}</div>
 				</div>
 
@@ -385,7 +417,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						</div>
 					</div>
 				</div>
-			) : hasQuestions && orderbooksReady && activeMarket ? (
+			) : activeMarket &&
+			  hasUsableOrderbookSnapshot(
+					questionOrderbooks[getMarketId(activeMarket)],
+			  ) ? (
 				<div className="mobile-trading-container">
 					<PredictionMarketTradeBox
 						market={
@@ -406,6 +441,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						onPositionChange={onPositionChange}
 						onSideChange={setTradeSide}
 						venueOverride={venueForTradeBox}
+						crossBuyYes={tradingPagePrices.bestYesPrice}
+						crossBuyNo={tradingPagePrices.bestNoPrice}
 					/>
 				</div>
 			) : (

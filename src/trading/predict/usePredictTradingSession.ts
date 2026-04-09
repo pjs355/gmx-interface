@@ -92,7 +92,7 @@ export function usePredictTradingSession(enabled: boolean) {
 		}
 
 		const run = async (): Promise<SessionRefs> => {
-			if (!authenticated) throw new Error("Log in to trade on Predict.fun");
+			if (!authenticated) throw new Error("Log in to trade on Predict");
 			const embedded = (wallets || []).find(
 				(w) =>
 					(w as { walletClientType?: string }).walletClientType === "privy" ||
@@ -101,7 +101,7 @@ export function usePredictTradingSession(enabled: boolean) {
 				| { getEthereumProvider?: () => Promise<unknown> }
 				| undefined;
 			if (!embedded?.getEthereumProvider) {
-				throw new Error("Embedded wallet required for Predict.fun on BNB");
+				throw new Error("Embedded wallet required for Predict on BNB");
 			}
 			const ethereum = (await embedded.getEthereumProvider()) as {
 				request: (a: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -142,7 +142,7 @@ export function usePredictTradingSession(enabled: boolean) {
 			const { builder } = await ensureSession();
 			const result = await builder.setApprovals();
 			if (!result.success) {
-				throw new Error("Predict.fun approvals failed");
+				throw new Error("Predict approvals failed");
 			}
 		} catch (e: unknown) {
 			const msg = e instanceof Error ? e.message : String(e);

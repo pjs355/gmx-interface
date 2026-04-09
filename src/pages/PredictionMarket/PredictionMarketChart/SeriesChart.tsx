@@ -1,6 +1,64 @@
 import React, { useMemo, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
-import type { ChartDataPoint } from './types';
+import type { ChartDataPoint, MergedExchangePoint } from './types';
+
+export const VENUE_COLORS: Record<string, string> = {
+  levelUp: "#ffffff",
+  polymarket: "#3b82f6",
+  kalshi: "#10b981",
+  predictFun: "#8b5cf6",
+  bestOdds: "#06b6d4",
+};
+
+export const VENUE_LABELS: Record<string, string> = {
+  levelUp: "LevelUp",
+  polymarket: "Polymarket",
+  kalshi: "Kalshi",
+  predictFun: "Predict",
+  bestOdds: "Best Odds",
+};
+
+function useTimeDomain(data: any[], timeRangeSeconds?: number) {
+  return useMemo(() => {
+    const now = Math.floor(Date.now() / 1000);
+
+    if (timeRangeSeconds) {
+      const start = now - timeRangeSeconds;
+      const tickCount = 5;
+      const tickInterval = timeRangeSeconds / (tickCount - 1);
+      const tickPositions = Array.from({ length: tickCount }, (_, i) =>
+        Math.floor(start + i * tickInterval)
+      );
+      return { domainStart: start, domainEnd: now, ticks: tickPositions };
+    }
+
+    if (data.length > 0) {
+      const timestamps = data.map((d: any) => d.timestamp as number).filter((t) => t > 0);
+      if (timestamps.length === 0) return { domainStart: now - 86400, domainEnd: now, ticks: undefined };
+      const start = Math.min(...timestamps);
+      const end = Math.max(...timestamps);
+      const range = end - start;
+      const tickCount = 5;
+      const tickInterval = range / (tickCount - 1);
+      const tickPositions = Array.from({ length: tickCount }, (_, i) =>
+        Math.floor(start + i * tickInterval)
+      );
+      return { domainStart: start, domainEnd: end, ticks: tickPositions };
+    }
+
+    return { domainStart: now - 86400, domainEnd: now, ticks: undefined };
+  }, [data, timeRangeSeconds]);
+}
+
+function formatXAxisTick(timestamp: number, timeRangeSeconds?: number): string {
+  const date = new Date(timestamp * 1000);
+  if (timeRangeSeconds && timeRangeSeconds <= 86400) {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ─── Standard LevelUp chart (team A vs team B) ───────────────────
 
 export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket, tooltip, height = 300, timeRangeSeconds }: {
   data: ChartDataPoint[];
@@ -9,57 +67,15 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
   isVsSingleMarket: boolean;
   tooltip: React.ReactElement | any;
   height?: number;
-  timeRangeSeconds?: number; // Time range in seconds for fixed domain
+  timeRangeSeconds?: number;
 }) {
-  // Calculate fixed time domain from data or use time range
-  const { domainStart, domainEnd, ticks } = useMemo(() => {
-    const now = Math.floor(Date.now() / 1000);
-    
-    if (timeRangeSeconds) {
-      // Fixed time range (1H, 1D, 1W)
-      const start = now - timeRangeSeconds;
-      const end = now;
-      
-      // Generate 5 evenly-spaced ticks
-      const tickCount = 5;
-      const tickInterval = timeRangeSeconds / (tickCount - 1);
-      const tickPositions = Array.from({ length: tickCount }, (_, i) => 
-        Math.floor(start + i * tickInterval)
-      );
-      
-      return { domainStart: start, domainEnd: end, ticks: tickPositions };
-    } else if (data.length > 0) {
-      // "All" time range - use data extent
-      const timestamps = data.map(d => d.timestamp).filter(t => t > 0);
-      const start = Math.min(...timestamps);
-      const end = Math.max(...timestamps);
-      const range = end - start;
-      
-      // Generate 5 evenly-spaced ticks
-      const tickCount = 5;
-      const tickInterval = range / (tickCount - 1);
-      const tickPositions = Array.from({ length: tickCount }, (_, i) => 
-        Math.floor(start + i * tickInterval)
-      );
-      
-      return { domainStart: start, domainEnd: end, ticks: tickPositions };
-    }
-    
-    // Fallback
-    return { domainStart: now - 86400, domainEnd: now, ticks: undefined };
-  }, [data, timeRangeSeconds]);
+  const { domainStart, domainEnd, ticks } = useTimeDomain(data, timeRangeSeconds);
 
-  // Calculate dynamic Y-axis domain based on data
-  // "Hanging reload" - keep previous domain until new data is ready
   const prevYDomainRef = useRef<{ min: number; max: number; ticks: number[] }>({ min: 0, max: 100, ticks: [0, 25, 50, 75, 100] });
-  
-  const yAxisConfig = useMemo(() => {
-    if (!data || data.length === 0) {
-      // Return previous values while loading (hanging reload)
-      return prevYDomainRef.current;
-    }
 
-    // Find min and max values from both percentage and secondPercentage
+  const yAxisConfig = useMemo(() => {
+    if (!data || data.length === 0) return prevYDomainRef.current;
+
     let maxValue = 0;
     let minValue = 100;
     for (const point of data) {
@@ -73,23 +89,14 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
       }
     }
 
-    // Calculate the range and add buffer
     const range = maxValue - minValue;
-    const buffer = Math.max(range * 0.1, 2); // At least 2% buffer or 10% of range
-    
-    // Round up max to nearest multiple of 5, with buffer
+    const buffer = Math.max(range * 0.1, 2);
     const bufferedMax = maxValue + buffer;
     const roundedMax = Math.ceil(bufferedMax / 5) * 5;
-    
-    // Round down min to nearest multiple of 5, with buffer
     const bufferedMin = minValue - buffer;
     const roundedMin = Math.floor(bufferedMin / 5) * 5;
-    
-    // Clamp to valid percentage range (0-100)
     const finalMax = Math.min(100, roundedMax);
     const finalMin = Math.max(0, roundedMin);
-    
-    // Ensure we have at least a 10% range for readability
     const finalRange = finalMax - finalMin;
     let adjustedMin = finalMin;
     let adjustedMax = finalMax;
@@ -98,127 +105,91 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
       adjustedMin = Math.max(0, Math.floor((midpoint - 5) / 5) * 5);
       adjustedMax = Math.min(100, Math.ceil((midpoint + 5) / 5) * 5);
     }
-
-    // Generate ticks in increments of 5
     const yTicks: number[] = [];
-    for (let i = adjustedMin; i <= adjustedMax; i += 5) {
-      yTicks.push(i);
-    }
-
+    for (let i = adjustedMin; i <= adjustedMax; i += 5) yTicks.push(i);
     const result = { min: adjustedMin, max: adjustedMax, ticks: yTicks };
     prevYDomainRef.current = result;
     return result;
   }, [data]);
 
-  // Generate reference lines at useful positions within the current range
   const referenceLines = useMemo(() => {
     const lines: { y: number; opacity: number }[] = [];
     const { min, max } = yAxisConfig;
-    
-    // Add reference line at 50% if it's within range
-    if (min <= 50 && max >= 50) {
-      lines.push({ y: 50, opacity: 0.3 });
-    }
-    
-    // Add reference lines at 25% and 75% if within range
-    if (min <= 25 && max >= 25) {
-      lines.push({ y: 25, opacity: 0.1 });
-    }
-    if (min <= 75 && max >= 75) {
-      lines.push({ y: 75, opacity: 0.1 });
-    }
-    
-    // If range is narrow and doesn't include standard lines, add midpoint reference
+    if (min <= 50 && max >= 50) lines.push({ y: 50, opacity: 0.3 });
+    if (min <= 25 && max >= 25) lines.push({ y: 25, opacity: 0.1 });
+    if (min <= 75 && max >= 75) lines.push({ y: 75, opacity: 0.1 });
     if (lines.length === 0) {
       const midpoint = Math.round((min + max) / 2 / 5) * 5;
-      if (midpoint > min && midpoint < max) {
-        lines.push({ y: midpoint, opacity: 0.2 });
-      }
+      if (midpoint > min && midpoint < max) lines.push({ y: midpoint, opacity: 0.2 });
     }
-    
     return lines;
   }, [yAxisConfig]);
-  
+
   return (
     <div style={{ width: '100%' }}>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data} margin={{ top: 12, right: 12, left: 30, bottom: 48 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" horizontal vertical={false} />
-          <XAxis 
+          <XAxis
             dataKey="timestamp"
             type="number"
             domain={[domainStart, domainEnd]}
             ticks={ticks}
             scale="linear"
             allowDataOverflow={false}
-            axisLine={false} 
-            tickLine={false} 
-            tick={{ fill: '#ffffff', fontSize: 10 }} 
-            tickFormatter={(timestamp) => {
-              const date = new Date(timestamp * 1000);
-              if (timeRangeSeconds && timeRangeSeconds <= 3600) {
-                // 1H - show time only (HH:MM)
-                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-              } else if (timeRangeSeconds && timeRangeSeconds <= 86400) {
-                // 1D - show time only (HH:MM)
-                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-              } else if (timeRangeSeconds && timeRangeSeconds <= 604800) {
-                // 1W - show day and time
-                return date.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
-              } else {
-                // All - show date only
-                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-              }
-            }}
-            height={40} 
-            angle={0} 
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#ffffff', fontSize: 10 }}
+            tickFormatter={(ts) => formatXAxisTick(ts, timeRangeSeconds)}
+            height={40}
+            angle={0}
             textAnchor="middle"
             padding={{ left: 10, right: 10 }}
           />
-          <YAxis 
-            yAxisId="right" 
-            orientation="right" 
-            domain={[yAxisConfig.min, yAxisConfig.max]} 
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            domain={[yAxisConfig.min, yAxisConfig.max]}
             ticks={yAxisConfig.ticks}
-            axisLine={false} 
-            tickLine={false} 
-            tick={{ fill: '#ffffff', fontSize: 11 }} 
-            tickFormatter={(value) => `${value}%`} 
-            width={40} 
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#ffffff', fontSize: 11 }}
+            tickFormatter={(value) => `${value}%`}
+            width={40}
           />
           <Tooltip content={tooltip} />
           {referenceLines.map((line, idx) => (
-            <ReferenceLine 
+            <ReferenceLine
               key={idx}
-              yAxisId="right" 
-              y={line.y} 
-              stroke={`rgba(255, 255, 255, ${line.opacity})`} 
-              strokeDasharray={line.opacity >= 0.3 ? "2 2" : "1 1"} 
+              yAxisId="right"
+              y={line.y}
+              stroke={`rgba(255, 255, 255, ${line.opacity})`}
+              strokeDasharray={line.opacity >= 0.3 ? "2 2" : "1 1"}
             />
           ))}
-          <Line 
-            yAxisId="right" 
-            type="monotone" 
-            dataKey="percentage" 
-            stroke={isVsSingleMarket ? yesTeamColor : '#8b5cf6'} 
+          <Line
+            yAxisId="right"
+            type="monotone"
+            dataKey="percentage"
+            stroke={isVsSingleMarket ? yesTeamColor : '#8b5cf6'}
             strokeWidth={2}
-            dot={false} 
-            connectNulls 
+            dot={false}
+            connectNulls
             animationDuration={500}
             animationEasing="ease-out"
-            activeDot={{ r: 4, fill: isVsSingleMarket ? yesTeamColor : '#8b5cf6', stroke: '#ffffff', strokeWidth: 2 }} 
+            activeDot={{ r: 4, fill: isVsSingleMarket ? yesTeamColor : '#8b5cf6', stroke: '#ffffff', strokeWidth: 2 }}
           />
-          <Line 
-            yAxisId="right" 
-            type="monotone" 
-            dataKey="secondPercentage" 
-            stroke={isVsSingleMarket ? noTeamColor : '#3b82f6'} 
+          <Line
+            yAxisId="right"
+            type="monotone"
+            dataKey="secondPercentage"
+            stroke={isVsSingleMarket ? noTeamColor : '#3b82f6'}
             strokeWidth={2}
-            dot={false} 
-            connectNulls 
+            dot={false}
+            connectNulls
             animationDuration={500}
             animationEasing="ease-out"
-            activeDot={{ r: 4, fill: isVsSingleMarket ? noTeamColor : '#3b82f6', stroke: '#ffffff', strokeWidth: 2 }} 
+            activeDot={{ r: 4, fill: isVsSingleMarket ? noTeamColor : '#3b82f6', stroke: '#ffffff', strokeWidth: 2 }}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -226,4 +197,188 @@ export function SeriesChart({ data, yesTeamColor, noTeamColor, isVsSingleMarket,
   );
 }
 
+// ─── Multi-exchange overlay chart ─────────────────────────────────
 
+interface ExchangeOverlayChartProps {
+  data: MergedExchangePoint[];
+  enabledVenues: Set<string>;
+  teamAName: string;
+  teamBName: string;
+  teamAColor: string;
+  teamBColor: string;
+  height?: number;
+  timeRangeSeconds?: number;
+}
+
+const TEAM_B_SUFFIX = "B";
+
+function teamBKey(venue: string): string {
+  return venue + TEAM_B_SUFFIX;
+}
+
+function baseVenueFromKey(dataKey: string): string {
+  if (dataKey.endsWith(TEAM_B_SUFFIX)) return dataKey.slice(0, -1);
+  return dataKey;
+}
+
+function ExchangeTooltipContent({ active, payload, teamAName, teamBName, teamAColor, teamBColor }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+  const ts = payload[0]?.payload?.timestamp;
+  const date = ts ? new Date(ts * 1000) : null;
+
+  const grouped = new Map<string, { a?: number; b?: number; colorA: string; colorB: string }>();
+  for (const entry of payload) {
+    if (entry.value == null) continue;
+    const key = entry.dataKey as string;
+    const base = baseVenueFromKey(key);
+    const isB = key !== base;
+    const isBestOdds = base === "bestOdds";
+    const venueColor = VENUE_COLORS[base] ?? entry.color;
+    if (!grouped.has(base)) {
+      grouped.set(base, {
+        colorA: isBestOdds ? (teamAColor ?? venueColor) : venueColor,
+        colorB: isBestOdds ? (teamBColor ?? venueColor) : venueColor,
+      });
+    }
+    const g = grouped.get(base)!;
+    if (isB) g.b = entry.value; else g.a = entry.value;
+  }
+
+  return (
+    <div style={{
+      backgroundColor: 'rgba(17, 17, 17, 0.95)',
+      border: '1px solid rgba(255,255,255,0.15)',
+      borderRadius: 8,
+      padding: '8px 12px',
+      fontSize: 12,
+      color: '#fff',
+    }}>
+      {date && (
+        <p style={{ margin: '0 0 6px', opacity: 0.6 }}>
+          {date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
+      {Array.from(grouped.entries()).map(([venue, g]) => {
+        const label = VENUE_LABELS[venue] ?? venue;
+        return (
+          <div key={venue} style={{ margin: '3px 0' }}>
+            <span style={{ color: g.colorA, fontWeight: 600 }}>{label}</span>
+            {g.a != null && (
+              <span style={{ color: g.colorA, marginLeft: 8 }}>
+                {teamAName}: {Number(g.a).toFixed(1)}%
+              </span>
+            )}
+            {g.b != null && (
+              <span style={{ color: g.colorB, opacity: 0.65, marginLeft: 8 }}>
+                {teamBName}: {Number(g.b).toFixed(1)}%
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ExchangeOverlayChart({
+  data,
+  enabledVenues,
+  teamAName,
+  teamBName,
+  teamAColor,
+  teamBColor,
+  height = 300,
+  timeRangeSeconds,
+}: ExchangeOverlayChartProps) {
+  const { domainStart, domainEnd, ticks } = useTimeDomain(data, timeRangeSeconds);
+
+  // Detect which venues have real B-side data
+  const venuesWithBData = useMemo(() => {
+    const bKeys: Record<string, keyof MergedExchangePoint> = {
+      levelUp: "levelUpB",
+      polymarket: "polymarketB",
+      kalshi: "kalshiB",
+      predictFun: "predictFunB",
+      bestOdds: "bestOddsB",
+    };
+    const result = new Set<string>();
+    for (const [venue, field] of Object.entries(bKeys)) {
+      if (data.some((pt) => pt[field] != null)) {
+        result.add(venue);
+      }
+    }
+    return result;
+  }, [data]);
+
+  const lines = useMemo(() => {
+    const out: { key: string; dataKey: string; color: string; width: number; dash?: string }[] = [];
+    const venues = Array.from(enabledVenues);
+    for (const venue of venues) {
+      const isBestOdds = venue === "bestOdds";
+      const colorA = isBestOdds ? teamAColor : (VENUE_COLORS[venue] ?? "#888");
+      const colorB = isBestOdds ? teamBColor : (VENUE_COLORS[venue] ?? "#888");
+      const width = isBestOdds ? 2.5 : 2;
+
+      out.push({ key: `${venue}-a`, dataKey: venue, color: colorA, width });
+
+      if (venuesWithBData.has(venue)) {
+        out.push({ key: `${venue}-b`, dataKey: teamBKey(venue), color: colorB, width, dash: "6 3" });
+      }
+    }
+    return out;
+  }, [enabledVenues, venuesWithBData, teamAColor, teamBColor]);
+
+  return (
+    <div style={{ width: '100%' }}>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={data} margin={{ top: 12, right: 12, left: 30, bottom: 48 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" horizontal vertical={false} />
+          <XAxis
+            dataKey="timestamp"
+            type="number"
+            domain={[domainStart, domainEnd]}
+            ticks={ticks}
+            scale="linear"
+            allowDataOverflow={false}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#ffffff', fontSize: 10 }}
+            tickFormatter={(ts) => formatXAxisTick(ts, timeRangeSeconds)}
+            height={40}
+            angle={0}
+            textAnchor="middle"
+            padding={{ left: 10, right: 10 }}
+          />
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            domain={[0, 100]}
+            ticks={[0, 25, 50, 75, 100]}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: '#ffffff', fontSize: 11 }}
+            tickFormatter={(v) => `${v}%`}
+            width={40}
+          />
+          <Tooltip content={<ExchangeTooltipContent teamAName={teamAName} teamBName={teamBName} teamAColor={teamAColor} teamBColor={teamBColor} />} />
+          <ReferenceLine yAxisId="right" y={50} stroke="rgba(255, 255, 255, 0.3)" strokeDasharray="2 2" />
+          {lines.map((l) => (
+            <Line
+              key={l.key}
+              yAxisId="right"
+              type="monotone"
+              dataKey={l.dataKey}
+              stroke={l.color}
+              strokeWidth={l.width}
+              strokeDasharray={l.dash}
+              dot={false}
+              connectNulls
+              animationDuration={500}
+              activeDot={{ r: 3, stroke: '#fff', strokeWidth: 1 }}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}

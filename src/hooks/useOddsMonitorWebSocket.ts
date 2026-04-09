@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	MatchedMarket,
 	OddsMonitorAppState,
@@ -7,6 +7,7 @@ import type {
 	VenueStatusInfo,
 } from "@/types/odds-monitor";
 import { getMatchedMarketsUrl } from "@/config/oddsMonitorBase";
+import type { MatchedMarketsDflowWire } from "@/types/matchedMarketsDflowWire";
 
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -48,13 +49,7 @@ interface MatchedMarketsApiItem {
 			tickSize: string;
 		};
 		kalshi?: { tickerA: string; tickerB?: string; eventTicker: string };
-		dflow?: {
-			tickerA: string;
-			tickerB?: string;
-			eventTicker: string;
-			yesMintA?: string;
-			yesMintB?: string;
-		};
+		dflow?: MatchedMarketsDflowWire;
 		predictFun?: {
 			marketIdA?: string;
 			marketIdB?: string;
@@ -106,6 +101,8 @@ function apiItemToMatchedMarket(item: MatchedMarketsApiItem): MatchedMarket {
 		predictFunPriceB: null,
 		limitlessPriceA: null,
 		limitlessPriceB: null,
+		levelUpPriceA: null,
+		levelUpPriceB: null,
 	};
 }
 
@@ -146,7 +143,7 @@ function teamToOrderbookData(team: VenuePriceTeam, snapshotStatus?: SnapshotStat
 	};
 }
 
-type VenueKey = "polymarket" | "dflow" | "kalshi" | "predictfun" | "limitless";
+type VenueKey = "polymarket" | "dflow" | "kalshi" | "predictfun" | "limitless" | "levelup";
 
 const VENUE_PRICE_FIELDS: Record<VenueKey, [keyof MatchedMarket, keyof MatchedMarket][]> = {
 	polymarket: [["polyPriceA", "polyPriceB"]],
@@ -154,6 +151,7 @@ const VENUE_PRICE_FIELDS: Record<VenueKey, [keyof MatchedMarket, keyof MatchedMa
 	kalshi: [["dflowPriceA", "dflowPriceB"], ["kalshiPriceA", "kalshiPriceB"]],
 	predictfun: [["predictFunPriceA", "predictFunPriceB"]],
 	limitless: [["limitlessPriceA", "limitlessPriceB"]],
+	levelup: [["levelUpPriceA", "levelUpPriceB"]],
 };
 
 /** Wire venue id from venue-prices snapshots (matches server `VenueConnectionManager`). */
@@ -164,6 +162,7 @@ function venueWireNameToKey(venue: string): VenueKey | null {
 	if (v === "dflow") return "dflow";
 	if (v === "kalshi") return "kalshi";
 	if (v === "limitless") return "limitless";
+	if (v === "levelup") return "levelup";
 	return null;
 }
 
@@ -191,6 +190,68 @@ function applyPriceUpdates(
 	return changed;
 }
 
+function bufferOrApplyVenueSnapshots(
+	markets: Map<string, MatchedMarket>,
+	pending: Map<string, VenuePriceSnapshot[]>,
+	snapshots: VenuePriceSnapshot[],
+): boolean {
+	let changed = false;
+	const byId = new Map<string, VenuePriceSnapshot[]>();
+	for (const s of snapshots) {
+		const pid = s.pandaMatchId;
+		if (!pid) continue;
+		const list = byId.get(pid) ?? [];
+		list.push(s);
+		byId.set(pid, list);
+	}
+	for (const [pid, snaps] of byId) {
+		if (markets.has(pid)) {
+			if (applyPriceUpdates(markets, snaps)) changed = true;
+		} else {
+			const prev = pending.get(pid) ?? [];
+			pending.set(pid, prev.concat(snaps));
+		}
+	}
+	return changed;
+}
+
+function venueSnapshotsFromMessage(message: {
+	type?: string;
+	data?: unknown;
+	pandaMatchId?: string;
+	venue?: string;
+	teamA?: VenuePriceTeam;
+	teamB?: VenuePriceTeam;
+	timestamp?: number;
+	status?: SnapshotStatus;
+}): VenuePriceSnapshot[] {
+	if (message.type === "venue_prices" && Array.isArray(message.data)) {
+		return message.data as VenuePriceSnapshot[];
+	}
+	if (message.type === "venue_bbo") {
+		if (Array.isArray(message.data)) return message.data as VenuePriceSnapshot[];
+		if (
+			typeof message.pandaMatchId === "string" &&
+			message.pandaMatchId &&
+			typeof message.venue === "string" &&
+			message.teamA &&
+			message.teamB
+		) {
+			return [
+				{
+					pandaMatchId: message.pandaMatchId,
+					venue: message.venue,
+					teamA: message.teamA,
+					teamB: message.teamB,
+					timestamp: typeof message.timestamp === "number" ? message.timestamp : Date.now(),
+					status: message.status,
+				},
+			];
+		}
+	}
+	return [];
+}
+
 // ── Hook ────────────────────────────────────────────────────────────
 
 /**
@@ -200,7 +261,8 @@ function applyPriceUpdates(
  * so all downstream consumers work unchanged.
  */
 export function useOddsMonitorWebSocket(
-	wsUrl: string | null
+	wsUrl: string | null,
+	activePandaMatchIds: string[] = [],
 ): UseOddsMonitorWebSocketResult {
 	const [connected, setConnected] = useState(false);
 	const [appState, setAppState] = useState<OddsMonitorAppState | null>(null);
@@ -214,6 +276,8 @@ export function useOddsMonitorWebSocket(
 	const venueStatusRef = useRef<Map<string, VenueStatusInfo[]>>(new Map());
 	const mappingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const mappingFetchInflightRef = useRef<Promise<void> | null>(null);
+	const pendingVenueSnapsRef = useRef<Map<string, VenuePriceSnapshot[]>>(new Map());
+	const prevSentPandaSubsRef = useRef<Set<string>>(new Set());
 
 	const clearReconnectTimer = () => {
 		if (reconnectTimerRef.current !== null) {
@@ -384,11 +448,24 @@ export function useOddsMonitorWebSocket(
 					base.predictFunPriceB = prev.predictFunPriceB;
 					base.limitlessPriceA = prev.limitlessPriceA;
 					base.limitlessPriceB = prev.limitlessPriceB;
+					base.levelUpPriceA = prev.levelUpPriceA;
+					base.levelUpPriceB = prev.levelUpPriceB;
 				}
 				next.set(item.pandaMatchId, base);
 			}
 
 			marketsRef.current = next;
+
+			const pend = pendingVenueSnapsRef.current;
+			for (const [pid, snaps] of Array.from(pend.entries())) {
+				if (next.has(pid) && snaps.length) {
+					if (applyPriceUpdates(marketsRef.current, snaps)) {
+						/* merged buffered BBO into new row */
+					}
+					pend.delete(pid);
+				}
+			}
+
 			publishState();
 			} catch (err) {
 				if (import.meta.env.DEV) console.error("[venue-monitor] Mappings fetch error:", err);
@@ -421,6 +498,8 @@ export function useOddsMonitorWebSocket(
 			setConnected(false);
 			setAppState(null);
 			setLastWsError(null);
+			prevSentPandaSubsRef.current = new Set();
+			pendingVenueSnapsRef.current = new Map();
 			return;
 		}
 
@@ -439,6 +518,7 @@ export function useOddsMonitorWebSocket(
 				ws.onopen = () => {
 					if (wsRef.current !== ws) return;
 					if (import.meta.env.DEV) console.log("[venue-monitor] WebSocket connected");
+					prevSentPandaSubsRef.current = new Set();
 					setConnected(true);
 					setLastWsError(null);
 					reconnectAttemptRef.current = 0;
@@ -456,12 +536,16 @@ export function useOddsMonitorWebSocket(
 							if (import.meta.env.DEV) console.log("[venue-monitor] WS:", message.type);
 							return;
 						}
-						if (message.type === "venue_prices" && Array.isArray(message.data)) {
-							const changed = applyPriceUpdates(
-								marketsRef.current,
-								message.data as VenuePriceSnapshot[],
-							);
-							if (changed) publishState();
+						if (message.type === "venue_prices" || message.type === "venue_bbo") {
+							const snaps = venueSnapshotsFromMessage(message);
+							if (snaps.length) {
+								const changed = bufferOrApplyVenueSnapshots(
+									marketsRef.current,
+									pendingVenueSnapsRef.current,
+									snaps,
+								);
+								if (changed) publishState();
+							}
 							return;
 						}
 						if (
@@ -543,6 +627,46 @@ export function useOddsMonitorWebSocket(
 			if (w) w.close();
 		};
 	}, [wsUrl, fetchMappings, publishState]);
+
+	const pandaSubsKey = useMemo(
+		() =>
+			[...activePandaMatchIds]
+				.map((id) => String(id).trim())
+				.filter(Boolean)
+				.sort()
+				.join("\0"),
+		[activePandaMatchIds],
+	);
+
+	useEffect(() => {
+		const socket = wsRef.current;
+		if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+		const want = new Set(
+			activePandaMatchIds.map((id) => String(id).trim()).filter(Boolean),
+		);
+		const prev = prevSentPandaSubsRef.current;
+
+		for (const id of prev) {
+			if (!want.has(id)) {
+				try {
+					socket.send(JSON.stringify({ type: "unsubscribe", pandaMatchId: id }));
+				} catch {
+					/* ignore */
+				}
+			}
+		}
+		for (const id of want) {
+			if (!prev.has(id)) {
+				try {
+					socket.send(JSON.stringify({ type: "subscribe", pandaMatchId: id }));
+				} catch {
+					/* ignore */
+				}
+			}
+		}
+		prevSentPandaSubsRef.current = new Set(want);
+	}, [connected, pandaSubsKey, activePandaMatchIds]);
 
 	return {
 		connected,

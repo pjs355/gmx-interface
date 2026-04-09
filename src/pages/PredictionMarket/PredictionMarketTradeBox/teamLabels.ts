@@ -2,11 +2,14 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 
 /** Prefer umbrella title (e.g. "A vs B - Match Winner"); Over/Under uses market title only. */
 export function getYesNoTeamLabels(
-	market: PredictionMarket,
+	market: PredictionMarket | null | undefined,
 	umbrellaDisplayName?: string,
 ): { yesTeamLabel: string; noTeamLabel: string } {
+	if (!market) {
+		return { yesTeamLabel: "Yes", noTeamLabel: "No" };
+	}
 	const marketTitle = (
-		market?.displayName ||
+		market.displayName ||
 		(market as { question?: string }).question ||
 		""
 	).trim();

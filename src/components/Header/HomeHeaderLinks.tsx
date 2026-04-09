@@ -38,7 +38,7 @@ export function HomeHeaderLinks({
 		{
 			label: t`App`,
 			isHomeLink: true,
-			link: `/predictions`,
+			link: `/`,
 			onClick: () => {
 				// No analytics tracking needed
 			},

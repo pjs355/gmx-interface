@@ -16,6 +16,10 @@ import { MarketHeader } from "./MarketHeader";
 import { useMatchSettled } from "./useMatchSettled";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
+import {
+	normalizeOrderbookPayload,
+	hasUsableOrderbookSnapshot,
+} from "./utils";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -51,6 +55,7 @@ function PredictionMarketContent() {
 		umbrella: false,
 		markets: false,
 	});
+	const wsPayloadDevLoggedRef = useRef(new Set<string>());
 
 	const {
 		umbrellas,
@@ -95,7 +100,7 @@ function PredictionMarketContent() {
 				}
 				setQuestions([]);
 				setLoading(false);
-				navigate("/predictions", { replace: true });
+				navigate("/", { replace: true });
 				return;
 			}
 			return;
@@ -117,11 +122,14 @@ function PredictionMarketContent() {
 				(q as any)?._id ||
 				(q as any)?.questionId ||
 				(q as any)?.marketId;
-			if (qid)
-				seeded[qid] = getOrderbookForQuestion(
+			if (qid) {
+				const ob = getOrderbookForQuestion(
 					umbrellaFromContext._id,
 					qid
 				);
+				seeded[qid] =
+					ob != null ? normalizeOrderbookPayload(ob) : ob;
+			}
 		}
 		setQuestionOrderbooks(seeded);
 		setLoading(false);
@@ -134,109 +142,174 @@ function PredictionMarketContent() {
 		navigate,
 	]);
 
-	// WebSocket connections for real-time orderbook updates
+	const marketIdsKey = useMemo(
+		() =>
+			[...questions]
+				.map((q) => q._id || q.questionId || q.marketId)
+				.filter(Boolean)
+				.map((id) => String(id))
+				.sort()
+				.join("|"),
+		[questions],
+	);
+
+	// REST bootstrap: populate books from production orderbook API so chart/trade work if WS is down or slow
+	useEffect(() => {
+		if (!umbrella?._id || !marketIdsKey) return;
+		const qids = marketIdsKey.split("|");
+		let cancelled = false;
+		(async () => {
+			const pairs = await Promise.all(
+				qids.map(async (qid) => {
+					const ob = await refreshOrderbook(umbrella._id, qid);
+					return { qid, ob };
+				}),
+			);
+			if (cancelled) return;
+			setQuestionOrderbooks((prev) => {
+				const next = { ...prev };
+				for (const { qid, ob } of pairs) {
+					if (ob != null) next[qid] = normalizeOrderbookPayload(ob);
+				}
+				return next;
+			});
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [umbrella?._id, marketIdsKey, refreshOrderbook]);
+
+	// Single multiplex WebSocket (`/ws`) for all market orderbooks on this umbrella
 	useEffect(() => {
 		if (!umbrella?._id || questions.length === 0) return;
 
-		const wsUrl = getPredictionWebSocketUrl();
-		const connections: WebSocket[] = [];
+		const wsBase = getPredictionWebSocketUrl().replace(/\/$/, "");
+		const wsUrl = `${wsBase}/ws`;
 		const receivedOrderbooks = new Set<string>();
 
-		// Reset ready state when questions change
 		setOrderbooksReady(false);
 
-		// Get all market IDs we're expecting
 		const expectedMarketIds = questions
 			.map((q) => q._id || q.questionId || q.marketId)
-			.filter(Boolean);
+			.filter(Boolean)
+			.map((id) => String(id));
 
-		// Create a WebSocket connection for each market
-		questions.forEach((question) => {
-			const marketId =
-				question._id || question.questionId || question.marketId;
-			if (!marketId) return;
+		const applyOrderbookForMarket = (marketId: string, raw: unknown) => {
+			const wrapped =
+				raw && typeof raw === "object" && !Array.isArray(raw)
+					? (raw as Record<string, unknown>)
+					: null;
+			const inner = wrapped?.snapshot ?? wrapped?.orderbook ?? wrapped?.data ?? raw;
+			const orderbook = normalizeOrderbookPayload(inner);
 
-			try {
-				const ws = new WebSocket(`${wsUrl}/orderbook/${marketId}`);
-
-				ws.onopen = () => {
-					// WebSocket connected
-				};
-
-				ws.onmessage = (event) => {
-					try {
-						const message = JSON.parse(event.data);
-
-						// Extract the orderbook snapshot from the message
-						const orderbook = message.snapshot || message;
-
-						// Update the orderbook for this specific market
-						setQuestionOrderbooks((prev) => ({
-							...prev,
-							[marketId]: orderbook,
-						}));
-
-						// Track that we've received data for this market
-						receivedOrderbooks.add(marketId);
-
-						// Check if all orderbooks have been received
-						if (
-							receivedOrderbooks.size === expectedMarketIds.length
-						) {
-							setOrderbooksReady(true);
-						}
-					} catch (error) {
-						console.error(
-							"error",
-							`Failed to parse WebSocket message for market ${marketId}:`,
-							error
-						);
-					}
-				};
-
-				ws.onerror = (error) => {
-					console.error(
-						"error",
-						`WebSocket error for market ${marketId}:`,
-						error
+			if (import.meta.env.DEV && !hasUsableOrderbookSnapshot(orderbook)) {
+				const mid = String(marketId);
+				if (!wsPayloadDevLoggedRef.current.has(mid)) {
+					wsPayloadDevLoggedRef.current.add(mid);
+					console.debug(
+						"[PredictionMarket] multiplex WS orderbook not usable after normalize",
+						{
+							marketId: mid,
+							rawKeys:
+								inner &&
+								typeof inner === "object" &&
+								!Array.isArray(inner)
+									? Object.keys(inner as object)
+									: typeof inner,
+						},
 					);
-				};
-
-				ws.onclose = () => {
-					// WebSocket closed
-				};
-				connections.push(ws);
-			} catch (error) {
-				console.error(
-					"error",
-					`Failed to create WebSocket for market ${marketId}:`,
-					error
-				);
+				}
 			}
-		});
 
-		// Fallback timeout - if orderbooks don't load within 5 seconds, show UI anyway
+			setQuestionOrderbooks((prev) => ({
+				...prev,
+				[marketId]: orderbook,
+			}));
+			receivedOrderbooks.add(marketId);
+			if (receivedOrderbooks.size === expectedMarketIds.length) {
+				setOrderbooksReady(true);
+			}
+		};
+
+		const routeMessage = (message: unknown) => {
+			if (!message || typeof message !== "object") return;
+			const m = message as Record<string, unknown>;
+			const t = m.type;
+			if (t === "subscribed" || t === "unsubscribed" || t === "pong" || t === "error") {
+				return;
+			}
+
+			const midRaw =
+				m.market ?? m.questionId ?? m.question_id ?? m.conditionId;
+			if (typeof midRaw === "string" && midRaw) {
+				applyOrderbookForMarket(midRaw, m.snapshot ?? m.orderbook ?? m);
+				return;
+			}
+
+			const markets = m.markets;
+			if (Array.isArray(markets)) {
+				for (const item of markets) {
+					if (!item || typeof item !== "object") continue;
+					const row = item as Record<string, unknown>;
+					const id = row.market ?? row.questionId ?? row.conditionId;
+					if (typeof id === "string" && id) {
+						applyOrderbookForMarket(id, row.snapshot ?? row.orderbook ?? row);
+					}
+				}
+			}
+		};
+
+		let ws: WebSocket;
+		try {
+			ws = new WebSocket(wsUrl);
+		} catch (error) {
+			console.error("error", "Failed to create multiplex orderbook WebSocket:", error);
+			return;
+		}
+
+		ws.onopen = () => {
+			for (const mid of expectedMarketIds) {
+				try {
+					ws.send(JSON.stringify({ type: "subscribe", market: mid }));
+				} catch {
+					/* ignore */
+				}
+			}
+		};
+
+		ws.onmessage = (event) => {
+			try {
+				const message = JSON.parse(event.data as string);
+				routeMessage(message);
+			} catch (error) {
+				console.error("error", "Failed to parse multiplex WebSocket message:", error);
+			}
+		};
+
+		ws.onerror = (error) => {
+			console.error("error", "Multiplex orderbook WebSocket error:", error);
+		};
+
 		const timeout = setTimeout(() => {
 			if (!receivedOrderbooks.size) {
 				setOrderbooksReady(true);
 			}
 		}, 5000);
 
-		// Cleanup: close all connections on unmount or when dependencies change
 		return () => {
 			clearTimeout(timeout);
-			localStorage.removeItem("activePosition");
-
-			connections.forEach((ws) => {
-				if (
-					ws.readyState === WebSocket.OPEN ||
-					ws.readyState === WebSocket.CONNECTING
-				) {
-					ws.close();
+			if (ws.readyState === WebSocket.OPEN) {
+				for (const mid of expectedMarketIds) {
+					try {
+						ws.send(JSON.stringify({ type: "unsubscribe", market: mid }));
+					} catch {
+						/* ignore */
+					}
 				}
-			});
+			}
+			ws.close();
 		};
-	}, [umbrella?._id, questions.length]);
+	}, [umbrella?._id, marketIdsKey]);
 
 	// Poll for THIS umbrella's updates every 60 seconds (e.g., streamEnabled toggled by cron)
 	useEffect(() => {
@@ -315,25 +388,27 @@ function PredictionMarketContent() {
 	const fetchAllOrderbooks = useCallback(
 		async (qs: PredictionMarket[]) => {
 			if (!umbrella) return;
-			await Promise.all(
+			const rows = await Promise.all(
 				(qs || []).map(async (q) => {
 					const qid =
 						(q as any)._id ||
 						(q as any).questionId ||
 						(q as any).marketId;
-					if (!qid) return;
-					await refreshOrderbook(umbrella._id, qid);
-				})
+					if (!qid) return null;
+					const sid = String(qid);
+					const ob = await refreshOrderbook(umbrella._id, sid);
+					return { qid: sid, ob };
+				}),
 			);
-			// Re-seed from context after refresh
 			const updated: { [qid: string]: any } = {};
-			for (const q of qs as any[]) {
-				const qid =
-					(q as any)._id ||
-					(q as any).questionId ||
-					(q as any).marketId;
-				if (qid)
-					updated[qid] = getOrderbookForQuestion(umbrella._id, qid);
+			for (const row of rows) {
+				if (!row) continue;
+				let ob = row.ob;
+				if (ob == null) {
+					ob = getOrderbookForQuestion(umbrella._id, row.qid);
+				}
+				if (ob != null)
+					updated[row.qid] = normalizeOrderbookPayload(ob);
 			}
 			setQuestionOrderbooks(updated);
 		},
@@ -551,7 +626,7 @@ function PredictionMarketContent() {
 					</p>
 					<Button
 						variant="primary"
-						onClick={() => navigate("/predictions")}
+						onClick={() => navigate("/")}
 						style={{
 							padding: "12px 24px",
 							fontSize: "16px",
@@ -578,7 +653,7 @@ function PredictionMarketContent() {
 					</p>
 					<Button
 						variant="primary"
-						onClick={() => navigate("/predictions")}
+						onClick={() => navigate("/")}
 						style={{
 							padding: "12px 24px",
 							fontSize: "16px",
@@ -618,7 +693,6 @@ function PredictionMarketContent() {
 				onPositionChange={handlePositionChange}
 				fetchAllOrderbooks={fetchAllOrderbooks}
 				chartState={chartOnlyState}
-				orderbooksReady={orderbooksReady}
 				settledInfo={settledInfo}
 			/>
 		</div>

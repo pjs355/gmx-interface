@@ -184,9 +184,13 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 					const position: "yes" | "no" = leg.outcome === "A" ? "yes" : "no";
 					const shares = Math.round(leg.shares);
-					const signingPrice = side === "buy"
-						? Math.round(Math.min(leg.avgPrice * 1.15, 0.99) * 100) / 100
-						: Math.round(Math.max(leg.avgPrice * 0.85, 0.01) * 100) / 100;
+					const maxPx = leg.maxPrice;
+					const signingPrice =
+						maxPx != null && Number.isFinite(maxPx) && maxPx > 0 && maxPx <= 1
+							? Math.round(maxPx * 100) / 100
+							: side === "buy"
+								? Math.round(Math.min(leg.avgPrice * 1.15, 0.99) * 100) / 100
+								: Math.round(Math.max(leg.avgPrice * 0.85, 0.01) * 100) / 100;
 
 					const params: TradeExecutionParams = {
 						marketId: questionId,
@@ -288,22 +292,22 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					return { filled: true, filledShares: leg.shares, txHash: sig };
 				}
 
-				// ─── Predict.fun (BNB, USDT) ─────────────
+				// ─── Predict (BNB, USDT) ─────────────
 				case "predictfun": {
 					if (!predictSession.ready) {
-						return { filled: false, filledShares: 0, error: "Predict.fun session not ready. Authenticate on the Predict.fun tab first." };
+						return { filled: false, filledShares: 0, error: "Predict session not ready. Authenticate on the Predict tab first." };
 					}
 					if (!predictApprovalsOk) {
-						return { filled: false, filledShares: 0, error: "Predict.fun contracts not approved. Approve on the Predict.fun tab first." };
+						return { filled: false, filledShares: 0, error: "Predict contracts not approved. Approve on the Predict tab first." };
 					}
 
 					if (!predictTokenId) {
-						return { filled: false, filledShares: 0, error: "Missing Predict.fun outcome token ID" };
+						return { filled: false, filledShares: 0, error: "Missing Predict outcome token ID" };
 					}
 					const tokenId = predictTokenId;
 
 					if (predictNumericId == null || !predictMarketDetail) {
-						return { filled: false, filledShares: 0, error: "Predict.fun market data not loaded" };
+						return { filled: false, filledShares: 0, error: "Predict market data not loaded" };
 					}
 
 					const amountStr = side === "buy"

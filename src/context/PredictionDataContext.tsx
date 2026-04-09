@@ -11,6 +11,7 @@ import {
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { getPrivateApiBaseUrl } from "@/config/privateApiBase";
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
 import { usePrivy } from "@privy-io/react-auth";
@@ -49,7 +50,10 @@ type PredictionDataContextValue = {
 		umbrellaId: string,
 		questionId: string
 	) => any | null;
-	refreshOrderbook: (umbrellaId: string, questionId: string) => Promise<void>;
+	refreshOrderbook: (
+		umbrellaId: string,
+		questionId: string
+	) => Promise<any | null>;
 };
 
 const PredictionDataContext = createContext<PredictionDataContextValue>({
@@ -72,7 +76,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	getAllQuestionsForUmbrella: () => [],
 	getResolvedQuestionsForUmbrella: () => [],
 	getOrderbookForQuestion: () => null,
-	refreshOrderbook: async () => {},
+	refreshOrderbook: async () => null,
 });
 
 export function PredictionDataProvider({
@@ -284,7 +288,7 @@ export function PredictionDataProvider({
 			try {
 				const orderbookService = new OrderbookService();
 				const ob = await orderbookService.fetchOrderbook(questionId);
-				if (!ob) return;
+				if (!ob) return null;
 				// Decide which bucket to update
 				if (singleMarketQuestions[umbrellaId]) {
 					setSingleMarketOrderbooks((prev) => ({
@@ -308,8 +312,9 @@ export function PredictionDataProvider({
 						},
 					}));
 				}
+				return ob;
 			} catch {
-				// silent
+				return null;
 			}
 		},
 		[singleMarketQuestions, getQuestionsForUmbrella]
@@ -365,7 +370,7 @@ export function PredictionDataProvider({
 					}
 				}
 				const t0 = performance.now();
-				const baseUrl = getPredictionApiBaseUrl();
+				const baseUrl = getPrivateApiBaseUrl();
 				const response = await fetch(
 					`${baseUrl}/api/all-books-preview`
 				);

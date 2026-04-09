@@ -131,7 +131,7 @@ export function About() {
 					Fund your account and begin making predictions on major releases, esports events, and more.
 				</p>
 				<div className="About-button-container center">
-					<Link to="/predictions">
+					<Link to="/">
 						<Button variant="primary">Start Trading</Button>
 					</Link>
 				</div>
