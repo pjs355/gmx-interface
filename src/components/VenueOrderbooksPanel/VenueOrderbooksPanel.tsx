@@ -47,24 +47,19 @@ function buildVenueEntries(
 
 	const wsBookA = monitorBookToSnapshot(matched.levelUpPriceA);
 	const wsBookB = monitorBookToSnapshot(matched.levelUpPriceB);
-	const hasWsLevelUp = Boolean(
-		(wsBookA && ((wsBookA.asks?.length ?? 0) > 0 || (wsBookA.bids?.length ?? 0) > 0))
-		|| (wsBookB && ((wsBookB.asks?.length ?? 0) > 0 || (wsBookB.bids?.length ?? 0) > 0)),
-	);
-	if (hasWsLevelUp) {
+
+	const restHasDepth = levelUpOrderbook &&
+		((levelUpOrderbook.asks?.length ?? 0) + (levelUpOrderbook.bids?.length ?? 0)) > 2;
+	const luBookA = restHasDepth ? levelUpOrderbook : (wsBookA ?? levelUpOrderbook);
+	const luBookB = restHasDepth ? null : wsBookB;
+	const hasLevelUp = Boolean(luBookA || luBookB);
+
+	if (hasLevelUp) {
 		entries.push({
 			id: "levelup",
 			label: "LevelUp",
-			bookA: wsBookA ?? levelUpOrderbook,
-			bookB: wsBookB,
-			restricted: false,
-		});
-	} else if (levelUpOrderbook) {
-		entries.push({
-			id: "levelup",
-			label: "LevelUp",
-			bookA: levelUpOrderbook,
-			bookB: null,
+			bookA: luBookA,
+			bookB: luBookB,
 			restricted: false,
 		});
 	}
