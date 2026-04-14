@@ -3,13 +3,12 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSignMessage } from "@privy-io/react-auth/solana";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import bs58 from "bs58";
+import Tooltip from "@/components/Tooltip/Tooltip";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import type { DflowVerifyResponse } from "@/services/privateApi";
 
-function truncateAddr(a: string | null | undefined): string {
-	if (!a) return "—";
-	return `${a.slice(0, 6)}…${a.slice(-4)}`;
-}
+const KALSHI_NOT_VERIFIED_TOOLTIP =
+	"You must verify your identity via DFlow in order to place trades with Kalshi.";
 
 export default function DflowProofSection() {
 	const { authenticated, user } = usePrivy();
@@ -62,33 +61,6 @@ export default function DflowProofSection() {
 		staleTime: 120_000,
 		retry: false,
 	});
-
-	const refreshFromProof = useCallback(async () => {
-		setError(null);
-		setSuccessMsg(null);
-		setBusy(true);
-		try {
-			const result = await api.getDflowVerify();
-			if (result.verified) {
-				await queryClient.invalidateQueries({
-					queryKey: ["dflow", "account"],
-				});
-				setSuccessMsg(
-					"LevelUp is synced with Proof — you’re verified for Kalshi / DFlow."
-				);
-			} else {
-				setError(
-					"Proof still reports pending. If you only just finished ID verification, wait a minute and try again, or use Start Proof Verification."
-				);
-			}
-		} catch (e: unknown) {
-			const msg =
-				e instanceof Error ? e.message : "Could not refresh Proof status.";
-			setError(msg);
-		} finally {
-			setBusy(false);
-		}
-	}, [api, queryClient]);
 
 	const handleVerify = useCallback(async () => {
 		setError(null);
@@ -157,17 +129,19 @@ export default function DflowProofSection() {
 	if (!authenticated) return null;
 
 	return (
-		<div className="Details-info-section" style={{ marginTop: 24 }}>
-			<div className="Details-info-label">Kalshi / DFlow (Proof KYC)</div>
+		<div
+			id="dflow-kyc"
+			className="Details-info-section"
+			style={{ marginTop: 24 }}
+		>
+			<div
+				className="Details-info-label"
+				style={{ fontSize: 16, fontWeight: 700, opacity: 1 }}
+			>
+				Kalshi enabled trading
+			</div>
 
 			<div style={{ marginTop: 8 }}>
-				<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-					<span style={{ color: "#888", fontSize: 13 }}>Solana Wallet:</span>
-					<span style={{ color: "#fff", fontSize: 13, fontFamily: "monospace" }}>
-						{truncateAddr(solanaAddress)}
-					</span>
-				</div>
-
 				<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
 					<span style={{ color: "#888", fontSize: 13 }}>Status:</span>
 					{accountQuery.isLoading ? (
@@ -179,52 +153,35 @@ export default function DflowProofSection() {
 							Verified
 						</span>
 					) : (
-						<span style={{ color: "#f59e0b", fontSize: 13, fontWeight: 600 }}>
-							Not verified
-						</span>
+						<Tooltip
+							content={KALSHI_NOT_VERIFIED_TOOLTIP}
+							position="top"
+							withPortal={true}
+						>
+							<span
+								style={{
+									color: "#f59e0b",
+									fontSize: 13,
+									fontWeight: 600,
+									cursor: "help",
+								}}
+							>
+								Not verified
+							</span>
+						</Tooltip>
 					)}
 				</div>
 
 				{!isVerified && (
-					<p
-						style={{
-							color: "rgba(255,255,255,0.55)",
-							fontSize: 12,
-							lineHeight: 1.45,
-							margin: "0 0 12px 0",
-							maxWidth: 480,
-						}}
-					>
-						Got an email from DFlow that ID is verified? LevelUp only updates after our
-						server talks to Proof. Open this page again or use{" "}
-						<strong style={{ color: "rgba(255,255,255,0.75)" }}>
-							Refresh from Proof
-						</strong>{" "}
-						— it runs the same check as returning from the Proof flow.
-					</p>
-				)}
-
-				{!isVerified && (
-					<div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-						<button
-							type="button"
-							className="Details-button"
-							onClick={() => void refreshFromProof()}
-							disabled={
-								busy || accountQuery.isLoading || !solanaAddress || verifySyncQuery.isFetching
-							}
-							style={{ minWidth: 180 }}
-						>
-							{busy ? "Checking…" : "Refresh from Proof"}
-						</button>
+					<div style={{ marginTop: 4 }}>
 						<button
 							type="button"
 							className="Details-button"
 							onClick={() => void handleVerify()}
 							disabled={busy || accountQuery.isLoading || verifySyncQuery.isFetching}
-							style={{ minWidth: 200, opacity: 0.92 }}
+							style={{ minWidth: 180, opacity: 0.92 }}
 						>
-							{busy ? "Verifying…" : "Start Proof Verification"}
+							{busy ? "Verifying…" : "Get Verified"}
 						</button>
 					</div>
 				)}

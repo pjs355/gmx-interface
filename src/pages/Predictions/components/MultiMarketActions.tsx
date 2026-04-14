@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import Button from "components/Button/Button";
 import {
 	toCentsString,
@@ -9,6 +9,7 @@ import {
 } from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 
 interface MultiMarketActionsProps {
 	umbrellaId: string;
@@ -90,6 +91,52 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 
 	const totalMarkets = data?.questions?.length || 0;
 	const hasMoreMarkets = totalMarkets > 2;
+
+	const liveYesFinite =
+		typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice);
+	const liveNoFinite =
+		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice);
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		topMarkets.forEach((marketData, index) => {
+			const { question } = marketData;
+			const qid = question.questionId || question._id;
+			const preview = qid ? allBooksPreview[String(qid)] : undefined;
+			const yesPrice = liveYesFinite
+				? liveVenueYesPrice!
+				: (preview?.bestYesPrice ?? preview?.lowestAsk ?? null);
+			const noPrice = liveNoFinite
+				? liveVenueNoPrice!
+				: (preview?.bestNoPrice ?? null);
+			priceDebugLog(`homepage MultiMarketActions row ${index}`, {
+				umbrellaId,
+				marketName: question.displayName || question.question,
+				lookupQuestionId: qid ?? null,
+				mongoId: question._id ?? null,
+				previewFromAllBooksPreview: preview ?? null,
+				liveWsOverridesBothRows: liveYesFinite || liveNoFinite,
+				noteWhenLive:
+					"When live WS YES/NO are set, the same values apply to every top-2 row (match-level best, not per-question).",
+				dataSource:
+					"preview: GET getPrivateApiBaseUrl()/api/all-books-preview; live: venue-prices WS → listingBestYesNoFromMatched",
+				liveVenueYesPrice: liveVenueYesPrice ?? null,
+				liveVenueNoPrice: liveVenueNoPrice ?? null,
+				finalYesPrice: yesPrice ?? null,
+				finalNoPrice: noPrice ?? null,
+				yesSource: liveYesFinite ? "live_ws" : preview ? "preview_api" : "none",
+				noSource: liveNoFinite ? "live_ws" : preview?.bestNoPrice != null ? "preview_api" : "none",
+			});
+		});
+	}, [
+		umbrellaId,
+		topMarkets,
+		allBooksPreview,
+		liveVenueYesPrice,
+		liveVenueNoPrice,
+		liveYesFinite,
+		liveNoFinite,
+	]);
 
 	return (
 		<div className="multi-market-actions">

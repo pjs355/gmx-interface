@@ -196,7 +196,6 @@ const MIN_REQUEST_INTERVAL_MS = 100; // Minimum 100ms between requests
 export function clearSubgraphCache(): void {
 	queryCache.clear();
 	lastRequestTime = 0;
-	console.log("[Subgraph] Cache cleared");
 }
 
 /**
@@ -229,7 +228,6 @@ async function executeQuery<T>(
 	if (!skipCache) {
 		const cached = queryCache.get(cacheKey);
 		if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
-			console.log(`[Subgraph] Cache HIT (age: ${now - cached.timestamp}ms)`, { variables });
 			return cached.data as T;
 		}
 	}
@@ -238,7 +236,6 @@ async function executeQuery<T>(
 	const timeSinceLastRequest = now - lastRequestTime;
 	if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
 		const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
-		console.log(`[Subgraph] Rate limiting, waiting ${waitTime}ms`);
 		await sleep(waitTime);
 	}
 
@@ -272,8 +269,6 @@ async function executeQuery<T>(
 
 	// Store in cache
 	queryCache.set(cacheKey, { data: result.data, timestamp: Date.now() });
-
-	console.log(`[Subgraph] Query OK (${duration}ms, cached)`, { variables });
 
 	return result.data;
 }
@@ -311,8 +306,6 @@ export async function getUserAccount(
 	// If we got a full page, there might be more - keep paginating
 	let skip = PAGE_SIZE;
 	while (lastPageSize === PAGE_SIZE) {
-		console.log(`[Subgraph] Fetching page ${skip / PAGE_SIZE + 1} (skip: ${skip})...`);
-		
 		const nextPage = await executeQuery<{ account: SubgraphAccount | null }>(
 			GET_USER_ACCOUNT_QUERY,
 			{ wallet: normalizedAddress, first: PAGE_SIZE, skip }
@@ -332,8 +325,6 @@ export async function getUserAccount(
 			break;
 		}
 	}
-
-	console.log(`[Subgraph] Fetched ${allTokenBalances.length} total token balances for ${walletAddress}`);
 
 	return {
 		...firstPage.account,

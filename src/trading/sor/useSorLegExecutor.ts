@@ -19,6 +19,8 @@ import { isPrivyEmbeddedWallet } from "@/trading/polymarket/privyEmbeddedWallet"
 import { PRIVY_SPONSOR_BSC_GAS } from "@/config/privyBscGas";
 import { SOLANA_RPC_URL } from "@/config/rpc";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
+import type { PrivySolanaSendTransaction } from "@/trading/solana/privySponsoredSolana";
+import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
 
 type LegResult = {
 	filled: boolean;
@@ -89,10 +91,8 @@ export interface UseSorLegExecutorDeps {
 			tool?: string;
 		}) => Promise<unknown>;
 	};
-	privySolanaSign: (opts: {
-		transaction: VersionedTransaction;
-		connection: Connection;
-	}) => Promise<VersionedTransaction>;
+	/** Privy Solana `useSendTransaction` — use with `sponsor: true` for gasless DFlow legs. */
+	privySolanaSendTransaction: PrivySolanaSendTransaction;
 
 	market: PredictionMarket;
 	matchedMonitor: MatchedMarket | null;
@@ -141,7 +141,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		polyClob,
 		predictSession,
 		privateApi,
-		privySolanaSign,
+		privySolanaSendTransaction,
 		market,
 		matchedMonitor,
 		predictNumericId,
@@ -279,15 +279,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					const transaction = VersionedTransaction.deserialize(txBytes);
 					const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
-					const signedTx = (await privySolanaSign({
+					const sig = await sendPrivySponsoredSolanaTransaction(
+						privySolanaSendTransaction,
 						transaction,
 						connection,
-					})) as VersionedTransaction;
-
-					const sig = await connection.sendRawTransaction(signedTx.serialize(), {
-						skipPreflight: true,
-						maxRetries: 3,
-					});
+					);
 
 					return { filled: true, filledShares: leg.shares, txHash: sig };
 				}
@@ -341,7 +337,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			matchedMonitor,
 			dflowProofVerified,
 			privateApi,
-			privySolanaSign,
+			privySolanaSendTransaction,
 			predictSession,
 			predictApprovalsOk,
 			predictNumericId,

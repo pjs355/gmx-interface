@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import type { ChartDataPoint, TimeRange } from "./types";
 
 type UsePredictionChartDataArgs = {
@@ -243,6 +244,37 @@ export function usePredictionChartData({
 
 		return [...historicalData.slice(0, -1), updatedLast];
 	}, [historicalData, questionOrderbooks, questionId, secondId, secondMarket]);
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		const livePrice = questionOrderbooks
+			? getLivePrice(questionId, questionOrderbooks)
+			: null;
+		const liveSecond =
+			secondId && questionOrderbooks
+				? getLivePrice(secondId, questionOrderbooks)
+				: null;
+		const last = data[data.length - 1];
+		priceDebugLog("usePredictionChartData LevelUp series + live orderbook tick", {
+			questionId,
+			secondId: secondId ?? null,
+			historicalPoints: historicalData.length,
+			outputPoints: data.length,
+			liveFromOrderbookPrimary: livePrice,
+			liveFromOrderbookSecondary: liveSecond,
+			lastPointLiveFlags: last
+				? { isLive: last.isLive, secondIsLive: last.secondIsLive }
+				: null,
+			dataSource:
+				"History: market payload + predictionMarketCache (GET getPredictionApiBaseUrl()/questions/:id); live: min ask from questionOrderbooks on trading page",
+		});
+	}, [
+		data,
+		historicalData.length,
+		questionId,
+		secondId,
+		questionOrderbooks,
+	]);
 
 	// Cache refresh interval: only bumps cacheVersion when data count actually grows
 	useEffect(() => {

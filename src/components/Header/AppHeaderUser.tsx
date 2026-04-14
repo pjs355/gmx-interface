@@ -1,5 +1,5 @@
 // import { Trans } from "@lingui/react";
-import { useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { usePrivy, useFundWallet } from "@privy-io/react-auth";
 // Removed useCallback - not used after cleanup
 
@@ -81,18 +81,6 @@ export function AppHeaderUser({
 			maximumFractionDigits: 2,
 		}).format(num);
 	};
-	// Log user after successful authentication
-	useEffect(() => {
-		if (authenticated && user) {
-			console.log("Logged in user:", {
-				id: user.id,
-				wallet: account,
-				email: user.email?.address,
-				hasWallet: Boolean(account),
-			});
-		}
-	}, [authenticated, user, account]);
-
 	// Removed GMX-specific variables and tracking functions
 
 	if (!active || !account) {

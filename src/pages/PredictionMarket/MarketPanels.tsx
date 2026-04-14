@@ -19,6 +19,8 @@ import { useDirectVenueBooks } from "@/trading/venue-books";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import type { OrderbookData } from "@/types/odds-monitor";
 import { useTradingPagePrices } from "@/hooks/useTradingPagePrices";
+import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import {
 	ChartSkeleton,
 	TradeBoxSkeleton,
@@ -92,9 +94,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	// Direct venue WS connections (Polymarket + DFlow from browser)
 	const { appState: oddsAppState } = useOddsMonitor();
 	const matchedForVenueBooks = React.useMemo(() => {
-		if (!pandascoreMatchId || !oddsAppState?.markets?.length) return null;
-		return oddsAppState.markets.find((m) => String(m.pandaMatchId) === pandascoreMatchId) ?? null;
-	}, [oddsAppState?.markets, pandascoreMatchId]);
+		return findOddsMatchedMarket(
+			oddsAppState?.markets,
+			pandascoreMatchId,
+			umbrella?._id,
+		);
+	}, [oddsAppState?.markets, pandascoreMatchId, umbrella?._id]);
 
 	const serverVenueDepthParity = React.useMemo(() => {
 		const m = matchedForVenueBooks;
@@ -119,7 +124,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const firstQuestionId = firstQuestion ? (getMarketId(firstQuestion) || "0") : "";
 	const levelUpOrderbook = firstQuestionId ? questionOrderbooks[firstQuestionId] : null;
 
-	const tradingPagePrices = useTradingPagePrices(pandascoreMatchId, levelUpOrderbook, directBooks);
+	const tradingPagePrices = useTradingPagePrices(
+		pandascoreMatchId,
+		levelUpOrderbook,
+		directBooks,
+		umbrella?._id,
+	);
 
 	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
@@ -128,6 +138,39 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const streamUrl =
 		typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
 	const showStream = Boolean(umbrella?.streamEnabled) && streamUrl.length > 0;
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		priceDebugLog("MarketPanels venue / tab state", {
+			pandascoreMatchId: pandascoreMatchId || null,
+			activeTab,
+			showCrossVenueBooks,
+			serverVenueDepthParity,
+			directBooks: directBooks
+				? {
+						polyFailed: directBooks.polyFailed,
+						dflowFallback: directBooks.dflowFallback,
+						hasPolyA: Boolean(directBooks.polyBookA),
+						hasPolyB: Boolean(directBooks.polyBookB),
+						hasDflowA: Boolean(directBooks.dflowBookA),
+						hasDflowB: Boolean(directBooks.dflowBookB),
+					}
+				: null,
+			tradingPageSource: tradingPagePrices.source,
+			tradingPageBestYes: tradingPagePrices.bestYesPrice,
+			tradingPageBestNo: tradingPagePrices.bestNoPrice,
+			note: "Basic tab = EsportsVenueBooksPanel; Orderbooks = VenueOrderbooksPanel (MatchedMarket + directBooks + LevelUp REST snapshot).",
+		});
+	}, [
+		pandascoreMatchId,
+		activeTab,
+		showCrossVenueBooks,
+		serverVenueDepthParity,
+		directBooks,
+		tradingPagePrices.source,
+		tradingPagePrices.bestYesPrice,
+		tradingPagePrices.bestNoPrice,
+	]);
 
 	// Debug: Uncomment to track MarketPanels re-renders
 	// console.log("🎬 MarketPanels rendering", {
@@ -227,6 +270,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			<>
 				<VenueOrderbooksPanel
 					pandascoreMatchId={pandascoreMatchId}
+					umbrellaId={umbrella._id}
 					levelUpOrderbook={levelUpOrderbook}
 					market={firstQuestion ? {
 						...(firstQuestion as any),
@@ -370,6 +414,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						pandascoreMatchId={
 							pandascoreMatchId || undefined
 						}
+						umbrellaId={umbrella._id}
 						umbrellaDisplayName={umbrella.displayName}
 						initialPosition={activePosition}
 						onPositionChange={onPositionChange}
@@ -436,6 +481,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						pandascoreMatchId={
 							pandascoreMatchId || undefined
 						}
+						umbrellaId={umbrella._id}
 						umbrellaDisplayName={umbrella.displayName}
 						initialPosition={activePosition}
 						onPositionChange={onPositionChange}

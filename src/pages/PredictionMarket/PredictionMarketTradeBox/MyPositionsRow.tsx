@@ -1,62 +1,98 @@
 import React from "react";
-import { useUserData } from "context/UserDataContext";
+import { useTradeBoxShareBalances } from "./hooks/useTradeBoxShareBalances";
+import type { TradingVenue } from "./types";
 
 type MarketLike = {
-  _id: string;
-  questionId?: string;
-  marketId?: string;
-  yesTokenId?: string;
-  noTokenId?: string;
-  displayName?: string;
-  question?: string;
-  umbrellaChildrenCount?: number;
+	_id: string;
+	questionId?: string;
+	marketId?: string;
+	displayName?: string;
+	question?: string;
+	conditionId?: string;
+	umbrellaChildrenCount?: number;
 };
 
-export function MyPositionsRow({ market }: { market: MarketLike }) {
-  const { getTokenBalance } = useUserData();
-  
-  // Get market ID for lookup
-  const marketId = market._id || market.questionId || market.marketId;
-  const tokenBalance = marketId ? getTokenBalance(marketId) : null;
-  
-  const yesNum = tokenBalance ? Number(tokenBalance.yesBalance) : 0;
-  const noNum = tokenBalance ? Number(tokenBalance.noBalance) : 0;
-  const showYes = yesNum > 0;
-  const showNo = noNum > 0;
-  const showRow = showYes || showNo;
+function formatShareCount(n: number): string {
+	if (!Number.isFinite(n)) return String(n);
+	return new Intl.NumberFormat("en-US", {
+		maximumFractionDigits: n % 1 === 0 ? 0 : 4,
+		minimumFractionDigits: 0,
+	}).format(n);
+}
 
-  // Single VS market detection and team labels
-  const isVsSingle = (() => {
-    const title = ((market as any)?.displayName || (market as any)?.question || '').trim();
-    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-    return parts.length === 2 && ((market as any)?.umbrellaChildrenCount === 1);
-  })();
-  const teamLabels = (() => {
-    if (!isVsSingle) return { yesLabel: 'Yes', noLabel: 'No' };
-    const title = ((market as any)?.displayName || (market as any)?.question || '').trim();
-    const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-    return parts.length === 2 ? { yesLabel: parts[0], noLabel: parts[1] } : { yesLabel: 'Yes', noLabel: 'No' };
-  })();
-  const yesTeamColor: string | undefined = (market as any)?.yesColor;
-  const noTeamColor: string | undefined = (market as any)?.noColor;
+export function MyPositionsRow({
+	market,
+	umbrellaId,
+	tradingVenue,
+	yesTeamLabel,
+	noTeamLabel,
+	isVsSingle,
+	yesTeamColor,
+	noTeamColor,
+}: {
+	market: MarketLike;
+	umbrellaId?: string;
+	tradingVenue: TradingVenue;
+	yesTeamLabel: string;
+	noTeamLabel: string;
+	isVsSingle: boolean;
+	yesTeamColor?: string;
+	noTeamColor?: string;
+}) {
+	const { lines } = useTradeBoxShareBalances({
+		umbrellaId,
+		market,
+		tradingVenue,
+		yesTeamLabel,
+		noTeamLabel,
+		isVsSingle,
+	});
 
-  if (!showRow) return null;
+	if (lines.length === 0) return null;
 
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
-      <div style={{ fontSize: 14, fontWeight: 400, color: "#6B7280" }}>My position</div>
-      <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-        {showYes && (
-          <div style={{ fontSize: 14, fontWeight: 700, color: isVsSingle ? (yesTeamColor || "#ffffff") : "#22c55e" }}>
-            {yesNum.toLocaleString(undefined, { maximumFractionDigits: 2 })} {isVsSingle ? teamLabels.yesLabel : 'Yes'} Shares
-          </div>
-        )}
-        {showNo && (
-          <div style={{ fontSize: 14, fontWeight: 700, color: isVsSingle ? (noTeamColor || "#ffffff") : "#ef4444" }}>
-            {noNum.toLocaleString(undefined, { maximumFractionDigits: 2 })} {isVsSingle ? teamLabels.noLabel : 'No'} Shares
-          </div>
-        )}
-      </div>
-    </div>
-  );
+	return (
+		<div
+			style={{
+				display: "flex",
+				justifyContent: "space-between",
+				alignItems: "flex-start",
+				gap: 12,
+				marginBottom: 16,
+			}}
+		>
+			<div style={{ fontSize: 14, fontWeight: 400, color: "#6B7280", flexShrink: 0 }}>
+				My position
+			</div>
+			<div
+				style={{
+					display: "flex",
+					flexDirection: "column",
+					alignItems: "flex-end",
+					gap: 6,
+					textAlign: "right",
+				}}
+			>
+				{lines.map((line) => {
+					const color =
+						line.side === "yes"
+							? isVsSingle
+								? yesTeamColor || "#ffffff"
+								: "#22c55e"
+							: isVsSingle
+								? noTeamColor || "#ffffff"
+								: "#ef4444";
+					const suffixPart = line.venueSuffix ? ` ${line.venueSuffix}` : "";
+					return (
+						<div
+							key={line.key}
+							style={{ fontSize: 14, fontWeight: 700, color, lineHeight: 1.35 }}
+						>
+							{formatShareCount(line.shares)} shares of {line.label}
+							{suffixPart}
+						</div>
+					);
+				})}
+			</div>
+		</div>
+	);
 }

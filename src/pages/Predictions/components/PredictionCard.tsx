@@ -18,6 +18,7 @@ import { resolveTeamLogo } from "@/config/team-map";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useMatchVenuePrices } from "@/context/OddsMonitorContext";
 import { listingBestYesNoFromMatched } from "@/utils/listingVenuePrices";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { resolveUmbrellaEventDate } from "../utils/eventDates";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -158,11 +159,31 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			: "";
 	const matchedVenueRow = useMatchVenuePrices(
 		pandascoreMatchIdForVenues || null,
+		umbrella._id,
 	);
 	const listingVenueYesNo = useMemo(
 		() => listingBestYesNoFromMatched(matchedVenueRow),
 		[matchedVenueRow],
 	);
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		priceDebugLog("homepage PredictionCard venue overlay", {
+			umbrellaId: umbrella._id,
+			umbrellaName: umbrella.displayName,
+			pandascoreMatchIdForVenues: pandascoreMatchIdForVenues || null,
+			hasMatchedVenueRow: Boolean(matchedVenueRow),
+			listingVenueYesNo,
+			dataSource:
+				"MatchedMarket from OddsMonitor (venue-prices WS + GET matched-markets); see getOddsWebSocketUrl / getMatchedMarketsUrl",
+		});
+	}, [
+		umbrella._id,
+		umbrella.displayName,
+		pandascoreMatchIdForVenues,
+		matchedVenueRow,
+		listingVenueYesNo,
+	]);
 
 	const esportsTagId = useMemo(() => {
 		for (let index = 0; index < tags.length; index += 1) {

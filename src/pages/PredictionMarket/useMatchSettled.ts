@@ -8,6 +8,7 @@ import {
 	resolveCanonicalMatchWinner,
 	type UmbrellaForHistoryWinner,
 } from "@/pages/Positions/utils/historyOutcomeWinner";
+import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 
 function isGenericYesNoWinnerLabel(name: string): boolean {
 	const t = name.trim().toLowerCase();
@@ -56,7 +57,7 @@ export function useMatchSettled(
 			isSettled: true,
 			winnerName: row.winner.name || row.winner.acronym || "Winner",
 		};
-	}, [pandaId, oddsAppState?.markets]);
+	}, [pandaId, umbrellaId, oddsAppState?.markets]);
 
 	// Source 2: Resolved markets from context (backend settled the market)
 	const resolvedInfo = useMemo<SettledInfo | null>(() => {

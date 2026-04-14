@@ -51,6 +51,7 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		text: string;
 		disabled: boolean;
 		onClick: () => void;
+		depositShortfallUsd?: number;
 		isSweepingBook?: boolean;
 		availableShares?: number;
 	};
@@ -67,6 +68,7 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		remainingBudget: number | null;
 		requestReroute: () => Promise<number | null>;
 		acceptResult: () => Promise<void>;
+		resetExecution: () => void;
 	};
 	sorRouteExpired: boolean;
 	handleSorExecute: () => void;
@@ -102,6 +104,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	sorExecution,
 	sorRouteExpired,
 	handleSorExecute,
+	umbrellaId,
 	umbrellaDisplayName,
 	crossBuyYes,
 	crossBuyNo,
@@ -130,7 +133,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	// book.  When "no" is selected, swap the display formulas so the NO button shows
 	// the book directly while YES shows the 1−p complement.
 	const bookRepresentsNo =
-		(state.tradingVenue === "polymarket" || state.tradingVenue === "dflow") &&
+		(state.tradingVenue === "polymarket" ||
+			state.tradingVenue === "dflow" ||
+			state.tradingVenue === "limitless") &&
 		state.selectedPosition === "no";
 
 	const yesPriceCents = useMemo(() => {
@@ -272,6 +277,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				market={market}
 				orderbook={orderbook}
 				pandascoreMatchId={pandascoreMatchId}
+				umbrellaId={umbrellaId}
 				umbrellaDisplayName={umbrellaDisplayName}
 				crossBuyYes={crossBuyYes}
 				crossBuyNo={crossBuyNo}
@@ -439,6 +445,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				market={market}
 				orderbook={orderbook}
 				pandascoreMatchId={pandascoreMatchId}
+				umbrellaId={umbrellaId}
 				umbrellaDisplayName={umbrellaDisplayName}
 				crossBuyYes={crossBuyYes}
 				crossBuyNo={crossBuyNo}

@@ -1,5 +1,6 @@
 import { predictionMarketCache } from "@/cache/predictionMarketCache";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 
 export interface PredictionMarket {
 	_id: string;
@@ -218,6 +219,18 @@ class PredictionMarketDataService {
 	async refreshHistoricalData(questionId: string): Promise<boolean> {
 		try {
 			const market = await this.fetchMarketById(questionId);
+
+			if (isPredictionPricingDebugEnabled()) {
+				const url = `${this.API_BASE_URL}/questions/${questionId}`;
+				priceDebugLog("predictionMarketDataService.refreshHistoricalData", {
+					requestUrl: url,
+					predictionApiBase: this.API_BASE_URL,
+					gotMarket: Boolean(market),
+					historicalPricesLen: market?.historicalPrices?.length ?? 0,
+					historicalPricesYesLen: market?.historicalPricesYes?.length ?? 0,
+					historicalPricesNoLen: market?.historicalPricesNo?.length ?? 0,
+				});
+			}
 
 			if (!market) return false;
 

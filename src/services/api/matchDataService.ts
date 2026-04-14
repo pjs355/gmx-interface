@@ -28,6 +28,13 @@ export interface MatchedMarketExchange {
 		decimalPrecision: 2 | 3;
 		singleMarket?: boolean;
 	};
+	limitless?: {
+		slug: string;
+		tokenIdA: string;
+		tokenIdB: string;
+		orderbookSlugA?: string;
+		orderbookSlugB?: string;
+	};
 }
 
 interface RemoteMatchedMarket {
@@ -60,6 +67,13 @@ interface RemoteMatchedMarket {
 			decimalPrecision: 2 | 3;
 			singleMarket?: boolean;
 		};
+		limitless?: {
+			slug: string;
+			tokenIdA: string;
+			tokenIdB: string;
+			orderbookSlugA?: string;
+			orderbookSlugB?: string;
+		};
 	};
 }
 
@@ -67,7 +81,8 @@ function remoteToExchange(remote: RemoteMatchedMarket): MatchedMarketExchange | 
 	const em = remote.exchangeMatching;
 	if (!em) return null;
 
-	const hasAnyExchange = em.polymarket || em.kalshi || em.dflow || em.predictFun;
+	const hasAnyExchange =
+		em.polymarket || em.kalshi || em.dflow || em.predictFun || em.limitless;
 	if (!hasAnyExchange) return null;
 
 	const poly = em.polymarket;
@@ -89,6 +104,7 @@ function remoteToExchange(remote: RemoteMatchedMarket): MatchedMarketExchange | 
 		kalshi: em.kalshi,
 		dflow: em.dflow,
 		predictFun: em.predictFun,
+		limitless: em.limitless,
 	};
 }
 

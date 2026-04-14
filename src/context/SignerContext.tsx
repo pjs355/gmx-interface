@@ -533,7 +533,6 @@ async function listPositions(address?: string): Promise<void> {
  */
 function clearCache(): void {
   subgraphService.clearSubgraphCache();
-  console.log("✅ Subgraph cache cleared. Next query will fetch fresh data.");
 }
 
 // Expose debug functions to window
@@ -541,17 +540,4 @@ function clearCache(): void {
 (window as any).checkTokenBalance = checkTokenBalance;
 (window as any).listPositions = listPositions;
 (window as any).clearCache = clearCache;
-
-// Log available debug commands on load
-console.log('🛠️ Debug commands available:');
-console.log('   spoofAccount("0x...") - View another user\'s portfolio (read-only)');
-console.log('   clearSpoof() - Return to normal mode');
-console.log('   checkSpoof() - Check current spoof status');
-console.log('');
-console.log('📊 Balance verification commands:');
-console.log('   compareBalances("0x...") - Compare subgraph vs RPC balances');
-console.log('   listPositions("0x...") - List all token positions from subgraph');
-console.log('   checkTokenBalance("tokenId", "0x...") - Check specific token balance');
-console.log('   clearCache() - Clear subgraph cache for fresh data');
-
 

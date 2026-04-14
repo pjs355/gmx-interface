@@ -282,7 +282,6 @@ export default function FilteredPredictions({
 
 		// Handle "New" pill - sort by creation date
 		if (selectedGame === NEW_PILL_ID) {
-			console.log('[FilteredPredictions] New pill selected, sorting by createdAt');
 			return sortByCreationDate(filtered);
 		}
 
@@ -306,6 +305,7 @@ export default function FilteredPredictions({
 		type CalendarDay = { date: Date; events: CalendarEvent[] };
 
 		const upcomingMap = new Map<string, CalendarDay>();
+		const pastMap = new Map<string, CalendarDay>();
 		const unscheduled: Umbrella[] = [];
 
 		for (let index = 0; index < filteredUmbrellas.length; index += 1) {
@@ -323,12 +323,19 @@ export default function FilteredPredictions({
 				eventDate,
 			};
 
-			// Only include today and future — skip events from past days
-			if (dayStart.getTime() >= todayStartMs) {
+			const dayStartMs = dayStart.getTime();
+			if (dayStartMs >= todayStartMs) {
 				let day = upcomingMap.get(key);
 				if (!day) {
 					day = { date: dayStart, events: [] };
 					upcomingMap.set(key, day);
+				}
+				day.events.push(event);
+			} else {
+				let day = pastMap.get(key);
+				if (!day) {
+					day = { date: dayStart, events: [] };
+					pastMap.set(key, day);
 				}
 				day.events.push(event);
 			}
@@ -336,6 +343,8 @@ export default function FilteredPredictions({
 
 		const sortByDate = (a: CalendarDay, b: CalendarDay) =>
 			a.date.getTime() - b.date.getTime();
+		const sortByDateDesc = (a: CalendarDay, b: CalendarDay) =>
+			b.date.getTime() - a.date.getTime();
 
 		const upcomingDays = Array.from(upcomingMap.values())
 			.sort(sortByDate)
@@ -344,7 +353,12 @@ export default function FilteredPredictions({
 				return day;
 			});
 
-		const pastDays: CalendarDay[] = [];
+		const pastDays = Array.from(pastMap.values())
+			.sort(sortByDateDesc)
+			.map((day) => {
+				sortCalendarEventsByPlayOrder(day.events, now);
+				return day;
+			});
 
 		return {
 			todayStartMs,

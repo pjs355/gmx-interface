@@ -29,6 +29,7 @@ import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/
 import { getBridgeQuoteFingerprint } from "@/trading/lifi/quoteDisplay";
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
 import { SOLANA_RPC_URL } from "@/config/rpc";
+import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
 import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import type { LifiQuoteResponse } from "@/types/trading";
 
@@ -172,8 +173,7 @@ export function useBridgeFlow() {
 			signAndSendTransaction: async (serializedTx: Uint8Array) => {
 				const tx = VersionedTransaction.deserialize(serializedTx);
 				const conn = new Connection(SOLANA_RPC_URL);
-				const receipt = await privySolanaSendTx({ transaction: tx, connection: conn });
-				return receipt.signature;
+				return sendPrivySponsoredSolanaTransaction(privySolanaSendTx, tx, conn);
 			},
 		}),
 		[privySolanaSendTx]

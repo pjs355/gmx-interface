@@ -29,8 +29,13 @@ export function VenuePandaSubscriptionProvider({
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const flushActive = useCallback(() => {
-		const ids = Array.from(countsRef.current.keys()).sort();
-		setActivePandaMatchIds(ids.slice(0, MAX_VENUE_PANDA_SUBSCRIPTIONS));
+		const entries = [...countsRef.current.entries()].sort((a, b) => {
+			if (b[1] !== a[1]) return b[1] - a[1];
+			return a[0].localeCompare(b[0]);
+		});
+		setActivePandaMatchIds(
+			entries.slice(0, MAX_VENUE_PANDA_SUBSCRIPTIONS).map(([id]) => id),
+		);
 	}, []);
 
 	const scheduleFlush = useCallback(() => {
@@ -47,7 +52,7 @@ export function VenuePandaSubscriptionProvider({
 			if (!id) return;
 			const n = (countsRef.current.get(id) ?? 0) + 1;
 			countsRef.current.set(id, n);
-			if (n === 1) scheduleFlush();
+			scheduleFlush();
 		},
 		[scheduleFlush],
 	);

@@ -8,6 +8,10 @@ import type {
 } from "@/types/odds-monitor";
 import { getMatchedMarketsUrl } from "@/config/oddsMonitorBase";
 import type { MatchedMarketsDflowWire } from "@/types/matchedMarketsDflowWire";
+import {
+	isLimitlessConsoleDebugEnabled,
+	isLimitlessOrderbookVerboseDebug,
+} from "@/trading/limitless/limitlessConsoleDebug";
 
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -66,10 +70,31 @@ interface MatchedMarketsApiItem {
 	};
 }
 
-function apiItemToMatchedMarket(item: MatchedMarketsApiItem): MatchedMarket {
+/**
+ * When a page subscribes to venue_prices for a Panda id that is not in GET /matched-markets,
+ * we still need a map row so WS snapshots merge (otherwise they sit in pending forever).
+ */
+function createStubMatchedMarket(pandaMatchId: string): MatchedMarket {
+	const pid = String(pandaMatchId ?? "").trim();
+	return apiItemToMatchedMarket(
+		{
+			pandaMatchId: pid,
+			umbrellaId: "",
+			displayName: "",
+			exchangeMatching: {},
+		},
+		pid,
+	);
+}
+
+function apiItemToMatchedMarket(
+	item: MatchedMarketsApiItem,
+	normalizedPandaId: string,
+): MatchedMarket {
 	const em = item.exchangeMatching;
 	return {
-		pandaMatchId: item.pandaMatchId,
+		pandaMatchId: normalizedPandaId,
+		umbrellaId: item.umbrellaId ? String(item.umbrellaId).trim() : undefined,
 		polyConditionId: em.polymarket?.conditionId ?? "",
 		pandaTeamA: item.pandaTeamA ?? "",
 		pandaTeamB: item.pandaTeamB ?? "",
@@ -166,13 +191,88 @@ function venueWireNameToKey(venue: string): VenueKey | null {
 	return null;
 }
 
+/** Dedupe Limitless venue-prices logs (same book signature → one line). */
+const limitlessWsOrderbookLogLast = new Map<string, string>();
+
+function limitlessChartDisplayPct(book: OrderbookData): number | null {
+	if (book.bestAsk == null) return null;
+	const x = Number(book.bestAsk);
+	if (!Number.isFinite(x) || x < 0.005 || x > 0.995) return null;
+	return Math.round(x * 100);
+}
+
+function summarizeBookLevels(book: OrderbookData, max: number) {
+	const asks = (book.asks ?? []).slice(0, max).map((l) => ({ price: l.price, size: l.size }));
+	const bids = (book.bids ?? []).slice(0, max).map((l) => ({ price: l.price, size: l.size }));
+	return { asks, bids };
+}
+
+function logLimitlessWsOrderbookIfChanged(
+	pandaId: string,
+	snap: VenuePriceSnapshot,
+	dataA: ReturnType<typeof teamToOrderbookData>,
+	dataB: ReturnType<typeof teamToOrderbookData>,
+	market: MatchedMarket,
+): void {
+	if (!isLimitlessConsoleDebugEnabled()) return;
+	const sig = [
+		snap.status ?? "",
+		dataA.bestAsk,
+		dataA.bestBid,
+		dataA.snapshotStatus ?? "",
+		dataB.bestAsk,
+		dataB.bestBid,
+		dataB.snapshotStatus ?? "",
+		dataA.asks?.length ?? 0,
+		dataB.asks?.length ?? 0,
+	].join("|");
+	if (limitlessWsOrderbookLogLast.get(pandaId) === sig) return;
+	limitlessWsOrderbookLogLast.set(pandaId, sig);
+	const lx = market.limitless;
+	const payload: Record<string, unknown> = {
+		pandaMatchId: pandaId,
+		venue: "limitless",
+		snapshotStatus: snap.status,
+		mapping: lx
+			? {
+					slug: lx.slug,
+					orderbookSlugA: lx.orderbookSlugA ?? null,
+					orderbookSlugB: lx.orderbookSlugB ?? null,
+				}
+			: null,
+		chartDisplayPctA: limitlessChartDisplayPct(dataA),
+		chartDisplayPctB: limitlessChartDisplayPct(dataB),
+		bookA: {
+			bestAsk: dataA.bestAsk,
+			bestBid: dataA.bestBid,
+			snapshotStatus: dataA.snapshotStatus,
+			askLevels: dataA.asks?.length ?? 0,
+			bidLevels: dataA.bids?.length ?? 0,
+		},
+		bookB: {
+			bestAsk: dataB.bestAsk,
+			bestBid: dataB.bestBid,
+			snapshotStatus: dataB.snapshotStatus,
+			askLevels: dataB.asks?.length ?? 0,
+			bidLevels: dataB.bids?.length ?? 0,
+		},
+	};
+	if (isLimitlessOrderbookVerboseDebug()) {
+		payload.topOfBookVerbose = {
+			bookA: summarizeBookLevels(dataA, 5),
+			bookB: summarizeBookLevels(dataB, 5),
+		};
+	}
+	console.info("[limitless/ws-orderbook]", payload);
+}
+
 function applyPriceUpdates(
 	markets: Map<string, MatchedMarket>,
 	snapshots: VenuePriceSnapshot[],
 ): boolean {
 	let changed = false;
 	for (const snap of snapshots) {
-		const market = markets.get(snap.pandaMatchId);
+		const market = markets.get(String(snap.pandaMatchId ?? "").trim());
 		if (!market) continue;
 
 		const venue = venueWireNameToKey(snap.venue);
@@ -181,6 +281,10 @@ function applyPriceUpdates(
 
 		const dataA = teamToOrderbookData(snap.teamA, snap.status);
 		const dataB = teamToOrderbookData(snap.teamB, snap.status);
+		if (venue === "limitless") {
+			const pid = String(snap.pandaMatchId ?? "").trim();
+			if (pid) logLimitlessWsOrderbookIfChanged(pid, snap, dataA, dataB, market);
+		}
 		for (const [fieldA, fieldB] of fieldPairs) {
 			(market as any)[fieldA] = dataA;
 			(market as any)[fieldB] = dataB;
@@ -194,17 +298,22 @@ function bufferOrApplyVenueSnapshots(
 	markets: Map<string, MatchedMarket>,
 	pending: Map<string, VenuePriceSnapshot[]>,
 	snapshots: VenuePriceSnapshot[],
+	subscribedPandaIds: Set<string>,
 ): boolean {
 	let changed = false;
 	const byId = new Map<string, VenuePriceSnapshot[]>();
 	for (const s of snapshots) {
-		const pid = s.pandaMatchId;
+		const pid = String(s.pandaMatchId ?? "").trim();
 		if (!pid) continue;
 		const list = byId.get(pid) ?? [];
 		list.push(s);
 		byId.set(pid, list);
 	}
 	for (const [pid, snaps] of byId) {
+		if (!markets.has(pid) && subscribedPandaIds.has(pid)) {
+			markets.set(pid, createStubMatchedMarket(pid));
+			changed = true;
+		}
 		if (markets.has(pid)) {
 			if (applyPriceUpdates(markets, snaps)) changed = true;
 		} else {
@@ -278,6 +387,9 @@ export function useOddsMonitorWebSocket(
 	const mappingFetchInflightRef = useRef<Promise<void> | null>(null);
 	const pendingVenueSnapsRef = useRef<Map<string, VenuePriceSnapshot[]>>(new Map());
 	const prevSentPandaSubsRef = useRef<Set<string>>(new Set());
+	/** Latest Panda ids for subscribe — updated every render so ws.onopen can send before React flushes the subscribe effect. */
+	const activePandaMatchIdsRef = useRef<string[]>(activePandaMatchIds);
+	activePandaMatchIdsRef.current = activePandaMatchIds;
 
 	const clearReconnectTimer = () => {
 		if (reconnectTimerRef.current !== null) {
@@ -309,18 +421,14 @@ export function useOddsMonitorWebSocket(
 		const run = (async () => {
 			try {
 			const url = getMatchedMarketsUrl();
-			if (import.meta.env.DEV) console.log("[venue-monitor] Fetching mappings from", url);
 			const res = await fetch(url);
 			if (!res.ok) {
-				if (import.meta.env.DEV) console.warn("[venue-monitor] Mappings fetch failed:", res.status, res.statusText);
 				return;
 			}
 			const items: MatchedMarketsApiItem[] = await res.json();
 			if (!Array.isArray(items)) {
-				if (import.meta.env.DEV) console.warn("[venue-monitor] Mappings response is not an array");
 				return;
 			}
-			if (import.meta.env.DEV) console.log("[venue-monitor] Loaded", items.length, "matched markets");
 
 			// Heavy: per-item groups + console.table. Opt-in via VITE_VERBOSE_VENUE_MONITOR=true
 			if (verboseVenueMappings) {
@@ -435,8 +543,10 @@ export function useOddsMonitorWebSocket(
 			const next = new Map<string, MatchedMarket>();
 
 			for (const item of items) {
-				const prev = existing.get(item.pandaMatchId);
-				const base = apiItemToMatchedMarket(item);
+				const pid = String(item.pandaMatchId ?? "").trim();
+				if (!pid) continue;
+				const prev = existing.get(pid);
+				const base = apiItemToMatchedMarket(item, pid);
 				if (prev) {
 					base.polyPriceA = prev.polyPriceA;
 					base.polyPriceB = prev.polyPriceB;
@@ -451,7 +561,15 @@ export function useOddsMonitorWebSocket(
 					base.levelUpPriceA = prev.levelUpPriceA;
 					base.levelUpPriceB = prev.levelUpPriceB;
 				}
-				next.set(item.pandaMatchId, base);
+				next.set(pid, base);
+			}
+
+			/* Rows the UI subscribed to but missing from /matched-markets (e.g. local DB skew). */
+			for (const raw of activePandaMatchIdsRef.current) {
+				const key = String(raw ?? "").trim();
+				if (!key || next.has(key)) continue;
+				const prev = existing.get(key);
+				next.set(key, prev ?? createStubMatchedMarket(key));
 			}
 
 			marketsRef.current = next;
@@ -467,8 +585,8 @@ export function useOddsMonitorWebSocket(
 			}
 
 			publishState();
-			} catch (err) {
-				if (import.meta.env.DEV) console.error("[venue-monitor] Mappings fetch error:", err);
+			} catch {
+				/* mapping fetch failed — state unchanged */
 			}
 		})();
 		mappingFetchInflightRef.current = run.finally(() => {
@@ -503,7 +621,6 @@ export function useOddsMonitorWebSocket(
 			return;
 		}
 
-		if (import.meta.env.DEV) console.log("[venue-monitor] Connecting to", wsUrl);
 		fetchMappings();
 		mappingTimerRef.current = setInterval(fetchMappings, MAPPING_REFRESH_MS);
 
@@ -517,8 +634,20 @@ export function useOddsMonitorWebSocket(
 
 				ws.onopen = () => {
 					if (wsRef.current !== ws) return;
-					if (import.meta.env.DEV) console.log("[venue-monitor] WebSocket connected");
+					const want = new Set(
+						activePandaMatchIdsRef.current
+							.map((id) => String(id).trim())
+							.filter(Boolean),
+					);
 					prevSentPandaSubsRef.current = new Set();
+					for (const id of want) {
+						try {
+							ws.send(JSON.stringify({ type: "subscribe", pandaMatchId: id }));
+						} catch {
+							/* ignore */
+						}
+					}
+					prevSentPandaSubsRef.current = new Set(want);
 					setConnected(true);
 					setLastWsError(null);
 					reconnectAttemptRef.current = 0;
@@ -533,16 +662,21 @@ export function useOddsMonitorWebSocket(
 							message.type === "subscribed" ||
 							message.type === "unsubscribed"
 						) {
-							if (import.meta.env.DEV) console.log("[venue-monitor] WS:", message.type);
 							return;
 						}
 						if (message.type === "venue_prices" || message.type === "venue_bbo") {
 							const snaps = venueSnapshotsFromMessage(message);
 							if (snaps.length) {
+								const subscribed = new Set(
+									activePandaMatchIdsRef.current
+										.map((id) => String(id).trim())
+										.filter(Boolean),
+								);
 								const changed = bufferOrApplyVenueSnapshots(
 									marketsRef.current,
 									pendingVenueSnapsRef.current,
 									snaps,
+									subscribed,
 								);
 								if (changed) publishState();
 							}
@@ -553,13 +687,12 @@ export function useOddsMonitorWebSocket(
 							message.pandaMatchId &&
 							Array.isArray(message.venues)
 						) {
-							if (import.meta.env.DEV)
-								console.log("[venue-monitor] venue_status for", message.pandaMatchId, message.venues);
+							const mid = String(message.pandaMatchId ?? "").trim();
 							venueStatusRef.current.set(
-								message.pandaMatchId as string,
+								mid,
 								message.venues as VenueStatusInfo[],
 							);
-							const market = marketsRef.current.get(message.pandaMatchId as string);
+							const market = mid ? marketsRef.current.get(mid) : undefined;
 							if (market) {
 								market.venueStatuses = message.venues as VenueStatusInfo[];
 								publishState();
@@ -571,9 +704,6 @@ export function useOddsMonitorWebSocket(
 				};
 
 				ws.onerror = () => {
-					if (reconnectAttemptRef.current === 0) {
-						if (import.meta.env.DEV) console.warn("[venue-monitor] WebSocket error (suppressing further logs)");
-					}
 					setLastWsError("WebSocket error");
 				};
 
@@ -589,7 +719,6 @@ export function useOddsMonitorWebSocket(
 					reconnectAttemptRef.current = attempt + 1;
 
 					if (attempt >= MAX_RECONNECT_ATTEMPTS) {
-						if (import.meta.env.DEV) console.warn("[venue-monitor] Max reconnect attempts reached, giving up");
 						setLastWsError("Venue prices WebSocket unavailable");
 						return;
 					}
@@ -603,7 +732,6 @@ export function useOddsMonitorWebSocket(
 					reconnectAttemptRef.current = attempt + 1;
 
 					if (attempt >= MAX_RECONNECT_ATTEMPTS) {
-						if (import.meta.env.DEV) console.warn("[venue-monitor] Max reconnect attempts reached, giving up");
 						setLastWsError("Venue prices WebSocket unavailable");
 						return;
 					}
@@ -667,6 +795,27 @@ export function useOddsMonitorWebSocket(
 		}
 		prevSentPandaSubsRef.current = new Set(want);
 	}, [connected, pandaSubsKey, activePandaMatchIds]);
+
+	/** Ensure subscribed ids have a monitor row immediately (not only after first WS tick or mapping poll). */
+	useEffect(() => {
+		if (!connected) return;
+		const want = new Set(
+			activePandaMatchIds.map((id) => String(id).trim()).filter(Boolean),
+		);
+		let changed = false;
+		for (const id of want) {
+			if (!marketsRef.current.has(id)) {
+				marketsRef.current.set(id, createStubMatchedMarket(id));
+				changed = true;
+			}
+			const buffered = pendingVenueSnapsRef.current.get(id);
+			if (buffered?.length) {
+				if (applyPriceUpdates(marketsRef.current, buffered)) changed = true;
+				pendingVenueSnapsRef.current.delete(id);
+			}
+		}
+		if (changed) publishState();
+	}, [connected, pandaSubsKey, activePandaMatchIds, publishState]);
 
 	return {
 		connected,

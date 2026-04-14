@@ -2,7 +2,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
 
-export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow";
+export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
 export interface TradeBoxState {
 	tradingVenue: TradingVenue;
@@ -30,6 +30,8 @@ export interface TradeBoxProps {
 	orderbook?: OrderbookSnapshot | null;
 	/** PandaScore match id on the umbrella — required for Polymarket CLOB on esports. */
 	pandascoreMatchId?: string;
+	/** Resolves venue-prices row when panda id on umbrella ≠ monitor key */
+	umbrellaId?: string;
 	/** Umbrella list title — used to derive "Team A vs Team B" when question is only "Match Winner". */
 	umbrellaDisplayName?: string;
 	initialPosition?: "yes" | "no";

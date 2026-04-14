@@ -35,13 +35,10 @@ function wrapEthereumBscMainnetLocalChainMeta(
 }
 
 /**
- * When Privy sponsorship is off, pass `sponsor: false` on `eth_sendTransaction` so the
- * embedded wallet pays BNB gas (see Privy / viem extended tx fields).
+ * Ethers does not set Privy's `sponsor` field on `eth_sendTransaction`. Inject it so
+ * embedded-wallet Predict / redeem txs request Privy paymaster when enabled.
  */
-function wrapEthereumNoBscSponsor(
-	ethereum: Eip1193Provider
-): Eip1193Provider {
-	if (PRIVY_SPONSOR_BSC_GAS) return ethereum;
+function wrapEthereumBscSponsorFlag(ethereum: Eip1193Provider): Eip1193Provider {
 	return {
 		request: (args) => {
 			if (
@@ -52,7 +49,7 @@ function wrapEthereumNoBscSponsor(
 			) {
 				const tx = {
 					...(args.params[0] as Record<string, unknown>),
-					sponsor: false,
+					sponsor: PRIVY_SPONSOR_BSC_GAS,
 				};
 				return ethereum.request({
 					...args,
@@ -92,7 +89,7 @@ export async function ensurePredictChain(ethereum: Eip1193Provider): Promise<voi
 }
 
 export function getBscBrowserSigner(ethereum: Eip1193Provider) {
-	const piped = wrapEthereumNoBscSponsor(
+	const piped = wrapEthereumBscSponsorFlag(
 		wrapEthereumBscMainnetLocalChainMeta(ethereum)
 	);
 	const provider = new BrowserProvider(piped, BSC_MAINNET_CHAIN_ID);

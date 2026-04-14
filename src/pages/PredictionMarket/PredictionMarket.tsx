@@ -8,7 +8,7 @@ import {
 	Umbrella,
 	umbrellaDataService,
 } from "@/services/api/umbrellaDataService";
-import { getPredictionWebSocketUrl } from "@/config/predictionApiBase";
+import { getOrderbookApiBaseUrl, getPredictionWebSocketUrl } from "@/config/predictionApiBase";
 import { usePredictionData } from "context/PredictionDataContext";
 import { MarketPanels } from "./MarketPanels";
 import { useChartState } from "./useChartState";
@@ -20,6 +20,7 @@ import {
 	normalizeOrderbookPayload,
 	hasUsableOrderbookSnapshot,
 } from "./utils";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -166,6 +167,24 @@ function PredictionMarketContent() {
 				}),
 			);
 			if (cancelled) return;
+			if (isPredictionPricingDebugEnabled()) {
+				priceDebugLog("PredictionMarket REST orderbook bootstrap", {
+					orderbookApiBaseUrl: getOrderbookApiBaseUrl(),
+					umbrellaId: umbrella._id,
+					questionIds: qids,
+						note: "Orderbook REST uses getOrderbookApiBaseUrl() (Railway by default; follows VITE_PREDICTION_API_BASE_URL when set).",
+				});
+				for (const { qid, ob } of pairs) {
+					const normalized = ob != null ? normalizeOrderbookPayload(ob) : null;
+					const snap = normalized as { asks?: unknown[]; bids?: unknown[] } | null;
+					priceDebugLog(`PredictionMarket orderbook snapshot ${qid}`, {
+						hadRaw: ob != null,
+						askCount: snap?.asks?.length ?? 0,
+						bidCount: snap?.bids?.length ?? 0,
+						usable: normalized ? hasUsableOrderbookSnapshot(normalized) : false,
+					});
+				}
+			}
 			setQuestionOrderbooks((prev) => {
 				const next = { ...prev };
 				for (const { qid, ob } of pairs) {

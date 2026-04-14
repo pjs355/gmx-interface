@@ -111,15 +111,10 @@ export function About() {
 				<div className="About-section">
 					<h2 className="About-section-title">Withdrawals</h2>
 					<p className="About-section-text">
-						For now, withdrawals are crypto only. You can withdraw USDC on Base to:
-					</p>
-					<ul className="About-list">
-						<li>Coinbase</li>
-						<li>A private crypto wallet that supports Base</li>
-						<li>Another exchange that supports USDC on Base</li>
-					</ul>
-					<p className="About-section-text">
-						We will be adding more withdrawal options soon.
+						Withdrawals are crypto only. From Transfers you can send USDC or USDT to supported
+						networks (for example Base, Polygon, BNB Chain, and Solana). The app may route funds
+						from the wallet where your cash is held using LI.FI. Always confirm the recipient
+						network and token type—sending to the wrong address or chain can mean permanent loss.
 					</p>
 				</div>
 

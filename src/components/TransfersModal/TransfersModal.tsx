@@ -1,102 +1,173 @@
 /**
- * TransfersModal - USDC Withdrawal Modal
- * 
- * PURPOSE:
- * Handles USDC withdrawals from user's wallet to any external address on Base network.
- * This replaced the old complex Payments page with a simple, focused withdrawal flow.
- * 
- * FLOW:
- * 1. "withdraw" view - User enters recipient address and amount
- *    - Validates address format (0x + 40 hex chars)
- *    - Validates amount doesn't exceed available cash balance
- *    - Shows warning about Base network compatibility
- * 
- * 2. "review" view - User confirms transaction details
- *    - Shows full recipient address (not truncated) for verification
- *    - Shows exact amount being sent
- *    - User can go back to edit or proceed to send
- * 
- * 3. "submitted" view - Transaction confirmation
- *    - Shows success with BaseScan link to view transaction
- *    - User clicks "Done" to close modal
- * 
- * TRANSACTION HANDLING:
- * - Smart wallets (email login): Uses Privy's useSmartWallets().getClientForChain()
- * - External wallets: Uses ethers signer.sendTransaction()
- * - Pattern copied from claimEarnings.ts for consistency
- * 
- * IMPORTANT:
- * - USDC has 6 decimals (not 18 like ETH)
- * - Uses getUSDCAddress() from config/addresses.ts
- * - Refreshes user data after successful withdrawal
- * 
- * CREATED: Jan 2026 - Replaced old Payments page
+ * TransfersModal — multi-chain withdrawals via POST /funding/lifi/withdraw/plan
+ * (LI.FI routes + same-chain EVM direct transfer when applicable).
  */
 
-import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import Modal from "@/components/Modal/Modal";
 import { useTransfersModal } from "@/context/TransfersModalContext";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
-import { getUSDCAddress } from "@/config/addresses";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
+import { buildChainBalances } from "@/trading/sor/SmartRouteToggle";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import {
+	useWithdrawPlanExecution,
+	getWithdrawExecutionErrorMessage,
+} from "@/pages/Transfers/useWithdrawPlanExecution";
+import type {
+	LifiWithdrawPlanData,
+	LifiWithdrawPlanLeg,
+} from "@/types/trading";
+import type { WithdrawPlanTxEntry } from "@/pages/Transfers/useWithdrawPlanExecution";
 import "./TransfersModal.scss";
 
 type ModalView = "withdraw" | "review" | "submitted";
 
-// Address validation regex
-const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-// Base mainnet chain id
-const BASE_CHAIN_ID = 8453;
+const SOLANA_LIFI_CHAIN_ID = 1151111081099710;
 
-// USDC contract ABI
-const USDC_ABI = ["function transfer(address to, uint256 amount) returns (bool)"];
+const DEST_CHAINS: { label: string; chainId: number }[] = [
+	{ label: "Base", chainId: 8453 },
+	{ label: "Polygon", chainId: 137 },
+	{ label: "BNB Chain", chainId: 56 },
+	{ label: "Solana", chainId: SOLANA_LIFI_CHAIN_ID },
+];
+
+function explorerTxUrl(chainId: number, txHash: string): string {
+	const h = txHash.trim();
+	if (chainId === 8453) return `https://basescan.org/tx/${h}`;
+	if (chainId === 137) return `https://polygonscan.com/tx/${h}`;
+	if (chainId === 56) return `https://bscscan.com/tx/${h}`;
+	return `https://solscan.io/tx/${h}`;
+}
+
+function chainLabel(chainId: number): string {
+	return DEST_CHAINS.find((c) => c.chainId === chainId)?.label ?? `Chain ${chainId}`;
+}
+
+function legAmountLabel(leg: LifiWithdrawPlanLeg): string {
+	if (leg.mode === "direct_transfer") {
+		return `$${leg.amountHuman}`;
+	}
+	try {
+		const raw = BigInt(leg.fromAmount);
+		const d = leg.fromFundingStable.decimals;
+		const human = Number(raw) / 10 ** d;
+		if (!Number.isFinite(human)) return "—";
+		return `$${human.toFixed(2)}`;
+	} catch {
+		return "—";
+	}
+}
+
+function legRouteType(leg: LifiWithdrawPlanLeg): string {
+	return leg.mode === "direct_transfer" ? "Direct" : "LI.FI";
+}
+
+function legSourceLabel(leg: LifiWithdrawPlanLeg): string {
+	if (leg.mode === "direct_transfer") {
+		return chainLabel(leg.toChain);
+	}
+	return `${chainLabel(leg.fromChain)} → ${chainLabel(leg.toChain)}`;
+}
 
 export function TransfersModal() {
 	const { isOpen, closeModal } = useTransfersModal();
 	const { cashBalance } = usePortfolio();
-	const { account, hasSmartWallet, signer } = useSignerContext();
-	const { refresh: refreshUserData } = useUserData();
-	const { getClientForChain } = useSmartWallets();
+	const { account } = useSignerContext();
+	const { refresh: refreshUserData, usdcBalance } = useUserData();
+	const funding = useFundingAddresses();
+	const api = usePrivateApiClient();
+	const { executePlan } = useWithdrawPlanExecution();
 
-	// View state - starts on withdraw form
+	const bridgeBalances = useBridgeFundingBalances({
+		baseSmartWallet: funding.baseSmartWallet,
+		polymarketSafe: funding.polymarketSafe,
+		embeddedEoa: funding.embeddedEoa,
+		solanaAddress: funding.solanaAddress,
+		enabled: !funding.isLoading && Boolean(account),
+	});
+
+	const chainBalances = useMemo(
+		() =>
+			buildChainBalances({
+				baseUsdcBalance: Number(usdcBalance) || 0,
+				baseWalletAddress: funding.baseSmartWallet ?? "",
+				polygonUsdcBalance: parseFloat(
+					bridgeBalances.data?.polygonUsdcEHuman ?? "0"
+				),
+				polygonWalletAddress: funding.polymarketSafe,
+				solanaUsdcBalance: parseFloat(
+					bridgeBalances.data?.solanaUsdcHuman ?? "0"
+				),
+				solanaWalletAddress: funding.solanaAddress,
+				bnbUsdtBalance: parseFloat(bridgeBalances.data?.bscUsdtHuman ?? "0"),
+				bnbWalletAddress: funding.embeddedEoa,
+			}),
+		[
+			usdcBalance,
+			funding.baseSmartWallet,
+			funding.polymarketSafe,
+			funding.embeddedEoa,
+			funding.solanaAddress,
+			bridgeBalances.data,
+		]
+	);
+
+	const totalFundingOnRails = useMemo(
+		() =>
+			chainBalances.reduce((sum, b) => {
+				const n =
+					typeof b.balance === "number" && Number.isFinite(b.balance)
+						? b.balance
+						: 0;
+				return sum + n;
+			}, 0),
+		[chainBalances]
+	);
+
+	/** Withdrawable total: portfolio cash capped by balances reported on funding chains. */
+	const maxWithdrawAmount = useMemo(
+		() => Math.min(cashBalance, totalFundingOnRails),
+		[cashBalance, totalFundingOnRails]
+	);
+
 	const [view, setView] = useState<ModalView>("withdraw");
-
-	// Withdraw form state
+	const [toChain, setToChain] = useState<number | null>(null);
+	const [toAsset, setToAsset] = useState<"USDC" | "USDT" | null>(null);
 	const [recipientAddress, setRecipientAddress] = useState("");
 	const [withdrawAmount, setWithdrawAmount] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isPlanning, setIsPlanning] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [txHash, setTxHash] = useState<string | null>(null);
+	const [submittedEntries, setSubmittedEntries] = useState<
+		WithdrawPlanTxEntry[] | null
+	>(null);
+	const [plan, setPlan] = useState<LifiWithdrawPlanData | null>(null);
 
-	// Lazy-load ethers to keep it out of the initial bundle
-	const ethersRef = useRef<typeof import("ethers") | null>(null);
-	const getEthers = useCallback(async () => {
-		if (!ethersRef.current) {
-			ethersRef.current = await import("ethers");
-		}
-		return ethersRef.current;
-	}, []);
-
-	// Reset state when modal closes
 	useEffect(() => {
 		if (!isOpen) {
-			// Delay reset to allow close animation
 			const timer = setTimeout(() => {
 				setView("withdraw");
+				setToChain(null);
+				setToAsset(null);
 				setRecipientAddress("");
 				setWithdrawAmount("");
 				setError(null);
 				setIsSubmitting(false);
-				setTxHash(null);
+				setIsPlanning(false);
+				setSubmittedEntries(null);
+				setPlan(null);
 			}, 200);
 			return () => clearTimeout(timer);
 		}
 	}, [isOpen]);
 
-	// Format currency helper
 	const formatCurrency = useCallback((value: number | null | string): string => {
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || !isFinite(num)) return "0.00";
@@ -106,122 +177,110 @@ export function TransfersModal() {
 		}).format(num);
 	}, []);
 
-	// Validation states
+	const destIsSolana = toChain === SOLANA_LIFI_CHAIN_ID;
+	const networkChosen = toChain !== null;
+	const assetChosen = toAsset !== null;
 	const addressHasInput = recipientAddress.length > 0;
-	const isAddressValid = ADDRESS_REGEX.test(recipientAddress);
+	const isAddressValid = destIsSolana
+		? SOLANA_ADDRESS_RE.test(recipientAddress.trim())
+		: EVM_ADDRESS_RE.test(recipientAddress.trim());
 	const isAddressInvalid = addressHasInput && !isAddressValid;
 
 	const amountHasInput = withdrawAmount.length > 0;
 	const parsedAmount = parseFloat(withdrawAmount);
-	const isAmountOverBalance = amountHasInput && !isNaN(parsedAmount) && parsedAmount > cashBalance;
-	const isAmountValid = amountHasInput && !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= cashBalance;
+	const isAmountOverMaxWithdraw =
+		amountHasInput &&
+		!isNaN(parsedAmount) &&
+		maxWithdrawAmount > 0 &&
+		parsedAmount > maxWithdrawAmount + 1e-9;
+	const isAmountValid =
+		amountHasInput &&
+		!isNaN(parsedAmount) &&
+		parsedAmount > 0 &&
+		parsedAmount <= maxWithdrawAmount + 1e-9 &&
+		chainBalances.length > 0;
 
-	const canProceedToReview = isAddressValid && isAmountValid;
+	const canRequestReview =
+		networkChosen &&
+		assetChosen &&
+		isAddressValid &&
+		isAmountValid &&
+		chainBalances.length > 0;
 
-	// Handle proceed to review screen
-	const handleProceedToReview = useCallback(() => {
-		if (!canProceedToReview) return;
+	const handleProceedToReview = useCallback(async () => {
+		if (!canRequestReview || toChain === null || toAsset === null) return;
 		setError(null);
-		setView("review");
-	}, [canProceedToReview]);
+		setIsPlanning(true);
+		setPlan(null);
+		try {
+			const planPayload = await api.postFundingLifiWithdrawPlan({
+				amountHuman: withdrawAmount.trim(),
+				toChain,
+				toAsset,
+				toAddress: recipientAddress.trim(),
+				slippage: 0.005,
+				balances: chainBalances,
+			});
+			if (
+				!planPayload ||
+				typeof planPayload !== "object" ||
+				(planPayload.mode !== "lifi" &&
+					planPayload.mode !== "direct_transfer" &&
+					planPayload.mode !== "composite")
+			) {
+				throw new Error("Withdraw plan failed");
+			}
+			setPlan(planPayload);
+			setView("review");
+		} catch (e) {
+			setError(getWithdrawExecutionErrorMessage(e));
+		} finally {
+			setIsPlanning(false);
+		}
+	}, [
+		api,
+		canRequestReview,
+		chainBalances,
+		recipientAddress,
+		toAsset,
+		toChain,
+		withdrawAmount,
+	]);
 
-	// Handle back to form
 	const handleBackToForm = useCallback(() => {
 		setError(null);
+		setPlan(null);
 		setView("withdraw");
 	}, []);
 
-	// Handle actual send transaction
 	const handleSendTransaction = useCallback(async () => {
-		if (!account) {
-			setError("No wallet connected");
+		if (!plan) {
+			setError("No withdrawal plan. Go back and try again.");
 			return;
 		}
-
 		setIsSubmitting(true);
 		setError(null);
-		setTxHash(null);
-
+		setSubmittedEntries(null);
 		try {
-			const ethersModule = await getEthers();
-			const amountWei = ethersModule.parseUnits(withdrawAmount, 6);
-
-			const iface = new ethersModule.Interface(USDC_ABI);
-			const transferData = iface.encodeFunctionData("transfer", [
-				recipientAddress,
-				amountWei,
-			]);
-
-			console.log("TRANSFER DEBUG:", {
-				to: getUSDCAddress(),
-				recipient: recipientAddress,
-				amount: withdrawAmount,
-				amountWei: amountWei.toString(),
-				hasSmartWallet,
-				account,
-			});
-
-			let resultTxHash: string;
-
-			if (hasSmartWallet) {
-				// Smart wallet path - use viem client
-				console.log("TRANSFER: Using smart wallet path");
-				const smartWalletClient = await getClientForChain({
-					id: BASE_CHAIN_ID,
-				});
-				if (!smartWalletClient) {
-					throw new Error("No smart wallet client available for Base chain");
-				}
-
-				const tx = await smartWalletClient.sendTransaction({
-					to: getUSDCAddress() as `0x${string}`,
-					data: transferData as `0x${string}`,
-					value: 0n,
-				});
-				resultTxHash = tx;
-			} else {
-				// External/Embedded wallet path - use ethers signer
-				console.log("TRANSFER: Using external/embedded wallet path");
-				if (!signer) {
-					throw new Error("No signer available");
-				}
-
-				const tx = await signer.sendTransaction({
-					to: getUSDCAddress(),
-					data: transferData,
-					value: 0,
-				});
-				await tx.wait();
-				resultTxHash = tx.hash;
-			}
-
-			console.log("TRANSFER SUCCESS: Transaction hash:", resultTxHash);
-			setTxHash(resultTxHash);
-
-			// Show submitted confirmation
+			const out = await executePlan(plan);
+			setSubmittedEntries(out.entries);
 			setView("submitted");
-
-			// Refresh balance
-			refreshUserData();
-		} catch (err: any) {
-			console.error("Withdrawal error:", err);
-			setError(err?.message || "Something went wrong. Please try again.");
+			await refreshUserData();
+		} catch (err) {
+			setError(getWithdrawExecutionErrorMessage(err));
 		} finally {
 			setIsSubmitting(false);
 		}
-	}, [account, hasSmartWallet, signer, getClientForChain, recipientAddress, withdrawAmount, getEthers, refreshUserData]);
+	}, [executePlan, plan, refreshUserData]);
 
-	// Handle done - close modal
 	const handleDone = useCallback(() => {
 		closeModal();
 	}, [closeModal]);
 
-	// Handle cancel - close modal
 	const handleCancel = useCallback(() => {
 		closeModal();
 	}, [closeModal]);
 
-	// Get modal title based on view
 	const getModalTitle = (): string => {
 		switch (view) {
 			case "review":
@@ -229,11 +288,10 @@ export function TransfersModal() {
 			case "submitted":
 				return "Withdrawal Submitted";
 			default:
-				return "Withdraw USDC";
+				return "Withdraw funds";
 		}
 	};
 
-	// Get input class names based on validation state
 	const getAddressInputClass = () => {
 		let classes = "transfers-address-input";
 		if (isAddressValid) classes += " input-valid";
@@ -243,24 +301,98 @@ export function TransfersModal() {
 
 	const getAmountInputClass = () => {
 		let classes = "";
-		if (isAmountOverBalance) classes += " input-error";
+		if (isAmountOverMaxWithdraw) classes += " input-error";
 		return classes;
 	};
 
-	// Render withdraw form view
+	const routeSummary = useMemo(() => {
+		if (!plan) return null;
+		if (plan.mode === "composite") {
+			return `${plan.legs.length} steps from your funded wallets`;
+		}
+		if (plan.mode === "direct_transfer") {
+			return `Send on ${chainLabel(plan.toChain)} (direct transfer)`;
+		}
+		return `Routed via LI.FI from ${chainLabel(plan.fromChain)} → ${chainLabel(plan.toChain)}`;
+	}, [plan]);
+
 	const renderWithdrawView = () => (
 		<div className="transfers-withdraw-form">
+			{error && (
+				<div className="transfers-error-message" role="alert">
+					<span className="transfers-error-text">{error}</span>
+				</div>
+			)}
+			{chainBalances.length === 0 && (
+				<div className="transfers-field-error" style={{ marginBottom: 12 }}>
+					No funded wallets detected yet. Deposit or wait for balances to load.
+				</div>
+			)}
+
 			<div className="transfers-input-group">
-				<label>Recipient Address</label>
+				<label>Destination network</label>
+				<div
+					className="transfers-pill-row"
+					role="group"
+					aria-label="Destination network"
+				>
+					{DEST_CHAINS.map((c) => (
+						<button
+							key={c.chainId}
+							type="button"
+							className={
+								toChain === c.chainId
+									? "transfers-pill transfers-pill--active"
+									: "transfers-pill"
+							}
+							onClick={() => setToChain(c.chainId)}
+						>
+							{c.label}
+						</button>
+					))}
+				</div>
+			</div>
+
+			<div className="transfers-input-group">
+				<label>Asset</label>
+				<div className="transfers-pill-row" role="group" aria-label="Asset">
+					{(["USDC", "USDT"] as const).map((sym) => (
+						<button
+							key={sym}
+							type="button"
+							className={
+								toAsset === sym
+									? "transfers-pill transfers-pill--active"
+									: "transfers-pill"
+							}
+							onClick={() => setToAsset(sym)}
+						>
+							{sym}
+						</button>
+					))}
+				</div>
+			</div>
+
+			<div className="transfers-input-group">
+				<label>Recipient address</label>
 				<input
 					type="text"
 					className={getAddressInputClass()}
-					placeholder="0x..."
+					placeholder={
+						!networkChosen
+							? "Select network first…"
+							: destIsSolana
+								? "Solana address…"
+								: "0x…"
+					}
 					value={recipientAddress}
 					onChange={(e) => setRecipientAddress(e.target.value)}
+					disabled={!networkChosen}
 				/>
-				{isAddressInvalid && (
-					<div className="transfers-field-error">Invalid address</div>
+				{networkChosen && isAddressInvalid && (
+					<div className="transfers-field-error">
+						Invalid {destIsSolana ? "Solana" : "EVM"} address
+					</div>
 				)}
 			</div>
 
@@ -276,28 +408,46 @@ export function TransfersModal() {
 					min="0"
 				/>
 				<div className="transfers-available">
-					Available: <span>${formatCurrency(cashBalance)}</span>
+					Cash across wallets:{" "}
+					<span>${formatCurrency(cashBalance)}</span>
+					{totalFundingOnRails > 0 &&
+						totalFundingOnRails + 1e-6 < cashBalance && (
+							<span className="transfers-available-cap">
+								{" "}
+								· Withdrawable now:{" "}
+								<span>${formatCurrency(maxWithdrawAmount)}</span> (funded
+								on-chain balances)
+							</span>
+						)}
 				</div>
-				{isAmountOverBalance && (
-					<div className="transfers-field-error">Insufficient balance</div>
+				{isAmountOverMaxWithdraw && (
+					<div className="transfers-field-error">
+						Amount exceeds what you can withdraw (${formatCurrency(maxWithdrawAmount)}{" "}
+						available).
+					</div>
 				)}
 			</div>
 
 			<div className="transfers-network-notice">
-				Only send to an address that supports USDC on Base. If the recipient cannot accept USDC on Base, funds may be lost permanently.
+				Withdrawals may route from Base, Polygon, BNB, or Solana depending on where
+				your cash is held. Always verify the recipient network and asset; wrong
+				details can mean permanent loss.
 			</div>
 
 			<div className="transfers-form-actions">
 				<button
+					type="button"
 					className="transfers-btn-confirm"
-					onClick={handleProceedToReview}
-					disabled={!canProceedToReview}
+					onClick={() => void handleProceedToReview()}
+					disabled={!canRequestReview || isPlanning}
 				>
-					Confirm Send
+					{isPlanning ? "Getting route…" : "Continue"}
 				</button>
 				<button
+					type="button"
 					className="transfers-btn-cancel"
 					onClick={handleCancel}
+					disabled={isPlanning}
 				>
 					Cancel
 				</button>
@@ -305,7 +455,6 @@ export function TransfersModal() {
 		</div>
 	);
 
-	// Render review view - shows all details before sending
 	const renderReviewView = () => (
 		<div className="transfers-review">
 			{error && (
@@ -315,13 +464,49 @@ export function TransfersModal() {
 			)}
 
 			<p className="transfers-review-warning">
-				Please review the details below. This transaction cannot be reversed.
+				Please review the details below. Blockchain transfers cannot be reversed.
 			</p>
 
 			<div className="transfers-review-details">
 				<div className="transfers-review-row">
-					<span className="transfers-review-label">Network</span>
-					<span className="transfers-review-value">USDC on Base</span>
+					<span className="transfers-review-label">Route</span>
+					<span className="transfers-review-value">{routeSummary ?? "—"}</span>
+				</div>
+				{plan?.mode === "composite" && (
+					<div className="transfers-review-legs-wrap">
+						<table className="transfers-review-legs">
+							<thead>
+								<tr>
+									<th scope="col">#</th>
+									<th scope="col">Source / path</th>
+									<th scope="col">Type</th>
+									<th scope="col">Amount</th>
+								</tr>
+							</thead>
+							<tbody>
+								{plan.legs.map((leg, idx) => (
+									<tr key={`${leg.mode}-${idx}`}>
+										<td>{idx + 1}</td>
+										<td>{legSourceLabel(leg)}</td>
+										<td>{legRouteType(leg)}</td>
+										<td>{legAmountLabel(leg)}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+						<p className="transfers-review-legs-note">
+							Steps run in order. If one step fails, earlier steps may already
+							have settled on-chain.
+						</p>
+					</div>
+				)}
+				<div className="transfers-review-row">
+					<span className="transfers-review-label">Destination</span>
+					<span className="transfers-review-value">
+						{toChain != null && toAsset != null
+							? `${chainLabel(toChain)} · ${toAsset}`
+							: "—"}
+					</span>
 				</div>
 				<div className="transfers-review-row">
 					<span className="transfers-review-label">Recipient</span>
@@ -339,20 +524,22 @@ export function TransfersModal() {
 
 			<div className="transfers-form-actions">
 				<button
+					type="button"
 					className="transfers-btn-send"
-					onClick={handleSendTransaction}
-					disabled={isSubmitting}
+					onClick={() => void handleSendTransaction()}
+					disabled={isSubmitting || !plan}
 				>
 					{isSubmitting ? (
 						<span className="transfers-btn-loading">
 							<span className="transfers-spinner" />
-							Sending...
+							Sending…
 						</span>
 					) : (
 						"Send"
 					)}
 				</button>
 				<button
+					type="button"
 					className="transfers-btn-cancel"
 					onClick={handleBackToForm}
 					disabled={isSubmitting}
@@ -363,7 +550,6 @@ export function TransfersModal() {
 		</div>
 	);
 
-	// Render submitted confirmation view
 	const renderSubmittedView = () => (
 		<div className="transfers-confirmation">
 			<div className="transfers-confirmation-icon">
@@ -375,8 +561,12 @@ export function TransfersModal() {
 
 			<div className="transfers-confirmation-details">
 				<div className="transfers-confirmation-row">
-					<span className="transfers-confirmation-label">Network</span>
-					<span className="transfers-confirmation-value">USDC on Base</span>
+					<span className="transfers-confirmation-label">Destination</span>
+					<span className="transfers-confirmation-value">
+						{toChain != null && toAsset != null
+							? `${chainLabel(toChain)} · ${toAsset}`
+							: "—"}
+					</span>
 				</div>
 				<div className="transfers-confirmation-row">
 					<span className="transfers-confirmation-label">Recipient</span>
@@ -390,28 +580,37 @@ export function TransfersModal() {
 						${formatCurrency(withdrawAmount)}
 					</span>
 				</div>
-				{txHash && (
-					<div className="transfers-confirmation-row">
-						<span className="transfers-confirmation-label">Transaction</span>
-						<a 
-							className="transfers-confirmation-value tx-link"
-							href={`https://basescan.org/tx/${txHash}`}
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							View on BaseScan
-						</a>
+				{submittedEntries && submittedEntries.length > 0 && (
+					<div className="transfers-confirmation-txs">
+						<span className="transfers-confirmation-label">
+							{submittedEntries.length > 1 ? "Transactions" : "Transaction"}
+						</span>
+						<ul className="transfers-confirmation-tx-list">
+							{submittedEntries.map((e, i) => (
+								<li key={`${e.txHash}-${i}`}>
+									<a
+										className="transfers-confirmation-value tx-link"
+										href={explorerTxUrl(e.explorerChainId, e.txHash)}
+										target="_blank"
+										rel="noopener noreferrer"
+									>
+										{submittedEntries.length > 1
+											? `Step ${i + 1} on ${chainLabel(e.explorerChainId)}`
+											: "View on explorer"}
+									</a>
+								</li>
+							))}
+						</ul>
 					</div>
 				)}
 			</div>
 
-			<button className="transfers-btn-done" onClick={handleDone}>
+			<button type="button" className="transfers-btn-done" onClick={handleDone}>
 				Done
 			</button>
 		</div>
 	);
 
-	// Render content based on view
 	const renderContent = () => {
 		switch (view) {
 			case "review":

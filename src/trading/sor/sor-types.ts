@@ -208,23 +208,26 @@ function formatShortfallShares(n: number): string {
 	return n % 1 === 0 ? String(Math.round(n)) : n.toFixed(1);
 }
 
-/** User-facing line for the “missed opportunity” banner (buy + executionShortfall). */
-export function getExecutionShortfallBannerText(route: RoutePlan): string | null {
+/** Profile anchor for Kalshi / DFlow Proof KYC (see DflowProofSection). */
+export const PROFILE_DFLOW_KYC_HASH = "dflow-kyc";
+
+export type KalshiKycShortfallBannerParts = {
+	extraShares: string;
+};
+
+/**
+ * Buy-route shortfall banner only when Kalshi (dflow) is blocking — Polymarket and
+ * other venues do not use this “account setup” message here.
+ */
+export function getKalshiKycShortfallBannerParts(
+	route: RoutePlan
+): KalshiKycShortfallBannerParts | null {
 	if (route.side !== "buy" || !route.executionShortfall) return null;
-	const { extraSharesIfFullyReady, executableTotalShares, venuesBlocking } =
-		route.executionShortfall;
+	const { extraSharesIfFullyReady, venuesBlocking } = route.executionShortfall;
 	if (extraSharesIfFullyReady <= EXEC_SHORTFALL_EPS) return null;
+	if (!venuesBlocking.includes("dflow")) return null;
 
-	const plus = formatShortfallShares(extraSharesIfFullyReady);
-	const today = formatShortfallShares(executableTotalShares);
-
-	const onlyDflow =
-		venuesBlocking.length === 1 && venuesBlocking[0] === "dflow";
-	const setupLead = onlyDflow
-		? "Complete Kalshi (DFlow) verification"
-		: venuesBlocking.length > 0
-			? `Complete setup on ${venuesBlocking.map((v) => VENUE_DISPLAY_NAMES[v]).join(", ")}`
-			: "Complete venue setup";
-
-	return `${setupLead} to unlock about +${plus} more shares on this route. With your connected venues you’d get about ${today} shares today.`;
+	return {
+		extraShares: formatShortfallShares(extraSharesIfFullyReady),
+	};
 }

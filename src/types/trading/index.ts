@@ -20,6 +20,7 @@ export type {
 	PolymarketVerifyOnChainBody,
 } from "./polymarketBuilder";
 export type {
+	FundingStableMetaJson,
 	LifiAllowanceHint,
 	LifiQuoteRequestBody,
 	LifiQuoteResponse,
@@ -27,6 +28,15 @@ export type {
 	LifiStatusParams,
 	LifiStatusResponse,
 	LifiTransactionRequest,
+	LifiWithdrawCompositeData,
+	LifiWithdrawDirectTransferData,
+	LifiWithdrawLifiData,
+	LifiWithdrawPlanData,
+	LifiWithdrawPlanLeg,
+	LifiWithdrawPlanRequestBody,
+	LifiWithdrawPlanResponse,
+	LifiWithdrawSelectedSource,
+	WithdrawPlanBalanceRow,
 } from "./lifi";
 export type {
 	VenueId,

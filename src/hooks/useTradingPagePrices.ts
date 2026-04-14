@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { MatchedMarket, OrderbookData, SnapshotStatus } from "@/types/odds-monitor";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { DirectVenueBooks } from "@/trading/venue-books";
@@ -6,6 +6,9 @@ import type { VenueBboResponse } from "@/hooks/useVenueBbo";
 import { useVenueBbo } from "@/hooks/useVenueBbo";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+import { isLimitlessConsoleDebugEnabled } from "@/trading/limitless/limitlessConsoleDebug";
 
 const MIN_VALID_PRICE = 0.005;
 const MAX_VALID_PRICE = 0.995;
@@ -228,14 +231,18 @@ export function useTradingPagePrices(
 	pandascoreMatchId: string,
 	levelUpOrderbook: OrderbookSnapshot | null | undefined,
 	directBooks: DirectVenueBooks | null | undefined,
+	umbrellaId?: string | null,
 ): TradingPagePrices {
 	const { enabled: wsEnabled, connected, appState } = useOddsMonitor();
+	const limitlessStripSigRef = useRef("");
 
 	const matched = useMemo((): MatchedMarket | null => {
-		if (!appState?.markets?.length) return null;
-		const id = String(pandascoreMatchId);
-		return appState.markets.find((m) => String(m.pandaMatchId) === id) ?? null;
-	}, [appState?.markets, pandascoreMatchId]);
+		return findOddsMatchedMarket(
+			appState?.markets,
+			pandascoreMatchId,
+			umbrellaId,
+		);
+	}, [appState?.markets, pandascoreMatchId, umbrellaId]);
 
 	const hasDirectBookPrices = Boolean(
 		directBooks?.polyBookA?.asks?.length || directBooks?.polyBookB?.asks?.length
@@ -301,6 +308,93 @@ export function useTradingPagePrices(
 			restError: Boolean(restBbo.error),
 		};
 	}, [wsHasVenuePrices, connected, matched, levelUpOrderbook, restBbo.data, restBbo.isLoading, restBbo.error, directBooks, wsEnabled, appState]);
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		const rowSummary = result.venueRows.map((r) => ({
+			id: r.id,
+			linked: r.linked,
+			askA: r.askA,
+			askB: r.askB,
+		}));
+		priceDebugLog("useTradingPagePrices (trading strip / Basic tab)", {
+			pandascoreMatchId,
+			source: result.source,
+			wsConnected: result.wsConnected,
+			wsEnabled: result.wsEnabled,
+			matchedPandaId: result.matched?.pandaMatchId ?? null,
+			bestAIdx: result.bestAIdx,
+			bestBIdx: result.bestBIdx,
+			bestYesPrice: result.bestYesPrice,
+			bestNoPrice: result.bestNoPrice,
+			venueRows: rowSummary,
+			isLoading: result.isLoading,
+			restError: result.restError,
+			note:
+				"Primary: venue-prices WS + direct browser books when linked; fallback REST useVenueBbo when WS has no venue snapshots.",
+		});
+	}, [
+		pandascoreMatchId,
+		result.source,
+		result.wsConnected,
+		result.wsEnabled,
+		result.matched,
+		result.bestAIdx,
+		result.bestBIdx,
+		result.bestYesPrice,
+		result.bestNoPrice,
+		result.venueRows,
+		result.isLoading,
+		result.restError,
+	]);
+
+	useEffect(() => {
+		if (!isLimitlessConsoleDebugEnabled()) return;
+		const m = result.matched;
+		if (!m?.limitless) return;
+		const row = result.venueRows.find((r) => r.id === "limitless");
+		const sig = [
+			pandascoreMatchId,
+			String(umbrellaId ?? ""),
+			result.source,
+			row?.askA ?? "",
+			row?.askB ?? "",
+			m.limitlessPriceA?.bestAsk ?? "",
+			m.limitlessPriceB?.bestAsk ?? "",
+			row?.statusA ?? "",
+			row?.statusB ?? "",
+		].join("|");
+		if (limitlessStripSigRef.current === sig) return;
+		limitlessStripSigRef.current = sig;
+		console.info("[limitless/trading-strip-prices]", {
+			pandascoreMatchId: pandascoreMatchId || null,
+			umbrellaId: umbrellaId ?? null,
+			source: result.source,
+			wsConnected: result.wsConnected,
+			slug: m.limitless.slug,
+			orderbookSlugA: m.limitless.orderbookSlugA ?? null,
+			orderbookSlugB: m.limitless.orderbookSlugB ?? null,
+			venueRowAskProbA: row?.askA ?? null,
+			venueRowAskProbB: row?.askB ?? null,
+			venueRowStatusA: row?.statusA ?? null,
+			venueRowStatusB: row?.statusB ?? null,
+			wsBookBestAskA: m.limitlessPriceA?.bestAsk ?? null,
+			wsBookBestBidA: m.limitlessPriceA?.bestBid ?? null,
+			wsBookBestAskB: m.limitlessPriceB?.bestAsk ?? null,
+			wsBookBestBidB: m.limitlessPriceB?.bestBid ?? null,
+			wsBookSnapshotStatusA: m.limitlessPriceA?.snapshotStatus ?? null,
+			wsBookSnapshotStatusB: m.limitlessPriceB?.snapshotStatus ?? null,
+			wsBookAskLevelsA: m.limitlessPriceA?.asks?.length ?? 0,
+			wsBookAskLevelsB: m.limitlessPriceB?.asks?.length ?? 0,
+		});
+	}, [
+		pandascoreMatchId,
+		umbrellaId,
+		result.matched,
+		result.venueRows,
+		result.source,
+		result.wsConnected,
+	]);
 
 	return result;
 }

@@ -7,6 +7,7 @@ import { LoadingState } from "../Predictions/components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { resolveUmbrellaEventDate } from "../Predictions/utils/eventDates";
+import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 import "./Home.scss";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -264,6 +265,27 @@ export default function Home() {
 
 		return () => clearTimeout(timeout);
 	}, [loading, gamingUmbrellas, esportsUmbrellas]);
+
+	const { subscribePandaMatchId, unsubscribePandaMatchId } =
+		useVenuePandaSubscription();
+
+	const homeDisplayedPandaIdsKey = React.useMemo(() => {
+		const ids = new Set<string>();
+		for (const u of [...gamingUmbrellas, ...esportsUmbrellas]) {
+			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
+			const pid = typeof raw === "string" ? raw.trim() : "";
+			if (pid) ids.add(pid);
+		}
+		return [...ids].sort().join("\0");
+	}, [gamingUmbrellas, esportsUmbrellas]);
+
+	useEffect(() => {
+		const ids = homeDisplayedPandaIdsKey ? homeDisplayedPandaIdsKey.split("\0") : [];
+		for (const id of ids) subscribePandaMatchId(id);
+		return () => {
+			for (const id of ids) unsubscribePandaMatchId(id);
+		};
+	}, [homeDisplayedPandaIdsKey, subscribePandaMatchId, unsubscribePandaMatchId]);
 
 	const handleRetry = () => {
 		window.location.reload();

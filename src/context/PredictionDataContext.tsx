@@ -10,7 +10,6 @@ import {
 	umbrellaDataService,
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { getPrivateApiBaseUrl } from "@/config/privateApiBase";
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
@@ -118,10 +117,8 @@ export function PredictionDataProvider({
 		// Only show loading spinner on initial load, not on SWR background refresh
 		if (!hasDataRef.current) setLoading(true);
 		setError(undefined);
-		const t0 = performance.now();
 		try {
 			const umbrellas = await umbrellaDataService.fetchAllUmbrellas();
-			console.log(`[Perf] PredictionDataContext.load() umbrella fetch + processing: ${Math.round(performance.now() - t0)}ms`);
 			const entries = await Promise.all(
 				umbrellas.map(async (umbrella: any) => {
 					const markets = umbrella.children;
@@ -369,7 +366,6 @@ export function PredictionDataProvider({
 						return;
 					}
 				}
-				const t0 = performance.now();
 				const baseUrl = getPrivateApiBaseUrl();
 				const response = await fetch(
 					`${baseUrl}/api/all-books-preview`
@@ -405,7 +401,6 @@ export function PredictionDataProvider({
 					}
 					setAllBooksPreview(previewMap);
 					setBooksPreviewLoading(false);
-					console.log(`[Perf] /api/all-books-preview: ${Math.round(performance.now() - t0)}ms, ${Object.keys(previewMap).length} markets`);
 				}
 			} catch (err) {
 				console.error(

@@ -41,6 +41,8 @@ export interface VenueStatusInfo {
 
 export interface MatchedMarket {
 	pandaMatchId: string;
+	/** From GET /matched-markets; used to resolve row when panda id on umbrella ≠ monitor key */
+	umbrellaId?: string;
 	polyConditionId: string;
 	pandaTeamA: string;
 	pandaTeamB: string;

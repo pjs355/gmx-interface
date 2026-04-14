@@ -5,7 +5,11 @@
 
 import { isLocalApi } from "./environment";
 import { getPrivateApiBaseUrl } from "./privateApiBase";
-import { getPredictionApiBaseUrl } from "./predictionApiBase";
+import {
+	getPredictionApiBaseOverride,
+	getPredictionApiBaseUrl,
+	getPredictionWebSocketUrl,
+} from "./predictionApiBase";
 
 const WS_PATH = "/ws/venue-prices";
 
@@ -14,10 +18,11 @@ const WS_PATH = "/ws/venue-prices";
  *
  * Priority:
  * 1. `VITE_ODDS_WS_BASE` env var (explicit override, path appended)
- * 2. Dev on localhost → ws://localhost:8080
- * 3. Dev on LAN IP → ws://<page-host>:8080
- * 4. Production → derive from prediction API base URL
- * 5. null if nothing resolved (disables connection)
+ * 2. `VITE_PREDICTION_API_BASE_URL` set → same WebSocket host as multiplex (`getPredictionWebSocketUrl` + path)
+ * 3. Dev on localhost → ws://localhost:8080
+ * 4. Dev on LAN IP → ws://<page-host>:8080
+ * 5. Production → derive from prediction API base URL
+ * 6. null if nothing resolved (disables connection)
  */
 export function getOddsWebSocketUrl(): string | null {
 	const fromEnv =
@@ -27,6 +32,11 @@ export function getOddsWebSocketUrl(): string | null {
 
 	if (fromEnv) {
 		return `${fromEnv.replace(/\/$/, "")}${WS_PATH}`;
+	}
+
+	if (getPredictionApiBaseOverride() != null) {
+		const wsBase = getPredictionWebSocketUrl().replace(/\/$/, "");
+		return `${wsBase}${WS_PATH}`;
 	}
 
 	if (import.meta.env.DEV && typeof window !== "undefined") {
@@ -52,9 +62,12 @@ export function getOddsWebSocketUrl(): string | null {
 
 /**
  * HTTP base URL for the matched-markets REST endpoint.
- * Uses the same origin as the prediction API.
+ * Uses the same host as the prediction API when `VITE_PREDICTION_API_BASE_URL` is set; otherwise prior rules.
  */
 export function getMatchedMarketsUrl(): string {
+	if (getPredictionApiBaseOverride() != null) {
+		return `${getPredictionApiBaseUrl().replace(/\/$/, "")}/matched-markets`;
+	}
 	if (import.meta.env.DEV && typeof window !== "undefined") {
 		const host = window.location.hostname;
 		if (host === "localhost" || host === "127.0.0.1") {

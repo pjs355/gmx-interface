@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { usePredictionChartData } from "./usePredictionChartData";
 import { useMultiExchangeChartData } from "./useMultiExchangeChartData";
 import { ExchangeOverlayChart, VENUE_COLORS, VENUE_LABELS } from "./SeriesChart";
@@ -8,6 +8,7 @@ import type { TimeRange } from "./types";
 import type { MergedExchangePoint } from "./types";
 import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
 import "./PredictionMarketChart.scss";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 
 interface PredictionMarketChartProps {
 	questionId: string;
@@ -106,6 +107,51 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		timeRange,
 	});
 
+	useEffect(() => {
+		if (!exchangeChart.hasLimitless) return;
+		setEnabledVenues((prev) => {
+			if (prev.has("limitless")) return prev;
+			const next = new Set(prev);
+			next.add("limitless");
+			return next;
+		});
+	}, [exchangeChart.hasLimitless]);
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		priceDebugLog("PredictionMarketChart", {
+			effectiveQuestionId,
+			umbrellaId: umbrellaId ?? null,
+			pandaMatchId: pandaMatchId ?? null,
+			timeRange,
+			levelUpPoints: levelUpChartData.length,
+			exchangeMergedPoints: exchangeChart.data.length,
+			exchangeLoading: exchangeChart.loading,
+			exchangeError: exchangeChart.error,
+			hasLevelUp: exchangeChart.hasLevelUp,
+			hasPolymarket: exchangeChart.hasPolymarket,
+			hasKalshi: exchangeChart.hasKalshi,
+			hasPredictFun: exchangeChart.hasPredictFun,
+			hasLimitless: exchangeChart.hasLimitless,
+			note:
+				"LevelUp line: usePredictionChartData. Multi-venue / best-odds: useMultiExchangeChartData (server batch + exchange APIs + WS live overlay).",
+		});
+	}, [
+		effectiveQuestionId,
+		umbrellaId,
+		pandaMatchId,
+		timeRange,
+		levelUpChartData.length,
+		exchangeChart.data.length,
+		exchangeChart.loading,
+		exchangeChart.error,
+		exchangeChart.hasLevelUp,
+		exchangeChart.hasPolymarket,
+		exchangeChart.hasKalshi,
+		exchangeChart.hasPredictFun,
+		exchangeChart.hasLimitless,
+	]);
+
 	// Stale-while-loading: keep showing previous data while new range loads
 	const staleRef = useRef<{ data: MergedExchangePoint[] }>({ data: [] });
 
@@ -160,8 +206,15 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		if (exchangeChart.hasPolymarket) venues.push("polymarket");
 		if (exchangeChart.hasKalshi) venues.push("kalshi");
 		if (exchangeChart.hasPredictFun) venues.push("predictFun");
+		if (exchangeChart.hasLimitless) venues.push("limitless");
 		return venues;
-	}, [exchangeChart.hasLevelUp, exchangeChart.hasPolymarket, exchangeChart.hasKalshi, exchangeChart.hasPredictFun]);
+	}, [
+		exchangeChart.hasLevelUp,
+		exchangeChart.hasPolymarket,
+		exchangeChart.hasKalshi,
+		exchangeChart.hasPredictFun,
+		exchangeChart.hasLimitless,
+	]);
 
 	const marketTitle = activeMarket?.displayName || activeMarket?.question || "Market";
 

@@ -4,8 +4,9 @@ interface ImportMetaEnv {
 	/** Optional Polygon mainnet JSON-RPC URL (Infura, Alchemy, etc.); falls back to a public node */
 	readonly VITE_POLYGON_RPC_URL?: string;
 	/**
-	 * Optional public prediction API base (umbrellas, markets, tags, order WS).
-	 * Yarn dev [3] uses Railway for catalogs by default; private API defaults to localhost (see privateApiBase).
+	 * Optional public prediction API base (umbrellas, markets, tags, multiplex orderbook WS `/ws`).
+	 * When set, orderbook REST (`getOrderbookApiBaseUrl`) and matched-markets / venue-prices URLs align to this host
+	 * unless `VITE_ODDS_WS_BASE` overrides the venue WebSocket only. Example full local stack: `http://localhost:8080`.
 	 */
 	readonly VITE_PREDICTION_API_BASE_URL?: string;
 	/** Override private API host (Polymarket, account-overview, funding). Dev [3] defaults to http://localhost:8080 */
@@ -25,7 +26,11 @@ interface ImportMetaEnv {
 	 * also tunnels order POST (EU egress); must be a URL your Railway /proxy can reach (not localhost).
 	 */
 	readonly VITE_AMSTERDAM_PROXY_LEVELUP_API_URL?: string;
-	/** "true" → request Privy gas sponsorship on BSC; omit or false → you pay BNB gas */
+	/**
+	 * "true" → disable Privy BSC gas sponsorship (you pay BNB). Omit for default sponsored gas.
+	 */
+	readonly VITE_PRIVY_DISABLE_BSC_GAS_SPONSOR?: string;
+	/** @deprecated Use VITE_PRIVY_DISABLE_BSC_GAS_SPONSOR; "false" disables sponsorship (legacy). */
 	readonly VITE_PRIVY_SPONSOR_BSC_GAS?: string;
 	/** Optional Predict smart-wallet deposit address (maker/signer for orders) */
 	readonly VITE_PREDICT_ACCOUNT_ADDRESS?: string;
@@ -34,6 +39,8 @@ interface ImportMetaEnv {
 	 * Set if your server mounts e.g. `/predict/orders/matches` without the `/api` prefix.
 	 */
 	readonly VITE_PREDICT_ORDER_MATCHES_PATH?: string;
+	/** Reserved: enables `isPredictionPricingDebugEnabled()` (debug-only code paths; see debugPredictionPricing.ts) */
+	readonly VITE_DEBUG_PREDICTION_PRICING?: string;
 }
 
 // Image module declarations

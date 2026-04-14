@@ -104,9 +104,7 @@ class UmbrellaDataService {
 	}
 
 	private async fetchFromNetwork(): Promise<Umbrella[]> {
-		const t0 = performance.now();
 		const response = await fetch(`${this.API_BASE_URL}/umbrellas`);
-		const t1 = performance.now();
 
 		if (!response.ok) {
 			throw new Error(
@@ -131,15 +129,10 @@ class UmbrellaDataService {
 				}
 			},
 		);
-		const t2 = performance.now();
 
 		if (!apiResponse.success || !Array.isArray(apiResponse.data)) {
 			throw new Error("Invalid API response structure");
 		}
-
-		console.log(
-			`[Perf] /umbrellas: network=${Math.round(t1 - t0)}ms, parse=${Math.round(t2 - t1)}ms, count=${apiResponse.data.length}`
-		);
 
 		this.umbrellasCache = apiResponse.data;
 		this.writeLocalStorageCache(apiResponse.data);
@@ -175,9 +168,6 @@ class UmbrellaDataService {
 			const stale = this.readLocalStorageCache();
 			if (stale) {
 				this.umbrellasCache = stale;
-				console.log(
-					`[SWR] Serving ${stale.length} umbrellas from localStorage cache`
-				);
 				this.refreshInBackground();
 				return stale;
 			}

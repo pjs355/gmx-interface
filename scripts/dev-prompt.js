@@ -34,10 +34,10 @@ console.log(`${COLORS.bright}Select environment:${COLORS.reset}
       ${COLORS.dim}API: http://localhost:8080${COLORS.reset}
       ${COLORS.dim}Test data, test contracts${COLORS.reset}
   
-  ${COLORS.magenta}[3] DEV${COLORS.reset}   ${COLORS.dim}→ Production contracts + live catalogs + local private API${COLORS.reset}
-      ${COLORS.dim}Markets/umbrellas/tags → Railway (same as levelup.markets)${COLORS.reset}
-      ${COLORS.dim}Polymarket / account / transfers / builder → http://localhost:8080 by default${COLORS.reset}
-      ${COLORS.dim}Override port: VITE_PRIVATE_API_BASE in .env${COLORS.reset}
+  ${COLORS.magenta}[3] DEV${COLORS.reset}   ${COLORS.dim}→ Production contracts + unified local API on :8080${COLORS.reset}
+      ${COLORS.dim}Umbrellas, multiplex /ws, orderbook REST, matched-markets, venue-prices → http://localhost:8080${COLORS.reset}
+      ${COLORS.dim}(Sets VITE_PREDICTION_API_BASE_URL for this session; use Railway catalogs via .env or npx vite instead.)${COLORS.reset}
+      ${COLORS.dim}Override port: VITE_PRIVATE_API_BASE / VITE_PREDICTION_API_BASE_URL in .env${COLORS.reset}
       ${COLORS.dim}Real contract addresses on Base${COLORS.reset}
 `);
 
@@ -53,7 +53,7 @@ rl.question(`${COLORS.magenta}Enter choice (1, 2, or 3): ${COLORS.reset}`, (answ
     console.log(`\n${COLORS.yellow}✓ TEST environment${COLORS.reset}`);
   } else if (choice === '3' || choice.toLowerCase() === 'dev') {
     envMode = 'local-production';
-    console.log(`\n${COLORS.magenta}✓ DEV: live catalogs (Railway) + private API default localhost:8080 + production contracts${COLORS.reset}`);
+    console.log(`\n${COLORS.magenta}✓ DEV: unified prediction API http://localhost:8080 + production contracts${COLORS.reset}`);
   } else {
     envMode = 'testnet';
     console.log(`\n${COLORS.yellow}⚠ Invalid choice, defaulting to TEST environment${COLORS.reset}`);
@@ -75,6 +75,10 @@ ${COLORS.bright}Railway proxy (EU egress):${COLORS.reset}
       console.log(`${COLORS.dim}✓ Direct routing (no Railway proxy)${COLORS.reset}\n`);
     }
 
+    /** [3] local-production: one process on :8080 for REST + multiplex WS + venue-prices (avoids Railway/local split). */
+    const localPredictionApi =
+      envMode === 'local-production' ? { VITE_PREDICTION_API_BASE_URL: 'http://localhost:8080' } : {};
+
     const vite = spawn('npx', ['vite'], {
       stdio: 'inherit',
       shell: true,
@@ -82,6 +86,7 @@ ${COLORS.bright}Railway proxy (EU egress):${COLORS.reset}
         ...process.env,
         VITE_ENVIRONMENT_MODE: envMode,
         ...(useProxy ? { VITE_POLYMARKET_CLOB_PROXY: 'true' } : {}),
+        ...localPredictionApi,
       },
     });
 

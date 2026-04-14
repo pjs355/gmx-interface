@@ -3,6 +3,10 @@ import { getAccountOverviewApiPath } from "@/config/accountOverviewApi";
 import { getPolymarketAccountApiPath } from "@/config/polymarketPrivateApiPath";
 import { getPrivateApiRequestUrl } from "@/config/privateApiBase";
 import type { CreateOrderPayload } from "@/trading/predict/predictOrderSubmit";
+import type {
+	LimitlessEnsureAccountResponse,
+	LimitlessOrderRequest,
+} from "@/trading/limitless/limitlessPrivateApiTypes";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import {
 	mapPredictPositionRows,
@@ -18,6 +22,10 @@ import type {
 	AccountOverview,
 	LifiQuoteRequestBody,
 	LifiQuoteResponse,
+	LifiWithdrawCompositeData,
+	LifiWithdrawPlanData,
+	LifiWithdrawPlanLeg,
+	LifiWithdrawPlanRequestBody,
 	LifiStatusParams,
 	LifiStatusResponse,
 	PolymarketAccountResponse,
@@ -28,6 +36,15 @@ import type {
 	PolymarketVerifyOnChainBody,
 } from "@/types/trading";
 import { PrivateApiError } from "./errors";
+
+function parseWithdrawPlanLeg(value: unknown): LifiWithdrawPlanLeg | null {
+	if (!value || typeof value !== "object") return null;
+	const mode = (value as Record<string, unknown>).mode;
+	if (mode === "direct_transfer" || mode === "lifi") {
+		return value as LifiWithdrawPlanLeg;
+	}
+	return null;
+}
 
 // ── DFlow / Kalshi types (narrow; no full OpenAPI mirror) ──────────
 
@@ -414,6 +431,84 @@ export function createPrivateApiClient(
 			return readJson<LifiQuoteResponse>(res);
 		},
 
+		async postFundingLifiWithdrawPlan(
+			body: LifiWithdrawPlanRequestBody
+		): Promise<LifiWithdrawPlanData> {
+			const res = await authorizedFetch("/funding/lifi/withdraw/plan", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			const raw = await parseJsonSafe(res);
+			if (!res.ok) {
+				const msg = privateApiHttpErrorMessage(raw, res.status);
+				throw new PrivateApiError(msg, res.status, raw);
+			}
+			if (!raw || typeof raw !== "object") {
+				throw new PrivateApiError(
+					"Withdraw plan: empty response",
+					res.status,
+					raw
+				);
+			}
+			const obj = raw as Record<string, unknown>;
+			const inner =
+				obj.success === true &&
+				obj.data != null &&
+				typeof obj.data === "object"
+					? (obj.data as Record<string, unknown>)
+					: (raw as Record<string, unknown>);
+			if (inner.mode === "composite") {
+				const legsRaw = inner.legs;
+				const totalAmountHuman = inner.totalAmountHuman;
+				const toChain = inner.toChain;
+				const toAsset = inner.toAsset;
+				const toAddress = inner.toAddress;
+				if (
+					typeof totalAmountHuman !== "string" ||
+					typeof toAddress !== "string" ||
+					typeof toChain !== "number" ||
+					(toAsset !== "USDC" && toAsset !== "USDT") ||
+					!Array.isArray(legsRaw) ||
+					legsRaw.length < 2
+				) {
+					throw new PrivateApiError(
+						"Withdraw plan: invalid composite response",
+						res.status,
+						raw
+					);
+				}
+				const legs: LifiWithdrawPlanLeg[] = [];
+				for (const leg of legsRaw) {
+					const parsed = parseWithdrawPlanLeg(leg);
+					if (!parsed) {
+						throw new PrivateApiError(
+							"Withdraw plan: invalid leg in composite response",
+							res.status,
+							raw
+						);
+					}
+					legs.push(parsed);
+				}
+				const composite: LifiWithdrawCompositeData = {
+					mode: "composite",
+					totalAmountHuman,
+					toChain,
+					toAsset,
+					toAddress,
+					legs,
+				};
+				return composite;
+			}
+			if (inner.mode !== "lifi" && inner.mode !== "direct_transfer") {
+				const errMsg =
+					typeof obj.error === "string" && obj.error.trim()
+						? obj.error.trim()
+						: "Withdraw plan: unexpected response";
+				throw new PrivateApiError(errMsg, res.status, raw);
+			}
+			return inner as LifiWithdrawPlanData;
+		},
+
 		async getFundingLifiStatus(
 			params: LifiStatusParams
 		): Promise<LifiStatusResponse> {
@@ -656,6 +751,29 @@ export function createPrivateApiClient(
 				`/api/dflow/onchain-trades?${q.toString()}`
 			);
 			return readJson<DflowOnchainTrade[]>(res);
+		},
+
+		// ── Limitless (Base) ───────────────────────────────────────────
+
+		async postLimitlessEnsureAccount(): Promise<LimitlessEnsureAccountResponse> {
+			const res = await authorizedFetch("/api/limitless/ensure-account", {
+				method: "POST",
+				body: JSON.stringify({}),
+			});
+			return readJson<LimitlessEnsureAccountResponse>(res);
+		},
+
+		async postLimitlessOrder(body: LimitlessOrderRequest): Promise<unknown> {
+			const res = await authorizedFetch("/api/limitless/orders", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson<unknown>(res);
+		},
+
+		async getLimitlessPositions(): Promise<unknown> {
+			const res = await authorizedFetch("/api/limitless/positions");
+			return readJson<unknown>(res);
 		},
 	};
 }

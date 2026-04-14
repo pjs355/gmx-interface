@@ -26,6 +26,7 @@ function trySorDepositToTrade(side: "buy" | "sell", sorState: SorStateForDeposit
 		text: "Deposit to Trade",
 		disabled: false,
 		onClick: sorState.handleAddFunds,
+		depositShortfallUsd: gap.shortfall,
 	};
 }
 
@@ -33,6 +34,8 @@ export interface ButtonStateResult {
   text: string;
   disabled: boolean;
   onClick: () => void;
+  /** Shown under the deposit CTA when SOR buy needs more cash. */
+  depositShortfallUsd?: number;
   // Info for "sweeping the book" warning
   isSweepingBook?: boolean;
   availableShares?: number;
@@ -76,6 +79,17 @@ export function useButtonState({
     | undefined,
   predictUsdtBalance = undefined as number | undefined,
   predictSellShareBalance = undefined as number | null | undefined,
+  limitlessTrading = undefined as
+    | {
+        hasPandascoreLink: boolean;
+        hasMonitorMatch: boolean;
+        hasLimitlessMapping: boolean;
+        ready: boolean;
+        loading: boolean;
+        blockedReason: string | null;
+      }
+    | undefined,
+  limitlessSellShareBalance = undefined as number | null | undefined,
   dflowProofVerified = undefined as boolean | undefined,
   dflowProofLoading = undefined as boolean | undefined,
   sorState = undefined as
@@ -158,6 +172,7 @@ export function useButtonState({
           text: "Deposit to Trade",
           disabled: false,
           onClick: sorState.handleAddFunds,
+          depositShortfallUsd: sorAllBuyDeposit.shortfall,
         };
       }
 
@@ -245,6 +260,90 @@ export function useButtonState({
       };
     }
 
+    if (state.tradingVenue === "limitless") {
+      const lt = limitlessTrading;
+      if (!lt?.hasPandascoreLink) {
+        return {
+          text: "Limitless: esports match not linked",
+          disabled: true,
+          onClick: () => {},
+        };
+      }
+      if (!lt.hasMonitorMatch) {
+        return {
+          text: "Limitless: no matched market",
+          disabled: true,
+          onClick: () => {},
+        };
+      }
+      if (!lt.hasLimitlessMapping) {
+        return {
+          text: "Limitless: market not linked",
+          disabled: true,
+          onClick: () => {},
+        };
+      }
+      if (lt.loading && !lt.ready) {
+        return {
+          text: "Preparing Limitless…",
+          disabled: true,
+          onClick: () => {},
+        };
+      }
+      if (!lt.ready) {
+        return {
+          text: lt.blockedReason ?? "Limitless unavailable",
+          disabled: true,
+          onClick: () => {},
+        };
+      }
+      if (
+        !state.selectedPosition ||
+        !state.amount ||
+        (state.orderType === "limit" && !state.price)
+      ) {
+        return { text: "Enter amount", disabled: true, onClick: () => {} };
+      }
+      const sorLxDeposit = trySorDepositToTrade(state.side, sorState);
+      if (sorLxDeposit) return sorLxDeposit;
+      const balRaw =
+        typeof usdcBalance === "number" && Number.isFinite(usdcBalance)
+          ? usdcBalance
+          : parseFloat(String(usdcBalance || "0"));
+      if (balRaw <= 0 && state.side === "buy") {
+        return {
+          text: "Add USDC on Base for Limitless",
+          disabled: false,
+          onClick: handleAddFunds,
+        };
+      }
+      const actionText = state.side === "buy" ? "Buy" : "Sell";
+      let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
+      if (market) {
+        const title = (
+          market?.displayName ||
+          (market as any)?.question ||
+          ""
+        ).trim();
+        const parts = title
+          .split(/\s*vs\.?\s*/i)
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+        const isVsSingle =
+          parts.length === 2 && (market as any)?.umbrellaChildrenCount === 1;
+        if (isVsSingle) {
+          const teamName =
+            state.selectedPosition === "yes" ? parts[0] : parts[1];
+          buttonText = `${actionText} ${teamName}`;
+        }
+      }
+      return {
+        text: buttonText,
+        disabled: false,
+        onClick: handleTrade,
+      };
+    }
+
     if (state.tradingVenue === "dflow") {
       if (dflowProofLoading) {
         return { text: "Checking Kalshi KYC…", disabled: true, onClick: () => {} };
@@ -253,7 +352,7 @@ export function useButtonState({
         return {
           text: "Complete Proof KYC →",
           disabled: false,
-          onClick: () => navigate("/profile"),
+          onClick: () => navigate("/profile#dflow-kyc"),
         };
       }
       if (
@@ -474,7 +573,11 @@ export function useButtonState({
       state.selectedPosition,
       yesBalance,
       noBalance,
-      state.tradingVenue === "predictfun" ? predictSellShareBalance ?? null : null
+      state.tradingVenue === "predictfun"
+        ? predictSellShareBalance ?? null
+        : state.tradingVenue === "limitless"
+          ? limitlessSellShareBalance ?? null
+          : null
     );
     if (!sharesCheck.hasSufficientShares) return { text: "Insufficient Shares", disabled: true, onClick: () => {}, isSweepingBook, availableShares };
     
@@ -495,7 +598,7 @@ export function useButtonState({
     }
     
     return { text: buttonText, disabled: false, onClick: handleTrade, isSweepingBook, availableShares };
-  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance, dflowProofVerified, dflowProofLoading, sorState, navigate]);
+  }, [authenticated, account, state, login, approvalState, approveToken, marketOrderHandler, usdcBalance, yesBalance, noBalance, handleTrade, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictApproval, predictUsdtBalance, predictSellShareBalance, limitlessTrading, limitlessSellShareBalance, dflowProofVerified, dflowProofLoading, sorState, navigate]);
 }
 
 

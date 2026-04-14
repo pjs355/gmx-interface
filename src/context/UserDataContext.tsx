@@ -233,8 +233,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		walletAddress: string,
 		marketDataMap: Map<string, { yesTokenId: string; noTokenId: string }>
 	): Promise<Array<{ tokenId: string; balance: string }>> => {
-		console.log(`[UserDataContext] 🔄 RPC Fallback: Fetching token balances for ${walletAddress}...`);
-		
 		const provider = getReadProvider();
 		const ctfContract = new Contract(
 			getCTFAddress(),
@@ -250,8 +248,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			if (yesTokenId) tokenIds.add(yesTokenId);
 			if (noTokenId) tokenIds.add(noTokenId);
 		}
-
-		console.log(`[UserDataContext] 🔄 RPC Fallback: Checking ${tokenIds.size} token IDs...`);
 
 		// Batch fetch in groups of 20 to avoid overwhelming RPC
 		const tokenIdArray = Array.from(tokenIds);
@@ -277,7 +273,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			results.push(...batchResults.filter((r): r is { tokenId: string; balance: string } => r !== null));
 		}
 
-		console.log(`[UserDataContext] 🔄 RPC Fallback: Found ${results.length} non-zero balances`);
 		return results;
 	}, [getReadProvider]);
 
@@ -291,12 +286,10 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		if (!forceRefresh && subgraphFetchedRef.current === walletAddress) return;
 
 		try {
-			console.log(`[UserDataContext] Fetching token balances for ${walletAddress}...`);
 			const subgraphAccount = await subgraphService.getUserAccount(walletAddress);
 
 			if (!subgraphAccount) {
 				// User has never interacted with the contracts
-				console.log(`[UserDataContext] No account found for ${walletAddress}`);
 				setRawTokenBalances([]);
 				subgraphFetchedRef.current = walletAddress;
 				setUsingRpcFallback(false);
@@ -304,19 +297,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			}
 
 				// Store raw token balances for later mapping (NOT usdc - that comes from RPC)
-			console.log(`[UserDataContext] Loaded ${subgraphAccount.tokenBalances.length} token balances for ${walletAddress}`);
 			setRawTokenBalances(subgraphAccount.tokenBalances);
 			subgraphFetchedRef.current = walletAddress;
 			setUsingRpcFallback(false);
 		} catch (error) {
 			console.error("Error loading token balances from subgraph:", error);
-			
-			// Check if it's a rate limit or network error - try RPC fallback
-			const errorMessage = error instanceof Error ? error.message : String(error);
-			const isRateLimited = errorMessage.includes("429") || errorMessage.includes("rate");
-			
-			console.log(`[UserDataContext] ⚠️ Subgraph failed${isRateLimited ? " (rate limited)" : ""}. Trying RPC fallback...`);
-			
+
 			try {
 				// Build market data map from current context
 				const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
@@ -348,7 +334,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				});
 
 				if (marketDataMap.size === 0) {
-					console.log(`[UserDataContext] ⚠️ No market data available for RPC fallback yet`);
 					setRawTokenBalances([]);
 					subgraphFetchedRef.current = null; // Allow retry
 					return;
@@ -358,7 +343,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				setRawTokenBalances(rpcBalances);
 				subgraphFetchedRef.current = walletAddress;
 				setUsingRpcFallback(true);
-				console.log(`[UserDataContext] ✅ RPC fallback successful! Loaded ${rpcBalances.length} positions`);
 			} catch (rpcError) {
 				console.error("[UserDataContext] RPC fallback also failed:", rpcError);
 				setRawTokenBalances([]);
@@ -389,8 +373,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		if (!Array.isArray(umbrellas) || umbrellas.length === 0) return;
 		// Only retry if we haven't successfully fetched yet (ref is null from failed attempt)
 		if (subgraphFetchedRef.current !== null) return;
-		
-		console.log("[UserDataContext] Retrying balance fetch now that umbrellas are loaded...");
+
 		fetchTokenBalancesFromSubgraph(account, true);
 	}, [account, umbrellas, fetchTokenBalancesFromSubgraph]);
 
@@ -719,8 +702,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	// Use this after trades when subgraph indexing delay would show stale data
 	const refreshViaRpc = useCallback(async () => {
 		if (!account) return;
-		console.log("[UserDataContext] 🔄 Force RPC refresh requested...");
-		
+
 		usdcFetchedRef.current = null;
 		
 		// Build market data map from current context
@@ -762,7 +744,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			// Update state with RPC balances
 			setRawTokenBalances(rpcBalances);
 			setUsingRpcFallback(true);
-			console.log(`[UserDataContext] ✅ Force RPC refresh complete! Loaded ${rpcBalances.length} positions`);
 		} catch (error) {
 			console.error("[UserDataContext] Force RPC refresh failed:", error);
 		}

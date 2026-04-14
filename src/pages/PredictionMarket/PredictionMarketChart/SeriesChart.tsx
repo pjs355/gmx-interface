@@ -7,6 +7,7 @@ export const VENUE_COLORS: Record<string, string> = {
   polymarket: "#3b82f6",
   kalshi: "#10b981",
   predictFun: "#8b5cf6",
+  limitless: "#f97316",
   bestOdds: "#06b6d4",
 };
 
@@ -15,6 +16,7 @@ export const VENUE_LABELS: Record<string, string> = {
   polymarket: "Polymarket",
   kalshi: "Kalshi",
   predictFun: "Predict",
+  limitless: "Limitless",
   bestOdds: "Best Odds",
 };
 
@@ -299,6 +301,7 @@ export function ExchangeOverlayChart({
       polymarket: "polymarketB",
       kalshi: "kalshiB",
       predictFun: "predictFunB",
+      limitless: "limitlessB",
       bestOdds: "bestOddsB",
     };
     const result = new Set<string>();

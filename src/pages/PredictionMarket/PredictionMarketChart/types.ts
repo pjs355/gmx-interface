@@ -20,11 +20,13 @@ export interface MergedExchangePoint {
   polymarket?: number;
   kalshi?: number;
   predictFun?: number;
+  limitless?: number;
   bestOdds?: number;
   // Team B (vs markets only, computed as 100 - TeamA)
   levelUpB?: number;
   polymarketB?: number;
   kalshiB?: number;
   predictFunB?: number;
+  limitlessB?: number;
   bestOddsB?: number;
 }

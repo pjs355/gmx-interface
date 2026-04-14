@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from "react";
+import Tooltip from "components/Tooltip/Tooltip";
 import type { RoutePlan } from "./sor-types";
 import {
 	VENUE_DISPLAY_NAMES,
 	VENUE_COLORS,
-	getExecutionShortfallBannerText,
+	getKalshiKycShortfallBannerParts,
 } from "./sor-types";
+import { SorKalshiKycShortfallBanner } from "./SorKalshiKycShortfallBanner";
+import {
+	buildFundsTransferTooltip,
+	getSorLifiTransferFeeRowState,
+	formatSorDetailsSharesDisplay,
+	formatSorFeeUsdDisplay,
+	formatSorUsdRounded2,
+	formatToWinUsdDisplay,
+} from "./sorUiUtils";
 
 interface SorRouteDisplayProps {
 	route: RoutePlan | null;
@@ -14,14 +24,6 @@ interface SorRouteDisplayProps {
 	onExecute: () => void;
 	onFallback: () => void;
 	executing: boolean;
-}
-
-function formatCurrency(n: number): string {
-	return `$${n.toFixed(2)}`;
-}
-
-function formatShares(n: number): string {
-	return n % 1 === 0 ? String(n) : n.toFixed(1);
 }
 
 function formatPercent(n: number): string {
@@ -96,7 +98,6 @@ export function SorRouteDisplay({
 	if (!route) return null;
 
 	const hasSavings = route.savingsVsSingleVenue.percentImprovement > 5;
-	const shortfallBanner = getExecutionShortfallBannerText(route);
 
 	return (
 		<div style={{ ...styles.container, opacity: isStale && !isLoading ? 0.7 : 1 }}>
@@ -112,7 +113,7 @@ export function SorRouteDisplay({
 							width: `${widthPct}%`,
 							backgroundColor: VENUE_COLORS[leg.venue],
 						}}
-						title={`${VENUE_DISPLAY_NAMES[leg.venue]}: ${formatShares(leg.shares)} shares`}
+						title={`${VENUE_DISPLAY_NAMES[leg.venue]}: ${formatSorDetailsSharesDisplay(leg.shares)} shares`}
 					/>
 				);
 			})}
@@ -121,21 +122,21 @@ export function SorRouteDisplay({
 			{/* Summary */}
 			<div style={styles.summary}>
 				<div style={styles.summaryMain}>
-					<span style={styles.totalShares}>{formatShares(route.totalShares)} shares</span>
+					<span style={styles.totalShares}>{formatSorDetailsSharesDisplay(route.totalShares)} shares</span>
 					<span style={styles.totalPrice}>
-						at {route.totalShares > 0 ? formatCurrency(route.totalCost / route.totalShares) : "--"}/share all-in
+						at {route.totalShares > 0 ? `$${formatSorUsdRounded2(route.totalCost / route.totalShares)}` : "--"}/share all-in
 					</span>
 				</div>
 				{hasSavings && (
 					<div style={styles.savingsCallout}>
-						Smart Route: +{formatShares(route.savingsVsSingleVenue.extraShares)} shares
+						Smart Route: +{formatSorDetailsSharesDisplay(route.savingsVsSingleVenue.extraShares)} shares
 						({formatPercent(route.savingsVsSingleVenue.percentImprovement)}) vs{" "}
 						{VENUE_DISPLAY_NAMES[route.singleVenueBest.venue]} alone
 					</div>
 				)}
-				{shortfallBanner && (
+				{getKalshiKycShortfallBannerParts(route) && (
 					<div style={styles.shortfallBanner} role="status">
-						{shortfallBanner}
+						<SorKalshiKycShortfallBanner route={route} variant="embedded" />
 					</div>
 				)}
 			</div>
@@ -154,11 +155,11 @@ export function SorRouteDisplay({
 						{VENUE_DISPLAY_NAMES[leg.venue]}
 						</div>
 						<div style={styles.legDetails}>
-							<span>{formatShares(leg.shares)} @ {(leg.avgPrice * 100).toFixed(0)}¢</span>
-							<span style={styles.legFee}>fee {formatCurrency(leg.fee)}</span>
+							<span>{formatSorDetailsSharesDisplay(leg.shares)} @ {(leg.avgPrice * 100).toFixed(0)}¢</span>
+							<span style={styles.legFee}>fee ${formatSorFeeUsdDisplay(leg.fee)}</span>
 							{leg.bridge && (
 								<span style={styles.legBridge}>
-									bridge {formatCurrency(leg.bridge.estimatedCost)}
+									bridge ${formatSorFeeUsdDisplay(leg.bridge.estimatedCost)}
 								</span>
 							)}
 						</div>
@@ -174,12 +175,20 @@ export function SorRouteDisplay({
 			{/* Footer: fees + time + expiry */}
 			<div style={styles.footer}>
 				<div style={styles.footerStats}>
-					<span>Fees: {formatCurrency(route.totalFees)}</span>
-					{route.totalBridgeCost > 0 && (
-						<span>Bridge: {formatCurrency(route.totalBridgeCost)}</span>
-					)}
+					<span>Fees: ${formatSorFeeUsdDisplay(route.totalFees)}</span>
+					{(() => {
+						const st = getSorLifiTransferFeeRowState(route);
+						if (!st.show) return null;
+						return (
+							<Tooltip content={buildFundsTransferTooltip(route)} position="top" withPortal={true}>
+								<span style={{ cursor: "help", borderBottom: "1px dotted rgba(255,255,255,0.35)" }}>
+									LI.FI (est.): ${formatSorFeeUsdDisplay(st.displayUsd)}
+								</span>
+							</Tooltip>
+						);
+					})()}
 					{route.remainder > 0.01 && (
-						<span>Dust: {formatCurrency(route.remainder)}</span>
+						<span>Dust: ${formatToWinUsdDisplay(route.remainder)}</span>
 					)}
 					<span>Time: {formatTime(route.estimatedExecutionTimeSeconds)}</span>
 				</div>
@@ -189,7 +198,7 @@ export function SorRouteDisplay({
 			{/* Warnings */}
 			{route.insufficientLiquidity && (
 				<div style={styles.warning}>
-					Insufficient liquidity — only {formatShares(route.totalShares)} shares available
+					Insufficient liquidity — only {formatSorDetailsSharesDisplay(route.totalShares)} shares available
 				</div>
 			)}
 
@@ -268,11 +277,9 @@ const styles: Record<string, React.CSSProperties> = {
 	},
 	shortfallBanner: {
 		fontSize: 12,
-		color: "#93c5fd",
+		color: "#d1d5db",
 		lineHeight: 1.45,
-		padding: "6px 8px",
-		borderRadius: 4,
-		backgroundColor: "rgba(59, 130, 246, 0.12)",
+		padding: "6px 0",
 	},
 	legsContainer: {
 		display: "flex",

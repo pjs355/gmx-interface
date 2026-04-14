@@ -431,43 +431,43 @@
 .transfers-addresses__title {
 	font-size: 1.05rem;
 	font-weight: 700;
-	margin: 0 0 8px;
+	margin: 0 0 18px;
 	color: #fff;
 }
 
-.transfers-addresses__sub {
-	font-size: 0.78rem;
-	line-height: 1.45;
-	color: rgba(255, 255, 255, 0.48);
-	margin: 0 0 16px;
-}
-
-.transfers-addresses__row {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 12px 0;
+.transfers-addresses__item {
+	padding: 14px 0;
 	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+	&:first-of-type {
+		padding-top: 0;
+	}
 
 	&:last-child {
 		border-bottom: none;
 		padding-bottom: 0;
 	}
-
-	&:first-of-type {
-		padding-top: 0;
-	}
 }
 
-.transfers-addresses__label {
-	font-size: 0.72rem;
+.transfers-addresses__chain {
+	font-size: 0.95rem;
 	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-	color: rgba(255, 255, 255, 0.45);
+	color: rgba(255, 255, 255, 0.92);
+	margin: 0 0 8px;
+	letter-spacing: 0.01em;
+}
+
+.transfers-addresses__value-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	min-width: 0;
 }
 
 .transfers-addresses__value {
+	flex: 1 1 auto;
+	min-width: 0;
 	display: block;
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
 		"Liberation Mono", "Courier New", monospace;
@@ -475,10 +475,18 @@
 	font-weight: 500;
 	color: rgba(255, 255, 255, 0.92);
 	word-break: break-all;
-	line-height: 1.35;
+	line-height: 1.4;
 	background: transparent;
 	padding: 0;
 	margin: 0;
+}
+
+.transfers-addresses__value-row .transfers-skeleton--address {
+	flex: 1 1 auto;
+	min-width: 0;
+	max-width: none;
+	height: 18px;
+	margin-top: 2px;
 }
 
 .transfers-skeleton--address {

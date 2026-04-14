@@ -1,20 +1,58 @@
+import { useEffect, useMemo } from "react";
 import type { SnapshotStatus } from "@/types/odds-monitor";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import type { TradingPagePrices, VenueRowModel } from "@/hooks/useTradingPagePrices";
 import "./EsportsVenueBooksPanel.scss";
 
 const MIN_VALID_PRICE = 0.005;
 const MAX_VALID_PRICE = 0.995;
 
+function isLimitlessVenueRow(venueId?: string): boolean {
+	return String(venueId ?? "").toLowerCase() === "limitless";
+}
+
 function formatAskCell(
 	linked: boolean,
 	prob: number | null,
 	status?: SnapshotStatus,
+	venueId?: string,
 ): string {
 	if (!linked) return "—";
 	if (prob !== null && prob >= MIN_VALID_PRICE && prob <= MAX_VALID_PRICE) return `${Math.round(prob * 100)}¢`;
 	if (prob !== null || status === "no_liquidity") return "No shares";
 	if (status === "awaiting_data") return "Connecting…";
+	/** Limitless row is linked from matched-markets; empty book is “no offers”, not a broken UI. */
+	if (isLimitlessVenueRow(venueId)) return "No shares";
 	return "—";
+}
+
+/** All row indices tied for best ask in the same column (same displayed ¢ as the minimum). */
+function indicesAtBestDisplayedCents(
+	rows: VenueRowModel[],
+	key: "askA" | "askB",
+): Set<number> {
+	const displayCents: number[] = [];
+	for (const r of rows) {
+		const p = r[key];
+		if (p !== null && p >= MIN_VALID_PRICE && p <= MAX_VALID_PRICE) {
+			displayCents.push(Math.round(p * 100));
+		}
+	}
+	if (displayCents.length === 0) return new Set();
+	const minCents = Math.min(...displayCents);
+	const out = new Set<number>();
+	rows.forEach((r, i) => {
+		const p = r[key];
+		if (
+			p !== null &&
+			p >= MIN_VALID_PRICE &&
+			p <= MAX_VALID_PRICE &&
+			Math.round(p * 100) === minCents
+		) {
+			out.add(i);
+		}
+	});
+	return out;
 }
 
 function askCellClass(
@@ -22,13 +60,20 @@ function askCellClass(
 	prob: number | null,
 	status?: SnapshotStatus,
 	isBest?: boolean,
+	venueId?: string,
 ): string {
 	const base = "esports-venue-books__td esports-venue-books__td--num";
-	if (!linked || (prob === null && !status)) {
+	const limitlessLinkedNoQuote =
+		isLimitlessVenueRow(venueId) && linked && prob === null && !status;
+	if (!linked || (prob === null && !status && !limitlessLinkedNoQuote)) {
 		return `${base} esports-venue-books__td--empty`;
 	}
 	const outOfRange = prob !== null && (prob < MIN_VALID_PRICE || prob > MAX_VALID_PRICE);
-	if (outOfRange || (prob === null && (status === "no_liquidity" || status === "awaiting_data"))) {
+	if (
+		outOfRange ||
+		limitlessLinkedNoQuote ||
+		(prob === null && (status === "no_liquidity" || status === "awaiting_data"))
+	) {
 		return `${base} esports-venue-books__td--status`;
 	}
 	if (isBest) {
@@ -44,8 +89,8 @@ type Props = {
 export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 	const {
 		venueRows,
-		bestAIdx,
-		bestBIdx,
+		bestYesPrice,
+		bestNoPrice,
 		teamA,
 		teamB,
 		source,
@@ -56,6 +101,53 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 		matched,
 		appState,
 	} = tradingPagePrices;
+
+	const bestAIndices = useMemo(
+		() => indicesAtBestDisplayedCents(venueRows, "askA"),
+		[venueRows],
+	);
+	const bestBIndices = useMemo(
+		() => indicesAtBestDisplayedCents(venueRows, "askB"),
+		[venueRows],
+	);
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		priceDebugLog("EsportsVenueBooksPanel (Basic tab render)", {
+			source,
+			wsEnabled,
+			wsConnected,
+			isLoading,
+			restError,
+			teamA,
+			teamB,
+			bestAIndices: [...bestAIndices],
+			bestBIndices: [...bestBIndices],
+			bestYesPrice,
+			bestNoPrice,
+			venueRows: venueRows.map((r) => ({
+				id: r.id,
+				linked: r.linked,
+				askA: r.askA,
+				askB: r.askB,
+			})),
+			matchedPandaId: matched?.pandaMatchId ?? null,
+		});
+	}, [
+		source,
+		wsEnabled,
+		wsConnected,
+		isLoading,
+		restError,
+		teamA,
+		teamB,
+		bestAIndices,
+		bestBIndices,
+		bestYesPrice,
+		bestNoPrice,
+		venueRows,
+		matched,
+	]);
 
 	if (!wsEnabled) {
 		return (
@@ -164,14 +256,26 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 								{row.label}
 							</th>
 							<td
-								className={askCellClass(row.linked, row.askA, row.statusA, idx === bestAIdx)}
+								className={askCellClass(
+									row.linked,
+									row.askA,
+									row.statusA,
+									bestAIndices.has(idx),
+									row.id,
+								)}
 							>
-								{formatAskCell(row.linked, row.askA, row.statusA)}
+								{formatAskCell(row.linked, row.askA, row.statusA, row.id)}
 							</td>
 							<td
-								className={askCellClass(row.linked, row.askB, row.statusB, idx === bestBIdx)}
+								className={askCellClass(
+									row.linked,
+									row.askB,
+									row.statusB,
+									bestBIndices.has(idx),
+									row.id,
+								)}
 							>
-								{formatAskCell(row.linked, row.askB, row.statusB)}
+								{formatAskCell(row.linked, row.askB, row.statusB, row.id)}
 							</td>
 						</tr>
 					))}

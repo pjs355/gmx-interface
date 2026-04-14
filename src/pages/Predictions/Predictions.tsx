@@ -147,17 +147,7 @@ export default function Predictions() {
 		
 		// Handle "New" pill - sort by creation date, no tag filtering
 		if (selectedGame === NEW_PILL_ID) {
-			console.log('[Predictions] New pill selected, sorting by createdAt');
-			console.log('[Predictions] Before sort:', filtered.slice(0, 3).map(u => ({ 
-				name: u.displayName, 
-				createdAt: (u as any).createdAt 
-			})));
-			const sorted = sortByCreationDate(filtered);
-			console.log('[Predictions] After sort:', sorted.slice(0, 3).map(u => ({ 
-				name: u.displayName, 
-				createdAt: (u as any).createdAt 
-			})));
-			return sorted;
+			return sortByCreationDate(filtered);
 		}
 		
 		if (selectedGame) {

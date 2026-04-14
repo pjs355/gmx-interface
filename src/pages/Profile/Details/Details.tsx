@@ -31,8 +31,6 @@ export default function Details() {
 	const [usernameValue, setUsernameValue] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 	const [usernameError, setUsernameError] = useState<string | null>(null);
-	const [copySuccess, setCopySuccess] = useState(false);
-
 	// Email preferences state
 	const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
 		generalNotifications: true,
@@ -48,25 +46,9 @@ export default function Details() {
 	// const [showDeleteModal, setShowDeleteModal] = useState(false);
 	// const [acceptInput, setAcceptInput] = useState("");
 
-	// Extract email, phone, and smart wallet from Privy user object
+	// Extract email and phone from Privy user object
 	const userEmail = user?.email?.address || null;
 	const userPhone = user?.phone?.number || null;
-	const smartWallet = user?.linkedAccounts?.find(
-		(account: any) => account.type === "smart_wallet"
-	);
-	const smartWalletAddress = (smartWallet as any)?.address || null;
-
-	const handleCopyAddress = async () => {
-		if (smartWalletAddress) {
-			try {
-				await navigator.clipboard.writeText(smartWalletAddress);
-				setCopySuccess(true);
-				setTimeout(() => setCopySuccess(false), 2000);
-			} catch (err) {
-				console.error("Failed to copy address:", err);
-			}
-		}
-	};
 
 	useEffect(() => {
 		// Wait for Privy to be ready and user to be authenticated
@@ -376,27 +358,6 @@ export default function Details() {
 							<div className="Details-info-label">Phone</div>
 							<div className="Details-info-value">
 								{userPhone}
-							</div>
-						</div>
-					)}
-
-					{/* Smart Wallet Address Display */}
-					{smartWalletAddress && (
-						<div className="Details-info-section">
-							<div className="Details-info-label">
-								Smart Wallet Address (Base)
-							</div>
-							<div className="Details-wallet-display">
-								<div className="Details-info-value Details-wallet-address Details-truncate" title={smartWalletAddress}>
-									{smartWalletAddress}
-								</div>
-								<button
-									className="Details-copy-button"
-									onClick={handleCopyAddress}
-									title="Copy address"
-								>
-									{copySuccess ? "✓" : "Copy"}
-								</button>
 							</div>
 						</div>
 					)}

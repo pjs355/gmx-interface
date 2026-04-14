@@ -68,3 +68,84 @@ export type LifiStatusParams = {
 };
 
 export type LifiStatusResponse = Jsonish;
+
+/** POST /funding/lifi/withdraw/plan */
+export type WithdrawPlanBalanceRow = {
+	chain: string;
+	lifiChainId: number;
+	balance: number;
+	walletAddress: string;
+};
+
+export type LifiWithdrawPlanRequestBody = {
+	amountHuman: string;
+	toChain: number;
+	toAsset: "USDC" | "USDT";
+	toAddress: string;
+	slippage?: number;
+	balances: WithdrawPlanBalanceRow[];
+};
+
+export type LifiWithdrawSelectedSource = {
+	/** SOR-style chain key, e.g. `base`, `polygon` */
+	chain: string;
+	lifiChainId: number;
+	walletAddress: string;
+};
+
+export type FundingStableMetaJson = {
+	symbol: string;
+	decimals: number;
+	address: string;
+};
+
+export type LifiWithdrawDirectTransferData = {
+	mode: "direct_transfer";
+	selectedSource: LifiWithdrawSelectedSource;
+	toChain: number;
+	toAddress: string;
+	token: FundingStableMetaJson;
+	amountHuman: string;
+	amountAtomic: string;
+};
+
+export type LifiWithdrawLifiData = {
+	mode: "lifi";
+	selectedSource: LifiWithdrawSelectedSource;
+	fromChain: number;
+	toChain: number;
+	fromToken: string;
+	toToken: string;
+	fromFundingStable: FundingStableMetaJson;
+	toFundingStable: FundingStableMetaJson;
+	fromAmount: string;
+	fromAddress: string;
+	toAddress: string;
+	tool: string;
+	statusBridge: string | null;
+	quote?: Jsonish;
+	steps?: LifiQuoteStep[];
+};
+
+/** One executable slice from POST /funding/lifi/withdraw/plan */
+export type LifiWithdrawPlanLeg =
+	| LifiWithdrawDirectTransferData
+	| LifiWithdrawLifiData;
+
+export type LifiWithdrawCompositeData = {
+	mode: "composite";
+	totalAmountHuman: string;
+	toChain: number;
+	toAsset: "USDC" | "USDT";
+	toAddress: string;
+	legs: LifiWithdrawPlanLeg[];
+};
+
+export type LifiWithdrawPlanData =
+	| LifiWithdrawPlanLeg
+	| LifiWithdrawCompositeData;
+
+export type LifiWithdrawPlanResponse = {
+	success: boolean;
+	data: LifiWithdrawPlanData;
+};

@@ -1,9 +1,14 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath } from "node:url";
+import http from "node:http";
+import https from "node:https";
+
+/** Config file directory — use for .env + aliases so behavior matches other laptops regardless of `process.cwd()`. */
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Dev-only: tunnels browser requests through Railway `/proxy` (EU egress).
@@ -194,7 +199,7 @@ function railwayDevProxyPlugin(
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-	const viteEnv = loadEnv(mode, process.cwd(), "VITE_");
+	const viteEnv = loadEnv(mode, projectRoot, "VITE_");
 
 	/** Must match client (`import.meta.env`): `.env` is in `viteEnv`, not always on `process.env`. */
 	const clobProxyFlag =
@@ -276,18 +281,18 @@ export default defineConfig(({ mode }) => {
 		},
 		resolve: {
 			alias: {
-				"@": path.resolve(__dirname, "./src"),
-				components: path.resolve(__dirname, "./src/components"),
-				pages: path.resolve(__dirname, "./src/pages"),
-				lib: path.resolve(__dirname, "./src/lib"),
-				context: path.resolve(__dirname, "./src/context"),
-				config: path.resolve(__dirname, "./src/config"),
-				domain: path.resolve(__dirname, "./src/domain"),
-				utils: path.resolve(__dirname, "./src/utils"),
-				img: path.resolve(__dirname, "./src/img"),
-				styles: path.resolve(__dirname, "./src/styles"),
-				crypto: path.resolve(__dirname, "./src/polyfills/crypto-hmac-shim.ts"),
-				"node:crypto": path.resolve(__dirname, "./src/polyfills/crypto-hmac-shim.ts"),
+				"@": path.resolve(projectRoot, "./src"),
+				components: path.resolve(projectRoot, "./src/components"),
+				pages: path.resolve(projectRoot, "./src/pages"),
+				lib: path.resolve(projectRoot, "./src/lib"),
+				context: path.resolve(projectRoot, "./src/context"),
+				config: path.resolve(projectRoot, "./src/config"),
+				domain: path.resolve(projectRoot, "./src/domain"),
+				utils: path.resolve(projectRoot, "./src/utils"),
+				img: path.resolve(projectRoot, "./src/img"),
+				styles: path.resolve(projectRoot, "./src/styles"),
+				crypto: path.resolve(projectRoot, "./src/polyfills/crypto-hmac-shim.ts"),
+				"node:crypto": path.resolve(projectRoot, "./src/polyfills/crypto-hmac-shim.ts"),
 			},
 		},
 		css: {

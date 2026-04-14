@@ -628,9 +628,20 @@
 		transition: opacity 0.15s ease;
 
 		&--recalculating {
-			animation: betSizePulse 1.2s ease-in-out infinite;
+			animation: betSizePulse 1.8s ease-in-out infinite;
 		}
 		margin-bottom: 20px;
+
+		.bet-size-recalculating-footer {
+			margin-top: 10px;
+			padding-top: 8px;
+			border-top: 1px solid rgba(255, 255, 255, 0.08);
+			font-size: 11px;
+			font-weight: 600;
+			letter-spacing: 0.02em;
+			color: #94a3b8;
+			text-align: center;
+		}
 
 		.bet-size-info,
 		.leverage-info {
@@ -806,13 +817,6 @@
 			margin-top: 2px;
 		}
 
-		.sor-details-split-hint {
-			font-size: 11px;
-			color: #9ca3af;
-			line-height: 1.35;
-			margin-bottom: 8px;
-		}
-
 		.sor-details-row--leg {
 			margin-bottom: 6px;
 			font-size: 12px;
@@ -821,6 +825,11 @@
 
 		.sor-details-leg-text {
 			color: #d1d5db;
+		}
+
+		.sor-details-leg-text--lifi {
+			cursor: help;
+			border-bottom: 1px dotted rgba(255, 255, 255, 0.28);
 		}
 
 		.sor-details-row--fee {
@@ -836,6 +845,11 @@
 
 		.sor-details-fee-label {
 			color: #d1d5db;
+		}
+
+		.sor-details-fee-label--lifi {
+			cursor: help;
+			border-bottom: 1px dotted rgba(255, 255, 255, 0.28);
 		}
 
 		.sor-details-fee-value {

@@ -1,9 +1,15 @@
 import type { PricePoint } from "@/services/api/exchangePriceHistoryService";
 import type { TimeRange, MergedExchangePoint } from "@/pages/PredictionMarket/PredictionMarketChart/types";
 
-type VenueKey = "levelUp" | "polymarket" | "kalshi" | "predictFun";
+type VenueKey = "levelUp" | "polymarket" | "kalshi" | "predictFun" | "limitless";
 
-const TEAM_A_KEYS: readonly VenueKey[] = ["levelUp", "polymarket", "kalshi", "predictFun"];
+const TEAM_A_KEYS: readonly VenueKey[] = [
+	"levelUp",
+	"polymarket",
+	"kalshi",
+	"predictFun",
+	"limitless",
+];
 
 interface VenueSeries {
 	venue: VenueKey;
@@ -29,6 +35,7 @@ function setVenueValue(point: MergedExchangePoint, venue: VenueKey, value: numbe
 		case "polymarket":  point.polymarket = value; break;
 		case "kalshi":      point.kalshi = value; break;
 		case "predictFun":  point.predictFun = value; break;
+		case "limitless":   point.limitless = value; break;
 	}
 }
 
@@ -38,6 +45,7 @@ function getVenueValue(point: MergedExchangePoint, venue: VenueKey): number | un
 		case "polymarket":  return point.polymarket;
 		case "kalshi":      return point.kalshi;
 		case "predictFun":  return point.predictFun;
+		case "limitless":   return point.limitless;
 	}
 }
 
@@ -47,6 +55,7 @@ function setVenueBValue(point: MergedExchangePoint, venue: VenueKey, value: numb
 		case "polymarket":  point.polymarketB = value; break;
 		case "kalshi":      point.kalshiB = value; break;
 		case "predictFun":  point.predictFunB = value; break;
+		case "limitless":   point.limitlessB = value; break;
 	}
 }
 
@@ -56,6 +65,7 @@ function getVenueBValue(point: MergedExchangePoint, venue: VenueKey): number | u
 		case "polymarket":  return point.polymarketB;
 		case "kalshi":      return point.kalshiB;
 		case "predictFun":  return point.predictFunB;
+		case "limitless":   return point.limitlessB;
 	}
 }
 

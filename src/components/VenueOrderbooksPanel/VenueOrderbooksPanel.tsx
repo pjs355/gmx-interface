@@ -7,6 +7,8 @@ import type { TradingVenue } from "@/pages/PredictionMarket/PredictionMarketTrad
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 import type { DirectVenueBooks } from "@/trading/venue-books";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 
 function monitorBookToSnapshot(book: OrderbookData | null | undefined): OrderbookSnapshot | null {
 	if (!book) return null;
@@ -126,6 +128,7 @@ function venueIdToTradingVenue(id: string): TradingVenue | null {
 
 type Props = {
 	pandascoreMatchId: string;
+	umbrellaId?: string;
 	levelUpOrderbook: OrderbookSnapshot | null;
 	market?: PredictionMarket;
 	umbrellaDisplayName?: string;
@@ -138,6 +141,7 @@ type Props = {
 
 export function VenueOrderbooksPanel({
 	pandascoreMatchId,
+	umbrellaId,
 	levelUpOrderbook,
 	market,
 	umbrellaDisplayName,
@@ -154,15 +158,44 @@ export function VenueOrderbooksPanel({
 	const marketSwitchFiredRef = useRef(false);
 
 	const matched = useMemo((): MatchedMarket | null => {
-		if (!appState?.markets?.length) return null;
-		const id = String(pandascoreMatchId);
-		return appState.markets.find((m) => String(m.pandaMatchId) === id) ?? null;
-	}, [appState?.markets, pandascoreMatchId]);
+		return findOddsMatchedMarket(
+			appState?.markets,
+			pandascoreMatchId,
+			umbrellaId,
+		);
+	}, [appState?.markets, pandascoreMatchId, umbrellaId]);
 
 	const venues = useMemo(() => {
 		if (!matched) return [];
 		return buildVenueEntries(matched, levelUpOrderbook, directBooks);
 	}, [matched, levelUpOrderbook, directBooks]);
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		const depth = (snap: OrderbookSnapshot | null | undefined) => {
+			if (!snap) return { asks: 0, bids: 0, hasSize: false };
+			const asks = snap.asks?.filter((a) => (a.size ?? 0) > 0).length ?? 0;
+			const bids = snap.bids?.filter((b) => (b.size ?? 0) > 0).length ?? 0;
+			return {
+				asks: snap.asks?.length ?? 0,
+				bids: snap.bids?.length ?? 0,
+				hasSize: asks > 0 || bids > 0,
+			};
+		};
+		priceDebugLog("VenueOrderbooksPanel (Orderbooks tab)", {
+			pandascoreMatchId,
+			hasMatched: Boolean(matched),
+			entryCount: venues.length,
+			entries: venues.map((v) => ({
+				id: v.id,
+				label: v.label,
+				restricted: v.restricted,
+				bookA: depth(v.bookA),
+				bookB: depth(v.bookB),
+			})),
+			note: "Books from MatchedMarket (venue-prices WS) + directBooks browser WS when enabled + LevelUp orderbook REST snapshot.",
+		});
+	}, [pandascoreMatchId, matched, venues]);
 
 	useEffect(() => {
 		if (venues.length === 0) return;

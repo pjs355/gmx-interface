@@ -1,5 +1,5 @@
 /**
- * Server-side chart history (POST batch). Falls back to parallel public fetches when absent.
+ * Server-side chart history (POST batch on predictions API).
  */
 
 import type { TimeRange } from "@/pages/PredictionMarket/PredictionMarketChart/types";
@@ -14,7 +14,27 @@ export interface ChartHistoryVenueBundle {
 	kalshiB: PricePoint[];
 	predict: PricePoint[];
 	predictB: PricePoint[];
+	limitless: PricePoint[];
+	limitlessB: PricePoint[];
 }
+
+export const EMPTY_CHART_VENUE_BUNDLE: ChartHistoryVenueBundle = {
+	poly: [],
+	polyB: [],
+	kalshi: [],
+	kalshiB: [],
+	predict: [],
+	predictB: [],
+	limitless: [],
+	limitlessB: [],
+};
+
+export type ChartPriceHistoryBatchResult =
+	| { ok: true; data: ChartHistoryVenueBundle }
+	| { ok: false; kind: "http"; status: number }
+	| { ok: false; kind: "not_found" }
+	| { ok: false; kind: "malformed" }
+	| { ok: false; kind: "network" };
 
 function normalizePointArray(raw: unknown): PricePoint[] {
 	if (!Array.isArray(raw)) return [];
@@ -32,37 +52,35 @@ function normalizePointArray(raw: unknown): PricePoint[] {
 function parseBatchPayload(json: unknown): ChartHistoryVenueBundle | null {
 	if (!json || typeof json !== "object") return null;
 	const root = json as Record<string, unknown>;
-	const data = (root.data ?? root) as Record<string, unknown>;
+	if (root.success === false) return null;
+	const data = root.data;
 	if (!data || typeof data !== "object") return null;
 
-	const poly = normalizePointArray(data.poly ?? data.polyA);
-	const polyB = normalizePointArray(data.polyB);
-	const kalshi = normalizePointArray(data.kalshi ?? data.kalshiA ?? data.dflowA);
-	const kalshiB = normalizePointArray(data.kalshiB ?? data.dflowB);
-	const predict = normalizePointArray(data.predict ?? data.predictFun ?? data.predictA);
-	const predictB = normalizePointArray(data.predictB ?? data.predictFunB);
+	const d = data as Record<string, unknown>;
+	const poly = normalizePointArray(d.poly ?? d.polyA);
+	const polyB = normalizePointArray(d.polyB);
+	const kalshi = normalizePointArray(d.kalshi ?? d.kalshiA ?? d.dflowA);
+	const kalshiB = normalizePointArray(d.kalshiB ?? d.dflowB);
+	const predict = normalizePointArray(d.predict ?? d.predictFun ?? d.predictA);
+	const predictB = normalizePointArray(d.predictB ?? d.predictFunB);
+	const limitless = normalizePointArray(d.limitless ?? d.limitlessA);
+	const limitlessB = normalizePointArray(d.limitlessB);
 
-	const hasAny =
-		poly.length > 0 ||
-		polyB.length > 0 ||
-		kalshi.length > 0 ||
-		kalshiB.length > 0 ||
-		predict.length > 0 ||
-		predictB.length > 0;
-	if (!hasAny) return null;
-
-	return { poly, polyB, kalshi, kalshiB, predict, predictB };
+	return { poly, polyB, kalshi, kalshiB, predict, predictB, limitless, limitlessB };
 }
 
 /**
- * One round-trip historical chart load. Returns null if route missing, non-OK, or empty payload.
+ * One round-trip historical chart load.
+ * On HTTP success with a valid payload shape, returns `ok: true` even when every series is empty.
  */
 export async function fetchChartPriceHistoryBatch(
 	mm: MatchedMarketExchange | null,
 	range: TimeRange,
 	authToken: string | null,
-): Promise<ChartHistoryVenueBundle | null> {
-	if (!mm) return null;
+): Promise<ChartPriceHistoryBatchResult> {
+	if (!mm) {
+		return { ok: true, data: { ...EMPTY_CHART_VENUE_BUNDLE } };
+	}
 	const base = getPredictionApiBaseUrl().replace(/\/$/, "");
 	const url = `${base}/api/chart-price-history/batch`;
 
@@ -82,11 +100,13 @@ export async function fetchChartPriceHistoryBatch(
 
 	try {
 		const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-		if (res.status === 404) return null;
-		if (!res.ok) return null;
+		if (res.status === 404) return { ok: false, kind: "not_found" };
+		if (!res.ok) return { ok: false, kind: "http", status: res.status };
 		const json: unknown = await res.json();
-		return parseBatchPayload(json);
+		const parsed = parseBatchPayload(json);
+		if (!parsed) return { ok: false, kind: "malformed" };
+		return { ok: true, data: parsed };
 	} catch {
-		return null;
+		return { ok: false, kind: "network" };
 	}
 }

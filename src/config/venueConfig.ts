@@ -2,8 +2,12 @@ import { calculateFeeMatchingBackend } from "@/pages/PredictionMarket/Prediction
 import { calculatePolymarketFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePolymarket";
 import { calculatePredictFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePredict";
 import { calculateDflowFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeDflow";
+import {
+	calculateLimitlessFee,
+	LIMITLESS_DEFAULT_FEE_RATE_BPS,
+} from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
 
-export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow";
+export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
 export interface FeeEstimateParams {
 	contracts: number;
@@ -123,6 +127,31 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 		feeDescription: "Market fee",
 		feeTooltip:
 			"Predict fee is per-market (feeRateBps from API): contracts × price × feeRateBps / 10 000.",
+	},
+
+	limitless: {
+		id: "limitless",
+		displayName: "Limitless",
+		collateral: "USDC",
+		chain: "base",
+		supportsLimitOrders: true,
+		supportsMarketOrders: true,
+		supportsSell: true,
+		requiresWholeShares: false,
+		estimateFee: ({ contracts, price, feeRateBps }) => {
+			const notional = contracts * price;
+			return calculateLimitlessFee(
+				notional,
+				feeRateBps ?? LIMITLESS_DEFAULT_FEE_RATE_BPS,
+			);
+		},
+		effectiveBuyBudget: (usd, opts) => {
+			const bps = opts?.feeRateBps ?? LIMITLESS_DEFAULT_FEE_RATE_BPS;
+			return bps > 0 ? usd / (1 + bps / 10_000) : usd;
+		},
+		feeDescription: "Limitless fee",
+		feeTooltip:
+			"Limitless taker fee as basis points on notional (default 300 bps unless the market specifies otherwise).",
 	},
 
 	dflow: {

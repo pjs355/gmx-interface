@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import Button from "components/Button/Button";
 import {
 	toCentsString,
@@ -8,6 +8,7 @@ import {
 } from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { usePredictionData } from "context/PredictionDataContext";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 
 interface SingleMarketActionsProps {
 	orderbook: any;
@@ -30,8 +31,16 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	liveVenueNoPrice,
 }) => {
 	const { allBooksPreview } = usePredictionData();
-	const questionId = question?.questionId;
-	const preview = questionId ? allBooksPreview[questionId] : undefined;
+	const preview =
+		(question?.questionId && allBooksPreview[question.questionId]) ||
+		(question?._id && allBooksPreview[question._id]) ||
+		undefined;
+	const lookupKey =
+		question?.questionId && allBooksPreview[question.questionId]
+			? question.questionId
+			: question?._id && allBooksPreview[question._id]
+				? question._id
+				: (question?.questionId ?? question?._id);
 
 	const yesPrice =
 		typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice)
@@ -41,6 +50,51 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
 			? liveVenueNoPrice
 			: (preview?.bestNoPrice ?? null);
+
+	const yesSource: "live_ws" | "preview_api" | "none" =
+		typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice)
+			? "live_ws"
+			: preview?.bestYesPrice != null || preview?.lowestAsk != null
+				? "preview_api"
+				: "none";
+	const noSource: "live_ws" | "preview_api" | "none" =
+		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
+			? "live_ws"
+			: preview?.bestNoPrice != null
+				? "preview_api"
+				: "none";
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		priceDebugLog("homepage SingleMarketActions displayed prices", {
+			marketName: question?.displayName || question?.question,
+			previewLookupKey: lookupKey ?? null,
+			questionIdField: question?.questionId ?? null,
+			mongoId: question?._id ?? null,
+			previewFromAllBooksPreview: preview ?? null,
+			dataSource:
+				"allBooksPreview from GET getPrivateApiBaseUrl()/api/all-books-preview; live from venue-prices WS → MatchedMarket",
+			liveVenueYesPrice: liveVenueYesPrice ?? null,
+			liveVenueNoPrice: liveVenueNoPrice ?? null,
+			finalYesPrice: yesPrice ?? null,
+			finalNoPrice: noPrice ?? null,
+			yesSource,
+			noSource,
+		});
+	}, [
+		lookupKey,
+		question?.questionId,
+		question?._id,
+		question?.displayName,
+		question?.question,
+		preview,
+		liveVenueYesPrice,
+		liveVenueNoPrice,
+		yesPrice,
+		noPrice,
+		yesSource,
+		noSource,
+	]);
 
 	const yesPriceCents =
 		yesPrice !== null && yesPrice !== undefined

@@ -2,11 +2,6 @@ import { useEffect, useMemo, useReducer, useRef, useCallback, useState } from "r
 import { usePrivy } from "@privy-io/react-auth";
 import type { TimeRange, MergedExchangePoint, ChartDataPoint } from "./types";
 import type { PricePoint } from "@/services/api/exchangePriceHistoryService";
-import {
-	fetchPolymarketPriceHistory,
-	fetchKalshiDflowPriceHistoryAB,
-	fetchPredictFunPriceHistory,
-} from "@/services/api/exchangePriceHistoryService";
 import { fetchChartPriceHistoryBatch } from "@/services/api/serverChartPriceHistoryService";
 import {
 	type MatchedMarketExchange,
@@ -14,8 +9,11 @@ import {
 	findMatchedMarketByUmbrellaId,
 } from "@/services/api/matchDataService";
 import { mergeExchangeTimeSeries } from "@/utils/mergeExchangeTimeSeries";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { OrderbookData } from "@/types/odds-monitor";
+import { isLimitlessConsoleDebugEnabled } from "@/trading/limitless/limitlessConsoleDebug";
 
 export interface MultiExchangeChartResult {
 	data: MergedExchangePoint[];
@@ -25,6 +23,7 @@ export interface MultiExchangeChartResult {
 	hasPolymarket: boolean;
 	hasKalshi: boolean;
 	hasPredictFun: boolean;
+	hasLimitless: boolean;
 }
 
 interface Args {
@@ -37,6 +36,30 @@ interface Args {
 
 const LIVE_BUCKET_SEC = 3;
 
+/** Dedupe chart batch logs (Strict Mode / re-renders). */
+let lastLimitlessChartBatchLogSig = "";
+
+function logLimitlessChartBatchIfNew(sig: string, payload: Record<string, unknown>): void {
+	if (!isLimitlessConsoleDebugEnabled()) return;
+	if (lastLimitlessChartBatchLogSig === sig) return;
+	lastLimitlessChartBatchLogSig = sig;
+	console.info("[limitless/chart-batch]", payload);
+}
+
+function limitlessMetaForLog(
+	mm: MatchedMarketExchange | null | undefined,
+): Record<string, unknown> | null {
+	const lx = mm?.limitless;
+	if (!lx) return null;
+	return {
+		slug: lx.slug,
+		orderbookSlugA: lx.orderbookSlugA ?? null,
+		orderbookSlugB: lx.orderbookSlugB ?? null,
+		tokenIdA: lx.tokenIdA,
+		tokenIdB: lx.tokenIdB,
+	};
+}
+
 function bestAskDisplay100(book: OrderbookData | null | undefined): number | undefined {
 	if (!book || book.bestAsk == null) return undefined;
 	const x = Number(book.bestAsk);
@@ -45,8 +68,8 @@ function bestAskDisplay100(book: OrderbookData | null | undefined): number | und
 }
 
 function attachBestOdds(point: MergedExchangePoint): MergedExchangePoint {
-	const aKeys = ["levelUp", "polymarket", "kalshi", "predictFun"] as const;
-	const bKeys = ["levelUpB", "polymarketB", "kalshiB", "predictFunB"] as const;
+	const aKeys = ["levelUp", "polymarket", "kalshi", "predictFun", "limitless"] as const;
+	const bKeys = ["levelUpB", "polymarketB", "kalshiB", "predictFunB", "limitlessB"] as const;
 	const teamA: number[] = [];
 	for (const k of aKeys) {
 		const v = point[k];
@@ -73,6 +96,8 @@ interface VenueData {
 	kalshiB: PricePoint[];
 	predict: PricePoint[];
 	predictB: PricePoint[];
+	limitless: PricePoint[];
+	limitlessB: PricePoint[];
 }
 
 interface State {
@@ -98,6 +123,8 @@ const EMPTY_VENUE: VenueData = {
 	kalshiB: [],
 	predict: [],
 	predictB: [],
+	limitless: [],
+	limitlessB: [],
 };
 
 function clamp01(p: number): number {
@@ -118,13 +145,18 @@ function reducer(state: State, action: Action): State {
 		case "MATCH_RESOLVED":
 			return { ...state, matchedMarket: action.market, matchResolved: true };
 		case "FETCH_START":
-			return { ...state, loading: true, error: null };
+			return { ...state, venueData: EMPTY_VENUE, loading: true, error: null };
 		case "FETCH_DONE":
 			return { ...state, venueData: action.data, loading: false, error: null };
 		case "FETCH_CACHED":
 			return { ...state, venueData: action.data, loading: false, error: null };
 		case "FETCH_ERROR":
-			return { ...state, loading: false, error: action.error };
+			return {
+				...state,
+				venueData: EMPTY_VENUE,
+				loading: false,
+				error: action.error,
+			};
 		default:
 			return state;
 	}
@@ -140,17 +172,6 @@ const initialState: State = {
 
 type VenueCache = Map<TimeRange, VenueData>;
 
-function venueDataHasPoints(v: VenueData): boolean {
-	return (
-		v.poly.length > 0 ||
-		v.polyB.length > 0 ||
-		v.kalshi.length > 0 ||
-		v.kalshiB.length > 0 ||
-		v.predict.length > 0 ||
-		v.predictB.length > 0
-	);
-}
-
 export function useMultiExchangeChartData({
 	conditionId,
 	umbrellaId,
@@ -162,6 +183,7 @@ export function useMultiExchangeChartData({
 	const [state, dispatch] = useReducer(reducer, initialState);
 	const cancelRef = useRef(0);
 	const venueCacheRef = useRef<VenueCache>(new Map());
+	const limitlessChartLiveSigRef = useRef("");
 	const getAccessTokenRef = useRef(getAccessToken);
 	getAccessTokenRef.current = getAccessToken;
 
@@ -173,20 +195,24 @@ export function useMultiExchangeChartData({
 	const [liveTick, setLiveTick] = useState(0);
 	useEffect(() => {
 		const id = String(pandaMatchId ?? "").trim();
-		if (!id) return;
+		const uid = String(umbrellaId ?? "").trim();
+		if (!id && !uid) return;
 		const h = window.setInterval(
 			() => setLiveTick((n) => n + 1),
 			LIVE_BUCKET_SEC * 1000,
 		);
 		return () => window.clearInterval(h);
-	}, [pandaMatchId]);
+	}, [pandaMatchId, umbrellaId]);
 
 	const { appState } = useOddsMonitor();
 	const matchedLive = useMemo(() => {
-		const id = String(pandaMatchId ?? "").trim();
-		if (!id || !appState?.markets?.length) return null;
-		return appState.markets.find((m) => String(m.pandaMatchId) === id) ?? null;
-	}, [appState?.markets, appState?.timestamp, pandaMatchId, liveTick]);
+		if (!appState?.markets?.length) return null;
+		return findOddsMatchedMarket(
+			appState.markets,
+			pandaMatchId,
+			umbrellaId,
+		);
+	}, [appState?.markets, appState?.timestamp, pandaMatchId, umbrellaId, liveTick]);
 
 	useEffect(() => {
 		if (!umbrellaId && !conditionId) {
@@ -223,6 +249,21 @@ export function useMultiExchangeChartData({
 		const cached = venueCacheRef.current.get(timeRange);
 
 		if (cached) {
+			const lxMeta = limitlessMetaForLog(state.matchedMarket);
+			if (lxMeta) {
+				const pid = String(pandaMatchId ?? "").trim();
+				const uid = String(umbrellaId ?? "").trim();
+				const sig = `batch|${timeRange}|${pid}|${uid}|cache|${cached.limitless.length}|${cached.limitlessB.length}`;
+				logLimitlessChartBatchIfNew(sig, {
+					source: "cache",
+					timeRange,
+					pandaMatchId: pid || null,
+					umbrellaId: uid || null,
+					limitlessMeta: lxMeta,
+					limitlessPoints: cached.limitless.length,
+					limitlessBPoints: cached.limitlessB.length,
+				});
+			}
 			dispatch({ type: "FETCH_CACHED", data: cached });
 			return;
 		}
@@ -236,81 +277,69 @@ export function useMultiExchangeChartData({
 
 				if (cancelRef.current !== id) return;
 
-				const batch = await fetchChartPriceHistoryBatch(mm, timeRange, authToken);
+				const batchResult = await fetchChartPriceHistoryBatch(mm, timeRange, authToken);
 				if (cancelRef.current !== id) return;
 
-				if (batch && venueDataHasPoints(batch)) {
-					let predictB = batch.predictB;
-					const pf = mm?.predictFun;
-					if (
-						batch.predict.length > 0 &&
-						predictB.length === 0 &&
-						pf &&
-						(pf.singleMarket === true ||
-							!pf.marketIdB ||
-							pf.marketIdB === pf.marketIdA)
-					) {
-						predictB = complementPricePoints(batch.predict);
-					}
-					const data: VenueData = {
-						poly: batch.poly,
-						polyB: batch.polyB,
-						kalshi: batch.kalshi,
-						kalshiB: batch.kalshiB,
-						predict: batch.predict,
-						predictB,
-					};
-					venueCacheRef.current.set(timeRange, data);
-					dispatch({ type: "FETCH_DONE", data });
+				if (!batchResult.ok) {
+					const msg =
+						batchResult.kind === "http"
+							? `Chart data failed (${batchResult.status})`
+							: batchResult.kind === "not_found"
+								? "Chart data unavailable"
+								: "Failed to fetch chart data";
+					dispatch({ type: "FETCH_ERROR", error: msg });
 					return;
 				}
 
-				const [polyResult, polyBResult, kalshiABResult] = await Promise.all([
-					mm?.polyTokenIdA
-						? fetchPolymarketPriceHistory(mm.polyTokenIdA, timeRange)
-						: Promise.resolve([] as PricePoint[]),
-					mm?.polyTokenIdB
-						? fetchPolymarketPriceHistory(mm.polyTokenIdB, timeRange)
-						: Promise.resolve([] as PricePoint[]),
-					fetchKalshiDflowPriceHistoryAB(mm ?? null, timeRange),
-				]);
-
-				if (cancelRef.current !== id) return;
-
-				const [predictResult, predictBResult] = await Promise.all([
-					mm?.predictFun?.marketIdA
-						? fetchPredictFunPriceHistory(mm.predictFun.marketIdA, timeRange, authToken)
-						: Promise.resolve([] as PricePoint[]),
-					mm?.predictFun?.marketIdB
-						? fetchPredictFunPriceHistory(mm.predictFun.marketIdB, timeRange, authToken)
-						: Promise.resolve([] as PricePoint[]),
-				]);
-
-				if (cancelRef.current !== id) return;
-
-				let predictB = predictBResult;
+				const batch = batchResult.data;
+				let predictB = batch.predictB;
 				const pf = mm?.predictFun;
 				if (
-					predictResult.length > 0 &&
+					batch.predict.length > 0 &&
 					predictB.length === 0 &&
 					pf &&
 					(pf.singleMarket === true ||
 						!pf.marketIdB ||
 						pf.marketIdB === pf.marketIdA)
 				) {
-					predictB = complementPricePoints(predictResult);
+					predictB = complementPricePoints(batch.predict);
 				}
-
+				let limitlessB = batch.limitlessB;
+				const lx = mm?.limitless;
+				if (
+					batch.limitless.length > 0 &&
+					limitlessB.length === 0 &&
+					lx &&
+					(!lx.tokenIdB || lx.tokenIdB === lx.tokenIdA)
+				) {
+					limitlessB = complementPricePoints(batch.limitless);
+				}
 				const data: VenueData = {
-					poly: polyResult,
-					polyB: polyBResult,
-					kalshi: kalshiABResult.a,
-					kalshiB: kalshiABResult.b,
-					predict: predictResult,
+					poly: batch.poly,
+					polyB: batch.polyB,
+					kalshi: batch.kalshi,
+					kalshiB: batch.kalshiB,
+					predict: batch.predict,
 					predictB,
+					limitless: batch.limitless,
+					limitlessB,
 				};
-
 				venueCacheRef.current.set(timeRange, data);
+				const lxMeta = limitlessMetaForLog(mm);
+				if (lxMeta) {
+					const pid = String(pandaMatchId ?? "").trim();
+					const uid = String(umbrellaId ?? "").trim();
+					const sig = `batch|${timeRange}|${pid}|${uid}|network|${data.limitless.length}|${data.limitlessB.length}`;
+					logLimitlessChartBatchIfNew(sig, {
+						source: "network",
+						timeRange,
+						pandaMatchId: pid || null,
+						umbrellaId: uid || null,
+						limitlessMeta: lxMeta,
+						limitlessPoints: data.limitless.length,
+						limitlessBPoints: data.limitlessB.length,
+					});
+				}
 				dispatch({ type: "FETCH_DONE", data });
 			} catch {
 				if (cancelRef.current === id) {
@@ -318,7 +347,7 @@ export function useMultiExchangeChartData({
 				}
 			}
 		})();
-	}, [state.matchedMarket, state.matchResolved, timeRange, stableGetToken]);
+	}, [state.matchedMarket, state.matchResolved, timeRange, stableGetToken, pandaMatchId, umbrellaId]);
 
 	const levelUpData = useMemo(
 		(): PricePoint[] =>
@@ -337,8 +366,9 @@ export function useMultiExchangeChartData({
 	);
 
 	const merged = useMemo((): MergedExchangePoint[] => {
-		const { poly, polyB, kalshi, kalshiB, predict, predictB } = state.venueData;
-		type Venue = "levelUp" | "polymarket" | "kalshi" | "predictFun";
+		const { poly, polyB, kalshi, kalshiB, predict, predictB, limitless, limitlessB } =
+			state.venueData;
+		type Venue = "levelUp" | "polymarket" | "kalshi" | "predictFun" | "limitless";
 		const series: { venue: Venue; points: PricePoint[] }[] = [];
 		const seriesB: { venue: Venue; points: PricePoint[] }[] = [];
 
@@ -346,10 +376,12 @@ export function useMultiExchangeChartData({
 		if (poly.length > 0) series.push({ venue: "polymarket", points: poly });
 		if (kalshi.length > 0) series.push({ venue: "kalshi", points: kalshi });
 		if (predict.length > 0) series.push({ venue: "predictFun", points: predict });
+		if (limitless.length > 0) series.push({ venue: "limitless", points: limitless });
 
 		if (polyB.length > 0) seriesB.push({ venue: "polymarket", points: polyB });
 		if (kalshiB.length > 0) seriesB.push({ venue: "kalshi", points: kalshiB });
 		if (predictB.length > 0) seriesB.push({ venue: "predictFun", points: predictB });
+		if (limitlessB.length > 0) seriesB.push({ venue: "limitless", points: limitlessB });
 		if (levelUpDataB.length > 0) seriesB.push({ venue: "levelUp", points: levelUpDataB });
 
 		if (series.length === 0) return [];
@@ -377,13 +409,20 @@ export function useMultiExchangeChartData({
 		if (pra != null) pt.predictFun = pra;
 		if (prb != null) pt.predictFunB = prb;
 
+		const lxa = bestAskDisplay100(m.limitlessPriceA as OrderbookData);
+		const lxb = bestAskDisplay100(m.limitlessPriceB as OrderbookData);
+		if (lxa != null) pt.limitless = lxa;
+		if (lxb != null) pt.limitlessB = lxb;
+
 		if (
 			pt.polymarket === undefined &&
 			pt.polymarketB === undefined &&
 			pt.kalshi === undefined &&
 			pt.kalshiB === undefined &&
 			pt.predictFun === undefined &&
-			pt.predictFunB === undefined
+			pt.predictFunB === undefined &&
+			pt.limitless === undefined &&
+			pt.limitlessB === undefined
 		) {
 			return null;
 		}
@@ -392,14 +431,9 @@ export function useMultiExchangeChartData({
 
 	const mergedWithLive = useMemo(() => {
 		const id = String(pandaMatchId ?? "").trim();
-		if (!id || !liveOverlayPoint || merged.length === 0) return merged;
-		const t = liveOverlayPoint.timestamp;
-		const lastTs = merged[merged.length - 1].timestamp;
-		if (t < lastTs) return merged;
+		if (!liveOverlayPoint) return merged;
 
-		const idx = merged.findIndex((p) => p.timestamp === t);
-		if (idx >= 0) {
-			const base = merged[idx];
+		const blendLiveOntoBase = (base: MergedExchangePoint): MergedExchangePoint => {
 			const blended: MergedExchangePoint = {
 				...base,
 				...(liveOverlayPoint.polymarket !== undefined
@@ -416,11 +450,37 @@ export function useMultiExchangeChartData({
 				...(liveOverlayPoint.predictFunB !== undefined
 					? { predictFunB: liveOverlayPoint.predictFunB }
 					: {}),
+				...(liveOverlayPoint.limitless !== undefined
+					? { limitless: liveOverlayPoint.limitless }
+					: {}),
+				...(liveOverlayPoint.limitlessB !== undefined
+					? { limitlessB: liveOverlayPoint.limitlessB }
+					: {}),
 			};
-			return merged.map((p, i) => (i === idx ? attachBestOdds(blended) : p));
+			return attachBestOdds(blended);
+		};
+
+		if (merged.length === 0) {
+			if (!id) return merged;
+			return [attachBestOdds({ ...liveOverlayPoint })];
 		}
 
-		const base = merged[merged.length - 1];
+		if (!id) return merged;
+
+		const t = liveOverlayPoint.timestamp;
+		const lastIdx = merged.length - 1;
+		const lastTs = merged[lastIdx].timestamp;
+
+		if (t < lastTs) {
+			return merged.map((p, i) => (i === lastIdx ? blendLiveOntoBase(p) : p));
+		}
+
+		const idx = merged.findIndex((p) => p.timestamp === t);
+		if (idx >= 0) {
+			return merged.map((p, i) => (i === idx ? blendLiveOntoBase(p) : p));
+		}
+
+		const base = merged[lastIdx];
 		const extended: MergedExchangePoint = {
 			...base,
 			polymarket: liveOverlayPoint.polymarket ?? base.polymarket,
@@ -429,21 +489,99 @@ export function useMultiExchangeChartData({
 			kalshiB: liveOverlayPoint.kalshiB ?? base.kalshiB,
 			predictFun: liveOverlayPoint.predictFun ?? base.predictFun,
 			predictFunB: liveOverlayPoint.predictFunB ?? base.predictFunB,
+			limitless: liveOverlayPoint.limitless ?? base.limitless,
+			limitlessB: liveOverlayPoint.limitlessB ?? base.limitlessB,
 			timestamp: t,
 		};
 		return [...merged, attachBestOdds(extended)];
 	}, [merged, liveOverlayPoint, pandaMatchId]);
 
+	useEffect(() => {
+		if (!isLimitlessConsoleDebugEnabled()) return;
+		const id = String(pandaMatchId ?? "").trim();
+		if (!id || !matchedLive?.limitless) return;
+		const lxa = bestAskDisplay100(matchedLive.limitlessPriceA as OrderbookData);
+		const lxb = bestAskDisplay100(matchedLive.limitlessPriceB as OrderbookData);
+		const sig = `${id}|live|${lxa ?? "∅"}|${lxb ?? "∅"}|${matchedLive.limitlessPriceA?.snapshotStatus ?? ""}|${matchedLive.limitlessPriceB?.snapshotStatus ?? ""}`;
+		if (limitlessChartLiveSigRef.current === sig) return;
+		limitlessChartLiveSigRef.current = sig;
+		console.info("[limitless/chart-live-prices]", {
+			pandaMatchId: id,
+			slug: matchedLive.limitless.slug,
+			rawBestAskA: matchedLive.limitlessPriceA?.bestAsk ?? null,
+			rawBestAskB: matchedLive.limitlessPriceB?.bestAsk ?? null,
+			chartDisplayPctA: lxa ?? null,
+			chartDisplayPctB: lxb ?? null,
+			snapshotStatusA: matchedLive.limitlessPriceA?.snapshotStatus ?? null,
+			snapshotStatusB: matchedLive.limitlessPriceB?.snapshotStatus ?? null,
+			askLevelsA: matchedLive.limitlessPriceA?.asks?.length ?? 0,
+			askLevelsB: matchedLive.limitlessPriceB?.asks?.length ?? 0,
+		});
+	}, [matchedLive, pandaMatchId]);
+
 	const noData = !state.loading && mergedWithLive.length === 0;
+
+	useEffect(() => {
+		if (!isPredictionPricingDebugEnabled()) return;
+		const { poly, polyB, kalshi, kalshiB, predict, predictB, limitless, limitlessB } =
+			state.venueData;
+		priceDebugLog("useMultiExchangeChartData (price comparison series)", {
+			umbrellaId: umbrellaId ?? null,
+			conditionId: conditionId ?? null,
+			pandaMatchId: pandaMatchId ?? null,
+			timeRange,
+			matchResolved: state.matchResolved,
+			loading: state.loading,
+			error: state.error,
+			venuePointCounts: {
+				poly: poly.length,
+				polyB: polyB.length,
+				kalshi: kalshi.length,
+				kalshiB: kalshiB.length,
+				predict: predict.length,
+				predictB: predictB.length,
+				limitless: limitless.length,
+				limitlessB: limitlessB.length,
+			},
+			levelUpChartPoints: levelUpChartData.length,
+			mergedPoints: mergedWithLive.length,
+			hasLiveOverlay: liveOverlayPoint != null,
+			note:
+				"History: predictions API POST /api/chart-price-history/batch only; live bucket from OddsMonitor MatchedMarket (same WS as venue-prices).",
+		});
+	}, [
+		umbrellaId,
+		conditionId,
+		pandaMatchId,
+		timeRange,
+		state.matchResolved,
+		state.loading,
+		state.error,
+		state.venueData.poly.length,
+		state.venueData.polyB.length,
+		state.venueData.kalshi.length,
+		state.venueData.kalshiB.length,
+		state.venueData.predict.length,
+		state.venueData.predictB.length,
+		state.venueData.limitless.length,
+		state.venueData.limitlessB.length,
+		levelUpChartData.length,
+		mergedWithLive.length,
+		liveOverlayPoint,
+	]);
 
 	return {
 		data: mergedWithLive,
 		loading: state.loading,
-		error: noData ? "No price data available from any exchange" : state.error,
+		error:
+			state.error ??
+			(noData ? "No price data available from any exchange" : null),
 		hasLevelUp: levelUpData.length > 0 || levelUpDataB.length > 0,
 		hasPolymarket: state.venueData.poly.length > 0,
 		hasKalshi: state.venueData.kalshi.length > 0,
 		hasPredictFun:
 			state.venueData.predict.length > 0 || state.venueData.predictB.length > 0,
+		hasLimitless:
+			state.venueData.limitless.length > 0 || state.venueData.limitlessB.length > 0,
 	};
 }

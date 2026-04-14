@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useEffect, useState, useRef, forwardRef, useImperativeHandle } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 // Link import removed — executionGateBanner no longer rendered
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
@@ -58,13 +58,13 @@ import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
-import { useSignTransaction } from "@privy-io/react-auth/solana";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
 import { SOLANA_RPC_URL } from "@/config/rpc";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
 import { useSendTransaction as useSolanaSendTransaction } from "@privy-io/react-auth/solana";
+import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
 import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import { buildChainBalances, useSorRoute, useSorExecution } from "@/trading/sor";
@@ -72,6 +72,29 @@ import { useSorLegExecutor } from "@/trading/sor/useSorLegExecutor";
 import type { ChainBalance, VenuePositionEntry, SorOutcome } from "@/trading/sor";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { useDflowOutcomeBalance } from "@/trading/dflow/useDflowOutcomeBalance";
+import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
+import { tradingQueryKeys } from "@/trading/queryKeys";
+import { LIMITLESS_QUERY_ROOT } from "@/trading/limitless/limitlessQueryKeys";
+import {
+	limitlessOrderbookForPosition,
+	limitlessOutcomeTokenId,
+} from "@/trading/limitless/limitlessOrderbook";
+import {
+	useLimitlessPositions,
+	limitlessSharesForToken,
+} from "@/trading/limitless/useLimitlessPositions";
+import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "./feeLimitless";
+
+function isLimitlessEnsureSuccess(data: unknown): boolean {
+	if (data == null || typeof data !== "object") return false;
+	const d = data as Record<string, unknown>;
+	const pid = d.profileId;
+	if (typeof pid === "number" && Number.isFinite(pid)) return true;
+	if (typeof pid === "string" && pid.trim() !== "" && Number.isFinite(Number(pid))) return true;
+	return typeof d.account === "string" && d.account.trim().length > 0;
+}
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
@@ -89,7 +112,7 @@ export interface PredictionMarketTradeBoxHandle {
 }
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo }, ref) => {
 
   const pandaId = pandascoreMatchId?.trim() ?? "";
   const multiVenueEnabled = Boolean(pandaId);
@@ -110,8 +133,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const { wallets: privyWallets } = usePrivyWallets();
   const { fundWallet } = useFundWallet();
-  const { signTransaction: privySolanaSign } = useSignTransaction();
-
   /** LevelUp REST orderbook (signing + execution always uses this for LevelUp venue). */
   const levelUpOrderbook = propOrderbook ?? null;
 
@@ -133,6 +154,22 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const dflowProof = useDflowProofStatus();
   const privateApi = usePrivateApiClient();
+  const profileQuery = useCurrentProfile({ enabled: authenticated });
+  const profileId = profileQuery.data?._id;
+  const limitlessEnsureQuery = useQuery({
+    queryKey: profileId
+      ? tradingQueryKeys.limitlessEnsureAccount(profileId)
+      : ["trading", "limitlessEnsure", "__disabled__"],
+    enabled: Boolean(authenticated && profileId),
+    queryFn: () => privateApi.postLimitlessEnsureAccount(),
+    staleTime: 1000 * 60 * 30,
+    retry: 1,
+  });
+  const limitlessReady = Boolean(
+    limitlessEnsureQuery.isSuccess &&
+      limitlessEnsureQuery.data != null &&
+      isLimitlessEnsureSuccess(limitlessEnsureQuery.data),
+  );
   const funding = useFundingAddresses();
   const relay = usePolymarketRelay();
   const { sendTransaction: privySolanaSendTx } = useSolanaSendTransaction();
@@ -142,8 +179,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       signAndSendTransaction: async (serializedTx: Uint8Array) => {
         const tx = VersionedTransaction.deserialize(serializedTx);
         const conn = new Connection(SOLANA_RPC_URL);
-        const receipt = await privySolanaSendTx({ transaction: tx, connection: conn });
-        return receipt.signature;
+        return sendPrivySponsoredSolanaTransaction(privySolanaSendTx, tx, conn);
       },
     }),
     [privySolanaSendTx]
@@ -165,12 +201,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     appState: oddsAppState,
   } = useOddsMonitor();
   const matchedMonitor = useMemo(() => {
-    if (!pandaId || !oddsAppState?.markets?.length) return null;
-    return (
-      oddsAppState.markets.find((m) => String(m.pandaMatchId) === pandaId) ??
-      null
+    return findOddsMatchedMarket(
+      oddsAppState?.markets,
+      pandaId || null,
+      propUmbrellaId,
     );
-  }, [oddsAppState?.markets, pandaId]);
+  }, [oddsAppState?.markets, pandaId, propUmbrellaId]);
 
   const matchedVenues = useMemo(() => {
     const set = new Set<string>(["levelup"]);
@@ -178,8 +214,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     if (matchedMonitor.polyConditionId || matchedMonitor.polyTokenIdA) set.add("polymarket");
     if (matchedMonitor.dflow || matchedMonitor.kalshi) set.add("dflow");
     if (matchedMonitor.predictFun) set.add("predictfun");
+    if (matchedMonitor.limitless) set.add("limitless");
     return set;
   }, [matchedMonitor]);
+
+  useEffect(() => {
+    if (!isPredictionPricingDebugEnabled()) return;
+    const list = [...matchedVenues];
+    priceDebugLog("PredictionMarketTradeBox tradeable venues (dropdown)", {
+      pandaId: pandaId || null,
+      hasMatchedMonitor: Boolean(matchedMonitor),
+      matchedVenues: list,
+      note:
+        "Venue list is derived from OddsMonitor MatchedMarket (venue-prices WS / matched-markets), not from all-books-preview. LevelUp is always included.",
+    });
+  }, [pandaId, matchedMonitor, matchedVenues]);
 
   const dflowLink = useMemo(
     () => (matchedMonitor ? getDflowKalshiMonitorLink(matchedMonitor) : undefined),
@@ -192,6 +241,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    if (!profileId) return;
+    if (limitlessEnsureQuery.status !== "success") return;
+    if (!isLimitlessEnsureSuccess(limitlessEnsureQuery.data)) return;
+    void queryClient.invalidateQueries({
+      queryKey: tradingQueryKeys.accountOverview(profileId),
+    });
+  }, [profileId, limitlessEnsureQuery.status, limitlessEnsureQuery.dataUpdatedAt, queryClient]);
+
   const crossBuyPrices = useMemo(() => ({
     crossBuyYes: propCrossBuyYes ?? null,
     crossBuyNo: propCrossBuyNo ?? null,
@@ -203,6 +261,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   const predictVenueActive = state.tradingVenue === "predictfun";
+  const limitlessVenueActive = state.tradingVenue === "limitless";
   const isPredictSingleMarket =
     predictVenueActive && matchedMonitor?.predictFun?.singleMarket === true;
 
@@ -314,6 +373,31 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
   const predictSellShareBalance = predictShareQuery.data ?? null;
 
+  const limitlessTokenIdForSell = useMemo(() => {
+    if (!limitlessVenueActive || !matchedMonitor || !state.selectedPosition) return null;
+    return limitlessOutcomeTokenId(
+      matchedMonitor,
+      state.selectedPosition,
+      yesTeamLabel,
+      noTeamLabel,
+    );
+  }, [
+    limitlessVenueActive,
+    matchedMonitor,
+    state.selectedPosition,
+    yesTeamLabel,
+    noTeamLabel,
+  ]);
+
+  const limitlessPositionsQuery = useLimitlessPositions(
+    limitlessVenueActive && authenticated && Boolean(profileId),
+  );
+  const limitlessSellShareBalance = useMemo(
+    () =>
+      limitlessSharesForToken(limitlessPositionsQuery.data, limitlessTokenIdForSell),
+    [limitlessPositionsQuery.data, limitlessTokenIdForSell],
+  );
+
   const predictVenueBookHints = useMemo(() => {
     if (!predictVenueActive || !matchedMonitor) return null;
     return {
@@ -371,6 +455,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return predictVenueBookHints?.[pos] ?? null;
     }
     if (!matchedMonitor) return null;
+    if (state.tradingVenue === "limitless") {
+      const lxRaw = limitlessOrderbookForPosition(
+        matchedMonitor,
+        state.selectedPosition ?? "yes",
+        yesTeamLabel,
+        noTeamLabel,
+      );
+      return monitorBookToOrderbookSnapshot(lxRaw);
+    }
     if (state.tradingVenue === "dflow") {
       const dflowRaw = dflowKalshiOrderbookForPosition(
         matchedMonitor,
@@ -542,6 +635,32 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     return null;
   }, [state.tradingVenue, matchedMonitor]);
 
+  const limitlessTrading = useMemo(
+    () => ({
+      hasPandascoreLink: Boolean(pandaId),
+      hasMonitorMatch: Boolean(matchedMonitor),
+      hasLimitlessMapping: Boolean(matchedMonitor?.limitless),
+      ready: limitlessReady,
+      loading:
+        limitlessEnsureQuery.isLoading ||
+        (authenticated && Boolean(profileId) && !limitlessEnsureQuery.isFetched),
+      blockedReason: limitlessEnsureQuery.isError
+        ? getPrivateApiErrorMessage(limitlessEnsureQuery.error)
+        : null,
+    }),
+    [
+      pandaId,
+      matchedMonitor,
+      limitlessReady,
+      limitlessEnsureQuery.isLoading,
+      limitlessEnsureQuery.isFetched,
+      limitlessEnsureQuery.isError,
+      limitlessEnsureQuery.error,
+      authenticated,
+      profileId,
+    ],
+  );
+
   const predictTrading = useMemo(
     () => ({
       hasPandascoreLink: Boolean(pandaId),
@@ -639,6 +758,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     ) {
       const usdAmount = parseFloat(state.amount);
       if (!isNaN(usdAmount) && usdAmount > 0) {
+        const sizingFeeBps =
+          state.tradingVenue === "limitless"
+            ? LIMITLESS_DEFAULT_FEE_RATE_BPS
+            : predictMarketDetail?.feeRateBps;
         // Every venue reserves fees from the user's input so they never pay
         // more than they entered. effectiveBuyBudget returns the share-buying
         // portion; the remainder covers fees.
@@ -646,7 +769,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         const effectiveBudget =
           state.side === "buy"
             ? venueConfig.effectiveBuyBudget(usdAmount, {
-                feeRateBps: predictMarketDetail?.feeRateBps,
+                feeRateBps: sizingFeeBps,
                 approxPrice: bestAskPrice,
               })
             : usdAmount;
@@ -667,7 +790,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             contracts,
             price: avgPrice,
             side: "buy",
-            feeRateBps: predictMarketDetail?.feeRateBps,
+            feeRateBps: sizingFeeBps,
           });
           const estimatedCost = spent + tradingFee;
 
@@ -689,7 +812,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           contracts,
           price: avgSellPrice,
           side: "sell",
-          feeRateBps: predictMarketDetail?.feeRateBps,
+          feeRateBps: sizingFeeBps,
         });
         const netReceive = grossReceive - sellTradingFee;
 
@@ -824,15 +947,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         const transaction = VersionedTransaction.deserialize(txBytes);
         const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
-        // Sign via Privy (no simulation), then send ourselves with skipPreflight
-        const signedTx = await privySolanaSign({
+        const sig = await sendPrivySponsoredSolanaTransaction(
+          privySolanaSendTx,
           transaction,
           connection,
-        }) as VersionedTransaction;
-
-        const sig = await connection.sendRawTransaction(
-          signedTx.serialize(),
-          { skipPreflight: true, maxRetries: 3 },
         );
 
         setState((prev) => ({
@@ -977,6 +1095,140 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       } catch (error: unknown) {
         if (import.meta.env.DEV) {
           console.error("[Predict trade]", error);
+        }
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: getPrivateApiErrorMessage(error),
+          },
+        }));
+      } finally {
+        setState((prev) => ({ ...prev, isLoading: false }));
+      }
+      return;
+    }
+
+    if (state.tradingVenue === "limitless") {
+      if (!account) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "No wallet connected. Please connect your wallet first.",
+          },
+        }));
+        return;
+      }
+      if (!pandaId || !matchedMonitor?.limitless) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              "Limitless needs a linked esports match and exchange mapping on the odds monitor.",
+          },
+        }));
+        return;
+      }
+      if (limitlessEnsureQuery.isLoading && !limitlessEnsureQuery.data) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "Provisioning Limitless trading account… try again in a moment.",
+          },
+        }));
+        return;
+      }
+      if (!limitlessReady) {
+        const msg = limitlessEnsureQuery.isError
+          ? getPrivateApiErrorMessage(limitlessEnsureQuery.error)
+          : "Limitless unavailable";
+        setState((prev) => ({
+          ...prev,
+          orderResult: { success: false, error: msg },
+        }));
+        return;
+      }
+
+      const slug = matchedMonitor.limitless.slug;
+      const tokenId = limitlessOutcomeTokenId(
+        matchedMonitor,
+        state.selectedPosition!,
+        yesTeamLabel,
+        noTeamLabel,
+      );
+      if (!tokenId) {
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error: "Could not resolve Limitless outcome token for this side.",
+          },
+        }));
+        return;
+      }
+
+      setState((prev) => ({ ...prev, isLoading: true, orderResult: null }));
+      const feeRateBps = LIMITLESS_DEFAULT_FEE_RATE_BPS;
+      try {
+        if (state.orderType === "limit") {
+          const size = parseFloat(state.amount);
+          const price = parseFloat(state.price) / 100;
+          if (!Number.isFinite(size) || size <= 0) {
+            throw new Error("Invalid size.");
+          }
+          if (!Number.isFinite(price) || price <= 0 || price >= 1) {
+            throw new Error("Limit price must be between 0 and 1 (enter cents in the box).");
+          }
+          await privateApi.postLimitlessOrder({
+            marketSlug: slug,
+            orderType: "GTC",
+            tokenId,
+            side: state.side === "buy" ? "BUY" : "SELL",
+            price,
+            size,
+            feeRateBps,
+          });
+        } else if (state.side === "buy") {
+          const usd = parseFloat(state.amount);
+          if (!Number.isFinite(usd) || usd <= 0) {
+            throw new Error("Invalid USDC amount.");
+          }
+          await privateApi.postLimitlessOrder({
+            marketSlug: slug,
+            orderType: "FOK",
+            tokenId,
+            side: "BUY",
+            makerAmount: usd,
+            feeRateBps,
+          });
+        } else {
+          const shares = parseFloat(state.amount);
+          if (!Number.isFinite(shares) || shares <= 0) {
+            throw new Error("Invalid shares.");
+          }
+          await privateApi.postLimitlessOrder({
+            marketSlug: slug,
+            orderType: "FOK",
+            tokenId,
+            side: "SELL",
+            makerAmount: shares,
+            feeRateBps,
+          });
+        }
+        setState((prev) => ({
+          ...prev,
+          orderResult: { success: true },
+          amount: "",
+          price: "",
+        }));
+        await queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] });
+        await limitlessPositionsQuery.refetch();
+      } catch (error: unknown) {
+        if (import.meta.env.DEV) {
+          console.error("[Limitless trade]", error);
         }
         setState((prev) => ({
           ...prev,
@@ -1275,6 +1527,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         // Falls back to local book walk if SOR hasn't returned yet.
         const frozenSorRoute = sorRouteRef.current;
         const sorLeg = frozenSorRoute?.legs?.[0];
+        const signVenueCfg = getVenueConfig(state.tradingVenue);
 
         // Helper: derive top-of-book prices (do not mutate orderbook)
         const bestAsk =
@@ -1288,10 +1541,17 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
         if (frozenState.side === "buy") {
           const usdAmount = parseFloat(frozenState.amount);
+          const sorAmountMatches =
+            frozenSorRoute &&
+            Number.isFinite(usdAmount) &&
+            Math.abs(frozenSorRoute.requestedAmount - usdAmount) < 0.0001;
 
           // Try SOR route first (server-side book walk with maxPrice)
-          if (sorLeg && frozenSorRoute) {
-            orderAmount = Math.floor(frozenSorRoute.totalShares);
+          if (sorLeg && frozenSorRoute && sorAmountMatches) {
+            const rawShares = frozenSorRoute.totalShares;
+            orderAmount = signVenueCfg.requiresWholeShares
+              ? Math.floor(rawShares)
+              : rawShares;
             // maxPrice from SOR (needs backend addition); fall back to avgPrice * 1.05 slippage buffer
             const sorMaxPrice = (sorLeg as any).maxPrice;
             orderPrice = sorMaxPrice && isFinite(sorMaxPrice) && sorMaxPrice > 0
@@ -1316,7 +1576,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
               frozenState.selectedPosition,
               "buy"
             );
-            orderAmount = Math.floor(calc.contracts);
+            orderAmount = signVenueCfg.requiresWholeShares
+              ? Math.floor(calc.contracts)
+              : calc.contracts;
 
             if (!orderAmount || !isFinite(orderAmount) || orderAmount <= 0) {
               throw new Error("Unable to compute contracts for market buy order");
@@ -1348,8 +1610,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
               ? Math.round(sorMinPrice * 100) / 100
               : Math.round(sorLeg.avgPrice * 0.95 * 100) / 100;
 
-            // Use actual shares sold from SOR
-            const sorShares = Math.floor(frozenSorRoute.totalShares);
+            const rawSorSell = frozenSorRoute.totalShares;
+            const sorShares = signVenueCfg.requiresWholeShares
+              ? Math.floor(rawSorSell)
+              : rawSorSell;
             if (sorShares > 0) {
               orderAmount = sorShares;
             }
@@ -1516,7 +1780,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowMintQuery.data,
     dflowMintQuery.isLoading,
     privateApi,
-    privySolanaSign,
+    privySolanaSendTx,
+    limitlessEnsureQuery.isLoading,
+    limitlessEnsureQuery.data,
+    limitlessEnsureQuery.isError,
+    limitlessEnsureQuery.error,
+    limitlessReady,
+    limitlessPositionsQuery,
   ]);
 
   // Auto-dismiss order result after 4 seconds
@@ -1556,7 +1826,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       if (state.isLoading) {
         throw new Error("Already processing a trade");
       }
-      if (state.tradingVenue === "polymarket" || state.tradingVenue === "predictfun" || state.tradingVenue === "dflow") {
+      if (
+        state.tradingVenue === "polymarket" ||
+        state.tradingVenue === "predictfun" ||
+        state.tradingVenue === "dflow" ||
+        state.tradingVenue === "limitless"
+      ) {
         if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) {
           throw new Error("Missing required fields: position, amount, or price");
         }
@@ -1614,7 +1889,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     polyClob,
     predictSession,
     privateApi,
-    privySolanaSign,
+    privySolanaSendTransaction: privySolanaSendTx,
     market,
     matchedMonitor,
     predictNumericId,
@@ -1712,6 +1987,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       entries.push({ venue: "dflow", shares: dfBal });
     }
 
+    const lxBal = limitlessSellShareBalance;
+    if (typeof lxBal === "number" && lxBal > 0) {
+      entries.push({ venue: "limitless", shares: lxBal });
+    }
+
     return entries;
   }, [
     state.selectedPosition,
@@ -1722,6 +2002,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     market,
     predictSellShareBalance,
     dflowOutcomeBalQuery.data,
+    limitlessSellShareBalance,
+    umbrellaDisplayName,
   ]);
 
   // --- SOR: total cash across all chains (for affordability check, not route constraint) ---
@@ -1847,6 +2129,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       : undefined,
     predictUsdtBalance,
     predictSellShareBalance,
+    limitlessTrading,
+    limitlessSellShareBalance,
     dflowProofVerified: dflowProof.isVerified,
     dflowProofLoading: dflowProof.isLoading,
     sorState: {
@@ -1870,6 +2154,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         text: "Complete trading setup",
         disabled: true,
         onClick: () => {},
+        depositShortfallUsd: undefined,
       };
     }
     return buttonState;
@@ -1883,18 +2168,31 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       market={market}
       orderbook={effectiveOrderbook}
       pandascoreMatchId={pandascoreMatchId}
+      umbrellaId={propUmbrellaId}
       umbrellaDisplayName={umbrellaDisplayName}
       crossBuyYes={crossBuyPrices.crossBuyYes}
       crossBuyNo={crossBuyPrices.crossBuyNo}
       state={(() => {
-        // When SOR route is available for single-venue trades, overlay its data
+        // When SOR route is available for single-venue trades, overlay its data — only if this
+        // response matches the current amount and is not stale (otherwise show local book walk).
         const sr = sorRoute.route;
-        const hasSorData = sr && sr.legs.length > 0 && state.tradingVenue !== "all";
+        const inputAmount = parseFloat(state.amount) || 0;
+        const sorMatchesInput =
+          sr &&
+          sr.legs.length > 0 &&
+          Math.abs(sr.requestedAmount - inputAmount) < 0.0001;
+        const hasSorData =
+          sorMatchesInput &&
+          !sorRoute.isStale &&
+          state.tradingVenue !== "all";
         const bookData = calculatedMarketOrderData;
 
         if (hasSorData && state.orderType === "market") {
           const leg = sr.legs[0];
-          const sorContracts = Math.floor(sr.totalShares);
+          const shareVenueCfg = getVenueConfig(state.tradingVenue);
+          const sorContracts = shareVenueCfg.requiresWholeShares
+            ? Math.floor(sr.totalShares)
+            : sr.totalShares;
           const sorCost = sr.totalCost;
           const sorFee = sr.totalFees;
 
@@ -1960,7 +2258,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       sorExecution={sorExecution}
       sorRouteExpired={sorRouteExpired}
       handleSorExecute={handleSorExecute}
-      totalAvailableCash={totalAvailableCash}
     />
   );
 });
