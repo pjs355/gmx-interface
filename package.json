@@ -3,6 +3,7 @@
 	"private": true,
 	"version": "0.0.0",
 	"type": "module",
+	"packageManager": "yarn@3.1.0",
 	"scripts": {
 		"dev": "tsx scripts/dev-prompt.ts",
 		"dev:live": "VITE_ENVIRONMENT_MODE=production vite",
