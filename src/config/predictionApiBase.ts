@@ -4,7 +4,7 @@
  * Environment-aware: Returns testnet (localhost) or production API URLs
  * based on environment.ts configuration.
  *
- * `local-production` (yarn dev → [3]): `scripts/dev-prompt.js` sets
+ * `local-production` (yarn dev → [3]): `scripts/dev-prompt.ts` sets
  * `VITE_PREDICTION_API_BASE_URL=http://localhost:8080` so prediction + multiplex + orderbook + venue
  * share one local API. Without that (e.g. `npx vite` + `VITE_ENVIRONMENT_MODE=local-production` only),
  * prediction API defaults to Railway. Private routes: `privateApiBase.ts`.

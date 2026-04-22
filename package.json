@@ -4,7 +4,7 @@
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"dev": "node scripts/dev-prompt.js",
+		"dev": "tsx scripts/dev-prompt.ts",
 		"dev:live": "VITE_ENVIRONMENT_MODE=production vite",
 		"dev:test": "VITE_ENVIRONMENT_MODE=testnet vite",
 		"build": "NODE_OPTIONS=--max-old-space-size=8192 vite build",
@@ -81,6 +81,7 @@
 		"eslint-plugin-react-refresh": "^0.4.4",
 		"jsdom": "^24.0.0",
 		"sass": "^1.69.5",
+		"tsx": "^4.19.3",
 		"typescript": "^5.2.2",
 		"vite": "^4.5.0",
 		"vite-plugin-node-polyfills": "^0.26.0",
