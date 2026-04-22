@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { usePrivy, useWallets, useSendTransaction } from "@privy-io/react-auth";
 import { BrowserProvider } from "ethers";
 import { OrderBuilder, ChainId } from "@predictdotfun/sdk";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ const predictAccount =
 export function usePredictEnsureAuth(shouldAuth: boolean) {
 	const { authenticated } = usePrivy();
 	const { wallets } = useWallets();
+	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
 	const api = usePrivateApiClient();
 	const queryClient = useQueryClient();
 	const attempted = useRef(false);
@@ -33,12 +34,15 @@ export function usePredictEnsureAuth(shouldAuth: boolean) {
 		const embedded = (wallets || []).find(
 			(w: any) =>
 				w?.walletClientType === "privy" || w?.connectorType === "privy"
-		) as { getEthereumProvider?: () => Promise<any> } | undefined;
+		) as
+			| { getEthereumProvider?: () => Promise<any>; address?: string }
+			| undefined;
 
-		if (!embedded?.getEthereumProvider) {
+		if (!embedded?.getEthereumProvider || !embedded.address) {
 			console.warn("[PredictEnsureAuth] No embedded wallet with getEthereumProvider found");
 			return;
 		}
+		const address = embedded.address as `0x${string}`;
 
 		attempted.current = true;
 		setState("pending");
@@ -54,7 +58,11 @@ export function usePredictEnsureAuth(shouldAuth: boolean) {
 
 			if (predictAccount) {
 				await ensurePredictChain(ethereum);
-				const ethSigner = await getBscBrowserSigner(ethereum);
+				const ethSigner = await getBscBrowserSigner({
+					ethereum,
+					address,
+					sendTransaction: privyEvmSendTransaction,
+				});
 				const builder = await OrderBuilder.make(
 					ChainId.BnbMainnet,
 					ethSigner as any,
@@ -81,7 +89,7 @@ export function usePredictEnsureAuth(shouldAuth: boolean) {
 			console.warn("[PredictEnsureAuth] Auto-auth failed:", err?.message ?? err);
 			setState("error");
 		});
-	}, [shouldAuth, authenticated, wallets, api, queryClient]);
+	}, [shouldAuth, authenticated, wallets, api, queryClient, privyEvmSendTransaction]);
 
 	return state;
 }

@@ -24,6 +24,42 @@ export interface UmbrellaTeamMapping {
 	secondaryColor?: string | null;
 }
 
+/** Mirrors predictions-api / DB `ExchangeMatching.limitless` when present on the umbrella. */
+export interface UmbrellaExchangeMatchingLimitless {
+	slug: string;
+	tokenIdA: string;
+	tokenIdB: string;
+	orderbookSlugA?: string;
+	orderbookSlugB?: string;
+}
+
+/**
+ * Cross-venue matching blob on the umbrella document (predictions-api).
+ * Limitless UI (Basic tab, trade box, chart) is driven separately by odds-monitor
+ * state built from GET /matched-markets + venue-prices WS — compare both when debugging.
+ */
+export interface UmbrellaExchangeMatching {
+	matchedAt?: number;
+	matchConfidence?: number;
+	matchMethod?: string;
+	pandaTeamA?: string;
+	pandaTeamB?: string;
+	limitless?: UmbrellaExchangeMatchingLimitless;
+	polymarket?: unknown;
+	kalshi?: unknown;
+	dflow?: unknown;
+	/** Predict.fun keys when persisted on the umbrella (GET /umbrellas); same ids as Predict REST / positions. */
+	predictFun?: {
+		marketIdA?: string;
+		marketIdB?: string;
+		tokenIdA?: string;
+		tokenIdB?: string;
+		decimalPrecision?: number;
+		singleMarket?: boolean;
+	};
+	levelup?: unknown;
+}
+
 export interface Umbrella {
 	_id: string;
 	displayName: string;
@@ -40,6 +76,8 @@ export interface Umbrella {
 	pandascore_matchId?: string;
 	teamMappings?: UmbrellaTeamMapping[];
 	eventDate?: string | null;
+	/** When API returns it — not used for Limitless venue row; see odds monitor + matched-markets. */
+	exchangeMatching?: UmbrellaExchangeMatching;
 }
 
 interface UmbrellaApiResponse {

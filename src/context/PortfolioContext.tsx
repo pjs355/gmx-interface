@@ -15,8 +15,11 @@ import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { sumPredictPositionMarkValue } from "@/trading/predict/sumPredictPositionMarkValue";
+import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useOddsMonitor } from "context/OddsMonitorContext";
 
 type PortfolioContextValue = {
 	portfolioTotal: number | null;
@@ -32,7 +35,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const [portfolioTotal, setPortfolioTotal] = useState<number | null>(null);
 	const lastCashRef = React.useRef<number>(0);
 	const lastPositionsRef = React.useRef<number>(0);
-	const { account } = useSignerContext();
+	const { account, signerAddress } = useSignerContext();
 	const {
 		umbrellas,
 		getQuestionsForUmbrella,
@@ -40,6 +43,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		allBooksPreview,
 		booksPreviewLoading,
 	} = usePredictionData();
+	const { appState } = useOddsMonitor();
 	const {
 		usdcBalance,
 		tokenBalances,
@@ -93,14 +97,40 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		);
 	}, [polyPositionsQuery.data]);
 
-	const predictPositionsQuery = usePredictPositions(venueReady ? (account ?? null) : null);
+	// Match usePositionsData: Predict.fun keys off the embedded signer (BNB), not the Base smart wallet.
+	const predictQueryAddress = signerAddress ?? account;
+	const predictPositionsQuery = usePredictPositions(
+		venueReady ? (predictQueryAddress ?? null) : null
+	);
+	const predictPortfolioMarketIds = useMemo(() => {
+		const ids = new Set<number>();
+		for (const p of predictPositionsQuery.data ?? []) {
+			if (p.numericMarketId) ids.add(p.numericMarketId);
+		}
+		return Array.from(ids);
+	}, [predictPositionsQuery.data]);
+	const predictMarketDetailsPortfolioQuery = usePredictMarketDetailsMap(
+		predictPortfolioMarketIds,
+		venueReady && predictPortfolioMarketIds.length > 0,
+	);
 	const predictPositionsTotal = useMemo(() => {
 		if (!predictPositionsQuery.data) return 0;
-		return predictPositionsQuery.data.reduce(
-			(sum, p) => sum + (p.currentValue ?? 0),
-			0
+		return sumPredictPositionMarkValue(
+			predictPositionsQuery.data,
+			allBooksPreview,
+			umbrellas,
+			getQuestionsForUmbrella,
+			appState?.markets,
+			predictMarketDetailsPortfolioQuery.data ?? null,
 		);
-	}, [predictPositionsQuery.data]);
+	}, [
+		predictPositionsQuery.data,
+		allBooksPreview,
+		umbrellas,
+		getQuestionsForUmbrella,
+		appState?.markets,
+		predictMarketDetailsPortfolioQuery.data,
+	]);
 
 	const privateApi = usePrivateApiClient();
 	const dflowRpcEnabled =
@@ -229,14 +259,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			return;
 		}
 
-		// For users with no token balances (new users), we can compute immediately
-		const hasNoTokens = tokenBalances.size === 0 && !userDataLoading;
-		
-		// Don't compute if prices haven't loaded yet, UNLESS user has no tokens
-		if (booksPreviewLoading && !hasNoTokens) {
-			return;
-		}
-
 		try {
 			// Collect markets with BOTH IDs
 			const markets: Array<{ balanceId: string; priceId: string }> = [];
@@ -339,12 +361,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		if (!account) {
 			setPortfolioTotal(0);
-			return;
-		}
-		
-		const hasNoTokens = tokenBalances.size === 0 && !userDataLoading;
-		
-		if (booksPreviewLoading && !hasNoTokens) {
 			return;
 		}
 		compute();

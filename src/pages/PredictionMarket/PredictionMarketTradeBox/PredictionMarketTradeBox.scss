@@ -270,6 +270,7 @@
 
 		.position-btn {
 			flex: 1;
+			min-width: 0;
 			padding: 12px;
 			border-radius: 8px;
 			font-size: 18px;
@@ -279,6 +280,30 @@
 			border: 2px solid #6b7280;
 			color: #6b7280;
 			background: transparent;
+			white-space: nowrap;
+			overflow: hidden;
+
+			.position-btn__label-row {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 6px;
+				width: 100%;
+				min-width: 0;
+				font-weight: inherit;
+				font-size: inherit;
+			}
+
+			.position-btn__name {
+				min-width: 0;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.position-btn__price {
+				flex-shrink: 0;
+			}
 
 			&:hover {
 				border-color: #22c55e;
@@ -615,33 +640,13 @@
 		}
 	}
 
-	@keyframes betSizePulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.45; }
-	}
-
 	.bet-size-section {
 		background: black !important;
 		border: none;
 		border-radius: 8px;
 		padding: 12px;
 		transition: opacity 0.15s ease;
-
-		&--recalculating {
-			animation: betSizePulse 1.8s ease-in-out infinite;
-		}
 		margin-bottom: 20px;
-
-		.bet-size-recalculating-footer {
-			margin-top: 10px;
-			padding-top: 8px;
-			border-top: 1px solid rgba(255, 255, 255, 0.08);
-			font-size: 11px;
-			font-weight: 600;
-			letter-spacing: 0.02em;
-			color: #94a3b8;
-			text-align: center;
-		}
 
 		.bet-size-info,
 		.leverage-info {
@@ -856,6 +861,38 @@
 			color: #d1d5db;
 			white-space: nowrap;
 		}
+
+		.sor-details-consolidated-fees {
+			display: inline-flex;
+			flex-direction: row;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 6px 10px;
+		}
+
+		.sor-details-consolidated-fees__fees-tooltip-handle {
+			display: inline;
+			cursor: help;
+			text-decoration: none;
+			border-bottom: 1px dashed rgba(255, 255, 255, 0.55);
+			padding-bottom: 1px;
+		}
+
+		.sor-details-consolidated-fees__fees-label {
+			text-decoration: none;
+		}
+
+		.sor-details-consolidated-fees__amount {
+			text-decoration: none;
+		}
+
+		.sor-details-consolidated-fees__tooltip-body {
+			font-size: 12px;
+			line-height: 1.45;
+			text-align: left;
+			color: #e5e7eb;
+			max-width: 260px;
+		}
 	}
 
 	.order-result {
@@ -899,6 +936,10 @@
 
 	.trade-button {
 		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+		justify-content: center;
+		align-items: center;
 		padding: 16px;
 		border-radius: 8px;
 		font-weight: 600;
@@ -908,6 +949,18 @@
 		color: white;
 		cursor: pointer;
 		transition: all 0.2s ease;
+		white-space: nowrap;
+		overflow: hidden;
+
+		.trade-button__label {
+			display: block;
+			flex: 1 1 0%;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			text-align: center;
+		}
 
 		&:hover:not(:disabled) {
 			background: #7c3aed;

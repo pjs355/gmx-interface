@@ -33,6 +33,8 @@ export interface UseOddsMonitorWebSocketResult {
 }
 
 // ── Matched-markets REST → MatchedMarket[] conversion ──────────────
+// Portfolio Predict resolution (`buildPredictUmbrellaLookup`) needs `predictFun` ids to match
+// Predict.fun REST: `marketIdA/B` as numeric strings and/or `tokenIdA/B` as outcome ERC1155 ids.
 
 interface MatchedMarketsApiItem {
 	pandaMatchId: string;
@@ -54,9 +56,12 @@ interface MatchedMarketsApiItem {
 		};
 		kalshi?: { tickerA: string; tickerB?: string; eventTicker: string };
 		dflow?: MatchedMarketsDflowWire;
+		/** When present, `tokenIdA/B` must match Predict outcome ERC1155 ids for portfolio lookup. */
 		predictFun?: {
 			marketIdA?: string;
 			marketIdB?: string;
+			tokenIdA?: string;
+			tokenIdB?: string;
 			decimalPrecision: number;
 			singleMarket?: boolean;
 		};
@@ -111,6 +116,8 @@ function apiItemToMatchedMarket(
 			? {
 					marketIdA: em.predictFun.marketIdA,
 					marketIdB: em.predictFun.marketIdB,
+					tokenIdA: em.predictFun.tokenIdA,
+					tokenIdB: em.predictFun.tokenIdB,
 					decimalPrecision: (em.predictFun.decimalPrecision ?? 2) as 2 | 3,
 					singleMarket: em.predictFun.singleMarket,
 				}
@@ -266,6 +273,19 @@ function logLimitlessWsOrderbookIfChanged(
 	console.info("[limitless/ws-orderbook]", payload);
 }
 
+/**
+ * Limitless upstream (Socket.IO → BFF) can emit transient empty teams on reconnect/throttle.
+ * Without this, we overwrite good `limitlessPriceA/B` with empty books while chart history still looks fine.
+ */
+function bookHasQuotableLiquidity(book: OrderbookData | null | undefined): boolean {
+	if (!book) return false;
+	if (book.bestAsk != null && Number.isFinite(Number(book.bestAsk))) return true;
+	if (book.bestBid != null && Number.isFinite(Number(book.bestBid))) return true;
+	if (book.asks?.some((a) => (a.size ?? 0) > 0)) return true;
+	if (book.bids?.some((b) => (b.size ?? 0) > 0)) return true;
+	return false;
+}
+
 function applyPriceUpdates(
 	markets: Map<string, MatchedMarket>,
 	snapshots: VenuePriceSnapshot[],
@@ -281,13 +301,35 @@ function applyPriceUpdates(
 
 		const dataA = teamToOrderbookData(snap.teamA, snap.status);
 		const dataB = teamToOrderbookData(snap.teamB, snap.status);
+		let assignA = dataA;
+		let assignB = dataB;
 		if (venue === "limitless") {
+			const prevA = market.limitlessPriceA;
+			const prevB = market.limitlessPriceB;
+			/** Server says book is empty on purpose — allow UI to clear instead of freezing stale. */
+			const allowClear = snap.status === "no_liquidity";
+			if (
+				!allowClear &&
+				!bookHasQuotableLiquidity(dataA) &&
+				bookHasQuotableLiquidity(prevA)
+			) {
+				assignA = prevA as OrderbookData;
+			}
+			if (
+				!allowClear &&
+				!bookHasQuotableLiquidity(dataB) &&
+				bookHasQuotableLiquidity(prevB)
+			) {
+				assignB = prevB as OrderbookData;
+			}
 			const pid = String(snap.pandaMatchId ?? "").trim();
-			if (pid) logLimitlessWsOrderbookIfChanged(pid, snap, dataA, dataB, market);
+			if (pid) logLimitlessWsOrderbookIfChanged(pid, snap, assignA, assignB, market);
 		}
 		for (const [fieldA, fieldB] of fieldPairs) {
-			(market as any)[fieldA] = dataA;
-			(market as any)[fieldB] = dataB;
+			const a = venue === "limitless" ? assignA : dataA;
+			const b = venue === "limitless" ? assignB : dataB;
+			(market as any)[fieldA] = a;
+			(market as any)[fieldB] = b;
 		}
 		changed = true;
 	}
@@ -560,6 +602,19 @@ export function useOddsMonitorWebSocket(
 					base.limitlessPriceB = prev.limitlessPriceB;
 					base.levelUpPriceA = prev.levelUpPriceA;
 					base.levelUpPriceB = prev.levelUpPriceB;
+				}
+				/**
+				 * GET /matched-markets can briefly omit `limitless` on a row that still has live books.
+				 * Without this, `base.limitless` becomes undefined → Basic tab drops the Limitless row entirely.
+				 */
+				if (
+					prev &&
+					!base.limitless &&
+					prev.limitless &&
+					(bookHasQuotableLiquidity(prev.limitlessPriceA) ||
+						bookHasQuotableLiquidity(prev.limitlessPriceB))
+				) {
+					base.limitless = prev.limitless;
 				}
 				next.set(pid, base);
 			}

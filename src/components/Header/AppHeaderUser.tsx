@@ -1,7 +1,5 @@
 // import { Trans } from "@lingui/react";
-import { useCallback } from "react";
-import { usePrivy, useFundWallet } from "@privy-io/react-auth";
-// Removed useCallback - not used after cleanup
+import { usePrivy } from "@privy-io/react-auth";
 
 // Removed BASE and getChainName - not used after cleanup
 // Removed isDevelopment - not used
@@ -13,6 +11,12 @@ import { usePrivy, useFundWallet } from "@privy-io/react-auth";
 
 // Removed all userAnalytics and GMX-specific imports
 import { useSignerContext } from "context/SignerContext";
+import { useUserData } from "@/context/UserDataContext";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import {
+	PrivyGatedFundTrigger,
+	resolvePrivyEvmFundTarget,
+} from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 
 import { OneClickButton } from "components/OneClickButton/OneClickButton";
 import AddressDropdown from "components/AddressDropdown/AddressDropdown";
@@ -46,23 +50,18 @@ export function AppHeaderUser({
 	showRedirectModal,
 }: Props) {
     // Simplified for prediction markets - centralized signer context
-    const { authenticated: active, account } = useSignerContext();
+    const { authenticated: active, account, ready: signerReady } = useSignerContext();
 	const { login, user, authenticated } = usePrivy();
-	const { fundWallet } = useFundWallet();
+	const { refresh: refreshUserData } = useUserData();
+	const funding = useFundingAddresses();
+	const fundEvmTarget = resolvePrivyEvmFundTarget(
+		funding.baseSmartWallet,
+		account
+	);
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
 	const showCashMetricSkeleton = cashLoading || blockHeaderMetrics;
-
-	// Handle deposit - triggers Privy funding modal directly
-	const handleDeposit = useCallback(async () => {
-		if (!account) return;
-		try {
-			await fundWallet(account, { chain: { id: 8453 } }); // Base mainnet
-		} catch (err) {
-			console.error("Deposit error:", err);
-		}
-	}, [account, fundWallet]);
 
 	// Detect if user logged in with email (smart wallet) or external wallet
 	const hasSmartWallet = user?.linkedAccounts?.some(
@@ -211,10 +210,18 @@ export function AppHeaderUser({
 					)}
 					{/* USDC Balance Display - Hidden on mobile - Clicks open Privy deposit */}
 					{!small && (
+						<PrivyGatedFundTrigger
+							fundTarget={fundEvmTarget}
+							ready={signerReady}
+							onAfterFund={refreshUserData}
+						>
+							{({ openFund, canFund }) => (
 						<div
 							className="header-metric-box mr-4"
-							onClick={handleDeposit}
-							style={{ cursor: "pointer" }}
+							onClick={() => {
+								if (canFund) void openFund();
+							}}
+							style={{ cursor: canFund ? "pointer" : "default" }}
 						>
 							<div className="flex flex-col items-center">
 								<span
@@ -235,6 +242,8 @@ export function AppHeaderUser({
 								</span>
 							</div>
 						</div>
+							)}
+						</PrivyGatedFundTrigger>
 					)}
 
                     {!small && (

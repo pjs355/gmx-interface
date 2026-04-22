@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
+import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
 import { useTradeBoxShareBalances } from "./hooks/useTradeBoxShareBalances";
+import type { MatchedMarket } from "@/types/odds-monitor";
 import type { TradingVenue } from "./types";
 
 type MarketLike = {
@@ -29,6 +31,9 @@ export function MyPositionsRow({
 	isVsSingle,
 	yesTeamColor,
 	noTeamColor,
+	side,
+	selectedPosition,
+	matchedMonitor,
 }: {
 	market: MarketLike;
 	umbrellaId?: string;
@@ -38,61 +43,193 @@ export function MyPositionsRow({
 	isVsSingle: boolean;
 	yesTeamColor?: string;
 	noTeamColor?: string;
+	side: "buy" | "sell";
+	selectedPosition: "yes" | "no" | null;
+	matchedMonitor?: MatchedMarket | null;
 }) {
-	const { lines } = useTradeBoxShareBalances({
-		umbrellaId,
-		market,
-		tradingVenue,
-		yesTeamLabel,
-		noTeamLabel,
-		isVsSingle,
-	});
+	const [detailsOpen, setDetailsOpen] = useState(false);
+	const { buyLines, sellTotalShares, sellVenueBreakdown, sellOutcomeLabel } =
+		useTradeBoxShareBalances({
+			umbrellaId,
+			market,
+			tradingVenue,
+			yesTeamLabel,
+			noTeamLabel,
+			isVsSingle,
+			selectedPosition,
+			matchedMonitor,
+		});
 
-	if (lines.length === 0) return null;
+	/** Same treatment as chart team lines on black: dark team hex is lightened so text stays readable. */
+	const colorForLine = (lineSide: "yes" | "no") => {
+		if (!isVsSingle) {
+			return lineSide === "yes" ? "#22c55e" : "#ef4444";
+		}
+		const raw = lineSide === "yes" ? yesTeamColor : noTeamColor;
+		return getChartStrokeColorForDarkBg(raw, "#ffffff");
+	};
 
-	return (
-		<div
-			style={{
-				display: "flex",
-				justifyContent: "space-between",
-				alignItems: "flex-start",
-				gap: 12,
-				marginBottom: 16,
-			}}
-		>
-			<div style={{ fontSize: 14, fontWeight: 400, color: "#6B7280", flexShrink: 0 }}>
-				My position
-			</div>
+	if (side === "buy") {
+		if (buyLines.length === 0) return null;
+		return (
 			<div
 				style={{
 					display: "flex",
-					flexDirection: "column",
-					alignItems: "flex-end",
-					gap: 6,
-					textAlign: "right",
+					justifyContent: "space-between",
+					alignItems: "flex-start",
+					gap: 12,
+					marginBottom: 16,
 				}}
 			>
-				{lines.map((line) => {
-					const color =
-						line.side === "yes"
-							? isVsSingle
-								? yesTeamColor || "#ffffff"
-								: "#22c55e"
-							: isVsSingle
-								? noTeamColor || "#ffffff"
-								: "#ef4444";
-					const suffixPart = line.venueSuffix ? ` ${line.venueSuffix}` : "";
-					return (
+				<div style={{ fontSize: 14, fontWeight: 400, color: "#ffffff", flexShrink: 0 }}>
+					Your Position:
+				</div>
+				<div
+					style={{
+						display: "flex",
+						flexDirection: "column",
+						alignItems: "flex-end",
+						gap: 6,
+						textAlign: "right",
+					}}
+				>
+					{buyLines.map((line) => (
 						<div
 							key={line.key}
-							style={{ fontSize: 14, fontWeight: 700, color, lineHeight: 1.35 }}
+							style={{
+								fontSize: 14,
+								fontWeight: 700,
+								color: colorForLine(line.side),
+								lineHeight: 1.35,
+							}}
 						>
-							{formatShareCount(line.shares)} shares of {line.label}
-							{suffixPart}
+							{formatShareCount(line.shares)} Shares {line.label}
 						</div>
-					);
-				})}
+					))}
+				</div>
 			</div>
+		);
+	}
+
+	// Sell
+	const headlineColor =
+		selectedPosition === "no"
+			? colorForLine("no")
+			: colorForLine("yes");
+
+	if (sellTotalShares <= 0) {
+		return (
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "flex-start",
+					gap: 12,
+					marginBottom: 16,
+				}}
+			>
+				<div style={{ fontSize: 14, fontWeight: 400, color: "#ffffff", flexShrink: 0 }}>
+					Your Position:
+				</div>
+				<div
+					style={{
+						fontSize: 14,
+						fontWeight: 700,
+						color: headlineColor,
+						lineHeight: 1.35,
+					}}
+				>
+					None
+				</div>
+			</div>
+		);
+	}
+
+	const headlineRight = `${formatShareCount(sellTotalShares)} Shares ${sellOutcomeLabel}`;
+	const showDetails = tradingVenue === "all" && sellVenueBreakdown.length > 1;
+
+	return (
+		<div style={{ marginBottom: 16 }}>
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "flex-start",
+					gap: 12,
+				}}
+			>
+				<div style={{ fontSize: 14, fontWeight: 400, color: "#ffffff", flexShrink: 0 }}>
+					Your Position:
+				</div>
+				<div
+					style={{
+						fontSize: 14,
+						fontWeight: 700,
+						color: headlineColor,
+						lineHeight: 1.35,
+						textAlign: "right",
+					}}
+				>
+					{headlineRight}
+				</div>
+			</div>
+			{showDetails ? (
+				<div style={{ marginTop: 8, textAlign: "right" }}>
+					<button
+						type="button"
+						onClick={() => setDetailsOpen((o) => !o)}
+						style={{
+							display: "inline-flex",
+							alignItems: "center",
+							gap: 6,
+							background: "none",
+							border: "none",
+							padding: 0,
+							cursor: "pointer",
+							fontSize: 13,
+							fontWeight: 600,
+							color: "#9ca3af",
+						}}
+					>
+						<span
+							style={{
+								fontSize: 10,
+								transform: detailsOpen ? "rotate(180deg)" : "rotate(0deg)",
+								display: "inline-block",
+								transition: "transform 0.15s ease",
+							}}
+						>
+							▼
+						</span>
+						Details
+					</button>
+					{detailsOpen ? (
+						<div
+							style={{
+								marginTop: 8,
+								display: "flex",
+								flexDirection: "column",
+								alignItems: "flex-end",
+								gap: 4,
+							}}
+						>
+							{sellVenueBreakdown.map((row) => (
+								<div
+									key={row.key}
+									style={{
+										fontSize: 13,
+										fontWeight: 600,
+										color: headlineColor,
+										lineHeight: 1.35,
+									}}
+								>
+									{formatShareCount(row.shares)} Shares {sellOutcomeLabel} ({row.venueDisplay})
+								</div>
+							))}
+						</div>
+					) : null}
+				</div>
+			) : null}
 		</div>
 	);
 }

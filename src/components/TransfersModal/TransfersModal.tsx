@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
+import Tooltip from "@/components/Tooltip/Tooltip";
 import Modal from "@/components/Modal/Modal";
 import { useTransfersModal } from "@/context/TransfersModalContext";
 import { usePortfolio } from "@/context/PortfolioContext";
@@ -17,11 +18,7 @@ import {
 	useWithdrawPlanExecution,
 	getWithdrawExecutionErrorMessage,
 } from "@/pages/Transfers/useWithdrawPlanExecution";
-import type {
-	LifiWithdrawPlanData,
-	LifiWithdrawPlanLeg,
-} from "@/types/trading";
-import type { WithdrawPlanTxEntry } from "@/pages/Transfers/useWithdrawPlanExecution";
+import type { LifiWithdrawPlanData, LifiWithdrawPlanLeg } from "@/types/trading";
 import "./TransfersModal.scss";
 
 type ModalView = "withdraw" | "review" | "submitted";
@@ -38,42 +35,60 @@ const DEST_CHAINS: { label: string; chainId: number }[] = [
 	{ label: "Solana", chainId: SOLANA_LIFI_CHAIN_ID },
 ];
 
-function explorerTxUrl(chainId: number, txHash: string): string {
-	const h = txHash.trim();
-	if (chainId === 8453) return `https://basescan.org/tx/${h}`;
-	if (chainId === 137) return `https://polygonscan.com/tx/${h}`;
-	if (chainId === 56) return `https://bscscan.com/tx/${h}`;
-	return `https://solscan.io/tx/${h}`;
-}
-
 function chainLabel(chainId: number): string {
 	return DEST_CHAINS.find((c) => c.chainId === chainId)?.label ?? `Chain ${chainId}`;
 }
 
-function legAmountLabel(leg: LifiWithdrawPlanLeg): string {
-	if (leg.mode === "direct_transfer") {
-		return `$${leg.amountHuman}`;
-	}
-	try {
-		const raw = BigInt(leg.fromAmount);
-		const d = leg.fromFundingStable.decimals;
-		const human = Number(raw) / 10 ** d;
-		if (!Number.isFinite(human)) return "—";
-		return `$${human.toFixed(2)}`;
-	} catch {
-		return "—";
-	}
+function collectWithdrawLegs(plan: LifiWithdrawPlanData): LifiWithdrawPlanLeg[] {
+	if (plan.mode === "composite") return plan.legs;
+	return [plan];
 }
 
-function legRouteType(leg: LifiWithdrawPlanLeg): string {
-	return leg.mode === "direct_transfer" ? "Direct" : "LI.FI";
+function sumUsdFromCostArray(arr: unknown): number {
+	if (!Array.isArray(arr)) return 0;
+	let sum = 0;
+	for (const item of arr) {
+		if (!item || typeof item !== "object") continue;
+		const raw = (item as Record<string, unknown>).amountUSD;
+		const n = typeof raw === "string" ? parseFloat(raw) : Number(raw);
+		if (Number.isFinite(n)) sum += n;
+	}
+	return sum;
 }
 
-function legSourceLabel(leg: LifiWithdrawPlanLeg): string {
+/** LI.FI protocol / bridge fee line items only (USD). Excludes `gasCosts` — gas is sponsored separately. */
+function sumLifiProtocolFeeUsd(quote: unknown): number {
+	if (!quote || typeof quote !== "object") return 0;
+	const est = (quote as Record<string, unknown>).estimate;
+	if (!est || typeof est !== "object") return 0;
+	return sumUsdFromCostArray((est as Record<string, unknown>).feeCosts);
+}
+
+/** Quoted destination stable received for this leg (human units on `destChainId`). */
+function legDestinationReceiveHuman(
+	leg: LifiWithdrawPlanLeg,
+	destChainId: number
+): number {
+	if (leg.toChain !== destChainId) return 0;
 	if (leg.mode === "direct_transfer") {
-		return chainLabel(leg.toChain);
+		const n = parseFloat(leg.amountHuman);
+		return Number.isFinite(n) ? n : 0;
 	}
-	return `${chainLabel(leg.fromChain)} → ${chainLabel(leg.toChain)}`;
+	const q = leg.quote as Record<string, unknown> | null | undefined;
+	const est = q?.estimate as Record<string, unknown> | undefined;
+	if (!est) return 0;
+	const toAmt = est.toAmount;
+	if (typeof toAmt === "string" || typeof toAmt === "number") {
+		try {
+			const raw = BigInt(String(toAmt));
+			const dec = leg.toFundingStable.decimals;
+			return Number(raw) / 10 ** dec;
+		} catch {
+			/* fall through */
+		}
+	}
+	const toUsd = parseFloat(String(est.toAmountUSD ?? ""));
+	return Number.isFinite(toUsd) ? toUsd : 0;
 }
 
 export function TransfersModal() {
@@ -145,10 +160,58 @@ export function TransfersModal() {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isPlanning, setIsPlanning] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [submittedEntries, setSubmittedEntries] = useState<
-		WithdrawPlanTxEntry[] | null
-	>(null);
 	const [plan, setPlan] = useState<LifiWithdrawPlanData | null>(null);
+
+	/**
+	 * Protocol fees (LI.FI feeCosts) + route spread (remainder to match send vs receive).
+	 * combinedCostUsd = protocolFees + routeSpread (2dp). Gas excluded.
+	 */
+	const reviewFeeAndReceive = useMemo(() => {
+		const grossHuman = parseFloat(withdrawAmount.trim()) || 0;
+		if (
+			!plan ||
+			toChain == null ||
+			!Number.isFinite(grossHuman) ||
+			grossHuman <= 0
+		) {
+			return {
+				requestHuman: 0,
+				protocolFeesUsd: 0,
+				routeSpreadUsd: 0,
+				combinedCostUsd: 0,
+				receiveHuman: 0,
+			};
+		}
+		const legs = collectWithdrawLegs(plan);
+		let protocolFeesSum = 0;
+		for (const leg of legs) {
+			if (leg.mode === "lifi" && leg.quote) {
+				protocolFeesSum += sumLifiProtocolFeeUsd(leg.quote);
+			}
+		}
+		let receiveHuman = 0;
+		for (const leg of legs) {
+			receiveHuman += legDestinationReceiveHuman(leg, toChain);
+		}
+		if (receiveHuman <= 1e-9 && grossHuman > 0) {
+			receiveHuman = Math.max(0, grossHuman - protocolFeesSum);
+		}
+		const reqC = Math.round(grossHuman * 100) / 100;
+		const feeC = Math.round(protocolFeesSum * 100) / 100;
+		const recvC = Math.round(receiveHuman * 100) / 100;
+		const routeSpreadUsd = Math.max(
+			0,
+			Math.round((reqC - feeC - recvC) * 100) / 100
+		);
+		const combinedCostUsd = Math.round((feeC + routeSpreadUsd) * 100) / 100;
+		return {
+			requestHuman: grossHuman,
+			protocolFeesUsd: feeC,
+			routeSpreadUsd,
+			combinedCostUsd,
+			receiveHuman,
+		};
+	}, [plan, withdrawAmount, toChain]);
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -161,7 +224,6 @@ export function TransfersModal() {
 				setError(null);
 				setIsSubmitting(false);
 				setIsPlanning(false);
-				setSubmittedEntries(null);
 				setPlan(null);
 			}, 200);
 			return () => clearTimeout(timer);
@@ -176,6 +238,21 @@ export function TransfersModal() {
 			maximumFractionDigits: 2,
 		}).format(num);
 	}, []);
+
+	const estimatedCostTooltipContent = useMemo(
+		() => (
+			<div className="transfers-fee-tooltip">
+				<p>Protocol fees: ${formatCurrency(reviewFeeAndReceive.protocolFeesUsd)}</p>
+				<p>Route spread: ${formatCurrency(reviewFeeAndReceive.routeSpreadUsd)}</p>
+				<p>Gas is sponsored (not in this total).</p>
+			</div>
+		),
+		[
+			formatCurrency,
+			reviewFeeAndReceive.protocolFeesUsd,
+			reviewFeeAndReceive.routeSpreadUsd,
+		]
+	);
 
 	const destIsSolana = toChain === SOLANA_LIFI_CHAIN_ID;
 	const networkChosen = toChain !== null;
@@ -260,10 +337,8 @@ export function TransfersModal() {
 		}
 		setIsSubmitting(true);
 		setError(null);
-		setSubmittedEntries(null);
 		try {
-			const out = await executePlan(plan);
-			setSubmittedEntries(out.entries);
+			await executePlan(plan);
 			setView("submitted");
 			await refreshUserData();
 		} catch (err) {
@@ -285,8 +360,6 @@ export function TransfersModal() {
 		switch (view) {
 			case "review":
 				return "Review Withdrawal";
-			case "submitted":
-				return "Withdrawal Submitted";
 			default:
 				return "Withdraw funds";
 		}
@@ -304,17 +377,6 @@ export function TransfersModal() {
 		if (isAmountOverMaxWithdraw) classes += " input-error";
 		return classes;
 	};
-
-	const routeSummary = useMemo(() => {
-		if (!plan) return null;
-		if (plan.mode === "composite") {
-			return `${plan.legs.length} steps from your funded wallets`;
-		}
-		if (plan.mode === "direct_transfer") {
-			return `Send on ${chainLabel(plan.toChain)} (direct transfer)`;
-		}
-		return `Routed via LI.FI from ${chainLabel(plan.fromChain)} → ${chainLabel(plan.toChain)}`;
-	}, [plan]);
 
 	const renderWithdrawView = () => (
 		<div className="transfers-withdraw-form">
@@ -428,12 +490,6 @@ export function TransfersModal() {
 				)}
 			</div>
 
-			<div className="transfers-network-notice">
-				Withdrawals may route from Base, Polygon, BNB, or Solana depending on where
-				your cash is held. Always verify the recipient network and asset; wrong
-				details can mean permanent loss.
-			</div>
-
 			<div className="transfers-form-actions">
 				<button
 					type="button"
@@ -463,43 +519,7 @@ export function TransfersModal() {
 				</div>
 			)}
 
-			<p className="transfers-review-warning">
-				Please review the details below. Blockchain transfers cannot be reversed.
-			</p>
-
 			<div className="transfers-review-details">
-				<div className="transfers-review-row">
-					<span className="transfers-review-label">Route</span>
-					<span className="transfers-review-value">{routeSummary ?? "—"}</span>
-				</div>
-				{plan?.mode === "composite" && (
-					<div className="transfers-review-legs-wrap">
-						<table className="transfers-review-legs">
-							<thead>
-								<tr>
-									<th scope="col">#</th>
-									<th scope="col">Source / path</th>
-									<th scope="col">Type</th>
-									<th scope="col">Amount</th>
-								</tr>
-							</thead>
-							<tbody>
-								{plan.legs.map((leg, idx) => (
-									<tr key={`${leg.mode}-${idx}`}>
-										<td>{idx + 1}</td>
-										<td>{legSourceLabel(leg)}</td>
-										<td>{legRouteType(leg)}</td>
-										<td>{legAmountLabel(leg)}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-						<p className="transfers-review-legs-note">
-							Steps run in order. If one step fails, earlier steps may already
-							have settled on-chain.
-						</p>
-					</div>
-				)}
 				<div className="transfers-review-row">
 					<span className="transfers-review-label">Destination</span>
 					<span className="transfers-review-value">
@@ -515,12 +535,39 @@ export function TransfersModal() {
 					</span>
 				</div>
 				<div className="transfers-review-row">
-					<span className="transfers-review-label">Amount</span>
+					<span className="transfers-review-label">{"You're sending"}</span>
+					<span className="transfers-review-value">
+						${formatCurrency(reviewFeeAndReceive.requestHuman)}
+					</span>
+				</div>
+				<div className="transfers-review-row">
+					<Tooltip
+						content={estimatedCostTooltipContent}
+						position="top"
+						withPortal={true}
+						tooltipClassName="transfers-fee-tooltip-popup"
+					>
+						<span className="transfers-review-label transfers-review-label--fees">
+							Estimated cost
+						</span>
+					</Tooltip>
+					<span className="transfers-review-value">
+						${formatCurrency(reviewFeeAndReceive.combinedCostUsd)}
+					</span>
+				</div>
+				<div className="transfers-review-row">
+					<span className="transfers-review-label">
+						You receive{toAsset != null ? ` (${toAsset})` : ""}
+					</span>
 					<span className="transfers-review-value transfers-review-amount">
-						${formatCurrency(withdrawAmount)}
+						${formatCurrency(reviewFeeAndReceive.receiveHuman)}
 					</span>
 				</div>
 			</div>
+
+			<p className="transfers-review-irreversible">
+				Fund transfers cannot be reversed.
+			</p>
 
 			<div className="transfers-form-actions">
 				<button
@@ -557,53 +604,7 @@ export function TransfersModal() {
 					<polyline points="20 6 9 17 4 12" />
 				</svg>
 			</div>
-			<h3 className="transfers-confirmation-title">Withdrawal Submitted</h3>
-
-			<div className="transfers-confirmation-details">
-				<div className="transfers-confirmation-row">
-					<span className="transfers-confirmation-label">Destination</span>
-					<span className="transfers-confirmation-value">
-						{toChain != null && toAsset != null
-							? `${chainLabel(toChain)} · ${toAsset}`
-							: "—"}
-					</span>
-				</div>
-				<div className="transfers-confirmation-row">
-					<span className="transfers-confirmation-label">Recipient</span>
-					<span className="transfers-confirmation-value address">
-						{recipientAddress}
-					</span>
-				</div>
-				<div className="transfers-confirmation-row">
-					<span className="transfers-confirmation-label">Amount</span>
-					<span className="transfers-confirmation-value amount">
-						${formatCurrency(withdrawAmount)}
-					</span>
-				</div>
-				{submittedEntries && submittedEntries.length > 0 && (
-					<div className="transfers-confirmation-txs">
-						<span className="transfers-confirmation-label">
-							{submittedEntries.length > 1 ? "Transactions" : "Transaction"}
-						</span>
-						<ul className="transfers-confirmation-tx-list">
-							{submittedEntries.map((e, i) => (
-								<li key={`${e.txHash}-${i}`}>
-									<a
-										className="transfers-confirmation-value tx-link"
-										href={explorerTxUrl(e.explorerChainId, e.txHash)}
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										{submittedEntries.length > 1
-											? `Step ${i + 1} on ${chainLabel(e.explorerChainId)}`
-											: "View on explorer"}
-									</a>
-								</li>
-							))}
-						</ul>
-					</div>
-				)}
-			</div>
+			<p className="transfers-confirmation-title">Withdrawal Submitted</p>
 
 			<button type="button" className="transfers-btn-done" onClick={handleDone}>
 				Done
@@ -629,7 +630,7 @@ export function TransfersModal() {
 			setIsVisible={(visible) => {
 				if (!visible) closeModal();
 			}}
-			label={getModalTitle()}
+			label={view === "submitted" ? undefined : getModalTitle()}
 			noDivider={view === "submitted"}
 		>
 			{renderContent()}

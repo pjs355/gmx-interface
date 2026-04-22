@@ -34,7 +34,7 @@ export default function ResolvedPositionsCardView({
 		markets: MarketEntry[];
 	}>;
 	toCentsString: (n?: number | null) => string;
-	onClaimSuccess?: (marketId: string | string[], umbrellaId: string) => void;
+	onClaimSuccess?: (marketId: string | string[], umbrellaId: string) => void | Promise<void>;
 }) {
 	const unifiedBlocks = useMemo(() => {
 		const blocks: UnifiedBlock[] = [];
@@ -212,7 +212,7 @@ function MultiClaimButton({
 	umbrellaId,
 }: {
 	markets: Array<{ market: PredictionMarket; resolvedOutcome: "yes" | "no" }>;
-	onClaimSuccess?: (marketId: string | string[], umbrellaId: string) => void;
+	onClaimSuccess?: (marketId: string | string[], umbrellaId: string) => void | Promise<void>;
 	umbrellaId: string;
 }) {
 	const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -245,7 +245,7 @@ function MultiClaimButton({
 		} finally {
 			if (onClaimSuccess && claimed.length > 0) {
 				await new Promise((r) => setTimeout(r, 2000));
-				onClaimSuccess(claimed, umbrellaId);
+				await Promise.resolve(onClaimSuccess(claimed, umbrellaId));
 			}
 			setIsClaiming(false);
 		}

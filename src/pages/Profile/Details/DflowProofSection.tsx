@@ -1,11 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useSignMessage } from "@privy-io/react-auth/solana";
+import { useSignMessage, useWallets as useSolanaWallets } from "@privy-io/react-auth/solana";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import bs58 from "bs58";
 import Tooltip from "@/components/Tooltip/Tooltip";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import type { DflowVerifyResponse } from "@/services/privateApi";
+import { startDflowProofRedirect } from "@/trading/dflow/startDflowProofRedirect";
 
 const KALSHI_NOT_VERIFIED_TOOLTIP =
 	"You must verify your identity via DFlow in order to place trades with Kalshi.";
@@ -13,6 +12,7 @@ const KALSHI_NOT_VERIFIED_TOOLTIP =
 export default function DflowProofSection() {
 	const { authenticated, user } = usePrivy();
 	const { signMessage } = useSignMessage();
+	const { wallets: solanaWallets } = useSolanaWallets();
 	const api = usePrivateApiClient();
 	const queryClient = useQueryClient();
 
@@ -34,6 +34,11 @@ export default function DflowProofSection() {
 	) as { address?: string } | undefined;
 	const solanaAddress =
 		proofState?.solanaWalletAddress ?? solanaLinked?.address ?? null;
+
+	const embeddedSolanaWallet = useMemo(
+		() => solanaWallets.find((w) => w.address === solanaAddress) ?? solanaWallets[0] ?? null,
+		[solanaWallets, solanaAddress],
+	);
 
 	const isVerified =
 		proofState?.identityVerified && proofState?.ownershipProofValid;
@@ -67,35 +72,29 @@ export default function DflowProofSection() {
 		setSuccessMsg(null);
 		setBusy(true);
 		try {
-			const result: DflowVerifyResponse = await api.getDflowVerify();
-
-			if (result.verified) {
+			if (!embeddedSolanaWallet) {
+				throw new Error(
+					"No Solana wallet available. Reload the page, then try again.",
+				);
+			}
+			const returnUrl = `${window.location.origin}/profile?dflow_proof=1`;
+			const out = await startDflowProofRedirect(
+				api,
+				async ({ message }) => {
+					const { signature } = await signMessage({
+						message,
+						wallet: embeddedSolanaWallet,
+					});
+					return signature;
+				},
+				returnUrl,
+			);
+			if (out === "already_verified") {
 				await queryClient.invalidateQueries({
 					queryKey: ["dflow", "account"],
 				});
 				setSuccessMsg("Proof KYC verified.");
-				setBusy(false);
-				return;
 			}
-
-			const messageBytes = new TextEncoder().encode(result.proofMessage);
-			const sigBytes: Uint8Array = await signMessage({
-				message: messageBytes,
-			});
-
-			const sigBase58 = bs58.encode(sigBytes);
-			const walletPubkey = result.solanaWalletAddress;
-
-			const redirectUri = encodeURIComponent(
-				`${window.location.origin}/profile?dflow_proof=1`
-			);
-			const proofUrl =
-				`${result.proofRedirectBase}?wallet=${walletPubkey}` +
-				`&signature=${sigBase58}` +
-				`&timestamp=${result.timestamp}` +
-				`&redirect_uri=${redirectUri}`;
-
-			window.location.href = proofUrl;
 		} catch (e: unknown) {
 			const msg =
 				e instanceof Error ? e.message : "Proof verification failed.";
@@ -103,28 +102,7 @@ export default function DflowProofSection() {
 		} finally {
 			setBusy(false);
 		}
-	}, [api, signMessage, queryClient]);
-
-	const searchParams = new URLSearchParams(window.location.search);
-	const isProofReturn = searchParams.get("dflow_proof") === "1";
-
-	useQuery({
-		queryKey: ["dflow", "verify-on-return"],
-		queryFn: async () => {
-			const result = await api.getDflowVerify();
-			if (result.verified) {
-				await queryClient.invalidateQueries({
-					queryKey: ["dflow", "account"],
-				});
-			}
-			const url = new URL(window.location.href);
-			url.searchParams.delete("dflow_proof");
-			window.history.replaceState({}, "", url.toString());
-			return result;
-		},
-		enabled: authenticated && isProofReturn,
-		staleTime: Infinity,
-	});
+	}, [api, signMessage, embeddedSolanaWallet, queryClient]);
 
 	if (!authenticated) return null;
 

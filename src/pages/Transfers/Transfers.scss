@@ -421,18 +421,63 @@
 // Wallet addresses reference (bottom of Transfers)
 .transfers-addresses {
 	margin-top: 36px;
-	padding: 20px 22px;
+	padding: 0;
 	background: rgba(20, 20, 25, 0.95);
 	border: 1px solid rgba(255, 255, 255, 0.1);
 	border-radius: 16px;
 	text-align: left;
+
+	&[open] .transfers-addresses__summary {
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	}
 }
 
-.transfers-addresses__title {
+.transfers-addresses__summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	list-style: none;
+	cursor: pointer;
 	font-size: 1.05rem;
 	font-weight: 700;
-	margin: 0 0 18px;
 	color: #fff;
+	padding: 20px 22px;
+	user-select: none;
+
+	&::-webkit-details-marker {
+		display: none;
+	}
+
+	&::after {
+		content: "";
+		flex-shrink: 0;
+		width: 0.45em;
+		height: 0.45em;
+		margin-top: 2px;
+		border-right: 2px solid rgba(255, 255, 255, 0.55);
+		border-bottom: 2px solid rgba(255, 255, 255, 0.55);
+		transform: rotate(-45deg);
+		transition: transform 0.2s ease;
+	}
+
+	.transfers-addresses[open] &::after {
+		transform: rotate(45deg);
+		margin-top: -2px;
+	}
+}
+
+.transfers-addresses__inner {
+	padding: 0 22px 20px;
+}
+
+.transfers-addresses__notice {
+	margin: 0 0 16px;
+	padding-top: 16px;
+	font-size: 0.85rem;
+	line-height: 1.5;
+	font-weight: 400;
+	color: rgba(255, 255, 255, 0.72);
 }
 
 .transfers-addresses__item {

@@ -26,12 +26,6 @@ interface ImportMetaEnv {
 	 * also tunnels order POST (EU egress); must be a URL your Railway /proxy can reach (not localhost).
 	 */
 	readonly VITE_AMSTERDAM_PROXY_LEVELUP_API_URL?: string;
-	/**
-	 * "true" → disable Privy BSC gas sponsorship (you pay BNB). Omit for default sponsored gas.
-	 */
-	readonly VITE_PRIVY_DISABLE_BSC_GAS_SPONSOR?: string;
-	/** @deprecated Use VITE_PRIVY_DISABLE_BSC_GAS_SPONSOR; "false" disables sponsorship (legacy). */
-	readonly VITE_PRIVY_SPONSOR_BSC_GAS?: string;
 	/** Optional Predict smart-wallet deposit address (maker/signer for orders) */
 	readonly VITE_PREDICT_ACCOUNT_ADDRESS?: string;
 	/**
@@ -41,6 +35,16 @@ interface ImportMetaEnv {
 	readonly VITE_PREDICT_ORDER_MATCHES_PATH?: string;
 	/** Reserved: enables `isPredictionPricingDebugEnabled()` (debug-only code paths; see debugPredictionPricing.ts) */
 	readonly VITE_DEBUG_PREDICTION_PRICING?: string;
+	/** "true" → verbose SOR / umbrella / balance logs (`isTradingDebugLoggingEnabled`) */
+	readonly VITE_DEBUG_TRADING?: string;
+	/** Solana mainnet JSON-RPC (Helius, Alchemy, QuickNode); avoids public 503s */
+	readonly VITE_SOLANA_RPC_URL?: string;
+	/** Extra Solana HTTP RPC URLs after transient failures on the primary */
+	readonly VITE_SOLANA_RPC_FALLBACK_URLS?: string;
+	/** DFlow REST catalog host (must match tickers); default dev-prediction-markets-api.dflow.net */
+	readonly VITE_DFLOW_REST_BASE?: string;
+	/** DFlow orderbook WebSocket URL */
+	readonly VITE_DFLOW_WS_URL?: string;
 }
 
 // Image module declarations

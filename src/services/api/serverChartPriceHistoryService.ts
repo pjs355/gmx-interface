@@ -96,6 +96,8 @@ export async function fetchChartPriceHistoryBatch(
 		dflow: mm.dflow,
 		kalshi: mm.kalshi,
 		predictFun: mm.predictFun,
+		/** Required for chart batch to fetch Limitless REST history without extra inference latency. */
+		limitless: mm.limitless,
 	};
 
 	try {

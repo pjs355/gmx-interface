@@ -124,6 +124,41 @@ export function getContrastingTextColor(hex?: string | null): string {
 	return luminance > 0.6 ? "#000000" : "#ffffff";
 }
 
+/**
+ * Outline for a selected team button when the fill is the team color (vs-single markets).
+ * Matches trading UI: pure black/white fills get the opposite outline; mid-tones use luminance.
+ */
+export function getBorderColorForSelected(backgroundColor: string): string {
+	if (!backgroundColor) return "#ffffff";
+	const lower = backgroundColor.trim().toLowerCase();
+	const cleaned = lower.replace("#", "");
+	if (
+		cleaned === "000000" ||
+		cleaned === "000" ||
+		lower === "rgb(0, 0, 0)" ||
+		lower === "black"
+	) {
+		return "#ffffff";
+	}
+	if (
+		cleaned === "ffffff" ||
+		cleaned === "fff" ||
+		lower === "rgb(255, 255, 255)" ||
+		lower === "white"
+	) {
+		return "#000000";
+	}
+	const full =
+		cleaned.length === 3
+			? cleaned.split("").map((c) => c + c).join("")
+			: cleaned;
+	const r = parseInt(full.substring(0, 2), 16) || 0;
+	const g = parseInt(full.substring(2, 4), 16) || 0;
+	const b = parseInt(full.substring(4, 6), 16) || 0;
+	const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+	return brightness < 128 ? "#ffffff" : "#000000";
+}
+
 const channelToHex = (n: number) =>
 	Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
 

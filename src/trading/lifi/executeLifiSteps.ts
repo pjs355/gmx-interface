@@ -194,6 +194,24 @@ export async function executeLifiSteps(
 
 	for (let i = 0; i < ordered.length; i++) {
 		const step = ordered[i];
+
+		// Predictions `POST /funding/lifi/quote` returns Solana legs from `flattenExecutableSteps`
+		// as `{ kind: "solana", transactionDataBase64 }` (no per-step `transactionRequest`).
+		const solanaB64 =
+			step.kind === "solana" && typeof step.transactionDataBase64 === "string"
+				? step.transactionDataBase64.trim()
+				: "";
+		if (solanaB64) {
+			const sol = options?.solanaSigner;
+			if (!sol) {
+				throw new Error(`LI.FI step ${i} targets Solana but no solanaSigner is configured.`);
+			}
+			const txBytes = Uint8Array.from(atob(solanaB64), (c) => c.charCodeAt(0));
+			const sig = await sol.signAndSendTransaction(txBytes);
+			if (sig) txHashes.push(sig);
+			continue;
+		}
+
 		const tr: LifiTransactionRequest | undefined = step.transactionRequest;
 		if (!tr) {
 			throw new Error(

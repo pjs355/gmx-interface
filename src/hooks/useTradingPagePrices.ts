@@ -8,7 +8,9 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
 import { isLimitlessConsoleDebugEnabled } from "@/trading/limitless/limitlessConsoleDebug";
+import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 
 const MIN_VALID_PRICE = 0.005;
 const MAX_VALID_PRICE = 0.995;
@@ -125,8 +127,12 @@ function buildVenueRowsFromWs(
 			id: "limitless",
 			label: "Limitless",
 			linked: Boolean(m.limitless),
-			askA: m.limitless ? bestAskProb(m.limitlessPriceA) : null,
-			askB: m.limitless ? bestAskProb(m.limitlessPriceB) : null,
+			askA: m.limitless
+				? (bestAskProb(m.limitlessPriceA) ?? bestAskFromSnapshot(directBooks?.limitlessBookA))
+				: null,
+			askB: m.limitless
+				? (bestAskProb(m.limitlessPriceB) ?? bestAskFromSnapshot(directBooks?.limitlessBookB))
+				: null,
 			statusA: bookStatus(m.limitlessPriceA),
 			statusB: bookStatus(m.limitlessPriceB),
 		},
@@ -232,21 +238,25 @@ export function useTradingPagePrices(
 	levelUpOrderbook: OrderbookSnapshot | null | undefined,
 	directBooks: DirectVenueBooks | null | undefined,
 	umbrellaId?: string | null,
+	/** When `/matched-markets` omits limitless but the umbrella has it (env skew). */
+	limitlessFromUmbrella?: UmbrellaExchangeMatchingLimitless | null,
 ): TradingPagePrices {
 	const { enabled: wsEnabled, connected, appState } = useOddsMonitor();
 	const limitlessStripSigRef = useRef("");
 
 	const matched = useMemo((): MatchedMarket | null => {
-		return findOddsMatchedMarket(
+		const base = findOddsMatchedMarket(
 			appState?.markets,
 			pandascoreMatchId,
 			umbrellaId,
 		);
-	}, [appState?.markets, pandascoreMatchId, umbrellaId]);
+		return mergeMonitorLimitlessFromUmbrella(base, limitlessFromUmbrella);
+	}, [appState?.markets, pandascoreMatchId, umbrellaId, limitlessFromUmbrella]);
 
 	const hasDirectBookPrices = Boolean(
 		directBooks?.polyBookA?.asks?.length || directBooks?.polyBookB?.asks?.length
 		|| directBooks?.dflowBookA?.asks?.length || directBooks?.dflowBookB?.asks?.length
+		|| directBooks?.limitlessBookA?.asks?.length || directBooks?.limitlessBookB?.asks?.length
 	);
 	const wsHasVenuePrices = connected && matched != null && (
 		matched.polyPriceA !== null || matched.dflowPriceA !== null

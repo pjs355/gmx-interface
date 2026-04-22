@@ -5,12 +5,17 @@ import { PolymarketBookClient } from "./polymarket-book-client";
 import { DflowBookClient } from "./dflow-book-client";
 import { venueBookToSnapshot } from "./orderbook-helpers";
 import type { VenueBook } from "./types";
+import { fetchLimitlessOrderbookSnapshotBySlug } from "./fetchLimitlessPublicOrderbook";
+import { LIMITLESS_LEGACY_CLIENT_FALLBACKS } from "@/config/limitlessLegacyClientFallbacks";
 
 export interface DirectVenueBooks {
 	polyBookA: OrderbookSnapshot | null;
 	polyBookB: OrderbookSnapshot | null;
 	dflowBookA: OrderbookSnapshot | null;
 	dflowBookB: OrderbookSnapshot | null;
+	/** Public Limitless REST — fills Basic / orderbooks when venue-prices WS omits books. */
+	limitlessBookA: OrderbookSnapshot | null;
+	limitlessBookB: OrderbookSnapshot | null;
 	polyConnected: boolean;
 	dflowConnected: boolean;
 	/** True when DFlow keyless WS failed and we should fall back to /ws/venue-prices */
@@ -24,17 +29,23 @@ const EMPTY: DirectVenueBooks = {
 	polyBookB: null,
 	dflowBookA: null,
 	dflowBookB: null,
+	limitlessBookA: null,
+	limitlessBookB: null,
 	polyConnected: false,
 	dflowConnected: false,
 	dflowFallback: false,
 	polyFailed: false,
 };
 
+const LIMITLESS_POLL_MS = 3_000;
+
 /**
  * Manages direct browser-native WebSocket connections to Polymarket and DFlow,
  * mapping incoming books to side A / side B using the MatchedMarket identifiers.
  *
  * Predict.fun stays on the server's /ws/venue-prices (API key required).
+ * Limitless: public GET /markets/{orderbookSlug}/orderbook on api.limitless.exchange (poll),
+ * same role as Polymarket WS when the venue-prices service does not stream Limitless depth.
  * LevelUp's own book already connects directly via multiplex `/ws` on the trading page.
  */
 export function useDirectVenueBooks(
@@ -51,6 +62,8 @@ export function useDirectVenueBooks(
 	const [polyFailed, setPolyFailed] = useState(false);
 	const [dflowConnected, setDflowConnected] = useState(false);
 	const [dflowFallback, setDflowFallback] = useState(false);
+	const [limitlessBookA, setLimitlessBookA] = useState<OrderbookSnapshot | null>(null);
+	const [limitlessBookB, setLimitlessBookB] = useState<OrderbookSnapshot | null>(null);
 
 	// Stable refs to current token/ticker IDs for use in callbacks
 	const polyTokenIdARef = useRef<string>("");
@@ -63,6 +76,8 @@ export function useDirectVenueBooks(
 	const polyTokenIdB = matched?.polyTokenIdB ?? "";
 	const dflowTickerA = matched?.dflow?.tickerA ?? "";
 	const dflowTickerB = matched?.dflow?.tickerB ?? "";
+	const limitlessSlugA = matched?.limitless?.orderbookSlugA?.trim() ?? "";
+	const limitlessSlugB = matched?.limitless?.orderbookSlugB?.trim() ?? "";
 
 	polyTokenIdARef.current = polyTokenIdA;
 	polyTokenIdBRef.current = polyTokenIdB;
@@ -198,6 +213,41 @@ export function useDirectVenueBooks(
 		};
 	}, [disabled, dflowTickerA, dflowTickerB, handleDflowBook]);
 
+	// --- Limitless public REST (per-outcome orderbook slugs) — legacy only ---
+	useEffect(() => {
+		if (
+			disabled ||
+			!LIMITLESS_LEGACY_CLIENT_FALLBACKS ||
+			(!limitlessSlugA && !limitlessSlugB)
+		) {
+			setLimitlessBookA(null);
+			setLimitlessBookB(null);
+			return;
+		}
+
+		let cancelled = false;
+
+		const tick = async () => {
+			const [a, b] = await Promise.all([
+				limitlessSlugA ? fetchLimitlessOrderbookSnapshotBySlug(limitlessSlugA) : Promise.resolve(null),
+				limitlessSlugB ? fetchLimitlessOrderbookSnapshotBySlug(limitlessSlugB) : Promise.resolve(null),
+			]);
+			if (cancelled) return;
+			setLimitlessBookA(a);
+			setLimitlessBookB(b);
+		};
+
+		void tick();
+		const id = window.setInterval(() => {
+			void tick();
+		}, LIMITLESS_POLL_MS);
+
+		return () => {
+			cancelled = true;
+			window.clearInterval(id);
+		};
+	}, [disabled, limitlessSlugA, limitlessSlugB]);
+
 	if (!matched || disabled) return EMPTY;
 
 	return {
@@ -205,6 +255,8 @@ export function useDirectVenueBooks(
 		polyBookB,
 		dflowBookA,
 		dflowBookB,
+		limitlessBookA,
+		limitlessBookB,
 		polyConnected,
 		dflowConnected,
 		dflowFallback,

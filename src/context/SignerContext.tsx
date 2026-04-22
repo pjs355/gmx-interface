@@ -5,6 +5,7 @@ import { DEBUG_ACCOUNT_OVERRIDE_KEY } from "config/localStorage";
 import { getCTFAddress, getUSDCAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { subgraphService, fromMicroUnits } from "@/services/subgraph/subgraphService";
+import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/polymarket/privyEmbeddedWallet";
 
 type SignerContextValue = {
   authenticated: boolean;
@@ -83,7 +84,9 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
 
       const smartLinked: any = ((user as any)?.linkedAccounts || []).find((a: any) => a?.type === 'smart_wallet');
       const smartAddress = (smartLinked?.address as string | undefined);
-      const embedded = (wallets || []).find((w: any) => w?.type === 'embedded_wallet' || w?.walletClientType === 'privy' || w?.connectorType === 'privy');
+      const embedded = findEvmPrivyEmbeddedWallet(
+        (wallets || []) as readonly PrivyWalletListEntry[]
+      );
       const external = (wallets || []).find((w: any) => w?.type === 'wallet' || w?.connectorType !== 'privy');
 
       const hasSmart = Boolean(smartAddress);

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import type { AccountOverview, PolymarketAccountResponse } from "@/types/trading";
+import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/polymarket/privyEmbeddedWallet";
 
 export type NormalizedTradingWallets = {
 	/** Coinbase Smart Wallet on Base — primary LevelUp balance / LI.FI `from` on Base */
@@ -58,9 +59,8 @@ export function useTradingWallets(
 			(typeof overviewWallet?.address === "string" && overviewWallet.address) ||
 			smartFromUser;
 
-		const embedded = (wallets || []).find(
-			(w: { walletClientType?: string; connectorType?: string }) =>
-				w?.walletClientType === "privy" || w?.connectorType === "privy"
+		const embedded = findEvmPrivyEmbeddedWallet(
+			(wallets || []) as readonly PrivyWalletListEntry[]
 		) as { address?: string } | undefined;
 
 		const embeddedEoa =

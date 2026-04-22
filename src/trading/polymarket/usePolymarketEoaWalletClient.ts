@@ -4,7 +4,10 @@ import { createWalletClient, custom, type WalletClient } from "viem";
 import { polygon } from "viem/chains";
 
 import type { Eip1193Like } from "./ethers5FromEip1193";
-import { isPrivyEmbeddedWallet } from "@/trading/polymarket/privyEmbeddedWallet";
+import {
+	findEvmPrivyEmbeddedWallet,
+	type PrivyWalletListEntry,
+} from "@/trading/polymarket/privyEmbeddedWallet";
 
 export type PolymarketEoaClientState = {
 	ready: boolean;
@@ -30,7 +33,8 @@ export function usePolymarketEoaWalletClient(): PolymarketEoaClientState {
 	const [error, setError] = useState<string | null>(null);
 	const [nonce, setNonce] = useState(0);
 
-	const embedded = wallets?.find((w) => isPrivyEmbeddedWallet(w as never)) ?? null;
+	const embedded =
+		findEvmPrivyEmbeddedWallet((wallets || []) as readonly PrivyWalletListEntry[]) ?? null;
 	const address = embedded?.address as `0x${string}` | undefined;
 
 	// Stable ref to the wallet object — avoid re-triggering effect on array identity changes

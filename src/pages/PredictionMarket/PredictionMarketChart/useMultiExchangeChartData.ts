@@ -414,6 +414,11 @@ export function useMultiExchangeChartData({
 		if (lxa != null) pt.limitless = lxa;
 		if (lxb != null) pt.limitlessB = lxb;
 
+		const lua = bestAskDisplay100(m.levelUpPriceA as OrderbookData);
+		const lub = bestAskDisplay100(m.levelUpPriceB as OrderbookData);
+		if (lua != null) pt.levelUp = lua;
+		if (lub != null) pt.levelUpB = lub;
+
 		if (
 			pt.polymarket === undefined &&
 			pt.polymarketB === undefined &&
@@ -422,12 +427,14 @@ export function useMultiExchangeChartData({
 			pt.predictFun === undefined &&
 			pt.predictFunB === undefined &&
 			pt.limitless === undefined &&
-			pt.limitlessB === undefined
+			pt.limitlessB === undefined &&
+			pt.levelUp === undefined &&
+			pt.levelUpB === undefined
 		) {
 			return null;
 		}
 		return attachBestOdds(pt);
-	}, [matchedLive, liveTick]);
+	}, [matchedLive, liveTick, appState?.timestamp]);
 
 	const mergedWithLive = useMemo(() => {
 		const id = String(pandaMatchId ?? "").trim();
@@ -491,6 +498,8 @@ export function useMultiExchangeChartData({
 			predictFunB: liveOverlayPoint.predictFunB ?? base.predictFunB,
 			limitless: liveOverlayPoint.limitless ?? base.limitless,
 			limitlessB: liveOverlayPoint.limitlessB ?? base.limitlessB,
+			levelUp: liveOverlayPoint.levelUp ?? base.levelUp,
+			levelUpB: liveOverlayPoint.levelUpB ?? base.levelUpB,
 			timestamp: t,
 		};
 		return [...merged, attachBestOdds(extended)];

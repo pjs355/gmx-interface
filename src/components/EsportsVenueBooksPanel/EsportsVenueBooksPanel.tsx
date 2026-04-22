@@ -26,6 +26,25 @@ function formatAskCell(
 	return "—";
 }
 
+/** Both price cells show exactly “No shares” (used to pin those rows to the bottom of the Basic table). */
+function rowShowsNoSharesBothColumns(row: VenueRowModel): boolean {
+	return (
+		formatAskCell(row.linked, row.askA, row.statusA, row.id) === "No shares" &&
+		formatAskCell(row.linked, row.askB, row.statusB, row.id) === "No shares"
+	);
+}
+
+function sortVenueRowsNoSharesLast(rows: VenueRowModel[]): VenueRowModel[] {
+	if (rows.length <= 1) return rows;
+	return [...rows].sort((a, b) => {
+		const aBottom = rowShowsNoSharesBothColumns(a);
+		const bBottom = rowShowsNoSharesBothColumns(b);
+		if (aBottom && !bBottom) return 1;
+		if (!aBottom && bBottom) return -1;
+		return 0;
+	});
+}
+
 /** All row indices tied for best ask in the same column (same displayed ¢ as the minimum). */
 function indicesAtBestDisplayedCents(
 	rows: VenueRowModel[],
@@ -102,13 +121,18 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 		appState,
 	} = tradingPagePrices;
 
-	const bestAIndices = useMemo(
-		() => indicesAtBestDisplayedCents(venueRows, "askA"),
+	const orderedVenueRows = useMemo(
+		() => sortVenueRowsNoSharesLast(venueRows),
 		[venueRows],
 	);
+
+	const bestAIndices = useMemo(
+		() => indicesAtBestDisplayedCents(orderedVenueRows, "askA"),
+		[orderedVenueRows],
+	);
 	const bestBIndices = useMemo(
-		() => indicesAtBestDisplayedCents(venueRows, "askB"),
-		[venueRows],
+		() => indicesAtBestDisplayedCents(orderedVenueRows, "askB"),
+		[orderedVenueRows],
 	);
 
 	useEffect(() => {
@@ -125,7 +149,7 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 			bestBIndices: [...bestBIndices],
 			bestYesPrice,
 			bestNoPrice,
-			venueRows: venueRows.map((r) => ({
+			venueRows: orderedVenueRows.map((r) => ({
 				id: r.id,
 				linked: r.linked,
 				askA: r.askA,
@@ -145,7 +169,7 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 		bestBIndices,
 		bestYesPrice,
 		bestNoPrice,
-		venueRows,
+		orderedVenueRows,
 		matched,
 	]);
 
@@ -173,7 +197,9 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 			return (
 				<div className="esports-venue-books">
 					<p className="esports-venue-books__muted">
-						Venue prices are unavailable from your current region.
+						Couldn&apos;t load cross-venue prices: the odds WebSocket is disconnected and
+						the backup odds API request failed. Check your network, VPN, or odds service
+						config (<code>VITE_ODDS_WS_BASE</code> / private API), then refresh.
 					</p>
 				</div>
 			);
@@ -223,9 +249,10 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 						<tr>
 							<th
 								scope="col"
-								className="esports-venue-books__th esports-venue-books__th--venue"
-								aria-label="Exchange"
-							/>
+								className="esports-venue-books__th esports-venue-books__th--venue esports-venue-books__th--chart-title"
+							>
+								Prediction Markets
+							</th>
 							<th
 								scope="col"
 								className="esports-venue-books__th esports-venue-books__th--team"
@@ -247,7 +274,7 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 						</tr>
 					</thead>
 					<tbody>
-					{venueRows.map((row: VenueRowModel, idx: number) => (
+					{orderedVenueRows.map((row: VenueRowModel, idx: number) => (
 						<tr key={row.id} className="esports-venue-books__tr">
 							<th
 								scope="row"

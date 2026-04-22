@@ -17,6 +17,7 @@ import Footer from "components/Footer/Footer";
 import { RPGPanel } from "components/RPGPanel";
 import { TransfersModal } from "components/TransfersModal";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
+import { DflowProofReturnSync } from "@/trading/dflow/DflowProofReturnSync";
 
 import { MainRoutes } from "./MainRoutes";
 
@@ -55,6 +56,7 @@ export function AppRoutes() {
 	return (
 		<>
 			<BackgroundPrefetch />
+			<DflowProofReturnSync />
 			<div className="App">
 				<div className="App-content">
 					<Header

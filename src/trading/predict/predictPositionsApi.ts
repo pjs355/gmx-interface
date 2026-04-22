@@ -15,6 +15,9 @@ export type PredictPositionRow = {
 	};
 	amount: string;
 	valueUsd: string;
+	/** Injected by LevelUp private API when `exchangeMatching.predictFun` matches. */
+	levelUpUmbrellaId?: string;
+	levelUpUmbrellaDisplayName?: string;
 };
 
 function toVenuePosition(row: PredictPositionRow): VenuePosition {
@@ -35,6 +38,12 @@ function toVenuePosition(row: PredictPositionRow): VenuePosition {
 		tokenId: normalizePredictTokenId(row.outcome.onChainId),
 		conditionId: row.market.conditionId,
 		numericMarketId: row.market.id,
+		...(row.levelUpUmbrellaId?.trim()
+			? { levelUpUmbrellaId: row.levelUpUmbrellaId.trim() }
+			: {}),
+		...(row.levelUpUmbrellaDisplayName?.trim()
+			? { levelUpUmbrellaDisplayName: row.levelUpUmbrellaDisplayName.trim() }
+			: {}),
 	};
 }
 

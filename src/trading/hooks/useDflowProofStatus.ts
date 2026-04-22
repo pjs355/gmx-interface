@@ -39,5 +39,16 @@ export function useDflowProofStatus() {
 		isFetched: query.isFetched,
 		isSuccess: query.isSuccess,
 		data: query.data ?? null,
+		/**
+		 * Force a fresh read of `/dflow/account` and return the updated
+		 * verification boolean. Used by the SOR leg executor to avoid
+		 * falsely rejecting a user who completed KYC mid-session with a
+		 * stale cache.
+		 */
+		refetchIsVerified: async (): Promise<boolean> => {
+			const refreshed = await query.refetch();
+			const ps = refreshed.data?.proofState;
+			return Boolean(ps?.identityVerified && ps?.ownershipProofValid);
+		},
 	};
 }

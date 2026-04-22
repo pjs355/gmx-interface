@@ -4,6 +4,35 @@ export const getMarketId = (market: any): string => {
 };
 
 /**
+ * Orderbook map key for the canonical LevelUp (winner) question — same question
+ * the predictions API uses for venue-prices / venue-bbo (`exchangeMatching.levelup.questionId`
+ * is the on-chain questionId hex; `questionOrderbooks` is keyed by client market id).
+ */
+export function resolveLevelUpOrderbookKey(
+	sortedQuestions: any[] | undefined | null,
+	exchangeMatchingLevelupQuestionId?: string | null,
+): string | null {
+	const qs = Array.isArray(sortedQuestions)
+		? sortedQuestions.filter((q) => q && getMarketId(q))
+		: [];
+	if (qs.length === 0) return null;
+	const raw = String(exchangeMatchingLevelupQuestionId ?? "").trim();
+	if (raw) {
+		const byChainQuestionId = qs.find(
+			(q) => String(q?.questionId ?? "").trim() === raw,
+		);
+		if (byChainQuestionId) return getMarketId(byChainQuestionId);
+		const byMongoOrOtherId = qs.find((q) => getMarketId(q) === raw);
+		if (byMongoOrOtherId) return getMarketId(byMongoOrOtherId);
+	}
+	const winner = qs.find(
+		(q) => String(q?.pandascore_template ?? "") === "winner-2-way",
+	);
+	if (winner) return getMarketId(winner);
+	return getMarketId(qs[0]);
+}
+
+/**
  * Peel REST / WebSocket envelopes (`{ data: { asks, bids } }`, nested `snapshot`) so
  * asks/bids are at the top level like `OrderbookSnapshot`.
  */

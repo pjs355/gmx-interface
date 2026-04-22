@@ -266,12 +266,12 @@ function ExchangeTooltipContent({ active, payload, teamAName, teamBName, teamACo
           <div key={venue} style={{ margin: '3px 0' }}>
             <span style={{ color: g.colorA, fontWeight: 600 }}>{label}</span>
             {g.a != null && (
-              <span style={{ color: g.colorA, marginLeft: 8 }}>
+              <span style={{ color: g.colorA, marginLeft: 8, opacity: 1 }}>
                 {teamAName}: {Number(g.a).toFixed(1)}%
               </span>
             )}
             {g.b != null && (
-              <span style={{ color: g.colorB, opacity: 0.65, marginLeft: 8 }}>
+              <span style={{ color: g.colorB, marginLeft: 8, opacity: 0.92 }}>
                 {teamBName}: {Number(g.b).toFixed(1)}%
               </span>
             )}

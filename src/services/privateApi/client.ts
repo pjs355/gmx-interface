@@ -46,6 +46,33 @@ function parseWithdrawPlanLeg(value: unknown): LifiWithdrawPlanLeg | null {
 	return null;
 }
 
+// ── Predict.fun venue state (mirrors server `publicPredictState`) ──
+
+export type PredictPublicVenueState = {
+	makerAddress?: string | null;
+	signerAddress?: string | null;
+	tradingEnabled?: boolean | null;
+	approvalComplete?: boolean | null;
+	jwtExpiresAtSec?: number | null;
+	lastError?: string | null;
+	hasJwt: boolean;
+	jwtExpired: boolean;
+};
+
+export type PredictAccountResponse = {
+	venueRegistered: boolean;
+	venueStatus: "active" | "suspended" | "disconnected" | "not_registered";
+	predictAccount: PredictPublicVenueState;
+};
+
+export type PredictAccountSyncBody = {
+	makerAddress?: string;
+	signerAddress?: string;
+	tradingEnabled?: boolean;
+	approvalComplete?: boolean;
+	lastError?: string;
+};
+
 // ── DFlow / Kalshi types (narrow; no full OpenAPI mirror) ──────────
 
 export type DflowProofState = {
@@ -540,6 +567,19 @@ export function createPrivateApiClient(
 			const res = await authorizedFetch(path);
 			const rows = await readJson<PredictPositionRow[]>(res);
 			return mapPredictPositionRows(rows);
+		},
+
+		async getPredictAccount(): Promise<PredictAccountResponse> {
+			const res = await authorizedFetch("/api/predict/account");
+			return readJson<PredictAccountResponse>(res);
+		},
+
+		async postPredictAccountSync(body: PredictAccountSyncBody): Promise<void> {
+			const res = await authorizedFetch("/api/predict/account/sync", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			await readJson<unknown>(res);
 		},
 
 		async getPredictAuthMessage(): Promise<{ message: string }> {

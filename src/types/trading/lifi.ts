@@ -28,7 +28,11 @@ export type LifiQuoteStep = {
 	tool?: string;
 	chainId?: number;
 	stepIndex?: number;
+	/** Present on EVM legs from `flattenExecutableSteps` (predictions API). */
 	transactionRequest?: LifiTransactionRequest;
+	/** Present on Solana legs from `flattenExecutableSteps` (base64 serialized tx). */
+	kind?: "evm" | "solana";
+	transactionDataBase64?: string;
 	requiresApproval?: boolean;
 	allowanceHint?: LifiAllowanceHint;
 	[key: string]: unknown;

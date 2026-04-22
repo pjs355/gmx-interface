@@ -21,6 +21,76 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
  * Railway /proxy expects: POST { url, method, headers?, body? }
  * Railway /proxy returns: { status, data, ... }
  */
+/**
+ * Limitless `api.limitless.exchange` blocks browser CORS. Dev server rewrites same-origin
+ * `/__limitless-api/markets/:slug/orderbook` → upstream (see `fetchLimitlessPublicOrderbook.ts`).
+ */
+function installLimitlessExchangeProxy(
+	middlewares: import("connect").Server,
+): void {
+	middlewares.use((req, res, next) => {
+		const raw = req.url ?? "";
+		const pathOnly = raw.split("?")[0] ?? "";
+		if (!pathOnly.startsWith("/__limitless-api/")) return next();
+
+		if (req.method === "OPTIONS") {
+			res.setHeader("Access-Control-Allow-Origin", "*");
+			res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+			res.setHeader("Access-Control-Allow-Headers", "*");
+			res.statusCode = 204;
+			res.end();
+			return;
+		}
+		if (req.method !== "GET") {
+			res.statusCode = 405;
+			res.setHeader("Content-Type", "application/json");
+			res.end(JSON.stringify({ error: "Method not allowed" }));
+			return;
+		}
+
+		const upstreamPath = pathOnly.replace(/^\/__limitless-api/, "") || "/";
+		const target = `https://api.limitless.exchange${upstreamPath}`;
+
+		https
+			.get(
+				target,
+				{
+					headers: { Accept: "application/json" },
+				},
+				(up) => {
+					res.setHeader("Access-Control-Allow-Origin", "*");
+					const ct = up.headers["content-type"];
+					if (ct) {
+						res.setHeader(
+							"Content-Type",
+							Array.isArray(ct) ? ct[0] : ct,
+						);
+					}
+					res.statusCode = up.statusCode ?? 502;
+					up.pipe(res);
+				},
+			)
+			.on("error", (err: Error) => {
+				res.statusCode = 502;
+				res.setHeader("Access-Control-Allow-Origin", "*");
+				res.setHeader("Content-Type", "application/json");
+				res.end(JSON.stringify({ error: err.message }));
+			});
+	});
+}
+
+function limitlessExchangeDevProxyPlugin(): Plugin {
+	return {
+		name: "limitless-exchange-dev-proxy",
+		configureServer(server) {
+			installLimitlessExchangeProxy(server.middlewares);
+		},
+		configurePreviewServer(server) {
+			installLimitlessExchangeProxy(server.middlewares);
+		},
+	};
+}
+
 function railwayDevProxyPlugin(
 	proxyUrl: string,
 	proxyToken: string,
@@ -244,6 +314,10 @@ export default defineConfig(({ mode }) => {
 			? privateApiHostDefault
 			: "https://prediction-api-production.up.railway.app");
 
+	const limitlessLegacyClientFallbacks =
+		process.env.VITE_LIMITLESS_LEGACY_CLIENT_FALLBACKS === "true" ||
+		viteEnv.VITE_LIMITLESS_LEGACY_CLIENT_FALLBACKS === "true";
+
 	return {
 		plugins: [
 			react({
@@ -251,6 +325,7 @@ export default defineConfig(({ mode }) => {
 					plugins: ["macros"],
 				},
 			}),
+			...(limitlessLegacyClientFallbacks ? [limitlessExchangeDevProxyPlugin()] : []),
 			lingui(),
 			// Only include Sentry plugin when building with sourcemaps
 			...(mode === "sourcemaps"
@@ -275,6 +350,9 @@ export default defineConfig(({ mode }) => {
 		define: {},
 		optimizeDeps: {
 			exclude: ["@base-org/account"],
+			// eventemitter3 ships ESM entry (index.mjs) that default-imports CJS index.js;
+			// without pre-bundling, the browser sees "no default export" (Privy / walletconnect chain).
+			include: ["eventemitter3"],
 		},
 		esbuild: {
 			target: "es2022",

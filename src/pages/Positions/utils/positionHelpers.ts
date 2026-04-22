@@ -64,6 +64,28 @@ export function buildSyntheticOrder(
 	};
 }
 
+/**
+ * Volume-weighted mark using only legs that have an explicit price. Avoids diluting
+ * (e.g.) Polymarket `curPrice` with LevelUp shares that have no No-side quote (`noValue` 0).
+ */
+function shareWeightedMarkPrice(
+	markets: MarketPosition[],
+	leg: "yes" | "no",
+): number | null {
+	let sumPxSh = 0;
+	let sumSh = 0;
+	for (const mp of markets) {
+		const shares = leg === "yes" ? mp.yesBalance : mp.noBalance;
+		const price = leg === "yes" ? mp.yesPrice : mp.noPrice;
+		if (shares <= 0) continue;
+		if (price === null || price === undefined || !Number.isFinite(price)) continue;
+		sumPxSh += shares * price;
+		sumSh += shares;
+	}
+	if (sumSh <= 0) return null;
+	return sumPxSh / sumSh;
+}
+
 export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[] {
 	if (markets.length <= 1) return markets;
 
@@ -102,10 +124,15 @@ export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[
 	const yesAvg = totalYesShares > 0 ? totalYesCost / totalYesShares : null;
 	const noAvg = totalNoShares > 0 ? totalNoCost / totalNoShares : null;
 
-	const blendedYesPrice =
-		totalYesShares > 0 && yesValue > 0 ? yesValue / totalYesShares : bestYesPrice;
-	const blendedNoPrice =
-		totalNoShares > 0 && noValue > 0 ? noValue / totalNoShares : bestNoPrice;
+	const weightedYes = shareWeightedMarkPrice(markets, "yes");
+	const weightedNo = shareWeightedMarkPrice(markets, "no");
+	const impliedYesFromValue =
+		totalYesShares > 0 && yesValue > 0 ? yesValue / totalYesShares : null;
+	const impliedNoFromValue =
+		totalNoShares > 0 && noValue > 0 ? noValue / totalNoShares : null;
+
+	const blendedYesPrice = weightedYes ?? impliedYesFromValue ?? bestYesPrice;
+	const blendedNoPrice = weightedNo ?? impliedNoFromValue ?? bestNoPrice;
 
 	return [
 		{

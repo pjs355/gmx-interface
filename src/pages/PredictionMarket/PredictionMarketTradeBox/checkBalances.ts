@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useUserData } from "context/UserDataContext";
 import { useSignerContext } from "context/SignerContext";
 import { getVenueConfig, type TradingVenue } from "@/config/venueConfig";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 // Simple in-memory cache to avoid duplicate RPC calls per session
 // Key: `${account}:${tokenId}` -> value: string balance
@@ -47,10 +48,12 @@ export function useYesNoBalances(market: {
 		if (tokenBalance) {
 			const yesBal = Number(tokenBalance.yesBalance) || 0;
 			const noBal = Number(tokenBalance.noBalance) || 0;
-			console.log(`🔍 useYesNoBalances - Market ${marketId}:`, {
-				yesBalance: yesBal,
-				noBalance: noBal,
-			});
+			if (isTradingDebugLoggingEnabled()) {
+				console.log(`🔍 useYesNoBalances - Market ${marketId}:`, {
+					yesBalance: yesBal,
+					noBalance: noBal,
+				});
+			}
 			setYesBalance(yesBal);
 			setNoBalance(noBal);
 		} else {

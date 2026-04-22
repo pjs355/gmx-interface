@@ -15,7 +15,7 @@ import type {
 	MarketOrderCalculation,
 } from "./types";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
-import type { RoutePlan, RouteExecution } from "@/trading/sor";
+import type { RoutePlan, RouteExecution, SorErrorCode } from "@/trading/sor";
 import Button from "components/Button/Button";
 import { getYesNoTeamLabels } from "./teamLabels";
 import {
@@ -61,7 +61,13 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	usdcBalance?: number;
 	calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
 	getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
-	sorRoute: { route: RoutePlan | null; isLoading: boolean; error: string | null; isStale: boolean };
+	sorRoute: {
+		route: RoutePlan | null;
+		isLoading: boolean;
+		error: string | null;
+		routeErrorCode: SorErrorCode | null;
+		isStale: boolean;
+	};
 	sorExecution: {
 		execution: RouteExecution | null;
 		isExecuting: boolean;
@@ -74,6 +80,8 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	handleSorExecute: () => void;
 	crossBuyYes: number | null;
 	crossBuyNo: number | null;
+	/** Max sellable shares for the active venue tab and selected outcome (SOR-scoped). */
+	maxScopedSellShares: number;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -108,6 +116,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	umbrellaDisplayName,
 	crossBuyYes,
 	crossBuyNo,
+	maxScopedSellShares,
+	matchedMonitor,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -304,6 +314,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				sorExecution={sorExecution}
 				sorRouteExpired={sorRouteExpired}
 				handleSorExecute={handleSorExecute}
+				maxScopedSellShares={maxScopedSellShares}
+				matchedMonitor={matchedMonitor}
 			/>
 		</div>
 	);
@@ -472,8 +484,10 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				sorExecution={sorExecution}
 				sorRouteExpired={sorRouteExpired}
 				handleSorExecute={handleSorExecute}
+				maxScopedSellShares={maxScopedSellShares}
+				matchedMonitor={matchedMonitor}
 			/>
-		</div>
+			</div>
 	</PredictionCurtain>
 	);
 }

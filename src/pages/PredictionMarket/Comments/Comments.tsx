@@ -395,12 +395,10 @@ function NewComment({
 
 	return (
 		<div className="new-comment">
-			<label htmlFor="new-comment-input" className="new-comment__label">
-				<Trans>Leave a comment</Trans>
-			</label>
 			<textarea
 				id="new-comment-input"
 				className="new-comment__textarea"
+				aria-label={t`Share your view on this market...`}
 				value={commentText}
 				maxLength={COMMENT_MAX_LENGTH}
 				placeholder={t`Share your view on this market...`}

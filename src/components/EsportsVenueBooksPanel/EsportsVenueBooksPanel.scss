@@ -36,7 +36,14 @@
 
 .esports-venue-books__th--venue {
 	width: 28%;
-	min-width: 5.5rem;
+	min-width: 8.5rem;
+}
+
+.esports-venue-books__th--chart-title {
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	color: rgba(255, 255, 255, 0.92);
 }
 
 .esports-venue-books__th--team {
@@ -111,4 +118,45 @@
 
 .esports-venue-books__warn {
 	color: #fcd34d;
+}
+
+// Prediction market page mobile / tablet — fit table to width; keep scroll as fallback
+.prediction-market-page.mobile .esports-venue-books {
+	padding-top: 8px;
+	font-size: 0.875rem;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+.prediction-market-page.mobile .esports-venue-books__table-wrap {
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.prediction-market-page.mobile .esports-venue-books__table {
+	min-width: 0;
+	table-layout: fixed;
+}
+
+.prediction-market-page.mobile .esports-venue-books__th,
+.prediction-market-page.mobile .esports-venue-books__td {
+	padding: 8px 6px;
+	font-size: 0.875rem;
+}
+
+.prediction-market-page.mobile .esports-venue-books__th {
+	font-size: 0.9rem;
+}
+
+.prediction-market-page.mobile .esports-venue-books__th--venue {
+	min-width: 0;
+	width: 26%;
+}
+
+.prediction-market-page.mobile .esports-venue-books__th--team {
+	min-width: 0;
+	max-width: none;
+	width: 37%;
 }

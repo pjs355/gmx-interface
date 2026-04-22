@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useMedia } from "react-use";
 import { usePredictionChartData } from "./usePredictionChartData";
 import { useMultiExchangeChartData } from "./useMultiExchangeChartData";
 import { ExchangeOverlayChart, VENUE_COLORS, VENUE_LABELS } from "./SeriesChart";
@@ -9,12 +10,14 @@ import type { MergedExchangePoint } from "./types";
 import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
 import "./PredictionMarketChart.scss";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 
-interface PredictionMarketChartProps {
+export interface PredictionMarketChartProps {
 	questionId: string;
 	umbrellaId?: string;
 	/** PandaScore match id for live venue BBO overlay on the chart */
 	pandaMatchId?: string;
+	limitlessFromUmbrella?: UmbrellaExchangeMatchingLimitless | null;
 	umbrellaDisplayName?: string;
 	activeMarket?: any;
 	secondMarket?: any;
@@ -28,7 +31,8 @@ const TIME_RANGES: { key: TimeRange; label: string; seconds: number }[] = [
 	// { key: "all", label: "All", seconds: Infinity }, // disabled for now — too much data
 ];
 
-const CHART_HEIGHT = typeof window !== "undefined" && window.innerWidth <= 768 ? 240 : 300;
+const CHART_HEIGHT_DESKTOP = 300;
+const CHART_HEIGHT_MOBILE_LAYOUT = 220;
 
 const DEFAULT_ENABLED = new Set(["bestOdds"]);
 
@@ -36,12 +40,16 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	questionId,
 	umbrellaId,
 	pandaMatchId,
+	limitlessFromUmbrella,
 	umbrellaDisplayName,
 	activeMarket,
 	secondMarket,
 	questionOrderbooks,
 	className = "",
 }) => {
+	const isTradingMobileLayout = useMedia("(max-width: 1100px)");
+	const chartHeight = isTradingMobileLayout ? CHART_HEIGHT_MOBILE_LAYOUT : CHART_HEIGHT_DESKTOP;
+
 	const [timeRange, setTimeRange] = useState<TimeRange>("1d");
 	const [enabledVenues, setEnabledVenues] = useState<Set<string>>(DEFAULT_ENABLED);
 
@@ -105,17 +113,8 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		pandaMatchId,
 		levelUpChartData,
 		timeRange,
+		limitlessMappingFromUmbrella: limitlessFromUmbrella,
 	});
-
-	useEffect(() => {
-		if (!exchangeChart.hasLimitless) return;
-		setEnabledVenues((prev) => {
-			if (prev.has("limitless")) return prev;
-			const next = new Set(prev);
-			next.add("limitless");
-			return next;
-		});
-	}, [exchangeChart.hasLimitless]);
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
@@ -194,12 +193,6 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		return { teamA, teamB };
 	}, [displayData, levelUpChartData]);
 
-	const headerLive = useMemo(() => {
-		const p = levelUpChartData[levelUpChartData.length - 1];
-		if (!p) return { primary: false, secondary: false };
-		return { primary: Boolean(p.isLive), secondary: Boolean(p.secondIsLive) };
-	}, [levelUpChartData]);
-
 	const availableVenues = useMemo(() => {
 		const venues: string[] = ["bestOdds"];
 		if (exchangeChart.hasLevelUp) venues.push("levelUp");
@@ -252,18 +245,6 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 									>
 										{Math.round(headerBestOdds.teamA)}%
 									</span>
-									{headerLive.primary && (
-										<span
-											className="live-indicator primary-indicator"
-											style={
-												isVsSingleMarket
-													? { color: chartTeamAColor }
-													: undefined
-											}
-										>
-											●
-										</span>
-									)}
 								</div>
 							</div>
 							<div className="market-info second-market">
@@ -279,18 +260,6 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 									>
 										{Math.round(headerBestOdds.teamB)}%
 									</span>
-									{headerLive.secondary && (
-										<span
-											className="live-indicator second-indicator"
-											style={
-												isVsSingleMarket
-													? { color: chartTeamBColor }
-													: undefined
-											}
-										>
-											●
-										</span>
-									)}
 								</div>
 							</div>
 						</>
@@ -302,9 +271,6 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 									<span className="price-value primary-price">
 										{Math.round(headerBestOdds.teamA)}%
 									</span>
-									{headerLive.primary && (
-										<span className="live-indicator primary-indicator">●</span>
-									)}
 								</div>
 							)}
 						</div>
@@ -320,26 +286,40 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 				className="chart-container"
 				style={{ minWidth: 0, minHeight: 280 }}
 			>
-				{exchangeChart.loading && (
-					<div className="chart-spinner-overlay">
-						<div className="chart-spinner" />
+				<div className="chart-plot-area">
+					{exchangeChart.loading && (
+						<div className="chart-spinner-overlay">
+							<div className="chart-spinner" />
+						</div>
+					)}
+					{exchangeChart.error && !exchangeChart.loading && displayData.length === 0 && (
+						<div className="exchange-chart-empty">{exchangeChart.error}</div>
+					)}
+					{displayData.length > 0 && (
+						<ExchangeOverlayChart
+							data={displayData}
+							enabledVenues={enabledVenues}
+							teamAName={teamAName}
+							teamBName={teamBName}
+							teamAColor={chartTeamAColor}
+							teamBColor={chartTeamBColor}
+							height={chartHeight}
+							timeRangeSeconds={timeRangeSecondsForChart}
+						/>
+					)}
+
+					<div className="time-range-selector bottom-right">
+						{TIME_RANGES.map((range) => (
+							<button
+								key={range.key}
+								className={`time-range-btn ${timeRange === range.key ? "active" : ""}`}
+								onClick={() => setTimeRange(range.key)}
+							>
+								{range.label}
+							</button>
+						))}
 					</div>
-				)}
-				{exchangeChart.error && !exchangeChart.loading && displayData.length === 0 && (
-					<div className="exchange-chart-empty">{exchangeChart.error}</div>
-				)}
-				{displayData.length > 0 && (
-					<ExchangeOverlayChart
-						data={displayData}
-						enabledVenues={enabledVenues}
-						teamAName={teamAName}
-						teamBName={teamBName}
-						teamAColor={chartTeamAColor}
-						teamBColor={chartTeamBColor}
-						height={CHART_HEIGHT}
-						timeRangeSeconds={timeRangeSecondsForChart}
-					/>
-				)}
+				</div>
 
 				<div className="venue-checkbox-bar">
 					{availableVenues.map((venue) => {
@@ -360,18 +340,6 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 						);
 					})}
 				</div>
-
-				<div className="time-range-selector bottom-right">
-					{TIME_RANGES.map((range) => (
-						<button
-							key={range.key}
-							className={`time-range-btn ${timeRange === range.key ? "active" : ""}`}
-							onClick={() => setTimeRange(range.key)}
-						>
-							{range.label}
-						</button>
-					))}
-				</div>
 			</div>
 		</div>
 	);
@@ -390,6 +358,8 @@ const PredictionMarketChart = React.memo<PredictionMarketChartProps>(
 		if (prevProps.umbrellaId !== nextProps.umbrellaId) return false;
 
 		if (prevProps.pandaMatchId !== nextProps.pandaMatchId) return false;
+
+		if (prevProps.limitlessFromUmbrella !== nextProps.limitlessFromUmbrella) return false;
 
 		if (prevProps.activeMarket?.conditionId !== nextProps.activeMarket?.conditionId) {
 			return false;

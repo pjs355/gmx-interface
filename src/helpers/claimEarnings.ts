@@ -1,7 +1,10 @@
 import { ethers } from "ethers";
 import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-import { useWallets as usePrivyWallets } from "@privy-io/react-auth";
+import {
+	useWallets as usePrivyWallets,
+	useSendTransaction,
+} from "@privy-io/react-auth";
 import { useCallback, useMemo, useState } from "react";
 import { AddressesByChainId, ChainId } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -116,6 +119,7 @@ export function useClaimForVenue(
 	const { getRelayClient: getPolyRelayClient } = usePolymarketRelay();
 
 	const { wallets } = usePrivyWallets();
+	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
 
 	const [isClaiming, setIsClaiming] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -202,17 +206,22 @@ export function useClaimForVenue(
 					w?.walletClientType === "privy" ||
 					w?.connectorType === "privy"
 			) as
-				| { getEthereumProvider?: () => Promise<any> }
+				| { getEthereumProvider?: () => Promise<any>; address?: string }
 				| undefined;
 
-			if (!embedded?.getEthereumProvider)
+			if (!embedded?.getEthereumProvider || !embedded.address)
 				throw new Error(
 					"Embedded wallet required for Predict claims on BNB"
 				);
 
+			const address = embedded.address as `0x${string}`;
 			const ethereum = await embedded.getEthereumProvider();
 			await ensurePredictChain(ethereum);
-			const bscSigner = await getBscBrowserSigner(ethereum);
+			const bscSigner = await getBscBrowserSigner({
+				ethereum,
+				address,
+				sendTransaction: privyEvmSendTransaction,
+			});
 
 			const chainId = ChainId.BnbMainnet;
 			const ctfAddress =
@@ -305,6 +314,7 @@ export function useClaimForVenue(
 		isYieldBearing,
 		getPolyRelayClient,
 		wallets,
+		privyEvmSendTransaction,
 	]);
 
 	return { claim, isClaiming, error, txHash, isExternalClaim: false };

@@ -1,15 +1,23 @@
 import React, { useCallback } from "react";
 import { useLogin } from "@privy-io/react-auth";
-import { useFundWallet } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { usePortfolio } from "@/context/PortfolioContext";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import {
+	PrivyGatedDepositButton,
+	resolvePrivyEvmFundTarget,
+} from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import "./ProgressBanner.scss";
 
 export function ProgressBanner() {
 	const { login } = useLogin();
-	const { fundWallet } = useFundWallet();
-	const { account, authenticated } = useSignerContext();
+	const { account, authenticated, ready: signerReady } = useSignerContext();
+	const funding = useFundingAddresses();
+	const fundEvmTarget = resolvePrivyEvmFundTarget(
+		funding.baseSmartWallet,
+		account
+	);
 	const { orders, loading: ordersLoading } = useUserData();
 	const { cashBalance, cashLoading } = usePortfolio();
 
@@ -17,19 +25,6 @@ export function ProgressBanner() {
 	const handleGetStarted = useCallback(() => {
 		login();
 	}, [login]);
-
-	// Handle Fund Account - opens Privy onramping
-	const handleFundAccount = useCallback(async () => {
-		if (!account) return;
-		try {
-			await fundWallet(account, {
-				chain: { id: 8453 }, // Base mainnet
-			});
-		} catch (err) {
-			console.error("Fund wallet error:", err);
-			// User likely cancelled - no need to show error
-		}
-	}, [account, fundWallet]);
 
 	// Banner 1: Welcome Banner - Show to non-authenticated users
 	if (!authenticated || !account) {
@@ -76,12 +71,13 @@ export function ProgressBanner() {
 							Add funds to your account so that you can place your first trade.
 						</h3>
 					</div>
-					<button
+					<PrivyGatedDepositButton
 						className="progress-banner-button"
-						onClick={handleFundAccount}
+						fundTarget={fundEvmTarget}
+						ready={signerReady}
 					>
 						Add Funds
-					</button>
+					</PrivyGatedDepositButton>
 				</div>
 			</div>
 		);

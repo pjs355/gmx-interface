@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Tooltip from "components/Tooltip/Tooltip";
+import { useAnimatedDots } from "@/hooks/useAnimatedDots";
 import type { RoutePlan } from "./sor-types";
 import {
 	VENUE_DISPLAY_NAMES,
@@ -77,7 +78,13 @@ export function SorRouteDisplay({
 		return () => clearInterval(timer);
 	}, [route]);
 
-	if (error) {
+	const execDots = useAnimatedDots(400);
+
+	if (!route && isLoading) {
+		return null;
+	}
+
+	if (error && !isLoading) {
 		return (
 			<div style={styles.container}>
 				<div style={styles.errorBox}>
@@ -89,10 +96,6 @@ export function SorRouteDisplay({
 				</button>
 			</div>
 		);
-	}
-
-	if (!route && isLoading) {
-		return null;
 	}
 
 	if (!route) return null;
@@ -214,7 +217,7 @@ export function SorRouteDisplay({
 				}}
 			>
 				{executing
-					? "Executing..."
+					? `Executing${execDots}`
 					: routeExpired
 						? "Route Expired — Refreshing..."
 						: `Execute Smart Route`}

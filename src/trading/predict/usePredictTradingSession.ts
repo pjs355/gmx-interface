@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { usePrivy, useWallets, useSendTransaction } from "@privy-io/react-auth";
 import { parseUnits, type Signer } from "ethers";
 import type { Book } from "@predictdotfun/sdk";
 import { ChainId, OrderBuilder, Side } from "@predictdotfun/sdk";
@@ -11,6 +11,7 @@ import {
 	isPredictUnauthorizedError,
 } from "./predictOrderSubmit";
 import type { PredictMarketDetail } from "./predictMarketApi";
+import { enrichPredictGasOrFundsErrorMessage } from "./predictGasGuidance";
 
 type SessionRefs = {
 	builder: OrderBuilder;
@@ -69,6 +70,7 @@ async function withSessionRetry<T>(
 export function usePredictTradingSession(enabled: boolean) {
 	const { authenticated, ready: privyReady } = usePrivy();
 	const { wallets } = useWallets();
+	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
 	const privateApi = usePrivateApiClient();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -98,16 +100,19 @@ export function usePredictTradingSession(enabled: boolean) {
 					(w as { walletClientType?: string }).walletClientType === "privy" ||
 					(w as { connectorType?: string }).connectorType === "privy"
 			) as
-				| { getEthereumProvider?: () => Promise<unknown> }
+				| { getEthereumProvider?: () => Promise<unknown>; address?: string }
 				| undefined;
-			if (!embedded?.getEthereumProvider) {
+			if (!embedded?.getEthereumProvider || !embedded.address) {
 				throw new Error("Embedded wallet required for Predict on BNB");
 			}
-			const ethereum = (await embedded.getEthereumProvider()) as {
-				request: (a: { method: string; params?: unknown[] }) => Promise<unknown>;
-			};
+			const address = embedded.address as `0x${string}`;
+			const ethereum = (await embedded.getEthereumProvider()) as never;
 			await ensurePredictChain(ethereum);
-			const ethSigner = await getBscBrowserSigner(ethereum);
+			const ethSigner = await getBscBrowserSigner({
+				ethereum,
+				address,
+				sendTransaction: privyEvmSendTransaction,
+			});
 
 			if (sessionRef.current) {
 				const prev = await sessionRef.current.signer.getAddress();
@@ -133,7 +138,7 @@ export function usePredictTradingSession(enabled: boolean) {
 		});
 		sessionInFlightRef.current = p;
 		return p;
-	}, [authenticated, wallets, chainId, predictAccount, privateApi]);
+	}, [authenticated, wallets, chainId, predictAccount, privateApi, privyEvmSendTransaction]);
 
 	const setApprovals = useCallback(async () => {
 		setLoading(true);
@@ -142,12 +147,25 @@ export function usePredictTradingSession(enabled: boolean) {
 			const { builder } = await ensureSession();
 			const result = await builder.setApprovals();
 			if (!result.success) {
-				throw new Error("Predict approvals failed");
+				const failedTxs = result.transactions.filter((t) => !t.success);
+				const detail = failedTxs
+					.map((t) => {
+						const c = "cause" in t ? t.cause : undefined;
+						return c instanceof Error ? c.message : c ? String(c) : null;
+					})
+					.filter((s): s is string => Boolean(s && s.trim()))
+					.join("; ");
+				const raw = detail ? `Predict approvals failed: ${detail}` : "Predict approvals failed";
+				throw new Error(raw);
 			}
 		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : String(e);
+			const base = e instanceof Error ? e.message : String(e);
+			const msg = enrichPredictGasOrFundsErrorMessage(base);
 			setError(msg);
-			throw e;
+			if (e instanceof Error) {
+				throw new Error(msg, { cause: e });
+			}
+			throw new Error(msg);
 		} finally {
 			setLoading(false);
 		}

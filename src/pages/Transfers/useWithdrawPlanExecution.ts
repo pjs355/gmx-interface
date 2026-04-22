@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-import { useWallets } from "@privy-io/react-auth";
-import { useSendTransaction as useSolanaSendTransaction } from "@privy-io/react-auth/solana";
+import { useSendTransaction } from "@privy-io/react-auth";
+import {
+	useSignAndSendTransaction,
+	useWallets as useSolanaWallets,
+} from "@privy-io/react-auth/solana";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import { getAddress, isAddress } from "viem";
 import { bsc } from "viem/chains";
-import { Connection, VersionedTransaction } from "@solana/web3.js";
-import { isPrivyEmbeddedWallet } from "@/trading/polymarket/privyEmbeddedWallet";
 import { useUserData } from "@/context/UserDataContext";
 import { getPrivateApiErrorMessage } from "@/services/privateApi";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
@@ -24,10 +25,9 @@ import {
 	deployPolymarketSafeIfNeeded,
 	executePolymarketApprovalBatch,
 } from "@/trading/polymarket/safeActions";
-import { PRIVY_SPONSOR_BSC_GAS } from "@/config/privyBscGas";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
-import { SOLANA_RPC_URL } from "@/config/rpc";
+import { createSolanaConnectionForWalletSend } from "@/config/rpc";
 import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
 import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import type {
@@ -107,25 +107,28 @@ export function useWithdrawPlanExecution() {
 	const { refresh: refreshUserData } = useUserData();
 	const api = usePrivateApiClient();
 	const { getClientForChain } = useSmartWallets();
-	const { wallets } = useWallets();
 	const relay = usePolymarketRelay();
-	const { sendTransaction: privySolanaSendTx } = useSolanaSendTransaction();
-	const embeddedRef = useRef<
-		| { getEthereumProvider?: () => Promise<unknown> }
-		| null
-	>(null);
-	embeddedRef.current =
-		(wallets || []).find((w) => isPrivyEmbeddedWallet(w as never)) ?? null;
+	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
+	const { signAndSendTransaction: privySolanaSignAndSend } = useSignAndSendTransaction();
+	const { wallets: solanaWallets } = useSolanaWallets();
+	const embeddedSolanaWallet = useMemo(
+		() => solanaWallets.find((w) => w.address === funding.solanaAddress) ?? solanaWallets[0] ?? null,
+		[solanaWallets, funding.solanaAddress],
+	);
 
-	const solanaSigner = useMemo<SolanaSignerCapable>(
-		() => ({
-			signAndSendTransaction: async (serializedTx: Uint8Array) => {
-				const tx = VersionedTransaction.deserialize(serializedTx);
-				const conn = new Connection(SOLANA_RPC_URL);
-				return sendPrivySponsoredSolanaTransaction(privySolanaSendTx, tx, conn);
-			},
-		}),
-		[privySolanaSendTx]
+	const solanaSigner = useMemo<SolanaSignerCapable | null>(
+		() =>
+			embeddedSolanaWallet
+				? {
+						signAndSendTransaction: (serializedTx: Uint8Array) =>
+							sendPrivySponsoredSolanaTransaction(
+								privySolanaSignAndSend,
+								embeddedSolanaWallet,
+								serializedTx,
+							),
+					}
+				: null,
+		[privySolanaSignAndSend, embeddedSolanaWallet],
 	);
 
 	const allowanceOwnerByChainId = useMemo(() => {
@@ -139,20 +142,15 @@ export function useWithdrawPlanExecution() {
 	const getSignerForChain = useCallback(
 		async (chainId: number) => {
 			if (chainId === BNB) {
-				const embedded = embeddedRef.current;
 				const addr = funding.embeddedEoa as `0x${string}` | undefined;
-				if (
-					!embedded ||
-					typeof embedded.getEthereumProvider !== "function" ||
-					!addr ||
-					!/^0x[a-fA-F0-9]{40}$/i.test(addr)
-				) {
+				if (!addr || !/^0x[a-fA-F0-9]{40}$/i.test(addr)) {
 					return null;
 				}
-				const provider = await embedded.getEthereumProvider();
-				return createPrivyEmbeddedSendTransactionCapable(provider, addr, bsc, {
-					sponsorGas: PRIVY_SPONSOR_BSC_GAS,
-				});
+				return createPrivyEmbeddedSendTransactionCapable(
+					addr,
+					bsc,
+					privyEvmSendTransaction,
+				);
 			}
 			const client = await getClientForChain({ id: chainId });
 			if (!client) return null;
@@ -166,7 +164,7 @@ export function useWithdrawPlanExecution() {
 				}) => client.sendTransaction(args),
 			};
 		},
-		[getClientForChain, funding.embeddedEoa]
+		[getClientForChain, funding.embeddedEoa, privyEvmSendTransaction]
 	);
 
 	const executePlan = useCallback(
@@ -179,14 +177,17 @@ export function useWithdrawPlanExecution() {
 				if (leg.mode === "direct_transfer") {
 					const chainId = leg.toChain;
 					if (chainId === SOLANA_LIFI_CHAIN_ID) {
-						const conn = new Connection(SOLANA_RPC_URL);
+						if (!solanaSigner) {
+							throw new Error("Solana embedded wallet unavailable — reload and try again.");
+						}
+						const conn = createSolanaConnectionForWalletSend();
 						const txHash = await executeDirectSolanaSplWithdraw({
 							mintAddress: leg.token.address,
 							ownerWalletAddress: leg.selectedSource.walletAddress,
 							recipientAddress: leg.toAddress.trim(),
 							amountAtomic: BigInt(leg.amountAtomic),
 							connection: conn,
-							privySolanaSend: privySolanaSendTx,
+							solanaSigner,
 						});
 						await refreshUserData();
 						await Promise.all([
@@ -287,13 +288,16 @@ export function useWithdrawPlanExecution() {
 					polygonRelay = { client };
 				}
 
+				if (routeIncludesSolana && !solanaSigner) {
+					throw new Error("Solana embedded wallet unavailable — reload and try again.");
+				}
 				const { txHashes } = await executeLifiSteps(
 					quote.steps,
 					getSignerForChain,
 					{
 						allowanceOwnerByChainId,
 						...(polygonRelay ? { polygonRelay } : {}),
-						...(routeIncludesSolana ? { solanaSigner } : {}),
+						...(routeIncludesSolana && solanaSigner ? { solanaSigner } : {}),
 					}
 				);
 
@@ -356,7 +360,6 @@ export function useWithdrawPlanExecution() {
 			api,
 			funding,
 			getSignerForChain,
-			privySolanaSendTx,
 			queryClient,
 			refreshUserData,
 			relay,

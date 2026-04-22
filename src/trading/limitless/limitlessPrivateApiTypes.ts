@@ -1,7 +1,19 @@
+/** After `unwrapEnvelope`, i.e. the API `data` object (not the outer `{ success, data }`). */
 export type LimitlessEnsureAccountResponse = {
-	profileId: number;
-	account: string;
-	created?: boolean;
+	venueRegistered: boolean;
+	venueStatus: "active" | "suspended" | "disconnected" | "not_registered";
+	limitlessAccount: {
+		hasApiKey?: boolean;
+		ownerId?: number;
+		makerAddress?: string;
+		signerAddress?: string;
+		tradingEnabled?: boolean;
+		approvalComplete?: boolean;
+		lastError?: string;
+		feeRateBps?: number;
+		lastProfileSyncAt?: string;
+		lastAllowanceCheckSlug?: string;
+	};
 };
 
 export type LimitlessOrderSide = "BUY" | "SELL";

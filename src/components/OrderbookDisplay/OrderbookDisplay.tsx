@@ -1,8 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import type {
-	OrderbookSnapshot,
-	OrderbookEntry,
-} from "@/services/api/orderbookService";
+import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useCurtainActions } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
 // Helper function to calculate prices from orderbook
@@ -25,6 +22,7 @@ import {
 	shortenTeamLabelForButton,
 	hexToRgba,
 	getContrastingTextColor,
+	getBorderColorForSelected,
 	mixHexOnBlack,
 } from "@/helpers/predictionUtils";
 import { getYesNoTeamLabels } from "@/pages/PredictionMarket/PredictionMarketTradeBox/teamLabels";
@@ -50,6 +48,8 @@ interface OrderbookDisplayProps {
 	isCollapsed?: boolean;
 	side?: "buy" | "sell";
 	umbrellaDisplayName?: string;
+	/** Single always-visible book: team row above ladder; no accordion header. */
+	layout?: "accordion" | "embedded";
 }
 
 export default function OrderbookDisplay({
@@ -68,7 +68,9 @@ export default function OrderbookDisplay({
 	isCollapsed = true,
 	side = "buy",
 	umbrellaDisplayName,
+	layout = "accordion",
 }: OrderbookDisplayProps) {
+	const isEmbedded = layout === "embedded";
 	const [activeTab, setActiveTab] = useState<"yes" | "no">("yes");
 	const { openCurtain } = useCurtainActions();
 	const spreadRef = useRef<HTMLDivElement>(null);
@@ -81,29 +83,28 @@ export default function OrderbookDisplay({
 		}
 	}, [isActiveMarket, activePosition, activeTab]);
 
+	const ladderExpanded = isEmbedded || !isCollapsed;
+
 	// Scroll the orderbook's internal container to center the spread (does NOT scroll the page)
 	useEffect(() => {
-		if (!isCollapsed && spreadRef.current && ordersListRef.current) {
-			// Use setTimeout to ensure the DOM has rendered and slide animation has started
-			setTimeout(() => {
-				if (spreadRef.current && ordersListRef.current) {
-					const container = ordersListRef.current;
-					const spread = spreadRef.current;
+		if (!ladderExpanded) return;
+		const t = window.setTimeout(() => {
+			if (spreadRef.current && ordersListRef.current) {
+				const container = ordersListRef.current;
+				const spread = spreadRef.current;
 
-					// Calculate position to center the spread within the orderbook container
-					const spreadTop = spread.offsetTop;
-					const containerHeight = container.clientHeight;
-					const scrollPosition = spreadTop - containerHeight / 2;
+				const spreadTop = spread.offsetTop;
+				const containerHeight = container.clientHeight;
+				const scrollPosition = spreadTop - containerHeight / 2;
 
-					// Scroll within the orderbook container only (not the page)
-					container.scrollTo({
-						top: scrollPosition,
-						behavior: "smooth",
-					});
-				}
-			}, 100);
-		}
-	}, [isCollapsed]);
+				container.scrollTo({
+					top: scrollPosition,
+					behavior: "smooth",
+				});
+			}
+		}, 100);
+		return () => window.clearTimeout(t);
+	}, [ladderExpanded, orderbook, activeTab]);
 
 	// Calculate prices for this market's orderbook
 	const { bestBid: marketBestBid, bestAsk: marketBestAsk } = useMemo(() => {
@@ -212,9 +213,180 @@ export default function OrderbookDisplay({
 			? `${toCentsString(noLabelPrice)}¢`
 			: "--";
 
+	const teamTabRow = (
+		<div className="orderbook-embedded-team-row">
+			<div className="orderbook-tabs">
+				<button
+					type="button"
+					className={`tab-button trade-yes ${
+						isActiveMarket && activePosition === "yes" ? "active-yes" : ""
+					}`}
+					onClick={(e) => {
+						if (!isEmbedded) e.stopPropagation();
+						setActiveTab("yes");
+						if (market && onMarketSwitch) {
+							onMarketSwitch(market, "yes");
+						}
+						if (
+							typeof window !== "undefined" &&
+							window.innerWidth <= 1100
+						) {
+							openCurtain();
+						}
+					}}
+					onMouseEnter={(e) => {
+						if (isVsSingle && activeTab !== "yes") {
+							e.currentTarget.style.border = `2px solid ${yesColor}`;
+						}
+					}}
+					onMouseLeave={(e) => {
+						if (isVsSingle && activeTab !== "yes") {
+							e.currentTarget.style.border = `2px solid ${hexToRgba(
+								yesColor,
+								0.35,
+							)}`;
+						}
+					}}
+					style={
+						isVsSingle
+							? {
+									background:
+										activeTab === "yes"
+											? yesColor
+											: hexToRgba(yesColor, 0.35),
+									color:
+										activeTab === "yes"
+											? yesTextOnSolid
+											: yesTextOnTint,
+									border: `2px solid ${
+										activeTab === "yes"
+											? getBorderColorForSelected(yesColor)
+											: hexToRgba(yesColor, 0.35)
+									}`,
+							  }
+							: undefined
+					}
+				>
+					<span
+						style={{
+							display: "inline-flex",
+							alignItems: "center",
+							gap: 6,
+							maxWidth: "100%",
+							minWidth: 0,
+							justifyContent: "center",
+						}}
+					>
+						<span
+							style={{
+								minWidth: 0,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{yesTeamLabel}
+						</span>
+						<span style={{ flexShrink: 0 }}>{yesLabel}</span>
+					</span>
+				</button>
+				<button
+					type="button"
+					className={`tab-button trade-no ${
+						isActiveMarket && activePosition === "no" ? "active-no" : ""
+					}`}
+					onClick={(e) => {
+						if (!isEmbedded) e.stopPropagation();
+						setActiveTab("no");
+						if (market && onMarketSwitch) {
+							onMarketSwitch(market, "no");
+						}
+						if (
+							typeof window !== "undefined" &&
+							window.innerWidth <= 1100
+						) {
+							openCurtain();
+						}
+					}}
+					onMouseEnter={(e) => {
+						if (isVsSingle && activeTab !== "no") {
+							e.currentTarget.style.border = `2px solid ${noColor}`;
+						}
+					}}
+					onMouseLeave={(e) => {
+						if (isVsSingle && activeTab !== "no") {
+							e.currentTarget.style.border = `2px solid ${hexToRgba(
+								noColor,
+								0.35,
+							)}`;
+						}
+					}}
+					style={
+						isVsSingle
+							? {
+									background:
+										activeTab === "no"
+											? noColor
+											: hexToRgba(noColor, 0.35),
+									color:
+										activeTab === "no"
+											? noTextOnSolid
+											: noTextOnTint,
+									border: `2px solid ${
+										activeTab === "no"
+											? getBorderColorForSelected(noColor)
+											: hexToRgba(noColor, 0.35)
+									}`,
+							  }
+							: undefined
+					}
+				>
+					<span
+						style={{
+							display: "inline-flex",
+							alignItems: "center",
+							gap: 6,
+							maxWidth: "100%",
+							minWidth: 0,
+							justifyContent: "center",
+						}}
+					>
+						<span
+							style={{
+								minWidth: 0,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{noTeamLabel}
+						</span>
+						<span style={{ flexShrink: 0 }}>{noLabel}</span>
+					</span>
+				</button>
+			</div>
+		</div>
+	);
+
 	// Show a minimal collapsed state when loading (not full loading screen)
 	// This allows the header with prices to still be interactive
 	if (loading && !orderbook) {
+		if (isEmbedded) {
+			return (
+				<div className="orderbook-display orderbook-display--embedded">
+					{teamTabRow}
+					<div className="orderbook-headers">
+						<span className="header-label"></span>
+						<span className="header-price">Price</span>
+						<span className="header-shares">Shares</span>
+						<span className="header-total">Total</span>
+					</div>
+					<div className="orderbook-content">
+						<div className="loading-message">Loading order book…</div>
+					</div>
+				</div>
+			);
+		}
 		return (
 			<div className="orderbook-display">
 				<div className="orderbook-header">
@@ -239,6 +411,7 @@ export default function OrderbookDisplay({
 						<div className="header-right">
 							<div className="orderbook-tabs">
 								<button
+									type="button"
 									className={`tab-button trade-yes ${isActiveMarket && activePosition === "yes" ? "active-yes" : ""}`}
 									onClick={(e) => {
 										e.stopPropagation();
@@ -259,12 +432,30 @@ export default function OrderbookDisplay({
 									style={
 										isVsSingle
 											? {
-													background: hexToRgba(
-														yesColor,
-														0.35,
-													),
-													color: yesTextOnTint,
-													border: `2px solid ${hexToRgba(yesColor, 0.35)}`,
+													background:
+														isActiveMarket &&
+														activePosition === "yes"
+															? yesColor
+															: hexToRgba(
+																	yesColor,
+																	0.35,
+															  ),
+													color:
+														isActiveMarket &&
+														activePosition === "yes"
+															? yesTextOnSolid
+															: yesTextOnTint,
+													border: `2px solid ${
+														isActiveMarket &&
+														activePosition === "yes"
+															? getBorderColorForSelected(
+																	yesColor,
+															  )
+															: hexToRgba(
+																	yesColor,
+																	0.35,
+															  )
+													}`,
 											  }
 											: undefined
 									}
@@ -272,6 +463,7 @@ export default function OrderbookDisplay({
 									{yesTeamLabel} --
 								</button>
 								<button
+									type="button"
 									className={`tab-button trade-no ${isActiveMarket && activePosition === "no" ? "active-no" : ""}`}
 									onClick={(e) => {
 										e.stopPropagation();
@@ -292,12 +484,30 @@ export default function OrderbookDisplay({
 									style={
 										isVsSingle
 											? {
-													background: hexToRgba(
-														noColor,
-														0.35,
-													),
-													color: noTextOnTint,
-													border: `2px solid ${hexToRgba(noColor, 0.35)}`,
+													background:
+														isActiveMarket &&
+														activePosition === "no"
+															? noColor
+															: hexToRgba(
+																	noColor,
+																	0.35,
+															  ),
+													color:
+														isActiveMarket &&
+														activePosition === "no"
+															? noTextOnSolid
+															: noTextOnTint,
+													border: `2px solid ${
+														isActiveMarket &&
+														activePosition === "no"
+															? getBorderColorForSelected(
+																	noColor,
+															  )
+															: hexToRgba(
+																	noColor,
+																	0.35,
+															  )
+													}`,
 											  }
 											: undefined
 									}
@@ -313,6 +523,16 @@ export default function OrderbookDisplay({
 	}
 
 	if (error) {
+		if (isEmbedded) {
+			return (
+				<div className="orderbook-display orderbook-display--embedded">
+					{teamTabRow}
+					<div className="orderbook-content">
+						<div className="error-message">Error: {error}</div>
+					</div>
+				</div>
+			);
+		}
 		return (
 			<div className="orderbook-display">
 				<div className="orderbook-header">
@@ -326,6 +546,18 @@ export default function OrderbookDisplay({
 	}
 
 	if (!orderbook) {
+		if (isEmbedded) {
+			return (
+				<div className="orderbook-display orderbook-display--embedded">
+					{teamTabRow}
+					<div className="orderbook-content">
+						<div className="no-data-message">
+							No orderbook data available
+						</div>
+					</div>
+				</div>
+			);
+		}
 		return (
 			<div className="orderbook-display">
 				<div className="orderbook-header">
@@ -554,220 +786,228 @@ export default function OrderbookDisplay({
 	const bidsWithDepth = calculateDepthPercentages(displayBids, false);
 
 	return (
-		<div className="orderbook-display">
-			<div className="orderbook-header">
-				<div
-					className={`header-top clickable-header ${
-						isCollapsed ? "collapsed" : "expanded"
-					}`}
-					onClick={() => {
-						if (market && onOrderbookToggle) {
-							const marketId =
-								market._id ||
-								market.questionId ||
-								market.marketId;
+		<div
+			className={
+				isEmbedded
+					? "orderbook-display orderbook-display--embedded"
+					: "orderbook-display"
+			}
+		>
+			{isEmbedded ? (
+				teamTabRow
+			) : (
+				<div className="orderbook-header">
+					<div
+						className={`header-top clickable-header ${
+							isCollapsed ? "collapsed" : "expanded"
+						}`}
+						onClick={() => {
+							if (market && onOrderbookToggle) {
+								const marketId =
+									market._id ||
+									market.questionId ||
+									market.marketId;
 
-							// If this is not the active market, switch to it while preserving the current position
-							if (
-								!isActiveMarket &&
-								onMarketSwitch &&
-								activePosition
-							) {
-								// Switch to this market but keep the current yes/no position from the active market
-								onMarketSwitch(market, activePosition);
+								if (
+									!isActiveMarket &&
+									onMarketSwitch &&
+									activePosition
+								) {
+									onMarketSwitch(market, activePosition);
+								}
+
+								onOrderbookToggle(marketId);
 							}
-
-							// Toggle the orderbook open/closed
-							onOrderbookToggle(marketId);
+						}}
+						title={
+							isCollapsed
+								? "Click to expand orderbook"
+								: "Click to collapse orderbook"
 						}
-					}}
-					title={
-						isCollapsed
-							? "Click to expand orderbook"
-							: "Click to collapse orderbook"
-					}
-				>
-					{/* Left: Market Name */}
-					<div className="header-left">
-						<div className="header-title-section">
-							<h3>{displayTitle || "Order Book"}</h3>
+					>
+						<div className="header-left">
+							<div className="header-title-section">
+								<h3>{displayTitle || "Order Book"}</h3>
+							</div>
 						</div>
-					</div>
 
-					{/* Right: Trade Yes/No Tabs - always visible */}
-					<div className="header-right">
-						<div className="orderbook-tabs">
-							<button
-								className={`tab-button trade-yes ${
-									isActiveMarket && activePosition === "yes"
-										? "active-yes"
-										: ""
-								}`}
-								onClick={(e) => {
-									e.stopPropagation(); // Prevent header click
-									setActiveTab("yes");
-									if (market && onMarketSwitch) {
-										onMarketSwitch(market, "yes");
-									}
-									// On mobile/tablet, also open the trading panel (curtain)
-									if (
-										typeof window !== "undefined" &&
-										window.innerWidth <= 1100
-									) {
-										openCurtain();
-									}
-								}}
-								onMouseEnter={(e) => {
-									if (isVsSingle && activeTab !== "yes") {
-										e.currentTarget.style.border = `2px solid ${yesColor}`;
-									}
-								}}
-								onMouseLeave={(e) => {
-									if (isVsSingle && activeTab !== "yes") {
-										e.currentTarget.style.border = `2px solid ${hexToRgba(
-											yesColor,
-											0.35
-										)}`;
-									}
-								}}
-								style={
-									isVsSingle
-										? {
-												background:
-													activeTab === "yes"
-														? yesColor
-														: hexToRgba(
-																yesColor,
-																0.35
-														  ),
-												color:
-													activeTab === "yes"
-														? yesTextOnSolid
-														: yesTextOnTint,
-												border: `2px solid ${
-													activeTab === "yes"
-														? yesColor
-														: hexToRgba(
-																yesColor,
-																0.35
-														  )
-												}`,
-										  }
-										: undefined
-								}
-							>
-								<span
-									style={{
-										display: "inline-flex",
-										alignItems: "center",
-										gap: 6,
-										maxWidth: "100%",
-										minWidth: 0,
-										justifyContent: "center",
+						<div className="header-right">
+							<div className="orderbook-tabs">
+								<button
+									type="button"
+									className={`tab-button trade-yes ${
+										isActiveMarket && activePosition === "yes"
+											? "active-yes"
+											: ""
+									}`}
+									onClick={(e) => {
+										e.stopPropagation();
+										setActiveTab("yes");
+										if (market && onMarketSwitch) {
+											onMarketSwitch(market, "yes");
+										}
+										if (
+											typeof window !== "undefined" &&
+											window.innerWidth <= 1100
+										) {
+											openCurtain();
+										}
 									}}
+									onMouseEnter={(e) => {
+										if (isVsSingle && activeTab !== "yes") {
+											e.currentTarget.style.border = `2px solid ${yesColor}`;
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (isVsSingle && activeTab !== "yes") {
+											e.currentTarget.style.border = `2px solid ${hexToRgba(
+												yesColor,
+												0.35,
+											)}`;
+										}
+									}}
+									style={
+										isVsSingle
+											? {
+													background:
+														activeTab === "yes"
+															? yesColor
+															: hexToRgba(
+																	yesColor,
+																	0.35,
+															  ),
+													color:
+														activeTab === "yes"
+															? yesTextOnSolid
+															: yesTextOnTint,
+													border: `2px solid ${
+														activeTab === "yes"
+															? getBorderColorForSelected(
+																	yesColor,
+															  )
+															: hexToRgba(
+																	yesColor,
+																	0.35,
+															  )
+													}`,
+											  }
+											: undefined
+									}
 								>
 									<span
 										style={{
+											display: "inline-flex",
+											alignItems: "center",
+											gap: 6,
+											maxWidth: "100%",
 											minWidth: 0,
-											overflow: "hidden",
-											textOverflow: "ellipsis",
-											whiteSpace: "nowrap",
+											justifyContent: "center",
 										}}
 									>
-										{yesTeamLabel}
+										<span
+											style={{
+												minWidth: 0,
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+											}}
+										>
+											{yesTeamLabel}
+										</span>
+										<span style={{ flexShrink: 0 }}>{yesLabel}</span>
 									</span>
-									<span style={{ flexShrink: 0 }}>{yesLabel}</span>
-								</span>
-							</button>
-							<button
-								className={`tab-button trade-no ${
-									isActiveMarket && activePosition === "no"
-										? "active-no"
-										: ""
-								}`}
-								onClick={(e) => {
-									e.stopPropagation(); // Prevent header click
-									setActiveTab("no");
-									if (market && onMarketSwitch) {
-										onMarketSwitch(market, "no");
-									}
-									// On mobile/tablet, also open the trading panel (curtain)
-									if (
-										typeof window !== "undefined" &&
-										window.innerWidth <= 1100
-									) {
-										openCurtain();
-									}
-								}}
-								onMouseEnter={(e) => {
-									if (isVsSingle && activeTab !== "no") {
-										e.currentTarget.style.border = `2px solid ${noColor}`;
-									}
-								}}
-								onMouseLeave={(e) => {
-									if (isVsSingle && activeTab !== "no") {
-										e.currentTarget.style.border = `2px solid ${hexToRgba(
-											noColor,
-											0.35
-										)}`;
-									}
-								}}
-								style={
-									isVsSingle
-										? {
-												background:
-													activeTab === "no"
-														? noColor
-														: hexToRgba(
-																noColor,
-																0.35
-														  ),
-												color:
-													activeTab === "no"
-														? noTextOnSolid
-														: noTextOnTint,
-												border: `2px solid ${
-													activeTab === "no"
-														? noColor
-														: hexToRgba(
-																noColor,
-																0.35
-														  )
-												}`,
-										  }
-										: undefined
-								}
-							>
-								<span
-									style={{
-										display: "inline-flex",
-										alignItems: "center",
-										gap: 6,
-										maxWidth: "100%",
-										minWidth: 0,
-										justifyContent: "center",
+								</button>
+								<button
+									type="button"
+									className={`tab-button trade-no ${
+										isActiveMarket && activePosition === "no"
+											? "active-no"
+											: ""
+									}`}
+									onClick={(e) => {
+										e.stopPropagation();
+										setActiveTab("no");
+										if (market && onMarketSwitch) {
+											onMarketSwitch(market, "no");
+										}
+										if (
+											typeof window !== "undefined" &&
+											window.innerWidth <= 1100
+										) {
+											openCurtain();
+										}
 									}}
+									onMouseEnter={(e) => {
+										if (isVsSingle && activeTab !== "no") {
+											e.currentTarget.style.border = `2px solid ${noColor}`;
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (isVsSingle && activeTab !== "no") {
+											e.currentTarget.style.border = `2px solid ${hexToRgba(
+												noColor,
+												0.35,
+											)}`;
+										}
+									}}
+									style={
+										isVsSingle
+											? {
+													background:
+														activeTab === "no"
+															? noColor
+															: hexToRgba(
+																	noColor,
+																	0.35,
+															  ),
+													color:
+														activeTab === "no"
+															? noTextOnSolid
+															: noTextOnTint,
+													border: `2px solid ${
+														activeTab === "no"
+															? getBorderColorForSelected(
+																	noColor,
+															  )
+															: hexToRgba(
+																	noColor,
+																	0.35,
+															  )
+													}`,
+											  }
+											: undefined
+									}
 								>
 									<span
 										style={{
+											display: "inline-flex",
+											alignItems: "center",
+											gap: 6,
+											maxWidth: "100%",
 											minWidth: 0,
-											overflow: "hidden",
-											textOverflow: "ellipsis",
-											whiteSpace: "nowrap",
+											justifyContent: "center",
 										}}
 									>
-										{noTeamLabel}
+										<span
+											style={{
+												minWidth: 0,
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+											}}
+										>
+											{noTeamLabel}
+										</span>
+										<span style={{ flexShrink: 0 }}>{noLabel}</span>
 									</span>
-									<span style={{ flexShrink: 0 }}>{noLabel}</span>
-								</span>
-							</button>
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			)}
 
-			{/* Orderbook content - only show when not collapsed */}
-			{!isCollapsed && (
+			{ladderExpanded && (
 				<>
 					{/* Fixed Column Headers */}
 					<div className="orderbook-headers">
@@ -886,3 +1126,4 @@ export default function OrderbookDisplay({
 		</div>
 	);
 }
+

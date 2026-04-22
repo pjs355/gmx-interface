@@ -1,6 +1,8 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
+import type { MatchedMarket } from "@/types/odds-monitor";
 
 export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
@@ -32,6 +34,8 @@ export interface TradeBoxProps {
 	pandascoreMatchId?: string;
 	/** Resolves venue-prices row when panda id on umbrella ≠ monitor key */
 	umbrellaId?: string;
+	/** When GET /matched-markets omits limitless but umbrella has it (e.g. Railway vs local). */
+	limitlessMappingFromUmbrella?: UmbrellaExchangeMatchingLimitless | null;
 	/** Umbrella list title — used to derive "Team A vs Team B" when question is only "Match Winner". */
 	umbrellaDisplayName?: string;
 	initialPosition?: "yes" | "no";
@@ -43,6 +47,8 @@ export interface TradeBoxProps {
 	crossBuyYes?: number | null;
 	/** Cross-venue best NO price from unified trading page prices (WS-first). */
 	crossBuyNo?: number | null;
+	/** Odds-monitor row for this match (Polymarket token mapping for balances). */
+	matchedMonitor?: MatchedMarket | null;
 }
 
 export interface MarketOrderCalculation {

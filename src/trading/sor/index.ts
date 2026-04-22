@@ -21,12 +21,14 @@ export type {
 	SorChain,
 	SorOutcome,
 	SorSide,
+	SorErrorCode,
 	ChainBalance,
 	VenuePositionEntry,
 	RoutePlan,
 	RouteLeg,
 	RouteRequest,
 	RouteExecution,
+	ExecutionLeg,
 	ExecutionLegStatus,
 	RouteExecutionStatus,
 	VenueMarketIds,
@@ -40,6 +42,24 @@ export {
 	PROFILE_DFLOW_KYC_HASH,
 } from "./sor-types";
 export type { KalshiKycShortfallBannerParts } from "./sor-types";
+
+export {
+	validateLegMinimum,
+	routeFailsVenueMinimums,
+	rawInputBelowVenueMinimum,
+	checkRawInputAgainstVenueMinimum,
+	aggregateMinThresholds,
+	predictRawInputBelowProtocolMinimum,
+	parseLimitPriceCents,
+	probabilityToLimitPriceCentsString,
+	PREDICT_MIN_BUY_USD,
+	PREDICT_MIN_SHARES,
+	SOR_MIN_MARKET_BUY_USD,
+	SOR_MIN_LIMIT_ORDER_USD,
+	SOR_MIN_MARKET_SELL_SHARES,
+	SOR_FLOOR_MESSAGES,
+} from "./sorPreflight";
+export type { BelowMinReason } from "./sorPreflight";
 
 export {
 	sorChainDisplayName,

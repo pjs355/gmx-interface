@@ -21,6 +21,7 @@ import {
 	hasUsableOrderbookSnapshot,
 } from "./utils";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -44,7 +45,6 @@ function PredictionMarketContent() {
 			? storedPosition
 			: "yes";
 	});
-	const [openOrderbookId, setOpenOrderbookId] = useState<string | null>(null);
 	const [hasUserSelectedMarket, setHasUserSelectedMarket] = useState(false);
 	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] =
 		useState(false);
@@ -142,6 +142,24 @@ function PredictionMarketContent() {
 		// getUmbrellaById, getQuestionsForUmbrella, getOrderbookForQuestion are stable
 		navigate,
 	]);
+
+	useEffect(() => {
+		if (!umbrella || !isTradingDebugLoggingEnabled()) return;
+		try {
+			const clone = JSON.parse(JSON.stringify(umbrella)) as Umbrella;
+			console.log("[PredictionMarket] full umbrella object:", clone);
+			console.log(
+				"[PredictionMarket] umbrella.exchangeMatching.limitless (DB-shaped; not what Basic tab uses):",
+				clone.exchangeMatching?.limitless ?? "(absent — Limitless tab still works if GET /matched-markets + WS include it)",
+			);
+		} catch {
+			console.log("[PredictionMarket] full umbrella object (non-serializable fields omitted):", umbrella);
+			console.log(
+				"[PredictionMarket] umbrella.exchangeMatching.limitless:",
+				umbrella.exchangeMatching?.limitless ?? "(absent)",
+			);
+		}
+	}, [umbrella]);
 
 	const marketIdsKey = useMemo(
 		() =>
@@ -449,23 +467,13 @@ function PredictionMarketContent() {
 		setActivePosition(position);
 	}, []);
 
-	// Function to handle orderbook toggle (for header clicks)
-	const handleOrderbookToggle = useCallback((marketId: string) => {
-		setOpenOrderbookId((prev) => (prev === marketId ? null : marketId));
-	}, []);
-
 	// Function to handle market switch with orderbook opening (for Yes/No button clicks)
 	const handleMarketSwitchWithOrderbook = useCallback(
 		(market: PredictionMarket, position: "yes" | "no") => {
-			const marketId = market._id || market.questionId || market.marketId;
-
 			// Switch active market and position
 			setActiveMarket(market);
 			setActivePosition(position);
 			setHasUserSelectedMarket(true); // Mark as user-selected to prevent auto-reset
-
-			// Open this orderbook (closes others automatically)
-			setOpenOrderbookId(marketId);
 		},
 		[]
 	);
@@ -594,13 +602,6 @@ function PredictionMarketContent() {
 				setActiveMarket(targetMarket);
 			}
 
-			// Auto-open orderbook for single-market umbrellas
-			if (sortedQuestions.length === 1 && targetMarket) {
-				const marketId = getMarketId(targetMarket);
-				if (marketId) {
-					setOpenOrderbookId(marketId);
-				}
-			}
 		}
 	}, [
 		hasUserSelectedMarket,
@@ -703,12 +704,10 @@ function PredictionMarketContent() {
 				questionOrderbooks={questionOrderbooks}
 				activeMarket={activeMarket as any}
 				activePosition={activePosition}
-				openOrderbookId={openOrderbookId}
 				onMarketSwitch={handleMarketSwitch}
 				onMarketSwitchWithOrderbook={
 					handleMarketSwitchWithOrderbook
 				}
-				onOrderbookToggle={handleOrderbookToggle}
 				onPositionChange={handlePositionChange}
 				fetchAllOrderbooks={fetchAllOrderbooks}
 				chartState={chartOnlyState}

@@ -1,8 +1,18 @@
 import { orderbookFromYesNoBidDecimalMaps, extractBestPrices } from "./orderbook-helpers";
 import type { VenueBook, VenueBestPrices } from "./types";
 
-const WS_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
-const REST_BASE = "https://dev-prediction-markets-api.dflow.net";
+const DEFAULT_WS = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
+const DEFAULT_REST = "https://dev-prediction-markets-api.dflow.net";
+
+function readEnvTrim(key: string): string | null {
+	if (typeof import.meta.env === "undefined") return null;
+	const v = (import.meta.env as Record<string, unknown>)[key];
+	return typeof v === "string" && v.trim() !== "" ? v.trim().replace(/\/$/, "") : null;
+}
+
+/** Must match catalog where Kalshi/DFlow tickers exist (wrong host → REST 404). */
+const REST_BASE = readEnvTrim("VITE_DFLOW_REST_BASE") ?? DEFAULT_REST;
+const WS_URL = readEnvTrim("VITE_DFLOW_WS_URL") ?? DEFAULT_WS;
 const RECONNECT_MAX = 25;
 const PING_INTERVAL_MS = 15_000;
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -21,6 +31,9 @@ export class DflowBookClient {
 	private readonly handlers: DflowWsHandlers;
 	private wanted = new Set<string>();
 	private seededTickers = new Set<string>();
+	/** Tickers whose REST seed returned 404 — not on this DFlow host; skip repeat fetches until reconnect. */
+	private restUnavailableTickers = new Set<string>();
+	private rest404Logged = new Set<string>();
 	private reconnectAttempt = 0;
 	private closedByUser = false;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,7 +79,9 @@ export class DflowBookClient {
 			this.ws.send(JSON.stringify({ type: "subscribe", channel: "orderbook", tickers: added }));
 		}
 
-		const needSeed = added.filter((t) => !this.seededTickers.has(t));
+		const needSeed = added.filter(
+			(t) => !this.seededTickers.has(t) && !this.restUnavailableTickers.has(t),
+		);
 		if (needSeed.length > 0) {
 			void this.seedOrderbooks(needSeed);
 		}
@@ -105,6 +120,8 @@ export class DflowBookClient {
 					JSON.stringify({ type: "subscribe", channel: "orderbook", tickers: [...this.wanted] }),
 				);
 				this.seededTickers.clear();
+				this.restUnavailableTickers.clear();
+				this.rest404Logged.clear();
 				void this.seedOrderbooks([...this.wanted]);
 			}
 			this.handlers.onConnect?.();
@@ -142,6 +159,8 @@ export class DflowBookClient {
 		this.closedByUser = true;
 		this.wanted.clear();
 		this.seededTickers.clear();
+		this.restUnavailableTickers.clear();
+		this.rest404Logged.clear();
 		this.stopPing();
 		this.upSince = null;
 		if (this.connectTimeout) {
@@ -230,11 +249,14 @@ export class DflowBookClient {
 	 * DFlow WS only streams deltas, not initial state.
 	 */
 	private async seedOrderbooks(tickers: string[]): Promise<void> {
+		const pending = tickers.filter((t) => !this.restUnavailableTickers.has(t));
+		if (pending.length === 0) return;
+
 		let seeded = 0;
 		let failed = 0;
 
-		for (let i = 0; i < tickers.length; i += REST_SEED_CONCURRENCY) {
-			const batch = tickers.slice(i, i + REST_SEED_CONCURRENCY);
+		for (let i = 0; i < pending.length; i += REST_SEED_CONCURRENCY) {
+			const batch = pending.slice(i, i + REST_SEED_CONCURRENCY);
 			const results = await Promise.allSettled(
 				batch.map(async (ticker) => {
 					const url = `${REST_BASE}/api/v1/orderbook/${encodeURIComponent(ticker)}`;
@@ -242,6 +264,15 @@ export class DflowBookClient {
 						signal: AbortSignal.timeout(10_000),
 					});
 					if (!res.ok) {
+						if (res.status === 404) {
+							this.restUnavailableTickers.add(ticker);
+							if (!this.rest404Logged.has(ticker)) {
+								this.rest404Logged.add(ticker);
+								console.warn(
+									`[DFlowBookClient] Orderbook REST 404 for "${ticker}" at ${REST_BASE} — ticker not on this DFlow env; skipping further REST seed until reconnect.`,
+								);
+							}
+						}
 						throw new Error(`${res.status}`);
 					}
 					const data = await res.json() as Record<string, unknown>;
@@ -275,8 +306,10 @@ export class DflowBookClient {
 			}
 		}
 
-		if (import.meta.env.DEV) {
-			console.log(`[DFlowBookClient] REST seed: ${seeded} books loaded, ${failed} failed, ${tickers.length} tickers`);
+		if (import.meta.env.DEV && (seeded > 0 || failed > 0)) {
+			console.log(
+				`[DFlowBookClient] REST seed: ${seeded} books loaded, ${failed} failed, ${pending.length} tickers attempted`,
+			);
 		}
 	}
 }

@@ -27,6 +27,10 @@ export interface VenuePosition {
 	redeemable?: boolean;
 	/** Predict.fun numeric market id (used for settlement lookups) */
 	numericMarketId?: number;
+	/** Server-resolved LevelUp umbrella id (Predict positions proxy join). */
+	levelUpUmbrellaId?: string;
+	/** Optional display label from the same join (for UI only). */
+	levelUpUmbrellaDisplayName?: string;
 	/** Market-level status from the venue (e.g. "RESOLVED") */
 	marketStatus?: string;
 	/** Per-outcome result: did this specific outcome win or lose? */

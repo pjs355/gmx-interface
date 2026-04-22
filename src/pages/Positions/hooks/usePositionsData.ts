@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -10,8 +11,10 @@ import {
 } from "@/services/api/simplifiedOrderService";
 import { useUserData } from "context/UserDataContext";
 import { usePredictionData } from "context/PredictionDataContext";
+import { useOddsMonitor } from "context/OddsMonitorContext";
 import { usePortfolio } from "context/PortfolioContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePolymarketTradeHistory } from "@/trading/polymarket/usePolymarketTradeHistory";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
@@ -29,8 +32,15 @@ import {
 import { computePredictCostByTokenFromMatches } from "@/trading/predict/predictMatchesApi";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import { useQuery } from "@tanstack/react-query";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+import { inferPredictSideFromMarketDetail } from "@/trading/predict/predictPositionSide";
+import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
+import type { MatchedMarket } from "@/types/odds-monitor";
+import {
+	findMatchedMarketByPolyConditionId,
+	inferPolymarketYesNoFromToken,
+	parseVsTeamLabelsFromDisplayTitle,
+} from "@/trading/polymarket/polyPositionSide";
 import type { VenueId, VenueOrder, VenuePosition } from "@/types/trading/venuePosition";
 import {
 	logPortfolioLoadState,
@@ -38,15 +48,22 @@ import {
 	portfolioPerfEnabled,
 	truncateWallet,
 } from "../utils/portfolioPerfLog";
-import { titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import {
 	type MarketPosition,
 	type UmbrellaPositions,
-	isGenericSubMarketTitle,
 	buildSyntheticOrder,
 	mergeMarketPositions,
 	buildSyntheticUmbrella,
 } from "../utils/positionHelpers";
+import {
+	buildPredictUmbrellaLookup,
+	logPredictUmbrellaOnce,
+	matchVenuePositionToUmbrella,
+	predictUmbrellaDebugEnabled,
+	resolvePredictUmbrellaForDisplay,
+	type PredictUmbrellaLookup,
+} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+import { shortPredictFunMarketTitleForPortfolio } from "@/helpers/umbrellaDisplayName";
 
 /** History rows for Predict tokens that only appear in FILLED orders (no current position). */
 function predictFilledOrdersToVenueHistoryRows(
@@ -54,6 +71,8 @@ function predictFilledOrdersToVenueHistoryRows(
 	seen: Set<string>,
 	costLookup: Map<string, { totalCost: number; totalShares: number; avgPrice: number }>,
 	marketDetails: Map<number, PredictMarketDetail>,
+	predictLookup: PredictUmbrellaLookup | null,
+	umbrellas: Umbrella[],
 ): VenuePosition[] {
 	const firstRowByToken = new Map<string, PredictOrderRow>();
 	for (const row of filledOrders) {
@@ -71,10 +90,21 @@ function predictFilledOrdersToVenueHistoryRows(
 			detail?.outcomes?.find(
 				(o) => normalizePredictTokenId(o.onChainId) === tokenId,
 			)?.name ?? "Yes";
+		const titleForMatch = (detail?.question ?? detail?.title ?? "").trim();
+		const resolvedUmbrella = resolvePredictUmbrellaForDisplay(
+			{ tokenId, numericMarketId: row.marketId, marketTitle: titleForMatch },
+			predictLookup,
+			umbrellas,
+			titleForMatch || undefined,
+		);
+		const venueTitle =
+			resolvedUmbrella?.displayName?.trim() ??
+			(shortPredictFunMarketTitleForPortfolio(titleForMatch) ||
+				titleForMatch ||
+				`Market #${row.marketId}`);
 		out.push({
 			venue: "predictfun",
-			marketTitle:
-				detail?.question ?? detail?.title ?? `Market #${row.marketId}`,
+			marketTitle: venueTitle,
 			outcome: outcomeName,
 			shares: costEntry.totalShares,
 			avgPrice: costEntry.avgPrice,
@@ -103,11 +133,37 @@ function buildVenueMarketPosition(
 		yesValue?: number;
 		noValue?: number;
 	},
+	marketDisplayName?: string,
+	predictMarketDetail?: PredictMarketDetail | null,
+	polyTeamInference?: {
+		matched: MatchedMarket;
+		yesTeamLabel: string;
+		noTeamLabel: string;
+	} | null,
 ): MarketPosition {
-	const isYes =
-		pv.outcome.toLowerCase() === "yes" ||
-		(pv.outcome.toLowerCase() !== "no" &&
-			(pv.marketTitle?.toLowerCase() ?? "").includes(pv.outcome.toLowerCase()));
+	const predictInferred =
+		venue === "predictfun"
+			? inferPredictSideFromMarketDetail(
+					predictMarketDetail ?? undefined,
+					pv.tokenId,
+				)
+			: null;
+	const polyInferredSide =
+		venue === "polymarket" && polyTeamInference
+			? inferPolymarketYesNoFromToken(
+					pv,
+					polyTeamInference.matched,
+					polyTeamInference.yesTeamLabel,
+					polyTeamInference.noTeamLabel,
+				)
+			: null;
+	const isYes = polyInferredSide
+		? polyInferredSide.side === "Yes"
+		: predictInferred
+			? predictInferred.side === "Yes"
+			: pv.outcome.toLowerCase() === "yes" ||
+				(pv.outcome.toLowerCase() !== "no" &&
+					(pv.marketTitle?.toLowerCase() ?? "").includes(pv.outcome.toLowerCase()));
 	const qid = `${qidPrefix}-${pv.tokenId.slice(0, 12)}`;
 	const side: "Yes" | "No" = isYes ? "Yes" : "No";
 	const synthOrder =
@@ -131,7 +187,7 @@ function buildVenueMarketPosition(
 	return {
 		market: {
 			_id: qid,
-			displayName: pv.marketTitle,
+			displayName: marketDisplayName?.trim() || pv.marketTitle,
 			questionId: pv.conditionId ?? pv.tokenId,
 		} as unknown as PredictionMarket,
 		yesBalance: isYes ? pv.shares : 0,
@@ -157,8 +213,14 @@ function buildVenueMarketPosition(
 			},
 		},
 		venue,
-		predictOutcomeLabelYes: venue === "predictfun" && isYes ? pv.outcome : undefined,
-		predictOutcomeLabelNo: venue === "predictfun" && !isYes ? pv.outcome : undefined,
+		predictOutcomeLabelYes:
+			venue === "predictfun" && isYes
+				? (predictInferred?.teamName ?? pv.outcome)
+				: undefined,
+		predictOutcomeLabelNo:
+			venue === "predictfun" && !isYes
+				? (predictInferred?.teamName ?? pv.outcome)
+				: undefined,
 	};
 }
 
@@ -170,6 +232,10 @@ function buildUnmatchedVenueUmbrellas(
 	qidPrefix: string,
 	groupKeyFn: (p: any) => string,
 	idPrefix: string,
+	predictLookup: PredictUmbrellaLookup | null = null,
+	predictMarketDetails?: Map<number, PredictMarketDetail>,
+	matchedOddsMarkets: MatchedMarket[] = [],
+	catalogUmbrellas: Umbrella[] = [],
 ): UmbrellaPositions[] {
 	const unmatched = positions.filter((p) => !matchedIds.has(p.tokenId));
 	const byGroup = new Map<string, any[]>();
@@ -183,20 +249,73 @@ function buildUnmatchedVenueUmbrellas(
 	const umbrellas: UmbrellaPositions[] = [];
 	for (const [eventKey, group] of byGroup) {
 		const first = group[0];
-		const synth = buildSyntheticUmbrella(
-			`${idPrefix}-${eventKey.slice(0, 20)}`,
-			first.marketTitle,
-			first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
-		);
-		const rawMarkets = group.map((p) =>
-			buildVenueMarketPosition(p, venue, venueName, qidPrefix),
-		);
-		umbrellas.push({ umbrella: synth, markets: mergeMarketPositions(rawMarkets) });
+		let resolvedPredict: Umbrella | null = null;
+		if (venue === "predictfun") {
+			const fd =
+				first.numericMarketId != null && predictMarketDetails
+					? predictMarketDetails.get(first.numericMarketId)
+					: undefined;
+			const hint = (fd?.question ?? fd?.title ?? "").trim() || undefined;
+			resolvedPredict = resolvePredictUmbrellaForDisplay(
+				first,
+				predictLookup,
+				catalogUmbrellas,
+				hint,
+			);
+		}
+		const predictSyntheticTitle =
+			venue === "predictfun"
+				? resolvedPredict?.displayName?.trim() ||
+					shortPredictFunMarketTitleForPortfolio(first.marketTitle) ||
+					first.marketTitle
+				: first.marketTitle;
+		const umbrellaForBlock =
+			resolvedPredict ??
+			buildSyntheticUmbrella(
+				`${idPrefix}-${eventKey.slice(0, 20)}`,
+				predictSyntheticTitle,
+				first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
+			);
+		const displayOverride =
+			resolvedPredict?.displayName?.trim() || undefined;
+		const rawMarkets = group.map((p) => {
+			const polyRow =
+				venue === "polymarket"
+					? findMatchedMarketByPolyConditionId(matchedOddsMarkets, p.conditionId)
+					: null;
+			const polyLabels =
+				venue === "polymarket"
+					? parseVsTeamLabelsFromDisplayTitle(displayOverride) ??
+						parseVsTeamLabelsFromDisplayTitle(p.marketTitle)
+					: null;
+			const polyInference =
+				polyRow && polyLabels
+					? {
+							matched: polyRow,
+							yesTeamLabel: polyLabels.yesTeamLabel,
+							noTeamLabel: polyLabels.noTeamLabel,
+						}
+					: null;
+			return buildVenueMarketPosition(
+				p,
+				venue,
+				venueName,
+				qidPrefix,
+				undefined,
+				displayOverride,
+				venue === "predictfun" && predictMarketDetails && p.numericMarketId != null
+					? predictMarketDetails.get(p.numericMarketId) ?? null
+					: null,
+				polyInference,
+			);
+		});
+		umbrellas.push({ umbrella: umbrellaForBlock, markets: mergeMarketPositions(rawMarkets) });
 	}
 	return umbrellas;
 }
 
 export default function usePositionsData() {
+	const queryClient = useQueryClient();
 	const { account, signerAddress, isDebugMode, debugAccount, realAccount } = useSignerContext();
 	const {
 		portfolioTotal: portfolioTotalCtx,
@@ -209,6 +328,7 @@ export default function usePositionsData() {
 		usdcLoading,
 		loading: userDataLoading,
 		refresh: refreshUserData,
+		refreshViaRpc,
 		loadOrders,
 	} = useUserData();
 
@@ -225,6 +345,36 @@ export default function usePositionsData() {
 		allBooksPreview,
 		booksPreviewLoading,
 	} = usePredictionData();
+
+	const { appState } = useOddsMonitor();
+	const predictUmbrellaLookup = useMemo(
+		() => buildPredictUmbrellaLookup(appState?.markets, umbrellas),
+		[appState?.markets, umbrellas],
+	);
+
+	useEffect(() => {
+		if (!predictUmbrellaDebugEnabled) return;
+		const marketKeys = [...predictUmbrellaLookup.byMarketId.keys()].sort((a, b) => {
+			const na = Number(a);
+			const nb = Number(b);
+			if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+			return a.localeCompare(b);
+		});
+		const tokenKeys = [...predictUmbrellaLookup.byToken.keys()].sort((a, b) =>
+			a.length !== b.length ? a.length - b.length : a.localeCompare(b),
+		);
+		const dedupeId = `mk:${marketKeys.join("|")}|tok:${tokenKeys.length}`;
+		logPredictUmbrellaOnce("lookup-snapshot", dedupeId, {
+			monitorRowCount: appState?.markets?.length ?? 0,
+			catalogUmbrellaCount: umbrellas.length,
+			lookupByTokenSize: predictUmbrellaLookup.byToken.size,
+			lookupByMarketIdSize: predictUmbrellaLookup.byMarketId.size,
+			lookupMarketIdKeysSorted: marketKeys,
+			lookupTokenIdKeysSample: tokenKeys.slice(0, 24),
+			lookupTokenIdKeysTruncated: Math.max(0, tokenKeys.length - 24),
+			hint: "If Predict `numericMarketId` (e.g. 205021) is missing from `lookupMarketIdKeysSorted`, predictions-api / matched-markets `predictFun.marketId*` do not match Predict REST. Compare `lookupTokenIdKeysSample` prefixes to position `tokenId`.",
+		});
+	}, [appState?.markets, umbrellas.length, predictUmbrellaLookup]);
 
 	const { polymarketSafe, solanaAddress } = useFundingAddresses();
 	const { authenticated } = usePrivy();
@@ -319,21 +469,10 @@ export default function usePositionsData() {
 	});
 	const allDflowPositions = dflowPositionsQuery.data ?? [];
 
-	const predictMarketsQuery = useQuery({
-		queryKey: ["predict-market-details", predictMarketIds],
-		enabled: predictMarketIds.length > 0,
-		staleTime: 60_000,
-		queryFn: async () => {
-			const results = await Promise.allSettled(
-				predictMarketIds.map((id) => privateApi.getPredictMarket(id)),
-			);
-			const map = new Map<number, PredictMarketDetail>();
-			results.forEach((r, i) => {
-				if (r.status === "fulfilled") map.set(predictMarketIds[i], r.value);
-			});
-			return map;
-		},
-	});
+	const predictMarketsQuery = usePredictMarketDetailsMap(
+		predictMarketIds,
+		predictMarketIds.length > 0,
+	);
 	const predictMarketDetails = predictMarketsQuery.data ?? new Map<number, PredictMarketDetail>();
 
 	// --- Atomic loading gate: wait for ALL data including enrichment ---
@@ -388,9 +527,6 @@ export default function usePositionsData() {
 			const detail = pos.numericMarketId ? predictMarketDetails.get(pos.numericMarketId) : undefined;
 			const costEntry = getPredictCostForToken(predictCostLookup, pos.tokenId);
 			const enriched = { ...pos };
-			if (detail?.question && isGenericSubMarketTitle(enriched.marketTitle)) {
-				enriched.marketTitle = detail.question;
-			}
 			if (costEntry) {
 				enriched.avgPrice = costEntry.avgPrice;
 				enriched.cost = costEntry.totalCost;
@@ -445,16 +581,24 @@ export default function usePositionsData() {
 	}, [allDflowPositions]);
 
 	const handleClaimSuccess = useCallback(
-		(marketId: string | string[], _umbrellaId: string) => {
+		async (marketId: string | string[], _umbrellaId: string) => {
 			const ids = Array.isArray(marketId) ? marketId : [marketId];
 			setClaimedMarkets((prev) => {
 				const next = new Set(prev);
 				for (const id of ids) next.add(id);
 				return next;
 			});
-			refreshUserData();
+			try {
+				await Promise.all([
+					refreshUserData(),
+					queryClient.invalidateQueries({ queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY] }),
+				]);
+				await refreshViaRpc();
+			} catch (e) {
+				console.error("[usePositionsData] Post-claim balance refresh failed:", e);
+			}
 		},
-		[refreshUserData],
+		[refreshUserData, refreshViaRpc, queryClient],
 	);
 
 	// --- Build conditionId -> umbrella index for fast venue matching ---
@@ -470,18 +614,11 @@ export default function usePositionsData() {
 		return map;
 	}, [umbrellas]);
 
-	function matchVenueToUmbrella(pos: any): Umbrella | null {
-		if (pos.conditionId && umbrellaLookupByConditionId.has(pos.conditionId)) {
-			return umbrellaLookupByConditionId.get(pos.conditionId)!;
-		}
-		return umbrellas.find((u) =>
-			titlesMatchVenue(u.displayName ?? "", pos.marketTitle ?? ""),
-		) ?? null;
-	}
-
 	// --- Active positions grouped by umbrella ---
 	const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) return [];
+
+		const oddsMonitorMarkets = appState?.markets ?? [];
 
 		const matchedPolyTokenIds = new Set<string>();
 		const matchedPredictTokenIds = new Set<string>();
@@ -537,10 +674,46 @@ export default function usePositionsData() {
 					const matches: MarketPosition[] = [];
 					for (const pv of venuePositions) {
 						if (matchedIds.has(pv.tokenId)) continue;
-						const matched = matchVenueToUmbrella(pv);
+						const predictDetail =
+							venue === "predictfun" && pv.numericMarketId != null
+								? predictMarketDetails.get(pv.numericMarketId)
+								: undefined;
+						const predictTitleHint =
+							venue === "predictfun"
+								? (predictDetail?.question ?? predictDetail?.title ?? "").trim() ||
+									undefined
+								: undefined;
+						const matched = matchVenuePositionToUmbrella(
+							pv,
+							venue,
+							umbrellaLookupByConditionId,
+							umbrellas,
+							predictUmbrellaLookup,
+							predictTitleHint,
+						);
 						if (matched && matched._id === umbrella._id) {
 							matchedIds.add(pv.tokenId);
 							let overrides: any = undefined;
+							const polyMatchedRow =
+								venue === "polymarket"
+									? findMatchedMarketByPolyConditionId(
+											oddsMonitorMarkets,
+											pv.conditionId,
+										)
+									: null;
+							const polyLabelsForMatch =
+								venue === "polymarket"
+									? parseVsTeamLabelsFromDisplayTitle(matched.displayName) ??
+										parseVsTeamLabelsFromDisplayTitle(pv.marketTitle)
+									: null;
+							const polyInferenceForMatch =
+								polyMatchedRow && polyLabelsForMatch
+									? {
+											matched: polyMatchedRow,
+											yesTeamLabel: polyLabelsForMatch.yesTeamLabel,
+											noTeamLabel: polyLabelsForMatch.noTeamLabel,
+										}
+									: null;
 							if (venue === "predictfun") {
 								let liveYesPrice: number | null = null;
 								let liveNoPrice: number | null = null;
@@ -556,17 +729,43 @@ export default function usePositionsData() {
 										break;
 									}
 								}
-								const isYes =
-									pv.outcome.toLowerCase() === "yes" ||
-									(pv.outcome.toLowerCase() !== "no" &&
-										(pv.marketTitle?.toLowerCase() ?? "").includes(pv.outcome.toLowerCase()));
-								const yP = isYes ? (liveYesPrice ?? pv.currentPrice) : null;
-								const nP = isYes ? null : (liveNoPrice ?? pv.currentPrice);
-								const yV = yP !== null ? pv.shares * yP : (isYes ? pv.currentValue : 0);
-								const nV = nP !== null ? pv.shares * nP : (isYes ? 0 : pv.currentValue);
+								const inferredPv = inferPredictSideFromMarketDetail(
+									predictDetail ?? undefined,
+									pv.tokenId,
+								);
+								const isYesForPredict = inferredPv
+									? inferredPv.side === "Yes"
+									: pv.outcome.toLowerCase() === "yes" ||
+										(pv.outcome.toLowerCase() !== "no" &&
+											(pv.marketTitle?.toLowerCase() ?? "").includes(
+												pv.outcome.toLowerCase(),
+											));
+								const yP = isYesForPredict
+									? (liveYesPrice ?? pv.currentPrice)
+									: null;
+								const nP = isYesForPredict
+									? null
+									: (liveNoPrice ?? pv.currentPrice);
+								const yV =
+									yP !== null ? pv.shares * yP : isYesForPredict ? pv.currentValue : 0;
+								const nV =
+									nP !== null ? pv.shares * nP : isYesForPredict ? 0 : pv.currentValue;
 								overrides = { yesPrice: yP, noPrice: nP, yesValue: yV, noValue: nV };
 							}
-							matches.push(buildVenueMarketPosition(pv, venue, venueName, qidPrefix, overrides));
+							const displayOverride =
+								matched.displayName?.trim() || undefined;
+							matches.push(
+								buildVenueMarketPosition(
+									pv,
+									venue,
+									venueName,
+									qidPrefix,
+									overrides,
+									displayOverride,
+									venue === "predictfun" ? (predictDetail ?? null) : null,
+									polyInferenceForMatch,
+								),
+							);
 						}
 					}
 					return matches;
@@ -584,25 +783,41 @@ export default function usePositionsData() {
 		const polyUmbrellas = buildUnmatchedVenueUmbrellas(
 			polyPositions, matchedPolyTokenIds, "polymarket", "Polymarket", "poly",
 			(p) => p.eventSlug || p.marketTitle, "poly-event",
+			null,
+			undefined,
+			oddsMonitorMarkets,
+			[],
 		);
 		const predictUmbrellas = buildUnmatchedVenueUmbrellas(
 			predictPositions, matchedPredictTokenIds, "predictfun", "Predict", "predict",
 			(p) => p.marketTitle || p.tokenId, "predict-market",
+			predictUmbrellaLookup,
+			predictMarketDetails,
+			[],
+			umbrellas,
 		);
 		const dflowUmbrellas = buildUnmatchedVenueUmbrellas(
 			dflowPositions, matchedDflowTokenIds, "dflow", "DFlow", "dflow",
 			(p) => p.marketTitle || p.tokenId, "dflow-market",
+			null,
+			undefined,
+			[],
+			[],
 		);
 
 		return [...levelUpUmbrellas, ...polyUmbrellas, ...predictUmbrellas, ...dflowUmbrellas];
 	}, [
 		effectiveAccount, umbrellas, getQuestionsForUmbrella, tokenBalances, orders,
 		allBooksPreview, polyPositions, predictPositions, dflowPositions, umbrellaLookupByConditionId,
+		predictUmbrellaLookup,
+		predictMarketDetails,
+		appState?.markets,
 	]);
 
 	// --- Resolved (winnings) ---
 	const resolvedUmbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) return [];
+		const oddsMonitorMarkets = appState?.markets ?? [];
 		const resolved: UmbrellaPositions[] = [];
 
 		Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
@@ -670,18 +885,95 @@ export default function usePositionsData() {
 			}
 			for (const [, positions] of byGroup) {
 				const first = positions[0];
-				const synth = buildSyntheticUmbrella(
-					`${idPrefix}-${first.tokenId.slice(0, 10)}`,
-					first.marketTitle,
-					first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
-				);
+				const firstWinDetail =
+					venue === "predictfun" && first.numericMarketId != null
+						? predictMarketDetails.get(first.numericMarketId)
+						: undefined;
+				const firstWinHint =
+					(firstWinDetail?.question ?? firstWinDetail?.title ?? "").trim() || undefined;
+				const resolvedPredictWin =
+					venue === "predictfun"
+						? resolvePredictUmbrellaForDisplay(
+								first,
+								predictUmbrellaLookup,
+								umbrellas,
+								firstWinHint,
+							)
+						: null;
+				const predictWinSyntheticLabel =
+					venue === "predictfun"
+						? resolvedPredictWin?.displayName?.trim() ||
+							shortPredictFunMarketTitleForPortfolio(
+								firstWinHint || first.marketTitle,
+							) ||
+							first.marketTitle
+						: first.marketTitle;
+				const umbrellaForWinBlock =
+					resolvedPredictWin ??
+					buildSyntheticUmbrella(
+						`${idPrefix}-${first.tokenId.slice(0, 10)}`,
+						predictWinSyntheticLabel,
+						first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
+					);
+				const blockMarketTitle =
+					venue === "predictfun"
+						? resolvedPredictWin?.displayName?.trim() ||
+							shortPredictFunMarketTitleForPortfolio(
+								firstWinHint || first.marketTitle,
+							) ||
+							first.marketTitle
+						: first.marketTitle;
 				const markets: MarketPosition[] = positions.map((pv) => {
-					const isYes = pv.outcome.toLowerCase() === "yes" || pv.outcome.toLowerCase() !== "no";
-					const mDetail = pv.numericMarketId ? predictMarketDetails.get(pv.numericMarketId) : undefined;
+					const mDetail =
+						venue === "predictfun" && pv.numericMarketId != null
+							? predictMarketDetails.get(pv.numericMarketId)
+							: undefined;
+					const inferredW =
+						venue === "predictfun"
+							? inferPredictSideFromMarketDetail(mDetail ?? undefined, pv.tokenId)
+							: null;
+					const polyWinRow =
+						venue === "polymarket"
+							? findMatchedMarketByPolyConditionId(oddsMonitorMarkets, pv.conditionId)
+							: null;
+					const polyWinLabels =
+						venue === "polymarket"
+							? parseVsTeamLabelsFromDisplayTitle(pv.marketTitle) ??
+								parseVsTeamLabelsFromDisplayTitle(blockMarketTitle)
+							: null;
+					const polyWinInf =
+						venue === "polymarket" && polyWinRow && polyWinLabels
+							? inferPolymarketYesNoFromToken(
+									pv,
+									polyWinRow,
+									polyWinLabels.yesTeamLabel,
+									polyWinLabels.noTeamLabel,
+								)
+							: null;
+					const isYes =
+						venue === "polymarket"
+							? polyWinInf
+								? polyWinInf.side === "Yes"
+								: pv.outcome.toLowerCase() === "yes" ||
+									(pv.outcome.toLowerCase() !== "no" &&
+										(pv.marketTitle?.toLowerCase() ?? "").includes(
+											pv.outcome.toLowerCase(),
+										))
+							: inferredW != null
+								? inferredW.side === "Yes"
+								: pv.outcome.toLowerCase() === "yes" ||
+									(pv.outcome.toLowerCase() !== "no" &&
+										(pv.marketTitle?.toLowerCase() ?? "").includes(
+											pv.outcome.toLowerCase(),
+										));
+					const teamLabel =
+						venue === "predictfun"
+							? (inferredW?.teamName ?? pv.outcome)
+							: pv.outcome;
 					return {
 						market: {
 							_id: `${idPrefix}-${pv.tokenId.slice(0, 12)}`,
-							displayName: pv.marketTitle,
+							displayName: blockMarketTitle,
 							questionId: pv.conditionId ?? pv.tokenId,
 							conditionId: pv.conditionId,
 							resolvedOutcome: isYes ? "yes" : "no",
@@ -698,15 +990,39 @@ export default function usePositionsData() {
 							No: { totalSize: 0, totalValue: 0, avgPrice: null, count: 0 },
 						},
 						venue,
-						predictOutcomeLabelYes: venue === "predictfun" && isYes ? pv.outcome : undefined,
-						predictOutcomeLabelNo: venue === "predictfun" && !isYes ? pv.outcome : undefined,
+						predictOutcomeLabelYes:
+							venue === "predictfun" && isYes ? teamLabel : undefined,
+						predictOutcomeLabelNo:
+							venue === "predictfun" && !isYes ? teamLabel : undefined,
 					};
 				}).filter((mp) => !claimedMarkets.has((mp.market as any)._id));
-				if (markets.length > 0) resolved.push({ umbrella: synth, markets });
+				if (markets.length > 0) {
+					if (venue === "predictfun" && !resolvedPredictWin) {
+						logPredictUmbrellaOnce(
+							"winnings-synthetic-block",
+							String(first.numericMarketId ?? first.tokenId ?? ""),
+							{
+								syntheticLabelSample: predictWinSyntheticLabel.slice(0, 220),
+								hadMarketDetailsHint: Boolean(firstWinHint),
+								hintSample: firstWinHint?.slice(0, 220),
+								numericMarketId: first.numericMarketId,
+								tokenIdSample: String(first.tokenId ?? "").slice(0, 32),
+								positionsInGroup: positions.length,
+							},
+						);
+					}
+					resolved.push({ umbrella: umbrellaForWinBlock, markets });
+				}
 			}
 		};
 
-		appendVenueWinnings(predictWinnings, "predictfun", "predict-win", (p) => p.marketTitle || p.tokenId);
+		appendVenueWinnings(predictWinnings, "predictfun", "predict-win", (p) => {
+			const d =
+				p.numericMarketId != null ? predictMarketDetails.get(p.numericMarketId) : undefined;
+			const hint = (d?.question ?? d?.title ?? "").trim() || undefined;
+			const u = resolvePredictUmbrellaForDisplay(p, predictUmbrellaLookup, umbrellas, hint);
+			return u?._id ?? String(p.numericMarketId ?? p.tokenId);
+		});
 		appendVenueWinnings(polyWinnings, "polymarket", "poly-win", (p) => p.eventSlug || p.marketTitle);
 		appendVenueWinnings(dflowWinnings, "dflow", "dflow-win", (p) => p.marketTitle || p.tokenId);
 
@@ -714,6 +1030,8 @@ export default function usePositionsData() {
 	}, [
 		effectiveAccount, resolvedMarketsByUmbrella, umbrellas, tokenBalances,
 		claimedMarkets, predictWinnings, polyWinnings, dflowWinnings, predictMarketDetails,
+		predictUmbrellaLookup,
+		appState?.markets,
 	]);
 
 	// --- Derived values ---
@@ -879,13 +1197,15 @@ export default function usePositionsData() {
 		portfolioPerfFingerprintRef.current = "";
 	}, [effectiveAccount]);
 
-	const polyPriceMap = useMemo(() => {
+	// Includes merged LevelUp + venue rows (`mergeMarketPositions` clears `venue`), so Polymarket
+	// marks are not dropped when the primary `market._id` is the LevelUp question.
+	const portfolioSidePriceMap = useMemo(() => {
 		const map: Record<string, { yesPrice: number | null; noPrice: number | null }> = {};
 		for (const up of umbrellaPositions) {
 			for (const mp of up.markets) {
-				if (mp.venue === "polymarket" || mp.venue === "predictfun" || mp.venue === "dflow") {
-					map[mp.market._id] = { yesPrice: mp.yesPrice, noPrice: mp.noPrice };
-				}
+				const id = mp.market._id;
+				if (!id) continue;
+				map[id] = { yesPrice: mp.yesPrice, noPrice: mp.noPrice };
 			}
 		}
 		return map;
@@ -893,8 +1213,11 @@ export default function usePositionsData() {
 
 	const getCurrentPriceForSide = useCallback(
 		(market: PredictionMarket, side: "Yes" | "No"): number | null => {
-			const polyPrices = polyPriceMap[market._id];
-			if (polyPrices) return side === "Yes" ? polyPrices.yesPrice : polyPrices.noPrice;
+			const stored = portfolioSidePriceMap[market._id];
+			const fromStored =
+				stored != null ? (side === "Yes" ? stored.yesPrice : stored.noPrice) : null;
+			if (fromStored != null && Number.isFinite(fromStored)) return fromStored;
+
 			const questionId = market.questionId || market._id;
 			if (!questionId) return null;
 			const preview = allBooksPreview[questionId];
@@ -903,7 +1226,7 @@ export default function usePositionsData() {
 				? 1 - preview.highestBid
 				: null;
 		},
-		[polyPriceMap, allBooksPreview],
+		[portfolioSidePriceMap, allBooksPreview],
 	);
 
 	const umbrellaBalancesPositions = useMemo(
@@ -950,16 +1273,57 @@ export default function usePositionsData() {
 		if (predictOpenOrders.length === 0) return [];
 		const titleLookup = new Map<number, string>();
 		const outcomeLookup = new Map<string, string>();
+
+		const predictMarketTitleFromMonitor = (marketId: number): string => {
+			const fromPos = allPredictPositions.find((p) => p.numericMarketId === marketId);
+			const detail = predictMarketDetails.get(marketId);
+			const titleForMatch =
+				fromPos?.marketTitle?.trim() ||
+				detail?.question?.trim() ||
+				detail?.title?.trim() ||
+				"";
+			const detailHint = (detail?.question ?? detail?.title ?? "").trim() || undefined;
+			if (fromPos) {
+				const u = resolvePredictUmbrellaForDisplay(
+					fromPos,
+					predictUmbrellaLookup,
+					umbrellas,
+					detailHint,
+				);
+				if (u?.displayName?.trim()) return u.displayName.trim();
+			}
+			const sampleTok = detail?.outcomes?.find((o) => o.onChainId)?.onChainId;
+			if (sampleTok) {
+				const u = resolvePredictUmbrellaForDisplay(
+					{ tokenId: sampleTok, numericMarketId: marketId, marketTitle: titleForMatch },
+					predictUmbrellaLookup,
+					umbrellas,
+					detailHint,
+				);
+				if (u?.displayName?.trim()) return u.displayName.trim();
+			}
+			return (
+				shortPredictFunMarketTitleForPortfolio(titleForMatch) ||
+				titleForMatch ||
+				`Market #${marketId}`
+			);
+		};
+
 		for (const p of allPredictPositions) {
-			if (p.numericMarketId) titleLookup.set(p.numericMarketId, p.marketTitle);
+			if (p.numericMarketId != null) {
+				titleLookup.set(p.numericMarketId, predictMarketTitleFromMonitor(p.numericMarketId));
+			}
 			outcomeLookup.set(normalizePredictTokenId(p.tokenId), p.outcome);
 		}
 		for (const [id, detail] of predictMarketDetails) {
-			if (!titleLookup.has(id)) titleLookup.set(id, detail.title);
+			if (!titleLookup.has(id)) titleLookup.set(id, predictMarketTitleFromMonitor(id));
 			for (const o of detail.outcomes ?? []) {
 				const ok = normalizePredictTokenId(o.onChainId);
 				if (!outcomeLookup.has(ok)) outcomeLookup.set(ok, o.name);
 			}
+		}
+		for (const o of predictOpenOrders) {
+			if (!titleLookup.has(o.marketId)) titleLookup.set(o.marketId, predictMarketTitleFromMonitor(o.marketId));
 		}
 		const liveOrders = predictOpenOrders.filter((o) => {
 			const detail = predictMarketDetails.get(o.marketId);
@@ -967,7 +1331,7 @@ export default function usePositionsData() {
 			return detail.status !== "RESOLVED" && detail.status !== "REMOVED" && detail.tradingStatus !== "CLOSED";
 		});
 		return mapPredictOrdersToVenueOrders(liveOrders, titleLookup, outcomeLookup);
-	}, [predictOpenOrders, allPredictPositions, predictMarketDetails]);
+	}, [predictOpenOrders, allPredictPositions, predictMarketDetails, predictUmbrellaLookup, umbrellas]);
 
 	const venueHistory = useMemo(() => {
 		const items: typeof allPredictPositions = [];
@@ -1025,18 +1389,45 @@ export default function usePositionsData() {
 			seen,
 			predictCostLookup,
 			predictMarketDetails,
+			predictUmbrellaLookup,
+			umbrellas,
 		);
 		for (const p of predictFilledHistory) {
 			seen.add(p.tokenId);
 			items.push(p);
 		}
 
-		return items;
+		return items.map((item) => {
+			if (item.venue !== "predictfun") return item;
+			const histDetail =
+				item.numericMarketId != null
+					? predictMarketDetails.get(item.numericMarketId)
+					: undefined;
+			const histHint =
+				(histDetail?.question ?? histDetail?.title ?? "").trim() || undefined;
+			const u = resolvePredictUmbrellaForDisplay(
+				item,
+				predictUmbrellaLookup,
+				umbrellas,
+				histHint,
+			);
+			if (!u?.displayName?.trim()) {
+				const raw = (histHint ?? item.marketTitle ?? "").trim();
+				const short = shortPredictFunMarketTitleForPortfolio(raw);
+				if (short && short !== item.marketTitle) return { ...item, marketTitle: short };
+				return item;
+			}
+			const dn = u.displayName.trim();
+			if (item.marketTitle === dn) return item;
+			return { ...item, marketTitle: dn };
+		});
 	}, [
 		predictWinnings, predictHistory, polyWinnings, polyHistory,
 		polyTradeHistoryQuery.data, dflowWinnings, dflowHistory,
 		polyPositions, predictPositions, dflowPositions,
 		predictFilledOrders, predictCostLookup, predictMarketDetails,
+		predictUmbrellaLookup,
+		umbrellas,
 	]);
 
 	const returnsByQid = useMemo(() => {

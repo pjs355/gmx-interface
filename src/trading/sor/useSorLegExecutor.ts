@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef } from "react";
-import { useWallets } from "@privy-io/react-auth";
-import { Connection, VersionedTransaction } from "@solana/web3.js";
+import { useCallback, useMemo } from "react";
+import { useSendTransaction } from "@privy-io/react-auth";
+import { VersionedTransaction } from "@solana/web3.js";
 import { bsc } from "viem/chains";
 import { Side } from "@polymarket/clob-client";
 import type { TickSize } from "@polymarket/clob-client";
@@ -8,19 +8,18 @@ import type { RelayClient } from "@polymarket/builder-relayer-client";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+import type { Book } from "@predictdotfun/sdk";
 import type { TradeExecutionParams } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
 import type { RouteLeg, SorVenue } from "./sor-types";
+import { validateLegMinimum } from "./sorPreflight";
 import { CHAIN_LIFI_IDS } from "./sor-types";
 import type { SolanaSignerCapable, SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
-import { isPrivyEmbeddedWallet } from "@/trading/polymarket/privyEmbeddedWallet";
-import { PRIVY_SPONSOR_BSC_GAS } from "@/config/privyBscGas";
-import { SOLANA_RPC_URL } from "@/config/rpc";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
-import type { PrivySolanaSendTransaction } from "@/trading/solana/privySponsoredSolana";
-import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
+import type { LimitlessOrderRequest } from "@/trading/limitless/limitlessPrivateApiTypes";
+import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
 
 type LegResult = {
 	filled: boolean;
@@ -51,6 +50,14 @@ export interface UseSorLegExecutorDeps {
 			tickStyle?: TickSize;
 			negRisk?: boolean;
 		}) => Promise<unknown>;
+		placeLimitOrder: (args: {
+			tokenId: string;
+			price: number;
+			size: number;
+			side: typeof Side.BUY | typeof Side.SELL;
+			tickStyle?: TickSize;
+			negRisk?: boolean;
+		}) => Promise<unknown>;
 	};
 	predictSession: {
 		ready: boolean;
@@ -60,8 +67,15 @@ export interface UseSorLegExecutorDeps {
 			tokenId: string;
 			side: "buy" | "sell";
 			amount: string;
-			book?: unknown;
+			book?: Book | null;
 		}) => Promise<{ orderHash?: string }>;
+		placeLimitOrder: (args: {
+			market: PredictMarketDetail;
+			tokenId: string;
+			side: "buy" | "sell";
+			priceCents: number;
+			sizeShares: string;
+		}) => Promise<{ orderHash?: string } | unknown>;
 	};
 	privateApi: {
 		getDflowOrder: (params: {
@@ -83,16 +97,17 @@ export interface UseSorLegExecutorDeps {
 			slippage?: number;
 		}) => Promise<{
 			steps?: unknown[];
-			statusBridge?: string;
+			statusBridge?: string | null;
 			tool?: string;
 		}>;
 		getFundingLifiStatus: (params: {
 			txHash: string;
 			tool?: string;
+			fromChain?: number;
+			toChain?: number;
 		}) => Promise<unknown>;
+		postLimitlessOrder: (body: LimitlessOrderRequest) => Promise<unknown>;
 	};
-	/** Privy Solana `useSendTransaction` — use with `sponsor: true` for gasless DFlow legs. */
-	privySolanaSendTransaction: PrivySolanaSendTransaction;
 
 	market: PredictionMarket;
 	matchedMonitor: MatchedMarket | null;
@@ -102,7 +117,7 @@ export interface UseSorLegExecutorDeps {
 
 	getClientForChain: (opts: { id: number }) => Promise<{
 		sendTransaction: SendTransactionCapable["sendTransaction"];
-	} | null>;
+	} | null | undefined>;
 	fundingAddresses: {
 		baseSmartWallet?: string;
 		polymarketSafe?: string;
@@ -115,9 +130,36 @@ export interface UseSorLegExecutorDeps {
 	dflowProofVerified: boolean;
 	predictApprovalsOk: boolean;
 	predictTokenId: string | null;
+	/** Runs LevelUp USDC/CTF approvals if needed (first trade / SOR leg). */
+	ensureLevelUpApprovals?: () => Promise<void>;
+	/** Runs Predict BNB approvals if needed before placing orders. */
+	ensurePredictApprovals?: () => Promise<void>;
+	/**
+	 * Runs Polymarket approvals (Safe deploy + USDC/CTF approvals batch)
+	 * just-in-time before submitting the order. Throws with a user-visible
+	 * message if the batch fails — never fails silently.
+	 */
+	ensurePolymarketApprovals?: () => Promise<void>;
+	/**
+	 * Refreshes Limitless account provisioning (server-side `ensure-account`
+	 * which runs `syncAllowance`) immediately before submitting. Approvals on
+	 * Limitless are modeled server-side via the partner API; this call
+	 * confirms the user is cleared to trade before we hit `postLimitlessOrder`.
+	 */
+	ensureLimitlessApprovals?: () => Promise<void>;
+	/**
+	 * Re-fetches the DFlow/Proof KYC status on click so a user who verified
+	 * mid-session isn't falsely rejected from a stale cache. Returns the
+	 * freshly-read verified boolean. On `false`, the executor throws a loud
+	 * error and the trade box is expected to launch `startDflowProofRedirect`.
+	 */
+	ensureDflowProofVerified?: () => Promise<boolean>;
 }
 
 type SorChainKey = "base" | "polygon" | "solana" | "bnb";
+
+/** Extra headroom on LI.FI `amountHuman` so post-slippage USDT on BNB still covers Predict `makerAmount`. */
+const LIFI_BRIDGE_AMOUNT_MARGIN = 0.01;
 
 function addressForChain(
 	chain: SorChainKey,
@@ -135,13 +177,50 @@ function addressForChain(
 	}
 }
 
+const SOLANA_LIFI_CHAIN_ID = CHAIN_LIFI_IDS.solana;
+
+/**
+ * Hash to pass to `GET /funding/lifi/status`: the **source-chain** tx (first hop).
+ * When the route starts on Solana, that signature is base58, not `0x…`; picking the last
+ * EVM hash would poll the wrong tx.
+ */
+function pickBridgeSourceTxHashForLifiStatus(
+	txHashes: string[],
+	steps: unknown[] | undefined,
+	fromChainLifi: number,
+): string {
+	const first = Array.isArray(steps) ? (steps[0] as Record<string, unknown> | undefined) : undefined;
+	const tr0 = first?.transactionRequest as Record<string, unknown> | undefined;
+	const firstChainId =
+		typeof first?.chainId === "number"
+			? first.chainId
+			: typeof tr0?.chainId === "number"
+				? (tr0.chainId as number)
+				: undefined;
+	const firstStepIsSolana =
+		fromChainLifi === SOLANA_LIFI_CHAIN_ID ||
+		first?.kind === "solana" ||
+		firstChainId === SOLANA_LIFI_CHAIN_ID;
+
+	if (firstStepIsSolana) {
+		const base58 = txHashes.find(
+			(h) => typeof h === "string" && h.length > 0 && !/^0x[0-9a-fA-F]{64}$/i.test(h),
+		);
+		if (base58) return base58;
+		if (typeof txHashes[0] === "string" && txHashes[0].length > 0) return txHashes[0];
+	}
+
+	const evmHashes = txHashes.filter((h) => typeof h === "string" && /^0x[0-9a-fA-F]{64}$/i.test(h));
+	if (evmHashes.length > 0) return evmHashes[evmHashes.length - 1];
+	return txHashes[txHashes.length - 1] ?? txHashes[0] ?? "";
+}
+
 export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 	const {
 		tradeExecutionService,
 		polyClob,
 		predictSession,
 		privateApi,
-		privySolanaSendTransaction,
 		market,
 		matchedMonitor,
 		predictNumericId,
@@ -154,14 +233,14 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		dflowProofVerified,
 		predictApprovalsOk,
 		predictTokenId,
+		ensureLevelUpApprovals,
+		ensurePredictApprovals,
+		ensurePolymarketApprovals,
+		ensureLimitlessApprovals,
+		ensureDflowProofVerified,
 	} = deps;
 
-	const { wallets } = useWallets();
-	const embeddedRef = useRef<{
-		getEthereumProvider?: () => Promise<unknown>;
-	} | null>(null);
-	embeddedRef.current =
-		(wallets || []).find((w) => isPrivyEmbeddedWallet(w as never)) ?? null;
+	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
 
 	// ──────────────────────────────────────────────
 	// executeLeg: dispatches to the correct venue
@@ -171,11 +250,46 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		async (leg: RouteLeg, side: "buy" | "sell" = "buy"): Promise<LegResult> => {
 			const venue: SorVenue = leg.venue;
 
+			// Defense-in-depth: shares are non-transferable between venues, so
+			// sells must never arrive with a bridge plan. If a future bug ever
+			// stamps one, fail loud instead of LI.FI-spending the user's USDC
+			// to chase a non-transferable share.
+			if (side === "sell" && leg.bridge !== null) {
+				return {
+					filled: false,
+					filledShares: 0,
+					error: "Refusing to bridge on a sell leg — shares are non-transferable",
+				};
+			}
+
+			const isLimit = leg.orderType === "limit";
+			const limitPrice =
+				isLimit && typeof leg.limitPriceCents === "number"
+					? leg.limitPriceCents / 100
+					: undefined;
+
+			if (isLimit && (limitPrice == null || limitPrice <= 0 || limitPrice >= 1)) {
+				return {
+					filled: false,
+					filledShares: 0,
+					error: "Missing or invalid limit price on leg",
+				};
+			}
+
 			switch (venue) {
 				// ─── LevelUp (Base, USDC) ─────────────────
 				case "levelup": {
 					if (!account) {
 						return { filled: false, filledShares: 0, error: "No wallet connected" };
+					}
+					if (ensureLevelUpApprovals) {
+						try {
+							await ensureLevelUpApprovals();
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error ? e.message : "LevelUp approvals failed";
+							return { filled: false, filledShares: 0, error: msg };
+						}
 					}
 					const questionId = leg.venueMarketIds.levelUpQuestionId;
 					if (!questionId) {
@@ -185,8 +299,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					const position: "yes" | "no" = leg.outcome === "A" ? "yes" : "no";
 					const shares = Math.round(leg.shares);
 					const maxPx = leg.maxPrice;
-					const signingPrice =
-						maxPx != null && Number.isFinite(maxPx) && maxPx > 0 && maxPx <= 1
+					const signingPrice = isLimit
+						? Math.round((limitPrice as number) * 100) / 100
+						: maxPx != null && Number.isFinite(maxPx) && maxPx > 0 && maxPx <= 1
 							? Math.round(maxPx * 100) / 100
 							: side === "buy"
 								? Math.round(Math.min(leg.avgPrice * 1.15, 0.99) * 100) / 100
@@ -197,7 +312,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						position,
 						amount: shares,
 						price: signingPrice,
-						orderType: "market",
+						orderType: isLimit ? "limit" : "market",
 						side,
 						userAddress: account,
 						market,
@@ -217,6 +332,19 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					if (!polyClob.ready) {
 						return { filled: false, filledShares: 0, error: "Polymarket CLOB session not ready. Open Polymarket tab first to initialize." };
 					}
+					// Approvals are ungated from SOR eligibility — the user
+					// sees Polymarket in the plan regardless — but we must
+					// satisfy them JIT before signing an order, otherwise the
+					// CLOB rejects with a cryptic "not approved" error.
+					if (ensurePolymarketApprovals) {
+						try {
+							await ensurePolymarketApprovals();
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error ? e.message : "Polymarket approvals failed";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+					}
 					const tokenId =
 						leg.outcome === "A"
 							? leg.venueMarketIds.polyTokenIdA
@@ -232,21 +360,63 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						? Boolean(matchedMonitor.polyNegRisk)
 						: undefined;
 
-					await polyClob.placeMarketOrder({
-						tokenId,
-						amount: side === "buy" ? leg.executionAmountUsd : leg.shares,
-						side: side === "buy" ? Side.BUY : Side.SELL,
-						tickStyle,
-						negRisk,
-					});
+					if (isLimit) {
+						await polyClob.placeLimitOrder({
+							tokenId,
+							price: limitPrice as number,
+							size: leg.shares,
+							side: side === "buy" ? Side.BUY : Side.SELL,
+							tickStyle,
+							negRisk,
+						});
+					} else {
+						await polyClob.placeMarketOrder({
+							tokenId,
+							amount: side === "buy" ? leg.executionAmountUsd : leg.shares,
+							side: side === "buy" ? Side.BUY : Side.SELL,
+							tickStyle,
+							negRisk,
+						});
+					}
 
 					return { filled: true, filledShares: leg.shares };
 				}
 
 				// ─── DFlow / Kalshi (Solana, USDC) ────────
 				case "dflow": {
-					if (!dflowProofVerified) {
-						return { filled: false, filledShares: 0, error: "Kalshi KYC not verified. Complete verification on the Profile page." };
+					if (isLimit) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error: "Kalshi does not support limit orders",
+						};
+					}
+					// KYC is the one SOR gate we keep on DFlow (regulatory). A
+					// user can have KYC'd mid-session and still carry a stale
+					// `dflowProofVerified=false` flag from page load, so
+					// re-fetch on the click before bailing. When the refresh
+					// still says unverified, throw a loud error so the trade
+					// box can launch `startDflowProofRedirect` — no silent
+					// rejections.
+					let proofOk = dflowProofVerified;
+					if (ensureDflowProofVerified) {
+						try {
+							proofOk = await ensureDflowProofVerified();
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error
+									? e.message
+									: "Failed to refresh Kalshi KYC status";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+					}
+					if (!proofOk) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error:
+								"Kalshi KYC not verified. Complete verification on the Profile page.",
+						};
 					}
 					const outcomeMint =
 						leg.outcome === "A"
@@ -275,17 +445,82 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						throw new Error("Kalshi returned no transaction to sign");
 					}
 
+					if (!solanaSigner) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error: "Solana signer unavailable — connect your Solana embedded wallet",
+						};
+					}
+
 					const txBytes = Buffer.from(orderResult.transaction, "base64");
 					const transaction = VersionedTransaction.deserialize(txBytes);
-					const connection = new Connection(SOLANA_RPC_URL, "confirmed");
-
-					const sig = await sendPrivySponsoredSolanaTransaction(
-						privySolanaSendTransaction,
-						transaction,
-						connection,
+					const sig = await solanaSigner.signAndSendTransaction(
+						transaction.serialize(),
 					);
 
 					return { filled: true, filledShares: leg.shares, txHash: sig };
+				}
+
+				// ─── Limitless (Base, USDC) ───────────
+				case "limitless": {
+					const ids = leg.venueMarketIds;
+					const slug = ids.limitlessSlug?.trim();
+					const tokenId =
+						leg.outcome === "A"
+							? ids.limitlessTokenIdA
+							: ids.limitlessTokenIdB;
+					if (!slug || !tokenId) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error: "Missing Limitless slug or outcome token on route leg",
+						};
+					}
+					// Limitless approvals are server-side (partner API). The
+					// SOR no longer gates on `approvalComplete`, so we must
+					// re-run ensure-account on the click to guarantee the
+					// partner's allowance ledger is fresh before we submit.
+					if (ensureLimitlessApprovals) {
+						try {
+							await ensureLimitlessApprovals();
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error ? e.message : "Limitless account not ready";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+					}
+					const feeRateBps = LIMITLESS_DEFAULT_FEE_RATE_BPS;
+					if (isLimit) {
+						await privateApi.postLimitlessOrder({
+							marketSlug: slug,
+							orderType: "GTC",
+							tokenId,
+							side: side === "buy" ? "BUY" : "SELL",
+							price: limitPrice as number,
+							size: leg.shares,
+							feeRateBps,
+						});
+					} else if (side === "buy") {
+						await privateApi.postLimitlessOrder({
+							marketSlug: slug,
+							orderType: "FOK",
+							tokenId,
+							side: "BUY",
+							makerAmount: leg.executionAmountUsd,
+							feeRateBps,
+						});
+					} else {
+						await privateApi.postLimitlessOrder({
+							marketSlug: slug,
+							orderType: "FOK",
+							tokenId,
+							side: "SELL",
+							makerAmount: leg.shares,
+							feeRateBps,
+						});
+					}
+					return { filled: true, filledShares: leg.shares };
 				}
 
 				// ─── Predict (BNB, USDT) ─────────────
@@ -293,8 +528,19 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					if (!predictSession.ready) {
 						return { filled: false, filledShares: 0, error: "Predict session not ready. Authenticate on the Predict tab first." };
 					}
-					if (!predictApprovalsOk) {
-						return { filled: false, filledShares: 0, error: "Predict contracts not approved. Approve on the Predict tab first." };
+					if (ensurePredictApprovals) {
+						try {
+							await ensurePredictApprovals();
+						} catch (e: unknown) {
+							const msg = e instanceof Error ? e.message : "Predict approvals failed";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+					} else if (!predictApprovalsOk) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error: "Predict contracts not approved.",
+						};
 					}
 
 					if (!predictTokenId) {
@@ -304,6 +550,26 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 					if (predictNumericId == null || !predictMarketDetail) {
 						return { filled: false, filledShares: 0, error: "Predict market data not loaded" };
+					}
+
+					const preflight = validateLegMinimum(leg, side);
+					if (!preflight.ok) {
+						return { filled: false, filledShares: 0, error: preflight.error };
+					}
+
+					if (isLimit) {
+						const resp = await predictSession.placeLimitOrder({
+							market: predictMarketDetail,
+							tokenId,
+							side,
+							priceCents: leg.limitPriceCents as number,
+							sizeShares: leg.shares.toFixed(6),
+						});
+						return {
+							filled: true,
+							filledShares: leg.shares,
+							txHash: (resp as { orderHash?: string } | undefined)?.orderHash,
+						};
 					}
 
 					const amountStr = side === "buy"
@@ -337,12 +603,14 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			matchedMonitor,
 			dflowProofVerified,
 			privateApi,
-			privySolanaSendTransaction,
+			solanaSigner,
 			predictSession,
 			predictApprovalsOk,
 			predictNumericId,
 			predictMarketDetail,
 			predictTokenId,
+			ensureLevelUpApprovals,
+			ensurePredictApprovals,
 		],
 	);
 
@@ -367,10 +635,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			}
 
 			try {
+				const amountHuman = (bridge.amount * (1 + LIFI_BRIDGE_AMOUNT_MARGIN) + 0.01).toFixed(6);
 				const quote = await privateApi.postFundingLifiQuote({
 					fromChain: fromChainLifi,
 					toChain: toChainLifi,
-					amountHuman: bridge.amount.toFixed(6),
+					amountHuman,
 					fromAddress,
 					toAddress,
 					slippage: 0.005,
@@ -378,6 +647,18 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 				if (!quote.steps?.length) {
 					return { success: false, error: "LI.FI returned no bridge steps" };
+				}
+
+				if (import.meta.env.DEV) {
+					const st0 = quote.steps[0] as Record<string, unknown> | undefined;
+					console.info("[SOR] Bridge LIFI quote", {
+						venue: leg.venue,
+						fromChainLifi,
+						toChainLifi,
+						stepCount: quote.steps.length,
+						firstStepKind: st0?.kind,
+						firstStepChainId: st0?.chainId,
+					});
 				}
 
 				const BNB_CHAIN_ID = bsc.id;
@@ -396,15 +677,15 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 				const bridgeGetSigner = async (chainId: number): Promise<SendTransactionCapable | null> => {
 					if (chainId === BNB_CHAIN_ID) {
-						const embedded = embeddedRef.current;
 						const addr = fundingAddresses.embeddedEoa as `0x${string}` | undefined;
-						if (!embedded?.getEthereumProvider || !addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+						if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
 							return null;
 						}
-						const provider = await embedded.getEthereumProvider();
-						return createPrivyEmbeddedSendTransactionCapable(provider, addr, bsc, {
-							sponsorGas: PRIVY_SPONSOR_BSC_GAS,
-						});
+						return createPrivyEmbeddedSendTransactionCapable(
+							addr,
+							bsc,
+							privyEvmSendTransaction,
+						);
 					}
 					const client = await getClientForChain({ id: chainId });
 					if (!client) return null;
@@ -424,10 +705,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					},
 				);
 
-				const evmHashes = txHashes.filter((h) => typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h));
-				const sourceTxHash = evmHashes.length > 0
-					? evmHashes[evmHashes.length - 1]
-					: txHashes[txHashes.length - 1] ?? txHashes[0] ?? "";
+				const sourceTxHash = pickBridgeSourceTxHashForLifiStatus(
+					txHashes,
+					quote.steps as unknown[] | undefined,
+					fromChainLifi,
+				);
 				if (!sourceTxHash) {
 					return { success: false, error: "Bridge produced no transaction hash" };
 				}
@@ -441,7 +723,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					() =>
 						privateApi.getFundingLifiStatus({
 							txHash: sourceTxHash,
-							tool: statusTool,
+							...(statusTool != null ? { tool: statusTool } : {}),
+							fromChain: fromChainLifi,
+							toChain: toChainLifi,
 						}) as ReturnType<Parameters<typeof pollLifiUntilTerminal>[0]>,
 					{ maxAttempts: 60, intervalMs: 12_000 },
 				);

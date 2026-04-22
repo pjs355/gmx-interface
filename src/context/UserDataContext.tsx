@@ -19,6 +19,7 @@ import {
 import { getCTFAddress, getUSDCAddress, getExchangeAddress, getFeeWrapperAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { usePredictionData } from "context/PredictionDataContext";
+import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/polymarket/privyEmbeddedWallet";
 import {
 	subgraphService,
 	fromMicroUnits,
@@ -49,7 +50,8 @@ type UserDataContextValue = {
 	refreshViaRpc: () => Promise<void>; // Force RPC refresh (bypasses slow subgraph)
 	loadOrders: () => Promise<void>; // Lazy: call when orders are needed (e.g. Positions page)
 	getTokenBalance: (marketId: string) => TokenBalance | null;
-	checkApproval: () => Promise<void>;
+	/** Refreshes on-chain approval flags; returns whether LevelUp trading is fully approved. */
+	checkApproval: () => Promise<boolean>;
 	approveToken: () => Promise<void>;
 };
 
@@ -117,14 +119,14 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		return readProviderRef.current;
 	}, []);
 
-	const checkApproval = useCallback(async () => {
+	const checkApproval = useCallback(async (): Promise<boolean> => {
 		if (!account) {
 			setApprovalState({
 				isApproved: false,
 				isChecking: false,
 				isApproving: false,
 			});
-			return;
+			return false;
 		}
 
 		setApprovalState((prev) => ({ ...prev, isChecking: true }));
@@ -162,9 +164,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				isChecking: false,
 				isApproving: false,
 			});
+			return isApproved;
 		} catch (error) {
 			console.error("Error checking approval:", error);
 			setApprovalState((prev) => ({ ...prev, isChecking: false }));
+			return false;
 		}
 	}, [account, getReadProvider]);
 
@@ -548,12 +552,9 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				(acct: any) => acct?.type === "smart_wallet"
 			) as any;
 
-			const embeddedWallet = (privyWallets || []).find(
-				(w: any) =>
-					w?.type === "embedded_wallet" ||
-					w?.walletClientType === "privy" ||
-					w?.connectorType === "privy"
-			);
+			const embeddedWallet = findEvmPrivyEmbeddedWallet(
+				(privyWallets || []) as readonly PrivyWalletListEntry[]
+			) as { address?: string } | undefined;
 
 			const externalWallet = (privyWallets || []).find(
 				(w: any) => w?.type === "wallet" || w?.connectorType !== "privy"

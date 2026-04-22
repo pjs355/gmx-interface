@@ -1,36 +1,31 @@
-import { createWalletClient, custom, type Chain } from "viem";
+import type { Chain } from "viem";
+import type { UnsignedTransactionRequest } from "@privy-io/react-auth";
 import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
+import type { PrivyEvmSendTransaction } from "@/trading/bsc/privyBscProvider";
 
 /**
- * Viem `sendTransaction` for the Privy embedded wallet on an arbitrary EVM chain (e.g. BSC for LI.FI).
- * Uses the EIP-1193 provider from `embeddedWallet.getEthereumProvider()`.
+ * LI.FI `SendTransactionCapable` for the Privy embedded wallet on BSC (or any other
+ * supported EVM chain). Routes sends through Privy's TEE-sponsored
+ * `useSendTransaction({ sponsor: true })` so the user never needs native gas.
  */
 export function createPrivyEmbeddedSendTransactionCapable(
-	provider: unknown,
-	account: `0x${string}`,
+	address: `0x${string}`,
 	chain: Chain,
-	opts?: { sponsorGas?: boolean }
+	sendTransaction: PrivyEvmSendTransaction,
 ): SendTransactionCapable {
-	const walletClient = createWalletClient({
-		account,
-		chain,
-		transport: custom(provider as never),
-	});
-
 	return {
 		sendTransaction: async (args) => {
-			const payload: Record<string, unknown> = {
+			const input: UnsignedTransactionRequest = {
+				from: address,
 				to: args.to,
 				data: args.data,
-				value: args.value ?? 0n,
-				chain,
+				value: args.value,
+				chainId: args.chainId ?? chain.id,
 			};
-			if (opts?.sponsorGas === true || args.sponsor === true) {
-				payload.sponsor = true;
-			} else if (opts?.sponsorGas === false) {
-				payload.sponsor = false;
-			}
-			const hash = await walletClient.sendTransaction(payload as never);
+			const { hash } = await sendTransaction(input, {
+				sponsor: true,
+				address,
+			});
 			return hash;
 		},
 	};

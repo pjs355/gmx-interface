@@ -1,3 +1,19 @@
+.orderbook-display--embedded {
+  .orderbook-embedded-team-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 12px 16px 12px 20px;
+    background: black;
+    border-bottom: 1px solid #4B5563;
+
+    .orderbook-tabs {
+      display: flex;
+      gap: 4px;
+    }
+  }
+}
+
 .orderbook-display {
   background: black;
   overflow: hidden;
@@ -358,6 +374,26 @@
 
 // Responsive design
 @media (max-width: 768px) {
+  .orderbook-display--embedded {
+    .orderbook-embedded-team-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+      padding: 12px 16px;
+
+      .orderbook-tabs {
+        width: 100%;
+        gap: 6px;
+
+        .tab-button {
+          padding: 10px 14px;
+          font-size: 15px;
+          flex: 1;
+        }
+      }
+    }
+  }
+
   .orderbook-display {
     .market-stats {
       flex-direction: column;
@@ -404,4 +440,11 @@
       }
     }
   }
+}
+
+.prediction-market-page.mobile .orderbook-display {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }

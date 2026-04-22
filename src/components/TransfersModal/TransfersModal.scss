@@ -180,17 +180,6 @@
 	}
 }
 
-// Network Notice
-.transfers-network-notice {
-	padding: 14px 16px;
-	background: rgba(251, 191, 36, 0.08);
-	border: 1px solid rgba(251, 191, 36, 0.25);
-	border-radius: 10px;
-	font-size: 13px;
-	line-height: 1.6;
-	color: rgba(255, 255, 255, 0.8);
-}
-
 // Form Actions
 .transfers-form-actions {
 	display: flex;
@@ -300,6 +289,14 @@
 	text-align: center;
 }
 
+.transfers-review-irreversible {
+	font-size: 13px;
+	color: rgba(255, 255, 255, 0.62);
+	margin: 0;
+	line-height: 1.45;
+	text-align: center;
+}
+
 .transfers-review-details {
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid rgba(255, 255, 255, 0.08);
@@ -332,6 +329,18 @@
 	letter-spacing: 0.5px;
 }
 
+.transfers-review-label--fees {
+	cursor: help;
+	display: inline-block;
+	text-decoration: underline dotted rgba(255, 255, 255, 0.35);
+	text-underline-offset: 3px;
+	color: rgba(255, 255, 255, 0.55);
+
+	&:hover {
+		color: rgba(255, 255, 255, 0.75);
+	}
+}
+
 .transfers-review-value {
 	font-size: 15px;
 	font-weight: 600;
@@ -350,40 +359,6 @@
 	font-size: 20px;
 	font-weight: 700;
 	color: white;
-}
-
-.transfers-review-legs-wrap {
-	margin-top: 12px;
-}
-
-.transfers-review-legs {
-	width: 100%;
-	border-collapse: collapse;
-	font-size: 12px;
-	color: rgba(255, 255, 255, 0.88);
-
-	th,
-	td {
-		text-align: left;
-		padding: 8px 6px;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-		vertical-align: top;
-	}
-
-	th {
-		font-weight: 600;
-		color: rgba(255, 255, 255, 0.45);
-		text-transform: uppercase;
-		font-size: 10px;
-		letter-spacing: 0.04em;
-	}
-}
-
-.transfers-review-legs-note {
-	font-size: 12px;
-	color: rgba(255, 255, 255, 0.5);
-	margin: 10px 0 0 0;
-	line-height: 1.45;
 }
 
 // Confirmation View (after successful send)
@@ -414,7 +389,7 @@
 	font-size: 20px;
 	font-weight: 700;
 	color: white;
-	margin: 0 0 8px 0;
+	margin: 0 0 28px 0;
 }
 
 .transfers-confirmation-subtitle {
@@ -455,6 +430,37 @@
 	color: rgba(255, 255, 255, 0.5);
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
+}
+
+.transfers-confirmation-label--fees {
+	cursor: help;
+	display: inline-block;
+	text-decoration: underline dotted rgba(255, 255, 255, 0.35);
+	text-underline-offset: 3px;
+	color: rgba(255, 255, 255, 0.55);
+
+	&:hover {
+		color: rgba(255, 255, 255, 0.75);
+	}
+}
+
+.transfers-fee-tooltip-popup {
+	min-width: min(18.5rem, calc(100vw - 24px)) !important;
+	width: min(18.5rem, calc(100vw - 24px));
+	max-width: min(18.5rem, calc(100vw - 24px)) !important;
+	padding: 12px 14px !important;
+	font-size: 12px !important;
+	line-height: 1.45 !important;
+}
+
+.transfers-fee-tooltip {
+	p {
+		margin: 0 0 8px 0;
+
+		&:last-child {
+			margin-bottom: 0;
+		}
+	}
 }
 
 .transfers-confirmation-value {

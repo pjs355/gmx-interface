@@ -5,6 +5,8 @@ import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { TradingVenue } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
+import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
+import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
 import type { DirectVenueBooks } from "@/trading/venue-books";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
@@ -97,8 +99,8 @@ function buildVenueEntries(
 		entries.push({
 			id: "limitless",
 			label: "Limitless",
-			bookA: monitorBookToSnapshot(matched.limitlessPriceA),
-			bookB: monitorBookToSnapshot(matched.limitlessPriceB),
+			bookA: directBooks?.limitlessBookA ?? monitorBookToSnapshot(matched.limitlessPriceA),
+			bookB: directBooks?.limitlessBookB ?? monitorBookToSnapshot(matched.limitlessPriceB),
 			restricted: false,
 		});
 	}
@@ -122,13 +124,16 @@ function venueIdToTradingVenue(id: string): TradingVenue | null {
 		case "poly": return "polymarket";
 		case "dflow": return "dflow";
 		case "predictFun": return "predictfun";
+		case "limitless": return "limitless";
 		default: return null;
 	}
 }
 
-type Props = {
+export type VenueOrderbooksPanelProps = {
 	pandascoreMatchId: string;
 	umbrellaId?: string;
+	/** Fallback when odds-monitor row omits limitless (prod /matched-markets skew). */
+	limitlessFromUmbrella?: UmbrellaExchangeMatchingLimitless | null;
 	levelUpOrderbook: OrderbookSnapshot | null;
 	market?: PredictionMarket;
 	umbrellaDisplayName?: string;
@@ -142,6 +147,7 @@ type Props = {
 export function VenueOrderbooksPanel({
 	pandascoreMatchId,
 	umbrellaId,
+	limitlessFromUmbrella,
 	levelUpOrderbook,
 	market,
 	umbrellaDisplayName,
@@ -150,20 +156,20 @@ export function VenueOrderbooksPanel({
 	activePosition,
 	side = "buy",
 	directBooks,
-}: Props) {
+}: VenueOrderbooksPanelProps) {
 	const { appState } = useOddsMonitor();
-	const [openVenueId, setOpenVenueId] = useState<string | null>(null);
+	const [selectedVenueId, setSelectedVenueId] = useState("");
 	const hasDefaultedRef = useRef(false);
 	const hasLiquidityDefaultedRef = useRef(false);
-	const marketSwitchFiredRef = useRef(false);
 
 	const matched = useMemo((): MatchedMarket | null => {
-		return findOddsMatchedMarket(
+		const base = findOddsMatchedMarket(
 			appState?.markets,
 			pandascoreMatchId,
 			umbrellaId,
 		);
-	}, [appState?.markets, pandascoreMatchId, umbrellaId]);
+		return mergeMonitorLimitlessFromUmbrella(base, limitlessFromUmbrella);
+	}, [appState?.markets, pandascoreMatchId, umbrellaId, limitlessFromUmbrella]);
 
 	const venues = useMemo(() => {
 		if (!matched) return [];
@@ -201,7 +207,7 @@ export function VenueOrderbooksPanel({
 		if (venues.length === 0) return;
 
 		if (!hasDefaultedRef.current) {
-			setOpenVenueId(venues[0].id);
+			setSelectedVenueId(venues[0].id);
 			hasDefaultedRef.current = true;
 		}
 
@@ -214,88 +220,100 @@ export function VenueOrderbooksPanel({
 				return asks.some((e) => (e.size ?? 0) > 0) || bids.some((e) => (e.size ?? 0) > 0);
 			});
 			if (withLiquidity) {
-				setOpenVenueId(withLiquidity.id);
+				setSelectedVenueId(withLiquidity.id);
 				hasLiquidityDefaultedRef.current = true;
 			}
 		}
 	}, [venues]);
 
-	const handleToggle = useCallback((venueId: string) => {
-		if (marketSwitchFiredRef.current) {
-			marketSwitchFiredRef.current = false;
-			return;
+	useEffect(() => {
+		if (venues.length === 0 || !selectedVenueId) return;
+		if (!venues.some((v) => v.id === selectedVenueId)) {
+			setSelectedVenueId(venues[0].id);
 		}
-		setOpenVenueId((prev) => {
-			const opening = prev !== venueId;
-			if (opening && onVenueSelect) {
-				const tv = venueIdToTradingVenue(venueId);
-				if (tv) onVenueSelect(tv);
-			}
-			return opening ? venueId : null;
-		});
-	}, [onVenueSelect]);
+	}, [venues, selectedVenueId]);
 
-	const makeMarketSwitchHandler = useCallback((venueId: string) => {
-		return (m: PredictionMarket, position: "yes" | "no") => {
-			if (onMarketSwitch) onMarketSwitch(m, position);
+	const selectVenue = useCallback(
+		(venueId: string) => {
+			setSelectedVenueId(venueId);
 			const tv = venueIdToTradingVenue(venueId);
 			if (tv && onVenueSelect) onVenueSelect(tv);
-			setOpenVenueId(venueId);
-			marketSwitchFiredRef.current = true;
-			Promise.resolve().then(() => { marketSwitchFiredRef.current = false; });
-		};
-	}, [onMarketSwitch, onVenueSelect]);
+		},
+		[onVenueSelect],
+	);
+
+	const handleMarketSwitchOnly = useCallback(
+		(m: PredictionMarket, position: "yes" | "no") => {
+			if (onMarketSwitch) onMarketSwitch(m, position);
+		},
+		[onMarketSwitch],
+	);
 
 	if (venues.length === 0) return null;
 
+	const activeVenueId = selectedVenueId || venues[0].id;
+	const selectedVenue =
+		venues.find((v) => v.id === activeVenueId) ?? venues[0];
+	const isLevelUp = selectedVenue.id === "levelup";
+
 	return (
 		<div className="venue-orderbooks-panel">
-			{venues.map((venue) => {
-				const isLevelUp = venue.id === "levelup";
+			<div
+				className="venue-orderbooks-pill-strip venue-tab-switcher"
+				role="tablist"
+				aria-label="Venue orderbooks"
+			>
+				{venues.map((venue) => (
+					<button
+						key={venue.id}
+						type="button"
+						role="tab"
+						aria-selected={activeVenueId === venue.id}
+						className={`venue-tab-btn${activeVenueId === venue.id ? " venue-tab-btn--active" : ""}${venue.restricted ? " venue-tab-btn--restricted" : ""}`}
+						onClick={() => selectVenue(venue.id)}
+					>
+						{venue.label}
+					</button>
+				))}
+			</div>
 
-				if (venue.restricted) {
-					return (
-						<div key={venue.id} className="question-orderbook">
-							<div
-								style={{
-									padding: "12px 16px",
-									background: "rgba(251, 191, 36, 0.08)",
-									border: "1px solid rgba(251, 191, 36, 0.25)",
-									borderRadius: 6,
-									color: "rgba(253, 224, 71, 0.9)",
-									fontSize: "0.88rem",
-									display: "flex",
-									alignItems: "center",
-									gap: 8,
-								}}
-							>
-								<span style={{ fontSize: "1.1rem" }}>&#9888;</span>
-								<span>{venue.label} orderbook is unavailable from your region</span>
-							</div>
-						</div>
-					);
-				}
-
-				return (
-					<div key={venue.id} className="question-orderbook">
-						<OrderbookDisplay
-							orderbook={venue.bookA}
-							noSideOrderbook={isLevelUp ? undefined : venue.bookB}
-							loading={!venue.bookA}
-							error={null}
-							customTitle={venue.label}
-							market={market}
-							umbrellaDisplayName={umbrellaDisplayName}
-							onMarketSwitch={makeMarketSwitchHandler(venue.id)}
-							onOrderbookToggle={() => handleToggle(venue.id)}
-							isActiveMarket={false}
-							activePosition={activePosition}
-							isCollapsed={openVenueId !== venue.id}
-							side={side}
-						/>
+			<div className="question-orderbook">
+				{selectedVenue.restricted ? (
+					<div
+						style={{
+							padding: "12px 16px",
+							background: "rgba(251, 191, 36, 0.08)",
+							border: "1px solid rgba(251, 191, 36, 0.25)",
+							borderRadius: 6,
+							color: "rgba(253, 224, 71, 0.9)",
+							fontSize: "0.88rem",
+							display: "flex",
+							alignItems: "center",
+							gap: 8,
+						}}
+					>
+						<span style={{ fontSize: "1.1rem" }}>&#9888;</span>
+						<span>
+							{selectedVenue.label} orderbook is unavailable from your region
+						</span>
 					</div>
-				);
-			})}
+				) : (
+					<OrderbookDisplay
+						layout="embedded"
+						orderbook={selectedVenue.bookA}
+						noSideOrderbook={isLevelUp ? undefined : selectedVenue.bookB}
+						loading={!selectedVenue.bookA}
+						error={null}
+						market={market}
+						umbrellaDisplayName={umbrellaDisplayName}
+						onMarketSwitch={handleMarketSwitchOnly}
+						isActiveMarket
+						activePosition={activePosition}
+						isCollapsed={false}
+						side={side}
+					/>
+				)}
+			</div>
 		</div>
 	);
 }

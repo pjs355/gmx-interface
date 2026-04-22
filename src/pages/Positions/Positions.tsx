@@ -71,7 +71,6 @@ export default function Positions() {
 		dflowPositionsStripPending,
 		polyTradeHistoryLoading,
 		portfolioLoading,
-		portfolioTotalCtx,
 		cashBalanceCtx,
 		usdcLoading,
 		positionsTotalValue,
@@ -287,7 +286,7 @@ export default function Positions() {
 			<div>
 				<div className="positions-header-group">
 					<PositionsHeader
-						portfolioTotal={portfolioTotalCtx ?? cashBalanceCtx + positionsTotalValue}
+						portfolioTotal={Number(cashBalanceCtx) + positionsTotalValue}
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
 						cashLoading={usdcLoading}

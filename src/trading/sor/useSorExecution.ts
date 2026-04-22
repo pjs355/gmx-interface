@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { createSorApiClient } from "./sor-api";
+import { validateLegMinimum } from "./sorPreflight";
 import type {
 	RoutePlan,
 	RouteLeg,
@@ -10,6 +11,25 @@ import type {
 
 const RETRY_COUNT = 2;
 const RETRY_DELAY_MS = 2000;
+/** Max wall time per bridge or leg (wallet prompts, LI.FI, venue APIs). Prevents stuck "Executing…". */
+const LEG_OR_BRIDGE_TIMEOUT_MS = 180_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
+		}, ms);
+		promise
+			.then((v) => {
+				clearTimeout(timer);
+				resolve(v);
+			})
+			.catch((e) => {
+				clearTimeout(timer);
+				reject(e);
+			});
+	});
+}
 
 export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<{
 	filled: boolean;
@@ -32,7 +52,7 @@ export interface UseSorExecutionInput {
 export interface UseSorExecutionResult {
 	execution: RouteExecution | null;
 	isExecuting: boolean;
-	execute: (route: RoutePlan) => Promise<void>;
+	execute: (route: RoutePlan) => Promise<RouteExecution | null>;
 	remainingBudget: number | null;
 	requestReroute: () => Promise<number | null>;
 	acceptResult: () => Promise<void>;
@@ -117,7 +137,12 @@ export function useSorExecution(
 	const routeRef = useRef<RoutePlan | null>(null);
 	const executingRef = useRef(false);
 	const mountedRef = useRef(true);
-	useEffect(() => { return () => { mountedRef.current = false; }; }, []);
+	useEffect(() => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
 
 	const executeLegWithRetry = useCallback(
 		async (leg: RouteLeg, retriesLeft: number, side: "buy" | "sell" = "buy"): Promise<{
@@ -156,8 +181,11 @@ export function useSorExecution(
 	);
 
 	const execute = useCallback(
-		async (route: RoutePlan) => {
-			if (executingRef.current) return;
+		async (route: RoutePlan): Promise<RouteExecution | null> => {
+			if (executingRef.current) {
+				console.warn("[SOR] execute ignored — already in progress");
+				return null;
+			}
 			executingRef.current = true;
 			routeRef.current = route;
 			setIsExecuting(true);
@@ -166,21 +194,75 @@ export function useSorExecution(
 			const isSell = route.side === "sell";
 			const legResults = new Map<string, { filled: boolean; filledShares: number; txHash?: string; error?: string }>();
 
+			// Pre-flight: reject routes whose legs violate venue protocol minimums
+			// BEFORE bridging so users don't end up with dust stuck on the destination
+			// chain. Failed legs are reported with friendly errors to the UI.
+			for (const leg of route.legs) {
+				const check = validateLegMinimum(leg, route.side);
+				if (!check.ok) {
+					legResults.set(leg.venue, {
+						filled: false,
+						filledShares: 0,
+						error: check.error,
+					});
+				}
+			}
+			if (legResults.size === route.legs.length && route.legs.length > 0) {
+				console.warn("[SOR] Pre-flight validation failed for every leg", {
+					errors: Array.from(legResults.values()).map((r) => r.error),
+				});
+				const preflightExec = buildLocalExecution(route, legResults);
+				if (preflightExec.status === "executing") {
+					preflightExec.status = "failed";
+				}
+				if (mountedRef.current) setExecution(preflightExec);
+				executingRef.current = false;
+				setIsExecuting(false);
+				return preflightExec;
+			}
+
 			const initialExec = buildLocalExecution(route, legResults);
 			if (mountedRef.current) setExecution(initialExec);
 
 			trySyncBackend(() => apiClient.startExecution(route).then(() => {}));
 
+			// Use console.log — many devtools default filter hides console.info.
+			console.log("[SOR] Execution started", {
+				routeId: route.routeId,
+				legs: route.legs.map((l) => l.venue),
+				side: route.side,
+			});
+
+			let result: RouteExecution | null = null;
 			try {
+				// Exclude legs that failed pre-flight validation from the execution loops;
+				// they already have a failed entry in `legResults` and surface to the UI.
+				const eligibleLegs = route.legs.filter((l) => !legResults.has(l.venue));
 				const immediateLegs = isSell
-					? route.legs
-					: route.legs.filter((l) => !l.bridge);
+					? eligibleLegs
+					: eligibleLegs.filter((l) => !l.bridge);
 				const bridgeLegs = isSell
 					? []
-					: route.legs.filter((l) => !!l.bridge);
+					: eligibleLegs.filter((l) => !!l.bridge);
 
 				const immediatePromises = immediateLegs.map(async (leg) => {
-					const result = await executeLegWithRetry(leg, RETRY_COUNT, route.side);
+					console.log("[SOR] Leg start", leg.venue, { routeId: route.routeId });
+					let result: Awaited<ReturnType<typeof executeLegWithRetry>>;
+					try {
+						result = await withTimeout(
+							executeLegWithRetry(leg, RETRY_COUNT, route.side),
+							LEG_OR_BRIDGE_TIMEOUT_MS,
+							`SOR leg ${leg.venue}`,
+						);
+					} catch (err) {
+						const msg = err instanceof Error ? err.message : String(err);
+						console.warn("[SOR] Leg failed", leg.venue, msg);
+						result = { filled: false, filledShares: 0, error: msg };
+					}
+					console.log("[SOR] Leg end", leg.venue, {
+						filled: result.filled,
+						error: result.error,
+					});
 					legResults.set(leg.venue, result);
 
 					if (mountedRef.current) {
@@ -204,7 +286,19 @@ export function useSorExecution(
 				});
 
 				const bridgePromises = bridgeLegs.map(async (leg) => {
-					const bridgeResult = await executeBridge(leg);
+					console.log("[SOR] Bridge start", leg.venue, { routeId: route.routeId });
+					let bridgeResult: Awaited<ReturnType<typeof executeBridge>>;
+					try {
+						bridgeResult = await withTimeout(
+							executeBridge(leg),
+							LEG_OR_BRIDGE_TIMEOUT_MS,
+							`SOR bridge ${leg.venue}`,
+						);
+					} catch (err) {
+						const msg = err instanceof Error ? err.message : String(err);
+						console.warn("[SOR] Bridge error", leg.venue, msg);
+						bridgeResult = { success: false, error: msg };
+					}
 					if (!bridgeResult.success) {
 						const failResult = { filled: false, filledShares: 0, error: bridgeResult.error ?? "Bridge failed" };
 						legResults.set(leg.venue, failResult);
@@ -222,7 +316,23 @@ export function useSorExecution(
 						return failResult;
 					}
 
-					const tradeResult = await executeLegWithRetry(leg, RETRY_COUNT, route.side);
+					console.log("[SOR] Bridge+trade leg start", leg.venue);
+					let tradeResult: Awaited<ReturnType<typeof executeLegWithRetry>>;
+					try {
+						tradeResult = await withTimeout(
+							executeLegWithRetry(leg, RETRY_COUNT, route.side),
+							LEG_OR_BRIDGE_TIMEOUT_MS,
+							`SOR post-bridge leg ${leg.venue}`,
+						);
+					} catch (err) {
+						const msg = err instanceof Error ? err.message : String(err);
+						console.warn("[SOR] Post-bridge leg failed", leg.venue, msg);
+						tradeResult = { filled: false, filledShares: 0, error: msg };
+					}
+					console.log("[SOR] Bridge+trade leg end", leg.venue, {
+						filled: tradeResult.filled,
+						error: tradeResult.error,
+					});
 					legResults.set(leg.venue, tradeResult);
 					if (mountedRef.current) setExecution(buildLocalExecution(route, legResults));
 
@@ -243,7 +353,16 @@ export function useSorExecution(
 					return tradeResult;
 				});
 
-				await Promise.allSettled([...immediatePromises, ...bridgePromises]);
+				// Buy: run all bridge+trade sequences before any no-bridge leg so collateral
+				// (e.g. USDT on BNB for Predict) exists before venue orders that depend on it.
+				// Bridge legs can still run in parallel with each other when multiple destinations exist.
+				await Promise.allSettled(bridgePromises);
+				await Promise.allSettled(immediatePromises);
+
+				console.log("[SOR] Execution finished", {
+					routeId: route.routeId,
+					venues: route.legs.map((l) => l.venue),
+				});
 
 				const finalExec = buildLocalExecution(route, legResults);
 				if (mountedRef.current) {
@@ -252,6 +371,7 @@ export function useSorExecution(
 						setRemainingBudget(finalExec.remainingBudget);
 					}
 				}
+				result = finalExec;
 			} catch (err) {
 				console.error("[SOR] Execution error:", err);
 				const errorExec = buildLocalExecution(route, legResults);
@@ -259,10 +379,14 @@ export function useSorExecution(
 					errorExec.status = "failed";
 				}
 				if (mountedRef.current) setExecution(errorExec);
-		} finally {
-			executingRef.current = false;
-			if (mountedRef.current) setIsExecuting(false);
-		}
+				result = errorExec;
+			} finally {
+				executingRef.current = false;
+				// Always clear — if we gate on mountedRef, Strict Mode / route unmount can leave the
+				// trade button stuck on "Executing" with no console output from a never-settled run.
+				setIsExecuting(false);
+			}
+			return result;
 		},
 		[apiClient, executeLegWithRetry, executeBridge, trySyncBackend],
 	);

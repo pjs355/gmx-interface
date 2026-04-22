@@ -64,12 +64,35 @@ export function createSorApiClient(
 
 	return {
 		async getRoute(request, signal) {
+			// The server returns HTTP 200 with `{success:false, code, error}`
+			// for every expected business-logic outcome (EXECUTION_NOT_READY,
+			// NO_BOOKS_AVAILABLE, AMOUNT_TOO_SMALL, …). A non-2xx status here
+			// means something genuinely went wrong: 401 auth, 429 rate-limit,
+			// 400 Zod validation, 500 internal. We still try to parse the
+			// body because those paths also return `SorRouteResult` shapes
+			// (e.g. RATE_LIMITED) — callers then handle the `code` like any
+			// other failure instead of catching a thrown exception.
 			const res = await authFetch("/api/sor/route", {
 				method: "POST",
 				body: JSON.stringify(request),
 				signal,
 			});
-			return readJson<SorRouteResult>(res);
+			const text = await res.text();
+			let body: unknown;
+			try {
+				body = JSON.parse(text) as unknown;
+			} catch {
+				throw new Error(`SOR API error ${res.status}: ${text.slice(0, 200)}`);
+			}
+			if (
+				body &&
+				typeof body === "object" &&
+				"success" in body &&
+				typeof (body as SorRouteResult).success === "boolean"
+			) {
+				return body as SorRouteResult;
+			}
+			throw new Error(`SOR API error ${res.status}: ${text.slice(0, 200)}`);
 		},
 
 		async startExecution(route, signal) {

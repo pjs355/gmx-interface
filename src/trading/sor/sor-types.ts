@@ -1,7 +1,13 @@
-export type SorVenue = "levelup" | "polymarket" | "dflow" | "predictfun";
+export type SorVenue =
+	| "levelup"
+	| "polymarket"
+	| "dflow"
+	| "predictfun"
+	| "limitless";
 export type SorChain = "base" | "polygon" | "solana" | "bnb";
 export type SorOutcome = "A" | "B";
 export type SorSide = "buy" | "sell";
+export type SorOrderType = "market" | "limit";
 
 export interface ChainBalance {
 	chain: SorChain;
@@ -41,6 +47,12 @@ export interface VenueMarketIds {
 	predictFunMarketIdB?: string;
 	predictFunDecimalPrecision?: 2 | 3;
 	predictFunSingleMarket?: boolean;
+	/** Limitless (Base) — from SOR server legs */
+	limitlessSlug?: string;
+	limitlessTokenIdA?: string;
+	limitlessTokenIdB?: string;
+	limitlessOrderbookSlugA?: string;
+	limitlessOrderbookSlugB?: string;
 	levelUpQuestionId?: string;
 }
 
@@ -59,6 +71,10 @@ export interface RouteLeg {
 	/** When set by SOR, use as limit price for LevelUp legs (slippage cap). */
 	maxPrice?: number;
 	venueMarketIds: VenueMarketIds;
+	/** Market (FOK) or limit (GTC/resting) execution for this leg. */
+	orderType: SorOrderType;
+	/** Limit price as integer cents (1–99). Present iff orderType === "limit". */
+	limitPriceCents?: number;
 }
 
 export interface SingleVenueBest {
@@ -74,6 +90,19 @@ export interface VenueRequirements {
 	needsProxyWallet?: boolean;
 	executionReady?: boolean;
 	blockingReasons?: string[];
+	/**
+	 * True when a live orderbook snapshot was present at route time. False when
+	 * the venue is matched for this market but no ask-side / bid-side depth had
+	 * been ingested yet — a transient price-feed gap. The UI should show
+	 * "waiting for price feed" rather than "complete setup" in this case.
+	 */
+	bookAvailable?: boolean;
+	/**
+	 * True when this venue contributed at least one filled leg to the returned
+	 * plan. Lets the UI distinguish "Polymarket is in the route" from
+	 * "Polymarket was scanned but dropped".
+	 */
+	inPlan?: boolean;
 }
 
 /** Buy routes: optimal plan includes venues the user cannot execute yet. */
@@ -81,6 +110,20 @@ export interface ExecutionShortfall {
 	executableTotalShares: number;
 	extraSharesIfFullyReady: number;
 	venuesBlocking: SorVenue[];
+}
+
+/**
+ * Optional hint returned on buy routes when bumping the trade size by a small
+ * amount would unlock a materially cheaper venue. Advisory only.
+ */
+export interface SizeSuggestion {
+	suggestedAmount: number;
+	deltaAmount: number;
+	unlockedVenue: SorVenue;
+	unlockedEffectivePrice: number;
+	currentEffectivePrice: number;
+	improvementPct: number;
+	reason: string;
 }
 
 export interface RoutePlan {
@@ -107,6 +150,7 @@ export interface RoutePlan {
 	venuesExcluded: SorVenue[];
 	venueRequirements: Partial<Record<SorVenue, VenueRequirements>>;
 	executionShortfall?: ExecutionShortfall;
+	sizeSuggestion?: SizeSuggestion;
 	hmac: string;
 	expiresAt: number;
 	computedInMs: number;
@@ -123,6 +167,10 @@ export interface RouteRequest {
 	polyFeeRate?: number;
 	predictFunFeeRateBps?: number;
 	targetVenue?: SorVenue;
+	/** Defaults to "market". Limit orders also require targetVenue + limitPriceCents. */
+	orderType?: SorOrderType;
+	/** Integer cents 1–99 (0.01–0.99 probability). Required for limit orders. */
+	limitPriceCents?: number;
 }
 
 export interface RouteResponse {
@@ -130,10 +178,25 @@ export interface RouteResponse {
 	route: RoutePlan;
 }
 
+/** Mirrors server `SorErrorCode` (subset extended as API grows). */
+export type SorErrorCode =
+	| "NO_MARKET_FOUND"
+	| "NO_VENUES_ELIGIBLE"
+	| "NO_BOOKS_AVAILABLE"
+	| "ALL_BOOKS_STALE"
+	| "AMOUNT_TOO_SMALL"
+	| "AMOUNT_TOO_LARGE"
+	| "INTERNAL_ERROR"
+	| "RATE_LIMITED"
+	| "ROUTE_EXPIRED"
+	| "INVALID_HMAC"
+	| "VALIDATION_ERROR"
+	| "EXECUTION_NOT_READY";
+
 export interface RouteErrorResponse {
 	success: false;
 	error: string;
-	code: string;
+	code: SorErrorCode;
 }
 
 export type SorRouteResult = RouteResponse | RouteErrorResponse;
@@ -193,6 +256,7 @@ export const VENUE_DISPLAY_NAMES: Record<SorVenue, string> = {
 	polymarket: "Polymarket",
 	dflow: "Kalshi",
 	predictfun: "Predict",
+	limitless: "Limitless",
 };
 
 export const VENUE_COLORS: Record<SorVenue, string> = {
@@ -200,6 +264,7 @@ export const VENUE_COLORS: Record<SorVenue, string> = {
 	polymarket: "#22c55e",
 	dflow: "#f59e0b",
 	predictfun: "#ec4899",
+	limitless: "#94a3b8",
 };
 
 const EXEC_SHORTFALL_EPS = 0.01;

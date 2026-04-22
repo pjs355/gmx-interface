@@ -950,8 +950,13 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 						Daily
 					</span>
 				)}
-				{isDailyUmbrella ? "Ends In:" : "Starts In:"}
-				&nbsp;&nbsp; {statusContent}
+				{!isLive ? (
+					<>
+						{isDailyUmbrella ? "Ends In:" : "Starts In:"}
+						&nbsp;&nbsp;{" "}
+					</>
+				) : null}
+				{statusContent}
 			</div>
 		) : null}
 		</div>

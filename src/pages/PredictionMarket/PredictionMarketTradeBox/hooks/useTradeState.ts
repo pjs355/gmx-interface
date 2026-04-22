@@ -40,7 +40,9 @@ export function useTradeState(initialPosition?: "yes" | "no", initialVenue?: Tra
     setState((prev) => ({
       ...prev,
       tradingVenue,
-      ...(tradingVenue === "all" ? { orderType: "market" as const } : {}),
+      ...(tradingVenue === "all" || tradingVenue === "dflow"
+        ? { orderType: "market" as const }
+        : {}),
     }));
   }, []);
 

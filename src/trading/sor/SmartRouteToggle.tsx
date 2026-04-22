@@ -223,41 +223,53 @@ export function buildChainBalances(params: {
 	solanaWalletAddress?: string;
 	bnbUsdtBalance?: number;
 	bnbWalletAddress?: string;
+	/**
+	 * When true, include one row per chain whenever that chain's wallet address is set,
+	 * even if balance is 0. SOR backends often validate the full cross-chain wallet map.
+	 */
+	includeZeroBalanceChainsWithAddress?: boolean;
 }): ChainBalance[] {
 	const balances: ChainBalance[] = [];
+	const inc = Boolean(params.includeZeroBalanceChainsWithAddress);
 
-	if (params.baseUsdcBalance > 0 && params.baseWalletAddress) {
-		balances.push({
-			chain: "base",
-			lifiChainId: CHAIN_LIFI_IDS.base,
-			balance: params.baseUsdcBalance,
-			walletAddress: params.baseWalletAddress,
-		});
+	if (params.baseWalletAddress) {
+		const bal = Math.max(0, params.baseUsdcBalance);
+		if (bal > 0 || inc) {
+			balances.push({
+				chain: "base",
+				lifiChainId: CHAIN_LIFI_IDS.base,
+				balance: bal,
+				walletAddress: params.baseWalletAddress,
+			});
+		}
 	}
 
-	if ((params.polygonUsdcBalance ?? 0) > 0 && params.polygonWalletAddress) {
+	const polyBal = Math.max(0, params.polygonUsdcBalance ?? 0);
+	if (params.polygonWalletAddress && (polyBal > 0 || inc)) {
 		balances.push({
 			chain: "polygon",
 			lifiChainId: CHAIN_LIFI_IDS.polygon,
-			balance: params.polygonUsdcBalance!,
+			balance: polyBal,
 			walletAddress: params.polygonWalletAddress,
 		});
 	}
 
-	if ((params.solanaUsdcBalance ?? 0) > 0 && params.solanaWalletAddress) {
+	const solBal = Math.max(0, params.solanaUsdcBalance ?? 0);
+	if (params.solanaWalletAddress && (solBal > 0 || inc)) {
 		balances.push({
 			chain: "solana",
 			lifiChainId: CHAIN_LIFI_IDS.solana,
-			balance: params.solanaUsdcBalance!,
+			balance: solBal,
 			walletAddress: params.solanaWalletAddress,
 		});
 	}
 
-	if ((params.bnbUsdtBalance ?? 0) > 0 && params.bnbWalletAddress) {
+	const bnbBal = Math.max(0, params.bnbUsdtBalance ?? 0);
+	if (params.bnbWalletAddress && (bnbBal > 0 || inc)) {
 		balances.push({
 			chain: "bnb",
 			lifiChainId: CHAIN_LIFI_IDS.bnb,
-			balance: params.bnbUsdtBalance!,
+			balance: bnbBal,
 			walletAddress: params.bnbWalletAddress,
 		});
 	}

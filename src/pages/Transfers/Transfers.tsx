@@ -37,12 +37,15 @@
 
 import React, { useCallback, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useFundWallet } from "@privy-io/react-auth";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { useTransfersModal } from "@/context/TransfersModalContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import {
+	PrivyGatedDepositButton,
+	resolvePrivyEvmFundTarget,
+} from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { TransfersBridgePanel } from "./TransfersBridgePanel";
 import "@/pages/Profile/Details/Details.scss";
 import "./Transfers.scss";
@@ -57,12 +60,15 @@ function formatAddress(value: string | undefined): string {
 
 export default function Transfers() {
 	const { login, authenticated } = usePrivy();
-	const { account } = useSignerContext();
+	const { account, ready: signerReady } = useSignerContext();
 	const { portfolioTotal, cashBalance, portfolioLoading, cashLoading } = usePortfolio();
 	const { refresh: refreshUserData } = useUserData();
-	const { fundWallet } = useFundWallet();
 	const { openModal: openWithdrawModal } = useTransfersModal();
 	const funding = useFundingAddresses();
+	const fundEvmTarget = resolvePrivyEvmFundTarget(
+		funding.baseSmartWallet,
+		account
+	);
 	const [copiedAddressKey, setCopiedAddressKey] = useState<string | null>(null);
 
 	const handleCopyAddress = useCallback(
@@ -88,22 +94,6 @@ export default function Transfers() {
 			maximumFractionDigits: 2,
 		}).format(value);
 	}, []);
-
-	// Handle deposit - triggers Privy funding modal
-	const handleDeposit = useCallback(async () => {
-		if (!account) return;
-
-		try {
-			await fundWallet(account, {
-				chain: { id: 8453 }, // Base mainnet
-			});
-			// Refresh balance after Privy modal closes
-			refreshUserData();
-		} catch (err) {
-			console.error("Deposit error:", err);
-			// User likely cancelled - no need to show error
-		}
-	}, [account, fundWallet, refreshUserData]);
 
 	// Handle withdraw - opens withdraw modal
 	const handleWithdraw = useCallback(() => {
@@ -160,12 +150,14 @@ export default function Transfers() {
 				</div>
 
 				<div className="transfers-actions transfers-actions--below-summary">
-					<button
+					<PrivyGatedDepositButton
 						className="transfers-btn transfers-btn-deposit"
-						onClick={handleDeposit}
+						fundTarget={fundEvmTarget}
+						ready={signerReady}
+						onAfterFund={refreshUserData}
 					>
 						Deposit Funds
-					</button>
+					</PrivyGatedDepositButton>
 					<button
 						className="transfers-btn transfers-btn-withdraw"
 						onClick={handleWithdraw}
@@ -177,130 +169,139 @@ export default function Transfers() {
 
 				{SHOW_TRANSFERS_BRIDGE_PANEL ? <TransfersBridgePanel /> : null}
 
-				<section className="transfers-addresses" aria-label="Your wallet addresses">
-					<h2 className="transfers-addresses__title">Your addresses</h2>
+				<details className="transfers-addresses" aria-label="Your wallet addresses">
+					<summary className="transfers-addresses__summary">
+						Your addresses
+					</summary>
+					<div className="transfers-addresses__inner">
+						<p className="transfers-addresses__notice">
+							If sending funds manually, please ensure that you are using the
+							correct currency by chain. LevelUp does not currently support
+							recovering incorrect sent funds.
+						</p>
 
-					<div className="transfers-addresses__item">
-						<div className="transfers-addresses__chain">Polygon</div>
-						<div className="transfers-addresses__value-row">
-							{funding.isLoading &&
-							!(funding.polymarketSafe ?? funding.polygonSigner) ? (
-								<span className="transfers-skeleton transfers-skeleton--address" />
-							) : (
-								<code className="transfers-addresses__value">
-									{formatAddress(
-										funding.polymarketSafe ?? funding.polygonSigner,
-									)}
-								</code>
-							)}
-							<button
-								type="button"
-								className="Details-copy-button Details-copy-button--compact"
-								title="Copy address"
-								aria-label="Copy Polygon address"
-								disabled={
-									!String(
-										funding.polymarketSafe ?? funding.polygonSigner,
-									).trim() ||
-									(funding.isLoading &&
-										!(funding.polymarketSafe ?? funding.polygonSigner))
-								}
-								onClick={() =>
-									void handleCopyAddress(
-										"polygon",
-										funding.polymarketSafe ?? funding.polygonSigner,
-									)
-								}
-							>
-								{copiedAddressKey === "polygon" ? "✓" : "Copy"}
-							</button>
+						<div className="transfers-addresses__item">
+							<div className="transfers-addresses__chain">Polygon (USDC.e)</div>
+							<div className="transfers-addresses__value-row">
+								{funding.isLoading &&
+								!(funding.polymarketSafe ?? funding.polygonSigner) ? (
+									<span className="transfers-skeleton transfers-skeleton--address" />
+								) : (
+									<code className="transfers-addresses__value">
+										{formatAddress(
+											funding.polymarketSafe ?? funding.polygonSigner,
+										)}
+									</code>
+								)}
+								<button
+									type="button"
+									className="Details-copy-button Details-copy-button--compact"
+									title="Copy address"
+									aria-label="Copy Polygon USDC.e address"
+									disabled={
+										!String(
+											funding.polymarketSafe ?? funding.polygonSigner,
+										).trim() ||
+										(funding.isLoading &&
+											!(funding.polymarketSafe ?? funding.polygonSigner))
+									}
+									onClick={() =>
+										void handleCopyAddress(
+											"polygon",
+											funding.polymarketSafe ?? funding.polygonSigner,
+										)
+									}
+								>
+									{copiedAddressKey === "polygon" ? "✓" : "Copy"}
+								</button>
+							</div>
+						</div>
+
+						<div className="transfers-addresses__item">
+							<div className="transfers-addresses__chain">Base (USDC)</div>
+							<div className="transfers-addresses__value-row">
+								{funding.isLoading && !funding.baseSmartWallet ? (
+									<span className="transfers-skeleton transfers-skeleton--address" />
+								) : (
+									<code className="transfers-addresses__value">
+										{formatAddress(funding.baseSmartWallet)}
+									</code>
+								)}
+								<button
+									type="button"
+									className="Details-copy-button Details-copy-button--compact"
+									title="Copy address"
+									aria-label="Copy Base USDC address"
+									disabled={
+										!String(funding.baseSmartWallet ?? "").trim() ||
+										(funding.isLoading && !funding.baseSmartWallet)
+									}
+									onClick={() =>
+										void handleCopyAddress("base", funding.baseSmartWallet)
+									}
+								>
+									{copiedAddressKey === "base" ? "✓" : "Copy"}
+								</button>
+							</div>
+						</div>
+
+						<div className="transfers-addresses__item">
+							<div className="transfers-addresses__chain">BNB Chain (USDT)</div>
+							<div className="transfers-addresses__value-row">
+								{funding.isLoading && !funding.embeddedEoa ? (
+									<span className="transfers-skeleton transfers-skeleton--address" />
+								) : (
+									<code className="transfers-addresses__value">
+										{formatAddress(funding.embeddedEoa)}
+									</code>
+								)}
+								<button
+									type="button"
+									className="Details-copy-button Details-copy-button--compact"
+									title="Copy address"
+									aria-label="Copy BNB Chain USDT address"
+									disabled={
+										!String(funding.embeddedEoa ?? "").trim() ||
+										(funding.isLoading && !funding.embeddedEoa)
+									}
+									onClick={() =>
+										void handleCopyAddress("bnb", funding.embeddedEoa)
+									}
+								>
+									{copiedAddressKey === "bnb" ? "✓" : "Copy"}
+								</button>
+							</div>
+						</div>
+
+						<div className="transfers-addresses__item">
+							<div className="transfers-addresses__chain">Solana (USDC)</div>
+							<div className="transfers-addresses__value-row">
+								{funding.isLoading && !funding.solanaAddress ? (
+									<span className="transfers-skeleton transfers-skeleton--address" />
+								) : (
+									<code className="transfers-addresses__value">
+										{formatAddress(funding.solanaAddress)}
+									</code>
+								)}
+								<button
+									type="button"
+									className="Details-copy-button Details-copy-button--compact"
+									title="Copy address"
+									aria-label="Copy Solana USDC address"
+									disabled={
+										!String(funding.solanaAddress ?? "").trim() ||
+										(funding.isLoading && !funding.solanaAddress)
+									}
+									onClick={() =>
+										void handleCopyAddress("solana", funding.solanaAddress)
+									}
+								>
+									{copiedAddressKey === "solana" ? "✓" : "Copy"}
+								</button>
+							</div>
 						</div>
 					</div>
-
-					<div className="transfers-addresses__item">
-						<div className="transfers-addresses__chain">Base</div>
-						<div className="transfers-addresses__value-row">
-							{funding.isLoading && !funding.baseSmartWallet ? (
-								<span className="transfers-skeleton transfers-skeleton--address" />
-							) : (
-								<code className="transfers-addresses__value">
-									{formatAddress(funding.baseSmartWallet)}
-								</code>
-							)}
-							<button
-								type="button"
-								className="Details-copy-button Details-copy-button--compact"
-								title="Copy address"
-								aria-label="Copy Base address"
-								disabled={
-									!String(funding.baseSmartWallet ?? "").trim() ||
-									(funding.isLoading && !funding.baseSmartWallet)
-								}
-								onClick={() =>
-									void handleCopyAddress("base", funding.baseSmartWallet)
-								}
-							>
-								{copiedAddressKey === "base" ? "✓" : "Copy"}
-							</button>
-						</div>
-					</div>
-
-					<div className="transfers-addresses__item">
-						<div className="transfers-addresses__chain">BNB Chain</div>
-						<div className="transfers-addresses__value-row">
-							{funding.isLoading && !funding.embeddedEoa ? (
-								<span className="transfers-skeleton transfers-skeleton--address" />
-							) : (
-								<code className="transfers-addresses__value">
-									{formatAddress(funding.embeddedEoa)}
-								</code>
-							)}
-							<button
-								type="button"
-								className="Details-copy-button Details-copy-button--compact"
-								title="Copy address"
-								aria-label="Copy BNB Chain address"
-								disabled={
-									!String(funding.embeddedEoa ?? "").trim() ||
-									(funding.isLoading && !funding.embeddedEoa)
-								}
-								onClick={() =>
-									void handleCopyAddress("bnb", funding.embeddedEoa)
-								}
-							>
-								{copiedAddressKey === "bnb" ? "✓" : "Copy"}
-							</button>
-						</div>
-					</div>
-
-					<div className="transfers-addresses__item">
-						<div className="transfers-addresses__chain">Solana</div>
-						<div className="transfers-addresses__value-row">
-							{funding.isLoading && !funding.solanaAddress ? (
-								<span className="transfers-skeleton transfers-skeleton--address" />
-							) : (
-								<code className="transfers-addresses__value">
-									{formatAddress(funding.solanaAddress)}
-								</code>
-							)}
-							<button
-								type="button"
-								className="Details-copy-button Details-copy-button--compact"
-								title="Copy address"
-								aria-label="Copy Solana address"
-								disabled={
-									!String(funding.solanaAddress ?? "").trim() ||
-									(funding.isLoading && !funding.solanaAddress)
-								}
-								onClick={() =>
-									void handleCopyAddress("solana", funding.solanaAddress)
-								}
-							>
-								{copiedAddressKey === "solana" ? "✓" : "Copy"}
-							</button>
-						</div>
-					</div>
-				</section>
+				</details>
 			</div>
 		</div>
 	);
