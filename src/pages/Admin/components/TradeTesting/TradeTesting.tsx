@@ -3,7 +3,11 @@ import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { useUserData } from "@/context/UserDataContext";
-import { getPredictionWebSocketUrl, getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import {
+	getPredictionWebSocketUrl,
+	getPredictionApiBaseUrl,
+	getPredictionOrderApiBaseUrl,
+} from "@/config/predictionApiBase";
 import { EXCHANGE_ADDRESS } from "@/config/addresses";
 import { MarketSelector } from "./MarketSelector";
 import { TradeExecutor, type TradeTestConfig, type TradeResult, type SettlementVerification } from "./TradeExecutor";

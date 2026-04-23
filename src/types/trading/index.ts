@@ -22,6 +22,7 @@ export type {
 export type {
 	FundingStableMetaJson,
 	LifiAllowanceHint,
+	LifiSolanaDelegateHint,
 	LifiQuoteRequestBody,
 	LifiQuoteResponse,
 	LifiQuoteStep,

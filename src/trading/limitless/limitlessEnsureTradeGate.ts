@@ -2,37 +2,55 @@
  * Interprets `POST /api/limitless/ensure-account` payload (after client `{ data }` unwrap).
  * Legacy deployments may still return `profileId` / `account` at the top level.
  */
-export function getLimitlessEnsureTradeGate(data: unknown): {
+export type LimitlessEnsureNotReadyCode =
+	| "NO_DATA"
+	| "VENUE_NOT_REGISTERED"
+	| "MISSING_LIMITLESS_ACCOUNT"
+	| "OWNER_NOT_PROVISIONED";
+
+export type LimitlessEnsureTradeGateResult = {
 	ready: boolean;
 	blockedReason: string | null;
-} {
+	/** Set when `ready` is false; use for dev diagnostics (not user-facing button copy). */
+	notReadyCode: LimitlessEnsureNotReadyCode | null;
+};
+
+export function getLimitlessEnsureTradeGate(data: unknown): LimitlessEnsureTradeGateResult {
 	if (data == null || typeof data !== "object") {
-		return { ready: false, blockedReason: null };
+		return {
+			ready: false,
+			blockedReason: null,
+			notReadyCode: "NO_DATA",
+		};
 	}
 	const d = data as Record<string, unknown>;
 
 	const pid = d.profileId;
 	if (typeof pid === "number" && Number.isFinite(pid)) {
-		return { ready: true, blockedReason: null };
+		return { ready: true, blockedReason: null, notReadyCode: null };
 	}
 	if (typeof pid === "string" && pid.trim() !== "" && Number.isFinite(Number(pid))) {
-		return { ready: true, blockedReason: null };
+		return { ready: true, blockedReason: null, notReadyCode: null };
 	}
 	if (typeof d.account === "string" && d.account.trim().length > 0) {
-		return { ready: true, blockedReason: null };
+		return { ready: true, blockedReason: null, notReadyCode: null };
 	}
 
 	if (d.venueRegistered !== true) {
 		return {
 			ready: false,
-			blockedReason:
-				"Limitless account not provisioned. Connect a Base wallet (or smart wallet), then refresh this page.",
+			blockedReason: null,
+			notReadyCode: "VENUE_NOT_REGISTERED",
 		};
 	}
 
 	const la = d.limitlessAccount;
 	if (!la || typeof la !== "object") {
-		return { ready: false, blockedReason: null };
+		return {
+			ready: false,
+			blockedReason: null,
+			notReadyCode: "MISSING_LIMITLESS_ACCOUNT",
+		};
 	}
 	const acc = la as Record<string, unknown>;
 	const oid = acc.ownerId;
@@ -41,12 +59,31 @@ export function getLimitlessEnsureTradeGate(data: unknown): {
 	if (!provisioned) {
 		return {
 			ready: false,
-			blockedReason:
-				"Limitless sub-account is still provisioning. Wait a few seconds and refresh, or try again after ensure-account completes.",
+			blockedReason: null,
+			notReadyCode: "OWNER_NOT_PROVISIONED",
 		};
 	}
 
-	return { ready: true, blockedReason: null };
+	return { ready: true, blockedReason: null, notReadyCode: null };
+}
+
+/** Maps `notReadyCode` to a stable dev-log label (snake_case). */
+export function limitlessEnsureNotReadyCodeToWhy(
+	code: LimitlessEnsureNotReadyCode | null,
+): string | null {
+	if (code == null) return null;
+	switch (code) {
+		case "NO_DATA":
+			return "no_ensure_data";
+		case "VENUE_NOT_REGISTERED":
+			return "venue_not_registered";
+		case "MISSING_LIMITLESS_ACCOUNT":
+			return "missing_limitless_account";
+		case "OWNER_NOT_PROVISIONED":
+			return "owner_not_provisioned";
+		default:
+			return "unknown_gate";
+	}
 }
 
 /** Successful ensure touched venue state — refresh account overview if mounted. */

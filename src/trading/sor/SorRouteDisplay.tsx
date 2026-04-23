@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Tooltip from "components/Tooltip/Tooltip";
-import { useAnimatedDots } from "@/hooks/useAnimatedDots";
 import type { RoutePlan } from "./sor-types";
+import type { SorExecutionPhase } from "./useSorExecution";
 import {
 	VENUE_DISPLAY_NAMES,
 	VENUE_COLORS,
@@ -25,6 +25,8 @@ interface SorRouteDisplayProps {
 	onExecute: () => void;
 	onFallback: () => void;
 	executing: boolean;
+	/** When `executing`, distinguishes LI.FI prefund vs venue order (from `useSorExecution`). */
+	executionPhase?: SorExecutionPhase;
 }
 
 function formatPercent(n: number): string {
@@ -63,6 +65,7 @@ export function SorRouteDisplay({
 	onExecute,
 	onFallback,
 	executing,
+	executionPhase = "executing_trade",
 }: SorRouteDisplayProps) {
 	const [routeExpired, setRouteExpired] = useState(false);
 	useEffect(() => {
@@ -77,8 +80,6 @@ export function SorRouteDisplay({
 		const timer = setInterval(check, 1000);
 		return () => clearInterval(timer);
 	}, [route]);
-
-	const execDots = useAnimatedDots(400);
 
 	if (!route && isLoading) {
 		return null;
@@ -217,7 +218,9 @@ export function SorRouteDisplay({
 				}}
 			>
 				{executing
-					? `Executing${execDots}`
+					? executionPhase === "moving_funds"
+						? "Moving funds..."
+						: "Executing trade..."
 					: routeExpired
 						? "Route Expired — Refreshing..."
 						: `Execute Smart Route`}

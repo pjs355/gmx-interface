@@ -1,6 +1,6 @@
 import type { LifiStatusResponse } from "@/types/trading";
 
-function extractStatus(body: unknown): string | undefined {
+export function extractLifiStatus(body: unknown): string | undefined {
 	if (!body || typeof body !== "object") return undefined;
 	const o = body as Record<string, unknown>;
 	if (typeof o.status === "string") return o.status;
@@ -34,6 +34,22 @@ export type PollLifiOptions = {
 };
 
 /**
+ * Throws if the polled body is not a successful terminal LI.FI status.
+ */
+export function assertLifiTerminalSuccess(body: unknown): void {
+	const st = extractLifiStatus(body);
+	if (!st) {
+		throw new Error("LI.FI status response had no status field — cannot confirm the bridge.");
+	}
+	const u = st.toUpperCase();
+	if (u === "DONE" || u === "COMPLETED" || u === "SUCCESS") return;
+	if (u === "FAILED" || u === "REFUNDED" || u === "NOT_FOUND" || u === "CANCELLED") {
+		throw new Error(`LI.FI bridge ended with status "${st}".`);
+	}
+	throw new Error(`LI.FI bridge ended with unexpected status "${st}".`);
+}
+
+/**
  * Poll GET /funding/lifi/status until terminal or max attempts.
  * Supports cancellation via AbortSignal.
  */
@@ -50,8 +66,9 @@ export async function pollLifiUntilTerminal(
 			throw new DOMException("Polling aborted", "AbortError");
 		}
 		last = await getStatus();
-		const st = extractStatus(last);
+		const st = extractLifiStatus(last);
 		if (st && isTerminalStatus(st)) {
+			assertLifiTerminalSuccess(last);
 			return last;
 		}
 		await new Promise<void>((resolve, reject) => {
@@ -62,5 +79,8 @@ export async function pollLifiUntilTerminal(
 			}, { once: true });
 		});
 	}
-	return last;
+	const finalSt = extractLifiStatus(last);
+	throw new Error(
+		`LI.FI bridge status never reached a terminal state after ${maxAttempts} checks (interval ${intervalMs}ms). Last status: ${finalSt ?? "unknown"}.`,
+	);
 }

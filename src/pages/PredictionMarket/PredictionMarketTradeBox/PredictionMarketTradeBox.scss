@@ -282,6 +282,20 @@
 			background: transparent;
 			white-space: nowrap;
 			overflow: hidden;
+			/* Let inner row use full button width so the name can ellipsis before the price */
+			&.button {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 100%;
+				max-width: 100%;
+			}
+
+			> .position-btn__label-row {
+				flex: 1 1 0%;
+				min-width: 0;
+				max-width: 100%;
+			}
 
 			.position-btn__label-row {
 				display: flex;
@@ -295,6 +309,7 @@
 			}
 
 			.position-btn__name {
+				flex: 1 1 0%;
 				min-width: 0;
 				overflow: hidden;
 				text-overflow: ellipsis;
@@ -1213,6 +1228,7 @@
 .curtain-header-buttons {
 	.position-btn {
 		flex: 1;
+		min-width: 0;
 		padding: 12px;
 		border-radius: 8px;
 		font-size: 18px;
@@ -1222,6 +1238,45 @@
 		border: 2px solid #6b7280;
 		color: #6b7280;
 		background: transparent;
+		overflow: hidden;
+		white-space: nowrap;
+
+		&.button {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 100%;
+			max-width: 100%;
+		}
+
+		> .position-btn__label-row {
+			flex: 1 1 0%;
+			min-width: 0;
+			max-width: 100%;
+		}
+
+		.position-btn__label-row {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+			width: 100%;
+			min-width: 0;
+			font-weight: inherit;
+			font-size: inherit;
+		}
+
+		.position-btn__name {
+			flex: 1 1 0%;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.position-btn__price {
+			flex-shrink: 0;
+		}
 
 		&:hover {
 			border-color: #22c55e;

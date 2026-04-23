@@ -8,28 +8,13 @@ import type {
 	RouteExecution,
 	SorVenue,
 } from "./sor-types";
+import { groupBridgeLegsByCorridor } from "./sorBridgeGroups";
+import { withTimeout } from "@/utils/withTimeout";
 
 const RETRY_COUNT = 2;
 const RETRY_DELAY_MS = 2000;
-/** Max wall time per bridge or leg (wallet prompts, LI.FI, venue APIs). Prevents stuck "Executing…". */
-const LEG_OR_BRIDGE_TIMEOUT_MS = 180_000;
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => {
-			reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
-		}, ms);
-		promise
-			.then((v) => {
-				clearTimeout(timer);
-				resolve(v);
-			})
-			.catch((e) => {
-				clearTimeout(timer);
-				reject(e);
-			});
-	});
-}
+/** Max wall time per bridge or leg (wallet prompts, LI.FI, venue APIs). Prevents stuck trade button. */
+const LEG_OR_BRIDGE_TIMEOUT_MS = 240_000;
 
 export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<{
 	filled: boolean;
@@ -38,7 +23,10 @@ export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<{
 	error?: string;
 }>;
 
-export type BridgeExecutor = (leg: RouteLeg) => Promise<{
+export type BridgeExecutor = (
+	leg: RouteLeg,
+	opts?: { amountUsdOverride?: number },
+) => Promise<{
 	success: boolean;
 	bridgeTxHash?: string;
 	error?: string;
@@ -49,9 +37,14 @@ export interface UseSorExecutionInput {
 	executeBridge: BridgeExecutor;
 }
 
+/** UI phase while `isExecuting` — LI.FI prefund vs venue order execution. */
+export type SorExecutionPhase = "idle" | "moving_funds" | "executing_trade";
+
 export interface UseSorExecutionResult {
 	execution: RouteExecution | null;
 	isExecuting: boolean;
+	/** Which long-running sub-step the user should see (only meaningful when `isExecuting`). */
+	executionPhase: SorExecutionPhase;
 	execute: (route: RoutePlan) => Promise<RouteExecution | null>;
 	remainingBudget: number | null;
 	requestReroute: () => Promise<number | null>;
@@ -133,6 +126,7 @@ export function useSorExecution(
 
 	const [execution, setExecution] = useState<RouteExecution | null>(null);
 	const [isExecuting, setIsExecuting] = useState(false);
+	const [executionPhase, setExecutionPhase] = useState<SorExecutionPhase>("idle");
 	const [remainingBudget, setRemainingBudget] = useState<number | null>(null);
 	const routeRef = useRef<RoutePlan | null>(null);
 	const executingRef = useRef(false);
@@ -189,6 +183,7 @@ export function useSorExecution(
 			executingRef.current = true;
 			routeRef.current = route;
 			setIsExecuting(true);
+			setExecutionPhase("executing_trade");
 			setRemainingBudget(null);
 
 			const isSell = route.side === "sell";
@@ -218,6 +213,7 @@ export function useSorExecution(
 				if (mountedRef.current) setExecution(preflightExec);
 				executingRef.current = false;
 				setIsExecuting(false);
+				setExecutionPhase("idle");
 				return preflightExec;
 			}
 
@@ -245,6 +241,104 @@ export function useSorExecution(
 					? []
 					: eligibleLegs.filter((l) => !!l.bridge);
 
+				// Do not start immediate legs until bridge groups settle — bridge corridors run
+				// sequentially (aggregated per from→to), then venue legs, so we do not race LiFi
+				// against POST /orders before USDC arrives.
+
+				const bridgeGroups = groupBridgeLegsByCorridor(bridgeLegs);
+				for (const group of bridgeGroups) {
+					console.log("[SOR] Bridge start", {
+						routeId: route.routeId,
+						corridor: group.key,
+						venues: group.legs.map((l) => l.venue),
+						aggregatedUsd: group.totalAmountUsd,
+					});
+					if (mountedRef.current) setExecutionPhase("moving_funds");
+					let bridgeResult: Awaited<ReturnType<typeof executeBridge>>;
+					try {
+						bridgeResult = await withTimeout(
+							executeBridge(group.representativeLeg, {
+								amountUsdOverride: group.totalAmountUsd,
+							}),
+							LEG_OR_BRIDGE_TIMEOUT_MS,
+							`SOR bridge ${group.key}`,
+						);
+					} catch (err) {
+						const msg = err instanceof Error ? err.message : String(err);
+						console.warn("[SOR] Bridge error", group.key, msg);
+						bridgeResult = { success: false, error: msg };
+					}
+					if (!bridgeResult.success) {
+						const failResult = {
+							filled: false,
+							filledShares: 0,
+							error: bridgeResult.error ?? "Bridge failed",
+						};
+						for (const leg of group.legs) {
+							legResults.set(leg.venue, failResult);
+							if (mountedRef.current) {
+								setExecution(buildLocalExecution(route, legResults));
+							}
+							trySyncBackend(() =>
+								apiClient
+									.updateLeg(
+										route.routeId,
+										leg.venue as SorVenue,
+										"failed",
+										{
+											error: bridgeResult.error ?? "Bridge failed",
+											bridgeTxHash: bridgeResult.bridgeTxHash,
+										},
+									)
+									.then(() => {}),
+							);
+						}
+						continue;
+					}
+
+					if (mountedRef.current) setExecutionPhase("executing_trade");
+					for (const leg of group.legs) {
+						console.log("[SOR] Bridge+trade leg start", leg.venue);
+						let tradeResult: Awaited<ReturnType<typeof executeLegWithRetry>>;
+						try {
+							tradeResult = await withTimeout(
+								executeLegWithRetry(leg, RETRY_COUNT, route.side),
+								LEG_OR_BRIDGE_TIMEOUT_MS,
+								`SOR post-bridge leg ${leg.venue}`,
+							);
+						} catch (err) {
+							const msg = err instanceof Error ? err.message : String(err);
+							console.warn("[SOR] Post-bridge leg failed", leg.venue, msg);
+							tradeResult = { filled: false, filledShares: 0, error: msg };
+						}
+						console.log("[SOR] Bridge+trade leg end", leg.venue, {
+							filled: tradeResult.filled,
+							error: tradeResult.error,
+						});
+						legResults.set(leg.venue, tradeResult);
+						if (mountedRef.current) setExecution(buildLocalExecution(route, legResults));
+
+						trySyncBackend(() =>
+							apiClient
+								.updateLeg(
+									route.routeId,
+									leg.venue as SorVenue,
+									tradeResult.filled ? "filled" : "failed",
+									{
+										filledShares: tradeResult.filledShares,
+										txHash: tradeResult.txHash,
+										bridgeTxHash: bridgeResult.bridgeTxHash,
+										error: tradeResult.error,
+									},
+								)
+								.then(() => {}),
+						);
+					}
+				}
+
+				// Bridge groups run sequentially (aggregated per corridor) before legs with no bridge.
+
+				if (mountedRef.current) setExecutionPhase("executing_trade");
 				const immediatePromises = immediateLegs.map(async (leg) => {
 					console.log("[SOR] Leg start", leg.venue, { routeId: route.routeId });
 					let result: Awaited<ReturnType<typeof executeLegWithRetry>>;
@@ -285,78 +379,6 @@ export function useSorExecution(
 					return result;
 				});
 
-				const bridgePromises = bridgeLegs.map(async (leg) => {
-					console.log("[SOR] Bridge start", leg.venue, { routeId: route.routeId });
-					let bridgeResult: Awaited<ReturnType<typeof executeBridge>>;
-					try {
-						bridgeResult = await withTimeout(
-							executeBridge(leg),
-							LEG_OR_BRIDGE_TIMEOUT_MS,
-							`SOR bridge ${leg.venue}`,
-						);
-					} catch (err) {
-						const msg = err instanceof Error ? err.message : String(err);
-						console.warn("[SOR] Bridge error", leg.venue, msg);
-						bridgeResult = { success: false, error: msg };
-					}
-					if (!bridgeResult.success) {
-						const failResult = { filled: false, filledShares: 0, error: bridgeResult.error ?? "Bridge failed" };
-						legResults.set(leg.venue, failResult);
-						if (mountedRef.current) setExecution(buildLocalExecution(route, legResults));
-
-						trySyncBackend(() =>
-							apiClient.updateLeg(
-								route.routeId,
-								leg.venue as SorVenue,
-								"failed",
-								{ error: bridgeResult.error ?? "Bridge failed", bridgeTxHash: bridgeResult.bridgeTxHash },
-							).then(() => {}),
-						);
-
-						return failResult;
-					}
-
-					console.log("[SOR] Bridge+trade leg start", leg.venue);
-					let tradeResult: Awaited<ReturnType<typeof executeLegWithRetry>>;
-					try {
-						tradeResult = await withTimeout(
-							executeLegWithRetry(leg, RETRY_COUNT, route.side),
-							LEG_OR_BRIDGE_TIMEOUT_MS,
-							`SOR post-bridge leg ${leg.venue}`,
-						);
-					} catch (err) {
-						const msg = err instanceof Error ? err.message : String(err);
-						console.warn("[SOR] Post-bridge leg failed", leg.venue, msg);
-						tradeResult = { filled: false, filledShares: 0, error: msg };
-					}
-					console.log("[SOR] Bridge+trade leg end", leg.venue, {
-						filled: tradeResult.filled,
-						error: tradeResult.error,
-					});
-					legResults.set(leg.venue, tradeResult);
-					if (mountedRef.current) setExecution(buildLocalExecution(route, legResults));
-
-					trySyncBackend(() =>
-						apiClient.updateLeg(
-							route.routeId,
-							leg.venue as SorVenue,
-							tradeResult.filled ? "filled" : "failed",
-							{
-								filledShares: tradeResult.filledShares,
-								txHash: tradeResult.txHash,
-								bridgeTxHash: bridgeResult.bridgeTxHash,
-								error: tradeResult.error,
-							},
-						).then(() => {}),
-					);
-
-					return tradeResult;
-				});
-
-				// Buy: run all bridge+trade sequences before any no-bridge leg so collateral
-				// (e.g. USDT on BNB for Predict) exists before venue orders that depend on it.
-				// Bridge legs can still run in parallel with each other when multiple destinations exist.
-				await Promise.allSettled(bridgePromises);
 				await Promise.allSettled(immediatePromises);
 
 				console.log("[SOR] Execution finished", {
@@ -385,6 +407,7 @@ export function useSorExecution(
 				// Always clear — if we gate on mountedRef, Strict Mode / route unmount can leave the
 				// trade button stuck on "Executing" with no console output from a never-settled run.
 				setIsExecuting(false);
+				setExecutionPhase("idle");
 			}
 			return result;
 		},
@@ -430,6 +453,7 @@ export function useSorExecution(
 		executingRef.current = false;
 		setExecution(null);
 		setIsExecuting(false);
+		setExecutionPhase("idle");
 		setRemainingBudget(null);
 		routeRef.current = null;
 	}, []);
@@ -437,6 +461,7 @@ export function useSorExecution(
 	return {
 		execution,
 		isExecuting,
+		executionPhase,
 		execute,
 		remainingBudget,
 		requestReroute,

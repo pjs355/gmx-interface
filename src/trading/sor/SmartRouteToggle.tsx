@@ -14,7 +14,8 @@ export interface SmartRouteToggleProps {
 	questionId: string | undefined;
 	outcome: SorOutcome | undefined;
 	amount: number;
-	walletBalances: ChainBalance[];
+	/** Optional; route preview does not use this for sizing (theoretical liquidity on server). */
+	walletBalances?: ChainBalance[];
 	onExecuteLeg: (leg: RouteLeg) => Promise<{
 		filled: boolean;
 		filledShares: number;
@@ -38,7 +39,6 @@ export function SmartRouteToggle({
 	questionId,
 	outcome,
 	amount,
-	walletBalances,
 	onExecuteLeg,
 	onExecuteBridge,
 	onFallbackToSingleVenue,
@@ -54,7 +54,7 @@ export function SmartRouteToggle({
 		outcome,
 		side: "buy",
 		amount,
-		walletBalances,
+		walletBalances: undefined,
 		enabled,
 		polyFeeRate,
 		predictFunFeeRateBps,
@@ -132,6 +132,7 @@ export function SmartRouteToggle({
 							onFallbackToSingleVenue();
 						}}
 						executing={sorExecution.isExecuting}
+						executionPhase={sorExecution.executionPhase}
 					/>
 
 					{/* Execution result */}

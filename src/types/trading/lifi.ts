@@ -23,6 +23,17 @@ export type LifiAllowanceHint = {
 	chainId?: number;
 };
 
+/**
+ * SPL delegate preflight for LI.FI Solana legs (from raw `estimate.approvalAddress` + action).
+ * Populated by `mergeLifiStepsWithRawAllowanceMetadata` when the server step omits it.
+ */
+export type LifiSolanaDelegateHint = {
+	mint: string;
+	delegate: string;
+	amountRaw: string;
+	chainId: number;
+};
+
 export type LifiQuoteStep = {
 	type?: string;
 	tool?: string;
@@ -35,6 +46,8 @@ export type LifiQuoteStep = {
 	transactionDataBase64?: string;
 	requiresApproval?: boolean;
 	allowanceHint?: LifiAllowanceHint;
+	/** Client-merge from raw quote for SPL `approve` before the main Solana tx. */
+	lifiSolanaDelegateHint?: LifiSolanaDelegateHint;
 	[key: string]: unknown;
 };
 

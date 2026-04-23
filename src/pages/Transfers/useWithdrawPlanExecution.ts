@@ -12,6 +12,7 @@ import { bsc } from "viem/chains";
 import { useUserData } from "@/context/UserDataContext";
 import { getPrivateApiErrorMessage } from "@/services/privateApi";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
+import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { executeDirectErc20Withdraw } from "@/trading/lifi/executeDirectEvmWithdraw";
 import { executeDirectSolanaSplWithdraw } from "@/trading/lifi/executeDirectSolanaSplWithdraw";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
@@ -64,25 +65,14 @@ function pickLifiStatusTool(quote: LifiQuoteResponse): string | undefined {
 
 function pickTxHashForLifiStatusPoll(
 	txHashes: string[],
-	quote: LifiQuoteResponse,
+	_quote: LifiQuoteResponse,
 	fromChain: number
 ): string {
-	const hashes = txHashes.filter(
-		(h) => typeof h === "string" && /^0x[0-9a-fA-F]{64}$/i.test(h)
-	);
-	if (hashes.length === 0) {
-		return txHashes[0] ?? "";
-	}
-	if (hashes.length === 1) return hashes[0];
-
-	const steps = quote.steps ?? [];
-	const first = steps[0];
-	const firstTr = first?.transactionRequest;
-	const firstChain = firstTr?.chainId ?? first?.chainId;
-	if (first?.requiresApproval && firstChain === fromChain) {
-		return hashes[1] ?? hashes[hashes.length - 1];
-	}
-	return hashes[hashes.length - 1];
+	return pickLifiSourceTxHashForStatus({
+		txHashes,
+		fromChainLifi: fromChain,
+		solanaLifiChainId: SOLANA_LIFI_CHAIN_ID,
+	});
 }
 
 function lifiWithdrawToQuoteResponse(d: LifiWithdrawLifiData): LifiQuoteResponse {
@@ -296,6 +286,10 @@ export function useWithdrawPlanExecution() {
 					getSignerForChain,
 					{
 						allowanceOwnerByChainId,
+						rawLifiRoute: quote.quote,
+						...(funding.solanaAddress?.trim()
+							? { solanaTokenOwnerAddress: funding.solanaAddress.trim() }
+							: {}),
 						...(polygonRelay ? { polygonRelay } : {}),
 						...(routeIncludesSolana && solanaSigner ? { solanaSigner } : {}),
 					}

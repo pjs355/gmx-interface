@@ -9,6 +9,8 @@ interface ImportMetaEnv {
 	 * unless `VITE_ODDS_WS_BASE` overrides the venue WebSocket only. Example full local stack: `http://localhost:8080`.
 	 */
 	readonly VITE_PREDICTION_API_BASE_URL?: string;
+	/** Optional: base for `POST /orders` only. If unset, dev [3] still posts signed orders to prod Railway. */
+	readonly VITE_PREDICTION_ORDER_API_BASE_URL?: string;
 	/** Override private API host (Polymarket, account-overview, funding). Dev [3] defaults to http://localhost:8080 */
 	readonly VITE_PRIVATE_API_BASE?: string;
 	/** Set to "true" to enable trading shell execution gate network calls */

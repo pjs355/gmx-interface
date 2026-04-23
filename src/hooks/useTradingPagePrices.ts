@@ -25,6 +25,10 @@ export type VenueRowModel = {
 	linked: boolean;
 	askA: number | null;
 	askB: number | null;
+	/** Best bid on outcome A / Team A (sell YES). */
+	bidA: number | null;
+	/** Best bid on outcome B / Team B (sell NO). */
+	bidB: number | null;
 	statusA?: SnapshotStatus;
 	statusB?: SnapshotStatus;
 };
@@ -71,20 +75,55 @@ function bestAskFromSnapshot(snap: OrderbookSnapshot | null | undefined): number
 	return min === Infinity ? null : min;
 }
 
+function bestBidProb(book: OrderbookData | null | undefined): number | null {
+	if (!book) return null;
+	if (book.bestBid !== null && book.bestBid !== undefined) {
+		const p = typeof book.bestBid === "number" ? book.bestBid : Number(book.bestBid);
+		if (Number.isFinite(p) && p >= MIN_VALID_PRICE && p <= MAX_VALID_PRICE) return p;
+	}
+	if (book.bids?.length) {
+		let max = -Infinity;
+		for (const b of book.bids) {
+			if ((b.size ?? 0) > 0 && b.price >= MIN_VALID_PRICE && b.price <= MAX_VALID_PRICE && b.price > max) max = b.price;
+		}
+		if (max !== -Infinity) return max;
+	}
+	return null;
+}
+
+function bestBidFromSnapshot(snap: OrderbookSnapshot | null | undefined): number | null {
+	if (!snap?.bids?.length) return null;
+	let max = -Infinity;
+	for (const b of snap.bids) {
+		if ((b.size ?? 0) > 0 && b.price >= MIN_VALID_PRICE && b.price <= MAX_VALID_PRICE && b.price > max) max = b.price;
+	}
+	return max === -Infinity ? null : max;
+}
+
 function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | undefined {
 	return book?.snapshotStatus;
 }
 
-function computeLevelUpRow(orderbook: OrderbookSnapshot | null | undefined): { askA: number | null; askB: number | null } {
-	if (!orderbook) return { askA: null, askB: null };
+function computeLevelUpRow(orderbook: OrderbookSnapshot | null | undefined): {
+	askA: number | null;
+	askB: number | null;
+	bidA: number | null;
+	bidB: number | null;
+} {
+	if (!orderbook) return { askA: null, askB: null, bidA: null, bidB: null };
 	const posAsks = orderbook.asks?.filter((a) => (a.size ?? 0) > 0 && isValidPrice(a.price)) ?? [];
 	const bestAsk = posAsks.length > 0 ? Math.min(...posAsks.map((a) => a.price)) : null;
 	const posBids = orderbook.bids?.filter((b) => (b.size ?? 0) > 0 && isValidPrice(b.price)) ?? [];
 	const bestBid = posBids.length > 0 ? Math.max(...posBids.map((b) => b.price)) : null;
 	const askB = bestBid !== null ? 1 - bestBid : null;
+	const bidA = bestBid !== null && isValidPrice(bestBid) ? bestBid : null;
+	const bidB =
+		bestAsk !== null && isValidPrice(1 - bestAsk) ? 1 - bestAsk : null;
 	return {
 		askA: bestAsk,
 		askB: askB !== null && isValidPrice(askB) ? askB : null,
+		bidA,
+		bidB,
 	};
 }
 
@@ -95,6 +134,8 @@ function buildVenueRowsFromWs(
 ): VenueRowModel[] {
 	const polyAskA = bestAskProb(m.polyPriceA) ?? bestAskFromSnapshot(directBooks?.polyBookA);
 	const polyAskB = bestAskProb(m.polyPriceB) ?? bestAskFromSnapshot(directBooks?.polyBookB);
+	const polyBidA = bestBidProb(m.polyPriceA) ?? bestBidFromSnapshot(directBooks?.polyBookA);
+	const polyBidB = bestBidProb(m.polyPriceB) ?? bestBidFromSnapshot(directBooks?.polyBookB);
 
 	const dflowLinked = Boolean(getDflowKalshiMonitorLink(m));
 	const dflowAskA = dflowLinked
@@ -102,6 +143,12 @@ function buildVenueRowsFromWs(
 		: null;
 	const dflowAskB = dflowLinked
 		? (bestAskProb(m.dflowPriceB ?? m.kalshiPriceB) ?? bestAskFromSnapshot(directBooks?.dflowBookB))
+		: null;
+	const dflowBidA = dflowLinked
+		? (bestBidProb(m.dflowPriceA ?? m.kalshiPriceA) ?? bestBidFromSnapshot(directBooks?.dflowBookA))
+		: null;
+	const dflowBidB = dflowLinked
+		? (bestBidProb(m.dflowPriceB ?? m.kalshiPriceB) ?? bestBidFromSnapshot(directBooks?.dflowBookB))
 		: null;
 
 	const externalRows: VenueRowModel[] = [
@@ -111,6 +158,8 @@ function buildVenueRowsFromWs(
 			linked: Boolean(m.polyConditionId || m.polyTokenIdA),
 			askA: polyAskA,
 			askB: polyAskB,
+			bidA: polyBidA,
+			bidB: polyBidB,
 			statusA: bookStatus(m.polyPriceA),
 			statusB: bookStatus(m.polyPriceB),
 		},
@@ -120,6 +169,8 @@ function buildVenueRowsFromWs(
 			linked: dflowLinked,
 			askA: dflowAskA,
 			askB: dflowAskB,
+			bidA: dflowBidA,
+			bidB: dflowBidB,
 			statusA: bookStatus(m.dflowPriceA ?? m.kalshiPriceA),
 			statusB: bookStatus(m.dflowPriceB ?? m.kalshiPriceB),
 		},
@@ -133,6 +184,12 @@ function buildVenueRowsFromWs(
 			askB: m.limitless
 				? (bestAskProb(m.limitlessPriceB) ?? bestAskFromSnapshot(directBooks?.limitlessBookB))
 				: null,
+			bidA: m.limitless
+				? (bestBidProb(m.limitlessPriceA) ?? bestBidFromSnapshot(directBooks?.limitlessBookA))
+				: null,
+			bidB: m.limitless
+				? (bestBidProb(m.limitlessPriceB) ?? bestBidFromSnapshot(directBooks?.limitlessBookB))
+				: null,
 			statusA: bookStatus(m.limitlessPriceA),
 			statusB: bookStatus(m.limitlessPriceB),
 		},
@@ -142,6 +199,8 @@ function buildVenueRowsFromWs(
 			linked: Boolean(m.predictFun),
 			askA: m.predictFun ? bestAskProb(m.predictFunPriceA) : null,
 			askB: m.predictFun ? bestAskProb(m.predictFunPriceB) : null,
+			bidA: m.predictFun ? bestBidProb(m.predictFunPriceA) : null,
+			bidB: m.predictFun ? bestBidProb(m.predictFunPriceB) : null,
 			statusA: bookStatus(m.predictFunPriceA),
 			statusB: bookStatus(m.predictFunPriceB),
 		},
@@ -149,15 +208,21 @@ function buildVenueRowsFromWs(
 
 	const wsAskA = bestAskProb(m.levelUpPriceA);
 	const wsAskB = bestAskProb(m.levelUpPriceB);
+	const wsBidA = bestBidProb(m.levelUpPriceA);
+	const wsBidB = bestBidProb(m.levelUpPriceB);
 	const localLu = computeLevelUpRow(levelUpOrderbook);
 	const askA = wsAskA ?? localLu.askA;
 	const askB = wsAskB ?? localLu.askB;
+	const bidA = wsBidA ?? localLu.bidA;
+	const bidB = wsBidB ?? localLu.bidB;
 	const luRow: VenueRowModel = {
 		id: "levelup",
 		label: "LevelUp",
 		linked: askA !== null || askB !== null,
 		askA,
 		askB,
+		bidA,
+		bidB,
 		statusA: bookStatus(m.levelUpPriceA),
 		statusB: bookStatus(m.levelUpPriceB),
 	};
@@ -188,6 +253,8 @@ function buildVenueRowsFromRest(
 
 	const askA = luVenueA ?? luPrices.askA ?? luRestA;
 	const askB = luVenueB ?? luPrices.askB ?? luRestB;
+	const bidA = luPrices.bidA;
+	const bidB = luPrices.bidB;
 	const luStatusA = luFromVenues?.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined;
 	const luStatusB = luFromVenues?.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined;
 
@@ -197,6 +264,8 @@ function buildVenueRowsFromRest(
 		linked: askA !== null || askB !== null,
 		askA,
 		askB,
+		bidA,
+		bidB,
 		statusA: luStatusA,
 		statusB: luStatusB,
 	};
@@ -209,11 +278,46 @@ function buildVenueRowsFromRest(
 			linked: true,
 			askA: v.bestAskA && isValidPrice(v.bestAskA) ? v.bestAskA : null,
 			askB: v.bestAskB && isValidPrice(v.bestAskB) ? v.bestAskB : null,
+			bidA: null,
+			bidB: null,
 			statusA: v.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined,
 			statusB: v.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined,
 		}));
 
 	return luRow.linked ? [luRow, ...venueRows] : venueRows;
+}
+
+/** Map venue price row id → `VenuePosition.venue` key used in portfolio hooks. */
+const PRICE_ROW_TO_VENUE_SHARE_KEY: Record<string, string> = {
+	levelup: "levelup",
+	poly: "polymarket",
+	polymarket: "polymarket",
+	predictFun: "predictfun",
+	predictfun: "predictfun",
+	dflow: "dflow",
+	limitless: "limitless",
+};
+
+/**
+ * Best sell (highest bid) for an outcome among venues where the user holds shares.
+ * Used for All Markets sell tab position buttons only.
+ */
+export function maxAllMarketsSellBidForOutcome(
+	rows: VenueRowModel[],
+	outcome: "yes" | "no",
+	venueShares: Record<string, number>,
+): number | null {
+	const bidKey = outcome === "yes" ? "bidA" : "bidB";
+	let best: number | null = null;
+	for (const r of rows) {
+		const vKey = PRICE_ROW_TO_VENUE_SHARE_KEY[r.id] ?? r.id;
+		const held = venueShares[vKey] ?? 0;
+		if (!(held > 0)) continue;
+		const bid = r[bidKey];
+		if (bid === null || !isValidPrice(bid)) continue;
+		if (best === null || bid > best) best = bid;
+	}
+	return best;
 }
 
 function computeBestIndices(rows: VenueRowModel[]): { bestAIdx: number; bestBIdx: number } {

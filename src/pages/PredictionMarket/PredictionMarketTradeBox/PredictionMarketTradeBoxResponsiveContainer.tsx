@@ -14,6 +14,7 @@ import type {
 	TradingVenue,
 	MarketOrderCalculation,
 } from "./types";
+import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { RoutePlan, RouteExecution, SorErrorCode } from "@/trading/sor";
 import Button from "components/Button/Button";
@@ -82,6 +83,9 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	crossBuyNo: number | null;
 	/** Max sellable shares for the active venue tab and selected outcome (SOR-scoped). */
 	maxScopedSellShares: number;
+	allMarketsSellYesBid?: number | null;
+	allMarketsSellNoBid?: number | null;
+	shareBalances: TradeBoxShareBalancesSnapshot;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -118,6 +122,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	crossBuyNo,
 	maxScopedSellShares,
 	matchedMonitor,
+	allMarketsSellYesBid = null,
+	allMarketsSellNoBid = null,
+	shareBalances,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -149,6 +156,12 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		state.selectedPosition === "no";
 
 	const yesPriceCents = useMemo(() => {
+		if (state.tradingVenue === "all" && state.side === "sell") {
+			if (allMarketsSellYesBid != null && Number.isFinite(allMarketsSellYesBid)) {
+				return calcCents(allMarketsSellYesBid);
+			}
+			return "";
+		}
 		if (
 			state.tradingVenue === "all" &&
 			state.side === "buy" &&
@@ -187,9 +200,16 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		calcCents,
 		bookRepresentsNo,
 		crossBuyYes,
+		allMarketsSellYesBid,
 	]);
 
 	const noPriceCents = useMemo(() => {
+		if (state.tradingVenue === "all" && state.side === "sell") {
+			if (allMarketsSellNoBid != null && Number.isFinite(allMarketsSellNoBid)) {
+				return calcCents(allMarketsSellNoBid);
+			}
+			return "";
+		}
 		if (
 			state.tradingVenue === "all" &&
 			state.side === "buy" &&
@@ -228,6 +248,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		calcCents,
 		bookRepresentsNo,
 		crossBuyNo,
+		allMarketsSellNoBid,
 	]);
 
 	const isVsSingle = useMemo(() => {
@@ -316,6 +337,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				handleSorExecute={handleSorExecute}
 				maxScopedSellShares={maxScopedSellShares}
 				matchedMonitor={matchedMonitor}
+				allMarketsSellYesBid={allMarketsSellYesBid}
+				allMarketsSellNoBid={allMarketsSellNoBid}
+				shareBalances={shareBalances}
 			/>
 		</div>
 	);
@@ -380,7 +404,12 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 									e.currentTarget.style.boxShadow = "none";
 								}}
 							>
-								{`${mobileYesLabel} ${yesPriceCents}¢`}
+								<strong className="position-btn__label-row">
+									<span className="position-btn__name">{mobileYesLabel}</span>
+									<span className="position-btn__price">
+										{yesPriceCents ? `${yesPriceCents}¢` : ""}
+									</span>
+								</strong>
 							</Button>
 							<Button
 								variant="secondary"
@@ -435,7 +464,12 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 									e.currentTarget.style.boxShadow = "none";
 								}}
 							>
-								{`${mobileNoLabel} ${noPriceCents}¢`}
+								<strong className="position-btn__label-row">
+									<span className="position-btn__name">{mobileNoLabel}</span>
+									<span className="position-btn__price">
+										{noPriceCents ? `${noPriceCents}¢` : ""}
+									</span>
+								</strong>
 							</Button>
 						</div>
 					</div>
@@ -486,6 +520,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				handleSorExecute={handleSorExecute}
 				maxScopedSellShares={maxScopedSellShares}
 				matchedMonitor={matchedMonitor}
+				allMarketsSellYesBid={allMarketsSellYesBid}
+				allMarketsSellNoBid={allMarketsSellNoBid}
+				shareBalances={shareBalances}
 			/>
 			</div>
 	</PredictionCurtain>

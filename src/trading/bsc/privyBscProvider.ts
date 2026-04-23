@@ -151,7 +151,15 @@ function isRetryableSendError(err: unknown): boolean {
 	);
 }
 
-async function sendWithBackoff<T>(
+/** Queue per embedded wallet so LI.FI / Predict bursts do not 400/429 Privy's wallet RPC. */
+export function runQueuedBnbPrivyTask<T>(
+	address: `0x${string}`,
+	task: () => Promise<T>,
+): Promise<T> {
+	return enqueueSponsoredSend(address, task);
+}
+
+export async function sendWithBackoffForBscPrivy<T>(
 	fn: () => Promise<T>,
 	label: string,
 ): Promise<T> {
@@ -196,8 +204,8 @@ export function createPrivyBscSponsoredProvider(args: {
 				if (raw) {
 					applyBscEip1559FeeFloors(raw);
 					const input = toUnsignedTransactionRequest(raw, address);
-					return enqueueSponsoredSend(address, async () => {
-						const { hash } = await sendWithBackoff(
+					return runQueuedBnbPrivyTask(address, async () => {
+						const { hash } = await sendWithBackoffForBscPrivy(
 							() => sendTransaction(input, { sponsor: true, address }),
 							`eth_sendTransaction(to=${input.to ?? "?"})`,
 						);

@@ -471,6 +471,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						venueOverride={venueForTradeBox}
 						crossBuyYes={tradingPagePrices.bestYesPrice}
 						crossBuyNo={tradingPagePrices.bestNoPrice}
+						venueRowsForSellStrip={
+							pandascoreMatchId ? tradingPagePrices.venueRows : undefined
+						}
 					/>
 				) : (
 					<TradeBoxSkeleton />
@@ -539,6 +542,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					venueOverride={venueForTradeBox}
 					crossBuyYes={tradingPagePrices.bestYesPrice}
 					crossBuyNo={tradingPagePrices.bestNoPrice}
+					venueRowsForSellStrip={
+						pandascoreMatchId ? tradingPagePrices.venueRows : undefined
+					}
 				/>
 				</div>
 			) : (

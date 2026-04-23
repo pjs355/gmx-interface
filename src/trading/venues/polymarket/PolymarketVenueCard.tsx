@@ -92,6 +92,10 @@ export function PolymarketVenueCard({ accountOverview, profileId }: Props) {
 		try {
 			await executeLifiSteps(lastQuote.steps, getSignerForChain, {
 				fromAddress: wallets.baseSmartWallet,
+				rawLifiRoute: lastQuote.quote,
+				...(wallets.solanaAddress?.trim()
+					? { solanaTokenOwnerAddress: wallets.solanaAddress.trim() }
+					: {}),
 			});
 			await poly.verifyOnChain.mutateAsync({});
 			await refetchTradingData();

@@ -15,11 +15,31 @@ import { validateLegMinimum } from "./sorPreflight";
 import { CHAIN_LIFI_IDS } from "./sor-types";
 import type { SolanaSignerCapable, SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
+import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
+import type { LifiStatusResponse } from "@/types/trading";
+import { withTimeout } from "@/utils/withTimeout";
+import { readFundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
+import {
+	buildPrefundSteps,
+	computePrefundBridgeShortfallUsdHuman,
+	computePrefundNeedUsdHuman,
+	formatPrefundBalanceBreakdown,
+	isMultisourcePrefundEnabled,
+	LIFI_BRIDGE_AMOUNT_MARGIN,
+	PREFUND_SHORTFALL_COVERED_EPS_USD,
+	type PrefundStep,
+} from "@/trading/sor/prefundPlan";
+import { ensurePrefundQuoteMeetsDestMin } from "@/trading/sor/lifiPrefundQuoteSolve";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
 import type { LimitlessOrderRequest } from "@/trading/limitless/limitlessPrivateApiTypes";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
+
+/** Keep prefund sub-steps bounded vs `LEG_OR_BRIDGE_TIMEOUT_MS` in `useSorExecution`. */
+const SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS = 100_000;
+/** ~15 × 4s ≈ 60s of idle wait between polls, plus ~15 status calls (outer bridge timeout still applies). */
+const SOR_LIFI_PREFUND_POLL = { maxAttempts: 15, intervalMs: 4_000 } as const;
 
 type LegResult = {
 	filled: boolean;
@@ -97,6 +117,8 @@ export interface UseSorLegExecutorDeps {
 			slippage?: number;
 		}) => Promise<{
 			steps?: unknown[];
+			/** Raw LI.FI route object (`data.quote` from POST /funding/lifi/quote). */
+			quote?: unknown;
 			statusBridge?: string | null;
 			tool?: string;
 		}>;
@@ -158,9 +180,6 @@ export interface UseSorLegExecutorDeps {
 
 type SorChainKey = "base" | "polygon" | "solana" | "bnb";
 
-/** Extra headroom on LI.FI `amountHuman` so post-slippage USDT on BNB still covers Predict `makerAmount`. */
-const LIFI_BRIDGE_AMOUNT_MARGIN = 0.01;
-
 function addressForChain(
 	chain: SorChainKey,
 	addrs: UseSorLegExecutorDeps["fundingAddresses"],
@@ -179,6 +198,18 @@ function addressForChain(
 
 const SOLANA_LIFI_CHAIN_ID = CHAIN_LIFI_IDS.solana;
 
+function maskFundingAddress(addr: string | undefined): string | undefined {
+	if (!addr?.trim()) return undefined;
+	const a = addr.trim();
+	if (a.startsWith("0x") && a.length > 12) {
+		return `${a.slice(0, 6)}…${a.slice(-4)}`;
+	}
+	if (a.length > 12) {
+		return `${a.slice(0, 4)}…${a.slice(-4)}`;
+	}
+	return a;
+}
+
 /**
  * Hash to pass to `GET /funding/lifi/status`: the **source-chain** tx (first hop).
  * When the route starts on Solana, that signature is base58, not `0x…`; picking the last
@@ -186,33 +217,14 @@ const SOLANA_LIFI_CHAIN_ID = CHAIN_LIFI_IDS.solana;
  */
 function pickBridgeSourceTxHashForLifiStatus(
 	txHashes: string[],
-	steps: unknown[] | undefined,
+	_steps: unknown[] | undefined,
 	fromChainLifi: number,
 ): string {
-	const first = Array.isArray(steps) ? (steps[0] as Record<string, unknown> | undefined) : undefined;
-	const tr0 = first?.transactionRequest as Record<string, unknown> | undefined;
-	const firstChainId =
-		typeof first?.chainId === "number"
-			? first.chainId
-			: typeof tr0?.chainId === "number"
-				? (tr0.chainId as number)
-				: undefined;
-	const firstStepIsSolana =
-		fromChainLifi === SOLANA_LIFI_CHAIN_ID ||
-		first?.kind === "solana" ||
-		firstChainId === SOLANA_LIFI_CHAIN_ID;
-
-	if (firstStepIsSolana) {
-		const base58 = txHashes.find(
-			(h) => typeof h === "string" && h.length > 0 && !/^0x[0-9a-fA-F]{64}$/i.test(h),
-		);
-		if (base58) return base58;
-		if (typeof txHashes[0] === "string" && txHashes[0].length > 0) return txHashes[0];
-	}
-
-	const evmHashes = txHashes.filter((h) => typeof h === "string" && /^0x[0-9a-fA-F]{64}$/i.test(h));
-	if (evmHashes.length > 0) return evmHashes[evmHashes.length - 1];
-	return txHashes[txHashes.length - 1] ?? txHashes[0] ?? "";
+	return pickLifiSourceTxHashForStatus({
+		txHashes,
+		fromChainLifi,
+		solanaLifiChainId: SOLANA_LIFI_CHAIN_ID,
+	});
 }
 
 export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
@@ -619,118 +631,254 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 	// ──────────────────────────────────────────────
 
 	const executeBridge = useCallback(
-		async (leg: RouteLeg): Promise<BridgeResult> => {
+		async (
+			leg: RouteLeg,
+			opts?: { amountUsdOverride?: number },
+		): Promise<BridgeResult> => {
 			const bridge = leg.bridge;
 			if (!bridge) {
 				return { success: false, error: "No bridge data on leg" };
 			}
 
-			const fromChainLifi = CHAIN_LIFI_IDS[bridge.fromChain];
 			const toChainLifi = CHAIN_LIFI_IDS[bridge.toChain];
-			const fromAddress = addressForChain(bridge.fromChain, fundingAddresses);
 			const toAddress = addressForChain(bridge.toChain, fundingAddresses);
-
-			if (!fromAddress) {
-				return { success: false, error: `No wallet address for source chain ${bridge.fromChain}` };
+			if (!toAddress?.trim()) {
+				return {
+					success: false,
+					error: `No wallet address for destination chain ${bridge.toChain}`,
+				};
 			}
 
-			try {
-				const amountHuman = (bridge.amount * (1 + LIFI_BRIDGE_AMOUNT_MARGIN) + 0.01).toFixed(6);
-				const quote = await privateApi.postFundingLifiQuote({
-					fromChain: fromChainLifi,
-					toChain: toChainLifi,
-					amountHuman,
-					fromAddress,
-					toAddress,
-					slippage: 0.005,
-				});
+			const BNB_CHAIN_ID = bsc.id;
+			const POLYGON_CHAIN_ID = 137;
 
-				if (!quote.steps?.length) {
-					return { success: false, error: "LI.FI returned no bridge steps" };
+			try {
+				const needHuman = computePrefundNeedUsdHuman(
+					opts?.amountUsdOverride ?? bridge.amount,
+					LIFI_BRIDGE_AMOUNT_MARGIN,
+				);
+				const balancesHuman = await readFundingStableBalancesHuman(fundingAddresses);
+				const multisource = isMultisourcePrefundEnabled();
+				const onDestUsd = Math.max(0, balancesHuman[bridge.toChain] ?? 0);
+				const venueAppliedUsd = Math.min(needHuman, onDestUsd);
+				const bridgeShortfallUsd = computePrefundBridgeShortfallUsdHuman(
+					needHuman,
+					bridge.toChain,
+					balancesHuman,
+				);
+				const prefundLogBase = {
+					venue: leg.venue,
+					prefundTargetUsdApprox: Number(needHuman.toFixed(4)),
+					venueSpendAppliedUsdApprox: Number(venueAppliedUsd.toFixed(4)),
+					bridgeShortfallUsdApprox: Number(bridgeShortfallUsd.toFixed(4)),
+					bridgeAmountUsd: opts?.amountUsdOverride ?? bridge.amount,
+					multisource,
+					sorFrom: bridge.fromChain,
+					sorTo: bridge.toChain,
+					onChainUsd: {
+						base: Number(balancesHuman.base.toFixed(4)),
+						polygon: Number(balancesHuman.polygon.toFixed(4)),
+						bnb: Number(balancesHuman.bnb.toFixed(4)),
+						solana: Number(balancesHuman.solana.toFixed(4)),
+					},
+					sumSourcesExclDest: Number(
+						(["base", "polygon", "solana", "bnb"] as const)
+							.filter((c) => c !== bridge.toChain)
+							.reduce((s, c) => s + Math.max(0, balancesHuman[c] ?? 0), 0)
+							.toFixed(4),
+					),
+					breakdownLine: formatPrefundBalanceBreakdown(balancesHuman, bridge.toChain),
+					walletsMasked: {
+						base: maskFundingAddress(fundingAddresses.baseSmartWallet),
+						polygon: maskFundingAddress(fundingAddresses.polymarketSafe),
+						bnb: maskFundingAddress(fundingAddresses.embeddedEoa),
+						solana: maskFundingAddress(fundingAddresses.solanaAddress),
+					},
+				};
+				console.warn("[SOR][prefund] on-chain stable snapshot (RPC)", prefundLogBase);
+
+				if (bridgeShortfallUsd <= PREFUND_SHORTFALL_COVERED_EPS_USD) {
+					console.warn("[SOR][prefund] no LI.FI pull — venue balance covers prefund target", {
+						...prefundLogBase,
+					});
+					return { success: true };
 				}
 
-				if (import.meta.env.DEV) {
-					const st0 = quote.steps[0] as Record<string, unknown> | undefined;
-					console.info("[SOR] Bridge LIFI quote", {
+				let steps: PrefundStep[];
+				try {
+					steps = buildPrefundSteps(
+						bridgeShortfallUsd,
+						bridge.fromChain,
+						bridge.toChain,
+						balancesHuman,
+						multisource,
+						{ fullPrefundNeedUsdHuman: needHuman },
+					);
+				} catch (planErr) {
+					console.warn("[SOR][prefund] plan rejected — compare to UI pooled cash", {
+						...prefundLogBase,
+						reason: planErr instanceof Error ? planErr.message : String(planErr),
+					});
+					return {
+						success: false,
+						error: planErr instanceof Error ? planErr.message : String(planErr),
+					};
+				}
+
+				let lastSourceTxHash: string | undefined;
+
+				for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
+					const step = steps[stepIdx]!;
+					const fromChainLifi = CHAIN_LIFI_IDS[step.fromChain];
+					const fromAddress = addressForChain(step.fromChain, fundingAddresses);
+					if (!fromAddress) {
+						return {
+							success: false,
+							error: `No wallet address for source chain ${step.fromChain}`,
+						};
+					}
+
+					const maxFromHuman = Math.max(0, balancesHuman[step.fromChain] ?? 0);
+					const destPortionUsd = Math.max(0, Number(step.amountHuman));
+					let quote: Awaited<ReturnType<typeof privateApi.postFundingLifiQuote>>;
+					let spentHumanForLedger = 0;
+					try {
+						const solved = await ensurePrefundQuoteMeetsDestMin({
+							api: privateApi,
+							fromChainLifi,
+							toChainLifi,
+							fromAddress,
+							toAddress: toAddress.trim(),
+							destPortionUsd,
+							maxFromHuman,
+							seedAmountHuman: step.amountHuman,
+						});
+						quote = solved.quote;
+						spentHumanForLedger = Number(solved.amountHuman);
+					} catch (quoteErr) {
+						const msg =
+							quoteErr instanceof Error ? quoteErr.message : String(quoteErr);
+						return { success: false, error: msg };
+					}
+
+					if (!quote.steps?.length) {
+						return { success: false, error: "LI.FI returned no bridge steps" };
+					}
+
+					if (import.meta.env.DEV) {
+						const st0 = quote.steps[0] as Record<string, unknown> | undefined;
+						console.info("[SOR] Bridge LIFI quote", {
+							venue: leg.venue,
+							prefundStep: `${stepIdx + 1}/${steps.length}`,
+							fromChainLifi,
+							toChainLifi,
+							stepCount: quote.steps.length,
+							firstStepKind: st0?.kind,
+							firstStepChainId: st0?.chainId,
+						});
+					}
+
+					const needsRelay = fromChainLifi === POLYGON_CHAIN_ID;
+					let relayClient: RelayClient | null = null;
+					if (needsRelay) {
+						relayClient = await getRelayClient();
+					}
+
+					const allowanceOwnerByChainId: Partial<Record<number, string>> = {};
+					if (fundingAddresses.baseSmartWallet) {
+						allowanceOwnerByChainId[8453] = fundingAddresses.baseSmartWallet;
+					}
+					if (fundingAddresses.polymarketSafe) {
+						allowanceOwnerByChainId[POLYGON_CHAIN_ID] = fundingAddresses.polymarketSafe;
+					}
+					if (fundingAddresses.embeddedEoa) {
+						allowanceOwnerByChainId[BNB_CHAIN_ID] = fundingAddresses.embeddedEoa;
+					}
+
+					const bridgeGetSigner = async (chainId: number): Promise<SendTransactionCapable | null> => {
+						if (chainId === BNB_CHAIN_ID) {
+							const addr = fundingAddresses.embeddedEoa as `0x${string}` | undefined;
+							if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+								return null;
+							}
+							return createPrivyEmbeddedSendTransactionCapable(
+								addr,
+								bsc,
+								privyEvmSendTransaction,
+							);
+						}
+						const client = await getClientForChain({ id: chainId });
+						if (!client) return null;
+						return {
+							sendTransaction: (args: Parameters<SendTransactionCapable["sendTransaction"]>[0]) =>
+								client.sendTransaction(args),
+						};
+					};
+
+					console.warn("[SOR][prefund] executing LI.FI on-chain steps (wallet may prompt)…", {
 						venue: leg.venue,
+						prefundStep: `${stepIdx + 1}/${steps.length}`,
 						fromChainLifi,
 						toChainLifi,
-						stepCount: quote.steps.length,
-						firstStepKind: st0?.kind,
-						firstStepChainId: st0?.chainId,
 					});
-				}
 
-				const BNB_CHAIN_ID = bsc.id;
-				const POLYGON_CHAIN_ID = 137;
+					const { txHashes } = await withTimeout(
+						executeLifiSteps(
+							quote.steps as Parameters<typeof executeLifiSteps>[0],
+							bridgeGetSigner,
+							{
+								allowanceOwnerByChainId,
+								polygonRelay: needsRelay && relayClient ? { client: relayClient } : undefined,
+								solanaSigner: solanaSigner ?? undefined,
+								rawLifiRoute: quote.quote,
+								...(fundingAddresses.solanaAddress?.trim()
+									? { solanaTokenOwnerAddress: fundingAddresses.solanaAddress.trim() }
+									: {}),
+							},
+						),
+						SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS,
+						"SOR LI.FI on-chain steps (approvals / bridge tx)",
+					);
 
-				const needsRelay = fromChainLifi === POLYGON_CHAIN_ID;
-				let relayClient: RelayClient | null = null;
-				if (needsRelay) {
-					relayClient = await getRelayClient();
-				}
+					console.warn("[SOR][prefund] on-chain steps submitted; polling bridge status…", {
+						venue: leg.venue,
+						txCount: txHashes.length,
+					});
 
-				const allowanceOwnerByChainId: Partial<Record<number, string>> = {};
-				if (fundingAddresses.baseSmartWallet) allowanceOwnerByChainId[8453] = fundingAddresses.baseSmartWallet;
-				if (fundingAddresses.polymarketSafe) allowanceOwnerByChainId[POLYGON_CHAIN_ID] = fundingAddresses.polymarketSafe;
-				if (fundingAddresses.embeddedEoa) allowanceOwnerByChainId[BNB_CHAIN_ID] = fundingAddresses.embeddedEoa;
-
-				const bridgeGetSigner = async (chainId: number): Promise<SendTransactionCapable | null> => {
-					if (chainId === BNB_CHAIN_ID) {
-						const addr = fundingAddresses.embeddedEoa as `0x${string}` | undefined;
-						if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
-							return null;
-						}
-						return createPrivyEmbeddedSendTransactionCapable(
-							addr,
-							bsc,
-							privyEvmSendTransaction,
-						);
+					const sourceTxHash = pickBridgeSourceTxHashForLifiStatus(
+						txHashes,
+						quote.steps as unknown[] | undefined,
+						fromChainLifi,
+					);
+					if (!sourceTxHash) {
+						return { success: false, error: "Bridge produced no transaction hash" };
 					}
-					const client = await getClientForChain({ id: chainId });
-					if (!client) return null;
-					return {
-						sendTransaction: (args: Parameters<SendTransactionCapable["sendTransaction"]>[0]) =>
-							client.sendTransaction(args),
-					};
-				};
 
-				const { txHashes } = await executeLifiSteps(
-					quote.steps as Parameters<typeof executeLifiSteps>[0],
-					bridgeGetSigner,
-					{
-						allowanceOwnerByChainId,
-						polygonRelay: needsRelay && relayClient ? { client: relayClient } : undefined,
-						solanaSigner: solanaSigner ?? undefined,
-					},
-				);
+					const statusTool =
+						typeof quote.statusBridge === "string" && quote.statusBridge.trim()
+							? quote.statusBridge.trim()
+							: undefined;
 
-				const sourceTxHash = pickBridgeSourceTxHashForLifiStatus(
-					txHashes,
-					quote.steps as unknown[] | undefined,
-					fromChainLifi,
-				);
-				if (!sourceTxHash) {
-					return { success: false, error: "Bridge produced no transaction hash" };
+					await pollLifiUntilTerminal(
+						() =>
+							privateApi.getFundingLifiStatus({
+								txHash: sourceTxHash,
+								...(statusTool != null ? { tool: statusTool } : {}),
+								fromChain: fromChainLifi,
+								toChain: toChainLifi,
+							}) as Promise<LifiStatusResponse>,
+						SOR_LIFI_PREFUND_POLL,
+					);
+
+					if (Number.isFinite(spentHumanForLedger) && spentHumanForLedger > 0) {
+						const cur = balancesHuman[step.fromChain] ?? 0;
+						balancesHuman[step.fromChain] = Math.max(0, cur - spentHumanForLedger);
+					}
+
+					lastSourceTxHash = sourceTxHash;
 				}
 
-				const statusTool =
-					typeof quote.statusBridge === "string" && quote.statusBridge.trim()
-						? quote.statusBridge.trim()
-						: undefined;
-
-				await pollLifiUntilTerminal(
-					() =>
-						privateApi.getFundingLifiStatus({
-							txHash: sourceTxHash,
-							...(statusTool != null ? { tool: statusTool } : {}),
-							fromChain: fromChainLifi,
-							toChain: toChainLifi,
-						}) as ReturnType<Parameters<typeof pollLifiUntilTerminal>[0]>,
-					{ maxAttempts: 60, intervalMs: 12_000 },
-				);
-
-				return { success: true, bridgeTxHash: sourceTxHash };
+				return { success: true, bridgeTxHash: lastSourceTxHash };
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : "Bridge execution failed";
 				return { success: false, error: msg };

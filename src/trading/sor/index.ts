@@ -2,7 +2,13 @@ export { useSorRoute } from "./useSorRoute";
 export type { UseSorRouteInput, UseSorRouteResult } from "./useSorRoute";
 
 export { useSorExecution } from "./useSorExecution";
-export type { UseSorExecutionInput, UseSorExecutionResult, LegExecutor, BridgeExecutor } from "./useSorExecution";
+export type {
+	UseSorExecutionInput,
+	UseSorExecutionResult,
+	LegExecutor,
+	BridgeExecutor,
+	SorExecutionPhase,
+} from "./useSorExecution";
 
 export { useSorLegExecutor } from "./useSorLegExecutor";
 export type { UseSorLegExecutorDeps } from "./useSorLegExecutor";

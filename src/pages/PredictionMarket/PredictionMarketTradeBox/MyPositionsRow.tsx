@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
-import { useTradeBoxShareBalances } from "./hooks/useTradeBoxShareBalances";
+import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { TradingVenue } from "./types";
 
@@ -34,6 +34,7 @@ export function MyPositionsRow({
 	side,
 	selectedPosition,
 	matchedMonitor,
+	shareBalances,
 }: {
 	market: MarketLike;
 	umbrellaId?: string;
@@ -46,19 +47,11 @@ export function MyPositionsRow({
 	side: "buy" | "sell";
 	selectedPosition: "yes" | "no" | null;
 	matchedMonitor?: MatchedMarket | null;
+	shareBalances: TradeBoxShareBalancesSnapshot;
 }) {
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const { buyLines, sellTotalShares, sellVenueBreakdown, sellOutcomeLabel } =
-		useTradeBoxShareBalances({
-			umbrellaId,
-			market,
-			tradingVenue,
-			yesTeamLabel,
-			noTeamLabel,
-			isVsSingle,
-			selectedPosition,
-			matchedMonitor,
-		});
+		shareBalances;
 
 	/** Same treatment as chart team lines on black: dark team hex is lightened so text stays readable. */
 	const colorForLine = (lineSide: "yes" | "no") => {

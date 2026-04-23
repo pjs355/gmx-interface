@@ -589,9 +589,15 @@ export default function usePositionsData() {
 				return next;
 			});
 			try {
+				// Re-fetch venue position APIs (Predict / Poly / DFlow) and mark-to-market data so
+				// portfolio total matches fresh cash; cash alone can update while stale mark values double-count.
 				await Promise.all([
 					refreshUserData(),
 					queryClient.invalidateQueries({ queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY] }),
+					queryClient.invalidateQueries({ queryKey: ["predict-positions"] }),
+					queryClient.invalidateQueries({ queryKey: ["predict-market-details"] }),
+					queryClient.invalidateQueries({ queryKey: ["polymarket-positions"] }),
+					queryClient.invalidateQueries({ queryKey: ["dflow-positions"] }),
 				]);
 				await refreshViaRpc();
 			} catch (e) {

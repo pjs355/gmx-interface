@@ -49,6 +49,17 @@ export type SellVenueBreakdownRow = {
 	shares: number;
 };
 
+/** Snapshot from `useTradeBoxShareBalances` for child components (single hook instance in parent). */
+export type TradeBoxShareBalancesSnapshot = {
+	buyLines: TradeBoxShareLine[];
+	sellTotalShares: number;
+	sellVenueBreakdown: SellVenueBreakdownRow[];
+	sellOutcomeLabel: string;
+	loading: boolean;
+	/** Per-venue share counts for YES/NO when on “All Markets” (keys = `VenuePosition.venue`). */
+	allMarketsOutcomeVenueShares: { yes: Record<string, number>; no: Record<string, number> } | null;
+};
+
 function buildConditionUmbrellaLookup(umbrellas: Umbrella[]): Map<string, Umbrella> {
 	const map = new Map<string, Umbrella>();
 	for (const umb of umbrellas) {
@@ -205,13 +216,7 @@ export function useTradeBoxShareBalances(opts: {
 	selectedPosition: "yes" | "no" | null;
 	/** Same row as orderbooks — preferred for Poly tokenId → Yes/No before WS list lookup. */
 	matchedMonitor?: MatchedMarket | null;
-}): {
-	buyLines: TradeBoxShareLine[];
-	sellTotalShares: number;
-	sellVenueBreakdown: SellVenueBreakdownRow[];
-	sellOutcomeLabel: string;
-	loading: boolean;
-} {
+}): TradeBoxShareBalancesSnapshot {
 	const {
 		umbrellaId,
 		market,
@@ -532,5 +537,47 @@ export function useTradeBoxShareBalances(opts: {
 		pageMatchedMonitor,
 	]);
 
-	return { buyLines, sellTotalShares, sellVenueBreakdown, sellOutcomeLabel, loading };
+	const allMarketsOutcomeVenueShares = useMemo(() => {
+		if (mapTradingVenueFilter(tradingVenue) !== "all") return null;
+		const yes: Record<string, number> = {};
+		const no: Record<string, number> = {};
+		const add = (target: Record<string, number>, venueKey: string, sh: number) => {
+			if (!Number.isFinite(sh) || sh <= 0) return;
+			target[venueKey] = (target[venueKey] ?? 0) + sh;
+		};
+		if (levelBalances.yes > 0) add(yes, "levelup", levelBalances.yes);
+		if (levelBalances.no > 0) add(no, "levelup", levelBalances.no);
+		for (const p of relevantVenuePositions) {
+			const side = venuePositionToYesNo(
+				p,
+				matchedOddsMarkets,
+				pageMatchedMonitor,
+				isVsSingle,
+				yesTeamLabel,
+				noTeamLabel,
+			);
+			if (side === "yes") add(yes, p.venue, p.shares);
+			else if (side === "no") add(no, p.venue, p.shares);
+		}
+		return { yes, no };
+	}, [
+		tradingVenue,
+		isVsSingle,
+		yesTeamLabel,
+		noTeamLabel,
+		levelBalances,
+		relevantVenuePositions,
+		appState?.markets,
+		appState?.timestamp,
+		pageMatchedMonitor,
+	]);
+
+	return {
+		buyLines,
+		sellTotalShares,
+		sellVenueBreakdown,
+		sellOutcomeLabel,
+		loading,
+		allMarketsOutcomeVenueShares,
+	};
 }

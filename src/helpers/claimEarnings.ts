@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { Contract, ethers, type Provider } from "ethers";
 import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import {
@@ -6,7 +6,7 @@ import {
 	useSendTransaction,
 } from "@privy-io/react-auth";
 import { useCallback, useMemo, useState } from "react";
-import { AddressesByChainId, ChainId } from "@predictdotfun/sdk";
+import { AddressesByChainId, ChainId, OrderBuilder } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getCTFAddress, getUSDCAddress } from "@/config/addresses";
 import { POLYGON_CTF, POLYGON_USDC_E } from "@/trading/polymarket/constants";
@@ -30,6 +30,41 @@ const CTF_ABI = [
 
 const YES_INDEX_SET = 1;
 const NO_INDEX_SET = 2;
+
+const CTF_READ_ABI = [
+	"function getCollectionId(bytes32 parentCollectionId, bytes32 conditionId, uint256 indexSet) view returns (bytes32)",
+	"function getPositionId(address collateralToken, bytes32 collectionId) view returns (uint256)",
+	"function balanceOf(address account, uint256 id) view returns (uint256)",
+] as const;
+
+/**
+ * ERC1155 outcome balance for a resolved binary market (used for NegRisk
+ * redeem amount). Holder must match where Predict holds tokens (Kernel when
+ * `VITE_PREDICT_ACCOUNT_ADDRESS` is set, else the embedded EOA).
+ */
+async function readPredictOutcomeTokenBalance(args: {
+	provider: Provider;
+	conditionId: string;
+	indexSet: 1 | 2;
+	isNegRisk: boolean;
+	isYieldBearing: boolean;
+	holder: string;
+}): Promise<bigint> {
+	const chainId = ChainId.BnbMainnet;
+	const ctfAddr =
+		AddressesByChainId[chainId][
+			predictCtfKey(args.isNegRisk, args.isYieldBearing)
+		];
+	const collateral = AddressesByChainId[chainId].USDT;
+	const ctf = new Contract(ctfAddr, CTF_READ_ABI, args.provider);
+	const collectionId = await ctf.getCollectionId(
+		ethers.ZeroHash,
+		args.conditionId,
+		args.indexSet,
+	);
+	const positionId = await ctf.getPositionId(collateral, collectionId);
+	return ctf.balanceOf(args.holder, positionId) as Promise<bigint>;
+}
 
 type MarketVenue = "levelup" | "polymarket" | "predictfun";
 
@@ -223,36 +258,82 @@ export function useClaimForVenue(
 				sendTransaction: privyEvmSendTransaction,
 			});
 
-			const chainId = ChainId.BnbMainnet;
-			const ctfAddress =
-				AddressesByChainId[chainId][
-					predictCtfKey(isNegRisk, isYieldBearing)
-				];
-			const collateral = AddressesByChainId[chainId].USDT;
+			const predictAccountRaw =
+				typeof import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS === "string"
+					? import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS.trim()
+					: "";
+			const predictAccount =
+				predictAccountRaw.length > 0 ? predictAccountRaw : undefined;
 
-			const redeemData = iface.encodeFunctionData("redeemPositions", [
-				collateral,
-				ethers.ZeroHash,
-				market.conditionId,
-				[YES_INDEX_SET, NO_INDEX_SET],
-			]);
+			// Must mirror `usePredictTradingSession`: single winning index set,
+			// and when `predictAccount` (Kernel) is set, redemption goes through
+			// `kernel.execute` via the SDK — raw EOA→CTF calls revert in
+			// simulation because outcome ERC1155 balances sit on the Kernel.
+			const indexSet = (
+				resolvedOutcome === "yes" ? YES_INDEX_SET : NO_INDEX_SET
+			) as 1 | 2;
 
-			console.log("CLAIM DEBUG: Predict redeem on BNB", {
-				ctf: ctfAddress,
-				collateral,
+			const builder = await OrderBuilder.make(
+				ChainId.BnbMainnet,
+				bscSigner as never,
+				predictAccount ? { predictAccount } : {},
+			);
+
+			let amount: bigint | undefined;
+			if (isNegRisk) {
+				const provider = bscSigner.provider;
+				if (!provider) {
+					throw new Error(
+						"No BNB provider available to read Predict position balance",
+					);
+				}
+				const holder =
+					predictAccount ?? (await bscSigner.getAddress());
+				amount = await readPredictOutcomeTokenBalance({
+					provider,
+					conditionId: market.conditionId,
+					indexSet,
+					isNegRisk,
+					isYieldBearing,
+					holder,
+				});
+				if (amount === 0n) {
+					throw new Error(
+						"No redeemable outcome tokens for this market on your Predict account",
+					);
+				}
+			}
+
+			console.log("CLAIM DEBUG: Predict redeem on BNB (OrderBuilder)", {
 				conditionId: market.conditionId,
-				indexSets: [YES_INDEX_SET, NO_INDEX_SET],
+				indexSet,
 				isNegRisk,
 				isYieldBearing,
+				predictAccount: predictAccount ?? null,
+				negRiskAmount: amount?.toString() ?? null,
 			});
 
-			const tx = await bscSigner.sendTransaction({
-				to: ctfAddress as string,
-				data: redeemData,
-				value: 0,
+			const result = await builder.redeemPositions({
+				conditionId: market.conditionId,
+				indexSet,
+				isNegRisk,
+				isYieldBearing,
+				...(isNegRisk ? { amount } : {}),
 			});
-			await tx.wait();
-			return tx.hash;
+
+			if (!result.success) {
+				const c = result.cause;
+				throw c instanceof Error ? c : new Error(String(c));
+			}
+			const receipt = result.receipt;
+			const hash =
+				receipt?.hash ??
+				(receipt as { transactionHash?: string } | undefined)
+					?.transactionHash;
+			if (!hash) {
+				throw new Error("Predict redeem did not return a transaction hash");
+			}
+			return hash;
 		}
 
 		async function redeemLevelUp(): Promise<string> {

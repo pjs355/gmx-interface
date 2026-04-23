@@ -11,6 +11,9 @@
  *
  * Override: `VITE_PREDICTION_API_BASE_URL` (e.g. `http://localhost:8080` for full local API:
  * multiplex `/ws`, orderbook REST, umbrellas, tags — same host as venue-prices when odds URLs derive from it).
+ *
+ * Signed `POST /orders/...` uses `getPredictionOrderApiBaseUrl()` so yarn dev [3] (localhost catalog)
+ * still submits orders to production settlement. Optional: `VITE_PREDICTION_ORDER_API_BASE_URL`.
  */
 
 import { getEnvironment, isLocalApi } from "./environment";
@@ -48,6 +51,49 @@ export function getPredictionApiBaseOverride(): string | null {
 	const raw = import.meta.env.VITE_PREDICTION_API_BASE_URL;
 	if (typeof raw !== "string" || raw.trim() === "") return null;
 	return normalizeApiBase(raw);
+}
+
+/** Optional: base URL for `POST /orders` only (staging, etc.). */
+export function getPredictionOrderApiBaseOverride(): string | null {
+	const raw = import.meta.env.VITE_PREDICTION_ORDER_API_BASE_URL;
+	if (typeof raw !== "string" || raw.trim() === "") return null;
+	return normalizeApiBase(raw);
+}
+
+function isLoopbackHttpPredictionHost(url: string): boolean {
+	try {
+		const u = new URL(normalizeApiBase(url));
+		if (u.protocol !== "http:") return false;
+		const h = u.hostname.toLowerCase();
+		return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Base URL for signed LevelUp prediction orders (`POST /orders/:questionId`).
+ * - Explicit `VITE_PREDICTION_ORDER_API_BASE_URL` wins.
+ * - **testnet**: same host as `getPredictionApiBaseUrl()` (local order API).
+ * - **local-production** with `VITE_PREDICTION_API_BASE_URL` on loopback HTTP (yarn dev [3]): production Railway
+ *   so orders are never posted to an uninitialized local :8080.
+ * - Otherwise: `getPredictionApiBaseUrl()` (LIVE, prod deploy, or local-production without localhost override).
+ */
+export function getPredictionOrderApiBaseUrl(): string {
+	const orderOverride = getPredictionOrderApiBaseOverride();
+	if (orderOverride) return orderOverride;
+	if (getEnvironment() === "testnet") {
+		return getPredictionApiBaseUrl();
+	}
+	const predOverride = getPredictionApiBaseOverride();
+	if (
+		getEnvironment() === "local-production" &&
+		predOverride &&
+		isLoopbackHttpPredictionHost(predOverride)
+	) {
+		return API_URLS.production.api;
+	}
+	return getPredictionApiBaseUrl();
 }
 
 // =============================================================================

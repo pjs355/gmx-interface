@@ -3,6 +3,7 @@ import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaD
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
 import type { MatchedMarket } from "@/types/odds-monitor";
+import type { VenueRowModel } from "@/hooks/useTradingPagePrices";
 
 export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
@@ -47,6 +48,11 @@ export interface TradeBoxProps {
 	crossBuyYes?: number | null;
 	/** Cross-venue best NO price from unified trading page prices (WS-first). */
 	crossBuyNo?: number | null;
+	/**
+	 * Per-venue ask/bid rows from `useTradingPagePrices` — used for All Markets sell
+	 * tab position-button pricing (best bid among venues where the user holds shares).
+	 */
+	venueRowsForSellStrip?: VenueRowModel[] | null;
 	/** Odds-monitor row for this match (Polymarket token mapping for balances). */
 	matchedMonitor?: MatchedMarket | null;
 }

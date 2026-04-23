@@ -1,5 +1,11 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import {
+	createLogger,
+	defineConfig,
+	loadEnv,
+	type Logger,
+	type Plugin,
+} from "vite";
 import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "path";
@@ -9,6 +15,22 @@ import https from "node:https";
 
 /** Config file directory — use for .env + aliases so behavior matches other laptops regardless of `process.cwd()`. */
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+
+/** `@base-org/account` ships sourcemaps that reference unpublished `.ts` paths; Vite logs each via `warnOnce`. */
+function createViteLoggerWithoutBaseOrgSourcemapNoise(): Logger {
+	const logger = createLogger();
+	const warnOnce = logger.warnOnce.bind(logger);
+	logger.warnOnce = (msg, options) => {
+		if (
+			msg.includes("Sourcemap for") &&
+			msg.includes("@base-org/account")
+		) {
+			return;
+		}
+		warnOnce(msg, options);
+	};
+	return logger;
+}
 
 /**
  * Dev-only: tunnels browser requests through Railway `/proxy` (EU egress).
@@ -319,6 +341,7 @@ export default defineConfig(({ mode }) => {
 		viteEnv.VITE_LIMITLESS_LEGACY_CLIENT_FALLBACKS === "true";
 
 	return {
+		customLogger: createViteLoggerWithoutBaseOrgSourcemapNoise(),
 		plugins: [
 			react({
 				babel: {
@@ -349,6 +372,7 @@ export default defineConfig(({ mode }) => {
 		],
 		define: {},
 		optimizeDeps: {
+			// Must stay excluded: dist uses `import … with { type: 'json' }`, which Vite 4's esbuild cannot pre-bundle.
 			exclude: ["@base-org/account"],
 			// eventemitter3 ships ESM entry (index.mjs) that default-imports CJS index.js;
 			// without pre-bundling, the browser sees "no default export" (Privy / walletconnect chain).

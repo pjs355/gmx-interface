@@ -7,7 +7,10 @@ import {
 	FEE_MODULE_ADDRESS,
 	FEE_RATE_BPS,
 } from "config/addresses";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import {
+	getPredictionApiBaseUrl,
+	getPredictionOrderApiBaseUrl,
+} from "@/config/predictionApiBase";
 
 // Utility function to round dollar amounts based on buy/sell direction
 function roundDollarAmount(amount: number, side: "buy" | "sell"): number {
@@ -35,6 +38,11 @@ const BASE_RPC =
 // NOTE: API URL is now fetched dynamically to prevent stale URL caching issues
 function getProductionApi(): string {
 	return getPredictionApiBaseUrl(); // PREDICTION MARKETS ONLY - separate from perps
+}
+
+/** Host for `POST /orders` only — production Railway when dev [3] uses localhost for catalog/WS. */
+function getOrderSubmissionApi(): string {
+	return getPredictionOrderApiBaseUrl();
 }
 
 // NO HARDCODED TOKENS - All token IDs must come from market data API
@@ -462,7 +470,7 @@ export class PredictionMarketService {
 		return { domain, types, message };
 	}
 
-	// Method to submit order to your local server (PREDICTION MARKETS ONLY)
+	// Submit signed order to prediction order API (prod when dev [3] uses localhost for REST/WS)
 	async submitOrderToAPI(
 		order: MarketOrder,
 		questionId?: string,
@@ -471,7 +479,7 @@ export class PredictionMarketService {
 	): Promise<any> {
 		console.log(
 			"🌐 Submitting order to API (PREDICTION MARKETS ONLY):",
-			getProductionApi()
+			getOrderSubmissionApi()
 		);
 		console.log("📤 Order payload:", JSON.stringify(order, null, 2));
 		console.log("🔍 Question ID for endpoint:", questionId);
@@ -489,8 +497,8 @@ export class PredictionMarketService {
 		try {
 			// Use questionId in the endpoint if provided, otherwise fall back to /orders
 			const endpoint = questionId
-				? `${getProductionApi()}/orders/${questionId}`
-				: `${getProductionApi()}/orders`;
+				? `${getOrderSubmissionApi()}/orders/${questionId}`
+				: `${getOrderSubmissionApi()}/orders`;
 			console.log("🌐 Using endpoint:", endpoint);
 
 			const headers: HeadersInit = {

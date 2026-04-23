@@ -71,10 +71,10 @@ function formatSorRouteFailureMessage(
 		// Post-grace: the client already waited ~3 s on this; message it as
 		// a loading state rather than a hard failure because the book should
 		// still appear shortly.
-		return "Finding best odds…";
+		return "Fetching price...";
 	}
 	if (code === "NO_BOOKS_AVAILABLE") {
-		return "Finding best odds…";
+		return "Fetching price...";
 	}
 	if (code === "ALL_BOOKS_STALE") {
 		return "Refreshing venue prices…";
