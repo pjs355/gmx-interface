@@ -151,6 +151,15 @@ export interface RoutePlan {
 	venueRequirements: Partial<Record<SorVenue, VenueRequirements>>;
 	executionShortfall?: ExecutionShortfall;
 	sizeSuggestion?: SizeSuggestion;
+	/**
+	 * Buy: `true` when per-chain balances cover the route legs (server-computed).
+	 * `false` when wallet payload empty, zero, or short on a required chain.
+	 */
+	sufficientFunds?: boolean;
+	/**
+	 * @deprecated Legacy preview flag from older API. Prefer `sufficientFunds`.
+	 */
+	theoreticalLiquidity?: boolean;
 	hmac: string;
 	expiresAt: number;
 	computedInMs: number;
@@ -166,11 +175,18 @@ export interface RouteRequest {
 	slippageTolerance?: number;
 	polyFeeRate?: number;
 	predictFunFeeRateBps?: number;
+	/** Limitless buy fee bps (optional; server defaults to 300). */
+	limitlessFeeRateBps?: number;
 	targetVenue?: SorVenue;
 	/** Defaults to "market". Limit orders also require targetVenue + limitPriceCents. */
 	orderType?: SorOrderType;
 	/** Integer cents 1–99 (0.01–0.99 probability). Required for limit orders. */
 	limitPriceCents?: number;
+	/**
+	 * Buy: USDC on the Limitless delegated maker (Base). Separate from `walletBalances`
+	 * `base`, which is the smart wallet — keeps LevelUp from inheriting maker spend.
+	 */
+	limitlessMakerBaseUsdc?: number;
 }
 
 export interface RouteResponse {
@@ -191,7 +207,9 @@ export type SorErrorCode =
 	| "ROUTE_EXPIRED"
 	| "INVALID_HMAC"
 	| "VALIDATION_ERROR"
-	| "EXECUTION_NOT_READY";
+	| "EXECUTION_NOT_READY"
+	| "THEORETICAL_ROUTE_NOT_EXECUTABLE"
+	| "INSUFFICIENT_FUNDS";
 
 export interface RouteErrorResponse {
 	success: false;

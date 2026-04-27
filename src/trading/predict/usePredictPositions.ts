@@ -12,6 +12,7 @@ export function usePredictPositions(address: string | undefined | null) {
 		queryKey: ["predict-positions", a],
 		enabled: Boolean(a.startsWith("0x")),
 		staleTime: 30_000,
+		placeholderData: (previousData) => previousData,
 		queryFn: () => api.getPredictPositions(address!),
 	});
 }

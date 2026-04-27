@@ -18,8 +18,16 @@ import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { sumPredictPositionMarkValue } from "@/trading/predict/sumPredictPositionMarkValue";
 import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
+import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
+import { limitlessPositionsForPortfolioMtm } from "@/trading/limitless/splitLimitlessVenuePositions";
+import { debugLimitlessPortfolioTable } from "@/trading/limitless/limitlessPortfolioDebug";
+import { isVenueMarketResolvedLike } from "@/types/trading/venuePosition";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useOddsMonitor } from "context/OddsMonitorContext";
+import {
+	syntheticVenueWinningsRowId,
+	useRecentSettlementClaim,
+} from "context/RecentSettlementClaimContext";
 
 type PortfolioContextValue = {
 	portfolioTotal: number | null;
@@ -31,10 +39,25 @@ type PortfolioContextValue = {
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
 
+/** Used when a consumer mounts outside `PortfolioProvider` (broken tree or duplicate context module under Vite HMR). */
+const PORTFOLIO_CONTEXT_FALLBACK: PortfolioContextValue = {
+	portfolioTotal: null,
+	cashBalance: 0,
+	loading: true,
+	cashLoading: true,
+	portfolioLoading: true,
+};
+
+let portfolioProviderMissingLogged = false;
+
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
+	const { acknowledgedClearedPayoutKeys } = useRecentSettlementClaim();
 	const [portfolioTotal, setPortfolioTotal] = useState<number | null>(null);
 	const lastCashRef = React.useRef<number>(0);
-	const lastPositionsRef = React.useRef<number>(0);
+	/** Mark-to-market (LevelUp books) + off-chain venue — excludes unclaimed resolution value. */
+	const lastMarkToMarketAndVenueRef = React.useRef<number>(0);
+	/** Last full "positions" column (mtm+venue+LevelUp unclaimed) — for snap-to-zero guard only. */
+	const lastPortfolioPositionColumnRef = React.useRef<number>(0);
 	const { account, signerAddress } = useSignerContext();
 	const {
 		umbrellas,
@@ -64,15 +87,19 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		};
 	}, []);
 
-	const { polymarketSafe, embeddedEoa, solanaAddress } = useFundingAddresses();
+	const { polymarketSafe, embeddedEoa, solanaAddress, limitlessMakerBase } =
+		useFundingAddresses();
 	const { authenticated } = usePrivy();
 	const dflowProof = useDflowProofStatus();
 	const solanaLinked = Boolean(solanaAddress?.trim());
 
-	const venueEnabled = venueReady && Boolean(polymarketSafe || embeddedEoa || solanaAddress);
+	const venueEnabled =
+		venueReady &&
+		Boolean(polymarketSafe || embeddedEoa || solanaAddress || limitlessMakerBase);
 
 	const bridgeBalances = useBridgeFundingBalances({
 		baseSmartWallet: undefined,
+		limitlessMakerBase: venueEnabled ? limitlessMakerBase : null,
 		polymarketSafe: venueEnabled ? polymarketSafe : null,
 		embeddedEoa: venueEnabled ? embeddedEoa : null,
 		solanaAddress: venueEnabled ? solanaAddress : null,
@@ -87,36 +114,57 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const solanaUsdcCash = bridgeBalances.data?.solanaUsdcHuman
 		? Number(bridgeBalances.data.solanaUsdcHuman)
 		: 0;
+	const limitlessMakerUsdcCash = bridgeBalances.data?.baseLimitlessUsdcHuman
+		? Number(bridgeBalances.data.baseLimitlessUsdcHuman)
+		: 0;
 
 	const polyPositionsQuery = usePolymarketPositions(venueReady ? polymarketSafe : null);
+	const polyPositionsDataNetClaim = useMemo(() => {
+		if (!polyPositionsQuery.data) return null;
+		return polyPositionsQuery.data.filter(
+			(p) =>
+				!acknowledgedClearedPayoutKeys.has(
+					syntheticVenueWinningsRowId("polymarket", p.tokenId),
+				),
+		);
+	}, [acknowledgedClearedPayoutKeys, polyPositionsQuery.data]);
 	const polyPositionsTotal = useMemo(() => {
-		if (!polyPositionsQuery.data) return 0;
-		return polyPositionsQuery.data.reduce(
+		if (!polyPositionsDataNetClaim) return 0;
+		return polyPositionsDataNetClaim.reduce(
 			(sum, p) => sum + (p.currentValue ?? 0),
 			0
 		);
-	}, [polyPositionsQuery.data]);
+	}, [polyPositionsDataNetClaim]);
 
 	// Match usePositionsData: Predict.fun keys off the embedded signer (BNB), not the Base smart wallet.
 	const predictQueryAddress = signerAddress ?? account;
 	const predictPositionsQuery = usePredictPositions(
 		venueReady ? (predictQueryAddress ?? null) : null
 	);
+	const predictPositionsDataNetClaim = useMemo(() => {
+		if (!predictPositionsQuery.data) return null;
+		return predictPositionsQuery.data.filter(
+			(p) =>
+				!acknowledgedClearedPayoutKeys.has(
+					syntheticVenueWinningsRowId("predictfun", p.tokenId),
+				),
+		);
+	}, [acknowledgedClearedPayoutKeys, predictPositionsQuery.data]);
 	const predictPortfolioMarketIds = useMemo(() => {
 		const ids = new Set<number>();
-		for (const p of predictPositionsQuery.data ?? []) {
+		for (const p of predictPositionsDataNetClaim ?? []) {
 			if (p.numericMarketId) ids.add(p.numericMarketId);
 		}
 		return Array.from(ids);
-	}, [predictPositionsQuery.data]);
+	}, [predictPositionsDataNetClaim]);
 	const predictMarketDetailsPortfolioQuery = usePredictMarketDetailsMap(
 		predictPortfolioMarketIds,
 		venueReady && predictPortfolioMarketIds.length > 0,
 	);
 	const predictPositionsTotal = useMemo(() => {
-		if (!predictPositionsQuery.data) return 0;
+		if (!predictPositionsDataNetClaim) return 0;
 		return sumPredictPositionMarkValue(
-			predictPositionsQuery.data,
+			predictPositionsDataNetClaim,
 			allBooksPreview,
 			umbrellas,
 			getQuestionsForUmbrella,
@@ -124,7 +172,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			predictMarketDetailsPortfolioQuery.data ?? null,
 		);
 	}, [
-		predictPositionsQuery.data,
+		predictPositionsDataNetClaim,
 		allBooksPreview,
 		umbrellas,
 		getQuestionsForUmbrella,
@@ -152,6 +200,51 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		);
 	}, [dflowPositionsQuery.data]);
 
+	const limitlessPortfolioEnabled =
+		venueReady &&
+		Boolean(authenticated) &&
+		Boolean(limitlessMakerBase?.trim());
+	const limitlessVenuePositionsQuery =
+		useLimitlessVenuePositions(limitlessPortfolioEnabled);
+	const limitlessPositionsDataNetClaim = useMemo(() => {
+		const src = limitlessVenuePositionsQuery.data;
+		if (!src) return null;
+		// Exclude History-bucket rows so header MTM matches Positions tab (no double-count on settled CLOB).
+		const mtm = limitlessPositionsForPortfolioMtm(src);
+		return mtm.filter(
+			(p) =>
+				!acknowledgedClearedPayoutKeys.has(
+					syntheticVenueWinningsRowId("limitless", p.tokenId),
+				),
+		);
+	}, [acknowledgedClearedPayoutKeys, limitlessVenuePositionsQuery.data]);
+	const limitlessPositionsTotal = useMemo(() => {
+		if (!limitlessPositionsDataNetClaim) return 0;
+		return limitlessPositionsDataNetClaim.reduce(
+			(sum, p) => sum + (p.currentValue ?? 0),
+			0,
+		);
+	}, [limitlessPositionsDataNetClaim]);
+
+	React.useEffect(() => {
+		if (!import.meta.env.DEV) return;
+		const rows = limitlessPositionsDataNetClaim;
+		if (!rows || rows.length === 0) return;
+		debugLimitlessPortfolioTable(
+			"Portfolio header: limitless venue positions (MTM inputs)",
+			rows.map((p) => ({
+				title: (p.marketTitle ?? "").slice(0, 56),
+				outcome: p.outcome,
+				shares: p.shares,
+				currentValue: p.currentValue,
+				marketStatus: p.marketStatus ?? "(missing)",
+				resolvedLike: isVenueMarketResolvedLike(p.marketStatus),
+				redeemable: p.redeemable,
+				tokenTail: (p.tokenId ?? "").slice(-14),
+			})),
+		);
+	}, [limitlessPositionsDataNetClaim]);
+
 	// Resolved LevelUp markets live in resolvedMarketsByUmbrella (not getQuestionsForUmbrella).
 	// Each winning share is worth $1 at settlement — same economics as the Winnings table.
 	const levelUpResolvedWinningsTotal = useMemo(() => {
@@ -161,6 +254,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			for (const m of resolvedMarkets) {
 				const balanceId = (m as { _id?: string })?._id;
 				if (!balanceId) continue;
+				if (acknowledgedClearedPayoutKeys.has(String(balanceId))) continue;
 				const tb = tokenBalances.get(balanceId);
 				if (!tb) continue;
 				const outcome = String(
@@ -173,7 +267,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			}
 		}
 		return sum;
-	}, [resolvedMarketsByUmbrella, tokenBalances]);
+	}, [acknowledgedClearedPayoutKeys, resolvedMarketsByUmbrella, tokenBalances]);
 
 	// Track separate loading states
 	const [hasInitialCashLoad, setHasInitialCashLoad] = React.useState(false);
@@ -185,6 +279,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	React.useEffect(() => {
 		setHasInitialCashLoad(false);
 		setHasInitialPortfolioLoad(false);
+		lastMarkToMarketAndVenueRef.current = 0;
+		lastPortfolioPositionColumnRef.current = 0;
 		// Clear any existing timeout
 		if (initialLoadTimeoutRef.current) {
 			clearTimeout(initialLoadTimeoutRef.current);
@@ -223,10 +319,20 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		};
 	}, [account, hasInitialPortfolioLoad, userDataLoading]);
 
-	// Cash is loading if we haven't loaded it yet and user data is loading
-	const cashLoading =
+	// Cash = Base USDC + off-chain bridge balances. Avoid flicker: do not show a "partial"
+	// total (Base only) and then a skeleton when venue/bundle loads — same rule the header uses.
+	const baseCashMissing =
 		!hasInitialCashLoad &&
 		(usdcBalance === null || usdcBalance === undefined);
+	// While `venueReady` is false, off-chain stables are not in the total yet; treat as loading.
+	const waitingOnVenueDeferral = Boolean(account) && !venueReady;
+	const waitingOnFirstBridge =
+		Boolean(account) &&
+		venueReady &&
+		venueEnabled &&
+		!bridgeBalances.isFetched;
+	const cashLoading =
+		baseCashMissing || waitingOnVenueDeferral || waitingOnFirstBridge;
 	const dflowBlockingPortfolio =
 		Boolean(account) &&
 		solanaLinked &&
@@ -241,7 +347,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		booksPreviewLoading ||
 		dflowBlockingPortfolio;
 
-	// Stable cash balance: LevelUp Base USDC + Polymarket Safe USDC.e + Predict BSC USDT
+	// Stable cash balance: LevelUp Base USDC + Limitless maker (Base) + Polymarket Safe USDC.e + Predict BSC USDT
 	const cashBalance = useMemo(() => {
 		const baseCash =
 			usdcBalance === null || usdcBalance === undefined
@@ -250,8 +356,20 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		if (usdcBalance !== null && usdcBalance !== undefined) {
 			lastCashRef.current = baseCash;
 		}
-		return baseCash + polySafeUsdcE + bscUsdtCash + solanaUsdcCash;
-	}, [usdcBalance, polySafeUsdcE, bscUsdtCash, solanaUsdcCash]);
+		return (
+			baseCash +
+			limitlessMakerUsdcCash +
+			polySafeUsdcE +
+			bscUsdtCash +
+			solanaUsdcCash
+		);
+	}, [
+		usdcBalance,
+		limitlessMakerUsdcCash,
+		polySafeUsdcE,
+		bscUsdtCash,
+		solanaUsdcCash,
+	]);
 
 	const compute = useCallback(() => {
 		if (!account) {
@@ -273,8 +391,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				});
 			});
 			
-			// Compute positions total from tokenBalances and allBooksPreview (best ask/bid prices)
-			let positions = 0;
+			// Mark-to-market from tokenBalances and allBooksPreview (best ask/bid)
+			let markToMarket = 0;
 			let pricedMarkets = 0;
 			markets.forEach(({ balanceId, priceId }) => {
 				// Get balances using MongoDB _id
@@ -298,45 +416,59 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				}
 				const yv = typeof yp === "number" ? yes * yp : 0;
 				const nv = typeof np === "number" ? no * np : 0;
-				positions += yv + nv;
+				markToMarket += yv + nv;
 			});
 
-			// Include Polymarket + Predict.fun + DFlow positions value (off-chain venue APIs)
-			positions += polyPositionsTotal + predictPositionsTotal + dflowPositionsTotal;
+			// Off-chain venue notionals
+			markToMarket +=
+				polyPositionsTotal +
+				predictPositionsTotal +
+				dflowPositionsTotal +
+				limitlessPositionsTotal;
 
-			// Smoothing: avoid snap-to-zero during transient loads
 			const prevCash = lastCashRef.current;
-			const prevPositions = lastPositionsRef.current;
 			const nextCash = cashBalance;
-			let nextPositions = positions;
+			const prevMtmv = lastMarkToMarketAndVenueRef.current;
+			// Reuse only prior mtm+venue. Never reuse a value that already includes
+			// levelUpResolvedWinningsTotal — it was re-added every 500ms tick and inflated the header.
+			const prevForZeroGuard = lastPortfolioPositionColumnRef.current;
+			let nextMtmv = markToMarket;
 			if (
+				booksPreviewLoading &&
 				(pricedMarkets === 0 || markets.length === 0) &&
-				prevPositions > 0 &&
+				prevMtmv > 0 &&
 				polyPositionsTotal === 0 &&
 				predictPositionsTotal === 0 &&
-				dflowPositionsTotal === 0
+				dflowPositionsTotal === 0 &&
+				limitlessPositionsTotal === 0
 			) {
-				nextPositions = prevPositions;
+				nextMtmv = prevMtmv;
 			}
-			// Always include claimable LevelUp settlement value (not in active market list / preview).
-			nextPositions += levelUpResolvedWinningsTotal;
+			lastMarkToMarketAndVenueRef.current = nextMtmv;
+			// Unclaimed LevelUp resolution ($1 / winning share) — one addition per recompute
+			const positionColumnWithResolved =
+				nextMtmv + levelUpResolvedWinningsTotal;
+			lastPortfolioPositionColumnRef.current = positionColumnWithResolved;
 			const effectiveCash =
 				usdcBalance === null || usdcBalance === undefined
-					? prevCash + polySafeUsdcE + bscUsdtCash + solanaUsdcCash
+					? prevCash +
+						limitlessMakerUsdcCash +
+						polySafeUsdcE +
+						bscUsdtCash +
+						solanaUsdcCash
 					: nextCash;
-			const nextTotal = effectiveCash + nextPositions;
+			const nextTotal = effectiveCash + positionColumnWithResolved;
 			setPortfolioTotal((current) => {
 				if (
 					current !== null &&
 					nextTotal === 0 &&
-					(prevCash > 0 || prevPositions > 0)
+					(prevCash > 0 || prevForZeroGuard > 0)
 				) {
 					return current;
 				}
 				return nextTotal;
 			});
 			lastCashRef.current = effectiveCash;
-			lastPositionsRef.current = nextPositions;
 		} catch {
 			setPortfolioTotal((current) => current ?? cashBalance);
 		}
@@ -352,10 +484,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		polyPositionsTotal,
 		predictPositionsTotal,
 		dflowPositionsTotal,
+		limitlessPositionsTotal,
 		levelUpResolvedWinningsTotal,
 		polySafeUsdcE,
 		bscUsdtCash,
 		solanaUsdcCash,
+		limitlessMakerUsdcCash,
 	]);
 
 	useEffect(() => {
@@ -378,10 +512,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		polyPositionsTotal,
 		predictPositionsTotal,
 		dflowPositionsTotal,
+		limitlessPositionsTotal,
 		levelUpResolvedWinningsTotal,
 		polySafeUsdcE,
 		bscUsdtCash,
 		solanaUsdcCash,
+		limitlessMakerUsdcCash,
 	]);
 
 	const value = useMemo<PortfolioContextValue>(
@@ -410,10 +546,17 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 
 export function usePortfolio(): PortfolioContextValue {
 	const ctx = useContext(PortfolioContext);
-	if (!ctx) {
-		throw new Error("usePortfolio must be used within a PortfolioProvider");
+	if (ctx) {
+		return ctx;
 	}
-	return ctx;
+	if (import.meta.env.DEV && !portfolioProviderMissingLogged) {
+		portfolioProviderMissingLogged = true;
+		// eslint-disable-next-line no-console -- intentional once-per-session diagnostic
+		console.error(
+			"[usePortfolio] No PortfolioProvider context (duplicate React/context bundle or provider order bug). Using loading fallback — hard-refresh the dev server if this persists.",
+		);
+	}
+	return PORTFOLIO_CONTEXT_FALLBACK;
 }
 
 export default PortfolioContext;

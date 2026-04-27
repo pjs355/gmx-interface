@@ -3,13 +3,16 @@ import { useNavigate } from "react-router-dom";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
-import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
 import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
-import { getTradeCount } from "../utils/positionHelpers";
+import {
+	getTradeCount,
+	fifoAlignedBasisForPositionsRow,
+} from "../utils/positionHelpers";
 
 export default function PositionsCardView({
 	umbrellaBalances,
@@ -62,14 +65,14 @@ export default function PositionsCardView({
 	const mergedByUmbrella = useMemo(() => {
 		return umbrellaBalances.map(({ umbrella, markets }: any) => {
 			const sideBuckets: Record<"Yes" | "No", {
-				shares: number; marketValue: number; totalCost: number; totalReturn: number;
-				hasCost: boolean; hasReturn: boolean; tradeCount: number; marketIds: string[];
+				shares: number; marketValue: number; totalCost: number;
+				hasCost: boolean; marketIds: string[];
 				weightedPriceSum: number; priceShares: number;
 				weightedAvgSum: number; avgShares: number;
 				label: string; primaryMarket: any;
 			}> = {
-				Yes: { shares: 0, marketValue: 0, totalCost: 0, totalReturn: 0, hasCost: false, hasReturn: false, tradeCount: 0, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
-				No: { shares: 0, marketValue: 0, totalCost: 0, totalReturn: 0, hasCost: false, hasReturn: false, tradeCount: 0, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
+				Yes: { shares: 0, marketValue: 0, totalCost: 0, hasCost: false, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
+				No: { shares: 0, marketValue: 0, totalCost: 0, hasCost: false, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
 			};
 
 			for (const { market, yes, no, venue, predictOutcomeLabelYes, predictOutcomeLabelNo } of markets) {
@@ -102,13 +105,6 @@ export default function PositionsCardView({
 					if (effectiveCost !== null) { bucket.totalCost += effectiveCost; bucket.hasCost = true; }
 					if (effectiveAvgPrice !== null) { bucket.weightedAvgSum += effectiveAvgPrice * amount; bucket.avgShares += amount; }
 
-					const mv = price !== null ? price * amount : null;
-					const baseReturn = mv === null || effectiveCost === null ? null : mv - effectiveCost;
-					const realizedLegPnl = returnsByQid[qid]?.[side] ?? 0;
-					if (baseReturn !== null) { bucket.totalReturn += baseReturn + realizedLegPnl; bucket.hasReturn = true; }
-
-					bucket.tradeCount += getTradeCount(orders, qid, side);
-
 					if (!bucket.label) {
 						if (venue === "predictfun") {
 							bucket.label = getPredictPositionRowLabel(title, side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo, side) || side;
@@ -134,16 +130,68 @@ export default function PositionsCardView({
 			for (const side of ["Yes", "No"] as const) {
 				const b = sideBuckets[side];
 				if (b.shares <= 0) continue;
+
+				const uniqMarketIds = [...new Set(b.marketIds)];
+				let tradeCountDeduped = 0;
+				for (const qid of uniqMarketIds) {
+					tradeCountDeduped += getTradeCount(orders, qid, side);
+				}
+
+				const fifo = fifoAlignedBasisForPositionsRow(
+					orders,
+					uniqMarketIds,
+					side,
+					b.shares,
+				);
+
+				let totalCostDisplay: number | null = b.hasCost ? b.totalCost : null;
+				let avgPriceDisplay: number | null =
+					b.avgShares > 0 ? b.weightedAvgSum / b.avgShares : null;
+				if (fifo.fifoCost != null && fifo.fifoAvgPrice != null) {
+					totalCostDisplay = fifo.fifoCost;
+					avgPriceDisplay = fifo.fifoAvgPrice;
+				}
+
+				const mvDisplay = b.priceShares > 0 ? b.marketValue : null;
+
+				let realizedLegPnL = 0;
+				for (const id of uniqMarketIds) {
+					const r = returnsByQid[id]?.[side];
+					if (typeof r === "number" && Number.isFinite(r)) {
+						realizedLegPnL = r;
+						break;
+					}
+				}
+
+				let totalReturnDisplay: number | null = null;
+				let hasRet = false;
+				if (mvDisplay !== null && totalCostDisplay !== null) {
+					totalReturnDisplay = mvDisplay - totalCostDisplay + realizedLegPnL;
+					hasRet = true;
+				}
+
 				rows.push({
-					side, label: b.label || side, totalShares: b.shares,
-					currentPrice: b.priceShares > 0 ? b.weightedPriceSum / b.priceShares : null,
-					marketValue: b.priceShares > 0 ? b.marketValue : null,
-					avgPrice: b.avgShares > 0 ? b.weightedAvgSum / b.avgShares : null,
-					totalCost: b.hasCost ? b.totalCost : null, payout: b.shares,
-					totalReturn: b.hasReturn ? b.totalReturn : null,
-					totalReturnPct: b.hasReturn && b.totalCost > 0 ? (b.totalReturn / b.totalCost) * 100 : null,
-					tradeCount: b.tradeCount, marketIds: b.marketIds,
-					primaryMarket: b.primaryMarket, primaryUmbrella: umbrella,
+					side,
+					label: b.label || side,
+					totalShares: b.shares,
+					currentPrice:
+						b.priceShares > 0 ? b.weightedPriceSum / b.priceShares : null,
+					marketValue: mvDisplay,
+					avgPrice: avgPriceDisplay,
+					totalCost: totalCostDisplay,
+					payout: b.shares,
+					totalReturn: hasRet ? totalReturnDisplay : null,
+					totalReturnPct:
+						hasRet &&
+						totalCostDisplay != null &&
+						totalCostDisplay > 0 &&
+						totalReturnDisplay != null
+							? (totalReturnDisplay / totalCostDisplay) * 100
+							: null,
+					tradeCount: tradeCountDeduped,
+					marketIds: b.marketIds,
+					primaryMarket: b.primaryMarket,
+					primaryUmbrella: umbrella,
 				});
 			}
 			return { umbrella, rows };
@@ -153,7 +201,7 @@ export default function PositionsCardView({
 	return (
 		<div className="flex flex-col gap-12">
 			{mergedByUmbrella.map(({ umbrella, rows }) => {
-				const umbrellaHeaderLabel = stripUmbrellaDisplayPrefix(umbrella.displayName);
+				const blockUmbrellaTitle = umbrellaHeaderLabel(umbrella);
 				return (
 					<div key={umbrella._id} className="umbrella-card">
 						{rows.map((row) => {
@@ -186,7 +234,7 @@ export default function PositionsCardView({
 										<UmbrellaImage umbrella={umbrella} size={40} />
 										<div style={{ flex: 1 }}>
 											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
-												{umbrellaHeaderLabel}
+												{blockUmbrellaTitle}
 											</div>
 											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
 												{singleSide && row.label === row.side ? (

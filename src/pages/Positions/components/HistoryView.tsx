@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { getFinalAmount, type ProcessedOrder } from "@/services/api/simplifiedOrderService";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
@@ -7,15 +8,40 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import TradeHistoryList from "./TradeHistoryList";
 import UmbrellaImage from "./UmbrellaImage";
-import { stripUmbrellaDisplayPrefix, titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
-import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
-import { getTradeCount, getNetCashFlow } from "../utils/positionHelpers";
 import {
+	stripUmbrellaDisplayPrefix,
+	titlesMatchVenue,
+	umbrellaHeaderLabel,
+} from "@/helpers/umbrellaDisplayName";
+import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
+import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/levelUpQuestionIdsForVenueHistory";
+import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
+import {
+	getTradeCount,
+	getNetCashFlow,
+	formatHistoryReturnPctAbs,
+	venueHistoryPositionToSyntheticOrders,
+	venueHistoryRowToSyntheticOrder,
+	venueHistorySyntheticUmbrellaId,
+} from "../utils/positionHelpers";
+import {
+	inferVenueHistoryYesNoSide,
 	resolveCanonicalMatchWinner,
 	shortTeamDisplayName,
 	winnerLabelFromLevelUpTitle,
 	winnerLabelFromVenuePosition,
 } from "../utils/historyOutcomeWinner";
+import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
+import {
+	buildPredictUmbrellaLookup,
+	matchVenuePositionToUmbrellaForHistory,
+} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+import {
+	logFullHistoryDebug,
+	type FullHistoryUnifiedBlock,
+	type LogFullHistoryDebugParams,
+} from "../utils/fullHistoryDebugLog";
+import { sortUnifiedHistoryBlocksByLatest } from "../utils/historyActivitySort";
 
 type UnifiedHistoryBlock = {
 	id: string;
@@ -44,16 +70,36 @@ export default function HistoryView({
 	orders,
 	resolvedMarketsByUmbrella,
 	venueHistory = [],
+	catalogUmbrellas,
+	venueHistoryRawItemsForDebug,
+	historyResolveStage,
 }: {
 	umbrellaBalances: any[];
 	returnsByQid: Record<string, { Yes: number; No: number }>;
 	orders: any[];
 	resolvedMarketsByUmbrella: Record<string, any[]>;
 	venueHistory?: VenuePosition[];
+	/** Pre-resolve venue merge rows from `usePositionsData` (FULL HISTORY debug). */
+	venueHistoryRawItemsForDebug?: VenuePosition[];
+	/** Merged active + resolve payloads (e.g. inactive) for History lookups only. */
+	catalogUmbrellas?: Umbrella[];
+	/** `POST /api/umbrellas/resolve-venue-history` status + row id counts for `FULL HISTORY`. */
+	historyResolveStage?: LogFullHistoryDebugParams["resolveStage"];
 }) {
-	const { umbrellas } = usePredictionData();
+	const { umbrellas: contextUmbrellas } = usePredictionData();
+	const umbrellas = catalogUmbrellas ?? contextUmbrellas;
 	const { appState } = useOddsMonitor();
 	const matchedMarkets = appState?.markets ?? null;
+	const umbrellaLookupByConditionId = useMemo(
+		() => buildUmbrellaLookupByPolymarketConditionId(umbrellas),
+		[umbrellas],
+	);
+
+	const predictUmbrellaLookup = useMemo(
+		() => buildPredictUmbrellaLookup(appState?.markets, umbrellas),
+		[appState?.markets, umbrellas],
+	);
+
 	const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
 
 	const toggleMarketExpansion = (key: string) => {
@@ -92,18 +138,83 @@ export default function HistoryView({
 			blocks.set(umbrellaId, { id: umbrellaId, umbrella: umb, luMarkets: marketsWithHistory, venuePositions: [] });
 		});
 
-		const matchedTokenIds = new Set<string>();
+		const placed = new WeakSet<VenuePosition>();
+
 		for (const pos of venueHistory) {
-			const matched = umbrellas.find((u) => u.displayName && titlesMatchVenue(u.displayName, pos.marketTitle ?? ""));
-			if (matched && blocks.has(matched._id)) {
-				blocks.get(matched._id)!.venuePositions.push(pos);
-				matchedTokenIds.add(pos.tokenId);
+			const uid = pos.levelUpUmbrellaId?.trim();
+			if (!uid) continue;
+			const fromCatalog = umbrellas.find((u) => u._id === uid);
+			const dn =
+				stripUmbrellaDisplayPrefix(
+					pos.levelUpUmbrellaDisplayName ?? pos.marketTitle,
+				).trim() || pos.marketTitle;
+			const rowUmbrella: Umbrella =
+				fromCatalog ??
+				({
+					_id: uid,
+					displayName: dn || `Umbrella ${uid.slice(0, 8)}...`,
+					children: [],
+					originalChildren: [],
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					__v: 0,
+					_polyIcon: pos.iconUrl,
+				} as Umbrella);
+			const existing = blocks.get(uid);
+			if (!existing) {
+				blocks.set(uid, {
+					id: uid,
+					umbrella: rowUmbrella,
+					luMarkets: [],
+					venuePositions: [pos],
+				});
+			} else {
+				const cur = existing.umbrella as Umbrella;
+				const prefer =
+					(Array.isArray(rowUmbrella.children) && rowUmbrella.children.length > 0) ||
+					(rowUmbrella as { exchangeMatching?: unknown }).exchangeMatching != null
+						? rowUmbrella
+						: cur;
+				if (prefer !== cur) {
+					existing.umbrella = prefer;
+				}
+				existing.venuePositions.push(pos);
+			}
+			placed.add(pos);
+		}
+
+		for (const pos of venueHistory) {
+			if (placed.has(pos)) continue;
+			const predictHint =
+				pos.venue === "predictfun"
+					? stripUmbrellaDisplayPrefix(pos.marketTitle) || undefined
+					: undefined;
+			const matchedUmb = matchVenuePositionToUmbrellaForHistory(
+				pos,
+				pos.venue,
+				umbrellaLookupByConditionId,
+				umbrellas,
+				predictUmbrellaLookup,
+				predictHint,
+			);
+			if (matchedUmb) {
+				const id = matchedUmb._id;
+				if (!blocks.has(id)) {
+					blocks.set(id, {
+						id,
+						umbrella: matchedUmb,
+						luMarkets: [],
+						venuePositions: [],
+					});
+				}
+				blocks.get(id)!.venuePositions.push(pos);
+				placed.add(pos);
 			}
 		}
 
 		const unmatchedByTitle = new Map<string, VenuePosition[]>();
 		for (const pos of venueHistory) {
-			if (matchedTokenIds.has(pos.tokenId)) continue;
+			if (placed.has(pos)) continue;
 			const key = stripUmbrellaDisplayPrefix(pos.marketTitle) || pos.marketTitle;
 			const arr = unmatchedByTitle.get(key) ?? [];
 			arr.push(pos);
@@ -112,7 +223,7 @@ export default function HistoryView({
 		for (const [title, positions] of unmatchedByTitle) {
 			const matched = umbrellas.find((u) => u.displayName && titlesMatchVenue(u.displayName, title));
 			const synth = matched ?? {
-				_id: `venue-hist-${title.slice(0, 20)}`,
+				_id: venueHistorySyntheticUmbrellaId(title, positions),
 				displayName: title,
 				children: [], originalChildren: [],
 				createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), __v: 0,
@@ -121,21 +232,47 @@ export default function HistoryView({
 			blocks.set(synth._id, { id: synth._id, umbrella: synth, luMarkets: [], venuePositions: positions });
 		}
 
-		return Array.from(blocks.values());
-	}, [resolvedMarketsByUmbrella, orders, umbrellas, venueHistory]);
+		return sortUnifiedHistoryBlocksByLatest(Array.from(blocks.values()), orders);
+	}, [
+		resolvedMarketsByUmbrella,
+		orders,
+		umbrellas,
+		venueHistory,
+		umbrellaLookupByConditionId,
+		predictUmbrellaLookup,
+	]);
+
+	useEffect(() => {
+		logFullHistoryDebug({
+			layout: "table",
+			venueHistory,
+			unifiedBlocks: unifiedBlocks as FullHistoryUnifiedBlock[],
+			umbrellas,
+			umbrellaLookupByConditionId,
+			predictLookup: predictUmbrellaLookup,
+			orders,
+			resolvedMarketsByUmbrella,
+			umbrellaBalances,
+			venueHistoryRawItems: venueHistoryRawItemsForDebug,
+			resolveStage: historyResolveStage ?? undefined,
+		});
+	}, [
+		venueHistory,
+		unifiedBlocks,
+		umbrellas,
+		umbrellaLookupByConditionId,
+		predictUmbrellaLookup,
+		orders,
+		resolvedMarketsByUmbrella,
+		umbrellaBalances,
+		venueHistoryRawItemsForDebug,
+		historyResolveStage,
+	]);
 
 	const venueHistorySyntheticOrders = useMemo(() => {
 		const synth: ProcessedOrder[] = [];
 		for (const pos of venueHistory) {
-			if (pos.shares <= 0) continue;
-			const venueName = pos.venue === "predictfun" ? "Predict" : pos.venue === "polymarket" ? "Polymarket" : pos.venue === "dflow" ? "Kalshi" : pos.venue;
-			const position: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || pos.outcome.toLowerCase() !== "no" ? "Yes" : "No";
-			synth.push({
-				orderId: `synth-vh-${pos.tokenId}`, questionId: pos.tokenId, tokenId: pos.tokenId,
-				side: "buy", position, price: pos.avgPrice ?? 0, size: pos.shares,
-				filled: true, filledAt: null, createdAt: new Date().toISOString(),
-				usdcValue: pos.cost ?? pos.shares * (pos.avgPrice ?? 0), tokenValue: pos.shares, venue: venueName,
-			});
+			synth.push(...venueHistoryPositionToSyntheticOrders(pos));
 		}
 		return synth;
 	}, [venueHistory]);
@@ -143,6 +280,7 @@ export default function HistoryView({
 	const allOrders = useMemo(() => [...orders, ...venueHistorySyntheticOrders], [orders, venueHistorySyntheticOrders]);
 
 	const mergedRowsByBlock = useMemo(() => {
+		let limitlessHistUiLog = 0;
 		return unifiedBlocks.map((block) => {
 			const resolvedList = resolvedMarketsByUmbrella[block.id] ?? [];
 			const luSample = block.luMarkets[0]?.market ?? null;
@@ -210,10 +348,39 @@ export default function HistoryView({
 			}
 
 			for (const pos of block.venuePositions) {
-				const side: "Yes" | "No" = pos.outcome.toLowerCase() === "yes" || pos.outcome.toLowerCase() !== "no" ? "Yes" : "No";
+				const side = inferVenueHistoryYesNoSide(pos.marketTitle, pos.outcome);
+				if (
+					import.meta.env.DEV &&
+					pos.venue === "limitless" &&
+					limitlessHistUiLog < 18
+				) {
+					limitlessHistUiLog++;
+					const synth = venueHistoryRowToSyntheticOrder(pos);
+					debugLimitlessPortfolio("History tab UI: limitless venueHistory row → bucket + labels", {
+						umbrella: umbrellaHeaderLabel(block.umbrella),
+						rawApiOutcome: pos.outcome,
+						inferredYesNoBucket: side,
+						rowMarketTitle: pos.marketTitle,
+						marketStatusOnRow: pos.marketStatus,
+						outcomeResultOnRow: pos.outcomeResult,
+						winnerColumnLabel: winnerLabelFromVenuePosition(pos),
+						marketColumnLabel: getVenueHistoryMarketColumnLabel(
+							pos.marketTitle,
+							pos,
+							block.venuePositions.length === 1 && block.luMarkets.length === 0,
+						),
+						syntheticOrderPosition: synth?.position,
+						syntheticPrice: synth?.price,
+						syntheticUsdc: synth?.usdcValue,
+					});
+				}
 				const bucket = sideBuckets[side];
 				bucket.hasData = true;
 				bucket.marketIds.push(pos.tokenId);
+				for (const qid of levelUpQuestionIdsForVenueHistoryRow(umbrellas, pos)) {
+					if (!bucket.marketIds.includes(qid)) bucket.marketIds.push(qid);
+					bucket.tradeCount += getTradeCount(orders, qid, side);
+				}
 
 				const safeShares = pos.shares != null && isFinite(pos.shares) ? pos.shares : 0;
 				bucket.finalPosition += safeShares;
@@ -228,7 +395,7 @@ export default function HistoryView({
 				const ret = pos.pnl != null && isFinite(pos.pnl) ? pos.pnl : payout - safeCost;
 				bucket.totalReturn += ret;
 
-				bucket.tradeCount += 1;
+				bucket.tradeCount += venueHistoryPositionToSyntheticOrders(pos).length;
 
 				if (!bucket.label) {
 					const singleInGroup = block.venuePositions.length === 1 && block.luMarkets.length === 0;
@@ -259,7 +426,7 @@ export default function HistoryView({
 			}
 			return { block, rows };
 		});
-	}, [unifiedBlocks, orders, returnsByQid, resolvedMarketsByUmbrella, matchedMarkets]);
+	}, [unifiedBlocks, orders, returnsByQid, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
 
 	if (unifiedBlocks.length === 0) {
 		return (
@@ -302,7 +469,7 @@ export default function HistoryView({
 							>
 								<div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
 									<UmbrellaImage umbrella={block.umbrella} />
-									{stripUmbrellaDisplayPrefix(block.umbrella.displayName)}
+									{umbrellaHeaderLabel(block.umbrella)}
 								</div>
 							</div>
 
@@ -319,7 +486,7 @@ export default function HistoryView({
 									const u = `$${Math.abs(row.totalReturn).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 									if (row.totalReturnPct === null || !isFinite(row.totalReturnPct)) return `${s}${u}`;
 									const sp = row.totalReturnPct >= 0 ? "+" : "-";
-									return `${s}${u} (${sp}${Math.round(Math.abs(row.totalReturnPct))}%)`;
+									return `${s}${u} (${sp}${formatHistoryReturnPctAbs(row.totalReturnPct)}%)`;
 								})();
 								const posText = row.finalPosition > 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—";
 

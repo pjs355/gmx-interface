@@ -6,13 +6,16 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
-import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
 import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryList from "./TradeHistoryList";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
-import { getTradeCount } from "../utils/positionHelpers";
+import {
+	getTradeCount,
+	fifoAlignedBasisForPositionsRow,
+} from "../utils/positionHelpers";
 
 type MergedRow = {
 	side: "Yes" | "No";
@@ -73,14 +76,14 @@ export default function PositionsTableView({
 	const mergedByUmbrella = useMemo(() => {
 		return umbrellaBalances.map(({ umbrella, markets }: any) => {
 			const sideBuckets: Record<"Yes" | "No", {
-				shares: number; marketValue: number; totalCost: number; totalReturn: number;
-				hasCost: boolean; hasReturn: boolean; tradeCount: number; marketIds: string[];
+				shares: number; marketValue: number; totalCost: number;
+				hasCost: boolean; marketIds: string[];
 				weightedPriceSum: number; priceShares: number;
 				weightedAvgSum: number; avgShares: number;
 				label: string; primaryMarket: any;
 			}> = {
-				Yes: { shares: 0, marketValue: 0, totalCost: 0, totalReturn: 0, hasCost: false, hasReturn: false, tradeCount: 0, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
-				No: { shares: 0, marketValue: 0, totalCost: 0, totalReturn: 0, hasCost: false, hasReturn: false, tradeCount: 0, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
+				Yes: { shares: 0, marketValue: 0, totalCost: 0, hasCost: false, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
+				No: { shares: 0, marketValue: 0, totalCost: 0, hasCost: false, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
 			};
 
 			for (const { market, yes, no, venue, predictOutcomeLabelYes, predictOutcomeLabelNo } of markets) {
@@ -119,16 +122,6 @@ export default function PositionsTableView({
 						bucket.avgShares += amount;
 					}
 
-					const mv = price !== null ? price * amount : null;
-					const baseReturn = mv === null || effectiveCost === null ? null : mv - effectiveCost;
-					const realizedLegPnl = returnsByQid[qid]?.[side] ?? 0;
-					if (baseReturn !== null) {
-						bucket.totalReturn += baseReturn + realizedLegPnl;
-						bucket.hasReturn = true;
-					}
-
-					bucket.tradeCount += getTradeCount(orders, qid, side);
-
 					if (!bucket.label) {
 						if (venue === "predictfun") {
 							bucket.label = getPredictPositionRowLabel(title, side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo, side) || side;
@@ -147,18 +140,65 @@ export default function PositionsTableView({
 			for (const side of ["Yes", "No"] as const) {
 				const b = sideBuckets[side];
 				if (b.shares <= 0) continue;
+
+				const uniqMarketIds = [...new Set(b.marketIds)];
+				let tradeCountDeduped = 0;
+				for (const qid of uniqMarketIds) {
+					tradeCountDeduped += getTradeCount(orders, qid, side);
+				}
+
+				const fifo = fifoAlignedBasisForPositionsRow(
+					orders,
+					uniqMarketIds,
+					side,
+					b.shares,
+				);
+
+				let totalCostDisplay: number | null = b.hasCost ? b.totalCost : null;
+				let avgPriceDisplay: number | null =
+					b.avgShares > 0 ? b.weightedAvgSum / b.avgShares : null;
+				if (fifo.fifoCost != null && fifo.fifoAvgPrice != null) {
+					totalCostDisplay = fifo.fifoCost;
+					avgPriceDisplay = fifo.fifoAvgPrice;
+				}
+
+				const mvDisplay = b.priceShares > 0 ? b.marketValue : null;
+
+				let realizedLegPnL = 0;
+				for (const id of uniqMarketIds) {
+					const r = returnsByQid[id]?.[side];
+					if (typeof r === "number" && Number.isFinite(r)) {
+						realizedLegPnL = r;
+						break;
+					}
+				}
+
+				let totalReturnDisplay: number | null = null;
+				let hasRet = false;
+				if (mvDisplay !== null && totalCostDisplay !== null) {
+					totalReturnDisplay = mvDisplay - totalCostDisplay + realizedLegPnL;
+					hasRet = true;
+				}
+
 				rows.push({
 					side,
 					label: b.label || side,
 					totalShares: b.shares,
-					currentPrice: b.priceShares > 0 ? b.weightedPriceSum / b.priceShares : null,
-					marketValue: b.priceShares > 0 ? b.marketValue : null,
-					avgPrice: b.avgShares > 0 ? b.weightedAvgSum / b.avgShares : null,
-					totalCost: b.hasCost ? b.totalCost : null,
+					currentPrice:
+						b.priceShares > 0 ? b.weightedPriceSum / b.priceShares : null,
+					marketValue: mvDisplay,
+					avgPrice: avgPriceDisplay,
+					totalCost: totalCostDisplay,
 					payout: b.shares,
-					totalReturn: b.hasReturn ? b.totalReturn : null,
-					totalReturnPct: b.hasReturn && b.totalCost > 0 ? (b.totalReturn / b.totalCost) * 100 : null,
-					tradeCount: b.tradeCount,
+					totalReturn: hasRet ? totalReturnDisplay : null,
+					totalReturnPct:
+						hasRet &&
+						totalCostDisplay != null &&
+						totalCostDisplay > 0 &&
+						totalReturnDisplay != null
+							? (totalReturnDisplay / totalCostDisplay) * 100
+							: null,
+					tradeCount: tradeCountDeduped,
 					marketIds: b.marketIds,
 					primaryMarket: b.primaryMarket,
 					primaryUmbrella: umbrella,
@@ -191,7 +231,11 @@ export default function PositionsTableView({
 					<div style={{ textAlign: "center" }}>Payout if correct</div>
 					<div style={{ textAlign: "center" }}>Market Value</div>
 					<div style={{ textAlign: "center" }}>
-						<Tooltip content="Total return includes market value of current positions and any past buys/sells." position="top" tooltipClassName="custom-tooltip">
+						<Tooltip
+							content="Unrealized (current market value minus FIFO cost of your open shares from filled trades) plus realized trading P&L from round-trips. This is not the same as the expanded “NET” cash-flow line, which is a simple sum of buy and sell cash amounts without your mark on the remaining position."
+							position="top"
+							tooltipClassName="custom-tooltip"
+						>
 							Total Return
 						</Tooltip>
 					</div>
@@ -213,7 +257,7 @@ export default function PositionsTableView({
 							>
 								<div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
 									<UmbrellaImage umbrella={umbrella} />
-									{stripUmbrellaDisplayPrefix(umbrella.displayName)}
+									{umbrellaHeaderLabel(umbrella)}
 								</div>
 							</div>
 

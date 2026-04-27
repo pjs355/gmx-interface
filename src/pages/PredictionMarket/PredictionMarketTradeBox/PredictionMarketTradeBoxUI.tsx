@@ -15,6 +15,8 @@ import type {
   RouteLeg,
   SorVenue,
   SorErrorCode,
+  SorExecutionPhase,
+  SorPrefundLegProgress,
 } from "@/trading/sor";
 import {
   VENUE_DISPLAY_NAMES,
@@ -183,6 +185,8 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   sorExecution: {
     execution: RouteExecution | null;
     isExecuting: boolean;
+    executionPhase?: SorExecutionPhase;
+    prefundLegProgress?: SorPrefundLegProgress | null;
     remainingBudget: number | null;
     requestReroute: () => Promise<number | null>;
     acceptResult: () => Promise<void>;
@@ -242,6 +246,12 @@ export default function PredictionMarketTradeBoxUI({
   const [sorDetailsExpanded, setSorDetailsExpanded] = useState(false);
   const [singleVenueDetailsExpanded, setSingleVenueDetailsExpanded] = useState(false);
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
+  /**
+   * Pulse only while `isStale` is true (inputs changed, tab resume, or grace after a transient error).
+   * Background auto-refresh uses `isLoading` without flipping stale, so sitting on "1,000" does not blink every few seconds.
+   */
+  const sorTotalsRecalculating =
+    tradingVenue === "all" && sorRoute.isStale && sorRoute.route != null;
   const sellFieldsLocked = side === "sell" && maxScopedSellShares <= 0;
   const venueConfig = getVenueConfig(tradingVenue);
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
@@ -655,8 +665,6 @@ export default function PredictionMarketTradeBoxUI({
           />
         </div>
       </div>
-      {/* Venue hint messages removed — internal status not shown to users */}
-      
 
       <div className="tradebox-header">
         <div className="side-selector">
@@ -948,7 +956,13 @@ export default function PredictionMarketTradeBoxUI({
                 ? Math.max(0, route.totalCost - route.totalFees)
                 : null;
             return (
-            <>
+            <div
+              className={
+                sorTotalsRecalculating
+                  ? "sor-route-totals sor-route-totals--recalculating"
+                  : "sor-route-totals"
+              }
+            >
               {!isSell && route.totalShares > 0 && (
                 <div className="bet-size-info">
                   <div className="bet-size-main-row">
@@ -1036,7 +1050,7 @@ export default function PredictionMarketTradeBoxUI({
                   </div>
                 </div>
               )}
-            </>
+            </div>
             );
           })()}
         </div>

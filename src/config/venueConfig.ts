@@ -150,8 +150,7 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 			return bps > 0 ? usd / (1 + bps / 10_000) : usd;
 		},
 		feeDescription: "Limitless fee",
-		feeTooltip:
-			"Limitless taker fee as basis points on notional (default 300 bps unless the market specifies otherwise).",
+		feeTooltip: "Limitless taker fee is 3% on notional.",
 	},
 
 	dflow: {

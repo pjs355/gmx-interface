@@ -8,6 +8,7 @@ export type {
 	LegExecutor,
 	BridgeExecutor,
 	SorExecutionPhase,
+	SorPrefundLegProgress,
 } from "./useSorExecution";
 
 export { useSorLegExecutor } from "./useSorLegExecutor";
@@ -15,9 +16,11 @@ export type { UseSorLegExecutorDeps } from "./useSorLegExecutor";
 
 export { SorRouteDisplay } from "./SorRouteDisplay";
 export { SorKalshiKycShortfallBanner } from "./SorKalshiKycShortfallBanner";
+export { SorTransientRouteErrorText } from "./SorTransientRouteErrorText";
 
-export { SmartRouteToggle, buildChainBalances } from "./SmartRouteToggle";
+export { SmartRouteToggle } from "./SmartRouteToggle";
 export type { SmartRouteToggleProps } from "./SmartRouteToggle";
+export { buildChainBalances } from "./buildChainBalances";
 
 export { createSorApiClient } from "./sor-api";
 export type { SorApiClient } from "./sor-api";

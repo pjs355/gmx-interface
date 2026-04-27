@@ -376,12 +376,19 @@ export default defineConfig(({ mode }) => {
 			exclude: ["@base-org/account"],
 			// eventemitter3 ships ESM entry (index.mjs) that default-imports CJS index.js;
 			// without pre-bundling, the browser sees "no default export" (Privy / walletconnect chain).
-			include: ["eventemitter3"],
+			include: [
+				"eventemitter3",
+				// Admin (and others) import Firebase; eager pre-bundle reduces
+				// `504 (Outdated Optimize Dep)` / stale `node_modules/.vite/deps/*` URLs after HMR or server restarts.
+				"firebase/app",
+				"firebase/storage",
+			],
 		},
 		esbuild: {
 			target: "es2022",
 		},
 		resolve: {
+			dedupe: ["react", "react-dom"],
 			alias: {
 				"@": path.resolve(projectRoot, "./src"),
 				components: path.resolve(projectRoot, "./src/components"),

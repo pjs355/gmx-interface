@@ -1,3 +1,4 @@
+import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import { normalizePredictTokenId } from "./predictOrdersApi";
 
@@ -24,9 +25,13 @@ function toVenuePosition(row: PredictPositionRow): VenuePosition {
 	const shares = Number(row.amount) / 1e18;
 	const currentValue = parseFloat(row.valueUsd) || 0;
 	const currentPrice = shares > 0 ? currentValue / shares : null;
+	const rawVenueTitle = row.market.question || row.market.title;
+	const umbrellaTitle = stripUmbrellaDisplayPrefix(
+		row.levelUpUmbrellaDisplayName?.trim() ?? "",
+	).trim();
 	return {
 		venue: "predictfun",
-		marketTitle: row.market.question || row.market.title,
+		marketTitle: umbrellaTitle || rawVenueTitle,
 		outcome: row.outcome.name,
 		shares,
 		avgPrice: null,

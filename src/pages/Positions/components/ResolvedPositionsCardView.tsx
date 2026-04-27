@@ -6,7 +6,11 @@ import { useClaimForVenue } from "@/helpers/claimEarnings";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
-import { stripUmbrellaDisplayPrefix, titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
+import {
+	stripUmbrellaDisplayPrefix,
+	titlesMatchVenue,
+	umbrellaHeaderLabel,
+} from "@/helpers/umbrellaDisplayName";
 
 type MarketEntry = { market: PredictionMarket; yes: string; no: string };
 
@@ -111,7 +115,7 @@ export default function ResolvedPositionsCardView({
 	return (
 		<div className="flex flex-col gap-12">
 			{mergedByBlock.map(({ block, rows }) => {
-				const umbrellaHeaderLabel = stripUmbrellaDisplayPrefix(block.umbrella.displayName);
+				const blockUmbrellaTitle = umbrellaHeaderLabel(block.umbrella);
 				return (
 					<div key={block.id} className="umbrella-card">
 						{rows.map((row) => {
@@ -149,7 +153,7 @@ export default function ResolvedPositionsCardView({
 													marginBottom: 4,
 												}}
 											>
-												{umbrellaHeaderLabel}
+												{blockUmbrellaTitle}
 											</div>
 											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
 												{row.label}

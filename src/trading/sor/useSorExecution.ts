@@ -1,4 +1,12 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import {
+	useState,
+	useCallback,
+	useRef,
+	useMemo,
+	useEffect,
+	useLayoutEffect,
+	type MutableRefObject,
+} from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { createSorApiClient } from "./sor-api";
 import { validateLegMinimum } from "./sorPreflight";
@@ -13,8 +21,11 @@ import { withTimeout } from "@/utils/withTimeout";
 
 const RETRY_COUNT = 2;
 const RETRY_DELAY_MS = 2000;
-/** Max wall time per bridge or leg (wallet prompts, LI.FI, venue APIs). Prevents stuck trade button. */
-const LEG_OR_BRIDGE_TIMEOUT_MS = 240_000;
+/**
+ * Max wall time per bridge or leg (wallet prompts, LI.FI, venue APIs).
+ * Polygon prefund uses the Polymarket relayer (~200s poll budget) plus LI.FI status polling.
+ */
+const LEG_OR_BRIDGE_TIMEOUT_MS = 300_000;
 
 export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<{
 	filled: boolean;
@@ -23,28 +34,56 @@ export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<{
 	error?: string;
 }>;
 
+/** LI.FI prefund hop index for UI (`current` is 1-based). */
+export type SorPrefundLegProgress = { current: number; total: number };
+
 export type BridgeExecutor = (
 	leg: RouteLeg,
-	opts?: { amountUsdOverride?: number },
+	opts?: {
+		amountUsdOverride?: number;
+		/** Fired at the start of each `buildPrefundSteps` LI.FI hop (same-chain sweeps run inside that hop). */
+		onPrefundProgress?: (p: SorPrefundLegProgress) => void;
+	},
 ) => Promise<{
 	success: boolean;
 	bridgeTxHash?: string;
 	error?: string;
 }>;
 
+/**
+ * UI phase while `isExecuting` — LI.FI prefund, allowance prompts, and venue
+ * order execution.
+ */
+export type SorExecutionPhase =
+	| "idle"
+	| "moving_funds"
+	| "approving_funds_transfer"
+	| "approving_trades"
+	| "executing_trade";
+
 export interface UseSorExecutionInput {
 	executeLeg: LegExecutor;
 	executeBridge: BridgeExecutor;
+	/**
+	 * Optional sink wired by the trade box: the hook assigns
+	 * `ref.current = (phase) => …` so `useSorLegExecutor` can update labels during
+	 * first-time token / venue approvals without importing this hook.
+	 */
+	reportExecutionPhaseRef?: MutableRefObject<
+		((phase: SorExecutionPhase) => void) | undefined
+	>;
 }
-
-/** UI phase while `isExecuting` — LI.FI prefund vs venue order execution. */
-export type SorExecutionPhase = "idle" | "moving_funds" | "executing_trade";
 
 export interface UseSorExecutionResult {
 	execution: RouteExecution | null;
 	isExecuting: boolean;
 	/** Which long-running sub-step the user should see (only meaningful when `isExecuting`). */
 	executionPhase: SorExecutionPhase;
+	/**
+	 * Set during LI.FI prefund (`moving_funds` / `approving_funds_transfer`) when
+	 * there are multiple source hops; `null` otherwise.
+	 */
+	prefundLegProgress: SorPrefundLegProgress | null;
 	execute: (route: RoutePlan) => Promise<RouteExecution | null>;
 	remainingBudget: number | null;
 	requestReroute: () => Promise<number | null>;
@@ -110,7 +149,7 @@ export function useSorExecution(
 ): UseSorExecutionResult {
 	const { getAccessToken } = usePrivy();
 	const { identityToken } = useIdentityToken();
-	const { executeLeg, executeBridge } = input;
+	const { executeLeg, executeBridge, reportExecutionPhaseRef } = input;
 
 	const identityTokenRef = useRef(identityToken);
 	identityTokenRef.current = identityToken;
@@ -127,6 +166,8 @@ export function useSorExecution(
 	const [execution, setExecution] = useState<RouteExecution | null>(null);
 	const [isExecuting, setIsExecuting] = useState(false);
 	const [executionPhase, setExecutionPhase] = useState<SorExecutionPhase>("idle");
+	const [prefundLegProgress, setPrefundLegProgress] =
+		useState<SorPrefundLegProgress | null>(null);
 	const [remainingBudget, setRemainingBudget] = useState<number | null>(null);
 	const routeRef = useRef<RoutePlan | null>(null);
 	const executingRef = useRef(false);
@@ -137,6 +178,17 @@ export function useSorExecution(
 			mountedRef.current = false;
 		};
 	}, []);
+
+	useLayoutEffect(() => {
+		if (!reportExecutionPhaseRef) return;
+		reportExecutionPhaseRef.current = (phase: SorExecutionPhase) => {
+			if (!executingRef.current) return;
+			if (mountedRef.current) setExecutionPhase(phase);
+		};
+		return () => {
+			reportExecutionPhaseRef.current = undefined;
+		};
+	}, [reportExecutionPhaseRef]);
 
 	const executeLegWithRetry = useCallback(
 		async (leg: RouteLeg, retriesLeft: number, side: "buy" | "sell" = "buy"): Promise<{
@@ -217,6 +269,58 @@ export function useSorExecution(
 				return preflightExec;
 			}
 
+			if (route.side === "buy" && route.sufficientFunds === false) {
+				const errMsg =
+					"Insufficient funds for this route at the quoted size. Add USDC on the required chains (or complete prefund), refresh the route, then try again.";
+				for (const leg of route.legs) {
+					if (!legResults.has(leg.venue)) {
+						legResults.set(leg.venue, {
+							filled: false,
+							filledShares: 0,
+							error: errMsg,
+						});
+					}
+				}
+				const preflightExec = buildLocalExecution(route, legResults);
+				if (preflightExec.status === "executing") {
+					preflightExec.status = "failed";
+				}
+				if (mountedRef.current) setExecution(preflightExec);
+				executingRef.current = false;
+				setIsExecuting(false);
+				setExecutionPhase("idle");
+				console.warn("[SOR] Blocked execution: insufficientFunds buy route", {
+					routeId: route.routeId,
+				});
+				return preflightExec;
+			}
+
+			if (route.side === "buy" && route.theoreticalLiquidity === true) {
+				const errMsg =
+					"This route uses a legacy preview flag. Refresh the trade sheet to fetch a new route, then try again.";
+				for (const leg of route.legs) {
+					if (!legResults.has(leg.venue)) {
+						legResults.set(leg.venue, {
+							filled: false,
+							filledShares: 0,
+							error: errMsg,
+						});
+					}
+				}
+				const preflightExec = buildLocalExecution(route, legResults);
+				if (preflightExec.status === "executing") {
+					preflightExec.status = "failed";
+				}
+				if (mountedRef.current) setExecution(preflightExec);
+				executingRef.current = false;
+				setIsExecuting(false);
+				setExecutionPhase("idle");
+				console.warn("[SOR] Blocked execution: legacy theoreticalLiquidity buy route", {
+					routeId: route.routeId,
+				});
+				return preflightExec;
+			}
+
 			const initialExec = buildLocalExecution(route, legResults);
 			if (mountedRef.current) setExecution(initialExec);
 
@@ -228,6 +332,36 @@ export function useSorExecution(
 				legs: route.legs.map((l) => l.venue),
 				side: route.side,
 			});
+
+			const legPlanSummary = route.legs.map((l) => ({
+				venue: l.venue,
+				chain: l.chain,
+				hasBridge: l.bridge != null,
+				bridgeCorridor:
+					l.bridge != null
+						? `${l.bridge.fromChain}→${l.bridge.toChain}`
+						: null,
+				executionAmountUsd: l.executionAmountUsd,
+			}));
+			console.log("[SOR] leg plan (LiFi prefund vs immediate venue)", legPlanSummary);
+
+			if (route.side === "buy") {
+				const dflowNoBridge = route.legs.filter(
+					(l) => l.venue === "dflow" && !l.bridge,
+				);
+				if (dflowNoBridge.length > 0) {
+					console.warn(
+						"[SOR_PREFUND] DFlow legs with bridge=null are immediate legs: executeBridge (LiFi) does not run before them. SPL USDC must already be on the Solana embedded wallet for these amounts.",
+						{
+							routeId: route.routeId,
+							executionAmountUsdByLeg: dflowNoBridge.map((l) => ({
+								venue: l.venue,
+								usd: l.executionAmountUsd,
+							})),
+						},
+					);
+				}
+			}
 
 			let result: RouteExecution | null = null;
 			try {
@@ -243,7 +377,8 @@ export function useSorExecution(
 
 				// Do not start immediate legs until bridge groups settle — bridge corridors run
 				// sequentially (aggregated per from→to), then venue legs, so we do not race LiFi
-				// against POST /orders before USDC arrives.
+				// against POST /orders before USDC arrives. Limit buys that include a bridge hint use
+				// the same bridge-first ordering as market buys.
 
 				const bridgeGroups = groupBridgeLegsByCorridor(bridgeLegs);
 				for (const group of bridgeGroups) {
@@ -253,12 +388,20 @@ export function useSorExecution(
 						venues: group.legs.map((l) => l.venue),
 						aggregatedUsd: group.totalAmountUsd,
 					});
-					if (mountedRef.current) setExecutionPhase("moving_funds");
+					if (mountedRef.current) {
+						setExecutionPhase("moving_funds");
+						setPrefundLegProgress(null);
+					}
 					let bridgeResult: Awaited<ReturnType<typeof executeBridge>>;
 					try {
 						bridgeResult = await withTimeout(
 							executeBridge(group.representativeLeg, {
 								amountUsdOverride: group.totalAmountUsd,
+								onPrefundProgress: (p) => {
+									if (mountedRef.current) {
+										setPrefundLegProgress(p);
+									}
+								},
 							}),
 							LEG_OR_BRIDGE_TIMEOUT_MS,
 							`SOR bridge ${group.key}`,
@@ -267,6 +410,9 @@ export function useSorExecution(
 						const msg = err instanceof Error ? err.message : String(err);
 						console.warn("[SOR] Bridge error", group.key, msg);
 						bridgeResult = { success: false, error: msg };
+					}
+					if (mountedRef.current) {
+						setPrefundLegProgress(null);
 					}
 					if (!bridgeResult.success) {
 						const failResult = {
@@ -296,7 +442,10 @@ export function useSorExecution(
 						continue;
 					}
 
-					if (mountedRef.current) setExecutionPhase("executing_trade");
+					if (mountedRef.current) {
+						setExecutionPhase("executing_trade");
+						setPrefundLegProgress(null);
+					}
 					for (const leg of group.legs) {
 						console.log("[SOR] Bridge+trade leg start", leg.venue);
 						let tradeResult: Awaited<ReturnType<typeof executeLegWithRetry>>;
@@ -408,6 +557,7 @@ export function useSorExecution(
 				// trade button stuck on "Executing" with no console output from a never-settled run.
 				setIsExecuting(false);
 				setExecutionPhase("idle");
+				setPrefundLegProgress(null);
 			}
 			return result;
 		},
@@ -454,6 +604,7 @@ export function useSorExecution(
 		setExecution(null);
 		setIsExecuting(false);
 		setExecutionPhase("idle");
+		setPrefundLegProgress(null);
 		setRemainingBudget(null);
 		routeRef.current = null;
 	}, []);
@@ -462,6 +613,7 @@ export function useSorExecution(
 		execution,
 		isExecuting,
 		executionPhase,
+		prefundLegProgress,
 		execute,
 		remainingBudget,
 		requestReroute,

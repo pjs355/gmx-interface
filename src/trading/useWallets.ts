@@ -6,6 +6,11 @@ import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading
 export type NormalizedTradingWallets = {
 	/** Coinbase Smart Wallet on Base — primary LevelUp balance / LI.FI `from` on Base */
 	baseSmartWallet: string | undefined;
+	/**
+	 * Limitless partner server-wallet maker on Base (8453) — venue collateral for delegated orders.
+	 * From account overview `venues[limitless].fundingDestination` (same as API `limitlessAccount.makerAddress`).
+	 */
+	limitlessMakerBase: string | undefined;
 	/** Privy embedded EOA — Polymarket signer */
 	embeddedEoa: string | undefined;
 	/** Polymarket Safe on Polygon */
@@ -75,6 +80,14 @@ export function useTradingWallets(
 				?.find((v) => String(v.venueId).toLowerCase() === "polymarket")
 				?.fundingDestination?.address as string | undefined);
 
+		const lxDest = accountOverview?.venues?.find(
+			(v) => String(v.venueId).toLowerCase() === "limitless",
+		)?.fundingDestination;
+		const limitlessMakerRaw =
+			typeof lxDest?.address === "string" ? lxDest.address.trim() : "";
+		const limitlessMakerBase =
+			/^0x[a-fA-F0-9]{40}$/.test(limitlessMakerRaw) ? limitlessMakerRaw : undefined;
+
 		const solWallet = (wallets || []).find((w) => {
 			const cw = w as { chainType?: string; address?: string };
 			return cw.chainType === "solana";
@@ -87,6 +100,7 @@ export function useTradingWallets(
 		const solFromLinked = readSolanaAddressFromUser(user);
 		return {
 			baseSmartWallet,
+			limitlessMakerBase,
 			embeddedEoa,
 			polymarketSafe,
 			polygonSigner: embeddedEoa,

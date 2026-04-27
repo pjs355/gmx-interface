@@ -71,7 +71,8 @@ import { SignerProvider } from "context/SignerContext";
 import { PredictionDataProvider } from "context/PredictionDataContext";
 import { OddsMonitorProvider } from "context/OddsMonitorContext";
 import { UserDataProvider } from "context/UserDataContext";
-import { PortfolioProvider } from "context/PortfolioContext";
+import { RecentSettlementClaimProvider } from "context/RecentSettlementClaimContext";
+import { PortfolioProvider } from "@/context/PortfolioContext";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
 import { TransfersModalProvider } from "context/TransfersModalContext";
@@ -121,6 +122,7 @@ createRoot(document.getElementById("root")!).render(
 							<SignerProvider>
 									<UserDataProvider>
 										<PolymarketBackgroundActivation />
+										<RecentSettlementClaimProvider>
 										<PortfolioProvider>
 											<PositionsPageMetricsGateProvider>
 												<RPGProvider>
@@ -130,6 +132,7 @@ createRoot(document.getElementById("root")!).render(
 												</RPGProvider>
 											</PositionsPageMetricsGateProvider>
 										</PortfolioProvider>
+										</RecentSettlementClaimProvider>
 									</UserDataProvider>
 							</SignerProvider>
 						</OddsMonitorProvider>

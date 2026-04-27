@@ -1,56 +1,6 @@
-@keyframes skeleton-pulse {
-	0% {
-		opacity: 0.06;
-	}
-	50% {
-		opacity: 0.12;
-	}
-	100% {
-		opacity: 0.06;
-	}
-}
-
 .page-skeleton {
-	display: flex;
-	flex-direction: column;
-	gap: 24px;
-	padding: 32px 24px;
-	max-width: 1200px;
-	margin: 0 auto;
+	flex: 1 1 auto;
+	width: 100%;
 	min-height: 60vh;
-
-	&__bar {
-		height: 40px;
-		border-radius: 8px;
-		background: white;
-		animation: skeleton-pulse 1.5s ease-in-out infinite;
-
-		&--wide {
-			width: 60%;
-		}
-	}
-
-	&__row {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 16px;
-
-		@media (max-width: 768px) {
-			grid-template-columns: 1fr;
-		}
-	}
-
-	&__card {
-		height: 200px;
-		border-radius: 12px;
-		background: white;
-		animation: skeleton-pulse 1.5s ease-in-out infinite;
-
-		&:nth-child(2) {
-			animation-delay: 0.2s;
-		}
-		&:nth-child(3) {
-			animation-delay: 0.4s;
-		}
-	}
+	box-sizing: border-box;
 }

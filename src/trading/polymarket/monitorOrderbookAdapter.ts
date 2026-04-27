@@ -13,42 +13,16 @@ function levelsToEntries(levels: OrderbookLevel[] | undefined) {
  * Converts odds-monitor `OrderbookData` into `OrderbookSnapshot` so
  * `useMarketOrderHandler` can walk the book the same way as LevelUp REST books.
  *
- * If the server only sends bests (no bid/ask arrays), we synthesize one level per
- * side using `totalAskLiquidity` / `totalBidLiquidity` when present; otherwise null
- * (avoid faking unknown depth).
+ * Uses only resting levels from `asks` / `bids` with positive size — no BBO-only
+ * or liquidity-total synthesis when arrays are empty.
  */
 export function monitorBookToOrderbookSnapshot(
 	book: OrderbookData | null | undefined
 ): OrderbookSnapshot | null {
 	if (!book) return null;
 
-	let asks = levelsToEntries(book.asks);
-	let bids = levelsToEntries(book.bids);
-
-	if (
-		!asks.length &&
-		book.bestAsk != null &&
-		Number.isFinite(Number(book.bestAsk))
-	) {
-		const liq = book.totalAskLiquidity;
-		const size =
-			typeof liq === "number" && Number.isFinite(liq) && liq > 0 ? liq : null;
-		if (size != null) {
-			asks = [{ price: Number(book.bestAsk), size }];
-		}
-	}
-	if (
-		!bids.length &&
-		book.bestBid != null &&
-		Number.isFinite(Number(book.bestBid))
-	) {
-		const liq = book.totalBidLiquidity;
-		const size =
-			typeof liq === "number" && Number.isFinite(liq) && liq > 0 ? liq : null;
-		if (size != null) {
-			bids = [{ price: Number(book.bestBid), size }];
-		}
-	}
+	const asks = levelsToEntries(book.asks).filter((l) => l.size > 0);
+	const bids = levelsToEntries(book.bids).filter((l) => l.size > 0);
 
 	if (!asks.length && !bids.length) return null;
 

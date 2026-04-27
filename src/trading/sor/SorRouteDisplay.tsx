@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Tooltip from "components/Tooltip/Tooltip";
+import { useAnimatedDots } from "@/hooks/useAnimatedDots";
+import { SorTransientRouteErrorText } from "./SorTransientRouteErrorText";
 import type { RoutePlan } from "./sor-types";
-import type { SorExecutionPhase } from "./useSorExecution";
+import type { SorExecutionPhase, SorPrefundLegProgress } from "./useSorExecution";
 import {
 	VENUE_DISPLAY_NAMES,
 	VENUE_COLORS,
@@ -27,6 +29,8 @@ interface SorRouteDisplayProps {
 	executing: boolean;
 	/** When `executing`, distinguishes LI.FI prefund vs venue order (from `useSorExecution`). */
 	executionPhase?: SorExecutionPhase;
+	/** During multi-hop LI.FI prefund, `(current/total)` for the moving-funds label. */
+	prefundLegProgress?: SorPrefundLegProgress | null;
 }
 
 function formatPercent(n: number): string {
@@ -66,8 +70,10 @@ export function SorRouteDisplay({
 	onFallback,
 	executing,
 	executionPhase = "executing_trade",
+	prefundLegProgress = null,
 }: SorRouteDisplayProps) {
 	const [routeExpired, setRouteExpired] = useState(false);
+	const executingDots = useAnimatedDots(400);
 	useEffect(() => {
 		if (!route) {
 			setRouteExpired(false);
@@ -90,7 +96,9 @@ export function SorRouteDisplay({
 			<div style={styles.container}>
 				<div style={styles.errorBox}>
 					<span style={styles.errorIcon}>!</span>
-					<span>Route unavailable: {error}</span>
+					<span>
+						Route unavailable: <SorTransientRouteErrorText message={error} />
+					</span>
 				</div>
 				<button type="button" onClick={onFallback} style={styles.fallbackBtn}>
 					Trade on LevelUp instead
@@ -218,9 +226,26 @@ export function SorRouteDisplay({
 				}}
 			>
 				{executing
-					? executionPhase === "moving_funds"
-						? "Moving funds..."
-						: "Executing trade..."
+					? (() => {
+							const hop =
+								prefundLegProgress &&
+								prefundLegProgress.total > 1 &&
+								prefundLegProgress.current >= 1
+									? ` (${prefundLegProgress.current}/${prefundLegProgress.total})`
+									: "";
+							if (executionPhase === "approving_funds_transfer") {
+								return `Approving funds transfer${hop}${executingDots}`;
+							}
+							if (executionPhase === "approving_trades") {
+								return `Approving trades${executingDots}`;
+							}
+							if (executionPhase === "moving_funds") {
+								return hop
+									? `Moving funds${hop}${executingDots}`
+									: `Moving funds${executingDots}`;
+							}
+							return `Executing trade${executingDots}`;
+						})()
 					: routeExpired
 						? "Route Expired — Refreshing..."
 						: `Execute Smart Route`}

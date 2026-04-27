@@ -4,6 +4,10 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
+import { limitlessVenuePositionMatchesPageMarket } from "@/trading/limitless/limitlessTradeBoxMatch";
+import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
+import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
@@ -18,6 +22,10 @@ import {
 	findMatchedMarketByPolyConditionId,
 	inferPolymarketYesNoFromToken,
 } from "@/trading/polymarket/polyPositionSide";
+import {
+	buildUmbrellaLookupByPolymarketConditionId,
+	polymarketConditionLookupKey,
+} from "@/trading/polymarket/polymarketConditionLookup";
 import type { TradingVenue } from "../types";
 
 const VENUE_SUFFIX: Record<VenueId | "levelup", string> = {
@@ -25,6 +33,7 @@ const VENUE_SUFFIX: Record<VenueId | "levelup", string> = {
 	polymarket: "Polymarket",
 	predictfun: "Predict",
 	dflow: "Kalshi",
+	limitless: "Limitless",
 };
 
 type MarketRef = {
@@ -60,25 +69,14 @@ export type TradeBoxShareBalancesSnapshot = {
 	allMarketsOutcomeVenueShares: { yes: Record<string, number>; no: Record<string, number> } | null;
 };
 
-function buildConditionUmbrellaLookup(umbrellas: Umbrella[]): Map<string, Umbrella> {
-	const map = new Map<string, Umbrella>();
-	for (const umb of umbrellas) {
-		const children = (umb as { originalChildren?: unknown[] }).originalChildren ?? umb.children ?? [];
-		for (const child of children as { conditionId?: string; marketId?: string }[]) {
-			if (child.conditionId) map.set(child.conditionId, umb);
-			if (child.marketId) map.set(child.marketId, umb);
-		}
-	}
-	return map;
-}
-
 function umbrellaForPosition(
 	pos: VenuePosition,
 	umbrellas: Umbrella[],
 	condLookup: Map<string, Umbrella>,
 ): Umbrella | null {
-	if (pos.conditionId && condLookup.has(pos.conditionId)) {
-		return condLookup.get(pos.conditionId)!;
+	const k = polymarketConditionLookupKey(pos.conditionId ?? "");
+	if (k && condLookup.has(k)) {
+		return condLookup.get(k)!;
 	}
 	return (
 		umbrellas.find((u) => titlesMatchVenue(u.displayName ?? "", pos.marketTitle ?? "")) ?? null
@@ -88,7 +86,9 @@ function umbrellaForPosition(
 function positionMatchesMarket(pos: VenuePosition, market: MarketRef): boolean {
 	const mid = (market.conditionId || "").trim();
 	const pid = (pos.conditionId || "").trim();
-	if (mid && pid) return mid === pid;
+	if (mid && pid && polymarketConditionLookupKey(mid) === polymarketConditionLookupKey(pid)) {
+		return true;
+	}
 	const mt = (market.displayName || market.question || "").trim();
 	const pt = (pos.marketTitle || "").trim();
 	if (!mt || !pt) return false;
@@ -104,8 +104,8 @@ function positionMatchesMarketOrSiblings(
 	market: MarketRef,
 	siblingConditionIds: Set<string>,
 ): boolean {
-	const pid = (pos.conditionId || "").trim();
-	if (pid && siblingConditionIds.size > 0 && siblingConditionIds.has(pid)) return true;
+	const pidKey = polymarketConditionLookupKey((pos.conditionId || "").trim());
+	if (pidKey && siblingConditionIds.size > 0 && siblingConditionIds.has(pidKey)) return true;
 	return positionMatchesMarket(pos, market);
 }
 
@@ -120,10 +120,10 @@ function buildSiblingConditionIdSet(
 	if (!markets?.length) return set;
 	for (const m of markets) {
 		const cid = String((m as { conditionId?: string }).conditionId ?? "").trim();
-		if (cid) set.add(cid);
+		if (cid) set.add(polymarketConditionLookupKey(cid));
 	}
 	const mid = (market.conditionId || "").trim();
-	if (mid) set.add(mid);
+	if (mid) set.add(polymarketConditionLookupKey(mid));
 	return set;
 }
 
@@ -190,6 +190,16 @@ function venuePositionToYesNo(
 			noTeamLabel,
 		);
 	}
+	if (p.venue === "limitless") {
+		const lx = pageMatchedMonitor?.limitless;
+		if (lx?.tokenIdA && lx?.tokenIdB) {
+			const tid = canonicalLimitlessTokenId(p.tokenId);
+			const a = canonicalLimitlessTokenId(String(lx.tokenIdA));
+			const b = canonicalLimitlessTokenId(String(lx.tokenIdB));
+			if (tid === a) return "yes";
+			if (tid === b) return "no";
+		}
+	}
 	return outcomeToSide(p.outcome, isVsSingle, yesTeamLabel, noTeamLabel);
 }
 
@@ -198,6 +208,7 @@ function mapTradingVenueFilter(v: TradingVenue): VenueId | "levelup" | "all" {
 	if (v === "polymarket") return "polymarket";
 	if (v === "predictfun") return "predictfun";
 	if (v === "dflow") return "dflow";
+	if (v === "limitless") return "limitless";
 	return "all";
 }
 
@@ -232,10 +243,9 @@ export function useTradeBoxShareBalances(opts: {
 	const { umbrellas, allMarketsByUmbrella } = usePredictionData();
 	const { appState } = useOddsMonitor();
 	const matchedOddsMarkets = appState?.markets;
-	const { polymarketSafe, solanaAddress } = useFundingAddresses();
+	const { polymarketSafe, solanaAddress, limitlessMakerBase } = useFundingAddresses();
 	const privateApi = usePrivateApiClient();
 	const { authenticated } = usePrivy();
-	const dflowProof = useDflowProofStatus();
 
 	const [venueReady, setVenueReady] = useState(false);
 	useEffect(() => {
@@ -248,6 +258,13 @@ export function useTradeBoxShareBalances(opts: {
 			if (timeoutId !== null) clearTimeout(timeoutId);
 		};
 	}, []);
+
+	const limitlessPortfolioEnabled =
+		Boolean(authenticated) && Boolean(limitlessMakerBase?.trim());
+	const limitlessVenueQ = useLimitlessVenuePositions(
+		venueReady && limitlessPortfolioEnabled,
+	);
+	const dflowProof = useDflowProofStatus();
 
 	const venueEnabled =
 		venueReady && Boolean(account && (polymarketSafe || (account as string)?.length));
@@ -266,7 +283,10 @@ export function useTradeBoxShareBalances(opts: {
 		enabled: dflowRpcEnabled,
 	});
 
-	const condLookup = useMemo(() => buildConditionUmbrellaLookup(umbrellas), [umbrellas]);
+	const condLookup = useMemo(
+		() => buildUmbrellaLookupByPolymarketConditionId(umbrellas),
+		[umbrellas],
+	);
 
 	const siblingConditionIds = useMemo(
 		() => buildSiblingConditionIdSet(umbrellaId, market ?? undefined, allMarketsByUmbrella),
@@ -288,6 +308,7 @@ export function useTradeBoxShareBalances(opts: {
 			...(polyQ.data ?? []),
 			...(predictQ.data ?? []),
 			...(dflowQ.data ?? []),
+			...(limitlessVenueQ.data ?? []),
 		]) {
 			const k = dedupeKey(p);
 			if (seen.has(k)) continue;
@@ -296,6 +317,19 @@ export function useTradeBoxShareBalances(opts: {
 			if (p.venue === "polymarket" && polyMonitorCid) {
 				const pc = String(p.conditionId ?? "").trim();
 				if (pc === polyMonitorCid) keep = true;
+			}
+			if (!keep && p.venue === "limitless" && umbrellaId) {
+				const uTarget = umbrellas.find((u) => u._id === umbrellaId);
+				if (
+					uTarget &&
+					limitlessVenuePositionMatchesPageMarket(
+						p,
+						uTarget,
+						pageMatchedMonitor ?? null,
+					)
+				) {
+					keep = true;
+				}
 			}
 			if (!keep) {
 				const u = umbrellaForPosition(p, umbrellas, condLookup);
@@ -320,6 +354,60 @@ export function useTradeBoxShareBalances(opts: {
 		polyQ.data,
 		predictQ.data,
 		dflowQ.data,
+		limitlessVenueQ.data,
+	]);
+
+	useEffect(() => {
+		if (!import.meta.env.DEV) return;
+		if (!umbrellaId) return;
+		const lx = relevantVenuePositions.filter((p) => p.venue === "limitless");
+		if (lx.length === 0) return;
+		const uTarget = umbrellas.find((u) => u._id === umbrellaId);
+		debugLimitlessPortfolio("Trade box: limitless rows included in share aggregate", {
+			umbrellaId,
+			monitorLimitless: pageMatchedMonitor?.limitless
+				? {
+						tokenIdA: String(pageMatchedMonitor.limitless.tokenIdA ?? "").slice(-16),
+						tokenIdB: String(pageMatchedMonitor.limitless.tokenIdB ?? "").slice(-16),
+					}
+				: null,
+			rows: lx.map((p) => {
+				const bySlugToken =
+					uTarget &&
+					limitlessVenuePositionMatchesPageMarket(
+						p,
+						uTarget,
+						pageMatchedMonitor ?? null,
+					);
+				const yn = venuePositionToYesNo(
+					p,
+					matchedOddsMarkets,
+					pageMatchedMonitor,
+					isVsSingle,
+					yesTeamLabel,
+					noTeamLabel,
+				);
+				return {
+					title: (p.marketTitle ?? "").slice(0, 56),
+					outcomeString: p.outcome,
+					marketStatus: p.marketStatus,
+					shares: p.shares,
+					tokenTail: (p.tokenId ?? "").slice(-16),
+					matchedBySlugTokenMonitor: Boolean(bySlugToken),
+					tradeBoxYesNo: yn,
+					note: "Uses monitor tokenIdA/B for Yes/No when present; History tab uses inferVenueHistoryYesNoSide(title,outcome) on venueHistory rows instead",
+				};
+			}),
+		});
+	}, [
+		umbrellaId,
+		relevantVenuePositions,
+		umbrellas,
+		pageMatchedMonitor,
+		matchedOddsMarkets,
+		isVsSingle,
+		yesTeamLabel,
+		noTeamLabel,
 	]);
 
 	const levelBalances = useMemo(() => {
@@ -335,7 +423,10 @@ export function useTradeBoxShareBalances(opts: {
 
 	const loading =
 		Boolean(umbrellaId && account) &&
-		(polyQ.isLoading || predictQ.isLoading || (dflowRpcEnabled && dflowQ.isLoading));
+		(polyQ.isLoading ||
+			predictQ.isLoading ||
+			(dflowRpcEnabled && dflowQ.isLoading) ||
+			(limitlessPortfolioEnabled && limitlessVenueQ.isLoading));
 
 	const lines = useMemo((): TradeBoxShareLine[] => {
 		const mode = mapTradingVenueFilter(tradingVenue);

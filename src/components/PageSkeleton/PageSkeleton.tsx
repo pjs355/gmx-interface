@@ -1,14 +1,10 @@
 import "./PageSkeleton.scss";
 
+/**
+ * Suspense fallback for lazy routes: keeps the main column from collapsing to zero
+ * height (which pulled the footer up). No visible bars/cards — avoids the old
+ * low-contrast white placeholders that read as a random oval flash.
+ */
 export function PageSkeleton() {
-	return (
-		<div className="page-skeleton">
-			<div className="page-skeleton__bar page-skeleton__bar--wide" />
-			<div className="page-skeleton__row">
-				<div className="page-skeleton__card" />
-				<div className="page-skeleton__card" />
-				<div className="page-skeleton__card" />
-			</div>
-		</div>
-	);
+	return <div className="page-skeleton" aria-hidden />;
 }

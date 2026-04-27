@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import type { VenueOrder } from "@/types/trading/venuePosition";
+import { type VenueOrder, venueDisplayLabel } from "@/types/trading/venuePosition";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	resolveLogoByTags,
@@ -14,6 +16,8 @@ import {
 	getTagLabelsFromUmbrella,
 } from "@/helpers/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
+import { outcomeSideLabelColor } from "../utils/positionHelpers";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -70,6 +74,7 @@ export default function OrdersCardView({
 }) {
 	const navigate = useNavigate();
 	const privateApi = usePrivateApiClient();
+	const queryClient = useQueryClient();
 
 	const navigateToTradingPage = (
 		umbrella: Umbrella,
@@ -196,7 +201,7 @@ export default function OrdersCardView({
 														marginBottom: 4,
 													}}
 												>
-													{umbrella.displayName}
+													{umbrellaHeaderLabel(umbrella)}
 												</div>
 												<div
 													style={{
@@ -466,11 +471,11 @@ export default function OrdersCardView({
 				>
 					<div style={{ flex: 1 }}>
 						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
-							{vo.venue === "predictfun" ? "Predict" : vo.venue}
+							{venueDisplayLabel(vo.venue)}
 						</div>
 						<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
 							{vo.marketTitle}{" "}
-							<span style={{ color: vo.position === "Yes" ? "#16a34a" : "#ef4444" }}>
+							<span style={{ color: outcomeSideLabelColor(vo.position) }}>
 								{vo.position}
 							</span>{" "}
 							<span style={{ color: vo.side === "buy" ? "#16a34a" : "#ef4444" }}>
@@ -510,6 +515,11 @@ export default function OrdersCardView({
 								try {
 									if (vo.venue === "predictfun" && vo.rawOrder) {
 										await privateApi.removePredictOrders({ orders: [vo.rawOrder] });
+									} else if (vo.venue === "limitless") {
+										await privateApi.deleteLimitlessOrder(vo.orderId);
+										await queryClient.invalidateQueries({
+											queryKey: limitlessQueryKeys.root,
+										});
 									}
 								} catch (err) {
 									console.error("Cancel venue order error:", err);

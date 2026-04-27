@@ -357,6 +357,10 @@
 		font-size: 0.95rem;
 	}
 
+	&__select--readonly {
+		cursor: default;
+	}
+
 	&__actions {
 		display: flex;
 		flex-wrap: wrap;
@@ -541,3 +545,4 @@
 	height: 18px;
 	margin-top: 2px;
 }
+

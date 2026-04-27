@@ -1,4 +1,15 @@
 // React import not required with automatic JSX runtime
+import type { CSSProperties } from "react";
+import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
+
+/** Same as AppHeaderUser / AppHeaderLinks `header-metric` cash skeleton. */
+const cashBalanceSkeletonBoxStyle: CSSProperties = {
+	display: "inline-block",
+	width: 70,
+	height: 16,
+	borderRadius: 4,
+	backgroundColor: "rgba(255, 255, 255, 0.1)",
+};
 
 export default function PositionsHeader({
 	portfolioTotal,
@@ -7,10 +18,11 @@ export default function PositionsHeader({
 	cashLoading = false,
 	positionsLoading = false,
 	portfolioLoading = false,
-	/** When true (positions page still loading), keep Portfolio, Positions $, and Cash in skeleton to avoid layout shift. */
+	/** When true (positions page still loading), keep Portfolio & Positions metrics in skeleton. */
 	summariesLocked = false,
 }: {
 	portfolioTotal: number;
+	/** Open + unclaimed resolution (same as Winnings in portfolio). */
 	positionsTotalValue: number;
 	usdcBalance: number;
 	cashLoading?: boolean;
@@ -18,9 +30,10 @@ export default function PositionsHeader({
 	portfolioLoading?: boolean;
 	summariesLocked?: boolean;
 }) {
+	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const lockAll = summariesLocked === true;
-	// Cash is Base USDC from UserDataContext — already fetched app-wide; do not hide it behind portfolio gate.
-	const showCashSkeleton = cashLoading;
+	// Match AppHeaderUser: cash skeleton until Portfolio cash is ready OR page metrics are blocked
+	const showCashSkeleton = cashLoading || blockHeaderMetrics;
 	const showPositionsSkeleton =
 		lockAll ||
 		positionsLoading ||
@@ -148,12 +161,7 @@ export default function PositionsHeader({
 							{showCashSkeleton ? (
 								<span
 									className="skeleton-box"
-									style={{
-										display: "inline-block",
-										width: 100,
-										height: 22,
-										borderRadius: 4,
-									}}
+									style={cashBalanceSkeletonBoxStyle}
 								/>
 							) : (
 								<>
@@ -289,12 +297,7 @@ export default function PositionsHeader({
 							{showCashSkeleton ? (
 								<span
 									className="skeleton-box"
-									style={{
-										display: "inline-block",
-										width: 100,
-										height: 22,
-										borderRadius: 4,
-									}}
+									style={cashBalanceSkeletonBoxStyle}
 								/>
 							) : (
 								<>

@@ -6,6 +6,7 @@ import type { CreateOrderPayload } from "@/trading/predict/predictOrderSubmit";
 import type {
 	LimitlessEnsureAccountResponse,
 	LimitlessOrderRequest,
+	LimitlessVerifyAllowanceResult,
 } from "@/trading/limitless/limitlessPrivateApiTypes";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import {
@@ -17,6 +18,8 @@ import {
 	normalizePredictMatchesList,
 	type PredictMatchEventRow,
 } from "@/trading/predict/predictMatchesApi";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { UmbrellaExchangeResolveQuery } from "@/trading/umbrellaVenueResolveKey";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import type {
 	AccountOverview,
@@ -192,6 +195,49 @@ export type DflowOnchainTrade = {
 	createdAt: number;
 };
 
+/**
+ * `/api/dflow/onchain-trades` may return a bare array or a paged object. Call on the
+ * inner JSON after `{ data: ... }` envelope unwrapping.
+ */
+function extractDflowOnchainTradesPayload(payload: unknown): {
+	trades: DflowOnchainTrade[];
+	cursor: string | null;
+} {
+	if (Array.isArray(payload)) {
+		return { trades: payload as DflowOnchainTrade[], cursor: null };
+	}
+	if (!payload || typeof payload !== "object") {
+		return { trades: [], cursor: null };
+	}
+	const o = payload as Record<string, unknown>;
+	const raw =
+		Array.isArray(o.trades)
+			? o.trades
+			: Array.isArray(o.results)
+				? o.results
+				: Array.isArray(o.items)
+					? o.items
+					: Array.isArray(o.data)
+						? o.data
+						: [];
+	const trades = raw as DflowOnchainTrade[];
+	const cursorRaw = o.cursor ?? o.nextCursor ?? o.next_cursor;
+	let cursor: string | null = null;
+	if (typeof cursorRaw === "string" && cursorRaw.trim()) cursor = cursorRaw.trim();
+	const nestedPag =
+		o.pagination && typeof o.pagination === "object"
+			? (o.pagination as Record<string, unknown>).cursor
+			: undefined;
+	if (
+		!cursor &&
+		typeof nestedPag === "string" &&
+		nestedPag.trim()
+	) {
+		cursor = nestedPag.trim();
+	}
+	return { trades, cursor };
+}
+
 function dflowOrderParamsToQuery(params: DflowOrderParams): URLSearchParams {
 	const q = new URLSearchParams();
 	q.set("inputMint", params.inputMint);
@@ -231,9 +277,69 @@ async function parseJsonSafe(response: Response): Promise<unknown> {
 
 function unwrapEnvelope<T>(raw: unknown): T {
 	if (raw && typeof raw === "object" && "data" in raw) {
-		return (raw as { data: T }).data;
+		const envelope = raw as Record<string, unknown>;
+		const inner = envelope.data;
+		if (
+			(inner === null || inner === undefined) &&
+			envelope.success === true
+		) {
+			throw new PrivateApiError(
+				"Private API returned success with null or missing `data` in the envelope.",
+				502,
+				raw,
+			);
+		}
+		return inner as T;
 	}
 	return raw as T;
+}
+
+export type UmbrellaResolveExchangeKeysPayload = {
+	byClientKey: Record<string, { umbrellaId?: string; displayName?: string }>;
+	umbrellasById?: Record<string, Umbrella>;
+};
+
+/**
+ * `readJson` unwraps `{ success, data }` → inner `data`. Umbrella resolve handlers
+ * expect `{ success, data: { byClientKey, umbrellasById? } }` — re-wrap when the
+ * payload is already the inner shape.
+ */
+function normalizeUmbrellaResolveExchangeKeysResponse(
+	afterReadJson: unknown,
+): { success: boolean; data?: UmbrellaResolveExchangeKeysPayload } {
+	if (!afterReadJson || typeof afterReadJson !== "object") {
+		return { success: false };
+	}
+	const o = afterReadJson as Record<string, unknown>;
+	if ("success" in o && o.data != null && typeof o.data === "object") {
+		const d = o.data as Record<string, unknown>;
+		const byClientKey = d.byClientKey;
+		if (byClientKey != null && typeof byClientKey === "object") {
+			return {
+				success: o.success === true,
+				data: {
+					byClientKey: byClientKey as UmbrellaResolveExchangeKeysPayload["byClientKey"],
+					...(d.umbrellasById != null && typeof d.umbrellasById === "object"
+						? {
+								umbrellasById: d.umbrellasById as Record<string, Umbrella>,
+							}
+						: {}),
+				},
+			};
+		}
+	}
+	if ("byClientKey" in o && o.byClientKey != null && typeof o.byClientKey === "object") {
+		return {
+			success: true,
+			data: {
+				byClientKey: o.byClientKey as UmbrellaResolveExchangeKeysPayload["byClientKey"],
+				...(o.umbrellasById != null && typeof o.umbrellasById === "object"
+					? { umbrellasById: o.umbrellasById as Record<string, Umbrella> }
+					: {}),
+			},
+		};
+	}
+	return { success: false };
 }
 
 function isPredictOrderRowShape(x: unknown): x is PredictOrderRow {
@@ -684,6 +790,52 @@ export function createPrivateApiClient(
 			return normalizePredictMatchesList(body);
 		},
 
+		/** Batch-resolve venue keys to LevelUp umbrella id + displayName (Mongo `exchangeMatching`). */
+		async postUmbrellaResolveExchangeKeys(body: {
+			queries: UmbrellaExchangeResolveQuery[];
+			/** When true, response includes `umbrellasById` (full lean rows + children) for resolved hits. */
+			includeUmbrellaPayloads?: boolean;
+		}): Promise<{
+			success: boolean;
+			data?: UmbrellaResolveExchangeKeysPayload;
+		}> {
+			const res = await authorizedFetch("/api/umbrellas/resolve-exchange-keys", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			const inner = await readJson<unknown>(res);
+			return normalizeUmbrellaResolveExchangeKeysResponse(inner);
+		},
+
+		/** History-only batch resolve: same `queries` as resolve-exchange-keys; always returns `umbrellasById` for hits. */
+		async postUmbrellaResolveVenueHistory(body: {
+			queries: UmbrellaExchangeResolveQuery[];
+		}): Promise<{
+			success: boolean;
+			data?: UmbrellaResolveExchangeKeysPayload;
+		}> {
+			const res = await authorizedFetch("/api/umbrellas/resolve-venue-history", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			const inner = await readJson<unknown>(res);
+			return normalizeUmbrellaResolveExchangeKeysResponse(inner);
+		},
+
+		/** Resolve a single Polymarket CTF `conditionId` to a lean umbrella + children (same rules as batch Poly resolve). */
+		async postUmbrellaResolvePolymarketCondition(body: {
+			conditionId: string;
+		}): Promise<{
+			success: boolean;
+			data?: { conditionId: string; umbrella: Umbrella | null };
+		}> {
+			const res = await authorizedFetch("/api/umbrellas/resolve-polymarket-condition", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson(res);
+		},
+
 		async removePredictOrders(
 			body: unknown
 		): Promise<unknown> {
@@ -786,11 +938,50 @@ export function createPrivateApiClient(
 		async getDflowOnchainTrades(
 			wallet: string
 		): Promise<DflowOnchainTrade[]> {
-			const q = new URLSearchParams({ wallet });
-			const res = await authorizedFetch(
-				`/api/dflow/onchain-trades?${q.toString()}`
-			);
-			return readJson<DflowOnchainTrade[]>(res);
+			const walletTrim = wallet.trim();
+			const merged: DflowOnchainTrade[] = [];
+			const dedupeKeys = new Set<string>();
+			let cursor: string | undefined;
+			const limit = 250;
+			const maxPages = 80;
+
+			for (let page = 0; page < maxPages; page++) {
+				const q = new URLSearchParams({ wallet: walletTrim });
+				q.set("limit", String(limit));
+				if (cursor) q.set("cursor", cursor);
+
+				const res = await authorizedFetch(
+					`/api/dflow/onchain-trades?${q.toString()}`
+				);
+				const body = await parseJsonSafe(res);
+				if (!res.ok) {
+					throw new PrivateApiError(
+						privateApiHttpErrorMessage(body, res.status),
+						res.status,
+						body,
+					);
+				}
+				const inner = unwrapEnvelope(body);
+				const { trades, cursor: nextCursor } =
+					extractDflowOnchainTradesPayload(inner);
+				for (const t of trades) {
+					const k = `${t.transactionSignature}:${t.id}`;
+					if (dedupeKeys.has(k)) continue;
+					dedupeKeys.add(k);
+					merged.push(t);
+				}
+
+				const nc =
+					typeof nextCursor === "string" && nextCursor.trim()
+						? nextCursor.trim()
+						: null;
+				if (!nc || trades.length === 0) break;
+				if (nc === cursor) break;
+				cursor = nc;
+				if (trades.length < limit) break;
+			}
+
+			return merged;
 		},
 
 		// ── Limitless (Base) ───────────────────────────────────────────
@@ -800,19 +991,182 @@ export function createPrivateApiClient(
 				method: "POST",
 				body: JSON.stringify({}),
 			});
-			return readJson<LimitlessEnsureAccountResponse>(res);
+			const data = await readJson<LimitlessEnsureAccountResponse>(res);
+			if (import.meta.env.DEV && data?.canonicalSlugMissing) {
+				console.info("[Limitless/API]", "ensure-account", {
+					canonicalSlugMissing: true,
+					note: "Warmup allowance probe skipped — configure an active Umbrella with exchangeMatching.limitless.slug for server-side spender snapshot.",
+				});
+			}
+			return data;
+		},
+
+		async postLimitlessVerifyAllowance(
+			marketSlug: string,
+			opts?: { tokenId?: string },
+		): Promise<LimitlessVerifyAllowanceResult> {
+			const slug = marketSlug.trim();
+			const tokenId = opts?.tokenId?.trim();
+			if (import.meta.env.DEV) {
+				console.info("[Limitless/API]", "POST verify-allowance", {
+					marketSlug: slug,
+					tokenId: tokenId ? `${tokenId.slice(0, 14)}…` : undefined,
+				});
+			}
+			const res = await authorizedFetch("/api/limitless/account/verify-allowance", {
+				method: "POST",
+				body: JSON.stringify(
+					tokenId ? { marketSlug: slug, tokenId } : { marketSlug: slug },
+				),
+			});
+			const out = await readJson<LimitlessVerifyAllowanceResult>(res);
+			if (import.meta.env.DEV && out && typeof out === "object") {
+				const o = out as Record<string, unknown>;
+				const clip = (s: unknown, n = 12) =>
+					typeof s === "string" && s.length > n ? `${s.slice(0, n)}…` : s;
+				console.info("[Limitless/API]", "verify-allowance response", {
+					marketSlug: o.marketSlug,
+					declaredMarketSlug: o.declaredMarketSlug,
+					effectiveMarketSlug: o.effectiveMarketSlug,
+					hasMinimumAllowance: o.hasMinimumAllowance,
+					spender: clip(o.spender, 12),
+					usdcSpendersCount: Array.isArray(o.usdcSpenders)
+						? (o.usdcSpenders as unknown[]).length
+						: 0,
+					hasCtfAddress: typeof o.ctfAddress === "string" && Boolean((o.ctfAddress as string).trim()),
+					hasVenueAdapter: o.venueAdapter != null && String(o.venueAdapter).trim() !== "",
+					partnerAllowanceOwnerId: o.partnerAllowanceOwnerId,
+					limitlessPartnerAllowanceType: o.limitlessPartnerAllowanceType,
+					limitlessCheckedAddress: clip(o.limitlessCheckedAddress, 14),
+					limitlessAllowanceRaw: clip(o.limitlessAllowanceRaw, 24),
+				});
+			}
+			if (!out || typeof out !== "object") {
+				throw new PrivateApiError(
+					"verify-allowance returned an invalid payload.",
+					502,
+					out,
+				);
+			}
+			const o = out as Record<string, unknown>;
+			if (typeof o.marketSlug !== "string" || !o.marketSlug.trim()) {
+				throw new PrivateApiError(
+					"verify-allowance response missing marketSlug.",
+					502,
+					out,
+				);
+			}
+			if (typeof o.spender !== "string" || !o.spender.trim()) {
+				throw new PrivateApiError(
+					"verify-allowance response missing spender (venue exchange).",
+					502,
+					out,
+				);
+			}
+			return out;
 		},
 
 		async postLimitlessOrder(body: LimitlessOrderRequest): Promise<unknown> {
+			if (import.meta.env.DEV) {
+				console.info("[Limitless/API]", "POST orders (submit)", {
+					marketSlug: body.marketSlug,
+					orderType: body.orderType,
+					side: body.side,
+					tokenId: `${body.tokenId?.toString?.().slice(0, 14) ?? "?"}…`,
+				});
+			}
 			const res = await authorizedFetch("/api/limitless/orders", {
 				method: "POST",
 				body: JSON.stringify(body),
 			});
-			return readJson<unknown>(res);
+			try {
+				const parsed = await readJson<unknown>(res);
+				if (import.meta.env.DEV) {
+					const po = parsed as Record<string, unknown> | null;
+					const meta =
+						po && typeof po === "object" && "_meta" in po
+							? (po._meta as { effectiveMarketSlug?: string; declaredMarketSlug?: string })
+							: undefined;
+					const keysWithoutMeta =
+						po && typeof po === "object"
+							? Object.keys(po).filter((k) => k !== "_meta").slice(0, 20)
+							: [];
+					console.info("[Limitless/API]", "POST orders OK", {
+						requestMarketSlug: body.marketSlug,
+						effectiveMarketSlugFromApi: meta?.effectiveMarketSlug,
+						declaredMarketSlugFromApi: meta?.declaredMarketSlug,
+						responseKeys: keysWithoutMeta.length ? keysWithoutMeta : typeof parsed,
+					});
+				}
+				return parsed;
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				console.error("[Limitless/API]", "POST orders failed", {
+					marketSlug: body.marketSlug,
+					orderType: body.orderType,
+					message: msg,
+					hint:
+						msg.includes("null or missing `data`") || msg.includes("reading 'data')")
+							? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
+							: undefined,
+				});
+				throw err;
+			}
 		},
 
 		async getLimitlessPositions(): Promise<unknown> {
 			const res = await authorizedFetch("/api/limitless/positions");
+			return readJson<unknown>(res);
+		},
+
+		async getLimitlessPortfolioPositionsVenue(): Promise<unknown> {
+			const res = await authorizedFetch("/api/limitless/portfolio/positions-venue");
+			return readJson<unknown>(res);
+		},
+
+		async getLimitlessOpenOrders(): Promise<unknown> {
+			const res = await authorizedFetch("/api/limitless/orders/open");
+			return readJson<unknown>(res);
+		},
+
+		async getLimitlessPortfolioHistory(q: {
+			limit: number;
+			/** 1-based page — matches Limitless `/portfolio/history` and SDK `getUserHistory`. */
+			page: number;
+		}): Promise<unknown> {
+			const p = new URLSearchParams({
+				limit: String(q.limit),
+				page: String(q.page),
+			});
+			const res = await authorizedFetch(
+				`/api/limitless/portfolio/history?${p.toString()}`,
+			);
+			return readJson<unknown>(res);
+		},
+
+		async deleteLimitlessOrder(orderId: string): Promise<unknown> {
+			const enc = encodeURIComponent(orderId.trim());
+			const res = await authorizedFetch(`/api/limitless/orders/${enc}`, {
+				method: "DELETE",
+			});
+			return readJson<unknown>(res);
+		},
+
+		/**
+		 * Partner-signed withdrawal from the Limitless server-wallet sub-account to the
+		 * user’s Base smart wallet (must match profile `smart_wallet` on the API).
+		 */
+		async postLimitlessPortfolioWithdraw(input: {
+			amountHuman: number;
+			destination: string;
+		}): Promise<unknown> {
+			const res = await authorizedFetch("/api/limitless/portfolio/withdraw", {
+				method: "POST",
+				body: JSON.stringify({
+					amountHuman: input.amountHuman,
+					destination: input.destination.trim(),
+				}),
+			});
 			return readJson<unknown>(res);
 		},
 	};

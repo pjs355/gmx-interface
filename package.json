@@ -6,6 +6,8 @@
 	"packageManager": "yarn@3.1.0",
 	"scripts": {
 		"dev": "tsx scripts/dev-prompt.ts",
+		"dev:clean": "rm -rf node_modules/.vite && vite",
+		"dev:clean:test": "rm -rf node_modules/.vite && VITE_ENVIRONMENT_MODE=testnet vite",
 		"dev:live": "VITE_ENVIRONMENT_MODE=production vite",
 		"dev:test": "VITE_ENVIRONMENT_MODE=testnet vite",
 		"build": "NODE_OPTIONS=--max-old-space-size=8192 vite build",

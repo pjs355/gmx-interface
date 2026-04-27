@@ -39,9 +39,15 @@ const BNB = bsc.id;
 const SOLANA_LIFI_CHAIN_ID = 1151111081099710;
 
 /** UI endpoint ↔ on-chain funding account (matches Transfers dropdowns). */
-export type BridgeEndpoint = "levelup" | "polymarket" | "bnb" | "solana";
+export type BridgeEndpoint = "levelup" | "polymarket" | "bnb" | "solana" | "limitless";
 
-const BRIDGE_ENDPOINT_ORDER: BridgeEndpoint[] = ["levelup", "polymarket", "bnb", "solana"];
+const BRIDGE_ENDPOINT_ORDER: BridgeEndpoint[] = [
+	"levelup",
+	"polymarket",
+	"bnb",
+	"solana",
+	"limitless",
+];
 
 /** When From and To would match, switch the other field to a different endpoint (all three chains supported). */
 function distinctBridgeEndpoint(exclude: BridgeEndpoint): BridgeEndpoint {
@@ -92,6 +98,8 @@ function chainForEndpoint(e: BridgeEndpoint): number {
 	switch (e) {
 		case "levelup":
 			return BASE;
+		case "limitless":
+			return BASE;
 		case "polymarket":
 			return POLYGON;
 		case "bnb":
@@ -104,21 +112,24 @@ function chainForEndpoint(e: BridgeEndpoint): number {
 function addressForEndpoint(
 	e: BridgeEndpoint,
 	funding: {
-		baseSmartWallet?: string;
-		polymarketSafe?: string;
-		embeddedEoa?: string;
-		solanaAddress?: string;
+		baseSmartWallet?: string | null;
+		limitlessMakerBase?: string | null;
+		polymarketSafe?: string | null;
+		embeddedEoa?: string | null;
+		solanaAddress?: string | null;
 	}
 ): string | undefined {
 	switch (e) {
 		case "levelup":
-			return funding.baseSmartWallet;
+			return funding.baseSmartWallet ?? undefined;
+		case "limitless":
+			return funding.limitlessMakerBase ?? undefined;
 		case "polymarket":
-			return funding.polymarketSafe;
+			return funding.polymarketSafe ?? undefined;
 		case "bnb":
-			return funding.embeddedEoa;
+			return funding.embeddedEoa ?? undefined;
 		case "solana":
-			return funding.solanaAddress;
+			return funding.solanaAddress ?? undefined;
 	}
 }
 
@@ -126,19 +137,71 @@ export function routeHasRequiredAddresses(
 	from: BridgeEndpoint,
 	to: BridgeEndpoint,
 	funding: {
-		baseSmartWallet?: string;
-		polymarketSafe?: string;
-		embeddedEoa?: string;
-		solanaAddress?: string;
+		baseSmartWallet?: string | null;
+		limitlessMakerBase?: string | null;
+		polymarketSafe?: string | null;
+		embeddedEoa?: string | null;
+		solanaAddress?: string | null;
 	}
 ): boolean {
+	/** User cannot sign from the Limitless server-wallet — no LI.FI sourcing from this pocket. */
+	if (from === "limitless") return false;
 	if (from === to) return false;
 	const ends = new Set<BridgeEndpoint>([from, to]);
 	if (ends.has("levelup") && !funding.baseSmartWallet) return false;
+	if (ends.has("limitless") && !funding.limitlessMakerBase) return false;
 	if (ends.has("polymarket") && !funding.polymarketSafe) return false;
 	if (ends.has("bnb") && !funding.embeddedEoa) return false;
 	if (ends.has("solana") && !funding.solanaAddress) return false;
 	return true;
+}
+
+export type BridgeFundingBalanceRow = {
+	baseUsdcHuman: string | null;
+	polygonUsdcEHuman: string | null;
+	bscUsdtHuman: string | null;
+	solanaUsdcHuman: string | null;
+};
+
+function parseHumanUsd(h: string | null | undefined): number {
+	if (h == null || h === "") return 0;
+	const n = parseFloat(h);
+	return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+/**
+ * Li.FI-eligible source with the largest on-screen balance for the chosen destination.
+ * Excludes `limitless` (server maker wallet cannot sign as a bridge source).
+ */
+export function pickAutoFromForBridgeTransfer(
+	to: BridgeEndpoint,
+	funding: {
+		baseSmartWallet?: string | null;
+		limitlessMakerBase?: string | null;
+		polymarketSafe?: string | null;
+		embeddedEoa?: string | null;
+		solanaAddress?: string | null;
+	},
+	row: BridgeFundingBalanceRow,
+): BridgeEndpoint {
+	const order: BridgeEndpoint[] = ["levelup", "polymarket", "bnb", "solana"];
+	let best: { ep: BridgeEndpoint; bal: number } | null = null;
+	for (const ep of order) {
+		if (ep === to) continue;
+		if (!routeHasRequiredAddresses(ep, to, funding)) continue;
+		const bal =
+			ep === "levelup"
+				? parseHumanUsd(row.baseUsdcHuman)
+				: ep === "polymarket"
+					? parseHumanUsd(row.polygonUsdcEHuman)
+					: ep === "bnb"
+						? parseHumanUsd(row.bscUsdtHuman)
+						: parseHumanUsd(row.solanaUsdcHuman);
+		if (!best || bal > best.bal) best = { ep, bal };
+	}
+	if (best) return best.ep;
+	const fallback = order.find((ep) => ep !== to && routeHasRequiredAddresses(ep, to, funding));
+	return fallback ?? distinctBridgeEndpoint(to);
 }
 
 export function useBridgeFlow() {
@@ -146,6 +209,7 @@ export function useBridgeFlow() {
 	const funding = useFundingAddresses();
 	const fundingBalances = useBridgeFundingBalances({
 		baseSmartWallet: funding.baseSmartWallet,
+		limitlessMakerBase: funding.limitlessMakerBase,
 		polymarketSafe: funding.polymarketSafe,
 		embeddedEoa: funding.embeddedEoa,
 		solanaAddress: funding.solanaAddress,
@@ -210,6 +274,24 @@ export function useBridgeFlow() {
 	}, []);
 
 	const routeOk = routeHasRequiredAddresses(fromEndpoint, toEndpoint, funding);
+
+	useEffect(() => {
+		if (funding.isLoading || fundingBalances.isLoading) return;
+		const row = fundingBalances.data;
+		if (!row) return;
+		const nextFrom = pickAutoFromForBridgeTransfer(toEndpoint, funding, row);
+		setFromEndpoint((prev) => (prev === nextFrom ? prev : nextFrom));
+	}, [
+		toEndpoint,
+		funding.isLoading,
+		funding.baseSmartWallet,
+		funding.limitlessMakerBase,
+		funding.polymarketSafe,
+		funding.embeddedEoa,
+		funding.solanaAddress,
+		fundingBalances.isLoading,
+		fundingBalances.data,
+	]);
 
 	const fromChain = chainForEndpoint(fromEndpoint);
 	const toChain = chainForEndpoint(toEndpoint);
@@ -305,7 +387,6 @@ export function useBridgeFlow() {
 
 	const setToEndpointValidated = useCallback((e: BridgeEndpoint) => {
 		setToEndpoint(e);
-		setFromEndpoint((prev) => (prev === e ? distinctBridgeEndpoint(e) : prev));
 		setQuote(null);
 		setQuoteInputContext(null);
 		quoteFingerprintRef.current = "";
@@ -410,6 +491,7 @@ export function useBridgeFlow() {
 			toChain,
 			parsedAmount,
 			funding.baseSmartWallet,
+			funding.limitlessMakerBase,
 			funding.polymarketSafe,
 			funding.embeddedEoa,
 			funding.solanaAddress,
@@ -459,6 +541,7 @@ export function useBridgeFlow() {
 		toEndpoint,
 		parsedAmount,
 		funding.baseSmartWallet,
+		funding.limitlessMakerBase,
 		funding.polymarketSafe,
 		funding.embeddedEoa,
 		funding.solanaAddress,
@@ -493,6 +576,7 @@ export function useBridgeFlow() {
 		toEndpoint,
 		parsedAmount,
 		funding.baseSmartWallet,
+		funding.limitlessMakerBase,
 		funding.polymarketSafe,
 		funding.embeddedEoa,
 		funding.solanaAddress,

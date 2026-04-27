@@ -23,13 +23,14 @@ import { predictionMarketDataService } from "@/services/api/predictionMarketData
 import { getPrivateApiErrorMessage } from "@/services/privateApi";
 import { calculateFeeMatchingBackend } from "./feeLevelUp";
 import { getVenueConfig } from "@/config/venueConfig";
+import { ensureLimitlessTradingApprovalsOnBase } from "@/trading/limitless/limitlessTradingApprovalsOnBase";
+import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { usePolymarketExecutionGate } from "@/trading/hooks/usePolymarketExecutionGate";
 import { usePolymarketClobTradingSession } from "@/trading/polymarket/usePolymarketClobTradingSession";
 import {
 	polyOrderbookForPosition,
 	polyOutcomeTokenId,
-	polyOutcomeSide,
 } from "@/trading/polymarket/polyOutcomeTokenId";
 import {
 	dflowKalshiOrderbookForPosition,
@@ -86,6 +87,7 @@ import {
 	SOR_MIN_MARKET_BUY_USD,
 	SOR_MIN_LIMIT_ORDER_USD,
 	SOR_MIN_MARKET_SELL_SHARES,
+	type SorExecutionPhase,
 } from "@/trading/sor";
 import { useSorLegExecutor } from "@/trading/sor/useSorLegExecutor";
 import type {
@@ -95,7 +97,6 @@ import type {
 	RoutePlan,
 } from "@/trading/sor";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
-import { useDflowOutcomeBalance } from "@/trading/dflow/useDflowOutcomeBalance";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import { maxAllMarketsSellBidForOutcome } from "@/hooks/useTradingPagePrices";
@@ -118,7 +119,6 @@ import {
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
-
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
 }
@@ -227,6 +227,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const fundingBalances = useBridgeFundingBalances({
     baseSmartWallet: funding.baseSmartWallet,
+    limitlessMakerBase: funding.limitlessMakerBase,
     polymarketSafe: funding.polymarketSafe,
     embeddedEoa: funding.embeddedEoa,
     solanaAddress: funding.solanaAddress,
@@ -768,8 +769,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     return null;
   }, [state.tradingVenue, matchedMonitor]);
 
-  const limitlessTrading = useMemo(
-    () => ({
+  const limitlessTrading = useMemo(() => {
+    const raw = limitlessEnsureQuery.data;
+    let approvalComplete: boolean | undefined;
+    if (raw && typeof raw === "object") {
+      const la = (raw as { limitlessAccount?: unknown }).limitlessAccount;
+      if (la && typeof la === "object") {
+        const ac = (la as { approvalComplete?: unknown }).approvalComplete;
+        if (typeof ac === "boolean") {
+          approvalComplete = ac;
+        }
+      }
+    }
+    return {
       hasPandascoreLink: Boolean(pandaId),
       hasMonitorMatch: Boolean(matchedMonitor),
       hasLimitlessMapping: Boolean(matchedMonitor?.limitless),
@@ -782,21 +794,22 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         : limitlessEnsureGate.ready
           ? null
           : limitlessEnsureGate.blockedReason,
-    }),
-    [
-      pandaId,
-      matchedMonitor,
-      limitlessReady,
-      limitlessEnsureGate.ready,
-      limitlessEnsureGate.blockedReason,
-      limitlessEnsureQuery.isLoading,
-      limitlessEnsureQuery.isFetched,
-      limitlessEnsureQuery.isError,
-      limitlessEnsureQuery.error,
-      authenticated,
-      profileId,
-    ],
-  );
+      approvalComplete,
+    };
+  }, [
+    pandaId,
+    matchedMonitor,
+    limitlessReady,
+    limitlessEnsureGate.ready,
+    limitlessEnsureGate.blockedReason,
+    limitlessEnsureQuery.isLoading,
+    limitlessEnsureQuery.isFetched,
+    limitlessEnsureQuery.isError,
+    limitlessEnsureQuery.error,
+    limitlessEnsureQuery.data,
+    authenticated,
+    profileId,
+  ]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -1155,23 +1168,261 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }, [funding.polymarketSafe, relay]);
 
   /**
-   * Just-in-time Limitless readiness check. The partner API holds the
-   * source-of-truth allowance ledger, and our `POST /limitless/ensure-account`
-   * endpoint syncs it. SOR no longer gates on `approvalComplete`, so we must
-   * confirm on the click that the account + allowance are ready.
+   * Just-in-time Limitless: `verify-allowance`, then on-chain approvals by side
+   * (buy: USDC only; sell: CTF only), one `sendTransaction` + receipt per call,
+   * partner USDC re-check for buys, then refetch `ensure-account` for gate state.
    */
-  const ensureLimitlessApprovalsForTrade = useCallback(async () => {
-    const refreshed = await limitlessEnsureQuery.refetch();
-    const gate = getLimitlessEnsureTradeGate(refreshed.data ?? null);
-    if (!gate.ready) {
-      const msg =
-        gate.blockedReason?.trim() ||
-        (gate.notReadyCode != null
-          ? `Limitless not ready (${gate.notReadyCode})`
-          : "Limitless not ready.");
-      throw new Error(msg);
-    }
-  }, [limitlessEnsureQuery]);
+  const ensureLimitlessApprovalsForTrade = useCallback(
+    async (ctx: {
+      marketSlug: string;
+      limitlessOrderTokenId?: string;
+      side: "buy" | "sell";
+      getClientForChain: (opts: {
+        id: number;
+      }) => Promise<SendTransactionCapable | null | undefined>;
+    }) => {
+      const lxJit = "[Limitless/JIT]";
+      const slug = ctx.marketSlug.trim();
+      const orderTokenId = ctx.limitlessOrderTokenId?.trim();
+      const verifyOpts = orderTokenId ? { tokenId: orderTokenId } : undefined;
+      /** Venue slug used for partner allowance + market fetch (may differ from route slug for NegRisk). */
+      let effectiveVenueSlug = slug;
+      if (!slug) {
+        throw new Error("Limitless market slug missing — cannot verify allowance.");
+      }
+      console.info(lxJit, "start", {
+        routeSlug: slug,
+        effectiveVenueSlug,
+        side: ctx.side,
+        tokenIdSent: Boolean(orderTokenId),
+      });
+      const ensureData = limitlessEnsureQuery.data;
+      const makerFromEnsure =
+        ensureData &&
+        typeof ensureData === "object" &&
+        (ensureData as { limitlessAccount?: { makerAddress?: string } }).limitlessAccount
+          ?.makerAddress?.trim();
+      const makerFromOverview = funding.limitlessMakerBase?.trim();
+      const maker =
+        (makerFromEnsure && makerFromEnsure.length > 0
+          ? makerFromEnsure
+          : makerFromOverview && makerFromOverview.length > 0
+            ? makerFromOverview
+            : "") ?? "";
+      if (!maker) {
+        throw new Error(
+          "Limitless maker address missing — refresh ensure-account or wait for account overview.",
+        );
+      }
+
+      /** User’s Privy Base funding identity (SCW or EOA) — for delegation checks only, not Limitless collateral. */
+      const userBaseFunding =
+        resolvePrivyEvmFundTarget(funding.baseSmartWallet, account)?.trim() ?? "";
+      const allowanceOwner = userBaseFunding.length > 0 ? userBaseFunding : maker;
+      const clipAddr = (addr: string) => {
+        const t = addr.trim();
+        if (t.length <= 22) return t;
+        return `${t.slice(0, 10)}…${t.slice(-6)}`;
+      };
+      console.info(lxJit, "phase", {
+        step: "verify_allowance",
+        routeSlug: slug,
+        effectiveVenueSlug,
+        maker: `${maker.slice(0, 10)}…`,
+        userBaseFunding: userBaseFunding
+          ? `${userBaseFunding.slice(0, 10)}…`
+          : "(none)",
+        allowanceOwnerForNonDelegatedPath: `${allowanceOwner.slice(0, 10)}…`,
+      });
+      let allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
+      effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
+      console.info(lxJit, "phase", {
+        step: "verify_allowance_done",
+        routeSlug: slug,
+        effectiveVenueSlug,
+        effectiveMarketSlug: allowance.effectiveMarketSlug,
+        declaredMarketSlug: allowance.declaredMarketSlug,
+        hasMinimumAllowance: allowance.hasMinimumAllowance,
+        spender: `${allowance.spender.slice(0, 12)}…`,
+        partnerAllowanceOwnerId: allowance.partnerAllowanceOwnerId,
+        limitlessPartnerAllowanceType: allowance.limitlessPartnerAllowanceType,
+        limitlessCheckedAddress:
+          typeof allowance.limitlessCheckedAddress === "string"
+            ? clipAddr(allowance.limitlessCheckedAddress)
+            : undefined,
+      });
+
+      /**
+       * Partner delegated + `createServerWallet: true` — Limitless managed wallet (`maker`)
+       * differs from the user's Privy Base fund target. Approvals are provisioned by
+       * Limitless on the sub-account; browser USDC/CTF txs from the user's wallet are
+       * the wrong identity (see programmatic API server-wallet section).
+       */
+      const makerLower = maker.trim().toLowerCase();
+      const userBaseLower = userBaseFunding.trim().toLowerCase();
+      /** Partner server-wallet: maker is never the user’s Base smart wallet / EOA fund target. */
+      const isDelegatedServerWalletSubAccount =
+        makerLower.length > 0 &&
+        (userBaseLower.length === 0 || makerLower !== userBaseLower);
+
+      const buyPartnerUsdcOk = ctx.side === "buy" && allowance.hasMinimumAllowance;
+      console.info(lxJit, "phase", {
+        step: "sub_account_mode",
+        routeSlug: slug,
+        effectiveVenueSlug,
+        isDelegatedServerWalletSubAccount,
+        hasMinimumAllowance: allowance.hasMinimumAllowance,
+      });
+
+      console.info(lxJit, "phase", {
+        step: "on_chain_approvals_if_needed",
+        routeSlug: slug,
+        effectiveVenueSlug,
+      });
+      let didSendTransactions = false;
+      try {
+        if (isDelegatedServerWalletSubAccount) {
+          console.info(lxJit, "phase", {
+            step: "on_chain_approvals_skipped",
+            routeSlug: slug,
+            effectiveVenueSlug,
+            reason: "delegated_server_wallet_sub_account",
+            note: "Limitless provisions approvals on managed wallet; skip Privy Base JIT",
+          });
+        } else if (!buyPartnerUsdcOk || ctx.side === "sell") {
+          const r = await ensureLimitlessTradingApprovalsOnBase({
+            getClientForChain: ctx.getClientForChain,
+            maker,
+            allowanceOwner,
+            verify: allowance,
+            side: ctx.side,
+          });
+          didSendTransactions = r.didSendTransactions;
+        } else {
+          console.info(lxJit, "phase", {
+            step: "on_chain_approvals_skipped",
+            routeSlug: slug,
+            effectiveVenueSlug,
+            reason: "buy_partner_usdc_ok",
+          });
+        }
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error(lxJit, "blocked at on_chain_approvals", {
+          routeSlug: slug,
+          effectiveVenueSlug,
+          message: m,
+        });
+        throw e;
+      }
+      console.info(lxJit, "phase", {
+        step: "on_chain_approvals_done",
+        routeSlug: slug,
+        effectiveVenueSlug,
+      });
+
+      if (isDelegatedServerWalletSubAccount && ctx.side === "buy") {
+        const refreshed = await fundingBalances.refetch();
+        const row = refreshed.data;
+        const makerUsd = row?.baseLimitlessUsdcHuman
+          ? Number(row.baseLimitlessUsdcHuman)
+          : 0;
+        if (!Number.isFinite(makerUsd) || makerUsd < 0.01) {
+          throw new Error(
+            "Add USDC to your Limitless balance before buying. Open Transfers and move funds from your Base wallet.",
+          );
+        }
+      }
+
+      if (
+        ctx.side === "buy" &&
+        !allowance.hasMinimumAllowance &&
+        !isDelegatedServerWalletSubAccount
+      ) {
+        console.info(lxJit, "phase", {
+          step: "partner_usdc_recheck",
+          routeSlug: slug,
+          effectiveVenueSlug,
+          didSendTransactions,
+        });
+        allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
+        effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
+        if (!allowance.hasMinimumAllowance && didSendTransactions) {
+          await new Promise((r) => setTimeout(r, 2000));
+          allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
+          effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
+        }
+        if (!allowance.hasMinimumAllowance) {
+          const detail = [
+            `maker=${clipAddr(maker)}`,
+            `userBaseFunding=${clipAddr(userBaseFunding || "(none)")}`,
+            `spender=${clipAddr(allowance.spender)}`,
+          ];
+          if (allowance.limitlessCheckedAddress?.trim()) {
+            detail.push(`partnerChecked=${clipAddr(allowance.limitlessCheckedAddress)}`);
+          }
+          console.error(lxJit, "blocked after partner USDC recheck", {
+            routeSlug: slug,
+            effectiveVenueSlug,
+            hasMinimumAllowance: allowance.hasMinimumAllowance,
+            detail,
+          });
+          throw new Error(
+            `Limitless still reports insufficient USDC allowance after Base setup (${detail.join(", ")}). ` +
+              `If you just approved on-chain, wait a minute and retry, or finish setup in the Limitless app.`,
+          );
+        }
+        console.info(lxJit, "partner USDC OK", { routeSlug: slug, effectiveVenueSlug });
+      }
+      console.info(lxJit, "phase", {
+        step: "ensure_account_refetch",
+        routeSlug: slug,
+        effectiveVenueSlug,
+      });
+      const refetchResult = await limitlessEnsureQuery.refetch();
+      const gatePayload =
+        (refetchResult != null && typeof refetchResult === "object"
+          ? (refetchResult as { data?: unknown }).data
+          : undefined) ??
+        limitlessEnsureQuery.data ??
+        null;
+      const gate = getLimitlessEnsureTradeGate(gatePayload);
+      console.info(lxJit, "phase", {
+        step: "trade_gate",
+        routeSlug: slug,
+        effectiveVenueSlug,
+        ready: gate.ready,
+        notReadyCode: gate.notReadyCode,
+        blockedReason: gate.blockedReason,
+      });
+      if (!gate.ready) {
+        const msg =
+          gate.blockedReason?.trim() ||
+          (gate.notReadyCode != null
+            ? `Limitless not ready (${gate.notReadyCode})`
+            : "Limitless not ready.");
+        console.error(lxJit, "blocked at trade_gate", {
+          routeSlug: slug,
+          effectiveVenueSlug,
+          msg,
+        });
+        throw new Error(msg);
+      }
+      console.info(lxJit, "complete", {
+        routeSlug: slug,
+        effectiveVenueSlug,
+        side: ctx.side,
+      });
+    },
+    [
+      account,
+      funding.baseSmartWallet,
+      funding.limitlessMakerBase,
+      fundingBalances,
+      limitlessEnsureQuery,
+      privateApi,
+    ],
+  );
 
   /**
    * Just-in-time DFlow/Proof KYC refresh. KYC remains the one SOR-level
@@ -1285,6 +1536,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }), [handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, state, authenticated, account, yesBalance, noBalance, checkSufficientShares]);
 
   // SOR execution wiring: executor callbacks + multi-chain wallet balances
+  const sorReportExecutionPhaseRef = useRef<
+    ((phase: SorExecutionPhase) => void) | undefined
+  >(undefined);
+
   const sorExecutor = useSorLegExecutor({
     tradeExecutionService,
     polyClob,
@@ -1298,6 +1553,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     getClientForChain,
     fundingAddresses: {
       baseSmartWallet: funding.baseSmartWallet,
+      limitlessMakerBase: funding.limitlessMakerBase,
       polymarketSafe: funding.polymarketSafe,
       embeddedEoa: funding.embeddedEoa,
       solanaAddress: funding.solanaAddress,
@@ -1312,7 +1568,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     ensurePolymarketApprovals: ensurePolymarketApprovalsForTrade,
     ensureLimitlessApprovals: ensureLimitlessApprovalsForTrade,
     ensureDflowProofVerified: ensureDflowProofVerifiedForTrade,
+    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
   });
+
+  const limitlessMakerCashForSor = fundingBalances.data?.baseLimitlessUsdcHuman
+    ? Number(fundingBalances.data.baseLimitlessUsdcHuman)
+    : 0;
 
   const sorWalletBalances: ChainBalance[] = useMemo(
     () =>
@@ -1349,25 +1610,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     multiVenueEnabled ? funding.polymarketSafe : undefined,
   );
 
-  const dflowOutcomeMintForPosition = useMemo(() => {
-    if (!dflowLink || !state.selectedPosition || !matchedMonitor) return null;
-    const yesMint = dflowLink.yesMintA ?? dflowMintQuery.data?.yesMint;
-    const noMint = dflowLink.noMintA ?? dflowMintQuery.data?.noMint;
-    if (!yesMint || !noMint) return null;
-    try {
-      const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market, umbrellaDisplayName);
-      const resolvedSide = polyOutcomeSide(matchedMonitor, state.selectedPosition, yesTeamLabel, noTeamLabel);
-      return resolvedSide === "A" ? yesMint : noMint;
-    } catch {
-      return state.selectedPosition === "yes" ? yesMint : noMint;
-    }
-  }, [dflowLink, dflowMintQuery.data, state.selectedPosition, market, matchedMonitor]);
-
-  const dflowOutcomeBalQuery = useDflowOutcomeBalance(
-    multiVenueEnabled ? funding.solanaAddress : undefined,
-    dflowOutcomeMintForPosition,
-  );
-
   const sorVenuePositions: VenuePositionEntry[] = useMemo(() => {
     if (!state.selectedPosition) return [];
     const entries: VenuePositionEntry[] = [];
@@ -1389,8 +1631,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       entries.push({ venue: "predictfun", shares: pfBal });
     }
 
-    const dfBal = dflowOutcomeBalQuery.data;
-    if (typeof dfBal === "number" && dfBal > 0) {
+    // DFlow: use the same pipeline as the sell breakdown (`useTradeBoxShareBalances` →
+    // `useDflowPositions`), not a single-mint RPC read (mint / A-B mapping can disagree).
+    const byOutcome = tradeBoxShareBalances.allMarketsOutcomeVenueShares;
+    let dfBal: number | undefined;
+    if (byOutcome) {
+      const sideMap =
+        state.selectedPosition === "yes" ? byOutcome.yes : byOutcome.no;
+      const v = sideMap.dflow;
+      dfBal = typeof v === "number" && Number.isFinite(v) ? v : undefined;
+    } else {
+      const row = tradeBoxShareBalances.sellVenueBreakdown.find((r) => r.key === "dflow");
+      dfBal =
+        row && Number.isFinite(row.shares) && row.shares > 0 ? row.shares : undefined;
+    }
+    if (dfBal != null && dfBal > 0) {
       entries.push({ venue: "dflow", shares: dfBal });
     }
 
@@ -1408,7 +1663,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     matchedMonitor,
     market,
     predictSellShareBalance,
-    dflowOutcomeBalQuery.data,
+    tradeBoxShareBalances.allMarketsOutcomeVenueShares,
+    tradeBoxShareBalances.sellVenueBreakdown,
     limitlessSellShareBalance,
     umbrellaDisplayName,
   ]);
@@ -1425,11 +1681,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     [sorVenuePositionsForActiveTab],
   );
 
-  // --- SOR: total cash across all chains (for affordability check, not route constraint) ---
-  const totalAvailableCash = useMemo(
-    () => sorWalletBalances.reduce((sum, b) => sum + b.balance, 0),
-    [sorWalletBalances],
-  );
+  /**
+   * Pooled stable for SOR buy gates + deposit CTA — same basis everywhere (LevelUp, Limitless, etc.):
+   * Base SCW + Polygon + Solana + BNB rows from `sorWalletBalances`, plus Limitless maker Base USDC.
+   * Prefund / Li.FI moves funds before signing; the gate must not pretend off-Base stables do not exist.
+   */
+  const totalAvailableCash = useMemo(() => {
+    const makerUsd = Number.isFinite(limitlessMakerCashForSor)
+      ? Math.max(0, limitlessMakerCashForSor)
+      : 0;
+    return (
+      sorWalletBalances.reduce((sum, b) => sum + b.balance, 0) + makerUsd
+    );
+  }, [sorWalletBalances, limitlessMakerCashForSor]);
 
   // --- SOR route computation + execution (active for ALL venues, not just "all") ---
   const sorLimitPriceCents: number | undefined =
@@ -1488,9 +1752,18 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     outcome: sorRouteOutcome,
     side: state.side,
     amount: sorAmountUsd,
-    // Omit balances so the server returns a book+budget route; deposit UX uses
-    // sorWalletBalances + getSorBuyCashShortfall separately.
-    walletBalances: undefined,
+    /**
+     * Per-chain balances for predictions SOR. When omitted or empty, the server still
+     * walks full books but sets `route.sufficientFunds === false` (execute blocked until
+     * balances cover legs and bridges). Prefer non-empty `buildChainBalances` rows.
+     */
+    walletBalances: sorWalletBalances.length > 0 ? sorWalletBalances : undefined,
+    ...(state.side === "buy" && Number.isFinite(limitlessMakerCashForSor)
+      ? { limitlessMakerBaseUsdc: Math.max(0, limitlessMakerCashForSor) }
+      : {}),
+    ...(state.side === "buy"
+      ? { limitlessFeeRateBps: LIMITLESS_DEFAULT_FEE_RATE_BPS }
+      : {}),
     venuePositions: state.side === "sell" ? sorVenuePositionsForActiveTab : undefined,
     enabled: sorRouteEnabled,
     polyFeeRate: 0.03,
@@ -1506,6 +1779,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const sorExecution = useSorExecution({
     executeLeg: sorExecutor.executeLeg,
     executeBridge: sorExecutor.executeBridge,
+    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
   });
 
   const [sorRouteExpired, setSorRouteExpired] = useState(false);
@@ -1671,6 +1945,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       routeErrorCode: sorRoute.routeErrorCode,
       isExecuting: sorExecution.isExecuting,
       executionPhase: sorExecution.executionPhase,
+      prefundLegProgress: sorExecution.prefundLegProgress,
       routeExpired: sorRouteExpired,
       handleExecute: handleSorExecute,
       venuePositions: sorVenuePositionsForActiveTab,

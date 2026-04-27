@@ -69,11 +69,12 @@ export default function Positions() {
 		isDataFullyLoaded,
 		isPositionsTabContentReady,
 		dflowPositionsStripPending,
-		polyTradeHistoryLoading,
+		venueTradeHistoryLoading,
 		portfolioLoading,
 		cashBalanceCtx,
-		usdcLoading,
+		portfolioCashLoading,
 		positionsTotalValue,
+		portfolioTotalCtx,
 		umbrellaPositions,
 		resolvedUmbrellaPositions,
 		umbrellaBalancesPositions,
@@ -81,6 +82,9 @@ export default function Positions() {
 		combinedOrders,
 		venueOrders,
 		venueHistory,
+		venueHistoryRawItemsForDebug,
+		historyCatalogUmbrellas,
+		historyResolveStage,
 		returnsByQid,
 		aggregates,
 		spentByQid,
@@ -94,7 +98,7 @@ export default function Positions() {
 
 	const showContentSkeleton =
 		!isDataFullyLoaded ||
-		(activeTab === "history" && polyTradeHistoryLoading);
+		(activeTab === "history" && venueTradeHistoryLoading);
 
 	const showTabBodySkeleton =
 		activeTab === "positions"
@@ -231,13 +235,20 @@ export default function Positions() {
 				orders={combinedOrders}
 				resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
 				venueHistory={venueHistory}
+				venueHistoryRawItemsForDebug={venueHistoryRawItemsForDebug}
+				catalogUmbrellas={historyCatalogUmbrellas}
+				historyResolveStage={historyResolveStage}
 			/>
 		) : (
 			<HistoryCardView
+				umbrellaBalances={umbrellaBalancesPositions}
 				returnsByQid={returnsByQid}
 				orders={combinedOrders}
 				resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
 				venueHistory={venueHistory}
+				venueHistoryRawItemsForDebug={venueHistoryRawItemsForDebug}
+				catalogUmbrellas={historyCatalogUmbrellas}
+				historyResolveStage={historyResolveStage}
 			/>
 		);
 
@@ -286,10 +297,14 @@ export default function Positions() {
 			<div>
 				<div className="positions-header-group">
 					<PositionsHeader
-						portfolioTotal={Number(cashBalanceCtx) + positionsTotalValue}
+						portfolioTotal={
+							portfolioTotalCtx != null && Number.isFinite(portfolioTotalCtx)
+								? portfolioTotalCtx
+								: Number(cashBalanceCtx) + positionsTotalValue
+						}
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
-						cashLoading={usdcLoading}
+						cashLoading={portfolioCashLoading}
 						positionsLoading={showContentSkeleton}
 						portfolioLoading={portfolioLoading}
 						summariesLocked={Boolean(account) && showContentSkeleton}

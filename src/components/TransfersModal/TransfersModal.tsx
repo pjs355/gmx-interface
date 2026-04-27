@@ -1,9 +1,14 @@
 /**
  * TransfersModal — multi-chain withdrawals via POST /funding/lifi/withdraw/plan
  * (LI.FI routes + same-chain EVM direct transfer when applicable).
+ *
+ * When the withdrawal amount exceeds Base smart wallet USDC but Limitless maker on Base
+ * can cover the gap, we consolidate maker → SCW (partner withdraw) before planning so
+ * Li.FI always sources from the SCW.
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Tooltip from "@/components/Tooltip/Tooltip";
 import Modal from "@/components/Modal/Modal";
 import { useTransfersModal } from "@/context/TransfersModalContext";
@@ -12,12 +17,15 @@ import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
-import { buildChainBalances } from "@/trading/sor/SmartRouteToggle";
+import { buildChainBalances } from "@/trading/sor/buildChainBalances";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import {
 	useWithdrawPlanExecution,
 	getWithdrawExecutionErrorMessage,
 } from "@/pages/Transfers/useWithdrawPlanExecution";
+import { prefundLimitlessMakerToScwForTransfersWithdraw } from "@/pages/Transfers/prefundLimitlessMakerToScwForTransfersWithdraw";
+import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
+import { readFundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
 import type { LifiWithdrawPlanData, LifiWithdrawPlanLeg } from "@/types/trading";
 import "./TransfersModal.scss";
 
@@ -98,10 +106,12 @@ export function TransfersModal() {
 	const { refresh: refreshUserData, usdcBalance } = useUserData();
 	const funding = useFundingAddresses();
 	const api = usePrivateApiClient();
+	const queryClient = useQueryClient();
 	const { executePlan } = useWithdrawPlanExecution();
 
 	const bridgeBalances = useBridgeFundingBalances({
 		baseSmartWallet: funding.baseSmartWallet,
+		limitlessMakerBase: funding.limitlessMakerBase,
 		polymarketSafe: funding.polymarketSafe,
 		embeddedEoa: funding.embeddedEoa,
 		solanaAddress: funding.solanaAddress,
@@ -134,6 +144,12 @@ export function TransfersModal() {
 		]
 	);
 
+	const limitlessOnMaker = useMemo(() => {
+		const raw = bridgeBalances.data?.baseLimitlessUsdcHuman;
+		const n = raw == null || raw === "" ? Number.NaN : parseFloat(raw);
+		return Number.isFinite(n) ? Math.max(0, n) : 0;
+	}, [bridgeBalances.data]);
+
 	const totalFundingOnRails = useMemo(
 		() =>
 			chainBalances.reduce((sum, b) => {
@@ -142,8 +158,8 @@ export function TransfersModal() {
 						? b.balance
 						: 0;
 				return sum + n;
-			}, 0),
-		[chainBalances]
+			}, 0) + limitlessOnMaker,
+		[chainBalances, limitlessOnMaker]
 	);
 
 	/** Withdrawable total: portfolio cash capped by balances reported on funding chains. */
@@ -290,13 +306,53 @@ export function TransfersModal() {
 		setIsPlanning(true);
 		setPlan(null);
 		try {
+			const gross = parseFloat(withdrawAmount.trim()) || 0;
+			const fundingSnap = {
+				baseSmartWallet: funding.baseSmartWallet?.trim() || null,
+				limitlessMakerBase: funding.limitlessMakerBase?.trim() || null,
+				polymarketSafe: funding.polymarketSafe?.trim() || null,
+				embeddedEoa: funding.embeddedEoa?.trim() || null,
+				solanaAddress: funding.solanaAddress?.trim() || null,
+			};
+			let balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
+			const scwBase = Math.max(0, balancesSnap.base ?? 0);
+			const makerSnap = Math.max(0, balancesSnap.limitlessMakerBase ?? 0);
+			const shortfallOnScw = Math.max(0, gross - scwBase);
+			const pullFromMaker = Math.min(shortfallOnScw, makerSnap);
+			if (pullFromMaker >= 0.02) {
+				await prefundLimitlessMakerToScwForTransfersWithdraw({
+					amountFromMakerHuman: pullFromMaker,
+					funding: {
+						baseSmartWallet: funding.baseSmartWallet,
+						limitlessMakerBase: funding.limitlessMakerBase,
+					},
+					privateApi: api,
+				});
+				await queryClient.invalidateQueries({
+					queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
+				});
+				await bridgeBalances.refetch();
+				await refreshUserData();
+				balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
+			}
+			const planBalances = buildChainBalances({
+				baseUsdcBalance: Math.max(0, balancesSnap.base ?? 0),
+				baseWalletAddress: funding.baseSmartWallet ?? "",
+				polygonUsdcBalance: Math.max(0, balancesSnap.polygon ?? 0),
+				polygonWalletAddress: funding.polymarketSafe,
+				solanaUsdcBalance: Math.max(0, balancesSnap.solana ?? 0),
+				solanaWalletAddress: funding.solanaAddress,
+				bnbUsdtBalance: Math.max(0, balancesSnap.bnb ?? 0),
+				bnbWalletAddress: funding.embeddedEoa,
+			});
+
 			const planPayload = await api.postFundingLifiWithdrawPlan({
 				amountHuman: withdrawAmount.trim(),
 				toChain,
 				toAsset,
 				toAddress: recipientAddress.trim(),
 				slippage: 0.005,
-				balances: chainBalances,
+				balances: planBalances,
 			});
 			if (
 				!planPayload ||
@@ -316,9 +372,16 @@ export function TransfersModal() {
 		}
 	}, [
 		api,
+		bridgeBalances,
 		canRequestReview,
-		chainBalances,
+		funding.baseSmartWallet,
+		funding.embeddedEoa,
+		funding.limitlessMakerBase,
+		funding.polymarketSafe,
+		funding.solanaAddress,
+		queryClient,
 		recipientAddress,
+		refreshUserData,
 		toAsset,
 		toChain,
 		withdrawAmount,

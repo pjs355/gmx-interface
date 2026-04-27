@@ -2,6 +2,8 @@ import { titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { VenueId, VenuePosition } from "@/types/trading/venuePosition";
+import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
+import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
 
 /** Set `VITE_DEBUG_PREDICT_UMBRELLA=1` to log in production builds; dev always logs. */
@@ -253,6 +255,25 @@ export function resolvePredictUmbrellaForDisplay(
 	return null;
 }
 
+function catalogStubFromBatchResolve(
+	resolvedCatalogId: string,
+	pos: Pick<VenuePosition, "levelUpUmbrellaDisplayName" | "marketTitle">,
+): Umbrella {
+	const name =
+		pos.levelUpUmbrellaDisplayName?.trim() ||
+		pos.marketTitle?.trim() ||
+		"Resolved market";
+	return {
+		_id: resolvedCatalogId,
+		displayName: name,
+		children: [],
+		originalChildren: [],
+		createdAt: new Date(0).toISOString(),
+		updatedAt: new Date(0).toISOString(),
+		__v: 0,
+	} as Umbrella;
+}
+
 export function matchVenuePositionToUmbrella(
 	pos: Pick<
 		VenuePosition,
@@ -261,6 +282,8 @@ export function matchVenuePositionToUmbrella(
 		| "tokenId"
 		| "numericMarketId"
 		| "levelUpUmbrellaId"
+		| "levelUpUmbrellaDisplayName"
+		| "eventSlug"
 	>,
 	venue: VenueId,
 	conditionLookup: Map<string, Umbrella>,
@@ -268,20 +291,122 @@ export function matchVenuePositionToUmbrella(
 	predictLookup: PredictUmbrellaLookup | null,
 	predictTitleHint?: string | null,
 ): Umbrella | null {
-	if (pos.conditionId && conditionLookup.has(pos.conditionId)) {
-		return conditionLookup.get(pos.conditionId)!;
+	/** Poly map keys are Polymarket CTF ids only — do not run for Predict (may carry unrelated hex). */
+	if (venue === "polymarket") {
+		const cid = pos.conditionId?.trim();
+		if (cid) {
+			const key = polymarketConditionLookupKey(cid);
+			if (key && conditionLookup.has(key)) {
+				return conditionLookup.get(key)!;
+			}
+		}
+	}
+	const resolvedCatalogId = pos.levelUpUmbrellaId?.trim();
+	if (resolvedCatalogId) {
+		const byId = umbrellas.find((u) => String(u._id).trim() === resolvedCatalogId);
+		if (byId) return byId;
+		/**
+		 * Batch resolve can return inactive umbrellas omitted from GET /umbrellas (active-only).
+		 * For Predict, still allow monitor/catalog `resolvePredictUmbrellaForDisplay` to run.
+		 */
+		if (venue !== "predictfun") {
+			return catalogStubFromBatchResolve(resolvedCatalogId, pos);
+		}
 	}
 	if (venue === "predictfun") {
-		const resolvedId = pos.levelUpUmbrellaId?.trim();
-		if (resolvedId) {
-			const byId = umbrellas.find((u) => String(u._id).trim() === resolvedId);
-			if (byId) return byId;
+		const fromPredict = resolvePredictUmbrellaForDisplay(
+			pos,
+			predictLookup,
+			umbrellas,
+			predictTitleHint,
+		);
+		if (fromPredict) return fromPredict;
+		if (resolvedCatalogId) {
+			return catalogStubFromBatchResolve(resolvedCatalogId, pos);
 		}
-		return resolvePredictUmbrellaForDisplay(pos, predictLookup, umbrellas, predictTitleHint);
+		return null;
+	}
+	if (venue === "limitless") {
+		const slug = (pos.eventSlug ?? "").trim();
+		const tid = canonicalLimitlessTokenId(String(pos.tokenId ?? ""));
+		if (!tid) return null;
+
+		const byToken: Umbrella[] = [];
+		for (const u of umbrellas) {
+			const lx = u.exchangeMatching?.limitless;
+			if (!lx?.tokenIdA?.trim() || !lx?.tokenIdB?.trim()) continue;
+			const a = canonicalLimitlessTokenId(String(lx.tokenIdA));
+			const b = canonicalLimitlessTokenId(String(lx.tokenIdB));
+			if (tid === a || tid === b) byToken.push(u);
+		}
+		if (byToken.length === 0) return null;
+		if (byToken.length === 1) return byToken[0]!;
+
+		const slugNorm = slug;
+		const slugMatches = byToken.filter((u) => {
+			const lx = u.exchangeMatching!.limitless!;
+			const cand = [
+				(lx.slug ?? "").trim(),
+				(lx.orderbookSlugA ?? "").trim(),
+				(lx.orderbookSlugB ?? "").trim(),
+			].filter((s) => s.length > 0);
+			return slugNorm.length > 0 && cand.some((c) => c === slugNorm);
+		});
+		if (slugMatches.length === 1) return slugMatches[0]!;
+		if (slugMatches.length > 1) return slugMatches[0]!;
+		return byToken[0]!;
+	}
+	if (venue === "dflow") {
+		const mint = pos.tokenId?.trim();
+		if (!mint) return null;
+		for (const u of umbrellas) {
+			const d = u.exchangeMatching?.dflow as
+				| { yesMintA?: string; yesMintB?: string }
+				| undefined;
+			if (!d) continue;
+			if (d.yesMintA?.trim() === mint || d.yesMintB?.trim() === mint) return u;
+		}
+		return null;
 	}
 	return (
 		umbrellas.find((u) =>
 			titlesMatchVenue(u.displayName ?? "", pos.marketTitle ?? ""),
 		) ?? null
 	);
+}
+
+/**
+ * Same as {@link matchVenuePositionToUmbrella}, but if the matcher returns null while
+ * batch resolve already set `levelUpUmbrellaId`, still return a catalog stub so History
+ * groups under the resolved umbrella id.
+ */
+export function matchVenuePositionToUmbrellaForHistory(
+	pos: Pick<
+		VenuePosition,
+		| "conditionId"
+		| "marketTitle"
+		| "tokenId"
+		| "numericMarketId"
+		| "levelUpUmbrellaId"
+		| "levelUpUmbrellaDisplayName"
+		| "eventSlug"
+	>,
+	venue: VenueId,
+	conditionLookup: Map<string, Umbrella>,
+	umbrellas: Umbrella[],
+	predictLookup: PredictUmbrellaLookup | null,
+	predictTitleHint?: string | null,
+): Umbrella | null {
+	const hit = matchVenuePositionToUmbrella(
+		pos,
+		venue,
+		conditionLookup,
+		umbrellas,
+		predictLookup,
+		predictTitleHint,
+	);
+	if (hit) return hit;
+	const id = pos.levelUpUmbrellaId?.trim();
+	if (!id) return null;
+	return catalogStubFromBatchResolve(id, pos);
 }

@@ -245,6 +245,36 @@ export default function Transfers() {
 							</div>
 						</div>
 
+						{funding.limitlessMakerBase ? (
+							<div className="transfers-addresses__item">
+								<div className="transfers-addresses__chain">Limitless maker (Base USDC)</div>
+								<div className="transfers-addresses__value-row">
+									{funding.isLoading && !funding.limitlessMakerBase ? (
+										<span className="transfers-skeleton transfers-skeleton--address" />
+									) : (
+										<code className="transfers-addresses__value">
+											{formatAddress(funding.limitlessMakerBase)}
+										</code>
+									)}
+									<button
+										type="button"
+										className="Details-copy-button Details-copy-button--compact"
+										title="Copy address"
+										aria-label="Copy Limitless maker Base address"
+										disabled={
+											!String(funding.limitlessMakerBase ?? "").trim() ||
+											(funding.isLoading && !funding.limitlessMakerBase)
+										}
+										onClick={() =>
+											void handleCopyAddress("limitless", funding.limitlessMakerBase)
+										}
+									>
+										{copiedAddressKey === "limitless" ? "✓" : "Copy"}
+									</button>
+								</div>
+							</div>
+						) : null}
+
 						<div className="transfers-addresses__item">
 							<div className="transfers-addresses__chain">BNB Chain (USDT)</div>
 							<div className="transfers-addresses__value-row">

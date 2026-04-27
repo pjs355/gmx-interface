@@ -1,3 +1,5 @@
+import type { VenueHistoryFill } from "@/types/trading/venuePosition";
+import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import {
 	normalizePredictTokenId,
 	type TokenCostEntry,
@@ -15,6 +17,9 @@ export type PredictMatchLeg = {
 
 export type PredictMatchEventRow = {
 	market?: { id?: number };
+	/** Injected by LevelUp private API from Mongo `exchangeMatching.predictFun`. */
+	levelUpUmbrellaId?: string;
+	levelUpUmbrellaDisplayName?: string;
 	taker: PredictMatchLeg;
 	makers: PredictMatchLeg[];
 	amountFilled: string;
@@ -39,6 +44,13 @@ function isMatchLeg(x: unknown): x is PredictMatchLeg {
 		typeof r.price === "string" &&
 		typeof r.signer === "string"
 	);
+}
+
+function matchEventTimeMs(m: PredictMatchEventRow): number | null {
+	const s = m.executedAt?.trim();
+	if (!s) return null;
+	const d = Date.parse(s);
+	return Number.isFinite(d) ? d : null;
 }
 
 function isMatchRow(x: unknown): x is PredictMatchEventRow {
@@ -140,38 +152,193 @@ export function computePredictCostByTokenFromMatches(
 	const filter = filterSigner.trim();
 	if (!filter.startsWith("0x")) return map;
 
-	function add(tokenId: string, cost: number, shares: number) {
+	function add(
+		tokenId: string,
+		cost: number,
+		shares: number,
+		fillMs: number | null
+	) {
 		const existing = map.get(tokenId);
 		if (existing) {
 			existing.totalCost += cost;
 			existing.totalShares += shares;
 			existing.avgPrice = existing.totalCost / existing.totalShares;
+			if (
+				fillMs != null &&
+				(existing.lastTradeAtMs == null || fillMs > existing.lastTradeAtMs)
+			) {
+				existing.lastTradeAtMs = fillMs;
+			}
 		} else {
 			map.set(tokenId, {
 				totalCost: cost,
 				totalShares: shares,
 				avgPrice: cost / shares,
+				lastTradeAtMs: fillMs,
 			});
 		}
 	}
 
 	for (const m of matches) {
 		if (!m?.taker || !Array.isArray(m.makers)) continue;
+		const rowMs = matchEventTimeMs(m);
 		const legs = [m.taker, ...m.makers];
 		let anyLeg = false;
 		for (const leg of legs) {
 			if (!addrsEq(leg.signer, filter) || leg.quoteType !== "Bid") continue;
 			const parsed = legBidToCostShares(leg);
 			if (parsed) {
-				add(parsed.tokenId, parsed.cost, parsed.shares);
+				add(parsed.tokenId, parsed.cost, parsed.shares, rowMs);
 				anyLeg = true;
 			}
 		}
 		if (!anyLeg) {
 			const fb = matchLevelFallback(m, filter);
-			if (fb) add(fb.tokenId, fb.cost, fb.shares);
+			if (fb) add(fb.tokenId, fb.cost, fb.shares, rowMs);
 		}
 	}
 
 	return map;
+}
+
+function matchProbPrice(usdc: number, shares: number): number | null {
+	if (shares > 0 && usdc > 0) {
+		const p = usdc / shares;
+		if (p > 0 && p <= 1) return p;
+		if (p > 1 && p <= 100) return p / 100;
+	}
+	return null;
+}
+
+/**
+ * Per-outcome fills from chain match events (buys via Bid legs, sells via Ask legs).
+ */
+export function buildPredictHistoryFillsFromMatches(
+	filterSigner: string,
+	matches: PredictMatchEventRow[],
+): Map<string, VenueHistoryFill[]> {
+	const byMint = new Map<string, VenueHistoryFill[]>();
+	const filter = filterSigner.trim();
+	if (!filter.startsWith("0x")) return byMint;
+
+	function pushFill(tokenId: string, fill: VenueHistoryFill): void {
+		const arr = byMint.get(tokenId) ?? [];
+		arr.push(fill);
+		byMint.set(tokenId, arr);
+	}
+
+	function pushBidFill(leg: PredictMatchLeg, rowMs: number | null, src: string): void {
+		const parsed = legBidToCostShares(leg);
+		if (!parsed) return;
+		const tradedAt = rowMs != null ? new Date(rowMs).toISOString() : "";
+		pushFill(parsed.tokenId, {
+			side: "buy",
+			shares: parsed.shares,
+			usdc: parsed.cost,
+			tradedAt,
+			sourceId: `${src}:bid`,
+			price: matchProbPrice(parsed.cost, parsed.shares),
+		});
+	}
+
+	function pushAskFill(leg: PredictMatchLeg, rowMs: number | null, src: string): void {
+		if (leg.quoteType !== "Ask") return;
+		const tokenId = normalizePredictTokenId(leg.outcome.onChainId);
+		if (!tokenId) return;
+		let amt: bigint;
+		let prc: bigint;
+		try {
+			amt = BigInt(leg.amount);
+			prc = BigInt(leg.price);
+		} catch {
+			return;
+		}
+		const proceedsWei = (amt * prc) / 10n ** 18n;
+		const shares = Number(amt) / 1e18;
+		const usdc = Number(proceedsWei) / 1e18;
+		if (
+			!Number.isFinite(shares) ||
+			!Number.isFinite(usdc) ||
+			(shares <= 0 && usdc <= 0)
+		) {
+			return;
+		}
+		const tradedAt = rowMs != null ? new Date(rowMs).toISOString() : "";
+		pushFill(tokenId, {
+			side: "sell",
+			shares: Math.max(shares, 0),
+			usdc: Math.max(usdc, 0),
+			tradedAt,
+			sourceId: `${src}:ask`,
+			price: matchProbPrice(usdc, shares),
+		});
+	}
+
+	for (const m of matches) {
+		if (!m?.taker || !Array.isArray(m.makers)) continue;
+		const rowMs = matchEventTimeMs(m);
+		const tx = m.transactionHash?.trim() || "";
+		const srcBase = tx || `match-${m.amountFilled?.slice(0, 12) ?? "?"}`;
+		const legs = [m.taker, ...m.makers];
+		for (let i = 0; i < legs.length; i++) {
+			const leg = legs[i]!;
+			if (!addrsEq(leg.signer, filter)) continue;
+			const src = `${srcBase}:leg${i}`;
+			if (leg.quoteType === "Bid") {
+				pushBidFill(leg, rowMs, src);
+			} else if (leg.quoteType === "Ask") {
+				pushAskFill(leg, rowMs, src);
+			}
+		}
+	}
+
+	for (const fills of byMint.values()) {
+		fills.sort(
+			(a, b) =>
+				Date.parse(a.tradedAt || "0") - Date.parse(b.tradedAt || "0"),
+		);
+	}
+	return byMint;
+}
+
+/**
+ * For tokens that only appear in matches (no FILLED order row), resolve numeric market id.
+ */
+export function predictMarketIdForTokenFromMatches(
+	matches: PredictMatchEventRow[],
+	tokenId: string,
+): number | null {
+	const want = normalizePredictTokenId(tokenId);
+	if (!want) return null;
+	for (const m of matches) {
+		const mid = m.market?.id;
+		if (mid == null || !Number.isFinite(Number(mid))) continue;
+		const legs = [m.taker, ...m.makers];
+		for (const leg of legs) {
+			if (normalizePredictTokenId(leg.outcome.onChainId) === want) {
+				return Number(mid);
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * When {@link predictMarketIdForTokenFromMatches} and order `marketId` are unavailable,
+ * infer market id from any loaded {@link PredictMarketDetail} whose outcomes include the token.
+ */
+export function predictMarketIdForTokenFromDetailsMap(
+	details: Map<number, PredictMarketDetail>,
+	tokenId: string,
+): number | null {
+	const want = normalizePredictTokenId(tokenId);
+	if (!want) return null;
+	for (const [mid, d] of details) {
+		for (const o of d.outcomes ?? []) {
+			if (normalizePredictTokenId(o.onChainId) === want) return mid;
+		}
+		const res = d.resolution;
+		if (res?.onChainId && normalizePredictTokenId(res.onChainId) === want) return mid;
+	}
+	return null;
 }

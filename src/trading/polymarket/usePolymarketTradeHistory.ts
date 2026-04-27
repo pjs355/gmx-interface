@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { VenuePosition } from "@/types/trading/venuePosition";
+import type { VenueHistoryFill, VenuePosition } from "@/types/trading/venuePosition";
 
 const POLYMARKET_DATA_API = "https://data-api.polymarket.com";
 
@@ -42,6 +42,15 @@ function numFromApi(v: unknown): number {
 	return Number.isFinite(n) ? n : 0;
 }
 
+/** Align TRADE vs REDEEM rows where API outcome casing differs — keys must match for redeemed detection */
+function outcomeNorm(outcome: string | undefined | null): string {
+	return String(outcome ?? "").trim().toLowerCase();
+}
+
+function aggOutcomeKey(conditionId: string, outcome: string): string {
+	return `${conditionId.trim()}::${outcomeNorm(outcome)}`;
+}
+
 /** Shares (outcome tokens) for a TRADE or REDEEM activity row */
 function activityShares(row: PolymarketActivityRow): number {
 	const r = row as unknown as Record<string, unknown>;
@@ -76,6 +85,75 @@ interface AggregatedTrade {
 	netShares: number;
 	redeemed: boolean;
 	redeemCash: number;
+	/** Latest activity timestamp (ms) among TRADE + matching REDEEM rows for this leg */
+	lastActivityMs: number | null;
+	fills: VenueHistoryFill[];
+}
+
+/** Normalize Polymarket activity `timestamp` (seconds, ms, or ISO string). */
+function activityTimestampMs(row: PolymarketActivityRow): number | null {
+	const t = row.timestamp;
+	if (t === null || t === undefined || t === "") return null;
+	if (typeof t === "number" && Number.isFinite(t)) {
+		return t > 1e12 ? Math.floor(t) : Math.floor(t * 1000);
+	}
+	const s = String(t).trim();
+	if (!s) return null;
+	const n = Number(s);
+	if (Number.isFinite(n)) return n > 1e12 ? Math.floor(n) : Math.floor(n * 1000);
+	const parsed = Date.parse(s);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function bumpLastActivity(agg: AggregatedTrade, row: PolymarketActivityRow): void {
+	const ms = activityTimestampMs(row);
+	if (ms == null) return;
+	if (agg.lastActivityMs == null || ms > agg.lastActivityMs) agg.lastActivityMs = ms;
+}
+
+function activityRowToFill(row: PolymarketActivityRow): VenueHistoryFill | null {
+	const tok = activityShares(row);
+	const usd = activityUsdc(row);
+	if (tok <= 0 && usd <= 0) return null;
+	const raw = row.side;
+	const side: "buy" | "sell" = raw === "SELL" ? "sell" : "buy";
+	const fillMs = activityTimestampMs(row);
+	const tradedAt =
+		fillMs != null ? new Date(fillMs).toISOString() : "";
+	const r = row as unknown as Record<string, unknown>;
+	const src =
+		(typeof r.transactionHash === "string" && r.transactionHash.trim()) ||
+		(typeof r.id === "string" && r.id.trim()) ||
+		undefined;
+	const pr = row.price != null ? numFromApi(row.price) : null;
+	const price =
+		pr != null && Number.isFinite(pr) && pr > 0 ? pr : null;
+	return { side, shares: tok, usdc: usd, tradedAt, sourceId: src, price };
+}
+
+function redeemRowToFill(r: PolymarketActivityRow): VenueHistoryFill | null {
+	const tok = activityShares(r);
+	const usd = activityUsdc(r);
+	if (tok <= 0 && usd <= 0) return null;
+	const fillMs = activityTimestampMs(r);
+	const tradedAt =
+		fillMs != null ? new Date(fillMs).toISOString() : "";
+	const ro = r as unknown as Record<string, unknown>;
+	const src =
+		(typeof ro.transactionHash === "string" && ro.transactionHash.trim()) ||
+		(typeof ro.id === "string" && ro.id.trim()) ||
+		undefined;
+	const price =
+		tok > 0 && usd > 0 ? usd / tok : null;
+	/** Settlement / redemption: cash in, token burn — show as sell in cash-flow math */
+	return {
+		side: "sell",
+		shares: tok,
+		usdc: usd,
+		tradedAt,
+		sourceId: src,
+		price,
+	};
 }
 
 async function fetchActivityPage(
@@ -107,8 +185,8 @@ async function fetchPolymarketTradeHistory(
 	safeAddress: string
 ): Promise<VenuePosition[]> {
 	const [trades, redeems] = await Promise.all([
-		fetchActivityPage(safeAddress, "TRADE", 500, 10),
-		fetchActivityPage(safeAddress, "REDEEM", 500, 5),
+		fetchActivityPage(safeAddress, "TRADE", 500, 40),
+		fetchActivityPage(safeAddress, "REDEEM", 500, 24),
 	]);
 
 	if (trades.length === 0 && redeems.length === 0) return [];
@@ -116,19 +194,23 @@ async function fetchPolymarketTradeHistory(
 	// Track which conditionId+outcome had a REDEEM (user won and redeemed)
 	const redeemedKeys = new Map<string, number>();
 	for (const r of redeems) {
-		const key = `${r.conditionId}::${r.outcome}`;
+		const rk = r.conditionId?.trim();
+		if (!rk) continue;
+		const key = aggOutcomeKey(rk, r.outcome);
 		redeemedKeys.set(key, (redeemedKeys.get(key) ?? 0) + activityUsdc(r));
 	}
 
 	const byKey = new Map<string, AggregatedTrade>();
 	for (const row of trades) {
-		const key = `${row.conditionId}::${row.outcome}`;
+		const cid = row.conditionId?.trim();
+		if (!cid) continue;
+		const key = aggOutcomeKey(cid, row.outcome);
 		const tok = activityShares(row);
 		const usd = activityUsdc(row);
 		let agg = byKey.get(key);
 		if (!agg) {
 			agg = {
-				conditionId: row.conditionId,
+				conditionId: cid,
 				asset: row.asset ?? "",
 				title: row.title ?? "",
 				outcome: row.outcome,
@@ -141,9 +223,14 @@ async function fetchPolymarketTradeHistory(
 				netShares: 0,
 				redeemed: redeemedKeys.has(key),
 				redeemCash: redeemedKeys.get(key) ?? 0,
+				lastActivityMs: null,
+				fills: [],
 			};
 			byKey.set(key, agg);
 		}
+		bumpLastActivity(agg!, row);
+		const tradeFill = activityRowToFill(row);
+		if (tradeFill) agg!.fills.push(tradeFill);
 		if (row.side === "BUY") {
 			agg!.totalBought += tok;
 			agg!.totalSpent += usd;
@@ -153,6 +240,43 @@ async function fetchPolymarketTradeHistory(
 			agg!.totalReceived += usd;
 			agg!.netShares -= tok;
 		}
+	}
+
+	for (const r of redeems) {
+		const rcid = r.conditionId?.trim();
+		if (!rcid) continue;
+		const key = aggOutcomeKey(rcid, r.outcome);
+		let agg = byKey.get(key);
+		if (!agg) {
+			agg = {
+				conditionId: rcid,
+				asset: r.asset ?? "",
+				title: r.title ?? "",
+				outcome: r.outcome,
+				eventSlug: r.eventSlug ?? "",
+				icon: r.icon ?? "",
+				totalBought: 0,
+				totalSold: 0,
+				totalSpent: 0,
+				totalReceived: 0,
+				netShares: 0,
+				redeemed: true,
+				redeemCash: redeemedKeys.get(key) ?? 0,
+				lastActivityMs: null,
+				fills: [],
+			};
+			byKey.set(key, agg);
+		}
+		bumpLastActivity(agg, r);
+		const rf = redeemRowToFill(r);
+		if (rf) agg.fills.push(rf);
+	}
+
+	for (const agg of byKey.values()) {
+		agg.fills.sort(
+			(a, b) =>
+				Date.parse(a.tradedAt || "0") - Date.parse(b.tradedAt || "0"),
+		);
 	}
 
 	const results = Array.from(byKey.values()).map((agg): VenuePosition => {
@@ -180,6 +304,10 @@ async function fetchPolymarketTradeHistory(
 			iconUrl: agg.icon,
 			outcomeResult: agg.redeemed ? "WON" : null,
 			marketStatus: "RESOLVED",
+			...(agg.lastActivityMs != null
+				? { historyTradeAt: new Date(agg.lastActivityMs).toISOString() }
+				: {}),
+			...(agg.fills.length > 0 ? { historyFills: agg.fills } : {}),
 		};
 	});
 

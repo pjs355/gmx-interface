@@ -2,11 +2,16 @@ import { formatBridgeQuoteUsdLines } from "@/trading/lifi/quoteDisplay";
 import type { BridgeEndpoint } from "./useBridgeFlow";
 import { useBridgeFlow } from "./useBridgeFlow";
 
-const ENDPOINT_OPTIONS: { value: BridgeEndpoint; label: string }[] = [
+const FROM_ENDPOINT_OPTIONS: { value: BridgeEndpoint; label: string }[] = [
 	{ value: "levelup", label: "LevelUp (Base)" },
 	{ value: "polymarket", label: "Polymarket (Polygon)" },
 	{ value: "bnb", label: "Predict (BNB)" },
 	{ value: "solana", label: "DFlow (Solana)" },
+];
+
+const TO_ENDPOINT_OPTIONS: { value: BridgeEndpoint; label: string }[] = [
+	...FROM_ENDPOINT_OPTIONS,
+	{ value: "limitless", label: "Limitless maker (Base)" },
 ];
 
 export function TransfersBridgePanel() {
@@ -17,6 +22,10 @@ export function TransfersBridgePanel() {
 	const quoteUsd = flow.quote ? formatBridgeQuoteUsdLines(flow.quote) : null;
 
 	const levelupUsd = formatWalletUsd(balances.data?.baseUsdcHuman ?? null, balances.isLoading);
+	const limitlessUsd = formatWalletUsd(
+		balances.data?.baseLimitlessUsdcHuman ?? null,
+		balances.isLoading
+	);
 	const polymarketUsd = formatWalletUsd(
 		balances.data?.polygonUsdcEHuman ?? null,
 		balances.isLoading
@@ -26,12 +35,14 @@ export function TransfersBridgePanel() {
 
 	const fromBalanceDisplay = balanceForEndpoint(flow.fromEndpoint, {
 		levelup: levelupUsd,
+		limitless: limitlessUsd,
 		polymarket: polymarketUsd,
 		bnb: bnbUsd,
 		solana: solanaUsd,
 	});
 	const toBalanceDisplay = balanceForEndpoint(flow.toEndpoint, {
 		levelup: levelupUsd,
+		limitless: limitlessUsd,
 		polymarket: polymarketUsd,
 		bnb: bnbUsd,
 		solana: solanaUsd,
@@ -44,6 +55,8 @@ export function TransfersBridgePanel() {
 
 	const routeUsesPolymarket =
 		flow.fromEndpoint === "polymarket" || flow.toEndpoint === "polymarket";
+
+	const routeUsesLimitless = flow.toEndpoint === "limitless";
 
 	const canConfirm =
 		flow.quoteAppliesToCurrentInput &&
@@ -66,8 +79,9 @@ export function TransfersBridgePanel() {
 		<section className="transfers-bridge" aria-label="Stablecoin transfer between chains">
 			<h2 className="transfers-bridge__title">Transfer funds</h2>
 			<p className="transfers-bridge__sub">
-				Move USDC between Base, Polygon, and Solana, or USDT on BNB (Predict), via LI.FI. Amount is
-				always in the source chain&apos;s stablecoin.
+				Move USDC between Base (LevelUp smart wallet, Limitless maker), Polygon, and Solana, or USDT
+				on BNB (Predict), via LI.FI. The source wallet is chosen for you from your balances; amount
+				is always in that wallet&apos;s stablecoin.
 			</p>
 
 			{flow.funding.isLoading || flow.relay.polymarketLoading ? (
@@ -123,21 +137,20 @@ export function TransfersBridgePanel() {
 
 			<div className="transfers-bridge__from-to" role="group" aria-label="Transfer route">
 				<div className="transfers-bridge__from-to-field">
-					<label className="transfers-bridge__label" htmlFor="bridge-from">
-						From
-					</label>
-					<select
+					<span className="transfers-bridge__label">From</span>
+					<div
 						id="bridge-from"
-						className="transfers-bridge__select"
-						value={flow.fromEndpoint}
-						onChange={(e) => flow.setFromEndpoint(e.target.value as BridgeEndpoint)}
+						className="transfers-bridge__select transfers-bridge__select--readonly"
+						role="status"
 					>
-						{ENDPOINT_OPTIONS.map((o) => (
-							<option key={o.value} value={o.value}>
-								{o.label}
-							</option>
-						))}
-					</select>
+						{FROM_ENDPOINT_OPTIONS.find((o) => o.value === flow.fromEndpoint)?.label ??
+							flow.fromEndpoint}
+					</div>
+					<p className="transfers-bridge__muted transfers-bridge__hint" role="note">
+						Source wallet is picked automatically from the largest on-screen balance among
+						wallets you can sign from for this destination (withdrawals use quote-based ranking
+						on the server instead).
+					</p>
 				</div>
 				<span className="transfers-bridge__arrow" aria-hidden>
 					→
@@ -152,7 +165,7 @@ export function TransfersBridgePanel() {
 						value={flow.toEndpoint}
 						onChange={(e) => flow.setToEndpoint(e.target.value as BridgeEndpoint)}
 					>
-						{ENDPOINT_OPTIONS.map((o) => (
+						{TO_ENDPOINT_OPTIONS.map((o) => (
 							<option key={o.value} value={o.value}>
 								{o.label}
 							</option>
@@ -277,11 +290,19 @@ function formatWalletUsd(humanBalance: string | null | undefined, isLoading: boo
 
 function balanceForEndpoint(
 	e: BridgeEndpoint,
-	map: { levelup: string; polymarket: string; bnb: string; solana: string }
+	map: {
+		levelup: string;
+		limitless: string;
+		polymarket: string;
+		bnb: string;
+		solana: string;
+	}
 ): string {
 	switch (e) {
 		case "levelup":
 			return map.levelup;
+		case "limitless":
+			return map.limitless;
 		case "polymarket":
 			return map.polymarket;
 		case "bnb":

@@ -1,6 +1,7 @@
 import React from "react";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
+import { outcomeSideLabelColor } from "../utils/positionHelpers";
 
 interface TradeHistoryListMobileProps {
 	orders: ProcessedOrder[];
@@ -25,10 +26,13 @@ export default function TradeHistoryListMobile({
 			if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
 			return true;
 		})
-		.sort(
-			(a, b) =>
-				new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-		);
+		.sort((a, b) => {
+			const ta = new Date(a.filledAt || a.createdAt).getTime();
+			const tb = new Date(b.filledAt || b.createdAt).getTime();
+			return (
+				(Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
+			);
+		});
 
 	if (!isExpanded || marketOrders.length === 0) {
 		return null;
@@ -37,6 +41,7 @@ export default function TradeHistoryListMobile({
 	const formatDate = (dateStr: string | null): string => {
 		if (!dateStr) return "—";
 		const date = new Date(dateStr);
+		if (Number.isNaN(date.getTime())) return "—";
 		return date.toLocaleDateString("en-US", {
 			month: "short",
 			day: "numeric",
@@ -91,9 +96,6 @@ export default function TradeHistoryListMobile({
 		.reduce((sum, o) => sum + o.tokenValue, 0);
 	const netShares = totalSharesBought - totalSharesSold;
 
-	// Reverse for display (newest first)
-	const displayOrders = [...marketOrders].reverse();
-
 	return (
 		<div
 			className="trade-history-mobile-container"
@@ -106,10 +108,20 @@ export default function TradeHistoryListMobile({
 			{/* Section Header */}
 			{/* Trade Cards */}
 			<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-				{displayOrders.map((order) => {
+				{marketOrders.map((order) => {
 					const isBuy = order.side === "buy";
-					const isYes = order.position === "Yes";
-					const sideText = positionDisplayLabel?.trim() || order.position;
+					const sideText = (
+						positionDisplayLabel?.trim() ||
+						order.position ||
+						""
+					).trim();
+					const tl = sideText.toLowerCase();
+					const binaryYesNoBg =
+						tl === "yes"
+							? "rgba(34, 197, 94, 0.15)"
+							: tl === "no"
+								? "rgba(248, 113, 113, 0.15)"
+								: "transparent";
 					const cashFlow = isBuy ? -order.usdcValue : order.usdcValue;
 					const shareChange = isBuy ? order.tokenValue : -order.tokenValue;
 
@@ -146,15 +158,19 @@ export default function TradeHistoryListMobile({
 								{/* Team / Yes/No with faded background */}
 								<span
 									style={{
-										color: isYes ? "#22c55e" : "#f87171",
+										color: outcomeSideLabelColor(
+											sideText,
+											"#22c55e",
+											"#f87171",
+										),
 										fontSize: 12,
 										fontWeight: 600,
-										background: isYes ? "rgba(34, 197, 94, 0.15)" : "rgba(248, 113, 113, 0.15)",
+										background: binaryYesNoBg,
 										padding: "2px 6px",
 										borderRadius: 4,
 									}}
 								>
-									{sideText}
+									{sideText || "—"}
 								</span>
 								</div>
 								<span style={{ color: "#666", fontSize: 11 }}>

@@ -1,6 +1,7 @@
 import { extractVsCore, stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { VenuePosition } from "@/types/trading/venuePosition";
+import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
 import { polyOutcomeTokenId } from "@/trading/polymarket/polyOutcomeTokenId";
 
 function normalizePolyTokenId(tokenId: string | undefined | null): string {
@@ -19,9 +20,12 @@ export function findMatchedMarketByPolyConditionId(
 	conditionId: string | undefined | null,
 ): MatchedMarket | null {
 	if (!markets?.length || !conditionId?.trim()) return null;
-	const c = conditionId.trim();
+	const key = polymarketConditionLookupKey(conditionId);
+	if (!key) return null;
 	return (
-		markets.find((m) => String(m.polyConditionId ?? "").trim() === c) ?? null
+		markets.find(
+			(m) => polymarketConditionLookupKey(String(m.polyConditionId ?? "")) === key,
+		) ?? null
 	);
 }
 

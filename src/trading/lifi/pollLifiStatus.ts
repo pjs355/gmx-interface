@@ -1,3 +1,4 @@
+import { PrivateApiError } from "@/services/privateApi/errors";
 import type { LifiStatusResponse } from "@/types/trading";
 
 export function extractLifiStatus(body: unknown): string | undefined {
@@ -34,6 +35,53 @@ export type PollLifiOptions = {
 };
 
 /**
+ * True when the private API proxied LI.FI `/v1/status` and the failure is likely
+ * transient (indexing lag, wrong `bridge` hint, rate limit, or gateway blip).
+ * See https://docs.li.fi/api-reference/check-the-status-of-a-cross-chain-transfer
+ */
+export function isTransientFundingLifiStatusPollError(err: unknown): boolean {
+	if (err instanceof TypeError) {
+		return true;
+	}
+	if (!(err instanceof PrivateApiError)) {
+		return false;
+	}
+	if (err.status === 429) {
+		return true;
+	}
+	if (err.status !== 502 && err.status !== 503 && err.status !== 504) {
+		return false;
+	}
+	const fromMessage = `${err.message} `;
+	const fromBody = stringifyBodyForLifiPollMatch(err.body);
+	const haystack = `${fromMessage}${fromBody}`.toLowerCase();
+	return (
+		haystack.includes("lifi_status_http:404") ||
+		haystack.includes("not found on chain") ||
+		haystack.includes('"code":1003') ||
+		haystack.includes("code:1003") ||
+		haystack.includes("lifi_status_failed")
+	);
+}
+
+function stringifyBodyForLifiPollMatch(body: unknown): string {
+	if (body == null) {
+		return "";
+	}
+	if (typeof body === "string") {
+		return body;
+	}
+	if (typeof body === "object") {
+		try {
+			return JSON.stringify(body);
+		} catch {
+			return "";
+		}
+	}
+	return String(body);
+}
+
+/**
  * Throws if the polled body is not a successful terminal LI.FI status.
  */
 export function assertLifiTerminalSuccess(body: unknown): void {
@@ -65,7 +113,25 @@ export async function pollLifiUntilTerminal(
 		if (opts.signal?.aborted) {
 			throw new DOMException("Polling aborted", "AbortError");
 		}
-		last = await getStatus();
+		try {
+			last = await getStatus();
+		} catch (err) {
+			if (!isTransientFundingLifiStatusPollError(err) || attempt === maxAttempts - 1) {
+				throw err;
+			}
+			await new Promise<void>((resolve, reject) => {
+				const timer = setTimeout(resolve, intervalMs);
+				opts.signal?.addEventListener(
+					"abort",
+					() => {
+						clearTimeout(timer);
+						reject(new DOMException("Polling aborted", "AbortError"));
+					},
+					{ once: true },
+				);
+			});
+			continue;
+		}
 		const st = extractLifiStatus(last);
 		if (st && isTerminalStatus(st)) {
 			assertLifiTerminalSuccess(last);

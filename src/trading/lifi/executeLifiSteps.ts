@@ -19,7 +19,10 @@ import {
 	POLYGON_RPC_URL,
 	createSolanaConnectionForWalletSend,
 } from "@/config/rpc";
-import { waitRelay } from "@/trading/polymarket/safeActions";
+import {
+	isPolymarketSafeRelayOnchainRevert,
+	waitRelay,
+} from "@/trading/polymarket/safeActions";
 import type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import {
 	handleTransferFromFailedIfPresent,
@@ -404,15 +407,31 @@ export async function executeLifiSteps(
 				}
 			}
 			batch.push(relayTransactionFromTr(tr));
-			try {
-				const resp = await relay.execute(batch, `LI.FI Polygon step ${i}`);
+			const relayMetadataBase = `LI.FI Polygon step ${i}`;
+			const runPolygonRelayOnce = async (suffix: string) => {
+				const resp = await relay.execute(batch, `${relayMetadataBase}${suffix}`);
 				const txHash = await waitRelay(resp);
 				if (txHash) txHashes.push(txHash);
-			} catch (e) {
-				throw handleTransferFromFailedIfPresent(
-					e,
-					lifiTransferFromLogContext(i, chainId, tr, step, options)
-				);
+			};
+			try {
+				await runPolygonRelayOnce("");
+			} catch (e0) {
+				if (isPolymarketSafeRelayOnchainRevert(e0)) {
+					await new Promise((r) => setTimeout(r, 1_600));
+					try {
+						await runPolygonRelayOnce(" (retry: fresh relay nonce)");
+					} catch (e1) {
+						throw handleTransferFromFailedIfPresent(
+							e1,
+							lifiTransferFromLogContext(i, chainId, tr, step, options),
+						);
+					}
+				} else {
+					throw handleTransferFromFailedIfPresent(
+						e0,
+						lifiTransferFromLogContext(i, chainId, tr, step, options),
+					);
+				}
 			}
 			continue;
 		}

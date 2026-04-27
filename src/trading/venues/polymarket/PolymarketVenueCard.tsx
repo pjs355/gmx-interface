@@ -8,7 +8,6 @@ import { useLifiQuoteMutation } from "@/trading/hooks/useLifiBridge";
 import { usePolymarketBuilder } from "@/trading/hooks/usePolymarketBuilder";
 import { useTradingWallets } from "@/trading/useWallets";
 import type { AccountOverview, LifiQuoteResponse } from "@/types/trading";
-import "@/trading/shell/TradingShell.scss";
 
 const BASE = 8453;
 const POLYGON = 137;

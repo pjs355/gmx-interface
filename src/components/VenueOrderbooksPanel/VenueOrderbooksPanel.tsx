@@ -12,19 +12,16 @@ import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 
+/** Only real resting depth (positive size). No BBO-only or zero-size synthetic rows. */
 function monitorBookToSnapshot(book: OrderbookData | null | undefined): OrderbookSnapshot | null {
 	if (!book) return null;
-	const asks = (book.asks ?? []).map((l, i) => ({ price: l.price, size: l.size, id: `a-${i}` }));
-	const bids = (book.bids ?? []).map((l, i) => ({ price: l.price, size: l.size, id: `b-${i}` }));
-	if (asks.length === 0 && bids.length === 0 && book.bestAsk == null && book.bestBid == null) {
-		return null;
-	}
-	if (asks.length === 0 && book.bestAsk != null) {
-		asks.push({ price: book.bestAsk, size: 0, id: "synth-a" });
-	}
-	if (bids.length === 0 && book.bestBid != null) {
-		bids.push({ price: book.bestBid, size: 0, id: "synth-b" });
-	}
+	const asks = (book.asks ?? [])
+		.filter((l) => Number(l.size) > 0)
+		.map((l, i) => ({ price: l.price, size: l.size, id: `a-${i}` }));
+	const bids = (book.bids ?? [])
+		.filter((l) => Number(l.size) > 0)
+		.map((l, i) => ({ price: l.price, size: l.size, id: `b-${i}` }));
+	if (asks.length === 0 && bids.length === 0) return null;
 	return {
 		asks,
 		bids,
@@ -106,11 +103,13 @@ function buildVenueEntries(
 	}
 
 	if (matched.predictFun) {
+		const singleMarket = matched.predictFun.singleMarket === true;
 		entries.push({
 			id: "predictFun",
 			label: "Predict",
 			bookA: monitorBookToSnapshot(matched.predictFunPriceA),
-			bookB: monitorBookToSnapshot(matched.predictFunPriceB),
+			// One CLOB: second tab inverts team A ladder (same model as trade box), not a separate B stream.
+			bookB: singleMarket ? null : monitorBookToSnapshot(matched.predictFunPriceB),
 			restricted: false,
 		});
 	}

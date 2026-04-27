@@ -1,9 +1,23 @@
-/** Remove leading "umbrella" token some catalogs embed in display names (e.g. `umbrellaGTA VI…`). */
+/**
+ * Remove leading catalog noise token `umbrella` — either as a separate word
+ * (`umbrella Monte …`) or glued (`umbrellaMonte…`, `umbrellaCounter-Strike…`).
+ */
 export function stripUmbrellaDisplayPrefix(
 	name: string | undefined | null
 ): string {
 	if (!name) return "";
-	return name.replace(/^umbrella\s*/i, "").trim();
+	let s = name.trim();
+	if (!/^umbrella/i.test(s)) return s;
+	s = s.replace(/^umbrella/i, "").trim();
+	if (s.startsWith("-") || s.startsWith(":")) s = s.slice(1).trim();
+	return s;
+}
+
+/** Block / row header: prefer catalog umbrella display, stripped of the `umbrella` prefix. */
+export function umbrellaHeaderLabel(
+	umbrellaLike: { displayName?: string | null } | null | undefined,
+): string {
+	return stripUmbrellaDisplayPrefix(umbrellaLike?.displayName ?? "").trim();
 }
 
 /** Map en dash, em dash, minus sign to ASCII hyphen so VS-core parsing can terminate after team B. */
@@ -88,6 +102,16 @@ export function shortPredictFunMarketTitleForPortfolio(
 ): string {
 	const t = (raw ?? "").trim();
 	if (!t) return "";
+	/** e.g. "Will Team Nemesis win the Heroic vs. Team Nemesis CS2 match?" → match line */
+	const predictWinner = t.match(
+		/\bwin\s+the\s+(.+?)\s+(?:CS2\s+)?match\??\s*$/i,
+	);
+	if (predictWinner?.[1]) {
+		const inner = predictWinner[1].replace(/\s+/g, " ").trim();
+		if (inner.length >= 3 && inner.length <= 160) {
+			return stripUmbrellaDisplayPrefix(inner).trim() || inner;
+		}
+	}
 	let s = t.replace(/^(?:[^:]+:\s*)+/i, "");
 	s = s.replace(/\s*\(\s*bo[0-9]+\s*\)/gi, "");
 	s = normalizeVsTitleDashes(s).replace(/\s+/g, " ").trim();

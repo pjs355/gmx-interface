@@ -142,8 +142,9 @@ export default function MobileTradingBoxHeader({
                   return;
                 }
                 
-                // Limit to 2 decimal places (but allow decimal point at the end)
-                if (cleanValue.includes('.') && cleanValue.split('.')[1] && cleanValue.split('.')[1].length > 2) {
+                const maxFractionDigits = side === "sell" ? 6 : 2;
+                const frac = cleanValue.includes(".") ? cleanValue.split(".")[1] : "";
+                if (frac && frac.length > maxFractionDigits) {
                   return;
                 }
                 

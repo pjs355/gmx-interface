@@ -7,7 +7,54 @@
  * which exchange the shares live on.
  */
 
-export type VenueId = "levelup" | "polymarket" | "predictfun" | "dflow";
+export type VenueId =
+	| "levelup"
+	| "polymarket"
+	| "predictfun"
+	| "dflow"
+	| "limitless";
+
+/** True when venue `marketStatus` indicates settlement (History tab, not open portfolio). */
+export function isVenueMarketResolvedLike(
+	status: string | null | undefined,
+): boolean {
+	const s = (status ?? "").toUpperCase().trim();
+	return (
+		s === "RESOLVED" ||
+		s === "CLOSED" ||
+		s === "SETTLED" ||
+		s === "FINALIZED"
+	);
+}
+
+/** Single label for History / Orders venue badges (matches existing copy). */
+export function venueDisplayLabel(venue: VenueId): string {
+	switch (venue) {
+		case "levelup":
+			return "LevelUp";
+		case "polymarket":
+			return "Polymarket";
+		case "predictfun":
+			return "Predict";
+		case "dflow":
+			return "Kalshi";
+		case "limitless":
+			return "Limitless";
+	}
+}
+
+/** One venue fill for History trade expansion (e.g. each Polymarket activity row). */
+export interface VenueHistoryFill {
+	side: "buy" | "sell";
+	shares: number;
+	/** USDC leg: spent on buy, received on sell / redeem */
+	usdc: number;
+	/** ISO timestamp */
+	tradedAt: string;
+	sourceId?: string;
+	/** Execution price when API provides it (probability 0–1 or cents) */
+	price?: number | null;
+}
 
 export interface VenuePosition {
 	venue: VenueId;
@@ -33,8 +80,26 @@ export interface VenuePosition {
 	levelUpUmbrellaDisplayName?: string;
 	/** Market-level status from the venue (e.g. "RESOLVED") */
 	marketStatus?: string;
+	/** Limitless `PositionMarket.closed` — when false, treat row as live for Positions vs History split. */
+	marketClosed?: boolean;
+	/** Limitless `PositionMarket.winningOutcomeIndex` (0 = YES, 1 = NO when set). */
+	winningOutcomeIndex?: number | null;
 	/** Per-outcome result: did this specific outcome win or lose? */
 	outcomeResult?: "WON" | "LOST" | null;
+	/**
+	 * Stable id from venue trade-history rows (e.g. Limitless `HistoryEntry.id`).
+	 * Used so History tab can show fills even when the same `tokenId` is still an open position.
+	 */
+	historySourceId?: string;
+	/** ISO timestamp from venue trade-history API (`createdAt` / fill time). */
+	historyTradeAt?: string;
+	/** Buy/sell from venue trade-history when present. */
+	historyTradeSide?: "buy" | "sell";
+	/**
+	 * When set, History expands one synthetic order per fill (buys + sells).
+	 * Summary row still uses aggregated `shares` / `cost` / `pnl` on this position.
+	 */
+	historyFills?: VenueHistoryFill[];
 }
 
 /**

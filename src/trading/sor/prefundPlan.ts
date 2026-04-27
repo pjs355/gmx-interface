@@ -6,8 +6,8 @@ export const LIFI_BRIDGE_AMOUNT_MARGIN = 0.01;
 
 const ALL_SOURCE_CHAINS: SorChain[] = ["base", "polygon", "solana", "bnb"];
 
-/** Skip dust legs that LI.FI often cannot route reliably. */
-const MIN_PREFUND_CHUNK_USD = 0.02;
+/** Skip dust legs that LI.FI often cannot route reliably. Exported for same-chain SCW→maker sweeps. */
+export const MIN_PREFUND_CHUNK_USD = 0.02;
 
 /** Treat cross-chain prefund as satisfied when shortfall is at or below this (fee / float slack). */
 export const PREFUND_SHORTFALL_COVERED_EPS_USD = 0.015;
@@ -18,17 +18,6 @@ const CHAIN_LABEL: Record<SorChain, string> = {
 	solana: "Solana",
 	bnb: "BNB Chain",
 };
-
-/**
- * When `VITE_SOR_MULTISOURCE_PREFUND` is not `"false"`, allow sequential bridges
- * from multiple source chains to cover one prefund need.
- */
-export function isMultisourcePrefundEnabled(): boolean {
-	return (
-		typeof import.meta !== "undefined" &&
-		import.meta.env?.VITE_SOR_MULTISOURCE_PREFUND !== "false"
-	);
-}
 
 export function computePrefundNeedUsdHuman(
 	bridgeAmountUsd: number,
@@ -45,9 +34,13 @@ export function computePrefundBridgeShortfallUsdHuman(
 	needUsdHuman: number,
 	toChain: SorChain,
 	balances: FundingStableBalancesHuman,
+	opts?: { limitlessBaseDest?: boolean },
 ): number {
 	const need = Math.max(0, needUsdHuman);
-	const onDest = Math.max(0, balances[toChain] ?? 0);
+	const onDest =
+		opts?.limitlessBaseDest === true && toChain === "base"
+			? Math.max(0, balances.limitlessMakerBase ?? 0)
+			: Math.max(0, balances[toChain] ?? 0);
 	return Math.max(0, need - Math.min(need, onDest));
 }
 
@@ -57,28 +50,39 @@ export type PrefundStep = {
 	amountHuman: string;
 };
 
-function chainStableLabel(c: SorChain): string {
-	if (c === "bnb") return "USDT (BNB Chain)";
-	return "USDC";
-}
-
 /** Human-readable per-chain balances for logs and error copy. */
 export function formatPrefundBalanceBreakdown(
 	balances: FundingStableBalancesHuman,
 	toChain: SorChain,
+	opts?: { limitlessBaseDest?: boolean },
 ): string {
 	const b = (c: SorChain) => Math.max(0, balances[c] ?? 0);
+	const lxVenueOnBase = opts?.limitlessBaseDest === true && toChain === "base";
 	const parts = ALL_SOURCE_CHAINS.map((c) => {
+		if (lxVenueOnBase && c === "base") {
+			return `${CHAIN_LABEL[c]} $${b(c).toFixed(2)} (smart wallet — for Limitless prefund, venue USDC is the maker row below; SCW can same-chain sweep to maker; not a LI.FI source to maker)`;
+		}
 		const tag =
 			c === toChain ? " (venue — counts first toward prefund; reduces LI.FI pull)" : "";
+		if (c === "base" && !lxVenueOnBase) {
+			const mk = Math.max(0, balances.limitlessMakerBase ?? 0);
+			const pooled = b(c) + mk;
+			return `${CHAIN_LABEL[c]} $${pooled.toFixed(2)} (SCW $${b(c).toFixed(2)} + Limitless maker $${mk.toFixed(2)} — maker consolidates to SCW via partner withdraw before Base LI.FI)${tag}`;
+		}
 		return `${CHAIN_LABEL[c]} $${b(c).toFixed(2)}${tag}`;
 	});
-	return parts.join(" | ");
+	const lx = Math.max(0, balances.limitlessMakerBase ?? 0);
+	const lxNote = lxVenueOnBase ? " (Limitless maker — only this counts as venue USDC on Base)" : "";
+	const lxPart =
+		lx > 0 || opts?.limitlessBaseDest
+			? ` | Limitless maker (Base) $${lx.toFixed(2)}${lxNote}`
+			: "";
+	return parts.join(" | ") + lxPart;
 }
 
 /**
  * Builds ordered LI.FI prefund steps: primary SOR `fromChain` first, then other
- * chains (descending balance) when multisource is enabled.
+ * chains (descending balance) until `needUsdHuman` is covered.
  *
  * @param needUsdHuman Cross-chain shortfall only (total prefund target minus stable already on
  * `toChain`). Callers should use {@link computePrefundBridgeShortfallUsdHuman}.
@@ -89,26 +93,32 @@ export function buildPrefundSteps(
 	primaryFrom: SorChain,
 	toChain: SorChain,
 	balances: FundingStableBalancesHuman,
-	multisource: boolean,
-	opts?: { fullPrefundNeedUsdHuman?: number },
+	opts?: { fullPrefundNeedUsdHuman?: number; limitlessBaseDest?: boolean },
 ): PrefundStep[] {
 	const need = Math.max(0, needUsdHuman);
-	const bal = (c: SorChain) => Math.max(0, balances[c] ?? 0);
+	const lxDest = opts?.limitlessBaseDest === true && toChain === "base";
+	/**
+	 * Spendable stable for LI.FI **sources** by SOR chain.
+	 * - Limitless-on-Base **destination**: Base SCW is not a LI.FI source to the maker; venue is
+	 *   `limitlessMakerBase` only (SCW→maker same-chain sweep is handled in the executor).
+	 * - Any other destination: Base capacity is **SCW + Limitless maker**; executor consolidates
+	 *   maker→SCW via partner withdraw before quoting Base LI.FI from the smart wallet.
+	 */
+	const bal = (c: SorChain) => {
+		if (c === "base") {
+			if (lxDest) return 0;
+			return (
+				Math.max(0, balances.base ?? 0) +
+				Math.max(0, balances.limitlessMakerBase ?? 0)
+			);
+		}
+		return Math.max(0, balances[c] ?? 0);
+	};
 
 	const totalExcludingDest = ALL_SOURCE_CHAINS.filter((c) => c !== toChain).reduce(
 		(s, c) => s + bal(c),
 		0,
 	);
-
-	if (!multisource) {
-		const b = bal(primaryFrom);
-		if (b + 1e-9 < need) {
-			throw new Error(
-				`Not enough ${chainStableLabel(primaryFrom)} on ${CHAIN_LABEL[primaryFrom]} for this prefund (~$${need.toFixed(2)} needed, ~$${b.toFixed(2)} on-chain). Add funds on ${CHAIN_LABEL[primaryFrom]} or set VITE_SOR_MULTISOURCE_PREFUND to allow routing remainder from other chains (~$${totalExcludingDest.toFixed(2)} total across sources). On-chain snapshot: ${formatPrefundBalanceBreakdown(balances, toChain)}.`,
-			);
-		}
-		return [{ fromChain: primaryFrom, amountHuman: need.toFixed(6) }];
-	}
 
 	let remaining = need;
 	const steps: PrefundStep[] = [];
@@ -143,13 +153,13 @@ export function buildPrefundSteps(
 				? ` After applying ~$${venueApplied.toFixed(2)} already on ${CHAIN_LABEL[toChain]} toward the prefund target (~$${full.toFixed(2)}),`
 				: "";
 		throw new Error(
-			`Insufficient stablecoin on source wallets (excluding ${CHAIN_LABEL[toChain]}) to LI.FI prefund the remaining ~$${need.toFixed(2)} into ${CHAIN_LABEL[toChain]}.${venueNote} Allocated ~$${(need - remaining).toFixed(2)} from those chains (~$${totalExcludingDest.toFixed(2)} total there). On-chain snapshot: ${formatPrefundBalanceBreakdown(balances, toChain)}.`,
+			`Insufficient stablecoin on source wallets (excluding ${CHAIN_LABEL[toChain]}) to LI.FI prefund the remaining ~$${need.toFixed(2)} into ${CHAIN_LABEL[toChain]}.${venueNote} Allocated ~$${(need - remaining).toFixed(2)} from those chains (~$${totalExcludingDest.toFixed(2)} total there). On-chain snapshot: ${formatPrefundBalanceBreakdown(balances, toChain, { limitlessBaseDest: opts?.limitlessBaseDest })}.`,
 		);
 	}
 
 	if (steps.length === 0) {
 		throw new Error(
-			`No prefund steps generated for ~$${need.toFixed(2)} need — balances may be below the minimum bridge chunk ($${MIN_PREFUND_CHUNK_USD}). Snapshot: ${formatPrefundBalanceBreakdown(balances, toChain)}.`,
+			`No prefund steps generated for ~$${need.toFixed(2)} need — balances may be below the minimum bridge chunk ($${MIN_PREFUND_CHUNK_USD}). Snapshot: ${formatPrefundBalanceBreakdown(balances, toChain, { limitlessBaseDest: opts?.limitlessBaseDest })}.`,
 		);
 	}
 

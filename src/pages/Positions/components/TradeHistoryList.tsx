@@ -1,6 +1,7 @@
 import React from "react";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
+import { outcomeSideLabelColor } from "../utils/positionHelpers";
 
 interface TradeHistoryListProps {
 	orders: ProcessedOrder[];
@@ -25,10 +26,13 @@ export default function TradeHistoryList({
 			if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
 			return true;
 		})
-		.sort(
-			(a, b) =>
-				new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-		);
+		.sort((a, b) => {
+			const ta = new Date(a.filledAt || a.createdAt).getTime();
+			const tb = new Date(b.filledAt || b.createdAt).getTime();
+			return (
+				(Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
+			);
+		});
 
 	if (!isExpanded || marketOrders.length === 0) {
 		return null;
@@ -37,6 +41,7 @@ export default function TradeHistoryList({
 	const formatDate = (dateStr: string | null): string => {
 		if (!dateStr) return "—";
 		const date = new Date(dateStr);
+		if (Number.isNaN(date.getTime())) return "—";
 		return date.toLocaleDateString("en-US", {
 			month: "short",
 			day: "numeric",
@@ -91,9 +96,6 @@ export default function TradeHistoryList({
 		.reduce((sum, o) => sum + o.tokenValue, 0);
 	const netShares = totalSharesBought - totalSharesSold;
 
-	// Reverse for display (newest first)
-	const displayOrders = [...marketOrders].reverse();
-
 	return (
 		<div
 			style={{
@@ -133,9 +135,13 @@ export default function TradeHistoryList({
 			</div>
 
 			{/* Trade Rows */}
-			{displayOrders.map((order, index) => {
+			{marketOrders.map((order, index) => {
 				const isBuy = order.side === "buy";
-				const isYes = order.position === "Yes";
+				const sideDisplayText = (
+					positionDisplayLabel?.trim() ||
+					order.position ||
+					""
+				).trim();
 				// Buy = cash out (negative), Sell = cash in (positive)
 				const cashFlow = isBuy ? -order.usdcValue : order.usdcValue;
 				const shareChange = isBuy ? order.tokenValue : -order.tokenValue;
@@ -175,15 +181,19 @@ export default function TradeHistoryList({
 						{isBuy ? "Buy" : "Sell"}
 					</div>
 
-					{/* Side: team name for vs markets, else Yes/No */}
+					{/* Side: team name for vs markets — neutral unless literal Yes/No */}
 					<div
 						style={{
 							textAlign: "center",
 							fontWeight: 500,
-							color: isYes ? "#22c55e" : "#f87171",
+							color: outcomeSideLabelColor(
+								sideDisplayText,
+								"#22c55e",
+								"#f87171",
+							),
 						}}
 					>
-						{positionDisplayLabel?.trim() || order.position}
+						{sideDisplayText || "—"}
 					</div>
 
 					{/* Shares with +/- */}

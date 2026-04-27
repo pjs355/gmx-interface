@@ -55,6 +55,8 @@ async function readSolanaUsdcHuman(walletAddress: string): Promise<number> {
 
 export type FundingAddressesInput = {
 	baseSmartWallet?: string | null;
+	/** Limitless server-wallet maker on Base — venue USDC for delegated Limitless legs. */
+	limitlessMakerBase?: string | null;
 	polymarketSafe?: string | null;
 	embeddedEoa?: string | null;
 	solanaAddress?: string | null;
@@ -64,7 +66,10 @@ export type FundingAddressesInput = {
  * Live funding-stable balances (human decimal strings / numbers) for each SOR chain.
  * Mirrors `useBridgeFundingBalances` query logic for use in prefund orchestration.
  */
-export type FundingStableBalancesHuman = Record<SorChain, number>;
+export type FundingStableBalancesHuman = Record<SorChain, number> & {
+	/** Base USDC on the Limitless maker address (delegated sub-account), distinct from `base` (SCW). */
+	limitlessMakerBase?: number;
+};
 
 export async function readFundingStableBalancesHuman(
 	addrs: FundingAddressesInput,
@@ -87,8 +92,12 @@ export async function readFundingStableBalancesHuman(
 		addrs.solanaAddress.length <= 44
 			? addrs.solanaAddress
 			: undefined;
+	const limitlessAddr =
+		addrs.limitlessMakerBase && /^0x[a-fA-F0-9]{40}$/i.test(addrs.limitlessMakerBase)
+			? (addrs.limitlessMakerBase as Address)
+			: undefined;
 
-	const [baseHuman, polygonHuman, bscHuman, solanaHuman] = await Promise.all([
+	const [baseHuman, polygonHuman, bscHuman, solanaHuman, limitlessHuman] = await Promise.all([
 		baseAddr
 			? basePublic
 					.readContract({
@@ -120,6 +129,16 @@ export async function readFundingStableBalancesHuman(
 					.then((raw) => Number(formatUnits(raw, 18)))
 			: Promise.resolve(0),
 		solAddr ? readSolanaUsdcHuman(solAddr) : Promise.resolve(0),
+		limitlessAddr
+			? basePublic
+					.readContract({
+						address: getUSDCAddress() as Address,
+						abi: erc20Abi,
+						functionName: "balanceOf",
+						args: [limitlessAddr],
+					})
+					.then((raw) => Number(formatUnits(raw, 6)))
+			: Promise.resolve(0),
 	]);
 
 	return {
@@ -127,5 +146,6 @@ export async function readFundingStableBalancesHuman(
 		polygon: polygonHuman,
 		bnb: bscHuman,
 		solana: solanaHuman,
+		limitlessMakerBase: limitlessHuman,
 	};
 }

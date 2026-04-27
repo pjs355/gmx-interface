@@ -41,6 +41,27 @@ const PREFUND_QUOTE_MAX_ITERS = 6;
 const PREFUND_QUOTE_COVER_RATIO = 1.02;
 
 /**
+ * When `sendHuman` is already at the wallet cap, LI.FI's **minimum** destination stable
+ * is often slightly below the nominal source USD (fees / route haircut). Requiring
+ * `minTo >= destNeed` with `destNeed === send` is then impossible. Allow a bounded slack
+ * so multi-step prefund can complete the Base chunk and continue with Solana, etc.
+ */
+const PREFUND_CAP_DEST_ABS_SLACK_USD = 0.06;
+const PREFUND_CAP_DEST_REL_SLACK = 0.035;
+
+/** Minimum quoted min-dest (human) we still treat as acceptable at send cap vs `destNeed`. */
+export function prefundDestNeedFloorAtSendCap(destNeed: number): number {
+	const need = Math.max(0, destNeed);
+	if (need <= 1e-12) return 0;
+	const relSlack = Math.max(
+		PREFUND_CAP_DEST_REL_SLACK * need,
+		PREFUND_CAP_DEST_ABS_SLACK_USD,
+	);
+	const cappedSlack = Math.min(need * 0.4, relSlack);
+	return Math.max(0, need - cappedSlack);
+}
+
+/**
  * Best-effort **parsed** destination stablecoin (human) from a raw LI.FI quote:
  * prefers `estimate.toAmountMin`, then `estimate.toAmount`, then `action.toAmount`
  * (no haircut — for diagnostics / tests).
@@ -171,8 +192,12 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 		}
 
 		// Already sending the wallet cap but quoted min destination is still short:
-		// further iterations only repeat the same capped quote — fail fast.
+		// further iterations only repeat the same capped quote — fail fast unless within fee slack.
 		if (sendHuman + 1e-9 >= cap && cap > 1e-12) {
+			const floor = prefundDestNeedFloorAtSendCap(destNeed);
+			if (minTo + 1e-6 >= floor) {
+				return { quote: q, amountHuman: sendHuman.toFixed(6) };
+			}
 			throw new Error(
 				`Prefund LI.FI: source balance cap ~$${cap.toFixed(4)} cannot meet quoted min destination ~$${minTo.toFixed(4)} (need ~$${destNeed.toFixed(4)})`,
 			);

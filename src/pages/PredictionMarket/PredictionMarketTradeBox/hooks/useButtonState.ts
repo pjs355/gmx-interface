@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAnimatedDots } from "../../../../hooks/useAnimatedDots";
-import { getVenueConfig } from "@/config/venueConfig";
+import { getVenueConfig, type TradingVenue } from "@/config/venueConfig";
 import {
 	checkRawInputAgainstVenueMinimum,
 	getSorBuyCashShortfall,
@@ -10,7 +10,12 @@ import {
 	SOR_FLOOR_MESSAGES,
 	type RoutePlan,
 	type SorExecutionPhase,
+	type SorPrefundLegProgress,
 } from "@/trading/sor";
+
+/** Caps console noise when `useMemo` recomputes often with the same bad input. */
+let missingPooledCashWarnCount = 0;
+const MAX_MISSING_POOLED_CASH_WARNS = 3;
 
 type SorStateForDeposit = {
 	route: RoutePlan | null;
@@ -21,8 +26,42 @@ type SorStateForDeposit = {
 	handleAddFunds?: () => void;
 };
 
+const PREVIEW_ROUTE_NO_BALANCES_MSG =
+	"Legacy route — refresh to load balance-backed execution";
+
+/** Buy: legacy preview route only (disabled). Per-chain shortfall uses `trySorDepositToTrade`. */
+function buttonIfBuyInsufficientFunds(
+	side: "buy" | "sell",
+	route: { sufficientFunds?: boolean; theoreticalLiquidity?: boolean } | null | undefined,
+): ButtonStateResult | null {
+	if (side !== "buy" || !route || route.theoreticalLiquidity !== true) return null;
+	return { text: PREVIEW_ROUTE_NO_BALANCES_MSG, disabled: true, onClick: () => {} };
+}
+
 function trySorDepositToTrade(side: "buy" | "sell", sorState: SorStateForDeposit | undefined): ButtonStateResult | null {
-	if (!sorState?.handleAddFunds) return null;
+	if (!sorState?.handleAddFunds || side !== "buy" || !sorState.route) return null;
+
+	if (sorState.route.sufficientFunds === false) {
+		const needed = sorState.route.totalCost;
+		const avail = sorState.totalAvailableCash;
+		let shortfall = 0;
+		if (typeof needed === "number" && Number.isFinite(needed) && needed > 0) {
+			if (typeof avail === "number" && Number.isFinite(avail)) {
+				shortfall = Math.max(0, needed - avail);
+			} else {
+				shortfall = needed;
+			}
+		}
+		if (shortfall > 0) {
+			return {
+				text: "Deposit to Trade",
+				disabled: false,
+				onClick: sorState.handleAddFunds,
+				depositShortfallUsd: shortfall,
+			};
+		}
+	}
+
 	const gap = getSorBuyCashShortfall(sorState.route, sorState.totalAvailableCash, {
 		routeExpired: sorState.routeExpired,
 		isLoading: sorState.isLoading,
@@ -38,9 +77,115 @@ function trySorDepositToTrade(side: "buy" | "sell", sorState: SorStateForDeposit
 	};
 }
 
-function sorExecutingPhaseButtonText(phase: SorExecutionPhase | undefined): string {
-	if (phase === "moving_funds") return "Moving funds...";
-	return "Executing trade...";
+function sorExecutingButtonLabel(
+	phase: SorExecutionPhase | undefined,
+	dots: string,
+	prefundLegProgress: SorPrefundLegProgress | null | undefined,
+): string {
+	const prefundHop =
+		prefundLegProgress &&
+		prefundLegProgress.total > 1 &&
+		prefundLegProgress.current >= 1
+			? ` (${prefundLegProgress.current}/${prefundLegProgress.total})`
+			: "";
+	if (phase === "approving_funds_transfer") {
+		return `Approving funds transfer${prefundHop}${dots}`;
+	}
+	if (phase === "approving_trades") {
+		return `Approving trades${dots}`;
+	}
+	if (phase === "moving_funds") {
+		if (prefundHop) {
+			return `Moving funds${prefundHop}${dots}`;
+		}
+		return `Moving funds${dots}`;
+	}
+	return `Executing trade${dots}`;
+}
+
+function aggregateCashFromSor(
+	usdcBalance: unknown,
+	sorState: { totalAvailableCash?: number } | undefined,
+): number {
+	const baseUsdc =
+		typeof usdcBalance === "number" ? usdcBalance : parseFloat(String(usdcBalance || "0"));
+	if (
+		sorState &&
+		typeof sorState.totalAvailableCash === "number" &&
+		Number.isFinite(sorState.totalAvailableCash)
+	) {
+		return sorState.totalAvailableCash;
+	}
+	if (sorState) {
+		if (missingPooledCashWarnCount < MAX_MISSING_POOLED_CASH_WARNS) {
+			missingPooledCashWarnCount += 1;
+			console.warn(
+				"[aggregateCashFromSor] totalAvailableCash missing or non-finite; pooled SOR cash treated as $0 (no Base-only fallback).",
+			);
+		}
+		return 0;
+	}
+	return baseUsdc;
+}
+
+type CheckSufficientBalanceFn = (
+	amount: string,
+	orderType: "market" | "limit",
+	side: "buy" | "sell",
+	usdcBalance: number,
+	price?: string,
+	marketOrderEstimatedCost?: number | null,
+	tradingVenue?: TradingVenue,
+) => { hasSufficientBalance: boolean; requiredAmount: number };
+
+/** Buy-only: zero pooled cash → Add Funds CTA (same semantics as unified block). */
+function buyAddFundsIfZeroPooledCash(opts: {
+	side: "buy" | "sell";
+	aggregateCash: number;
+	handleAddFunds: () => void;
+}): ButtonStateResult | null {
+	if (opts.side !== "buy" || !Number.isFinite(opts.aggregateCash) || opts.aggregateCash > 0) {
+		return null;
+	}
+	return { text: "Add Funds", disabled: false, onClick: opts.handleAddFunds };
+}
+
+/** Buy-only: positive pooled cash but not enough for this order (after Add-Funds gate). */
+function buyInsufficientBalanceIfPositivePooledCash(opts: {
+	side: "buy" | "sell";
+	aggregateCash: number;
+	amount: string;
+	orderType: "market" | "limit";
+	price?: string;
+	estimatedCost: number | null;
+	tradingVenue: TradingVenue;
+	checkSufficientBalance: CheckSufficientBalanceFn;
+	handleAddFunds?: () => void;
+}): ButtonStateResult | null {
+	if (opts.side !== "buy") return null;
+	if (!Number.isFinite(opts.aggregateCash)) return null;
+	const marketOrderEstimatedCost =
+		opts.orderType === "market" && opts.side === "buy" ? opts.estimatedCost : null;
+	const balanceCheck = opts.checkSufficientBalance(
+		opts.amount,
+		opts.orderType,
+		"buy",
+		opts.aggregateCash,
+		opts.price,
+		marketOrderEstimatedCost,
+		opts.tradingVenue,
+	);
+	if (balanceCheck.hasSufficientBalance) return null;
+	const shortfall = Math.max(0, balanceCheck.requiredAmount - opts.aggregateCash);
+	if (opts.handleAddFunds) {
+		return {
+			text: "Deposit to Trade",
+			disabled: false,
+			onClick: opts.handleAddFunds,
+			depositShortfallUsd: shortfall,
+		};
+	}
+	return { text: "Insufficient Balance", disabled: true, onClick: () => {} };
 }
 
 /**
@@ -67,6 +212,7 @@ function sorUnifiedPrimary(
 				routeErrorCode?: string | null;
 				isExecuting: boolean;
 				executionPhase?: SorExecutionPhase;
+				prefundLegProgress?: SorPrefundLegProgress | null;
 				routeExpired: boolean;
 				handleExecute: () => void;
 				totalAvailableCash?: number;
@@ -74,6 +220,7 @@ function sorUnifiedPrimary(
 		  }
 		| undefined,
 	buttonText: string,
+	animatedDots: string,
 	options?: SorUnifiedPrimaryOptions | boolean,
 ): ButtonStateResult | null {
 	if (!sorState?.handleExecute) return null;
@@ -89,11 +236,18 @@ function sorUnifiedPrimary(
 		maxSellShares = options.maxSellShares;
 	}
 
+	const theoretical = buttonIfBuyInsufficientFunds(side, sorState.route);
+	if (theoretical) return theoretical;
+
 	const dep = trySorDepositToTrade(side, sorState);
 	if (dep) return dep;
 	if (sorState.isExecuting) {
 		return {
-			text: sorExecutingPhaseButtonText(sorState.executionPhase),
+			text: sorExecutingButtonLabel(
+				sorState.executionPhase,
+				animatedDots,
+				sorState.prefundLegProgress,
+			),
 			disabled: true,
 			onClick: () => {},
 		};
@@ -209,6 +363,8 @@ export function useButtonState({
         ready: boolean;
         loading: boolean;
         blockedReason: string | null;
+        /** From ensure-account `limitlessAccount.approvalComplete` — USDC allowance snapshot. */
+        approvalComplete?: boolean;
       }
     | undefined,
   limitlessSellShareBalance = undefined as number | null | undefined,
@@ -226,6 +382,7 @@ export function useButtonState({
         routeErrorCode?: string | null;
         isExecuting: boolean;
         executionPhase?: SorExecutionPhase;
+        prefundLegProgress?: SorPrefundLegProgress | null;
         routeExpired: boolean;
         handleExecute: () => void;
         venuePositions?: { venue: string; shares: number }[];
@@ -318,7 +475,11 @@ export function useButtonState({
       }
       if (sorState?.isExecuting) {
         return {
-          text: sorExecutingPhaseButtonText(sorState.executionPhase),
+          text: sorExecutingButtonLabel(
+            sorState.executionPhase,
+            animatedDots,
+            sorState.prefundLegProgress,
+          ),
           disabled: true,
           onClick: () => {},
         };
@@ -372,6 +533,14 @@ export function useButtonState({
       if (!sorState?.route) {
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
+      {
+        const tb = buttonIfBuyInsufficientFunds(state.side, sorState.route);
+        if (tb) return tb;
+      }
+      {
+        const dep = trySorDepositToTrade(state.side, sorState);
+        if (dep) return dep;
+      }
       const actionText = state.side === "buy" ? "Buy" : "Sell";
       let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
       if (market) {
@@ -382,21 +551,6 @@ export function useButtonState({
           const teamName = state.selectedPosition === "yes" ? parts[0] : parts[1];
           buttonText = `${actionText} ${teamName}`;
         }
-      }
-
-      const sorAllBuyDeposit = getSorBuyCashShortfall(sorState.route, sorState.totalAvailableCash, {
-        routeExpired: sorState.routeExpired,
-        isLoading: sorState.isLoading,
-        isStale: sorState.isStale,
-        side: state.side,
-      });
-      if (sorAllBuyDeposit && sorState.handleAddFunds) {
-        return {
-          text: "Deposit to Trade",
-          disabled: false,
-          onClick: sorState.handleAddFunds,
-          depositShortfallUsd: sorAllBuyDeposit.shortfall,
-        };
       }
 
       if (routeFailsVenueMinimums(sorState.route, state.side)) {
@@ -496,10 +650,16 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
-      const sorBuy = sorUnifiedPrimary(state.side, sorState, buttonText, {
-        sellAmountStr: state.amount,
-        maxSellShares: scopedSellSharesTotal(),
-      });
+      const sorBuy = sorUnifiedPrimary(
+        state.side,
+        sorState,
+        buttonText,
+        animatedDots,
+        {
+          sellAmountStr: state.amount,
+          maxSellShares: scopedSellSharesTotal(),
+        },
+      );
       if (sorBuy) return sorBuy;
       return {
         text: "Fetching price...",
@@ -564,6 +724,46 @@ export function useButtonState({
       if (sellExceedsScopedHoldings()) {
         return { text: "Not enough shares", disabled: true, onClick: () => {} };
       }
+      if (state.orderType === "market" && state.selectedPosition) {
+        const liqPosition =
+          orderbookWalkPosition ?? state.selectedPosition ?? "yes";
+        const liquidityInfo = marketOrderHandler.getAvailableLiquidity(
+          liqPosition,
+          state.side,
+        );
+        if (!liquidityInfo.hasAnyLiquidity) {
+          return {
+            text: "No shares available",
+            disabled: true,
+            onClick: () => {},
+          };
+        }
+      }
+      {
+        const tb = buttonIfBuyInsufficientFunds(state.side, sorState?.route);
+        if (tb) return tb;
+      }
+      if (state.side === "buy") {
+        const aggregateCash = aggregateCashFromSor(usdcBalance, sorState);
+        const addFunds = buyAddFundsIfZeroPooledCash({
+          side: state.side,
+          aggregateCash,
+          handleAddFunds,
+        });
+        if (addFunds) return addFunds;
+        const insufficient = buyInsufficientBalanceIfPositivePooledCash({
+          side: state.side,
+          aggregateCash,
+          amount: state.amount,
+          orderType: state.orderType,
+          price: state.price,
+          estimatedCost: state.estimatedCost,
+          tradingVenue: "limitless",
+          checkSufficientBalance,
+          handleAddFunds,
+        });
+        if (insufficient) return insufficient;
+      }
       const actionText = state.side === "buy" ? "Buy" : "Sell";
       let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
       if (market) {
@@ -584,10 +784,16 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
-      const sorLx = sorUnifiedPrimary(state.side, sorState, buttonText, {
-        sellAmountStr: state.amount,
-        maxSellShares: scopedSellSharesTotal(),
-      });
+      const sorLx = sorUnifiedPrimary(
+        state.side,
+        sorState,
+        buttonText,
+        animatedDots,
+        {
+          sellAmountStr: state.amount,
+          maxSellShares: scopedSellSharesTotal(),
+        },
+      );
       if (sorLx) return sorLx;
       return {
         text: "Fetching price...",
@@ -659,10 +865,16 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
-      const sorDf = sorUnifiedPrimary(state.side, sorState, buttonText, {
-        sellAmountStr: state.amount,
-        maxSellShares: scopedSellSharesTotal(),
-      });
+      const sorDf = sorUnifiedPrimary(
+        state.side,
+        sorState,
+        buttonText,
+        animatedDots,
+        {
+          sellAmountStr: state.amount,
+          maxSellShares: scopedSellSharesTotal(),
+        },
+      );
       if (sorDf) return sorDf;
       return {
         text: "Fetching price...",
@@ -749,11 +961,17 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
-      const sorPf = sorUnifiedPrimary(state.side, sorState, buttonText, {
-        venueAutoSetupInFlight: Boolean(predictTrading?.loading),
-        sellAmountStr: state.amount,
-        maxSellShares: scopedSellSharesTotal(),
-      });
+      const sorPf = sorUnifiedPrimary(
+        state.side,
+        sorState,
+        buttonText,
+        animatedDots,
+        {
+          venueAutoSetupInFlight: Boolean(predictTrading?.loading),
+          sellAmountStr: state.amount,
+          maxSellShares: scopedSellSharesTotal(),
+        },
+      );
       if (sorPf) return sorPf;
       return {
         text: "Fetching price...",
@@ -762,18 +980,19 @@ export function useButtonState({
       };
     }
 
-    // One pooled cash figure (Base USDC + Polygon + Solana + BNB USDT, etc.) — same basis as SOR.
-    const baseUsdc =
-      typeof usdcBalance === "number" ? usdcBalance : parseFloat(String(usdcBalance || "0"));
-    const aggregateCash =
-      sorState &&
-      typeof sorState.totalAvailableCash === "number" &&
-      Number.isFinite(sorState.totalAvailableCash)
-        ? sorState.totalAvailableCash
-        : baseUsdc;
-    if (aggregateCash <= 0 && state.side === "buy") {
-      return { text: "Add Funds", disabled: false, onClick: handleAddFunds };
+    {
+      const tb = buttonIfBuyInsufficientFunds(state.side, sorState?.route);
+      if (tb) return tb;
     }
+
+    // One pooled cash figure (Base USDC + Polygon + Solana + BNB USDT, etc.) — same basis as SOR.
+    const aggregateCash = aggregateCashFromSor(usdcBalance, sorState);
+    const addFundsEarly = buyAddFundsIfZeroPooledCash({
+      side: state.side,
+      aggregateCash,
+      handleAddFunds,
+    });
+    if (addFundsEarly) return addFundsEarly;
 
     if (!state.selectedPosition) {
       return { text: "Enter amount", disabled: true, onClick: () => {} };
@@ -813,28 +1032,33 @@ export function useButtonState({
       orderbookWalkPosition ?? state.selectedPosition ?? "yes";
 
     if (state.orderType === "market" && state.selectedPosition) {
-      const liquidityInfo = marketOrderHandler.getAvailableLiquidity(
-        liqPosition,
-        state.side
-      );
-      availableShares = liquidityInfo.maxSharesAvailable;
-      
-      // Only block if there's truly ZERO liquidity (no shares at all)
-      if (!liquidityInfo.hasAnyLiquidity) {
-        return { text: "0 shares available. Place a limit order", disabled: true, onClick: () => {}, isSweepingBook: false, availableShares: 0 };
-      }
-      
-      // Check if user is trying to buy more than available (sweeping the book)
-      // For BUY orders: compare USD amount to max available USD value
-      // For SELL orders: compare shares to max available shares
-      if (state.side === "buy") {
-        const usdAmount = parseFloat(state.amount);
-        const vc = getVenueConfig(state.tradingVenue);
-        const effectiveBudget = vc.effectiveBuyBudget(usdAmount);
-        isSweepingBook = effectiveBudget > liquidityInfo.maxUsdValue + 0.01;
+      if (
+        state.tradingVenue === "all" &&
+        state.side === "buy" &&
+        sorState?.route
+      ) {
+        isSweepingBook = sorState.route.insufficientLiquidity === true;
+        availableShares = sorState.route.totalShares;
       } else {
-        const sharesRequested = parseFloat(state.amount);
-        isSweepingBook = sharesRequested > availableShares;
+        const liquidityInfo = marketOrderHandler.getAvailableLiquidity(
+          liqPosition,
+          state.side
+        );
+        availableShares = liquidityInfo.maxSharesAvailable;
+
+        if (!liquidityInfo.hasAnyLiquidity) {
+          return { text: "0 shares available. Place a limit order", disabled: true, onClick: () => {}, isSweepingBook: false, availableShares: 0 };
+        }
+
+        if (state.side === "buy") {
+          const usdAmount = parseFloat(state.amount);
+          const vc = getVenueConfig(state.tradingVenue);
+          const effectiveBudget = vc.effectiveBuyBudget(usdAmount);
+          isSweepingBook = effectiveBudget > liquidityInfo.maxUsdValue + 0.01;
+        } else {
+          const sharesRequested = parseFloat(state.amount);
+          isSweepingBook = sharesRequested > availableShares;
+        }
       }
     }
 
@@ -843,17 +1067,20 @@ export function useButtonState({
       if (dep) return { ...dep, isSweepingBook, availableShares };
     }
 
-    const marketOrderEstimatedCost = state.orderType === "market" && state.side === "buy" ? state.estimatedCost : null;
-    const balanceCheck = checkSufficientBalance(
-      state.amount,
-      state.orderType,
-      state.side,
+    const insufficientBal = buyInsufficientBalanceIfPositivePooledCash({
+      side: state.side,
       aggregateCash,
-      state.price,
-      marketOrderEstimatedCost,
-      state.tradingVenue
-    );
-    if (!balanceCheck.hasSufficientBalance) return { text: "Insufficient Balance", disabled: true, onClick: () => {}, isSweepingBook, availableShares };
+      amount: state.amount,
+      orderType: state.orderType,
+      price: state.price,
+      estimatedCost: state.estimatedCost,
+      tradingVenue: state.tradingVenue,
+      checkSufficientBalance,
+      handleAddFunds,
+    });
+    if (insufficientBal) {
+      return { ...insufficientBal, isSweepingBook, availableShares };
+    }
     const scopedSellForShareCheck =
       state.side === "sell" && Array.isArray(sorState?.venuePositions)
         ? scopedSellSharesTotal()
@@ -892,10 +1119,16 @@ export function useButtonState({
     }
 
     if (state.tradingVenue === "levelup") {
-      const sorLu = sorUnifiedPrimary(state.side, sorState, buttonText, {
-        sellAmountStr: state.amount,
-        maxSellShares: scopedSellSharesTotal(),
-      });
+      const sorLu = sorUnifiedPrimary(
+        state.side,
+        sorState,
+        buttonText,
+        animatedDots,
+        {
+          sellAmountStr: state.amount,
+          maxSellShares: scopedSellSharesTotal(),
+        },
+      );
       if (sorLu) {
         return { ...sorLu, isSweepingBook, availableShares };
       }

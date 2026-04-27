@@ -27,7 +27,7 @@ import ConnectWalletButton from "../Common/ConnectWalletButton";
 // Removed GMX-specific components: AddressDropdown, LanguagePopupHome, NetworkDropdown
 
 import "./Header.scss";
-import { usePortfolio as usePortfolioContext } from "context/PortfolioContext";
+import { usePortfolio as usePortfolioContext } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
 
 type Props = {

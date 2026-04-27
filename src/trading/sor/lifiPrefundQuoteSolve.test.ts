@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	ensurePrefundQuoteMeetsDestMin,
 	parseLifiQuoteMinToStableHuman,
+	prefundDestNeedFloorAtSendCap,
 	prefundQuotedMinDestHuman,
 } from "./lifiPrefundQuoteSolve";
 
@@ -53,7 +54,39 @@ describe("prefundQuotedMinDestHuman", () => {
 	});
 });
 
+describe("prefundDestNeedFloorAtSendCap", () => {
+	it("is slightly below nominal dest need for typical trade sizes", () => {
+		const need = 1.9721;
+		const floor = prefundDestNeedFloorAtSendCap(need);
+		expect(floor).toBeLessThan(need);
+		expect(1.9481).toBeGreaterThanOrEqual(floor - 1e-6);
+	});
+});
+
 describe("ensurePrefundQuoteMeetsDestMin", () => {
+	it("accepts capped send when quoted min dest is within bridge-fee slack", async () => {
+		const api = {
+			postFundingLifiQuote: vi.fn().mockResolvedValue({
+				steps: [{}],
+				quote: { estimate: { toAmountMin: "1948100" } },
+			}),
+		};
+		const destNeed = 1.9721;
+		const r = await ensurePrefundQuoteMeetsDestMin({
+			api,
+			fromChainLifi: 8453,
+			// Use 6-decimal dest so `toAmountMin` matches USDC-style atoms in the mock.
+			toChainLifi: 8453,
+			fromAddress: `0x${"1".repeat(40)}`,
+			toAddress: `0x${"2".repeat(40)}`,
+			destPortionUsd: destNeed,
+			maxFromHuman: destNeed,
+			seedAmountHuman: destNeed.toFixed(6),
+		});
+		expect(r.amountHuman).toBe(destNeed.toFixed(6));
+		expect(api.postFundingLifiQuote).toHaveBeenCalledTimes(1);
+	});
+
 	it("fails in one quote when capped send cannot reach dest min", async () => {
 		const api = {
 			postFundingLifiQuote: vi.fn().mockResolvedValue({

@@ -1,3 +1,13 @@
+@keyframes sor-route-totals-recalc-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.66;
+	}
+}
+
 .prediction-market-tradebox {
 	background: black;
 	border-radius: 12px;
@@ -102,19 +112,6 @@
 		div[class*="z-"] {
 			background: black !important;
 		}
-	}
-
-	.trade-venue-hint {
-		margin: -4px 0 12px;
-		font-size: 13px;
-		line-height: 1.45;
-		color: rgba(255, 255, 255, 0.55);
-	}
-
-	.trade-venue-hint__link {
-		color: #a78bfa;
-		text-decoration: underline;
-		white-space: nowrap;
 	}
 
 	.tradebox-header {
@@ -784,6 +781,15 @@
 			font-weight: 400;
 			margin-top: 4px;
 			text-align: left;
+		}
+
+		.sor-route-totals--recalculating {
+			animation: sor-route-totals-recalc-pulse 0.88s ease-in-out infinite;
+
+			@media (prefers-reduced-motion: reduce) {
+				animation: none;
+				opacity: 0.88;
+			}
 		}
 
 		// SOR "All venues" expandable route details

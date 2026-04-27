@@ -8,13 +8,14 @@ import type {
 	ChainBalance,
 	RouteLeg,
 } from "./sor-types";
-import { CHAIN_LIFI_IDS, VENUE_DISPLAY_NAMES } from "./sor-types";
+import { VENUE_DISPLAY_NAMES } from "./sor-types";
+import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
 
 export interface SmartRouteToggleProps {
 	questionId: string | undefined;
 	outcome: SorOutcome | undefined;
 	amount: number;
-	/** Optional; route preview does not use this for sizing (theoretical liquidity on server). */
+	/** Optional per-chain USDC/USDT hints; when set, server attaches `bridge` when a venue chain is short. */
 	walletBalances?: ChainBalance[];
 	onExecuteLeg: (leg: RouteLeg) => Promise<{
 		filled: boolean;
@@ -22,7 +23,13 @@ export interface SmartRouteToggleProps {
 		txHash?: string;
 		error?: string;
 	}>;
-	onExecuteBridge: (leg: RouteLeg) => Promise<{
+	onExecuteBridge: (
+		leg: RouteLeg,
+		opts?: {
+			amountUsdOverride?: number;
+			onPrefundProgress?: (p: { current: number; total: number }) => void;
+		},
+	) => Promise<{
 		success: boolean;
 		bridgeTxHash?: string;
 		error?: string;
@@ -39,6 +46,7 @@ export function SmartRouteToggle({
 	questionId,
 	outcome,
 	amount,
+	walletBalances,
 	onExecuteLeg,
 	onExecuteBridge,
 	onFallbackToSingleVenue,
@@ -54,10 +62,11 @@ export function SmartRouteToggle({
 		outcome,
 		side: "buy",
 		amount,
-		walletBalances: undefined,
+		walletBalances,
 		enabled,
 		polyFeeRate,
 		predictFunFeeRateBps,
+		limitlessFeeRateBps: LIMITLESS_DEFAULT_FEE_RATE_BPS,
 		targetVenue,
 	});
 
@@ -133,147 +142,10 @@ export function SmartRouteToggle({
 						}}
 						executing={sorExecution.isExecuting}
 						executionPhase={sorExecution.executionPhase}
+						prefundLegProgress={sorExecution.prefundLegProgress}
 					/>
-
-					{/* Execution result */}
-					{sorExecution.execution && !sorExecution.isExecuting && (
-						<div
-							style={{
-								marginTop: 8,
-								padding: "8px 12px",
-								borderRadius: 6,
-								fontSize: 12,
-								backgroundColor:
-									sorExecution.execution.status === "complete"
-										? "rgba(34, 197, 94, 0.08)"
-										: sorExecution.execution.status === "partial"
-											? "rgba(245, 158, 11, 0.08)"
-											: "rgba(239, 68, 68, 0.08)",
-								color:
-									sorExecution.execution.status === "complete"
-										? "#22c55e"
-										: sorExecution.execution.status === "partial"
-											? "#f59e0b"
-											: "#ef4444",
-							}}
-						>
-							{sorExecution.execution.status === "complete" && (
-								<>
-									Filled: {sorExecution.execution.totalFilledShares} shares
-								</>
-							)}
-							{sorExecution.execution.status === "partial" && (
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-									<span>
-										Partially filled: {sorExecution.execution.totalFilledShares} shares
-									</span>
-									<div style={{ display: "flex", gap: 8 }}>
-										<button
-											type="button"
-											onClick={() => sorExecution.requestReroute()}
-											style={{
-												padding: "4px 8px",
-												borderRadius: 4,
-												border: "1px solid #f59e0b",
-												backgroundColor: "transparent",
-												color: "#f59e0b",
-												fontSize: 11,
-												cursor: "pointer",
-											}}
-										>
-											Re-route {sorExecution.remainingBudget != null ? `$${sorExecution.remainingBudget.toFixed(2)}` : "remaining"}
-										</button>
-										<button
-											type="button"
-											onClick={() => sorExecution.acceptResult()}
-											style={{
-												padding: "4px 8px",
-												borderRadius: 4,
-												border: "1px solid rgba(255,255,255,0.1)",
-												backgroundColor: "transparent",
-												color: "#9ca3af",
-												fontSize: 11,
-												cursor: "pointer",
-											}}
-										>
-											Keep as-is
-										</button>
-									</div>
-								</div>
-							)}
-							{sorExecution.execution.status === "failed" && (
-								<>Execution failed. Funds remain in your wallets.</>
-							)}
-						</div>
-					)}
 				</div>
 			)}
 		</div>
 	);
-}
-
-/**
- * Helper to build ChainBalance array from the user's known balances.
- */
-export function buildChainBalances(params: {
-	baseUsdcBalance: number;
-	baseWalletAddress: string;
-	polygonUsdcBalance?: number;
-	polygonWalletAddress?: string;
-	solanaUsdcBalance?: number;
-	solanaWalletAddress?: string;
-	bnbUsdtBalance?: number;
-	bnbWalletAddress?: string;
-	/**
-	 * When true, include one row per chain whenever that chain's wallet address is set,
-	 * even if balance is 0. SOR backends often validate the full cross-chain wallet map.
-	 */
-	includeZeroBalanceChainsWithAddress?: boolean;
-}): ChainBalance[] {
-	const balances: ChainBalance[] = [];
-	const inc = Boolean(params.includeZeroBalanceChainsWithAddress);
-
-	if (params.baseWalletAddress) {
-		const bal = Math.max(0, params.baseUsdcBalance);
-		if (bal > 0 || inc) {
-			balances.push({
-				chain: "base",
-				lifiChainId: CHAIN_LIFI_IDS.base,
-				balance: bal,
-				walletAddress: params.baseWalletAddress,
-			});
-		}
-	}
-
-	const polyBal = Math.max(0, params.polygonUsdcBalance ?? 0);
-	if (params.polygonWalletAddress && (polyBal > 0 || inc)) {
-		balances.push({
-			chain: "polygon",
-			lifiChainId: CHAIN_LIFI_IDS.polygon,
-			balance: polyBal,
-			walletAddress: params.polygonWalletAddress,
-		});
-	}
-
-	const solBal = Math.max(0, params.solanaUsdcBalance ?? 0);
-	if (params.solanaWalletAddress && (solBal > 0 || inc)) {
-		balances.push({
-			chain: "solana",
-			lifiChainId: CHAIN_LIFI_IDS.solana,
-			balance: solBal,
-			walletAddress: params.solanaWalletAddress,
-		});
-	}
-
-	const bnbBal = Math.max(0, params.bnbUsdtBalance ?? 0);
-	if (params.bnbWalletAddress && (bnbBal > 0 || inc)) {
-		balances.push({
-			chain: "bnb",
-			lifiChainId: CHAIN_LIFI_IDS.bnb,
-			balance: bnbBal,
-			walletAddress: params.bnbWalletAddress,
-		});
-	}
-
-	return balances;
 }

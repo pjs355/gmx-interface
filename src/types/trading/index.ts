@@ -42,5 +42,6 @@ export type {
 export type {
 	VenueId,
 	VenuePosition,
+	VenueHistoryFill,
 	PolymarketDataApiPosition,
 } from "./venuePosition";

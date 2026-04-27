@@ -1,4 +1,7 @@
-import { shortTeamDisplayName } from "@/pages/Positions/utils/historyOutcomeWinner";
+import {
+	inferVenueHistoryYesNoSide,
+	shortTeamDisplayName,
+} from "@/pages/Positions/utils/historyOutcomeWinner";
 
 /**
  * Human-readable row label for Predict.fun positions on the Positions page.
@@ -58,13 +61,15 @@ export function getVenueHistoryMarketColumnLabel(
 	singleInGroup: boolean
 ): string {
 	if (!singleInGroup) return pos.outcome;
-	if (pos.venue === "predictfun" || pos.venue === "polymarket") {
-		const inferred = inferYesNoFromVenueOutcome(pos.outcome);
-		return getPredictPositionRowLabel(
-			marketTitle,
-			pos.outcome,
-			inferred ?? "Yes"
-		);
+	if (
+		pos.venue === "predictfun" ||
+		pos.venue === "polymarket" ||
+		pos.venue === "limitless"
+	) {
+		const inferred =
+			inferYesNoFromVenueOutcome(pos.outcome) ??
+			inferVenueHistoryYesNoSide(marketTitle, pos.outcome);
+		return getPredictPositionRowLabel(marketTitle, pos.outcome, inferred);
 	}
 	return pos.outcome;
 }

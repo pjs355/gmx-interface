@@ -6,6 +6,7 @@ import {
 } from "@solana/web3.js";
 import type { ConnectedStandardSolanaWallet } from "@privy-io/react-auth/solana";
 import { createSolanaConnectionForWalletSend } from "@/config/rpc";
+import { formatPrivySponsoredSolanaFailureBlock } from "@/trading/solana/privyRpcSimulationDebug";
 
 /**
  * Privy Solana TEE-backed sponsored submission.
@@ -188,6 +189,12 @@ export async function sendPrivySponsoredSolanaTransaction(
 			if (typeof console !== "undefined") {
 				console.warn(
 					`[privySponsoredSolana] send failed (attempt ${attempt}): ${msg}`,
+				);
+				console.warn(
+					formatPrivySponsoredSolanaFailureBlock({
+						serializedTx: bytesToSend,
+						privyThrownError: err,
+					}),
 				);
 			}
 

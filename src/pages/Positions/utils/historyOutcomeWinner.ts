@@ -4,6 +4,7 @@
  */
 
 import type { MatchedMarket } from "@/types/odds-monitor";
+import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
 
 function stripUmbrellaPrefix(title: string): string {
 	return title.replace(/^umbrella/gi, "").trim();
@@ -42,6 +43,26 @@ function outcomeMatchesTeam(outcome: string, team: string): boolean {
 	return o === t || o.includes(t) || t.includes(o);
 }
 
+/**
+ * Map trade-history `outcome` (Yes/No or team name) to Yes/No buckets for History tables.
+ * Avoid `(outcome === "yes") || (outcome !== "no")`, which treats every non-"no" string as Yes.
+ */
+export function inferVenueHistoryYesNoSide(marketTitle: string, outcome: string): "Yes" | "No" {
+	const o = outcome.trim();
+	const ol = o.toLowerCase();
+	if (ol === "yes") return "Yes";
+	if (ol === "no") return "No";
+
+	const pair = parseVsTeamsFromTitle(marketTitle);
+	if (!pair) return "Yes";
+	const [a, b] = pair;
+	const onA = outcomeMatchesTeam(o, a);
+	const onB = outcomeMatchesTeam(o, b);
+	if (onA && !onB) return "Yes";
+	if (onB && !onA) return "No";
+	return "Yes";
+}
+
 /** LevelUp resolved market: label for the side that won (team name or Yes/No). */
 export function winnerLabelFromLevelUpTitle(
 	title: string,
@@ -68,12 +89,16 @@ export function winnerLabelFromVenuePosition(pos: {
 	outcomeResult?: "WON" | "LOST" | null;
 }): string {
 	const pair = parseVsTeamsFromTitle(pos.marketTitle);
+	const hasResult = pos.outcomeResult === "WON" || pos.outcomeResult === "LOST";
 	const isWon = pos.outcomeResult === "WON";
 	const o = (pos.outcome || "").trim();
 	const oLower = o.toLowerCase();
 
 	if (pair) {
 		const [a, b] = pair;
+		if (!hasResult) {
+			return "—";
+		}
 
 		if (oLower === "yes") {
 			return isWon ? a : b;
@@ -98,6 +123,7 @@ export function winnerLabelFromVenuePosition(pos: {
 	}
 
 	if (oLower === "yes" || oLower === "no") {
+		if (!hasResult) return "—";
 		return isWon ? o : oLower === "yes" ? "No" : "Yes";
 	}
 	return isWon ? o : "—";
@@ -234,7 +260,7 @@ export function resolveCanonicalMatchWinner(args: {
 	);
 	if (fromMonitor) return fromMonitor;
 
-	const umbrellaTitle = args.umbrella.displayName;
+	const umbrellaTitle = umbrellaHeaderLabel(args.umbrella);
 	const fromResolved = pickResolvedWinnerFromMarkets(
 		args.resolvedMarketsForUmbrella,
 		umbrellaTitle,

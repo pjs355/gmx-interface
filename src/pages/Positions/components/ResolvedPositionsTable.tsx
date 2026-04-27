@@ -7,7 +7,11 @@ import ScrollableTable from "@/components/ScrollableTable/ScrollableTable";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
-import { stripUmbrellaDisplayPrefix, titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
+import {
+	stripUmbrellaDisplayPrefix,
+	titlesMatchVenue,
+	umbrellaHeaderLabel,
+} from "@/helpers/umbrellaDisplayName";
 
 type MarketEntry = { market: PredictionMarket; yes: string; no: string };
 
@@ -155,7 +159,7 @@ export default function ResolvedPositionsTable({
 									}}
 								>
 									<UmbrellaImage umbrella={block.umbrella} />
-									{stripUmbrellaDisplayPrefix(block.umbrella.displayName)}
+									{umbrellaHeaderLabel(block.umbrella)}
 								</div>
 							</div>
 

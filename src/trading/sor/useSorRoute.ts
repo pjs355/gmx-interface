@@ -107,6 +107,13 @@ export interface UseSorRouteInput {
 	outcome: SorOutcome | undefined;
 	side: SorSide;
 	amount: number;
+	/**
+	 * **Buy only.** Per-chain stable balances + wallet addresses for the predictions
+	 * SOR API. The server always walks full book depth; `route.sufficientFunds` is false
+	 * when this is omitted, empty, or balances do not cover the returned legs (including
+	 * bridges). Prefer `buildChainBalances` (including zero rows per chain) so funding
+	 * is accurate. Execution is blocked when `sufficientFunds === false`.
+	 */
 	walletBalances?: ChainBalance[];
 	venuePositions?: VenuePositionEntry[];
 	targetVenue?: SorVenue;
@@ -117,6 +124,10 @@ export interface UseSorRouteInput {
 	orderType?: SorOrderType;
 	/** Integer cents 1–99. Required when orderType === "limit". */
 	limitPriceCents?: number;
+	/** Buy: Limitless maker USDC on Base (see RouteRequest in sor-types). */
+	limitlessMakerBaseUsdc?: number;
+	/** Buy: Limitless fee rate in bps (optional; server defaults to 300). */
+	limitlessFeeRateBps?: number;
 }
 
 export interface UseSorRouteResult {
@@ -167,7 +178,47 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	const prevTargetVenueRef = useRef(input.targetVenue);
 	const prevQuestionIdRef = useRef(input.questionId);
 
-	const { questionId, outcome, side, amount, walletBalances, venuePositions, enabled, polyFeeRate, predictFunFeeRateBps, targetVenue, orderType, limitPriceCents } = input;
+	const {
+		questionId,
+		outcome,
+		side,
+		amount,
+		walletBalances,
+		venuePositions,
+		enabled,
+		polyFeeRate,
+		predictFunFeeRateBps,
+		targetVenue,
+		orderType,
+		limitPriceCents,
+		limitlessMakerBaseUsdc,
+		limitlessFeeRateBps,
+	} = input;
+
+	/**
+	 * Content keys for schedule effect deps — avoids thrashing when React Query hands
+	 * `walletBalances` / `venuePositions` a fresh array reference with the same
+	 * numbers (post-trade invalidations). Previously `doFetch` in the effect deps
+	 * re-ran the effect on every refetch, cleared the 300 ms debounce repeatedly, and
+	 * left the button stuck on "Fetching price..." (especially Predict with many
+	 * dependent queries).
+	 */
+	const walletBalancesKey = useMemo(
+		() =>
+			(walletBalances ?? [])
+				.map((b) => `${b.chain}:${b.balance}:${b.walletAddress ?? ""}`)
+				.sort()
+				.join("|"),
+		[walletBalances],
+	);
+	const venuePositionsKey = useMemo(
+		() =>
+			(venuePositions ?? [])
+				.map((p) => `${p.venue}:${p.shares}`)
+				.sort()
+				.join("|"),
+		[venuePositions],
+	);
 
 	const canFetch =
 		enabled &&
@@ -213,6 +264,16 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			...(targetVenue ? { targetVenue } : {}),
 			...(orderType ? { orderType } : {}),
 			...(typeof limitPriceCents === "number" ? { limitPriceCents } : {}),
+			...(side === "buy" &&
+			typeof limitlessMakerBaseUsdc === "number" &&
+			Number.isFinite(limitlessMakerBaseUsdc)
+				? { limitlessMakerBaseUsdc: Math.max(0, limitlessMakerBaseUsdc) }
+				: {}),
+			...(side === "buy" &&
+			typeof limitlessFeeRateBps === "number" &&
+			Number.isFinite(limitlessFeeRateBps)
+				? { limitlessFeeRateBps: Math.max(0, Math.floor(limitlessFeeRateBps)) }
+				: {}),
 		};
 
 		if (isTradingDebugLoggingEnabled()) {
@@ -352,7 +413,26 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				isLoadingRef.current = false;
 			}
 		}
-	}, [canFetch, questionId, outcome, side, amount, walletBalances, venuePositions, polyFeeRate, predictFunFeeRateBps, targetVenue, orderType, limitPriceCents, apiClient]);
+	}, [
+		canFetch,
+		questionId,
+		outcome,
+		side,
+		amount,
+		walletBalances,
+		venuePositions,
+		polyFeeRate,
+		predictFunFeeRateBps,
+		targetVenue,
+		orderType,
+		limitPriceCents,
+		limitlessMakerBaseUsdc,
+		limitlessFeeRateBps,
+		apiClient,
+	]);
+
+	const doFetchRef = useRef(doFetch);
+	doFetchRef.current = doFetch;
 
 	useEffect(() => {
 		if (!canFetch) {
@@ -385,17 +465,32 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		setIsStale(true);
 
 		if (outcomeChanged || sideChanged || targetVenueChanged || questionIdChanged) {
-			doFetch();
+			void doFetchRef.current();
 		} else {
 			debounceRef.current = setTimeout(() => {
-				doFetch();
+				void doFetchRef.current();
 			}, DEBOUNCE_MS);
 		}
 
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current);
 		};
-	}, [canFetch, doFetch, outcome, side, targetVenue, questionId]);
+	}, [
+		canFetch,
+		outcome,
+		side,
+		targetVenue,
+		questionId,
+		amount,
+		walletBalancesKey,
+		venuePositionsKey,
+		polyFeeRate,
+		predictFunFeeRateBps,
+		orderType,
+		limitPriceCents,
+		limitlessMakerBaseUsdc,
+		limitlessFeeRateBps,
+	]);
 
 	/**
 	 * Background-aware auto-refresh.
@@ -422,14 +517,14 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			clearPolling();
 			refreshRef.current = setInterval(() => {
 				if (!isLoadingRef.current && !document.hidden) {
-					doFetch();
+					void doFetchRef.current();
 				}
 			}, AUTO_REFRESH_MS) as unknown as ReturnType<typeof setTimeout>;
 		};
 
 		const resumeNow = () => {
 			setIsStale(true);
-			if (!isLoadingRef.current) doFetch();
+			if (!isLoadingRef.current) void doFetchRef.current();
 			startPolling();
 		};
 
@@ -455,7 +550,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			document.removeEventListener("visibilitychange", handleVisibility);
 			window.removeEventListener("focus", resumeNow);
 		};
-	}, [canFetch, route, doFetch]);
+	}, [canFetch, route]);
 
 	useEffect(() => {
 		return () => {
@@ -467,8 +562,8 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 
 	const refresh = useCallback(() => {
 		setIsStale(true);
-		doFetch();
-	}, [doFetch]);
+		void doFetchRef.current();
+	}, []);
 
 	return { route, isLoading, error, routeErrorCode, isStale, refresh };
 }

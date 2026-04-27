@@ -34,7 +34,11 @@ export function useTradeState(initialPosition?: "yes" | "no", initialVenue?: Tra
     setState((prev) => ({ ...prev, orderType }));
   }, []);
   const handleSideChange = useCallback((side: "buy" | "sell") => {
-    setState((prev) => ({ ...prev, side }));
+    setState((prev) => {
+      if (prev.side === side) return prev;
+      // Market buy is USD, market sell is shares; reset so we never carry the wrong denomination.
+      return { ...prev, side, amount: "" };
+    });
   }, []);
   const handleTradingVenueChange = useCallback((tradingVenue: TradingVenue) => {
     setState((prev) => ({

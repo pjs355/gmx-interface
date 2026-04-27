@@ -8,7 +8,7 @@ import { useCopyToClipboard } from "react-use";
 import { useNavigate } from "react-router-dom";
 import ExternalLink from "components/ExternalLink/ExternalLink";
 import { shortenAddress } from "@/services/wallets/shortenAddress";
-import { usePortfolio } from "context/PortfolioContext";
+import { usePortfolio } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
 import { isHomeSite } from "config/ui";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";

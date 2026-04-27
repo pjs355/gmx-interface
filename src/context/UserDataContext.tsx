@@ -21,6 +21,10 @@ import { DEFAULT_RPC_URL } from "config/rpc";
 import { usePredictionData } from "context/PredictionDataContext";
 import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/polymarket/privyEmbeddedWallet";
 import {
+	parsePrivyEvmTxHash,
+	waitForBaseTransactionSuccess,
+} from "@/trading/base/waitPrivyBaseTxReceipt";
+import {
 	subgraphService,
 	fromMicroUnits,
 } from "@/services/subgraph/subgraphService";
@@ -598,7 +602,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
 				// Send all 3 approvals as a batch - user only signs once!
 				console.log("🔐 Sending batched approval transaction (3 approvals in 1 signature)...");
-				await smartWalletClient.sendTransaction({
+				const batched = await smartWalletClient.sendTransaction({
 					calls: [
 						{
 							to: getUSDCAddress() as `0x${string}`,
@@ -617,6 +621,10 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 						},
 					],
 				});
+				await waitForBaseTransactionSuccess(
+					parsePrivyEvmTxHash(batched),
+					"LevelUp batched USDC/CTF approvals",
+				);
 				console.log("✅ Batched approval complete!");
 
 			} else if (useExternalWallet && externalWallet) {

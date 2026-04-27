@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
@@ -30,6 +38,10 @@ import {
 	type TeamRecord,
 } from "@/services/api/teamService";
 
+const AdminExportKeys = lazy(
+	() => import("./components/Keys/AdminExportKeys")
+);
+
 type AdminView =
 		| "markets-list"
 		| "markets-add"
@@ -48,7 +60,8 @@ type AdminView =
 	| "daily-games-list"
 	| "daily-games-add"
 	| "trade-testing"
-	| "wallet";
+	| "wallet"
+	| "keys";
 
 const DEFAULT_ADMIN_VIEW: AdminView = "markets-list";
 
@@ -71,6 +84,7 @@ const VALID_ADMIN_VIEWS: AdminView[] = [
 	"daily-games-add",
 	"trade-testing",
 	"wallet",
+	"keys",
 ] as const;
 
 function isValidAdminView(value: string | null): value is AdminView {
@@ -84,6 +98,8 @@ export default function Admin() {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { getAccessToken } = usePrivy();
+	const getAccessTokenRef = useRef(getAccessToken);
+	getAccessTokenRef.current = getAccessToken;
 	const { refresh: refreshPredictionData } = usePredictionData();
 	const [checking, setChecking] = useState(true);
 	const [selected, setSelected] = useState<Umbrella | null>(null);
@@ -199,10 +215,9 @@ export default function Admin() {
 		setTeamError(null);
 		(async () => {
 			try {
+				const getTok = getAccessTokenRef.current;
 				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: null;
+					typeof getTok === "function" ? await getTok() : null;
 				if (typeof token !== "string" || token.length === 0) {
 					throw new Error(
 						"Missing admin access token for loading team"
@@ -235,16 +250,15 @@ export default function Admin() {
 		return () => {
 			cancelled = true;
 		};
-	}, [getAccessToken, searchParams, selectedTeam, view]);
+	}, [searchParams, selectedTeam, view]);
 
 	useEffect(() => {
 		let mounted = true;
 		(async () => {
 			try {
+				const getTok = getAccessTokenRef.current;
 				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
+					typeof getTok === "function" ? await getTok() : undefined;
 				const resp = await fetch(
 					`${getPredictionApiBaseUrl()}/admin/session`,
 					{
@@ -274,7 +288,9 @@ export default function Admin() {
 		return () => {
 			mounted = false;
 		};
-	}, [getAccessToken, navigate]);
+		// Intentionally omit getAccessToken: Privy may return a new function
+		// reference often; re-running this effect causes session races / loops.
+	}, [navigate]);
 
 	if (checking) {
 		return (
@@ -682,6 +698,36 @@ export default function Admin() {
 						</button>
 					</div>
 				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Keys</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("keys", {
+									umbrellaId: null,
+									teamId: null,
+									profileId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid #22c55e",
+								borderRadius: 6,
+								background:
+									view === "keys"
+										? "rgba(34,197,94,0.2)"
+										: "transparent",
+								color: "#86efac",
+							}}
+						>
+							keys
+						</button>
+					</div>
+				</div>
 			</div>
 
 			{view === "markets-list" && (
@@ -831,6 +877,18 @@ export default function Admin() {
 			{view === "trade-testing" && <TradeTesting />}
 
 			{view === "wallet" && <AdminWallet />}
+
+			{view === "keys" && (
+				<Suspense
+					fallback={
+						<div style={{ padding: 12, color: "#aaa" }}>
+							Loading keys…
+						</div>
+					}
+				>
+					<AdminExportKeys />
+				</Suspense>
+			)}
 		</div>
 	);
 }

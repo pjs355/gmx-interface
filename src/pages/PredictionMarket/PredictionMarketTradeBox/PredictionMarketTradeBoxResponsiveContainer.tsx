@@ -16,7 +16,13 @@ import type {
 } from "./types";
 import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
-import type { RoutePlan, RouteExecution, SorErrorCode } from "@/trading/sor";
+import type {
+	RoutePlan,
+	RouteExecution,
+	SorErrorCode,
+	SorExecutionPhase,
+	SorPrefundLegProgress,
+} from "@/trading/sor";
 import Button from "components/Button/Button";
 import { getYesNoTeamLabels } from "./teamLabels";
 import {
@@ -72,6 +78,8 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	sorExecution: {
 		execution: RouteExecution | null;
 		isExecuting: boolean;
+		executionPhase?: SorExecutionPhase;
+		prefundLegProgress?: SorPrefundLegProgress | null;
 		remainingBudget: number | null;
 		requestReroute: () => Promise<number | null>;
 		acceptResult: () => Promise<void>;
