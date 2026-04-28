@@ -278,6 +278,10 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 
 		if (isTradingDebugLoggingEnabled()) {
 			console.log("[SOR] Route request →", {
+				questionId,
+				targetVenue,
+				orderType: orderType ?? "market",
+				limitPriceCents,
 				amount,
 				side,
 				outcome,
@@ -344,6 +348,14 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 					setRouteErrorCode(null);
 					setIsStale(false);
 					return;
+				}
+
+				if (isTradingDebugLoggingEnabled()) {
+					console.log("[SOR] Route response ←", {
+						success: false,
+						code: result.code,
+						error: (result.error ?? "").slice(0, 200),
+					});
 				}
 
 				const transient = TRANSIENT_SOR_ROUTE_CODES.includes(result.code);

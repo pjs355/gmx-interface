@@ -64,8 +64,15 @@ export function MyPositionsRow({
 
 	if (side === "buy") {
 		if (buyLines.length === 0) return null;
+		const buyTotalShares = buyLines.reduce(
+			(sum, line) => sum + (Number.isFinite(line.shares) ? line.shares : 0),
+			0,
+		);
 		return (
 			<div
+				data-qa="my-positions-row"
+				data-qa-side="buy"
+				data-qa-shares-count={buyTotalShares}
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
@@ -113,6 +120,9 @@ export function MyPositionsRow({
 	if (sellTotalShares <= 0) {
 		return (
 			<div
+				data-qa="my-positions-row"
+				data-qa-side="sell"
+				data-qa-shares-count={0}
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
@@ -142,7 +152,12 @@ export function MyPositionsRow({
 	const showDetails = tradingVenue === "all" && sellVenueBreakdown.length > 1;
 
 	return (
-		<div style={{ marginBottom: 16 }}>
+		<div
+			data-qa="my-positions-row"
+			data-qa-side="sell"
+			data-qa-shares-count={sellTotalShares}
+			style={{ marginBottom: 16 }}
+		>
 			<div
 				style={{
 					display: "flex",

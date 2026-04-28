@@ -19,7 +19,12 @@
 		"lint:strict": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
 		"preview": "vite preview",
 		"test": "vitest run",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"e2e": "playwright test --config e2e/playwright.config.ts",
+		"e2e:report": "playwright show-report e2e/playwright-report",
+		"e2e:seed-profile": "tsx e2e/scripts/seed-profile.ts",
+		"predeploy": "tsx scripts/predeploy.ts",
+		"predeploy:bootstrap": "tsx scripts/predeploy.ts --bootstrap"
 	},
 	"dependencies": {
 		"@floating-ui/react": "^0.27.16",
@@ -71,6 +76,7 @@
 		"@lingui/babel-plugin-lingui-macro": "^5.5.0",
 		"@lingui/cli": "4.10.0",
 		"@lingui/vite-plugin": "4.11.3",
+		"@playwright/test": "^1.59.1",
 		"@testing-library/react": "^14.0.0",
 		"@types/react": "^18.2.37",
 		"@types/react-dom": "^18.2.15",

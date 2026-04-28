@@ -217,6 +217,12 @@ export function AppHeaderUser({
 						>
 							{({ openFund, canFund }) => (
 						<div
+							data-qa="header-cash"
+							data-qa-cash-amount={
+								typeof cashBalance === "number" && isFinite(cashBalance)
+									? cashBalance
+									: undefined
+							}
 							className="header-metric-box mr-4"
 							onClick={() => {
 								if (canFund) void openFund();

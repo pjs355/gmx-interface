@@ -669,6 +669,7 @@ export default function PredictionMarketTradeBoxUI({
       <div className="tradebox-header">
         <div className="side-selector">
           <Button
+            qa="tradebox-side-buy"
             variant={side === 'buy' ? 'primary' : 'secondary'}
             onClick={() => onSideChange('buy')}
             className={`side-btn ${side === 'buy' ? 'selected primary' : ''}`}
@@ -677,6 +678,7 @@ export default function PredictionMarketTradeBoxUI({
           </Button>
           
           <Button
+            qa="tradebox-side-sell"
             variant={side === 'sell' ? 'primary' : 'secondary'}
             onClick={() => onSideChange('sell')}
             className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
@@ -703,6 +705,7 @@ export default function PredictionMarketTradeBoxUI({
       {/* Position Selection */}
       <div className="position-selector" style={{ marginBottom: 24 }}>
         <Button
+          qa="tradebox-position-yes"
           variant="secondary"
           onClick={() => onPositionChange('yes')}
           className={`position-btn ${selectedPosition === 'yes' ? 'selected primary' : ''}`}
@@ -729,6 +732,7 @@ export default function PredictionMarketTradeBoxUI({
         </Button>
         
         <Button
+          qa="tradebox-position-no"
           variant="secondary"
           onClick={() => onPositionChange('no')}
           className={`position-btn ${selectedPosition === 'no' ? 'selected secondary' : ''}`}
@@ -816,6 +820,7 @@ export default function PredictionMarketTradeBoxUI({
         <div className={`input-container prediction-input-container ${(!amount || amount === '') ? 'empty-input' : ''}`}>
           {/* Show $ symbol when there's a value, use placeholder when empty */}
           <input
+            data-qa="tradebox-amount-input"
             type="text"
             disabled={sellFieldsLocked}
             value={amount ? (amountInputShowsDollarPrefix ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
@@ -1234,6 +1239,7 @@ export default function PredictionMarketTradeBoxUI({
 
       {/* Trade Button */}
       <Button
+        qa="tradebox-submit"
         variant="primary"
         onClick={() => {
           try {
@@ -1442,7 +1448,11 @@ export default function PredictionMarketTradeBoxUI({
 
       {/* Small Popup Notification */}
       {orderResult && (
-        <div className={`trade-notification ${orderResult.success ? 'success' : 'error'}`}>
+        <div
+          data-qa="tradebox-fill-confirmation"
+          data-qa-fill-status={orderResult.success ? "success" : "error"}
+          className={`trade-notification ${orderResult.success ? 'success' : 'error'}`}
+        >
           <div className="notification-content">
             {orderResult.success ? (
               <div className="notification-text"> Order Submitted!</div>

@@ -1,0 +1,490 @@
+import { PREDICTIONS_API_URL } from "../playwright.config";
+
+export type RequiredVenueKey =
+	| "polymarket"
+	| "levelup"
+	| "predictFun"
+	| "limitless"
+	| "dflow";
+
+export const REQUIRED_VENUE_KEYS: RequiredVenueKey[] = [
+	"polymarket",
+	"levelup",
+	"predictFun",
+	"limitless",
+	"dflow",
+];
+
+/** Slug on `VenuePriceSnapshot.venue` from predictions-api venue-prices store. */
+const EXCHANGE_KEY_TO_VENUE_SLUG: Record<RequiredVenueKey, string> = {
+	polymarket: "polymarket",
+	levelup: "levelup",
+	predictFun: "predictfun",
+	limitless: "limitless",
+	dflow: "dflow",
+};
+
+/** Tightest live bid–ask on a venue must be below this (20¢ in probability space) for E2E. */
+export const MAX_E2E_VENUE_SPREAD_USD = 0.2;
+
+export type E2eTradingVenueSlug =
+	| "polymarket"
+	| "levelup"
+	| "predictfun"
+	| "limitless"
+	| "dflow";
+
+export function tradingVenueSlugForKey(
+	key: RequiredVenueKey,
+): E2eTradingVenueSlug {
+	const s = EXCHANGE_KEY_TO_VENUE_SLUG[key];
+	return s as E2eTradingVenueSlug;
+}
+
+export interface ExchangeMatching {
+	matchedAt?: number;
+	matchConfidence?: number;
+	matchMethod?: string;
+	polymarket?: {
+		conditionId: string;
+		slug?: string;
+		tokenIdA: string;
+		tokenIdB: string;
+		negRisk: boolean;
+		tickSize: string;
+	};
+	dflow?: {
+		tickerA: string;
+		tickerB?: string;
+		eventTicker: string;
+		yesMintA?: string;
+		yesMintB?: string;
+		accountsInitializedA?: boolean;
+		accountsInitializedB?: boolean;
+	};
+	predictFun?: {
+		marketIdA?: string;
+		marketIdB?: string;
+		tokenIdA?: string;
+		tokenIdB?: string;
+		decimalPrecision: number;
+		singleMarket?: boolean;
+	};
+	limitless?: {
+		slug: string;
+		tokenIdA: string;
+		tokenIdB: string;
+		orderbookSlugA?: string;
+		orderbookSlugB?: string;
+	};
+	levelup?: {
+		questionId: string;
+		conditionId?: string;
+		tokenIdA: string;
+		tokenIdB: string;
+		negRisk: boolean;
+		tickSize: string;
+	};
+}
+
+export interface MatchedMarketRow {
+	pandaMatchId: string;
+	umbrellaId: string;
+	displayName: string;
+	game?: string;
+	status?: string;
+	eventDate?: string;
+	pandaTeamA?: string;
+	pandaTeamB?: string;
+	teamMappings?: unknown[];
+	exchangeMatching: ExchangeMatching;
+}
+
+interface VenueTeam {
+	bestBid: number | null;
+	bestAsk: number | null;
+	indicativeMid?: number | null;
+}
+
+interface VenuePriceSnapshot {
+	pandaMatchId: string;
+	venue: string;
+	teamA: VenueTeam;
+	teamB: VenueTeam;
+	status?: string;
+}
+
+function missingVenues(row: MatchedMarketRow): RequiredVenueKey[] {
+	return REQUIRED_VENUE_KEYS.filter(
+		(key) => row.exchangeMatching[key] === undefined,
+	);
+}
+
+export function hasFutureEventDate(row: MatchedMarketRow): boolean {
+	if (row.eventDate === undefined) return false;
+	const t = Date.parse(row.eventDate);
+	if (!Number.isFinite(t)) return false;
+	return t > Date.now();
+}
+
+export async function fetchMatchedMarkets(
+	apiBaseUrl: string = PREDICTIONS_API_URL,
+): Promise<MatchedMarketRow[]> {
+	const base = apiBaseUrl.replace(/\/$/, "");
+	const url = `${base}/matched-markets`;
+	const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+	if (!res.ok) {
+		throw new Error(`GET ${url} returned ${res.status} ${res.statusText}`);
+	}
+	const body = (await res.json()) as unknown;
+	if (!Array.isArray(body)) {
+		throw new Error(`GET ${url} did not return an array; got ${typeof body}`);
+	}
+	return body as MatchedMarketRow[];
+}
+
+async function fetchVenueSnapshots(
+	apiBaseUrl: string,
+	pandaMatchId: string,
+): Promise<VenuePriceSnapshot[]> {
+	const base = apiBaseUrl.replace(/\/$/, "");
+	const url = `${base}/venue-prices/${encodeURIComponent(pandaMatchId)}`;
+	const res = await fetch(url, { signal: AbortSignal.timeout(25_000) });
+	if (!res.ok) {
+		throw new Error(`GET ${url} returned ${res.status} ${res.statusText}`);
+	}
+	const body = (await res.json()) as unknown;
+	if (!Array.isArray(body)) {
+		throw new Error(`GET ${url} expected array; got ${typeof body}`);
+	}
+	return body as VenuePriceSnapshot[];
+}
+
+export function createVenueSnapshotGetter(
+	apiBaseUrl: string,
+): (panda: string) => Promise<VenuePriceSnapshot[]> {
+	const cache = new Map<string, VenuePriceSnapshot[]>();
+	return async (panda: string): Promise<VenuePriceSnapshot[]> => {
+		const id = panda?.trim();
+		if (!id) {
+			return [];
+		}
+		const hit = cache.get(id);
+		if (hit) {
+			return hit;
+		}
+		try {
+			const sn = await fetchVenueSnapshots(apiBaseUrl, id);
+			cache.set(id, sn);
+			return sn;
+		} catch (err) {
+			console.error("error", err);
+			cache.set(id, []);
+			return [];
+		}
+	};
+}
+
+function teamSpread(team: VenueTeam): number | null {
+	const bid = team.bestBid;
+	const ask = team.bestAsk;
+	if (
+		typeof bid !== "number" ||
+		typeof ask !== "number" ||
+		!Number.isFinite(bid) ||
+		!Number.isFinite(ask)
+	) {
+		return null;
+	}
+	const s = ask - bid;
+	if (s < -1e-6 || s > 1 + 1e-6) {
+		return null;
+	}
+	return s;
+}
+
+function snapshotTightestSpread(snap: VenuePriceSnapshot): number | null {
+	if (snap.status && snap.status !== "live") {
+		return null;
+	}
+	const a = teamSpread(snap.teamA);
+	const b = teamSpread(snap.teamB);
+	const vals = [a, b].filter((x): x is number => x !== null);
+	if (vals.length === 0) {
+		return null;
+	}
+	return Math.min(...vals);
+}
+
+function spreadForVenueOnRow(
+	row: MatchedMarketRow,
+	key: RequiredVenueKey,
+	snaps: VenuePriceSnapshot[],
+): number | null {
+	if (row.exchangeMatching[key] === undefined) {
+		return null;
+	}
+	const slug = EXCHANGE_KEY_TO_VENUE_SLUG[key];
+	const snap = snaps.find((s) => s.venue === slug);
+	return snap ? snapshotTightestSpread(snap) : null;
+}
+
+interface BottleneckLiveBooks {
+	maxSpread: number;
+	liveVenueCount: number;
+}
+
+function bottleneckAmongLiveBooks(
+	row: MatchedMarketRow,
+	snaps: VenuePriceSnapshot[],
+): BottleneckLiveBooks {
+	const spreads: number[] = [];
+	for (const key of REQUIRED_VENUE_KEYS) {
+		if (row.exchangeMatching[key] === undefined) {
+			return { maxSpread: Number.POSITIVE_INFINITY, liveVenueCount: 0 };
+		}
+		const sp = spreadForVenueOnRow(row, key, snaps);
+		if (sp !== null) {
+			spreads.push(sp);
+		}
+	}
+	if (spreads.length === 0) {
+		return { maxSpread: Number.POSITIVE_INFINITY, liveVenueCount: 0 };
+	}
+	return {
+		maxSpread: Math.max(...spreads),
+		liveVenueCount: spreads.length,
+	};
+}
+
+function eventTime(row: MatchedMarketRow): number {
+	if (row.eventDate === undefined) {
+		return Number.POSITIVE_INFINITY;
+	}
+	const t = Date.parse(row.eventDate);
+	return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+}
+
+function isBetterAllFiveCandidate(
+	next: BottleneckLiveBooks,
+	nextEvent: number,
+	nextUmbrellaId: string,
+	cur: BottleneckLiveBooks,
+	curEvent: number,
+	curUmbrellaId: string,
+): boolean {
+	if (next.liveVenueCount !== cur.liveVenueCount) {
+		return next.liveVenueCount > cur.liveVenueCount;
+	}
+	if (next.maxSpread !== cur.maxSpread) {
+		return next.maxSpread < cur.maxSpread;
+	}
+	if (nextEvent !== curEvent) {
+		return nextEvent < curEvent;
+	}
+	return nextUmbrellaId < curUmbrellaId;
+}
+
+export interface PerVenueBestPick {
+	venueKey: RequiredVenueKey;
+	umbrellaId: string;
+	pandaMatchId: string;
+	spread: number;
+	displayName: string;
+	pandaTeamA?: string;
+	pandaTeamB?: string;
+}
+
+/**
+ * Split API picks by an operator-defined venue list (e.g. full-venue-cycle `REQUESTED_VENUES`).
+ * `withBook` preserves first-seen order from `requested`; duplicates in `requested` are ignored.
+ */
+export function partitionRequestedVenuePicks(
+	requested: readonly RequiredVenueKey[],
+	picks: readonly PerVenueBestPick[],
+): { withBook: PerVenueBestPick[]; missingBook: RequiredVenueKey[] } {
+	const pickByKey = new Map(picks.map((p) => [p.venueKey, p]));
+	const seen = new Set<RequiredVenueKey>();
+	const missingBook: RequiredVenueKey[] = [];
+	const withBook: PerVenueBestPick[] = [];
+	for (const key of requested) {
+		if (seen.has(key)) {
+			continue;
+		}
+		seen.add(key);
+		const p = pickByKey.get(key);
+		if (p === undefined) {
+			missingBook.push(key);
+		} else {
+			withBook.push(p);
+		}
+	}
+	return { withBook, missingBook };
+}
+
+export async function computePerVenueBestPicks(
+	future: MatchedMarketRow[],
+	getSnaps: (panda: string) => Promise<VenuePriceSnapshot[]>,
+): Promise<PerVenueBestPick[]> {
+	const picks: PerVenueBestPick[] = [];
+	for (const key of REQUIRED_VENUE_KEYS) {
+		let best: { sp: number; row: MatchedMarketRow } | null = null;
+		for (const row of future) {
+			if (row.exchangeMatching[key] === undefined) {
+				continue;
+			}
+			const snaps = await getSnaps(row.pandaMatchId);
+			const sp = spreadForVenueOnRow(row, key, snaps);
+			if (sp === null || !Number.isFinite(sp)) {
+				continue;
+			}
+			if (
+				best === null ||
+				sp < best.sp ||
+				(sp === best.sp && eventTime(row) < eventTime(best.row)) ||
+				(sp === best.sp &&
+					eventTime(row) === eventTime(best.row) &&
+					row.umbrellaId < best.row.umbrellaId)
+			) {
+				best = { sp, row };
+			}
+		}
+		if (best !== null) {
+			const r = best.row;
+			picks.push({
+				venueKey: key,
+				umbrellaId: String(r.umbrellaId),
+				pandaMatchId: String(r.pandaMatchId),
+				spread: best.sp,
+				displayName: r.displayName,
+				pandaTeamA: r.pandaTeamA,
+				pandaTeamB: r.pandaTeamB,
+			});
+		}
+	}
+	return picks;
+}
+
+function logPerVenueSummaryFromPicks(picks: PerVenueBestPick[]): void {
+	console.log(
+		"[matched-market] best live tightest-spread per venue (all upcoming rows that include that venue):",
+	);
+	const byKey = new Map(picks.map((p) => [p.venueKey, p]));
+	for (const key of REQUIRED_VENUE_KEYS) {
+		const p = byKey.get(key);
+		if (p === undefined) {
+			console.log(
+				`${key} - Best Spread = n/a // n/a // n/a (no live bid/ask in upcoming rows)`,
+			);
+			continue;
+		}
+		const ta = p.pandaTeamA?.trim() || "TeamA";
+		const tb = p.pandaTeamB?.trim() || "TeamB";
+		console.log(
+			`${key} - Best Spread = ${p.spread.toFixed(4)} // ${p.pandaMatchId} // ${ta} - ${tb}`,
+		);
+	}
+}
+
+export function assertPerVenueSpreadsWithinE2eCap(picks: PerVenueBestPick[]): void {
+	for (const p of picks) {
+		if (p.spread >= MAX_E2E_VENUE_SPREAD_USD) {
+			throw new Error(
+				`E2E spread cap: ${p.venueKey} best tightest spread is ${p.spread.toFixed(4)} ` +
+					`(umbrella ${p.umbrellaId}, panda ${p.pandaMatchId}) — max allowed is ${MAX_E2E_VENUE_SPREAD_USD} (20¢).`,
+			);
+		}
+	}
+}
+
+export async function resolvePerVenueBestPicks(
+	apiBaseUrl: string = PREDICTIONS_API_URL,
+): Promise<PerVenueBestPick[]> {
+	const all = await fetchMatchedMarkets(apiBaseUrl);
+	const future = all.filter(hasFutureEventDate);
+	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
+	const picks = await computePerVenueBestPicks(future, getSnaps);
+	logPerVenueSummaryFromPicks(picks);
+	return picks;
+}
+
+export interface AllVenuesResolution {
+	chosen: MatchedMarketRow;
+	totalCandidates: number;
+}
+
+export async function resolveAllVenuesUmbrella(
+	apiBaseUrl: string = PREDICTIONS_API_URL,
+): Promise<AllVenuesResolution> {
+	const all = await fetchMatchedMarkets(apiBaseUrl);
+	const future = all.filter(hasFutureEventDate);
+	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
+	const perVenuePicks = await computePerVenueBestPicks(future, getSnaps);
+	logPerVenueSummaryFromPicks(perVenuePicks);
+
+	const allFive = future.filter((row) => missingVenues(row).length === 0);
+
+	if (allFive.length > 0) {
+		let chosen: MatchedMarketRow | undefined;
+		let bestBottle: BottleneckLiveBooks | undefined;
+
+		for (const row of allFive) {
+			const snaps = await getSnaps(row.pandaMatchId);
+			const b = bottleneckAmongLiveBooks(row, snaps);
+			const t = eventTime(row);
+			if (
+				chosen === undefined ||
+				bestBottle === undefined ||
+				isBetterAllFiveCandidate(b, t, row.umbrellaId, bestBottle, eventTime(chosen), chosen.umbrellaId)
+			) {
+				chosen = row;
+				bestBottle = b;
+			}
+		}
+
+		if (
+			chosen === undefined ||
+			bestBottle === undefined ||
+			bestBottle.liveVenueCount === 0 ||
+			!Number.isFinite(bestBottle.maxSpread)
+		) {
+			chosen = [...allFive].sort((a, b) => eventTime(a) - eventTime(b))[0];
+			const fbSnaps = await getSnaps(chosen.pandaMatchId);
+			bestBottle = bottleneckAmongLiveBooks(chosen, fbSnaps);
+			console.log(
+				`[matched-market] no comparable live books among all-5 candidates; ` +
+					`falling back to earliest event among ${allFive.length} umbrellas.`,
+			);
+		}
+
+		console.log(
+			`[matched-market] picked umbrella ${chosen.umbrellaId} (${chosen.displayName}); ` +
+				`event ${chosen.eventDate}; ${allFive.length} all-5 candidates; ` +
+				`bookScore=max among live venues=${Number.isFinite(bestBottle.maxSpread) ? bestBottle.maxSpread.toFixed(4) : "∞"} ` +
+				`(${bestBottle.liveVenueCount}/5 venues had live bid/ask).`,
+		);
+
+		return { chosen, totalCandidates: allFive.length };
+	}
+
+	const ranked = future
+		.map((row) => ({
+			row,
+			missing: missingVenues(row),
+		}))
+		.sort((a, b) => a.missing.length - b.missing.length)
+		.slice(0, 5);
+
+	const lines = [
+		"No upcoming Umbrella has all 5 venues populated.",
+		`Searched ${all.length} matched markets; ${future.length} are upcoming.`,
+		"Top 5 candidates by venue coverage (fewest missing first):",
+	];
+	for (const entry of ranked) {
+		lines.push(
+			`  - ${entry.row.displayName} (${entry.row.umbrellaId}) event=${entry.row.eventDate}; missing: ${entry.missing.join(", ") || "(none)"}`,
+		);
+	}
+	console.error("error", lines.join("\n"));
+	throw new Error(lines.join(" | "));
+}

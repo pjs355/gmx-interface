@@ -82,6 +82,7 @@ export default function NestedTab<V extends string | number>({
               return (
                 <div
                   key={subOpt.value}
+                  data-qa-venue={qa === "trade-venue" ? String(subOpt.value) : undefined}
                   className={cx(
                     "text-body-medium cursor-pointer text-white hover:text-white trade-mode-menu-item",
                     { "text-white": subOpt.value === selectedValue }

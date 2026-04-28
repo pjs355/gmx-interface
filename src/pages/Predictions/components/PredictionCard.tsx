@@ -834,6 +834,9 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	return (
 		<div
 			key={umbrella._id}
+			data-qa="prediction-card"
+			data-qa-umbrella-id={umbrella._id}
+			data-qa-panda-match-id={umbrella.pandascore_matchId}
 			className="prediction-card"
 			onClick={handleCardClick}
 			style={{ cursor: "pointer" }}
