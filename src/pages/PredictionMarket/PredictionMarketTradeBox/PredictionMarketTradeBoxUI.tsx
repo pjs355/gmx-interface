@@ -849,15 +849,14 @@ export default function PredictionMarketTradeBoxUI({
                   return;
                 }
               } else {
-                // For market buy orders, allow decimals with existing validation
-                // Only block if there are multiple decimal points
+                // USD (market buy only in UI): 2 dp. Shares (sell, limit, All buy amount): up to 6 dp.
                 const decimalCount = (cleanValue.match(/\./g) || []).length;
                 if (decimalCount > 1) {
                   return;
                 }
-                
-                // Only block if there are more than 2 decimal places
-                if (cleanValue.includes('.') && cleanValue.split('.')[1] && cleanValue.split('.')[1].length > 2) {
+                const maxFractionDigits = amountInputShowsDollarPrefix ? 2 : 6;
+                const frac = cleanValue.includes(".") ? cleanValue.split(".")[1] : "";
+                if (frac && frac.length > maxFractionDigits) {
                   return;
                 }
               }

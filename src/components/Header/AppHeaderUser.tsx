@@ -61,7 +61,8 @@ export function AppHeaderUser({
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
-	const showCashMetricSkeleton = cashLoading || blockHeaderMetrics;
+	// Cash: do not block on positions page shell — show when balance fetches complete
+	const showCashMetricSkeleton = cashLoading;
 
 	// Detect if user logged in with email (smart wallet) or external wallet
 	const hasSmartWallet = user?.linkedAccounts?.some(

@@ -59,7 +59,7 @@ import {
 	logPolymarketTradePreflight,
 } from "@/trading/polymarket/polymarketOrderDebug";
 import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
-import { Side, type TickSize } from "@polymarket/clob-client";
+import { Side, type TickSize } from "@polymarket/clob-client-v2";
 import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";

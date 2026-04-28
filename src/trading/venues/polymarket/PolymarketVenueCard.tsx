@@ -92,6 +92,7 @@ export function PolymarketVenueCard({ accountOverview, profileId }: Props) {
 			await executeLifiSteps(lastQuote.steps, getSignerForChain, {
 				fromAddress: wallets.baseSmartWallet,
 				rawLifiRoute: lastQuote.quote,
+				polygonSafeUnwrapPrerequisite: lastQuote.polygonSafeUnwrapPrerequisite ?? undefined,
 				...(wallets.solanaAddress?.trim()
 					? { solanaTokenOwnerAddress: wallets.solanaAddress.trim() }
 					: {}),

@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
 	/** Optional Polygon mainnet JSON-RPC URL (Infura, Alchemy, etc.); falls back to a public node */
 	readonly VITE_POLYGON_RPC_URL?: string;
+	/** Optional extra Polygon JSON-RPC URLs (comma/space separated); tried after `VITE_POLYGON_RPC_URL` / default. */
+	readonly VITE_POLYGON_RPC_FALLBACK_URLS?: string;
 	/**
 	 * Optional public prediction API base (umbrellas, markets, tags, multiplex orderbook WS `/ws`).
 	 * When set, orderbook REST (`getOrderbookApiBaseUrl`) and matched-markets / venue-prices URLs align to this host
@@ -47,6 +49,12 @@ interface ImportMetaEnv {
 	readonly VITE_DFLOW_REST_BASE?: string;
 	/** DFlow orderbook WebSocket URL */
 	readonly VITE_DFLOW_WS_URL?: string;
+	/**
+	 * Optional override for LevelUp subgraph GraphQL HTTP endpoint (user token balances).
+	 * When unset, defaults to The Graph Studio `levelup-subgraph`. Use this if your
+	 * Goldsky or Studio deployment slug changes (fixes `deployment … does not exist`).
+	 */
+	readonly VITE_LEVELUP_SUBGRAPH_URL?: string;
 }
 
 // Image module declarations

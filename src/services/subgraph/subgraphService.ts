@@ -11,11 +11,21 @@
  * For real-time balance updates after trades, use RPC fallback or manual refresh.
  */
 
-// Subgraph URL - indexes BOTH testnet and production CTF contracts
-const SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1718616/levelup-subgraph/version/latest";
+/** Default: The Graph Studio deployment for LevelUp CTF balances (Base). */
+const DEFAULT_SUBGRAPH_URL =
+	"https://api.studio.thegraph.com/query/1718616/levelup-subgraph/version/latest";
 
 function getSubgraphUrl(): string {
-	return SUBGRAPH_URL;
+	const fromEnv = import.meta.env.VITE_LEVELUP_SUBGRAPH_URL?.trim();
+	if (!fromEnv || fromEnv.length === 0) return DEFAULT_SUBGRAPH_URL;
+	/** Goldsky slug `s111630` was removed; env copies still hit `deployment … does not exist`. */
+	if (fromEnv.includes("s111630")) {
+		console.warn(
+			"[Subgraph] VITE_LEVELUP_SUBGRAPH_URL references removed deployment s111630 — using default The Graph Studio URL. Update or clear the env var.",
+		);
+		return DEFAULT_SUBGRAPH_URL;
+	}
+	return fromEnv;
 }
 
 // ============================================================================

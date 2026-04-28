@@ -63,7 +63,7 @@ export function parseRawTokenAmountToNumber(
 
 /**
  * @deprecated Prefer {@link parseRawTokenAmountToNumber} with the correct token decimals.
- * USDC/USDC.e style 6-decimal base units only.
+ * Stable (e.g. pUSD) 6-decimal base units only.
  */
 export function parseUsdcLikeAmountToNumber(raw: string | null | undefined): number | null {
 	return parseRawTokenAmountToNumber(raw, 6);

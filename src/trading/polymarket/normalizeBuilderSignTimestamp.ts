@@ -1,4 +1,7 @@
 /**
+ * Relayer-only (gasless Safe txs). CLOB V2 order attribution uses `builderCode` on the CLOB client,
+ * not these HMAC headers.
+ *
  * Polymarket remote signer — align `POST /polymarket/builder/sign` with Polymarket’s reference:
  * https://github.com/Polymarket/privy-safe-builder-example/blob/main/app/api/polymarket/sign/route.ts
  *

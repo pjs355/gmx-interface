@@ -1,5 +1,5 @@
 /**
- * @polymarket/clob-client uses axios internally; on HTTP failure its `post()` helper
+ * `@polymarket/clob-client-v2` uses axios internally; on HTTP failure its `post()` helper
  * returns `{ error, status? }` instead of rejecting. Call this on every order POST result
  * so failures surface as exceptions and the UI does not show a false success.
  */

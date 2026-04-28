@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { type PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -566,7 +566,12 @@ export default function usePositionsData() {
 		});
 	}, [appState?.markets, umbrellas.length, predictUmbrellaLookup]);
 
-	const { polymarketSafe, solanaAddress, limitlessMakerBase } = useFundingAddresses();
+	const {
+		polymarketSafe,
+		solanaAddress,
+		limitlessMakerBase,
+		isLoading: fundingAddressesLoading,
+	} = useFundingAddresses();
 	const { authenticated } = usePrivy();
 	const dflowProof = useDflowProofStatus();
 	const solanaLinked = Boolean(solanaAddress?.trim());
@@ -750,20 +755,17 @@ export default function usePositionsData() {
 	);
 	const predictMarketDetails = predictMarketsQuery.data ?? new Map<number, PredictMarketDetail>();
 
-	// --- Atomic loading gate: wait for ALL data including enrichment ---
-	// Polymarket activity API can paginate many pages — do not block Positions/Orders skeleton on it.
-	// History tab waits separately via `venueTradeHistoryLoading` (see Positions.tsx).
+	// --- Atomic loading gate: core portfolio + venue positions (not History-only feeds) ---
+	// Polymarket activity / Limitless portfolio **history** APIs must not block the global shell —
+	// History tab uses `isHistoryTabContentReady` (see Positions.tsx).
+	// Match PortfolioContext: only wait on DFlow when `useDflowPositions` is actually enabled.
 	const dflowVenueSettled =
-		!solanaLinked ||
-		!Boolean(authenticated) ||
-		(dflowProof.isFetched &&
-			(!dflowProof.isVerified || !dflowPositionsQuery.isLoading));
+		!dflowRpcEnabled || !dflowPositionsQuery.isPending;
 
 	const limitlessVenueSettled =
 		!limitlessPortfolioEnabled ||
 		(!limitlessVenuePositionsQuery.isLoading &&
-			!limitlessOpenOrdersQuery.isLoading &&
-			!limitlessTradeHistoryQuery.isLoading);
+			!limitlessOpenOrdersQuery.isLoading);
 
 	const venueQueriesSettled =
 		!polyPositionsQuery.isLoading &&
@@ -786,20 +788,17 @@ export default function usePositionsData() {
 		venueQueriesSettled &&
 		(predictMarketIds.length === 0 || !predictMarketsQuery.isLoading);
 
-	/** Positions tab body can render without waiting on DFlow RPC; header stays on `isDataFullyLoaded`. */
+	/** Positions tab: same shell for header + body — includes DFlow when verified (no second skeleton strip). */
 	const isPositionsTabContentReady =
 		!predictionLoading &&
 		!userDataLoading &&
 		!portfolioLoading &&
 		venueQueriesSettledForPositionsBody &&
+		dflowVenueSettled &&
 		(predictMarketIds.length === 0 || !predictMarketsQuery.isLoading);
 
 	const dflowPositionsStripPending =
-		solanaLinked &&
-		Boolean(authenticated) &&
-		dflowProof.isFetched &&
-		dflowProof.isVerified &&
-		dflowPositionsQuery.isLoading;
+		dflowRpcEnabled && dflowPositionsQuery.isPending;
 
 	// --- Enrich + split venue positions ---
 	const { predictPositions, predictWinnings, predictHistory } = useMemo(() => {
@@ -883,9 +882,17 @@ export default function usePositionsData() {
 	const handleClaimSuccess = useCallback(
 		async (marketId: string | string[], _umbrellaId: string) => {
 			const ids = Array.isArray(marketId) ? marketId : [marketId];
+			const payoutKeys = ids
+				.map((id) => String(id ?? "").trim())
+				.filter((k) => k.length > 0);
+			// Same keys as Winnings rows (`predict-win-*`, LevelUp `balanceId`, etc.). PortfolioContext
+			// uses this set to drop stale venue MTM until predict/poly queries refetch after redeem.
+			if (payoutKeys.length > 0) {
+				acknowledgeClearedPayouts(payoutKeys);
+			}
 			setClaimedMarkets((prev) => {
 				const next = new Set(prev);
-				for (const id of ids) next.add(id);
+				for (const id of payoutKeys) next.add(id);
 				return next;
 			});
 			try {
@@ -1422,165 +1429,6 @@ export default function usePositionsData() {
 		[openPositionsValue, unclaimedWinningsPayoutTotal],
 	);
 
-	const portfolioPerfFingerprintRef = useRef("");
-	const portfolioReadyLoggedRef = useRef(false);
-
-	useEffect(() => {
-		if (!portfolioPerfEnabled() || !effectiveAccount) return;
-
-		const previewKeyCount = Object.keys(allBooksPreview).length;
-		const fingerprint = [
-			predictionLoading,
-			userDataLoading,
-			portfolioLoading,
-			booksPreviewLoading,
-			polyPositionsQuery.isLoading,
-			predictPositionsQuery.isLoading,
-			dflowPositionsQuery.isLoading,
-			predictMarketsQuery.isLoading,
-			isDataFullyLoaded,
-			isPositionsTabContentReady,
-			dflowPositionsStripPending,
-			predictMarketIds.length,
-			umbrellas.length,
-			tokenBalances.size,
-			previewKeyCount,
-			predictOrdersEnabled,
-		].join("|");
-
-		if (fingerprint !== portfolioPerfFingerprintRef.current) {
-			portfolioPerfFingerprintRef.current = fingerprint;
-			logPortfolioLoadState({
-				predictionLoading,
-				userDataLoading,
-				portfolioLoading,
-				booksPreviewLoading,
-				polyLoading: polyPositionsQuery.isLoading,
-				predictLoading: predictPositionsQuery.isLoading,
-				dflowLoading: dflowPositionsQuery.isLoading,
-				predictMarketsLoading: predictMarketsQuery.isLoading,
-				isDataFullyLoaded,
-				umbrellaCount: umbrellas.length,
-				tokenBalancesSize: tokenBalances.size,
-				previewKeys: previewKeyCount,
-				polyPos: allPolyPositions.length,
-				predictPos: allPredictPositions.length,
-				dflowPos: allDflowPositions.length,
-				predictMarketIds: predictMarketIds.length,
-				predictOrdersEnabled,
-				isPositionsTabContentReady,
-				dflowPositionsStripPending,
-			});
-		}
-
-		if (isDataFullyLoaded && !portfolioReadyLoggedRef.current) {
-			portfolioReadyLoggedRef.current = true;
-
-			const previewSampleKeys = Object.keys(allBooksPreview).slice(0, 3);
-			const previewSample = Object.fromEntries(
-				previewSampleKeys.map((k) => [k.slice(0, 12) + "…", allBooksPreview[k]]),
-			);
-
-			const polyVenueSum = allPolyPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
-			const predictVenueSum = allPredictPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
-			const dflowVenueSum = allDflowPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
-
-			let levelUpBookSum = 0;
-			const levelUpSamples: Array<Record<string, unknown>> = [];
-			for (const u of umbrellas) {
-				const markets = (getQuestionsForUmbrella(u._id) as PredictionMarket[]) || [];
-				for (const m of markets) {
-					const balanceId = m._id;
-					const priceId = m.questionId || m._id;
-					if (!balanceId || !priceId) continue;
-					const tb = tokenBalances.get(balanceId);
-					if (!tb) continue;
-					const yes = Number(tb.yesBalance) || 0;
-					const no = Number(tb.noBalance) || 0;
-					if (yes === 0 && no === 0) continue;
-					const preview = allBooksPreview[priceId] as
-						| {
-								lowestAsk?: number | null;
-								bestYesPrice?: number | null;
-								bestNoPrice?: number | null;
-								highestBid?: number | null;
-						  }
-						| undefined;
-					const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
-					const np =
-						typeof preview?.bestNoPrice === "number"
-							? preview.bestNoPrice
-							: preview?.highestBid != null && preview?.highestBid !== undefined
-								? 1 - preview.highestBid
-								: null;
-					const rowVal =
-						(typeof yp === "number" ? yes * yp : 0) + (typeof np === "number" ? no * np : 0);
-					levelUpBookSum += rowVal;
-					if (levelUpSamples.length < 2) {
-						levelUpSamples.push({
-							priceIdShort: String(priceId).slice(0, 10) + "…",
-							yes,
-							no,
-							yp,
-							np,
-							rowVal,
-							previewKeys: preview ? Object.keys(preview) : [],
-						});
-					}
-				}
-			}
-
-			logPortfolioReadySnapshot({
-				wallet: truncateWallet(effectiveAccount),
-				portfolioTotalCtx,
-				cashBalanceCtx,
-				positionsHeaderTotal: positionsTotalValue,
-				openPositionsValue,
-				unclaimedWinningsPayout: unclaimedWinningsPayoutTotal,
-				venueNotional: { polyVenueSum, predictVenueSum, dflowVenueSum },
-				levelUpBookSumFromPreview: levelUpBookSum,
-				levelUpSamples,
-				previewSample,
-			});
-		}
-
-		if (!isDataFullyLoaded) {
-			portfolioReadyLoggedRef.current = false;
-		}
-	}, [
-		effectiveAccount,
-		predictionLoading,
-		userDataLoading,
-		portfolioLoading,
-		booksPreviewLoading,
-		polyPositionsQuery.isLoading,
-		predictPositionsQuery.isLoading,
-		dflowPositionsQuery.isLoading,
-		predictMarketsQuery.isLoading,
-		isDataFullyLoaded,
-		isPositionsTabContentReady,
-		dflowPositionsStripPending,
-		predictMarketIds.length,
-		umbrellas,
-		tokenBalances,
-		allBooksPreview,
-		allPolyPositions,
-		allPredictPositions,
-		allDflowPositions,
-		getQuestionsForUmbrella,
-		portfolioTotalCtx,
-		cashBalanceCtx,
-		positionsTotalValue,
-		openPositionsValue,
-		unclaimedWinningsPayoutTotal,
-		predictOrdersEnabled,
-	]);
-
-	useEffect(() => {
-		portfolioReadyLoggedRef.current = false;
-		portfolioPerfFingerprintRef.current = "";
-	}, [effectiveAccount]);
-
 	// Includes merged LevelUp + venue rows (`mergeMarketPositions` clears `venue`), so Polymarket
 	// marks are not dropped when the primary `market._id` is the LevelUp question.
 	const portfolioSidePriceMap = useMemo(() => {
@@ -1919,11 +1767,24 @@ export default function usePositionsData() {
 		return out;
 	}, [venueHistoryRawItems]);
 
+	/** Order-independent payload fingerprint so query identity does not churn on row order alone. */
+	const venueHistoryResolveQueriesKeyStable = useMemo(() => {
+		try {
+			return JSON.stringify(
+				[...venueHistoryResolveQueries].sort((a, b) =>
+					String(a.clientKey ?? "").localeCompare(String(b.clientKey ?? "")),
+				),
+			);
+		} catch {
+			return String(venueHistoryResolveQueries.length);
+		}
+	}, [venueHistoryResolveQueries]);
+
 	const historyVenueUmbrellaResolveQuery = useQuery({
 		queryKey: [
 			"umbrella-resolve-venue-history",
 			"payloads",
-			JSON.stringify(venueHistoryResolveQueries),
+			venueHistoryResolveQueriesKeyStable,
 		],
 		queryFn: async () =>
 			postUmbrellaResolveExchangeKeysChunked(
@@ -1935,6 +1796,7 @@ export default function usePositionsData() {
 			),
 		enabled:
 			Boolean(authenticated && effectiveAccount && venueHistoryResolveQueries.length > 0),
+		placeholderData: keepPreviousData,
 		staleTime: 300_000,
 		retry: 1,
 	});
@@ -2313,9 +2175,199 @@ export default function usePositionsData() {
 		}, {} as Record<string, { Yes: number; No: number }>);
 	}, [umbrellaPositions]);
 
+	/** Trade history streams (Poly + Limitless) for the History tab; not part of global `isDataFullyLoaded`. */
 	const venueTradeHistoryLoading =
-		(Boolean(polymarketSafe) && polyTradeHistoryQuery.isPending) ||
-		(Boolean(limitlessMakerBase?.trim()) && limitlessTradeHistoryQuery.isPending);
+		(Boolean(polymarketSafe?.trim()) &&
+			!polyTradeHistoryQuery.isFetched &&
+			!polyTradeHistoryQuery.isError) ||
+		(Boolean(limitlessMakerBase?.trim()) &&
+			!limitlessTradeHistoryQuery.isFetched &&
+			!limitlessTradeHistoryQuery.isError);
+
+	const historyUmbrellaResolveSettled =
+		venueHistoryResolveQueries.length === 0 ||
+		!Boolean(authenticated && effectiveAccount) ||
+		historyVenueUmbrellaResolveQuery.isSuccess ||
+		historyVenueUmbrellaResolveQuery.isError ||
+		!historyVenueUmbrellaResolveQuery.isPending;
+
+	/** Single gate for History body + header: core data, funding addresses, activity history, batch resolve. */
+	const isHistoryTabContentReady =
+		isDataFullyLoaded &&
+		!fundingAddressesLoading &&
+		!venueTradeHistoryLoading &&
+		historyUmbrellaResolveSettled;
+
+	const portfolioPerfFingerprintRef = useRef("");
+	const portfolioReadyLoggedRef = useRef(false);
+
+	useEffect(() => {
+		if (!portfolioPerfEnabled() || !effectiveAccount) return;
+
+		const previewKeyCount = Object.keys(allBooksPreview).length;
+		const fingerprint = [
+			predictionLoading,
+			userDataLoading,
+			portfolioLoading,
+			booksPreviewLoading,
+			polyPositionsQuery.isLoading,
+			predictPositionsQuery.isLoading,
+			dflowPositionsQuery.isLoading,
+			predictMarketsQuery.isLoading,
+			isDataFullyLoaded,
+			isPositionsTabContentReady,
+			isHistoryTabContentReady,
+			venueTradeHistoryLoading,
+			dflowPositionsStripPending,
+			predictMarketIds.length,
+			umbrellas.length,
+			tokenBalances.size,
+			previewKeyCount,
+			predictOrdersEnabled,
+			truncateWallet(polymarketSafe),
+			truncateWallet(limitlessMakerBase),
+		].join("|");
+
+		if (fingerprint !== portfolioPerfFingerprintRef.current) {
+			portfolioPerfFingerprintRef.current = fingerprint;
+			logPortfolioLoadState({
+				predictionLoading,
+				userDataLoading,
+				portfolioLoading,
+				booksPreviewLoading,
+				polyLoading: polyPositionsQuery.isLoading,
+				predictLoading: predictPositionsQuery.isLoading,
+				dflowLoading: dflowPositionsQuery.isLoading,
+				predictMarketsLoading: predictMarketsQuery.isLoading,
+				isDataFullyLoaded,
+				umbrellaCount: umbrellas.length,
+				tokenBalancesSize: tokenBalances.size,
+				previewKeys: previewKeyCount,
+				polyPos: allPolyPositions.length,
+				predictPos: allPredictPositions.length,
+				dflowPos: allDflowPositions.length,
+				predictMarketIds: predictMarketIds.length,
+				predictOrdersEnabled,
+				isPositionsTabContentReady,
+				isHistoryTabContentReady,
+				venueTradeHistoryLoading,
+				dflowPositionsStripPending,
+				polymarketSafe: truncateWallet(polymarketSafe),
+				limitlessMakerBase: truncateWallet(limitlessMakerBase),
+			});
+		}
+
+		if (isDataFullyLoaded && !portfolioReadyLoggedRef.current) {
+			portfolioReadyLoggedRef.current = true;
+
+			const previewSampleKeys = Object.keys(allBooksPreview).slice(0, 3);
+			const previewSample = Object.fromEntries(
+				previewSampleKeys.map((k) => [k.slice(0, 12) + "…", allBooksPreview[k]]),
+			);
+
+			const polyVenueSum = allPolyPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+			const predictVenueSum = allPredictPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+			const dflowVenueSum = allDflowPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+
+			let levelUpBookSum = 0;
+			const levelUpSamples: Array<Record<string, unknown>> = [];
+			for (const u of umbrellas) {
+				const markets = (getQuestionsForUmbrella(u._id) as PredictionMarket[]) || [];
+				for (const m of markets) {
+					const balanceId = m._id;
+					const priceId = m.questionId || m._id;
+					if (!balanceId || !priceId) continue;
+					const tb = tokenBalances.get(balanceId);
+					if (!tb) continue;
+					const yes = Number(tb.yesBalance) || 0;
+					const no = Number(tb.noBalance) || 0;
+					if (yes === 0 && no === 0) continue;
+					const preview = allBooksPreview[priceId] as
+						| {
+								lowestAsk?: number | null;
+								bestYesPrice?: number | null;
+								bestNoPrice?: number | null;
+								highestBid?: number | null;
+						  }
+						| undefined;
+					const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
+					const np =
+						typeof preview?.bestNoPrice === "number"
+							? preview.bestNoPrice
+							: preview?.highestBid != null && preview?.highestBid !== undefined
+								? 1 - preview.highestBid
+								: null;
+					const rowVal =
+						(typeof yp === "number" ? yes * yp : 0) + (typeof np === "number" ? no * np : 0);
+					levelUpBookSum += rowVal;
+					if (levelUpSamples.length < 2) {
+						levelUpSamples.push({
+							priceIdShort: String(priceId).slice(0, 10) + "…",
+							yes,
+							no,
+							yp,
+							np,
+							rowVal,
+							previewKeys: preview ? Object.keys(preview) : [],
+						});
+					}
+				}
+			}
+
+			logPortfolioReadySnapshot({
+				wallet: truncateWallet(effectiveAccount),
+				portfolioTotalCtx,
+				cashBalanceCtx,
+				positionsHeaderTotal: positionsTotalValue,
+				openPositionsValue,
+				unclaimedWinningsPayout: unclaimedWinningsPayoutTotal,
+				venueNotional: { polyVenueSum, predictVenueSum, dflowVenueSum },
+				levelUpBookSumFromPreview: levelUpBookSum,
+				levelUpSamples,
+				previewSample,
+			});
+		}
+
+		if (!isDataFullyLoaded) {
+			portfolioReadyLoggedRef.current = false;
+		}
+	}, [
+		effectiveAccount,
+		predictionLoading,
+		userDataLoading,
+		portfolioLoading,
+		booksPreviewLoading,
+		polyPositionsQuery.isLoading,
+		predictPositionsQuery.isLoading,
+		dflowPositionsQuery.isLoading,
+		predictMarketsQuery.isLoading,
+		isDataFullyLoaded,
+		isPositionsTabContentReady,
+		isHistoryTabContentReady,
+		venueTradeHistoryLoading,
+		dflowPositionsStripPending,
+		predictMarketIds.length,
+		umbrellas,
+		tokenBalances,
+		allBooksPreview,
+		allPolyPositions,
+		allPredictPositions,
+		allDflowPositions,
+		getQuestionsForUmbrella,
+		portfolioTotalCtx,
+		cashBalanceCtx,
+		positionsTotalValue,
+		openPositionsValue,
+		unclaimedWinningsPayoutTotal,
+		predictOrdersEnabled,
+		polymarketSafe,
+		limitlessMakerBase,
+	]);
+
+	useEffect(() => {
+		portfolioReadyLoggedRef.current = false;
+		portfolioPerfFingerprintRef.current = "";
+	}, [effectiveAccount]);
 
 	return {
 		account,
@@ -2325,6 +2377,7 @@ export default function usePositionsData() {
 		realAccount,
 		isDataFullyLoaded,
 		isPositionsTabContentReady,
+		isHistoryTabContentReady,
 		dflowPositionsStripPending,
 		venueTradeHistoryLoading,
 		portfolioLoading,

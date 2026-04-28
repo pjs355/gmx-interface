@@ -42,7 +42,8 @@ export function AppHeaderLinks({
 		usePortfolio();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
-	const showCashMetricSkeleton = cashLoading || blockHeaderMetrics;
+	// Cash: show as soon as balance fetches complete, not when positions page is still loading
+	const showCashMetricSkeleton = cashLoading;
 
 	// Shared profile query -- avoids duplicate /profiles/me fetches
 	const profileQuery = useCurrentProfile();

@@ -23,6 +23,7 @@ export type {
 	FundingStableMetaJson,
 	LifiAllowanceHint,
 	LifiSolanaDelegateHint,
+	PolygonSafeUnwrapPrerequisite,
 	LifiQuoteRequestBody,
 	LifiQuoteResponse,
 	LifiQuoteStep,

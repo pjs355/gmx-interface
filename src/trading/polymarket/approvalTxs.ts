@@ -1,14 +1,13 @@
-import { createPublicClient, encodeFunctionData, erc20Abi, http, maxUint256 } from "viem";
-import { polygon } from "viem/chains";
+import { encodeFunctionData, erc20Abi, maxUint256 } from "viem";
 import type { Transaction } from "@polymarket/builder-relayer-client";
-import { POLYGON_RPC_URL } from "@/config/rpc";
+import { getPolygonPublicClient } from "@/config/polygonPublicClient";
 import {
 	POLYGON_CTF,
 	POLYGON_CTF_EXCHANGE,
 	POLYGON_NEG_RISK_ADAPTER,
 	POLYGON_NEG_RISK_CTF_EXCHANGE,
-	POLYGON_USDC_E,
-	USDC_E_ALLOWANCE_THRESHOLD,
+	POLYGON_PUSD,
+	PUSD_ALLOWANCE_THRESHOLD,
 } from "./constants";
 
 const erc1155Abi = [
@@ -47,10 +46,6 @@ const ERC1155_OPERATORS = [
 	POLYGON_NEG_RISK_ADAPTER,
 ] as const;
 
-function polygonPublic() {
-	return createPublicClient({ chain: polygon, transport: http(POLYGON_RPC_URL) });
-}
-
 export type ApprovalStatus = {
 	usdc: Record<string, boolean>;
 	erc1155: Record<string, boolean>;
@@ -60,33 +55,39 @@ export type ApprovalStatus = {
 export async function checkPolymarketApprovals(
 	safeAddress: string
 ): Promise<ApprovalStatus> {
-	const pc = polygonPublic();
+	const pc = getPolygonPublicClient();
 	const safe = safeAddress as `0x${string}`;
 
-	const [usdcResults, erc1155Results] = await Promise.all([
-		Promise.all(
-			USDC_SPENDERS.map(async (spender) => {
-				const allowance = await pc.readContract({
-					address: POLYGON_USDC_E,
-					abi: erc20Abi,
-					functionName: "allowance",
-					args: [safe, spender],
-				});
-				return [spender, allowance >= USDC_E_ALLOWANCE_THRESHOLD] as const;
-			})
-		),
-		Promise.all(
-			ERC1155_OPERATORS.map(async (op) => {
-				const ok = await pc.readContract({
-					address: POLYGON_CTF,
-					abi: erc1155Abi,
-					functionName: "isApprovedForAll",
-					args: [safe, op],
-				});
-				return [op, Boolean(ok)] as const;
-			})
-		),
-	]);
+	// Single multicall instead of 7 parallel eth_call POSTs — avoids flaky public RPCs closing connections.
+	const contracts = [
+		...USDC_SPENDERS.map((spender) => ({
+			address: POLYGON_PUSD,
+			abi: erc20Abi,
+			functionName: "allowance" as const,
+			args: [safe, spender] as const,
+		})),
+		...ERC1155_OPERATORS.map((operator) => ({
+			address: POLYGON_CTF,
+			abi: erc1155Abi,
+			functionName: "isApprovedForAll" as const,
+			args: [safe, operator] as const,
+		})),
+	];
+
+	const raw = await pc.multicall({
+		contracts,
+		allowFailure: false,
+	});
+
+	const usdcResults = USDC_SPENDERS.map((spender, i) => {
+		const allowance = raw[i] as bigint;
+		return [spender, allowance >= PUSD_ALLOWANCE_THRESHOLD] as const;
+	});
+	const off = USDC_SPENDERS.length;
+	const erc1155Results = ERC1155_OPERATORS.map((op, j) => {
+		const ok = raw[off + j] as boolean;
+		return [op, Boolean(ok)] as const;
+	});
 
 	const usdc = Object.fromEntries(usdcResults);
 	const erc1155 = Object.fromEntries(erc1155Results);
@@ -97,7 +98,7 @@ export async function checkPolymarketApprovals(
 
 function erc20ApproveTx(spender: `0x${string}`): Transaction {
 	return {
-		to: POLYGON_USDC_E,
+		to: POLYGON_PUSD,
 		value: "0",
 		data: encodeFunctionData({
 			abi: erc20Abi,

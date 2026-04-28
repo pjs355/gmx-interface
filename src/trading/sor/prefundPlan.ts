@@ -27,6 +27,22 @@ export function computePrefundNeedUsdHuman(
 }
 
 /**
+ * SOR `leg.bridge.amount` is **optimizer shortfall** (USD still to move from source
+ * chains onto the venue wallet). It can be **below** `executionAmountUsd` when the user
+ * already holds stable on the destination — but venue settlement still needs the **full**
+ * execution notional. Never anchor prefund on shortfall alone or we skip LI.FI and POST
+ * `/orders` fails with insufficient collateral.
+ */
+export function resolveBuyPrefundAnchorUsd(
+	routeBridgeUsd: number,
+	executionAmountUsd: number,
+): number {
+	const r = Number.isFinite(routeBridgeUsd) ? Math.max(0, routeBridgeUsd) : 0;
+	const e = Number.isFinite(executionAmountUsd) ? Math.max(0, executionAmountUsd) : 0;
+	return e > 0 ? Math.max(r, e) : r;
+}
+
+/**
  * USD that must still arrive via LI.FI from non-venue chains after spending stable
  * already on the bridge destination (venue) wallet toward the same prefund target.
  */

@@ -8,7 +8,7 @@ const MAP: Record<string, string> = {
 	SAFE_NOT_DEPLOYED: "Deploy your Polymarket Safe to continue.",
 	MISSING_L2_CREDENTIALS: "Complete API credentials setup for Polymarket.",
 	MISSING_ALLOWANCES: "Approve Polymarket contracts for trading.",
-	UNDERFUNDED_SAFE: "Fund your Polymarket Safe with USDC.e on Polygon.",
+	UNDERFUNDED_SAFE: "Fund your Polymarket Safe with pUSD on Polygon.",
 	BUILDER_NOT_READY: "Complete builder setup before trading.",
 	KALSHI_WALLET: "Connect a Solana wallet for Kalshi routing.",
 	PROOF_KYC_REQUIRED: "Complete Proof KYC verification on your Profile page.",

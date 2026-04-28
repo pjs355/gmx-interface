@@ -1,6 +1,5 @@
 // React import not required with automatic JSX runtime
 import type { CSSProperties } from "react";
-import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
 
 /** Same as AppHeaderUser / AppHeaderLinks `header-metric` cash skeleton. */
 const cashBalanceSkeletonBoxStyle: CSSProperties = {
@@ -30,10 +29,9 @@ export default function PositionsHeader({
 	portfolioLoading?: boolean;
 	summariesLocked?: boolean;
 }) {
-	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const lockAll = summariesLocked === true;
-	// Match AppHeaderUser: cash skeleton until Portfolio cash is ready OR page metrics are blocked
-	const showCashSkeleton = cashLoading || blockHeaderMetrics;
+	// Cash is independent: show as soon as wallet/balance calls complete; do not wait on positions table/history shell
+	const showCashSkeleton = cashLoading;
 	const showPositionsSkeleton =
 		lockAll ||
 		positionsLoading ||

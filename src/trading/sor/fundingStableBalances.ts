@@ -13,18 +13,14 @@ import {
 	SOLANA_USDC_MINT,
 	getUSDCAddress,
 } from "@/config/addresses";
-import { BSC_RPC_URL, DEFAULT_RPC_URL, POLYGON_RPC_URL, SOLANA_RPC_URL } from "@/config/rpc";
-import { POLYGON_USDC_E } from "@/trading/polymarket/constants";
+import { getPolygonPublicClient } from "@/config/polygonPublicClient";
+import { BSC_RPC_URL, DEFAULT_RPC_URL, SOLANA_RPC_URL } from "@/config/rpc";
+import { POLYGON_PUSD, POLYGON_USDC_E } from "@/trading/polymarket/constants";
 import type { SorChain } from "./sor-types";
 
 const basePublic = createPublicClient({
 	chain: base,
 	transport: http(DEFAULT_RPC_URL),
-});
-
-const polygonPublic = createPublicClient({
-	chain: polygon,
-	transport: http(POLYGON_RPC_URL),
 });
 
 const bscPublic = createPublicClient({
@@ -109,14 +105,25 @@ export async function readFundingStableBalancesHuman(
 					.then((raw) => Number(formatUnits(raw, 6)))
 			: Promise.resolve(0),
 		safeAddr
-			? polygonPublic
-					.readContract({
-						address: POLYGON_USDC_E,
-						abi: erc20Abi,
-						functionName: "balanceOf",
-						args: [safeAddr],
-					})
-					.then((raw) => Number(formatUnits(raw, 6)))
+			? (() => {
+					const pc = getPolygonPublicClient();
+					return Promise.all([
+						pc.readContract({
+							address: POLYGON_PUSD,
+							abi: erc20Abi,
+							functionName: "balanceOf",
+							args: [safeAddr],
+						}),
+						pc.readContract({
+							address: POLYGON_USDC_E,
+							abi: erc20Abi,
+							functionName: "balanceOf",
+							args: [safeAddr],
+						}),
+					]).then(([pusdRaw, usdceRaw]) =>
+						Number(formatUnits(pusdRaw, 6)) + Number(formatUnits(usdceRaw, 6)),
+					);
+				})()
 			: Promise.resolve(0),
 		bnbAddr
 			? bscPublic

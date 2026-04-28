@@ -61,6 +61,17 @@ export type LifiQuoteRequestBody = {
 	slippage?: number;
 };
 
+/**
+ * When bridging **from** Polygon with `fromAddress` = Polymarket Safe, the server may return
+ * relay `calls` to **unwrap pUSD → USDC.e** before LI.FI steps (LI.FI quotes from USDC.e).
+ */
+export type PolygonSafeUnwrapPrerequisite = {
+	safeAddress: string;
+	unwrapPusdAmountAtomic: string;
+	calls: { to: string; data: string; value: string }[];
+	note: string;
+};
+
 export type LifiQuoteResponse = {
 	quote?: Jsonish;
 	steps?: LifiQuoteStep[];
@@ -74,6 +85,7 @@ export type LifiQuoteResponse = {
 	fromAmount?: string;
 	fromToken?: Jsonish;
 	toToken?: Jsonish;
+	polygonSafeUnwrapPrerequisite?: PolygonSafeUnwrapPrerequisite | null;
 	[key: string]: unknown;
 };
 
@@ -142,6 +154,7 @@ export type LifiWithdrawLifiData = {
 	statusBridge: string | null;
 	quote?: Jsonish;
 	steps?: LifiQuoteStep[];
+	polygonSafeUnwrapPrerequisite?: PolygonSafeUnwrapPrerequisite | null;
 };
 
 /** One executable slice from POST /funding/lifi/withdraw/plan */

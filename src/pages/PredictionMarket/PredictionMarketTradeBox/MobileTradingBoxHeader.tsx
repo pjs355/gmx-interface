@@ -142,7 +142,9 @@ export default function MobileTradingBoxHeader({
                   return;
                 }
                 
-                const maxFractionDigits = side === "sell" ? 6 : 2;
+                // Shares (sell, limit, etc.): 6 dp; USD market buy: 2 dp
+                const maxFractionDigits =
+                  side === "buy" && orderType === "market" ? 2 : 6;
                 const frac = cleanValue.includes(".") ? cleanValue.split(".")[1] : "";
                 if (frac && frac.length > maxFractionDigits) {
                   return;

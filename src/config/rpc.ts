@@ -15,7 +15,12 @@ export const RPC_URLS = {
 	BASE_COINBASE: "https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih",
 	BASE_PUBLIC: "https://mainnet.base.org",
 	BASE_PUBLIC_NODE: "https://base-rpc.publicnode.com",
-	POLYGON_PUBLIC_NODE: "https://polygon-bor-rpc.publicnode.com",
+	/**
+	 * Primary Polygon HTTP RPC when `VITE_POLYGON_RPC_URL` is unset.
+	 * Avoid `polygon-rpc.com` here — it often returns **401** for browser `fetch` without API keys.
+	 * PublicNode / others are listed in `POLYGON_PUBLIC_HTTP_FALLBACKS` for resilience under burst reads.
+	 */
+	POLYGON_READ_DEFAULT: "https://rpc.ankr.com/polygon",
 	BSC_PUBLIC_NODE: "https://bsc-rpc.publicnode.com",
 	/** PublicNode — browser-origin calls often get 403 from api.mainnet-beta.solana.com. */
 	SOLANA_PUBLIC_NODE: "https://solana-rpc.publicnode.com",
@@ -28,8 +33,8 @@ export const DEFAULT_RPC_URL = RPC_URLS.BASE_COINBASE;
 export const FALLBACK_RPC_URL = RPC_URLS.BASE_INFURA;
 
 /**
- * Polygon mainnet RPC (Polymarket Safe reads, bridge balances, LI.FI allowance checks on Polygon).
- * Set `VITE_POLYGON_RPC_URL` in `.env` to use Infura/Alchemy/etc.; otherwise uses the public node below.
+ * Polygon mainnet RPC for wagmi `chain.rpcUrls.default` (`index.tsx`) — keep aligned with read client defaults when unset.
+ * Prefer `VITE_POLYGON_RPC_URL` for production (Infura/Alchemy); bundled defaults must allow browser JSON-RPC without 401.
  */
 const vitePolygonRpc =
 	typeof import.meta.env !== "undefined" &&
@@ -38,7 +43,47 @@ const vitePolygonRpc =
 		? import.meta.env.VITE_POLYGON_RPC_URL.trim()
 		: null;
 
-export const POLYGON_RPC_URL = vitePolygonRpc ?? RPC_URLS.POLYGON_PUBLIC_NODE;
+export const POLYGON_RPC_URL = vitePolygonRpc ?? RPC_URLS.POLYGON_READ_DEFAULT;
+
+/** When the primary Polygon RPC drops connections (common on free endpoints), try these next — no extra env required. */
+const POLYGON_PUBLIC_HTTP_FALLBACKS: readonly string[] = [
+	"https://polygon-bor-rpc.publicnode.com",
+	"https://rpc.ankr.com/polygon",
+	"https://1rpc.io/matic",
+	"https://polygon.llamarpc.com",
+];
+
+/** Optional comma- or space-separated extra Polygon HTTP RPC URLs (tried after `POLYGON_RPC_URL`). */
+function parsePolygonRpcFallbackUrlsFromEnv(): string[] {
+	const raw =
+		typeof import.meta.env !== "undefined" &&
+		typeof import.meta.env.VITE_POLYGON_RPC_FALLBACK_URLS === "string"
+			? import.meta.env.VITE_POLYGON_RPC_FALLBACK_URLS
+			: "";
+	return raw
+		.split(/[\s,]+/)
+		.map((s) => s.trim())
+		.filter((s) => s.startsWith("http://") || s.startsWith("https://"));
+}
+
+/**
+ * Ordered Polygon JSON-RPC URLs for viem reads (Polymarket approvals, bridge balances, LI.FI checks).
+ * Deduped: primary from env or `POLYGON_READ_DEFAULT`, then optional env fallbacks, then public alternates.
+ */
+export function getPolygonHttpRpcEndpoints(): readonly string[] {
+	const out: string[] = [];
+	const seen = new Set<string>();
+	const push = (u: string) => {
+		const t = u.trim();
+		if (!t || seen.has(t)) return;
+		seen.add(t);
+		out.push(t);
+	};
+	push(POLYGON_RPC_URL);
+	for (const u of parsePolygonRpcFallbackUrlsFromEnv()) push(u);
+	for (const u of POLYGON_PUBLIC_HTTP_FALLBACKS) push(u);
+	return out;
+}
 
 const viteBscRpc =
 	typeof import.meta.env !== "undefined" &&

@@ -16,7 +16,7 @@ type RelayerBundledError = {
 	data?: unknown;
 };
 
-/** Duck-type axios errors (e.g. from @polymarket/clob-client) without importing axios. */
+/** Duck-type axios errors (e.g. from @polymarket/clob-client-v2) without importing axios. */
 function tryAxiosLikeErrorMessage(err: unknown): string | null {
 	if (!err || typeof err !== "object") return null;
 	const e = err as {

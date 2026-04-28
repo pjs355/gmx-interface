@@ -73,8 +73,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		loading: userDataLoading,
 	} = useUserData();
 
-	// Defer venue queries until after the initial paint so the homepage renders fast.
-	// USDC cash shows immediately; venue cash/positions fill in after first frame.
+	// Defer expensive venue queries until after the first frame (faster first paint).
+	// Header cash still waits on `fundingHydrated` + first bridge fetch so the number does not step up.
 	const [venueReady, setVenueReady] = React.useState(false);
 	React.useEffect(() => {
 		let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -87,8 +87,13 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		};
 	}, []);
 
-	const { polymarketSafe, embeddedEoa, solanaAddress, limitlessMakerBase } =
-		useFundingAddresses();
+	const {
+		polymarketSafe,
+		embeddedEoa,
+		solanaAddress,
+		limitlessMakerBase,
+		fundingHydrated,
+	} = useFundingAddresses();
 	const { authenticated } = usePrivy();
 	const dflowProof = useDflowProofStatus();
 	const solanaLinked = Boolean(solanaAddress?.trim());
@@ -326,19 +331,28 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		(usdcBalance === null || usdcBalance === undefined);
 	// While `venueReady` is false, off-chain stables are not in the total yet; treat as loading.
 	const waitingOnVenueDeferral = Boolean(account) && !venueReady;
+	// Until profile + venue account data have loaded once, `venueEnabled` can flip and the
+	// shown total would step from Base-only to Base+off-chain — keep the cash skeleton up.
+	const waitingOnFundingHydration = Boolean(account) && !fundingHydrated;
 	const waitingOnFirstBridge =
 		Boolean(account) &&
 		venueReady &&
 		venueEnabled &&
 		!bridgeBalances.isFetched;
 	const cashLoading =
-		baseCashMissing || waitingOnVenueDeferral || waitingOnFirstBridge;
+		baseCashMissing ||
+		waitingOnVenueDeferral ||
+		waitingOnFundingHydration ||
+		waitingOnFirstBridge;
+	// Only gate the header on DFlow when we actually fetch Solana positions (`dflowRpcEnabled`).
+	// Previously we blocked on `solanaLinked && !dflowProof.isFetched`, which kept the portfolio
+	// skeleton up for any Privy-linked Solana wallet until `/dflow/account` finished — and
+	// `isVerified && isLoading` could stick true if the positions query never settled.
 	const dflowBlockingPortfolio =
 		Boolean(account) &&
-		solanaLinked &&
 		Boolean(authenticated) &&
-		(!dflowProof.isFetched ||
-			(dflowProof.isVerified && dflowPositionsQuery.isLoading));
+		dflowRpcEnabled &&
+		dflowPositionsQuery.isPending;
 
 	// Portfolio is loading if we haven't loaded it yet OR if balances/prices are still being fetched
 	const portfolioLoading =
