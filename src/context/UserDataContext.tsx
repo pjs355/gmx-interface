@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { mixpanelIdentify, mixpanelPeopleSet } from "@/utils/mixpanel";
-import { Contract, JsonRpcProvider, ethers, formatUnits } from "ethers";
+import { Contract, JsonRpcProvider, ethers } from "ethers";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useSignerContext } from "context/SignerContext";
 import {
@@ -45,13 +45,16 @@ type ApprovalState = {
 type UserDataContextValue = {
 	orders: ProcessedOrder[];
 	tokenBalances: Map<string, TokenBalance>; // marketId -> TokenBalance
-	usdcBalance: string | null;
-	usdcLoading: boolean; // Separate loading state for USDC balance
 	approvalState: ApprovalState;
 	loading: boolean;
 	usingRpcFallback: boolean; // True when subgraph failed and using RPC
 	refresh: () => Promise<void>;
-	refreshViaRpc: () => Promise<void>; // Force RPC refresh (bypasses slow subgraph)
+	/**
+	 * Force RPC refresh of share-position balances (bypasses subgraph indexing delay).
+	 * Cash-side collateral balances live in {@link useCollateralTokens} — call its
+	 * `refetch()` separately for post-trade USDC/USDT updates.
+	 */
+	refreshTokenPositions: () => Promise<void>;
 	loadOrders: () => Promise<void>; // Lazy: call when orders are needed (e.g. Positions page)
 	getTokenBalance: (marketId: string) => TokenBalance | null;
 	/** Refreshes on-chain approval flags; returns whether LevelUp trading is fully approved. */
@@ -71,8 +74,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	const [tokenBalances, setTokenBalances] = useState<
 		Map<string, TokenBalance>
 	>(new Map());
-	const [usdcBalance, setUsdcBalance] = useState<string | null>(null);
-	const [usdcLoading, setUsdcLoading] = useState(true); // Separate loading state for USDC
 	const [approvalState, setApprovalState] = useState<ApprovalState>({
 		isApproved: false,
 		isChecking: false,
@@ -193,45 +194,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		rawTokenBalancesRef.current = rawTokenBalances;
 	}, [rawTokenBalances]);
-
-	// Track if we've already fetched USDC for this account
-	const usdcFetchedRef = useRef<string | null>(null);
-
-	/**
-	 * Fetch USDC balance via RPC for real-time accuracy
-	 */
-	const fetchUsdcBalanceRpc = useCallback(async (walletAddress: string) => {
-		// Skip if we've already fetched for this account (prevents StrictMode double-fetch)
-		if (usdcFetchedRef.current === walletAddress) return;
-
-		// Set loading AFTER the skip check to prevent flash on StrictMode remount
-		setUsdcLoading(true);
-
-		try {
-			const provider = getReadProvider();
-			const erc20 = new Contract(
-				getUSDCAddress(),
-				[
-					"function balanceOf(address account) view returns (uint256)",
-					"function decimals() view returns (uint8)",
-				],
-				provider
-			);
-
-			const [usdcRaw, usdcDecimals] = await Promise.all([
-				erc20.balanceOf(walletAddress),
-				erc20.decimals(),
-			]);
-			
-			setUsdcBalance(formatUnits(usdcRaw, usdcDecimals));
-			usdcFetchedRef.current = walletAddress;
-		} catch (error) {
-			console.error("Error fetching USDC balance via RPC:", error);
-			setUsdcBalance("0");
-		} finally {
-			setUsdcLoading(false);
-		}
-	}, [getReadProvider]);
 
 	/**
 	 * Fetch token balances via RPC as fallback when subgraph fails
@@ -359,20 +321,15 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchTokenBalancesFromRpc]);
 
-	// Fetch balances IMMEDIATELY when account is available
+	// Fetch token positions IMMEDIATELY when account is available
 	useEffect(() => {
 		if (account) {
-			// USDC via RPC, token positions via subgraph (in parallel)
-			fetchUsdcBalanceRpc(account);
 			fetchTokenBalancesFromSubgraph(account);
 		} else {
-			setUsdcBalance(null);
-			setUsdcLoading(false);
 			setRawTokenBalances([]);
 			subgraphFetchedRef.current = null;
-			usdcFetchedRef.current = null;
 		}
-	}, [account, fetchUsdcBalanceRpc, fetchTokenBalancesFromSubgraph]);
+	}, [account, fetchTokenBalancesFromSubgraph]);
 
 	// RETRY: If initial balance fetch failed (no market data yet), retry when umbrellas load
 	// This handles the case where subgraph fails in production and RPC fallback needs market data
@@ -477,7 +434,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		if (!account) {
 			setOrders([]);
 			setTokenBalances(new Map());
-			setUsdcBalance(null);
 			loadedForAccountRef.current = null;
 			return;
 		}
@@ -698,22 +654,21 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		loadedForAccountRef.current = null;
 		ordersLoadedRef.current = null;
 		subgraphFetchedRef.current = null;
-		usdcFetchedRef.current = null;
 		subgraphService.clearSubgraphCache();
 		await Promise.all([
-			fetchUsdcBalanceRpc(account),
 			fetchTokenBalancesFromSubgraph(account, true),
 			load(),
 		]);
-	}, [account, fetchUsdcBalanceRpc, fetchTokenBalancesFromSubgraph, load]);
+	}, [account, fetchTokenBalancesFromSubgraph, load]);
 
-	// Force RPC refresh - bypasses subgraph entirely for immediate balance updates
-	// Use this after trades when subgraph indexing delay would show stale data
-	const refreshViaRpc = useCallback(async () => {
+	/**
+	 * Force RPC refresh of share-position balances. Use after trades, when subgraph
+	 * indexing delay would show stale token balances. Cash-side collateral balances
+	 * are NOT refreshed here — call `useCollateralTokens().refetch()` separately.
+	 */
+	const refreshTokenPositions = useCallback(async () => {
 		if (!account) return;
 
-		usdcFetchedRef.current = null;
-		
 		// Build market data map from current context
 		const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
 		// CRITICAL: Always use _id as the key for consistency with Positions.tsx lookups
@@ -744,31 +699,23 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		});
 
 		try {
-			// Fetch both USDC and token balances via RPC in parallel
-			const [, rpcBalances] = await Promise.all([
-				fetchUsdcBalanceRpc(account),
-				fetchTokenBalancesFromRpc(account, marketDataMap),
-			]);
-
-			// Update state with RPC balances
+			const rpcBalances = await fetchTokenBalancesFromRpc(account, marketDataMap);
 			setRawTokenBalances(rpcBalances);
 			setUsingRpcFallback(true);
-		} catch (error) {
-			console.error("[UserDataContext] Force RPC refresh failed:", error);
+		} catch (err) {
+			console.error("error", err);
 		}
-	}, [account, umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchUsdcBalanceRpc, fetchTokenBalancesFromRpc]);
+	}, [account, umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchTokenBalancesFromRpc]);
 
 	const value = useMemo<UserDataContextValue>(
 		() => ({
 			orders,
 			tokenBalances,
-			usdcBalance,
-			usdcLoading,
 			approvalState,
 			loading,
 			usingRpcFallback,
 			refresh,
-			refreshViaRpc,
+			refreshTokenPositions,
 			loadOrders,
 			getTokenBalance,
 			checkApproval,
@@ -777,13 +724,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		[
 			orders,
 			tokenBalances,
-			usdcBalance,
-			usdcLoading,
 			approvalState,
 			loading,
 			usingRpcFallback,
 			refresh,
-			refreshViaRpc,
+			refreshTokenPositions,
 			loadOrders,
 			getTokenBalance,
 			checkApproval,

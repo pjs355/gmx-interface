@@ -3,6 +3,7 @@ import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { useUserData } from "@/context/UserDataContext";
+import { useCollateralTokens } from "@/context/CollateralTokenContext";
 import {
 	getPredictionWebSocketUrl,
 	getPredictionApiBaseUrl,
@@ -152,7 +153,9 @@ export default function TradeTesting() {
 	const { authenticated, getAccessToken } = usePrivy();
 	const { identityToken } = useIdentityToken();
 	const { account, signer } = useSignerContext();
-	const { usdcBalance, refreshViaRpc } = useUserData();
+	const { refreshTokenPositions } = useUserData();
+	const collateralTokens = useCollateralTokens();
+	const usdcBalance = collateralTokens.baseUsdc;
 	const { umbrellas, getAllQuestionsForUmbrella } = usePredictionData();
 
 	const [selectedMarket, setSelectedMarket] = useState<MarketData | null>(null);
@@ -329,8 +332,11 @@ export default function TradeTesting() {
 
 			await executor.runTestSuite(config);
 
-			// Refresh balances after all trades
-			await refreshViaRpc();
+			// Refresh balances after all trades — collateral tokens + share positions in parallel.
+			await Promise.all([
+				collateralTokens.refetch(),
+				refreshTokenPositions(),
+			]);
 
 			setTestState((prev) => ({
 				...prev,
@@ -346,7 +352,7 @@ export default function TradeTesting() {
 				errors: [...prev.errors, errorMsg],
 			}));
 		}
-	}, [selectedMarket, account, signer, orderbook, config, refreshViaRpc, getAccessToken, identityToken]);
+	}, [selectedMarket, account, signer, orderbook, config, refreshTokenPositions, collateralTokens, getAccessToken, identityToken]);
 
 	// Run random stress test - BLAST random orders without any pre-checks
 	// The point is to test edge cases and server error handling
@@ -1094,7 +1100,7 @@ export default function TradeTesting() {
 				</div>
 				<div className="info-row">
 					<span className="label">USDC Balance:</span>
-					<span className="value">${Number(usdcBalance || 0).toFixed(2)}</span>
+					<span className="value">${usdcBalance.toFixed(2)}</span>
 				</div>
 				<div className="info-row">
 					<span className="label">Signer Ready:</span>

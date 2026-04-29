@@ -137,8 +137,8 @@ export class Tradebox {
 		console.warn("[e2e tradebox] submit() entered");
 		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
 		const button = this.root.locator('[data-qa="tradebox-submit"]');
-		await logTradeboxDomSnapshot("submit: amount input (initial)", input);
-		await logTradeboxDomSnapshot("submit: trade button (initial)", button);
+		// await logTradeboxDomSnapshot("submit: amount input (initial)", input);
+		// await logTradeboxDomSnapshot("submit: trade button (initial)", button);
 
 		const deadline = Date.now() + SUBMIT_READY_TIMEOUT_MS;
 
@@ -239,7 +239,9 @@ export class Tradebox {
 	): Promise<number> {
 		await this.expandSorDetailsIfCollapsed();
 		const loc = this.root
-			.locator('.sor-details-panel [data-qa="sor-leg-cost"][data-cost-usd]')
+			.locator(
+				'.sor-details-panel [data-qa="sor-leg-cost"][data-cost-usd]',
+			)
 			.first();
 		await loc.waitFor({ state: "visible", timeout: timeoutMs });
 		const raw = await loc.getAttribute("data-cost-usd");

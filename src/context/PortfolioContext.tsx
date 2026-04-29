@@ -8,11 +8,11 @@ import React, {
 } from "react";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useUserData } from "context/UserDataContext";
+import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { sumPredictPositionMarkValue } from "@/trading/predict/sumPredictPositionMarkValue";
@@ -31,7 +31,8 @@ import {
 
 type PortfolioContextValue = {
 	portfolioTotal: number | null;
-	cashBalance: number;
+	/** `null` until `CollateralTokenContext` has settled at least once. */
+	cashBalance: number | null;
 	loading: boolean;
 	cashLoading: boolean;
 	portfolioLoading: boolean;
@@ -42,7 +43,7 @@ const PortfolioContext = createContext<PortfolioContextValue | null>(null);
 /** Used when a consumer mounts outside `PortfolioProvider` (broken tree or duplicate context module under Vite HMR). */
 const PORTFOLIO_CONTEXT_FALLBACK: PortfolioContextValue = {
 	portfolioTotal: null,
-	cashBalance: 0,
+	cashBalance: null,
 	loading: true,
 	cashLoading: true,
 	portfolioLoading: true,
@@ -53,7 +54,6 @@ let portfolioProviderMissingLogged = false;
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const { acknowledgedClearedPayoutKeys } = useRecentSettlementClaim();
 	const [portfolioTotal, setPortfolioTotal] = useState<number | null>(null);
-	const lastCashRef = React.useRef<number>(0);
 	/** Mark-to-market (LevelUp books) + off-chain venue — excludes unclaimed resolution value. */
 	const lastMarkToMarketAndVenueRef = React.useRef<number>(0);
 	/** Last full "positions" column (mtm+venue+LevelUp unclaimed) — for snap-to-zero guard only. */
@@ -67,63 +67,19 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		booksPreviewLoading,
 	} = usePredictionData();
 	const { appState } = useOddsMonitor();
-	const {
-		usdcBalance,
-		tokenBalances,
-		loading: userDataLoading,
-	} = useUserData();
-
-	// Defer expensive venue queries until after the first frame (faster first paint).
-	// Header cash still waits on `fundingHydrated` + first bridge fetch so the number does not step up.
-	const [venueReady, setVenueReady] = React.useState(false);
-	React.useEffect(() => {
-		let timeoutId: ReturnType<typeof setTimeout> | null = null;
-		const rafId = requestAnimationFrame(() => {
-			timeoutId = setTimeout(() => setVenueReady(true), 0);
-		});
-		return () => {
-			cancelAnimationFrame(rafId);
-			if (timeoutId !== null) clearTimeout(timeoutId);
-		};
-	}, []);
+	const { tokenBalances, loading: userDataLoading } = useUserData();
+	const collateral = useCollateralTokens();
 
 	const {
 		polymarketSafe,
-		embeddedEoa,
 		solanaAddress,
 		limitlessMakerBase,
-		fundingHydrated,
 	} = useFundingAddresses();
 	const { authenticated } = usePrivy();
 	const dflowProof = useDflowProofStatus();
 	const solanaLinked = Boolean(solanaAddress?.trim());
 
-	const venueEnabled =
-		venueReady &&
-		Boolean(polymarketSafe || embeddedEoa || solanaAddress || limitlessMakerBase);
-
-	const bridgeBalances = useBridgeFundingBalances({
-		baseSmartWallet: undefined,
-		limitlessMakerBase: venueEnabled ? limitlessMakerBase : null,
-		polymarketSafe: venueEnabled ? polymarketSafe : null,
-		embeddedEoa: venueEnabled ? embeddedEoa : null,
-		solanaAddress: venueEnabled ? solanaAddress : null,
-		enabled: venueEnabled,
-	});
-	const polySafeUsdcE = bridgeBalances.data?.polygonUsdcEHuman
-		? Number(bridgeBalances.data.polygonUsdcEHuman)
-		: 0;
-	const bscUsdtCash = bridgeBalances.data?.bscUsdtHuman
-		? Number(bridgeBalances.data.bscUsdtHuman)
-		: 0;
-	const solanaUsdcCash = bridgeBalances.data?.solanaUsdcHuman
-		? Number(bridgeBalances.data.solanaUsdcHuman)
-		: 0;
-	const limitlessMakerUsdcCash = bridgeBalances.data?.baseLimitlessUsdcHuman
-		? Number(bridgeBalances.data.baseLimitlessUsdcHuman)
-		: 0;
-
-	const polyPositionsQuery = usePolymarketPositions(venueReady ? polymarketSafe : null);
+	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
 	const polyPositionsDataNetClaim = useMemo(() => {
 		if (!polyPositionsQuery.data) return null;
 		return polyPositionsQuery.data.filter(
@@ -143,9 +99,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 
 	// Match usePositionsData: Predict.fun keys off the embedded signer (BNB), not the Base smart wallet.
 	const predictQueryAddress = signerAddress ?? account;
-	const predictPositionsQuery = usePredictPositions(
-		venueReady ? (predictQueryAddress ?? null) : null
-	);
+	const predictPositionsQuery = usePredictPositions(predictQueryAddress ?? null);
 	const predictPositionsDataNetClaim = useMemo(() => {
 		if (!predictPositionsQuery.data) return null;
 		return predictPositionsQuery.data.filter(
@@ -164,7 +118,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	}, [predictPositionsDataNetClaim]);
 	const predictMarketDetailsPortfolioQuery = usePredictMarketDetailsMap(
 		predictPortfolioMarketIds,
-		venueReady && predictPortfolioMarketIds.length > 0,
+		predictPortfolioMarketIds.length > 0,
 	);
 	const predictPositionsTotal = useMemo(() => {
 		if (!predictPositionsDataNetClaim) return 0;
@@ -187,13 +141,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 
 	const privateApi = usePrivateApiClient();
 	const dflowRpcEnabled =
-		venueReady &&
 		solanaLinked &&
 		Boolean(authenticated) &&
 		dflowProof.isFetched &&
 		dflowProof.isVerified;
 	const dflowPositionsQuery = useDflowPositions(
-		venueReady ? solanaAddress : null,
+		solanaAddress,
 		privateApi,
 		{ enabled: dflowRpcEnabled },
 	);
@@ -206,9 +159,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	}, [dflowPositionsQuery.data]);
 
 	const limitlessPortfolioEnabled =
-		venueReady &&
-		Boolean(authenticated) &&
-		Boolean(limitlessMakerBase?.trim());
+		Boolean(authenticated) && Boolean(limitlessMakerBase?.trim());
 	const limitlessVenuePositionsQuery =
 		useLimitlessVenuePositions(limitlessPortfolioEnabled);
 	const limitlessPositionsDataNetClaim = useMemo(() => {
@@ -274,30 +225,21 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		return sum;
 	}, [acknowledgedClearedPayoutKeys, resolvedMarketsByUmbrella, tokenBalances]);
 
-	// Track separate loading states
-	const [hasInitialCashLoad, setHasInitialCashLoad] = React.useState(false);
+	// Track portfolio loading state separately. Cash loading comes from `collateral.isFetched`.
 	const [hasInitialPortfolioLoad, setHasInitialPortfolioLoad] =
 		React.useState(false);
 	const initialLoadTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-	// Reset loading states when account changes
+	// Reset loading state when account changes
 	React.useEffect(() => {
-		setHasInitialCashLoad(false);
 		setHasInitialPortfolioLoad(false);
 		lastMarkToMarketAndVenueRef.current = 0;
 		lastPortfolioPositionColumnRef.current = 0;
-		// Clear any existing timeout
 		if (initialLoadTimeoutRef.current) {
 			clearTimeout(initialLoadTimeoutRef.current);
 			initialLoadTimeoutRef.current = null;
 		}
 	}, [account]);
-
-	React.useEffect(() => {
-		if (usdcBalance !== null && usdcBalance !== undefined) {
-			setHasInitialCashLoad(true);
-		}
-	}, [usdcBalance]);
 
 	React.useEffect(() => {
 		if (portfolioTotal !== null && portfolioTotal !== undefined) {
@@ -324,26 +266,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		};
 	}, [account, hasInitialPortfolioLoad, userDataLoading]);
 
-	// Cash = Base USDC + off-chain bridge balances. Avoid flicker: do not show a "partial"
-	// total (Base only) and then a skeleton when venue/bundle loads — same rule the header uses.
-	const baseCashMissing =
-		!hasInitialCashLoad &&
-		(usdcBalance === null || usdcBalance === undefined);
-	// While `venueReady` is false, off-chain stables are not in the total yet; treat as loading.
-	const waitingOnVenueDeferral = Boolean(account) && !venueReady;
-	// Until profile + venue account data have loaded once, `venueEnabled` can flip and the
-	// shown total would step from Base-only to Base+off-chain — keep the cash skeleton up.
-	const waitingOnFundingHydration = Boolean(account) && !fundingHydrated;
-	const waitingOnFirstBridge =
-		Boolean(account) &&
-		venueReady &&
-		venueEnabled &&
-		!bridgeBalances.isFetched;
-	const cashLoading =
-		baseCashMissing ||
-		waitingOnVenueDeferral ||
-		waitingOnFundingHydration ||
-		waitingOnFirstBridge;
+	// Cash loading is now driven entirely by the single CollateralTokenContext query —
+	// either pending or not yet fetched once for the current address set.
+	const cashLoading = Boolean(account) && !collateral.isFetched;
 	// Only gate the header on DFlow when we actually fetch Solana positions (`dflowRpcEnabled`).
 	// Previously we blocked on `solanaLinked && !dflowProof.isFetched`, which kept the portfolio
 	// skeleton up for any Privy-linked Solana wallet until `/dflow/account` finished — and
@@ -361,28 +286,23 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		booksPreviewLoading ||
 		dflowBlockingPortfolio;
 
-	// Stable cash balance: LevelUp Base USDC + Limitless maker (Base) + Polymarket Safe USDC.e + Predict BSC USDT
-	const cashBalance = useMemo(() => {
-		const baseCash =
-			usdcBalance === null || usdcBalance === undefined
-				? lastCashRef.current
-				: Number(usdcBalance) || 0;
-		if (usdcBalance !== null && usdcBalance !== undefined) {
-			lastCashRef.current = baseCash;
-		}
+	// Single sum from CollateralTokenContext — `null` until that query has settled at least once.
+	const cashBalance: number | null = useMemo(() => {
+		if (!collateral.isFetched) return null;
 		return (
-			baseCash +
-			limitlessMakerUsdcCash +
-			polySafeUsdcE +
-			bscUsdtCash +
-			solanaUsdcCash
+			collateral.baseUsdc +
+			collateral.polygonStable +
+			collateral.bscUsdt +
+			collateral.solanaUsdc +
+			collateral.limitlessMakerUsdc
 		);
 	}, [
-		usdcBalance,
-		limitlessMakerUsdcCash,
-		polySafeUsdcE,
-		bscUsdtCash,
-		solanaUsdcCash,
+		collateral.isFetched,
+		collateral.baseUsdc,
+		collateral.polygonStable,
+		collateral.bscUsdt,
+		collateral.solanaUsdc,
+		collateral.limitlessMakerUsdc,
 	]);
 
 	const compute = useCallback(() => {
@@ -440,8 +360,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				dflowPositionsTotal +
 				limitlessPositionsTotal;
 
-			const prevCash = lastCashRef.current;
-			const nextCash = cashBalance;
 			const prevMtmv = lastMarkToMarketAndVenueRef.current;
 			// Reuse only prior mtm+venue. Never reuse a value that already includes
 			// levelUpResolvedWinningsTotal — it was re-added every 500ms tick and inflated the header.
@@ -463,27 +381,25 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			const positionColumnWithResolved =
 				nextMtmv + levelUpResolvedWinningsTotal;
 			lastPortfolioPositionColumnRef.current = positionColumnWithResolved;
-			const effectiveCash =
-				usdcBalance === null || usdcBalance === undefined
-					? prevCash +
-						limitlessMakerUsdcCash +
-						polySafeUsdcE +
-						bscUsdtCash +
-						solanaUsdcCash
-					: nextCash;
-			const nextTotal = effectiveCash + positionColumnWithResolved;
+			// Cash side comes from the single CollateralTokenContext snapshot.
+			// While `cashBalance` is null (first load), keep `portfolioTotal` null too
+			// rather than displaying a partial total without cash included.
+			if (cashBalance === null) {
+				return;
+			}
+			const nextTotal = cashBalance + positionColumnWithResolved;
 			setPortfolioTotal((current) => {
 				if (
 					current !== null &&
 					nextTotal === 0 &&
-					(prevCash > 0 || prevForZeroGuard > 0)
+					(cashBalance > 0 || prevForZeroGuard > 0)
 				) {
 					return current;
 				}
 				return nextTotal;
 			});
-			lastCashRef.current = effectiveCash;
-		} catch {
+		} catch (err) {
+			console.error("error", err);
 			setPortfolioTotal((current) => current ?? cashBalance);
 		}
 	}, [
@@ -494,16 +410,11 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		cashBalance,
 		allBooksPreview,
 		booksPreviewLoading,
-		userDataLoading,
 		polyPositionsTotal,
 		predictPositionsTotal,
 		dflowPositionsTotal,
 		limitlessPositionsTotal,
 		levelUpResolvedWinningsTotal,
-		polySafeUsdcE,
-		bscUsdtCash,
-		solanaUsdcCash,
-		limitlessMakerUsdcCash,
 	]);
 
 	useEffect(() => {
@@ -517,7 +428,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	}, [
 		account,
 		tokenBalances,
-		usdcBalance,
+		cashBalance,
 		umbrellas,
 		allBooksPreview,
 		booksPreviewLoading,
@@ -528,10 +439,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		dflowPositionsTotal,
 		limitlessPositionsTotal,
 		levelUpResolvedWinningsTotal,
-		polySafeUsdcE,
-		bscUsdtCash,
-		solanaUsdcCash,
-		limitlessMakerUsdcCash,
 	]);
 
 	const value = useMemo<PortfolioContextValue>(

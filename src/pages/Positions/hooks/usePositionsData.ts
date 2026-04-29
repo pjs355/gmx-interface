@@ -10,6 +10,7 @@ import {
 	type ProcessedOrder,
 } from "@/services/api/simplifiedOrderService";
 import { useUserData } from "context/UserDataContext";
+import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useRecentSettlementClaim } from "context/RecentSettlementClaimContext";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useOddsMonitor } from "context/OddsMonitorContext";
@@ -514,12 +515,12 @@ export default function usePositionsData() {
 	const {
 		orders,
 		tokenBalances,
-		usdcLoading,
 		loading: userDataLoading,
 		refresh: refreshUserData,
-		refreshViaRpc,
+		refreshTokenPositions,
 		loadOrders,
 	} = useUserData();
+	const collateralTokens = useCollateralTokens();
 	const { acknowledgeClearedPayouts } = useRecentSettlementClaim();
 
 	// Lazy-load orders when Positions page mounts (deferred from startup)
@@ -907,12 +908,15 @@ export default function usePositionsData() {
 					queryClient.invalidateQueries({ queryKey: ["dflow-positions"] }),
 					queryClient.invalidateQueries({ queryKey: limitlessQueryKeys.root }),
 				]);
-				await refreshViaRpc();
+				await Promise.all([
+					collateralTokens.refetch(),
+					refreshTokenPositions(),
+				]);
 			} catch (e) {
 				console.error("[usePositionsData] Post-claim balance refresh failed:", e);
 			}
 		},
-		[acknowledgeClearedPayouts, refreshUserData, refreshViaRpc, queryClient],
+		[acknowledgeClearedPayouts, refreshUserData, refreshTokenPositions, collateralTokens, queryClient],
 	);
 
 	// --- Build conditionId -> umbrella index for fast venue matching ---
@@ -2384,7 +2388,6 @@ export default function usePositionsData() {
 		portfolioTotalCtx,
 		cashBalanceCtx,
 		portfolioCashLoading,
-		usdcLoading,
 		positionsTotalValue,
 		umbrellaPositions,
 		resolvedUmbrellaPositions,

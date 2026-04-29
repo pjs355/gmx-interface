@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { useUserData } from "context/UserDataContext";
+import { useCollateralTokens } from "context/CollateralTokenContext";
 import { BalanceProvider, useBalances } from "context/BalanceContext";
 import { usePredictionData } from "context/PredictionDataContext";
 import { OrderbookService } from "@/services/api/orderbookService";
@@ -40,6 +41,7 @@ function TradeBoxTestInner() {
 	const { wallets: privyWallets, ready: walletsReady } = usePrivyWallets(); // Same as production line 32
 	const userData = useUserData();
 	const balanceContext = useBalances();
+	const collateralTokens = useCollateralTokens();
 	const predictionData = usePredictionData();
 	const [checkingAdmin, setCheckingAdmin] = useState(true);
 
@@ -87,7 +89,8 @@ function TradeBoxTestInner() {
 	const tradeExecutionService = useTradeExecutionService();
 
 	// Safely destructure with fallbacks
-	const { usdcBalance, getTokenBalance } = userData || {};
+	const { getTokenBalance } = userData || {};
+	const usdcBalance = collateralTokens.baseUsdc;
 	const { getBalance, refreshBalances } = balanceContext || {};
 	const { getQuestionsForUmbrella, umbrellas } = predictionData || {};
 
@@ -125,7 +128,7 @@ function TradeBoxTestInner() {
 		balancesRef.current = {
 			yes: liveYesBalance,
 			no: liveNoBalance,
-			usdc: parseFloat(usdcBalance || "0"),
+			usdc: usdcBalance,
 		};
 		console.log("🔄 Balance ref updated:", balancesRef.current);
 	}, [liveYesBalance, liveNoBalance, usdcBalance]);
@@ -640,7 +643,7 @@ function TradeBoxTestInner() {
 						<div className="balance-row">
 							<span>USDC:</span>
 							<span className="balance-value">
-								${parseFloat(usdcBalance || "0").toFixed(2)}
+								${usdcBalance.toFixed(2)}
 							</span>
 						</div>
 						{market &&

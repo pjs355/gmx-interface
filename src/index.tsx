@@ -72,6 +72,7 @@ import { PredictionDataProvider } from "context/PredictionDataContext";
 import { OddsMonitorProvider } from "context/OddsMonitorContext";
 import { UserDataProvider } from "context/UserDataContext";
 import { RecentSettlementClaimProvider } from "context/RecentSettlementClaimContext";
+import { CollateralTokenProvider } from "@/context/CollateralTokenContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
@@ -123,15 +124,17 @@ createRoot(document.getElementById("root")!).render(
 									<UserDataProvider>
 										<PolymarketBackgroundActivation />
 										<RecentSettlementClaimProvider>
-										<PortfolioProvider>
-											<PositionsPageMetricsGateProvider>
-												<RPGProvider>
-													<TransfersModalProvider>
-														<App />
-													</TransfersModalProvider>
-												</RPGProvider>
-											</PositionsPageMetricsGateProvider>
-										</PortfolioProvider>
+										<CollateralTokenProvider>
+											<PortfolioProvider>
+												<PositionsPageMetricsGateProvider>
+													<RPGProvider>
+														<TransfersModalProvider>
+															<App />
+														</TransfersModalProvider>
+													</RPGProvider>
+												</PositionsPageMetricsGateProvider>
+											</PortfolioProvider>
+										</CollateralTokenProvider>
 										</RecentSettlementClaimProvider>
 									</UserDataProvider>
 							</SignerProvider>

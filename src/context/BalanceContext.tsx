@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useSignerContext } from 'context/SignerContext';
 import { useUserData } from 'context/UserDataContext';
+import { useCollateralTokens } from 'context/CollateralTokenContext';
 
 /**
  * BalanceContext - Provides token balance lookups
@@ -20,7 +21,8 @@ const BalanceContext = createContext<BalanceContextType | null>(null);
 
 export function BalanceProvider({ children }: { children: React.ReactNode }) {
   const { account } = useSignerContext();
-  const { tokenBalances, loading: userDataLoading, refreshViaRpc } = useUserData();
+  const { tokenBalances, loading: userDataLoading, refreshTokenPositions } = useUserData();
+  const collateralTokens = useCollateralTokens();
   const [localCache, setLocalCache] = useState<Map<string, number>>(new Map());
 
   // Build a tokenId -> balance lookup from UserDataContext's tokenBalances
@@ -51,12 +53,10 @@ export function BalanceProvider({ children }: { children: React.ReactNode }) {
   }, [account, localCache]);
 
   const refreshBalances = useCallback(async (_tokenIds: string[]) => {
-    // Trigger a refresh of UserDataContext which will update tokenBalances
-    // Uses RPC for immediate updates (subgraph has 10-60 second indexing delay)
-    if (refreshViaRpc) {
-      await refreshViaRpc();
-    }
-  }, [refreshViaRpc]);
+    // Refresh share-position balances (UserDataContext) AND collateral-token
+    // balances (CollateralTokenContext) in parallel — both feed the trade UI.
+    await Promise.all([refreshTokenPositions(), collateralTokens.refetch()]);
+  }, [refreshTokenPositions, collateralTokens]);
 
   return (
     <BalanceContext.Provider value={{ 

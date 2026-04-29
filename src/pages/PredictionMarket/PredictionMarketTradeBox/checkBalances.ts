@@ -12,11 +12,6 @@ function getCacheKey(account: string, tokenId: string): string {
 	return `${account}:${tokenId}`;
 }
 
-export function useUSDCBalance() {
-	const { usdcBalance } = useUserData();
-	return Number(usdcBalance ?? 0);
-}
-
 // Hook to fetch YES/NO token balances for a specific market
 export function useYesNoBalances(market: {
 	yesTokenId?: string;

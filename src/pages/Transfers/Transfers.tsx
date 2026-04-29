@@ -161,7 +161,7 @@ export default function Transfers() {
 					<button
 						className="transfers-btn transfers-btn-withdraw"
 						onClick={handleWithdraw}
-						disabled={cashBalance <= 0}
+						disabled={cashLoading || cashBalance === null || cashBalance <= 0}
 					>
 						Withdraw Funds
 					</button>

@@ -49,6 +49,11 @@ export async function readHeaderCashUsd(page: Page): Promise<number | null> {
 /**
  * Strict variant: throws if `[data-qa="header-cash"]` is not visible after `timeoutMs`
  * or the rendered value is unreadable. Use this when the test must have a number.
+ *
+ * Waits for `data-qa-cash-amount` to be populated before reading. The header now
+ * deliberately omits that attribute while `cashLoading` is true (single-source
+ * `CollateralTokenContext` query has not settled), so reading earlier would
+ * pick up an in-flight or absent value and break post-trade math.
  */
 export async function expectHeaderCashUsd(
 	page: Page,
@@ -59,6 +64,13 @@ export async function expectHeaderCashUsd(
 		cashBox,
 		"header-cash element not found; user may not be logged in",
 	).toBeVisible({ timeout: timeoutMs });
+	const cashAttr = page
+		.locator('[data-qa="header-cash"][data-qa-cash-amount]')
+		.first();
+	await expect(
+		cashAttr,
+		"header-cash never wrote data-qa-cash-amount within timeout — collateral query did not settle",
+	).toBeAttached({ timeout: timeoutMs });
 	const v = await readHeaderCashUsd(page);
 	if (v === null) {
 		throw new Error(

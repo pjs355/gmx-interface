@@ -15,6 +15,7 @@ import { useTransfersModal } from "@/context/TransfersModalContext";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
+import { useCollateralTokens } from "@/context/CollateralTokenContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
 import { buildChainBalances } from "@/trading/sor/buildChainBalances";
@@ -103,7 +104,9 @@ export function TransfersModal() {
 	const { isOpen, closeModal } = useTransfersModal();
 	const { cashBalance } = usePortfolio();
 	const { account } = useSignerContext();
-	const { refresh: refreshUserData, usdcBalance } = useUserData();
+	const { refresh: refreshUserData } = useUserData();
+	const collateralTokens = useCollateralTokens();
+	const usdcBalance = collateralTokens.baseUsdc;
 	const funding = useFundingAddresses();
 	const api = usePrivateApiClient();
 	const queryClient = useQueryClient();
@@ -121,7 +124,7 @@ export function TransfersModal() {
 	const chainBalances = useMemo(
 		() =>
 			buildChainBalances({
-				baseUsdcBalance: Number(usdcBalance) || 0,
+				baseUsdcBalance: usdcBalance,
 				baseWalletAddress: funding.baseSmartWallet ?? "",
 				polygonUsdcBalance: parseFloat(
 					bridgeBalances.data?.polygonUsdcEHuman ?? "0"
@@ -164,7 +167,10 @@ export function TransfersModal() {
 
 	/** Withdrawable total: portfolio cash capped by balances reported on funding chains. */
 	const maxWithdrawAmount = useMemo(
-		() => Math.min(cashBalance, totalFundingOnRails),
+		() =>
+			cashBalance === null
+				? 0
+				: Math.min(cashBalance, totalFundingOnRails),
 		[cashBalance, totalFundingOnRails]
 	);
 
@@ -535,7 +541,8 @@ export function TransfersModal() {
 				<div className="transfers-available">
 					Cash across wallets:{" "}
 					<span>${formatCurrency(cashBalance)}</span>
-					{totalFundingOnRails > 0 &&
+					{cashBalance !== null &&
+						totalFundingOnRails > 0 &&
 						totalFundingOnRails + 1e-6 < cashBalance && (
 							<span className="transfers-available-cap">
 								{" "}

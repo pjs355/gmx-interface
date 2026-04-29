@@ -220,7 +220,9 @@ export function AppHeaderUser({
 						<div
 							data-qa="header-cash"
 							data-qa-cash-amount={
-								typeof cashBalance === "number" && isFinite(cashBalance)
+								!cashLoading &&
+								typeof cashBalance === "number" &&
+								isFinite(cashBalance)
 									? cashBalance
 									: undefined
 							}

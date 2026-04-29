@@ -15,8 +15,12 @@ import { useMarketOrderHandler } from "./MarketOrderHandler";
 import { useTradeExecutionService } from "./TradeExecutionService";
 import PredictionMarketTradeBoxResponsiveContainer from "./PredictionMarketTradeBoxResponsiveContainer";
 // Removed OrderbookContext import - using passed orderbook prop instead
-import { useUSDCBalance, checkSufficientBalance, useYesNoBalances, checkSufficientShares } from "./checkBalances";
+import { checkSufficientBalance, useYesNoBalances, checkSufficientShares } from "./checkBalances";
 import { useUserData } from "context/UserDataContext";
+import {
+	useCollateralTokens,
+	COLLATERAL_TOKENS_QUERY_KEY,
+} from "context/CollateralTokenContext";
 import { useButtonState } from "./hooks/useButtonState";
 import { useTradeState } from "./hooks/useTradeState";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
@@ -66,10 +70,7 @@ import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import {
-	useBridgeFundingBalances,
-	BRIDGE_FUNDING_BALANCES_QUERY_KEY,
-} from "@/trading/hooks/useBridgeFundingBalances";
+import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import {
 	useSignAndSendTransaction as useSolanaSignAndSendTransaction,
 	useSignMessage as useSolanaSignMessage,
@@ -152,7 +153,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
-  const { approvalState, checkApproval, approveToken, refresh, refreshViaRpc } = useUserData();
+  const { approvalState, checkApproval, approveToken, refresh, refreshTokenPositions } = useUserData();
+  const collateralTokens = useCollateralTokens();
 
   // Lazy approval check: deferred from startup, runs when trade box mounts
   useEffect(() => {
@@ -229,15 +231,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         : null,
     [privySolanaSignAndSend, embeddedSolanaWallet]
   );
-
-  const fundingBalances = useBridgeFundingBalances({
-    baseSmartWallet: funding.baseSmartWallet,
-    limitlessMakerBase: funding.limitlessMakerBase,
-    polymarketSafe: funding.polymarketSafe,
-    embeddedEoa: funding.embeddedEoa,
-    solanaAddress: funding.solanaAddress,
-    enabled: !funding.isLoading && multiVenueEnabled,
-  });
 
   const tradeExecutionService = useTradeExecutionService();
   const executionGate = usePolymarketExecutionGate();
@@ -963,7 +956,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     ]
   );
 
-  const usdcBalance = useUSDCBalance();
+  const usdcBalance = collateralTokens.baseUsdc;
   const { yesBalance, noBalance } = useYesNoBalances(market);
 
   // Notify parent when position changes; SOR ("all") buy: sync reference limit cents to cross-venue best
@@ -1327,11 +1320,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       });
 
       if (isDelegatedServerWalletSubAccount && ctx.side === "buy") {
-        const refreshed = await fundingBalances.refetch();
-        const row = refreshed.data;
-        const makerUsd = row?.baseLimitlessUsdcHuman
-          ? Number(row.baseLimitlessUsdcHuman)
-          : 0;
+        const fresh = await collateralTokens.refetch();
+        const makerUsd =
+          typeof fresh?.limitlessMakerBase === "number" &&
+          Number.isFinite(fresh.limitlessMakerBase)
+            ? Math.max(0, fresh.limitlessMakerBase)
+            : 0;
         if (!Number.isFinite(makerUsd) || makerUsd < 0.01) {
           throw new Error(
             "Add USDC to your Limitless balance before buying. Open Transfers and move funds from your Base wallet.",
@@ -1423,7 +1417,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       account,
       funding.baseSmartWallet,
       funding.limitlessMakerBase,
-      fundingBalances,
+      collateralTokens,
       limitlessEnsureQuery,
       privateApi,
     ],
@@ -1576,34 +1570,33 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     reportExecutionPhaseRef: sorReportExecutionPhaseRef,
   });
 
-  const limitlessMakerCashForSor = fundingBalances.data?.baseLimitlessUsdcHuman
-    ? Number(fundingBalances.data.baseLimitlessUsdcHuman)
-    : 0;
+  /**
+   * Single source with `CollateralTokenContext` — do not use `useBridgeFundingBalances`
+   * gated on `multiVenueEnabled` here. Predict (and other single-tab) flows still need
+   * Polygon / BNB / Solana rows for SOR + Li.FI prefund when Base USDC is low.
+   */
+  const limitlessMakerCashForSor = collateralTokens.limitlessMakerUsdc;
 
   const sorWalletBalances: ChainBalance[] = useMemo(
     () =>
       buildChainBalances({
-        baseUsdcBalance: usdcBalance ?? 0,
+        baseUsdcBalance: collateralTokens.baseUsdc,
         baseWalletAddress: account ?? "",
-        polygonUsdcBalance: fundingBalances.data?.polygonUsdcEHuman
-          ? Number(fundingBalances.data.polygonUsdcEHuman)
-          : undefined,
+        polygonUsdcBalance: collateralTokens.polygonStable,
         polygonWalletAddress: funding.polymarketSafe,
-        solanaUsdcBalance: fundingBalances.data?.solanaUsdcHuman
-          ? Number(fundingBalances.data.solanaUsdcHuman)
-          : undefined,
+        solanaUsdcBalance: collateralTokens.solanaUsdc,
         solanaWalletAddress: funding.solanaAddress,
-        bnbUsdtBalance: fundingBalances.data?.bscUsdtHuman
-          ? Number(fundingBalances.data.bscUsdtHuman)
-          : undefined,
+        bnbUsdtBalance: collateralTokens.bscUsdt,
         bnbWalletAddress: funding.embeddedEoa,
         /** SOR API expects per-chain rows when addresses exist, not only chains with positive balance. */
         includeZeroBalanceChainsWithAddress: true,
       }),
     [
-      usdcBalance,
+      collateralTokens.baseUsdc,
+      collateralTokens.polygonStable,
+      collateralTokens.solanaUsdc,
+      collateralTokens.bscUsdt,
       account,
-      fundingBalances.data,
       funding.polymarketSafe,
       funding.solanaAddress,
       funding.embeddedEoa,
@@ -1916,7 +1909,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         queryClient.invalidateQueries({ queryKey: ["dflow-outcome-balance"] }),
         queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] }),
         queryClient.invalidateQueries({ queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY] }),
-        refreshViaRpc(),
+        queryClient.invalidateQueries({ queryKey: [COLLATERAL_TOKENS_QUERY_KEY] }),
+        collateralTokens.refetch(),
+        refreshTokenPositions(),
       ]).catch((e: unknown) => {
         console.error("error", e);
       });
@@ -1952,7 +1947,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       if (pollInterval !== undefined) clearInterval(pollInterval);
       if (pollWindowTimer !== undefined) clearTimeout(pollWindowTimer);
     };
-  }, [sorExecution.isExecuting, sorExecution.execution, queryClient, setState, refreshViaRpc]);
+  }, [sorExecution.isExecuting, sorExecution.execution, queryClient, setState, refreshTokenPositions, collateralTokens]);
 
   useEffect(() => {
     if (pandaId && state.tradingVenue !== "all") {
