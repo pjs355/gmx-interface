@@ -13,7 +13,7 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import usePositionsData from "./hooks/usePositionsData";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { markPositionsPageMount } from "./utils/portfolioPerfLog";
 import { toCentsString } from "./utils/formatCurrency";
 
@@ -93,15 +93,42 @@ export default function Positions() {
 		resolvedMarketsByUmbrella,
 		activeTab,
 		setActiveTab,
+		positionsShellBypassMaxWaitMs,
 	} = data;
 
 	/** One shell for header + tab: no mismatch between portfolio row and table/cards. */
-	const pageShellLoading =
+	const pageShellLoadingStrict =
 		activeTab === "positions"
 			? !isPositionsTabContentReady
 			: activeTab === "history"
 				? !isHistoryTabContentReady
 				: !isDataFullyLoaded;
+
+	const [positionsShellBypass, setPositionsShellBypass] = useState(false);
+
+	/** Read inside timer only — omitting from effect deps avoids resetting bypass when DFlow settles (10s→5s) while the shell is still strict (skeleton flicker). */
+	const shellBypassMsRef = useRef(positionsShellBypassMaxWaitMs);
+	shellBypassMsRef.current = positionsShellBypassMaxWaitMs;
+
+	/** Shell bypass delay comes from `usePositionsData` (5s default, 10s while DFlow query pending). */
+	useEffect(() => {
+		if (!account) {
+			setPositionsShellBypass(false);
+			return;
+		}
+		if (!pageShellLoadingStrict) {
+			setPositionsShellBypass(false);
+			return;
+		}
+		setPositionsShellBypass(false);
+		const t = window.setTimeout(
+			() => setPositionsShellBypass(true),
+			shellBypassMsRef.current,
+		);
+		return () => window.clearTimeout(t);
+	}, [account, pageShellLoadingStrict]);
+
+	const pageShellLoading = positionsShellBypass ? false : pageShellLoadingStrict;
 
 	const { setBlockHeaderMetrics } = usePositionsPageMetricsGate();
 	useEffect(() => {

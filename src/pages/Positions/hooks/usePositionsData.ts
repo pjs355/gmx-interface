@@ -77,6 +77,11 @@ import {
 	polymarketConditionLookupKey,
 } from "@/trading/polymarket/polymarketConditionLookup";
 import {
+	buildUmbrellaLookupByDflowEventTicker,
+	buildUmbrellaLookupByDflowOutcomeMint,
+	lookupUmbrellaByDflowEventTicker,
+} from "@/trading/dflow/dflowUmbrellaLookup";
+import {
 	type VenueHistoryFill,
 	type VenueId,
 	type VenueOrder,
@@ -87,7 +92,9 @@ import {
 import {
 	logPortfolioLoadState,
 	logPortfolioReadySnapshot,
+	logPositionsLoadingGateState,
 	portfolioPerfEnabled,
+	positionsLoadingGateDiagEnabled,
 	truncateWallet,
 } from "../utils/portfolioPerfLog";
 import {
@@ -174,6 +181,33 @@ function mergePredictHistoryFillMaps(
 		);
 	}
 	return out;
+}
+
+/** Resolved Predict markets: map user's outcome token to WON/LOST for History tab labels + PnL. */
+function predictOutcomeResultForHistoryToken(
+	detail: PredictMarketDetail | undefined,
+	tokenId: string,
+): "WON" | "LOST" | undefined {
+	if (!detail) return undefined;
+	const lifecycle = (detail.status ?? "").toUpperCase().trim();
+	if (lifecycle === "REMOVED") return undefined;
+	if (lifecycle !== "RESOLVED") return undefined;
+
+	const normT = normalizePredictTokenId(tokenId);
+	if (!normT) return undefined;
+
+	for (const o of detail.outcomes ?? []) {
+		if (normalizePredictTokenId(o.onChainId) !== normT) continue;
+		const st = String(o.status ?? "").toUpperCase();
+		if (st === "WON") return "WON";
+		if (st === "LOST") return "LOST";
+	}
+	const res = detail.resolution;
+	if (res?.onChainId) {
+		if (normalizePredictTokenId(res.onChainId) === normT) return "WON";
+		return "LOST";
+	}
+	return undefined;
 }
 
 /** History rows for Predict tokens from FILLED orders, match events, and/or per-fill maps. */
@@ -264,10 +298,23 @@ function predictFilledOrdersToVenueHistoryRows(
 					buySh += f.shares;
 				}
 			}
-			sharesOut = 0;
+			sharesOut = buySh > 0 ? buySh : 0;
 			costOut = buyUsdc > 0 ? buyUsdc : null;
 			avgPrice =
 				buySh > 0 && buyUsdc > 0 ? buyUsdc / buySh : null;
+		}
+
+		const outcomeResult = predictOutcomeResultForHistoryToken(detail, tokenId);
+		const resolvedLike =
+			(detail?.status ?? "").toUpperCase().trim() === "RESOLVED";
+		let pnlOut: number | null = null;
+		let pnlPct: number | null = null;
+		if (outcomeResult === "WON" && costOut != null && Number.isFinite(costOut) && Number.isFinite(sharesOut)) {
+			pnlOut = sharesOut - costOut;
+			pnlPct = costOut > 0 ? (pnlOut / costOut) * 100 : null;
+		} else if (outcomeResult === "LOST" && costOut != null && Number.isFinite(costOut)) {
+			pnlOut = -costOut;
+			pnlPct = costOut > 0 ? -100 : null;
 		}
 
 		out.push({
@@ -278,13 +325,14 @@ function predictFilledOrdersToVenueHistoryRows(
 			avgPrice,
 			currentPrice: null,
 			cost: costOut,
-			currentValue: 0,
-			pnl: null,
-			pnlPercent: null,
+			currentValue: outcomeResult === "WON" ? sharesOut : 0,
+			pnl: pnlOut,
+			pnlPercent: pnlPct,
 			tokenId,
 			...(marketId != null ? { numericMarketId: marketId } : {}),
 			conditionId: detail?.conditionId,
-			marketStatus: "CLOSED",
+			marketStatus: resolvedLike ? "RESOLVED" : "CLOSED",
+			...(outcomeResult ? { outcomeResult } : {}),
 			...(fills.length > 0 ? { historyFills: fills } : {}),
 			...(row?.levelUpUmbrellaId?.trim()
 				? { levelUpUmbrellaId: row.levelUpUmbrellaId.trim() }
@@ -346,18 +394,18 @@ function buildVenueMarketPosition(
 		historyFills && historyFills.length > 0
 			? venueHistoryPositionToSyntheticOrders(pv as VenuePosition)
 			: pv.shares > 0 && (pv.avgPrice || pv.cost)
-				? [
-						buildSyntheticOrder(
-							qid,
-							venueName,
-							side,
-							pv.shares,
-							pv.avgPrice,
-							pv.cost,
-							pv.historyTradeAt,
-						),
-					]
-				: [];
+			? [
+					buildSyntheticOrder(
+						qid,
+						venueName,
+						side,
+						pv.shares,
+						pv.avgPrice,
+						pv.cost,
+						pv.historyTradeAt,
+					),
+				]
+			: [];
 
 	const yesPrice = overrides?.yesPrice !== undefined
 		? (isYes ? overrides.yesPrice : null)
@@ -427,6 +475,14 @@ function buildUnmatchedVenueUmbrellas(
 ): UmbrellaPositions[] {
 	const unmatched = positions.filter((p) => !matchedIds.has(p.tokenId));
 	const byGroup = new Map<string, any[]>();
+	const dflowMintLookup =
+		venue === "dflow" && catalogUmbrellas.length > 0
+			? buildUmbrellaLookupByDflowOutcomeMint(catalogUmbrellas)
+			: null;
+	const dflowEventTickerLookup =
+		venue === "dflow" && catalogUmbrellas.length > 0
+			? buildUmbrellaLookupByDflowEventTicker(catalogUmbrellas)
+			: null;
 	for (const p of unmatched) {
 		const key = groupKeyFn(p);
 		const arr = byGroup.get(key) ?? [];
@@ -438,6 +494,7 @@ function buildUnmatchedVenueUmbrellas(
 	for (const [eventKey, group] of byGroup) {
 		const first = group[0];
 		let resolvedPredict: Umbrella | null = null;
+		let resolvedDflowCatalog: Umbrella | null = null;
 		if (venue === "predictfun") {
 			const fd =
 				first.numericMarketId != null && predictMarketDetails
@@ -451,21 +508,45 @@ function buildUnmatchedVenueUmbrellas(
 				hint,
 			);
 		}
+		if (venue === "dflow") {
+			const et =
+				typeof first.dflowEventTicker === "string" ? first.dflowEventTicker.trim() : "";
+			if (et) {
+				resolvedDflowCatalog =
+					lookupUmbrellaByDflowEventTicker(et, dflowEventTickerLookup, catalogUmbrellas) ??
+					null;
+			} else if (dflowMintLookup) {
+				const mint = typeof first.tokenId === "string" ? first.tokenId.trim() : "";
+				if (mint) resolvedDflowCatalog = dflowMintLookup.get(mint) ?? null;
+			}
+		}
 		const predictSyntheticTitle =
 			venue === "predictfun"
 				? resolvedPredict?.displayName?.trim() ||
 					shortPredictFunMarketTitleForPortfolio(first.marketTitle) ||
 					first.marketTitle
 				: first.marketTitle;
+		const syntheticBlockTitle =
+			venue === "predictfun"
+				? predictSyntheticTitle
+				: venue === "dflow"
+					? stripUmbrellaDisplayPrefix(
+							resolvedDflowCatalog?.displayName ?? "",
+						).trim() ||
+						first.marketTitle
+					: first.marketTitle;
 		const umbrellaForBlock =
 			resolvedPredict ??
+			resolvedDflowCatalog ??
 			buildSyntheticUmbrella(
 				`${idPrefix}-${eventKey.slice(0, 20)}`,
-				predictSyntheticTitle,
+				syntheticBlockTitle,
 				first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
 			);
 		const displayOverride =
-			resolvedPredict?.displayName?.trim() || undefined;
+			resolvedPredict?.displayName?.trim() ||
+			resolvedDflowCatalog?.displayName?.trim() ||
+			undefined;
 		const rawMarkets = group.map((p) => {
 			const polyRow =
 				venue === "polymarket"
@@ -800,6 +881,22 @@ export default function usePositionsData() {
 	const dflowPositionsStripPending =
 		dflowRpcEnabled && dflowPositionsQuery.isPending;
 
+	/**
+	 * Full-page Positions shell bypass (`Positions.tsx`): after this delay with the strict shell
+	 * still up, we show partial data so Poly/Predict are not blocked by a slow DFlow stack.
+	 *
+	 * DFlow path = paginated `GET /api/dflow/onchain-trades` + `filter_outcome_mints` + parallel
+	 * (`markets/batch` + batched Solana Token-2022 reads). Public RPC can be slow; keep the
+	 * skeleton up longer **only while** `dflowPositionsQuery.isPending` so verified Kalshi users
+	 * see fewer empty-state flashes. Other venues stay on the shorter budget.
+	 */
+	const POSITIONS_SHELL_BYPASS_MS_DEFAULT = 5_000;
+	const POSITIONS_SHELL_BYPASS_MS_DFLOW_PENDING = 10_000;
+	const positionsShellBypassMaxWaitMs =
+		dflowRpcEnabled && dflowPositionsQuery.isPending
+			? POSITIONS_SHELL_BYPASS_MS_DFLOW_PENDING
+			: POSITIONS_SHELL_BYPASS_MS_DEFAULT;
+
 	// --- Enrich + split venue positions ---
 	const { predictPositions, predictWinnings, predictHistory } = useMemo(() => {
 		const active: typeof allPredictPositions = [];
@@ -921,6 +1018,16 @@ export default function usePositionsData() {
 		[umbrellas],
 	);
 
+	const umbrellaLookupByDflowOutcomeMint = useMemo(
+		() => buildUmbrellaLookupByDflowOutcomeMint(umbrellas),
+		[umbrellas],
+	);
+
+	const umbrellaLookupByDflowEventTicker = useMemo(
+		() => buildUmbrellaLookupByDflowEventTicker(umbrellas),
+		[umbrellas],
+	);
+
 	// --- Active positions grouped by umbrella ---
 	const umbrellaPositions: UmbrellaPositions[] = useMemo(() => {
 		if (!effectiveAccount) return [];
@@ -998,6 +1105,8 @@ export default function usePositionsData() {
 							umbrellas,
 							predictUmbrellaLookup,
 							predictTitleHint,
+							umbrellaLookupByDflowOutcomeMint,
+							umbrellaLookupByDflowEventTicker,
 						);
 						if (matched && matched._id === umbrella._id) {
 							matchedIds.add(pv.tokenId);
@@ -1123,7 +1232,7 @@ export default function usePositionsData() {
 			null,
 			undefined,
 			[],
-			[],
+			umbrellas,
 		);
 		const limitlessUmbrellas = buildUnmatchedVenueUmbrellas(
 			limitlessPositions,
@@ -1149,6 +1258,8 @@ export default function usePositionsData() {
 	}, [
 		effectiveAccount, umbrellas, getQuestionsForUmbrella, tokenBalances, orders,
 		allBooksPreview, polyPositions, predictPositions, dflowPositions, limitlessPositions, umbrellaLookupByConditionId,
+		umbrellaLookupByDflowOutcomeMint,
+		umbrellaLookupByDflowEventTicker,
 		predictUmbrellaLookup,
 		predictMarketDetails,
 		appState?.markets,
@@ -1729,30 +1840,6 @@ export default function usePositionsData() {
 		predictMatchesQuery.data,
 	]);
 
-	useEffect(() => {
-		if (!import.meta.env.DEV) return;
-		const poly = polyTradeHistoryQuery.data ?? [];
-		let polyWon = 0;
-		for (const p of poly) {
-			if (p.venue === "polymarket" && p.outcomeResult === "WON") polyWon++;
-		}
-		const mat = predictMatchesQuery.data ?? [];
-		console.debug("[venueHistorySources]", {
-			rawItemCount: venueHistoryRawItems.length,
-			predictFilledOrders: predictFilledOrders.length,
-			predictMatchEvents: mat.length,
-			polyActivityRows: poly.length,
-			polyActivityOutcomeWon: polyWon,
-			limitlessHistoryApiRows: limitlessTradeHistoryQuery.data?.length ?? 0,
-		});
-	}, [
-		venueHistoryRawItems,
-		predictFilledOrders.length,
-		predictMatchesQuery.data,
-		polyTradeHistoryQuery.data,
-		limitlessTradeHistoryQuery.data,
-	]);
-
 	const venueHistoryResolveQueries = useMemo(() => {
 		const seen = new Set<string>();
 		const out: UmbrellaExchangeResolveQuery[] = [];
@@ -1779,6 +1866,50 @@ export default function usePositionsData() {
 			return String(venueHistoryResolveQueries.length);
 		}
 	}, [venueHistoryResolveQueries]);
+
+	/**
+	 * Opt-in (`VITE_DEBUG_VENUE_HISTORY_SOURCES=1`): merged venue-history source sizes. Fingerprinted
+	 * (counts + resolve batch size) — not `venueHistoryRawItems` identity — because Poly/Predict/
+	 * Limitless queries often produce a new array reference on each tick while counts are unchanged.
+	 */
+	const venueHistorySourcesDebugFingerprintRef = useRef("");
+
+	useEffect(() => {
+		if (import.meta.env.VITE_DEBUG_VENUE_HISTORY_SOURCES !== "1") return;
+		const poly = polyTradeHistoryQuery.data ?? [];
+		let polyWon = 0;
+		for (const p of poly) {
+			if (p.venue === "polymarket" && p.outcomeResult === "WON") polyWon++;
+		}
+		const mat = predictMatchesQuery.data ?? [];
+		const fp = [
+			venueHistoryRawItems.length,
+			predictFilledOrders.length,
+			mat.length,
+			poly.length,
+			polyWon,
+			limitlessTradeHistoryQuery.data?.length ?? 0,
+			venueHistoryResolveQueries.length,
+		].join(":");
+		if (fp === venueHistorySourcesDebugFingerprintRef.current) return;
+		venueHistorySourcesDebugFingerprintRef.current = fp;
+		console.debug("[venueHistorySources]", {
+			rawItemCount: venueHistoryRawItems.length,
+			predictFilledOrders: predictFilledOrders.length,
+			predictMatchEvents: mat.length,
+			polyActivityRows: poly.length,
+			polyActivityOutcomeWon: polyWon,
+			limitlessHistoryApiRows: limitlessTradeHistoryQuery.data?.length ?? 0,
+			historyResolveQueryCount: venueHistoryResolveQueries.length,
+		});
+	}, [
+		venueHistoryRawItems.length,
+		predictFilledOrders.length,
+		predictMatchesQuery.data,
+		polyTradeHistoryQuery.data,
+		limitlessTradeHistoryQuery.data,
+		venueHistoryResolveQueries.length,
+	]);
 
 	const historyVenueUmbrellaResolveQuery = useQuery({
 		queryKey: [
@@ -1825,13 +1956,37 @@ export default function usePositionsData() {
 		[historyCatalogUmbrellas],
 	);
 
+	/** DFlow outcome mint → umbrella (exchangeMatching.dflow yes/no mints), incl. resolve payloads. */
+	const umbrellaLookupByDflowMintForHistory = useMemo(
+		() => buildUmbrellaLookupByDflowOutcomeMint(historyCatalogUmbrellas),
+		[historyCatalogUmbrellas],
+	);
+
+	const umbrellaLookupByDflowEventTickerForHistory = useMemo(
+		() => buildUmbrellaLookupByDflowEventTicker(historyCatalogUmbrellas),
+		[historyCatalogUmbrellas],
+	);
+
 	const predictUmbrellaLookupForHistory = useMemo(
 		() => buildPredictUmbrellaLookup(appState?.markets, historyCatalogUmbrellas),
 		[appState?.markets, historyCatalogUmbrellas],
 	);
 
+	/**
+	 * Dev-only FULL_HISTORY_RESOLVE logging: `partial_hits` means some `clientKey`s have no
+	 * `umbrellaId` in the resolve response (Mongo / exchangeMatching catalog gap)—not a stuck
+	 * resolve or History loading latch; rows still render with synthetic/unmatched grouping.
+	 * TanStack refetch-on-window-focus replays the same payload and used to spam `console.warn`,
+	 * which Sentry surfaces as errors; we fingerprint identical outcomes and log partials at
+	 * `info` so focus refetch does not look like a recurring failure.
+	 *
+	 * Console output is opt-in: set `VITE_DEBUG_FULL_HISTORY_RESOLVE=1` (errors still log in dev).
+	 */
+	const fullHistoryResolveDiagFingerprintRef = useRef("");
+
 	useEffect(() => {
 		if (!import.meta.env.DEV) return;
+
 		if (historyVenueUmbrellaResolveQuery.isError) {
 			// eslint-disable-next-line no-console -- History batch-resolve diagnostic
 			console.warn(
@@ -1841,7 +1996,11 @@ export default function usePositionsData() {
 					error: historyVenueUmbrellaResolveQuery.error,
 				},
 			);
+			return;
 		}
+
+		if (import.meta.env.VITE_DEBUG_FULL_HISTORY_RESOLVE !== "1") return;
+
 		const d = historyVenueUmbrellaResolveQuery.data;
 		const oldGateWouldSkip = venueHistoryRawItems.filter(
 			(p) =>
@@ -1860,6 +2019,16 @@ export default function usePositionsData() {
 			const umbrellaIdHits = venueHistoryResolveQueries.filter(
 				(x) => by[x.clientKey]?.umbrellaId,
 			).length;
+			const classify =
+				umbrellaIdHits === 0
+					? "all_miss_or_empty_hits"
+					: missKeys.length === 0
+						? "all_hits"
+						: "partial_hits";
+			const diagFp = `${classify}:${venueHistoryResolveQueries.length}:${[...missKeys].sort().join("\0")}`;
+			if (diagFp === fullHistoryResolveDiagFingerprintRef.current) return;
+			fullHistoryResolveDiagFingerprintRef.current = diagFp;
+
 			const payloads = d.data?.umbrellasById;
 			const payloadIdCount = payloads ? Object.keys(payloads).length : 0;
 			const predictRowsMissingResolveClientKey = venueHistoryRawItems.filter(
@@ -1876,12 +2045,7 @@ export default function usePositionsData() {
 				privateApiBase: getPrivateApiBaseUrl(),
 				queryCount: venueHistoryResolveQueries.length,
 				resolveRequestChunkCount,
-				classify:
-					umbrellaIdHits === 0
-						? "all_miss_or_empty_hits"
-						: missKeys.length === 0
-							? "all_hits"
-							: "partial_hits",
+				classify,
 				sampleQueries: venueHistoryResolveQueries.slice(0, 8).map((q) => ({
 					venue: q.venue,
 					clientKey:
@@ -1892,11 +2056,20 @@ export default function usePositionsData() {
 							: q.conditionId
 						: undefined,
 					numericMarketId: q.numericMarketId,
+					dflowEventTicker: q.dflowEventTicker,
+					tokenIdPresent: Boolean(q.tokenId?.trim()),
 				})),
 				byClientKeyEntryCount: Object.keys(by).length,
 				rowsWithUmbrellaIdInResponse: umbrellaIdHits,
 				missKeyCount: missKeys.length,
 				missKeysSample: missKeys.slice(0, 16),
+				...(missKeys.length > 0
+					? {
+							partialHitsNote:
+								"Some keys have no umbrellaId in resolve (catalog gap); labels may stay generic.",
+							missKeysExtraSample: missKeys.slice(16, 36),
+						}
+					: {}),
 				umbrellasByIdCount: payloadIdCount,
 				rawVenueHistoryCount: venueHistoryRawItems.length,
 				predictRowsMissingResolveClientKey,
@@ -1914,12 +2087,6 @@ export default function usePositionsData() {
 							.slice(0, 12),
 					},
 				);
-			} else if (missKeys.length > 0) {
-				// eslint-disable-next-line no-console -- History batch-resolve diagnostic
-				console.warn("[FULL_HISTORY_RESOLVE] partial hits — some clientKeys missing umbrellaId", {
-					missKeyCount: missKeys.length,
-					missKeysSample: missKeys.slice(0, 20),
-				});
 			}
 		} else if (d?.success) {
 			const predictRowsMissingResolveClientKey = venueHistoryRawItems.filter(
@@ -2038,6 +2205,50 @@ export default function usePositionsData() {
 				}
 			}
 			if (item.venue === "dflow") {
+				const et = item.dflowEventTicker?.trim();
+				if (et) {
+					const u = lookupUmbrellaByDflowEventTicker(
+						et,
+						umbrellaLookupByDflowEventTickerForHistory,
+						historyCatalogUmbrellas,
+					);
+					if (u?.displayName?.trim()) {
+						const dn = stripUmbrellaDisplayPrefix(u.displayName).trim();
+						const idPatch: Partial<VenuePosition> = {};
+						if (!item.levelUpUmbrellaId?.trim()) {
+							idPatch.levelUpUmbrellaId = u._id;
+							if (!item.levelUpUmbrellaDisplayName?.trim()) {
+								idPatch.levelUpUmbrellaDisplayName = u.displayName;
+							}
+						}
+						if (dn && dn !== item.marketTitle) {
+							return { ...item, ...idPatch, marketTitle: dn };
+						}
+						if (Object.keys(idPatch).length > 0) {
+							return { ...item, ...idPatch };
+						}
+						return item;
+					}
+				} else if (item.tokenId?.trim()) {
+					const u = umbrellaLookupByDflowMintForHistory.get(item.tokenId.trim());
+					if (u?.displayName?.trim()) {
+						const dn = stripUmbrellaDisplayPrefix(u.displayName).trim();
+						const idPatch: Partial<VenuePosition> = {};
+						if (!item.levelUpUmbrellaId?.trim()) {
+							idPatch.levelUpUmbrellaId = u._id;
+							if (!item.levelUpUmbrellaDisplayName?.trim()) {
+								idPatch.levelUpUmbrellaDisplayName = u.displayName;
+							}
+						}
+						if (dn && dn !== item.marketTitle) {
+							return { ...item, ...idPatch, marketTitle: dn };
+						}
+						if (Object.keys(idPatch).length > 0) {
+							return { ...item, ...idPatch };
+						}
+						return item;
+					}
+				}
 				const apiTitle = stripUmbrellaDisplayPrefix(
 					item.levelUpUmbrellaDisplayName ?? "",
 				).trim();
@@ -2104,6 +2315,8 @@ export default function usePositionsData() {
 		historyVenueUmbrellaResolveQuery.data,
 		venueHistoryResolveQueries,
 		umbrellaLookupByConditionIdForHistory,
+		umbrellaLookupByDflowMintForHistory,
+		umbrellaLookupByDflowEventTickerForHistory,
 		predictUmbrellaLookupForHistory,
 		historyCatalogUmbrellas,
 		predictMarketDetails,
@@ -2184,12 +2397,14 @@ export default function usePositionsData() {
 			!limitlessTradeHistoryQuery.isFetched &&
 			!limitlessTradeHistoryQuery.isError);
 
+	const hResolve = historyVenueUmbrellaResolveQuery;
+	/** While resolve query key grows, `keepPreviousData` shows prior batch — still `isPending` without counting as “blocking” the History shell. */
 	const historyUmbrellaResolveSettled =
 		venueHistoryResolveQueries.length === 0 ||
 		!Boolean(authenticated && effectiveAccount) ||
-		historyVenueUmbrellaResolveQuery.isSuccess ||
-		historyVenueUmbrellaResolveQuery.isError ||
-		!historyVenueUmbrellaResolveQuery.isPending;
+		hResolve.isError ||
+		!hResolve.isPending ||
+		hResolve.isPlaceholderData;
 
 	/** Single gate for History body + header: core data, funding addresses, activity history, batch resolve. */
 	const isHistoryTabContentReady =
@@ -2197,6 +2412,285 @@ export default function usePositionsData() {
 		!fundingAddressesLoading &&
 		!venueTradeHistoryLoading &&
 		historyUmbrellaResolveSettled;
+
+	const positionsLoadingGateFingerprintRef = useRef("");
+	useEffect(() => {
+		if (!positionsLoadingGateDiagEnabled() || !effectiveAccount) return;
+
+		const armsBlockers: string[] = [];
+		if (predictionLoading) armsBlockers.push("predictionLoading");
+		if (userDataLoading) armsBlockers.push("userDataLoading");
+		if (portfolioLoading) armsBlockers.push("portfolioLoading");
+		if (booksPreviewLoading) armsBlockers.push("booksPreviewLoading");
+		if (polyPositionsQuery.isLoading) armsBlockers.push("polyPositionsQuery.isLoading");
+		if (predictPositionsQuery.isLoading) armsBlockers.push("predictPositionsQuery.isLoading");
+		if (dflowRpcEnabled && dflowPositionsQuery.isPending) {
+			armsBlockers.push("dflowPositionsQuery.isPending");
+		}
+		if (limitlessPortfolioEnabled && limitlessVenuePositionsQuery.isLoading) {
+			armsBlockers.push("limitlessVenuePositionsQuery.isLoading");
+		}
+		if (limitlessPortfolioEnabled && limitlessOpenOrdersQuery.isLoading) {
+			armsBlockers.push("limitlessOpenOrdersQuery.isLoading");
+		}
+		if (predictMarketIds.length > 0 && predictMarketsQuery.isLoading) {
+			armsBlockers.push("predictMarketsQuery.isLoading");
+		}
+		if (
+			Boolean(polymarketSafe?.trim()) &&
+			!polyTradeHistoryQuery.isFetched &&
+			!polyTradeHistoryQuery.isError
+		) {
+			armsBlockers.push("polyTradeHistoryQuery.awaitingFirstFetch");
+		}
+		if (
+			Boolean(limitlessMakerBase?.trim()) &&
+			!limitlessTradeHistoryQuery.isFetched &&
+			!limitlessTradeHistoryQuery.isError
+		) {
+			armsBlockers.push("limitlessTradeHistoryQuery.awaitingFirstFetch");
+		}
+		if (fundingAddressesLoading) armsBlockers.push("fundingAddressesLoading");
+		if (
+			venueHistoryResolveQueries.length > 0 &&
+			Boolean(authenticated && effectiveAccount) &&
+			historyVenueUmbrellaResolveQuery.isPending &&
+			!historyVenueUmbrellaResolveQuery.isPlaceholderData
+		) {
+			armsBlockers.push("historyVenueUmbrellaResolveQuery.isPending");
+		}
+
+		/**
+		 * `armsBlockers` mixes History-only waits with core venue loads — do not infer Positions-tab
+		 * skeleton from `blockerCount` alone. These mirror `isPositionsTabContentReady` /
+		 * `isHistoryTabContentReady` in Positions.tsx (`pageShellLoading`).
+		 */
+		const positionsShellBlockers: string[] = [];
+		if (predictionLoading) positionsShellBlockers.push("predictionLoading");
+		if (userDataLoading) positionsShellBlockers.push("userDataLoading");
+		if (portfolioLoading) positionsShellBlockers.push("portfolioLoading");
+		if (polyPositionsQuery.isLoading) positionsShellBlockers.push("polyPositionsQuery.isLoading");
+		if (predictPositionsQuery.isLoading) {
+			positionsShellBlockers.push("predictPositionsQuery.isLoading");
+		}
+		if (limitlessPortfolioEnabled && limitlessVenuePositionsQuery.isLoading) {
+			positionsShellBlockers.push("limitlessVenuePositionsQuery.isLoading");
+		}
+		if (dflowRpcEnabled && dflowPositionsQuery.isPending) {
+			// Coupled to `positionsShellBypassMaxWaitMs` (10s shell grace while DFlow loads).
+			positionsShellBlockers.push("dflowPositionsQuery.isPending");
+		}
+		if (predictMarketIds.length > 0 && predictMarketsQuery.isLoading) {
+			positionsShellBlockers.push("predictMarketsQuery.isLoading");
+		}
+
+		const historyShellBlockers: string[] = [];
+		if (!isDataFullyLoaded) historyShellBlockers.push("!isDataFullyLoaded");
+		if (fundingAddressesLoading) historyShellBlockers.push("fundingAddressesLoading");
+		if (venueTradeHistoryLoading) historyShellBlockers.push("venueTradeHistoryLoading");
+		if (!historyUmbrellaResolveSettled) {
+			historyShellBlockers.push("!historyUmbrellaResolveSettled");
+		}
+
+		const fingerprint = [
+			armsBlockers.join(","),
+			String(isDataFullyLoaded),
+			String(isPositionsTabContentReady),
+			String(isHistoryTabContentReady),
+			polyPositionsQuery.fetchStatus,
+			predictPositionsQuery.fetchStatus,
+			predictMarketsQuery.fetchStatus,
+			polyTradeHistoryQuery.fetchStatus,
+			limitlessTradeHistoryQuery.fetchStatus,
+			historyVenueUmbrellaResolveQuery.fetchStatus,
+		].join("|");
+
+		if (fingerprint === positionsLoadingGateFingerprintRef.current) return;
+		positionsLoadingGateFingerprintRef.current = fingerprint;
+
+		const predictIdsMissingDetail =
+			predictMarketIds.length > 0 && predictMarketsQuery.isSuccess
+				? predictMarketIds.filter((id) => !predictMarketDetails.has(id))
+				: [];
+
+		const marketRows = umbrellas.flatMap((u) => {
+			const markets = (getQuestionsForUmbrella(u._id) as PredictionMarket[]) || [];
+			return markets.map((m) => {
+				const balanceId = m._id;
+				const priceId = m.questionId || m._id;
+				const tb = balanceId ? tokenBalances.get(balanceId) : undefined;
+				const preview = priceId ? allBooksPreview[priceId] : undefined;
+				const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
+				const np =
+					typeof preview?.bestNoPrice === "number"
+						? preview.bestNoPrice
+						: preview?.highestBid != null && preview?.highestBid !== undefined
+							? 1 - preview.highestBid
+							: null;
+				const priced = typeof yp === "number" || typeof np === "number";
+				const yes = tb ? Number(tb.yesBalance) : 0;
+				const no = tb ? Number(tb.noBalance) : 0;
+				const issues: string[] = [];
+				if (yes > 0 || no > 0) {
+					if (!priced) issues.push("openPositionNoBookPrice");
+				}
+				return {
+					umbrellaId: String(u._id).slice(0, 10),
+					title: String((m as { displayName?: string }).displayName ?? "").slice(0, 56),
+					balanceId: String(balanceId ?? "").slice(0, 14),
+					priceKey: String(priceId ?? "").slice(0, 16),
+					hasTokenBalanceRow: Boolean(tb),
+					hasPricedBook: priced,
+					yes,
+					no,
+					issues,
+				};
+			});
+		});
+
+		const marketsWithIssues = marketRows.filter((r) => r.issues.length > 0);
+
+		logPositionsLoadingGateState({
+			wallet: truncateWallet(effectiveAccount),
+			blockers: armsBlockers,
+			blockersText: armsBlockers.join(" · "),
+			blockerCount: armsBlockers.length,
+			positionsShellBlockers,
+			positionsShellBlockersText: positionsShellBlockers.join(" · ") || "(none)",
+			historyShellBlockers,
+			historyShellBlockersText: historyShellBlockers.join(" · ") || "(none)",
+			arms: {
+				predictionLoading,
+				userDataLoading,
+				portfolioLoading,
+				booksPreviewLoading,
+				polyPositions: {
+					isLoading: polyPositionsQuery.isLoading,
+					fetchStatus: polyPositionsQuery.fetchStatus,
+				},
+				predictPositions: {
+					isLoading: predictPositionsQuery.isLoading,
+					fetchStatus: predictPositionsQuery.fetchStatus,
+				},
+				dflow: {
+					dflowRpcEnabled,
+					isPending: dflowPositionsQuery.isPending,
+					fetchStatus: dflowPositionsQuery.fetchStatus,
+				},
+				limitlessVenue: {
+					enabled: limitlessPortfolioEnabled,
+					isLoading: limitlessVenuePositionsQuery.isLoading,
+					fetchStatus: limitlessVenuePositionsQuery.fetchStatus,
+				},
+				limitlessOpenOrders: {
+					enabled: limitlessPortfolioEnabled,
+					isLoading: limitlessOpenOrdersQuery.isLoading,
+					fetchStatus: limitlessOpenOrdersQuery.fetchStatus,
+				},
+				predictMarketDetails: {
+					idCount: predictMarketIds.length,
+					isLoading: predictMarketsQuery.isLoading,
+					fetchStatus: predictMarketsQuery.fetchStatus,
+					idsMissingFromDetailMap: predictIdsMissingDetail.slice(0, 24),
+					idsMissingTruncated: Math.max(0, predictIdsMissingDetail.length - 24),
+				},
+				predictOrders: {
+					filledCount: predictFilledOrders.length,
+					filledFetched: predictFilledFetched,
+					filledError: Boolean(predictFilledError),
+				},
+				polyTradeHistory: {
+					needed: Boolean(polymarketSafe?.trim()),
+					isFetched: polyTradeHistoryQuery.isFetched,
+					isPending: polyTradeHistoryQuery.isPending,
+					fetchStatus: polyTradeHistoryQuery.fetchStatus,
+					isError: polyTradeHistoryQuery.isError,
+				},
+				limitlessTradeHistory: {
+					needed: Boolean(limitlessMakerBase?.trim()),
+					isFetched: limitlessTradeHistoryQuery.isFetched,
+					isPending: limitlessTradeHistoryQuery.isPending,
+					fetchStatus: limitlessTradeHistoryQuery.fetchStatus,
+					isError: limitlessTradeHistoryQuery.isError,
+				},
+				fundingAddressesLoading,
+				historyResolve: {
+					queryCount: venueHistoryResolveQueries.length,
+					isPending: historyVenueUmbrellaResolveQuery.isPending,
+					fetchStatus: historyVenueUmbrellaResolveQuery.fetchStatus,
+					isSuccess: historyVenueUmbrellaResolveQuery.isSuccess,
+					isError: historyVenueUmbrellaResolveQuery.isError,
+				},
+			},
+			gates: {
+				isDataFullyLoaded,
+				isPositionsTabContentReady,
+				isHistoryTabContentReady,
+				venueTradeHistoryLoading,
+				historyUmbrellaResolveSettled,
+			},
+			catalogMarkets: {
+				totalRows: marketRows.length,
+				withBalanceOrPosition: marketRows.filter((r) => r.yes > 0 || r.no > 0).length,
+				missingBookForOpenNotional: marketsWithIssues.length,
+				marketsWithIssues: marketsWithIssues.slice(0, 40),
+				allMarketsSample: marketRows.slice(0, 30),
+				allMarketsTruncated: Math.max(0, marketRows.length - 30),
+			},
+		});
+	}, [
+		effectiveAccount,
+		predictionLoading,
+		userDataLoading,
+		portfolioLoading,
+		booksPreviewLoading,
+		polyPositionsQuery.isLoading,
+		polyPositionsQuery.fetchStatus,
+		predictPositionsQuery.isLoading,
+		predictPositionsQuery.fetchStatus,
+		dflowRpcEnabled,
+		dflowPositionsQuery.isPending,
+		dflowPositionsQuery.fetchStatus,
+		limitlessPortfolioEnabled,
+		limitlessVenuePositionsQuery.isLoading,
+		limitlessVenuePositionsQuery.fetchStatus,
+		limitlessOpenOrdersQuery.isLoading,
+		limitlessOpenOrdersQuery.fetchStatus,
+		predictMarketIds,
+		predictMarketsQuery.isLoading,
+		predictMarketsQuery.isSuccess,
+		predictMarketsQuery.fetchStatus,
+		predictMarketDetails,
+		predictFilledOrders.length,
+		predictFilledFetched,
+		predictFilledError,
+		polymarketSafe,
+		polyTradeHistoryQuery.isFetched,
+		polyTradeHistoryQuery.isPending,
+		polyTradeHistoryQuery.isError,
+		polyTradeHistoryQuery.fetchStatus,
+		limitlessMakerBase,
+		limitlessTradeHistoryQuery.isFetched,
+		limitlessTradeHistoryQuery.isPending,
+		limitlessTradeHistoryQuery.isError,
+		limitlessTradeHistoryQuery.fetchStatus,
+		fundingAddressesLoading,
+		venueHistoryResolveQueries.length,
+		authenticated,
+		historyVenueUmbrellaResolveQuery.isPending,
+		historyVenueUmbrellaResolveQuery.fetchStatus,
+		historyVenueUmbrellaResolveQuery.isSuccess,
+		historyVenueUmbrellaResolveQuery.isError,
+		isDataFullyLoaded,
+		isPositionsTabContentReady,
+		isHistoryTabContentReady,
+		venueTradeHistoryLoading,
+		historyUmbrellaResolveSettled,
+		umbrellas,
+		getQuestionsForUmbrella,
+		tokenBalances,
+		allBooksPreview,
+	]);
 
 	const portfolioPerfFingerprintRef = useRef("");
 	const portfolioReadyLoggedRef = useRef(false);
@@ -2407,5 +2901,7 @@ export default function usePositionsData() {
 		resolvedMarketsByUmbrella,
 		activeTab,
 		setActiveTab,
+		/** See comment above `POSITIONS_SHELL_BYPASS_MS_*` — consumed by `Positions.tsx` shell timer. */
+		positionsShellBypassMaxWaitMs,
 	};
 }

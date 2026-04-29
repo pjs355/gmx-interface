@@ -3,8 +3,11 @@ import { usePrivy } from "@privy-io/react-auth";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import type { PredictOrderRow } from "./predictOrdersApi";
 
-/** Avoid spamming the same diagnostic on every refetch when orders are genuinely empty */
-let loggedEmptyOrdersHint = false;
+/** Opt-in: `VITE_DEBUG_PREDICT_ORDERS=1` (dev). */
+const predictOrdersConsole =
+	typeof import.meta !== "undefined" && import.meta.env?.DEV
+		? import.meta.env.VITE_DEBUG_PREDICT_ORDERS === "1"
+		: false;
 
 /**
  * Fetches Predict.fun orders for the authenticated user.
@@ -34,7 +37,7 @@ export function usePredictOrders(enabled = true) {
 				const all = await api.getPredictOrders(undefined);
 				const filled = all.filter((r) => r.status === "FILLED");
 				if (filled.length > 0) {
-					if (import.meta.env.DEV) {
+					if (predictOrdersConsole) {
 						console.log(
 							"[PredictOrders] status=FILLED was empty; using",
 							filled.length,
@@ -44,14 +47,14 @@ export function usePredictOrders(enabled = true) {
 						);
 					}
 					rows = filled;
-				} else if (import.meta.env.DEV && all.length > 0) {
+				} else if (predictOrdersConsole && all.length > 0) {
 					console.warn(
 						"[PredictOrders] No FILLED orders in list of",
 						all.length,
 						"— statuses:",
 						[...new Set(all.map((r) => r.status))].join(", ") || "(none)"
 					);
-				} else if (import.meta.env.DEV && all.length === 0 && !loggedEmptyOrdersHint) {
+				} else if (predictOrdersConsole && all.length === 0 && !loggedEmptyOrdersHint) {
 					loggedEmptyOrdersHint = true;
 					console.info(
 						"[PredictOrders] Zero FILLED orders — cost/avg falls back to GET /api/predict/orders/matches?signerAddress=… when you have Predict positions.",
@@ -59,7 +62,7 @@ export function usePredictOrders(enabled = true) {
 					);
 				}
 			}
-			if (import.meta.env.DEV && rows.length > 0) {
+			if (predictOrdersConsole && rows.length > 0) {
 				console.log("[PredictOrders] Fetched", rows.length, "filled orders for cost basis");
 			}
 			return rows;
@@ -79,7 +82,7 @@ export function usePredictOrders(enabled = true) {
 	// Surface auth errors so the UI can react
 	if (filledQuery.error) {
 		const msg = (filledQuery.error as any)?.message ?? "";
-		if (/401|unauthorized|expired/i.test(msg)) {
+		if (import.meta.env.DEV && /401|unauthorized|expired/i.test(msg)) {
 			console.warn(
 				"[PredictOrders] Predict.fun session expired — cost/avg price data unavailable. " +
 				"User needs to place a trade or re-authenticate to refresh the session."

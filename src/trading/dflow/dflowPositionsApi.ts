@@ -1,11 +1,48 @@
-import { Connection, PublicKey } from "@solana/web3.js";
-import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import { Connection, PublicKey, type AccountInfo } from "@solana/web3.js";
+import {
+	TOKEN_2022_PROGRAM_ID,
+	getAssociatedTokenAddressSync,
+} from "@solana/spl-token";
 import type { VenueHistoryFill, VenuePosition } from "@/types/trading/venuePosition";
 import type {
 	DflowBatchMarket,
 	DflowMarketAccountInfo,
 	DflowOnchainTrade,
 } from "@/services/privateApi";
+
+/**
+ * Same field precedence as predictions `eventTickerFromEsportsMarket` (nested `event_ticker`
+ * before camelCase `eventTicker`) so History resolve keys match `exchangeMatching.dflow`.
+ */
+export function dflowEventTickerFromBatchMarket(market: DflowBatchMarket): string | undefined {
+	const rec = market as unknown as Record<string, unknown>;
+	const snake = rec.event_ticker;
+	if (typeof snake === "string" && snake.trim()) return snake.trim();
+	const camel = rec.eventTicker;
+	if (typeof camel === "string" && camel.trim()) return camel.trim();
+	return undefined;
+}
+
+/*
+ * DFlow on-chain balances (Positions / trade box) — maintainers
+ * -----------------------------------------------------------
+ * Why not one RPC? Solana stores each outcome mint in a separate SPL Token-2022 account (often
+ * the ATA). There is no single "wallet balance" call for all prediction outcomes.
+ *
+ * Why not full-wallet scan? `getParsedTokenAccountsByOwner` without mint filter enumerates
+ * every Token-2022 account — slow and rate-limit prone on public RPC.
+ *
+ * Flow: outcome mints come from API trade history → filter_outcome_mints → this module reads
+ * balances only for those mints. Primary: batched `getMultipleParsedAccounts` on ATAs
+ * (see constants DFLOW_*). Fallback: per-mint `getParsedTokenAccountsByOwner` when the ATA
+ * cell is missing or unparsable (non-ATA custody).
+ *
+ * Known limitation: ATA exists with 0 uiAmount but shares live only in a non-ATA account — we
+ * skip extra RPC on the "zero" path; revisit if that case appears in prod.
+ *
+ * Tunables: DFLOW_OUTCOME_MINT_RPC_CONCURRENCY, DFLOW_PER_MINT_BALANCE_TIMEOUT_MS,
+ * DFLOW_BALANCE_MULTIREAD_CHUNK, DFLOW_MULTIREAD_CHUNK_TIMEOUT_MS.
+ */
 
 export type DflowSolanaToken = {
 	mint: string;
@@ -18,29 +55,211 @@ export type DflowMarketPosition = DflowSolanaToken & {
 	market: DflowBatchMarket;
 };
 
+/** Parallelism for per-mint fallback reads (non-ATA or failed batch cell). */
+export const DFLOW_OUTCOME_MINT_RPC_CONCURRENCY = 20;
+
+/** Per-mint ceiling so a few bad mints cannot stall the whole DFlow positions query. */
+export const DFLOW_PER_MINT_BALANCE_TIMEOUT_MS = 10_000;
+
+/** `getMultipleParsedAccounts` chunk size (RPC max is typically 100). */
+export const DFLOW_BALANCE_MULTIREAD_CHUNK = 100;
+
+/** Whole-batch timeout for multi-account balance reads. */
+export const DFLOW_MULTIREAD_CHUNK_TIMEOUT_MS = 22_000;
+
+type AtaParseResult =
+	| { kind: "positive"; balance: number; decimals: number }
+	| { kind: "zero" }
+	| { kind: "fallback" };
+
+function parsedToken2022AtaBalance(
+	account: AccountInfo<Buffer | { parsed?: unknown }> | null,
+	expectedMintBase58: string,
+): AtaParseResult {
+	if (!account?.data || typeof account.data !== "object") return { kind: "fallback" };
+	const data = account.data as {
+		parsed?: { type?: string; info?: Record<string, unknown> };
+	};
+	const inner = data.parsed;
+	if (!inner || inner.type !== "account" || !inner.info) return { kind: "fallback" };
+	const info = inner.info as {
+		mint?: string;
+		tokenAmount?: { uiAmount?: number | null; decimals?: number };
+	};
+	const mint = info.mint?.trim() ?? "";
+	if (mint !== expectedMintBase58.trim()) return { kind: "fallback" };
+	const uiAmount = info.tokenAmount?.uiAmount;
+	const decimals = info.tokenAmount?.decimals ?? 0;
+	if (uiAmount == null || !Number.isFinite(uiAmount) || uiAmount <= 0) {
+		return { kind: "zero" };
+	}
+	return { kind: "positive", balance: uiAmount, decimals };
+}
+
+function mergeMintBalance(
+	map: Map<string, { balance: number; decimals: number }>,
+	mintStr: string,
+	balance: number,
+	decimals: number,
+): void {
+	const prev = map.get(mintStr);
+	if (prev) {
+		map.set(mintStr, {
+			balance: prev.balance + balance,
+			decimals: prev.decimals || decimals,
+		});
+	} else {
+		map.set(mintStr, { balance, decimals });
+	}
+}
+
 /**
- * Reads all Token-2022 accounts from a Solana wallet and returns
- * non-zero balances as `DflowSolanaToken[]`.
+ * Reads Token-2022 balances for outcome mints the wallet has traded.
+ *
+ * Primary path: batched `getMultipleParsedAccounts` on Token-2022 ATAs (~1 RPC per 100 mints).
+ * Fallback: `getParsedTokenAccountsByOwner` per mint when ATA is missing or unparsable (non-ATA custody).
  */
-export async function fetchWalletToken2022Accounts(
+export async function fetchToken2022BalancesForMints(
 	connection: Connection,
-	owner: PublicKey
+	owner: PublicKey,
+	mints: string[],
+	options?: {
+		timeoutMsPerMint?: number;
+		concurrency?: number;
+		chunkSize?: number;
+		chunkTimeoutMs?: number;
+	},
 ): Promise<DflowSolanaToken[]> {
-	const resp = await connection.getParsedTokenAccountsByOwner(owner, {
-		programId: TOKEN_2022_PROGRAM_ID,
-	});
+	const timeoutMsPerMint =
+		options?.timeoutMsPerMint ?? DFLOW_PER_MINT_BALANCE_TIMEOUT_MS;
+	const concurrency =
+		options?.concurrency ?? DFLOW_OUTCOME_MINT_RPC_CONCURRENCY;
+	const chunkTimeoutMs =
+		options?.chunkTimeoutMs ?? DFLOW_MULTIREAD_CHUNK_TIMEOUT_MS;
+	const chunkSize = options?.chunkSize ?? DFLOW_BALANCE_MULTIREAD_CHUNK;
+
+	const unique = [...new Set(mints.map((m) => m.trim()).filter(Boolean))];
+	const balanceByMint = new Map<string, { balance: number; decimals: number }>();
+
+	type MintRow = { mintStr: string; mintPk: PublicKey };
+	const rows: MintRow[] = [];
+	for (const mintStr of unique) {
+		try {
+			rows.push({ mintStr, mintPk: new PublicKey(mintStr) });
+		} catch {
+			/* skip invalid mint */
+		}
+	}
+
+	if (rows.length === 0) return [];
+
+	const fallbackMints = new Set<string>();
+
+	for (let i = 0; i < rows.length; i += chunkSize) {
+		const chunk = rows.slice(i, i + chunkSize);
+		const atas = chunk.map((r) =>
+			getAssociatedTokenAddressSync(
+				r.mintPk,
+				owner,
+				false,
+				TOKEN_2022_PROGRAM_ID,
+			),
+		);
+		try {
+			const res = await Promise.race([
+				connection.getMultipleParsedAccounts(atas),
+				new Promise<never>((_, reject) => {
+					setTimeout(() => {
+						reject(new Error("DFlow Solana: getMultipleParsedAccounts chunk timeout"));
+					}, chunkTimeoutMs);
+				}),
+			]);
+			const accounts = res.value;
+			for (let j = 0; j < chunk.length; j++) {
+				const { mintStr } = chunk[j];
+				const acc = accounts[j] ?? null;
+				if (acc == null) {
+					fallbackMints.add(mintStr);
+					continue;
+				}
+				const pr = parsedToken2022AtaBalance(acc, mintStr);
+				if (pr.kind === "fallback") {
+					fallbackMints.add(mintStr);
+				} else if (pr.kind === "positive") {
+					mergeMintBalance(balanceByMint, mintStr, pr.balance, pr.decimals);
+				}
+			}
+		} catch (err) {
+			for (const { mintStr } of chunk) fallbackMints.add(mintStr);
+			if (import.meta.env.DEV) {
+				// eslint-disable-next-line no-console -- DFlow RPC diagnostic
+				console.warn(
+					"[DFlow] ATA batch Token-2022 read failed; per-mint fallback for chunk",
+					err,
+				);
+			}
+		}
+	}
+
+	async function readOneMintOwnerFilter(mintStr: string): Promise<void> {
+		let mintPk: PublicKey;
+		try {
+			mintPk = new PublicKey(mintStr);
+		} catch {
+			return;
+		}
+		try {
+			const resp = await Promise.race([
+				connection.getParsedTokenAccountsByOwner(owner, {
+					programId: TOKEN_2022_PROGRAM_ID,
+					mint: mintPk,
+				}),
+				new Promise<never>((_, reject) => {
+					setTimeout(() => {
+						reject(
+							new Error(
+								`DFlow Solana: balance read for mint exceeded ${timeoutMsPerMint}ms`,
+							),
+						);
+					}, timeoutMsPerMint);
+				}),
+			]);
+			let sum = 0;
+			let decimals = 0;
+			for (const { account } of resp.value) {
+				const info = account.data.parsed?.info as
+					| { mint?: string; tokenAmount?: { uiAmount?: number | null; decimals?: number } }
+					| undefined;
+				if (!info) continue;
+				if ((info.mint?.trim() ?? "") !== mintStr.trim()) continue;
+				const uiAmount: number | null = info.tokenAmount?.uiAmount ?? null;
+				if (uiAmount == null || !Number.isFinite(uiAmount) || uiAmount <= 0) continue;
+				sum += uiAmount;
+				decimals = info.tokenAmount?.decimals ?? decimals;
+			}
+			if (sum > 0) mergeMintBalance(balanceByMint, mintStr, sum, decimals);
+		} catch (err) {
+			if (import.meta.env.DEV) {
+				// eslint-disable-next-line no-console -- DFlow RPC diagnostic
+				console.warn(
+					"[DFlow] Per-mint Token-2022 read failed or timed out; skipping mint",
+					mintStr,
+					err,
+				);
+			}
+		}
+	}
+
+	const fallbackList = [...fallbackMints];
+	const workers = Math.max(1, Math.min(concurrency, fallbackList.length || 1));
+	for (let i = 0; i < fallbackList.length; i += workers) {
+		const slice = fallbackList.slice(i, i + workers);
+		await Promise.all(slice.map((m) => readOneMintOwnerFilter(m)));
+	}
 
 	const tokens: DflowSolanaToken[] = [];
-	for (const { account } of resp.value) {
-		const info = account.data.parsed?.info;
-		if (!info) continue;
-		const uiAmount: number | null = info.tokenAmount?.uiAmount ?? null;
-		if (uiAmount == null || uiAmount <= 0) continue;
-		tokens.push({
-			mint: info.mint as string,
-			balance: uiAmount,
-			decimals: info.tokenAmount?.decimals ?? 0,
-		});
+	for (const [mintStr, { balance, decimals }] of balanceByMint) {
+		if (balance > 0) tokens.push({ mint: mintStr, balance, decimals });
 	}
 	return tokens;
 }
@@ -429,6 +648,8 @@ export function toVenuePositions(
 			}
 		}
 
+		const dflowEventTicker = dflowEventTickerFromBatchMarket(pos.market);
+
 		return {
 			venue: "dflow",
 			marketTitle: pos.market.title,
@@ -441,6 +662,7 @@ export function toVenuePositions(
 			pnl,
 			pnlPercent,
 			tokenId: pos.mint,
+			...(dflowEventTicker ? { dflowEventTicker } : {}),
 			marketStatus: pos.market.status?.toUpperCase(),
 			outcomeResult: isFinalized ? (isWon ? "WON" : "LOST") : null,
 			...(latestMs != null

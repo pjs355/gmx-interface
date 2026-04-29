@@ -26,6 +26,11 @@ import {
 	buildUmbrellaLookupByPolymarketConditionId,
 	polymarketConditionLookupKey,
 } from "@/trading/polymarket/polymarketConditionLookup";
+import {
+	buildUmbrellaLookupByDflowEventTicker,
+	buildUmbrellaLookupByDflowOutcomeMint,
+	lookupUmbrellaByDflowEventTicker,
+} from "@/trading/dflow/dflowUmbrellaLookup";
 import type { TradingVenue } from "../types";
 
 const VENUE_SUFFIX: Record<VenueId | "levelup", string> = {
@@ -73,10 +78,22 @@ function umbrellaForPosition(
 	pos: VenuePosition,
 	umbrellas: Umbrella[],
 	condLookup: Map<string, Umbrella>,
+	dflowMintLookup: Map<string, Umbrella>,
+	dflowEventTickerLookup: Map<string, Umbrella>,
 ): Umbrella | null {
 	const k = polymarketConditionLookupKey(pos.conditionId ?? "");
 	if (k && condLookup.has(k)) {
 		return condLookup.get(k)!;
+	}
+	if (pos.venue === "dflow") {
+		const et = pos.dflowEventTicker?.trim();
+		if (et) {
+			return lookupUmbrellaByDflowEventTicker(et, dflowEventTickerLookup, umbrellas);
+		}
+		if (pos.tokenId?.trim()) {
+			const hit = dflowMintLookup.get(pos.tokenId.trim());
+			if (hit) return hit;
+		}
 	}
 	return (
 		umbrellas.find((u) => titlesMatchVenue(u.displayName ?? "", pos.marketTitle ?? "")) ?? null
@@ -288,6 +305,16 @@ export function useTradeBoxShareBalances(opts: {
 		[umbrellas],
 	);
 
+	const dflowMintLookup = useMemo(
+		() => buildUmbrellaLookupByDflowOutcomeMint(umbrellas),
+		[umbrellas],
+	);
+
+	const dflowEventTickerLookup = useMemo(
+		() => buildUmbrellaLookupByDflowEventTicker(umbrellas),
+		[umbrellas],
+	);
+
 	const siblingConditionIds = useMemo(
 		() => buildSiblingConditionIdSet(umbrellaId, market ?? undefined, allMarketsByUmbrella),
 		[umbrellaId, market, allMarketsByUmbrella],
@@ -332,7 +359,13 @@ export function useTradeBoxShareBalances(opts: {
 				}
 			}
 			if (!keep) {
-				const u = umbrellaForPosition(p, umbrellas, condLookup);
+				const u = umbrellaForPosition(
+					p,
+					umbrellas,
+					condLookup,
+					dflowMintLookup,
+					dflowEventTickerLookup,
+				);
 				if (!u || u._id !== umbrellaId) continue;
 				if (!positionMatchesMarketOrSiblings(p, market, siblingConditionIds)) continue;
 				keep = true;
@@ -349,6 +382,8 @@ export function useTradeBoxShareBalances(opts: {
 		market,
 		umbrellas,
 		condLookup,
+		dflowMintLookup,
+		dflowEventTickerLookup,
 		siblingConditionIds,
 		pageMatchedMonitor,
 		polyQ.data,

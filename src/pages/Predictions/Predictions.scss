@@ -560,32 +560,7 @@
 	margin-top: 4px;
 	margin-bottom: 24px;
 
-	/* Mobile: Horizontal scroll carousel for esports calendar */
-	@media (max-width: 767px) {
-		display: flex;
-		overflow-x: auto;
-		overflow-y: hidden;
-		scroll-snap-type: x mandatory;
-		scroll-behavior: smooth;
-		gap: 16px;
-		-webkit-overflow-scrolling: touch;
-		scrollbar-width: none; /* Firefox */
-		-ms-overflow-style: none; /* IE 10+ */
-		padding-bottom: 8px;
-
-		&::-webkit-scrollbar {
-			display: none;
-		}
-
-		/* Each card takes most of screen width but shows peek of next card */
-		.prediction-card {
-			flex: 0 0 calc(100vw - 80px);
-			max-width: calc(100vw - 80px);
-			scroll-snap-align: start;
-			scroll-snap-stop: always;
-			height: auto !important;
-		}
-	}
+	/* Mobile: same as tablet/desktop — use parent `.predictions-grid` (vertical scroll, no horizontal row). */
 }
 
 .prediction-calendar-day--unscheduled .prediction-calendar-primary {
