@@ -6,7 +6,8 @@ import {
 } from "../page-objects/tradebox";
 import { type Page } from "@playwright/test";
 
-const VENUES_TO_SWEEP: TradingVenue[] = [
+/** Default when callers omit `venues`: sweep every venue tab the tradebox exposes. */
+const DEFAULT_VENUES_TO_SWEEP: TradingVenue[] = [
 	"levelup",
 	"polymarket",
 	"predictfun",
@@ -14,7 +15,14 @@ const VENUES_TO_SWEEP: TradingVenue[] = [
 	"dflow",
 ];
 
-export async function cleanupOpenPositions(page: Page): Promise<void> {
+/**
+ * Optionally restrict which venue tabs to open (e.g. match `REQUESTED_VENUES` in
+ * `per-venue-trade-cycle.spec.ts`). Pass a non-empty list; otherwise all defaults run.
+ */
+export async function cleanupOpenPositions(
+	page: Page,
+	venues?: readonly TradingVenue[],
+): Promise<void> {
 	const tradebox = new Tradebox(page);
 	const tradeboxVisible = await tradeboxRootLocator(page)
 		.isVisible()
@@ -26,7 +34,10 @@ export async function cleanupOpenPositions(page: Page): Promise<void> {
 		return;
 	}
 
-	for (const venue of VENUES_TO_SWEEP) {
+	const sweep: readonly TradingVenue[] =
+		venues !== undefined && venues.length > 0 ? venues : DEFAULT_VENUES_TO_SWEEP;
+
+	for (const venue of sweep) {
 		try {
 			await tradebox.selectVenue(venue);
 			for (const position of ["yes", "no"] as Position[]) {

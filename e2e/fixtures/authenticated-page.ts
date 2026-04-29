@@ -6,6 +6,43 @@ import { E2E_PERSISTENT_CONTEXT_OPTIONS } from "../persistent-context-options";
 
 const USER_DATA_DIR = path.join(E2E_ROOT, ".user-data");
 
+/**
+ * Chrome leaves these under `user-data-dir`; if the browser was killed without a
+ * clean shutdown, the next `launchPersistentContext` fails with ProcessSingleton.
+ * Only call after a launch failure that matches that error, or you risk two live
+ * processes using one profile.
+ */
+function removeChromeSingletonArtifacts(profileDir: string): void {
+	const names = ["SingletonLock", "SingletonCookie", "SingletonSocket"] as const;
+	for (const name of names) {
+		const p = path.join(profileDir, name);
+		try {
+			if (fs.existsSync(p)) {
+				fs.unlinkSync(p);
+			}
+		} catch (e: unknown) {
+			console.error("error", e);
+		}
+	}
+}
+
+function isChromeProfileSingletonLaunchError(err: unknown): boolean {
+	const msg =
+		err instanceof Error
+			? `${err.message}\n${err.stack ?? ""}`
+			: String(err);
+	return /ProcessSingleton|SingletonLock|profile is already in use|Failed to create a ProcessSingleton|File exists \(17\)/i.test(
+		msg,
+	);
+}
+
+async function launchPersistentContextOnce(): Promise<BrowserContext> {
+	return chromium.launchPersistentContext(
+		USER_DATA_DIR,
+		E2E_PERSISTENT_CONTEXT_OPTIONS,
+	);
+}
+
 /** Only present in the header when Privy + signer report an account (see AppHeaderUser). */
 const SENTINEL_LOGGED_IN_USER = '[data-qa="user-address"]';
 const SENTINEL_LOGGED_OUT = '[data-qa="connect-wallet-button"]';
@@ -26,10 +63,27 @@ export async function openAuthenticatedSession(): Promise<AuthenticatedSession> 
 		);
 	}
 
-	const context = await chromium.launchPersistentContext(
-		USER_DATA_DIR,
-		E2E_PERSISTENT_CONTEXT_OPTIONS,
-	);
+	let context: BrowserContext;
+	try {
+		context = await launchPersistentContextOnce();
+	} catch (err: unknown) {
+		if (!isChromeProfileSingletonLaunchError(err)) {
+			console.error("error", err);
+			throw err;
+		}
+		console.warn(
+			`[e2e] Chrome refused profile at ${USER_DATA_DIR} (singleton lock / already in use). ` +
+				`Removing stale Singleton* files and retrying once. If this persists, quit any Chrome window ` +
+				`that was opened with this same user-data dir (e.g. after yarn e2e:seed-profile).`,
+		);
+		removeChromeSingletonArtifacts(USER_DATA_DIR);
+		try {
+			context = await launchPersistentContextOnce();
+		} catch (retryErr: unknown) {
+			console.error("error", retryErr);
+			throw retryErr;
+		}
+	}
 
 	const pages = context.pages();
 	const page = pages.length > 0 ? pages[0] : await context.newPage();

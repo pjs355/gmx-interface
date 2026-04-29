@@ -16,7 +16,7 @@ type RelayerBundledError = {
 	data?: unknown;
 };
 
-/** Duck-type axios errors (e.g. from @polymarket/clob-client) without importing axios. */
+/** Duck-type axios errors (e.g. from @polymarket/clob-client-v2) without importing axios. */
 function tryAxiosLikeErrorMessage(err: unknown): string | null {
 	if (!err || typeof err !== "object") return null;
 	const e = err as {
@@ -87,7 +87,13 @@ export function getPrivateApiErrorMessage(err: unknown): string {
 	if (err instanceof Error) {
 		const relay = tryMessageFromRelayerClientError(err.message);
 		if (relay) return relay;
-		return err.message;
+		const fromMsg = err.message.trim();
+		if (fromMsg.length > 0) return err.message;
+		const fromName = err.name.trim();
+		if (fromName.length > 0 && fromName !== "Error") {
+			return `${fromName} (no message)`;
+		}
+		return "Request failed";
 	}
 	if (err && typeof err === "object" && "error" in err) {
 		const raw = (err as { error: unknown }).error;

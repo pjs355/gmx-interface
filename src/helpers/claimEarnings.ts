@@ -9,9 +9,9 @@ import { useCallback, useMemo, useState } from "react";
 import { AddressesByChainId, ChainId, OrderBuilder } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getCTFAddress, getUSDCAddress } from "@/config/addresses";
-import { POLYGON_CTF, POLYGON_USDC_E } from "@/trading/polymarket/constants";
+import { POLYGON_CTF, POLYGON_PUSD } from "@/trading/polymarket/constants";
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
-import { waitRelay } from "@/trading/polymarket/safeActions";
+import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { predictCtfKey } from "@/trading/predict/predictContractKeys";
 import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
 
@@ -215,7 +215,7 @@ export function useClaimForVenue(
 				);
 
 			const redeemData = iface.encodeFunctionData("redeemPositions", [
-				POLYGON_USDC_E,
+				POLYGON_PUSD,
 				ethers.ZeroHash,
 				market.conditionId,
 				[YES_INDEX_SET, NO_INDEX_SET],
@@ -223,16 +223,17 @@ export function useClaimForVenue(
 
 			console.log("CLAIM DEBUG: Polymarket redeem via Safe relay", {
 				ctf: POLYGON_CTF,
-				collateral: POLYGON_USDC_E,
+				collateral: POLYGON_PUSD,
 				conditionId: market.conditionId,
 				indexSets: [YES_INDEX_SET, NO_INDEX_SET],
 			});
 
-			const resp = await relayClient.execute(
+			const respOrHash = await executePolygonRelayAndWait(
+				relayClient,
 				[{ to: POLYGON_CTF as string, value: "0", data: redeemData }],
-				"Redeem Polymarket winnings"
+				"Redeem Polymarket winnings",
 			);
-			return await waitRelay(resp);
+			return respOrHash;
 		}
 
 		async function redeemPredict(): Promise<string> {

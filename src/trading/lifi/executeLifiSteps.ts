@@ -12,16 +12,18 @@ import type {
 	LifiAllowanceHint,
 	LifiQuoteStep,
 	LifiTransactionRequest,
+	PolygonSafeUnwrapPrerequisite,
 } from "@/types/trading";
+import { getPolygonPublicClient } from "@/config/polygonPublicClient";
 import {
 	BSC_RPC_URL,
 	DEFAULT_RPC_URL,
-	POLYGON_RPC_URL,
 	createSolanaConnectionForWalletSend,
 } from "@/config/rpc";
 import {
 	isPolymarketSafeRelayOnchainRevert,
 	waitRelay,
+	withPolygonRelayMutex,
 } from "@/trading/polymarket/safeActions";
 import type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import {
@@ -66,6 +68,11 @@ export type ExecuteLifiStepsOptions = {
 	rawLifiRoute?: unknown;
 	/** Solana wallet (base58) that owns SPL USDC for delegate + bridge txs. */
 	solanaTokenOwnerAddress?: string;
+	/**
+	 * From `POST /funding/lifi/quote` when bridging from Polygon Polymarket Safe: run these relay txs
+	 * **before** LI.FI steps so USDC.e is available for LI.FI `transferFrom`.
+	 */
+	polygonSafeUnwrapPrerequisite?: PolygonSafeUnwrapPrerequisite | null;
 };
 
 function toHexData(data: string | undefined): `0x${string}` | undefined {
@@ -88,7 +95,7 @@ function publicClientForChain(chainId: number) {
 		return createPublicClient({ chain: base, transport: http(DEFAULT_RPC_URL) });
 	}
 	if (chainId === polygon.id) {
-		return createPublicClient({ chain: polygon, transport: http(POLYGON_RPC_URL) });
+		return getPolygonPublicClient();
 	}
 	if (chainId === bsc.id) {
 		return createPublicClient({ chain: bsc, transport: http(BSC_RPC_URL) });
@@ -291,6 +298,12 @@ function relayTransactionFromTr(tr: LifiTransactionRequest): Transaction {
 	};
 }
 
+function relayTransactionsFromUnwrapPrerequisite(
+	calls: PolygonSafeUnwrapPrerequisite["calls"],
+): Transaction[] {
+	return calls.map((c) => relayTransactionFromTr(c));
+}
+
 /**
  * Execute LI.FI (or server-normalized) steps in order using the wallet client
  * returned for each step's chain. Optionally sends ERC-20 approvals per step hints.
@@ -312,6 +325,57 @@ export async function executeLifiSteps(
 		ordered = sorted;
 	}
 	const relay = options?.polygonRelay?.client;
+
+	const unwrapPre = options?.polygonSafeUnwrapPrerequisite;
+	if (relay && unwrapPre?.calls?.length) {
+		const txs = relayTransactionsFromUnwrapPrerequisite(unwrapPre.calls);
+		const runUnwrapPre = async (suffix: string) => {
+			await withPolygonRelayMutex(async () => {
+				if (txs.length === 2) {
+					const r0 = await relay.execute(
+						[txs[0]!],
+						`Polygon pUSD → Offramp approval (pre-LI.FI)${suffix}`,
+					);
+					const h0 = await waitRelay(r0);
+					if (h0) txHashes.push(h0);
+					await new Promise((r) => setTimeout(r, 2_500));
+					const r1 = await relay.execute(
+						[txs[1]!],
+						`Polygon pUSD unwrap → USDC.e (pre-LI.FI)${suffix}`,
+					);
+					const h1 = await waitRelay(r1);
+					if (h1) txHashes.push(h1);
+				} else if (txs.length === 1) {
+					const resp = await relay.execute(
+						txs,
+						`Polygon unwrap prerequisite before LI.FI${suffix}`,
+					);
+					const h = await waitRelay(resp);
+					if (h) txHashes.push(h);
+				} else {
+					for (let j = 0; j < txs.length; j++) {
+						if (j > 0) await new Promise((r) => setTimeout(r, 2_500));
+						const rj = await relay.execute(
+							[txs[j]!],
+							`Polygon unwrap prerequisite ${j + 1}/${txs.length} (pre-LI.FI)${suffix}`,
+						);
+						const hj = await waitRelay(rj);
+						if (hj) txHashes.push(hj);
+					}
+				}
+			});
+		};
+		try {
+			await runUnwrapPre("");
+		} catch (e0) {
+			if (isPolymarketSafeRelayOnchainRevert(e0)) {
+				await new Promise((r) => setTimeout(r, 4_000));
+				await runUnwrapPre(" (retry: fresh relay nonce)");
+			} else {
+				throw e0;
+			}
+		}
+	}
 
 	const solanaConn =
 		options?.solanaSigner && options?.solanaTokenOwnerAddress?.trim()
@@ -408,16 +472,36 @@ export async function executeLifiSteps(
 			}
 			batch.push(relayTransactionFromTr(tr));
 			const relayMetadataBase = `LI.FI Polygon step ${i}`;
+			/** One mutex segment: if ERC-20 approve + router tx, mine approve first (relay nonce advances), then pause before swap — avoids GS026 from batched multicall simulation races. */
 			const runPolygonRelayOnce = async (suffix: string) => {
-				const resp = await relay.execute(batch, `${relayMetadataBase}${suffix}`);
-				const txHash = await waitRelay(resp);
-				if (txHash) txHashes.push(txHash);
+				await withPolygonRelayMutex(async () => {
+					if (batch.length === 2) {
+						const approveTx = batch[0]!;
+						const mainTx = batch[1]!;
+						const rA = await relay.execute(
+							[approveTx],
+							`${relayMetadataBase} (token approval)${suffix}`,
+						);
+						await waitRelay(rA);
+						await new Promise((r) => setTimeout(r, 2_500));
+						const rS = await relay.execute(
+							[mainTx],
+							`${relayMetadataBase} (route step)${suffix}`,
+						);
+						const txHash = await waitRelay(rS);
+						if (txHash) txHashes.push(txHash);
+					} else {
+						const resp = await relay.execute(batch, `${relayMetadataBase}${suffix}`);
+						const txHash = await waitRelay(resp);
+						if (txHash) txHashes.push(txHash);
+					}
+				});
 			};
 			try {
 				await runPolygonRelayOnce("");
 			} catch (e0) {
 				if (isPolymarketSafeRelayOnchainRevert(e0)) {
-					await new Promise((r) => setTimeout(r, 1_600));
+					await new Promise((r) => setTimeout(r, 4_000));
 					try {
 						await runPolygonRelayOnce(" (retry: fresh relay nonce)");
 					} catch (e1) {

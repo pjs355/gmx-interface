@@ -1,6 +1,7 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 
 import Button from "components/Button/Button";
+import SpinningLoader from "@/components/Common/SpinningLoader";
 import Tabs from "components/Tabs/Tabs";
 import Tooltip from "components/Tooltip/Tooltip";
 import type { TradeBoxProps, TradeBoxState, ApprovalState, TradingVenue, MarketOrderCalculation } from './types';
@@ -38,6 +39,7 @@ import {
 	getContrastingTextColor,
 	mixHexOnBlack,
 } from "@/helpers/predictionUtils";
+import { SHARE_SELL_COMPARE_EPS } from "./checkBalances";
 
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -246,6 +248,144 @@ export default function PredictionMarketTradeBoxUI({
   const [sorDetailsExpanded, setSorDetailsExpanded] = useState(false);
   const [singleVenueDetailsExpanded, setSingleVenueDetailsExpanded] = useState(false);
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
+
+  /** Green “Filled” SOR banner (All Markets only). */
+  const sorFilledBannerVisible =
+    tradingVenue === "all" &&
+    sorExecution.execution != null &&
+    !sorExecution.isExecuting &&
+    sorExecution.execution.status === "complete";
+
+  const [positionSharesChainSyncUi, setPositionSharesChainSyncUi] = useState(false);
+
+  /** Latest snapshot for effects that must not re-run on every balance poll. */
+  const shareBalancesRef = useRef(shareBalances);
+  shareBalancesRef.current = shareBalances;
+
+  /** Baseline share totals when a fill completes or “Order Submitted!” fires (any venue). */
+  const positionSyncBaselineRef = useRef<{
+    buySum: number;
+    sellTotal: number;
+  } | null>(null);
+  const fillBannerRouteIdRef = useRef<string | undefined>(undefined);
+  /** True after `orderResult.success` rising edge until balances catch up or max wait (toast clears in 4s). */
+  const orderSubmitSyncActiveRef = useRef(false);
+  const prevOrderResultSuccessRef = useRef(false);
+  const positionSyncMaxTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+
+  const clearPositionSyncMaxTimer = useCallback(() => {
+    if (positionSyncMaxTimerRef.current != null) {
+      window.clearTimeout(positionSyncMaxTimerRef.current);
+      positionSyncMaxTimerRef.current = null;
+    }
+  }, []);
+
+  const armPositionSyncMaxTimer = useCallback(() => {
+    clearPositionSyncMaxTimer();
+    positionSyncMaxTimerRef.current = window.setTimeout(() => {
+      positionSyncMaxTimerRef.current = null;
+      setPositionSharesChainSyncUi(false);
+      orderSubmitSyncActiveRef.current = false;
+    }, 30_000);
+  }, [clearPositionSyncMaxTimer]);
+
+  const capturePositionSyncBaseline = useCallback(() => {
+    const sb = shareBalancesRef.current;
+    const buySum = sb.buyLines.reduce(
+      (s, l) => s + (Number.isFinite(l.shares) ? l.shares : 0),
+      0,
+    );
+    positionSyncBaselineRef.current = {
+      buySum,
+      sellTotal: sb.sellTotalShares,
+    };
+  }, []);
+
+  /** All Markets: green “Filled / Sold” row — same timing as post-trade polling. */
+  useEffect(() => {
+    if (!sorFilledBannerVisible) {
+      fillBannerRouteIdRef.current = undefined;
+      if (!orderSubmitSyncActiveRef.current) {
+        positionSyncBaselineRef.current = null;
+        setPositionSharesChainSyncUi(false);
+        clearPositionSyncMaxTimer();
+      }
+      return;
+    }
+    const routeId = sorExecution.execution?.routeId;
+    if (fillBannerRouteIdRef.current !== routeId) {
+      fillBannerRouteIdRef.current = routeId;
+      capturePositionSyncBaseline();
+      setPositionSharesChainSyncUi(true);
+      armPositionSyncMaxTimer();
+    }
+  }, [
+    sorFilledBannerVisible,
+    sorExecution.execution?.routeId,
+    capturePositionSyncBaseline,
+    armPositionSyncMaxTimer,
+    clearPositionSyncMaxTimer,
+  ]);
+
+  /** Any venue: “Order Submitted!” — single-venue Predict/Poly/etc. never shows the All Markets green row. */
+  useEffect(() => {
+    const success = !!orderResult?.success;
+    const rising = success && !prevOrderResultSuccessRef.current;
+    prevOrderResultSuccessRef.current = success;
+    if (!rising) return;
+
+    orderSubmitSyncActiveRef.current = true;
+    capturePositionSyncBaseline();
+    setPositionSharesChainSyncUi(true);
+    armPositionSyncMaxTimer();
+  }, [orderResult?.success, capturePositionSyncBaseline, armPositionSyncMaxTimer]);
+
+  useEffect(() => {
+    return () => {
+      clearPositionSyncMaxTimer();
+    };
+  }, [clearPositionSyncMaxTimer]);
+
+  useEffect(() => {
+    if (!positionSharesChainSyncUi) return;
+
+    const base = positionSyncBaselineRef.current;
+    const sellT = shareBalances.sellTotalShares;
+    const buySum = shareBalances.buyLines.reduce(
+      (s, l) => s + (Number.isFinite(l.shares) ? l.shares : 0),
+      0,
+    );
+    const filled = sorExecution.execution?.totalFilledShares;
+    const haveFilled = Number.isFinite(filled) && filled !== undefined && filled > 1e-6;
+
+    const endSync = () => {
+      setPositionSharesChainSyncUi(false);
+      orderSubmitSyncActiveRef.current = false;
+      clearPositionSyncMaxTimer();
+    };
+
+    if (side === "sell") {
+      if (haveFilled && sellT <= SHARE_SELL_COMPARE_EPS) {
+        endSync();
+        return;
+      }
+      if (base != null && sellT < base.sellTotal - 1e-6) {
+        endSync();
+      }
+      return;
+    }
+
+    if (side === "buy" && base != null && buySum > base.buySum + 1e-6) {
+      endSync();
+    }
+  }, [
+    positionSharesChainSyncUi,
+    shareBalances.buyLines,
+    shareBalances.sellTotalShares,
+    side,
+    sorExecution.execution?.totalFilledShares,
+    clearPositionSyncMaxTimer,
+  ]);
   /**
    * Pulse only while `isStale` is true (inputs changed, tab resume, or grace after a transient error).
    * Background auto-refresh uses `isLoading` without flipping stale, so sitting on "1,000" does not blink every few seconds.
@@ -774,6 +914,7 @@ export default function PredictionMarketTradeBoxUI({
           selectedPosition={selectedPosition}
           matchedMonitor={matchedMonitor}
           shareBalances={shareBalances}
+          positionSharesRefreshing={positionSharesChainSyncUi}
         />
       </div>
 
@@ -854,15 +995,14 @@ export default function PredictionMarketTradeBoxUI({
                   return;
                 }
               } else {
-                // For market buy orders, allow decimals with existing validation
-                // Only block if there are multiple decimal points
+                // USD (market buy only in UI): 2 dp. Shares (sell, limit, All buy amount): up to 8 dp.
                 const decimalCount = (cleanValue.match(/\./g) || []).length;
                 if (decimalCount > 1) {
                   return;
                 }
-                
-                // Only block if there are more than 2 decimal places
-                if (cleanValue.includes('.') && cleanValue.split('.')[1] && cleanValue.split('.')[1].length > 2) {
+                const maxFractionDigits = amountInputShowsDollarPrefix ? 2 : 8;
+                const frac = cleanValue.includes(".") ? cleanValue.split(".")[1] : "";
+                if (frac && frac.length > maxFractionDigits) {
                   return;
                 }
               }
@@ -1028,7 +1168,15 @@ export default function PredictionMarketTradeBoxUI({
                       const shareStr = formatSorDetailsSharesDisplay(leg.shares);
                       const cents = (leg.avgPrice * 100).toFixed(0);
                       return (
-                        <div key={`${leg.venue}-${idx}`} className="sor-details-row sor-details-row--leg">
+                        <div
+                          key={`${leg.venue}-${idx}`}
+                          className="sor-details-row sor-details-row--leg"
+                          data-qa="sor-leg"
+                          data-leg-venue={leg.venue}
+                          data-leg-side={isSell ? "sell" : "buy"}
+                          data-leg-num-shares={leg.shares}
+                          data-leg-price-cents={cents}
+                        >
                           <span className="sor-details-leg-text">
                             {VENUE_DISPLAY_NAMES[leg.venue]}
                             {isSell ? ` Sell ${shareStr}` : ` ${shareStr}`} Shares @ {cents}¢
@@ -1040,7 +1188,11 @@ export default function PredictionMarketTradeBoxUI({
                     {!isSell && Number.isFinite(route.totalCost) && (
                       <div className="sor-details-row sor-details-row--fee">
                         <span className="sor-details-fee-label">Cost:</span>
-                        <span className="sor-details-fee-value">
+                        <span
+                          className="sor-details-fee-value"
+                          data-qa="sor-leg-cost"
+                          data-cost-usd={route.totalCost}
+                        >
                           $ {formatSorUsd2(Math.floor(route.totalCost * 100) / 100)}
                         </span>
                       </div>
@@ -1088,7 +1240,11 @@ export default function PredictionMarketTradeBoxUI({
                     {`Estimated Receive${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
                   </span>
                 </Tooltip>
-                <span className="bet-size-value estimated-receive-value">
+                <span
+                  className="bet-size-value estimated-receive-value"
+                  data-qa="tradebox-estimated-receive-usd"
+                  data-receive-usd={netReceive}
+                >
                   $ {(Math.floor(netReceive * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
@@ -1145,21 +1301,42 @@ export default function PredictionMarketTradeBoxUI({
             {singleVenueDetailsExpanded && (
               <div className="sor-details-panel">
                 {orderType === "limit" && limitOrderAmount !== null && amount && price && (
-                  <div className="sor-details-row sor-details-row--leg">
+                  <div
+                    className="sor-details-row sor-details-row--leg"
+                    data-qa="sor-leg"
+                    data-leg-venue={state.tradingVenue}
+                    data-leg-side="limit"
+                    data-leg-num-shares={Number(amount)}
+                    data-leg-price-cents={Number(price)}
+                  >
                     <span className="sor-details-leg-text">
                       Limit — {formatSorDetailsSharesDisplay(Number(amount))} shares @ {price}¢
                     </span>
                   </div>
                 )}
                 {orderType === "market" && side === "buy" && oddsData !== null && calculatedContracts !== null && (
-                  <div className="sor-details-row sor-details-row--leg">
+                  <div
+                    className="sor-details-row sor-details-row--leg"
+                    data-qa="sor-leg"
+                    data-leg-venue={state.tradingVenue}
+                    data-leg-side="market-buy"
+                    data-leg-num-shares={calculatedContracts}
+                    data-leg-price-cents={oddsData.pct}
+                  >
                     <span className="sor-details-leg-text">
                       {venueConfig.displayName} {formatSorDetailsSharesDisplay(calculatedContracts)} Shares @ {oddsData.pct}¢
                     </span>
                   </div>
                 )}
                 {orderType === "market" && side === "sell" && sellAvgCents !== null && amount && Number(amount) > 0 && (
-                  <div className="sor-details-row sor-details-row--leg">
+                  <div
+                    className="sor-details-row sor-details-row--leg"
+                    data-qa="sor-leg"
+                    data-leg-venue={state.tradingVenue}
+                    data-leg-side="market-sell"
+                    data-leg-num-shares={Number(amount)}
+                    data-leg-price-cents={sellAvgCents}
+                  >
                     <span className="sor-details-leg-text">
                       {venueConfig.displayName} Sell {formatSorDetailsSharesDisplay(Number(amount))} Shares @ {sellAvgCents}¢
                     </span>
@@ -1214,7 +1391,11 @@ export default function PredictionMarketTradeBoxUI({
                   Number.isFinite(estimatedCost) && (
                   <div className="sor-details-row sor-details-row--fee">
                     <span className="sor-details-fee-label">Cost:</span>
-                    <span className="sor-details-fee-value">
+                    <span
+                      className="sor-details-fee-value"
+                      data-qa="sor-leg-cost"
+                      data-cost-usd={estimatedCost}
+                    >
                       $ {formatSorUsd2(Math.floor(estimatedCost * 100) / 100)}
                     </span>
                   </div>
@@ -1226,7 +1407,11 @@ export default function PredictionMarketTradeBoxUI({
                   price && (
                   <div className="sor-details-row sor-details-row--fee">
                     <span className="sor-details-fee-label">Cost:</span>
-                    <span className="sor-details-fee-value">
+                    <span
+                      className="sor-details-fee-value"
+                      data-qa="sor-leg-cost"
+                      data-cost-usd={limitOrderAmount + limitOrderFee}
+                    >
                       $ {formatSorUsd2(Math.floor((limitOrderAmount + limitOrderFee) * 100) / 100)}
                     </span>
                   </div>

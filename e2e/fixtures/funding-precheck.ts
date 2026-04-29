@@ -1,4 +1,5 @@
 import { type Page, expect } from "@playwright/test";
+import { readHeaderCashUsd } from "../helpers/header-cash";
 
 const MIN_BALANCE_USD = 60;
 /** Cash can climb after Base USDC + bridge balances hydrate (see PortfolioContext). */
@@ -7,42 +8,6 @@ const POLL_MS = 400;
 /** If header Cash stays finite and < min this long without increasing, fail (avoids a silent 90s wait). */
 const STUCK_BELOW_MIN_MS = 15_000;
 const PROGRESS_LOG_MS = 5_000;
-
-async function readHeaderCashUsd(page: Page): Promise<number | null> {
-	const cashBox = page.locator('[data-qa="header-cash"]').first();
-	const visible = await cashBox.isVisible().catch(() => false);
-	if (!visible) {
-		return null;
-	}
-	// Logic must live entirely inside this callback — it runs in the browser, not in Node.
-	return cashBox.evaluate((el) => {
-		const attr = el.getAttribute("data-qa-cash-amount");
-		if (attr !== null && attr.trim() !== "") {
-			const fromAttr = Number(attr);
-			if (Number.isFinite(fromAttr) && fromAttr >= 0) {
-				return fromAttr;
-			}
-		}
-		if (!(el instanceof HTMLElement)) {
-			return null;
-		}
-		const text = el.innerText ?? "";
-		const re = /\$([\d,]+(?:\.\d{1,2})?)/g;
-		let last: string | null = null;
-		for (;;) {
-			const m = re.exec(text);
-			if (m === null) {
-				break;
-			}
-			last = m[1];
-		}
-		if (last === null) {
-			return null;
-		}
-		const fromText = Number(last.replace(/,/g, ""));
-		return Number.isFinite(fromText) && fromText >= 0 ? fromText : null;
-	});
-}
 
 export async function fundingPrecheck(page: Page): Promise<void> {
 	const cashBox = page.locator('[data-qa="header-cash"]');

@@ -68,8 +68,7 @@ export default function Positions() {
 		realAccount,
 		isDataFullyLoaded,
 		isPositionsTabContentReady,
-		dflowPositionsStripPending,
-		venueTradeHistoryLoading,
+		isHistoryTabContentReady,
 		portfolioLoading,
 		cashBalanceCtx,
 		portfolioCashLoading,
@@ -96,14 +95,13 @@ export default function Positions() {
 		setActiveTab,
 	} = data;
 
-	const showContentSkeleton =
-		!isDataFullyLoaded ||
-		(activeTab === "history" && venueTradeHistoryLoading);
-
-	const showTabBodySkeleton =
+	/** One shell for header + tab: no mismatch between portfolio row and table/cards. */
+	const pageShellLoading =
 		activeTab === "positions"
 			? !isPositionsTabContentReady
-			: showContentSkeleton;
+			: activeTab === "history"
+				? !isHistoryTabContentReady
+				: !isDataFullyLoaded;
 
 	const { setBlockHeaderMetrics } = usePositionsPageMetricsGate();
 	useEffect(() => {
@@ -111,9 +109,9 @@ export default function Positions() {
 			setBlockHeaderMetrics(false);
 			return;
 		}
-		setBlockHeaderMetrics(showContentSkeleton);
+		setBlockHeaderMetrics(pageShellLoading);
 		return () => setBlockHeaderMetrics(false);
-	}, [account, showContentSkeleton, setBlockHeaderMetrics]);
+	}, [account, pageShellLoading, setBlockHeaderMetrics]);
 
 	const renderPositionsTab = () => {
 		const hasPositions = umbrellaPositions.length > 0;
@@ -182,39 +180,6 @@ export default function Positions() {
 					<p className="text-body" style={{ color: "#888", marginTop: "16px" }}>
 						No current positions.
 					</p>
-				)}
-				{dflowPositionsStripPending && (
-					<div className="positions-portfolio-skeleton" style={{ marginTop: 12 }}>
-						{Array.from({ length: 2 }).map((_, i) => (
-							<div
-								key={i}
-								style={{
-									borderBottom: "1px solid #1a1a1a",
-									padding: "12px 0",
-									display: "flex",
-									alignItems: "center",
-									gap: 16,
-								}}
-							>
-								<span
-									className="skeleton-box"
-									style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }}
-								/>
-								<div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-									<span
-										className="skeleton-box"
-										style={{
-											width: `${60 - i * 8}%`,
-											maxWidth: 280,
-											height: 16,
-											borderRadius: 4,
-										}}
-									/>
-									<SkeletonRow widths={[60, 50, 70, 80, 70, 90]} height={14} />
-								</div>
-							</div>
-						))}
-					</div>
 				)}
 			</>
 		);
@@ -305,9 +270,9 @@ export default function Positions() {
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
 						cashLoading={portfolioCashLoading}
-						positionsLoading={showContentSkeleton}
+						positionsLoading={pageShellLoading}
 						portfolioLoading={portfolioLoading}
-						summariesLocked={Boolean(account) && showContentSkeleton}
+						summariesLocked={Boolean(account) && pageShellLoading}
 					/>
 					<PositionsTabs activeTab={activeTab} setActiveTab={setActiveTab} />
 				</div>
@@ -316,7 +281,7 @@ export default function Positions() {
 					{!account && <p className="text-body">Log in to view balances.</p>}
 					{account && (
 						<>
-							{showTabBodySkeleton ? (
+							{pageShellLoading ? (
 								<PortfolioSkeleton />
 							) : activeTab === "positions" ? (
 								renderPositionsTab()

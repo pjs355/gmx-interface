@@ -1,13 +1,16 @@
 /**
- * Minimal browser shim for Node `crypto` — only implements createHmac (SHA-256).
+ * Minimal browser shim for Node `crypto` — `createHmac` (SHA-256) and `createHash` (SHA-1).
  *
- * @polymarket/clob-client calls `crypto.createHmac("sha256", secret)` to build
- * L2 auth headers (`buildPolyHmacSignature`). The full `crypto-browserify` pulls
- * in `readable-stream` / `hash-base` which need `Buffer` before the app entry
- * runs, crashing Vite's pre-bundle.
+ * Polymarket CLOB L2 HMAC calls `crypto.createHmac("sha256", secret)` for L2 auth headers.
+ * `@polymarket/clob-client-v2` also uses `crypto.createHash("sha1")` for order summary hashing.
  *
- * This shim contains a pure-JS SHA-256 + HMAC — zero Node dependencies.
+ * The full `crypto-browserify` pulls in `readable-stream` / `hash-base` which need `Buffer`
+ * before the app entry runs, crashing Vite's pre-bundle.
+ *
+ * HMAC + SHA-256 here are pure JS; SHA-1 for `createHash` uses `@noble/hashes` (already in the app).
  */
+
+import { sha1 as sha1Noble } from "@noble/hashes/sha1";
 
 function toBytes(input: string | Uint8Array): Uint8Array {
 	if (input instanceof Uint8Array) return input;
@@ -194,4 +197,43 @@ export function createHmac(
 	return new HmacInstance(algorithm, key);
 }
 
-export default { createHmac };
+// ─── createHash (Node-compatible subset; clob-client-v2 uses sha1 only) ───────
+
+class HashInstance {
+	private _chunks: Uint8Array[] = [];
+
+	constructor(private readonly alg: string) {
+		const a = alg.toLowerCase();
+		if (a !== "sha1") {
+			throw new Error(
+				`crypto-hmac-shim createHash: only sha1 is supported, got "${alg}"`
+			);
+		}
+	}
+
+	update(data: string | Uint8Array): this {
+		this._chunks.push(toBytes(data));
+		return this;
+	}
+
+	digest(encoding?: string): string | Uint8Array {
+		let totalLen = 0;
+		for (const c of this._chunks) totalLen += c.length;
+		const message = new Uint8Array(totalLen);
+		let offset = 0;
+		for (const chunk of this._chunks) {
+			message.set(chunk, offset);
+			offset += chunk.length;
+		}
+		const result = sha1Noble(message);
+		if (encoding === "hex") return hexEncode(result);
+		if (encoding === "base64") return btoa(String.fromCharCode(...result));
+		return result;
+	}
+}
+
+export function createHash(algorithm: string): HashInstance {
+	return new HashInstance(algorithm);
+}
+
+export default { createHmac, createHash };

@@ -18,6 +18,14 @@ import type {
 } from "./sor-types";
 import { groupBridgeLegsByCorridor } from "./sorBridgeGroups";
 import { withTimeout } from "@/utils/withTimeout";
+import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
+
+/** Never return a blank leg error — empty messages hide the real failure in one-line SOR logs. */
+function sorExecutionFailureMessage(err: unknown): string {
+	const m = getPrivateApiErrorMessage(err).trim();
+	if (m.length > 0) return m;
+	return "Execution failed with no message (throw had no usable text — inspect DevTools Network for the failing request).";
+}
 
 const RETRY_COUNT = 2;
 const RETRY_DELAY_MS = 2000;
@@ -113,13 +121,21 @@ function buildLocalExecution(
 			allFilled = false;
 		}
 
+		const rawErr = result?.error?.trim();
+		const errorForLeg =
+			filled || !result
+				? undefined
+				: rawErr && rawErr.length > 0
+					? rawErr
+					: "Venue leg failed with no error message — check Network for this venue and earlier [SOR] Bridge+trade leg end / Leg end logs.";
+
 		return {
 			venue: leg.venue as SorVenue,
 			status: result ? (filled ? "filled" as const : "failed" as const) : "pending" as const,
 			shares: leg.shares,
 			filledShares,
 			txHash: result?.txHash,
-			error: result?.error,
+			error: errorForLeg,
 			updatedAt: Date.now(),
 		};
 	});
@@ -199,16 +215,24 @@ export function useSorExecution(
 		}> => {
 			try {
 				const result = await executeLeg(leg, side);
+				if (!result.filled && !(result.error?.trim())) {
+					return {
+						...result,
+						error:
+							"Venue returned filled=false with no error message — check useSorLegExecutor / Predict SDK logs for this venue.",
+					};
+				}
 				return result;
 			} catch (err) {
 				if (retriesLeft > 0) {
 					await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
 					return executeLegWithRetry(leg, retriesLeft - 1, side);
 				}
+				console.error("error", err);
 				return {
 					filled: false,
 					filledShares: 0,
-					error: err instanceof Error ? err.message : "Execution failed",
+					error: sorExecutionFailureMessage(err),
 				};
 			}
 		},
@@ -407,7 +431,8 @@ export function useSorExecution(
 							`SOR bridge ${group.key}`,
 						);
 					} catch (err) {
-						const msg = err instanceof Error ? err.message : String(err);
+						console.error("error", err);
+						const msg = sorExecutionFailureMessage(err);
 						console.warn("[SOR] Bridge error", group.key, msg);
 						bridgeResult = { success: false, error: msg };
 					}
@@ -415,13 +440,17 @@ export function useSorExecution(
 						setPrefundLegProgress(null);
 					}
 					if (!bridgeResult.success) {
-						const failResult = {
-							filled: false,
-							filledShares: 0,
-							error: bridgeResult.error ?? "Bridge failed",
-						};
+						const trimmedBridgeErr = bridgeResult.error?.trim();
+						const bridgeErr =
+							trimmedBridgeErr && trimmedBridgeErr.length > 0
+								? trimmedBridgeErr
+								: "Bridge failed (no error message — check [SOR] Bridge error log above).";
 						for (const leg of group.legs) {
-							legResults.set(leg.venue, failResult);
+							legResults.set(leg.venue, {
+								filled: false,
+								filledShares: 0,
+								error: bridgeErr,
+							});
 							if (mountedRef.current) {
 								setExecution(buildLocalExecution(route, legResults));
 							}
@@ -432,7 +461,7 @@ export function useSorExecution(
 										leg.venue as SorVenue,
 										"failed",
 										{
-											error: bridgeResult.error ?? "Bridge failed",
+											error: bridgeErr,
 											bridgeTxHash: bridgeResult.bridgeTxHash,
 										},
 									)
@@ -456,7 +485,8 @@ export function useSorExecution(
 								`SOR post-bridge leg ${leg.venue}`,
 							);
 						} catch (err) {
-							const msg = err instanceof Error ? err.message : String(err);
+							console.error("error", err);
+							const msg = sorExecutionFailureMessage(err);
 							console.warn("[SOR] Post-bridge leg failed", leg.venue, msg);
 							tradeResult = { filled: false, filledShares: 0, error: msg };
 						}
@@ -498,7 +528,8 @@ export function useSorExecution(
 							`SOR leg ${leg.venue}`,
 						);
 					} catch (err) {
-						const msg = err instanceof Error ? err.message : String(err);
+						console.error("error", err);
+						const msg = sorExecutionFailureMessage(err);
 						console.warn("[SOR] Leg failed", leg.venue, msg);
 						result = { filled: false, filledShares: 0, error: msg };
 					}

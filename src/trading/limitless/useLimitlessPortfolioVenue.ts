@@ -6,6 +6,7 @@ import {
 	venueDisplayLabel,
 } from "@/types/trading/venuePosition";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { PrivateApiError } from "@/services/privateApi/errors";
 import { limitlessQueryKeys } from "./limitlessQueryKeys";
 import { canonicalLimitlessTokenId } from "./limitlessTokenId";
 import {
@@ -22,6 +23,14 @@ function num(v: unknown): number {
 
 function str(v: unknown): string {
 	return typeof v === "string" ? v.trim() : "";
+}
+
+/** Local / staging API often omits Limitless routes — treat as empty portfolio instead of hanging retries. */
+function isLimitlessPortfolioProxyMissing(err: unknown): boolean {
+	return (
+		err instanceof PrivateApiError &&
+		(err.status === 404 || err.status === 501 || err.status === 405)
+	);
 }
 
 /**
@@ -336,27 +345,28 @@ function mapHistoryRowToVenuePosition(row: unknown): VenuePosition | null {
 }
 
 async function fetchLimitlessTradeHistoryPages(
-	getHistory: (q: { limit: number; page: number }) => Promise<unknown>,
+	getHistory: (q: {
+		limit: number;
+		cursor?: string | null;
+	}) => Promise<unknown>,
 ): Promise<VenuePosition[]> {
 	const limit = 50;
 	const out: VenuePosition[] = [];
 	const seen = new Set<string>();
-	/** Partner history is paginated; cap pages to avoid unbounded load (50 rows × 100 = 5000 max). */
+	/** Limitless `/portfolio/history` uses cursor pagination (OpenAPI: `cursor` + `limit`). */
 	const maxHistoryPages = 100;
-	for (let page = 1; page <= maxHistoryPages; page++) {
-		const body = await getHistory({ limit, page });
+	let cursor: string | null | undefined;
+	for (let i = 0; i < maxHistoryPages; i++) {
+		const body = await getHistory({ limit, cursor });
 		const rows = extractHistoryArray(body);
 		if (rows.length === 0) break;
-		if (import.meta.env.DEV && page === 1 && rows[0]) {
-			debugLimitlessShallowRowShape("GET portfolio/history page=1 first raw row", rows[0]);
+		if (import.meta.env.DEV && i === 0 && rows[0]) {
+			debugLimitlessShallowRowShape(
+				"GET portfolio/history first page first raw row",
+				rows[0],
+			);
 		}
-		let totalCount: number | null = null;
-		if (body && typeof body === "object") {
-			const tc = (body as { totalCount?: unknown }).totalCount;
-			if (typeof tc === "number" && Number.isFinite(tc) && tc >= 0) {
-				totalCount = tc;
-			}
-		}
+		let added = 0;
 		for (const r of rows) {
 			const v = mapHistoryRowToVenuePosition(r);
 			if (!v) continue;
@@ -375,9 +385,25 @@ async function fetchLimitlessTradeHistoryPages(
 			if (seen.has(k)) continue;
 			seen.add(k);
 			out.push(v);
+			added += 1;
+		}
+		if (added === 0) break;
+		let totalCount: number | null = null;
+		if (body && typeof body === "object") {
+			const tc = (body as { totalCount?: unknown }).totalCount;
+			if (typeof tc === "number" && Number.isFinite(tc) && tc >= 0) {
+				totalCount = tc;
+			}
 		}
 		if (rows.length < limit) break;
-		if (totalCount !== null && page * limit >= totalCount) break;
+		if (totalCount !== null && out.length >= totalCount) break;
+		const rawNext = (body as { nextCursor?: unknown }).nextCursor;
+		const next =
+			typeof rawNext === "string" && rawNext.trim().length > 0
+				? rawNext.trim()
+				: null;
+		if (!next) break;
+		cursor = next;
 	}
 	if (import.meta.env.DEV && out.length > 0) {
 		const mappedRows = out.slice(0, 20).map((p) => ({
@@ -405,8 +431,15 @@ export function useLimitlessVenuePositions(enabled: boolean) {
 		queryKey: limitlessQueryKeys.positionsVenue,
 		enabled,
 		staleTime: 15_000,
+		retry: false,
 		queryFn: async () => {
-			const raw = await api.getLimitlessPortfolioPositionsVenue();
+			let raw: unknown;
+			try {
+				raw = await api.getLimitlessPortfolioPositionsVenue();
+			} catch (e) {
+				if (isLimitlessPortfolioProxyMissing(e)) return [];
+				throw e;
+			}
 			if (!Array.isArray(raw)) return [];
 			const out: VenuePosition[] = [];
 			for (const row of raw) {
@@ -455,8 +488,15 @@ export function useLimitlessOpenOrders(enabled: boolean) {
 		queryKey: limitlessQueryKeys.openOrders,
 		enabled,
 		staleTime: 10_000,
+		retry: false,
 		queryFn: async () => {
-			const raw = await api.getLimitlessOpenOrders();
+			let raw: unknown;
+			try {
+				raw = await api.getLimitlessOpenOrders();
+			} catch (e) {
+				if (isLimitlessPortfolioProxyMissing(e)) return [];
+				throw e;
+			}
 			if (!Array.isArray(raw)) return [];
 			const out: VenueOrder[] = [];
 			for (const row of raw) {
@@ -474,9 +514,16 @@ export function useLimitlessTradeHistory(enabled: boolean) {
 		queryKey: limitlessQueryKeys.portfolioHistory,
 		enabled,
 		staleTime: 60_000,
-		queryFn: () =>
-			fetchLimitlessTradeHistoryPages((q) =>
-				api.getLimitlessPortfolioHistory(q),
-			),
+		retry: false,
+		queryFn: async () => {
+			try {
+				return await fetchLimitlessTradeHistoryPages((q) =>
+					api.getLimitlessPortfolioHistory(q),
+				);
+			} catch (e) {
+				if (isLimitlessPortfolioProxyMissing(e)) return [];
+				throw e;
+			}
+		},
 	});
 }

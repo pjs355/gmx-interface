@@ -88,6 +88,7 @@ function lifiWithdrawToQuoteResponse(d: LifiWithdrawLifiData): LifiQuoteResponse
 		toChain: d.toChain,
 		fromAddress: d.fromAddress,
 		toAddress: d.toAddress,
+		polygonSafeUnwrapPrerequisite: d.polygonSafeUnwrapPrerequisite ?? undefined,
 	};
 }
 
@@ -287,6 +288,7 @@ export function useWithdrawPlanExecution() {
 					{
 						allowanceOwnerByChainId,
 						rawLifiRoute: quote.quote,
+						polygonSafeUnwrapPrerequisite: quote.polygonSafeUnwrapPrerequisite ?? undefined,
 						...(funding.solanaAddress?.trim()
 							? { solanaTokenOwnerAddress: funding.solanaAddress.trim() }
 							: {}),

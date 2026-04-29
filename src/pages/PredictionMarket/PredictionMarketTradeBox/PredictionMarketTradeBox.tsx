@@ -59,7 +59,7 @@ import {
 	logPolymarketTradePreflight,
 } from "@/trading/polymarket/polymarketOrderDebug";
 import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
-import { Side, type TickSize } from "@polymarket/clob-client";
+import { Side, type TickSize } from "@polymarket/clob-client-v2";
 import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
@@ -119,6 +119,11 @@ import {
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
+
+/** Same moment as "Order Submitted!" — on-chain/API balances often lag LI.FI + venue fills. */
+const POST_SOR_BALANCE_POLL_INTERVAL_MS = 2_500;
+const POST_SOR_BALANCE_POLL_WINDOW_MS = 30_000;
+
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
 }
@@ -1805,7 +1810,39 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       void sorExecution
         .execute(sorRoute.route)
         .then((res) => {
-          console.log("[SOR] execute settled", res?.status ?? res);
+          if (res == null) {
+            console.error("[SOR] execute settled: null result (execute ignored or bug)");
+            return;
+          }
+          const summary = {
+            routeId: res.routeId,
+            status: res.status,
+            totalFilledShares: res.totalFilledShares,
+            totalSpent: res.totalSpent,
+            remainingBudget: res.remainingBudget,
+            legs: res.legs.map((l) => ({
+              venue: l.venue,
+              legStatus: l.status,
+              shares: l.shares,
+              filledShares: l.filledShares,
+              error: l.error ?? null,
+              txHash: l.txHash ?? null,
+              bridgeTxHash: l.bridgeTxHash ?? null,
+            })),
+          };
+          // Always use console.log for the object — some console filters hide console.warn.
+          console.log("[SOR] execute settled", summary);
+          if (res.status !== "complete") {
+            const legLine = res.legs
+              .map(
+                (l) =>
+                  `${l.venue}(${l.status}${l.error ? `: ${l.error}` : ""})`,
+              )
+              .join(" | ");
+            console.error(
+              `[SOR] execute not complete — status=${res.status} | ${legLine}`,
+            );
+          }
         })
         .catch((err: unknown) => {
           console.error("[SOR] execute rejected", err);
@@ -1865,8 +1902,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   useEffect(() => {
     const wasExecuting = prevSorExecutingRef.current;
     prevSorExecutingRef.current = sorExecution.isExecuting;
-    if (wasExecuting && !sorExecution.isExecuting && sorExecution.execution) {
-      void Promise.all([
+
+    let pollInterval: ReturnType<typeof setInterval> | undefined;
+    let pollWindowTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const invalidatePostTradeBalances = () =>
+      Promise.all([
         queryClient.invalidateQueries({ queryKey: ["polymarket-positions"] }),
         queryClient.invalidateQueries({ queryKey: ["predict-positions"] }),
         queryClient.invalidateQueries({ queryKey: ["predict-outcome-shares"] }),
@@ -1876,10 +1917,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] }),
         queryClient.invalidateQueries({ queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY] }),
         refreshViaRpc(),
-      ]).catch(() => {});
+      ]).catch((e: unknown) => {
+        console.error("error", e);
+      });
+
+    if (wasExecuting && !sorExecution.isExecuting && sorExecution.execution) {
+      void invalidatePostTradeBalances();
       const { status, legs } = sorExecution.execution;
       if (status === "complete") {
         setState((s) => ({ ...s, amount: "", orderResult: { success: true } }));
+        pollInterval = setInterval(() => {
+          void invalidatePostTradeBalances();
+        }, POST_SOR_BALANCE_POLL_INTERVAL_MS);
+        pollWindowTimer = setTimeout(() => {
+          if (pollInterval !== undefined) clearInterval(pollInterval);
+        }, POST_SOR_BALANCE_POLL_WINDOW_MS);
       } else if (status === "failed" || status === "partial") {
         const failedLeg = legs.find((l) => l.status === "failed");
         setState((s) => ({
@@ -1895,6 +1947,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         }));
       }
     }
+
+    return () => {
+      if (pollInterval !== undefined) clearInterval(pollInterval);
+      if (pollWindowTimer !== undefined) clearTimeout(pollWindowTimer);
+    };
   }, [sorExecution.isExecuting, sorExecution.execution, queryClient, setState, refreshViaRpc]);
 
   useEffect(() => {

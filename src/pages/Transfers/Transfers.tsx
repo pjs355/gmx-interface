@@ -181,7 +181,7 @@ export default function Transfers() {
 						</p>
 
 						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">Polygon (USDC.e)</div>
+							<div className="transfers-addresses__chain">Polygon (pUSD)</div>
 							<div className="transfers-addresses__value-row">
 								{funding.isLoading &&
 								!(funding.polymarketSafe ?? funding.polygonSigner) ? (
@@ -197,7 +197,7 @@ export default function Transfers() {
 									type="button"
 									className="Details-copy-button Details-copy-button--compact"
 									title="Copy address"
-									aria-label="Copy Polygon USDC.e address"
+									aria-label="Copy Polygon pUSD address"
 									disabled={
 										!String(
 											funding.polymarketSafe ?? funding.polygonSigner,

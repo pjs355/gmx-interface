@@ -123,6 +123,9 @@ export function checkSufficientBalance(
 	}
 }
 
+/** Sub-share tolerance: on-chain `formatUnits` + JS float can be slightly below a rounded UI amount. */
+export const SHARE_SELL_COMPARE_EPS = 1e-7;
+
 // Function to check if user has sufficient YES/NO token shares for sell orders
 export function checkSufficientShares(
 	amount: string,
@@ -153,7 +156,8 @@ export function checkSufficientShares(
 				: noBalance;
 
 	return {
-		hasSufficientShares: availableShares >= requiredShares,
+		hasSufficientShares:
+			availableShares + SHARE_SELL_COMPARE_EPS >= requiredShares,
 		requiredShares,
 	};
 }

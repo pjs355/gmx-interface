@@ -12,6 +12,7 @@ import {
 	type SorExecutionPhase,
 	type SorPrefundLegProgress,
 } from "@/trading/sor";
+import { SHARE_SELL_COMPARE_EPS } from "../checkBalances";
 
 /** Caps console noise when `useMemo` recomputes often with the same bad input. */
 let missingPooledCashWarnCount = 0;
@@ -444,7 +445,12 @@ export function useButtonState({
       if (state.side !== "sell") return false;
       const req = parseFloat(state.amount);
       const held = scopedSellSharesTotal();
-      return Number.isFinite(req) && req > 0 && Number.isFinite(held) && req > held + 1e-9;
+      return (
+        Number.isFinite(req) &&
+        req > 0 &&
+        Number.isFinite(held) &&
+        req > held + SHARE_SELL_COMPARE_EPS
+      );
     };
 
     const noSharesToSellButton = (): ButtonStateResult => ({

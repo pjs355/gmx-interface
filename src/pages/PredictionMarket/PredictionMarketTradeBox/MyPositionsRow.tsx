@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import SpinningLoader from "@/components/Common/SpinningLoader";
 import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
 import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import type { MatchedMarket } from "@/types/odds-monitor";
@@ -16,8 +17,12 @@ type MarketLike = {
 
 function formatShareCount(n: number): string {
 	if (!Number.isFinite(n)) return String(n);
+	if (Number.isInteger(n) || Math.abs(n - Math.round(n)) < 1e-9) {
+		return String(Math.round(n));
+	}
+	// Up to 8 decimals so on-chain / API float drift matches what sell validation uses (see SHARE_SELL_COMPARE_EPS in checkBalances).
 	return new Intl.NumberFormat("en-US", {
-		maximumFractionDigits: n % 1 === 0 ? 0 : 4,
+		maximumFractionDigits: 8,
 		minimumFractionDigits: 0,
 	}).format(n);
 }
@@ -35,6 +40,8 @@ export function MyPositionsRow({
 	selectedPosition,
 	matchedMonitor,
 	shareBalances,
+	/** All Markets SOR “Filled” banner is up — position counts may still be catching up on-chain. */
+	positionSharesRefreshing = false,
 }: {
 	market: MarketLike;
 	umbrellaId?: string;
@@ -48,6 +55,7 @@ export function MyPositionsRow({
 	selectedPosition: "yes" | "no" | null;
 	matchedMonitor?: MatchedMarket | null;
 	shareBalances: TradeBoxShareBalancesSnapshot;
+	positionSharesRefreshing?: boolean;
 }) {
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const { buyLines, sellTotalShares, sellVenueBreakdown, sellOutcomeLabel } =
@@ -73,6 +81,7 @@ export function MyPositionsRow({
 				data-qa="my-positions-row"
 				data-qa-side="buy"
 				data-qa-shares-count={buyTotalShares}
+				data-qa-position-refreshing={positionSharesRefreshing ? "true" : "false"}
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
@@ -106,6 +115,22 @@ export function MyPositionsRow({
 							{formatShareCount(line.shares)} Shares {line.label}
 						</div>
 					))}
+					{positionSharesRefreshing ? (
+						<div
+							style={{
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 8,
+								marginTop: 4,
+								fontSize: 12,
+								fontWeight: 500,
+								color: "#94a3b8",
+							}}
+						>
+							<SpinningLoader size="14px" />
+							<span>Updating balance…</span>
+						</div>
+					) : null}
 				</div>
 			</div>
 		);
@@ -123,6 +148,7 @@ export function MyPositionsRow({
 				data-qa="my-positions-row"
 				data-qa-side="sell"
 				data-qa-shares-count={0}
+				data-qa-position-refreshing={positionSharesRefreshing ? "true" : "false"}
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
@@ -136,13 +162,37 @@ export function MyPositionsRow({
 				</div>
 				<div
 					style={{
-						fontSize: 14,
-						fontWeight: 700,
-						color: headlineColor,
-						lineHeight: 1.35,
+						display: "flex",
+						flexDirection: "column",
+						alignItems: "flex-end",
+						gap: 6,
 					}}
 				>
-					None
+					<div
+						style={{
+							fontSize: 14,
+							fontWeight: 700,
+							color: headlineColor,
+							lineHeight: 1.35,
+						}}
+					>
+						None
+					</div>
+					{positionSharesRefreshing ? (
+						<div
+							style={{
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 8,
+								fontSize: 12,
+								fontWeight: 500,
+								color: "#94a3b8",
+							}}
+						>
+							<SpinningLoader size="14px" />
+							<span>Updating balance…</span>
+						</div>
+					) : null}
 				</div>
 			</div>
 		);
@@ -156,6 +206,7 @@ export function MyPositionsRow({
 			data-qa="my-positions-row"
 			data-qa-side="sell"
 			data-qa-shares-count={sellTotalShares}
+			data-qa-position-refreshing={positionSharesRefreshing ? "true" : "false"}
 			style={{ marginBottom: 16 }}
 		>
 			<div
@@ -171,14 +222,38 @@ export function MyPositionsRow({
 				</div>
 				<div
 					style={{
-						fontSize: 14,
-						fontWeight: 700,
-						color: headlineColor,
-						lineHeight: 1.35,
+						display: "flex",
+						flexDirection: "column",
+						alignItems: "flex-end",
+						gap: 6,
 						textAlign: "right",
 					}}
 				>
-					{headlineRight}
+					<div
+						style={{
+							fontSize: 14,
+							fontWeight: 700,
+							color: headlineColor,
+							lineHeight: 1.35,
+						}}
+					>
+						{headlineRight}
+					</div>
+					{positionSharesRefreshing ? (
+						<div
+							style={{
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 8,
+								fontSize: 12,
+								fontWeight: 500,
+								color: "#94a3b8",
+							}}
+						>
+							<SpinningLoader size="14px" />
+							<span>Updating balance…</span>
+						</div>
+					) : null}
 				</div>
 			</div>
 			{showDetails ? (

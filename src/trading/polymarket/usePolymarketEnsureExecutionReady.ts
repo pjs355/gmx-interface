@@ -79,7 +79,7 @@ type BuilderReadiness = {
  *  2. Deploy counterfactual Gnosis Safe via the Polymarket relayer (gasless;
  *     one EIP-712 signature from the embedded EOA).
  *  3. Check on-chain allowances; if any are missing, run the batched
- *     USDC.e + ERC-1155 `setApprovalForAll` relay execute (gasless; one
+ *     pUSD + ERC-1155 `setApprovalForAll` relay execute (gasless; one
  *     Safe-message signature).
  *  4. POST `/polymarket/account/verify-on-chain` — the server re-reads Safe
  *     deployment + allowances and flips `tradingEnabled: true` atomically
@@ -238,8 +238,8 @@ export function usePolymarketEnsureExecutionReady(args: {
 			const approvalStatus = await checkPolymarketApprovals(safe);
 			logInfo("approvals:check", {
 				safe,
-				usdc: approvalStatus.usdcApproved,
-				ctf: approvalStatus.ctfApproved,
+				usdc: approvalStatus.usdc,
+				erc1155: approvalStatus.erc1155,
 				all: approvalStatus.allApproved,
 			});
 			if (!approvalStatus.allApproved) {

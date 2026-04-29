@@ -238,7 +238,7 @@ export function useTradeBoxShareBalances(opts: {
 		selectedPosition,
 		matchedMonitor: pageMatchedMonitor,
 	} = opts;
-	const { account } = useSignerContext();
+	const { account, signerAddress } = useSignerContext();
 	const { getTokenBalance } = useUserData();
 	const { umbrellas, allMarketsByUmbrella } = usePredictionData();
 	const { appState } = useOddsMonitor();
@@ -270,7 +270,11 @@ export function useTradeBoxShareBalances(opts: {
 		venueReady && Boolean(account && (polymarketSafe || (account as string)?.length));
 
 	const polyQ = usePolymarketPositions(venueEnabled ? polymarketSafe : null);
-	const predictQ = usePredictPositions(venueEnabled ? account : null);
+	/** Same wallet as {@link usePositionsData} / {@link PortfolioProvider}: Predict.fun is keyed off the embedded signer (BNB), not the Base SCW `account` when they differ. */
+	const predictQueryWallet = (signerAddress?.trim() || account?.trim()) || null;
+	const predictQ = usePredictPositions(
+		venueEnabled && predictQueryWallet ? predictQueryWallet : null,
+	);
 
 	const solanaLinked = Boolean(solanaAddress?.trim());
 	const dflowRpcEnabled =

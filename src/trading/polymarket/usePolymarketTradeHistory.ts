@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { VenueHistoryFill, VenuePosition } from "@/types/trading/venuePosition";
 
+/** Public activity feed — not Polymarket CLOB V2 order/trade HTTP (`clob.polymarket.com`). */
 const POLYMARKET_DATA_API = "https://data-api.polymarket.com";
 
 /**

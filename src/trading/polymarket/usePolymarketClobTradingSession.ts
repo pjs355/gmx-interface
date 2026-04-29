@@ -3,21 +3,20 @@ import {
 	ClobClient,
 	Chain,
 	OrderType,
+	SignatureTypeV2,
 	type ApiKeyCreds,
 	type CreateOrderOptions,
 	type Side,
 	type TickSize,
-} from "@polymarket/clob-client";
-import { SignatureType } from "@polymarket/order-utils";
+} from "@polymarket/clob-client-v2";
 import { usePrivy } from "@privy-io/react-auth";
-import { createLevelUpBuilderConfig } from "./levelUpBuilderConfig";
+import { POLYMARKET_BUILDER_CODE } from "./polymarketBuilderCode";
 import { ethers5JsonRpcSignerFromEip1193 } from "./ethers5FromEip1193";
 import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import { useAccountOverview } from "@/trading/hooks/useAccountOverview";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { usePolymarketBuilder } from "@/trading/hooks/usePolymarketBuilder";
 import { useTradingWallets } from "@/trading/useWallets";
-import type { GetToken } from "@/services/privateApi/client";
 import {
 	ensurePolymarketClobOrderSuccess,
 	summarizeClobResultForLog,
@@ -126,7 +125,7 @@ export function usePolymarketClobTradingSession(
 	options: UsePolymarketClobTradingSessionOptions = {}
 ) {
 	const { enabled = true, profileId: profileIdOpt } = options;
-	const { authenticated, ready: privyReady, getAccessToken } = usePrivy();
+	const { authenticated, ready: privyReady } = usePrivy();
 	const profileQuery = useCurrentProfile({
 		enabled: enabled && authenticated,
 	});
@@ -139,11 +138,6 @@ export function usePolymarketClobTradingSession(
 	/** Same resolution as Transfers (`useFundingAddresses`): overview venue + polymarket account. */
 	const wallets = useTradingWallets(overviewQuery.data, poly.data);
 	const eoa = usePolymarketEoaWalletClient();
-
-	const getToken: GetToken = useCallback(async () => {
-		if (typeof getAccessToken !== "function") return null;
-		return getAccessToken();
-	}, [getAccessToken]);
 
 	const eip1193ForSigner = eoa.eip1193Provider;
 	const eip1193 = useMemo(
@@ -229,25 +223,25 @@ export function usePolymarketClobTradingSession(
 				);
 
 				let creds = readStoredCreds(eoaAddress, safe);
-				const credsClient = new ClobClient(CLOB_HOST, Chain.POLYGON, signer);
+				const credsClient = new ClobClient({
+					host: CLOB_HOST,
+					chain: Chain.POLYGON,
+					signer,
+				});
 				if (!creds) {
 					creds = await credsClient.createOrDeriveApiKey();
 					writeStoredCreds(eoaAddress, safe, creds);
 				}
 
-				const builderConfig = await createLevelUpBuilderConfig(getToken);
-				/* `ClobClient` bundles an older `@polymarket/builder-signing-sdk`; root uses ^1.x for the relayer. */
-				const tradingClient = new ClobClient(
-					CLOB_HOST,
-					Chain.POLYGON,
-					signer as never,
+				const tradingClient = new ClobClient({
+					host: CLOB_HOST,
+					chain: Chain.POLYGON,
+					signer,
 					creds,
-					SignatureType.POLY_GNOSIS_SAFE,
-					safe,
-					undefined,
-					undefined,
-					builderConfig as never
-				);
+					signatureType: SignatureTypeV2.POLY_GNOSIS_SAFE,
+					funderAddress: safe,
+					builderConfig: { builderCode: POLYMARKET_BUILDER_CODE },
+				});
 
 				if (cancelled || gen !== genRef.current) return;
 				setClobClient(tradingClient);
@@ -258,7 +252,7 @@ export function usePolymarketClobTradingSession(
 				if (DEV) {
 					// eslint-disable-next-line no-console
 					console.error(
-						"[Polymarket CLOB] session init failed — check builder POST /polymarket/builder/sign, API keys, and wallet",
+						"[Polymarket CLOB] session init failed — check L2 API derivation, wallet, and network",
 						e
 					);
 				}
@@ -273,7 +267,7 @@ export function usePolymarketClobTradingSession(
 		return () => {
 			cancelled = true;
 		};
-	}, [canInit, eoaAddress, eip1193, safe, getToken]);
+	}, [canInit, eoaAddress, eip1193, safe]);
 
 	const placeLimitOrder = useCallback(
 		async (args: PlaceClobLimitOrderArgs) => {

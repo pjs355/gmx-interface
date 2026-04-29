@@ -2,6 +2,7 @@ import type {
 	RelayClient,
 	RelayerTransaction,
 	RelayerTransactionResponse,
+	Transaction,
 } from "@polymarket/builder-relayer-client";
 import { deriveSafe } from "@polymarket/builder-relayer-client/dist/builder/derive";
 import {
@@ -28,6 +29,34 @@ const POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL =
 export function isPolymarketSafeRelayOnchainRevert(err: unknown): boolean {
 	const m = err instanceof Error ? err.message : String(err);
 	return m.includes(POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL);
+}
+
+/** Tail of a promise chain — serializes all Polymarket Safe relay usage (LI.FI, wrap, approvals). */
+let polygonRelayMutexTail: Promise<unknown> = Promise.resolve();
+
+/**
+ * Ensures only one Polymarket `RelayClient` flow runs at a time across the app.
+ * Concurrent `execute` / `deploy` calls share one Safe and stale off-chain relay nonces → GS025/GS026.
+ */
+export function withPolygonRelayMutex<T>(fn: () => Promise<T>): Promise<T> {
+	const run = polygonRelayMutexTail.then(fn) as Promise<T>;
+	polygonRelayMutexTail = run.then(
+		() => undefined,
+		() => undefined,
+	);
+	return run;
+}
+
+/** `execute` + `waitRelay` under the global Polygon relay mutex. */
+export async function executePolygonRelayAndWait(
+	client: RelayClient,
+	txs: Transaction[],
+	description: string,
+): Promise<string | undefined> {
+	return withPolygonRelayMutex(async () => {
+		const resp = await client.execute(txs, description);
+		return waitRelay(resp);
+	});
 }
 
 /**
@@ -61,7 +90,7 @@ export async function waitRelay(resp: RelayerTransactionResponse): Promise<strin
 		const explorer = h ? ` On Polygon, inspect tx ${h} on a block explorer.` : "";
 		throw new Error(
 			h
-				? `${POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL} (tx ${h}).${explorer} Common causes: insufficient USDC in the Safe for this LI.FI leg, route/slippage mismatch, missing router approval, or Gnosis Safe GS026/GS025 (signature / relay nonce). ${POLYGON_POLYMARKET_SAFE_RELAY_GS_HINT}`
+				? `${POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL} (tx ${h}).${explorer} Common causes: insufficient pUSD in the Safe for this LI.FI leg, route/slippage mismatch, missing router approval, or Gnosis Safe GS026/GS025 (signature / relay nonce). ${POLYGON_POLYMARKET_SAFE_RELAY_GS_HINT}`
 				: `${POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL} (STATE_FAILED). ${POLYGON_POLYMARKET_SAFE_RELAY_GS_HINT}`,
 		);
 	}
@@ -82,12 +111,14 @@ export async function deployPolymarketSafeIfNeeded(
 	const factory = client.contractConfig.SafeContracts.SafeFactory;
 	const safe = deriveSafe(signerAddress, factory);
 	if (await client.getDeployed(safe)) return false;
-	const resp = await client.deploy();
-	await waitRelay(resp);
+	await withPolygonRelayMutex(async () => {
+		const resp = await client.deploy();
+		await waitRelay(resp);
+	});
 	return true;
 }
 
-/** One batched relay execute for all Polymarket USDC.e + ERC-1155 approvals. */
+/** One batched relay execute for all Polymarket pUSD + ERC-1155 approvals. */
 export async function executePolymarketApprovalBatch(
 	client: RelayClient,
 	safeAddress: string
@@ -95,6 +126,5 @@ export async function executePolymarketApprovalBatch(
 	const status = await checkPolymarketApprovals(safeAddress);
 	if (status.allApproved) return;
 	const txs = buildPolymarketApprovalTransactions();
-	const resp = await client.execute(txs, "LevelUp Polymarket approvals");
-	await waitRelay(resp);
+	await executePolygonRelayAndWait(client, txs, "LevelUp Polymarket approvals");
 }

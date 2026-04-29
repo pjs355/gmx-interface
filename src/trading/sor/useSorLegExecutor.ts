@@ -3,8 +3,8 @@ import { useSendTransaction } from "@privy-io/react-auth";
 import { VersionedTransaction } from "@solana/web3.js";
 import { encodeFunctionData, erc20Abi } from "viem";
 import { base, bsc } from "viem/chains";
-import { Side } from "@polymarket/clob-client";
-import type { TickSize } from "@polymarket/clob-client";
+import { Side } from "@polymarket/clob-client-v2";
+import type { TickSize } from "@polymarket/clob-client-v2";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
@@ -18,8 +18,9 @@ import type { SolanaSignerCapable, SendTransactionCapable } from "@/trading/lifi
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
 import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
-import type { LifiStatusResponse } from "@/types/trading";
+import type { LifiStatusResponse, LifiQuoteResponse } from "@/types/trading";
 import { withTimeout } from "@/utils/withTimeout";
+import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
 import type { SorExecutionPhase } from "./useSorExecution";
 import {
 	readFundingStableBalancesHuman,
@@ -33,10 +34,19 @@ import {
 	LIFI_BRIDGE_AMOUNT_MARGIN,
 	MIN_PREFUND_CHUNK_USD,
 	PREFUND_SHORTFALL_COVERED_EPS_USD,
+	resolveBuyPrefundAnchorUsd,
 	type PrefundStep,
 } from "@/trading/sor/prefundPlan";
-import { ensurePrefundQuoteMeetsDestMin } from "@/trading/sor/lifiPrefundQuoteSolve";
+import {
+	ensurePrefundQuoteMeetsDestMin,
+	type PrefundLifiQuoteClient,
+} from "@/trading/sor/lifiPrefundQuoteSolve";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
+import {
+	buildPolygonSafeUsdceWrapTransactions,
+	readPolymarketSafeUsdceBalanceWei,
+} from "@/trading/polymarket/polygonCollateralWrap";
+import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
 import type { LimitlessOrderRequest } from "@/trading/limitless/limitlessPrivateApiTypes";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
@@ -512,7 +522,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					};
 				}
 
-				// ─── Polymarket (Polygon, USDC) ───────────
+				// ─── Polymarket (Polygon, pUSD) ───────────
 				case "polymarket": {
 					if (!polyClob.ready) {
 						return { filled: false, filledShares: 0, error: "Polymarket CLOB session not ready. Open Polymarket tab first to initialize." };
@@ -531,6 +541,50 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							return { filled: false, filledShares: 0, error: msg };
 						} finally {
 							reportSorExecutionPhase("executing_trade");
+						}
+					}
+					// CLOB spends pUSD — wrap Safe USDC.e via Collateral Onramp before buys.
+					if (side === "buy") {
+						const rawSafe = fundingAddresses.polymarketSafe?.trim();
+						if (rawSafe && /^0x[a-fA-F0-9]{40}$/i.test(rawSafe)) {
+							let usdceWei: bigint;
+							try {
+								usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe);
+							} catch (e: unknown) {
+								const msg =
+									e instanceof Error
+										? e.message
+										: "Could not read Polygon USDC.e balance before trade";
+								return { filled: false, filledShares: 0, error: msg };
+							}
+							if (usdceWei > 0n) {
+								const relayClient = await getRelayClient();
+								if (!relayClient) {
+									return {
+										filled: false,
+										filledShares: 0,
+										error:
+											"Polymarket relayer unavailable — cannot wrap USDC.e to pUSD before trading.",
+									};
+								}
+								try {
+									const txs = buildPolygonSafeUsdceWrapTransactions({
+										safeAddress: rawSafe,
+										wrapAmountWei: usdceWei,
+									});
+									await executePolygonRelayAndWait(
+										relayClient,
+										txs,
+										"Wrap USDC.e to pUSD for Polymarket",
+									);
+								} catch (e: unknown) {
+									const msg =
+										e instanceof Error
+											? e.message
+											: "USDC.e wrap failed before Polymarket order";
+									return { filled: false, filledShares: 0, error: msg };
+								}
+							}
 						}
 					}
 					const tokenId =
@@ -862,8 +916,14 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						try {
 							await ensurePredictApprovals();
 						} catch (e: unknown) {
-							const msg = e instanceof Error ? e.message : "Predict approvals failed";
-							return { filled: false, filledShares: 0, error: msg };
+							console.error("error", e);
+							const msg = getPrivateApiErrorMessage(e).trim();
+							return {
+								filled: false,
+								filledShares: 0,
+								error:
+									msg.length > 0 ? msg : "Predict approvals failed (no error message).",
+							};
 						} finally {
 							reportSorExecutionPhase("executing_trade");
 						}
@@ -890,37 +950,52 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					}
 
 					if (isLimit) {
-						const resp = await predictSession.placeLimitOrder({
-							market: predictMarketDetail,
-							tokenId,
-							side,
-							priceCents: leg.limitPriceCents as number,
-							sizeShares: leg.shares.toFixed(6),
-						});
-						return {
-							filled: true,
-							filledShares: leg.shares,
-							txHash: (resp as { orderHash?: string } | undefined)?.orderHash,
-						};
+						try {
+							const resp = await predictSession.placeLimitOrder({
+								market: predictMarketDetail,
+								tokenId,
+								side,
+								priceCents: leg.limitPriceCents as number,
+								sizeShares: leg.shares.toFixed(6),
+							});
+							return {
+								filled: true,
+								filledShares: leg.shares,
+								txHash: (resp as { orderHash?: string } | undefined)?.orderHash,
+							};
+						} catch (e: unknown) {
+							console.error("error", e);
+							const msg = getPrivateApiErrorMessage(e).trim();
+							throw new Error(
+								msg.length > 0 ? msg : "Predict limit order failed (no error message).",
+							);
+						}
 					}
 
 					const amountStr = side === "buy"
 						? leg.executionAmountUsd.toFixed(6)
 						: leg.shares.toFixed(6);
 
-					const resp = await predictSession.placeMarketOrder({
-						marketId: predictNumericId,
-						market: predictMarketDetail,
-						tokenId,
-						side,
-						amount: amountStr,
-					});
-
-					return {
-						filled: true,
-						filledShares: leg.shares,
-						txHash: (resp as { orderHash?: string })?.orderHash,
-					};
+					try {
+						const resp = await predictSession.placeMarketOrder({
+							marketId: predictNumericId,
+							market: predictMarketDetail,
+							tokenId,
+							side,
+							amount: amountStr,
+						});
+						return {
+							filled: true,
+							filledShares: leg.shares,
+							txHash: (resp as { orderHash?: string })?.orderHash,
+						};
+					} catch (e: unknown) {
+						console.error("error", e);
+						const msg = getPrivateApiErrorMessage(e).trim();
+						throw new Error(
+							msg.length > 0 ? msg : "Predict market order failed (no error message).",
+						);
+					}
 				}
 
 				default:
@@ -943,6 +1018,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			predictTokenId,
 			ensureLevelUpApprovals,
 			ensurePredictApprovals,
+			ensurePolymarketApprovals,
+			getRelayClient,
+			fundingAddresses,
 		],
 	);
 
@@ -989,21 +1067,23 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			const POLYGON_CHAIN_ID = 137;
 
 			try {
+				/** Optimizer shortfall and/or group aggregate — see {@link resolveBuyPrefundAnchorUsd}. */
 				const routeBridgeUsd = opts?.amountUsdOverride ?? bridge.amount;
-				/**
-				 * Limitless collateral is on the maker; `bridge.amount` can be too small if route
-				 * hints omitted maker USDC (historically SCW-only `base` row) or the optimizer attached
-				 * a partial corridor. Anchor prefund to the leg's **execution** notional for every
-				 * Limitless **buy** leg (market and limit).
-				 */
-				const execUsd =
-					typeof leg.executionAmountUsd === "number" && Number.isFinite(leg.executionAmountUsd)
-						? Math.max(0, leg.executionAmountUsd)
-						: 0;
-				const prefundAnchorUsd =
-					leg.venue === "limitless" && execUsd > 0
-						? Math.max(routeBridgeUsd, execUsd)
-						: routeBridgeUsd;
+				if (
+					!(
+						typeof leg.executionAmountUsd === "number" &&
+						Number.isFinite(leg.executionAmountUsd) &&
+						leg.executionAmountUsd > 0
+					)
+				) {
+					throw new Error(
+						"Buy route is missing executionAmountUsd on a bridged leg — refresh the quote and try again.",
+					);
+				}
+				const prefundAnchorUsd = resolveBuyPrefundAnchorUsd(
+					routeBridgeUsd,
+					leg.executionAmountUsd,
+				);
 				const needHuman = computePrefundNeedUsdHuman(
 					prefundAnchorUsd,
 					LIFI_BRIDGE_AMOUNT_MARGIN,
@@ -1065,6 +1145,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						plannedSweepMicros > 0n ? Number(lifiNeedUsd.toFixed(6)) : null,
 					scwSweepUsdcApprox: plannedSweepMicros > 0n ? sweepAmountHuman : null,
 					bridgeAmountUsd: opts?.amountUsdOverride ?? bridge.amount,
+					prefundAnchorUsdApprox: Number(prefundAnchorUsd.toFixed(4)),
 					sorFrom: bridge.fromChain,
 					sorTo: bridge.toChain,
 					onChainUsd: {
@@ -1213,11 +1294,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								? Math.max(0, balancesHuman.base ?? 0)
 								: Math.max(0, balancesHuman[step.fromChain] ?? 0);
 						const destPortionUsd = Math.max(0, Number(step.amountHuman));
-						let quote: Awaited<ReturnType<typeof privateApi.postFundingLifiQuote>>;
+						let quote: LifiQuoteResponse;
 						let spentHumanForLedger = 0;
 						try {
 							const solved = await ensurePrefundQuoteMeetsDestMin({
-								api: privateApi,
+								api: privateApi as PrefundLifiQuoteClient,
 								fromChainLifi,
 								toChainLifi,
 								fromAddress,
@@ -1310,6 +1391,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 										polygonRelay: needsRelay && relayClient ? { client: relayClient } : undefined,
 										solanaSigner: solanaSigner ?? undefined,
 										rawLifiRoute: quote.quote,
+										polygonSafeUnwrapPrerequisite: quote.polygonSafeUnwrapPrerequisite ?? undefined,
 										...(fundingAddresses.solanaAddress?.trim()
 											? { solanaTokenOwnerAddress: fundingAddresses.solanaAddress.trim() }
 											: {}),
@@ -1385,8 +1467,15 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					bridgeTxHash: lastSourceTxHash ?? scwToMakerSweepTxHash,
 				};
 			} catch (err) {
-				const msg = err instanceof Error ? err.message : "Bridge execution failed";
-				return { success: false, error: msg };
+				console.error("error", err);
+				const msg = getPrivateApiErrorMessage(err).trim();
+				return {
+					success: false,
+					error:
+						msg.length > 0
+							? msg
+							: "Bridge execution failed (no error message).",
+				};
 			}
 		},
 		[

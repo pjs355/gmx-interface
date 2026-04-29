@@ -1131,13 +1131,12 @@ export function createPrivateApiClient(
 
 		async getLimitlessPortfolioHistory(q: {
 			limit: number;
-			/** 1-based page — matches Limitless `/portfolio/history` and SDK `getUserHistory`. */
-			page: number;
+			/** Opaque cursor from previous response `nextCursor` (Limitless OpenAPI). */
+			cursor?: string | null;
 		}): Promise<unknown> {
-			const p = new URLSearchParams({
-				limit: String(q.limit),
-				page: String(q.page),
-			});
+			const p = new URLSearchParams({ limit: String(q.limit) });
+			const c = q.cursor?.trim();
+			if (c) p.set("cursor", c);
 			const res = await authorizedFetch(
 				`/api/limitless/portfolio/history?${p.toString()}`,
 			);

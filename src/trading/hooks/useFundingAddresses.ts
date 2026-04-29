@@ -32,6 +32,12 @@ export function useFundingAddresses() {
 		profileQuery.isLoading ||
 		(Boolean(profileId) && (overviewQuery.isLoading || polymarketQuery.isFetching));
 
+	/** One-time: profile + (when linked) overview + polymarket have settled. Not true during refetch. */
+	const fundingHydrated =
+		profileQuery.isFetched &&
+		(!profileId ||
+			(overviewQuery.isFetched && polymarketQuery.isFetched));
+
 	return useMemo(
 		() => ({
 			profileId,
@@ -42,6 +48,7 @@ export function useFundingAddresses() {
 			polymarketAccount: polymarketQuery.data,
 			accountOverview: overviewQuery.data,
 			isLoading,
+			fundingHydrated,
 			refetchPolymarket: polymarketQuery.refetch,
 			refetchOverview: overviewQuery.refetch,
 			verifyOnChain: polymarketQuery.verifyOnChain,
@@ -86,6 +93,7 @@ export function useFundingAddresses() {
 			overviewQuery.isError,
 			overviewQuery.error,
 			isLoading,
+			fundingHydrated,
 			polymarketQuery.refetch,
 			overviewQuery.refetch,
 			polymarketQuery.verifyOnChain,

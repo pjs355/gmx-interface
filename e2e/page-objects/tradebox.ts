@@ -35,8 +35,50 @@ const SETTLE_AFTER_FILL_MS = 5_000;
 /** Slow down automation so React / SOR can keep up with real user timing. */
 const BETWEEN_TRADEBOX_ACTIONS_MS = 200;
 
+/** SOR route + price quote should arrive after a $5 buy/sell amount is typed. */
+const QUOTE_READY_TIMEOUT_MS = 30_000;
+/** Poll until amount field has a value and Trade is enabled, then click. */
+const SUBMIT_READY_TIMEOUT_MS = 60_000;
+const SUBMIT_POLL_MS = 150;
+/** Buy fill → /predict (or other) positions API → React Query refetch can take seconds. */
+const SHARES_VISIBLE_TIMEOUT_MS = 60_000;
+const SHARES_POLL_MS = 500;
+
+export type LegSide = "limit" | "market-buy" | "market-sell";
+export interface LegAttrs {
+	venue: string;
+	numShares: number;
+	priceCents: number;
+}
+
 function sleepBetweenTradeboxActions(): Promise<void> {
 	return new Promise((r) => setTimeout(r, BETWEEN_TRADEBOX_ACTIONS_MS));
+}
+
+function parseTradeboxAmountInput(raw: string): number {
+	const n = Number.parseFloat(String(raw).replace(/[$,\s]/g, ""));
+	return Number.isFinite(n) ? n : 0;
+}
+
+/** Logs real DOM from the resolved node (Playwright `Locator` is not loggable as HTML). */
+async function logTradeboxDomSnapshot(
+	label: string,
+	locator: Locator,
+): Promise<void> {
+	const info = await locator
+		.evaluate((el) => ({
+			tag: el.tagName,
+			disabled:
+				el instanceof HTMLButtonElement ||
+				el instanceof HTMLInputElement
+					? el.disabled
+					: null,
+			ariaDisabled: el.getAttribute("aria-disabled"),
+			text: (el as HTMLElement).innerText?.trim().slice(0, 200) ?? "",
+			outerHTML: el.outerHTML.slice(0, 600),
+		}))
+		.catch((e: unknown) => ({ evaluateError: String(e) }));
+	console.warn(`[e2e tradebox] ${label}`, JSON.stringify(info, null, 2));
 }
 
 export class Tradebox {
@@ -91,12 +133,211 @@ export class Tradebox {
 	}
 
 	async submit(): Promise<void> {
+		// Logs go to the **terminal** that runs `yarn e2e` / `playwright test`, not the browser DevTools console.
+		console.warn("[e2e tradebox] submit() entered");
+		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
 		const button = this.root.locator('[data-qa="tradebox-submit"]');
-		await expect(button, "submit button not enabled").toBeEnabled({
-			timeout: 30_000,
+		await logTradeboxDomSnapshot("submit: amount input (initial)", input);
+		await logTradeboxDomSnapshot("submit: trade button (initial)", button);
+
+		const deadline = Date.now() + SUBMIT_READY_TIMEOUT_MS;
+
+		while (Date.now() < deadline) {
+			const raw = await input.inputValue().catch(() => "");
+			const amount = parseTradeboxAmountInput(raw);
+			const enabled = await button.isEnabled().catch(() => false);
+			if (amount > 0 && enabled) {
+				console.warn(
+					`[e2e tradebox] submit: clicking (amount=${amount} enabled=true)`,
+				);
+				await logTradeboxDomSnapshot(
+					"submit: trade button (before click)",
+					button,
+				);
+				await button.click();
+				return;
+			}
+			await new Promise((r) => setTimeout(r, SUBMIT_POLL_MS));
+		}
+
+		const lastRaw = await input.inputValue().catch(() => "(unreadable)");
+		const lastEnabled = await button.isEnabled().catch(() => false);
+		throw new Error(
+			`submit: need positive amount in input AND enabled Trade button within ${SUBMIT_READY_TIMEOUT_MS}ms ` +
+				`(last inputValue=${JSON.stringify(lastRaw)} enabled=${lastEnabled})`,
+		);
+	}
+
+	/** Just assert the submit button reaches the enabled state. Used by `*.price-populates` tests. */
+	async expectSubmitEnabled(
+		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
+	): Promise<void> {
+		const button = this.root.locator('[data-qa="tradebox-submit"]');
+		await expect(
+			button,
+			"tradebox-submit did not become enabled (no SOR quote)",
+		).toBeEnabled({ timeout: timeoutMs });
+	}
+
+	/**
+	 * `data-qa="sor-leg"` rows live under the Details collapsible, which starts
+	 * collapsed in `PredictionMarketTradeBoxUI` (single-venue and multi-SOR).
+	 */
+	async expandSorDetailsIfCollapsed(): Promise<void> {
+		const toggle = this.root.locator("button.sor-details-toggle").first();
+		await expect(toggle).toBeVisible({ timeout: 15_000 });
+		const expanded = await toggle.getAttribute("aria-expanded");
+		if (expanded === "true") {
+			return;
+		}
+		await toggle.click();
+		await expect(toggle).toHaveAttribute("aria-expanded", "true", {
+			timeout: 10_000,
 		});
 		await sleepBetweenTradeboxActions();
-		await button.click();
+	}
+
+	/** Read `data-leg-*` attributes from the currently rendered SOR leg row for the given side. */
+	async readLegAttrs(
+		legSide: LegSide,
+		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
+	): Promise<LegAttrs> {
+		await this.expandSorDetailsIfCollapsed();
+		const leg = this.root.locator(
+			`[data-qa="sor-leg"][data-leg-side="${legSide}"]`,
+		);
+		await leg.waitFor({ state: "visible", timeout: timeoutMs });
+		const venue = await leg.getAttribute("data-leg-venue");
+		const numSharesAttr = await leg.getAttribute("data-leg-num-shares");
+		const priceCentsAttr = await leg.getAttribute("data-leg-price-cents");
+		if (
+			venue === null ||
+			numSharesAttr === null ||
+			priceCentsAttr === null
+		) {
+			throw new Error(
+				`sor-leg[data-leg-side="${legSide}"] missing one of data-leg-{venue,num-shares,price-cents}: ` +
+					`venue=${venue} numShares=${numSharesAttr} priceCents=${priceCentsAttr}`,
+			);
+		}
+		const numShares = Number(numSharesAttr);
+		const priceCents = Number(priceCentsAttr);
+		if (!Number.isFinite(numShares) || !Number.isFinite(priceCents)) {
+			throw new Error(
+				`sor-leg[data-leg-side="${legSide}"] non-numeric attrs: numShares=${numSharesAttr} priceCents=${priceCentsAttr}`,
+			);
+		}
+		return { venue, numShares, priceCents };
+	}
+
+	/**
+	 * Single-venue market buy: Details "Cost:" row exposes `data-cost-usd` on
+	 * `[data-qa="sor-leg-cost"]`.
+	 */
+	async readQuotedBuyCostUsd(
+		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
+	): Promise<number> {
+		await this.expandSorDetailsIfCollapsed();
+		const loc = this.root
+			.locator('.sor-details-panel [data-qa="sor-leg-cost"][data-cost-usd]')
+			.first();
+		await loc.waitFor({ state: "visible", timeout: timeoutMs });
+		const raw = await loc.getAttribute("data-cost-usd");
+		if (raw === null || raw.trim() === "") {
+			throw new Error(
+				"readQuotedBuyCostUsd: missing data-cost-usd on sor-leg-cost in Details",
+			);
+		}
+		const n = Number(raw);
+		if (!Number.isFinite(n) || n < 0) {
+			throw new Error(
+				`readQuotedBuyCostUsd: invalid data-cost-usd=${JSON.stringify(raw)}`,
+			);
+		}
+		return n;
+	}
+
+	/** Single-venue market sell: Estimated Receive exposes `data-receive-usd`. */
+	async readQuotedSellReceiveUsd(
+		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
+	): Promise<number> {
+		const loc = this.root.locator(
+			'[data-qa="tradebox-estimated-receive-usd"][data-receive-usd]',
+		);
+		await loc.waitFor({ state: "visible", timeout: timeoutMs });
+		const raw = await loc.getAttribute("data-receive-usd");
+		if (raw === null || raw.trim() === "") {
+			throw new Error(
+				"readQuotedSellReceiveUsd: missing data-receive-usd on tradebox-estimated-receive-usd",
+			);
+		}
+		const n = Number(raw);
+		if (!Number.isFinite(n) || n < 0) {
+			throw new Error(
+				`readQuotedSellReceiveUsd: invalid data-receive-usd=${JSON.stringify(raw)}`,
+			);
+		}
+		return n;
+	}
+
+	/**
+	 * Poll the buy-side `MyPositionsRow` until it reports > 0 shares.
+	 * Replaces the old fixed `await sleep(5000)` with a deterministic signal.
+	 */
+	async waitForBuyShares(
+		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS,
+	): Promise<number> {
+		const row = this.root.locator(
+			'[data-qa="my-positions-row"][data-qa-side="buy"]',
+		);
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			const visible = await row.isVisible().catch(() => false);
+			if (visible) {
+				const sharesAttr = await row.getAttribute(
+					"data-qa-shares-count",
+				);
+				if (sharesAttr !== null) {
+					const parsed = Number(sharesAttr);
+					if (Number.isFinite(parsed) && parsed > 0) {
+						return parsed;
+					}
+				}
+			}
+			await new Promise((r) => setTimeout(r, SHARES_POLL_MS));
+		}
+		throw new Error(
+			`waitForBuyShares: my-positions-row[data-qa-side="buy"] never reported > 0 shares within ${timeoutMs}ms ` +
+				`(after a successful fill confirmation). Likely positions API lag, query staleness, or position-to-market mismatch.`,
+		);
+	}
+
+	/** Poll until the rendered `MyPositionsRow` reports `data-qa-shares-count <= 0`. */
+	async waitForSharesCleared(
+		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS,
+	): Promise<void> {
+		const row = this.root.locator('[data-qa="my-positions-row"]');
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			const visible = await row.isVisible().catch(() => false);
+			if (visible) {
+				const sharesAttr = await row.getAttribute(
+					"data-qa-shares-count",
+				);
+				if (sharesAttr !== null) {
+					const parsed = Number(sharesAttr);
+					if (Number.isFinite(parsed) && parsed <= 0) {
+						return;
+					}
+				}
+			} else {
+				return;
+			}
+			await new Promise((r) => setTimeout(r, SHARES_POLL_MS));
+		}
+		throw new Error(
+			`waitForSharesCleared: my-positions-row never reached data-qa-shares-count <= 0 within ${timeoutMs}ms`,
+		);
 	}
 
 	async waitForFill(): Promise<void> {
@@ -115,7 +356,9 @@ export class Tradebox {
 				.then(() => "error" as const),
 		]);
 		if (winner === "error") {
-			const message = await failure.innerText().catch(() => "(no message)");
+			const message = await failure
+				.innerText()
+				.catch(() => "(no message)");
 			throw new Error(`Order failed: ${message}`);
 		}
 		await new Promise((r) => setTimeout(r, SETTLE_AFTER_FILL_MS));

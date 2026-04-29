@@ -657,6 +657,7 @@ export function useBridgeFlow() {
 			const { txHashes } = await executeLifiSteps(quote.steps, getSignerForChain, {
 				allowanceOwnerByChainId,
 				rawLifiRoute: quote.quote,
+				polygonSafeUnwrapPrerequisite: quote.polygonSafeUnwrapPrerequisite ?? undefined,
 				...(funding.solanaAddress?.trim()
 					? { solanaTokenOwnerAddress: funding.solanaAddress.trim() }
 					: {}),

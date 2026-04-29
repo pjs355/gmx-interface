@@ -2,7 +2,7 @@ import type { RelayClient, Transaction } from "@polymarket/builder-relayer-clien
 import { encodeFunctionData, erc20Abi } from "viem";
 import { polygon } from "viem/chains";
 import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
-import { waitRelay } from "@/trading/polymarket/safeActions";
+import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 
 /**
  * Single ERC-20 transfer for same-chain withdrawals (Base / BNB smart wallet or Polygon Polymarket Safe relay).
@@ -25,11 +25,11 @@ export async function executeDirectErc20Withdraw(args: {
 		const batch: Transaction[] = [
 			{ to: args.tokenAddress, value: "0", data },
 		];
-		const resp = await args.polygonRelayClient.execute(
+		const h = await executePolygonRelayAndWait(
+			args.polygonRelayClient,
 			batch,
-			"LevelUp withdraw direct"
+			"LevelUp withdraw direct",
 		);
-		const h = await waitRelay(resp);
 		if (!h) throw new Error("Relayer did not return a transaction hash");
 		return h;
 	}
