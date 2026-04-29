@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import { SOLANA_RPC_URL } from "@/config/rpc";
+import { createSolanaConnectionForWalletSend } from "@/config/rpc";
 
-const connection = new Connection(SOLANA_RPC_URL, "confirmed");
+const connection = createSolanaConnectionForWalletSend();
 
 /**
  * Reads the Token-2022 balance for a single DFlow outcome mint held by a wallet.

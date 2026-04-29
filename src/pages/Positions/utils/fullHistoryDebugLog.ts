@@ -55,6 +55,10 @@ export type FullHistoryDebugSnapshot = {
 const MAX_VERBOSE_VENUE_ROWS = 250;
 const MAX_LEVEL_UP_ORDERS_LOG = 500;
 
+/** When History deps refire with the same counts / resolve state, skip repeat console spam. */
+let lastHistoryDebugRowsFingerprint = "";
+let lastHistoryDebugCatalogFingerprint = "";
+
 function serializeFill(f: VenueHistoryFill): Record<string, unknown> {
 	return {
 		side: f.side,
@@ -201,6 +205,8 @@ function snapshot(
 	umbrellas: Umbrella[],
 	umbrellaLookupByConditionId: Map<string, Umbrella>,
 	predictLookup: PredictUmbrellaLookup | null,
+	dflowMintLookup: Map<string, Umbrella> | null | undefined,
+	dflowEventTickerLookup: Map<string, Umbrella> | null | undefined,
 ): FullHistoryDebugSnapshot {
 	const trades = venueHistory.map((pos) => {
 		const predictHint =
@@ -214,6 +220,8 @@ function snapshot(
 			umbrellas,
 			predictLookup,
 			predictHint,
+			dflowMintLookup ?? null,
+			dflowEventTickerLookup ?? null,
 		);
 		const containingBlock = unifiedBlocks.find((b) => b.venuePositions.includes(pos));
 		const umb = containingBlock?.umbrella;
@@ -227,6 +235,7 @@ function snapshot(
 			conditionId: pos.conditionId ?? null,
 			numericMarketId: pos.numericMarketId ?? null,
 			eventSlug: pos.eventSlug ?? null,
+			dflowEventTicker: pos.dflowEventTicker ?? null,
 			historySourceId: pos.historySourceId ?? null,
 			levelUpUmbrellaId: pos.levelUpUmbrellaId ?? null,
 			levelUpUmbrellaDisplayName: pos.levelUpUmbrellaDisplayName ?? null,
@@ -279,6 +288,10 @@ export type LogFullHistoryDebugParams = {
 	umbrellas: Umbrella[];
 	umbrellaLookupByConditionId: Map<string, Umbrella>;
 	predictLookup: PredictUmbrellaLookup | null;
+	/** Same map as `buildUmbrellaLookupByDflowOutcomeMint(umbrellas)` — optional for debug parity. */
+	dflowMintLookup?: Map<string, Umbrella> | null;
+	/** Same map as `buildUmbrellaLookupByDflowEventTicker(umbrellas)`. */
+	dflowEventTickerLookup?: Map<string, Umbrella> | null;
 	/** `combinedOrders` from Positions — LevelUp + venue rows used for History cash-flow */
 	orders?: ProcessedOrder[];
 	resolvedMarketsByUmbrella?: Record<string, any[]>;
@@ -297,8 +310,10 @@ export type LogFullHistoryDebugParams = {
 	} | null;
 };
 
-/** One structured `console.info` for the History tab (remove or gate before release). */
+/** Dev-only: merged venue history + orders + resolve stage (no full umbrella tree — see UMBRELLAS_FULL). */
 export function logFullHistoryDebug(params: LogFullHistoryDebugParams): void {
+	if (!import.meta.env.DEV) return;
+
 	const snap = snapshot(
 		params.layout,
 		params.venueHistory,
@@ -306,6 +321,8 @@ export function logFullHistoryDebug(params: LogFullHistoryDebugParams): void {
 		params.umbrellas,
 		params.umbrellaLookupByConditionId,
 		params.predictLookup,
+		params.dflowMintLookup,
+		params.dflowEventTickerLookup,
 	);
 
 	const orders = params.orders ?? [];
@@ -321,20 +338,29 @@ export function logFullHistoryDebug(params: LogFullHistoryDebugParams): void {
 		.map(serializeLevelUpOrder);
 	const ordersTruncated = orders.length > MAX_LEVEL_UP_ORDERS_LOG;
 
-	const umbrellaCatalog = params.umbrellas.map((u) => ({
-		_id: u._id,
-		displayName: u.displayName,
-		childCount: Array.isArray(u.children) ? u.children.length : 0,
-		originalChildCount: Array.isArray(u.originalChildren)
-			? u.originalChildren.length
-			: 0,
-	}));
+	const rowsFingerprint = [
+		params.layout,
+		snap.venueHistoryTradeCount,
+		snap.unifiedBlockCount,
+		orders.length,
+		params.venueHistoryRawItems?.length ?? "",
+		params.resolveStage?.rowCountTotal ?? "",
+		params.resolveStage?.batchFetchStatus ?? "",
+		params.resolveStage?.queryCount ?? "",
+	].join("|");
+
+	const catalogFingerprint = params.umbrellas
+		.map((u) => String(u._id))
+		.sort()
+		.join(",");
 
 	const payload = {
 		...snap,
 		lookupEngine: {
 			umbrellaLookupByConditionIdSize: params.umbrellaLookupByConditionId.size,
 			predictLookupPresent: params.predictLookup != null,
+			dflowMintLookupSize: params.dflowMintLookup?.size ?? 0,
+			dflowEventTickerLookupSize: params.dflowEventTickerLookup?.size ?? 0,
 		},
 		levelUpAndOrders: {
 			combinedOrdersTotal: orders.length,
@@ -344,7 +370,14 @@ export function logFullHistoryDebug(params: LogFullHistoryDebugParams): void {
 			ordersTruncated,
 			ordersOmittedCount: ordersTruncated ? orders.length - MAX_LEVEL_UP_ORDERS_LOG : 0,
 		},
-		umbrellaCatalogAll: umbrellaCatalog,
+		umbrellaCatalogSummary: params.umbrellas.map((u) => ({
+			_id: u._id,
+			displayName: u.displayName,
+			childCount: Array.isArray(u.children) ? u.children.length : 0,
+			originalChildCount: Array.isArray(u.originalChildren)
+				? u.originalChildren.length
+				: 0,
+		})),
 		resolvedMarketsCoverage: buildResolvedMarketsCoverage(
 			params.resolvedMarketsByUmbrella,
 			orders,
@@ -361,22 +394,42 @@ export function logFullHistoryDebug(params: LogFullHistoryDebugParams): void {
 		...(params.resolveStage != null ? { resolveStage: params.resolveStage } : {}),
 	};
 
-	// eslint-disable-next-line no-console -- intentional History tab diagnostic
-	console.info("FULL HISTORY", payload);
+	if (rowsFingerprint !== lastHistoryDebugRowsFingerprint) {
+		lastHistoryDebugRowsFingerprint = rowsFingerprint;
+		// eslint-disable-next-line no-console -- intentional History tab diagnostic
+		console.groupCollapsed(
+			`[History] FULL_HISTORY · rows=${snap.venueHistoryTradeCount} · blocks=${snap.unifiedBlockCount} · orders=${orders.length} (expand)`,
+		);
+		// eslint-disable-next-line no-console -- intentional History tab diagnostic
+		console.info(payload);
+		// eslint-disable-next-line no-console -- intentional History tab diagnostic
+		console.info(
+			"[History] Full `exchangeMatching` + children: open UMBRELLAS_FULL group (logged once per catalog id set).",
+		);
+		// eslint-disable-next-line no-console -- intentional History tab diagnostic
+		console.groupEnd();
+	}
 
-	const predictLinked = params.umbrellas.filter(
-		(u) =>
-			u.exchangeMatching != null &&
-			typeof (u.exchangeMatching as { predictFun?: unknown }).predictFun === "object",
-	);
-	// eslint-disable-next-line no-console -- full catalog for inverse-resolve / exchangeMatching inspection
-	console.info("[UMBRELLAS_FULL]", {
-		note: "In-memory umbrellas used on History (PredictionData catalog + historyCatalog merge from POST resolve umbrellasById). Expand `all` in DevTools.",
-		count: params.umbrellas.length,
-		predictFunLinkedCount: predictLinked.length,
-		/** Every umbrella as returned from the client (including children, exchangeMatching, etc.). */
-		all: params.umbrellas,
-		/** Subset with `exchangeMatching.predictFun` — fields used for Predict batch inverse lookup. */
-		predictLinkedOnly: predictLinked,
-	});
+	if (catalogFingerprint !== lastHistoryDebugCatalogFingerprint) {
+		lastHistoryDebugCatalogFingerprint = catalogFingerprint;
+		const predictLinked = params.umbrellas.filter(
+			(u) =>
+				u.exchangeMatching != null &&
+				typeof (u.exchangeMatching as { predictFun?: unknown }).predictFun === "object",
+		);
+		// eslint-disable-next-line no-console -- full catalog for inverse-resolve / exchangeMatching inspection
+		console.groupCollapsed(
+			`[History] UMBRELLAS_FULL · count=${params.umbrellas.length} · predictLinked=${predictLinked.length} (expand)`,
+		);
+		// eslint-disable-next-line no-console -- full catalog for inverse-resolve / exchangeMatching inspection
+		console.info({
+			note: "In-memory umbrellas (catalog + resolve merge). `all` is the full tree.",
+			count: params.umbrellas.length,
+			predictFunLinkedCount: predictLinked.length,
+			all: params.umbrellas,
+			predictLinkedOnly: predictLinked,
+		});
+		// eslint-disable-next-line no-console -- full catalog for inverse-resolve / exchangeMatching inspection
+		console.groupEnd();
+	}
 }

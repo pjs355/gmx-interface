@@ -2,13 +2,17 @@ import { titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { VenueId, VenuePosition } from "@/types/trading/venuePosition";
+import {
+	lookupUmbrellaByDflowEventTicker,
+	mintMatchesDflowExchange,
+} from "@/trading/dflow/dflowUmbrellaLookup";
 import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
 import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
 
-/** Set `VITE_DEBUG_PREDICT_UMBRELLA=1` to log in production builds; dev always logs. */
+/** Set `VITE_DEBUG_PREDICT_UMBRELLA=1` to enable (default dev builds stay quiet). */
 export const predictUmbrellaDebugEnabled =
-	Boolean(import.meta.env.DEV) || import.meta.env.VITE_DEBUG_PREDICT_UMBRELLA === "1";
+	import.meta.env.VITE_DEBUG_PREDICT_UMBRELLA === "1";
 
 /** Namespaced portfolio / resolver debug (dev or `VITE_DEBUG_PREDICT_UMBRELLA=1`). */
 export function logPredictUmbrella(phase: string, payload: Record<string, unknown>) {
@@ -284,12 +288,17 @@ export function matchVenuePositionToUmbrella(
 		| "levelUpUmbrellaId"
 		| "levelUpUmbrellaDisplayName"
 		| "eventSlug"
+		| "dflowEventTicker"
 	>,
 	venue: VenueId,
 	conditionLookup: Map<string, Umbrella>,
 	umbrellas: Umbrella[],
 	predictLookup: PredictUmbrellaLookup | null,
 	predictTitleHint?: string | null,
+	/** Outcome mint → catalog umbrella (`exchangeMatching.dflow`). Same index as `buildUmbrellaLookupByDflowOutcomeMint`. */
+	dflowMintLookup?: Map<string, Umbrella> | null,
+	/** `eventTicker` → catalog umbrella (`exchangeMatching.dflow.eventTicker`). Same index as `buildUmbrellaLookupByDflowEventTicker`. */
+	dflowEventTickerLookup?: Map<string, Umbrella> | null,
 ): Umbrella | null {
 	/** Poly map keys are Polymarket CTF ids only — do not run for Predict (may carry unrelated hex). */
 	if (venue === "polymarket") {
@@ -357,14 +366,18 @@ export function matchVenuePositionToUmbrella(
 		return byToken[0]!;
 	}
 	if (venue === "dflow") {
-		const mint = pos.tokenId?.trim();
+		const et = pos.dflowEventTicker?.trim();
+		if (et) {
+			return lookupUmbrellaByDflowEventTicker(et, dflowEventTickerLookup, umbrellas);
+		}
+		const mint = typeof pos.tokenId === "string" ? pos.tokenId.trim() : "";
 		if (!mint) return null;
+		if (dflowMintLookup) {
+			const byMint = dflowMintLookup.get(mint);
+			if (byMint) return byMint;
+		}
 		for (const u of umbrellas) {
-			const d = u.exchangeMatching?.dflow as
-				| { yesMintA?: string; yesMintB?: string }
-				| undefined;
-			if (!d) continue;
-			if (d.yesMintA?.trim() === mint || d.yesMintB?.trim() === mint) return u;
+			if (mintMatchesDflowExchange(u.exchangeMatching?.dflow, mint)) return u;
 		}
 		return null;
 	}
@@ -390,12 +403,15 @@ export function matchVenuePositionToUmbrellaForHistory(
 		| "levelUpUmbrellaId"
 		| "levelUpUmbrellaDisplayName"
 		| "eventSlug"
+		| "dflowEventTicker"
 	>,
 	venue: VenueId,
 	conditionLookup: Map<string, Umbrella>,
 	umbrellas: Umbrella[],
 	predictLookup: PredictUmbrellaLookup | null,
 	predictTitleHint?: string | null,
+	dflowMintLookup?: Map<string, Umbrella> | null,
+	dflowEventTickerLookup?: Map<string, Umbrella> | null,
 ): Umbrella | null {
 	const hit = matchVenuePositionToUmbrella(
 		pos,
@@ -404,6 +420,8 @@ export function matchVenuePositionToUmbrellaForHistory(
 		umbrellas,
 		predictLookup,
 		predictTitleHint,
+		dflowMintLookup,
+		dflowEventTickerLookup,
 	);
 	if (hit) return hit;
 	const id = pos.levelUpUmbrellaId?.trim();

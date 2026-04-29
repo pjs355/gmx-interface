@@ -14,6 +14,7 @@ import {
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
 import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
+import { buildUmbrellaLookupByDflowEventTicker, buildUmbrellaLookupByDflowOutcomeMint } from "@/trading/dflow/dflowUmbrellaLookup";
 import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/levelUpQuestionIdsForVenueHistory";
 import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
 import {
@@ -98,6 +99,16 @@ export default function HistoryView({
 	const predictUmbrellaLookup = useMemo(
 		() => buildPredictUmbrellaLookup(appState?.markets, umbrellas),
 		[appState?.markets, umbrellas],
+	);
+
+	const umbrellaLookupByDflowOutcomeMint = useMemo(
+		() => buildUmbrellaLookupByDflowOutcomeMint(umbrellas),
+		[umbrellas],
+	);
+
+	const umbrellaLookupByDflowEventTicker = useMemo(
+		() => buildUmbrellaLookupByDflowEventTicker(umbrellas),
+		[umbrellas],
 	);
 
 	const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
@@ -196,6 +207,8 @@ export default function HistoryView({
 				umbrellas,
 				predictUmbrellaLookup,
 				predictHint,
+				umbrellaLookupByDflowOutcomeMint,
+				umbrellaLookupByDflowEventTicker,
 			);
 			if (matchedUmb) {
 				const id = matchedUmb._id;
@@ -240,6 +253,8 @@ export default function HistoryView({
 		venueHistory,
 		umbrellaLookupByConditionId,
 		predictUmbrellaLookup,
+		umbrellaLookupByDflowOutcomeMint,
+		umbrellaLookupByDflowEventTicker,
 	]);
 
 	useEffect(() => {
@@ -250,6 +265,8 @@ export default function HistoryView({
 			umbrellas,
 			umbrellaLookupByConditionId,
 			predictLookup: predictUmbrellaLookup,
+			dflowMintLookup: umbrellaLookupByDflowOutcomeMint,
+			dflowEventTickerLookup: umbrellaLookupByDflowEventTicker,
 			orders,
 			resolvedMarketsByUmbrella,
 			umbrellaBalances,
@@ -262,6 +279,8 @@ export default function HistoryView({
 		umbrellas,
 		umbrellaLookupByConditionId,
 		predictUmbrellaLookup,
+		umbrellaLookupByDflowOutcomeMint,
+		umbrellaLookupByDflowEventTicker,
 		orders,
 		resolvedMarketsByUmbrella,
 		umbrellaBalances,

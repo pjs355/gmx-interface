@@ -212,6 +212,14 @@ export function createSolanaConnectionForWalletSend(): Connection {
 	});
 }
 
+/**
+ * Same JSON-RPC client as {@link createSolanaConnectionForWalletSend} (HTTP 429/502/503/504 fallbacks).
+ * Use for read-only scans (DFlow Token-2022 accounts, SPL balances) — not only sponsored sends.
+ */
+export function createSolanaConnectionForJsonRpcReads(): Connection {
+	return createSolanaConnectionForWalletSend();
+}
+
 // All available Base RPC URLs for round-robin/fallback
 export const ALL_RPC_URLS = [
 	RPC_URLS.BASE_COINBASE,

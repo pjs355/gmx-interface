@@ -68,6 +68,12 @@ export interface VenuePosition {
 	pnl: number | null;
 	pnlPercent: number | null;
 	tokenId: string;
+	/**
+	 * DFlow / Kalshi metadata `eventTicker` from `markets/batch` (same key as
+	 * `exchangeMatching.dflow.eventTicker` on umbrellas). Used for History batch resolve
+	 * when present; absent rows use outcome `tokenId` only.
+	 */
+	dflowEventTicker?: string;
 	conditionId?: string;
 	eventSlug?: string;
 	iconUrl?: string;

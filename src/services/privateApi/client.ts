@@ -165,6 +165,8 @@ export type DflowOrderResponse = {
 /** Market detail from `POST /api/v1/markets/batch` (DFlow Metadata API). */
 export type DflowBatchMarket = {
 	ticker: string;
+	/** Nested Kalshi/DFlow event id when upstream sends snake_case (matches matcher / Mongo). */
+	event_ticker?: string;
 	eventTicker: string;
 	title: string;
 	subtitle: string;

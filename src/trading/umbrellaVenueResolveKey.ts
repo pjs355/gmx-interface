@@ -9,6 +9,8 @@ export type UmbrellaExchangeResolveQuery = {
 	conditionId?: string;
 	numericMarketId?: number;
 	tokenId?: string;
+	/** DFlow only: Kalshi/DFlow `eventTicker` (must match `exchangeMatching.dflow.eventTicker`). */
+	dflowEventTicker?: string;
 	eventSlug?: string;
 };
 
@@ -30,8 +32,11 @@ export function venueHistoryExchangeResolveKey(pos: VenuePosition): string | nul
 		const s = (pos.eventSlug ?? "").trim();
 		return `lx:${t}:${s}`;
 	}
-	if (pos.venue === "dflow" && pos.tokenId?.trim()) {
-		return `df:${pos.tokenId.trim()}`;
+	if (pos.venue === "dflow") {
+		const et = pos.dflowEventTicker?.trim();
+		if (et) return `dfevt:${et}`;
+		const m = pos.tokenId?.trim();
+		if (m) return `df:${m}`;
 	}
 	return null;
 }
@@ -70,6 +75,10 @@ export function venuePositionToResolveQuery(
 		};
 	}
 	if (pos.venue === "dflow") {
+		const et = pos.dflowEventTicker?.trim();
+		if (et) {
+			return { clientKey, venue: "dflow", dflowEventTicker: et };
+		}
 		const m = pos.tokenId?.trim();
 		if (!m) return null;
 		return { clientKey, venue: "dflow", tokenId: m };

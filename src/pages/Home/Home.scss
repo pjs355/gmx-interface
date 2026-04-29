@@ -80,7 +80,7 @@
 	}
 }
 
-/* Scoped to home page only */
+/* Home markets: grid only; below 768px one column + vertical page scroll (no horizontal carousel). */
 .home-page .predictions-grid {
 	display: grid;
 	grid-template-columns: 1fr;
@@ -94,37 +94,6 @@
 	/* Desktop */
 	@media (min-width: 1100px) {
 		grid-template-columns: repeat(3, 1fr);
-	}
-
-	/* Mobile: Horizontal scroll carousel */
-	@media (max-width: 767px) {
-		display: flex !important;
-		overflow-x: auto !important;
-		overflow-y: hidden !important;
-		scroll-snap-type: x mandatory;
-		scroll-behavior: smooth;
-		gap: 16px;
-		-webkit-overflow-scrolling: touch;
-		scrollbar-width: none; /* Firefox */
-		-ms-overflow-style: none; /* IE 10+ */
-		padding-bottom: 8px;
-		flex-direction: row;
-
-		&::-webkit-scrollbar {
-			display: none;
-		}
-
-		/* Each card takes most of screen width but shows peek of next card */
-		.prediction-card,
-		.view-all-card {
-			flex: 0 0 calc(100vw - 80px) !important;
-			max-width: calc(100vw - 80px) !important;
-			min-width: calc(100vw - 80px) !important;
-			width: calc(100vw - 80px) !important;
-			scroll-snap-align: start;
-			scroll-snap-stop: always;
-			height: auto;
-		}
 	}
 }
 

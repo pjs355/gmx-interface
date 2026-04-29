@@ -1,5 +1,10 @@
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { VenuePosition } from "@/types/trading/venuePosition";
+import {
+	dflowWireMatchesEventTicker,
+	mintMatchesDflowExchange,
+	normalizeDflowEventTickerKey,
+} from "@/trading/dflow/dflowUmbrellaLookup";
 import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
 import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
@@ -119,19 +124,26 @@ export function levelUpQuestionIdsForVenueHistoryRow(
 		return out;
 	}
 
-	if (pos.venue === "dflow" && pos.tokenId?.trim()) {
-		const mint = pos.tokenId.trim();
+	if (pos.venue === "dflow") {
+		const et = pos.dflowEventTicker?.trim();
+		if (et) {
+			const etNorm = normalizeDflowEventTickerKey(et);
+			for (const u of umbrellas) {
+				const d = u.exchangeMatching?.dflow;
+				if (!dflowWireMatchesEventTicker(etNorm, d)) continue;
+				push(levelUpQ(u));
+				for (const ch of childrenOf(u)) push(ch._id);
+			}
+			return out;
+		}
+		const mint = pos.tokenId?.trim();
+		if (!mint) return out;
 		for (const u of umbrellas) {
-			const d = u.exchangeMatching?.dflow as
-				| { yesMintA?: string; yesMintB?: string }
-				| undefined;
-			if (!d) continue;
-			const hit =
-				(d.yesMintA?.trim() === mint) || (d.yesMintB?.trim() === mint);
-			if (!hit) continue;
+			if (!mintMatchesDflowExchange(u.exchangeMatching?.dflow, mint)) continue;
 			push(levelUpQ(u));
 			for (const ch of childrenOf(u)) push(ch._id);
 		}
+		return out;
 	}
 
 	return out;
