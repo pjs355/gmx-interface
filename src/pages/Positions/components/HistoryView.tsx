@@ -1,5 +1,9 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getFinalAmount, type ProcessedOrder } from "@/services/api/simplifiedOrderService";
+import {
+	getFinalAmount,
+	getTradingReturns,
+	type ProcessedOrder,
+} from "@/services/api/simplifiedOrderService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import Tooltip from "components/Tooltip/Tooltip";
@@ -19,7 +23,6 @@ import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/levelUpQuestionI
 import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
 import {
 	getTradeCount,
-	getNetCashFlow,
 	formatHistoryReturnPctAbs,
 	venueHistoryPositionToSyntheticOrders,
 	venueHistoryRowToSyntheticOrder,
@@ -67,7 +70,6 @@ type MergedHistoryRow = {
 
 export default function HistoryView({
 	umbrellaBalances,
-	returnsByQid,
 	orders,
 	resolvedMarketsByUmbrella,
 	venueHistory = [],
@@ -76,7 +78,6 @@ export default function HistoryView({
 	historyResolveStage,
 }: {
 	umbrellaBalances: any[];
-	returnsByQid: Record<string, { Yes: number; No: number }>;
 	orders: any[];
 	resolvedMarketsByUmbrella: Record<string, any[]>;
 	venueHistory?: VenuePosition[];
@@ -313,47 +314,36 @@ export default function HistoryView({
 				? shortTeamDisplayName(blockCanonical)
 				: null;
 
-			const sideBuckets: Record<"Yes" | "No", {
-				finalPosition: number; totalCost: number; totalPayout: number; totalReturn: number;
-				hasData: boolean; tradeCount: number; marketIds: string[];
-				label: string; outcomeText: string;
-			}> = {
-				Yes: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "" },
-				No: { finalPosition: 0, totalCost: 0, totalPayout: 0, totalReturn: 0, hasData: false, tradeCount: 0, marketIds: [], label: "", outcomeText: "" },
+			type Bucket = {
+				hasData: boolean;
+				label: string;
+				outcomeText: string;
+				marketIds: string[];
+				wonByQid: Record<string, boolean>;
+			};
+			const sideBuckets: Record<"Yes" | "No", Bucket> = {
+				Yes: { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
+				No:  { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
 			};
 
 			for (const { market } of block.luMarkets) {
 				const qid = market._id || market.questionId || market.marketId;
 				if (!qid) continue;
-				const fa = getFinalAmount(orders, qid);
 				const resolved = String((market as any).resolvedOutcome || "").toLowerCase();
 				const title = (market?.displayName || (market as any)?.question || "").trim();
 				const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
 				const isVs = parts.length === 2;
 
 				for (const side of ["Yes", "No"] as const) {
-					const tc = getTradeCount(orders, qid, side);
+					const tc = getTradeCount(allOrders, qid, side);
 					if (tc === 0) continue;
 					const bucket = sideBuckets[side];
 					bucket.hasData = true;
-					bucket.marketIds.push(qid);
-
-					const finalShares = side === "Yes" ? fa.yesShares : fa.noShares;
-					bucket.finalPosition += finalShares;
-
-					const ncf = getNetCashFlow(orders, qid, side);
-					const cashSpent = ncf < 0 ? Math.abs(ncf) : 0;
-					bucket.totalCost += cashSpent;
-
-					const correct = (side === "Yes" && resolved === "yes") || (side === "No" && resolved === "no");
-					const payout = finalShares * (correct ? 1 : 0);
-					bucket.totalPayout += payout;
-
-					const base = payout + ncf;
-					const leg = returnsByQid[qid]?.[side] ?? 0;
-					bucket.totalReturn += base + leg;
-
-					bucket.tradeCount += tc;
+					if (!bucket.marketIds.includes(qid)) bucket.marketIds.push(qid);
+					const won =
+						(side === "Yes" && resolved === "yes") ||
+						(side === "No" && resolved === "no");
+					bucket.wonByQid[qid] = won;
 
 					if (!bucket.label) {
 						bucket.label = isVs
@@ -395,26 +385,13 @@ export default function HistoryView({
 				}
 				const bucket = sideBuckets[side];
 				bucket.hasData = true;
-				bucket.marketIds.push(pos.tokenId);
+				if (!bucket.marketIds.includes(pos.tokenId)) bucket.marketIds.push(pos.tokenId);
+				const venueWon = pos.outcomeResult === "WON";
+				bucket.wonByQid[pos.tokenId] = venueWon;
 				for (const qid of levelUpQuestionIdsForVenueHistoryRow(umbrellas, pos)) {
 					if (!bucket.marketIds.includes(qid)) bucket.marketIds.push(qid);
-					bucket.tradeCount += getTradeCount(orders, qid, side);
+					if (bucket.wonByQid[qid] === undefined) bucket.wonByQid[qid] = venueWon;
 				}
-
-				const safeShares = pos.shares != null && isFinite(pos.shares) ? pos.shares : 0;
-				bucket.finalPosition += safeShares;
-
-				const safeCost = pos.cost != null && isFinite(pos.cost) ? pos.cost : 0;
-				bucket.totalCost += safeCost;
-
-				const isWon = pos.outcomeResult === "WON";
-				const payout = isWon ? (pos.pnl != null && isFinite(pos.pnl) && pos.cost != null ? pos.cost + pos.pnl : safeShares) : 0;
-				bucket.totalPayout += payout;
-
-				const ret = pos.pnl != null && isFinite(pos.pnl) ? pos.pnl : payout - safeCost;
-				bucket.totalReturn += ret;
-
-				bucket.tradeCount += venueHistoryPositionToSyntheticOrders(pos).length;
 
 				if (!bucket.label) {
 					const singleInGroup = block.venuePositions.length === 1 && block.luMarkets.length === 0;
@@ -429,23 +406,67 @@ export default function HistoryView({
 			for (const side of ["Yes", "No"] as const) {
 				const b = sideBuckets[side];
 				if (!b.hasData) continue;
-				const retPct = b.totalCost > 0 ? (b.totalReturn / b.totalCost) * 100 : null;
-				const outcomeColor = b.totalReturn >= 0 ? "#16a34a" : "#ef4444";
+
+				const sideLower = side.toLowerCase();
+				let finalShares = 0;
+				let finalCost = 0;
+				let payout = 0;
+				let realized = 0;
+				let tradeCount = 0;
+
+				for (const qid of b.marketIds) {
+					let bought = 0;
+					let sold = 0;
+					for (const o of allOrders) {
+						if (o.questionId !== qid) continue;
+						if (!o.filled) continue;
+						if (o.position?.toLowerCase() !== sideLower) continue;
+						const shares =
+							typeof o.tokenValue === "number" && Number.isFinite(o.tokenValue)
+								? o.tokenValue
+								: 0;
+						if (o.side === "buy") bought += shares;
+						else if (o.side === "sell") sold += shares;
+					}
+					const sharesHeld = bought - sold;
+					finalShares += sharesHeld;
+
+					const fa = getFinalAmount(allOrders, qid);
+					finalCost += side === "Yes" ? fa.yesCost : fa.noCost;
+
+					const tr = getTradingReturns(allOrders, qid);
+					realized += side === "Yes" ? tr.yesPnL : tr.noPnL;
+
+					if (b.wonByQid[qid] && sharesHeld > 0) {
+						payout += sharesHeld;
+					}
+
+					tradeCount += getTradeCount(allOrders, qid, side);
+				}
+
+				const totalReturn = (payout - finalCost) + realized;
+				const retPct = finalCost > 0 ? (totalReturn / finalCost) * 100 : null;
+				const outcomeColor = totalReturn >= 0 ? "#16a34a" : "#ef4444";
 				const fallbackOutcome = b.outcomeText
 					? shortTeamDisplayName(b.outcomeText)
 					: "—";
 				rows.push({
-					side, label: b.label || side,
-					finalPosition: b.finalPosition,
+					side,
+					label: b.label || side,
+					finalPosition: finalShares,
 					outcomeText: blockOutcomeShort ?? fallbackOutcome,
 					outcomeColor,
-					totalCost: b.totalCost, totalPayout: b.totalPayout, totalReturn: b.totalReturn,
-					totalReturnPct: retPct, tradeCount: b.tradeCount, marketIds: b.marketIds,
+					totalCost: finalCost,
+					totalPayout: payout,
+					totalReturn,
+					totalReturnPct: retPct,
+					tradeCount,
+					marketIds: b.marketIds,
 				});
 			}
 			return { block, rows };
 		});
-	}, [unifiedBlocks, orders, returnsByQid, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
+	}, [unifiedBlocks, allOrders, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
 
 	if (unifiedBlocks.length === 0) {
 		return (

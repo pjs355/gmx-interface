@@ -218,7 +218,6 @@ export default function Positions() {
 		!isMobile ? (
 			<HistoryView
 				umbrellaBalances={umbrellaBalancesPositions}
-				returnsByQid={returnsByQid}
 				orders={combinedOrders}
 				resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
 				venueHistory={venueHistory}
@@ -229,7 +228,6 @@ export default function Positions() {
 		) : (
 			<HistoryCardView
 				umbrellaBalances={umbrellaBalancesPositions}
-				returnsByQid={returnsByQid}
 				orders={combinedOrders}
 				resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
 				venueHistory={venueHistory}
