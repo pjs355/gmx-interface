@@ -34,7 +34,7 @@ import type { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import {
 	UMBRELLA_RESOLVE_EXCHANGE_MAX_QUERIES,
 	postUmbrellaResolveExchangeKeysChunked,
-} from "./venues/shared/postUmbrellaResolveExchangeKeysChunked";
+} from "../venues/shared/postUmbrellaResolveExchangeKeysChunked";
 
 type PrivateApi = ReturnType<typeof usePrivateApiClient>;
 
