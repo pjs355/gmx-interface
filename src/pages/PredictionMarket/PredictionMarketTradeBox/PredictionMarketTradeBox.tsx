@@ -98,6 +98,7 @@ import type {
 	RoutePlan,
 } from "@/trading/sor";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
+import { applyOptimisticPolymarketFillToQueryCache } from "@/trading/polymarket/optimisticPolymarketPositionsCache";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import { maxAllMarketsSellBidForOutcome } from "@/hooks/useTradingPagePrices";
@@ -123,7 +124,8 @@ import {
 
 /** Same moment as "Order Submitted!" — on-chain/API balances often lag LI.FI + venue fills. */
 const POST_SOR_BALANCE_POLL_INTERVAL_MS = 2_500;
-const POST_SOR_BALANCE_POLL_WINDOW_MS = 30_000;
+/** Polymarket Data API indexing can exceed 30s; optimistic merge covers UX; keep polling long enough for collateral + indexer. */
+const POST_SOR_BALANCE_POLL_WINDOW_MS = 75_000;
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
@@ -499,7 +501,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictTokenIdForPosition,
     predictMarketDetail?.isNegRisk ?? false,
     predictMarketDetail?.isYieldBearing ?? false,
-    predictVenueActive &&
+    (multiVenueEnabled || predictVenueActive) &&
       authenticated &&
       Boolean(predictTokenIdForPosition)
   );
@@ -597,6 +599,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return monitorBookToOrderbookSnapshot(lxRaw);
     }
     if (state.tradingVenue === "dflow") {
+      /** Monitor `dflowPrice*` only — not `DflowBookClient` / `directBooks` (those feed cross-venue display). */
       const dflowRaw = dflowKalshiOrderbookForPosition(
         matchedMonitor,
         state.selectedPosition ?? "yes",
@@ -1917,8 +1920,20 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       });
 
     if (wasExecuting && !sorExecution.isExecuting && sorExecution.execution) {
-      void invalidatePostTradeBalances();
       const { status, legs } = sorExecution.execution;
+
+      if (status === "complete") {
+        applyOptimisticPolymarketFillToQueryCache(
+          queryClient,
+          funding.polymarketSafe,
+          sorRouteRef.current as RoutePlan | null | undefined,
+          sorExecution.execution,
+          matchedMonitor ?? null,
+          String(market?.displayName ?? market?.question ?? umbrellaDisplayName ?? "").trim(),
+        );
+      }
+
+      void invalidatePostTradeBalances();
       if (status === "complete") {
         setState((s) => ({ ...s, amount: "", orderResult: { success: true } }));
         pollInterval = setInterval(() => {
@@ -1927,6 +1942,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         pollWindowTimer = setTimeout(() => {
           if (pollInterval !== undefined) clearInterval(pollInterval);
         }, POST_SOR_BALANCE_POLL_WINDOW_MS);
+        sorExecution.resetExecution();
       } else if (status === "failed" || status === "partial") {
         const failedLeg = legs.find((l) => l.status === "failed");
         setState((s) => ({
@@ -1947,7 +1963,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       if (pollInterval !== undefined) clearInterval(pollInterval);
       if (pollWindowTimer !== undefined) clearTimeout(pollWindowTimer);
     };
-  }, [sorExecution.isExecuting, sorExecution.execution, queryClient, setState, refreshTokenPositions, collateralTokens]);
+  }, [
+    sorExecution.isExecuting,
+    sorExecution.execution,
+    sorExecution.resetExecution,
+    queryClient,
+    setState,
+    refreshTokenPositions,
+    collateralTokens,
+    funding.polymarketSafe,
+    matchedMonitor,
+    market,
+    umbrellaDisplayName,
+  ]);
 
   useEffect(() => {
     if (pandaId && state.tradingVenue !== "all") {
@@ -2043,10 +2071,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         // response matches the current amount and is not stale (otherwise show local book walk).
         const sr = sorRoute.route;
         const inputAmount = parseFloat(state.amount) || 0;
+        // Cent-rounded match: float drift on requestedAmount vs typed amount must not
+        // disable the overlay — otherwise we fall back to local book walk (wrong $ / shares).
         const sorMatchesInput =
           sr &&
           sr.legs.length > 0 &&
-          Math.abs(sr.requestedAmount - inputAmount) < 0.0001;
+          inputAmount > 0 &&
+          Math.round(sr.requestedAmount * 100) === Math.round(inputAmount * 100);
         const hasSorData =
           sorMatchesInput &&
           !sorRoute.isStale &&
@@ -2056,26 +2087,32 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         if (hasSorData && state.orderType === "market") {
           const leg = sr.legs[0];
           const shareVenueCfg = getVenueConfig(state.tradingVenue);
-          const sorContracts = shareVenueCfg.requiresWholeShares
+          const sorContractsRaw = shareVenueCfg.requiresWholeShares
             ? Math.floor(sr.totalShares)
             : sr.totalShares;
-          const sorCost = sr.totalCost;
-          const sorFee = sr.totalFees;
+          const sorContracts = Number.isFinite(sorContractsRaw)
+            ? sorContractsRaw
+            : undefined;
+          const sorCost = Number.isFinite(sr.totalCost) ? sr.totalCost : undefined;
+          const sorFee = Number.isFinite(sr.totalFees) ? sr.totalFees : undefined;
 
           if (state.side === "buy") {
             return {
               ...state,
-              calculatedContracts: sorContracts || bookData.calculatedContracts,
+              calculatedContracts: sorContracts ?? bookData.calculatedContracts,
               remainingUsd: bookData.remainingUsd,
-              spent: sorCost > 0 ? sorCost - sorFee : bookData.spent,
-              tradingFee: sorFee || bookData.tradingFee,
-              estimatedCost: sorCost || bookData.estimatedCost,
+              spent:
+                sorCost !== undefined && sorFee !== undefined
+                  ? sorCost - sorFee
+                  : bookData.spent,
+              tradingFee: sorFee ?? bookData.tradingFee,
+              estimatedCost: sorCost ?? bookData.estimatedCost,
               grossReceive: null,
               sellTradingFee: null,
               netReceive: null,
             };
           }
-          // Sell
+          // Sell — leg.executionAmountUsd is net proceeds (matches chain settlement target).
           const legProceedsUsd =
             typeof leg.executionAmountUsd === "number" &&
             Number.isFinite(leg.executionAmountUsd) &&
@@ -2084,17 +2121,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
               : null;
           return {
             ...state,
-            calculatedContracts: sorContracts || bookData.calculatedContracts,
+            calculatedContracts: sorContracts ?? bookData.calculatedContracts,
             remainingUsd: bookData.remainingUsd,
             spent: null,
             tradingFee: null,
             estimatedCost: null,
             grossReceive: legProceedsUsd ?? bookData.grossReceive,
-            sellTradingFee: sorFee || bookData.sellTradingFee,
-            netReceive:
-              legProceedsUsd != null
-                ? legProceedsUsd - sorFee
-                : bookData.netReceive,
+            sellTradingFee: sorFee ?? bookData.sellTradingFee,
+            netReceive: legProceedsUsd ?? bookData.netReceive,
           };
         }
 

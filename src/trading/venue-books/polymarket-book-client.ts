@@ -1,3 +1,8 @@
+/**
+ * Live Polymarket CLOB order book via official market WebSocket. Used by umbrella
+ * pricing / direct venue books; includes reconnect + staleness so we can degrade
+ * gracefully. See `../polymarket/POLYMARKET_TRADING.md` §5.
+ */
 import { parseObjectBook, extractBestPrices } from "./orderbook-helpers";
 import type { VenueBook, VenueBestPrices } from "./types";
 

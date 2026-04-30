@@ -58,4 +58,17 @@ export class PredictionsPage {
 			timeout: 60_000,
 		});
 	}
+
+	/**
+	 * Full reload so positions / balances refetch (same pattern as `openUmbrellaTradingPageById`).
+	 * Call after a successful fill when `MyPositionsRow` lags the chain until refresh.
+	 */
+	async reloadUmbrellaPageForE2eBalances(): Promise<void> {
+		await this.page.reload({ waitUntil: "load" });
+		await new Promise((r) => setTimeout(r, POST_UMBRELLA_RELOAD_SETTLE_MS));
+		await tradeboxRootLocator(this.page).waitFor({
+			state: "visible",
+			timeout: 60_000,
+		});
+	}
 }

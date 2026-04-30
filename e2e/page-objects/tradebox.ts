@@ -37,11 +37,30 @@ const BETWEEN_TRADEBOX_ACTIONS_MS = 200;
 
 /** SOR route + price quote should arrive after a $5 buy/sell amount is typed. */
 const QUOTE_READY_TIMEOUT_MS = 30_000;
+/**
+ * Single-venue Details row `[data-qa="sor-leg"][data-leg-side="market-sell"]` only mounts
+ * when `sellAvgCents` is non-null (`PredictionMarketTradeBoxUI.tsx`). That can lag
+ * `expectSubmitEnabled()` — especially Polymarket/Polygon after a fill — so do not use
+ * the same 30s cap as buy legs. This is independent of header Cash polling
+ * (`e2e/helpers/header-cash.ts`).
+ */
+const MARKET_SELL_LEG_TIMEOUT_MS = 90_000;
 /** Poll until amount field has a value and Trade is enabled, then click. */
 const SUBMIT_READY_TIMEOUT_MS = 60_000;
 const SUBMIT_POLL_MS = 150;
 /** Buy fill → /predict (or other) positions API → React Query refetch can take seconds. */
 const SHARES_VISIBLE_TIMEOUT_MS = 60_000;
+/**
+ * DFlow positions come from on-chain trade history (`/api/dflow/onchain-trades`), not a
+ * fast REST inventory — indexing / RPC lag after a fill routinely exceeds other venues.
+ * E2E: use this for `waitForBuyShares*` / `waitForSharesCleared` when `venueKey === "dflow"`.
+ */
+export const SHARES_VISIBLE_TIMEOUT_DFLOW_MS = 180_000;
+
+/** Longer share-row polling for Kalshi/DFlow on-chain lag; other venues use 60s (`SHARES_VISIBLE_TIMEOUT_MS`). */
+export function sharesVisiblePollTimeoutMsForVenueKey(venueKey: string): number {
+	return venueKey === "dflow" ? SHARES_VISIBLE_TIMEOUT_DFLOW_MS : SHARES_VISIBLE_TIMEOUT_MS;
+}
 const SHARES_POLL_MS = 500;
 
 export type LegSide = "limit" | "market-buy" | "market-sell";
@@ -202,11 +221,15 @@ export class Tradebox {
 		legSide: LegSide,
 		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
 	): Promise<LegAttrs> {
+		const effectiveTimeout =
+			legSide === "market-sell" && timeoutMs === QUOTE_READY_TIMEOUT_MS
+				? MARKET_SELL_LEG_TIMEOUT_MS
+				: timeoutMs;
 		await this.expandSorDetailsIfCollapsed();
 		const leg = this.root.locator(
 			`[data-qa="sor-leg"][data-leg-side="${legSide}"]`,
 		);
-		await leg.waitFor({ state: "visible", timeout: timeoutMs });
+		await leg.waitFor({ state: "visible", timeout: effectiveTimeout });
 		const venue = await leg.getAttribute("data-leg-venue");
 		const numSharesAttr = await leg.getAttribute("data-leg-num-shares");
 		const priceCentsAttr = await leg.getAttribute("data-leg-price-cents");
@@ -283,8 +306,29 @@ export class Tradebox {
 	}
 
 	/**
+	 * Current cumulative shares on the buy-side `MyPositionsRow` (same attribute as
+	 * {@link waitForBuyShares}), or `0` if the row is absent / unreadable — baseline
+	 * for delta-vs-quote assertions after a fill.
+	 */
+	async readBuyRowTotalSharesOrZero(): Promise<number> {
+		const row = this.root.locator(
+			'[data-qa="my-positions-row"][data-qa-side="buy"]',
+		);
+		const visible = await row.isVisible().catch(() => false);
+		if (!visible) return 0;
+		const sharesAttr = await row.getAttribute("data-qa-shares-count");
+		if (sharesAttr === null || sharesAttr.trim() === "") return 0;
+		const parsed = Number(sharesAttr);
+		return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+	}
+
+	/**
 	 * Poll the buy-side `MyPositionsRow` until it reports > 0 shares.
 	 * Replaces the old fixed `await sleep(5000)` with a deterministic signal.
+	 *
+	 * If the account already holds shares on this outcome, use
+	 * {@link waitForBuySharesIncreaseSince} so we wait for the **post-fill** bump,
+	 * not the first `> 0` poll (which would return immediately).
 	 */
 	async waitForBuyShares(
 		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS,
@@ -311,6 +355,43 @@ export class Tradebox {
 		throw new Error(
 			`waitForBuyShares: my-positions-row[data-qa-side="buy"] never reported > 0 shares within ${timeoutMs}ms ` +
 				`(after a successful fill confirmation). Likely positions API lag, query staleness, or position-to-market mismatch.`,
+		);
+	}
+
+	/**
+	 * Like {@link waitForBuyShares}, but when `sharesBefore > 0` waits until the
+	 * cumulative buy row **strictly exceeds** that baseline (new fill reflected).
+	 */
+	async waitForBuySharesIncreaseSince(
+		sharesBefore: number,
+		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS,
+	): Promise<number> {
+		const row = this.root.locator(
+			'[data-qa="my-positions-row"][data-qa-side="buy"]',
+		);
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			const visible = await row.isVisible().catch(() => false);
+			if (visible) {
+				const sharesAttr = await row.getAttribute(
+					"data-qa-shares-count",
+				);
+				if (sharesAttr !== null) {
+					const parsed = Number(sharesAttr);
+					const ok =
+						sharesBefore <= 0
+							? Number.isFinite(parsed) && parsed > 0
+							: Number.isFinite(parsed) && parsed > sharesBefore;
+					if (ok) {
+						return parsed;
+					}
+				}
+			}
+			await new Promise((r) => setTimeout(r, SHARES_POLL_MS));
+		}
+		throw new Error(
+			`waitForBuySharesIncreaseSince: buy row never ${sharesBefore <= 0 ? "reported > 0" : `exceeded baseline ${sharesBefore}`} within ${timeoutMs}ms ` +
+				`(after fill confirmation).`,
 		);
 	}
 
@@ -349,12 +430,14 @@ export class Tradebox {
 		const failure = this.root.locator(
 			'[data-qa="tradebox-fill-confirmation"][data-qa-fill-status="error"]',
 		);
+		// Outcome node is a visually clipped sentinel (`trade-notification-e2e-sentinel`), not a toast —
+		// `visible` would time out even when the fill completed.
 		const winner = await Promise.race([
 			success
-				.waitFor({ state: "visible", timeout: FILL_TIMEOUT_MS })
+				.waitFor({ state: "attached", timeout: FILL_TIMEOUT_MS })
 				.then(() => "success" as const),
 			failure
-				.waitFor({ state: "visible", timeout: FILL_TIMEOUT_MS })
+				.waitFor({ state: "attached", timeout: FILL_TIMEOUT_MS })
 				.then(() => "error" as const),
 		]);
 		if (winner === "error") {

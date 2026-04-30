@@ -36,12 +36,10 @@ export interface VenueBestPrices {
  *       and multi-venue optimization overhead. If slow for single-venue,
  *       consider a fast path: skip optimizer, just walkBook → return single leg.
  *
- *  3. VERIFY DFlow WS without API key
- *     ─ Test: can the browser connect to
- *       wss://dev-prediction-markets-api.dflow.net/api/v1/ws
- *       without the x-api-key header?
- *     ─ Test: can GET /api/v1/orderbook/<ticker> be called without the key?
- *     ─ If either fails, the frontend falls back to server's /ws/venue-prices
- *       for DFlow automatically (dflowFallback flag).
+ *  3. DFlow browser paths
+ *     ─ WS: keyless `wss://.../api/v1/ws` (see DflowBookClient).
+ *     ─ REST seed: `GET {predictionApi}/api/public/dflow-orderbook?ticker=` (server attaches
+ *       Metadata `x-api-key` / relay); prod Metadata returns 403 without a key.
+ *     ─ If WS fails outright, `dflowFallback` still flags fallback to venue-prices WS.
  * ═══════════════════════════════════════════════════════════════════
  */

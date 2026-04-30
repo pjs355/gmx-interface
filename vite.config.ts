@@ -33,19 +33,17 @@ function createViteLoggerWithoutBaseOrgSourcemapNoise(): Logger {
 }
 
 /**
- * Dev-only: tunnels browser requests through Railway `/proxy` (EU egress).
+ * Dev-only: tunnels browser requests through Railway `/proxy` (same `VITE_POLY_PROXY_URL` / token as other routes).
  *
  * - `/polymarket-clob/*` → `https://clob.polymarket.com/*` (geo + CLOB signing)
- * - `/private-api-proxy/*` → **LIVE only**: `POST /api/predict/orders` to Railway EU upstream (default prod API).
- *   **TEST/DEV** (`VITE_ENVIRONMENT_MODE` testnet | local-production): order target defaults to local private API host.
- *   Client only uses this prefix in LIVE; Polymarket CLOB unchanged.
+ * - `/private-api-proxy/*` → `POST /api/predict/orders` to Railway EU upstream (`predictProxyTarget`)
+ * - `/limitless-exchange-proxy/*` → `https://api.limitless.exchange/*` (Limitless public GETs, e.g. orderbook)
+ *
+ * Limitless `api.limitless.exchange` blocks browser CORS. Without CLOB proxy: optional same-origin
+ * `/__limitless-api/...` → direct Node `https.get` (legacy fallbacks).
  *
  * Railway /proxy expects: POST { url, method, headers?, body? }
  * Railway /proxy returns: { status, data, ... }
- */
-/**
- * Limitless `api.limitless.exchange` blocks browser CORS. Dev server rewrites same-origin
- * `/__limitless-api/markets/:slug/orderbook` → upstream (see `fetchLimitlessPublicOrderbook.ts`).
  */
 function installLimitlessExchangeProxy(
 	middlewares: import("connect").Server,
@@ -137,7 +135,12 @@ function railwayDevProxyPlugin(
 									pathPrefix: "/private-api-proxy",
 									upstreamOrigin: apiBase,
 							  }
-						  : null;
+						  : url.startsWith("/limitless-exchange-proxy")
+						    ? {
+										pathPrefix: "/limitless-exchange-proxy",
+										upstreamOrigin: "https://api.limitless.exchange",
+							  }
+						    : null;
 
 				if (!route) return next();
 

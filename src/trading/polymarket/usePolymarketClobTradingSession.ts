@@ -27,6 +27,12 @@ import {
 	type Eip1193Like,
 } from "./polymarketOrderDebug";
 
+/**
+ * Polymarket CLOB trading session: derives L2 API credentials with the embedded EOA,
+ * then builds a `ClobClient` with `POLY_GNOSIS_SAFE` + Safe funder so orders settle
+ * against the Polymarket Safe. See `POLYMARKET_TRADING.md` in this folder for the
+ * full wallet, collateral, and Data API model.
+ */
 const CLOB_HOST =
 	import.meta.env.VITE_POLYMARKET_CLOB_PROXY === "true"
 		? "/polymarket-clob"

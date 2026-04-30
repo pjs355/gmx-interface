@@ -9,6 +9,7 @@
 }
 
 .prediction-market-tradebox {
+	position: relative;
 	background: black;
 	border-radius: 12px;
 	padding: 15px;
@@ -995,52 +996,30 @@
 		}
 	}
 
-	.trade-notification {
-		position: fixed;
-		bottom: 20px;
-		right: 20px;
-		animation: slideIn 0.3s ease-out;
-
-		&.success {
-			background: black;
-			border: none;
-		}
-
-		&.error {
-			background: black;
-			border: none;
-		}
-
-		.notification-content {
-			display: flex;
-			align-items: center;
-			gap: 8px;
-			padding: 12px 16px;
-			border-radius: 12px;
-			color: #ffffff;
-			font-weight: 500;
-			font-size: 14px;
-			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-			background: black;
-			border: 1px solid #4b5563;
-			backdrop-filter: blur(10px);
-			-webkit-backdrop-filter: blur(10px);
-
-			.notification-text {
-				white-space: nowrap;
-			}
-		}
+	/* Outcome for Playwright `waitForFill` — not shown as a toast (see `PredictionMarketTradeBoxUI.tsx`). */
+	.trade-notification-e2e-sentinel {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+		border: 0;
+		pointer-events: none;
 	}
 
-	@keyframes slideIn {
-		from {
-			transform: translateX(100%);
-			opacity: 0;
-		}
-		to {
-			transform: translateX(0);
-			opacity: 1;
-		}
+	.trade-notification-e2e-sentinel__label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+		border: 0;
 	}
 
 	.wallet-required {

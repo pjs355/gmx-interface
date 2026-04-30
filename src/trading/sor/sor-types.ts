@@ -62,6 +62,8 @@ export interface RouteLeg {
 	outcome: SorOutcome;
 	shares: number;
 	avgPrice: number;
+	/** Kalshi: expected USDC settlement when whole contracts differ from GET /order cap. */
+	settlementUsd?: number;
 	executionAmountUsd: number;
 	fee: number;
 	priceImpact: number;
@@ -207,6 +209,7 @@ export type SorErrorCode =
 	| "ROUTE_EXPIRED"
 	| "INVALID_HMAC"
 	| "VALIDATION_ERROR"
+	| "WHOLE_SHARES_ONLY"
 	| "EXECUTION_NOT_READY"
 	| "THEORETICAL_ROUTE_NOT_EXECUTABLE"
 	| "INSUFFICIENT_FUNDS";
@@ -215,6 +218,8 @@ export interface RouteErrorResponse {
 	success: false;
 	error: string;
 	code: SorErrorCode;
+	/** Present on some validation responses (e.g. Kalshi whole-share hint). */
+	tone?: "warning" | "error";
 }
 
 export type SorRouteResult = RouteResponse | RouteErrorResponse;

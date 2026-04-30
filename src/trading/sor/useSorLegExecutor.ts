@@ -522,7 +522,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					};
 				}
 
-				// ─── Polymarket (Polygon, pUSD) ───────────
+				// ─── Polymarket (Polygon, pUSD) — session, JIT approvals, wrap USDC.e→pUSD
+				// before buys; see `src/trading/polymarket/POLYMARKET_TRADING.md`.
 				case "polymarket": {
 					if (!polyClob.ready) {
 						return { filled: false, filledShares: 0, error: "Polymarket CLOB session not ready. Open Polymarket tab first to initialize." };

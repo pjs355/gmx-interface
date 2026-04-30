@@ -30,6 +30,7 @@ import {
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
 	lookupUmbrellaByDflowEventTicker,
+	mintMatchesDflowExchange,
 } from "@/trading/dflow/dflowUmbrellaLookup";
 import type { TradingVenue } from "../types";
 
@@ -74,6 +75,7 @@ export type TradeBoxShareBalancesSnapshot = {
 	allMarketsOutcomeVenueShares: { yes: Record<string, number>; no: Record<string, number> } | null;
 };
 
+/** Match venue row to open umbrella for trade-box share breakdown. DFlow: event ticker then mint — same contract as {@link matchVenuePositionToUmbrella}. */
 function umbrellaForPosition(
 	pos: VenuePosition,
 	umbrellas: Umbrella[],
@@ -88,11 +90,20 @@ function umbrellaForPosition(
 	if (pos.venue === "dflow") {
 		const et = pos.dflowEventTicker?.trim();
 		if (et) {
-			return lookupUmbrellaByDflowEventTicker(et, dflowEventTickerLookup, umbrellas);
+			const byEt = lookupUmbrellaByDflowEventTicker(
+				et,
+				dflowEventTickerLookup,
+				umbrellas,
+			);
+			if (byEt) return byEt;
 		}
 		if (pos.tokenId?.trim()) {
-			const hit = dflowMintLookup.get(pos.tokenId.trim());
+			const mint = pos.tokenId.trim();
+			const hit = dflowMintLookup.get(mint);
 			if (hit) return hit;
+			for (const u of umbrellas) {
+				if (mintMatchesDflowExchange(u.exchangeMatching?.dflow, mint)) return u;
+			}
 		}
 	}
 	return (
@@ -178,8 +189,12 @@ function polymarketPositionToYesNo(
 	const pageCid = pageMatchedMonitor
 		? String(pageMatchedMonitor.polyConditionId ?? "").trim()
 		: "";
+	const cidKey = polymarketConditionLookupKey(cid);
+	const pageCidKey = polymarketConditionLookupKey(pageCid);
 	const matchedFromPage =
-		pageMatchedMonitor && cid && pageCid && cid === pageCid ? pageMatchedMonitor : null;
+		pageMatchedMonitor && cidKey && pageCidKey && cidKey === pageCidKey
+			? pageMatchedMonitor
+			: null;
 	const matched =
 		matchedFromPage ?? findMatchedMarketByPolyConditionId(matchedMarkets, p.conditionId);
 	if (matched) {
@@ -334,6 +349,7 @@ export function useTradeBoxShareBalances(opts: {
 		const polyMonitorCid = pageMatchedMonitor
 			? String(pageMatchedMonitor.polyConditionId ?? "").trim()
 			: "";
+		const polyMonitorKey = polymarketConditionLookupKey(polyMonitorCid);
 
 		for (const p of [
 			...(polyQ.data ?? []),
@@ -345,9 +361,11 @@ export function useTradeBoxShareBalances(opts: {
 			if (seen.has(k)) continue;
 
 			let keep = false;
-			if (p.venue === "polymarket" && polyMonitorCid) {
-				const pc = String(p.conditionId ?? "").trim();
-				if (pc === polyMonitorCid) keep = true;
+			if (p.venue === "polymarket" && polyMonitorKey) {
+				const pcKey = polymarketConditionLookupKey(
+					String(p.conditionId ?? "").trim(),
+				);
+				if (pcKey && pcKey === polyMonitorKey) keep = true;
 			}
 			if (!keep && p.venue === "limitless" && umbrellaId) {
 				const uTarget = umbrellas.find((u) => u._id === umbrellaId);

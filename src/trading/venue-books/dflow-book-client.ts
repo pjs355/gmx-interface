@@ -1,8 +1,17 @@
+import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { orderbookFromYesNoBidDecimalMaps, extractBestPrices } from "./orderbook-helpers";
 import type { VenueBook, VenueBestPrices } from "./types";
 
+/**
+ * DFlow display books (Basic tab / cross-venue strip / orderbooks panel):
+ * - **WS:** browser → Metadata `VITE_DFLOW_WS_URL` (keyless), deltas keyed by `market_ticker`.
+ * - **REST seed:** browser → **prediction API** `GET /api/public/dflow-orderbook?ticker=` (server adds
+ *   `x-api-key` / relay) — not direct `dev-prediction-markets-api.dflow.net` (prod orderbooks return **403**
+ *   without a key). Same `yes_bids` / `no_bids` JSON as Metadata.
+ * Kalshi **trade** sizing in `PredictionMarketTradeBox` uses **venue-prices monitor** books only
+ * (`dflowKalshiOrderbookForPosition`); executable quotes use private `/api/dflow/...` — this client does not change those paths.
+ */
 const DEFAULT_WS = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
-const DEFAULT_REST = "https://dev-prediction-markets-api.dflow.net";
 
 function readEnvTrim(key: string): string | null {
 	if (typeof import.meta.env === "undefined") return null;
@@ -11,7 +20,6 @@ function readEnvTrim(key: string): string | null {
 }
 
 /** Must match catalog where Kalshi/DFlow tickers exist (wrong host → REST 404). */
-const REST_BASE = readEnvTrim("VITE_DFLOW_REST_BASE") ?? DEFAULT_REST;
 const WS_URL = readEnvTrim("VITE_DFLOW_WS_URL") ?? DEFAULT_WS;
 const RECONNECT_MAX = 25;
 const PING_INTERVAL_MS = 15_000;
@@ -31,7 +39,7 @@ export class DflowBookClient {
 	private readonly handlers: DflowWsHandlers;
 	private wanted = new Set<string>();
 	private seededTickers = new Set<string>();
-	/** Tickers whose REST seed returned 404 — not on this DFlow host; skip repeat fetches until reconnect. */
+	/** Tickers whose REST seed returned 404 from upstream (via prediction proxy); skip repeat fetches until reconnect. */
 	private restUnavailableTickers = new Set<string>();
 	private rest404Logged = new Set<string>();
 	private reconnectAttempt = 0;
@@ -203,6 +211,11 @@ export class DflowBookClient {
 		}
 	}
 
+	private orderbookSeedRequestUrl(ticker: string): string {
+		const base = getPredictionApiBaseUrl().replace(/\/$/, "");
+		return `${base}/api/public/dflow-orderbook?ticker=${encodeURIComponent(ticker)}`;
+	}
+
 	private scheduleReconnect(): void {
 		if (this.closedByUser) return;
 		const attempt = this.reconnectAttempt++;
@@ -259,7 +272,7 @@ export class DflowBookClient {
 			const batch = pending.slice(i, i + REST_SEED_CONCURRENCY);
 			const results = await Promise.allSettled(
 				batch.map(async (ticker) => {
-					const url = `${REST_BASE}/api/v1/orderbook/${encodeURIComponent(ticker)}`;
+					const url = this.orderbookSeedRequestUrl(ticker);
 					const res = await fetch(url, {
 						signal: AbortSignal.timeout(10_000),
 					});
@@ -269,7 +282,7 @@ export class DflowBookClient {
 							if (!this.rest404Logged.has(ticker)) {
 								this.rest404Logged.add(ticker);
 								console.warn(
-									`[DFlowBookClient] Orderbook REST 404 for "${ticker}" at ${REST_BASE} — ticker not on this DFlow env; skipping further REST seed until reconnect.`,
+									`[DFlowBookClient] Orderbook REST 404 for "${ticker}" (prediction API dflow-orderbook proxy) — upstream Metadata not found for this ticker; skipping further REST seed until reconnect.`,
 								);
 							}
 						}

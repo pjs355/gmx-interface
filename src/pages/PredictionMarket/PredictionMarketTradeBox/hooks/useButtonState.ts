@@ -264,6 +264,13 @@ function sorUnifiedPrimary(
 				onClick: () => {},
 			};
 		}
+		if (sorState.routeErrorCode === "WHOLE_SHARES_ONLY") {
+			return {
+				text: "Enter whole share amount",
+				disabled: true,
+				onClick: () => {},
+			};
+		}
 		// Distinguish "books still loading" / "market just resolved" — those
 		// are naturally transient — from "no venue can serve this size".
 		// Prevents the blanket "Route unavailable" that used to pop every
@@ -502,6 +509,13 @@ export function useButtonState({
         if (sorState.routeErrorCode === "AMOUNT_TOO_SMALL") {
           return {
             text: sorState.error || "Below trade minimum. Increase trade size",
+            disabled: true,
+            onClick: () => {},
+          };
+        }
+        if (sorState.routeErrorCode === "WHOLE_SHARES_ONLY") {
+          return {
+            text: "Enter whole share amount",
             disabled: true,
             onClick: () => {},
           };

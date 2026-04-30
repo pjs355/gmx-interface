@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import Tooltip from "components/Tooltip/Tooltip";
 import { useAnimatedDots } from "@/hooks/useAnimatedDots";
 import { SorTransientRouteErrorText } from "./SorTransientRouteErrorText";
-import type { RoutePlan } from "./sor-types";
+import type { RoutePlan, SorErrorCode } from "./sor-types";
 import type { SorExecutionPhase, SorPrefundLegProgress } from "./useSorExecution";
 import {
 	VENUE_DISPLAY_NAMES,
@@ -23,6 +23,8 @@ interface SorRouteDisplayProps {
 	route: RoutePlan | null;
 	isLoading: boolean;
 	error: string | null;
+	/** When set, styles the error row (e.g. Kalshi whole-share hint = warning yellow). */
+	routeErrorCode?: SorErrorCode | null;
 	isStale: boolean;
 	onExecute: () => void;
 	onFallback: () => void;
@@ -65,6 +67,7 @@ export function SorRouteDisplay({
 	route,
 	isLoading,
 	error,
+	routeErrorCode = null,
 	isStale,
 	onExecute,
 	onFallback,
@@ -92,12 +95,21 @@ export function SorRouteDisplay({
 	}
 
 	if (error && !isLoading) {
+		const rawErr = error;
+		const kalshiHint =
+			routeErrorCode === "WHOLE_SHARES_ONLY" ||
+			rawErr.includes("Fractional share amounts are not supported on Kalshi");
+		const displayErr = rawErr.replace(/^\s*Route unavailable:\s*/i, "").trim();
+		const warn = kalshiHint;
+		const boxStyle = warn ? styles.warningBox : styles.errorBox;
+		const iconStyle = warn ? styles.warningIcon : styles.errorIcon;
 		return (
 			<div style={styles.container}>
-				<div style={styles.errorBox}>
-					<span style={styles.errorIcon}>!</span>
-					<span>
-						Route unavailable: <SorTransientRouteErrorText message={error} />
+				<div style={boxStyle}>
+					<span style={iconStyle}>!</span>
+					<span style={warn ? { color: "#eab308" } : undefined}>
+						{warn ? "" : "Route unavailable: "}
+						<SorTransientRouteErrorText message={displayErr} />
 					</span>
 				</div>
 				<button type="button" onClick={onFallback} style={styles.fallbackBtn}>
@@ -407,11 +419,34 @@ const styles: Record<string, React.CSSProperties> = {
 		borderRadius: 6,
 		backgroundColor: "rgba(239, 68, 68, 0.08)",
 	},
+	warningBox: {
+		display: "flex",
+		alignItems: "center",
+		gap: 8,
+		fontSize: 13,
+		color: "#eab308",
+		padding: "8px 12px",
+		borderRadius: 6,
+		backgroundColor: "rgba(234, 179, 8, 0.12)",
+	},
 	errorIcon: {
 		width: 18,
 		height: 18,
 		borderRadius: "50%",
 		backgroundColor: "#ef4444",
+		color: "#fff",
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "center",
+		fontSize: 11,
+		fontWeight: 700,
+		flexShrink: 0,
+	},
+	warningIcon: {
+		width: 18,
+		height: 18,
+		borderRadius: "50%",
+		backgroundColor: "#ca8a04",
 		color: "#fff",
 		display: "flex",
 		alignItems: "center",

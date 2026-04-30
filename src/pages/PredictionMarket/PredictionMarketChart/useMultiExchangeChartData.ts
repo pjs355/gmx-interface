@@ -32,6 +32,8 @@ interface Args {
 	pandaMatchId?: string;
 	levelUpChartData: ChartDataPoint[];
 	timeRange: TimeRange;
+	/** When false, LevelUp history/live/Best Odds omit REST-backed LevelUp (empty book). */
+	includeLevelUp: boolean;
 }
 
 const LIVE_BUCKET_SEC = 3;
@@ -67,9 +69,17 @@ function bestAskDisplay100(book: OrderbookData | null | undefined): number | und
 	return x * 100;
 }
 
-function attachBestOdds(point: MergedExchangePoint): MergedExchangePoint {
-	const aKeys = ["levelUp", "polymarket", "kalshi", "predictFun", "limitless"] as const;
-	const bKeys = ["levelUpB", "polymarketB", "kalshiB", "predictFunB", "limitlessB"] as const;
+/** Recompute bestOdds / bestOddsB; when includeLevelUp is false, LevelUp is excluded from the min (and from stale rows). */
+export function attachBestOddsToMergedPoint(
+	point: MergedExchangePoint,
+	includeLevelUp: boolean,
+): MergedExchangePoint {
+	const aKeys = includeLevelUp
+		? (["levelUp", "polymarket", "kalshi", "predictFun", "limitless"] as const)
+		: (["polymarket", "kalshi", "predictFun", "limitless"] as const);
+	const bKeys = includeLevelUp
+		? (["levelUpB", "polymarketB", "kalshiB", "predictFunB", "limitlessB"] as const)
+		: (["polymarketB", "kalshiB", "predictFunB", "limitlessB"] as const);
 	const teamA: number[] = [];
 	for (const k of aKeys) {
 		const v = point[k];
@@ -178,6 +188,7 @@ export function useMultiExchangeChartData({
 	pandaMatchId,
 	levelUpChartData,
 	timeRange,
+	includeLevelUp,
 }: Args): MultiExchangeChartResult {
 	const { getAccessToken } = usePrivy();
 	const [state, dispatch] = useReducer(reducer, initialState);
@@ -372,7 +383,8 @@ export function useMultiExchangeChartData({
 		const series: { venue: Venue; points: PricePoint[] }[] = [];
 		const seriesB: { venue: Venue; points: PricePoint[] }[] = [];
 
-		if (levelUpData.length > 0) series.push({ venue: "levelUp", points: levelUpData });
+		if (includeLevelUp && levelUpData.length > 0)
+			series.push({ venue: "levelUp", points: levelUpData });
 		if (poly.length > 0) series.push({ venue: "polymarket", points: poly });
 		if (kalshi.length > 0) series.push({ venue: "kalshi", points: kalshi });
 		if (predict.length > 0) series.push({ venue: "predictFun", points: predict });
@@ -382,11 +394,12 @@ export function useMultiExchangeChartData({
 		if (kalshiB.length > 0) seriesB.push({ venue: "kalshi", points: kalshiB });
 		if (predictB.length > 0) seriesB.push({ venue: "predictFun", points: predictB });
 		if (limitlessB.length > 0) seriesB.push({ venue: "limitless", points: limitlessB });
-		if (levelUpDataB.length > 0) seriesB.push({ venue: "levelUp", points: levelUpDataB });
+		if (includeLevelUp && levelUpDataB.length > 0)
+			seriesB.push({ venue: "levelUp", points: levelUpDataB });
 
 		if (series.length === 0) return [];
 		return mergeExchangeTimeSeries(series, timeRange, seriesB.length > 0 ? seriesB : undefined);
-	}, [levelUpData, levelUpDataB, state.venueData, timeRange]);
+	}, [levelUpData, levelUpDataB, state.venueData, timeRange, includeLevelUp]);
 
 	const liveOverlayPoint = useMemo((): MergedExchangePoint | null => {
 		if (!matchedLive) return null;
@@ -414,10 +427,12 @@ export function useMultiExchangeChartData({
 		if (lxa != null) pt.limitless = lxa;
 		if (lxb != null) pt.limitlessB = lxb;
 
-		const lua = bestAskDisplay100(m.levelUpPriceA as OrderbookData);
-		const lub = bestAskDisplay100(m.levelUpPriceB as OrderbookData);
-		if (lua != null) pt.levelUp = lua;
-		if (lub != null) pt.levelUpB = lub;
+		if (includeLevelUp) {
+			const lua = bestAskDisplay100(m.levelUpPriceA as OrderbookData);
+			const lub = bestAskDisplay100(m.levelUpPriceB as OrderbookData);
+			if (lua != null) pt.levelUp = lua;
+			if (lub != null) pt.levelUpB = lub;
+		}
 
 		if (
 			pt.polymarket === undefined &&
@@ -433,8 +448,8 @@ export function useMultiExchangeChartData({
 		) {
 			return null;
 		}
-		return attachBestOdds(pt);
-	}, [matchedLive, liveTick, appState?.timestamp]);
+		return attachBestOddsToMergedPoint(pt, includeLevelUp);
+	}, [matchedLive, liveTick, appState?.timestamp, includeLevelUp]);
 
 	const mergedWithLive = useMemo(() => {
 		const id = String(pandaMatchId ?? "").trim();
@@ -464,12 +479,12 @@ export function useMultiExchangeChartData({
 					? { limitlessB: liveOverlayPoint.limitlessB }
 					: {}),
 			};
-			return attachBestOdds(blended);
+			return attachBestOddsToMergedPoint(blended, includeLevelUp);
 		};
 
 		if (merged.length === 0) {
 			if (!id) return merged;
-			return [attachBestOdds({ ...liveOverlayPoint })];
+			return [attachBestOddsToMergedPoint({ ...liveOverlayPoint }, includeLevelUp)];
 		}
 
 		if (!id) return merged;
@@ -488,22 +503,35 @@ export function useMultiExchangeChartData({
 		}
 
 		const base = merged[lastIdx];
-		const extended: MergedExchangePoint = {
-			...base,
-			polymarket: liveOverlayPoint.polymarket ?? base.polymarket,
-			polymarketB: liveOverlayPoint.polymarketB ?? base.polymarketB,
-			kalshi: liveOverlayPoint.kalshi ?? base.kalshi,
-			kalshiB: liveOverlayPoint.kalshiB ?? base.kalshiB,
-			predictFun: liveOverlayPoint.predictFun ?? base.predictFun,
-			predictFunB: liveOverlayPoint.predictFunB ?? base.predictFunB,
-			limitless: liveOverlayPoint.limitless ?? base.limitless,
-			limitlessB: liveOverlayPoint.limitlessB ?? base.limitlessB,
-			levelUp: liveOverlayPoint.levelUp ?? base.levelUp,
-			levelUpB: liveOverlayPoint.levelUpB ?? base.levelUpB,
-			timestamp: t,
-		};
-		return [...merged, attachBestOdds(extended)];
-	}, [merged, liveOverlayPoint, pandaMatchId]);
+		const extended: MergedExchangePoint = includeLevelUp
+			? {
+					...base,
+					polymarket: liveOverlayPoint.polymarket ?? base.polymarket,
+					polymarketB: liveOverlayPoint.polymarketB ?? base.polymarketB,
+					kalshi: liveOverlayPoint.kalshi ?? base.kalshi,
+					kalshiB: liveOverlayPoint.kalshiB ?? base.kalshiB,
+					predictFun: liveOverlayPoint.predictFun ?? base.predictFun,
+					predictFunB: liveOverlayPoint.predictFunB ?? base.predictFunB,
+					limitless: liveOverlayPoint.limitless ?? base.limitless,
+					limitlessB: liveOverlayPoint.limitlessB ?? base.limitlessB,
+					levelUp: liveOverlayPoint.levelUp ?? base.levelUp,
+					levelUpB: liveOverlayPoint.levelUpB ?? base.levelUpB,
+					timestamp: t,
+				}
+			: {
+					...base,
+					polymarket: liveOverlayPoint.polymarket ?? base.polymarket,
+					polymarketB: liveOverlayPoint.polymarketB ?? base.polymarketB,
+					kalshi: liveOverlayPoint.kalshi ?? base.kalshi,
+					kalshiB: liveOverlayPoint.kalshiB ?? base.kalshiB,
+					predictFun: liveOverlayPoint.predictFun ?? base.predictFun,
+					predictFunB: liveOverlayPoint.predictFunB ?? base.predictFunB,
+					limitless: liveOverlayPoint.limitless ?? base.limitless,
+					limitlessB: liveOverlayPoint.limitlessB ?? base.limitlessB,
+					timestamp: t,
+				};
+		return [...merged, attachBestOddsToMergedPoint(extended, includeLevelUp)];
+	}, [merged, liveOverlayPoint, pandaMatchId, includeLevelUp]);
 
 	useEffect(() => {
 		if (!isLimitlessConsoleDebugEnabled()) return;
@@ -585,7 +613,8 @@ export function useMultiExchangeChartData({
 		error:
 			state.error ??
 			(noData ? "No price data available from any exchange" : null),
-		hasLevelUp: levelUpData.length > 0 || levelUpDataB.length > 0,
+		hasLevelUp:
+			includeLevelUp && (levelUpData.length > 0 || levelUpDataB.length > 0),
 		hasPolymarket: state.venueData.poly.length > 0,
 		hasKalshi: state.venueData.kalshi.length > 0,
 		hasPredictFun:

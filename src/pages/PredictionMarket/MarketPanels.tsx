@@ -15,6 +15,7 @@ import type { SettledInfo } from "./useMatchSettled";
 import {
 	getMarketId,
 	hasUsableOrderbookSnapshot,
+	levelUpOrderbookHasRestingShares,
 	resolveLevelUpOrderbookKey,
 } from "./utils";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
@@ -140,6 +141,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const levelUpOrderbook = levelUpOrderbookKey
 		? questionOrderbooks[levelUpOrderbookKey] ?? null
 		: null;
+	/** Chart LevelUp series: canonical REST book only (venue WS may still show depth in Orderbooks tab). */
+	const chartLevelUpBookHasRestingShares =
+		levelUpOrderbookHasRestingShares(levelUpOrderbook);
 	const levelUpContextMarket =
 		(levelUpOrderbookKey
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
@@ -385,6 +389,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					umbrellaId={umbrella?._id}
 					pandaMatchId={pandascoreMatchId || undefined}
 					limitlessFromUmbrella={umbrellaLimitless}
+					levelUpOrderbookHasRestingShares={chartLevelUpBookHasRestingShares}
 					umbrellaDisplayName={umbrella?.displayName}
 					activeMarket={chartPrimaryMarket}
 					secondMarket={chartSecondaryMarket}

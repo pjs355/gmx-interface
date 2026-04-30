@@ -27,6 +27,18 @@ function sorExecutionFailureMessage(err: unknown): string {
 	return "Execution failed with no message (throw had no usable text — inspect DevTools Network for the failing request).";
 }
 
+function logDflowClientOrderSigning(
+	route: RoutePlan,
+	leg: RouteLeg,
+	phase: "immediate" | "postBridge",
+): void {
+	if (leg.venue !== "dflow" || route.side !== "buy") return;
+	const micro = Math.round(leg.executionAmountUsd * 1_000_000);
+	console.log(
+		`[SOR][DFlow] client-order-signing phase=${phase} routeId=${route.routeId} requestedAmount=${route.requestedAmount} execUsd=${leg.executionAmountUsd.toFixed(6)} shares=${leg.shares.toFixed(6)} amount_micro=${micro} (compare server [SOR] BUY signing-preview line for same routeId)`,
+	);
+}
+
 const RETRY_COUNT = 2;
 const RETRY_DELAY_MS = 2000;
 /**
@@ -477,6 +489,7 @@ export function useSorExecution(
 					}
 					for (const leg of group.legs) {
 						console.log("[SOR] Bridge+trade leg start", leg.venue);
+						logDflowClientOrderSigning(route, leg, "postBridge");
 						let tradeResult: Awaited<ReturnType<typeof executeLegWithRetry>>;
 						try {
 							tradeResult = await withTimeout(
@@ -520,6 +533,7 @@ export function useSorExecution(
 				if (mountedRef.current) setExecutionPhase("executing_trade");
 				const immediatePromises = immediateLegs.map(async (leg) => {
 					console.log("[SOR] Leg start", leg.venue, { routeId: route.routeId });
+					logDflowClientOrderSigning(route, leg, "immediate");
 					let result: Awaited<ReturnType<typeof executeLegWithRetry>>;
 					try {
 						result = await withTimeout(

@@ -72,6 +72,25 @@ export function hasUsableOrderbookSnapshot(ob: unknown): boolean {
   return Array.isArray(o.asks) || Array.isArray(o.bids);
 }
 
+function sumPositiveRestingSizes(levels: unknown): number {
+  if (!Array.isArray(levels)) return 0;
+  let sum = 0;
+  for (const row of levels) {
+    if (!row || typeof row !== "object") continue;
+    const n = Number((row as { size?: unknown }).size);
+    if (Number.isFinite(n) && n > 0) sum += n;
+  }
+  return sum;
+}
+
+/** True when normalized bids/asks have at least one strictly positive size (coerced). Used for chart gating on REST snapshot depth. */
+export function levelUpOrderbookHasRestingShares(raw: unknown): boolean {
+  const norm = normalizeOrderbookPayload(raw);
+  if (!norm || typeof norm !== "object" || Array.isArray(norm)) return false;
+  const o = norm as { asks?: unknown; bids?: unknown };
+  return sumPositiveRestingSizes(o.asks) + sumPositiveRestingSizes(o.bids) > 0;
+}
+
 export const sanitizeQuestions = (qs: any[] | undefined | null): any[] => {
   if (!Array.isArray(qs)) return [];
   return qs.filter((q) => q && getMarketId(q));

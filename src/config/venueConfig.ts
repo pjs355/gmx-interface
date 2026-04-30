@@ -1,7 +1,15 @@
+/**
+ * Per-venue fee estimates and **effective buy budget** (how much of the typed USD
+ * goes to notional vs reserved fees). Polymarket’s row uses price-dependent taker
+ * fees — see `feePolymarket.ts` and `src/trading/polymarket/POLYMARKET_TRADING.md` §4.
+ */
 import { calculateFeeMatchingBackend } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLevelUp";
 import { calculatePolymarketFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePolymarket";
 import { calculatePredictFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePredict";
-import { calculateDflowFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeDflow";
+import {
+	calculateDflowFee,
+	dflowEffectiveBuyBudget,
+} from "@/lib/dflowFees";
 import {
 	calculateLimitlessFee,
 	LIMITLESS_DEFAULT_FEE_RATE_BPS,
@@ -161,17 +169,16 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 		supportsLimitOrders: false,
 		supportsMarketOrders: true,
 		supportsSell: true,
-		requiresWholeShares: false,
+		requiresWholeShares: true,
 		estimateFee: ({ contracts, price }) => {
 			return calculateDflowFee(contracts, price);
 		},
 		effectiveBuyBudget: (usd, opts) => {
-			const p = opts?.approxPrice ?? 0.5;
-			return usd / (1 + 0.08 * (1 - p));
+			return dflowEffectiveBuyBudget(usd, opts?.approxPrice ?? 0.5);
 		},
-		feeDescription: "~8% probability-weighted",
+		feeDescription: "Probability-weighted (pond formula)",
 		feeTooltip:
-			"Kalshi Frost-tier fee: roundup(0.07 × C × p × (1−p)) + 0.01 × C × p × (1−p). Fee is in contracts, shown as USDC equivalent.",
+			"DFlow — same estimator as SOR: pond prediction-market-fees decomposition (contracts), USDC via ×p; settlement must match quote/order. Kalshi fills whole contracts; USDC spent can be below your cap. See pond.dflow.net/build/prediction-markets/prediction-market-fees",
 	},
 };
 

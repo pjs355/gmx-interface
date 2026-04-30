@@ -509,6 +509,7 @@ function buildUnmatchedVenueUmbrellas(
 				hint,
 			);
 		}
+		/* DFlow: event-ticker catalog match, then mint — must mirror `matchVenuePositionToUmbrella` (live Positions). */
 		if (venue === "dflow") {
 			const et =
 				typeof first.dflowEventTicker === "string" ? first.dflowEventTicker.trim() : "";
@@ -516,7 +517,8 @@ function buildUnmatchedVenueUmbrellas(
 				resolvedDflowCatalog =
 					lookupUmbrellaByDflowEventTicker(et, dflowEventTickerLookup, catalogUmbrellas) ??
 					null;
-			} else if (dflowMintLookup) {
+			}
+			if (!resolvedDflowCatalog && dflowMintLookup) {
 				const mint = typeof first.tokenId === "string" ? first.tokenId.trim() : "";
 				if (mint) resolvedDflowCatalog = dflowMintLookup.get(mint) ?? null;
 			}
@@ -2208,50 +2210,35 @@ export default function usePositionsData() {
 					}
 				}
 			}
+			/* DFlow venue-history row patch: event ticker then mint (same contract as `matchVenuePositionToUmbrella`). */
 			if (item.venue === "dflow") {
 				const et = item.dflowEventTicker?.trim();
-				if (et) {
-					const u = lookupUmbrellaByDflowEventTicker(
-						et,
-						umbrellaLookupByDflowEventTickerForHistory,
-						historyCatalogUmbrellas,
-					);
-					if (u?.displayName?.trim()) {
-						const dn = stripUmbrellaDisplayPrefix(u.displayName).trim();
-						const idPatch: Partial<VenuePosition> = {};
-						if (!item.levelUpUmbrellaId?.trim()) {
-							idPatch.levelUpUmbrellaId = u._id;
-							if (!item.levelUpUmbrellaDisplayName?.trim()) {
-								idPatch.levelUpUmbrellaDisplayName = u.displayName;
-							}
+				let u = et
+					? lookupUmbrellaByDflowEventTicker(
+							et,
+							umbrellaLookupByDflowEventTickerForHistory,
+							historyCatalogUmbrellas,
+						)
+					: undefined;
+				if (!u && item.tokenId?.trim()) {
+					u = umbrellaLookupByDflowMintForHistory.get(item.tokenId.trim());
+				}
+				if (u?.displayName?.trim()) {
+					const dn = stripUmbrellaDisplayPrefix(u.displayName).trim();
+					const idPatch: Partial<VenuePosition> = {};
+					if (!item.levelUpUmbrellaId?.trim()) {
+						idPatch.levelUpUmbrellaId = u._id;
+						if (!item.levelUpUmbrellaDisplayName?.trim()) {
+							idPatch.levelUpUmbrellaDisplayName = u.displayName;
 						}
-						if (dn && dn !== item.marketTitle) {
-							return { ...item, ...idPatch, marketTitle: dn };
-						}
-						if (Object.keys(idPatch).length > 0) {
-							return { ...item, ...idPatch };
-						}
-						return item;
 					}
-				} else if (item.tokenId?.trim()) {
-					const u = umbrellaLookupByDflowMintForHistory.get(item.tokenId.trim());
-					if (u?.displayName?.trim()) {
-						const dn = stripUmbrellaDisplayPrefix(u.displayName).trim();
-						const idPatch: Partial<VenuePosition> = {};
-						if (!item.levelUpUmbrellaId?.trim()) {
-							idPatch.levelUpUmbrellaId = u._id;
-							if (!item.levelUpUmbrellaDisplayName?.trim()) {
-								idPatch.levelUpUmbrellaDisplayName = u.displayName;
-							}
-						}
-						if (dn && dn !== item.marketTitle) {
-							return { ...item, ...idPatch, marketTitle: dn };
-						}
-						if (Object.keys(idPatch).length > 0) {
-							return { ...item, ...idPatch };
-						}
-						return item;
+					if (dn && dn !== item.marketTitle) {
+						return { ...item, ...idPatch, marketTitle: dn };
 					}
+					if (Object.keys(idPatch).length > 0) {
+						return { ...item, ...idPatch };
+					}
+					return item;
 				}
 				const apiTitle = stripUmbrellaDisplayPrefix(
 					item.levelUpUmbrellaDisplayName ?? "",

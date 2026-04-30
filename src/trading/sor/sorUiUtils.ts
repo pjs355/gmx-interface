@@ -55,6 +55,26 @@ export function formatSorUsdRounded2(usd: number): string {
 }
 
 /**
+ * Smart-route **buy** spend (total cost): ceil to whole cents so we never display less than
+ * snapshot rounding / micro-USDC settlement might charge (pairs with {@link formatSorFeeUsdDisplay}).
+ */
+export function formatSorBuyCostUsdDisplay(usd: number): string {
+	if (!Number.isFinite(usd) || usd <= 0) return formatSorUsd2(0);
+	const ceiledCents = Math.ceil(usd * 100 - 1e-9);
+	return formatSorUsd2(ceiledCents / 100);
+}
+
+/**
+ * Smart-route **sell** net proceeds: floor to whole cents so we never display more than the
+ * conservative estimate (chains often round transfers down).
+ */
+export function formatSorSellProceedsUsdDisplay(usd: number): string {
+	if (!Number.isFinite(usd) || usd <= 0) return formatSorUsd2(0);
+	const flooredCents = Math.floor(usd * 100 + 1e-9);
+	return formatSorUsd2(flooredCents / 100);
+}
+
+/**
  * Prefer API `totalBridgeCost` when > 0; otherwise sum `leg.bridge.estimatedCost`.
  * Buy routes only (sells do not execute bridge in the client).
  */

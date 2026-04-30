@@ -1,17 +1,23 @@
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { LIMITLESS_LEGACY_CLIENT_FALLBACKS } from "@/config/limitlessLegacyClientFallbacks";
+import { isClobProxyEnabled } from "@/config/privateApiBase";
 
 /**
  * Limitless REST does not send `Access-Control-Allow-Origin`, so the browser cannot call
  * `https://api.limitless.exchange/...` directly.
  *
- * - **Dev with legacy fallbacks:** same-origin `/__limitless-api/...` (Vite → Limitless).
+ * - **Dev + CLOB proxy (`VITE_POLYMARKET_CLOB_PROXY=true`):** same-origin `/limitless-exchange-proxy/...`
+ *   → Vite `railwayDevProxyPlugin` → Railway `/proxy` → `api.limitless.exchange` (same URL/token as Polymarket/Predict).
+ * - **Dev with legacy fallbacks only:** same-origin `/__limitless-api/...` (Vite direct Node → Limitless).
  * - **Production and default dev:** prediction API `GET /api/public/limitless-orderbook?slug=`
  *   (server forward + CORS on the predictions host).
  */
 function limitlessOrderbookRequestUrl(slug: string): string {
 	const enc = encodeURIComponent(slug.trim());
+	if (!import.meta.env.PROD && isClobProxyEnabled()) {
+		return `/limitless-exchange-proxy/markets/${enc}/orderbook`;
+	}
 	if (!import.meta.env.PROD && LIMITLESS_LEGACY_CLIENT_FALLBACKS) {
 		return `/__limitless-api/markets/${enc}/orderbook`;
 	}

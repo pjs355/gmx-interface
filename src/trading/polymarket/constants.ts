@@ -1,8 +1,12 @@
 import { getAddress } from "viem";
 
 /**
- * Polygon mainnet Polymarket contracts (from Polymarket builder docs / example repo).
- * All addresses are EIP-55 checksummed via getAddress().
+ * Polygon mainnet Polymarket contracts (builder docs / public contract lists).
+ * All addresses are EIP-55 checksummed via `getAddress()`.
+ *
+ * **Why these matter:** CLOB settlement, approvals, and USDC.e → pUSD wrapping
+ * target these contracts. For architecture (EOA vs Safe, wrap-before-buy, Data API
+ * lag), read `POLYMARKET_TRADING.md` in this folder.
  */
 export const POLYGON_PUSD = getAddress(
 	"0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"

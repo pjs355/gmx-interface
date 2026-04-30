@@ -134,6 +134,7 @@ export function SmartRouteToggle({
 						route={sorRoute.route}
 						isLoading={sorRoute.isLoading}
 						error={sorRoute.error}
+						routeErrorCode={sorRoute.routeErrorCode}
 						isStale={sorRoute.isStale}
 						onExecute={handleExecute}
 						onFallback={() => {

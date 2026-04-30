@@ -77,6 +77,8 @@ export {
 	formatSorDetailsSharesDisplay,
 	formatSorFeeUsdDisplay,
 	formatSorUsdRounded2,
+	formatSorBuyCostUsdDisplay,
+	formatSorSellProceedsUsdDisplay,
 	derivedBridgeUsdForDisplay,
 	buildFundsTransferTooltip,
 	getSorLifiTransferFeeRowState,

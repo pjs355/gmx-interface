@@ -137,19 +137,30 @@ function buildVenueRowsFromWs(
 	const polyBidA = bestBidProb(m.polyPriceA) ?? bestBidFromSnapshot(directBooks?.polyBookA);
 	const polyBidB = bestBidProb(m.polyPriceB) ?? bestBidFromSnapshot(directBooks?.polyBookB);
 
-	const dflowLinked = Boolean(getDflowKalshiMonitorLink(m));
-	const dflowAskA = dflowLinked
+	const dflowWire = getDflowKalshiMonitorLink(m);
+	const dflowBaseLinked = Boolean(dflowWire);
+	const dflowAskA = dflowBaseLinked
 		? (bestAskProb(m.dflowPriceA ?? m.kalshiPriceA) ?? bestAskFromSnapshot(directBooks?.dflowBookA))
 		: null;
-	const dflowAskB = dflowLinked
+	const dflowAskB = dflowBaseLinked
 		? (bestAskProb(m.dflowPriceB ?? m.kalshiPriceB) ?? bestAskFromSnapshot(directBooks?.dflowBookB))
 		: null;
-	const dflowBidA = dflowLinked
+	const dflowBidA = dflowBaseLinked
 		? (bestBidProb(m.dflowPriceA ?? m.kalshiPriceA) ?? bestBidFromSnapshot(directBooks?.dflowBookA))
 		: null;
-	const dflowBidB = dflowLinked
+	const dflowBidB = dflowBaseLinked
 		? (bestBidProb(m.dflowPriceB ?? m.kalshiPriceB) ?? bestBidFromSnapshot(directBooks?.dflowBookB))
 		: null;
+
+	const dflowKalshiRowHidden =
+		dflowBaseLinked &&
+		m.dflow?.accountsInitializedA === false &&
+		m.dflow?.accountsInitializedB === false &&
+		dflowAskA === null &&
+		dflowAskB === null &&
+		dflowBidA === null &&
+		dflowBidB === null;
+	const dflowLinked = dflowBaseLinked && !dflowKalshiRowHidden;
 
 	const externalRows: VenueRowModel[] = [
 		{

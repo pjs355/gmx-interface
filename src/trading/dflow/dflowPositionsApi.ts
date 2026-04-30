@@ -13,6 +13,9 @@ import type {
 /**
  * Same field precedence as predictions `eventTickerFromEsportsMarket` (nested `event_ticker`
  * before camelCase `eventTicker`) so History resolve keys match `exchangeMatching.dflow`.
+ *
+ * **Live Positions:** rows often carry this **and** `tokenId`. Umbrella matching must try
+ * event ticker first then mint — see {@link matchVenuePositionToUmbrella} (`venue === "dflow"`).
  */
 export function dflowEventTickerFromBatchMarket(market: DflowBatchMarket): string | undefined {
 	const rec = market as unknown as Record<string, unknown>;

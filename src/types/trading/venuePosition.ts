@@ -70,8 +70,9 @@ export interface VenuePosition {
 	tokenId: string;
 	/**
 	 * DFlow / Kalshi metadata `eventTicker` from `markets/batch` (same key as
-	 * `exchangeMatching.dflow.eventTicker` on umbrellas). Used for History batch resolve
-	 * when present; absent rows use outcome `tokenId` only.
+	 * `exchangeMatching.dflow.eventTicker` on umbrellas when present). For **live Positions**,
+	 * matching still **must fall through to outcome `tokenId` (mint)** when no umbrella hits
+	 * on event ticker alone — see `matchVenuePositionToUmbrella` (`venue === "dflow"`).
 	 */
 	dflowEventTicker?: string;
 	conditionId?: string;

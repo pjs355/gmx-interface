@@ -365,10 +365,25 @@ export function matchVenuePositionToUmbrella(
 		if (slugMatches.length > 1) return slugMatches[0]!;
 		return byToken[0]!;
 	}
+	/**
+	 * DFlow live Positions (do not regress)
+	 * ------------------------------
+	 * Batch positions usually include **both** `dflowEventTicker` and outcome `tokenId` (mint).
+	 * Catalog umbrellas may only have **mints** on `exchangeMatching.dflow` (no `eventTicker`).
+	 * If we `return` after event-ticker lookup only, those rows never match an umbrella and
+	 * disappear from Positions / trade box. **Always**: try event-ticker first, then mint
+	 * map + `mintMatchesDflowExchange` scan. Keep the same order in `buildUnmatchedVenueUmbrellas`,
+	 * `umbrellaForPosition` (trade box), and venue-history merge.
+	 */
 	if (venue === "dflow") {
 		const et = pos.dflowEventTicker?.trim();
 		if (et) {
-			return lookupUmbrellaByDflowEventTicker(et, dflowEventTickerLookup, umbrellas);
+			const byEt = lookupUmbrellaByDflowEventTicker(
+				et,
+				dflowEventTickerLookup,
+				umbrellas,
+			);
+			if (byEt) return byEt;
 		}
 		const mint = typeof pos.tokenId === "string" ? pos.tokenId.trim() : "";
 		if (!mint) return null;

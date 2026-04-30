@@ -29,6 +29,8 @@ import {
   formatToWinUsdDisplay,
   formatSorDetailsSharesDisplay,
   formatSorFeeUsdDisplay,
+  formatSorBuyCostUsdDisplay,
+  formatSorSellProceedsUsdDisplay,
   rawInputBelowVenueMinimum,
   parseLimitPriceCents,
 } from "@/trading/sor";
@@ -249,7 +251,7 @@ export default function PredictionMarketTradeBoxUI({
   const [singleVenueDetailsExpanded, setSingleVenueDetailsExpanded] = useState(false);
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
 
-  /** Green “Filled” SOR banner (All Markets only). */
+  /** Last completed All Markets SOR fill (no success banner — timing only for post-trade position sync). */
   const sorFilledBannerVisible =
     tradingVenue === "all" &&
     sorExecution.execution != null &&
@@ -402,7 +404,7 @@ export default function PredictionMarketTradeBoxUI({
     if (!sr || sorRoute.isStale) return null;
     const amt = parseFloat(amount) || 0;
     if (!Number.isFinite(amt) || amt <= 0) return null;
-    if (Math.abs(sr.requestedAmount - amt) >= 0.0001) return null;
+    if (Math.round(sr.requestedAmount * 100) !== Math.round(amt * 100)) return null;
     return sr;
   }, [tradingVenue, sorRoute.route, sorRoute.isStale, amount]);
 
@@ -688,7 +690,8 @@ export default function PredictionMarketTradeBoxUI({
       sorRoute.route &&
       sorRoute.route.legs.length > 0 &&
       !sorRoute.isStale &&
-      Math.abs(sorRoute.route.requestedAmount - usdAmount) < 0.0001;
+      Math.round(sorRoute.route.requestedAmount * 100) ===
+        Math.round(usdAmount * 100);
 
     if (sorRouteFreshForAmount) {
       const leg = sorRoute.route!.legs[0];
@@ -1078,18 +1081,44 @@ export default function PredictionMarketTradeBoxUI({
       {/* SOR route breakdown when venue is "all" */}
       {tradingVenue === "all" && (
         <div className="bet-size-section">
-          {sorRoute.error && !sorRoute.route && !sorRoute.isLoading && (
+          {sorRoute.error && !sorRoute.route && !sorRoute.isLoading && (() => {
+						const rawErr = sorRoute.error ?? "";
+						const isKalshiWholeShareHint =
+							sorRoute.routeErrorCode === "WHOLE_SHARES_ONLY" ||
+							rawErr.includes(
+								"Fractional share amounts are not supported on Kalshi",
+							);
+						const displayErr = rawErr
+							.replace(/^\s*Route unavailable:\s*/i, "")
+							.trim();
+						return (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
-                <span style={{ color: "#ef4444", fontSize: 12 }}>
+                <span
+                  style={
+                    isKalshiWholeShareHint
+                      ? {
+							fontSize: 12,
+							color: "#eab308",
+							display: "inline-block",
+							padding: "6px 8px",
+							borderRadius: 6,
+							backgroundColor: "rgba(234, 179, 8, 0.12)",
+						}
+                      : { color: "#ef4444", fontSize: 12 }
+                  }
+                >
                   {sorRoute.routeErrorCode === "EXECUTION_NOT_READY"
                     ? "Trading setup required: "
-                    : "Route unavailable: "}
-                  {sorRoute.error}
+                    : isKalshiWholeShareHint
+                      ? ""
+                      : "Route unavailable: "}
+                  {displayErr}
                 </span>
               </div>
             </div>
-          )}
+						);
+          })()}
           {sorRoute.route && (() => {
             const route = sorRoute.route;
             const isSell = route.side === "sell";
@@ -1098,7 +1127,8 @@ export default function PredictionMarketTradeBoxUI({
               isSell &&
               Number.isFinite(route.totalCost) &&
               Number.isFinite(route.totalFees)
-                ? Math.max(0, route.totalCost - route.totalFees)
+				? /* SOR sell: totalCost is already net proceeds per leg (DFlow: dflowSellProceedsUsd). Do not subtract totalFees again. */
+				  Math.max(0, route.totalCost)
                 : null;
             return (
             <div
@@ -1142,7 +1172,7 @@ export default function PredictionMarketTradeBoxUI({
                       </span>
                     </Tooltip>
                     <span className="bet-size-value estimated-receive-value">
-                      $ {(Math.floor(sorSellNetReceiveUsd * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      $ {formatSorSellProceedsUsdDisplay(sorSellNetReceiveUsd)}
                     </span>
                   </div>
                 </div>
@@ -1191,9 +1221,9 @@ export default function PredictionMarketTradeBoxUI({
                         <span
                           className="sor-details-fee-value"
                           data-qa="sor-leg-cost"
-                          data-cost-usd={route.totalCost}
+                          data-cost-usd={Math.ceil(route.totalCost * 100 - 1e-9) / 100}
                         >
-                          $ {formatSorUsd2(Math.floor(route.totalCost * 100) / 100)}
+                          $ {formatSorBuyCostUsdDisplay(route.totalCost)}
                         </span>
                       </div>
                     )}
@@ -1394,9 +1424,9 @@ export default function PredictionMarketTradeBoxUI({
                     <span
                       className="sor-details-fee-value"
                       data-qa="sor-leg-cost"
-                      data-cost-usd={estimatedCost}
+                      data-cost-usd={Math.ceil(estimatedCost * 100 - 1e-9) / 100}
                     >
-                      $ {formatSorUsd2(Math.floor(estimatedCost * 100) / 100)}
+                      $ {formatSorBuyCostUsdDisplay(estimatedCost)}
                     </span>
                   </div>
                 )}
@@ -1410,9 +1440,9 @@ export default function PredictionMarketTradeBoxUI({
                     <span
                       className="sor-details-fee-value"
                       data-qa="sor-leg-cost"
-                      data-cost-usd={limitOrderAmount + limitOrderFee}
+                      data-cost-usd={Math.ceil((limitOrderAmount + limitOrderFee) * 100 - 1e-9) / 100}
                     >
-                      $ {formatSorUsd2(Math.floor((limitOrderAmount + limitOrderFee) * 100) / 100)}
+                      $ {formatSorBuyCostUsdDisplay(limitOrderAmount + limitOrderFee)}
                     </span>
                   </div>
                 )}
@@ -1529,8 +1559,11 @@ export default function PredictionMarketTradeBoxUI({
       </>
       )}
 
-      {/* SOR execution result */}
-      {tradingVenue === "all" && sorExecution.execution && !sorExecution.isExecuting && (
+      {/* SOR execution result (partial / failed only — success has no fill summary banner) */}
+      {tradingVenue === "all" &&
+        sorExecution.execution &&
+        !sorExecution.isExecuting &&
+        sorExecution.execution.status !== "complete" && (
         <div
           style={{
             marginTop: 8,
@@ -1538,39 +1571,15 @@ export default function PredictionMarketTradeBoxUI({
             borderRadius: 6,
             fontSize: 12,
             backgroundColor:
-              sorExecution.execution.status === "complete"
-                ? "rgba(34, 197, 94, 0.08)"
-                : sorExecution.execution.status === "partial"
+              sorExecution.execution.status === "partial"
                   ? "rgba(245, 158, 11, 0.08)"
                   : "rgba(239, 68, 68, 0.08)",
             color:
-              sorExecution.execution.status === "complete"
-                ? "#22c55e"
-                : sorExecution.execution.status === "partial"
+              sorExecution.execution.status === "partial"
                   ? "#f59e0b"
                   : "#ef4444",
           }}
         >
-          {sorExecution.execution.status === "complete" && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>{side === "sell" ? "Sold" : "Filled"}: {formatSorDetailsSharesDisplay(sorExecution.execution.totalFilledShares)} shares{side === "sell" && sorExecution.execution.totalSpent > 0 ? ` — received $${formatToWinUsdDisplay(sorExecution.execution.totalSpent)}` : ""}</span>
-              <button
-                type="button"
-                onClick={() => sorExecution.resetExecution()}
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 4,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  backgroundColor: "transparent",
-                  color: "#9ca3af",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
           {sorExecution.execution.status === "partial" && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>{side === "sell" ? "Partially sold" : "Partially filled"}: {formatSorDetailsSharesDisplay(sorExecution.execution.totalFilledShares)} shares</span>
@@ -1631,24 +1640,21 @@ export default function PredictionMarketTradeBoxUI({
         </div>
       )}
 
-      {/* Small Popup Notification */}
+      {/* E2E / automation: outcome hook only (visually hidden — `e2e/page-objects/tradebox.ts` `waitForFill`). */}
       {orderResult && (
         <div
           data-qa="tradebox-fill-confirmation"
           data-qa-fill-status={orderResult.success ? "success" : "error"}
-          className={`trade-notification ${orderResult.success ? 'success' : 'error'}`}
+          className="trade-notification-e2e-sentinel"
+          aria-hidden="true"
         >
-          <div className="notification-content">
-            {orderResult.success ? (
-              <div className="notification-text"> Order Submitted!</div>
-            ) : (
-              <div className="notification-text">
-                {orderResult.error
-                  ? `Order failed: ${orderResult.error}`
-                  : "Order Failed"}
-              </div>
-            )}
-          </div>
+          <span className="trade-notification-e2e-sentinel__label">
+            {orderResult.success
+              ? "Order Submitted!"
+              : orderResult.error
+                ? `Order failed: ${orderResult.error}`
+                : "Order Failed"}
+          </span>
         </div>
       )}
     </div>

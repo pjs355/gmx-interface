@@ -45,7 +45,7 @@ interface ImportMetaEnv {
 	readonly VITE_SOLANA_RPC_URL?: string;
 	/** Extra Solana HTTP RPC URLs after transient failures on the primary */
 	readonly VITE_SOLANA_RPC_FALLBACK_URLS?: string;
-	/** DFlow REST catalog host (must match tickers); default dev-prediction-markets-api.dflow.net */
+	/** Legacy: browser REST seed for DFlow orderbooks uses `GET /api/public/dflow-orderbook` on the prediction API (see `dflow-book-client.ts`). */
 	readonly VITE_DFLOW_REST_BASE?: string;
 	/** DFlow orderbook WebSocket URL */
 	readonly VITE_DFLOW_WS_URL?: string;

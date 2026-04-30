@@ -1,7 +1,10 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useMedia } from "react-use";
 import { usePredictionChartData } from "./usePredictionChartData";
-import { useMultiExchangeChartData } from "./useMultiExchangeChartData";
+import {
+	attachBestOddsToMergedPoint,
+	useMultiExchangeChartData,
+} from "./useMultiExchangeChartData";
 import { ExchangeOverlayChart, VENUE_COLORS, VENUE_LABELS } from "./SeriesChart";
 import { getYesNoTeamLabels } from "../PredictionMarketTradeBox/teamLabels";
 import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
@@ -23,6 +26,8 @@ export interface PredictionMarketChartProps {
 	secondMarket?: any;
 	questionOrderbooks?: { [questionId: string]: any };
 	className?: string;
+	/** Canonical REST LevelUp book has resting size; chart WS/toggles use this (Orderbooks tab may still show venue WS depth). */
+	levelUpOrderbookHasRestingShares: boolean;
 }
 
 const TIME_RANGES: { key: TimeRange; label: string; seconds: number }[] = [
@@ -46,6 +51,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	secondMarket,
 	questionOrderbooks,
 	className = "",
+	levelUpOrderbookHasRestingShares,
 }) => {
 	const isTradingMobileLayout = useMedia("(max-width: 1100px)");
 	const chartHeight = isTradingMobileLayout ? CHART_HEIGHT_MOBILE_LAYOUT : CHART_HEIGHT_DESKTOP;
@@ -113,7 +119,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		pandaMatchId,
 		levelUpChartData,
 		timeRange,
-		limitlessMappingFromUmbrella: limitlessFromUmbrella,
+		includeLevelUp: levelUpOrderbookHasRestingShares,
 	});
 
 	useEffect(() => {
@@ -151,6 +157,16 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		exchangeChart.hasLimitless,
 	]);
 
+	useEffect(() => {
+		if (levelUpOrderbookHasRestingShares) return;
+		setEnabledVenues((prev) => {
+			if (!prev.has("levelUp")) return prev;
+			const next = new Set(prev);
+			next.delete("levelUp");
+			return next;
+		});
+	}, [levelUpOrderbookHasRestingShares]);
+
 	// Stale-while-loading: keep showing previous data while new range loads
 	const staleRef = useRef<{ data: MergedExchangePoint[] }>({ data: [] });
 
@@ -158,7 +174,17 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		staleRef.current = { data: exchangeChart.data };
 	}
 
-	const displayData = exchangeChart.data.length > 0 ? exchangeChart.data : staleRef.current.data;
+	const displayData = useMemo(() => {
+		const raw =
+			exchangeChart.data.length > 0 ? exchangeChart.data : staleRef.current.data;
+		return raw.map((p) => {
+			if (levelUpOrderbookHasRestingShares) {
+				return attachBestOddsToMergedPoint(p, true);
+			}
+			const { levelUp: _lu, levelUpB: _lub, ...rest } = p;
+			return attachBestOddsToMergedPoint(rest as MergedExchangePoint, false);
+		});
+	}, [exchangeChart.data, exchangeChart.loading, levelUpOrderbookHasRestingShares]);
 
 	/** Best odds per side (merged min-YES like the chart); fill A/B independently, then LevelUp fallback. */
 	const headerBestOdds = useMemo(() => {
@@ -174,6 +200,9 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 				teamB = p.bestOddsB;
 			}
 			if (teamA !== null && teamB !== null) break;
+		}
+		if (!levelUpOrderbookHasRestingShares) {
+			return { teamA, teamB };
 		}
 		const lu = levelUpChartData;
 		for (let i = lu.length - 1; i >= 0; i--) {
@@ -191,7 +220,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 			if (teamA !== null && teamB !== null) break;
 		}
 		return { teamA, teamB };
-	}, [displayData, levelUpChartData]);
+	}, [displayData, levelUpChartData, levelUpOrderbookHasRestingShares]);
 
 	const availableVenues = useMemo(() => {
 		const venues: string[] = ["bestOdds"];
@@ -358,6 +387,13 @@ const PredictionMarketChart = React.memo<PredictionMarketChartProps>(
 		if (prevProps.umbrellaId !== nextProps.umbrellaId) return false;
 
 		if (prevProps.pandaMatchId !== nextProps.pandaMatchId) return false;
+
+		if (
+			prevProps.levelUpOrderbookHasRestingShares !==
+			nextProps.levelUpOrderbookHasRestingShares
+		) {
+			return false;
+		}
 
 		if (prevProps.limitlessFromUmbrella !== nextProps.limitlessFromUmbrella) return false;
 
