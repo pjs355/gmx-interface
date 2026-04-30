@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 
@@ -13,6 +13,8 @@ export function usePredictMarketDetailsMap(marketIds: number[], enabled: boolean
 		queryKey: ["predict-market-details", sortedKey],
 		enabled: enabled && sortedKey.length > 0,
 		staleTime: 60_000,
+		/** When `predictMarketIds` grows, keep prior map so downstream merges never see an empty map mid-fetch. */
+		placeholderData: keepPreviousData,
 		queryFn: async () => {
 			const results = await Promise.allSettled(
 				sortedKey.map((id) => privateApi.getPredictMarket(id)),

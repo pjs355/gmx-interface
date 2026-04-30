@@ -6,6 +6,13 @@ const queryClient = new QueryClient({
 		queries: {
 			staleTime: 30_000,
 			retry: 1,
+			/**
+			 * In dev, refetch-on-focus causes a second burst of identical requests when
+			 * switching to DevTools or another tab (e.g. `/positions` “reloads” visually).
+			 * Production keeps the default refresh-on-focus so returning to the tab still
+			 * reconciles stale TanStack data with the server.
+			 */
+			refetchOnWindowFocus: import.meta.env.PROD,
 		},
 	},
 });

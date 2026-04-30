@@ -13,8 +13,7 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import usePositionsData from "./hooks/usePositionsData";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { markPositionsPageMount } from "./utils/portfolioPerfLog";
+import { useEffect, useRef, useState } from "react";
 import { toCentsString } from "./utils/formatCurrency";
 
 function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
@@ -54,10 +53,6 @@ function PortfolioSkeleton() {
 
 export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
-
-	useLayoutEffect(() => {
-		markPositionsPageMount();
-	}, []);
 
 	const data = usePositionsData();
 
