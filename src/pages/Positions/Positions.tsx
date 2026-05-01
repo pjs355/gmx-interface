@@ -13,8 +13,8 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import usePositionsData from "./hooks/usePositionsData";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { markPositionsPageMount } from "./utils/portfolioPerfLog";
+import { useEffect, useRef, useState } from "react";
+import { toCentsString } from "./utils/formatCurrency";
 
 function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
 	return (
@@ -53,10 +53,6 @@ function PortfolioSkeleton() {
 
 export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
-
-	useLayoutEffect(() => {
-		markPositionsPageMount();
-	}, []);
 
 	const data = usePositionsData();
 
@@ -163,11 +159,13 @@ export default function Positions() {
 						{!isMobile ? (
 							<ResolvedPositionsTable
 								umbrellaBalances={transformedWinnings}
+								toCentsString={toCentsString}
 								onClaimSuccess={handleClaimSuccess}
 							/>
 						) : (
 							<ResolvedPositionsCardView
 								umbrellaBalances={transformedWinnings}
+								toCentsString={toCentsString}
 								onClaimSuccess={handleClaimSuccess}
 							/>
 						)}
@@ -186,6 +184,7 @@ export default function Positions() {
 							spentByQid={spentByQid}
 							returnsByQid={returnsByQid}
 							getCurrentPriceForSide={getCurrentPriceForSide}
+							toCentsString={toCentsString}
 							orders={combinedOrders}
 						/>
 					) : (
@@ -195,6 +194,7 @@ export default function Positions() {
 							spentByQid={spentByQid}
 							returnsByQid={returnsByQid}
 							getCurrentPriceForSide={getCurrentPriceForSide}
+							toCentsString={toCentsString}
 							orders={combinedOrders}
 						/>
 					)
@@ -218,7 +218,6 @@ export default function Positions() {
 		!isMobile ? (
 			<HistoryView
 				umbrellaBalances={umbrellaBalancesPositions}
-				returnsByQid={returnsByQid}
 				orders={combinedOrders}
 				resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
 				venueHistory={venueHistory}
@@ -229,7 +228,6 @@ export default function Positions() {
 		) : (
 			<HistoryCardView
 				umbrellaBalances={umbrellaBalancesPositions}
-				returnsByQid={returnsByQid}
 				orders={combinedOrders}
 				resolvedMarketsByUmbrella={resolvedMarketsByUmbrella}
 				venueHistory={venueHistory}
