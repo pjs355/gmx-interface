@@ -1,5 +1,10 @@
 // Reusable resolver for picking a game logo from game-logos by tags, with fallback
 
+import cs2GameLogoUrl from "@/assets/game-logos/3093-logo-1739063238.443.svg";
+
+/** Same asset as the CS2 / Counter-Strike pill and trading-card game fallback. */
+export const CS2_GAME_LOGO_URL = cs2GameLogoUrl;
+
 // Load all game logos at build time via Vite glob
 const logoModules = import.meta.glob(
 	"@/assets/game-logos/*.{png,jpg,jpeg,svg,webp}",
@@ -50,6 +55,27 @@ for (const [tagKey, imageKey] of Object.entries(tagMappings)) {
 	}
 }
 
+function cs2LogoForNormalizedTagKey(key: string): string | null {
+	if (!key) return null;
+	if (key === "CS2" || key === "CSGO" || key === "CS_GO") return cs2GameLogoUrl;
+	if (key.startsWith("COUNTER_STRIKE")) return cs2GameLogoUrl;
+	if (key.startsWith("COUNTERSTRIKE")) return cs2GameLogoUrl;
+	return null;
+}
+
+const CS2_EXPLICIT_LOGO_KEYS = [
+	"CS2",
+	"CS_GO",
+	"CSGO",
+	"COUNTER_STRIKE",
+	"COUNTER_STRIKE_2",
+	"COUNTERSTRIKE",
+	"COUNTERSTRIKE2",
+] as const;
+for (const key of CS2_EXPLICIT_LOGO_KEYS) {
+	logoMap[key] = cs2GameLogoUrl;
+}
+
 export function resolveLogoByTags(
 	tags: string[] | undefined | null
 ): string | null {
@@ -57,7 +83,7 @@ export function resolveLogoByTags(
 		for (const raw of tags) {
 			if (!raw) continue;
 			const key = normalizeTag(String(raw));
-			const candidate = logoMap[key];
+			const candidate = logoMap[key] ?? cs2LogoForNormalizedTagKey(key);
 			if (candidate) return candidate;
 		}
 	}

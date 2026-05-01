@@ -28,6 +28,12 @@ import {
 import { getYesNoTeamLabels } from "@/pages/PredictionMarket/PredictionMarketTradeBox/teamLabels";
 import DepthBar from "./DepthBar";
 import "./OrderbookDisplay.scss";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import {
+	formatCentsLabel,
+	formatOrderbookLevelShares,
+	oddsDualLayoutForStyle,
+} from "@/utils/oddsDisplayFormat";
 
 interface OrderbookDisplayProps {
 	orderbook: OrderbookSnapshot | null;
@@ -71,6 +77,8 @@ export default function OrderbookDisplay({
 	layout = "accordion",
 }: OrderbookDisplayProps) {
 	const isEmbedded = layout === "embedded";
+	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
+	const teamOddsLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const [activeTab, setActiveTab] = useState<"yes" | "no">("yes");
 	const { openCurtain } = useCurtainActions();
 	const spreadRef = useRef<HTMLDivElement>(null);
@@ -110,13 +118,6 @@ export default function OrderbookDisplay({
 	const { bestBid: marketBestBid, bestAsk: marketBestAsk } = useMemo(() => {
 		return calculateOrderbookPrices(orderbook);
 	}, [orderbook]);
-
-	// Helper function to format price as cents
-	const toCentsString = (value?: number | null): string => {
-		if (value === undefined || value === null || !isFinite(value))
-			return "--";
-		return Math.round(value * 100).toString();
-	};
 
 	// Check if this is an "Over {number}" market (daily player count style)
 	const overUnderMatch = useMemo(() => {
@@ -206,12 +207,10 @@ export default function OrderbookDisplay({
 	
 	const yesLabel =
 		yesLabelPrice !== null
-			? `${toCentsString(yesLabelPrice)}¢`
+			? formatPrice(yesLabelPrice, teamOddsLayout)
 			: "--";
 	const noLabel =
-		noLabelPrice !== null
-			? `${toCentsString(noLabelPrice)}¢`
-			: "--";
+		noLabelPrice !== null ? formatPrice(noLabelPrice, teamOddsLayout) : "--";
 
 	const teamTabRow = (
 		<div className="orderbook-embedded-team-row">
@@ -1041,10 +1040,10 @@ export default function OrderbookDisplay({
 												{isLowestAsk ? "Asks" : ""}
 											</span>
 											<span className="price ask">
-												${ask.price.toFixed(2)}
+												{formatPrice(ask.price, teamOddsLayout)}
 											</span>
 											<span className="size">
-												{Math.round(ask.size)}
+												{formatOrderbookLevelShares(ask.size)}
 											</span>
 											<span className="total">
 												$
@@ -1074,7 +1073,7 @@ export default function OrderbookDisplay({
 											Spread:
 										</span>
 										<span className="spread-value">
-											${spread.toFixed(2)}
+											{formatCentsLabel(spread)}
 										</span>
 									</div>
 								)}
@@ -1098,10 +1097,10 @@ export default function OrderbookDisplay({
 												{isHighestBid ? "Bids" : ""}
 											</span>
 											<span className="price bid">
-												${bid.price.toFixed(2)}
+												{formatPrice(bid.price, teamOddsLayout)}
 											</span>
 											<span className="size">
-												{Math.round(bid.size)}
+												{formatOrderbookLevelShares(bid.size)}
 											</span>
 											<span className="total">
 												$

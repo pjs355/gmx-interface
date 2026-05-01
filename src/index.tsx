@@ -77,6 +77,7 @@ import { PortfolioProvider } from "@/context/PortfolioContext";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
 import { TransfersModalProvider } from "context/TransfersModalContext";
+import { OddsDisplayProvider } from "context/OddsDisplayContext";
 import { PolymarketBackgroundActivation } from "@/trading/polymarket/PolymarketBackgroundActivation";
 
 import App from "./app/App";
@@ -129,7 +130,9 @@ createRoot(document.getElementById("root")!).render(
 												<PositionsPageMetricsGateProvider>
 													<RPGProvider>
 														<TransfersModalProvider>
-															<App />
+															<OddsDisplayProvider>
+																<App />
+															</OddsDisplayProvider>
 														</TransfersModalProvider>
 													</RPGProvider>
 												</PositionsPageMetricsGateProvider>

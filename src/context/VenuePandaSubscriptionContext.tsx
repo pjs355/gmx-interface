@@ -8,7 +8,7 @@ import React, {
 } from "react";
 
 /** Max distinct PandaScore match IDs on one venue-prices connection (home + trading). */
-export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 40;
+export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 52;
 
 type VenuePandaSubscriptionContextValue = {
 	subscribePandaMatchId: (pandaMatchId: string) => void;

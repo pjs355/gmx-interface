@@ -13,6 +13,8 @@ import {
 	getTradeCount,
 	fifoAlignedBasisForPositionsRow,
 } from "../utils/positionHelpers";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
 
 export default function PositionsCardView({
 	umbrellaBalances,
@@ -20,7 +22,6 @@ export default function PositionsCardView({
 	spentByQid,
 	returnsByQid,
 	getCurrentPriceForSide,
-	toCentsString,
 	orders = [],
 }: {
 	umbrellaBalances: any[];
@@ -28,9 +29,10 @@ export default function PositionsCardView({
 	spentByQid: Record<string, { Yes: number; No: number }>;
 	returnsByQid: Record<string, { Yes: number; No: number }>;
 	getCurrentPriceForSide: (market: PredictionMarket, side: "Yes" | "No") => number | null;
-	toCentsString: (n?: number | null) => string;
 	orders?: ProcessedOrder[];
 }) {
+	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
+	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const navigate = useNavigate();
 	const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 	const [expandedTradeHistory, setExpandedTradeHistory] = useState<Set<string>>(new Set());
@@ -272,11 +274,11 @@ export default function PositionsCardView({
 											<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 												<div style={{ display: "flex", justifyContent: "space-between" }}>
 													<span style={{ color: "#888", fontSize: 13 }}>Current Price</span>
-													<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{toCentsString(row.currentPrice)}</span>
+													<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{formatPrice(row.currentPrice, portfolioPriceLayout)}</span>
 												</div>
 												<div style={{ display: "flex", justifyContent: "space-between" }}>
 													<span style={{ color: "#888", fontSize: 13 }}>Avg Price</span>
-													<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.avgPrice === null ? "—" : toCentsString(row.avgPrice)}</span>
+													<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.avgPrice === null ? "—" : formatPrice(row.avgPrice, portfolioPriceLayout)}</span>
 												</div>
 												<div style={{ display: "flex", justifyContent: "space-between" }}>
 													<span style={{ color: "#888", fontSize: 13 }}>Cost</span>

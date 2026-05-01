@@ -128,7 +128,7 @@ export default function DflowProofSection() {
 						<span style={{ color: "#888", fontSize: 13 }}>Syncing with Proof…</span>
 					) : isVerified ? (
 						<span style={{ color: "#16a34a", fontSize: 13, fontWeight: 600 }}>
-							Verified
+							Enabled
 						</span>
 					) : (
 						<Tooltip

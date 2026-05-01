@@ -2,6 +2,14 @@ import React from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import type { Tag } from "@/services/api/tagService";
+import {
+	isUmbrellaLiveByEventDate,
+	isUmbrellaStartingSoonByEventDate,
+	LIVE_PILL_ID,
+	normalizeTagLabel,
+	STARTING_SOON_PILL_ID,
+	useNowTick,
+} from "../utils/gameLinkFilters";
 
 interface GameLinksProps {
 	selectedGame: string | null;
@@ -19,15 +27,7 @@ export default function GameLinks({
 	filterType,
 }: GameLinksProps) {
 	const { tags, tagsLoading } = usePredictionData();
-
-	// Helper function to normalize tags for ESPORTS detection (keeping for backward compatibility)
-	const normalizeTag = (value: string) =>
-		value
-			.toUpperCase()
-			.normalize("NFKD")
-			.replace(/[\u0300-\u036f]/g, "")
-			.replace(/[^A-Z0-9]+/g, "_")
-			.replace(/^_+|_+$/g, "");
+	const now = useNowTick(60_000);
 
 	// Filter tags to only show tags that have active markets for the current page type
 	// All hooks must be called before any early returns
@@ -49,17 +49,24 @@ export default function GameLinks({
 		el.scrollBy({ left: delta, behavior: "smooth" });
 	};
 
-	const filteredTags = React.useMemo(() => {
+	const linkFilterState = React.useMemo(() => {
 		if (loading || tagsLoading || !umbrellas || umbrellas.length === 0) {
-			return []; // Don't show any tags while loading
+			return {
+				typeFilteredUmbrellas: [] as Umbrella[],
+				tagsSorted: [] as Tag[],
+				esportsTagId: undefined as string | undefined,
+			};
 		}
 
-		// First filter out inactive umbrellas (same logic as home page cards)
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			return (umbrella as any).active === true;
 		});
 
-		// Filter umbrellas by esports/games type if filterType is provided
+		const esportsTag = tags.find(
+			(t) => normalizeTagLabel(t.label) === "ESPORTS",
+		);
+		const esportsTagId = esportsTag?._id;
+
 		const typeFilteredUmbrellas = filterType
 			? activeUmbrellas.filter((umbrella) => {
 					const children = (umbrella as any).children as
@@ -67,16 +74,10 @@ export default function GameLinks({
 						| undefined;
 					if (!children || children.length === 0) return false;
 
-					// Check if any child has the ESPORTS tag
-					// Only check questions that HAVE tagIds (skip legacy questions)
-					const esportsTag = tags.find(
-						(t) => normalizeTag(t.label) === "ESPORTS"
-					);
 					const hasEsportsTag = children.some((q) => {
 						const tagIds: string[] | undefined = (q &&
 							(q as any).tagIds) as any;
 
-						// MUST have tagIds array (skip questions with legacy tags only)
 						if (!Array.isArray(tagIds) || tagIds.length === 0) {
 							return false;
 						}
@@ -88,20 +89,16 @@ export default function GameLinks({
 						return false;
 					});
 
-					// Filter based on filterType
 					if (filterType === "all") {
 						return true;
 					}
 					if (filterType === "esports") {
 						return hasEsportsTag;
 					}
-					// games
 					return !hasEsportsTag;
 			  })
 			: activeUmbrellas;
 
-		// For each tag, check if any umbrella has a question with that tagId
-		// Only show tags that have active markets
 		const tagsWithActiveMarkets = tags.filter((tag) => {
 			return typeFilteredUmbrellas.some((umbrella) => {
 				const children = (umbrella as any).children as
@@ -113,7 +110,6 @@ export default function GameLinks({
 					const tagIds: string[] | undefined = (q &&
 						(q as any).tagIds) as any;
 
-					// MUST have tagIds array (skip questions with legacy tags only)
 					if (!Array.isArray(tagIds) || tagIds.length === 0) {
 						return false;
 					}
@@ -123,20 +119,71 @@ export default function GameLinks({
 			});
 		});
 
-		// Filter out ESPORTS tag when on esports page (it's already implied by the URL)
 		const finalTags = tagsWithActiveMarkets.filter((tag) => {
-			if (filterType === "esports") {
-				const normalizedLabel = normalizeTag(tag.label);
-				return normalizedLabel !== "ESPORTS";
-			}
-			return true;
+			return normalizeTagLabel(tag.label) !== "ESPORTS";
 		});
 
-		return finalTags.sort((a, b) => a.label.localeCompare(b.label));
+		const tagsSorted = [...finalTags].sort((a, b) =>
+			a.label.localeCompare(b.label),
+		);
+
+		return { typeFilteredUmbrellas, tagsSorted, esportsTagId };
 	}, [umbrellas, loading, tagsLoading, filterType, tags]);
 
+	const filteredTags = linkFilterState.tagsSorted;
+
+	const liveMarketCount = React.useMemo(() => {
+		let n = 0;
+		for (const u of linkFilterState.typeFilteredUmbrellas) {
+			if (isUmbrellaLiveByEventDate(u, now, linkFilterState.esportsTagId)) {
+				n += 1;
+			}
+		}
+		return n;
+	}, [linkFilterState, now]);
+
+	const startingSoonMarketCount = React.useMemo(() => {
+		let n = 0;
+		for (const u of linkFilterState.typeFilteredUmbrellas) {
+			if (
+				isUmbrellaStartingSoonByEventDate(
+					u,
+					now,
+					linkFilterState.esportsTagId,
+				)
+			) {
+				n += 1;
+			}
+		}
+		return n;
+	}, [linkFilterState, now]);
+
+	const tagMarketCounts = React.useMemo(() => {
+		const map = new Map<string, number>();
+		const pool = linkFilterState.typeFilteredUmbrellas;
+		for (const tag of linkFilterState.tagsSorted) {
+			let c = 0;
+			for (const umbrella of pool) {
+				const children = (umbrella as any).children as
+					| Array<any>
+					| undefined;
+				if (!children || children.length === 0) continue;
+				const hit = children.some((q) => {
+					const tagIds: string[] | undefined = (q &&
+						(q as any).tagIds) as any;
+					if (!Array.isArray(tagIds) || tagIds.length === 0) {
+						return false;
+					}
+					return tagIds.includes(tag._id);
+				});
+				if (hit) c += 1;
+			}
+			map.set(tag._id, c);
+		}
+		return map;
+	}, [linkFilterState]);
+
 	React.useEffect(() => {
-		// Ensure we start at the far left
 		if (scrollRef.current) {
 			scrollRef.current.scrollLeft = 0;
 		}
@@ -150,13 +197,38 @@ export default function GameLinks({
 			el.removeEventListener("scroll", onScroll as any);
 			window.removeEventListener("resize", updateScrollState);
 		};
-	}, [updateScrollState]);
+	}, [updateScrollState, filteredTags]);
 
-	// Don't render anything while loading or if no tags have active markets
-	if (loading || tagsLoading || filteredTags.length === 0) return null;
+	if (loading || tagsLoading) return null;
 
-	// Special "New" pill identifier
-	const NEW_PILL_ID = "__NEW__";
+	const renderTagButton = (tag: Tag) => {
+		const count = tagMarketCounts.get(tag._id) ?? 0;
+		return (
+			<button
+				type="button"
+				className={`game-link ${
+					selectedGame === tag.label ? "active" : ""
+				}`}
+				key={tag._id}
+				onClick={() => {
+					if (selectedGame === tag.label) {
+						onGameSelect(null);
+					} else {
+						onGameSelect(tag.label);
+					}
+				}}
+			>
+				<span className="game-link__inner">
+					<span className="game-link__leading">
+						<span className="game-link__label">{tag.label}</span>
+					</span>
+					<span className="game-link__count" aria-label={`${count} markets`}>
+						{count}
+					</span>
+				</span>
+			</button>
+		);
+	};
 
 	return (
 		<div className="game-links-wrapper">
@@ -176,40 +248,60 @@ export default function GameLinks({
 				aria-label="Game links"
 				ref={scrollRef}
 			>
-				{/* "New" pill - always first, sorts by creation date */}
 				<button
-					className={`game-link ${
-						selectedGame === NEW_PILL_ID ? "active" : ""
+					type="button"
+					className={`game-link game-link--live ${
+						selectedGame === LIVE_PILL_ID ? "active" : ""
 					}`}
-					key={NEW_PILL_ID}
+					key={LIVE_PILL_ID}
 					onClick={() => {
-						if (selectedGame === NEW_PILL_ID) {
+						if (selectedGame === LIVE_PILL_ID) {
 							onGameSelect(null);
 						} else {
-							onGameSelect(NEW_PILL_ID);
+							onGameSelect(LIVE_PILL_ID);
 						}
 					}}
 				>
-					New
+					<span className="game-link__inner">
+						<span className="game-link__leading">
+							<span className="game-link__live-dot" aria-hidden />
+							<span className="game-link__label">Live</span>
+						</span>
+						<span
+							className="game-link__count"
+							aria-label={`${liveMarketCount} markets`}
+						>
+							{liveMarketCount}
+						</span>
+					</span>
 				</button>
-				{filteredTags.map((tag) => (
-					<button
-						className={`game-link ${
-							selectedGame === tag.label ? "active" : ""
-						}`}
-						key={tag._id}
-						onClick={() => {
-							// Toggle selection: if already selected, deselect; otherwise select
-							if (selectedGame === tag.label) {
-								onGameSelect(null);
-							} else {
-								onGameSelect(tag.label);
-							}
-						}}
-					>
-						{tag.label}
-					</button>
-				))}
+				<button
+					type="button"
+					className={`game-link ${
+						selectedGame === STARTING_SOON_PILL_ID ? "active" : ""
+					}`}
+					key={STARTING_SOON_PILL_ID}
+					onClick={() => {
+						if (selectedGame === STARTING_SOON_PILL_ID) {
+							onGameSelect(null);
+						} else {
+							onGameSelect(STARTING_SOON_PILL_ID);
+						}
+					}}
+				>
+					<span className="game-link__inner">
+						<span className="game-link__leading">
+							<span className="game-link__label">Starting Soon</span>
+						</span>
+						<span
+							className="game-link__count"
+							aria-label={`${startingSoonMarketCount} markets`}
+						>
+							{startingSoonMarketCount}
+						</span>
+					</span>
+				</button>
+				{filteredTags.map((tag) => renderTagButton(tag))}
 			</nav>
 			{canScrollRight && <div className="fade-right" aria-hidden />}
 			{canScrollRight && (

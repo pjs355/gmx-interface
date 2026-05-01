@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+	useState,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useCallback,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
@@ -8,11 +14,31 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import "../Predictions.scss";
 import GameLinks from "./GameLinks";
+import { HomeInlineTradeLayout } from "./HomeInlineTradeLayout";
+import PredictionsCalendarOddsPicker from "./PredictionsCalendarOddsPicker";
 import {
 	resolveUmbrellaEventDate,
 	startOfLocalDay,
 } from "../utils/eventDates";
-import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
+import {
+	MAX_VENUE_PANDA_SUBSCRIPTIONS,
+	useVenuePandaSubscription,
+} from "@/context/VenuePandaSubscriptionContext";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import {
+	getListingYesNoPricesForUmbrella,
+	isDeemphasizedSettledLeanOdds,
+} from "@/helpers/predictionUtils";
+import {
+	GAME_FILTER_COMPACT_MEDIA,
+	gameFilterResetSelection,
+	isUmbrellaLiveByEventDate,
+	isUmbrellaStartingSoonByEventDate,
+	LIVE_PILL_ID,
+	normalizeTagLabel,
+	STARTING_SOON_PILL_ID,
+	useNowTick,
+} from "../utils/gameLinkFilters";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
@@ -25,13 +51,25 @@ function getPlayOrderTier(eventMs: number, now: number): number {
 	return 2; // ended
 }
 
-function sortCalendarEventsByPlayOrder(events: CalendarEvent[], now: number): void {
+function sortCalendarEventsByPlayOrder(
+	events: CalendarEvent[],
+	now: number,
+	scoreDead: (umbrella: Umbrella) => number,
+): void {
 	events.sort((left, right) => {
 		const leftMs = left.eventDate.getTime();
 		const rightMs = right.eventDate.getTime();
 		const leftTier = getPlayOrderTier(leftMs, now);
 		const rightTier = getPlayOrderTier(rightMs, now);
 		if (leftTier !== rightTier) return leftTier - rightTier;
+
+		// Live tier: push "settled-lean" listing odds to the bottom
+		if (leftTier === 0) {
+			const dL = scoreDead(left.umbrella);
+			const dR = scoreDead(right.umbrella);
+			if (dL !== dR) return dL - dR;
+		}
+
 		return leftMs - rightMs;
 	});
 }
@@ -52,19 +90,6 @@ function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 		return bTradeCount - aTradeCount;
 	});
 }
-
-// Sort umbrellas by creation date (newest first)
-function sortByCreationDate(array: Umbrella[]): Umbrella[] {
-	return [...array].sort((a, b) => {
-		const aDate = new Date((a as any).createdAt || 0).getTime();
-		const bDate = new Date((b as any).createdAt || 0).getTime();
-		// Sort in descending order (newest first)
-		return bDate - aDate;
-	});
-}
-
-// Special identifier for the "New" pill
-const NEW_PILL_ID = "__NEW__";
 
 function buildDayKey(date: Date): string {
 	const year = date.getFullYear();
@@ -97,9 +122,8 @@ function formatDayLabel(
 	}
 
 	const secondary = targetDate.toLocaleDateString(undefined, {
-		month: "short",
+		month: "long",
 		day: "numeric",
-		year: "numeric",
 	});
 
 	return { primary, secondary };
@@ -154,6 +178,13 @@ function collectVisibleUmbrellas(
 	return out;
 }
 
+function gameFilterDisplayLabel(selectedGame: string | null): string | null {
+	if (!selectedGame) return null;
+	if (selectedGame === LIVE_PILL_ID) return "Live";
+	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
+	return selectedGame;
+}
+
 export default function FilteredPredictions({
 	filterType,
 }: FilteredPredictionsProps) {
@@ -162,6 +193,12 @@ export default function FilteredPredictions({
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 	const sentinelRef = useRef<HTMLDivElement>(null);
+
+	useLayoutEffect(() => {
+		const mq = window.matchMedia(GAME_FILTER_COMPACT_MEDIA);
+		if (!mq.matches) return;
+		setSelectedGame((prev) => (prev === null ? LIVE_PILL_ID : prev));
+	}, []);
 
 	// Reset visible count when filters change
 	useEffect(() => {
@@ -189,7 +226,7 @@ export default function FilteredPredictions({
 	// Listen for reset filter event from header
 	useEffect(() => {
 		const handleResetFilter = () => {
-			setSelectedGame(null);
+			setSelectedGame(gameFilterResetSelection());
 		};
 
 		window.addEventListener("resetGameFilter", handleResetFilter);
@@ -208,90 +245,84 @@ export default function FilteredPredictions({
 		tags,
 	} = usePredictionData();
 
-	const normalizeTag = (value: string) =>
-		value
-			.toUpperCase()
-			.normalize("NFKD")
-			.replace(/[\u0300-\u036f]/g, "")
-			.replace(/[^A-Z0-9]+/g, "_")
-			.replace(/^_+|_+$/g, "");
+	const { appState } = useOddsMonitor();
+	const now = useNowTick(60_000);
 
 	const filteredUmbrellas = React.useMemo(() => {
-		// First filter out inactive umbrellas
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			return (umbrella as any).active === true;
 		});
 
-		// Find ESPORTS tag
 		const esportsTag = tags.find(
-			(t) => normalizeTag(t.label) === "ESPORTS"
+			(t) => normalizeTagLabel(t.label) === "ESPORTS",
 		);
+		const esportsTagId = esportsTag?._id;
 
-		const filtered = activeUmbrellas
-			.filter((umbrella) => {
-				const children = (umbrella as any).children as
-					| Array<any>
-					| undefined;
-				if (!children || children.length === 0) return false;
+		let filtered = activeUmbrellas.filter((umbrella) => {
+			const children = (umbrella as any).children as
+				| Array<any>
+				| undefined;
+			if (!children || children.length === 0) return false;
 
-				// Check if any child has the ESPORTS tag
-				const hasEsportsTag = children.some((q) => {
-					const tagIds: string[] | undefined = (q &&
-						(q as any).tagIds) as any;
-					// MUST have tagIds array (skip questions with legacy tags only)
-					if (!Array.isArray(tagIds) || tagIds.length === 0) {
-						return false;
-					}
-					return esportsTag && tagIds.includes(esportsTag._id);
-				});
-
-				// Filter based on filterType
-				if (filterType === "all") {
-					return true;
+			const hasEsportsTag = children.some((q) => {
+				const tagIds: string[] | undefined = (q &&
+					(q as any).tagIds) as any;
+				if (!Array.isArray(tagIds) || tagIds.length === 0) {
+					return false;
 				}
-				if (filterType === "esports") {
-					return hasEsportsTag;
-				}
-				// games
-				return !hasEsportsTag;
-			})
-			.filter((umbrella) => {
-				// Apply secondary game filter if selected
-				// Skip tag filtering if "New" pill is selected (it just sorts, doesn't filter)
-				if (!selectedGame || selectedGame === NEW_PILL_ID) return true;
-
-				// Find the selected tag by label
-				const selectedTag = tags.find((t) => t.label === selectedGame);
-				if (!selectedTag) return true;
-
-				const children = (umbrella as any).children as
-					| Array<any>
-					| undefined;
-				if (!children || children.length === 0) return false;
-
-				return children.some((q) => {
-					const tagIds: string[] | undefined = (q &&
-						(q as any).tagIds) as any;
-					// MUST have tagIds array (skip questions with legacy tags only)
-					if (!Array.isArray(tagIds) || tagIds.length === 0) {
-						return false;
-					}
-					return tagIds.includes(selectedTag._id);
-				});
+				return esportsTag && tagIds.includes(esportsTag._id);
 			});
 
-		// Handle "New" pill - sort by creation date
-		if (selectedGame === NEW_PILL_ID) {
-			return sortByCreationDate(filtered);
+			if (filterType === "all") {
+				return true;
+			}
+			if (filterType === "esports") {
+				return hasEsportsTag;
+			}
+			return !hasEsportsTag;
+		});
+
+		if (
+			selectedGame &&
+			selectedGame !== LIVE_PILL_ID &&
+			selectedGame !== STARTING_SOON_PILL_ID
+		) {
+			const selectedTag = tags.find((t) => t.label === selectedGame);
+			if (selectedTag) {
+				filtered = filtered.filter((umbrella) => {
+					const children = (umbrella as any).children as
+						| Array<any>
+						| undefined;
+					if (!children || children.length === 0) return false;
+
+					return children.some((q) => {
+						const tagIds: string[] | undefined = (q &&
+							(q as any).tagIds) as any;
+						if (!Array.isArray(tagIds) || tagIds.length === 0) {
+							return false;
+						}
+						return tagIds.includes(selectedTag._id);
+					});
+				});
+			}
 		}
 
-		// Sort by trading activity for games-only flat grid (home "all" uses calendar ordering)
+		if (selectedGame === LIVE_PILL_ID) {
+			filtered = filtered.filter((umbrella) =>
+				isUmbrellaLiveByEventDate(umbrella, now, esportsTagId),
+			);
+		} else if (selectedGame === STARTING_SOON_PILL_ID) {
+			filtered = filtered.filter((umbrella) =>
+				isUmbrellaStartingSoonByEventDate(umbrella, now, esportsTagId),
+			);
+		}
+
 		if (filterType === "games") {
 			return sortByTradingActivity(filtered);
 		}
 
 		return filtered;
-	}, [umbrellas, filterType, selectedGame, tags]);
+	}, [umbrellas, filterType, selectedGame, tags, now]);
 
 	const calendarData = React.useMemo(() => {
 		if (filterType === "games") {
@@ -300,7 +331,6 @@ export default function FilteredPredictions({
 
 		const todayStart = startOfLocalDay(new Date());
 		const todayStartMs = todayStart.getTime();
-		const now = Date.now();
 
 		type CalendarDay = { date: Date; events: CalendarEvent[] };
 
@@ -346,17 +376,25 @@ export default function FilteredPredictions({
 		const sortByDateDesc = (a: CalendarDay, b: CalendarDay) =>
 			b.date.getTime() - a.date.getTime();
 
+		const scoreDead = (umbrella: Umbrella): number => {
+			const { yes, no } = getListingYesNoPricesForUmbrella(
+				umbrella,
+				appState?.markets,
+			);
+			return isDeemphasizedSettledLeanOdds(yes, no) ? 1 : 0;
+		};
+
 		const upcomingDays = Array.from(upcomingMap.values())
 			.sort(sortByDate)
 			.map((day) => {
-				sortCalendarEventsByPlayOrder(day.events, now);
+				sortCalendarEventsByPlayOrder(day.events, now, scoreDead);
 				return day;
 			});
 
 		const pastDays = Array.from(pastMap.values())
 			.sort(sortByDateDesc)
 			.map((day) => {
-				sortCalendarEventsByPlayOrder(day.events, now);
+				sortCalendarEventsByPlayOrder(day.events, now, scoreDead);
 				return day;
 			});
 
@@ -366,7 +404,7 @@ export default function FilteredPredictions({
 			pastDays,
 			unscheduled,
 		};
-	}, [filteredUmbrellas, filterType]);
+	}, [filteredUmbrellas, filterType, appState?.markets, now]);
 
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
@@ -442,23 +480,26 @@ export default function FilteredPredictions({
 		],
 	);
 
-	const visiblePandaIdsKey = React.useMemo(() => {
-		const ids = new Set<string>();
+	const visiblePandaIdsForVenueWs = React.useMemo(() => {
+		const out: string[] = [];
+		const seen = new Set<string>();
 		for (const u of visibleUmbrellasForVenueWs) {
 			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
 			const pid = typeof raw === "string" ? raw.trim() : "";
-			if (pid) ids.add(pid);
+			if (!pid || seen.has(pid)) continue;
+			seen.add(pid);
+			out.push(pid);
+			if (out.length >= MAX_VENUE_PANDA_SUBSCRIPTIONS) break;
 		}
-		return [...ids].sort().join("\0");
+		return out;
 	}, [visibleUmbrellasForVenueWs]);
 
 	useEffect(() => {
-		const ids = visiblePandaIdsKey ? visiblePandaIdsKey.split("\0") : [];
-		for (const id of ids) subscribePandaMatchId(id);
+		for (const id of visiblePandaIdsForVenueWs) subscribePandaMatchId(id);
 		return () => {
-			for (const id of ids) unsubscribePandaMatchId(id);
+			for (const id of visiblePandaIdsForVenueWs) unsubscribePandaMatchId(id);
 		};
-	}, [visiblePandaIdsKey, subscribePandaMatchId, unsubscribePandaMatchId]);
+	}, [visiblePandaIdsForVenueWs, subscribePandaMatchId, unsubscribePandaMatchId]);
 
 	const handleRetry = () => {
 		window.location.reload();
@@ -510,15 +551,19 @@ export default function FilteredPredictions({
 			content = (
 				<div className="no-markets-message no-markets-message--empty">
 					<p>
-						{selectedGame
-							? `No current ${pageTitle.toLowerCase()} markets for ${selectedGame}`
-							: noMarketsMessage}
+						{(() => {
+							const label = gameFilterDisplayLabel(selectedGame);
+							return label
+								? `No current ${pageTitle.toLowerCase()} markets for ${label}`
+								: noMarketsMessage;
+						})()}
 					</p>
 				</div>
 			);
 		} else {
 			// Progressive rendering: only render up to visibleCount cards across all day groups
 			let rendered = 0;
+			let calendarOddsPickerShown = false;
 			const calendarSections: React.ReactNode[] = [];
 
 			for (const day of calendarData.upcomingDays) {
@@ -528,6 +573,8 @@ export default function FilteredPredictions({
 				rendered += eventsToShow.length;
 
 				const label = formatDayLabel(day.date, calendarData.todayStartMs);
+				const showOddsPicker = !calendarOddsPickerShown;
+				if (showOddsPicker) calendarOddsPickerShown = true;
 				calendarSections.push(
 					<section
 						key={`upcoming-${buildDayKey(day.date)}`}
@@ -542,6 +589,7 @@ export default function FilteredPredictions({
 									{label.secondary}
 								</span>
 							</div>
+							{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
 						</header>
 						<div className="predictions-grid prediction-calendar-grid">
 							{eventsToShow.map((event) =>
@@ -557,6 +605,8 @@ export default function FilteredPredictions({
 				const unscheduledToShow = calendarData.unscheduled.slice(0, remaining);
 				rendered += unscheduledToShow.length;
 
+				const showOddsPicker = !calendarOddsPickerShown;
+				if (showOddsPicker) calendarOddsPickerShown = true;
 				calendarSections.push(
 					<section
 						key="unscheduled"
@@ -571,6 +621,7 @@ export default function FilteredPredictions({
 									Event date not provided
 								</span>
 							</div>
+							{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
 						</header>
 						<div className="predictions-grid prediction-calendar-grid">
 							{unscheduledToShow.map((umbrellaItem) =>
@@ -590,6 +641,8 @@ export default function FilteredPredictions({
 					rendered += eventsToShow.length;
 
 					const label = formatDayLabel(day.date, calendarData.todayStartMs);
+					const showOddsPicker = !calendarOddsPickerShown;
+					if (showOddsPicker) calendarOddsPickerShown = true;
 					pastSections.push(
 						<section
 							key={`past-${buildDayKey(day.date)}`}
@@ -604,6 +657,7 @@ export default function FilteredPredictions({
 										{label.secondary}
 									</span>
 								</div>
+								{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
 							</header>
 							<div className="predictions-grid prediction-calendar-grid">
 								{eventsToShow.map((event) =>
@@ -683,9 +737,12 @@ export default function FilteredPredictions({
 				) : (
 					<div className="no-markets-message no-markets-message--empty">
 						<p>
-							{selectedGame
-								? `No current ${pageTitle.toLowerCase()} markets for ${selectedGame}`
-								: noMarketsMessage}
+							{(() => {
+								const label = gameFilterDisplayLabel(selectedGame);
+								return label
+									? `No current ${pageTitle.toLowerCase()} markets for ${label}`
+									: noMarketsMessage;
+							})()}
 						</p>
 					</div>
 				)}
@@ -695,21 +752,31 @@ export default function FilteredPredictions({
 
 	return (
 		<div className="predictions-page page-layout">
-			<GameLinks
-				selectedGame={selectedGame}
-				onGameSelect={setSelectedGame}
-				umbrellas={umbrellas}
-				loading={loading}
-				filterType={filterType}
-			/>
-			{content}
-			{hasMoreItems && (
-				<div
-					ref={sentinelRef}
-					style={{ height: 1, width: "100%" }}
-					aria-hidden
+			<div className="predictions-page__body">
+				<GameLinks
+					selectedGame={selectedGame}
+					onGameSelect={setSelectedGame}
+					umbrellas={umbrellas}
+					loading={loading}
+					filterType={filterType}
 				/>
-			)}
+				<HomeInlineTradeLayout
+					enabled={filterType === "all"}
+					visibleUmbrellas={visibleUmbrellasForVenueWs}
+					selectedGame={selectedGame}
+				>
+					<div className="predictions-page__main">
+						{content}
+						{hasMoreItems && (
+							<div
+								ref={sentinelRef}
+								style={{ height: 1, width: "100%" }}
+								aria-hidden
+							/>
+						)}
+					</div>
+				</HomeInlineTradeLayout>
+			</div>
 		</div>
 	);
 }

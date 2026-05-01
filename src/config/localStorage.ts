@@ -11,6 +11,8 @@ export const SELECTED_NETWORK_LOCAL_STORAGE_KEY = "SELECTED_NETWORK";
 // UI preferences
 export const LANGUAGE_LOCALSTORAGE_KEY = "LANGUAGE";
 export const SHOW_DEBUG_VALUES_KEY = "show-debug-values";
+/** `"default"` | `"american"` — extensible for decimal/fractional later */
+export const ODDS_DISPLAY_STYLE_STORAGE_KEY = "odds-display-style";
 
 // Debug: Override the account address for read-only debugging
 // Set this to another user's wallet address to view their portfolio (read-only)

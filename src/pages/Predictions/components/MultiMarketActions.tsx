@@ -1,15 +1,15 @@
 import React, { useEffect } from "react";
 import Button from "components/Button/Button";
 import {
-	toCentsString,
 	truncateMarketName,
 	hexToRgba,
 	getContrastingTextColor,
 	mixHexOnBlack,
+	oddsBarPercent,
 } from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { usePredictionData } from "context/PredictionDataContext";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
 
 interface MultiMarketActionsProps {
 	umbrellaId: string;
@@ -24,6 +24,7 @@ interface MultiMarketActionsProps {
 	/** When set from OddsMonitor venue-prices, overrides listing preview for both rows */
 	liveVenueYesPrice?: number | null;
 	liveVenueNoPrice?: number | null;
+	compact?: boolean;
 }
 
 export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
@@ -33,9 +34,10 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 	onNavigateToUmbrella,
 	liveVenueYesPrice,
 	liveVenueNoPrice,
+	compact = false,
 }) => {
-	const { allBooksPreview } = usePredictionData();
-	
+	const { formatPrice } = useOddsDisplay();
+
 	// Helper to calculate total volume from orderbook data
 	// Volume = sum of all sizes in bids + asks
 	const getTotalVolume = React.useCallback((questionId: string, orderbooks: any) => {
@@ -102,36 +104,28 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 		topMarkets.forEach((marketData, index) => {
 			const { question } = marketData;
 			const qid = question.questionId || question._id;
-			const preview = qid ? allBooksPreview[String(qid)] : undefined;
-			const yesPrice = liveYesFinite
-				? liveVenueYesPrice!
-				: (preview?.bestYesPrice ?? preview?.lowestAsk ?? null);
-			const noPrice = liveNoFinite
-				? liveVenueNoPrice!
-				: (preview?.bestNoPrice ?? null);
+			const yesPrice = liveYesFinite ? liveVenueYesPrice! : null;
+			const noPrice = liveNoFinite ? liveVenueNoPrice! : null;
 			priceDebugLog(`homepage MultiMarketActions row ${index}`, {
 				umbrellaId,
 				marketName: question.displayName || question.question,
 				lookupQuestionId: qid ?? null,
 				mongoId: question._id ?? null,
-				previewFromAllBooksPreview: preview ?? null,
 				liveWsOverridesBothRows: liveYesFinite || liveNoFinite,
 				noteWhenLive:
 					"When live WS YES/NO are set, the same values apply to every top-2 row (match-level best, not per-question).",
-				dataSource:
-					"preview: GET getPrivateApiBaseUrl()/api/all-books-preview; live: venue-prices WS → listingBestYesNoFromMatched",
+				dataSource: "venue-prices WS → MatchedMarket → listingBestYesNoFromMatched (PredictionCard)",
 				liveVenueYesPrice: liveVenueYesPrice ?? null,
 				liveVenueNoPrice: liveVenueNoPrice ?? null,
 				finalYesPrice: yesPrice ?? null,
 				finalNoPrice: noPrice ?? null,
-				yesSource: liveYesFinite ? "live_ws" : preview ? "preview_api" : "none",
-				noSource: liveNoFinite ? "live_ws" : preview?.bestNoPrice != null ? "preview_api" : "none",
+				yesSource: liveYesFinite ? "live_ws" : "none",
+				noSource: liveNoFinite ? "live_ws" : "none",
 			});
 		});
 	}, [
 		umbrellaId,
 		topMarkets,
-		allBooksPreview,
 		liveVenueYesPrice,
 		liveVenueNoPrice,
 		liveYesFinite,
@@ -139,28 +133,33 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 	]);
 
 	return (
-		<div className="multi-market-actions">
+		<div
+			className={
+				compact
+					? "multi-market-actions multi-market-actions--compact"
+					: "multi-market-actions"
+			}
+		>
 			{topMarkets.map((marketData, index) => {
 				const { question } = marketData;
-				const questionId = question.questionId || question._id;
-				const preview = questionId
-					? allBooksPreview[questionId]
-					: undefined;
 
-			const yesPrice =
-				typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice)
-					? liveVenueYesPrice
-					: (preview?.bestYesPrice ?? preview?.lowestAsk ?? null);
-			const noPrice =
-				typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
-					? liveVenueNoPrice
-					: (preview?.bestNoPrice ?? null);
+				const yesPrice =
+					typeof liveVenueYesPrice === "number" &&
+					Number.isFinite(liveVenueYesPrice)
+						? liveVenueYesPrice
+						: null;
+				const noPrice =
+					typeof liveVenueNoPrice === "number" &&
+					Number.isFinite(liveVenueNoPrice)
+						? liveVenueNoPrice
+						: null;
 
 				const yesCents =
 					yesPrice !== null && yesPrice !== undefined
-						? `${toCentsString(yesPrice)}¢`
+						? formatPrice(yesPrice)
 						: "--";
-				const noCents = noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
+				const noCents =
+					noPrice !== null && noPrice !== undefined ? formatPrice(noPrice) : "--";
 
 				const rawYes = (question as any)?.yesColor;
 				const rawNo = (question as any)?.noColor;
@@ -185,17 +184,146 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 					mixHexOnBlack(noColor, 0.2),
 				);
 
+				const marketTitle = truncateMarketName(
+					question.displayName || question.question,
+				);
+
+				if (compact) {
+					const yesAria = `Yes ${marketTitle} ${yesCents}`;
+					const noAria = `No ${marketTitle} ${noCents}`;
+					const yesBarPct = oddsBarPercent(yesPrice);
+					const noBarPct = oddsBarPercent(noPrice);
+					return (
+						<div
+							key={question._id || question.questionId || index}
+							className="multi-market-block"
+						>
+							<div className="multi-market-actions__market-title">
+								{marketTitle}
+							</div>
+							<div className="prediction-card-outcome-rows">
+								<div className="prediction-card-outcome-row">
+									<div className="prediction-card-outcome-logo" />
+									<div className="prediction-card-outcome-middle">
+										<span className="prediction-card-outcome-label">
+											Yes
+										</span>
+										{yesBarPct !== null ? (
+											<div
+												className="prediction-card-outcome-odds-bar"
+												aria-hidden
+											>
+												<div
+													className="prediction-card-outcome-odds-bar__fill"
+													style={{
+														width: `${yesBarPct}%`,
+														backgroundColor: yesColor,
+													}}
+												/>
+											</div>
+										) : null}
+									</div>
+									<Button
+										variant="secondary"
+										className="action-button yes-button"
+										aria-label={yesAria}
+										onClick={() => onNavigate(question, "yes")}
+										style={{
+											background: hexToRgba(yesColor, 0.1),
+											color: yesTextIdle,
+											border: `2px solid ${yesColor}`,
+											fontSize: "16px",
+											padding: "10px 12px",
+											minHeight: "44px",
+											textAlign: "center",
+										}}
+										onMouseEnter={(e) => {
+											e.currentTarget.style.background =
+												hexToRgba(yesColor, 0.2);
+											e.currentTarget.style.color = yesTextHover;
+											e.currentTarget.style.transform =
+												"translateY(-1px)";
+											e.currentTarget.style.boxShadow = `0 4px 8px ${hexToRgba(yesColor, 0.3)}`;
+										}}
+										onMouseLeave={(e) => {
+											e.currentTarget.style.background =
+												hexToRgba(yesColor, 0.1);
+											e.currentTarget.style.color = yesTextIdle;
+											e.currentTarget.style.transform =
+												"translateY(0)";
+											e.currentTarget.style.boxShadow = "none";
+										}}
+									>
+										<strong>{yesCents}</strong>
+									</Button>
+								</div>
+								<div className="prediction-card-outcome-row">
+									<div className="prediction-card-outcome-logo" />
+									<div className="prediction-card-outcome-middle">
+										<span className="prediction-card-outcome-label">
+											No
+										</span>
+										{noBarPct !== null ? (
+											<div
+												className="prediction-card-outcome-odds-bar"
+												aria-hidden
+											>
+												<div
+													className="prediction-card-outcome-odds-bar__fill"
+													style={{
+														width: `${noBarPct}%`,
+														backgroundColor: noColor,
+													}}
+												/>
+											</div>
+										) : null}
+									</div>
+									<Button
+										variant="secondary"
+										className="action-button no-button"
+										aria-label={noAria}
+										onClick={() => onNavigate(question, "no")}
+										style={{
+											background: hexToRgba(noColor, 0.1),
+											color: noTextIdle,
+											border: `2px solid ${noColor}`,
+											fontSize: "16px",
+											padding: "10px 12px",
+											minHeight: "44px",
+											textAlign: "center",
+										}}
+										onMouseEnter={(e) => {
+											e.currentTarget.style.background =
+												hexToRgba(noColor, 0.2);
+											e.currentTarget.style.color = noTextHover;
+											e.currentTarget.style.transform =
+												"translateY(-1px)";
+											e.currentTarget.style.boxShadow = `0 4px 8px ${hexToRgba(noColor, 0.3)}`;
+										}}
+										onMouseLeave={(e) => {
+											e.currentTarget.style.background =
+												hexToRgba(noColor, 0.1);
+											e.currentTarget.style.color = noTextIdle;
+											e.currentTarget.style.transform =
+												"translateY(0)";
+											e.currentTarget.style.boxShadow = "none";
+										}}
+									>
+										<strong>{noCents}</strong>
+									</Button>
+								</div>
+							</div>
+						</div>
+					);
+				}
+
 				return (
 					<div
 						key={question._id || question.questionId || index}
 						className="market-row"
 					>
 						<div className="market-info">
-							<span className="market-name">
-								{truncateMarketName(
-									question.displayName || question.question
-								)}
-							</span>
+							<span className="market-name">{marketTitle}</span>
 						</div>
 						<div className="market-buttons">
 							<Button
@@ -273,9 +401,12 @@ export const MultiMarketActions: React.FC<MultiMarketActionsProps> = ({
 			})}
 			
 			{hasMoreMarkets && onNavigateToUmbrella && (
-				<div 
-					className="view-more-markets" 
-					onClick={onNavigateToUmbrella}
+				<div
+					className="view-more-markets"
+					onClick={(e) => {
+						e.stopPropagation();
+						onNavigateToUmbrella();
+					}}
 				>
 					<span>View more</span>
 					<svg 

@@ -1,3 +1,5 @@
+import type { OddsDisplayStyle } from "@/utils/oddsDisplayFormat";
+import { formatOddsPrice } from "@/utils/oddsDisplayFormat";
 import type { RoutePlan, SorChain, SorVenue } from "./sor-types";
 import { VENUE_DISPLAY_NAMES } from "./sor-types";
 
@@ -27,16 +29,55 @@ export function formatToWinUsdDisplay(rawUsd: number): string {
 }
 
 /**
- * Details rows (venue legs, limits): share counts floored to 2 decimals — aligns with To Win flooring.
+ * Details rows (venue legs, limits). Polymarket legs can be sub-penny share counts; flooring
+ * those to 2 decimals showed **0** while spend was non-zero.
  */
 export function formatSorDetailsSharesDisplay(shares: number): string {
 	if (!Number.isFinite(shares)) return String(shares);
+	if (shares <= 0) return "0";
+	if (shares < 0.01) {
+		return new Intl.NumberFormat("en-US", {
+			maximumSignificantDigits: 4,
+			maximumFractionDigits: 8,
+		}).format(shares);
+	}
 	const floored = Math.floor(shares * 100) / 100;
 	const whole = Math.abs(floored % 1) < 1e-9;
 	return new Intl.NumberFormat("en-US", {
 		maximumFractionDigits: whole ? 0 : 2,
 		minimumFractionDigits: whole ? 0 : 2,
 	}).format(floored);
+}
+
+const LONG_DECIMAL_CELL_STYLES = new Set<OddsDisplayStyle>([
+	"decimal",
+	"hong_kong",
+	"indonesian",
+	"malaysian",
+]);
+
+/**
+ * Avg fill price on dense SOR lines (“… shares @ avg …”). Ratio styles can emit 4+ fractional
+ * digits (e.g. ~53% implied → decimal **1.8984**); cap to **2** decimals for readability.
+ */
+export function formatSorLegAvgForDisplay(
+	p: number,
+	style: OddsDisplayStyle,
+): string {
+	const s = formatOddsPrice(p, style, "cell");
+	if (!LONG_DECIMAL_CELL_STYLES.has(style)) return s;
+	const m = s.match(/^([+-]?)(\d+\.\d{3,})$/);
+	if (!m) return s;
+	const n = Number(`${m[1] ?? ""}${m[2]}`);
+	if (!Number.isFinite(n)) return s;
+	const roundedMag = Math.abs(n)
+		.toFixed(2)
+		.replace(/(\.\d*?)0+$/, "$1")
+		.replace(/\.$/, "");
+	const sep = m[1] ?? "";
+	if (sep === "-") return `-${roundedMag}`;
+	if (sep === "+") return `+${roundedMag}`;
+	return roundedMag;
 }
 
 /**

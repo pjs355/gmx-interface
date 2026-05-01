@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePredictionData } from "context/PredictionDataContext";
@@ -11,6 +11,16 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "../Predictions/Predictions.scss";
 import GameLinks from "../Predictions/components/GameLinks";
 import { Search } from "../Predictions/components/Search/Search";
+import {
+	GAME_FILTER_COMPACT_MEDIA,
+	gameFilterResetSelection,
+	isUmbrellaLiveByEventDate,
+	isUmbrellaStartingSoonByEventDate,
+	LIVE_PILL_ID,
+	normalizeTagLabel,
+	STARTING_SOON_PILL_ID,
+	useNowTick,
+} from "../Predictions/utils/gameLinkFilters";
 
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
@@ -82,7 +92,7 @@ export default function TestPage() {
 	// Listen for reset filter event from header
 	useEffect(() => {
 		const handleResetFilter = () => {
-			setSelectedGame(null);
+			setSelectedGame(gameFilterResetSelection());
 		};
 
 		window.addEventListener("resetGameFilter", handleResetFilter);
@@ -100,13 +110,7 @@ export default function TestPage() {
 		tags,
 	} = usePredictionData();
 
-	const normalizeTag = (value: string) =>
-		value
-			.toUpperCase()
-			.normalize("NFKD")
-			.replace(/[\u0300-\u036f]/g, "")
-			.replace(/[^A-Z0-9]+/g, "_")
-			.replace(/^_+|_+$/g, "");
+	const now = useNowTick(60_000);
 
 	const handleSearchActive = useCallback(
 		async (active: boolean, query: string) => {
@@ -148,11 +152,12 @@ export default function TestPage() {
 
 		// Find ESPORTS tag to exclude esports markets from home page
 		const esportsTag = tags.find(
-			(t) => normalizeTag(t.label) === "ESPORTS"
+			(t) => normalizeTagLabel(t.label) === "ESPORTS",
 		);
+		const esportsTagId = esportsTag?._id;
 
 		// Filter out esports-tagged umbrellas
-		const nonEsportsUmbrellas = inactiveUmbrellas.filter((umbrella) => {
+		let filtered = inactiveUmbrellas.filter((umbrella) => {
 			const children = (umbrella as any).children as
 				| Array<any>
 				| undefined;
@@ -173,13 +178,14 @@ export default function TestPage() {
 			return !hasEsportsTag;
 		});
 
-		let filtered = nonEsportsUmbrellas;
-		
-		if (selectedGame) {
-			// Find the selected tag by label
+		if (
+			selectedGame &&
+			selectedGame !== LIVE_PILL_ID &&
+			selectedGame !== STARTING_SOON_PILL_ID
+		) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
 			if (selectedTag) {
-				filtered = nonEsportsUmbrellas.filter((umbrella) => {
+				filtered = filtered.filter((umbrella) => {
 					const children = (umbrella as any).children as
 						| Array<any>
 						| undefined;
@@ -187,7 +193,6 @@ export default function TestPage() {
 					return children.some((q) => {
 						const tagIds: string[] | undefined = (q &&
 							(q as any).tagIds) as any;
-						// MUST have tagIds array (skip questions with legacy tags only)
 						if (!Array.isArray(tagIds) || tagIds.length === 0) {
 							return false;
 						}
@@ -197,9 +202,26 @@ export default function TestPage() {
 			}
 		}
 
+		if (selectedGame === LIVE_PILL_ID) {
+			filtered = filtered.filter((umbrella) =>
+				isUmbrellaLiveByEventDate(umbrella, now, esportsTagId),
+			);
+		} else if (selectedGame === STARTING_SOON_PILL_ID) {
+			filtered = filtered.filter((umbrella) =>
+				isUmbrellaStartingSoonByEventDate(umbrella, now, esportsTagId),
+			);
+		}
+
 		// Sort by trading activity (most trades first)
 		return sortByTradingActivity(filtered);
-	}, [umbrellas, selectedGame, tags, searchActive, searchResults]);
+	}, [umbrellas, selectedGame, tags, searchActive, searchResults, now]);
+
+	const filterLabelForEmpty =
+		selectedGame === LIVE_PILL_ID
+			? "Live"
+			: selectedGame === STARTING_SOON_PILL_ID
+				? "Starting Soon"
+				: selectedGame;
 
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
@@ -305,41 +327,45 @@ export default function TestPage() {
 
 	return (
 		<div className="predictions-page page-layout">
-			{/** <ImageBanner /> */}
-			{/* <Search
-				onSearchActive={handleSearchActive}
-				searchResults={searchResults}
-				activeQuery={searchQuery}
-			/> */}
-			<GameLinks
-				selectedGame={selectedGame}
-				onGameSelect={setSelectedGame}
-				umbrellas={umbrellas}
-				loading={loading}
-				filterType="games"
-			/>
+			<div className="predictions-page__body">
+				{/** <ImageBanner /> */}
+				{/* <Search
+					onSearchActive={handleSearchActive}
+					searchResults={searchResults}
+					activeQuery={searchQuery}
+				/> */}
+				<GameLinks
+					selectedGame={selectedGame}
+					onGameSelect={setSelectedGame}
+					umbrellas={umbrellas}
+					loading={loading}
+					filterType="games"
+				/>
 
-			<div className="predictions-grid">
-				{filteredUmbrellas.length > 0 ? (
-					filteredUmbrellas.map((umbrella) => (
-						<PredictionCard
-							key={umbrella._id}
-							umbrella={umbrella}
-							singleMarketOrderbooks={singleMarketOrderbooks}
-							singleMarketQuestions={singleMarketQuestions}
-							multiMarketData={multiMarketData}
-							onNavigateToUmbrella={navigateToUmbrella}
-							onNavigateToSingleMarket={navigateToSingleMarket}
-							onNavigateToMultiMarket={navigateToMultiMarket}
-						/>
-					))
-				) : (
-					<div className="no-markets-message no-markets-message--empty">
-						<p>{`No inactive markets for ${
-							selectedGame ?? "this filter"
-						}`}</p>
+				<div className="predictions-page__main">
+					<div className="predictions-grid">
+						{filteredUmbrellas.length > 0 ? (
+							filteredUmbrellas.map((umbrella) => (
+								<PredictionCard
+									key={umbrella._id}
+									umbrella={umbrella}
+									singleMarketOrderbooks={singleMarketOrderbooks}
+									singleMarketQuestions={singleMarketQuestions}
+									multiMarketData={multiMarketData}
+									onNavigateToUmbrella={navigateToUmbrella}
+									onNavigateToSingleMarket={navigateToSingleMarket}
+									onNavigateToMultiMarket={navigateToMultiMarket}
+								/>
+							))
+						) : (
+							<div className="no-markets-message no-markets-message--empty">
+								<p>{`No inactive markets for ${
+									filterLabelForEmpty ?? "this filter"
+								}`}</p>
+							</div>
+						)}
 					</div>
-				)}
+				</div>
 			</div>
 		</div>
 	);

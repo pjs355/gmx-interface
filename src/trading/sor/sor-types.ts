@@ -191,11 +191,6 @@ export interface RouteRequest {
 	limitlessMakerBaseUsdc?: number;
 }
 
-export interface RouteResponse {
-	success: true;
-	route: RoutePlan;
-}
-
 /** Mirrors server `SorErrorCode` (subset extended as API grows). */
 export type SorErrorCode =
 	| "NO_MARKET_FOUND"
@@ -213,6 +208,55 @@ export type SorErrorCode =
 	| "EXECUTION_NOT_READY"
 	| "THEORETICAL_ROUTE_NOT_EXECUTABLE"
 	| "INSUFFICIENT_FUNDS";
+
+export type VenueRoutePreviewQuoteKind = "executable" | "theoreticalOnly";
+
+export interface VenueRoutePreviewBuy {
+	side: "buy";
+	venue: SorVenue;
+	quoteKind: VenueRoutePreviewQuoteKind;
+	/** Same USD budget as the parent smart-route request `amount`. */
+	requestedAmount: number;
+	/** Unused USD vs `requestedAmount` for this venue-only quote. */
+	remainder: number;
+	/** True when this venue's book cannot fill the full `requestedAmount` alone. */
+	insufficientLiquidity: boolean;
+	totalShares: number;
+	totalCost: number;
+	totalFees: number;
+	totalBridgeCost: number;
+	legs: RouteLeg[];
+}
+
+export interface VenueRoutePreviewSellOk {
+	side: "sell";
+	venue: SorVenue;
+	ok: true;
+	shares: number;
+	avgPrice: number;
+	proceeds: number;
+	fees: number;
+	legs: RouteLeg[];
+}
+
+export interface VenueRoutePreviewSellFail {
+	side: "sell";
+	venue: SorVenue;
+	ok: false;
+	code: SorErrorCode;
+	error: string;
+}
+
+export type VenueRoutePreview =
+	| VenueRoutePreviewBuy
+	| VenueRoutePreviewSellOk
+	| VenueRoutePreviewSellFail;
+
+export interface RouteResponse {
+	success: true;
+	route: RoutePlan;
+	venuePreviews?: VenueRoutePreview[];
+}
 
 export interface RouteErrorResponse {
 	success: false;

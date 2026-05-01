@@ -23,7 +23,9 @@ export interface OrderbookData {
 	asks?: OrderbookLevel[];
 	bidLevels?: number;
 	askLevels?: number;
+	/** Contracts at the best bid only (touch), not cumulative depth. */
 	totalBidLiquidity?: number;
+	/** Contracts at the best ask only (touch), not cumulative depth. */
 	totalAskLiquidity?: number;
 	totalBidValue?: number;
 	totalAskValue?: number;

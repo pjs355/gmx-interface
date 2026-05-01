@@ -41,6 +41,11 @@ export type {
 	ExecutionLegStatus,
 	RouteExecutionStatus,
 	VenueMarketIds,
+	VenueRoutePreview,
+	VenueRoutePreviewBuy,
+	VenueRoutePreviewSellOk,
+	VenueRoutePreviewSellFail,
+	VenueRoutePreviewQuoteKind,
 } from "./sor-types";
 
 export {
@@ -79,6 +84,7 @@ export {
 	formatSorUsdRounded2,
 	formatSorBuyCostUsdDisplay,
 	formatSorSellProceedsUsdDisplay,
+	formatSorLegAvgForDisplay,
 	derivedBridgeUsdForDisplay,
 	buildFundsTransferTooltip,
 	getSorLifiTransferFeeRowState,

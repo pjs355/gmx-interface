@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useMedia } from "react-use";
 import PredictionMarketChart from "./PredictionMarketChart";
 import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
-import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarketTradeBox";
+import { UmbrellaTradeBoxPanel } from "./UmbrellaTradeBoxPanel";
 // import RulesSection from "components/RulesSection/RulesSection"; // Hidden for now (Rules / Match Winner / Show More)
 import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
@@ -18,20 +18,9 @@ import {
 	levelUpOrderbookHasRestingShares,
 	resolveLevelUpOrderbookKey,
 } from "./utils";
-import { useOddsMonitor } from "@/context/OddsMonitorContext";
-import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
-import { useDirectVenueBooks } from "@/trading/venue-books";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
-import type { OrderbookData } from "@/types/odds-monitor";
-import { useTradingPagePrices } from "@/hooks/useTradingPagePrices";
-import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
-import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
+import { useUmbrellaTradePricing } from "./useUmbrellaTradePricing";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
-import {
-	ChartSkeleton,
-	TradeBoxSkeleton,
-	OrderbookSkeleton,
-} from "./Skeletons";
+import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
 
 type PanelsProps = {
 	umbrella: Umbrella;
@@ -80,63 +69,24 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		}
 	}, []);
 
-	const pandascoreMatchId =
-		typeof umbrella?.pandascore_matchId === "string"
-			? umbrella.pandascore_matchId.trim()
-			: "";
+	const {
+		tradingPagePrices,
+		directBooks,
+		serverVenueDepthParity,
+		pandascoreMatchId,
+	} = useUmbrellaTradePricing({
+		umbrella,
+		sortedQuestions,
+		questionOrderbooks,
+	});
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 
-	const { subscribePandaMatchId, unsubscribePandaMatchId } =
-		useVenuePandaSubscription();
-	useEffect(() => {
-		if (!pandascoreMatchId) return;
-		subscribePandaMatchId(pandascoreMatchId);
-		return () => unsubscribePandaMatchId(pandascoreMatchId);
-	}, [pandascoreMatchId, subscribePandaMatchId, unsubscribePandaMatchId]);
-
-	function orderbookDataHasDepth(book: OrderbookData | null | undefined): boolean {
-		if (!book) return false;
-		const asks = book.asks?.some((a) => (a.size ?? 0) > 0);
-		const bids = book.bids?.some((b) => (b.size ?? 0) > 0);
-		return Boolean(asks || bids);
-	}
-
-	// Direct venue WS connections (Polymarket + DFlow from browser)
-	const { appState: oddsAppState } = useOddsMonitor();
-	const matchedForVenueBooks = React.useMemo(() => {
-		const base = findOddsMatchedMarket(
-			oddsAppState?.markets,
-			pandascoreMatchId,
-			umbrella?._id,
-		);
-		return mergeMonitorLimitlessFromUmbrella(base, umbrellaLimitless);
-	}, [oddsAppState?.markets, pandascoreMatchId, umbrella?._id, umbrellaLimitless]);
-
-	const serverVenueDepthParity = React.useMemo(() => {
-		const m = matchedForVenueBooks;
-		if (!m) return false;
-		const polyLinked = Boolean(m.polyConditionId || m.polyTokenIdA);
-		const polyOk =
-			!polyLinked ||
-			(orderbookDataHasDepth(m.polyPriceA) && orderbookDataHasDepth(m.polyPriceB));
-		const dflowLinked = Boolean(getDflowKalshiMonitorLink(m));
-		const dflowOk =
-			!dflowLinked ||
-			(orderbookDataHasDepth(m.dflowPriceA ?? m.kalshiPriceA) &&
-				orderbookDataHasDepth(m.dflowPriceB ?? m.kalshiPriceB));
-		return polyOk && dflowOk;
-	}, [matchedForVenueBooks]);
-
-	const directBooks = useDirectVenueBooks(matchedForVenueBooks, {
-		disabled: serverVenueDepthParity,
-	});
-
 	const firstQuestion = sortedQuestions[0] ?? null;
-	const firstQuestionId = firstQuestion ? (getMarketId(firstQuestion) || "0") : "";
 	const levelUpOrderbookKey = resolveLevelUpOrderbookKey(
 		sortedQuestions,
-		umbrella?.exchangeMatching?.levelup?.questionId ?? null,
+		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)
+			?.levelup?.questionId ?? null,
 	);
 	const levelUpOrderbook = levelUpOrderbookKey
 		? questionOrderbooks[levelUpOrderbookKey] ?? null
@@ -149,15 +99,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
 			: null) ?? firstQuestion;
 
-	const tradingPagePrices = useTradingPagePrices(
-		pandascoreMatchId,
-		levelUpOrderbook,
-		directBooks,
-		umbrella?._id,
-		umbrellaLimitless,
-	);
-
-	// Check if we have questions (umbrella loaded)
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
 	const settledView = Boolean(settledInfo);
 	const showCrossVenueBooks = Boolean(pandascoreMatchId);
@@ -441,48 +382,16 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				</div>
 
 			<div className="right-panel">
-				{settledInfo ? (
-					<div className="prediction-market-tradebox match-settled-banner">
-						<div className="match-settled-banner__content">
-							<div className="match-settled-banner__winner">
-								{settledInfo.winnerName} has won!
-							</div>
-						</div>
-					</div>
-				) : activeMarket &&
-				  hasUsableOrderbookSnapshot(
-						questionOrderbooks[getMarketId(activeMarket)],
-				  ) ? (
-					<PredictionMarketTradeBox
-						market={
-							{
-								...(activeMarket as any),
-								umbrellaChildrenCount:
-									umbrella?.children?.length || 0,
-							} as any
-						}
-						orderbook={
-							questionOrderbooks[getMarketId(activeMarket)]
-						}
-						pandascoreMatchId={
-							pandascoreMatchId || undefined
-						}
-						umbrellaId={umbrella._id}
-						limitlessMappingFromUmbrella={umbrellaLimitless}
-						umbrellaDisplayName={umbrella.displayName}
-						initialPosition={activePosition}
-						onPositionChange={onPositionChange}
-						onSideChange={setTradeSide}
-						venueOverride={venueForTradeBox}
-						crossBuyYes={tradingPagePrices.bestYesPrice}
-						crossBuyNo={tradingPagePrices.bestNoPrice}
-						venueRowsForSellStrip={
-							pandascoreMatchId ? tradingPagePrices.venueRows : undefined
-						}
-					/>
-				) : (
-					<TradeBoxSkeleton />
-				)}
+				<UmbrellaTradeBoxPanel
+					umbrella={umbrella}
+					questionOrderbooks={questionOrderbooks}
+					activeMarket={activeMarket}
+					activePosition={activePosition}
+					onPositionChange={onPositionChange}
+					settledInfo={settledInfo ?? null}
+					tradingPagePrices={tradingPagePrices}
+					venueOverride={venueForTradeBox}
+				/>
 			</div>
 			</div>
 
@@ -509,54 +418,18 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				)}
 
 			{/* Mobile Trading Container - Fixed at bottom */}
-			{settledInfo ? (
-				<div className="mobile-trading-container">
-					<div className="prediction-market-tradebox match-settled-banner">
-						<div className="match-settled-banner__content">
-							<div className="match-settled-banner__winner">
-								{settledInfo.winnerName} has won!
-							</div>
-						</div>
-					</div>
-				</div>
-			) : activeMarket &&
-			  hasUsableOrderbookSnapshot(
-					questionOrderbooks[getMarketId(activeMarket)],
-			  ) ? (
-				<div className="mobile-trading-container">
-				<PredictionMarketTradeBox
-					market={
-						{
-							...(activeMarket as any),
-							umbrellaChildrenCount:
-								umbrella?.children?.length || 0,
-						} as any
-					}
-					orderbook={
-						questionOrderbooks[getMarketId(activeMarket)]
-					}
-					pandascoreMatchId={
-						pandascoreMatchId || undefined
-					}
-					umbrellaId={umbrella._id}
-					limitlessMappingFromUmbrella={umbrellaLimitless}
-					umbrellaDisplayName={umbrella.displayName}
-					initialPosition={activePosition}
+			<div className="mobile-trading-container">
+				<UmbrellaTradeBoxPanel
+					umbrella={umbrella}
+					questionOrderbooks={questionOrderbooks}
+					activeMarket={activeMarket}
+					activePosition={activePosition}
 					onPositionChange={onPositionChange}
-					onSideChange={setTradeSide}
+					settledInfo={settledInfo ?? null}
+					tradingPagePrices={tradingPagePrices}
 					venueOverride={venueForTradeBox}
-					crossBuyYes={tradingPagePrices.bestYesPrice}
-					crossBuyNo={tradingPagePrices.bestNoPrice}
-					venueRowsForSellStrip={
-						pandascoreMatchId ? tradingPagePrices.venueRows : undefined
-					}
 				/>
-				</div>
-			) : (
-				<div className="mobile-trading-container">
-					<TradeBoxSkeleton />
-				</div>
-			)}
+			</div>
 			</div>
 		</div>
 	);

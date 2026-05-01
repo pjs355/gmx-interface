@@ -12,6 +12,7 @@
 	background-color: #000000;
 
 	/* CSS Variables */
+	--app-header-height: 5rem;
 	--color-slate-800: #1e293b;
 	--color-slate-700: #334155;
 	--color-slate-100: #f1f5f9;
@@ -32,9 +33,6 @@ body {
 	width: 100vw;
 	overflow-x: hidden;
 	background-color: #000000;
-	background-image: url(@/assets/img/lu-bg-tiles.png);
-	background-repeat: repeat;
-	background-size: 300px 300px;
 	color: white;
 }
 

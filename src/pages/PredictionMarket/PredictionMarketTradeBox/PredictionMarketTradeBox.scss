@@ -1,17 +1,9 @@
-@keyframes sor-route-totals-recalc-pulse {
-	0%,
-	100% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 0.66;
-	}
-}
-
 .prediction-market-tradebox {
 	position: relative;
-	background: black;
+	background: #101114;
 	border-radius: 12px;
+	/* Clip children (inputs, tabs, shadows) to rounded rect — avoids painting above the top edge */
+	overflow: hidden;
 	padding: 15px;
 	margin-top: 15px;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -381,7 +373,7 @@
 			padding: 0.9rem;
 			margin-bottom: 1.05rem;
 			border-radius: 8px;
-			background: black !important;
+			background: #101114 !important;
 			border: 1px solid #4b5563;
 			display: flex;
 			justify-content: flex-end;
@@ -654,7 +646,7 @@
 	}
 
 	.bet-size-section {
-		background: black !important;
+		background: #101114 !important;
 		border: none;
 		border-radius: 8px;
 		padding: 12px;
@@ -775,113 +767,18 @@
 			color: #ffffff;
 		}
 
-		// Small grey odds text under To Win for market buy orders
-		.bet-size-odds-subtext {
-			font-size: 12px;
-			color: #9ca3af; // brighter grey color
-			font-weight: 400;
-			margin-top: 4px;
-			text-align: left;
-		}
-
-		.sor-route-totals--recalculating {
-			animation: sor-route-totals-recalc-pulse 0.88s ease-in-out infinite;
+		/**
+		 * Bet-size value cells (To Win, Avg Price, Estimated Receive) flash briefly
+		 * when their formatted text changes — same animation as the smart-routing rows so
+		 * the trade box and the comparison rows visually update in unison.
+		 */
+		.bet-size-value--flash {
+			animation: smart-routing-flash 180ms ease-in-out 3;
+			border-radius: 4px;
 
 			@media (prefers-reduced-motion: reduce) {
 				animation: none;
-				opacity: 0.88;
 			}
-		}
-
-		// SOR "All venues" expandable route details
-		.sor-details-wrap {
-			margin-top: 2px;
-		}
-
-		.sor-details-toggle {
-			display: block;
-			width: 100%;
-			padding: 4px 0;
-			margin: 0;
-			border: none;
-			background: transparent;
-			cursor: pointer;
-			font-family: inherit;
-			text-align: left;
-			color: #ffffff;
-			font-size: 12px;
-			font-weight: 400;
-		}
-
-		.sor-details-toggle-inline {
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
-		}
-
-		.sor-details-toggle-label {
-			color: #ffffff;
-			font-size: 12px;
-		}
-
-		.sor-details-chevron {
-			display: inline-block;
-			width: 0;
-			height: 0;
-			border-left: 4px solid transparent;
-			border-right: 4px solid transparent;
-			border-top: 5px solid #ffffff;
-			transition: transform 0.15s ease;
-			flex-shrink: 0;
-		}
-
-		.sor-details-chevron--open {
-			transform: rotate(180deg);
-		}
-
-		.sor-details-panel {
-			padding: 6px 0 4px 0;
-			margin-top: 2px;
-		}
-
-		.sor-details-row--leg {
-			margin-bottom: 6px;
-			font-size: 12px;
-			color: #d1d5db;
-		}
-
-		.sor-details-leg-text {
-			color: #d1d5db;
-		}
-
-		.sor-details-leg-text--lifi {
-			cursor: help;
-			border-bottom: 1px dotted rgba(255, 255, 255, 0.28);
-		}
-
-		.sor-details-row--fee {
-			display: flex;
-			justify-content: flex-start;
-			align-items: center;
-			flex-wrap: wrap;
-			gap: 4px 6px;
-			margin-top: 6px;
-			font-size: 12px;
-			color: #d1d5db;
-		}
-
-		.sor-details-fee-label {
-			color: #d1d5db;
-		}
-
-		.sor-details-fee-label--lifi {
-			cursor: help;
-			border-bottom: 1px dotted rgba(255, 255, 255, 0.28);
-		}
-
-		.sor-details-fee-value {
-			color: #d1d5db;
-			white-space: nowrap;
 		}
 
 		.sor-details-consolidated-fees {
@@ -1137,6 +1034,12 @@
 	max-height: 85vh;
 	overflow: auto;
 	position: relative;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
 }
 
 .prediction-curtain-header {
@@ -1365,5 +1268,331 @@
 		font-weight: 700;
 		color: #22c55e;
 		line-height: 1.2;
+	}
+}
+
+/**
+ * Per-cell value flash for SmartRoutingSection.
+ *
+ * Background polls are silent (`useFlashOnChange` only triggers when the formatted display
+ * string actually changes), so the user gets a quick visual confirmation on Polymarket
+ * moving 1¢ without the whole section pulsing.
+ *
+ * Three blinks at 180ms = 540ms total — matches `useFlashOnChange`'s default duration so
+ * the class is removed exactly when the animation finishes.
+ */
+@keyframes smart-routing-flash {
+	0%,
+	100% {
+		background-color: transparent;
+	}
+	50% {
+		background-color: rgba(96, 165, 250, 0.18);
+	}
+}
+
+.smart-routing-row__value--flash {
+	animation: smart-routing-flash 180ms ease-in-out 3;
+	border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.smart-routing-row__value--flash {
+		animation: none;
+	}
+}
+
+/* One card: header row + optional expanded body inside the same border. */
+.smart-routing-block {
+	margin-bottom: 8px;
+	border-radius: 10px;
+	border: 1px solid rgba(75, 85, 99, 0.55);
+	background: rgba(24, 26, 32, 0.95);
+	overflow: hidden;
+
+	&--selected {
+		border-color: rgba(96, 165, 250, 0.65);
+		box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25);
+	}
+
+	&--theoretical {
+		opacity: 0.72;
+	}
+
+	&--disabled {
+		opacity: 0.55;
+		pointer-events: none;
+	}
+}
+
+.smart-routing-row {
+	display: flex;
+	align-items: stretch;
+	width: 100%;
+	border: none;
+	border-radius: 0;
+	margin: 0;
+	background: transparent;
+	overflow: hidden;
+
+	&--message {
+		padding: 10px 12px;
+	}
+
+	&__main {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 10px 12px;
+		background: transparent;
+		border: none;
+		color: #e5e7eb;
+		text-align: left;
+		cursor: pointer;
+		font: inherit;
+
+		&:disabled {
+			cursor: default;
+		}
+	}
+
+	&__expand {
+		flex-shrink: 0;
+		width: auto;
+		min-width: 28px;
+		padding: 0 6px;
+		border: none;
+		background: transparent;
+		color: #d1d5db;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+
+		&:hover {
+			color: #f9fafb;
+		}
+	}
+
+	&__left {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+
+	&__logo {
+		width: 32px;
+		height: 32px;
+		border-radius: 8px;
+		background: rgba(55, 65, 81, 0.85);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 13px;
+		font-weight: 700;
+		color: #f9fafb;
+		flex-shrink: 0;
+
+		&--split {
+			background: rgba(59, 130, 246, 0.2);
+			color: #93c5fd;
+		}
+	}
+
+	&__meta {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	&__name {
+		font-weight: 600;
+		font-size: 14px;
+		color: #f3f4f6;
+	}
+
+	&__sub {
+		font-size: 12px;
+		color: #9ca3af;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	&__value {
+		font-weight: 600;
+		font-size: 14px;
+		color: #f9fafb;
+		flex-shrink: 0;
+	}
+
+	&__chev {
+		display: block;
+		width: 0;
+		height: 0;
+		border-left: 5px solid transparent;
+		border-right: 5px solid transparent;
+		border-top: 6px solid currentColor;
+		transition: transform 0.15s ease;
+
+		&--open {
+			transform: rotate(180deg);
+		}
+	}
+}
+
+.smart-routing-drawer {
+	padding: 0 12px 12px;
+	border-top: 1px solid rgba(55, 65, 81, 0.65);
+	background: rgba(12, 13, 16, 0.55);
+
+	&__legs {
+		padding-top: 4px;
+	}
+
+	&__leg {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+		gap: 6px 10px;
+		align-items: baseline;
+		padding: 8px 0;
+		font-size: 13px;
+		line-height: 1.35;
+		color: #e5e7eb;
+		border-bottom: 1px solid rgba(55, 65, 81, 0.4);
+
+		&:last-child {
+			border-bottom: none;
+		}
+	}
+
+	&__venue {
+		font-weight: 600;
+		color: #f9fafb;
+	}
+
+	&__leg-line {
+		font-size: 13px;
+		font-weight: 600;
+		color: #f3f4f6;
+		text-align: right;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+
+		.smart-routing-drawer__num {
+			color: inherit;
+			font-weight: inherit;
+		}
+	}
+
+	&__avg-tail {
+		color: #cbd5e1;
+		font-weight: 500;
+	}
+
+	&__num {
+		font-weight: inherit;
+		color: inherit;
+	}
+
+	&__footer {
+		margin-top: 4px;
+		padding-top: 10px;
+		border-top: 1px solid rgba(55, 65, 81, 0.55);
+	}
+
+	&__fees {
+		.sor-details-row--fee {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			width: 100%;
+			margin: 0;
+			padding: 0;
+			font-size: 13px;
+			color: #f3f4f6;
+			flex-wrap: nowrap;
+			gap: 12px;
+		}
+
+		.sor-details-consolidated-fees {
+			display: flex;
+			width: 100%;
+			justify-content: space-between;
+			align-items: center;
+			flex-wrap: nowrap;
+			gap: 12px;
+			color: #f3f4f6;
+		}
+
+		.sor-details-fee-label,
+		.sor-details-consolidated-fees__fees-label {
+			flex-shrink: 0;
+			color: #f3f4f6;
+		}
+
+		.sor-details-consolidated-fees__fees-trigger {
+			display: inline-flex;
+			align-items: center;
+			gap: 5px;
+			cursor: help;
+			color: #f3f4f6;
+		}
+
+		.sor-details-consolidated-fees__info-icon {
+			flex-shrink: 0;
+			color: #e5e7eb;
+			opacity: 1;
+		}
+
+		.sor-details-consolidated-fees__fees-tooltip-handle--smart-drawer {
+			display: inline-flex;
+			align-items: center;
+		}
+
+		.sor-details-fee-value,
+		.sor-details-consolidated-fees__amount {
+			font-weight: 600;
+			color: #f3f4f6;
+			text-align: right;
+		}
+	}
+
+	&__total {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-top: 10px;
+		padding-top: 8px;
+		border-top: 1px solid rgba(55, 65, 81, 0.45);
+		font-size: 13px;
+		font-weight: 600;
+		color: #f9fafb;
+
+		span:last-child {
+			font-variant-numeric: tabular-nums;
+		}
+	}
+}
+
+/* Portaled fee breakdown tooltip — match `.prediction-market-tradebox` surface (#101114). */
+.sor-fees-tooltip-popup--tradebox {
+	background-color: #101114 !important;
+	border: 1px solid #4b5563 !important;
+	border-radius: 8px !important;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+	min-width: 11rem !important;
+	max-width: min(280px, 92vw) !important;
+	padding: 10px 12px !important;
+	color: #e5e7eb !important;
+
+	svg.fill-slate-600 {
+		fill: #101114 !important;
 	}
 }

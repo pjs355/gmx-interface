@@ -1,7 +1,10 @@
 .predictions-page {
+	--predictions-split-gutter: 24px;
+	/* Same top inset for left nav pills and right trade column (below page padding). */
+	--predictions-home-column-inset: 8px;
 	min-height: 100vh;
-	background: #000000 url(@/assets/img/lu-bg-tiles.png) repeat;
-	background-size: 300px 300px;
+	background-color: #000000;
+	background-image: none;
 	display: flex;
 	flex-direction: column;
 	margin: 0 auto;
@@ -9,7 +12,7 @@
 	width: 100%;
 	padding-left: 50px;
 	padding-right: 50px;
-	padding-top: 50px;
+	padding-top: 12px;
 	padding-bottom: 50px;
 
 	// Promotion bar should extend full width (only used when shown on predictions page for non-authenticated users)
@@ -24,6 +27,20 @@
 		margin-top: 24px;
 		margin-bottom: 24px;
 	}
+}
+
+.predictions-page__body {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	width: 100%;
+	min-width: 0;
+}
+
+.predictions-page__main {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
 }
 
 .predictions-header {
@@ -202,25 +219,95 @@
 	font-size: 14px;
 	padding: 6px 10px;
 	border-radius: 9999px;
-	border: 1px solid var(--color-slate-200, #333333);
+	border: none;
 	background: transparent;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
-	transition: color 0.2s ease, background-color 0.2s ease,
-		border-color 0.2s ease;
+	justify-content: stretch;
+	width: 100%;
+	box-sizing: border-box;
+	text-align: left;
+	transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
 
 	&:hover {
-		background-color: rgba(139, 92, 246, 0.1);
-		border-color: #8b5cf6;
-		color: #8b5cf6;
+		background-color: #1a1a1a;
+		color: #ffffff;
 	}
 
 	&.active {
-		background-color: #8b5cf6;
-		border-color: #8b5cf6;
+		background-color: #1a1a1a;
 		color: #ffffff;
 	}
+}
+
+.game-link__inner {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-width: 0;
+	width: 100%;
+}
+
+.game-link__leading {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 10px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.game-link__count {
+	flex: 0 0 auto;
+	color: #9ca3af;
+	font-weight: 600;
+	font-size: 14px;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
+}
+
+.game-link:hover .game-link__count,
+.game-link.active .game-link__count {
+	color: #9ca3af;
+}
+
+@media (max-width: 1099px) {
+	.game-link__count {
+		display: none;
+	}
+
+	.game-link__inner {
+		justify-content: flex-start;
+	}
+}
+
+.game-link__label {
+	min-width: 0;
+}
+
+.game-link__logo {
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	object-fit: contain;
+	flex-shrink: 0;
+}
+
+.game-link__live-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 9999px;
+	background: #f87171;
+	box-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
+	flex-shrink: 0;
+}
+
+.game-link--live .game-link__label {
+	text-transform: none;
+	letter-spacing: normal;
 }
 
 .loading-message,
@@ -248,17 +335,6 @@
 	gap: 24px;
 	margin-bottom: 32px;
 
-	/* Tablet */
-	@media (min-width: 768px) {
-		grid-template-columns: repeat(2, 1fr);
-	}
-
-	/* Desktop */
-	@media (min-width: 1100px) {
-		grid-template-columns: repeat(3, 1fr);
-	}
-
-	/* Mobile: For vertical scroll (non-carousel), cards take full width minus small padding */
 	@media (max-width: 767px) {
 		gap: 16px;
 
@@ -269,151 +345,273 @@
 	}
 }
 
-/* Carousel style for esports page on mobile */
+/* Former horizontal carousel: same single-column vertical list as home */
 .predictions-grid.predictions-grid--carousel {
 	@media (max-width: 767px) {
-		display: flex !important;
-		overflow-x: auto !important;
-		overflow-y: hidden !important;
-		scroll-snap-type: x mandatory;
-		scroll-behavior: smooth;
+		display: grid !important;
+		grid-template-columns: 1fr !important;
+		overflow: visible !important;
 		gap: 16px;
-		-webkit-overflow-scrolling: touch;
-		scrollbar-width: none; /* Firefox */
-		-ms-overflow-style: none; /* IE 10+ */
 		padding-bottom: 8px;
 
-		&::-webkit-scrollbar {
-			display: none;
-		}
-
-		/* Carousel cards: narrower to show peek of next card */
 		.prediction-card,
 		.view-all-card-filtered {
-			flex: 0 0 calc(100vw - 80px) !important;
-			max-width: calc(100vw - 80px) !important;
-			min-width: calc(100vw - 80px) !important;
-			width: calc(100vw - 80px) !important;
-			scroll-snap-align: start;
-			scroll-snap-stop: always;
+			width: 100% !important;
+			max-width: 100% !important;
+			min-width: 0 !important;
 			height: auto !important;
 		}
 	}
 }
 
 .prediction-card {
-	background: black;
+	background: #101114;
 	border: 1px solid #6b7280;
 	border-radius: 16px;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-	transition: all 0.2s ease-in-out;
+	transition: background 0.2s ease-in-out, border-color 0.2s ease-in-out,
+		box-shadow 0.2s ease-in-out;
 	display: flex;
 	flex-direction: column;
-	height: 100%;
-	min-height: 364px;
+	height: auto;
+	min-height: 0;
 	overflow: hidden;
 
 	&:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+		background: #171a20;
+		border-color: #7b8494;
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 
-		.prediction-title-main {
+		.prediction-card__headline-main {
 			color: #8b5cf6;
 		}
 	}
 }
 
-.prediction-banner {
-	width: 100%;
-	height: 140px;
-	border-radius: 12px 12px 0 0;
-	background: #1f2937;
-	overflow: hidden;
-	position: relative;
-	cursor: pointer;
-	transition: opacity 0.2s ease;
+.prediction-card__top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 14px 20px 10px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	min-height: 40px;
+}
 
-	&:hover {
-		opacity: 0.85;
+.prediction-card--compact {
+	--prediction-card-inline: 20px;
+}
+
+.prediction-card--compact .prediction-card__top {
+	border-bottom: none;
+}
+
+.prediction-card__top--split {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.prediction-card__top-status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 10px;
+	flex: 1;
+	min-width: 0;
+}
+
+.prediction-card__top-headline {
+	flex-shrink: 0;
+	max-width: 48%;
+	min-width: 0;
+	text-align: right;
+}
+
+.prediction-card--compact .prediction-card__top-headline .prediction-card__headline {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 100%;
+}
+
+.prediction-card--compact .prediction-card__top.prediction-card__top--split {
+	padding-left: var(--prediction-card-inline);
+	padding-right: var(--prediction-card-inline);
+}
+
+.prediction-card--compact .prediction-card-outcome-rows {
+	padding-left: var(--prediction-card-inline);
+	padding-right: var(--prediction-card-inline);
+}
+
+.prediction-card--compact .prediction-actions {
+	padding: 8px 0 16px;
+}
+
+.prediction-card--compact .prediction-card-outcome-row {
+	align-items: flex-start;
+}
+
+.prediction-card--compact .prediction-card-outcome-middle {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-right: 8px;
+	box-sizing: border-box;
+}
+
+.prediction-card--compact
+	.prediction-card-outcome-middle
+	.prediction-card-outcome-label {
+	flex: 0 1 auto;
+	width: 100%;
+	line-height: 1.2;
+}
+
+.prediction-card--compact .prediction-card-outcome-odds-bar {
+	position: relative;
+	width: 100%;
+	height: 3px;
+	border-radius: 9999px;
+	background: transparent;
+	overflow: visible;
+	flex-shrink: 0;
+}
+
+.prediction-card--compact .prediction-card-outcome-odds-bar__fill {
+	height: 100%;
+	border-radius: 9999px;
+	min-width: 0;
+	transition: width 0.2s ease;
+}
+
+.prediction-card--compact
+	.multi-market-actions--compact
+	.multi-market-actions__market-title {
+	padding-left: var(--prediction-card-inline);
+	padding-right: var(--prediction-card-inline);
+}
+
+.prediction-card__headline {
+	font-size: 14px;
+	font-weight: 700;
+	color: #e5e7eb;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	line-height: 1.25;
+	transition: color 0.2s ease;
+}
+
+.prediction-card__headline-main {
+	transition: color 0.2s ease;
+}
+
+.prediction-card__headline-match-winner {
+	font-weight: 600;
+	color: #9ca3af;
+	letter-spacing: normal;
+	text-transform: none;
+	transition: color 0.2s ease;
+}
+
+.prediction-card__daily-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	font-size: 0.75em;
+	font-weight: 600;
+	color: #000000;
+	background-color: #fbbf24;
+	border-radius: 12px;
+	letter-spacing: 0.5px;
+	line-height: 1;
+	vertical-align: middle;
+}
+
+.prediction-card-outcome-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	padding: 0 20px 12px;
+	box-sizing: border-box;
+}
+
+.prediction-card-outcome-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-width: 0;
+}
+
+.prediction-card-outcome-logo {
+	flex: 0 0 40px;
+	width: 40px;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.prediction-card-outcome-logo-img {
+	width: 40px;
+	height: 40px;
+	object-fit: contain;
+	object-position: center;
+}
+
+/* Umbrella-style fallbacks (tag / game logo); boxed look when not the primary team asset */
+.prediction-card-outcome-logo-img--controller {
+	border-radius: 8px;
+	background: #000000;
+}
+
+.prediction-card-outcome-label {
+	flex: 1;
+	min-width: 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: #f9fafb;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.prediction-card-outcome-row .action-button {
+	flex: 0 0 auto;
+	min-width: 72px;
+	width: 88px;
+	max-width: 88px;
+	padding-left: 10px;
+	padding-right: 10px;
+}
+
+.multi-market-actions--compact .multi-market-block {
+	padding-bottom: 8px;
+	margin-bottom: 8px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+	&:last-child {
+		border-bottom: none;
+		margin-bottom: 0;
+		padding-bottom: 0;
 	}
 }
 
-.prediction-banner img {
-	width: 100%;
-	height: 100%;
-}
-
-.banner-placeholder {
-	width: 100%;
-	height: 100%;
-	background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: 2px dashed #333333;
-	padding: 12px;
-	box-sizing: border-box;
-}
-
-.banner-team-overlay {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 24px;
-	padding: 10px;
-	border-radius: 0;
-	background: none;
-	backdrop-filter: none;
-	box-shadow: none;
-}
-
-.banner-team {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 90px;
-	height: 90px;
-	box-sizing: border-box;
-}
-
-.banner-team-logo {
-	width: 80px;
-	height: 80px;
-	object-fit: contain;
-	object-position: center;
-	filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
-}
-
-.banner-team-fallback {
-	width: 56px;
-	height: 56px;
-	border-radius: 50%;
-	background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 24px;
-	font-weight: 700;
-	color: #ffffff;
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
-	border: 2px solid rgba(255, 255, 255, 0.2);
-}
-
-.banner-vs {
-	font-size: 18px;
-	font-weight: 700;
-	letter-spacing: 2px;
-	color: #f9fafb;
-	text-transform: uppercase;
-}
-
-.placeholder-text {
-	font-size: 32px;
-	opacity: 0.6;
+.multi-market-actions--compact .multi-market-actions__market-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #9ca3af;
+	margin-bottom: 8px;
+	padding: 0 20px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .prediction-card-content {
@@ -459,7 +657,7 @@
 	gap: 12px;
 	justify-content: center;
 	margin-top: auto;
-	padding: 0 24px 16px 24px;
+	padding: 8px 20px 16px;
 }
 
 .prediction-card-footer {
@@ -499,6 +697,10 @@
 	box-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
 }
 
+.prediction-live-text {
+	color: inherit;
+}
+
 .prediction-ended-label {
 	font-size: 12px;
 	color: #9ca3af;
@@ -533,6 +735,77 @@
 	align-items: center;
 	justify-content: space-between;
 	padding: 0 8px;
+	gap: 12px;
+}
+
+.prediction-calendar-odds-menu {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.prediction-calendar-odds-trigger {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 6px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: #9ca3af;
+	cursor: pointer;
+	transition:
+		color 0.15s ease,
+		background-color 0.15s ease;
+
+	&:hover {
+		color: #f9fafb;
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	&[data-hover],
+	&[data-active] {
+		color: #f9fafb;
+		background: rgba(255, 255, 255, 0.06);
+	}
+}
+
+.prediction-calendar-odds-items {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 6px);
+	z-index: 60;
+	min-width: min(260px, calc(100vw - 32px));
+	padding: 6px;
+	border-radius: 8px;
+	background: #141414;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+	outline: none;
+}
+
+.prediction-calendar-odds-item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 10px 12px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.92);
+	font-size: 14px;
+	font-weight: 500;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+
+	&--focus {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	&--selected {
+		color: #f9fafb;
+		background: rgba(255, 255, 255, 0.06);
+	}
 }
 
 .prediction-calendar-title {
@@ -602,6 +875,10 @@
 	gap: 12px;
 	width: 100%;
 
+}
+
+.single-market-actions--compact .prediction-card-outcome-rows {
+	padding-top: 8px;
 }
 
 .single-market-buttons {
@@ -797,7 +1074,7 @@
 
 /* View All Card for Filtered Pages (Esports) */
 .view-all-card-filtered {
-	background: #000000;
+	background: #101114;
 	border-radius: 16px;
 	display: none; /* Hidden by default */
 	cursor: pointer;
@@ -878,15 +1155,7 @@
 	}
 
 	.predictions-grid {
-		grid-template-columns: repeat(2, 1fr);
-	}
-
-	.prediction-card {
-		padding: 0; /* ensure banner image is edge-to-edge on tablet */
-	}
-
-	.prediction-card-content {
-		padding: 0 20px; /* maintain inner spacing without affecting banner */
+		grid-template-columns: 1fr;
 	}
 
 	.prediction-actions {
@@ -896,6 +1165,135 @@
 
 	.prediction-btn {
 		min-height: 48px;
+	}
+}
+
+/* Home inline trade dock (Markets tab): cards + sticky trade column (matches umbrella desktop breakpoint). */
+.predictions-page__home-trade-grid {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+@media (min-width: 1101px) {
+	.predictions-page__home-trade-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+		gap: var(--predictions-split-gutter, 24px);
+		align-items: start;
+	}
+
+	.predictions-page__home-trade-main {
+		min-width: 0;
+	}
+
+	.predictions-page__home-trade-panel.right-panel {
+		position: sticky;
+		top: var(--app-header-height, 6.2rem);
+		min-width: 0;
+		max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
+		overflow-y: auto;
+		overflow-x: hidden;
+		overscroll-behavior-y: contain;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+	}
+
+	/* Align trade module top with first sidebar pill (shared inset vs global tradebox margin-top). */
+	.predictions-page__home-trade-panel .prediction-market-tradebox,
+	.predictions-page__home-trade-panel .tradebox-skeleton {
+		margin-top: var(--predictions-home-column-inset, 8px);
+	}
+}
+
+.predictions-page__home-trade-mobile {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	z-index: 1000;
+	background: #000000;
+	border-top: 1px solid #333333;
+	min-height: 72px;
+	padding-bottom: constant(safe-area-inset-bottom);
+	padding-bottom: env(safe-area-inset-bottom);
+	will-change: transform;
+	transform: translateZ(0);
+	backface-visibility: hidden;
+}
+
+.predictions-page__home-trade-mobile--peek-hidden {
+	min-height: 0;
+	border-top: none;
+	background: transparent;
+}
+
+/* Laptop: vertical game filter sidebar (~20%) + main; horizontal pill bar unchanged below 1100px */
+@media (min-width: 1100px) {
+	.predictions-page__body {
+		flex-direction: row;
+		align-items: stretch;
+	}
+
+	.predictions-page__body > .predictions-page__main,
+	.predictions-page__body > .predictions-page__home-trade-grid {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.predictions-page__body > .game-links-wrapper {
+		flex: 0 0 20%;
+		max-width: 20%;
+		align-self: start;
+		position: sticky;
+		top: var(--app-header-height, 6.2rem);
+		margin-left: 0;
+		margin-right: 0;
+		padding: var(--predictions-home-column-inset, 8px)
+			var(--predictions-split-gutter, 24px) 24px 0;
+		box-sizing: border-box;
+	}
+
+	.predictions-page__body > .game-links-wrapper .scroll-arrow,
+	.predictions-page__body > .game-links-wrapper .fade-left,
+	.predictions-page__body > .game-links-wrapper .fade-right {
+		display: none !important;
+	}
+
+	.predictions-page__body > .game-links-wrapper .game-links-bar {
+		flex-direction: column;
+		align-items: stretch;
+		flex-wrap: nowrap;
+		overflow-x: visible;
+		overflow-y: visible;
+		white-space: normal;
+		gap: 12px;
+	}
+
+	.predictions-page__body > .game-links-wrapper .game-link {
+		width: 100%;
+		justify-content: flex-start;
+		box-sizing: border-box;
+		margin: 0;
+		font-size: 17px;
+		font-weight: 600;
+		padding: 12px 16px;
+		min-height: 48px;
+		border-radius: 8px;
+		border: none;
+		white-space: normal;
+		text-align: left;
+	}
+
+	.predictions-page__body > .game-links-wrapper .game-link__count {
+		font-size: 17px;
 	}
 }
 
@@ -921,14 +1319,6 @@
 			padding-left: 0;
 			padding-right: 0;
 		}
-	}
-
-	.prediction-card {
-		padding: 0; /* ensure banner image is edge-to-edge on mobile */
-	}
-
-	.prediction-card-content {
-		padding: 0 16px; /* slightly tighter inner spacing on mobile */
 	}
 
 	.prediction-actions {

@@ -1,5 +1,5 @@
 .mobile-trading-header {
-  background: black;
+  background: #101114;
   border: 1px solid #4B5563;
   border-radius: 12px;
   padding: 16px;
@@ -150,14 +150,14 @@
       border-radius: 8px;
       font-size: 28px;
       font-weight: 600;
-      background: #1a1a1a;
+      background: #101114;
       color: #ffffff;
       transition: all 0.2s ease;
 
       &:focus {
         outline: none;
         border-color: #8B5CF6;
-        background: #000000;
+        background: #101114;
         box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
       }
 

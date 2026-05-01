@@ -70,16 +70,30 @@ export function SmartRouteToggle({
 		targetVenue,
 	});
 
+	/**
+	 * The toggle has no "all" tab — when `targetVenue` is set we present the targeted plan,
+	 * otherwise the omnibus. Same channel-selection rule as the trade box's executable plan.
+	 */
+	const activeRoute = targetVenue ? sorRoute.executionRoute : sorRoute.displayRoute;
+	const activeLoading = targetVenue ? sorRoute.executionLoading : sorRoute.displayLoading;
+	const activeStale = targetVenue ? sorRoute.executionStale : sorRoute.displayStale;
+	const activeError = targetVenue
+		? (sorRoute.executionError ?? sorRoute.displayError)
+		: sorRoute.displayError;
+	const activeErrorCode = targetVenue
+		? (sorRoute.executionErrorCode ?? sorRoute.displayErrorCode)
+		: sorRoute.displayErrorCode;
+
 	const sorExecution = useSorExecution({
 		executeLeg: onExecuteLeg,
 		executeBridge: onExecuteBridge,
 	});
 
 	const handleExecute = useCallback(() => {
-		if (sorRoute.route) {
-			sorExecution.execute(sorRoute.route);
+		if (activeRoute) {
+			sorExecution.execute(activeRoute);
 		}
-	}, [sorRoute.route, sorExecution.execute]);
+	}, [activeRoute, sorExecution.execute]);
 
 	if (availableVenueCount <= 1 && !targetVenue) return null;
 
@@ -131,11 +145,11 @@ export function SmartRouteToggle({
 			{enabled && (
 				<div style={{ marginTop: 8 }}>
 					<SorRouteDisplay
-						route={sorRoute.route}
-						isLoading={sorRoute.isLoading}
-						error={sorRoute.error}
-						routeErrorCode={sorRoute.routeErrorCode}
-						isStale={sorRoute.isStale}
+						route={activeRoute}
+						isLoading={activeLoading}
+						error={activeError}
+						routeErrorCode={activeErrorCode}
+						isStale={activeStale}
 						onExecute={handleExecute}
 						onFallback={() => {
 							setEnabled(false);

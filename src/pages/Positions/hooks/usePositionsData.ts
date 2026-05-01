@@ -13,6 +13,7 @@ import { useUserData } from "context/UserDataContext";
 import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useRecentSettlementClaim } from "context/RecentSettlementClaimContext";
 import { usePredictionData } from "context/PredictionDataContext";
+import { getListingYesNoPricesForUmbrella } from "@/helpers/predictionUtils";
 import { useOddsMonitor } from "context/OddsMonitorContext";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
@@ -616,8 +617,6 @@ export default function usePositionsData() {
 		getAllQuestionsForUmbrella,
 		resolvedMarketsByUmbrella,
 		loading: predictionLoading,
-		allBooksPreview,
-		booksPreviewLoading,
 	} = usePredictionData();
 
 	const { appState } = useOddsMonitor();
@@ -1048,6 +1047,10 @@ export default function usePositionsData() {
 		const levelUpUmbrellas: UmbrellaPositions[] = umbrellas
 			.map((umbrella) => {
 				const markets = (getQuestionsForUmbrella(umbrella._id) as PredictionMarket[]) || [];
+				const matchListing = getListingYesNoPricesForUmbrella(
+					umbrella,
+					oddsMonitorMarkets,
+				);
 				const processedMarkets: MarketPosition[] = markets
 					.map((market) => {
 						const balanceId = market._id;
@@ -1055,12 +1058,8 @@ export default function usePositionsData() {
 						const tb = balanceId ? tokenBalances.get(balanceId) : undefined;
 						const yesBalance = tb ? Number(tb.yesBalance) : 0;
 						const noBalance = tb ? Number(tb.noBalance) : 0;
-						const preview = priceId ? allBooksPreview[priceId] : undefined;
-						const yesPrice = preview?.lowestAsk ?? null;
-						const noPrice =
-							preview?.highestBid !== null && preview?.highestBid !== undefined
-								? 1 - preview.highestBid
-								: null;
+						const yesPrice = matchListing.yes;
+						const noPrice = matchListing.no;
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;
 						const marketOrders = (orders || []).filter(
@@ -1138,20 +1137,11 @@ export default function usePositionsData() {
 										}
 									: null;
 							if (venue === "predictfun") {
-								let liveYesPrice: number | null = null;
-								let liveNoPrice: number | null = null;
-								for (const luMarket of markets) {
-									const pid = luMarket.questionId || luMarket._id;
-									const prev = pid ? allBooksPreview[pid] : undefined;
-									if (prev) {
-										liveYesPrice = prev.lowestAsk ?? null;
-										liveNoPrice =
-											prev.highestBid !== null && prev.highestBid !== undefined
-												? 1 - prev.highestBid
-												: null;
-										break;
-									}
-								}
+								const { yes: liveYesPrice, no: liveNoPrice } =
+									getListingYesNoPricesForUmbrella(
+										umbrella,
+										oddsMonitorMarkets,
+									);
 								const inferredPv = inferPredictSideFromMarketDetail(
 									predictDetail ?? undefined,
 									pv.tokenId,
@@ -1263,7 +1253,7 @@ export default function usePositionsData() {
 		];
 	}, [
 		effectiveAccount, umbrellas, getQuestionsForUmbrella, tokenBalances, orders,
-		allBooksPreview, polyPositions, predictPositions, dflowPositions, limitlessPositions, umbrellaLookupByConditionId,
+		polyPositions, predictPositions, dflowPositions, limitlessPositions, umbrellaLookupByConditionId,
 		umbrellaLookupByDflowOutcomeMint,
 		umbrellaLookupByDflowEventTicker,
 		predictUmbrellaLookup,
@@ -1566,16 +1556,9 @@ export default function usePositionsData() {
 			const fromStored =
 				stored != null ? (side === "Yes" ? stored.yesPrice : stored.noPrice) : null;
 			if (fromStored != null && Number.isFinite(fromStored)) return fromStored;
-
-			const questionId = market.questionId || market._id;
-			if (!questionId) return null;
-			const preview = allBooksPreview[questionId];
-			if (side === "Yes") return preview?.lowestAsk ?? null;
-			return preview?.highestBid !== null && preview?.highestBid !== undefined
-				? 1 - preview.highestBid
-				: null;
+			return null;
 		},
-		[portfolioSidePriceMap, allBooksPreview],
+		[portfolioSidePriceMap],
 	);
 
 	const umbrellaBalancesPositions = useMemo(
@@ -2412,7 +2395,6 @@ export default function usePositionsData() {
 		if (predictionLoading) armsBlockers.push("predictionLoading");
 		if (userDataLoading) armsBlockers.push("userDataLoading");
 		if (portfolioLoading) armsBlockers.push("portfolioLoading");
-		if (booksPreviewLoading) armsBlockers.push("booksPreviewLoading");
 		if (polyPositionsQuery.isLoading) armsBlockers.push("polyPositionsQuery.isLoading");
 		if (predictPositionsQuery.isLoading) armsBlockers.push("predictPositionsQuery.isLoading");
 		if (dflowRpcEnabled && dflowPositionsQuery.isPending) {
@@ -2506,18 +2488,14 @@ export default function usePositionsData() {
 
 		const marketRows = umbrellas.flatMap((u) => {
 			const markets = (getQuestionsForUmbrella(u._id) as PredictionMarket[]) || [];
+			const { yes: yp, no: np } = getListingYesNoPricesForUmbrella(
+				u,
+				appState?.markets,
+			);
 			return markets.map((m) => {
 				const balanceId = m._id;
 				const priceId = m.questionId || m._id;
 				const tb = balanceId ? tokenBalances.get(balanceId) : undefined;
-				const preview = priceId ? allBooksPreview[priceId] : undefined;
-				const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
-				const np =
-					typeof preview?.bestNoPrice === "number"
-						? preview.bestNoPrice
-						: preview?.highestBid != null && preview?.highestBid !== undefined
-							? 1 - preview.highestBid
-							: null;
 				const priced = typeof yp === "number" || typeof np === "number";
 				const yes = tb ? Number(tb.yesBalance) : 0;
 				const no = tb ? Number(tb.noBalance) : 0;
@@ -2554,7 +2532,6 @@ export default function usePositionsData() {
 				predictionLoading,
 				userDataLoading,
 				portfolioLoading,
-				booksPreviewLoading,
 				polyPositions: {
 					isLoading: polyPositionsQuery.isLoading,
 					fetchStatus: polyPositionsQuery.fetchStatus,
@@ -2634,7 +2611,6 @@ export default function usePositionsData() {
 		predictionLoading,
 		userDataLoading,
 		portfolioLoading,
-		booksPreviewLoading,
 		polyPositionsQuery.isLoading,
 		polyPositionsQuery.fetchStatus,
 		predictPositionsQuery.isLoading,
@@ -2680,7 +2656,7 @@ export default function usePositionsData() {
 		umbrellas,
 		getQuestionsForUmbrella,
 		tokenBalances,
-		allBooksPreview,
+		appState?.markets,
 	]);
 
 	const portfolioPerfFingerprintRef = useRef("");
@@ -2689,12 +2665,11 @@ export default function usePositionsData() {
 	useEffect(() => {
 		if (!portfolioPerfEnabled() || !effectiveAccount) return;
 
-		const previewKeyCount = Object.keys(allBooksPreview).length;
+		const monitorRowCount = appState?.markets?.length ?? 0;
 		const fingerprint = [
 			predictionLoading,
 			userDataLoading,
 			portfolioLoading,
-			booksPreviewLoading,
 			polyPositionsQuery.isLoading,
 			predictPositionsQuery.isLoading,
 			dflowPositionsQuery.isLoading,
@@ -2707,7 +2682,7 @@ export default function usePositionsData() {
 			predictMarketIds.length,
 			umbrellas.length,
 			tokenBalances.size,
-			previewKeyCount,
+			monitorRowCount,
 			predictOrdersEnabled,
 			truncateWallet(polymarketSafe),
 			truncateWallet(limitlessMakerBase),
@@ -2719,7 +2694,6 @@ export default function usePositionsData() {
 				predictionLoading,
 				userDataLoading,
 				portfolioLoading,
-				booksPreviewLoading,
 				polyLoading: polyPositionsQuery.isLoading,
 				predictLoading: predictPositionsQuery.isLoading,
 				dflowLoading: dflowPositionsQuery.isLoading,
@@ -2727,7 +2701,7 @@ export default function usePositionsData() {
 				isDataFullyLoaded,
 				umbrellaCount: umbrellas.length,
 				tokenBalancesSize: tokenBalances.size,
-				previewKeys: previewKeyCount,
+				previewKeys: monitorRowCount,
 				polyPos: allPolyPositions.length,
 				predictPos: allPredictPositions.length,
 				dflowPos: allDflowPositions.length,
@@ -2745,10 +2719,9 @@ export default function usePositionsData() {
 		if (isDataFullyLoaded && !portfolioReadyLoggedRef.current) {
 			portfolioReadyLoggedRef.current = true;
 
-			const previewSampleKeys = Object.keys(allBooksPreview).slice(0, 3);
-			const previewSample = Object.fromEntries(
-				previewSampleKeys.map((k) => [k.slice(0, 12) + "…", allBooksPreview[k]]),
-			);
+			const previewSample = {
+				oddsMonitorMatchedMarkets: monitorRowCount,
+			};
 
 			const polyVenueSum = allPolyPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
 			const predictVenueSum = allPredictPositions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
@@ -2757,6 +2730,10 @@ export default function usePositionsData() {
 			let levelUpBookSum = 0;
 			const levelUpSamples: Array<Record<string, unknown>> = [];
 			for (const u of umbrellas) {
+				const { yes: yp, no: np } = getListingYesNoPricesForUmbrella(
+					u,
+					appState?.markets,
+				);
 				const markets = (getQuestionsForUmbrella(u._id) as PredictionMarket[]) || [];
 				for (const m of markets) {
 					const balanceId = m._id;
@@ -2767,21 +2744,6 @@ export default function usePositionsData() {
 					const yes = Number(tb.yesBalance) || 0;
 					const no = Number(tb.noBalance) || 0;
 					if (yes === 0 && no === 0) continue;
-					const preview = allBooksPreview[priceId] as
-						| {
-								lowestAsk?: number | null;
-								bestYesPrice?: number | null;
-								bestNoPrice?: number | null;
-								highestBid?: number | null;
-						  }
-						| undefined;
-					const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
-					const np =
-						typeof preview?.bestNoPrice === "number"
-							? preview.bestNoPrice
-							: preview?.highestBid != null && preview?.highestBid !== undefined
-								? 1 - preview.highestBid
-								: null;
 					const rowVal =
 						(typeof yp === "number" ? yes * yp : 0) + (typeof np === "number" ? no * np : 0);
 					levelUpBookSum += rowVal;
@@ -2793,7 +2755,7 @@ export default function usePositionsData() {
 							yp,
 							np,
 							rowVal,
-							previewKeys: preview ? Object.keys(preview) : [],
+							priceSource: "odds_monitor_listing",
 						});
 					}
 				}
@@ -2821,7 +2783,6 @@ export default function usePositionsData() {
 		predictionLoading,
 		userDataLoading,
 		portfolioLoading,
-		booksPreviewLoading,
 		polyPositionsQuery.isLoading,
 		predictPositionsQuery.isLoading,
 		dflowPositionsQuery.isLoading,
@@ -2834,7 +2795,7 @@ export default function usePositionsData() {
 		predictMarketIds.length,
 		umbrellas,
 		tokenBalances,
-		allBooksPreview,
+		appState?.markets,
 		allPolyPositions,
 		allPredictPositions,
 		allDflowPositions,

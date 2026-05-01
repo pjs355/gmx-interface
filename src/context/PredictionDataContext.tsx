@@ -10,7 +10,6 @@ import {
 	umbrellaDataService,
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
-import { getPrivateApiBaseUrl } from "@/config/privateApiBase";
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
 import { usePrivy } from "@privy-io/react-auth";
@@ -67,7 +66,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	singleMarketOrderbooks: {},
 	multiMarketData: {},
 	loading: true,
-	booksPreviewLoading: true,
+	booksPreviewLoading: false,
 	error: undefined,
 	refresh: async () => {},
 	getUmbrellaById: () => undefined,
@@ -104,10 +103,6 @@ export function PredictionDataProvider({
 	const [multiMarketData, setMultiMarketData] = useState<Record<string, any>>(
 		{}
 	);
-	const [allBooksPreview, setAllBooksPreview] = useState<
-		Record<string, BookPreview>
-	>({});
-	const [booksPreviewLoading, setBooksPreviewLoading] = useState(true);
 	const [tags, setTags] = useState<Tag[]>([]);
 	const [tagsLoading, setTagsLoading] = useState(true);
 	const [error, setError] = useState<string | undefined>(undefined);
@@ -355,105 +350,20 @@ export function PredictionDataProvider({
 		};
 	}, []);
 
-	// Fetch lightweight orderbook preview for all markets
-	useEffect(() => {
-		const fetchAllBooksPreview = async () => {
-			if (document.visibilityState === "hidden") return;
-			try {
-				if (typeof window !== "undefined") {
-					const currentPath = window.location?.pathname ?? "";
-					if (currentPath.startsWith("/admin")) {
-						return;
-					}
-				}
-				const baseUrl = getPrivateApiBaseUrl();
-				const response = await fetch(
-					`${baseUrl}/api/all-books-preview`
-				);
-				if (!response.ok) {
-					throw new Error(
-						`Failed to fetch all-books-preview: ${response.status}`
-					);
-				}
-				const json = await response.json();
-
-				if (json.success && json.data) {
-					if (typeof window !== "undefined") {
-						const currentPath = window.location?.pathname ?? "";
-						if (currentPath.startsWith("/admin")) {
-							return;
-						}
-					}
-					const previewMap: Record<string, BookPreview> = {};
-					if (Array.isArray(json.data)) {
-						json.data.forEach((item: any) => {
-							const qId = item.questionId;
-							if (qId) {
-								previewMap[qId] = {
-									lowestAsk: item.lowestAskA ?? item.lowestAsk ?? null,
-									highestBid: item.highestBid ?? null,
-									bestYesPrice: item.bestYesPrice ?? null,
-									bestNoPrice:
-										item.bestNoPrice ?? item.lowestAskB ?? null,
-								};
-							}
-						});
-					}
-					setAllBooksPreview(previewMap);
-					setBooksPreviewLoading(false);
-				}
-			} catch (err) {
-				console.error(
-					"error",
-					"Failed to fetch all-books-preview:",
-					err
-				);
-				setBooksPreviewLoading(false);
-			}
-		};
-
-		fetchAllBooksPreview();
-
-		// Poll every 30s, but pause when tab is hidden
-		let intervalId: ReturnType<typeof setInterval> | null = setInterval(fetchAllBooksPreview, 30000);
-
-		const handleVisibility = () => {
-			if (document.visibilityState === "visible") {
-				// Tab became visible: fetch immediately + restart interval
-				fetchAllBooksPreview();
-				if (!intervalId) {
-					intervalId = setInterval(fetchAllBooksPreview, 30000);
-				}
-			} else {
-				// Tab hidden: stop polling
-				if (intervalId) {
-					clearInterval(intervalId);
-					intervalId = null;
-				}
-			}
-		};
-
-		document.addEventListener("visibilitychange", handleVisibility);
-		return () => {
-			if (intervalId) clearInterval(intervalId);
-			document.removeEventListener("visibilitychange", handleVisibility);
-		};
-	}, []);
-
 	const value = useMemo<PredictionDataContextValue>(
 		() => ({
 			umbrellas,
 			marketsByUmbrella,
 			allMarketsByUmbrella,
 			resolvedMarketsByUmbrella,
-			allBooksPreview,
+			allBooksPreview: {} as Record<string, BookPreview>,
 			tags,
 			tagsLoading,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,
 			loading,
-			booksPreviewLoading,
+			booksPreviewLoading: false,
 			error,
 			refresh: load,
 			getUmbrellaById,
@@ -468,14 +378,12 @@ export function PredictionDataProvider({
 			marketsByUmbrella,
 			allMarketsByUmbrella,
 			resolvedMarketsByUmbrella,
-			allBooksPreview,
 			tags,
 			tagsLoading,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,
 			loading,
-			booksPreviewLoading,
 			error,
 			load,
 			getUmbrellaById,

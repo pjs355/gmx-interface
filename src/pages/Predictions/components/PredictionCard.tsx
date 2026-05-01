@@ -10,16 +10,21 @@ import type {
 	UmbrellaTeamMapping,
 } from "services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import {
-	resolveUmbrellaBannerById,
-	getAlternativeImageUrls,
-} from "@/helpers/umbrellaBanners";
+import { truncateMarketName } from "@/helpers/predictionUtils";
 import { resolveTeamLogo } from "@/config/team-map";
 import { usePredictionData } from "context/PredictionDataContext";
-import { useMatchVenuePrices } from "@/context/OddsMonitorContext";
+import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { listingBestYesNoFromMatched } from "@/utils/listingVenuePrices";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { resolveUmbrellaEventDate } from "../utils/eventDates";
+import { useHomeTradeDockOptional } from "./HomeInlineTradeLayout";
+import { useCurtainActions } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
+import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
+import {
+	getTagImageFromUmbrella,
+	getTagLabelsFromUmbrella,
+	resolveLogoByTags,
+} from "@/helpers/gameLogoResolver";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
 
@@ -46,25 +51,6 @@ function normalizeTagLabel(value: string): string {
 		.replace(/[^A-Z0-9]+/g, "_")
 		.replace(/^_+|_+$/g, "");
 }
-const gameBannerModules = import.meta.glob<{ default: string }>(
-	"../../../assets/game-banners/*",
-	{ eager: true }
-);
-
-const gameBannerMap: Record<string, string> = Object.entries(
-	gameBannerModules
-).reduce((acc, [path, module]) => {
-	const fileName = path
-		.split("/")
-		.pop()
-		?.replace(/\.[^.]+$/, "");
-	// Access the default export from the module
-	const url = module?.default;
-	if (fileName && typeof url === "string") {
-		acc[fileName] = url;
-	}
-	return acc;
-}, {} as Record<string, string>);
 
 const normalizeGameName = (game?: string | null): string | null => {
 	if (!game) {
@@ -123,15 +109,58 @@ const resolveTeamLogoUrl = (team: UmbrellaTeamMapping): string | undefined => {
 	return undefined;
 };
 
-function getFirstLetter(text: string): string {
-	if (text.length === 0) {
-		return "?";
-	}
-	const first = text[0];
-	if (first && /[a-zA-Z0-9]/.test(first)) {
-		return first.toUpperCase();
-	}
-	return "?";
+/** Same fallback order as Winnings / UmbrellaImage: tag art → game-by-tags → GTA. */
+function PredictionOutcomeTeamImg({
+	umbrella,
+	tags,
+	teamLogoUrl,
+	displayName,
+}: {
+	umbrella: Umbrella;
+	tags: Array<{ _id: string; label: string; imageUrl?: string }>;
+	teamLogoUrl: string | null;
+	displayName: string;
+}) {
+	const candidates = useMemo(() => {
+		const tagImg = getTagImageFromUmbrella(umbrella, tags);
+		const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
+		const gameLogo = resolveLogoByTags(tagLabels);
+		const list: string[] = [];
+		if (teamLogoUrl) list.push(teamLogoUrl);
+		if (tagImg) list.push(tagImg);
+		if (gameLogo) list.push(gameLogo);
+		list.push(gtaIcon);
+		const out: string[] = [];
+		const seen = new Set<string>();
+		for (const u of list) {
+			if (!u || seen.has(u)) continue;
+			seen.add(u);
+			out.push(u);
+		}
+		return out;
+	}, [umbrella, tags, teamLogoUrl]);
+
+	const chainKey = candidates.join("\0");
+	const [index, setIndex] = useState(0);
+	useEffect(() => {
+		setIndex(0);
+	}, [chainKey]);
+
+	const src = candidates[index] ?? gtaIcon;
+	const showController = !teamLogoUrl || index > 0;
+
+	return (
+		<img
+			className={`prediction-card-outcome-logo-img${
+				showController ? " prediction-card-outcome-logo-img--controller" : ""
+			}`}
+			src={src}
+			alt={displayName}
+			onError={() =>
+				setIndex((i) => (i < candidates.length - 1 ? i + 1 : i))
+			}
+		/>
+	);
 }
 
 export const PredictionCard: React.FC<PredictionCardProps> = ({
@@ -143,9 +172,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	onNavigateToSingleMarket,
 	onNavigateToMultiMarket,
 }) => {
-	const [imageError, setImageError] = useState(false);
-	const [currentImageIndex, setCurrentImageIndex] = useState(0);
-	const [imageUrls, setImageUrls] = useState<string[]>([]);
+	const homeTradeDock = useHomeTradeDockOptional();
+	const { openCurtain } = useCurtainActions();
 	const { tags } = usePredictionData();
 	const [now, setNow] = useState(() => Date.now());
 
@@ -157,13 +185,15 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		typeof umbrella.pandascore_matchId === "string"
 			? umbrella.pandascore_matchId.trim()
 			: "";
+	const { appState: oddsAppState } = useOddsMonitor();
 	const matchedVenueRow = useMatchVenuePrices(
 		pandascoreMatchIdForVenues || null,
 		umbrella._id,
 	);
+	/** Row object is mutated in place on each WS tick; `timestamp` forces recompute when refs are stable. */
 	const listingVenueYesNo = useMemo(
 		() => listingBestYesNoFromMatched(matchedVenueRow),
-		[matchedVenueRow],
+		[matchedVenueRow, oddsAppState?.timestamp],
 	);
 
 	useEffect(() => {
@@ -551,62 +581,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		};
 	}, [countdownDateMs]);
 
-	// Build image URL list with fallback priority
-	useEffect(() => {
-		const urls: string[] = [];
-
-		// 1. Custom image on umbrella
-		if (umbrella.image) {
-			urls.push(umbrella.image);
-		}
-
-		// 2. Firebase banner by umbrella ID
-		const firebaseBanner = resolveUmbrellaBannerById(umbrella._id);
-		if (firebaseBanner) {
-			urls.push(firebaseBanner);
-		}
-
-		// 3. Game banner from umbrella.game field
-		const normalizedGame = normalizeGameName(umbrella.game);
-		if (normalizedGame && gameBannerMap[normalizedGame]) {
-			urls.push(gameBannerMap[normalizedGame]);
-		}
-
-		// 4. Game banner from tag slug
-		const children =
-			(umbrella as any).originalChildren || umbrella.children;
-		if (Array.isArray(children)) {
-			for (const child of children) {
-				const tagIds = child?.tagIds;
-				if (!Array.isArray(tagIds)) continue;
-				for (const tagId of tagIds) {
-					const tag = tags.find((t) => t._id === tagId);
-					if (!tag) continue;
-					const banner = gameBannerMap[tag.slug];
-					if (banner) {
-						urls.push(banner);
-					}
-				}
-			}
-		}
-
-		// 5. Alternative Firebase URLs (different extensions)
-		urls.push(...getAlternativeImageUrls(umbrella._id));
-
-		const unique = Array.from(new Set(urls.filter(Boolean))) as string[];
-		setImageUrls(unique);
-		setCurrentImageIndex(0);
-		setImageError(false);
-	}, [umbrella._id, umbrella.image, umbrella.game, umbrella.children, tags]);
-
-	const handleImageError = () => {
-		if (currentImageIndex < imageUrls.length - 1) {
-			setCurrentImageIndex((prev) => prev + 1);
-		} else {
-			setImageError(true);
-		}
-	};
-
 	const navigateToUmbrella = () => {
 		try {
 			const isSingleMarket =
@@ -668,6 +642,18 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		} catch (error) {
 			console.error("error", error);
 		}
+		const question = singleMarketQuestions[umbrella._id];
+		if (homeTradeDock?.onHomeOddsSelect && question) {
+			homeTradeDock.onHomeOddsSelect({
+				umbrella,
+				question,
+				position,
+			});
+			if (homeTradeDock.isHomeTradeMobile) {
+				openCurtain();
+			}
+			return;
+		}
 		onNavigateToSingleMarket(umbrella, position);
 	};
 
@@ -689,12 +675,96 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		} catch (error) {
 			console.error("error", error);
 		}
+		if (homeTradeDock?.onHomeOddsSelect) {
+			homeTradeDock.onHomeOddsSelect({ umbrella, question, position });
+			if (homeTradeDock.isHomeTradeMobile) {
+				openCurtain();
+			}
+			return;
+		}
 		onNavigateToMultiMarket(umbrella, question, position);
+	};
+
+	const hasPandascoreMatch =
+		typeof umbrella.pandascore_matchId === "string" &&
+		umbrella.pandascore_matchId.length > 0;
+	const showTeamLogos =
+		teamLogos.length >= 2 &&
+		(hasPandascoreMatch || teamLogos.some((t) => t.logoUrl !== null));
+
+	const cardHeadline = useMemo(() => {
+		const sub = (isEsportsUmbrella ? esportsTitleParts.subtitle : "").trim();
+		if (sub.length > 0) return sub;
+		const children = umbrella.children;
+		if (Array.isArray(children) && children.length === 1) {
+			const q = singleMarketQuestions[umbrella._id];
+			if (q) {
+				return truncateMarketName(
+					String(
+						q.displayName || (q as { question?: string }).question || "",
+					),
+				);
+			}
+		}
+		if (Array.isArray(children) && children.length >= 2) {
+			const md = multiMarketData[umbrella._id];
+			const q = md?.questions?.[0];
+			if (q) {
+				return truncateMarketName(
+					String(q.displayName || q.question || ""),
+				);
+			}
+		}
+		return truncateMarketName(umbrella.displayName);
+	}, [
+		isEsportsUmbrella,
+		esportsTitleParts.subtitle,
+		umbrella.children,
+		umbrella.displayName,
+		umbrella._id,
+		singleMarketQuestions,
+		multiMarketData,
+	]);
+
+	const cardHeadlineContent = useMemo((): React.ReactNode => {
+		const h = cardHeadline;
+		const tail = h.match(/^(.+?)(\s*-\s*Match Winner)\s*$/i);
+		if (tail) {
+			return (
+				<>
+					<span className="prediction-card__headline-main">{tail[1]}</span>
+					<span className="prediction-card__headline-match-winner">
+						{" - Match Winner"}
+					</span>
+				</>
+			);
+		}
+		if (/^match winner$/i.test(h.trim())) {
+			return (
+				<span className="prediction-card__headline-match-winner">
+					Match Winner
+				</span>
+			);
+		}
+		return <span className="prediction-card__headline-main">{h}</span>;
+	}, [cardHeadline]);
+
+	const renderOutcomeLogoSlot = (index: 0 | 1): React.ReactNode => {
+		if (!showTeamLogos || !teamLogos[index]) return null;
+		const t = teamLogos[index];
+		return (
+			<PredictionOutcomeTeamImg
+				key={`${umbrella._id}-outcome-${index}`}
+				umbrella={umbrella}
+				tags={tags}
+				teamLogoUrl={t.logoUrl}
+				displayName={t.displayName}
+			/>
+		);
 	};
 
 	const renderActions = () => {
 		if (umbrella.children && umbrella.children.length === 1) {
-			// Show Yes/No buttons for single market umbrellas
 			const orderbook = singleMarketOrderbooks[umbrella._id];
 			const question = singleMarketQuestions[umbrella._id];
 			const isDailyPlayerCount =
@@ -709,10 +779,12 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					umbrellaDisplayName={umbrella.displayName}
 					liveVenueYesPrice={listingVenueYesNo.yes ?? undefined}
 					liveVenueNoPrice={listingVenueYesNo.no ?? undefined}
+					compact
+					yesLogoSlot={renderOutcomeLogoSlot(0)}
+					noLogoSlot={renderOutcomeLogoSlot(1)}
 				/>
 			);
 		} else if (umbrella.children && umbrella.children.length >= 2) {
-			// Show top 2 markets with Yes/No buttons for multi-market umbrellas
 			return (
 				<MultiMarketActions
 					umbrellaId={umbrella._id}
@@ -721,10 +793,10 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					onNavigateToUmbrella={navigateToUmbrella}
 					liveVenueYesPrice={listingVenueYesNo.yes ?? undefined}
 					liveVenueNoPrice={listingVenueYesNo.no ?? undefined}
+					compact
 				/>
 			);
 		} else {
-			// Show Explore Questions button for umbrellas with no markets
 			return (
 				<Button
 					variant="primary-action"
@@ -739,19 +811,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 	};
 
-	const bannerImageUrl = imageUrls[currentImageIndex];
-	const shouldShowImage = Boolean(bannerImageUrl) && !imageError;
-	const hasPandascoreMatch =
-		typeof umbrella.pandascore_matchId === "string" &&
-		umbrella.pandascore_matchId.length > 0;
-	const showTeamLogos =
-		teamLogos.length >= 2 &&
-		(hasPandascoreMatch || teamLogos.some((t) => t.logoUrl !== null));
-	const showPlaceholderIcon = !shouldShowImage && !showTeamLogos;
-	const subtitleContent = isEsportsUmbrella ? esportsTitleParts.subtitle : "";
-	const shouldRenderSubtitle = subtitleContent.length > 0;
-	const hasCountdown = countdownDateMs !== null;
-
 	// Live logic only for esports (based on eventDate)
 	let isLive = false;
 	if (isEsportsUmbrella && eventDateMs !== null) {
@@ -763,7 +822,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 	}
 
-	// Upcoming logic: for esports use eventDate, for daily use endDate
 	let isUpcoming = false;
 	if (isEsportsUmbrella && eventDateMs !== null) {
 		if (now < eventDateMs) {
@@ -775,7 +833,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 	}
 
-	// Ended logic
 	let isEnded = false;
 	if (isEsportsUmbrella && eventDateMs !== null) {
 		if (!isLive && !isUpcoming) {
@@ -787,45 +844,46 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 	}
 
-	let statusContent: React.ReactNode = null;
+	const dailyWindowEnded =
+		isDailyUmbrella && endDateMs !== null && now >= endDateMs;
+
+	let topLeftStatus: React.ReactNode = null;
 	if (isLive) {
-		statusContent = (
+		topLeftStatus = (
 			<div className="prediction-live-indicator">
 				<span className="prediction-live-dot" />
 				<span className="prediction-live-text">Live</span>
 			</div>
 		);
-	} else if (isDailyUmbrella && endDate !== null) {
-		// For daily markets, always show countdown timer if endDate exists
-		// CountdownTimer will handle showing "Ended" when time has passed
-		statusContent = (
+	} else if (dailyWindowEnded || (isEsportsUmbrella && isEnded)) {
+		topLeftStatus = (
+			<span className="prediction-ended-label">Ended</span>
+		);
+	} else if (isDailyUmbrella && endDate !== null && !dailyWindowEnded) {
+		topLeftStatus = (
 			<CountdownTimer
 				target={endDate}
 				className="prediction-countdown"
+				prefix="Ends In:"
 				expiredLabel="Ended"
 				showZeroDays={false}
 			/>
 		);
-	} else if (isUpcoming && countdownDate !== null) {
-		// For esports that are upcoming
-		statusContent = (
+	} else if (isEsportsUmbrella && isUpcoming && countdownDate !== null) {
+		topLeftStatus = (
 			<CountdownTimer
 				target={countdownDate}
 				className="prediction-countdown"
+				prefix="Starts In:"
 				expiredLabel="Ended"
 				showZeroDays={false}
 			/>
 		);
-	} else if (isEnded) {
-		statusContent = <span className="prediction-ended-label">Ended</span>;
 	}
 
 	const handleCardClick = (e: React.MouseEvent) => {
 		const target = e.target as HTMLElement;
-		if (
-			target.closest(".prediction-actions") ||
-			target.closest(".action-button")
-		) {
+		if (target.closest(".action-button")) {
 			return;
 		}
 		navigateToUmbrella();
@@ -837,131 +895,25 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			data-qa="prediction-card"
 			data-qa-umbrella-id={umbrella._id}
 			data-qa-panda-match-id={umbrella.pandascore_matchId}
-			className="prediction-card"
+			className="prediction-card prediction-card--compact"
 			onClick={handleCardClick}
 			style={{ cursor: "pointer" }}
 		>
-			{/* Banner Image */}
-			<div
-				className="prediction-banner"
-				onClick={navigateToUmbrella}
-				style={{ cursor: "pointer" }}
-			>
-				{shouldShowImage ? (
-					<img
-						src={bannerImageUrl as string}
-						alt={umbrella.displayName}
-						className="banner-image"
-						onError={handleImageError}
-					/>
-				) : (
-					<div className="banner-placeholder">
-						{showPlaceholderIcon && (
-							<span className="placeholder-text">🎮</span>
-						)}
-					</div>
-				)}
-				{showTeamLogos && (
-					<div className="banner-team-overlay">
-						<div className="banner-team">
-							{teamLogos[0].logoUrl ? (
-								<img
-									src={teamLogos[0].logoUrl}
-									alt={teamLogos[0].displayName}
-									className="banner-team-logo"
-								/>
-							) : (
-								<div className="banner-team-fallback">
-									{getFirstLetter(teamLogos[0].displayName)}
-								</div>
-							)}
-						</div>
-						<span className="banner-vs">VS</span>
-						<div className="banner-team">
-							{teamLogos[1].logoUrl ? (
-								<img
-									src={teamLogos[1].logoUrl}
-									alt={teamLogos[1].displayName}
-									className="banner-team-logo"
-								/>
-							) : (
-								<div className="banner-team-fallback">
-									{getFirstLetter(teamLogos[1].displayName)}
-								</div>
-							)}
-						</div>
-					</div>
-				)}
-			</div>
-
-			<div className="prediction-card-content">
-				<div className="prediction-details">
-					<h3
-						className="prediction-title"
-						style={{
-							transition: "color 0.2s ease",
-						}}
-					>
-						{shouldRenderSubtitle ? (
-							<span className="prediction-title-prefix">
-								{subtitleContent}
-							</span>
-						) : null}
-						<span className="prediction-title-main">
-							{esportsTitleParts.headline}
-						</span>
-					</h3>
-					{umbrella.description && (
-						<p
-							className="prediction-description"
-							style={{
-								color: "#888",
-								fontSize: "14px",
-								marginTop: "8px",
-							}}
-						>
-							{umbrella.description}
-						</p>
-					)}
+			<div className="prediction-card__top prediction-card__top--split">
+				<div className="prediction-card__top-status">
+					{isDailyUmbrella ? (
+						<span className="prediction-card__daily-badge">Daily</span>
+					) : null}
+					{topLeftStatus}
+				</div>
+				<div className="prediction-card__top-headline">
+					<span className="prediction-card__headline">
+						{cardHeadlineContent}
+					</span>
 				</div>
 			</div>
 
-			<div
-				className="prediction-actions"
-				onClick={(e) => e.stopPropagation()}
-			>
-				{renderActions()}
-			</div>
-		{statusContent !== null ? (
-			<div className="prediction-card-footer">
-				{isDailyUmbrella && (
-					<span
-						style={{
-							display: "inline-block",
-							marginRight: "12px",
-							padding: "2px 8px",
-							fontSize: "0.75em",
-							fontWeight: 600,
-							color: "#000000",
-							backgroundColor: "#fbbf24",
-							borderRadius: "12px",
-							letterSpacing: "0.5px",
-							verticalAlign: "middle",
-							lineHeight: 1,
-						}}
-					>
-						Daily
-					</span>
-				)}
-				{!isLive ? (
-					<>
-						{isDailyUmbrella ? "Ends In:" : "Starts In:"}
-						&nbsp;&nbsp;{" "}
-					</>
-				) : null}
-				{statusContent}
-			</div>
-		) : null}
+			<div className="prediction-actions">{renderActions()}</div>
 		</div>
 	);
 };

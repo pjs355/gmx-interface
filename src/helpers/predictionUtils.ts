@@ -1,3 +1,10 @@
+import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { MatchedMarket } from "@/types/odds-monitor";
+import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+import { listingBestYesNoFromMatched } from "@/utils/listingVenuePrices";
+import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
+
 // Helper function to calculate prices from orderbook
 export const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -15,9 +22,77 @@ export const calculateOrderbookPrices = (orderbook: any) => {
 
 // Helper function to format price as cents
 export const toCentsString = (value?: number | null): string => {
-  if (value === undefined || value === null || !isFinite(value)) return "--";
-  return Math.round(value * 100).toString();
+	if (value === undefined || value === null || !isFinite(value)) return "--";
+	return Math.round(value * 100).toString();
 };
+
+/** Implied probability 0–1 → bar width 0–100, or null when price is unknown. */
+export function oddsBarPercent(
+	price: number | null | undefined,
+): number | null {
+	if (price === undefined || price === null || !Number.isFinite(price)) {
+		return null;
+	}
+	return Math.round(Math.max(0, Math.min(1, price)) * 100);
+}
+
+/**
+ * Match-level YES/NO best asks from OddsMonitor (`MatchedMarket` / venue-prices WS).
+ * Used for calendar ordering and anywhere listing preview applied before.
+ */
+export function getListingYesNoPricesForUmbrella(
+	umbrella: Umbrella,
+	matchedMarkets: MatchedMarket[] | null | undefined,
+): { yes: number | null; no: number | null } {
+	const raw = (umbrella as { pandascore_matchId?: unknown }).pandascore_matchId;
+	const panda = typeof raw === "string" ? raw.trim() : "";
+	if (!panda) return { yes: null, no: null };
+	const merged = mergeMonitorLimitlessFromUmbrella(
+		findOddsMatchedMarket(matchedMarkets, panda, umbrella._id),
+		umbrella.exchangeMatching?.limitless ?? null,
+	);
+	return listingBestYesNoFromMatched(merged);
+}
+
+/**
+ * True when listing odds look "settled" for UX ordering (demote in live lists).
+ * Handles inverses (100-0 vs 0-100). Treats null-null, 0-null, null-0, and one-sided
+ * ~0¢ / ~100¢ with the other side missing as deemphasized.
+ */
+export function isDeemphasizedSettledLeanOdds(
+	yes: number | null | undefined,
+	no: number | null | undefined,
+): boolean {
+	const yOk =
+		yes !== undefined && yes !== null && Number.isFinite(yes);
+	const nOk =
+		no !== undefined && no !== null && Number.isFinite(no);
+
+	if (!yOk && !nOk) return true;
+
+	if (!yOk && nOk) {
+		const n = Math.round(Math.max(0, Math.min(1, Number(no))) * 100);
+		return n <= 1 || n >= 99;
+	}
+	if (yOk && !nOk) {
+		const y = Math.round(Math.max(0, Math.min(1, Number(yes))) * 100);
+		return y <= 1 || y >= 99;
+	}
+
+	const y = Math.round(Math.max(0, Math.min(1, Number(yes))) * 100);
+	const n = Math.round(Math.max(0, Math.min(1, Number(no))) * 100);
+
+	// One side ~100¢, other ~0¢ (100-0, 99-1, 99-0, inverses, etc.)
+	if ((y >= 99 && n <= 1) || (n >= 99 && y <= 1)) return true;
+
+	// Both at or under 1¢ (0-0, 1-1, 0-1, 1-0)
+	if (y <= 1 && n <= 1) return true;
+
+	// Both very high (99-99, 100-100 style)
+	if (y >= 98 && n >= 98) return true;
+
+	return false;
+}
 
 // Helper function to get top 2 markets by highest Yes price
 export const getTopTwoMarkets = (

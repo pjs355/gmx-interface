@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useEffect, useState, useRef, forwardRef, useImperativeHandle } from "react";
+import { toast } from "react-toastify";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // Link import removed — executionGateBanner no longer rendered
 import { useSignerContext } from "context/SignerContext";
@@ -33,6 +34,7 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { usePolymarketExecutionGate } from "@/trading/hooks/usePolymarketExecutionGate";
 import { usePolymarketClobTradingSession } from "@/trading/polymarket/usePolymarketClobTradingSession";
 import {
+	levelUpMonitorBookForPosition,
 	polyOrderbookForPosition,
 	polyOutcomeTokenId,
 } from "@/trading/polymarket/polyOutcomeTokenId";
@@ -63,6 +65,7 @@ import {
 	logPolymarketTradePreflight,
 } from "@/trading/polymarket/polymarketOrderDebug";
 import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
+import { TOAST_AUTO_CLOSE_TIME } from "config/ui";
 import { Side, type TickSize } from "@polymarket/clob-client-v2";
 import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
@@ -143,13 +146,20 @@ export interface PredictionMarketTradeBoxHandle {
 }
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip, mobilePeekBar = "default" }, ref) => {
 
   const pandaId = pandascoreMatchId?.trim() ?? "";
   const multiVenueEnabled = Boolean(pandaId);
   const initialVenue = multiVenueEnabled ? "all" as const : "levelup" as const;
 
   const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTradingVenueChange } = useTradeState(initialPosition, initialVenue);
+
+  useEffect(() => {
+    if (!pandaId) return;
+    if (state.orderType !== "market") {
+      handleOrderTypeChange("market");
+    }
+  }, [pandaId, state.orderType, handleOrderTypeChange]);
   const { getClientForChain } = useSmartWallets();
   const { account, ready: signerReady } = useSignerContext();
   const { login, authenticated } = usePrivy();
@@ -559,12 +569,28 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     noTeamLabel,
   ]);
 
-  /** LevelUp REST for LevelUp; Polymarket monitor; Predict REST for selected outcome market. */
+  /** LevelUp: OddsMonitor WS book when connected (matches strip); REST otherwise. Other venues: monitor / REST as before. */
   const effectiveOrderbook = useMemo(() => {
     if (state.tradingVenue === "all") {
       return levelUpOrderbook;
     }
     if (state.tradingVenue === "levelup") {
+      if (
+        oddsMonitorEnabled &&
+        oddsMonitorConnected &&
+        matchedMonitor
+      ) {
+        const raw = levelUpMonitorBookForPosition(
+          matchedMonitor,
+          state.selectedPosition ?? "yes",
+          yesTeamLabel,
+          noTeamLabel,
+        );
+        const wsSnap = monitorBookToOrderbookSnapshot(raw, {
+          includeBboSyntheticLevels: true,
+        });
+        if (wsSnap) return wsSnap;
+      }
       return levelUpOrderbook;
     }
     if (state.tradingVenue === "predictfun") {
@@ -625,6 +651,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictOrderbookQuery.data,
     isPredictSingleMarket,
     predictVenueBookHints,
+    oddsMonitorEnabled,
+    oddsMonitorConnected,
   ]);
 
   const venueConfig = getVenueConfig(state.tradingVenue);
@@ -1474,6 +1502,41 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
   }, [state.orderResult]);
 
+  /** Same toast on umbrella page and home inline dock (`ToastContainer` in AppRoutes). */
+  const lastOrderResultToastKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!state.orderResult) {
+      lastOrderResultToastKeyRef.current = null;
+      return;
+    }
+    const r = state.orderResult;
+    const key = [
+      r.success ? "ok" : "fail",
+      r.error ?? "",
+      r.transactionHash ?? "",
+      r.orderId ?? "",
+    ].join("|");
+    if (lastOrderResultToastKeyRef.current === key) {
+      return;
+    }
+    lastOrderResultToastKeyRef.current = key;
+
+    const toastOpts = {
+      toastId: `prediction-trade-result-${key}`,
+      autoClose: TOAST_AUTO_CLOSE_TIME,
+    } as const;
+
+    if (r.success) {
+      toast.success("Order confirmed!", toastOpts);
+    } else {
+      toast.error(
+        r.error?.trim() ||
+          "Order could not be completed. Check your wallet and try again.",
+        toastOpts,
+      );
+    }
+  }, [state.orderResult]);
+
   // Expose methods for testing via ref
   useImperativeHandle(ref, () => ({
     setPosition: (position: 'yes' | 'no') => {
@@ -1765,7 +1828,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     ...(state.side === "buy"
       ? { limitlessFeeRateBps: LIMITLESS_DEFAULT_FEE_RATE_BPS }
       : {}),
-    venuePositions: state.side === "sell" ? sorVenuePositionsForActiveTab : undefined,
+    /**
+     * Sells: pass FULL position list (not the per-tab slice) so the omnibus channel can
+     * legitimately split across venues. The hook only adds `targetVenue` to the execution
+     * channel; the server filters per channel.
+     */
+    venuePositions: state.side === "sell" ? sorVenuePositions : undefined,
     enabled: sorRouteEnabled,
     polyFeeRate: 0.03,
     predictFunFeeRateBps: predictMarketDetail?.feeRateBps,
@@ -1774,8 +1842,37 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     limitPriceCents: sorLimitPriceCents,
   });
 
-  // Keep ref in sync so handleTrade (defined above) can access latest SOR data
-  sorRouteRef.current = sorRoute.route;
+  /**
+   * Resolved executable plan + status for the active tab:
+   * - "all"  → omnibus (display channel) is the executable plan.
+   * - venue  → targeted (execution channel); fall through to display only when execution hasn't returned yet.
+   *
+   * Errors fall through to display only when execution is still loading and has no code yet — keeps
+   * the button copy useful (display omnibus error) instead of flashing blank during the first tick.
+   */
+  const executableRoute = useMemo(
+    () =>
+      state.tradingVenue === "all"
+        ? sorRoute.displayRoute
+        : sorRoute.executionRoute,
+    [state.tradingVenue, sorRoute.displayRoute, sorRoute.executionRoute],
+  );
+  const executableLoading =
+    state.tradingVenue === "all" ? sorRoute.displayLoading : sorRoute.executionLoading;
+  const executableStale =
+    state.tradingVenue === "all" ? sorRoute.displayStale : sorRoute.executionStale;
+  const executableError =
+    state.tradingVenue === "all"
+      ? sorRoute.displayError
+      : (sorRoute.executionError ?? sorRoute.displayError);
+  const executableErrorCode =
+    state.tradingVenue === "all"
+      ? sorRoute.displayErrorCode
+      : (sorRoute.executionErrorCode ?? sorRoute.displayErrorCode);
+
+  // Keep ref in sync so handleTrade (defined above) can access latest SOR data — capture
+  // the executable plan (the one Submit will sign), not the omnibus.
+  sorRouteRef.current = executableRoute;
 
   const sorExecution = useSorExecution({
     executeLeg: sorExecutor.executeLeg,
@@ -1785,26 +1882,26 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const [sorRouteExpired, setSorRouteExpired] = useState(false);
   useEffect(() => {
-    if (!sorRoute.route) { setSorRouteExpired(false); return; }
+    if (!executableRoute) { setSorRouteExpired(false); return; }
     const check = () => {
-      if (sorRoute.route) {
-        setSorRouteExpired(Date.now() > sorRoute.route.expiresAt);
+      if (executableRoute) {
+        setSorRouteExpired(Date.now() > executableRoute.expiresAt);
       }
     };
     check();
     const timer = setInterval(check, 1000);
     return () => clearInterval(timer);
-  }, [sorRoute.route]);
+  }, [executableRoute]);
 
   useEffect(() => {
     sorRouteExpiredRef.current = sorRouteExpired;
   }, [sorRouteExpired]);
 
   const handleSorExecute = useCallback(() => {
-    if (sorRoute.route && !sorRouteExpired) {
-      console.log("[SOR] Trade button → execute", sorRoute.route.routeId);
+    if (executableRoute && !sorRouteExpired) {
+      console.log("[SOR] Trade button → execute", executableRoute.routeId);
       void sorExecution
-        .execute(sorRoute.route)
+        .execute(executableRoute)
         .then((res) => {
           if (res == null) {
             console.error("[SOR] execute settled: null result (execute ignored or bug)");
@@ -1863,21 +1960,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         success: false,
         error: sorRouteExpired
           ? "Odds expired. Wait for refresh, then try again."
-          : sorRoute.routeErrorCode === "EXECUTION_NOT_READY"
+          : executableErrorCode === "EXECUTION_NOT_READY"
             ? "Complete setup for this venue before trading."
-            : sorRoute.error?.trim()
-              ? sorRoute.error
-              : sorRoute.isLoading
+            : executableError?.trim()
+              ? executableError
+              : executableLoading
                 ? "Still finding the best route…"
                 : "No route available. Try a different amount or venue.",
       },
     }));
   }, [
-    sorRoute.route,
+    executableRoute,
     sorRouteExpired,
-    sorRoute.error,
-    sorRoute.isLoading,
-    sorRoute.routeErrorCode,
+    executableError,
+    executableLoading,
+    executableErrorCode,
     sorExecution.execute,
     setState,
   ]);
@@ -2018,11 +2115,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowStartProofFlow: handleStartDflowProofForTrade,
     sorMatchedVenues: matchedVenues,
     sorState: {
-      route: sorRoute.route,
-      isLoading: sorRoute.isLoading,
-      isStale: sorRoute.isStale,
-      error: sorRoute.error,
-      routeErrorCode: sorRoute.routeErrorCode,
+      // Executable channel: omnibus on "all", targeted on a venue tab. Preserves
+      // useButtonState semantics (route gates Submit; isLoading + isStale together
+      // suppress getSorBuyCashShortfall flicker during background polls).
+      route: executableRoute,
+      isLoading: executableLoading,
+      isStale: executableStale,
+      error: executableError,
+      routeErrorCode: executableErrorCode,
       isExecuting: sorExecution.isExecuting,
       executionPhase: sorExecution.executionPhase,
       prefundLegProgress: sorExecution.prefundLegProgress,
@@ -2067,9 +2167,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       crossBuyYes={crossBuyPrices.crossBuyYes}
       crossBuyNo={crossBuyPrices.crossBuyNo}
       state={(() => {
-        // When SOR route is available for single-venue trades, overlay its data — only if this
-        // response matches the current amount and is not stale (otherwise show local book walk).
-        const sr = sorRoute.route;
+        // Single-venue tab: overlay the executable (targeted) plan onto the trade-box
+        // numbers when it matches the typed amount. "all" tab falls through to the
+        // local book walk (calculatedMarketOrderData) — same behavior as before.
+        //
+        // We deliberately do NOT gate on `executionStale` — staleness flipping on a
+        // background poll would otherwise flip the To Win between SOR and bookData
+        // numbers (the "requote" feel). As long as the executionRoute matches the
+        // typed amount, it's the freshest authoritative plan and is what Submit signs.
+        const sr = sorRoute.executionRoute;
         const inputAmount = parseFloat(state.amount) || 0;
         // Cent-rounded match: float drift on requestedAmount vs typed amount must not
         // disable the overlay — otherwise we fall back to local book walk (wrong $ / shares).
@@ -2078,10 +2184,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           sr.legs.length > 0 &&
           inputAmount > 0 &&
           Math.round(sr.requestedAmount * 100) === Math.round(inputAmount * 100);
-        const hasSorData =
-          sorMatchesInput &&
-          !sorRoute.isStale &&
-          state.tradingVenue !== "all";
+        const hasSorData = sorMatchesInput && state.tradingVenue !== "all";
         const bookData = calculatedMarketOrderData;
 
         if (hasSorData && state.orderType === "market") {
@@ -2172,6 +2275,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       allMarketsSellYesBid={allMarketsSellYesBid}
       allMarketsSellNoBid={allMarketsSellNoBid}
       shareBalances={tradeBoxShareBalances}
+      mobilePeekBar={mobilePeekBar}
     />
 		</>
   );

@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { SnapshotStatus } from "@/types/odds-monitor";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import type { TradingPagePrices, VenueRowModel } from "@/hooks/useTradingPagePrices";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import "./EsportsVenueBooksPanel.scss";
 
 const MIN_VALID_PRICE = 0.005;
@@ -14,11 +15,14 @@ function isLimitlessVenueRow(venueId?: string): boolean {
 function formatAskCell(
 	linked: boolean,
 	prob: number | null,
-	status?: SnapshotStatus,
-	venueId?: string,
+	status: SnapshotStatus | undefined,
+	venueId: string | undefined,
+	formatProbDisplay: (p: number) => string,
 ): string {
 	if (!linked) return "—";
-	if (prob !== null && prob >= MIN_VALID_PRICE && prob <= MAX_VALID_PRICE) return `${Math.round(prob * 100)}¢`;
+	if (prob !== null && prob >= MIN_VALID_PRICE && prob <= MAX_VALID_PRICE) {
+		return formatProbDisplay(prob);
+	}
 	if (prob !== null || status === "no_liquidity") return "No shares";
 	if (status === "awaiting_data") return "Connecting…";
 	/** Limitless row is linked from matched-markets; empty book is “no offers”, not a broken UI. */
@@ -27,38 +31,45 @@ function formatAskCell(
 }
 
 /** Both price cells show exactly “No shares” (used to pin those rows to the bottom of the Basic table). */
-function rowShowsNoSharesBothColumns(row: VenueRowModel): boolean {
+function rowShowsNoSharesBothColumns(
+	row: VenueRowModel,
+	formatProbDisplay: (p: number) => string,
+): boolean {
 	return (
-		formatAskCell(row.linked, row.askA, row.statusA, row.id) === "No shares" &&
-		formatAskCell(row.linked, row.askB, row.statusB, row.id) === "No shares"
+		formatAskCell(row.linked, row.askA, row.statusA, row.id, formatProbDisplay) === "No shares" &&
+		formatAskCell(row.linked, row.askB, row.statusB, row.id, formatProbDisplay) === "No shares"
 	);
 }
 
-function sortVenueRowsNoSharesLast(rows: VenueRowModel[]): VenueRowModel[] {
+function sortVenueRowsNoSharesLast(
+	rows: VenueRowModel[],
+	formatProbDisplay: (p: number) => string,
+): VenueRowModel[] {
 	if (rows.length <= 1) return rows;
 	return [...rows].sort((a, b) => {
-		const aBottom = rowShowsNoSharesBothColumns(a);
-		const bBottom = rowShowsNoSharesBothColumns(b);
+		const aBottom = rowShowsNoSharesBothColumns(a, formatProbDisplay);
+		const bBottom = rowShowsNoSharesBothColumns(b, formatProbDisplay);
 		if (aBottom && !bBottom) return 1;
 		if (!aBottom && bBottom) return -1;
 		return 0;
 	});
 }
 
-/** All row indices tied for best ask in the same column (same displayed ¢ as the minimum). */
+const ASK_BEST_EPS = 1e-10;
+
+/** Row indices at the numerically best (lowest) ask in the column — whole-cent rounding hid sub-cent ties. */
 function indicesAtBestDisplayedCents(
 	rows: VenueRowModel[],
 	key: "askA" | "askB",
 ): Set<number> {
-	const displayCents: number[] = [];
+	let minP = Infinity;
 	for (const r of rows) {
 		const p = r[key];
 		if (p !== null && p >= MIN_VALID_PRICE && p <= MAX_VALID_PRICE) {
-			displayCents.push(Math.round(p * 100));
+			minP = Math.min(minP, p);
 		}
 	}
-	if (displayCents.length === 0) return new Set();
-	const minCents = Math.min(...displayCents);
+	if (!Number.isFinite(minP)) return new Set();
 	const out = new Set<number>();
 	rows.forEach((r, i) => {
 		const p = r[key];
@@ -66,7 +77,7 @@ function indicesAtBestDisplayedCents(
 			p !== null &&
 			p >= MIN_VALID_PRICE &&
 			p <= MAX_VALID_PRICE &&
-			Math.round(p * 100) === minCents
+			Math.abs(p - minP) <= ASK_BEST_EPS
 		) {
 			out.add(i);
 		}
@@ -106,6 +117,12 @@ type Props = {
 };
 
 export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
+	const { formatPrice } = useOddsDisplay();
+	const formatProbDisplay = useCallback(
+		(p: number) => formatPrice(p),
+		[formatPrice],
+	);
+
 	const {
 		venueRows,
 		bestYesPrice,
@@ -122,8 +139,8 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 	} = tradingPagePrices;
 
 	const orderedVenueRows = useMemo(
-		() => sortVenueRowsNoSharesLast(venueRows),
-		[venueRows],
+		() => sortVenueRowsNoSharesLast(venueRows, formatProbDisplay),
+		[venueRows, formatProbDisplay],
 	);
 
 	const bestAIndices = useMemo(
@@ -291,7 +308,7 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 									row.id,
 								)}
 							>
-								{formatAskCell(row.linked, row.askA, row.statusA, row.id)}
+								{formatAskCell(row.linked, row.askA, row.statusA, row.id, formatProbDisplay)}
 							</td>
 							<td
 								className={askCellClass(
@@ -302,7 +319,7 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 									row.id,
 								)}
 							>
-								{formatAskCell(row.linked, row.askB, row.statusB, row.id)}
+								{formatAskCell(row.linked, row.askB, row.statusB, row.id, formatProbDisplay)}
 							</td>
 						</tr>
 					))}

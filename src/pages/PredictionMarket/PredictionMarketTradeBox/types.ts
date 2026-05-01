@@ -55,6 +55,8 @@ export interface TradeBoxProps {
 	venueRowsForSellStrip?: VenueRowModel[] | null;
 	/** Odds-monitor row for this match (Polymarket token mapping for balances). */
 	matchedMonitor?: MatchedMarket | null;
+	/** Home: hide fixed Yes/No peek until `openCurtain()` (e.g. from card price tap). */
+	mobilePeekBar?: "default" | "hidden";
 }
 
 export interface MarketOrderCalculation {

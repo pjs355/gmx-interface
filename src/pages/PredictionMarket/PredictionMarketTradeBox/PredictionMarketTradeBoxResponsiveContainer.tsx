@@ -22,6 +22,7 @@ import type {
 	SorErrorCode,
 	SorExecutionPhase,
 	SorPrefundLegProgress,
+	VenueRoutePreview,
 } from "@/trading/sor";
 import Button from "components/Button/Button";
 import { getYesNoTeamLabels } from "./teamLabels";
@@ -29,6 +30,7 @@ import {
 	hexToRgba,
 	getContrastingTextColor,
 } from "@/helpers/predictionUtils";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
 
 export interface StableButtonPrices {
 	yesBestAsk: number | null; yesBestBid: number | null;
@@ -69,11 +71,17 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
 	getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
 	sorRoute: {
-		route: RoutePlan | null;
-		isLoading: boolean;
-		error: string | null;
-		routeErrorCode: SorErrorCode | null;
-		isStale: boolean;
+		displayRoute: RoutePlan | null;
+		executionRoute: RoutePlan | null;
+		venuePreviews: VenueRoutePreview[] | null;
+		displayLoading: boolean;
+		displayStale: boolean;
+		executionLoading: boolean;
+		executionStale: boolean;
+		displayError: string | null;
+		displayErrorCode: SorErrorCode | null;
+		executionError: string | null;
+		executionErrorCode: SorErrorCode | null;
 	};
 	sorExecution: {
 		execution: RouteExecution | null;
@@ -133,17 +141,15 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	allMarketsSellYesBid = null,
 	allMarketsSellNoBid = null,
 	shareBalances,
+	mobilePeekBar = "default",
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
 	const { openCurtain, closeCurtain } = useCurtainActions();
+	const { formatPrice } = useOddsDisplay();
 
-	const calcCents = useCallback((value?: number | null): string => {
-		if (value === undefined || value === null || !isFinite(value))
-			return "--";
-		return Math.round(value * 100).toString();
-	}, []);
-
+	const finiteOrNull = (v: number | null | undefined): number | null =>
+		typeof v === "number" && Number.isFinite(v) ? v : null;
 	const bestAsk = useMemo(() => {
 		if (!orderbook?.asks || orderbook.asks.length === 0) return null;
 		return Math.min(...orderbook.asks.map((a: any) => a.price));
@@ -163,10 +169,10 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			state.tradingVenue === "limitless") &&
 		state.selectedPosition === "no";
 
-	const yesPriceCents = useMemo(() => {
+	const yesPriceCurtain = useMemo((): number | null | "" => {
 		if (state.tradingVenue === "all" && state.side === "sell") {
 			if (allMarketsSellYesBid != null && Number.isFinite(allMarketsSellYesBid)) {
-				return calcCents(allMarketsSellYesBid);
+				return allMarketsSellYesBid;
 			}
 			return "";
 		}
@@ -176,7 +182,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			crossBuyYes != null &&
 			Number.isFinite(crossBuyYes)
 		) {
-			return calcCents(crossBuyYes);
+			return crossBuyYes;
 		}
 		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.yes) {
 			const h = predictVenueBookHints.yes;
@@ -188,16 +194,16 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				h.bids && h.bids.length > 0
 					? Math.max(...h.bids.map((b: { price: number }) => b.price))
 					: null;
-			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
+			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
 		}
 		if (bookRepresentsNo) {
 			return state.side === "buy"
-				? calcCents(bestBid === null ? null : 1 - (bestBid as any))
-				: calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
+				? finiteOrNull(bestBid === null ? null : 1 - (bestBid as number))
+				: finiteOrNull(bestAsk === null ? null : 1 - (bestAsk as number));
 		}
 		return state.side === "buy"
-			? calcCents(bestAsk as any)
-			: calcCents(bestBid as any);
+			? finiteOrNull(bestAsk as number | null)
+			: finiteOrNull(bestBid as number | null);
 	}, [
 		state.tradingVenue,
 		state.side,
@@ -205,16 +211,15 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		predictVenueBookHints,
 		bestAsk,
 		bestBid,
-		calcCents,
 		bookRepresentsNo,
 		crossBuyYes,
 		allMarketsSellYesBid,
 	]);
 
-	const noPriceCents = useMemo(() => {
+	const noPriceCurtain = useMemo((): number | null | "" => {
 		if (state.tradingVenue === "all" && state.side === "sell") {
 			if (allMarketsSellNoBid != null && Number.isFinite(allMarketsSellNoBid)) {
-				return calcCents(allMarketsSellNoBid);
+				return allMarketsSellNoBid;
 			}
 			return "";
 		}
@@ -224,7 +229,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			crossBuyNo != null &&
 			Number.isFinite(crossBuyNo)
 		) {
-			return calcCents(crossBuyNo);
+			return crossBuyNo;
 		}
 		if (state.tradingVenue === "predictfun" && predictVenueBookHints?.no) {
 			const h = predictVenueBookHints.no;
@@ -236,16 +241,16 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				h.bids && h.bids.length > 0
 					? Math.max(...h.bids.map((b: { price: number }) => b.price))
 					: null;
-			return state.side === "buy" ? calcCents(ba) : calcCents(bb);
+			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
 		}
 		if (bookRepresentsNo) {
 			return state.side === "buy"
-				? calcCents(bestAsk as any)
-				: calcCents(bestBid as any);
+				? finiteOrNull(bestAsk as number | null)
+				: finiteOrNull(bestBid as number | null);
 		}
 		return state.side === "buy"
-			? calcCents(bestBid === null ? null : 1 - (bestBid as any))
-			: calcCents(bestAsk === null ? null : 1 - (bestAsk as any));
+			? finiteOrNull(bestBid === null ? null : 1 - (bestBid as number))
+			: finiteOrNull(bestAsk === null ? null : 1 - (bestAsk as number));
 	}, [
 		state.tradingVenue,
 		state.side,
@@ -253,7 +258,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		predictVenueBookHints,
 		bestBid,
 		bestAsk,
-		calcCents,
 		bookRepresentsNo,
 		crossBuyNo,
 		allMarketsSellNoBid,
@@ -307,8 +311,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	if (!isMobile) {
 		return (
 			<div
-				className="text-body-medium flex flex-col rounded-12 shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-15"
-				style={{ backgroundColor: "black", marginBottom: "80px" }}
+				className="text-body-medium flex flex-col rounded-12 shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+				style={{ backgroundColor: "transparent", marginBottom: "80px" }}
 				data-qa="prediction-tradebox"
 			>
 				{executionGateBanner}
@@ -356,7 +360,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	return (
 		<PredictionCurtain
 			header={
-				isCurtainOpen ? null : (
+				mobilePeekBar === "hidden" || isCurtainOpen ? null : (
 					<div className="prediction-curtain-header">
 						<div className="curtain-header-buttons flex gap-8">
 							<Button
@@ -415,7 +419,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 								<strong className="position-btn__label-row">
 									<span className="position-btn__name">{mobileYesLabel}</span>
 									<span className="position-btn__price">
-										{yesPriceCents ? `${yesPriceCents}¢` : ""}
+										{yesPriceCurtain === ""
+											? ""
+											: formatPrice(yesPriceCurtain)}
 									</span>
 								</strong>
 							</Button>
@@ -475,7 +481,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 								<strong className="position-btn__label-row">
 									<span className="position-btn__name">{mobileNoLabel}</span>
 									<span className="position-btn__price">
-										{noPriceCents ? `${noPriceCents}¢` : ""}
+										{noPriceCurtain === ""
+											? ""
+											: formatPrice(noPriceCurtain)}
 									</span>
 								</strong>
 							</Button>

@@ -13,24 +13,19 @@ import { getVenueConfig } from '@/config/venueConfig';
 import type {
   RoutePlan,
   RouteExecution,
-  RouteLeg,
   SorVenue,
   SorErrorCode,
   SorExecutionPhase,
   SorPrefundLegProgress,
+  VenueRoutePreview,
 } from "@/trading/sor";
 import {
-  VENUE_DISPLAY_NAMES,
   VENUE_COLORS,
   SorKalshiKycShortfallBanner,
-  getSorLifiTransferFeeRowState,
-  derivedBridgeUsdForDisplay,
   formatSorUsd2,
   formatToWinUsdDisplay,
-  formatSorDetailsSharesDisplay,
-  formatSorFeeUsdDisplay,
-  formatSorBuyCostUsdDisplay,
   formatSorSellProceedsUsdDisplay,
+  formatSorDetailsSharesDisplay,
   rawInputBelowVenueMinimum,
   parseLimitPriceCents,
 } from "@/trading/sor";
@@ -41,7 +36,13 @@ import {
 	getContrastingTextColor,
 	mixHexOnBlack,
 } from "@/helpers/predictionUtils";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { SHARE_SELL_COMPARE_EPS } from "./checkBalances";
+import SmartRoutingSection from "./SmartRoutingSection";
+import { FlashingValue } from "@/utils/FlashingValue";
+
+const BET_VALUE_CLASS = "bet-size-value";
+const BET_VALUE_FLASH_CLASS = "bet-size-value--flash";
 
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -62,16 +63,6 @@ interface StableButtonPrices {
   noBestAsk: number | null; noBestBid: number | null;
 }
 
-function aggregateFeesByVenue(legs: RouteLeg[]): { venue: SorVenue; fee: number }[] {
-  const map = new Map<SorVenue, number>();
-  for (const leg of legs) {
-    map.set(leg.venue, (map.get(leg.venue) ?? 0) + leg.fee);
-  }
-  return [...map.entries()]
-    .filter(([, fee]) => fee > 0)
-    .map(([venue, fee]) => ({ venue, fee }));
-}
-
 /** Weighted average sale price in integer cents from SOR legs (multi-venue aware). */
 function sorRouteSellAvgCents(route: RoutePlan): number | null {
   if (route.side !== "sell" || route.totalShares <= 0) return null;
@@ -85,66 +76,6 @@ function sorRouteSellAvgCents(route: RoutePlan): number | null {
   const avg = weighted / route.totalShares;
   if (!Number.isFinite(avg) || avg <= 0) return null;
   return Math.round(avg * 100);
-}
-
-/** One “Fees $total” row; itemized breakdown is tooltip-only on the word “Fees” (amount is plain text). */
-function SorRouteConsolidatedFeesSummary({ route }: { route: RoutePlan }) {
-  const feeByVenue = aggregateFeesByVenue(route.legs);
-  const bridgeDerived = derivedBridgeUsdForDisplay(route);
-  const lifi = getSorLifiTransferFeeRowState(route);
-  /** Match `derivedBridgeUsdForDisplay`: API totalBridgeCost wins; else sum leg bridge estimates (avoids $0 after rounding when legs still have cost). */
-  const transferUsd =
-    route.side === "sell"
-      ? 0
-      : route.totalBridgeCost > 0
-        ? bridgeDerived.displayUsd
-        : bridgeDerived.legSumUsd > 1e-12
-          ? bridgeDerived.legSumUsd
-          : bridgeDerived.displayUsd;
-  const venueSum = feeByVenue.reduce((s, { fee }) => s + fee, 0);
-  const tradingUsd =
-    typeof route.totalFees === "number" &&
-    Number.isFinite(route.totalFees) &&
-    route.totalFees > 1e-9
-      ? route.totalFees
-      : venueSum;
-  const rawTotal = tradingUsd + transferUsd;
-  if (rawTotal <= 1e-9) return null;
-
-  const tooltipBody = (
-    <div className="sor-details-consolidated-fees__tooltip-body">
-      {feeByVenue
-        .filter(({ fee }) => fee > 0)
-        .map(({ venue, fee }) => (
-          <div key={venue}>
-            {VENUE_DISPLAY_NAMES[venue]} Fee: $ {formatSorFeeUsdDisplay(fee)}
-          </div>
-        ))}
-      {feeByVenue.every(({ fee }) => fee <= 0) && tradingUsd > 0 ? (
-        <div>Trading fees: $ {formatSorFeeUsdDisplay(tradingUsd)}</div>
-      ) : null}
-      {lifi.show ? (
-        <div>Funds transfer fee (est.): $ {formatSorFeeUsdDisplay(transferUsd)}</div>
-      ) : null}
-    </div>
-  );
-
-  return (
-    <div className="sor-details-row sor-details-row--fee sor-details-consolidated-fees">
-      <Tooltip
-        content={tooltipBody}
-        position="top"
-        withPortal={true}
-        disableHandleStyle
-        handleClassName="sor-details-consolidated-fees__fees-tooltip-handle"
-      >
-        <span className="sor-details-fee-label sor-details-consolidated-fees__fees-label">Fees</span>
-      </Tooltip>
-      <span className="sor-details-fee-value sor-details-consolidated-fees__amount">
-        $ {formatSorFeeUsdDisplay(rawTotal)}
-      </span>
-    </div>
-  );
 }
 
 interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
@@ -180,11 +111,17 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   };
   approvalState: ApprovalState;
   sorRoute: {
-    route: RoutePlan | null;
-    isLoading: boolean;
-    error: string | null;
-    routeErrorCode: SorErrorCode | null;
-    isStale: boolean;
+    displayRoute: RoutePlan | null;
+    executionRoute: RoutePlan | null;
+    venuePreviews: VenueRoutePreview[] | null;
+    displayLoading: boolean;
+    displayStale: boolean;
+    executionLoading: boolean;
+    executionStale: boolean;
+    displayError: string | null;
+    displayErrorCode: SorErrorCode | null;
+    executionError: string | null;
+    executionErrorCode: SorErrorCode | null;
   };
   sorExecution: {
     execution: RouteExecution | null;
@@ -247,8 +184,7 @@ export default function PredictionMarketTradeBoxUI({
   allMarketsSellNoBid = null,
   shareBalances,
 }: PredictionMarketTradeBoxUIProps) {
-  const [sorDetailsExpanded, setSorDetailsExpanded] = useState(false);
-  const [singleVenueDetailsExpanded, setSingleVenueDetailsExpanded] = useState(false);
+  const { formatPrice } = useOddsDisplay();
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
 
   /** Last completed All Markets SOR fill (no success banner — timing only for post-trade position sync). */
@@ -388,25 +324,9 @@ export default function PredictionMarketTradeBoxUI({
     sorExecution.execution?.totalFilledShares,
     clearPositionSyncMaxTimer,
   ]);
-  /**
-   * Pulse only while `isStale` is true (inputs changed, tab resume, or grace after a transient error).
-   * Background auto-refresh uses `isLoading` without flipping stale, so sitting on "1,000" does not blink every few seconds.
-   */
-  const sorTotalsRecalculating =
-    tradingVenue === "all" && sorRoute.isStale && sorRoute.route != null;
   const sellFieldsLocked = side === "sell" && maxScopedSellShares <= 0;
   const venueConfig = getVenueConfig(tradingVenue);
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
-  /** Single-venue SOR snapshot for LI.FI / bridge lines — same freshness as the numeric overlay. */
-  const singleVenueSorRouteForFees = useMemo(() => {
-    if (tradingVenue === "all") return null;
-    const sr = sorRoute.route;
-    if (!sr || sorRoute.isStale) return null;
-    const amt = parseFloat(amount) || 0;
-    if (!Number.isFinite(amt) || amt <= 0) return null;
-    if (Math.round(sr.requestedAmount * 100) !== Math.round(amt * 100)) return null;
-    return sr;
-  }, [tradingVenue, sorRoute.route, sorRoute.isStale, amount]);
 
   const venueDropdownOptions = useMemo(() => {
     const all: { value: string; label: string }[] = [
@@ -424,6 +344,13 @@ export default function PredictionMarketTradeBoxUI({
     }
     return [{ label: "Venue", options: venues }];
   }, [pandascoreMatchId, matchedVenues]);
+
+  /** Pandascore odds match with 2+ venues: "All Markets" prepended — smart rows replace the venue dropdown. */
+  const smartRoutingSurfaceActive = useMemo(() => {
+    const opts = venueDropdownOptions[0]?.options;
+    return Boolean(opts?.length && opts[0]?.value === "all");
+  }, [venueDropdownOptions]);
+
   const predictHints = predictVenueBookHints;
   const yesHintPrices = predictHints?.yes
     ? calculateOrderbookPrices(predictHints.yes)
@@ -450,11 +377,6 @@ export default function PredictionMarketTradeBoxUI({
     }
     
     return formattedInteger;
-  };
-
-  const toCentsString = (value?: number | null): string => {
-    if (value === undefined || value === null || !isFinite(value)) return "--";
-    return Math.round(value * 100).toString();
   };
 
   // For polymarket/dflow the effective orderbook is the *selected* outcome's native
@@ -507,22 +429,22 @@ export default function PredictionMarketTradeBoxUI({
   const yesPriceCents = useMemo(() => {
     if (tradingVenue === "all" && side === "sell") {
       if (allMarketsSellYesBid != null && Number.isFinite(allMarketsSellYesBid)) {
-        return `${toCentsString(allMarketsSellYesBid)}¢`;
+        return formatPrice(allMarketsSellYesBid);
       }
       return "";
     }
-    return yesPrice !== null ? `${toCentsString(yesPrice)}¢` : "--";
-  }, [tradingVenue, side, allMarketsSellYesBid, yesPrice]);
+    return yesPrice !== null ? formatPrice(yesPrice) : "--";
+  }, [tradingVenue, side, allMarketsSellYesBid, yesPrice, formatPrice]);
 
   const noPriceCents = useMemo(() => {
     if (tradingVenue === "all" && side === "sell") {
       if (allMarketsSellNoBid != null && Number.isFinite(allMarketsSellNoBid)) {
-        return `${toCentsString(allMarketsSellNoBid)}¢`;
+        return formatPrice(allMarketsSellNoBid);
       }
       return "";
     }
-    return noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
-  }, [tradingVenue, side, allMarketsSellNoBid, noPrice]);
+    return noPrice !== null ? formatPrice(noPrice) : "--";
+  }, [tradingVenue, side, allMarketsSellNoBid, noPrice, formatPrice]);
 
   const getBorderColorForSelected = (backgroundColor: string): string => {
     if (!backgroundColor) return '#ffffff';
@@ -687,14 +609,14 @@ export default function PredictionMarketTradeBoxUI({
     if (!Number.isFinite(usdAmount) || usdAmount <= 0) return null;
 
     const sorRouteFreshForAmount =
-      sorRoute.route &&
-      sorRoute.route.legs.length > 0 &&
-      !sorRoute.isStale &&
-      Math.round(sorRoute.route.requestedAmount * 100) ===
+      sorRoute.executionRoute &&
+      sorRoute.executionRoute.legs.length > 0 &&
+      !sorRoute.executionStale &&
+      Math.round(sorRoute.executionRoute.requestedAmount * 100) ===
         Math.round(usdAmount * 100);
 
     if (sorRouteFreshForAmount) {
-      const leg = sorRoute.route!.legs[0];
+      const leg = sorRoute.executionRoute!.legs[0];
       const avgPrice = leg.avgPrice;
       if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
       const referencePrice = bestAsk ?? null;
@@ -757,12 +679,12 @@ export default function PredictionMarketTradeBoxUI({
     predictHints,
     yesHintPrices,
     noHintPrices,
-    sorRoute.route,
-    sorRoute.isStale,
+    sorRoute.executionRoute,
+    sorRoute.executionStale,
   ]);
 
   // Compute Avg Price (¢) for market SELL orders using weighted average sale price.
-  // Prefers SOR route data when available.
+  // Prefers the SOR execution channel (single-venue) when fresh.
   const sellAvgCents = useMemo(() => {
     if (orderType !== 'market' || side !== 'sell') return null;
     if (!amount || !selectedPosition) return null;
@@ -770,13 +692,13 @@ export default function PredictionMarketTradeBoxUI({
     if (!Number.isFinite(shares) || shares <= 0) return null;
 
     const sorRouteFreshForAmount =
-      sorRoute.route &&
-      sorRoute.route.legs.length > 0 &&
-      !sorRoute.isStale &&
-      Math.abs(sorRoute.route.requestedAmount - shares) < 0.0001;
+      sorRoute.executionRoute &&
+      sorRoute.executionRoute.legs.length > 0 &&
+      !sorRoute.executionStale &&
+      Math.abs(sorRoute.executionRoute.requestedAmount - shares) < 0.0001;
 
     if (sorRouteFreshForAmount) {
-      const leg = sorRoute.route!.legs[0];
+      const leg = sorRoute.executionRoute!.legs[0];
       const avgPrice = leg.avgPrice;
       if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
       return Math.round(avgPrice * 100);
@@ -788,25 +710,27 @@ export default function PredictionMarketTradeBoxUI({
     if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
     const cents = Math.round(avgPrice * 100);
     return cents;
-  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, sorRoute.route, sorRoute.isStale]);
+  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, sorRoute.executionRoute, sorRoute.executionStale]);
 
   return (
     <div className="prediction-market-tradebox">
       {/* Title + venue dropdown (same control pattern as Market / Limit) */}
       <div className="market-name-header">
         <h3 className="market-name-header__title">{displayMarketTitle}</h3>
-        <div className="market-name-header__venue trade-mode-selector">
-          <Tabs
-            options={venueDropdownOptions}
-            regularOptionClassname="py-10"
-            type="inline"
-            selectedValue={state.tradingVenue}
-            onChange={(value) =>
-              onTradingVenueChange(value as TradingVenue)
-            }
-            qa="trade-venue"
-          />
-        </div>
+        {!smartRoutingSurfaceActive ? (
+          <div className="market-name-header__venue trade-mode-selector">
+            <Tabs
+              options={venueDropdownOptions}
+              regularOptionClassname="py-10"
+              type="inline"
+              selectedValue={state.tradingVenue}
+              onChange={(value) =>
+                onTradingVenueChange(value as TradingVenue)
+              }
+              qa="trade-venue"
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="tradebox-header">
@@ -829,7 +753,8 @@ export default function PredictionMarketTradeBoxUI({
             Sell
           </Button>
         </div>
-        {tradingVenue !== "all" && (
+        {/* Market/Limit hidden on pandascore multi-venue pages (market-only smart routing). */}
+        {tradingVenue !== "all" && !smartRoutingSurfaceActive && (
           <div className="trade-mode-selector">
             <Tabs
               options={orderTypeDropdownOptions}
@@ -1078,13 +1003,24 @@ export default function PredictionMarketTradeBoxUI({
         </div>
       )}
 
-      {/* SOR route breakdown when venue is "all" */}
+      {smartRoutingSurfaceActive && (
+        <SmartRoutingSection
+          displayRoute={sorRoute.displayRoute}
+          executionRoute={sorRoute.executionRoute}
+          venuePreviews={sorRoute.venuePreviews ?? null}
+          tradingVenue={tradingVenue}
+          isLoading={sorRoute.displayLoading}
+          onSelectVenue={onTradingVenueChange}
+        />
+      )}
+
+      {/* SOR route breakdown when venue is "all" — sourced from the omnibus (display) channel. */}
       {tradingVenue === "all" && (
         <div className="bet-size-section">
-          {sorRoute.error && !sorRoute.route && !sorRoute.isLoading && (() => {
-						const rawErr = sorRoute.error ?? "";
+          {sorRoute.displayError && !sorRoute.displayRoute && !sorRoute.displayLoading && (() => {
+						const rawErr = sorRoute.displayError ?? "";
 						const isKalshiWholeShareHint =
-							sorRoute.routeErrorCode === "WHOLE_SHARES_ONLY" ||
+							sorRoute.displayErrorCode === "WHOLE_SHARES_ONLY" ||
 							rawErr.includes(
 								"Fractional share amounts are not supported on Kalshi",
 							);
@@ -1108,7 +1044,7 @@ export default function PredictionMarketTradeBoxUI({
                       : { color: "#ef4444", fontSize: 12 }
                   }
                 >
-                  {sorRoute.routeErrorCode === "EXECUTION_NOT_READY"
+                  {sorRoute.displayErrorCode === "EXECUTION_NOT_READY"
                     ? "Trading setup required: "
                     : isKalshiWholeShareHint
                       ? ""
@@ -1119,8 +1055,8 @@ export default function PredictionMarketTradeBoxUI({
             </div>
 						);
           })()}
-          {sorRoute.route && (() => {
-            const route = sorRoute.route;
+          {sorRoute.displayRoute && (() => {
+            const route = sorRoute.displayRoute;
             const isSell = route.side === "sell";
             const sorSellAvgCents = isSell ? sorRouteSellAvgCents(route) : null;
             const sorSellNetReceiveUsd =
@@ -1131,23 +1067,16 @@ export default function PredictionMarketTradeBoxUI({
 				  Math.max(0, route.totalCost)
                 : null;
             return (
-            <div
-              className={
-                sorTotalsRecalculating
-                  ? "sor-route-totals sor-route-totals--recalculating"
-                  : "sor-route-totals"
-              }
-            >
+            <div className="sor-route-totals">
               {!isSell && route.totalShares > 0 && (
                 <div className="bet-size-info">
                   <div className="bet-size-main-row">
                     <span className="bet-size-label to-win-label">To Win</span>
-                    <span className="bet-size-value">
-                      $ {formatToWinUsdDisplay(route.totalShares)}
-                    </span>
-                  </div>
-                  <div className="bet-size-odds-subtext">
-                    Avg. odds {(route.totalCost / route.totalShares * 100).toFixed(0)}%
+                    <FlashingValue
+                      value={`$ ${formatToWinUsdDisplay(route.totalShares)}`}
+                      className={BET_VALUE_CLASS}
+                      flashClassName={BET_VALUE_FLASH_CLASS}
+                    />
                   </div>
                 </div>
               )}
@@ -1155,7 +1084,11 @@ export default function PredictionMarketTradeBoxUI({
                 <div className="bet-size-info">
                   <div className="bet-size-main-row">
                     <span className="bet-size-label">Avg Price</span>
-                    <span className="bet-size-value avg-price-value">{sorSellAvgCents}¢</span>
+                    <FlashingValue
+                      value={formatPrice(sorSellAvgCents / 100)}
+                      className={`${BET_VALUE_CLASS} avg-price-value`}
+                      flashClassName={BET_VALUE_FLASH_CLASS}
+                    />
                   </div>
                 </div>
               )}
@@ -1171,69 +1104,20 @@ export default function PredictionMarketTradeBoxUI({
                         {`Estimated Receive${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
                       </span>
                     </Tooltip>
-                    <span className="bet-size-value estimated-receive-value">
-                      $ {formatSorSellProceedsUsdDisplay(sorSellNetReceiveUsd)}
-                    </span>
+                    <FlashingValue
+                      value={`$ ${formatSorSellProceedsUsdDisplay(sorSellNetReceiveUsd)}`}
+                      className={`${BET_VALUE_CLASS} estimated-receive-value`}
+                      flashClassName={BET_VALUE_FLASH_CLASS}
+                    />
                   </div>
                 </div>
               )}
-              <div className="bet-size-info sor-details-wrap">
-                <button
-                  type="button"
-                  className="sor-details-toggle"
-                  aria-expanded={sorDetailsExpanded}
-                  onClick={() => setSorDetailsExpanded((open) => !open)}
-                >
-                  <span className="sor-details-toggle-inline">
-                    <span className="sor-details-toggle-label">Details</span>
-                    <span
-                      className={`sor-details-chevron${sorDetailsExpanded ? " sor-details-chevron--open" : ""}`}
-                      aria-hidden
-                    />
-                  </span>
-                </button>
-                {sorDetailsExpanded && (
-                  <div className="sor-details-panel">
-                    {route.legs.map((leg, idx) => {
-                      const shareStr = formatSorDetailsSharesDisplay(leg.shares);
-                      const cents = (leg.avgPrice * 100).toFixed(0);
-                      return (
-                        <div
-                          key={`${leg.venue}-${idx}`}
-                          className="sor-details-row sor-details-row--leg"
-                          data-qa="sor-leg"
-                          data-leg-venue={leg.venue}
-                          data-leg-side={isSell ? "sell" : "buy"}
-                          data-leg-num-shares={leg.shares}
-                          data-leg-price-cents={cents}
-                        >
-                          <span className="sor-details-leg-text">
-                            {VENUE_DISPLAY_NAMES[leg.venue]}
-                            {isSell ? ` Sell ${shareStr}` : ` ${shareStr}`} Shares @ {cents}¢
-                          </span>
-                        </div>
-                      );
-                    })}
-                    <SorRouteConsolidatedFeesSummary route={route} />
-                    {!isSell && Number.isFinite(route.totalCost) && (
-                      <div className="sor-details-row sor-details-row--fee">
-                        <span className="sor-details-fee-label">Cost:</span>
-                        <span
-                          className="sor-details-fee-value"
-                          data-qa="sor-leg-cost"
-                          data-cost-usd={Math.ceil(route.totalCost * 100 - 1e-9) / 100}
-                        >
-                          $ {formatSorBuyCostUsdDisplay(route.totalCost)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
               {route.insufficientLiquidity && (
                 <div className="bet-size-info">
                   <div style={{ fontSize: 12, color: "#f59e0b", fontWeight: 500, padding: "4px 0" }}>
-                    {isSell ? "Not enough bids to reach your proceeds target" : "Not enough shares to fill your order"}
+                    {isSell
+                      ? "Not enough bids to reach your proceeds target. Will fill partial order"
+                      : "Not enough shares to fill your order. Will fill partial order"}
                   </div>
                 </div>
               )}
@@ -1253,7 +1137,11 @@ export default function PredictionMarketTradeBoxUI({
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <span className="bet-size-label">Avg Price</span>
-                <span className="bet-size-value avg-price-value">{sellAvgCents}¢</span>
+                <FlashingValue
+                  value={formatPrice(sellAvgCents / 100)}
+                  className={`${BET_VALUE_CLASS} avg-price-value`}
+                  flashClassName={BET_VALUE_FLASH_CLASS}
+                />
               </div>
             </div>
           )}
@@ -1270,13 +1158,11 @@ export default function PredictionMarketTradeBoxUI({
                     {`Estimated Receive${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
                   </span>
                 </Tooltip>
-                <span
-                  className="bet-size-value estimated-receive-value"
-                  data-qa="tradebox-estimated-receive-usd"
-                  data-receive-usd={netReceive}
-                >
-                  $ {(Math.floor(netReceive * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
+                <FlashingValue
+                  value={`$ ${(Math.floor(netReceive * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  className={`${BET_VALUE_CLASS} estimated-receive-value`}
+                  flashClassName={BET_VALUE_FLASH_CLASS}
+                />
               </div>
             </div>
           )}
@@ -1292,9 +1178,11 @@ export default function PredictionMarketTradeBoxUI({
                     {limitOrderFee > 0 ? "Estimated Receive" : `Est. notional${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
                   </span>
                 </Tooltip>
-                <span className="bet-size-value amount-value">
-                  $ {(Math.floor((limitOrderAmount - limitOrderFee) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
+                <FlashingValue
+                  value={`$ ${(Math.floor((limitOrderAmount - limitOrderFee) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  className={`${BET_VALUE_CLASS} amount-value`}
+                  flashClassName={BET_VALUE_FLASH_CLASS}
+                />
               </div>
             </div>
           )}
@@ -1304,151 +1192,14 @@ export default function PredictionMarketTradeBoxUI({
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <span className={`bet-size-label to-win-label`}>To Win</span>
-                <span className="bet-size-value">$ {formatToWinUsdDisplay(toWinNumeric)}</span>
+                <FlashingValue
+                  value={`$ ${formatToWinUsdDisplay(toWinNumeric)}`}
+                  className={BET_VALUE_CLASS}
+                  flashClassName={BET_VALUE_FLASH_CLASS}
+                />
               </div>
-              {orderType === 'market' && oddsData && (
-                <div className="bet-size-odds-subtext">Avg. odds {oddsData.pct}%</div>
-              )}
             </div>
           )}
-
-          {/* Details: venue fill + fees (all single-venue markets) */}
-          <div className="bet-size-info sor-details-wrap">
-            <button
-              type="button"
-              className="sor-details-toggle"
-              aria-expanded={singleVenueDetailsExpanded}
-              onClick={() => setSingleVenueDetailsExpanded((o) => !o)}
-            >
-              <span className="sor-details-toggle-inline">
-                <span className="sor-details-toggle-label">Details</span>
-                <span
-                  className={`sor-details-chevron${singleVenueDetailsExpanded ? " sor-details-chevron--open" : ""}`}
-                  aria-hidden
-                />
-              </span>
-            </button>
-            {singleVenueDetailsExpanded && (
-              <div className="sor-details-panel">
-                {orderType === "limit" && limitOrderAmount !== null && amount && price && (
-                  <div
-                    className="sor-details-row sor-details-row--leg"
-                    data-qa="sor-leg"
-                    data-leg-venue={state.tradingVenue}
-                    data-leg-side="limit"
-                    data-leg-num-shares={Number(amount)}
-                    data-leg-price-cents={Number(price)}
-                  >
-                    <span className="sor-details-leg-text">
-                      Limit — {formatSorDetailsSharesDisplay(Number(amount))} shares @ {price}¢
-                    </span>
-                  </div>
-                )}
-                {orderType === "market" && side === "buy" && oddsData !== null && calculatedContracts !== null && (
-                  <div
-                    className="sor-details-row sor-details-row--leg"
-                    data-qa="sor-leg"
-                    data-leg-venue={state.tradingVenue}
-                    data-leg-side="market-buy"
-                    data-leg-num-shares={calculatedContracts}
-                    data-leg-price-cents={oddsData.pct}
-                  >
-                    <span className="sor-details-leg-text">
-                      {venueConfig.displayName} {formatSorDetailsSharesDisplay(calculatedContracts)} Shares @ {oddsData.pct}¢
-                    </span>
-                  </div>
-                )}
-                {orderType === "market" && side === "sell" && sellAvgCents !== null && amount && Number(amount) > 0 && (
-                  <div
-                    className="sor-details-row sor-details-row--leg"
-                    data-qa="sor-leg"
-                    data-leg-venue={state.tradingVenue}
-                    data-leg-side="market-sell"
-                    data-leg-num-shares={Number(amount)}
-                    data-leg-price-cents={sellAvgCents}
-                  >
-                    <span className="sor-details-leg-text">
-                      {venueConfig.displayName} Sell {formatSorDetailsSharesDisplay(Number(amount))} Shares @ {sellAvgCents}¢
-                    </span>
-                  </div>
-                )}
-                {singleVenueSorRouteForFees ? (
-                  <SorRouteConsolidatedFeesSummary route={singleVenueSorRouteForFees} />
-                ) : null}
-                {orderType === "limit" &&
-                  limitOrderFee > 0 &&
-                  !singleVenueSorRouteForFees && (
-                  <div className="sor-details-row sor-details-row--fee">
-                    <Tooltip content={venueConfig.feeTooltip} position="top" withPortal={true}>
-                      <span className="sor-details-fee-label">Fees</span>
-                    </Tooltip>
-                    <span className="sor-details-fee-value">
-                      $ {formatSorFeeUsdDisplay(limitOrderFee)}
-                    </span>
-                  </div>
-                )}
-                {orderType === "market" &&
-                  side === "buy" &&
-                  !singleVenueSorRouteForFees &&
-                  tradingFee !== null &&
-                  tradingFee > 0 && (
-                  <div className="sor-details-row sor-details-row--fee">
-                    <Tooltip content={venueConfig.feeTooltip} position="top" withPortal={true}>
-                      <span className="sor-details-fee-label">Fees</span>
-                    </Tooltip>
-                    <span className="sor-details-fee-value">
-                      $ {formatSorFeeUsdDisplay(tradingFee)}
-                    </span>
-                  </div>
-                )}
-                {orderType === "market" &&
-                  side === "sell" &&
-                  !singleVenueSorRouteForFees &&
-                  sellTradingFee !== null &&
-                  sellTradingFee > 0 && (
-                  <div className="sor-details-row sor-details-row--fee">
-                    <Tooltip content={venueConfig.feeTooltip} position="top" withPortal={true}>
-                      <span className="sor-details-fee-label">Fees</span>
-                    </Tooltip>
-                    <span className="sor-details-fee-value">
-                      $ {formatSorFeeUsdDisplay(sellTradingFee)}
-                    </span>
-                  </div>
-                )}
-                {side === "buy" &&
-                  orderType === "market" &&
-                  estimatedCost !== null &&
-                  Number.isFinite(estimatedCost) && (
-                  <div className="sor-details-row sor-details-row--fee">
-                    <span className="sor-details-fee-label">Cost:</span>
-                    <span
-                      className="sor-details-fee-value"
-                      data-qa="sor-leg-cost"
-                      data-cost-usd={Math.ceil(estimatedCost * 100 - 1e-9) / 100}
-                    >
-                      $ {formatSorBuyCostUsdDisplay(estimatedCost)}
-                    </span>
-                  </div>
-                )}
-                {side === "buy" &&
-                  orderType === "limit" &&
-                  limitOrderAmount !== null &&
-                  amount &&
-                  price && (
-                  <div className="sor-details-row sor-details-row--fee">
-                    <span className="sor-details-fee-label">Cost:</span>
-                    <span
-                      className="sor-details-fee-value"
-                      data-qa="sor-leg-cost"
-                      data-cost-usd={Math.ceil((limitOrderAmount + limitOrderFee) * 100 - 1e-9) / 100}
-                    >
-                      $ {formatSorBuyCostUsdDisplay(limitOrderAmount + limitOrderFee)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -1515,9 +1266,9 @@ export default function PredictionMarketTradeBoxUI({
         )}
       {tradingVenue === "all" &&
         side === "buy" &&
-        sorRoute.route?.sizeSuggestion &&
+        sorRoute.displayRoute?.sizeSuggestion &&
         (() => {
-          const s = sorRoute.route!.sizeSuggestion!;
+          const s = sorRoute.displayRoute!.sizeSuggestion!;
           const suggested = s.suggestedAmount;
           return (
             <div
@@ -1549,12 +1300,12 @@ export default function PredictionMarketTradeBoxUI({
               title={s.reason}
             >
               Increase to ${suggested.toFixed(2)} for a better price (
-              {Math.round(s.unlockedEffectivePrice * 100)}¢ / share)
+              {formatPrice(s.unlockedEffectivePrice)} / share)
             </div>
           );
         })()}
-      {tradingVenue === "all" && sorRoute.route && (
-        <SorKalshiKycShortfallBanner route={sorRoute.route} variant="tradebox" />
+      {tradingVenue === "all" && sorRoute.displayRoute && (
+        <SorKalshiKycShortfallBanner route={sorRoute.displayRoute} variant="tradebox" />
       )}
       </>
       )}

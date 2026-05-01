@@ -12,6 +12,7 @@ import type {
 	VenuePositionEntry,
 	SorRouteResult,
 	SorErrorCode,
+	VenueRoutePreview,
 } from "./sor-types";
 import { VENUE_DISPLAY_NAMES } from "./sor-types";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
@@ -68,9 +69,6 @@ function formatSorRouteFailureMessage(
 		return `No order book for ${VENUE_DISPLAY_NAMES[targetVenue]} on this market yet. Try another tab or All Markets.`;
 	}
 	if (code === "NO_MARKET_FOUND") {
-		// Post-grace: the client already waited ~3 s on this; message it as
-		// a loading state rather than a hard failure because the book should
-		// still appear shortly.
 		return "Fetching price...";
 	}
 	if (code === "NO_BOOKS_AVAILABLE") {
@@ -86,9 +84,6 @@ function formatSorRouteFailureMessage(
 		return server || "Complete trading setup for this venue before using smart routing.";
 	}
 	if (code === "AMOUNT_TOO_SMALL") {
-		// Server now returns the product-specific copy (e.g. "Trade minimum is
-		// $5.", "$5 minimum limit order value.", "Minimum sell is 1 share.");
-		// surface it directly so we don't mask the reason with a generic line.
 		if (server) return server;
 		return "Below trade minimum. Increase trade size";
 	}
@@ -110,13 +105,6 @@ export interface UseSorRouteInput {
 	outcome: SorOutcome | undefined;
 	side: SorSide;
 	amount: number;
-	/**
-	 * **Buy only.** Per-chain stable balances + wallet addresses for the predictions
-	 * SOR API. The server always walks full book depth; `route.sufficientFunds` is false
-	 * when this is omitted, empty, or balances do not cover the returned legs (including
-	 * bridges). Prefer `buildChainBalances` (including zero rows per chain) so funding
-	 * is accurate. Execution is blocked when `sufficientFunds === false`.
-	 */
 	walletBalances?: ChainBalance[];
 	venuePositions?: VenuePositionEntry[];
 	targetVenue?: SorVenue;
@@ -127,21 +115,34 @@ export interface UseSorRouteInput {
 	orderType?: SorOrderType;
 	/** Integer cents 1–99. Required when orderType === "limit". */
 	limitPriceCents?: number;
-	/** Buy: Limitless maker USDC on Base (see RouteRequest in sor-types). */
 	limitlessMakerBaseUsdc?: number;
-	/** Buy: Limitless fee rate in bps (optional; server defaults to 300). */
 	limitlessFeeRateBps?: number;
 }
 
+/**
+ * Dual-channel SOR result:
+ * - `displayRoute` = always-on omnibus plan (no `targetVenue`); drives smart-routing rows + split row.
+ * - `executionRoute` = targeted single-venue plan (only when `targetVenue` set); drives Submit + single-venue overlay.
+ *
+ * For `orderType === "limit"`, only the execution channel runs and `displayRoute` is aliased to the
+ * same `RoutePlan` reference; `venuePreviews` is `null` (omnibus is not computed for limit orders).
+ */
 export interface UseSorRouteResult {
-	route: RoutePlan | null;
-	isLoading: boolean;
-	error: string | null;
-	/** Set from API when `success: false` (e.g. EXECUTION_NOT_READY). */
-	routeErrorCode: SorErrorCode | null;
-	isStale: boolean;
+	displayRoute: RoutePlan | null;
+	executionRoute: RoutePlan | null;
+	venuePreviews: VenueRoutePreview[] | null;
+	displayLoading: boolean;
+	displayStale: boolean;
+	executionLoading: boolean;
+	executionStale: boolean;
+	displayError: string | null;
+	displayErrorCode: SorErrorCode | null;
+	executionError: string | null;
+	executionErrorCode: SorErrorCode | null;
 	refresh: () => void;
 }
+
+type ChannelKind = "display" | "execution";
 
 export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	const { getAccessToken } = usePrivy();
@@ -158,28 +159,6 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			),
 		[getAccessToken],
 	);
-
-	const [route, setRoute] = useState<RoutePlan | null>(null);
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [routeErrorCode, setRouteErrorCode] = useState<SorErrorCode | null>(null);
-	const [isStale, setIsStale] = useState(false);
-
-	const abortRef = useRef<AbortController | null>(null);
-	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const refreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const fetchCountRef = useRef(0);
-	const isLoadingRef = useRef(false);
-	/** Timestamp (ms) of the first transient failure in the current streak. */
-	const failureStreakStartRef = useRef<number | null>(null);
-	/** Latest route ref so the visibility-resume effect can decide whether to poll. */
-	const routeRef = useRef<RoutePlan | null>(null);
-	routeRef.current = route;
-
-	const prevOutcomeRef = useRef(input.outcome);
-	const prevSideRef = useRef(input.side);
-	const prevTargetVenueRef = useRef(input.targetVenue);
-	const prevQuestionIdRef = useRef(input.questionId);
 
 	const {
 		questionId,
@@ -198,13 +177,48 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		limitlessFeeRateBps,
 	} = input;
 
+	const [displayRoute, setDisplayRoute] = useState<RoutePlan | null>(null);
+	const [executionRoute, setExecutionRoute] = useState<RoutePlan | null>(null);
+	const [venuePreviews, setVenuePreviews] = useState<VenueRoutePreview[] | null>(null);
+
+	const [displayLoading, setDisplayLoading] = useState(false);
+	const [displayStale, setDisplayStale] = useState(false);
+	const [displayError, setDisplayError] = useState<string | null>(null);
+	const [displayErrorCode, setDisplayErrorCode] = useState<SorErrorCode | null>(null);
+
+	const [executionLoading, setExecutionLoading] = useState(false);
+	const [executionStale, setExecutionStale] = useState(false);
+	const [executionError, setExecutionError] = useState<string | null>(null);
+	const [executionErrorCode, setExecutionErrorCode] = useState<SorErrorCode | null>(null);
+
+	// Per-channel runtime refs.
+	const displayAbortRef = useRef<AbortController | null>(null);
+	const displayFetchIdRef = useRef(0);
+	const displayFailureStreakStartRef = useRef<number | null>(null);
+	const displayLastGoodRouteRef = useRef<RoutePlan | null>(null);
+	const displayLoadingRef = useRef(false);
+
+	const executionAbortRef = useRef<AbortController | null>(null);
+	const executionFetchIdRef = useRef(0);
+	const executionFailureStreakStartRef = useRef<number | null>(null);
+	const executionLastGoodRouteRef = useRef<RoutePlan | null>(null);
+	const executionLoadingRef = useRef(false);
+
+	// Shared scheduler refs.
+	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const refreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Identity-tracking refs.
+	const prevQuestionIdRef = useRef(questionId);
+	const prevOutcomeRef = useRef(outcome);
+	const prevSideRef = useRef(side);
+	const prevOrderTypeRef = useRef(orderType);
+	const prevTargetVenueRef = useRef(targetVenue);
+
 	/**
 	 * Content keys for schedule effect deps — avoids thrashing when React Query hands
 	 * `walletBalances` / `venuePositions` a fresh array reference with the same
-	 * numbers (post-trade invalidations). Previously `doFetch` in the effect deps
-	 * re-ran the effect on every refetch, cleared the 300 ms debounce repeatedly, and
-	 * left the button stuck on "Fetching price..." (especially Predict with many
-	 * dependent queries).
+	 * numbers (post-trade invalidations).
 	 */
 	const walletBalancesKey = useMemo(
 		() =>
@@ -237,253 +251,373 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				limitPriceCents >= 1 &&
 				limitPriceCents <= 99));
 
-	const doFetch = useCallback(async () => {
-		if (!canFetch || !questionId || !outcome) return;
-
-		abortRef.current?.abort();
-		const controller = new AbortController();
-		abortRef.current = controller;
-
-		let timedOut = false;
-		const timeoutId = setTimeout(() => {
-			timedOut = true;
-			controller.abort();
-		}, REQUEST_TIMEOUT_MS);
-
-		const fetchId = ++fetchCountRef.current;
-		setIsLoading(true);
-		isLoadingRef.current = true;
-		setError(null);
-		setRouteErrorCode(null);
-
-		const request: RouteRequest = {
+	const buildRequest = useCallback(
+		(channel: ChannelKind): RouteRequest => {
+			const includeTarget = channel === "execution" && !!targetVenue;
+			return {
+				questionId: questionId!,
+				outcome: outcome!,
+				side,
+				amount,
+				...(side === "buy" ? { walletBalances } : { venuePositions }),
+				polyFeeRate,
+				predictFunFeeRateBps,
+				...(includeTarget ? { targetVenue: targetVenue as SorVenue } : {}),
+				...(orderType ? { orderType } : {}),
+				...(typeof limitPriceCents === "number" ? { limitPriceCents } : {}),
+				...(side === "buy" &&
+				typeof limitlessMakerBaseUsdc === "number" &&
+				Number.isFinite(limitlessMakerBaseUsdc)
+					? { limitlessMakerBaseUsdc: Math.max(0, limitlessMakerBaseUsdc) }
+					: {}),
+				...(side === "buy" &&
+				typeof limitlessFeeRateBps === "number" &&
+				Number.isFinite(limitlessFeeRateBps)
+					? { limitlessFeeRateBps: Math.max(0, Math.floor(limitlessFeeRateBps)) }
+					: {}),
+			};
+		},
+		[
 			questionId,
 			outcome,
 			side,
 			amount,
-			...(side === "buy" ? { walletBalances } : { venuePositions }),
+			walletBalances,
+			venuePositions,
 			polyFeeRate,
 			predictFunFeeRateBps,
-			...(targetVenue ? { targetVenue } : {}),
-			...(orderType ? { orderType } : {}),
-			...(typeof limitPriceCents === "number" ? { limitPriceCents } : {}),
-			...(side === "buy" &&
-			typeof limitlessMakerBaseUsdc === "number" &&
-			Number.isFinite(limitlessMakerBaseUsdc)
-				? { limitlessMakerBaseUsdc: Math.max(0, limitlessMakerBaseUsdc) }
-				: {}),
-			...(side === "buy" &&
-			typeof limitlessFeeRateBps === "number" &&
-			Number.isFinite(limitlessFeeRateBps)
-				? { limitlessFeeRateBps: Math.max(0, Math.floor(limitlessFeeRateBps)) }
-				: {}),
-		};
+			targetVenue,
+			orderType,
+			limitPriceCents,
+			limitlessMakerBaseUsdc,
+			limitlessFeeRateBps,
+		],
+	);
 
-		if (isTradingDebugLoggingEnabled()) {
-			console.log("[SOR] Route request →", {
-				questionId,
-				targetVenue,
-				orderType: orderType ?? "market",
-				limitPriceCents,
-				amount,
-				side,
-				outcome,
-				walletBalances: side === "buy" ? walletBalances : undefined,
-				venuePositions: side === "sell" ? venuePositions : undefined,
-			});
-		}
+	const doFetchChannel = useCallback(
+		async (channel: ChannelKind) => {
+			if (!canFetch || !questionId || !outcome) return;
+			const isLimit = orderType === "limit";
+			// Execution channel only fires when there's a concrete target.
+			// (Limit orders force `targetVenue` via canFetch; market orders may not have one.)
+			if (channel === "execution" && !targetVenue) return;
+			// Display channel is silent for limit orders — execution channel aliases into display on success.
+			if (channel === "display" && isLimit) return;
 
-		/**
-		 * Apply a failure response. If the failure is transient and we still
-		 * have a recent successful route, keep the route on screen (marked
-		 * stale) until {@link ROUTE_FAILURE_GRACE_MS} has elapsed — this is
-		 * what stops the button flapping between valid and error states on a
-		 * one-tick miss of the 3 s auto-refresh. Non-transient codes clear
-		 * immediately: they're user-actionable (AMOUNT_TOO_SMALL / VALIDATION).
-		 */
-		const surfaceFailure = (opts: {
-			code: SorErrorCode | null;
-			message: string;
-			transient: boolean;
-		}) => {
-			if (opts.transient) {
-				if (failureStreakStartRef.current == null) {
-					failureStreakStartRef.current = Date.now();
+			const isExecution = channel === "execution";
+			const aliasToDisplay = isLimit && isExecution;
+
+			const channelAbortRef = isExecution ? executionAbortRef : displayAbortRef;
+			const channelFetchIdRef = isExecution ? executionFetchIdRef : displayFetchIdRef;
+			const channelFailureStreakStartRef = isExecution
+				? executionFailureStreakStartRef
+				: displayFailureStreakStartRef;
+			const channelLastGoodRouteRef = isExecution
+				? executionLastGoodRouteRef
+				: displayLastGoodRouteRef;
+			const channelLoadingRef = isExecution ? executionLoadingRef : displayLoadingRef;
+			const setLoading = isExecution ? setExecutionLoading : setDisplayLoading;
+			const setStale = isExecution ? setExecutionStale : setDisplayStale;
+			const setErr = isExecution ? setExecutionError : setDisplayError;
+			const setErrCode = isExecution ? setExecutionErrorCode : setDisplayErrorCode;
+			const setRoute = isExecution ? setExecutionRoute : setDisplayRoute;
+
+			channelAbortRef.current?.abort();
+			const controller = new AbortController();
+			channelAbortRef.current = controller;
+
+			let timedOut = false;
+			const timeoutId = setTimeout(() => {
+				timedOut = true;
+				controller.abort();
+			}, REQUEST_TIMEOUT_MS);
+
+			const fetchId = ++channelFetchIdRef.current;
+			setLoading(true);
+			channelLoadingRef.current = true;
+			setErr(null);
+			setErrCode(null);
+
+			const request = buildRequest(channel);
+
+			const applySuccess = (r: Extract<SorRouteResult, { success: true }>) => {
+				channelFailureStreakStartRef.current = null;
+				channelLastGoodRouteRef.current = r.route;
+				setRoute(r.route);
+				if (channel === "display") {
+					setVenuePreviews(r.venuePreviews ?? null);
 				}
-				const elapsed = Date.now() - failureStreakStartRef.current;
-				setIsStale(true);
-				if (elapsed < ROUTE_FAILURE_GRACE_MS && routeRef.current) {
-					// Within grace: hold the last-good route; don't surface
-					// error copy yet. The next refresh tick will retry.
-					return;
+				if (aliasToDisplay) {
+					setDisplayRoute(r.route);
+					setVenuePreviews(null);
+					setDisplayError(null);
+					setDisplayErrorCode(null);
+					setDisplayStale(false);
+					displayLastGoodRouteRef.current = r.route;
+					displayFailureStreakStartRef.current = null;
 				}
-			} else {
-				failureStreakStartRef.current = null;
+				setErr(null);
+				setErrCode(null);
+				setStale(false);
+			};
+
+			const surfaceFailure = (opts: {
+				code: SorErrorCode | null;
+				message: string;
+				transient: boolean;
+			}) => {
+				if (opts.transient) {
+					if (channelFailureStreakStartRef.current == null) {
+						channelFailureStreakStartRef.current = Date.now();
+					}
+					const elapsed = Date.now() - channelFailureStreakStartRef.current;
+					setStale(true);
+					if (elapsed < ROUTE_FAILURE_GRACE_MS && channelLastGoodRouteRef.current) {
+						return;
+					}
+				} else {
+					channelFailureStreakStartRef.current = null;
+				}
+				setRoute(null);
+				channelLastGoodRouteRef.current = null;
+				if (channel === "display") {
+					setVenuePreviews(null);
+				}
+				if (aliasToDisplay) {
+					setDisplayRoute(null);
+					setVenuePreviews(null);
+					setDisplayError(opts.message);
+					setDisplayErrorCode(opts.code);
+					setDisplayStale(false);
+					displayLastGoodRouteRef.current = null;
+					displayFailureStreakStartRef.current = null;
+				}
+				setErr(opts.message);
+				setErrCode(opts.code);
+				setStale(false);
+			};
+
+			if (isTradingDebugLoggingEnabled()) {
+				console.log("[SOR] Route request →", {
+					channel,
+					questionId,
+					targetVenue: isExecution ? targetVenue : undefined,
+					orderType: orderType ?? "market",
+					limitPriceCents,
+					amount,
+					side,
+					outcome,
+					walletBalances: side === "buy" ? walletBalances : undefined,
+					venuePositions: side === "sell" ? venuePositions : undefined,
+				});
 			}
-			setRoute(null);
-			setError(opts.message);
-			setRouteErrorCode(opts.code);
-			setIsStale(false);
-		};
 
-		const maxAttempts = 4;
-		try {
-			for (let attempt = 0; attempt < maxAttempts; attempt++) {
-				if (fetchCountRef.current !== fetchId) return;
+			const failureTargetForCopy = isExecution ? targetVenue : undefined;
+			const maxAttempts = 4;
+			try {
+				for (let attempt = 0; attempt < maxAttempts; attempt++) {
+					if (channelFetchIdRef.current !== fetchId) return;
+					const result = await apiClient.getRoute(request, controller.signal);
+					if (channelFetchIdRef.current !== fetchId) return;
 
-				const result: SorRouteResult = await apiClient.getRoute(request, controller.signal);
+					if (result.success) {
+						if (isTradingDebugLoggingEnabled()) {
+							console.log("[SOR] Route response ←", {
+								channel,
+								totalCost: result.route.totalCost,
+								totalShares: result.route.totalShares,
+								legs: result.route.legs.length,
+								insufficientLiquidity: result.route.insufficientLiquidity,
+								remainder: result.route.remainder,
+							});
+						}
+						applySuccess(result);
+						return;
+					}
 
-				if (fetchCountRef.current !== fetchId) return;
-
-				if (result.success) {
 					if (isTradingDebugLoggingEnabled()) {
 						console.log("[SOR] Route response ←", {
-							totalCost: result.route.totalCost,
-							totalShares: result.route.totalShares,
-							legs: result.route.legs.length,
-							insufficientLiquidity: result.route.insufficientLiquidity,
-							remainder: result.route.remainder,
+							channel,
+							success: false,
+							code: result.code,
+							error: (result.error ?? "").slice(0, 200),
 						});
 					}
-					failureStreakStartRef.current = null;
-					setRoute(result.route);
-					setError(null);
-					setRouteErrorCode(null);
-					setIsStale(false);
+
+					const transient = TRANSIENT_SOR_ROUTE_CODES.includes(result.code);
+					if (!transient || attempt === maxAttempts - 1) {
+						surfaceFailure({
+							code: result.code,
+							message: formatSorRouteFailureMessage(result, failureTargetForCopy),
+							transient,
+						});
+						return;
+					}
+
+					try {
+						const backoff = 280 + attempt * 140 + Math.floor(Math.random() * 80);
+						await sleep(backoff, controller.signal);
+					} catch {
+						if (channelFetchIdRef.current !== fetchId) return;
+						return;
+					}
+				}
+			} catch (err) {
+				if (channelFetchIdRef.current !== fetchId) return;
+				if (err instanceof DOMException && err.name === "AbortError") {
+					if (timedOut) {
+						surfaceFailure({
+							code: null,
+							message: "Route request timed out",
+							transient: true,
+						});
+					}
 					return;
 				}
-
-				if (isTradingDebugLoggingEnabled()) {
-					console.log("[SOR] Route response ←", {
-						success: false,
-						code: result.code,
-						error: (result.error ?? "").slice(0, 200),
-					});
-				}
-
-				const transient = TRANSIENT_SOR_ROUTE_CODES.includes(result.code);
-				if (!transient || attempt === maxAttempts - 1) {
-					surfaceFailure({
-						code: result.code,
-						message: formatSorRouteFailureMessage(result, targetVenue),
-						transient,
-					});
-					return;
-				}
-
+				let message = err instanceof Error ? err.message : "Failed to compute route";
 				try {
-					// Backoff with jitter; jitter avoids every client retrying
-					// on the same 3 s cadence after a shared-cause blip.
-					const backoff = 280 + attempt * 140 + Math.floor(Math.random() * 80);
-					await sleep(backoff, controller.signal);
-				} catch {
-					if (fetchCountRef.current !== fetchId) return;
-					return;
-				}
-			}
-		} catch (err) {
-			if (fetchCountRef.current !== fetchId) return;
-			if (err instanceof DOMException && err.name === "AbortError") {
-				if (timedOut) {
+					if (channelFetchIdRef.current !== fetchId) return;
+					await sleep(320 + Math.floor(Math.random() * 80), controller.signal);
+					if (channelFetchIdRef.current !== fetchId) return;
+					const retryResult = await apiClient.getRoute(request, controller.signal);
+					if (channelFetchIdRef.current !== fetchId) return;
+					if (retryResult.success) {
+						applySuccess(retryResult);
+						return;
+					}
 					surfaceFailure({
-						code: null,
-						message: "Route request timed out",
-						transient: true,
+						code: retryResult.code,
+						message: formatSorRouteFailureMessage(retryResult, failureTargetForCopy),
+						transient: TRANSIENT_SOR_ROUTE_CODES.includes(retryResult.code),
 					});
-				}
-				return;
-			}
-			let message = err instanceof Error ? err.message : "Failed to compute route";
-			try {
-				if (fetchCountRef.current !== fetchId) return;
-				await sleep(320 + Math.floor(Math.random() * 80), controller.signal);
-				if (fetchCountRef.current !== fetchId) return;
-				const retryResult: SorRouteResult = await apiClient.getRoute(request, controller.signal);
-				if (fetchCountRef.current !== fetchId) return;
-				if (retryResult.success) {
-					failureStreakStartRef.current = null;
-					setRoute(retryResult.route);
-					setError(null);
-					setRouteErrorCode(null);
-					setIsStale(false);
 					return;
+				} catch (e2) {
+					if (channelFetchIdRef.current !== fetchId) return;
+					if (e2 instanceof DOMException && e2.name === "AbortError") return;
+					message = e2 instanceof Error ? e2.message : "Failed to compute route after retry";
 				}
-				surfaceFailure({
-					code: retryResult.code,
-					message: formatSorRouteFailureMessage(retryResult, targetVenue),
-					transient: TRANSIENT_SOR_ROUTE_CODES.includes(retryResult.code),
-				});
-				return;
-			} catch (e2) {
-				if (fetchCountRef.current !== fetchId) return;
-				if (e2 instanceof DOMException && e2.name === "AbortError") return;
-				message =
-					e2 instanceof Error ? e2.message : "Failed to compute route after retry";
+				surfaceFailure({ code: null, message, transient: true });
+			} finally {
+				clearTimeout(timeoutId);
+				if (channelFetchIdRef.current === fetchId) {
+					setLoading(false);
+					channelLoadingRef.current = false;
+				}
 			}
-			surfaceFailure({ code: null, message, transient: true });
-		} finally {
-			clearTimeout(timeoutId);
-			if (fetchCountRef.current === fetchId) {
-				setIsLoading(false);
-				isLoadingRef.current = false;
-			}
-		}
-	}, [
-		canFetch,
-		questionId,
-		outcome,
-		side,
-		amount,
-		walletBalances,
-		venuePositions,
-		polyFeeRate,
-		predictFunFeeRateBps,
-		targetVenue,
-		orderType,
-		limitPriceCents,
-		limitlessMakerBaseUsdc,
-		limitlessFeeRateBps,
-		apiClient,
-	]);
+		},
+		[
+			canFetch,
+			questionId,
+			outcome,
+			side,
+			amount,
+			walletBalances,
+			venuePositions,
+			polyFeeRate,
+			predictFunFeeRateBps,
+			targetVenue,
+			orderType,
+			limitPriceCents,
+			limitlessMakerBaseUsdc,
+			limitlessFeeRateBps,
+			apiClient,
+			buildRequest,
+		],
+	);
 
-	const doFetchRef = useRef(doFetch);
-	doFetchRef.current = doFetch;
+	const doFetchChannelRef = useRef(doFetchChannel);
+	doFetchChannelRef.current = doFetchChannel;
+
+	/** Per-tick fan-out per the channel rules table. */
+	const fireChannels = useCallback(() => {
+		if (!canFetch) return;
+		const isLimit = orderType === "limit";
+		if (isLimit) {
+			void doFetchChannelRef.current("execution");
+			return;
+		}
+		void doFetchChannelRef.current("display");
+		if (targetVenue) {
+			void doFetchChannelRef.current("execution");
+		}
+	}, [canFetch, orderType, targetVenue]);
+
+	const fireChannelsRef = useRef(fireChannels);
+	fireChannelsRef.current = fireChannels;
+
+	const blankAll = useCallback(() => {
+		displayAbortRef.current?.abort();
+		executionAbortRef.current?.abort();
+		setDisplayRoute(null);
+		setExecutionRoute(null);
+		setVenuePreviews(null);
+		setDisplayLoading(false);
+		setExecutionLoading(false);
+		setDisplayStale(false);
+		setExecutionStale(false);
+		setDisplayError(null);
+		setExecutionError(null);
+		setDisplayErrorCode(null);
+		setExecutionErrorCode(null);
+		displayLoadingRef.current = false;
+		executionLoadingRef.current = false;
+		displayLastGoodRouteRef.current = null;
+		executionLastGoodRouteRef.current = null;
+		displayFailureStreakStartRef.current = null;
+		executionFailureStreakStartRef.current = null;
+	}, []);
+
+	const blankExecutionOnly = useCallback(() => {
+		executionAbortRef.current?.abort();
+		setExecutionRoute(null);
+		setExecutionLoading(false);
+		setExecutionError(null);
+		setExecutionErrorCode(null);
+		executionLoadingRef.current = false;
+		executionLastGoodRouteRef.current = null;
+		executionFailureStreakStartRef.current = null;
+	}, []);
 
 	useEffect(() => {
 		if (!canFetch) {
-			setRoute(null);
-			setError(null);
-			setRouteErrorCode(null);
-			setIsLoading(false);
-			failureStreakStartRef.current = null;
+			blankAll();
 			return;
 		}
 
 		if (debounceRef.current) clearTimeout(debounceRef.current);
 
+		const questionIdChanged = prevQuestionIdRef.current !== questionId;
 		const outcomeChanged = prevOutcomeRef.current !== outcome;
 		const sideChanged = prevSideRef.current !== side;
+		const orderTypeChanged = prevOrderTypeRef.current !== orderType;
 		const targetVenueChanged = prevTargetVenueRef.current !== targetVenue;
-		const questionIdChanged = prevQuestionIdRef.current !== questionId;
+
+		prevQuestionIdRef.current = questionId;
 		prevOutcomeRef.current = outcome;
 		prevSideRef.current = side;
+		prevOrderTypeRef.current = orderType;
 		prevTargetVenueRef.current = targetVenue;
-		prevQuestionIdRef.current = questionId;
 
-		if (targetVenueChanged || questionIdChanged) {
-			setRoute(null);
-			setError(null);
-			setRouteErrorCode(null);
-			failureStreakStartRef.current = null;
+		const identityReset =
+			questionIdChanged || outcomeChanged || sideChanged || orderTypeChanged;
+
+		if (identityReset) {
+			blankAll();
+		} else if (targetVenueChanged) {
+			// Tab switch: re-target execution only; leave display untouched.
+			blankExecutionOnly();
 		}
 
-		setIsStale(true);
+		setDisplayStale(true);
+		setExecutionStale(true);
 
-		if (outcomeChanged || sideChanged || targetVenueChanged || questionIdChanged) {
-			void doFetchRef.current();
+		// Identity / tab-switch fires immediately; amount + balance changes debounce.
+		const fireImmediately = identityReset || targetVenueChanged;
+		if (fireImmediately) {
+			fireChannelsRef.current();
 		} else {
 			debounceRef.current = setTimeout(() => {
-				void doFetchRef.current();
+				fireChannelsRef.current();
 			}, DEBOUNCE_MS);
 		}
 
@@ -492,34 +626,37 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		};
 	}, [
 		canFetch,
+		questionId,
 		outcome,
 		side,
 		targetVenue,
-		questionId,
+		orderType,
+		limitPriceCents,
 		amount,
 		walletBalancesKey,
 		venuePositionsKey,
 		polyFeeRate,
 		predictFunFeeRateBps,
-		orderType,
-		limitPriceCents,
 		limitlessMakerBaseUsdc,
 		limitlessFeeRateBps,
+		blankAll,
+		blankExecutionOnly,
 	]);
 
 	/**
-	 * Background-aware auto-refresh.
+	 * Background-aware auto-refresh — one shared 3 s tick fans out to both channels.
 	 *
-	 * - Polls every {@link AUTO_REFRESH_MS} while the tab is visible and we
-	 *   have a live route.
-	 * - Clears the interval whenever `document.hidden` becomes true so we
-	 *   don't hammer the API (and risk rate-limits) in backgrounded tabs.
-	 * - On return to visibility or window `focus`, fires an immediate refetch
-	 *   and flags `isStale` so the UI can show a brief "syncing" indicator
-	 *   — the user sees fresh odds the moment they come back to the tab.
+	 * - Pauses while `document.hidden`; immediate refetch on visibility/focus return.
+	 * - Each channel guards itself via its own `loadingRef` so a slow tick never piles up.
+	 * - Single-venue tab issues 2 POSTs per tick (display + execution); "all" issues 1; limits issue 1.
+	 *
+	 * Deps key on the boolean "has any route yet" instead of the route objects themselves so
+	 * the interval is set up once and doesn't get torn down + restarted on every successful tick.
 	 */
+	const hasAnyRoute = displayRoute != null || executionRoute != null;
 	useEffect(() => {
-		if (!canFetch || !route) return;
+		if (!canFetch) return;
+		if (!hasAnyRoute) return;
 
 		const clearPolling = () => {
 			if (refreshRef.current) {
@@ -528,18 +665,30 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			}
 		};
 
+		const tick = () => {
+			if (document.hidden) return;
+			const isLimit = orderType === "limit";
+			if (isLimit) {
+				if (!executionLoadingRef.current) void doFetchChannelRef.current("execution");
+				return;
+			}
+			if (!displayLoadingRef.current) void doFetchChannelRef.current("display");
+			if (targetVenue && !executionLoadingRef.current) {
+				void doFetchChannelRef.current("execution");
+			}
+		};
+
 		const startPolling = () => {
 			clearPolling();
-			refreshRef.current = setInterval(() => {
-				if (!isLoadingRef.current && !document.hidden) {
-					void doFetchRef.current();
-				}
-			}, AUTO_REFRESH_MS) as unknown as ReturnType<typeof setTimeout>;
+			refreshRef.current = setInterval(tick, AUTO_REFRESH_MS) as unknown as ReturnType<
+				typeof setTimeout
+			>;
 		};
 
 		const resumeNow = () => {
-			setIsStale(true);
-			if (!isLoadingRef.current) void doFetchRef.current();
+			setDisplayStale(true);
+			setExecutionStale(true);
+			tick();
 			startPolling();
 		};
 
@@ -565,20 +714,35 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			document.removeEventListener("visibilitychange", handleVisibility);
 			window.removeEventListener("focus", resumeNow);
 		};
-	}, [canFetch, route]);
+	}, [canFetch, hasAnyRoute, orderType, targetVenue]);
 
 	useEffect(() => {
 		return () => {
-			abortRef.current?.abort();
+			displayAbortRef.current?.abort();
+			executionAbortRef.current?.abort();
 			if (debounceRef.current) clearTimeout(debounceRef.current);
 			if (refreshRef.current) clearInterval(refreshRef.current);
 		};
 	}, []);
 
 	const refresh = useCallback(() => {
-		setIsStale(true);
-		void doFetchRef.current();
+		setDisplayStale(true);
+		setExecutionStale(true);
+		fireChannelsRef.current();
 	}, []);
 
-	return { route, isLoading, error, routeErrorCode, isStale, refresh };
+	return {
+		displayRoute,
+		executionRoute,
+		venuePreviews,
+		displayLoading,
+		displayStale,
+		executionLoading,
+		executionStale,
+		displayError,
+		displayErrorCode,
+		executionError,
+		executionErrorCode,
+		refresh,
+	};
 }

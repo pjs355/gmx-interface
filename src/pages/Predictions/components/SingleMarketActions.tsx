@@ -1,14 +1,17 @@
 import React, { useEffect } from "react";
 import Button from "components/Button/Button";
 import {
-	toCentsString,
 	shortenTeamLabelForButton,
 	hexToRgba,
 	getContrastingTextColor,
+	oddsBarPercent,
 } from "@/helpers/predictionUtils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { usePredictionData } from "context/PredictionDataContext";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/utils/debugPredictionPricing";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
 
 interface SingleMarketActionsProps {
 	orderbook: any;
@@ -19,6 +22,10 @@ interface SingleMarketActionsProps {
 	/** When set from OddsMonitor venue-prices, overrides listing preview for that side */
 	liveVenueYesPrice?: number | null;
 	liveVenueNoPrice?: number | null;
+	/** Compact list card: stacked rows, logo + name + price-only button */
+	compact?: boolean;
+	yesLogoSlot?: React.ReactNode;
+	noLogoSlot?: React.ReactNode;
 }
 
 export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
@@ -29,40 +36,30 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	umbrellaDisplayName,
 	liveVenueYesPrice,
 	liveVenueNoPrice,
+	compact = false,
+	yesLogoSlot,
+	noLogoSlot,
 }) => {
-	const { allBooksPreview } = usePredictionData();
-	const preview =
-		(question?.questionId && allBooksPreview[question.questionId]) ||
-		(question?._id && allBooksPreview[question._id]) ||
-		undefined;
-	const lookupKey =
-		question?.questionId && allBooksPreview[question.questionId]
-			? question.questionId
-			: question?._id && allBooksPreview[question._id]
-				? question._id
-				: (question?.questionId ?? question?._id);
+	const { formatPrice } = useOddsDisplay();
+	const lookupKey = question?.questionId ?? question?._id;
 
 	const yesPrice =
 		typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice)
 			? liveVenueYesPrice
-			: (preview?.bestYesPrice ?? preview?.lowestAsk ?? null);
+			: null;
 	const noPrice =
 		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
 			? liveVenueNoPrice
-			: (preview?.bestNoPrice ?? null);
+			: null;
 
-	const yesSource: "live_ws" | "preview_api" | "none" =
+	const yesSource: "live_ws" | "none" =
 		typeof liveVenueYesPrice === "number" && Number.isFinite(liveVenueYesPrice)
 			? "live_ws"
-			: preview?.bestYesPrice != null || preview?.lowestAsk != null
-				? "preview_api"
-				: "none";
-	const noSource: "live_ws" | "preview_api" | "none" =
+			: "none";
+	const noSource: "live_ws" | "none" =
 		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
 			? "live_ws"
-			: preview?.bestNoPrice != null
-				? "preview_api"
-				: "none";
+			: "none";
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
@@ -71,9 +68,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			previewLookupKey: lookupKey ?? null,
 			questionIdField: question?.questionId ?? null,
 			mongoId: question?._id ?? null,
-			previewFromAllBooksPreview: preview ?? null,
-			dataSource:
-				"allBooksPreview from GET getPrivateApiBaseUrl()/api/all-books-preview; live from venue-prices WS → MatchedMarket",
+			dataSource: "venue-prices WS → MatchedMarket → listingBestYesNoFromMatched (PredictionCard)",
 			liveVenueYesPrice: liveVenueYesPrice ?? null,
 			liveVenueNoPrice: liveVenueNoPrice ?? null,
 			finalYesPrice: yesPrice ?? null,
@@ -87,7 +82,6 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 		question?._id,
 		question?.displayName,
 		question?.question,
-		preview,
 		liveVenueYesPrice,
 		liveVenueNoPrice,
 		yesPrice,
@@ -97,25 +91,21 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	]);
 
 	const yesPriceCents =
-		yesPrice !== null && yesPrice !== undefined
-			? `${toCentsString(yesPrice)}¢`
-			: "--";
-	const noPriceCents = noPrice !== null ? `${toCentsString(noPrice)}¢` : "--";
+		yesPrice !== null && yesPrice !== undefined ? formatPrice(yesPrice) : "--";
+	const noPriceCents =
+		noPrice !== null && noPrice !== undefined ? formatPrice(noPrice) : "--";
 
-	// Derive team labels for single-market umbrellas with "vs" in the title
 	const deriveLabels = (): {
 		yesLabel: string;
 		noLabel: string;
 		settlementNumber: string | null;
 	} => {
-		// For daily player count markets, use Over/Under
 		if (isDailyPlayerCount) {
 			const questionDisplay = (
 				question?.displayName ||
 				(question as any)?.question ||
 				""
 			).trim();
-			// Strip "Over" or "Under" prefix from the settlement number
 			const settlementNum = questionDisplay
 				.replace(/^(Over|Under)\s*/i, "")
 				.trim();
@@ -126,7 +116,6 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			};
 		}
 
-		// Try umbrella name first (strip trailing " - Match Winner" etc.), then question name
 		const umbrellaCleaned = (umbrellaDisplayName || "")
 			.replace(/\s*-\s*Match Winner$/i, "")
 			.trim();
@@ -184,22 +173,176 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 		? shortenTeamLabelForButton(noLabel)
 		: noLabel;
 
+	const yesRowLabel = yesLabel;
+	const noRowLabel = noLabel;
+
+	const yesAriaLabel = `${yesLabel} ${yesPriceCents}`;
+	const noAriaLabel = `${noLabel} ${noPriceCents}`;
+
+	const settlementBlock =
+		settlementNumber !== null ? (
+			<div
+				className="settlement-number"
+				style={{
+					textAlign: "center",
+					marginBottom: "8px",
+					fontSize: "20px",
+					fontWeight: 600,
+					color: "#ffffff",
+				}}
+			>
+				{settlementNumber} Players
+			</div>
+		) : null;
+
+	if (compact) {
+		const yesBarPct = oddsBarPercent(yesPrice);
+		const noBarPct = oddsBarPercent(noPrice);
+		const yesBarColor = isVsSingle ? yesColor : "#22c55e";
+		const noBarColor = isVsSingle ? noColor : "#ef4444";
+
+		return (
+			<div className="single-market-actions single-market-actions--compact">
+				{settlementBlock}
+				<div className="prediction-card-outcome-rows">
+					<div className="prediction-card-outcome-row">
+						<div className="prediction-card-outcome-logo">
+							{yesLogoSlot}
+						</div>
+						<div className="prediction-card-outcome-middle">
+							<span className="prediction-card-outcome-label">
+								{yesRowLabel}
+							</span>
+							{yesBarPct !== null ? (
+								<div
+									className="prediction-card-outcome-odds-bar"
+									aria-hidden
+								>
+									<div
+										className="prediction-card-outcome-odds-bar__fill"
+										style={{
+											width: `${yesBarPct}%`,
+											backgroundColor: yesBarColor,
+										}}
+									/>
+								</div>
+							) : null}
+						</div>
+						<Button
+							variant="secondary"
+							className="action-button yes-button"
+							aria-label={yesAriaLabel}
+							onClick={() => onNavigate("yes")}
+							style={{
+								background: isVsSingle
+									? yesColor
+									: "rgba(34, 197, 94, 0.1)",
+								color: isVsSingle ? yesTextColor : "#22c55e",
+								border: `2px solid ${
+									isVsSingle ? yesColor : "#22c55e"
+								}`,
+								fontSize: "16px",
+								padding: "10px 12px",
+								minHeight: "44px",
+							}}
+							onMouseEnter={(e) => {
+								e.currentTarget.style.background = isVsSingle
+									? yesColor
+									: "rgba(34, 197, 94, 0.2)";
+								e.currentTarget.style.transform = "translateY(-1px)";
+								e.currentTarget.style.boxShadow = isVsSingle
+									? `0 4px 8px ${hexToRgba(yesColor, 0.45)}`
+									: "0 4px 8px rgba(34, 197, 94, 0.3)";
+								if (isVsSingle) {
+									e.currentTarget.style.color = yesTextColor;
+								}
+							}}
+							onMouseLeave={(e) => {
+								e.currentTarget.style.background = isVsSingle
+									? yesColor
+									: "rgba(34, 197, 94, 0.1)";
+								e.currentTarget.style.transform = "translateY(0)";
+								e.currentTarget.style.boxShadow = "none";
+								if (isVsSingle) {
+									e.currentTarget.style.color = yesTextColor;
+								}
+							}}
+						>
+							<strong>{yesPriceCents}</strong>
+						</Button>
+					</div>
+					<div className="prediction-card-outcome-row">
+						<div className="prediction-card-outcome-logo">
+							{noLogoSlot}
+						</div>
+						<div className="prediction-card-outcome-middle">
+							<span className="prediction-card-outcome-label">
+								{noRowLabel}
+							</span>
+							{noBarPct !== null ? (
+								<div
+									className="prediction-card-outcome-odds-bar"
+									aria-hidden
+								>
+									<div
+										className="prediction-card-outcome-odds-bar__fill"
+										style={{
+											width: `${noBarPct}%`,
+											backgroundColor: noBarColor,
+										}}
+									/>
+								</div>
+							) : null}
+						</div>
+						<Button
+							variant="secondary"
+							className="action-button no-button"
+							aria-label={noAriaLabel}
+							onClick={() => onNavigate("no")}
+							style={{
+								background: isVsSingle
+									? noColor
+									: "rgba(239, 68, 68, 0.1)",
+								color: isVsSingle ? noTextColor : "#ef4444",
+								border: `2px solid ${isVsSingle ? noColor : "#ef4444"}`,
+								fontSize: "16px",
+								padding: "10px 12px",
+								minHeight: "44px",
+							}}
+							onMouseEnter={(e) => {
+								e.currentTarget.style.background = isVsSingle
+									? noColor
+									: "rgba(239, 68, 68, 0.2)";
+								e.currentTarget.style.transform = "translateY(-1px)";
+								e.currentTarget.style.boxShadow = isVsSingle
+									? `0 4px 8px ${hexToRgba(noColor, 0.45)}`
+									: "0 4px 8px rgba(239, 68, 68, 0.3)";
+								if (isVsSingle) {
+									e.currentTarget.style.color = noTextColor;
+								}
+							}}
+							onMouseLeave={(e) => {
+								e.currentTarget.style.background = isVsSingle
+									? noColor
+									: "rgba(239, 68, 68, 0.1)";
+								e.currentTarget.style.transform = "translateY(0)";
+								e.currentTarget.style.boxShadow = "none";
+								if (isVsSingle) {
+									e.currentTarget.style.color = noTextColor;
+								}
+							}}
+						>
+							<strong>{noPriceCents}</strong>
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="single-market-actions">
-			{settlementNumber && (
-				<div
-					className="settlement-number"
-					style={{
-						textAlign: "center",
-						marginBottom: "8px",
-						fontSize: "20px",
-						fontWeight: 600,
-						color: "#ffffff",
-					}}
-				>
-					{settlementNumber} Players
-				</div>
-			)}
+			{settlementBlock}
 			<div className="single-market-buttons">
 				<Button
 					variant="secondary"

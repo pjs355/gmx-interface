@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useMedia } from "react-use";
 import { userService, type EmailPreferences } from "@/services/api/userService";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import {
+	parseOddsDisplayStyle,
+	ODDS_DISPLAY_SELECT_OPTIONS,
+} from "@/utils/oddsDisplayFormat";
 import RPGPane from "../RPGPane/RPGPane";
 import AchievementPane from "../AchievementPane/AchievementPane";
 import DflowProofSection from "./DflowProofSection";
@@ -41,6 +46,7 @@ export default function Details() {
 	const [isSavingPreferences, setIsSavingPreferences] = useState(false);
 	const [preferencesSaved, setPreferencesSaved] = useState(false);
 	const [emailPrefsExpanded, setEmailPrefsExpanded] = useState(false);
+	const { oddsDisplayStyle, setOddsDisplayStyle } = useOddsDisplay();
 
 	// Account deletion modal state - COMMENTED OUT FOR NOW
 	// const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -345,7 +351,7 @@ export default function Details() {
 					{/* Email Display */}
 					{userEmail && (
 						<div className="Details-info-section">
-							<div className="Details-info-label">Email</div>
+							<div className="Details-username-label">Email</div>
 							<div className="Details-info-value Details-truncate" title={userEmail}>
 								{userEmail}
 							</div>
@@ -365,6 +371,26 @@ export default function Details() {
 					<DflowProofSection />
 				</div>
 
+			</div>
+
+			<div className="Details-odds-display-section">
+				<div className="Details-odds-display-block">
+					<div className="Details-username-label">Odds display</div>
+					<select
+						value={oddsDisplayStyle}
+						onChange={(e) =>
+							setOddsDisplayStyle(parseOddsDisplayStyle(e.target.value))
+						}
+						className="Details-odds-select"
+						aria-label="Odds display format"
+					>
+						{ODDS_DISPLAY_SELECT_OPTIONS.map((o) => (
+							<option key={o.value} value={o.value}>
+								{o.label}
+							</option>
+						))}
+					</select>
+				</div>
 			</div>
 
 			{/* RPG Experience Pane - COMMENTED OUT FOR NOW */}

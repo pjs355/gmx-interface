@@ -1,150 +1,184 @@
-import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
 import Button from "components/Button/Button";
 
 import "./About.scss";
 
+const VENUES = ["Polymarket", "Kalshi", "Predict", "Limitless", "LevelUp"];
+
+const STEPS: Array<{ title: string; body: ReactNode }> = [
+	{
+		title: "Create an account",
+		body: "Sign up with your email and create your LevelUp account.",
+	},
+	{
+		title: "Add funds",
+		body: (
+			<>
+				Deposit into your LevelUp account using the built-in deposit flow.
+				Your account has one balance — you do not need to manually move
+				money between Polymarket, Kalshi, Predict, Limitless, and LevelUp.
+				We handle the routing behind the scenes.
+			</>
+		),
+	},
+	{
+		title: "Find a market",
+		body: "Browse esports markets, compare prices across connected venues, and decide what you want to trade.",
+	},
+	{
+		title: "Trade your way",
+		body: "Choose the venue yourself, or use smart routing to get the best available price across supported markets.",
+	},
+	{
+		title: "Track everything in one place",
+		body: "Your positions, balance, trades, and winnings are all shown inside LevelUp.",
+	},
+];
+
 export function About() {
 	return (
-		<div className="About">
-			<div className="About-content">
-		<div className="About-header">
-			<h1 className="About-title">
-				<span className="About-title-white">Think you know gaming?</span>
-				<span className="About-title-purple">Prove it.</span>
-			</h1>
-			<p className="About-subtitle">
-				Predict what happens next across esports, consoles, and your favorite titles. All for bragging rights, glory, and prizes.
-			</p>
-		</div>
-				{/* Video temporarily disabled
-				<div className="About-video-container">
-					<iframe
-						width="560"
-						height="315"
-						src="https://www.youtube.com/embed/Q4cVz67E4bU"
-						title="YouTube video player"
-						frameBorder="0"
-						allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-						allowFullScreen
-					></iframe>
-				</div>
-			*/}
-
-				{/* How It Works Section */}
-			<div className="About-section">
-					<h2 className="About-section-title">How It Works</h2>
-					
-					<div className="About-step">
-						<div className="About-step-number">1</div>
-						<div className="About-step-content">
-							<h3 className="About-step-title">Pick a Market</h3>
-							<p className="About-section-text">
-								Choose anything you have a take on, from Steam player peaks to award winners.
-							</p>
-						</div>
+		<div className="about-page">
+			<div className="about-container">
+				<header className="about-hero">
+					<div className="about-eyebrow">
+						Prediction Market Trading Aggregator
 					</div>
-
-					<div className="About-step">
-						<div className="About-step-number">2</div>
-						<div className="About-step-content">
-							<h3 className="About-step-title">Buy Shares</h3>
-							<p className="About-section-text">
-								Shares trade between 1 cent and 99 cents. That price is the market implied probability.
-								10 cents means the market is pricing the outcome at 10 percent.
-							</p>
-						</div>
-					</div>
-
-					<div className="About-step">
-						<div className="About-step-number">3</div>
-						<div className="About-step-content">
-							<h3 className="About-step-title">If You're Right, Your Shares Settle to $1</h3>
-				<p className="About-section-text">
-								When the outcome is confirmed, each correct share pays $1.
-							</p>
-							<div className="About-example">
-								<h4 className="About-example-title">Example</h4>
-								<ul className="About-example-list">
-									<li>Buy 10 shares at 10 cents</li>
-									<li>You spend $1</li>
-									<li>If you're right, you receive $10</li>
-								</ul>
-							</div>
-						</div>
-					</div>
-
-					<div className="About-step">
-						<div className="About-step-number">4</div>
-						<div className="About-step-content">
-							<h3 className="About-step-title">Market Resolves</h3>
-			<p className="About-section-text">
-								Once the real world result is confirmed using the market's listed source, we resolve the market. You can claim your winnings under your portfolio page.
-			</p>
-		</div>
-					</div>
-				</div>
-
-				{/* Funding Your Account Section */}
-				<div className="About-section">
-					<h2 className="About-section-title">Funding Your Account</h2>
-					<p className="About-section-text">
-						Adding funds is quick and happens right inside LevelUp. Your balance is held as USDC on Base. 
+					<h1 className="about-title">
+						Trade prediction markets without jumping between apps.
+					</h1>
+					<p className="about-lead">
+						LevelUp connects the biggest prediction markets into one
+						simple trading screen.
 					</p>
-					
-					<h3 className="About-subsection-title">Deposit Options</h3>
-					<ul className="About-list">
-						<li>Debit card</li>
-						<li>Apple Pay or Google Pay</li>
-						<li>Transfer from Coinbase</li>
-						<li>Send USDC on Base from a crypto wallet or another exchange</li>
-					</ul>
+				</header>
 
-					<div className="About-warning">
-						<h3 className="About-warning-title">⚠️ Sending from a Wallet or Exchange</h3>
-						<p className="About-section-text">
-							Only send USDC on Base to your LevelUp wallet address.  We have NO control over your wallet / funds so if you send a different asset or send USDC on a different network, funds may be lost permanently.
+				<section className="about-section">
+					<div className="about-venues" aria-label="Supported venues">
+						{VENUES.map((venue) => (
+							<span key={venue} className="about-venues__chip">
+								{venue}
+							</span>
+						))}
+					</div>
+					<p className="about-muted about-muted--small">
+						More venues coming soon.
+					</p>
+					<p className="about-pull">
+						See the best prices. Pick where you want to trade. Or use
+						smart routing to get the best available execution across
+						venues.
+					</p>
+				</section>
+
+				<section className="about-section">
+					<h2 className="about-section-title">Built for esports first</h2>
+					<p className="about-body">
+						We are starting with Counter-Strike markets. More esports are
+						coming soon. After that, we are adding broader sports markets
+						and more prediction venues.
+					</p>
+				</section>
+
+				<section className="about-section">
+					<h2 className="about-section-title">How it works</h2>
+					<ol className="about-steps">
+						{STEPS.map((step, index) => (
+							<li key={step.title} className="about-step">
+								<span className="about-step__num">
+									{String(index + 1).padStart(2, "0")}
+								</span>
+								<div className="about-step__content">
+									<h3 className="about-step__title">
+										{step.title}
+									</h3>
+									<p className="about-step__body">{step.body}</p>
+								</div>
+							</li>
+						))}
+					</ol>
+				</section>
+
+				<section className="about-section">
+					<h2 className="about-section-title">
+						One balance across markets
+					</h2>
+					<p className="about-body">
+						LevelUp is built so you do not need to worry about where your
+						funds are sitting. You deposit once. You trade across
+						connected markets. We manage the bankroll routing
+						automatically.
+					</p>
+					<p className="about-muted">
+						Your funds are held in a Privy crypto wallet connected to
+						your account. LevelUp does not have custody or control over
+						your funds.
+					</p>
+				</section>
+
+				<section className="about-section">
+					<h2 className="about-section-title">Enabling Kalshi trading</h2>
+					<p className="about-body">
+						Kalshi trading requires identity verification through DFlow.
+					</p>
+					<p className="about-body">
+						You can enable Kalshi trading from your profile. Once
+						verified, Kalshi markets can be traded through LevelUp where
+						supported.
+					</p>
+				</section>
+
+				<section className="about-section">
+					<h2 className="about-section-title">Funding your account</h2>
+					<p className="about-body">
+						Please use the normal deposit flow inside LevelUp.
+					</p>
+					<div className="about-warning">
+						<h3 className="about-warning__title">
+							Sending the wrong token or network can mean permanent
+							loss.
+						</h3>
+						<p className="about-warning__body">
+							If you deposit manually, only send the exact token and
+							network shown on the Transfers page. We do not support
+							token recovery right now.
 						</p>
 					</div>
-				</div>
+				</section>
 
-				{/* Withdrawals Section */}
-				<div className="About-section">
-					<h2 className="About-section-title">Withdrawals</h2>
-					<p className="About-section-text">
-						Withdrawals are crypto only. From Transfers you can send USDC or USDT to supported
-						networks (for example Base, Polygon, BNB Chain, and Solana). The app may route funds
-						from the wallet where your cash is held using LI.FI. Always confirm the recipient
-						network and token type—sending to the wrong address or chain can mean permanent loss.
+				<section className="about-section">
+					<h2 className="about-section-title">Start trading</h2>
+					<p className="about-body">
+						There are a lot of places to trade predictions. LevelUp is
+						built for the trader who wants the best available price
+						without jumping between five different apps.
 					</p>
-				</div>
+					<p className="about-body">
+						Create an account, fund once, compare every connected market,
+						and trade smarter.
+					</p>
+					<div className="about-cta">
+						<Button variant="primary" to="/">
+							Start trading
+						</Button>
+					</div>
+				</section>
 
-				{/* Start Trading Section */}
-			<div className="About-section">
-				<h2 className="About-section-title">Start Trading</h2>
-				<p className="About-section-text">
-					LevelUp is live and ready for you to start trading predictions on your favorite games.
-					Fund your account and begin making predictions on major releases, esports events, and more.
-				</p>
-				<div className="About-button-container center">
-					<Link to="/">
-						<Button variant="primary">Start Trading</Button>
-					</Link>
-				</div>
-			</div>
-
-				{/* Contact Section */}
-			<div className="About-section">
-				<h2 className="About-section-title">Got Ideas?</h2>
-				<p className="About-section-text">
-					Have a wild market idea or want to collab?
-					Hit us up because we actually read every message.
-				</p>
-				<div className="About-button-container center">
-					<Button variant="primary" to="mailto:brendan@levelup.markets">
-						Contact Us
-					</Button>
-				</div>
-			</div>
+				<section className="about-section about-section--last">
+					<h2 className="about-section-title">Got ideas?</h2>
+					<p className="about-body">
+						Have a market idea, venue request, partnership idea, or
+						feature you want us to build? Send it over. We actually read
+						every message.
+					</p>
+					<div className="about-cta">
+						<Button
+							variant="secondary"
+							to="mailto:brendan@levelup.markets"
+						>
+							Send a message
+						</Button>
+					</div>
+				</section>
 			</div>
 		</div>
 	);

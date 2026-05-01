@@ -16,6 +16,8 @@ import {
 	getTradeCount,
 	fifoAlignedBasisForPositionsRow,
 } from "../utils/positionHelpers";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
 
 type MergedRow = {
 	side: "Yes" | "No";
@@ -40,7 +42,6 @@ export default function PositionsTableView({
 	spentByQid,
 	returnsByQid,
 	getCurrentPriceForSide,
-	toCentsString,
 	orders = [],
 }: {
 	umbrellaBalances: any[];
@@ -48,9 +49,10 @@ export default function PositionsTableView({
 	spentByQid: Record<string, { Yes: number; No: number }>;
 	returnsByQid: Record<string, { Yes: number; No: number }>;
 	getCurrentPriceForSide: (market: PredictionMarket, side: "Yes" | "No") => number | null;
-	toCentsString: (n?: number | null) => string;
 	orders?: ProcessedOrder[];
 }) {
+	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
+	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const navigate = useNavigate();
 	const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
 
@@ -298,9 +300,9 @@ export default function PositionsTableView({
 													<span>{row.label}</span>
 												)}
 											</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{toCentsString(row.currentPrice)}</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>{formatPrice(row.currentPrice, portfolioPriceLayout)}</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{parseFloat(row.totalShares.toFixed(2))}</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{row.avgPrice === null ? "—" : toCentsString(row.avgPrice)}</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>{row.avgPrice === null ? "—" : formatPrice(row.avgPrice, portfolioPriceLayout)}</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{row.totalCost === null ? "—" : formatCurrency(row.totalCost)}</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{formatCurrency(row.payout)}</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{row.marketValue === null || isNaN(row.marketValue) ? "—" : formatCurrency(row.marketValue)}</div>

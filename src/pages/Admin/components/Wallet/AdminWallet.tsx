@@ -5,6 +5,8 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { getCTFAddress, getUSDCAddress } from "@/config/addresses";
 import { DEFAULT_RPC_URL } from "@/config/rpc";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import { getListingYesNoPricesForUmbrella } from "@/helpers/predictionUtils";
 import { subgraphService, fromMicroUnits } from "@/services/subgraph/subgraphService";
 import { fetchUserOrders, type ProcessedOrder, getFinalAmount } from "@/services/api/simplifiedOrderService";
 import ScrollableTable from "@/components/ScrollableTable/ScrollableTable";
@@ -94,8 +96,8 @@ export default function AdminWallet() {
 		umbrellas,
 		getAllQuestionsForUmbrella,
 		resolvedMarketsByUmbrella,
-		allBooksPreview,
 	} = usePredictionData();
+	const { appState } = useOddsMonitor();
 
 	// Wallet info state
 	const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
@@ -416,18 +418,19 @@ export default function AdminWallet() {
 		return umbrellas
 			.map((umbrella) => {
 				const markets = (getAllQuestionsForUmbrella(umbrella._id) as PredictionMarket[]) || [];
+				const { yes: umbrellaYes, no: umbrellaNo } = getListingYesNoPricesForUmbrella(
+					umbrella,
+					appState?.markets,
+				);
 				const processedMarkets: MarketPosition[] = markets
 					.map((market) => {
 						const balanceId = market._id;
-						const priceId = market.questionId || market._id;
-
 						const tb = balanceId ? tokenBalances.get(balanceId) : undefined;
 						const yesBalance = tb ? Number(tb.yesBalance) : 0;
 						const noBalance = tb ? Number(tb.noBalance) : 0;
 
-						const preview = priceId ? allBooksPreview[priceId] : undefined;
-						const yesPrice = preview?.lowestAskA ?? null;
-						const noPrice = preview?.lowestAskB ?? null;
+						const yesPrice = umbrellaYes;
+						const noPrice = umbrellaNo;
 
 						const yesValue = yesPrice ? yesBalance * yesPrice : 0;
 						const noValue = noPrice ? noBalance * noPrice : 0;
@@ -448,7 +451,7 @@ export default function AdminWallet() {
 				return { umbrella, markets: processedMarkets };
 			})
 			.filter((umbrella) => umbrella.markets.length > 0);
-	}, [walletInfo?.address, umbrellas, getAllQuestionsForUmbrella, tokenBalances, allBooksPreview]);
+	}, [walletInfo?.address, umbrellas, getAllQuestionsForUmbrella, tokenBalances, appState?.markets]);
 
 	// Derive resolved winnings
 	const resolvedUmbrellaPositions: UmbrellaPositions[] = useMemo(() => {

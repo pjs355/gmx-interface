@@ -21,7 +21,10 @@ $app-card-padding: 1.5rem;
 	width: 100%;
 }
 
-.App-content header {
+/* Reserve vertical space for fixed `.App-header` (see Header.scss). */
+.App-content > header[data-qa="header"] {
+	flex-shrink: 0;
+	height: var(--app-header-height, 6.2rem);
 	position: relative;
 	z-index: 800;
 }

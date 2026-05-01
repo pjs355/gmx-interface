@@ -15,7 +15,6 @@ import usePositionsData from "./hooks/usePositionsData";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { markPositionsPageMount } from "./utils/portfolioPerfLog";
-import { toCentsString } from "./utils/formatCurrency";
 
 function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
 	return (
@@ -164,13 +163,11 @@ export default function Positions() {
 						{!isMobile ? (
 							<ResolvedPositionsTable
 								umbrellaBalances={transformedWinnings}
-								toCentsString={toCentsString}
 								onClaimSuccess={handleClaimSuccess}
 							/>
 						) : (
 							<ResolvedPositionsCardView
 								umbrellaBalances={transformedWinnings}
-								toCentsString={toCentsString}
 								onClaimSuccess={handleClaimSuccess}
 							/>
 						)}
@@ -189,7 +186,6 @@ export default function Positions() {
 							spentByQid={spentByQid}
 							returnsByQid={returnsByQid}
 							getCurrentPriceForSide={getCurrentPriceForSide}
-							toCentsString={toCentsString}
 							orders={combinedOrders}
 						/>
 					) : (
@@ -199,7 +195,6 @@ export default function Positions() {
 							spentByQid={spentByQid}
 							returnsByQid={returnsByQid}
 							getCurrentPriceForSide={getCurrentPriceForSide}
-							toCentsString={toCentsString}
 							orders={combinedOrders}
 						/>
 					)

@@ -2,6 +2,8 @@ import React from "react";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
 import { outcomeSideLabelColor } from "../utils/positionHelpers";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
 
 interface TradeHistoryListProps {
 	orders: ProcessedOrder[];
@@ -19,6 +21,8 @@ export default function TradeHistoryList({
 	position,
 	positionDisplayLabel,
 }: TradeHistoryListProps) {
+	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
+	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const ids = Array.isArray(marketId) ? marketId : [marketId];
 	const marketOrders = orders
 		.filter((order) => {
@@ -48,10 +52,6 @@ export default function TradeHistoryList({
 			hour: "numeric",
 			minute: "2-digit",
 		});
-	};
-
-	const formatPrice = (price: number): string => {
-		return `${Math.round(price * 100)}¢`;
 	};
 
 	const formatCurrency = (value: number, showSign: boolean = false): string => {
@@ -209,7 +209,7 @@ export default function TradeHistoryList({
 
 					{/* Price */}
 					<div style={{ textAlign: "center", color: "#fff" }}>
-						{formatPrice(order.price)}
+						{formatPrice(order.price, portfolioPriceLayout)}
 					</div>
 
 					{/* Cash Flow with clear in/out indicator */}

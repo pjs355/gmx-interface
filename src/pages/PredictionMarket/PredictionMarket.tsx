@@ -8,19 +8,16 @@ import {
 	Umbrella,
 	umbrellaDataService,
 } from "@/services/api/umbrellaDataService";
-import { getOrderbookApiBaseUrl, getPredictionWebSocketUrl } from "@/config/predictionApiBase";
 import { usePredictionData } from "context/PredictionDataContext";
 import { MarketPanels } from "./MarketPanels";
+import { useUmbrellaLiveOrderbooks } from "./useUmbrellaLiveOrderbooks";
+import { useVolumeSortedQuestions } from "./useVolumeSortedQuestions";
 import { useChartState } from "./useChartState";
 import { MarketHeader } from "./MarketHeader";
 import { useMatchSettled } from "./useMatchSettled";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
-import {
-	normalizeOrderbookPayload,
-	hasUsableOrderbookSnapshot,
-} from "./utils";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { hasUsableOrderbookSnapshot } from "./utils";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 export default function PredictionMarket() {
@@ -32,9 +29,6 @@ function PredictionMarketContent() {
 	const navigate = useNavigate();
 	const [umbrella, setUmbrella] = useState<Umbrella | null>(null);
 	const [questions, setQuestions] = useState<PredictionMarket[]>([]);
-	const [questionOrderbooks, setQuestionOrderbooks] = useState<{
-		[questionId: string]: any;
-	}>({});
 	const [activeMarket, setActiveMarket] = useState<PredictionMarket | null>(
 		null
 	);
@@ -49,15 +43,12 @@ function PredictionMarketContent() {
 	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] =
 		useState(false);
 	const [loading, setLoading] = useState(true);
-	const [orderbooksReady, setOrderbooksReady] = useState(false);
 	const isMobile = useMedia("(max-width: 1100px)");
 	const titleRef = useRef<HTMLHeadingElement | null>(null);
 	const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({
 		umbrella: false,
 		markets: false,
 	});
-	const wsPayloadDevLoggedRef = useRef(new Set<string>());
-
 	const {
 		umbrellas,
 		getUmbrellaById,
@@ -65,7 +56,6 @@ function PredictionMarketContent() {
 		getResolvedQuestionsForUmbrella,
 		getOrderbookForQuestion,
 		refreshOrderbook,
-		allBooksPreview,
 		loading: contextLoading,
 		refresh: refreshContext,
 	} = usePredictionData();
@@ -115,24 +105,6 @@ function PredictionMarketContent() {
 			hasLogged.current.markets = true;
 		}
 		setQuestions(sanitized as any);
-
-		// Seed local orderbook map from context
-		const seeded: { [qid: string]: any } = {};
-		for (const q of (qs as any[]).filter(Boolean)) {
-			const qid =
-				(q as any)?._id ||
-				(q as any)?.questionId ||
-				(q as any)?.marketId;
-			if (qid) {
-				const ob = getOrderbookForQuestion(
-					umbrellaFromContext._id,
-					qid
-				);
-				seeded[qid] =
-					ob != null ? normalizeOrderbookPayload(ob) : ob;
-			}
-		}
-		setQuestionOrderbooks(seeded);
 		setLoading(false);
 	}, [
 		umbrellaId,
@@ -161,192 +133,16 @@ function PredictionMarketContent() {
 		}
 	}, [umbrella]);
 
-	const marketIdsKey = useMemo(
-		() =>
-			[...questions]
-				.map((q) => q._id || q.questionId || q.marketId)
-				.filter(Boolean)
-				.map((id) => String(id))
-				.sort()
-				.join("|"),
-		[questions],
+	const {
+		questionOrderbooks,
+		orderbooksReady,
+		fetchAllOrderbooks,
+	} = useUmbrellaLiveOrderbooks(
+		umbrella?._id,
+		questions,
+		getOrderbookForQuestion,
+		refreshOrderbook,
 	);
-
-	// REST bootstrap: populate books from production orderbook API so chart/trade work if WS is down or slow
-	useEffect(() => {
-		if (!umbrella?._id || !marketIdsKey) return;
-		const qids = marketIdsKey.split("|");
-		let cancelled = false;
-		(async () => {
-			const pairs = await Promise.all(
-				qids.map(async (qid) => {
-					const ob = await refreshOrderbook(umbrella._id, qid);
-					return { qid, ob };
-				}),
-			);
-			if (cancelled) return;
-			if (isPredictionPricingDebugEnabled()) {
-				priceDebugLog("PredictionMarket REST orderbook bootstrap", {
-					orderbookApiBaseUrl: getOrderbookApiBaseUrl(),
-					umbrellaId: umbrella._id,
-					questionIds: qids,
-						note: "Orderbook REST uses getOrderbookApiBaseUrl() (Railway by default; follows VITE_PREDICTION_API_BASE_URL when set).",
-				});
-				for (const { qid, ob } of pairs) {
-					const normalized = ob != null ? normalizeOrderbookPayload(ob) : null;
-					const snap = normalized as { asks?: unknown[]; bids?: unknown[] } | null;
-					priceDebugLog(`PredictionMarket orderbook snapshot ${qid}`, {
-						hadRaw: ob != null,
-						askCount: snap?.asks?.length ?? 0,
-						bidCount: snap?.bids?.length ?? 0,
-						usable: normalized ? hasUsableOrderbookSnapshot(normalized) : false,
-					});
-				}
-			}
-			setQuestionOrderbooks((prev) => {
-				const next = { ...prev };
-				for (const { qid, ob } of pairs) {
-					if (ob != null) next[qid] = normalizeOrderbookPayload(ob);
-				}
-				return next;
-			});
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [umbrella?._id, marketIdsKey, refreshOrderbook]);
-
-	// Single multiplex WebSocket (`/ws`) for all market orderbooks on this umbrella
-	useEffect(() => {
-		if (!umbrella?._id || questions.length === 0) return;
-
-		const wsBase = getPredictionWebSocketUrl().replace(/\/$/, "");
-		const wsUrl = `${wsBase}/ws`;
-		const receivedOrderbooks = new Set<string>();
-
-		setOrderbooksReady(false);
-
-		const expectedMarketIds = questions
-			.map((q) => q._id || q.questionId || q.marketId)
-			.filter(Boolean)
-			.map((id) => String(id));
-
-		const applyOrderbookForMarket = (marketId: string, raw: unknown) => {
-			const wrapped =
-				raw && typeof raw === "object" && !Array.isArray(raw)
-					? (raw as Record<string, unknown>)
-					: null;
-			const inner = wrapped?.snapshot ?? wrapped?.orderbook ?? wrapped?.data ?? raw;
-			const orderbook = normalizeOrderbookPayload(inner);
-
-			if (import.meta.env.DEV && !hasUsableOrderbookSnapshot(orderbook)) {
-				const mid = String(marketId);
-				if (!wsPayloadDevLoggedRef.current.has(mid)) {
-					wsPayloadDevLoggedRef.current.add(mid);
-					console.debug(
-						"[PredictionMarket] multiplex WS orderbook not usable after normalize",
-						{
-							marketId: mid,
-							rawKeys:
-								inner &&
-								typeof inner === "object" &&
-								!Array.isArray(inner)
-									? Object.keys(inner as object)
-									: typeof inner,
-						},
-					);
-				}
-			}
-
-			setQuestionOrderbooks((prev) => ({
-				...prev,
-				[marketId]: orderbook,
-			}));
-			receivedOrderbooks.add(marketId);
-			if (receivedOrderbooks.size === expectedMarketIds.length) {
-				setOrderbooksReady(true);
-			}
-		};
-
-		const routeMessage = (message: unknown) => {
-			if (!message || typeof message !== "object") return;
-			const m = message as Record<string, unknown>;
-			const t = m.type;
-			if (t === "subscribed" || t === "unsubscribed" || t === "pong" || t === "error") {
-				return;
-			}
-
-			const midRaw =
-				m.market ?? m.questionId ?? m.question_id ?? m.conditionId;
-			if (typeof midRaw === "string" && midRaw) {
-				applyOrderbookForMarket(midRaw, m.snapshot ?? m.orderbook ?? m);
-				return;
-			}
-
-			const markets = m.markets;
-			if (Array.isArray(markets)) {
-				for (const item of markets) {
-					if (!item || typeof item !== "object") continue;
-					const row = item as Record<string, unknown>;
-					const id = row.market ?? row.questionId ?? row.conditionId;
-					if (typeof id === "string" && id) {
-						applyOrderbookForMarket(id, row.snapshot ?? row.orderbook ?? row);
-					}
-				}
-			}
-		};
-
-		let ws: WebSocket;
-		try {
-			ws = new WebSocket(wsUrl);
-		} catch (error) {
-			console.error("error", "Failed to create multiplex orderbook WebSocket:", error);
-			return;
-		}
-
-		ws.onopen = () => {
-			for (const mid of expectedMarketIds) {
-				try {
-					ws.send(JSON.stringify({ type: "subscribe", market: mid }));
-				} catch {
-					/* ignore */
-				}
-			}
-		};
-
-		ws.onmessage = (event) => {
-			try {
-				const message = JSON.parse(event.data as string);
-				routeMessage(message);
-			} catch (error) {
-				console.error("error", "Failed to parse multiplex WebSocket message:", error);
-			}
-		};
-
-		ws.onerror = (error) => {
-			console.error("error", "Multiplex orderbook WebSocket error:", error);
-		};
-
-		const timeout = setTimeout(() => {
-			if (!receivedOrderbooks.size) {
-				setOrderbooksReady(true);
-			}
-		}, 5000);
-
-		return () => {
-			clearTimeout(timeout);
-			if (ws.readyState === WebSocket.OPEN) {
-				for (const mid of expectedMarketIds) {
-					try {
-						ws.send(JSON.stringify({ type: "unsubscribe", market: mid }));
-					} catch {
-						/* ignore */
-					}
-				}
-			}
-			ws.close();
-		};
-	}, [umbrella?._id, marketIdsKey]);
 
 	// Poll for THIS umbrella's updates every 60 seconds (e.g., streamEnabled toggled by cron)
 	useEffect(() => {
@@ -421,37 +217,6 @@ function PredictionMarketContent() {
 		return () => window.removeEventListener("resize", handler);
 	}, [isMobile, umbrella?.displayName]);
 
-	// Refresh orderbooks for all questions via context
-	const fetchAllOrderbooks = useCallback(
-		async (qs: PredictionMarket[]) => {
-			if (!umbrella) return;
-			const rows = await Promise.all(
-				(qs || []).map(async (q) => {
-					const qid =
-						(q as any)._id ||
-						(q as any).questionId ||
-						(q as any).marketId;
-					if (!qid) return null;
-					const sid = String(qid);
-					const ob = await refreshOrderbook(umbrella._id, sid);
-					return { qid: sid, ob };
-				}),
-			);
-			const updated: { [qid: string]: any } = {};
-			for (const row of rows) {
-				if (!row) continue;
-				let ob = row.ob;
-				if (ob == null) {
-					ob = getOrderbookForQuestion(umbrella._id, row.qid);
-				}
-				if (ob != null)
-					updated[row.qid] = normalizeOrderbookPayload(ob);
-			}
-			setQuestionOrderbooks(updated);
-		},
-		[umbrella, refreshOrderbook, getOrderbookForQuestion]
-	);
-
 	// Function to switch active market and position when Trade Yes/No is clicked
 	const handleMarketSwitch = useCallback(
 		(market: PredictionMarket, position: "yes" | "no") => {
@@ -501,55 +266,11 @@ function PredictionMarketContent() {
 		}
 	}, [activeMarketOrderbook, activeMarket]);
 
-	// Helper to calculate total volume from WebSocket orderbook data
-	// Volume = sum of all sizes in bids + asks
-	const getTotalVolume = useCallback(
-		(questionId: string) => {
-			const orderbook = questionOrderbooks[questionId];
-			if (!orderbook) return 0;
-
-			let totalVolume = 0;
-
-			// Sum ask sizes
-			if (orderbook.asks && Array.isArray(orderbook.asks)) {
-				for (const ask of orderbook.asks) {
-					if (typeof ask.size === "number") {
-						totalVolume += ask.size;
-					}
-				}
-			}
-
-			// Sum bid sizes
-			if (orderbook.bids && Array.isArray(orderbook.bids)) {
-				for (const bid of orderbook.bids) {
-					if (typeof bid.size === "number") {
-						totalVolume += bid.size;
-					}
-				}
-			}
-
-			return totalVolume;
-		},
-		[questionOrderbooks]
+	const sortedQuestions = useVolumeSortedQuestions(
+		questions,
+		questionOrderbooks,
+		orderbooksReady,
 	);
-
-	// Sort questions by highest trading volume using live WebSocket orderbook data
-	// Markets with the most interest (highest volume) appear at the top
-	const sortedQuestions = useMemo(() => {
-		const sorted = [...questions].sort((a, b) => {
-			const questionIdA = a._id || a.questionId || a.marketId;
-			const questionIdB = b._id || b.questionId || b.marketId;
-
-			// Use live WebSocket orderbook data to calculate volume
-			const volumeA = getTotalVolume(questionIdA);
-			const volumeB = getTotalVolume(questionIdB);
-
-			// Sort by highest volume first (descending order)
-			return volumeB - volumeA;
-		});
-
-		return sorted;
-	}, [questions, orderbooksReady, getTotalVolume]); // Re-sort when orderbooks become ready
 
 	// COMPLETELY ISOLATED CHART STATE - Never changes after initial load
 	// Chart state managed by useChartState hook

@@ -18,6 +18,8 @@ import {
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
 import { outcomeSideLabelColor } from "../utils/positionHelpers";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -72,6 +74,8 @@ export default function OrdersCardView({
 	orders: ProcessedOrder[];
 	venueOrders?: VenueOrder[];
 }) {
+	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
+	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const navigate = useNavigate();
 	const privateApi = usePrivateApiClient();
 	const queryClient = useQueryClient();
@@ -308,10 +312,7 @@ export default function OrdersCardView({
 													}}
 												>
 													{o.price !== undefined
-														? `${Math.round(
-																(o.price || 0) *
-																	100
-														  )}¢`
+														? formatPrice(o.price || 0, portfolioPriceLayout)
 														: "—"}
 												</div>
 											</div>
@@ -487,7 +488,7 @@ export default function OrdersCardView({
 				<div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
 					<div style={{ flex: 1 }}>
 						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Price</div>
-						<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{`${Math.round(vo.price * 100)}¢`}</div>
+						<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{formatPrice(vo.price, portfolioPriceLayout)}</div>
 					</div>
 					<div style={{ flex: 1, textAlign: "center" }}>
 						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Shares</div>

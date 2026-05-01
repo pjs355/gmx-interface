@@ -112,8 +112,33 @@ export class Tradebox {
 	}
 
 	async selectVenue(venue: TradingVenue): Promise<void> {
-		const trigger = this.root.locator('[data-qa="trade-venue-tab-Venue"]');
 		await sleepBetweenTradeboxActions();
+		const smartSection = this.root.locator('[data-qa="smart-routing-section"]');
+		const smartVisible = await smartSection
+			.isVisible()
+			.catch(() => false);
+		if (smartVisible) {
+			if (venue === "all") {
+				const split = this.root.locator('[data-qa="smart-routing-split-row"]');
+				await expect(
+					split,
+					'smart routing split row [data-qa="smart-routing-split-row"] not visible for venue=all',
+				).toBeVisible({ timeout: 10_000 });
+				await split.locator("button.smart-routing-row__main").click();
+			} else {
+				const row = this.root.locator(
+					`[data-qa="smart-routing-venue-row-${venue}"]`,
+				);
+				await expect(
+					row,
+					`smart routing row [data-qa="smart-routing-venue-row-${venue}"] not found`,
+				).toBeVisible({ timeout: 10_000 });
+				await row.click();
+			}
+			await sleepBetweenTradeboxActions();
+			return;
+		}
+		const trigger = this.root.locator('[data-qa="trade-venue-tab-Venue"]');
 		await trigger.click();
 		// Venue list may render in a portal attached to `document.body`.
 		const option = this.page.locator(`[data-qa-venue="${venue}"]`);

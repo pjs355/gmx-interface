@@ -18,6 +18,8 @@ import {
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
 import { outcomeSideLabelColor } from "../utils/positionHelpers";
+import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -72,6 +74,8 @@ export default function OrdersView({
 	orders: ProcessedOrder[];
 	venueOrders?: VenueOrder[];
 }) {
+	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
+	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const navigate = useNavigate();
 	const privateApi = usePrivateApiClient();
 	const queryClient = useQueryClient();
@@ -305,9 +309,7 @@ export default function OrdersView({
 											}}
 										>
 											{o.price !== undefined
-												? `${Math.round(
-														(o.price || 0) * 100
-												  )}¢`
+												? formatPrice(o.price || 0, portfolioPriceLayout)
 												: "—"}
 										</div>
 										<div
@@ -435,7 +437,7 @@ export default function OrdersView({
 						{vo.side === "buy" ? "Buy" : "Sell"}
 					</div>
 					<div style={{ textAlign: "center", color: "#fff" }}>
-						{`${Math.round(vo.price * 100)}¢`}
+						{formatPrice(vo.price, portfolioPriceLayout)}
 					</div>
 					<div style={{ textAlign: "center", color: "#fff" }}>
 						{Math.round(vo.size)}

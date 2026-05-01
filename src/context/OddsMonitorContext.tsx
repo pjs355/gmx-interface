@@ -75,7 +75,14 @@ export function useOddsMonitor(): OddsMonitorContextValue {
 	return ctx;
 }
 
-/** Live venue BBO rows for one PandaScore match from the shared odds monitor store. */
+/**
+ * Live venue BBO row for one PandaScore match from the shared odds monitor store.
+ *
+ * The returned `MatchedMarket` is the **same object reference** while that row
+ * exists: `useOddsMonitorWebSocket` applies venue_prices **in place** on the map.
+ * Do not memoize derived UI (cents, best asks) only on this reference — include
+ * `appState.timestamp` (or drop the memo) so ticks recompute after each publish.
+ */
 export function useMatchVenuePrices(
 	pandaMatchId: string | null | undefined,
 	umbrellaId?: string | null,

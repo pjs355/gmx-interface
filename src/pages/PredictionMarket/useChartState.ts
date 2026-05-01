@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from "react";
-import { usePredictionData } from "context/PredictionDataContext";
 
 type ChartState = {
 	isInitialized: boolean;
@@ -14,7 +13,6 @@ export function useChartState(
 	sortedQuestions: any[],
 	questionOrderbooks: Record<string, any>
 ) {
-	const { allBooksPreview } = usePredictionData();
 	const [chartOnlyState, setChartOnlyState] = useState<ChartState>({
 		isInitialized: false,
 		primaryMarket: null,
@@ -69,8 +67,6 @@ export function useChartState(
 		sortedQuestions,
 		chartOnlyState.primaryQuestionId,
 		chartOnlyState.secondaryQuestionId,
-		// Don't include allBooksPreview - it updates on every WebSocket message
-		// and we only use it for logging, not for determining which markets to show
 	]);
 
 	// Chart uses frozen data from global context - no additional API calls needed

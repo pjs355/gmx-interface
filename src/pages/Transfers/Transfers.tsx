@@ -38,6 +38,7 @@
 import React, { useCallback, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePortfolio } from "@/context/PortfolioContext";
+import { useCollateralTokens } from "@/context/CollateralTokenContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { useTransfersModal } from "@/context/TransfersModalContext";
@@ -62,6 +63,7 @@ export default function Transfers() {
 	const { login, authenticated } = usePrivy();
 	const { account, ready: signerReady } = useSignerContext();
 	const { portfolioTotal, cashBalance, portfolioLoading, cashLoading } = usePortfolio();
+	const collateral = useCollateralTokens();
 	const { refresh: refreshUserData } = useUserData();
 	const { openModal: openWithdrawModal } = useTransfersModal();
 	const funding = useFundingAddresses();
@@ -181,7 +183,16 @@ export default function Transfers() {
 						</p>
 
 						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">Polygon (pUSD)</div>
+							<div className="transfers-addresses__chain">
+								<span>Polygon (pUSD)</span>
+								<span className="transfers-addresses__balance">
+									{collateral.isFetched ? (
+										`$${formatCurrency(collateral.polygonStable)}`
+									) : (
+										<span className="transfers-skeleton transfers-skeleton--balance" />
+									)}
+								</span>
+							</div>
 							<div className="transfers-addresses__value-row">
 								{funding.isLoading &&
 								!(funding.polymarketSafe ?? funding.polygonSigner) ? (
@@ -218,7 +229,16 @@ export default function Transfers() {
 						</div>
 
 						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">Base (USDC)</div>
+							<div className="transfers-addresses__chain">
+								<span>Base (USDC)</span>
+								<span className="transfers-addresses__balance">
+									{collateral.isFetched ? (
+										`$${formatCurrency(collateral.baseUsdc)}`
+									) : (
+										<span className="transfers-skeleton transfers-skeleton--balance" />
+									)}
+								</span>
+							</div>
 							<div className="transfers-addresses__value-row">
 								{funding.isLoading && !funding.baseSmartWallet ? (
 									<span className="transfers-skeleton transfers-skeleton--address" />
@@ -247,7 +267,16 @@ export default function Transfers() {
 
 						{funding.limitlessMakerBase ? (
 							<div className="transfers-addresses__item">
-								<div className="transfers-addresses__chain">Limitless maker (Base USDC)</div>
+								<div className="transfers-addresses__chain">
+									<span>Limitless maker (Base USDC)</span>
+									<span className="transfers-addresses__balance">
+										{collateral.isFetched ? (
+											`$${formatCurrency(collateral.limitlessMakerUsdc)}`
+										) : (
+											<span className="transfers-skeleton transfers-skeleton--balance" />
+										)}
+									</span>
+								</div>
 								<div className="transfers-addresses__value-row">
 									{funding.isLoading && !funding.limitlessMakerBase ? (
 										<span className="transfers-skeleton transfers-skeleton--address" />
@@ -276,7 +305,16 @@ export default function Transfers() {
 						) : null}
 
 						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">BNB Chain (USDT)</div>
+							<div className="transfers-addresses__chain">
+								<span>BNB Chain (USDT)</span>
+								<span className="transfers-addresses__balance">
+									{collateral.isFetched ? (
+										`$${formatCurrency(collateral.bscUsdt)}`
+									) : (
+										<span className="transfers-skeleton transfers-skeleton--balance" />
+									)}
+								</span>
+							</div>
 							<div className="transfers-addresses__value-row">
 								{funding.isLoading && !funding.embeddedEoa ? (
 									<span className="transfers-skeleton transfers-skeleton--address" />
@@ -304,7 +342,16 @@ export default function Transfers() {
 						</div>
 
 						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">Solana (USDC)</div>
+							<div className="transfers-addresses__chain">
+								<span>Solana (USDC)</span>
+								<span className="transfers-addresses__balance">
+									{collateral.isFetched ? (
+										`$${formatCurrency(collateral.solanaUsdc)}`
+									) : (
+										<span className="transfers-skeleton transfers-skeleton--balance" />
+									)}
+								</span>
+							</div>
 							<div className="transfers-addresses__value-row">
 								{funding.isLoading && !funding.solanaAddress ? (
 									<span className="transfers-skeleton transfers-skeleton--address" />

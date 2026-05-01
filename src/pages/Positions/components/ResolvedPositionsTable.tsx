@@ -31,14 +31,12 @@ type UnifiedBlock = {
 
 export default function ResolvedPositionsTable({
 	umbrellaBalances,
-	toCentsString,
 	onClaimSuccess,
 }: {
 	umbrellaBalances: Array<{
 		umbrella: Umbrella;
 		markets: MarketEntry[];
 	}>;
-	toCentsString: (n?: number | null) => string;
 	onClaimSuccess?: (marketId: string | string[], umbrellaId: string) => void | Promise<void>;
 }) {
 	const unifiedBlocks = useMemo(() => {

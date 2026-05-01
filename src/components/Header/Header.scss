@@ -23,14 +23,19 @@ html.drawer-open {
 }
 
 .App-header {
-	height: 6.2rem;
-	backdrop-filter: blur(4px);
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 850;
+	height: var(--app-header-height, 5rem);
+	box-sizing: border-box;
+	backdrop-filter: blur(8px);
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	position: relative;
 	padding: 0 20px;
-	background: transparent 0% 0% no-repeat padding-box;
+	background-color: rgba(0, 0, 0, 0.88);
 	border-bottom: 1px solid #333333;
 
 	@media (min-width: 1100px) {
@@ -80,7 +85,7 @@ html.drawer-open {
 
 .App-header-drawer-close {
 	flex-shrink: 0;
-	height: 6.2rem;
+	height: var(--app-header-height, 5rem);
 	display: flex;
 	align-items: center;
 	justify-content: flex-end;
@@ -257,7 +262,7 @@ html.drawer-open {
 }
 
 .App-header-links-header {
-	height: 6.2rem;
+	height: var(--app-header-height, 5rem);
 	display: flex;
 	align-items: center;
 	z-index: 1;
@@ -328,7 +333,7 @@ html.drawer-open {
 }
 
 .App-header-logo-img {
-	height: 40px;
+	height: 32px;
 	width: auto;
 	object-fit: contain;
 	vertical-align: middle;
@@ -373,13 +378,13 @@ html.drawer-open {
 
 .App-header-container-left .a,
 .App-header-container-left a {
-	padding: 1.8rem 0.8rem;
+	padding: 1.1rem 0.8rem;
 	display: flex;
 	align-items: center;
 	color: #ffffff;
 	font-size: var(--font-size-body-large);
 	line-height: var(--line-height-body-large);
-	font-weight: normal;
+	font-weight: 700;
 	min-height: 2.4rem;
 	text-rendering: optimizeSpeed;
 	white-space: nowrap;
@@ -467,7 +472,7 @@ html.drawer-open {
 	}
 
 	.App-header-logo-img {
-		height: 36px;
+		height: 28px;
 	}
 
 	a.App-header-user-account {
@@ -513,7 +518,7 @@ html.drawer-open {
 	}
 
 	.App-header-logo-img {
-		height: 30px;
+		height: 24px;
 	}
 
 	.login-text-link {

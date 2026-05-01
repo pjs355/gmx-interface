@@ -24,6 +24,7 @@ import { debugLimitlessPortfolioTable } from "@/trading/limitless/limitlessPortf
 import { isVenueMarketResolvedLike } from "@/types/trading/venuePosition";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useOddsMonitor } from "context/OddsMonitorContext";
+import { getListingYesNoPricesForUmbrella } from "@/helpers/predictionUtils";
 import {
 	syntheticVenueWinningsRowId,
 	useRecentSettlementClaim,
@@ -63,8 +64,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		umbrellas,
 		getQuestionsForUmbrella,
 		resolvedMarketsByUmbrella,
-		allBooksPreview,
-		booksPreviewLoading,
 	} = usePredictionData();
 	const { appState } = useOddsMonitor();
 	const { tokenBalances, loading: userDataLoading } = useUserData();
@@ -124,7 +123,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		if (!predictPositionsDataNetClaim) return 0;
 		return sumPredictPositionMarkValue(
 			predictPositionsDataNetClaim,
-			allBooksPreview,
 			umbrellas,
 			getQuestionsForUmbrella,
 			appState?.markets,
@@ -132,7 +130,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		);
 	}, [
 		predictPositionsDataNetClaim,
-		allBooksPreview,
 		umbrellas,
 		getQuestionsForUmbrella,
 		appState?.markets,
@@ -283,7 +280,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const portfolioLoading =
 		!hasInitialPortfolioLoad ||
 		(userDataLoading && tokenBalances.size === 0) ||
-		booksPreviewLoading ||
 		dflowBlockingPortfolio;
 
 	// Single sum from CollateralTokenContext — `null` until that query has settled at least once.
@@ -312,45 +308,26 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		}
 
 		try {
-			// Collect markets with BOTH IDs
-			const markets: Array<{ balanceId: string; priceId: string }> = [];
+			let markToMarket = 0;
 			umbrellas.forEach((u: any) => {
+				const { yes: yp, no: np } = getListingYesNoPricesForUmbrella(
+					u,
+					appState?.markets,
+				);
+				const hasPrice = typeof yp === "number" || typeof np === "number";
 				const marketList = getQuestionsForUmbrella(u._id) as any[];
 				marketList.forEach((m: any) => {
-					const balanceId = m?._id; // MongoDB ID for balances
-					const priceId = m?.questionId || m?._id; // Transaction hash for prices
-					if (balanceId && priceId) {
-						markets.push({ balanceId, priceId });
-					}
+					const balanceId = m?._id;
+					if (!balanceId) return;
+					const tb = tokenBalances.get(balanceId);
+					if (!tb) return;
+					const yes = Number(tb.yesBalance) || 0;
+					const no = Number(tb.noBalance) || 0;
+					if (!hasPrice) return;
+					const yv = typeof yp === "number" ? yes * yp : 0;
+					const nv = typeof np === "number" ? no * np : 0;
+					markToMarket += yv + nv;
 				});
-			});
-			
-			// Mark-to-market from tokenBalances and allBooksPreview (best ask/bid)
-			let markToMarket = 0;
-			let pricedMarkets = 0;
-			markets.forEach(({ balanceId, priceId }) => {
-				// Get balances using MongoDB _id
-				const tb = tokenBalances.get(balanceId);
-				if (!tb) return;
-				const yes = Number(tb.yesBalance) || 0;
-				const no = Number(tb.noBalance) || 0;
-
-				// Align with BookPreview from PredictionDataContext + Positions usePositionsData
-				const preview = allBooksPreview[priceId];
-				const yp = preview?.lowestAsk ?? preview?.bestYesPrice ?? null;
-				const np =
-					typeof preview?.bestNoPrice === "number"
-						? preview.bestNoPrice
-						: preview?.highestBid != null && preview?.highestBid !== undefined
-							? 1 - preview.highestBid
-							: null;
-
-				if (typeof yp === "number" || typeof np === "number") {
-					pricedMarkets += 1;
-				}
-				const yv = typeof yp === "number" ? yes * yp : 0;
-				const nv = typeof np === "number" ? no * np : 0;
-				markToMarket += yv + nv;
 			});
 
 			// Off-chain venue notionals
@@ -361,21 +338,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				limitlessPositionsTotal;
 
 			const prevMtmv = lastMarkToMarketAndVenueRef.current;
-			// Reuse only prior mtm+venue. Never reuse a value that already includes
-			// levelUpResolvedWinningsTotal — it was re-added every 500ms tick and inflated the header.
 			const prevForZeroGuard = lastPortfolioPositionColumnRef.current;
-			let nextMtmv = markToMarket;
-			if (
-				booksPreviewLoading &&
-				(pricedMarkets === 0 || markets.length === 0) &&
-				prevMtmv > 0 &&
-				polyPositionsTotal === 0 &&
-				predictPositionsTotal === 0 &&
-				dflowPositionsTotal === 0 &&
-				limitlessPositionsTotal === 0
-			) {
-				nextMtmv = prevMtmv;
-			}
+			const nextMtmv = markToMarket;
 			lastMarkToMarketAndVenueRef.current = nextMtmv;
 			// Unclaimed LevelUp resolution ($1 / winning share) — one addition per recompute
 			const positionColumnWithResolved =
@@ -408,8 +372,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		getQuestionsForUmbrella,
 		tokenBalances,
 		cashBalance,
-		allBooksPreview,
-		booksPreviewLoading,
+		appState?.markets,
 		polyPositionsTotal,
 		predictPositionsTotal,
 		dflowPositionsTotal,
@@ -430,8 +393,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		tokenBalances,
 		cashBalance,
 		umbrellas,
-		allBooksPreview,
-		booksPreviewLoading,
+		appState?.markets,
 		userDataLoading,
 		compute,
 		polyPositionsTotal,

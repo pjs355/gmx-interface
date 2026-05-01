@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef } from "react";
 import type { MatchedMarket, OrderbookData, SnapshotStatus } from "@/types/odds-monitor";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { DirectVenueBooks } from "@/trading/venue-books";
-import type { VenueBboResponse } from "@/hooks/useVenueBbo";
-import { useVenueBbo } from "@/hooks/useVenueBbo";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
@@ -41,7 +39,7 @@ export interface TradingPagePrices {
 	bestNoPrice: number | null;
 	teamA: string;
 	teamB: string;
-	source: "ws" | "rest" | "none";
+	source: "ws" | "none";
 	wsConnected: boolean;
 	wsEnabled: boolean;
 	isLoading: boolean;
@@ -104,33 +102,9 @@ function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | un
 	return book?.snapshotStatus;
 }
 
-function computeLevelUpRow(orderbook: OrderbookSnapshot | null | undefined): {
-	askA: number | null;
-	askB: number | null;
-	bidA: number | null;
-	bidB: number | null;
-} {
-	if (!orderbook) return { askA: null, askB: null, bidA: null, bidB: null };
-	const posAsks = orderbook.asks?.filter((a) => (a.size ?? 0) > 0 && isValidPrice(a.price)) ?? [];
-	const bestAsk = posAsks.length > 0 ? Math.min(...posAsks.map((a) => a.price)) : null;
-	const posBids = orderbook.bids?.filter((b) => (b.size ?? 0) > 0 && isValidPrice(b.price)) ?? [];
-	const bestBid = posBids.length > 0 ? Math.max(...posBids.map((b) => b.price)) : null;
-	const askB = bestBid !== null ? 1 - bestBid : null;
-	const bidA = bestBid !== null && isValidPrice(bestBid) ? bestBid : null;
-	const bidB =
-		bestAsk !== null && isValidPrice(1 - bestAsk) ? 1 - bestAsk : null;
-	return {
-		askA: bestAsk,
-		askB: askB !== null && isValidPrice(askB) ? askB : null,
-		bidA,
-		bidB,
-	};
-}
-
 function buildVenueRowsFromWs(
 	m: MatchedMarket,
 	directBooks: DirectVenueBooks | null | undefined,
-	levelUpOrderbook: OrderbookSnapshot | null | undefined,
 ): VenueRowModel[] {
 	const polyAskA = bestAskProb(m.polyPriceA) ?? bestAskFromSnapshot(directBooks?.polyBookA);
 	const polyAskB = bestAskProb(m.polyPriceB) ?? bestAskFromSnapshot(directBooks?.polyBookB);
@@ -217,15 +191,10 @@ function buildVenueRowsFromWs(
 		},
 	].filter((r) => r.linked);
 
-	const wsAskA = bestAskProb(m.levelUpPriceA);
-	const wsAskB = bestAskProb(m.levelUpPriceB);
-	const wsBidA = bestBidProb(m.levelUpPriceA);
-	const wsBidB = bestBidProb(m.levelUpPriceB);
-	const localLu = computeLevelUpRow(levelUpOrderbook);
-	const askA = wsAskA ?? localLu.askA;
-	const askB = wsAskB ?? localLu.askB;
-	const bidA = wsBidA ?? localLu.bidA;
-	const bidB = wsBidB ?? localLu.bidB;
+	const askA = bestAskProb(m.levelUpPriceA);
+	const askB = bestAskProb(m.levelUpPriceB);
+	const bidA = bestBidProb(m.levelUpPriceA);
+	const bidB = bestBidProb(m.levelUpPriceB);
 	const luRow: VenueRowModel = {
 		id: "levelup",
 		label: "LevelUp",
@@ -239,63 +208,6 @@ function buildVenueRowsFromWs(
 	};
 
 	return luRow.linked ? [luRow, ...externalRows] : externalRows;
-}
-
-const VENUE_LABEL_MAP: Record<string, string> = {
-	levelup: "LevelUp",
-	polymarket: "Polymarket",
-	dflow: "Kalshi",
-	predictfun: "Predict",
-	limitless: "Limitless",
-};
-
-function buildVenueRowsFromRest(
-	bbo: VenueBboResponse,
-	levelUpOrderbook: OrderbookSnapshot | null | undefined,
-): VenueRowModel[] {
-	const luFromVenues = bbo.venues.find(
-		(v) => v.linked && String(v.venue).toLowerCase() === "levelup",
-	);
-	const luVenueA = luFromVenues?.bestAskA && isValidPrice(luFromVenues.bestAskA) ? luFromVenues.bestAskA : null;
-	const luVenueB = luFromVenues?.bestAskB && isValidPrice(luFromVenues.bestAskB) ? luFromVenues.bestAskB : null;
-	const luPrices = computeLevelUpRow(levelUpOrderbook);
-	const luRestA = bbo.levelup.bestAskA && isValidPrice(bbo.levelup.bestAskA) ? bbo.levelup.bestAskA : null;
-	const luRestB = bbo.levelup.bestAskB && isValidPrice(bbo.levelup.bestAskB) ? bbo.levelup.bestAskB : null;
-
-	const askA = luVenueA ?? luPrices.askA ?? luRestA;
-	const askB = luVenueB ?? luPrices.askB ?? luRestB;
-	const bidA = luPrices.bidA;
-	const bidB = luPrices.bidB;
-	const luStatusA = luFromVenues?.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined;
-	const luStatusB = luFromVenues?.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined;
-
-	const luRow: VenueRowModel = {
-		id: "levelup",
-		label: "LevelUp",
-		linked: askA !== null || askB !== null,
-		askA,
-		askB,
-		bidA,
-		bidB,
-		statusA: luStatusA,
-		statusB: luStatusB,
-	};
-
-	const venueRows: VenueRowModel[] = bbo.venues
-		.filter((v) => v.linked && String(v.venue).toLowerCase() !== "levelup")
-		.map((v) => ({
-			id: v.venue,
-			label: VENUE_LABEL_MAP[v.venue] ?? v.venue,
-			linked: true,
-			askA: v.bestAskA && isValidPrice(v.bestAskA) ? v.bestAskA : null,
-			askB: v.bestAskB && isValidPrice(v.bestAskB) ? v.bestAskB : null,
-			bidA: null,
-			bidB: null,
-			statusA: v.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined,
-			statusB: v.status === "no_liquidity" ? ("no_liquidity" as SnapshotStatus) : undefined,
-		}));
-
-	return luRow.linked ? [luRow, ...venueRows] : venueRows;
 }
 
 /** Map venue price row id → `VenuePosition.venue` key used in portfolio hooks. */
@@ -345,12 +257,12 @@ function computeBestIndices(rows: VenueRowModel[]): { bestAIdx: number; bestBIdx
 
 /**
  * Single source of truth for venue prices on the trading page.
- * Prioritises live WS data over REST, and computes cross-venue best prices
- * that both the Basic table and Trading module consume.
+ * Uses OddsMonitor (`/ws/venue-prices` → `MatchedMarket`) only for displayed strip prices;
+ * no REST venue-bbo or REST LevelUp orderbook merge.
  */
 export function useTradingPagePrices(
 	pandascoreMatchId: string,
-	levelUpOrderbook: OrderbookSnapshot | null | undefined,
+	_levelUpOrderbook: OrderbookSnapshot | null | undefined,
 	directBooks: DirectVenueBooks | null | undefined,
 	umbrellaId?: string | null,
 	/** When `/matched-markets` omits limitless but the umbrella has it (env skew). */
@@ -368,71 +280,44 @@ export function useTradingPagePrices(
 		return mergeMonitorLimitlessFromUmbrella(base, limitlessFromUmbrella);
 	}, [appState?.markets, pandascoreMatchId, umbrellaId, limitlessFromUmbrella]);
 
-	const hasDirectBookPrices = Boolean(
-		directBooks?.polyBookA?.asks?.length || directBooks?.polyBookB?.asks?.length
-		|| directBooks?.dflowBookA?.asks?.length || directBooks?.dflowBookB?.asks?.length
-		|| directBooks?.limitlessBookA?.asks?.length || directBooks?.limitlessBookB?.asks?.length
-	);
-	const wsHasVenuePrices = connected && matched != null && (
-		matched.polyPriceA !== null || matched.dflowPriceA !== null
-		|| matched.predictFunPriceA !== null || matched.limitlessPriceA !== null
-		|| matched.levelUpPriceA !== null || matched.levelUpPriceB !== null
-		|| hasDirectBookPrices
-	);
-
-	const restBbo = useVenueBbo(pandascoreMatchId, !wsHasVenuePrices);
-
 	const result = useMemo((): TradingPagePrices => {
-		const base = { wsConnected: connected, wsEnabled, isLoading: false, restError: false, matched, appState };
-
-		if (wsHasVenuePrices && matched) {
-			const rows = buildVenueRowsFromWs(matched, directBooks, levelUpOrderbook);
-			const { bestAIdx, bestBIdx } = computeBestIndices(rows);
-			const bestYes = bestAIdx >= 0 ? rows[bestAIdx].askA : null;
-			const bestNo = bestBIdx >= 0 ? rows[bestBIdx].askB : null;
-			return {
-				venueRows: rows, bestAIdx, bestBIdx,
-				bestYesPrice: bestYes, bestNoPrice: bestNo,
-				teamA: matched.pandaTeamA, teamB: matched.pandaTeamB,
-				source: "ws", ...base,
-			};
-		}
-
-		if (restBbo.data) {
-			const rows = buildVenueRowsFromRest(restBbo.data, levelUpOrderbook);
-			const { bestAIdx, bestBIdx } = computeBestIndices(rows);
-			const bestYes = bestAIdx >= 0 ? rows[bestAIdx].askA : null;
-			const bestNo = bestBIdx >= 0 ? rows[bestBIdx].askB : null;
-			return {
-				venueRows: rows, bestAIdx, bestBIdx,
-				bestYesPrice: bestYes, bestNoPrice: bestNo,
-				teamA: restBbo.data.pandaTeamA, teamB: restBbo.data.pandaTeamB,
-				source: "rest", ...base, isLoading: false,
-			};
-		}
+		const base = { wsConnected: connected, wsEnabled, restError: false, matched, appState };
 
 		if (connected && matched) {
-			const rows = buildVenueRowsFromWs(matched, directBooks, levelUpOrderbook);
+			const rows = buildVenueRowsFromWs(matched, directBooks);
 			const { bestAIdx, bestBIdx } = computeBestIndices(rows);
 			const bestYes = bestAIdx >= 0 ? rows[bestAIdx].askA : null;
 			const bestNo = bestBIdx >= 0 ? rows[bestBIdx].askB : null;
 			return {
-				venueRows: rows, bestAIdx, bestBIdx,
-				bestYesPrice: bestYes, bestNoPrice: bestNo,
-				teamA: matched.pandaTeamA, teamB: matched.pandaTeamB,
-				source: "ws", ...base,
+				venueRows: rows,
+				bestAIdx,
+				bestBIdx,
+				bestYesPrice: bestYes,
+				bestNoPrice: bestNo,
+				teamA: matched.pandaTeamA,
+				teamB: matched.pandaTeamB,
+				source: "ws",
+				...base,
+				isLoading: false,
 			};
 		}
 
+		const pandaReady = pandascoreMatchId.trim().length > 0;
+		const isLoading = Boolean(wsEnabled && pandaReady && connected && !matched);
+
 		return {
-			venueRows: [], bestAIdx: -1, bestBIdx: -1,
-			bestYesPrice: null, bestNoPrice: null,
-			teamA: "", teamB: "",
-			source: "none", ...base,
-			isLoading: restBbo.isLoading,
-			restError: Boolean(restBbo.error),
+			venueRows: [],
+			bestAIdx: -1,
+			bestBIdx: -1,
+			bestYesPrice: null,
+			bestNoPrice: null,
+			teamA: "",
+			teamB: "",
+			source: "none",
+			...base,
+			isLoading,
 		};
-	}, [wsHasVenuePrices, connected, matched, levelUpOrderbook, restBbo.data, restBbo.isLoading, restBbo.error, directBooks, wsEnabled, appState]);
+	}, [connected, matched, directBooks, wsEnabled, appState, pandascoreMatchId]);
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
@@ -456,7 +341,7 @@ export function useTradingPagePrices(
 			isLoading: result.isLoading,
 			restError: result.restError,
 			note:
-				"Primary: venue-prices WS + direct browser books when linked; fallback REST useVenueBbo when WS has no venue snapshots.",
+				"Strip prices: venue-prices WS MatchedMarket + direct browser books when linked; no REST venue-bbo.",
 		});
 	}, [
 		pandascoreMatchId,

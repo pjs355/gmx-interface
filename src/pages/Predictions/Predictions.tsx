@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
@@ -10,6 +10,16 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./Predictions.scss";
 import GameLinks from "./components/GameLinks";
 import { Search } from "./components/Search/Search";
+import {
+	GAME_FILTER_COMPACT_MEDIA,
+	gameFilterResetSelection,
+	isUmbrellaLiveByEventDate,
+	isUmbrellaStartingSoonByEventDate,
+	LIVE_PILL_ID,
+	normalizeTagLabel,
+	STARTING_SOON_PILL_ID,
+	useNowTick,
+} from "./utils/gameLinkFilters";
 
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
@@ -27,32 +37,24 @@ function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	});
 }
 
-// Sort umbrellas by creation date (newest first)
-function sortByCreationDate(array: Umbrella[]): Umbrella[] {
-	return [...array].sort((a, b) => {
-		const aDate = new Date(a.createdAt || 0).getTime();
-		const bDate = new Date(b.createdAt || 0).getTime();
-		// Sort in descending order (newest first)
-		return bDate - aDate;
-	});
-}
-
-// Special identifier for the "New" pill
-const NEW_PILL_ID = "__NEW__";
-
 export default function Predictions() {
 	const navigate = useNavigate();
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
-	const [imagesReady, setImagesReady] = useState(false);
 	const [searchActive, setSearchActive] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<Umbrella[]>([]);
 
+	useLayoutEffect(() => {
+		const mq = window.matchMedia(GAME_FILTER_COMPACT_MEDIA);
+		if (!mq.matches) return;
+		setSelectedGame((prev) => (prev === null ? LIVE_PILL_ID : prev));
+	}, []);
+
 	// Listen for reset filter event from header
 	useEffect(() => {
 		const handleResetFilter = () => {
-			setSelectedGame(null);
+			setSelectedGame(gameFilterResetSelection());
 		};
 
 		window.addEventListener("resetGameFilter", handleResetFilter);
@@ -69,14 +71,6 @@ export default function Predictions() {
 		multiMarketData,
 		tags,
 	} = usePredictionData();
-
-	const normalizeTag = (value: string) =>
-		value
-			.toUpperCase()
-			.normalize("NFKD")
-			.replace(/[\u0300-\u036f]/g, "")
-			.replace(/[^A-Z0-9]+/g, "_")
-			.replace(/^_+|_+$/g, "");
 
 	const handleSearchActive = useCallback(
 		async (active: boolean, query: string) => {
@@ -105,6 +99,8 @@ export default function Predictions() {
 		[]
 	);
 
+	const now = useNowTick(60_000);
+
 	const filteredUmbrellas = React.useMemo(() => {
 		// If search is active, use search results instead
 		if (searchActive && searchResults.length > 0) {
@@ -118,11 +114,12 @@ export default function Predictions() {
 
 		// Find ESPORTS tag to exclude esports markets from home page
 		const esportsTag = tags.find(
-			(t) => normalizeTag(t.label) === "ESPORTS"
+			(t) => normalizeTagLabel(t.label) === "ESPORTS",
 		);
+		const esportsTagId = esportsTag?._id;
 
 		// Filter out esports-tagged umbrellas
-		const nonEsportsUmbrellas = activeUmbrellas.filter((umbrella) => {
+		let filtered = activeUmbrellas.filter((umbrella) => {
 			const children = (umbrella as any).children as
 				| Array<any>
 				| undefined;
@@ -143,18 +140,14 @@ export default function Predictions() {
 			return !hasEsportsTag;
 		});
 
-		let filtered = nonEsportsUmbrellas;
-		
-		// Handle "New" pill - sort by creation date, no tag filtering
-		if (selectedGame === NEW_PILL_ID) {
-			return sortByCreationDate(filtered);
-		}
-		
-		if (selectedGame) {
-			// Find the selected tag by label
+		if (
+			selectedGame &&
+			selectedGame !== LIVE_PILL_ID &&
+			selectedGame !== STARTING_SOON_PILL_ID
+		) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
 			if (selectedTag) {
-				filtered = nonEsportsUmbrellas.filter((umbrella) => {
+				filtered = filtered.filter((umbrella) => {
 					const children = (umbrella as any).children as
 						| Array<any>
 						| undefined;
@@ -162,7 +155,6 @@ export default function Predictions() {
 					return children.some((q) => {
 						const tagIds: string[] | undefined = (q &&
 							(q as any).tagIds) as any;
-						// MUST have tagIds array (skip questions with legacy tags only)
 						if (!Array.isArray(tagIds) || tagIds.length === 0) {
 							return false;
 						}
@@ -172,9 +164,26 @@ export default function Predictions() {
 			}
 		}
 
+		if (selectedGame === LIVE_PILL_ID) {
+			filtered = filtered.filter((umbrella) =>
+				isUmbrellaLiveByEventDate(umbrella, now, esportsTagId),
+			);
+		} else if (selectedGame === STARTING_SOON_PILL_ID) {
+			filtered = filtered.filter((umbrella) =>
+				isUmbrellaStartingSoonByEventDate(umbrella, now, esportsTagId),
+			);
+		}
+
 		// Sort by trading activity (most trades first)
 		return sortByTradingActivity(filtered);
-	}, [umbrellas, selectedGame, tags, searchActive, searchResults]);
+	}, [umbrellas, selectedGame, tags, searchActive, searchResults, now]);
+
+	const filterLabelForEmpty =
+		selectedGame === LIVE_PILL_ID
+			? "Live"
+			: selectedGame === STARTING_SOON_PILL_ID
+				? "Starting Soon"
+				: selectedGame;
 
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
@@ -220,93 +229,55 @@ export default function Predictions() {
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
-	// Preload banner images only for umbrellas being displayed
-	useEffect(() => {
-		if (loading || filteredUmbrellas.length === 0) return;
-
-		// Only preload if umbrella has an explicit image URL set
-		// Don't speculatively try Firebase URLs that might 404
-		const imageUrls = filteredUmbrellas.map((u) => u.image).filter(Boolean);
-
-		if (imageUrls.length === 0) {
-			setImagesReady(true);
-			return;
-		}
-
-		let loadedCount = 0;
-		const totalImages = imageUrls.length;
-
-		imageUrls.forEach((url) => {
-			const img = new Image();
-			img.onload = () => {
-				loadedCount++;
-				if (loadedCount === totalImages) {
-					setImagesReady(true);
-				}
-			};
-			img.onerror = () => {
-				// Count errors as loaded to prevent hanging
-				loadedCount++;
-				if (loadedCount === totalImages) {
-					setImagesReady(true);
-				}
-			};
-			img.src = url as string;
-		});
-
-		// Fallback timeout - show page after 3 seconds even if images not loaded
-		const timeout = setTimeout(() => {
-			setImagesReady(true);
-		}, 3000);
-
-		return () => clearTimeout(timeout);
-	}, [loading, filteredUmbrellas]);
-
 	const handleRetry = () => {
 		window.location.reload();
 	};
 
-	if (loading || error || !imagesReady) {
+	if (loading || error) {
 		return <LoadingState error={error ?? null} onRetry={handleRetry} />;
 	}
 
 	return (
 		<div className="predictions-page page-layout">
-			{/** <ImageBanner /> */}
-			{/* <Search
-				onSearchActive={handleSearchActive}
-				searchResults={searchResults}
-				activeQuery={searchQuery}
-			/> */}
-			<GameLinks
-				selectedGame={selectedGame}
-				onGameSelect={setSelectedGame}
-				umbrellas={umbrellas}
-				loading={loading}
-				filterType="games"
-			/>
+			<div className="predictions-page__body">
+				{/** <ImageBanner /> */}
+				{/* <Search
+					onSearchActive={handleSearchActive}
+					searchResults={searchResults}
+					activeQuery={searchQuery}
+				/> */}
+				<GameLinks
+					selectedGame={selectedGame}
+					onGameSelect={setSelectedGame}
+					umbrellas={umbrellas}
+					loading={loading}
+					filterType="games"
+				/>
 
-			<div className="predictions-grid">
-				{filteredUmbrellas.length > 0 ? (
-					filteredUmbrellas.map((umbrella) => (
-						<PredictionCard
-							key={umbrella._id}
-							umbrella={umbrella}
-							singleMarketOrderbooks={singleMarketOrderbooks}
-							singleMarketQuestions={singleMarketQuestions}
-							multiMarketData={multiMarketData}
-							onNavigateToUmbrella={navigateToUmbrella}
-							onNavigateToSingleMarket={navigateToSingleMarket}
-							onNavigateToMultiMarket={navigateToMultiMarket}
-						/>
-					))
-				) : (
-					<div className="no-markets-message no-markets-message--empty">
-						<p>{`No current markets for ${
-							selectedGame ?? "this filter"
-						}`}</p>
+				<div className="predictions-page__main">
+					<div className="predictions-grid">
+						{filteredUmbrellas.length > 0 ? (
+							filteredUmbrellas.map((umbrella) => (
+								<PredictionCard
+									key={umbrella._id}
+									umbrella={umbrella}
+									singleMarketOrderbooks={singleMarketOrderbooks}
+									singleMarketQuestions={singleMarketQuestions}
+									multiMarketData={multiMarketData}
+									onNavigateToUmbrella={navigateToUmbrella}
+									onNavigateToSingleMarket={navigateToSingleMarket}
+									onNavigateToMultiMarket={navigateToMultiMarket}
+								/>
+							))
+						) : (
+							<div className="no-markets-message no-markets-message--empty">
+								<p>{`No current markets for ${
+									filterLabelForEmpty ?? "this filter"
+								}`}</p>
+							</div>
+						)}
 					</div>
-				)}
+				</div>
 			</div>
 		</div>
 	);

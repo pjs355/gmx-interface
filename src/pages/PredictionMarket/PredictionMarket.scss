@@ -2,7 +2,7 @@
 	padding-left: 50px;
 	padding-right: 50px;
 	max-width: none;
-	min-height: calc(100vh - 62px);
+	min-height: calc(100vh - var(--app-header-height, 6.2rem));
 	display: flex;
 	flex-direction: column;
 	padding-bottom: 2.4rem;
@@ -64,7 +64,21 @@
 
 .right-panel {
 	position: sticky;
-	top: 0;
+	top: var(--app-header-height, 6.2rem);
+	/* Taller than the viewport: keep layout unchanged; scroll this column when the pointer is here. */
+	min-width: 0;
+	max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
+	overflow-y: auto;
+	overflow-x: hidden;
+	overscroll-behavior-y: contain;
+	-webkit-overflow-scrolling: touch;
+	/* Scroll without visible scrollbar (wheel / trackpad / touch still work). */
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
 }
 
 .stream-section {
