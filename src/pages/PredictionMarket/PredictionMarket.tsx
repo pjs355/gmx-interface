@@ -13,7 +13,6 @@ import { MarketPanels } from "./MarketPanels";
 import { useUmbrellaLiveOrderbooks } from "./useUmbrellaLiveOrderbooks";
 import { useVolumeSortedQuestions } from "./useVolumeSortedQuestions";
 import { useChartState } from "./useChartState";
-import { MarketHeader } from "./MarketHeader";
 import { useMatchSettled } from "./useMatchSettled";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
@@ -27,28 +26,6 @@ export default function PredictionMarket() {
 function PredictionMarketContent() {
 	const { umbrellaId } = useParams<{ umbrellaId: string }>();
 	const navigate = useNavigate();
-	const [umbrella, setUmbrella] = useState<Umbrella | null>(null);
-	const [questions, setQuestions] = useState<PredictionMarket[]>([]);
-	const [activeMarket, setActiveMarket] = useState<PredictionMarket | null>(
-		null
-	);
-	const [activePosition, setActivePosition] = useState<"yes" | "no">(() => {
-		// Read activePosition from localStorage, default to 'yes' if not found
-		const storedPosition = localStorage.getItem("activePosition");
-		return storedPosition === "yes" || storedPosition === "no"
-			? storedPosition
-			: "yes";
-	});
-	const [hasUserSelectedMarket, setHasUserSelectedMarket] = useState(false);
-	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] =
-		useState(false);
-	const [loading, setLoading] = useState(true);
-	const isMobile = useMedia("(max-width: 1100px)");
-	const titleRef = useRef<HTMLHeadingElement | null>(null);
-	const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({
-		umbrella: false,
-		markets: false,
-	});
 	const {
 		umbrellas,
 		getUmbrellaById,
@@ -59,6 +36,97 @@ function PredictionMarketContent() {
 		loading: contextLoading,
 		refresh: refreshContext,
 	} = usePredictionData();
+
+	/*
+	 * Smooth home → umbrella navigation: when the user clicks a card on the
+	 * home dock we already cached the umbrella in localStorage and the full
+	 * umbrella + question list are also in `PredictionDataContext`. Resolve
+	 * everything synchronously during the FIRST render so the right-side
+	 * trade module can paint immediately, matching the dock visually with no
+	 * skeleton flash and no "Umbrella Not Found" flicker. The existing
+	 * `useEffect` below still handles direct-URL / refresh cases where the
+	 * context loads after mount.
+	 *
+	 * Lazy initializers run in declaration order, so each one can read the
+	 * `const` from the previous `useState(...)` line.
+	 */
+	const [umbrella, setUmbrella] = useState<Umbrella | null>(() => {
+		const fromCtx = getUmbrellaById(umbrellaId || "");
+		if (fromCtx) return fromCtx;
+		try {
+			const raw = localStorage.getItem("currentUmbrella");
+			return raw ? (JSON.parse(raw) as Umbrella) : null;
+		} catch {
+			return null;
+		}
+	});
+	const [questions, setQuestions] = useState<PredictionMarket[]>(() => {
+		if (!umbrella?._id) return [];
+		const qs = (getQuestionsForUmbrella(umbrella._id) as any[]) || [];
+		return qs.filter(
+			(q) =>
+				q &&
+				((q as any)._id ||
+					(q as any).questionId ||
+					(q as any).marketId)
+		) as PredictionMarket[];
+	});
+	/*
+	 * `selectedMarketId` is set by Yes/No clicks on multi-market home cards.
+	 * If it matches a cached question we can pick the right active market on
+	 * the very first paint; otherwise we fall back to `questions[0]` (still
+	 * better than `null` because `null` triggers the skeleton flash) and let
+	 * the post-mount useEffect refine to the volume-sorted top market once
+	 * orderbooks settle.
+	 */
+	const initialStoredMatch = useMemo<PredictionMarket | null>(() => {
+		if (questions.length === 0) return null;
+		const storedMarketId = localStorage.getItem("selectedMarketId");
+		if (!storedMarketId) return null;
+		const hit = questions.find((q) => {
+			const qid =
+				(q as any)._id ||
+				(q as any).questionId ||
+				(q as any).marketId;
+			return qid === storedMarketId;
+		});
+		if (hit) {
+			// Consume so the post-mount useEffect doesn't re-process.
+			localStorage.removeItem("selectedMarketId");
+			return hit;
+		}
+		return null;
+		// Intentionally only run on mount — `questions` is the lazy-init value.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+	const [activeMarket, setActiveMarket] = useState<PredictionMarket | null>(
+		() => initialStoredMatch ?? questions[0] ?? null
+	);
+	const [activePosition, setActivePosition] = useState<"yes" | "no">(() => {
+		// Read activePosition from localStorage, default to 'yes' if not found
+		const storedPosition = localStorage.getItem("activePosition");
+		return storedPosition === "yes" || storedPosition === "no"
+			? storedPosition
+			: "yes";
+	});
+	const [hasUserSelectedMarket, setHasUserSelectedMarket] = useState(false);
+	/*
+	 * Only mark "stored selection processed" when we *actually* used a stored
+	 * ID. For umbrella-card or "View more" navigations there's no stored ID,
+	 * so leave this `false`: the post-mount selection effect will then refine
+	 * `activeMarket` to the volume-sorted top market once orderbooks load
+	 * (the trade box stays mounted across that change because it's keyed by
+	 * `umbrella._id`, so no remount / skeleton flash).
+	 */
+	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] =
+		useState(() => Boolean(initialStoredMatch));
+	const [loading, setLoading] = useState(() => !umbrella);
+	const isMobile = useMedia("(max-width: 1100px)");
+	const titleRef = useRef<HTMLHeadingElement | null>(null);
+	const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({
+		umbrella: false,
+		markets: false,
+	});
 	// Removed tradeExecutionService - not used in this component
 
 	useEffect(() => {
@@ -254,6 +322,30 @@ function PredictionMarketContent() {
 		return orderbook;
 	}, [activeMarket, questionOrderbooks]);
 
+	/**
+	 * Mirror the umbrella's pin + active market into the home dock keys so a
+	 * round-trip (home → umbrella → home) keeps the exact same market focused
+	 * in the home trade widget. The keys are owned by `HomeInlineTradeLayout`
+	 * (see comments there); this just keeps them in sync from the detail page.
+	 */
+	useEffect(() => {
+		if (!umbrella?._id) return;
+		try {
+			localStorage.setItem("homeDockPinnedUmbrellaId", umbrella._id);
+			const id = activeMarket
+				? (activeMarket as any)._id ||
+				  (activeMarket as any).questionId ||
+				  (activeMarket as any).marketId ||
+				  ""
+				: "";
+			if (id) {
+				localStorage.setItem("homeDockActiveMarketId", id);
+			}
+		} catch {
+			/* localStorage unavailable */
+		}
+	}, [umbrella?._id, activeMarket]);
+
 	// Update the live ask store with the active market's best ask price
 	useEffect(() => {
 		if (
@@ -415,26 +507,28 @@ function PredictionMarketContent() {
 					isMobile ? "mobile" : "desktop"
 				}`}
 			>
-				{umbrella && (
-					<MarketHeader umbrella={umbrella} titleRef={titleRef} />
-				)}
-
-			<MarketPanels
-				umbrella={umbrella!}
-				sortedQuestions={sortedQuestions as any}
-				questionOrderbooks={questionOrderbooks}
-				activeMarket={activeMarket as any}
-				activePosition={activePosition}
-				onMarketSwitch={handleMarketSwitch}
-				onMarketSwitchWithOrderbook={
-					handleMarketSwitchWithOrderbook
-				}
-				onPositionChange={handlePositionChange}
-				fetchAllOrderbooks={fetchAllOrderbooks}
-				chartState={chartOnlyState}
-				settledInfo={settledInfo}
-			/>
-		</div>
+				{/* MarketHeader is rendered inside MarketPanels so it sits
+				    inside the left column on desktop and the top of the
+				    single-column stack on mobile. Keeps the trade box flush
+				    with the umbrella header instead of being pushed below a
+				    full-width black bar. */}
+				<MarketPanels
+					umbrella={umbrella!}
+					titleRef={titleRef}
+					sortedQuestions={sortedQuestions as any}
+					questionOrderbooks={questionOrderbooks}
+					activeMarket={activeMarket as any}
+					activePosition={activePosition}
+					onMarketSwitch={handleMarketSwitch}
+					onMarketSwitchWithOrderbook={
+						handleMarketSwitchWithOrderbook
+					}
+					onPositionChange={handlePositionChange}
+					fetchAllOrderbooks={fetchAllOrderbooks}
+					chartState={chartOnlyState}
+					settledInfo={settledInfo}
+				/>
+			</div>
 		</PredictionCurtainProvider>
 	);
 }

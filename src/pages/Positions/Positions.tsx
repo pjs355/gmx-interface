@@ -6,8 +6,8 @@ import PositionsTableView from "./components/PositionsTableView";
 import PositionsCardView from "./components/PositionsCardView";
 import ResolvedPositionsTable from "./components/ResolvedPositionsTable";
 import ResolvedPositionsCardView from "./components/ResolvedPositionsCardView";
-import OrdersView from "./components/OrdersView";
-import OrdersCardView from "./components/OrdersCardView";
+// import OrdersView from "./components/OrdersView";
+// import OrdersCardView from "./components/OrdersCardView";
 import HistoryView from "./components/HistoryView";
 import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
@@ -61,7 +61,7 @@ export default function Positions() {
 		isDebugMode,
 		debugAccount,
 		realAccount,
-		isDataFullyLoaded,
+		// isDataFullyLoaded, // used when Orders tab shell fell back to full-data gate
 		isPositionsTabContentReady,
 		isHistoryTabContentReady,
 		portfolioLoading,
@@ -72,9 +72,9 @@ export default function Positions() {
 		umbrellaPositions,
 		resolvedUmbrellaPositions,
 		umbrellaBalancesPositions,
-		umbrellaBalancesOrders,
+		// umbrellaBalancesOrders, // Orders tab (commented out)
 		combinedOrders,
-		venueOrders,
+		// venueOrders,
 		venueHistory,
 		venueHistoryRawItemsForDebug,
 		historyCatalogUmbrellas,
@@ -84,20 +84,25 @@ export default function Positions() {
 		spentByQid,
 		getCurrentPriceForSide,
 		handleClaimSuccess,
-		orders,
+		// orders, // LevelUp open orders — Orders tab only
 		resolvedMarketsByUmbrella,
 		activeTab,
 		setActiveTab,
 		positionsShellBypassMaxWaitMs,
 	} = data;
 
+	/** Orders tab removed from UI — normalize stale state (e.g. hot-reload) so a tab stays selected. */
+	useEffect(() => {
+		if (activeTab === "orders") setActiveTab("positions");
+	}, [activeTab, setActiveTab]);
+
 	/** One shell for header + tab: no mismatch between portfolio row and table/cards. */
 	const pageShellLoadingStrict =
-		activeTab === "positions"
+		activeTab === "positions" || activeTab === "orders"
 			? !isPositionsTabContentReady
 			: activeTab === "history"
 				? !isHistoryTabContentReady
-				: !isDataFullyLoaded;
+				: !isPositionsTabContentReady;
 
 	const [positionsShellBypass, setPositionsShellBypass] = useState(false);
 
@@ -145,6 +150,9 @@ export default function Positions() {
 					market: mp.market,
 					yes: outcome === "yes" ? mp.yesBalance.toString() : "0",
 					no: outcome === "no" ? mp.noBalance.toString() : "0",
+					venue: mp.venue,
+					yesLabel: mp.predictOutcomeLabelYes,
+					noLabel: mp.predictOutcomeLabelNo,
 				};
 			}),
 		}));
@@ -207,12 +215,14 @@ export default function Positions() {
 		);
 	};
 
+	/* Orders tab disabled — re-enable with OrdersView / OrdersCardView imports above.
 	const renderOrdersTab = () =>
 		!isMobile ? (
 			<OrdersView umbrellaBalances={umbrellaBalancesOrders} orders={orders || []} venueOrders={venueOrders} />
 		) : (
 			<OrdersCardView umbrellaBalances={umbrellaBalancesOrders} orders={orders || []} venueOrders={venueOrders} />
 		);
+	*/
 
 	const renderHistoryTab = () =>
 		!isMobile ? (
@@ -303,10 +313,8 @@ export default function Positions() {
 						<>
 							{pageShellLoading ? (
 								<PortfolioSkeleton />
-							) : activeTab === "positions" ? (
+							) : activeTab === "positions" || activeTab === "orders" ? (
 								renderPositionsTab()
-							) : activeTab === "orders" ? (
-								renderOrdersTab()
 							) : (
 								renderHistoryTab()
 							)}

@@ -6,13 +6,20 @@ import { useClaimForVenue } from "@/helpers/claimEarnings";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
+import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import {
-	stripUmbrellaDisplayPrefix,
 	titlesMatchVenue,
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
 
-type MarketEntry = { market: PredictionMarket; yes: string; no: string };
+type MarketEntry = {
+	market: PredictionMarket;
+	yes: string;
+	no: string;
+	venue?: string;
+	yesLabel?: string;
+	noLabel?: string;
+};
 
 type MergedWinningsRow = {
 	label: string;
@@ -73,7 +80,8 @@ export default function ResolvedPositionsCardView({
 				No: { shares: 0, markets: [], label: "" },
 			};
 
-			for (const { market, yes, no } of block.allMarkets) {
+			for (const entry of block.allMarkets) {
+				const { market, yes, no, venue, yesLabel, noLabel } = entry;
 				const outcome = String((market as any).resolvedOutcome || "").toLowerCase() as "yes" | "no";
 				const winningSide: "Yes" | "No" = outcome === "yes" ? "Yes" : "No";
 				const shares = winningSide === "Yes" ? Number(yes) : Number(no);
@@ -84,10 +92,24 @@ export default function ResolvedPositionsCardView({
 				bucket.markets.push({ market, resolvedOutcome: outcome });
 
 				if (!bucket.label) {
-					const title = (market?.displayName || (market as any)?.question || "").trim();
-					const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-					if (parts.length === 2) {
-						bucket.label = shortTeamDisplayName(winningSide === "Yes" ? parts[0]! : parts[1]!);
+					const sideLabel = winningSide === "Yes" ? yesLabel : noLabel;
+					if (sideLabel?.trim()) {
+						bucket.label = sideLabel.trim();
+					} else if (
+						venue === "predictfun" ||
+						venue === "dflow" ||
+						venue === "limitless"
+					) {
+						const title = (market?.displayName || (market as any)?.question || "").trim();
+						bucket.label =
+							getPredictPositionRowLabel(title, sideLabel, winningSide) ||
+							winningSide;
+					} else {
+						const title = (market?.displayName || (market as any)?.question || "").trim();
+						const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
+						if (parts.length === 2) {
+							bucket.label = shortTeamDisplayName(winningSide === "Yes" ? parts[0]! : parts[1]!);
+						}
 					}
 				}
 			}
@@ -105,7 +127,7 @@ export default function ResolvedPositionsCardView({
 				});
 			}
 			return { block, rows };
-		});
+		}).filter((entry) => entry.rows.length > 0);
 	}, [unifiedBlocks]);
 
 	if (mergedByBlock.length === 0) return null;

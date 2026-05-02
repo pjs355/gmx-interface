@@ -138,7 +138,13 @@ export function prefundQuotedMinDestHuman(
 
 /**
  * Fetches a LI.FI quote and, if the quoted **minimum** destination stable is below
- * `destPortionUsd`, scales up `amountHuman` (bounded by `maxFromHuman`) and re-quotes.
+ * `destPortionUsd`, scales up `amountHuman` (bounded by `min(maxFromHuman, budgetUsd)`)
+ * and re-quotes.
+ *
+ * `budgetUsd` is the strict per-corridor source-debit ceiling (= optimizer's
+ * `executionAmountUsd + bridge.estimatedCost`, summed for grouped legs). Capping at
+ * `min(walletBalance, budget)` prevents iteration from spending past the user's
+ * typed `request.amount` even when the source wallet has more available.
  */
 export async function ensurePrefundQuoteMeetsDestMin(args: {
 	api: PrefundLifiQuoteClient;
@@ -148,7 +154,15 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 	toAddress: string;
 	/** Nominal USD this hop should deliver on the destination (from prefund step sizing). */
 	destPortionUsd: number;
+	/** Source-wallet stable balance (physical cap). */
 	maxFromHuman: number;
+	/**
+	 * Per-corridor source-debit ceiling from the optimizer
+	 * (`executionAmountUsd + bridge.estimatedCost`). Required — drops the cap to
+	 * `min(maxFromHuman, budgetUsd)` so the bridge cannot exceed the optimizer's
+	 * per-leg allocation regardless of wallet headroom.
+	 */
+	budgetUsd: number;
 	seedAmountHuman: string;
 }): Promise<{ quote: LifiQuoteResponse; amountHuman: string }> {
 	const destNeed = Math.max(0, args.destPortionUsd);
@@ -156,7 +170,12 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 	if (!Number.isFinite(sendHuman) || sendHuman <= 0) {
 		throw new Error("Invalid prefund seed amountHuman");
 	}
-	const cap = Math.max(0, args.maxFromHuman);
+	const wallet = Math.max(0, args.maxFromHuman);
+	const budget = Math.max(0, args.budgetUsd);
+	if (!Number.isFinite(args.budgetUsd) || args.budgetUsd <= 0) {
+		throw new Error("ensurePrefundQuoteMeetsDestMin: budgetUsd must be > 0");
+	}
+	const cap = Math.min(wallet, budget);
 
 	for (let iter = 0; iter < PREFUND_QUOTE_MAX_ITERS; iter++) {
 		sendHuman = Math.min(sendHuman, cap);
@@ -191,15 +210,19 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 			return { quote: q, amountHuman: sendHuman.toFixed(6) };
 		}
 
-		// Already sending the wallet cap but quoted min destination is still short:
+		// Already sending the cap but quoted min destination is still short:
 		// further iterations only repeat the same capped quote — fail fast unless within fee slack.
 		if (sendHuman + 1e-9 >= cap && cap > 1e-12) {
 			const floor = prefundDestNeedFloorAtSendCap(destNeed);
 			if (minTo + 1e-6 >= floor) {
 				return { quote: q, amountHuman: sendHuman.toFixed(6) };
 			}
+			const capLabel =
+				wallet <= budget
+					? `source balance cap ~$${wallet.toFixed(4)}`
+					: `per-corridor budget cap ~$${budget.toFixed(4)} (source balance ~$${wallet.toFixed(4)})`;
 			throw new Error(
-				`Prefund LI.FI: source balance cap ~$${cap.toFixed(4)} cannot meet quoted min destination ~$${minTo.toFixed(4)} (need ~$${destNeed.toFixed(4)})`,
+				`Prefund LI.FI: ${capLabel} cannot meet quoted min destination ~$${minTo.toFixed(4)} (need ~$${destNeed.toFixed(4)})`,
 			);
 		}
 

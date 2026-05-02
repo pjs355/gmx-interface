@@ -108,8 +108,13 @@ export default function PositionsCardView({
 					if (effectiveAvgPrice !== null) { bucket.weightedAvgSum += effectiveAvgPrice * amount; bucket.avgShares += amount; }
 
 					if (!bucket.label) {
-						if (venue === "predictfun") {
-							bucket.label = getPredictPositionRowLabel(title, side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo, side) || side;
+						if (venue === "predictfun" || venue === "dflow" || venue === "limitless") {
+							bucket.label =
+								getPredictPositionRowLabel(
+									title,
+									side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo,
+									side,
+								) || side;
 						} else if (isVs) {
 							bucket.label = shortTeamDisplayName(
 								side === "Yes" ? parts[0] : parts[1],

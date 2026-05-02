@@ -3,6 +3,8 @@ import type { SnapshotStatus } from "@/types/odds-monitor";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import type { TradingPagePrices, VenueRowModel } from "@/hooks/useTradingPagePrices";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import MarketLogo from "@/components/MarketLogo/MarketLogo";
+import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
 import "./EsportsVenueBooksPanel.scss";
 
 const MIN_VALID_PRICE = 0.005;
@@ -297,7 +299,17 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 								scope="row"
 								className="esports-venue-books__td esports-venue-books__td--label"
 							>
-								{row.label}
+								<span className="esports-venue-books__label-row">
+									{resolveMarketLogo(row.id) ? (
+										<MarketLogo venue={row.id} size={16} />
+									) : (
+										<span
+											className="esports-venue-books__logo-placeholder"
+											aria-hidden="true"
+										/>
+									)}
+									<span>{row.label}</span>
+								</span>
 							</th>
 							<td
 								className={askCellClass(

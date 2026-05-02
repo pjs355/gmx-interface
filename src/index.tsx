@@ -74,10 +74,12 @@ import { UserDataProvider } from "context/UserDataContext";
 import { RecentSettlementClaimProvider } from "context/RecentSettlementClaimContext";
 import { CollateralTokenProvider } from "@/context/CollateralTokenContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
+import { PostTradeBalanceSyncProvider } from "@/trading/sor/usePostTradeBalanceSync";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
 import { TransfersModalProvider } from "context/TransfersModalContext";
 import { OddsDisplayProvider } from "context/OddsDisplayContext";
+import { StickyTradeAmountProvider } from "context/StickyTradeAmountContext";
 import { PolymarketBackgroundActivation } from "@/trading/polymarket/PolymarketBackgroundActivation";
 
 import App from "./app/App";
@@ -126,17 +128,21 @@ createRoot(document.getElementById("root")!).render(
 										<PolymarketBackgroundActivation />
 										<RecentSettlementClaimProvider>
 										<CollateralTokenProvider>
-											<PortfolioProvider>
-												<PositionsPageMetricsGateProvider>
-													<RPGProvider>
-														<TransfersModalProvider>
-															<OddsDisplayProvider>
-																<App />
-															</OddsDisplayProvider>
-														</TransfersModalProvider>
-													</RPGProvider>
-												</PositionsPageMetricsGateProvider>
-											</PortfolioProvider>
+											<PostTradeBalanceSyncProvider>
+												<PortfolioProvider>
+													<PositionsPageMetricsGateProvider>
+														<RPGProvider>
+															<TransfersModalProvider>
+																<OddsDisplayProvider>
+																	<StickyTradeAmountProvider>
+																		<App />
+																	</StickyTradeAmountProvider>
+																</OddsDisplayProvider>
+															</TransfersModalProvider>
+														</RPGProvider>
+													</PositionsPageMetricsGateProvider>
+												</PortfolioProvider>
+											</PostTradeBalanceSyncProvider>
 										</CollateralTokenProvider>
 										</RecentSettlementClaimProvider>
 									</UserDataProvider>

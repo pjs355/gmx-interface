@@ -40,6 +40,76 @@ const TRANSIENT_SOR_ROUTE_CODES: readonly SorErrorCode[] = [
 	"ALL_BOOKS_STALE",
 ];
 
+/**
+ * Cross-instance last-good route cache.
+ *
+ * Each `useSorRoute` instance has its own per-channel `lastGoodRouteRef`, but
+ * those are tied to the React component lifecycle: when the trade box
+ * unmounts (e.g., navigating from the home dock to the umbrella detail
+ * page), the refs are gone and the next mount has to wait for a fresh
+ * round-trip before showing any quote. This module-level cache survives the
+ * remount: when a new `useSorRoute` is initialized with the *same* inputs
+ * (questionId + outcome + side + amount + targetVenue + orderType +
+ * limitPriceCents), we hydrate `displayRoute` / `executionRoute` /
+ * `venuePreviews` synchronously on first render so the user sees the same
+ * SOR price they were just looking at, with no "Fetching price…" flash.
+ *
+ * The normal fetch + auto-refresh continues in the background, so the cache
+ * only ever provides a head-start — once the live result arrives it overrides
+ * the cached value.
+ *
+ * Bounded LRU (cap = `SOR_ROUTE_CACHE_CAP`) keyed by request signature.
+ */
+type CachedRouteEntry = {
+	route: RoutePlan;
+	venuePreviews: VenueRoutePreview[] | null;
+	timestamp: number;
+};
+
+const SOR_ROUTE_CACHE_CAP = 32;
+const sorRouteCache = new Map<string, CachedRouteEntry>();
+
+function buildSorRouteCacheKey(opts: {
+	questionId: string | undefined;
+	outcome: SorOutcome | undefined;
+	side: SorSide;
+	amount: number;
+	targetVenue: SorVenue | undefined;
+	orderType: SorOrderType | undefined;
+	limitPriceCents: number | undefined;
+}): string | null {
+	if (!opts.questionId || !opts.outcome || !(opts.amount > 0)) return null;
+	return [
+		opts.questionId,
+		opts.outcome,
+		opts.side,
+		opts.amount,
+		opts.targetVenue ?? "",
+		opts.orderType ?? "market",
+		opts.limitPriceCents ?? "",
+	].join("|");
+}
+
+function readSorRouteCache(key: string | null): CachedRouteEntry | null {
+	if (!key) return null;
+	return sorRouteCache.get(key) ?? null;
+}
+
+function writeSorRouteCache(
+	key: string | null,
+	entry: CachedRouteEntry,
+): void {
+	if (!key) return;
+	// Refresh LRU order: delete + set so the most recent insert is at the tail.
+	if (sorRouteCache.has(key)) sorRouteCache.delete(key);
+	sorRouteCache.set(key, entry);
+	while (sorRouteCache.size > SOR_ROUTE_CACHE_CAP) {
+		const oldest = sorRouteCache.keys().next().value;
+		if (typeof oldest === "string") sorRouteCache.delete(oldest);
+		else break;
+	}
+}
+
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
 		if (signal.aborted) {
@@ -61,6 +131,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 function formatSorRouteFailureMessage(
 	result: Extract<SorRouteResult, { success: false }>,
 	targetVenue: SorVenue | undefined,
+	side: SorSide,
 ): string {
 	const code = result.code;
 	const server = (result.error ?? "").trim();
@@ -68,11 +139,12 @@ function formatSorRouteFailureMessage(
 	if (code === "NO_MARKET_FOUND" && targetVenue) {
 		return `No order book for ${VENUE_DISPLAY_NAMES[targetVenue]} on this market yet. Try another tab or All Markets.`;
 	}
-	if (code === "NO_MARKET_FOUND") {
-		return "Fetching price...";
-	}
-	if (code === "NO_BOOKS_AVAILABLE") {
-		return "Fetching price...";
+	// `NO_MARKET_FOUND` (omnibus) and `NO_BOOKS_AVAILABLE` both mean: by the time the
+	// client surfaces this, the route has been retried and no venue can fill the order.
+	// Phrase it as the user-facing reality (no liquidity) instead of a misleading
+	// "Fetching price…" that implies progress.
+	if (code === "NO_MARKET_FOUND" || code === "NO_BOOKS_AVAILABLE") {
+		return side === "buy" ? "No shares available" : "No bids available";
 	}
 	if (code === "ALL_BOOKS_STALE") {
 		return "Refreshing venue prices…";
@@ -177,9 +249,47 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		limitlessFeeRateBps,
 	} = input;
 
-	const [displayRoute, setDisplayRoute] = useState<RoutePlan | null>(null);
-	const [executionRoute, setExecutionRoute] = useState<RoutePlan | null>(null);
-	const [venuePreviews, setVenuePreviews] = useState<VenueRoutePreview[] | null>(null);
+	/**
+	 * On first render, look up the module-level cache for *this exact*
+	 * request signature and seed the per-channel state with the cached
+	 * values so the trade box paints the user's last-known quote
+	 * immediately on remount. We seed both channels from the same lookup:
+	 *   - Display channel uses the no-target key (omnibus plan).
+	 *   - Execution channel uses the targetVenue key (single-venue plan).
+	 * Each channel's normal fetch flow runs right after and replaces these.
+	 */
+	const initialDisplayCacheKey = buildSorRouteCacheKey({
+		questionId,
+		outcome,
+		side,
+		amount,
+		targetVenue: undefined,
+		orderType: orderType ?? "market",
+		limitPriceCents,
+	});
+	const initialExecutionCacheKey = buildSorRouteCacheKey({
+		questionId,
+		outcome,
+		side,
+		amount,
+		targetVenue,
+		orderType: orderType ?? "market",
+		limitPriceCents,
+	});
+	const initialDisplayCacheEntry = readSorRouteCache(initialDisplayCacheKey);
+	const initialExecutionCacheEntry = readSorRouteCache(
+		initialExecutionCacheKey,
+	);
+
+	const [displayRoute, setDisplayRoute] = useState<RoutePlan | null>(
+		initialDisplayCacheEntry?.route ?? null,
+	);
+	const [executionRoute, setExecutionRoute] = useState<RoutePlan | null>(
+		initialExecutionCacheEntry?.route ?? null,
+	);
+	const [venuePreviews, setVenuePreviews] = useState<
+		VenueRoutePreview[] | null
+	>(initialDisplayCacheEntry?.venuePreviews ?? null);
 
 	const [displayLoading, setDisplayLoading] = useState(false);
 	const [displayStale, setDisplayStale] = useState(false);
@@ -359,6 +469,53 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				setErr(null);
 				setErrCode(null);
 				setStale(false);
+
+				// Persist the success in the module-level cache so the next mount
+				// with identical inputs (e.g., home → umbrella navigation) can
+				// paint the same quote synchronously instead of flashing a
+				// "Fetching price…" state. Keys mirror the channel semantics:
+				//  - display channel: no targetVenue (omnibus plan)
+				//  - execution channel: with targetVenue (single-venue plan)
+				//  - aliasToDisplay (limit orders): execution result is the
+				//    display result; cache it under both keys.
+				const cacheVenuePreviews =
+					channel === "display" ? (r.venuePreviews ?? null) : null;
+				if (channel === "display" || aliasToDisplay) {
+					writeSorRouteCache(
+						buildSorRouteCacheKey({
+							questionId,
+							outcome,
+							side,
+							amount,
+							targetVenue: undefined,
+							orderType: orderType ?? "market",
+							limitPriceCents,
+						}),
+						{
+							route: r.route,
+							venuePreviews: cacheVenuePreviews,
+							timestamp: Date.now(),
+						},
+					);
+				}
+				if (channel === "execution" && targetVenue) {
+					writeSorRouteCache(
+						buildSorRouteCacheKey({
+							questionId,
+							outcome,
+							side,
+							amount,
+							targetVenue,
+							orderType: orderType ?? "market",
+							limitPriceCents,
+						}),
+						{
+							route: r.route,
+							venuePreviews: null,
+							timestamp: Date.now(),
+						},
+					);
+				}
 			};
 
 			const surfaceFailure = (opts: {
@@ -448,7 +605,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 					if (!transient || attempt === maxAttempts - 1) {
 						surfaceFailure({
 							code: result.code,
-							message: formatSorRouteFailureMessage(result, failureTargetForCopy),
+							message: formatSorRouteFailureMessage(result, failureTargetForCopy, side),
 							transient,
 						});
 						return;
@@ -487,7 +644,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 					}
 					surfaceFailure({
 						code: retryResult.code,
-						message: formatSorRouteFailureMessage(retryResult, failureTargetForCopy),
+						message: formatSorRouteFailureMessage(retryResult, failureTargetForCopy, side),
 						transient: TRANSIENT_SOR_ROUTE_CODES.includes(retryResult.code),
 					});
 					return;

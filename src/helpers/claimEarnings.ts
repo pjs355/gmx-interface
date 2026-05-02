@@ -1,19 +1,27 @@
 import { Contract, ethers, type Provider } from "ethers";
+import { VersionedTransaction } from "@solana/web3.js";
 import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import {
 	useWallets as usePrivyWallets,
 	useSendTransaction,
 } from "@privy-io/react-auth";
+import {
+	useSignAndSendTransaction as useSolanaSignAndSendTransaction,
+	useWallets as useSolanaWallets,
+} from "@privy-io/react-auth/solana";
 import { useCallback, useMemo, useState } from "react";
 import { AddressesByChainId, ChainId, OrderBuilder } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { getCTFAddress, getUSDCAddress } from "@/config/addresses";
+import { getCTFAddress, getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
 import { POLYGON_CTF, POLYGON_PUSD } from "@/trading/polymarket/constants";
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { predictCtfKey } from "@/trading/predict/predictContractKeys";
 import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
 
 const BASE_CHAIN_ID = 8453;
 
@@ -66,7 +74,7 @@ async function readPredictOutcomeTokenBalance(args: {
 	return ctf.balanceOf(args.holder, positionId) as Promise<bigint>;
 }
 
-type MarketVenue = "levelup" | "polymarket" | "predictfun";
+type MarketVenue = "levelup" | "polymarket" | "predictfun" | "dflow";
 
 // Legacy hook for backward compatibility (hardcoded market)
 export function useClaimEarnings() {
@@ -143,6 +151,7 @@ export function useClaimEarnings() {
  *   - levelup:     Base chain CTF via smart wallet / ethers signer
  *   - polymarket:  Polygon CTF via Polymarket Safe relay
  *   - predictfun:  BNB CTF via embedded wallet switched to BSC
+ *   - dflow:       Solana — Kalshi/DFlow trade API (sell winning outcome mint → USDC), same as SOR sell leg
  */
 export function useClaimForVenue(
 	market: PredictionMarket,
@@ -162,6 +171,19 @@ export function useClaimForVenue(
 
 	const iface = useMemo(() => new ethers.Interface(CTF_ABI), []);
 
+	const privateApi = usePrivateApiClient();
+	const { solanaAddress } = useFundingAddresses();
+	const { signAndSendTransaction: privySolanaSignAndSend } =
+		useSolanaSignAndSendTransaction();
+	const { wallets: solanaWallets } = useSolanaWallets();
+	const embeddedSolanaWallet = useMemo(
+		() =>
+			solanaWallets.find((w) => w.address === solanaAddress?.trim()) ??
+			solanaWallets[0] ??
+			null,
+		[solanaWallets, solanaAddress],
+	);
+
 	const venue: MarketVenue = (market as any)?._venue || "levelup";
 	const isNegRisk = Boolean((market as any)?._isNegRisk);
 	const isYieldBearing = Boolean((market as any)?._isYieldBearing);
@@ -173,8 +195,9 @@ export function useClaimForVenue(
 
 		try {
 			if (!account) throw new Error("Connect wallet");
-			if (!market.conditionId)
+			if (venue !== "dflow" && !market.conditionId) {
 				throw new Error("Market conditionId not found");
+			}
 
 			console.log("CLAIM DEBUG: Claiming for market:", {
 				venue,
@@ -192,6 +215,8 @@ export function useClaimForVenue(
 				hash = await redeemPolymarket();
 			} else if (venue === "predictfun") {
 				hash = await redeemPredict();
+			} else if (venue === "dflow") {
+				hash = await redeemDflow();
 			} else {
 				hash = await redeemLevelUp();
 			}
@@ -205,6 +230,51 @@ export function useClaimForVenue(
 			return false;
 		} finally {
 			setIsClaiming(false);
+		}
+
+		async function redeemDflow(): Promise<string> {
+			if (!embeddedSolanaWallet) {
+				throw new Error(
+					"Connect your Solana wallet to redeem Kalshi / DFlow winnings",
+				);
+			}
+			const m = market as PredictionMarket & {
+				_dflowRedeemShares?: number;
+				questionId?: string;
+			};
+			const outcomeMint = String(m.questionId ?? "").trim();
+			if (!outcomeMint) {
+				throw new Error("Missing Kalshi outcome token (mint)");
+			}
+			const shares = Number(m._dflowRedeemShares ?? 0);
+			if (!Number.isFinite(shares) || shares <= 0) {
+				throw new Error(
+					"No redeemable Kalshi shares on this row — refresh the page and try again",
+				);
+			}
+			const amountBaseUnits = Math.round(shares * 1_000_000).toString();
+			const orderResult = await privateApi.getDflowOrder({
+				inputMint: outcomeMint,
+				outputMint: SOLANA_USDC_MINT,
+				amount: amountBaseUnits,
+			});
+			if (orderResult.code || orderResult.msg) {
+				throw new Error(
+					orderResult.msg ??
+						orderResult.code ??
+						"Kalshi redeem order failed",
+				);
+			}
+			if (!orderResult.transaction) {
+				throw new Error("Kalshi returned no transaction to sign");
+			}
+			const txBytes = Buffer.from(orderResult.transaction, "base64");
+			const transaction = VersionedTransaction.deserialize(txBytes);
+			return sendPrivySponsoredSolanaTransaction(
+				privySolanaSignAndSend,
+				embeddedSolanaWallet,
+				transaction.serialize(),
+			);
 		}
 
 		async function redeemPolymarket(): Promise<string | undefined> {
@@ -397,6 +467,9 @@ export function useClaimForVenue(
 		getPolyRelayClient,
 		wallets,
 		privyEvmSendTransaction,
+		privateApi,
+		embeddedSolanaWallet,
+		privySolanaSignAndSend,
 	]);
 
 	return { claim, isClaiming, error, txHash, isExternalClaim: false };

@@ -1,0 +1,150 @@
+@import "@/pages/PredictionMarket/Skeletons/Skeletons.scss";
+
+.home-skeleton {
+	pointer-events: none;
+	user-select: none;
+
+	.skeleton-shimmer {
+		border-radius: 6px;
+	}
+}
+
+.home-skeleton__sidebar {
+	position: relative;
+
+	.game-links-bar {
+		flex-wrap: nowrap;
+	}
+
+	@media (max-width: 1099px) {
+		.game-links-bar {
+			overflow: hidden;
+		}
+	}
+}
+
+.home-skeleton__pill {
+	cursor: default;
+	background: rgba(255, 255, 255, 0.04);
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.04);
+		color: inherit;
+	}
+}
+
+.home-skeleton__pill-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 9999px;
+	flex-shrink: 0;
+}
+
+.home-skeleton__pill-label {
+	height: 14px;
+	display: inline-block;
+}
+
+.home-skeleton__pill-count {
+	width: 26px;
+	height: 14px;
+	flex: 0 0 auto;
+}
+
+.home-skeleton__grid--no-dock {
+	@media (min-width: 1101px) {
+		display: block;
+	}
+}
+
+.home-skeleton__trade-panel {
+	min-width: 0;
+}
+
+.home-skeleton__section .prediction-calendar-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 0 12px;
+}
+
+.home-skeleton__heading {
+	display: block;
+	height: 18px;
+	margin-bottom: 6px;
+}
+
+.home-skeleton__heading-sub {
+	display: block;
+	height: 13px;
+}
+
+.home-skeleton__card {
+	cursor: default;
+
+	&:hover {
+		background: #101114;
+		border-color: #6b7280;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	}
+}
+
+.home-skeleton__chip {
+	display: inline-block;
+	width: 86px;
+	height: 18px;
+	border-radius: 9999px;
+}
+
+.home-skeleton__headline {
+	display: inline-block;
+	width: 150px;
+	height: 14px;
+	margin-left: auto;
+}
+
+.home-skeleton__rows {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 4px 20px 0;
+	box-sizing: border-box;
+}
+
+.home-skeleton__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.home-skeleton__row-logo {
+	width: 28px;
+	height: 28px;
+	border-radius: 9999px;
+	flex-shrink: 0;
+}
+
+.home-skeleton__row-middle {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.home-skeleton__row-label {
+	height: 12px;
+}
+
+.home-skeleton__row-bar {
+	height: 3px;
+	width: 100%;
+	border-radius: 9999px;
+}
+
+.home-skeleton__row-button {
+	flex: 0 0 auto;
+	width: 86px;
+	height: 44px;
+	border-radius: 8px;
+}

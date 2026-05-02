@@ -1180,7 +1180,17 @@
 @media (min-width: 1101px) {
 	.predictions-page__home-trade-grid {
 		display: grid;
-		grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+		/*
+		 * Right column uses the shared `--predictions-trade-panel-width` var
+		 * defined in `globals.css` so the trade module is pixel-identical on
+		 * the home page and the umbrella detail page (`.desktop-layout`).
+		 * Algebraically equivalent to the previous `1.55fr 1fr` template at
+		 * desktop widths (this var is just that calc bound to a fixed pixel
+		 * width so other pages can share it).
+		 */
+		grid-template-columns:
+			minmax(0, 1fr)
+			var(--predictions-trade-panel-width);
 		gap: var(--predictions-split-gutter, 24px);
 		align-items: start;
 	}

@@ -259,6 +259,11 @@
           transition: opacity 0.15s ease;
         }
 
+        .venue-logo {
+          opacity: 0.6;
+          transition: opacity 0.15s ease;
+        }
+
         &:hover {
           background: rgba(255, 255, 255, 0.08);
           color: rgba(255, 255, 255, 0.8);
@@ -270,6 +275,10 @@
           color: #ffffff;
 
           .venue-dot {
+            opacity: 1;
+          }
+
+          .venue-logo {
             opacity: 1;
           }
         }

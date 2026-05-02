@@ -16,12 +16,9 @@ import { useMarketOrderHandler } from "./MarketOrderHandler";
 import { useTradeExecutionService } from "./TradeExecutionService";
 import PredictionMarketTradeBoxResponsiveContainer from "./PredictionMarketTradeBoxResponsiveContainer";
 // Removed OrderbookContext import - using passed orderbook prop instead
-import { checkSufficientBalance, useYesNoBalances, checkSufficientShares } from "./checkBalances";
+import { checkSufficientBalance, useYesNoBalances, checkSufficientShares, SHARE_SELL_COMPARE_EPS } from "./checkBalances";
 import { useUserData } from "context/UserDataContext";
-import {
-	useCollateralTokens,
-	COLLATERAL_TOKENS_QUERY_KEY,
-} from "context/CollateralTokenContext";
+import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useButtonState } from "./hooks/useButtonState";
 import { useTradeState } from "./hooks/useTradeState";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
@@ -36,7 +33,6 @@ import { usePolymarketClobTradingSession } from "@/trading/polymarket/usePolymar
 import {
 	levelUpMonitorBookForPosition,
 	polyOrderbookForPosition,
-	polyOutcomeTokenId,
 } from "@/trading/polymarket/polyOutcomeTokenId";
 import {
 	dflowKalshiOrderbookForPosition,
@@ -73,7 +69,6 @@ import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import {
 	useSignAndSendTransaction as useSolanaSignAndSendTransaction,
 	useSignMessage as useSolanaSignMessage,
@@ -100,8 +95,8 @@ import type {
 	SorOutcome,
 	RoutePlan,
 } from "@/trading/sor";
-import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
-import { applyOptimisticPolymarketFillToQueryCache } from "@/trading/polymarket/optimisticPolymarketPositionsCache";
+import { usePostTradeBalanceSync } from "@/trading/sor/usePostTradeBalanceSync";
+import { capturePostTradeBaseline, type PostTradeBaseline } from "@/trading/sor/postTradeBaseline";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import { maxAllMarketsSellBidForOutcome } from "@/hooks/useTradingPagePrices";
@@ -109,7 +104,6 @@ import { useTradeBoxShareBalances } from "./hooks/useTradeBoxShareBalances";
 import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { tradingQueryKeys } from "@/trading/queryKeys";
-import { LIMITLESS_QUERY_ROOT } from "@/trading/limitless/limitlessQueryKeys";
 import {
 	limitlessOrderbookForPosition,
 	limitlessOutcomeTokenId,
@@ -124,11 +118,6 @@ import {
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
-
-/** Same moment as "Order Submitted!" — on-chain/API balances often lag LI.FI + venue fills. */
-const POST_SOR_BALANCE_POLL_INTERVAL_MS = 2_500;
-/** Polymarket Data API indexing can exceed 30s; optimistic merge covers UX; keep polling long enough for collateral + indexer. */
-const POST_SOR_BALANCE_POLL_WINDOW_MS = 75_000;
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
@@ -165,8 +154,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
-  const { approvalState, checkApproval, approveToken, refresh, refreshTokenPositions } = useUserData();
+  const {
+    approvalState,
+    checkApproval,
+    approveToken,
+    refresh,
+    refreshTokenPositions,
+    applyOptimisticLevelUpFill,
+  } = useUserData();
   const collateralTokens = useCollateralTokens();
+  const postTradeSync = usePostTradeBalanceSync();
 
   // Lazy approval check: deferred from startup, runs when trade box mounts
   useEffect(() => {
@@ -369,24 +366,23 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     matchedMonitor: matchedMonitor ?? null,
   });
 
+  // Highest bid among venues where the user holds shares — surfaced on the YES/NO
+  // sell buttons on every tab, not just All Markets. `maxAllMarketsSellBidForOutcome`
+  // already returns null when no held venue has a valid bid.
   const allMarketsSellYesBid = useMemo(() => {
-    if (state.tradingVenue !== "all" || !propVenueRowsForSellStrip?.length) return null;
+    if (!propVenueRowsForSellStrip?.length) return null;
     const m = tradeBoxShareBalances.allMarketsOutcomeVenueShares;
-    if (!m) return null;
     return maxAllMarketsSellBidForOutcome(propVenueRowsForSellStrip, "yes", m.yes);
   }, [
-    state.tradingVenue,
     propVenueRowsForSellStrip,
     tradeBoxShareBalances.allMarketsOutcomeVenueShares,
   ]);
 
   const allMarketsSellNoBid = useMemo(() => {
-    if (state.tradingVenue !== "all" || !propVenueRowsForSellStrip?.length) return null;
+    if (!propVenueRowsForSellStrip?.length) return null;
     const m = tradeBoxShareBalances.allMarketsOutcomeVenueShares;
-    if (!m) return null;
     return maxAllMarketsSellBidForOutcome(propVenueRowsForSellStrip, "no", m.no);
   }, [
-    state.tradingVenue,
     propVenueRowsForSellStrip,
     tradeBoxShareBalances.allMarketsOutcomeVenueShares,
   ]);
@@ -533,8 +529,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     noTeamLabel,
   ]);
 
+  // SOR sell on the always-on All-Markets tab needs Limitless shares regardless of the
+  // active venue tab. Mirrors the Predict gate (`multiVenueEnabled || predictVenueActive`).
   const limitlessPositionsQuery = useLimitlessPositions(
-    limitlessVenueActive && authenticated && Boolean(profileId),
+    (multiVenueEnabled || limitlessVenueActive) && authenticated && Boolean(profileId),
   );
   const limitlessSellShareBalance = useMemo(
     () =>
@@ -1670,10 +1668,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   // --- SOR sell: per-venue share positions ---
-  const polyPositionsQuery = usePolymarketPositions(
-    multiVenueEnabled ? funding.polymarketSafe : undefined,
-  );
-
+  // Single source of truth for share counts is `tradeBoxShareBalances.allMarketsOutcomeVenueShares`
+  // (Polymarket + DFlow), which already routes through `inferPolymarketYesNoFromToken`'s
+  // BigInt-normalized tokenId comparison. Predict / Limitless still come from the per-token
+  // queries (`predictSellShareBalance` / `limitlessSellShareBalance`) to preserve exact
+  // page-market scoping (their share-balance snapshot has a sibling-title fallback that
+  // could over-include shares from a sibling sub-market under the same umbrella).
   const sorVenuePositions: VenuePositionEntry[] = useMemo(() => {
     if (!state.selectedPosition) return [];
     const entries: VenuePositionEntry[] = [];
@@ -1681,13 +1681,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     const luBal = state.selectedPosition === "yes" ? yesBalance : noBalance;
     if (luBal > 0) entries.push({ venue: "levelup", shares: luBal });
 
-    if (polyPositionsQuery.data && matchedMonitor) {
-      try {
-        const { yesTeamLabel, noTeamLabel } = getYesNoTeamLabels(market, umbrellaDisplayName);
-        const tokenId = polyOutcomeTokenId(matchedMonitor, state.selectedPosition, yesTeamLabel, noTeamLabel);
-        const pos = polyPositionsQuery.data.find((p) => p.tokenId === tokenId);
-        if (pos && pos.shares > 0) entries.push({ venue: "polymarket", shares: pos.shares });
-      } catch { /* skip */ }
+    const byOutcome = tradeBoxShareBalances.allMarketsOutcomeVenueShares;
+    const sideMap =
+      state.selectedPosition === "yes" ? byOutcome.yes : byOutcome.no;
+
+    const polyShares = sideMap.polymarket;
+    if (typeof polyShares === "number" && Number.isFinite(polyShares) && polyShares > 0) {
+      entries.push({ venue: "polymarket", shares: polyShares });
     }
 
     const pfBal = predictSellShareBalance;
@@ -1695,21 +1695,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       entries.push({ venue: "predictfun", shares: pfBal });
     }
 
-    // DFlow: use the same pipeline as the sell breakdown (`useTradeBoxShareBalances` →
-    // `useDflowPositions`), not a single-mint RPC read (mint / A-B mapping can disagree).
-    const byOutcome = tradeBoxShareBalances.allMarketsOutcomeVenueShares;
-    let dfBal: number | undefined;
-    if (byOutcome) {
-      const sideMap =
-        state.selectedPosition === "yes" ? byOutcome.yes : byOutcome.no;
-      const v = sideMap.dflow;
-      dfBal = typeof v === "number" && Number.isFinite(v) ? v : undefined;
-    } else {
-      const row = tradeBoxShareBalances.sellVenueBreakdown.find((r) => r.key === "dflow");
-      dfBal =
-        row && Number.isFinite(row.shares) && row.shares > 0 ? row.shares : undefined;
-    }
-    if (dfBal != null && dfBal > 0) {
+    const dfBal = sideMap.dflow;
+    if (typeof dfBal === "number" && Number.isFinite(dfBal) && dfBal > 0) {
       entries.push({ venue: "dflow", shares: dfBal });
     }
 
@@ -1723,14 +1710,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     state.selectedPosition,
     yesBalance,
     noBalance,
-    polyPositionsQuery.data,
-    matchedMonitor,
-    market,
     predictSellShareBalance,
     tradeBoxShareBalances.allMarketsOutcomeVenueShares,
-    tradeBoxShareBalances.sellVenueBreakdown,
     limitlessSellShareBalance,
-    umbrellaDisplayName,
   ]);
 
   /** Sell routing + button state: single-venue tabs only include that venue’s shares. */
@@ -1766,12 +1748,28 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   // For market orders the amount field is USD. For limit orders the amount
   // field is shares and the price field is cents — SOR always expects USD, so
   // convert limit amounts to USD notional (shares * price).
+  //
+  // Market sell sell-all clamp: when the user types a value within
+  // SHARE_SELL_COMPARE_EPS (0.01 share) of their actual held total for the
+  // active tab, we substitute the exact held amount. This makes "type the
+  // displayed balance ⇒ sell entire position (incl. fractional remainder)"
+  // work consistently across every venue (Predict, DFlow, Polymarket,
+  // Limitless, LevelUp). MyPositionsRow displays held shares floored to 2 dp
+  // so the user's typed value is always at most ~0.01 below actual; the
+  // clamp closes that gap so SOR liquidates the whole position.
   const sorAmountUsd = (() => {
     const raw = parseFloat(state.amount);
     if (!Number.isFinite(raw) || raw <= 0) return 0;
     if (state.orderType === "limit") {
       if (sorLimitPriceCents == null) return 0;
       return raw * (sorLimitPriceCents / 100);
+    }
+    if (
+      state.side === "sell" &&
+      maxScopedSellShares > 0 &&
+      Math.abs(raw - maxScopedSellShares) <= SHARE_SELL_COMPARE_EPS
+    ) {
+      return maxScopedSellShares;
     }
     return raw;
   })();
@@ -1897,9 +1895,39 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     sorRouteExpiredRef.current = sorRouteExpired;
   }, [sorRouteExpired]);
 
+  const latestBaselineRef = useRef<{
+    routeId: string;
+    baseline: PostTradeBaseline;
+    route: RoutePlan;
+  } | null>(null);
+
   const handleSorExecute = useCallback(() => {
     if (executableRoute && !sorRouteExpired) {
       console.log("[SOR] Trade button → execute", executableRoute.routeId);
+      const marketId = (market?._id || (market as any)?.questionId) as
+        | string
+        | undefined;
+      const baseline = capturePostTradeBaseline({
+        queryClient,
+        route: executableRoute,
+        addresses: {
+          polymarketSafe: funding.polymarketSafe,
+          predictWallet: account,
+          solanaAddress: funding.solanaAddress,
+        },
+        levelUp: marketId
+          ? {
+              marketId,
+              yesBalance,
+              noBalance,
+            }
+          : null,
+      });
+      latestBaselineRef.current = {
+        routeId: executableRoute.routeId,
+        baseline,
+        route: executableRoute,
+      };
       void sorExecution
         .execute(executableRoute)
         .then((res) => {
@@ -1977,6 +2005,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     executableErrorCode,
     sorExecution.execute,
     setState,
+    queryClient,
+    funding.polymarketSafe,
+    funding.solanaAddress,
+    account,
+    market,
+    yesBalance,
+    noBalance,
   ]);
 
   // Forward the freshly-rebound `handleSorExecute` into the late-bound ref
@@ -1996,70 +2031,73 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     const wasExecuting = prevSorExecutingRef.current;
     prevSorExecutingRef.current = sorExecution.isExecuting;
 
-    let pollInterval: ReturnType<typeof setInterval> | undefined;
-    let pollWindowTimer: ReturnType<typeof setTimeout> | undefined;
+    if (!(wasExecuting && !sorExecution.isExecuting && sorExecution.execution)) {
+      return;
+    }
 
-    const invalidatePostTradeBalances = () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["polymarket-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["predict-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["predict-outcome-shares"] }),
-        queryClient.invalidateQueries({ queryKey: ["predict-usdt-balance"] }),
-        queryClient.invalidateQueries({ queryKey: ["dflow-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["dflow-outcome-balance"] }),
-        queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] }),
-        queryClient.invalidateQueries({ queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY] }),
-        queryClient.invalidateQueries({ queryKey: [COLLATERAL_TOKENS_QUERY_KEY] }),
-        collateralTokens.refetch(),
-        refreshTokenPositions(),
-      ]).catch((e: unknown) => {
-        console.error("error", e);
-      });
+    const { status, legs, routeId } = sorExecution.execution;
 
-    if (wasExecuting && !sorExecution.isExecuting && sorExecution.execution) {
-      const { status, legs } = sorExecution.execution;
+    // Defensive guard: `status === "complete"` already implies every leg is
+    // `filled` (see `buildLocalExecution`'s `allFilled` derivation), but a
+    // future refactor that decouples the two would silently regress this
+    // hook into firing the success toast on a partially-failed route. Re-derive
+    // from the leg array and demote anything that doesn't pass to the
+    // failed-or-partial branch so a rejected venue can never look "confirmed"
+    // in the UI.
+    const everyLegFilled =
+      legs.length > 0 && legs.every((l) => l.status === "filled");
 
-      if (status === "complete") {
-        applyOptimisticPolymarketFillToQueryCache(
+    if (status === "complete" && everyLegFilled) {
+      const cached = latestBaselineRef.current;
+      if (cached && cached.routeId === routeId) {
+        // Hand off to the centralised post-trade sync: applies optimistic
+        // updates per venue + cash, then runs delta-aware backoff polling that
+        // stops the moment observed balances catch up. Survives trade-box
+        // unmount because the provider lives at the app root.
+        postTradeSync.start({
           queryClient,
-          funding.polymarketSafe,
-          sorRouteRef.current as RoutePlan | null | undefined,
-          sorExecution.execution,
-          matchedMonitor ?? null,
-          String(market?.displayName ?? market?.question ?? umbrellaDisplayName ?? "").trim(),
+          route: cached.route,
+          execution: sorExecution.execution,
+          baseline: cached.baseline,
+          matchedMonitor: matchedMonitor ?? null,
+          marketTitleHint: String(
+            market?.displayName ?? market?.question ?? umbrellaDisplayName ?? "",
+          ).trim(),
+          addresses: {
+            polymarketSafe: funding.polymarketSafe,
+            predictWallet: account,
+            solanaAddress: funding.solanaAddress,
+          },
+          refreshLevelUpPositions: refreshTokenPositions,
+          refetchCollateral: collateralTokens.refetch,
+          applyOptimisticLevelUpFill,
+          applyOptimisticCashChange: collateralTokens.applyOptimisticCashChange,
+        });
+      } else if (import.meta.env.DEV) {
+        console.warn(
+          "[PostTradeSync] missing baseline for routeId — skipping optimistic + sync",
+          { routeId, cachedRouteId: cached?.routeId },
         );
       }
 
-      void invalidatePostTradeBalances();
-      if (status === "complete") {
-        setState((s) => ({ ...s, amount: "", orderResult: { success: true } }));
-        pollInterval = setInterval(() => {
-          void invalidatePostTradeBalances();
-        }, POST_SOR_BALANCE_POLL_INTERVAL_MS);
-        pollWindowTimer = setTimeout(() => {
-          if (pollInterval !== undefined) clearInterval(pollInterval);
-        }, POST_SOR_BALANCE_POLL_WINDOW_MS);
-        sorExecution.resetExecution();
-      } else if (status === "failed" || status === "partial") {
-        const failedLeg = legs.find((l) => l.status === "failed");
-        setState((s) => ({
-          ...s,
-          orderResult: {
-            success: false,
-            error:
-              failedLeg?.error ??
-              (status === "partial"
-                ? "Part of the smart route did not fill. Check balances and positions."
-                : "Smart route did not complete."),
-          },
-        }));
-      }
+      latestBaselineRef.current = null;
+      setState((s) => ({ ...s, amount: "", orderResult: { success: true } }));
+      sorExecution.resetExecution();
+    } else if (status === "failed" || status === "partial" || !everyLegFilled) {
+      latestBaselineRef.current = null;
+      const failedLeg = legs.find((l) => l.status === "failed");
+      setState((s) => ({
+        ...s,
+        orderResult: {
+          success: false,
+          error:
+            failedLeg?.error ??
+            (status === "partial"
+              ? "Part of the smart route did not fill. Check balances and positions."
+              : "Smart route did not complete."),
+        },
+      }));
     }
-
-    return () => {
-      if (pollInterval !== undefined) clearInterval(pollInterval);
-      if (pollWindowTimer !== undefined) clearTimeout(pollWindowTimer);
-    };
   }, [
     sorExecution.isExecuting,
     sorExecution.execution,
@@ -2069,9 +2107,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     refreshTokenPositions,
     collateralTokens,
     funding.polymarketSafe,
+    funding.solanaAddress,
+    account,
     matchedMonitor,
     market,
     umbrellaDisplayName,
+    postTradeSync,
+    applyOptimisticLevelUpFill,
   ]);
 
   useEffect(() => {

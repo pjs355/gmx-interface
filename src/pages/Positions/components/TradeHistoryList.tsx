@@ -4,6 +4,7 @@ import Tooltip from "components/Tooltip/Tooltip";
 import { outcomeSideLabelColor } from "../utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
+import MarketLogo from "@/components/MarketLogo/MarketLogo";
 
 interface TradeHistoryListProps {
 	orders: ProcessedOrder[];
@@ -224,8 +225,19 @@ export default function TradeHistoryList({
 					</div>
 
 					{/* Market venue */}
-					<div style={{ textAlign: "center", color: "#888", fontSize: 12 }}>
-						{order.venue ?? "LevelUp"}
+					<div
+						style={{
+							textAlign: "center",
+							color: "#888",
+							fontSize: 12,
+							display: "inline-flex",
+							alignItems: "center",
+							justifyContent: "center",
+							gap: 6,
+						}}
+					>
+						<MarketLogo venue={order.venue} size={14} />
+						<span>{order.venue ?? "LevelUp"}</span>
 					</div>
 
 					{/* Empty column to match parent grid */}

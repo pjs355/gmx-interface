@@ -38,6 +38,15 @@ const BETWEEN_TRADEBOX_ACTIONS_MS = 200;
 /** SOR route + price quote should arrive after a $5 buy/sell amount is typed. */
 const QUOTE_READY_TIMEOUT_MS = 30_000;
 /**
+ * Default buy-side USD typed by `selectVenue` when neither the smart routing
+ * rows nor the legacy venue dropdown are mounted yet. Matches the SOR floor
+ * (`SOR_MIN_MARKET_BUY_USD = 5`) and the spec's `TRADE_USD` so subsequent
+ * `setAmount(TRADE_USD)` calls don't trigger an extra SOR refetch / auto-select.
+ */
+const SELECT_VENUE_PRIME_AMOUNT_USD = 5;
+/** How long to wait for a venue surface to mount after priming SOR. */
+const SELECT_VENUE_SURFACE_TIMEOUT_MS = 30_000;
+/**
  * Single-venue Details row `[data-qa="sor-leg"][data-leg-side="market-sell"]` only mounts
  * when `sellAvgCents` is non-null (`PredictionMarketTradeBoxUI.tsx`). That can lag
  * `expectSubmitEnabled()` — especially Polymarket/Polygon after a fill — so do not use
@@ -113,42 +122,76 @@ export class Tradebox {
 
 	async selectVenue(venue: TradingVenue): Promise<void> {
 		await sleepBetweenTradeboxActions();
-		const smartSection = this.root.locator('[data-qa="smart-routing-section"]');
-		const smartVisible = await smartSection
-			.isVisible()
-			.catch(() => false);
-		if (smartVisible) {
+		const venueTab = this.root.locator('[data-qa="trade-venue-tab-Venue"]');
+		const smartRow =
+			venue === "all"
+				? this.root.locator('[data-qa="smart-routing-split-row"]')
+				: this.root.locator(
+						`[data-qa="smart-routing-venue-row-${venue}"]`,
+					);
+
+		// Initial page load (and post-trade reload) lands the trade box with no
+		// amount typed. `SmartRoutingSection` returns null until SOR has previews
+		// (it gates on `sortedVenuePreviews || multiVenueSplit || isLoading`),
+		// and on Pandascore multi-venue umbrellas the legacy dropdown is hidden
+		// by `smartRoutingSurfaceActive`. Prime SOR with the floor amount so one
+		// of the two surfaces becomes interactable before we click.
+		let tabVisible = await venueTab.isVisible().catch(() => false);
+		let rowVisible = await smartRow.isVisible().catch(() => false);
+		if (!tabVisible && !rowVisible) {
+			console.warn(
+				`[e2e tradebox] selectVenue(${venue}): neither smart routing row nor venue tab is visible; ` +
+					`priming SOR by typing $${SELECT_VENUE_PRIME_AMOUNT_USD}`,
+			);
+			await this.setAmount(SELECT_VENUE_PRIME_AMOUNT_USD);
+			await Promise.race([
+				venueTab
+					.waitFor({
+						state: "visible",
+						timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
+					})
+					.catch(() => {}),
+				smartRow
+					.waitFor({
+						state: "visible",
+						timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
+					})
+					.catch(() => {}),
+			]);
+			tabVisible = await venueTab.isVisible().catch(() => false);
+			rowVisible = await smartRow.isVisible().catch(() => false);
+		}
+
+		if (rowVisible) {
 			if (venue === "all") {
-				const split = this.root.locator('[data-qa="smart-routing-split-row"]');
-				await expect(
-					split,
-					'smart routing split row [data-qa="smart-routing-split-row"] not visible for venue=all',
-				).toBeVisible({ timeout: 10_000 });
-				await split.locator("button.smart-routing-row__main").click();
+				await smartRow.locator("button.smart-routing-row__main").click();
 			} else {
-				const row = this.root.locator(
-					`[data-qa="smart-routing-venue-row-${venue}"]`,
-				);
-				await expect(
-					row,
-					`smart routing row [data-qa="smart-routing-venue-row-${venue}"] not found`,
-				).toBeVisible({ timeout: 10_000 });
-				await row.click();
+				await smartRow.click();
 			}
 			await sleepBetweenTradeboxActions();
 			return;
 		}
-		const trigger = this.root.locator('[data-qa="trade-venue-tab-Venue"]');
-		await trigger.click();
-		// Venue list may render in a portal attached to `document.body`.
-		const option = this.page.locator(`[data-qa-venue="${venue}"]`);
-		await expect(
-			option,
-			`venue option [data-qa-venue="${venue}"] not found in dropdown`,
-		).toBeVisible({ timeout: 10_000 });
-		await sleepBetweenTradeboxActions();
-		await option.click();
-		await sleepBetweenTradeboxActions();
+
+		if (tabVisible) {
+			await venueTab.click();
+			// Venue list may render in a portal attached to `document.body`.
+			const option = this.page.locator(`[data-qa-venue="${venue}"]`);
+			await expect(
+				option,
+				`venue option [data-qa-venue="${venue}"] not found in dropdown`,
+			).toBeVisible({ timeout: 10_000 });
+			await sleepBetweenTradeboxActions();
+			await option.click();
+			await sleepBetweenTradeboxActions();
+			return;
+		}
+
+		throw new Error(
+			`selectVenue(${venue}): neither smart routing row [data-qa="smart-routing-venue-row-${venue}"] ` +
+				`nor legacy venue tab [data-qa="trade-venue-tab-Venue"] became visible after priming SOR ` +
+				`with $${SELECT_VENUE_PRIME_AMOUNT_USD}. Check that the umbrella has a live book for the venue ` +
+				`and that the dev server is on :3010.`,
+		);
 	}
 
 	async setSide(side: Side): Promise<void> {
@@ -167,12 +210,16 @@ export class Tradebox {
 		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
 		const text = String(amount);
 		await sleepBetweenTradeboxActions();
-		await input.click();
-		// Do not `fill("")` first: empty `state.amount` makes `sorAmountUsd` 0, turns off
-		// `useSorRoute` (`enabled: sorRouteEnabled`), and YES/NO previews can flip to "--"
-		// until the route refetches (manual typing rarely commits a full clear).
-		await input.press("ControlOrMeta+a");
-		await input.pressSequentially(text, { delay: 30 });
+		// `fill()` atomically replaces the input value via a single `input`
+		// event. The previous Ctrl+A → `pressSequentially` flow lost its
+		// selection between key events when React re-rendered the formatted
+		// value (`$5` ← controlled), which made a second `setAmount(5)` after
+		// a `$5` prime in `selectVenue` produce `$55` (the new "5" appended
+		// instead of replaced). `fill(text)` with a non-empty value never
+		// goes through `state.amount === ""`, so it does not disable
+		// `useSorRoute` mid-keystroke (the original concern that ruled out
+		// `fill("")` upstream).
+		await input.fill(text);
 		await sleepBetweenTradeboxActions();
 	}
 
@@ -224,12 +271,15 @@ export class Tradebox {
 	}
 
 	/**
-	 * `data-qa="sor-leg"` rows live under the Details collapsible, which starts
-	 * collapsed in `PredictionMarketTradeBoxUI` (single-venue and multi-SOR).
+	 * `data-qa="sor-leg"` rows live inside the visually-clipped E2E sentinel
+	 * block in `PredictionMarketTradeBoxUI` (`.tradebox-e2e-sentinel`). The
+	 * sentinel ships with `aria-expanded="true"` so this helper short-circuits
+	 * once the toggle is attached — there is no real Details collapsible in
+	 * the rendered UI to interact with.
 	 */
 	async expandSorDetailsIfCollapsed(): Promise<void> {
 		const toggle = this.root.locator("button.sor-details-toggle").first();
-		await expect(toggle).toBeVisible({ timeout: 15_000 });
+		await toggle.waitFor({ state: "attached", timeout: 15_000 });
 		const expanded = await toggle.getAttribute("aria-expanded");
 		if (expanded === "true") {
 			return;
@@ -254,7 +304,7 @@ export class Tradebox {
 		const leg = this.root.locator(
 			`[data-qa="sor-leg"][data-leg-side="${legSide}"]`,
 		);
-		await leg.waitFor({ state: "visible", timeout: effectiveTimeout });
+		await leg.waitFor({ state: "attached", timeout: effectiveTimeout });
 		const venue = await leg.getAttribute("data-leg-venue");
 		const numSharesAttr = await leg.getAttribute("data-leg-num-shares");
 		const priceCentsAttr = await leg.getAttribute("data-leg-price-cents");
@@ -291,7 +341,7 @@ export class Tradebox {
 				'.sor-details-panel [data-qa="sor-leg-cost"][data-cost-usd]',
 			)
 			.first();
-		await loc.waitFor({ state: "visible", timeout: timeoutMs });
+		await loc.waitFor({ state: "attached", timeout: timeoutMs });
 		const raw = await loc.getAttribute("data-cost-usd");
 		if (raw === null || raw.trim() === "") {
 			throw new Error(
@@ -314,7 +364,7 @@ export class Tradebox {
 		const loc = this.root.locator(
 			'[data-qa="tradebox-estimated-receive-usd"][data-receive-usd]',
 		);
-		await loc.waitFor({ state: "visible", timeout: timeoutMs });
+		await loc.waitFor({ state: "attached", timeout: timeoutMs });
 		const raw = await loc.getAttribute("data-receive-usd");
 		if (raw === null || raw.trim() === "") {
 			throw new Error(
@@ -467,9 +517,9 @@ export class Tradebox {
 		]);
 		if (winner === "error") {
 			const message = await failure
-				.innerText()
-				.catch(() => "(no message)");
-			throw new Error(`Order failed: ${message}`);
+				.getAttribute("data-qa-fill-error")
+				.catch(() => null);
+			throw new Error(`Order failed: ${message ?? "(no message)"}`);
 		}
 		await new Promise((r) => setTimeout(r, SETTLE_AFTER_FILL_MS));
 	}

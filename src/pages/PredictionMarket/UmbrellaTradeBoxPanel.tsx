@@ -4,7 +4,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { TradingVenue } from "./PredictionMarketTradeBox/types";
 import type { SettledInfo } from "./useMatchSettled";
-import { getMarketId, hasUsableOrderbookSnapshot } from "./utils";
+import { getMarketId } from "./utils";
 import type { TradingPagePrices } from "@/hooks/useTradingPagePrices";
 import { TradeBoxSkeleton } from "./Skeletons";
 
@@ -52,38 +52,45 @@ export function UmbrellaTradeBoxPanel({
 		);
 	}
 
-	if (
-		activeMarket &&
-		hasUsableOrderbookSnapshot(
-			questionOrderbooks[getMarketId(activeMarket)] as any,
-		)
-	) {
-		return (
-			<PredictionMarketTradeBox
-				market={
-					{
-						...(activeMarket as any),
-						umbrellaChildrenCount: umbrella?.children?.length || 0,
-					} as any
-				}
-				orderbook={questionOrderbooks[getMarketId(activeMarket)] as any}
-				pandascoreMatchId={pandascoreMatchId || undefined}
-				umbrellaId={umbrella._id}
-				limitlessMappingFromUmbrella={umbrellaLimitless}
-				umbrellaDisplayName={umbrella.displayName}
-				initialPosition={activePosition}
-				onPositionChange={onPositionChange}
-				onSideChange={setTradeSide}
-				venueOverride={venueOverride}
-				crossBuyYes={tradingPagePrices.bestYesPrice}
-				crossBuyNo={tradingPagePrices.bestNoPrice}
-				venueRowsForSellStrip={
-					pandascoreMatchId ? tradingPagePrices.venueRows : undefined
-				}
-				mobilePeekBar={mobilePeekBar}
-			/>
-		);
+	// Only show the skeleton when we don't have a market at all yet (first paint, no
+	// umbrella picked). Once an `activeMarket` exists, render the trade box even if its
+	// orderbook hasn't arrived — the trade box already handles a null/empty book
+	// gracefully (the Submit button shows "Fetching price…" and inputs stay editable).
+	// This prevents the "skeleton flash" the user sees when clicking between markets,
+	// and the typed amount survives via `StickyTradeAmountContext`.
+	if (!activeMarket) {
+		return <TradeBoxSkeleton />;
 	}
 
-	return <TradeBoxSkeleton />;
+	const orderbook = questionOrderbooks[getMarketId(activeMarket)] as any;
+
+	return (
+		<PredictionMarketTradeBox
+			// Key by umbrella so switching matches gets a clean re-init (correct
+			// initialVenue / pandascore wiring), while switching markets within the
+			// same umbrella keeps the same component mounted (no unmount, no flash).
+			key={umbrella._id}
+			market={
+				{
+					...(activeMarket as any),
+					umbrellaChildrenCount: umbrella?.children?.length || 0,
+				} as any
+			}
+			orderbook={orderbook ?? null}
+			pandascoreMatchId={pandascoreMatchId || undefined}
+			umbrellaId={umbrella._id}
+			limitlessMappingFromUmbrella={umbrellaLimitless}
+			umbrellaDisplayName={umbrella.displayName}
+			initialPosition={activePosition}
+			onPositionChange={onPositionChange}
+			onSideChange={setTradeSide}
+			venueOverride={venueOverride}
+			crossBuyYes={tradingPagePrices.bestYesPrice}
+			crossBuyNo={tradingPagePrices.bestNoPrice}
+			venueRowsForSellStrip={
+				pandascoreMatchId ? tradingPagePrices.venueRows : undefined
+			}
+			mobilePeekBar={mobilePeekBar}
+		/>
+	);
 }

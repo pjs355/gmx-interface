@@ -91,6 +91,10 @@ describe("formatOddsPrice grid", () => {
 		expect(formatOddsPrice(0.003, "default", cell)).toBe("0.3¢");
 	});
 
+	it("default cents uses two decimals from 0.01¢ up to kill float noise", () => {
+		expect(formatOddsPrice(0.00990331205, "default", cell)).toBe("0.99¢");
+	});
+
 	it("dualWithCents skips parens when primary is dash", () => {
 		expect(formatOddsPrice(0, "decimal", "dualWithCents")).toBe("--");
 		expect(formatOddsPrice(0.75, "decimal", "dualWithCents")).toMatch(

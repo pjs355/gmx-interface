@@ -528,7 +528,7 @@ export default function HistoryView({
 									const sp = row.totalReturnPct >= 0 ? "+" : "-";
 									return `${s}${u} (${sp}${formatHistoryReturnPctAbs(row.totalReturnPct)}%)`;
 								})();
-								const posText = row.finalPosition > 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—";
+								const posText = row.finalPosition >= 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—";
 
 								return (
 									<React.Fragment key={expandKey}>

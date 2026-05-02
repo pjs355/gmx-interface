@@ -57,6 +57,18 @@ type UserDataContextValue = {
 	refreshTokenPositions: () => Promise<void>;
 	loadOrders: () => Promise<void>; // Lazy: call when orders are needed (e.g. Positions page)
 	getTokenBalance: (marketId: string) => TokenBalance | null;
+	/**
+	 * Apply an optimistic LevelUp fill to `tokenBalances` immediately and remember
+	 * the resulting balance so subsequent subgraph/RPC refreshes can't regress it
+	 * until the indexer catches up (or the floor TTL expires). Use after a
+	 * confirmed SOR LevelUp leg.
+	 */
+	applyOptimisticLevelUpFill: (input: {
+		marketId: string;
+		side: "yes" | "no";
+		deltaShares: number;
+		direction: "buy" | "sell";
+	}) => void;
 	/** Refreshes on-chain approval flags; returns whether LevelUp trading is fully approved. */
 	checkApproval: () => Promise<boolean>;
 	approveToken: () => Promise<void>;
@@ -189,6 +201,140 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	>([]);
 	const rawTokenBalancesRef = useRef<Array<{ tokenId: string; balance: string }>>([]);
 	const subgraphFetchedRef = useRef<string | null>(null);
+
+	// Optimistic post-trade floors / ceilings, keyed by `${marketId}|${side}`.
+	// `min` (buy floor): displayed balance never falls below this until indexer catches up.
+	// `max` (sell ceiling): displayed balance never rises above this until indexer catches up.
+	// Floors auto-clear on refresh once the server-reported value crosses the threshold,
+	// or when the TTL expires.
+	type LevelUpFloorEntry = {
+		min?: number;
+		max?: number;
+		expiresAt: number;
+	};
+	const optimisticLevelUpFloorsRef = useRef<Map<string, LevelUpFloorEntry>>(
+		new Map(),
+	);
+	const LEVELUP_FLOOR_TTL_MS = 120_000;
+
+	/**
+	 * Apply pending optimistic floors/ceilings to a freshly-mapped balances map.
+	 * Mutates the input map in place and clears entries that have converged or expired.
+	 */
+	const applyOptimisticFloorsToMap = useCallback(
+		(balances: Map<string, TokenBalance>): Map<string, TokenBalance> => {
+			const floors = optimisticLevelUpFloorsRef.current;
+			if (floors.size === 0) return balances;
+			const now = Date.now();
+			for (const [key, entry] of Array.from(floors.entries())) {
+				if (entry.expiresAt <= now) {
+					floors.delete(key);
+					continue;
+				}
+				const sep = key.indexOf("|");
+				if (sep < 0) {
+					floors.delete(key);
+					continue;
+				}
+				const marketId = key.slice(0, sep);
+				const side = key.slice(sep + 1) as "yes" | "no";
+				const tb = balances.get(marketId);
+				if (!tb) continue;
+				const balanceStr = side === "yes" ? tb.yesBalance : tb.noBalance;
+				const balanceNum = parseFloat(balanceStr);
+
+				if (entry.min !== undefined) {
+					if (Number.isFinite(balanceNum) && balanceNum >= entry.min) {
+						delete entry.min;
+					} else {
+						const next = entry.min.toFixed(6);
+						balances.set(marketId, {
+							...tb,
+							...(side === "yes"
+								? { yesBalance: next }
+								: { noBalance: next }),
+						});
+					}
+				}
+
+				if (entry.max !== undefined) {
+					const tbAfterFloor = balances.get(marketId)!;
+					const afterFloorStr =
+						side === "yes" ? tbAfterFloor.yesBalance : tbAfterFloor.noBalance;
+					const afterFloorNum = parseFloat(afterFloorStr);
+					if (Number.isFinite(afterFloorNum) && afterFloorNum <= entry.max) {
+						delete entry.max;
+					} else {
+						const next = entry.max.toFixed(6);
+						balances.set(marketId, {
+							...tbAfterFloor,
+							...(side === "yes"
+								? { yesBalance: next }
+								: { noBalance: next }),
+						});
+					}
+				}
+
+				if (entry.min === undefined && entry.max === undefined) {
+					floors.delete(key);
+				}
+			}
+			return balances;
+		},
+		[],
+	);
+
+	const applyOptimisticLevelUpFill = useCallback(
+		(input: {
+			marketId: string;
+			side: "yes" | "no";
+			deltaShares: number;
+			direction: "buy" | "sell";
+		}) => {
+			const { marketId, side, deltaShares, direction } = input;
+			if (!marketId || !(deltaShares > 0)) return;
+
+			const key = `${marketId}|${side}`;
+			const existing = optimisticLevelUpFloorsRef.current.get(key);
+
+			setTokenBalances((prev) => {
+				const tb = prev.get(marketId);
+				if (!tb) return prev;
+				const sideBalanceStr = side === "yes" ? tb.yesBalance : tb.noBalance;
+				const cur = parseFloat(sideBalanceStr) || 0;
+
+				let nextValue: number;
+				if (direction === "buy") {
+					nextValue = cur + deltaShares;
+					optimisticLevelUpFloorsRef.current.set(key, {
+						...(existing ?? {}),
+						min: Math.max(existing?.min ?? 0, nextValue),
+						expiresAt: Date.now() + LEVELUP_FLOOR_TTL_MS,
+					});
+				} else {
+					nextValue = Math.max(0, cur - deltaShares);
+					optimisticLevelUpFloorsRef.current.set(key, {
+						...(existing ?? {}),
+						max:
+							existing?.max !== undefined
+								? Math.min(existing.max, nextValue)
+								: nextValue,
+						expiresAt: Date.now() + LEVELUP_FLOOR_TTL_MS,
+					});
+				}
+
+				const next = new Map(prev);
+				next.set(marketId, {
+					...tb,
+					...(side === "yes"
+						? { yesBalance: nextValue.toFixed(6) }
+						: { noBalance: nextValue.toFixed(6) }),
+				});
+				return next;
+			});
+		},
+		[],
+	);
 
 	// Keep ref in sync with state
 	useEffect(() => {
@@ -449,7 +595,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			// Map any already-available subgraph balances to market IDs
 			const currentRawBalances = rawTokenBalancesRef.current;
 			if (currentRawBalances.length > 0) {
-				setTokenBalances(mapTokenBalancesToMarkets(currentRawBalances, marketDataMap));
+				setTokenBalances(
+					applyOptimisticFloorsToMap(
+						mapTokenBalancesToMarkets(currentRawBalances, marketDataMap),
+					),
+				);
 			}
 		} finally {
 			setLoading(false);
@@ -491,8 +641,8 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		}
 
 		const mappedBalances = mapTokenBalancesToMarkets(rawTokenBalances, marketDataMap);
-		setTokenBalances(mappedBalances);
-	}, [rawTokenBalances, mapTokenBalancesToMarkets]);
+		setTokenBalances(applyOptimisticFloorsToMap(mappedBalances));
+	}, [rawTokenBalances, mapTokenBalancesToMarkets, applyOptimisticFloorsToMap]);
 
 	const getTokenBalance = useCallback(
 		(marketId: string) => {
@@ -718,6 +868,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			refreshTokenPositions,
 			loadOrders,
 			getTokenBalance,
+			applyOptimisticLevelUpFill,
 			checkApproval,
 			approveToken,
 		}),
@@ -731,6 +882,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			refreshTokenPositions,
 			loadOrders,
 			getTokenBalance,
+			applyOptimisticLevelUpFill,
 			checkApproval,
 			approveToken,
 		]

@@ -1,8 +1,14 @@
 import type { SorChain } from "./sor-types";
 import type { FundingStableBalancesHuman } from "./fundingStableBalances";
 
-/** Extra headroom on LI.FI `amountHuman` (must match `useSorLegExecutor`). */
-export const LIFI_BRIDGE_AMOUNT_MARGIN = 0.01;
+/**
+ * Extra headroom on LI.FI `amountHuman`. Set to 0 because the optimizer's
+ * per-leg `bridge.estimatedCost` already budgets the LI.FI fee, and
+ * `ensurePrefundQuoteMeetsDestMin` iterates `sendHuman` upward against a strict
+ * `budgetUsd` cap to absorb any quote-time variance. Adding margin here would
+ * stack with that and push source-wallet debit past the user's typed amount.
+ */
+export const LIFI_BRIDGE_AMOUNT_MARGIN = 0;
 
 const ALL_SOURCE_CHAINS: SorChain[] = ["base", "polygon", "solana", "bnb"];
 
@@ -19,11 +25,18 @@ const CHAIN_LABEL: Record<SorChain, string> = {
 	bnb: "BNB Chain",
 };
 
+/**
+ * Returns the prefund target (USD on destination wallet) for a bridge step.
+ * With `LIFI_BRIDGE_AMOUNT_MARGIN = 0` this is identity — the per-leg budget
+ * cap in `ensurePrefundQuoteMeetsDestMin` is the strict invariant; double-margining
+ * here used to stack with the optimizer's `bridge_cost` and the LI.FI iteration
+ * slack, which inflated source-wallet debit past `request.amount`.
+ */
 export function computePrefundNeedUsdHuman(
 	bridgeAmountUsd: number,
 	margin = LIFI_BRIDGE_AMOUNT_MARGIN,
 ): number {
-	return bridgeAmountUsd * (1 + margin) + 0.01;
+	return bridgeAmountUsd * (1 + margin);
 }
 
 /**
@@ -32,6 +45,13 @@ export function computePrefundNeedUsdHuman(
  * already holds stable on the destination — but venue settlement still needs the **full**
  * execution notional. Never anchor prefund on shortfall alone or we skip LI.FI and POST
  * `/orders` fails with insufficient collateral.
+ *
+ * The optimizer's `alloc.cost = notional + fee` is already encoded in `executionAmountUsd`,
+ * so the anchor does **not** add fee on top. Fee headroom for venue API balance checks
+ * (e.g. Polymarket CLOB requires `wallet >= makerAmount + protocolFee`) is satisfied at
+ * the wire layer by sending a smaller `amount` (notional, fee from outcome tokens) — see
+ * `wireAmountUsdForVenue` in `useSorLegExecutor`. Anchoring the bridge target on
+ * `executionAmountUsd` keeps source-wallet debit within `request.amount`.
  */
 export function resolveBuyPrefundAnchorUsd(
 	routeBridgeUsd: number,
@@ -39,7 +59,7 @@ export function resolveBuyPrefundAnchorUsd(
 ): number {
 	const r = Number.isFinite(routeBridgeUsd) ? Math.max(0, routeBridgeUsd) : 0;
 	const e = Number.isFinite(executionAmountUsd) ? Math.max(0, executionAmountUsd) : 0;
-	return e > 0 ? Math.max(r, e) : r;
+	return Math.max(r, e);
 }
 
 /**

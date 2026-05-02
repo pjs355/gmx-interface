@@ -10,6 +10,7 @@ import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "./PredictionCard";
 import { LoadingState } from "./LoadingState";
+import { HomeSkeleton } from "./HomeSkeleton";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import "../Predictions.scss";
@@ -139,7 +140,6 @@ const LOAD_MORE_COUNT = 20;
 type CalendarDataForVisibility = {
 	upcomingDays: { events: CalendarEvent[] }[];
 	unscheduled: Umbrella[];
-	pastDays: { events: CalendarEvent[] }[];
 };
 
 /** Same umbrella ordering as rendered cards (calendar vs flat grid), capped by `visibleCount`. */
@@ -165,15 +165,6 @@ function collectVisibleUmbrellas(
 		const remaining = visibleCount - rendered;
 		out.push(...calendarData.unscheduled.slice(0, remaining));
 		rendered += Math.min(remaining, calendarData.unscheduled.length);
-	}
-	if (rendered < visibleCount && calendarData.pastDays.length) {
-		for (const day of calendarData.pastDays) {
-			if (rendered >= visibleCount) break;
-			const remaining = visibleCount - rendered;
-			const slice = day.events.slice(0, remaining);
-			for (const e of slice) out.push(e.umbrella);
-			rendered += slice.length;
-		}
 	}
 	return out;
 }
@@ -243,6 +234,7 @@ export default function FilteredPredictions({
 		singleMarketQuestions,
 		multiMarketData,
 		tags,
+		tagsLoading,
 	} = usePredictionData();
 
 	const { appState } = useOddsMonitor();
@@ -335,9 +327,16 @@ export default function FilteredPredictions({
 		type CalendarDay = { date: Date; events: CalendarEvent[] };
 
 		const upcomingMap = new Map<string, CalendarDay>();
-		const pastMap = new Map<string, CalendarDay>();
 		const unscheduled: Umbrella[] = [];
 
+		/*
+		 * Past events (those whose local-day starts before today) are
+		 * intentionally dropped: the home page should never surface markets
+		 * older than today. Skipping them here means every downstream
+		 * consumer (`collectVisibleUmbrellas`, `calendarTotalCount`, the
+		 * calendar JSX, the venue-WS subscription list) automatically
+		 * excludes past umbrellas without each having to filter again.
+		 */
 		for (let index = 0; index < filteredUmbrellas.length; index += 1) {
 			const umbrella = filteredUmbrellas[index];
 			const eventDate = resolveUmbrellaEventDate(umbrella);
@@ -347,34 +346,26 @@ export default function FilteredPredictions({
 			}
 
 			const dayStart = startOfLocalDay(eventDate);
+			if (dayStart.getTime() < todayStartMs) {
+				continue;
+			}
+
 			const key = buildDayKey(dayStart);
 			const event: CalendarEvent = {
 				umbrella,
 				eventDate,
 			};
 
-			const dayStartMs = dayStart.getTime();
-			if (dayStartMs >= todayStartMs) {
-				let day = upcomingMap.get(key);
-				if (!day) {
-					day = { date: dayStart, events: [] };
-					upcomingMap.set(key, day);
-				}
-				day.events.push(event);
-			} else {
-				let day = pastMap.get(key);
-				if (!day) {
-					day = { date: dayStart, events: [] };
-					pastMap.set(key, day);
-				}
-				day.events.push(event);
+			let day = upcomingMap.get(key);
+			if (!day) {
+				day = { date: dayStart, events: [] };
+				upcomingMap.set(key, day);
 			}
+			day.events.push(event);
 		}
 
 		const sortByDate = (a: CalendarDay, b: CalendarDay) =>
 			a.date.getTime() - b.date.getTime();
-		const sortByDateDesc = (a: CalendarDay, b: CalendarDay) =>
-			b.date.getTime() - a.date.getTime();
 
 		const scoreDead = (umbrella: Umbrella): number => {
 			const { yes, no } = getListingYesNoPricesForUmbrella(
@@ -391,24 +382,46 @@ export default function FilteredPredictions({
 				return day;
 			});
 
-		const pastDays = Array.from(pastMap.values())
-			.sort(sortByDateDesc)
-			.map((day) => {
-				sortCalendarEventsByPlayOrder(day.events, now, scoreDead);
-				return day;
-			});
-
 		return {
 			todayStartMs,
 			upcomingDays,
-			pastDays,
+			pastDays: [] as CalendarDay[],
 			unscheduled,
 		};
 	}, [filteredUmbrellas, filterType, appState?.markets, now]);
 
+	/**
+	 * Pin the home dock onto the umbrella the user is about to navigate into.
+	 * Whenever they come back to the home page (browser-back, header click,
+	 * etc.) `HomeInlineTradeLayout` lazy-init reads these keys so the trade
+	 * widget keeps showing the same umbrella + market instead of snapping
+	 * back to the top of the list.
+	 *
+	 * Kept in sync with the keys defined in `HomeInlineTradeLayout.tsx`.
+	 */
+	const pinHomeDockForUmbrella = (
+		umbrellaId: string,
+		marketId: string | null,
+	) => {
+		try {
+			localStorage.setItem("homeDockPinnedUmbrellaId", umbrellaId);
+			if (marketId) {
+				localStorage.setItem("homeDockActiveMarketId", marketId);
+			} else {
+				localStorage.removeItem("homeDockActiveMarketId");
+			}
+		} catch {
+			/* localStorage unavailable — silently no-op */
+		}
+	};
+
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
+		// Don't overwrite the active market — when only the umbrella is known
+		// (generic card click), pin only the umbrella and let the dock pick
+		// its own active market when the user comes back.
+		pinHomeDockForUmbrella(umbrella._id, null);
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
@@ -425,6 +438,13 @@ export default function FilteredPredictions({
 			);
 			localStorage.setItem("activePosition", position);
 		}
+		const qid = question
+			? question._id ||
+			  (question as any).questionId ||
+			  (question as any).marketId ||
+			  null
+			: null;
+		pinHomeDockForUmbrella(umbrella._id, qid);
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
@@ -446,6 +466,7 @@ export default function FilteredPredictions({
 		if (marketId) {
 			localStorage.setItem("selectedMarketId", marketId);
 		}
+		pinHomeDockForUmbrella(umbrella._id, marketId ?? null);
 
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
@@ -456,7 +477,7 @@ export default function FilteredPredictions({
 		let count = 0;
 		for (const day of calendarData.upcomingDays) count += day.events.length;
 		count += calendarData.unscheduled.length;
-		for (const day of calendarData.pastDays) count += day.events.length;
+		// Past days are dropped at the `calendarData` stage — never counted.
 		return count;
 	}, [calendarData]);
 
@@ -518,8 +539,19 @@ export default function FilteredPredictions({
 		/>
 	);
 
-	if (loading || error) {
-		return <LoadingState error={error || null} onRetry={handleRetry} />;
+	if (error) {
+		return <LoadingState error={error} onRetry={handleRetry} />;
+	}
+
+	/*
+	 * Keep the skeleton up until BOTH umbrellas and tags are ready. Previously
+	 * we only gated on `loading` (umbrellas), which let the cards paint while
+	 * `GameLinks` was still returning `null` for `tagsLoading=true` — the user
+	 * saw cards appear first, then the left sidebar pop in. Holding the
+	 * skeleton until both finish loading makes the layout settle in one beat.
+	 */
+	if (loading || tagsLoading) {
+		return <HomeSkeleton filterType={filterType} />;
 	}
 
 	const pageTitle =
@@ -543,9 +575,11 @@ export default function FilteredPredictions({
 
 	if (shouldUseCalendar && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
-		const hasPast = calendarData.pastDays.length > 0;
 		const hasUnscheduled = calendarData.unscheduled.length > 0;
-		const hasAny = hasUpcoming || hasPast || hasUnscheduled;
+		// Past events are intentionally dropped at the `calendarData` stage
+		// (see comment there) — the home page never shows markets older
+		// than today, so there's no "Recent Events" archive section.
+		const hasAny = hasUpcoming || hasUnscheduled;
 
 		if (!hasAny) {
 			content = (
@@ -630,53 +664,6 @@ export default function FilteredPredictions({
 						</div>
 					</section>
 				);
-			}
-
-			if (rendered < visibleCount && hasPast) {
-				const pastSections: React.ReactNode[] = [];
-				for (const day of calendarData.pastDays) {
-					if (rendered >= visibleCount) break;
-					const remaining = visibleCount - rendered;
-					const eventsToShow = day.events.slice(0, remaining);
-					rendered += eventsToShow.length;
-
-					const label = formatDayLabel(day.date, calendarData.todayStartMs);
-					const showOddsPicker = !calendarOddsPickerShown;
-					if (showOddsPicker) calendarOddsPickerShown = true;
-					pastSections.push(
-						<section
-							key={`past-${buildDayKey(day.date)}`}
-							className="prediction-calendar-day prediction-calendar-day--past"
-						>
-							<header className="prediction-calendar-header">
-								<div className="prediction-calendar-title">
-									<span className="prediction-calendar-primary">
-										{label.primary}
-									</span>
-									<span className="prediction-calendar-secondary">
-										{label.secondary}
-									</span>
-								</div>
-								{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
-							</header>
-							<div className="predictions-grid prediction-calendar-grid">
-								{eventsToShow.map((event) =>
-									renderPredictionCard(event.umbrella)
-								)}
-							</div>
-						</section>
-					);
-				}
-				if (pastSections.length > 0) {
-					calendarSections.push(
-						<section key="past-archive" className="prediction-calendar-archive">
-							<h3 className="prediction-calendar-archive-title">
-								Recent Events
-							</h3>
-							{pastSections}
-						</section>
-					);
-				}
 			}
 
 			content = (

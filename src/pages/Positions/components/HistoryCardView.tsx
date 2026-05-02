@@ -527,7 +527,7 @@ export default function HistoryCardView({
 										<div style={{ padding: "16px", borderTop: "1px solid #2a2a2a", background: "#0f0f0f", display: "flex", flexDirection: "column", gap: 12 }}>
 											<div style={{ display: "flex", justifyContent: "space-between" }}>
 												<span style={{ color: "#888", fontSize: 13 }}>Position</span>
-												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.finalPosition > 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
+												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.finalPosition >= 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
 											</div>
 											<div style={{ display: "flex", justifyContent: "space-between" }}>
 												<span style={{ color: "#888", fontSize: 13 }}>Cost</span>

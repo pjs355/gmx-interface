@@ -37,6 +37,7 @@
 .esports-venue-books__th--venue {
 	width: 28%;
 	min-width: 8.5rem;
+	text-align: left;
 }
 
 .esports-venue-books__th--chart-title {
@@ -63,6 +64,25 @@
 	font-weight: 500;
 	color: rgba(255, 255, 255, 0.75);
 	background: rgba(255, 255, 255, 0.03);
+	text-align: left;
+}
+
+.esports-venue-books__label-row {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.esports-venue-books__label-row > img,
+.esports-venue-books__logo-placeholder {
+	flex-shrink: 0;
+}
+
+.esports-venue-books__logo-placeholder {
+	display: inline-block;
+	width: 16px;
+	height: 16px;
 }
 
 .esports-venue-books__td--num {

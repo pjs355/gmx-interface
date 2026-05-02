@@ -22,9 +22,7 @@ import type {
 import {
   VENUE_COLORS,
   SorKalshiKycShortfallBanner,
-  formatSorUsd2,
   formatToWinUsdDisplay,
-  formatSorSellProceedsUsdDisplay,
   formatSorDetailsSharesDisplay,
   rawInputBelowVenueMinimum,
   parseLimitPriceCents,
@@ -40,6 +38,7 @@ import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { SHARE_SELL_COMPARE_EPS } from "./checkBalances";
 import SmartRoutingSection from "./SmartRoutingSection";
 import { FlashingValue } from "@/utils/FlashingValue";
+import { usePortfolio } from "@/context/PortfolioContext";
 
 const BET_VALUE_CLASS = "bet-size-value";
 const BET_VALUE_FLASH_CLASS = "bet-size-value--flash";
@@ -61,21 +60,6 @@ const calculateOrderbookPrices = (orderbook: any) => {
 interface StableButtonPrices {
   yesBestAsk: number | null; yesBestBid: number | null;
   noBestAsk: number | null; noBestBid: number | null;
-}
-
-/** Weighted average sale price in integer cents from SOR legs (multi-venue aware). */
-function sorRouteSellAvgCents(route: RoutePlan): number | null {
-  if (route.side !== "sell" || route.totalShares <= 0) return null;
-  let weighted = 0;
-  for (const leg of route.legs) {
-    if (leg.shares > 0 && Number.isFinite(leg.avgPrice) && leg.avgPrice > 0) {
-      weighted += leg.shares * leg.avgPrice;
-    }
-  }
-  if (!(weighted > 0)) return null;
-  const avg = weighted / route.totalShares;
-  if (!Number.isFinite(avg) || avg <= 0) return null;
-  return Math.round(avg * 100);
 }
 
 interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
@@ -186,6 +170,19 @@ export default function PredictionMarketTradeBoxUI({
 }: PredictionMarketTradeBoxUIProps) {
   const { formatPrice } = useOddsDisplay();
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
+
+  /* Reuse the same cash number the AppHeader's "Cash" pill displays, so the
+   * "Balance: $X" line under the input is always identical to the header.
+   * `cashBalance` sums baseUsdc + polygonStable + bscUsdt + solanaUsdc +
+   * limitlessMakerUsdc (see PortfolioContext). */
+  const { cashBalance } = usePortfolio();
+  const formattedCashBalance =
+    typeof cashBalance === "number" && Number.isFinite(cashBalance)
+      ? new Intl.NumberFormat("en-US", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        }).format(cashBalance)
+      : null;
 
   /** Last completed All Markets SOR fill (no success banner — timing only for post-trade position sync). */
   const sorFilledBannerVisible =
@@ -425,26 +422,22 @@ export default function PredictionMarketTradeBoxUI({
             ? (bestBid === null ? null : 1 - bestBid)
             : (bestAsk === null ? null : 1 - bestAsk);
   
-  // Position buttons: All Markets sell = best bid only on outcomes you hold; else same as before.
+  // Sell-side YES/NO buttons show the highest bid among venues where the user holds
+  // shares (regardless of tab). When no held venue has a valid bid, fall back to the
+  // active-tab book bid so the button stays informative instead of blank.
   const yesPriceCents = useMemo(() => {
-    if (tradingVenue === "all" && side === "sell") {
-      if (allMarketsSellYesBid != null && Number.isFinite(allMarketsSellYesBid)) {
-        return formatPrice(allMarketsSellYesBid);
-      }
-      return "";
+    if (side === "sell" && allMarketsSellYesBid != null && Number.isFinite(allMarketsSellYesBid)) {
+      return formatPrice(allMarketsSellYesBid);
     }
     return yesPrice !== null ? formatPrice(yesPrice) : "--";
-  }, [tradingVenue, side, allMarketsSellYesBid, yesPrice, formatPrice]);
+  }, [side, allMarketsSellYesBid, yesPrice, formatPrice]);
 
   const noPriceCents = useMemo(() => {
-    if (tradingVenue === "all" && side === "sell") {
-      if (allMarketsSellNoBid != null && Number.isFinite(allMarketsSellNoBid)) {
-        return formatPrice(allMarketsSellNoBid);
-      }
-      return "";
+    if (side === "sell" && allMarketsSellNoBid != null && Number.isFinite(allMarketsSellNoBid)) {
+      return formatPrice(allMarketsSellNoBid);
     }
     return noPrice !== null ? formatPrice(noPrice) : "--";
-  }, [tradingVenue, side, allMarketsSellNoBid, noPrice, formatPrice]);
+  }, [side, allMarketsSellNoBid, noPrice, formatPrice]);
 
   const getBorderColorForSelected = (backgroundColor: string): string => {
     if (!backgroundColor) return '#ffffff';
@@ -962,7 +955,16 @@ export default function PredictionMarketTradeBoxUI({
         </div>
 
       </div>
-      
+
+      {/* Cash balance hint — small line right under the Amount input.
+          Shows the same value as the AppHeader "Cash" pill so the user always
+          knows their available cash at a glance while sizing a trade. */}
+      {formattedCashBalance !== null && (
+        <div className="trade-cash-balance-hint">
+          Balance: ${formattedCashBalance}
+        </div>
+      )}
+
       {/* Price Input (for Limit Orders) */}
       {orderType === 'limit' && (
         <div className="input-section">
@@ -1011,11 +1013,30 @@ export default function PredictionMarketTradeBoxUI({
           tradingVenue={tradingVenue}
           isLoading={sorRoute.displayLoading}
           onSelectVenue={onTradingVenueChange}
+          userAmount={amount}
+          side={side}
         />
       )}
 
-      {/* SOR route breakdown when venue is "all" — sourced from the omnibus (display) channel. */}
-      {tradingVenue === "all" && (
+      {/* SOR route breakdown when venue is "all" — sourced from the omnibus
+          (display) channel. We only render the wrapper if there's something
+          to show: an error, sell-side totals, or an insufficient-liquidity
+          warning. Pure buy success cases are intentionally empty here because
+          the smart-routing rows above already show the payout. */}
+      {tradingVenue === "all" && (() => {
+        const hasError = Boolean(
+          sorRoute.displayError && !sorRoute.displayRoute && !sorRoute.displayLoading,
+        );
+        const route = sorRoute.displayRoute;
+        const isSell = route?.side === "sell";
+        const hasSellTotals = Boolean(
+          route && isSell && route.totalShares > 0,
+        );
+        /* Partial-fill warning moved under the Buy button, so it's no
+         * longer part of the gate. */
+        const hasAllTabContent = hasError || hasSellTotals;
+        if (!hasAllTabContent) return null;
+        return (
         <div className="bet-size-section">
           {sorRoute.displayError && !sorRoute.displayRoute && !sorRoute.displayLoading && (() => {
 						const rawErr = sorRoute.displayError ?? "";
@@ -1024,6 +1045,13 @@ export default function PredictionMarketTradeBoxUI({
 							rawErr.includes(
 								"Fractional share amounts are not supported on Kalshi",
 							);
+						// `NO_BOOKS_AVAILABLE` / `NO_MARKET_FOUND` are already phrased as a
+						// complete, user-facing sentence in the SOR route formatter
+						// ("No shares available" / "No bids available"). Don't double up
+						// with a "Route unavailable: " prefix.
+						const isNoLiquidityHint =
+							sorRoute.displayErrorCode === "NO_BOOKS_AVAILABLE" ||
+							sorRoute.displayErrorCode === "NO_MARKET_FOUND";
 						const displayErr = rawErr
 							.replace(/^\s*Route unavailable:\s*/i, "")
 							.trim();
@@ -1046,7 +1074,7 @@ export default function PredictionMarketTradeBoxUI({
                 >
                   {sorRoute.displayErrorCode === "EXECUTION_NOT_READY"
                     ? "Trading setup required: "
-                    : isKalshiWholeShareHint
+                    : isKalshiWholeShareHint || isNoLiquidityHint
                       ? ""
                       : "Route unavailable: "}
                   {displayErr}
@@ -1055,117 +1083,33 @@ export default function PredictionMarketTradeBoxUI({
             </div>
 						);
           })()}
-          {sorRoute.displayRoute && (() => {
-            const route = sorRoute.displayRoute;
-            const isSell = route.side === "sell";
-            const sorSellAvgCents = isSell ? sorRouteSellAvgCents(route) : null;
-            const sorSellNetReceiveUsd =
-              isSell &&
-              Number.isFinite(route.totalCost) &&
-              Number.isFinite(route.totalFees)
-				? /* SOR sell: totalCost is already net proceeds per leg (DFlow: dflowSellProceedsUsd). Do not subtract totalFees again. */
-				  Math.max(0, route.totalCost)
-                : null;
-            return (
-            <div className="sor-route-totals">
-              {!isSell && route.totalShares > 0 && (
-                <div className="bet-size-info">
-                  <div className="bet-size-main-row">
-                    <span className="bet-size-label to-win-label">To Win</span>
-                    <FlashingValue
-                      value={`$ ${formatToWinUsdDisplay(route.totalShares)}`}
-                      className={BET_VALUE_CLASS}
-                      flashClassName={BET_VALUE_FLASH_CLASS}
-                    />
-                  </div>
-                </div>
-              )}
-              {isSell && route.totalShares > 0 && sorSellAvgCents !== null && (
-                <div className="bet-size-info">
-                  <div className="bet-size-main-row">
-                    <span className="bet-size-label">Avg Price</span>
-                    <FlashingValue
-                      value={formatPrice(sorSellAvgCents / 100)}
-                      className={`${BET_VALUE_CLASS} avg-price-value`}
-                      flashClassName={BET_VALUE_FLASH_CLASS}
-                    />
-                  </div>
-                </div>
-              )}
-              {isSell && route.totalShares > 0 && sorSellNetReceiveUsd !== null && (
-                <div className="bet-size-info">
-                  <div className="bet-size-main-row">
-                    <Tooltip
-                      content={venueConfig.feeTooltip}
-                      position="top"
-                      withPortal={true}
-                    >
-                      <span className="bet-size-label">
-                        {`Estimated Receive${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
-                      </span>
-                    </Tooltip>
-                    <FlashingValue
-                      value={`$ ${formatSorSellProceedsUsdDisplay(sorSellNetReceiveUsd)}`}
-                      className={`${BET_VALUE_CLASS} estimated-receive-value`}
-                      flashClassName={BET_VALUE_FLASH_CLASS}
-                    />
-                  </div>
-                </div>
-              )}
-              {route.insufficientLiquidity && (
-                <div className="bet-size-info">
-                  <div style={{ fontSize: 12, color: "#f59e0b", fontWeight: 500, padding: "4px 0" }}>
-                    {isSell
-                      ? "Not enough bids to reach your proceeds target. Will fill partial order"
-                      : "Not enough shares to fill your order. Will fill partial order"}
-                  </div>
-                </div>
-              )}
-            </div>
-            );
-          })()}
+          {/* Sell-side Avg Price + Estimated Receive lines were intentionally
+              removed: the per-venue smart-routing rows already show the
+              proceeds for the selected sell route, and stacking these
+              duplicate totals below cluttered the box. The partial-fill
+              warning is rendered once below the Sell button. */}
         </div>
-      )}
+        );
+      })()}
 
-      {/* Bet Size / To Win for single-venue orders */}
+      {/* Bet Size / To Win for single-venue orders.
+          The buy "To Win" row is hidden when smart routing is active (the
+          selected smart-routing row already shows it), so we exclude it from
+          the existence check too — otherwise we'd render an empty styled
+          wrapper for buy-on-a-venue-tab in pandascore markets. */}
       {tradingVenue !== "all" &&
         !belowTradeFloor &&
-        (toWinNumeric !== null || limitOrderAmount !== null || oddsData !== null || sellAvgCents !== null || netReceive !== null) && (
+        (
+          (toWinNumeric !== null && side === 'buy' && !smartRoutingSurfaceActive) ||
+          limitOrderAmount !== null ||
+          oddsData !== null
+        ) && (
         <div className="bet-size-section">
-          {/* Avg Price line for market SELL orders */}
-          {sellAvgCents !== null && (
-            <div className="bet-size-info">
-              <div className="bet-size-main-row">
-                <span className="bet-size-label">Avg Price</span>
-                <FlashingValue
-                  value={formatPrice(sellAvgCents / 100)}
-                  className={`${BET_VALUE_CLASS} avg-price-value`}
-                  flashClassName={BET_VALUE_FLASH_CLASS}
-                />
-              </div>
-            </div>
-          )}
-          {/* Estimated Receive for market SELL orders */}
-          {orderType === 'market' && side === 'sell' && netReceive !== null && sellTradingFee !== null && (
-            <div className="bet-size-info">
-              <div className="bet-size-main-row">
-                <Tooltip
-                  content={venueConfig.feeTooltip}
-                  position="top"
-                  withPortal={true}
-                >
-                  <span className="bet-size-label">
-                    {`Estimated Receive${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
-                  </span>
-                </Tooltip>
-                <FlashingValue
-                  value={`$ ${(Math.floor(netReceive * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  className={`${BET_VALUE_CLASS} estimated-receive-value`}
-                  flashClassName={BET_VALUE_FLASH_CLASS}
-                />
-              </div>
-            </div>
-          )}
+          {/* Market-sell Avg Price + Estimated Receive intentionally removed —
+              the per-venue smart-routing rows already show this info, and the
+              duplicate stack cluttered the box. Limit-sell still surfaces its
+              own "Estimated Receive" / "Est. notional" line below because that
+              is the only place a user sees what their limit price will yield. */}
           {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
@@ -1187,8 +1131,12 @@ export default function PredictionMarketTradeBoxUI({
             </div>
           )}
 
-          {/* Show To Win line for BUY orders only (SELL orders show Estimated Receive above) */}
-          {toWinNumeric !== null && side === 'buy' && (
+          {/* Show To Win line for BUY orders only (SELL orders show Estimated
+              Receive above). Suppressed when the smart-routing surface is
+              active because the selected smart-routing row already shows the
+              same payout in large green text. Single-venue markets without
+              smart routing still rely on this line as the only payout display. */}
+          {toWinNumeric !== null && side === 'buy' && !smartRoutingSurfaceActive && (
             <div className="bet-size-info">
               <div className="bet-size-main-row">
                 <span className={`bet-size-label to-win-label`}>To Win</span>
@@ -1247,23 +1195,30 @@ export default function PredictionMarketTradeBoxUI({
       >
         {buttonState.text}
       </Button>
-      {typeof buttonState.depositShortfallUsd === "number" &&
-        buttonState.depositShortfallUsd > 0 && (
-          <div
-            className="trade-deposit-shortfall-hint"
-            style={{
-              marginTop: 10,
-              padding: "0 4px",
-              fontSize: 12,
-              color: "#f59e0b",
-              fontWeight: 500,
-              textAlign: "center",
-              lineHeight: 1.35,
-            }}
-          >
-            Deposit needed $ {formatSorUsd2(buttonState.depositShortfallUsd)}
+      {/* The deposit-shortfall amount is already conveyed by the Buy button
+          text via `useButtonState`'s `trySorDepositToTrade` path, so the
+          standalone "Deposit needed $X" banner under the button was redundant
+          and noisy — removed. */}
+      {/* Partial-fill warning lives directly under the Buy button so it's the
+          last thing the user reads before clicking. Pulls from the active
+          executable route — `displayRoute` (omnibus) on the "all" tab,
+          `executionRoute` (targeted) on a single-venue tab — so it covers
+          both surfaces with one render path. */}
+      {(() => {
+        const route =
+          tradingVenue === "all"
+            ? sorRoute.displayRoute
+            : sorRoute.executionRoute;
+        if (!route?.insufficientLiquidity) return null;
+        const isSell = route.side === "sell";
+        return (
+          <div className="trade-partial-fill-hint">
+            {isSell
+              ? "Not enough bids to sell all shares"
+              : "Not enough shares to fill your order. Will fill partial order"}
           </div>
-        )}
+        );
+      })()}
       {tradingVenue === "all" &&
         side === "buy" &&
         sorRoute.displayRoute?.sizeSuggestion &&
@@ -1391,23 +1346,83 @@ export default function PredictionMarketTradeBoxUI({
         </div>
       )}
 
-      {/* E2E / automation: outcome hook only (visually hidden — `e2e/page-objects/tradebox.ts` `waitForFill`). */}
+      {/*
+        E2E / automation: outcome hook only (visually hidden — `e2e/page-objects/tradebox.ts` `waitForFill`).
+        The error reason is exposed via `data-qa-fill-error` so the verbose payload never lands in
+        the rendered DOM/toast — Playwright reads the attribute, the user sees the toast text only.
+      */}
       {orderResult && (
         <div
           data-qa="tradebox-fill-confirmation"
           data-qa-fill-status={orderResult.success ? "success" : "error"}
+          data-qa-fill-error={
+            orderResult.success ? undefined : orderResult.error || ""
+          }
           className="trade-notification-e2e-sentinel"
           aria-hidden="true"
         >
           <span className="trade-notification-e2e-sentinel__label">
-            {orderResult.success
-              ? "Order Submitted!"
-              : orderResult.error
-                ? `Order failed: ${orderResult.error}`
-                : "Order Failed"}
+            {orderResult.success ? "Order Submitted!" : "Order Failed"}
           </span>
         </div>
       )}
+
+      {/*
+        E2E / automation: single-venue market quote hook (visually hidden — `e2e/page-objects/tradebox.ts`
+        `readLegAttrs`, `readQuotedBuyCostUsd`, `readQuotedSellReceiveUsd`, `expandSorDetailsIfCollapsed`).
+        Populated directly from `sorRoute.executionRoute` (the targeted plan that Submit will sign);
+        when the route is null the sentinel is absent and tests time out cleanly with their existing
+        "no SOR quote" error path. The `aria-expanded="true"` toggle keeps the page object's expand
+        helper a no-op without re-introducing the visible Details collapsible that was intentionally
+        removed from the UI.
+      */}
+      {tradingVenue !== "all" &&
+        orderType === "market" &&
+        sorRoute.executionRoute &&
+        sorRoute.executionRoute.legs.length > 0 && (() => {
+          const route = sorRoute.executionRoute;
+          const leg = route.legs[0];
+          const legSide = route.side === "buy" ? "market-buy" : "market-sell";
+          const priceCents = Math.round(leg.avgPrice * 100);
+          const sellReceiveUsd =
+            typeof leg.executionAmountUsd === "number" &&
+            Number.isFinite(leg.executionAmountUsd) &&
+            leg.executionAmountUsd > 0
+              ? leg.executionAmountUsd
+              : route.totalCost;
+          return (
+            <div
+              className="sor-details-panel tradebox-e2e-sentinel"
+              aria-hidden="true"
+            >
+              <button
+                type="button"
+                tabIndex={-1}
+                className="sor-details-toggle tradebox-e2e-sentinel__toggle"
+                aria-expanded="true"
+              />
+              <div
+                data-qa="sor-leg"
+                data-leg-side={legSide}
+                data-leg-venue={leg.venue}
+                data-leg-num-shares={leg.shares}
+                data-leg-price-cents={priceCents}
+              />
+              {route.side === "buy" && Number.isFinite(route.totalCost) && (
+                <div
+                  data-qa="sor-leg-cost"
+                  data-cost-usd={route.totalCost}
+                />
+              )}
+              {route.side === "sell" && Number.isFinite(sellReceiveUsd) && (
+                <div
+                  data-qa="tradebox-estimated-receive-usd"
+                  data-receive-usd={sellReceiveUsd}
+                />
+              )}
+            </div>
+          );
+        })()}
     </div>
   );
 }

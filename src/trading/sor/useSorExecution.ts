@@ -61,6 +61,12 @@ export type BridgeExecutor = (
 	leg: RouteLeg,
 	opts?: {
 		amountUsdOverride?: number;
+		/**
+		 * Strict source-debit ceiling for the corridor. Capping `sendHuman` at
+		 * `min(walletBalance, budgetUsdOverride)` keeps source debit within the
+		 * optimizer's per-corridor allocation regardless of wallet headroom.
+		 */
+		budgetUsdOverride?: number;
 		/** Fired at the start of each `buildPrefundSteps` LI.FI hop (same-chain sweeps run inside that hop). */
 		onPrefundProgress?: (p: SorPrefundLegProgress) => void;
 	},
@@ -433,6 +439,8 @@ export function useSorExecution(
 						bridgeResult = await withTimeout(
 							executeBridge(group.representativeLeg, {
 								amountUsdOverride: group.totalAmountUsd,
+								budgetUsdOverride:
+									group.totalAmountUsd + group.groupBridgeCostUsd,
 								onPrefundProgress: (p) => {
 									if (mountedRef.current) {
 										setPrefundLegProgress(p);

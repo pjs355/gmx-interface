@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import OrderbookDisplay from "@/components/OrderbookDisplay/OrderbookDisplay";
+import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { TradingVenue } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
@@ -271,7 +272,10 @@ export function VenueOrderbooksPanel({
 						className={`venue-tab-btn${activeVenueId === venue.id ? " venue-tab-btn--active" : ""}${venue.restricted ? " venue-tab-btn--restricted" : ""}`}
 						onClick={() => selectVenue(venue.id)}
 					>
-						{venue.label}
+						<span className="venue-tab-btn__inner">
+							<MarketLogo venue={venue.id} size={16} />
+							<span>{venue.label}</span>
+						</span>
 					</button>
 				))}
 			</div>

@@ -1,6 +1,5 @@
-import { useState, useCallback, useMemo } from "react";
-import { PiArrowsSplitBold } from "react-icons/pi";
-import type { RoutePlan, RouteLeg, SorVenue, VenueRoutePreview } from "@/trading/sor";
+import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import type { RoutePlan, RouteLeg, SorSide, SorVenue, VenueRoutePreview } from "@/trading/sor";
 import {
 	VENUE_DISPLAY_NAMES,
 	formatToWinUsdDisplay,
@@ -13,9 +12,47 @@ import type { TradingVenue } from "@/config/venueConfig";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { FlashingValue } from "@/utils/FlashingValue";
 import { SorRouteConsolidatedFeesSummary } from "./SorRouteConsolidatedFeesSummary";
+import MarketLogo from "@/components/MarketLogo/MarketLogo";
+import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
 
 const SR_VALUE_CLASS = "smart-routing-row__value";
 const SR_VALUE_FLASH_CLASS = "smart-routing-row__value--flash";
+
+/** Brand blue→purple gradient (matches Header / RPGPanel). Inline SVG so the
+ *  fork lines paint a real gradient instead of a flat color. */
+function SplitGradientIcon({ size = 18 }: { size?: number }) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 24 24"
+			fill="none"
+			aria-hidden
+		>
+			<defs>
+				<linearGradient
+					id="sr-split-gradient"
+					x1="0"
+					y1="0"
+					x2="24"
+					y2="24"
+					gradientUnits="userSpaceOnUse"
+				>
+					<stop offset="0%" stopColor="#6a6ff5" />
+					<stop offset="100%" stopColor="#8b5cf6" />
+				</linearGradient>
+			</defs>
+			{/* Trunk + two diverging arrows ("Y" with arrowheads). */}
+			<path
+				d="M12 21V13M12 13L5 6M5 6V10M5 6H9M12 13L19 6M19 6V10M19 6H15"
+				stroke="url(#sr-split-gradient)"
+				strokeWidth="2.4"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
 
 function isSellPreviewOk(
 	p: VenueRoutePreview,
@@ -185,33 +222,124 @@ function pickExecutionOverlay(
 	return executionRoute;
 }
 
+/**
+ * Inline "Max shares" badge for split-drawer legs. Drops to "Max" when the leg's
+ * single-line text would overflow its container.
+ *
+ * Why measure instead of relying on @container queries: the parent leg-line uses
+ * `display: inline-flex; white-space: nowrap; overflow: hidden`, which makes
+ * container queries inside it brittle. A small `useLayoutEffect` measurement is
+ * robust and re-evaluates whenever the leg's underlying data changes (passed via
+ * `measureKey` so a new amount typed by the user re-runs the check).
+ *
+ * Hysteresis: once compact, we stay compact for that data shape (no oscillation).
+ * `measureKey` resets us to the full label when the leg's shares/price change so
+ * we always *try* "Max shares" first on the new layout.
+ */
+function MaxBadgeInline({ measureKey }: { measureKey: string }) {
+	const ref = useRef<HTMLSpanElement | null>(null);
+	const [compact, setCompact] = useState(false);
+
+	useEffect(() => {
+		setCompact(false);
+	}, [measureKey]);
+
+	useLayoutEffect(() => {
+		if (compact) return;
+		const span = ref.current;
+		if (!span) return;
+		const line = span.parentElement;
+		if (!line) return;
+		// 0.5px slack avoids sub-pixel rounding flips on retina displays.
+		if (line.scrollWidth > line.clientWidth + 0.5) {
+			setCompact(true);
+		}
+	}, [compact, measureKey]);
+
+	return (
+		<span ref={ref} className="smart-routing-drawer__leg-max smart-routing-drawer__leg-max--inline">
+			{compact ? " Max" : " Max shares"}
+		</span>
+	);
+}
+
 function SmartRoutingLegRows({
 	legs,
 	side,
 	formatLegAvg,
+	showVenueLogo = false,
+	atMaxByVenue,
 }: {
 	legs: RouteLeg[];
 	side: "buy" | "sell";
 	formatLegAvg: (p: number) => string;
+	/** Multi-venue (split) drawers prefix each leg with its venue logo so the user can
+	 *  tell legs apart. Single-venue drawers omit the logo — the venue is already
+	 *  identified by the row above. */
+	showVenueLogo?: boolean;
+	/** Buy only. Venues whose available depth was fully consumed by this route — the
+	 *  user couldn't get more shares from them at any price within the route's slippage
+	 *  cap. Drives the "Max shares available" hint. Server already exposes this as
+	 *  `VenueRoutePreviewBuy.insufficientLiquidity`; callers translate. */
+	atMaxByVenue?: Set<SorVenue>;
 }) {
 	return (
 		<div className="smart-routing-drawer__legs">
 			{legs.map((leg, idx) => {
 				const shareStr = formatSorDetailsSharesDisplay(leg.shares);
 				const priceStr = formatLegAvg(leg.avgPrice);
+				// Gross USD on this leg (shares × per-share price). Per-leg fees are
+				// rolled up into the consolidated "Fees" row below the legs.
+				const legGrossUsd =
+					Number.isFinite(leg.shares) &&
+					Number.isFinite(leg.avgPrice) &&
+					leg.shares > 0 &&
+					leg.avgPrice > 0
+						? leg.shares * leg.avgPrice
+						: null;
+				const atMax = atMaxByVenue?.has(leg.venue) === true;
 				return (
-					<div key={`${leg.venue}-${idx}`} className="smart-routing-drawer__leg">
-						<span className="smart-routing-drawer__venue">
-							{VENUE_DISPLAY_NAMES[leg.venue]}
-						</span>
-						<span className="smart-routing-drawer__leg-line">
-							{side === "sell" ? <>Sell </> : null}
-							<span className="smart-routing-drawer__num">{shareStr}</span>
-							{" shares"}
-							<span className="smart-routing-drawer__avg-tail">
-								{" @ avg "}
-								{priceStr}
+					<div
+						key={`${leg.venue}-${idx}`}
+						className="smart-routing-drawer__leg"
+					>
+						{/* Left column: the shares/avg line, plus the optional
+						 *  block-below "Max shares available" badge for the
+						 *  single-venue drawer (which has the room to spell it
+						 *  out without truncating). Split drawers render the
+						 *  badge inline at the end of the line instead. */}
+						<span className="smart-routing-drawer__leg-left">
+							<span className="smart-routing-drawer__leg-line">
+								{showVenueLogo ? (
+									<MarketLogo
+										venue={leg.venue}
+										size={16}
+										className="smart-routing-drawer__leg-logo"
+									/>
+								) : null}
+								{side === "sell" ? <>Sell </> : null}
+								<span className="smart-routing-drawer__num">{shareStr}</span>
+								{" shares"}
+								<span className="smart-routing-drawer__avg-tail">
+									{" @ avg "}
+									{priceStr}
+								</span>
+								{atMax && showVenueLogo ? (
+									<MaxBadgeInline
+										measureKey={`${leg.venue}-${leg.shares}-${leg.avgPrice}`}
+									/>
+								) : null}
 							</span>
+							{atMax && !showVenueLogo ? (
+								<span className="smart-routing-drawer__leg-max smart-routing-drawer__leg-max--block">
+									(Max shares available)
+								</span>
+							) : null}
+						</span>
+						<span className="smart-routing-drawer__leg-amount">
+							{legGrossUsd != null
+								? `$ ${formatSorBuyCostUsdDisplay(legGrossUsd)}`
+								: ""}
 						</span>
 					</div>
 				);
@@ -230,6 +358,10 @@ export interface SmartRoutingSectionProps {
 	tradingVenue: TradingVenue;
 	isLoading: boolean;
 	onSelectVenue: (venue: TradingVenue) => void;
+	/** Raw input amount string. When this changes we auto-select the top row again. */
+	userAmount?: string;
+	/** Side of the active trade — drives the right-hand column header label. */
+	side?: SorSide;
 }
 
 export default function SmartRoutingSection({
@@ -239,6 +371,8 @@ export default function SmartRoutingSection({
 	tradingVenue,
 	isLoading,
 	onSelectVenue,
+	userAmount,
+	side,
 }: SmartRoutingSectionProps) {
 	const { formatAvgOdds, oddsDisplayStyle } = useOddsDisplay();
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -280,6 +414,112 @@ export default function SmartRoutingSection({
 		[multiVenueSplit, displayRoute, venuePreviews],
 	);
 
+	/* Split-buy drawer: which venues did the route fully consume?
+	 *
+	 * Server marks each per-venue buy preview with `insufficientLiquidity` when
+	 * that venue alone (given the full requested USD budget) cannot fill the
+	 * order — its `totalShares` is the most the venue can ever provide at this
+	 * size. If a leg in the SPLIT route delivered ≥ that ceiling, the split
+	 * actually drained the venue's depth at the route's slippage cap, so we
+	 * tag that leg with "(Max shares available)". Sell drawers don't need this
+	 * (sell previews don't expose `insufficientLiquidity`).
+	 */
+	const splitBuyAtMaxByVenue = useMemo<Set<SorVenue> | undefined>(() => {
+		if (!displayRoute || displayRoute.side !== "buy") return undefined;
+		if (!venuePreviews || venuePreviews.length === 0) return undefined;
+		const out = new Set<SorVenue>();
+		const EPS = 1e-6;
+		for (const leg of displayRoute.legs) {
+			const preview = venuePreviews.find(
+				(p): p is Extract<VenueRoutePreview, { side: "buy" }> =>
+					p.side === "buy" && p.venue === leg.venue,
+			);
+			if (!preview) continue;
+			if (!preview.insufficientLiquidity) continue;
+			if (leg.shares + EPS >= preview.totalShares) out.add(leg.venue);
+		}
+		return out.size > 0 ? out : undefined;
+	}, [displayRoute, venuePreviews]);
+
+	/* ---------------------------------------------------------------------
+	 * Auto-select top row when the input amount changes.
+	 *
+	 * Goal: if the user types a new amount, the row that's now the best
+	 * payout (split when shown, else the first single-venue row) becomes
+	 * the selected row. Avoids stranding them on a stale single-venue
+	 * pick when more size makes split the winner.
+	 *
+	 * Notes:
+	 *  - We mark "dirty" the moment `userAmount` changes, then commit the
+	 *    selection only AFTER the SOR channel settles (`isLoading === false`),
+	 *    so we choose based on fresh data — not stale pre-fetch state.
+	 *  - First mount is intentionally NOT auto-selected; we honor the
+	 *    initial `tradingVenue` (sticky / venue tab) the parent passed in.
+	 *  - No-op on `executionRoute` updates: we only react to amount edits,
+	 *    so polling refreshes never fight the user's manual selection.
+	 * ------------------------------------------------------------------- */
+	const lastAutoSelectAmountRef = useRef<string | null>(
+		userAmount === undefined ? null : userAmount,
+	);
+	const pendingAutoSelectRef = useRef(false);
+	/**
+	 * Tracks the `tradingVenue` we last observed. When `tradingVenue` changes
+	 * for any reason **other than** auto-select itself (a manual venue tab
+	 * click, smart-row click, or e2e injection), we cancel the pending
+	 * auto-select so the SOR settle does not retroactively override the
+	 * user's choice. Without this, typing an amount and then clicking a
+	 * specific venue while SOR was still loading would leave the venue
+	 * flipping to the auto-pick a few seconds later.
+	 */
+	const lastObservedTradingVenueRef = useRef<TradingVenue>(tradingVenue);
+
+	useEffect(() => {
+		if (userAmount === undefined) return;
+		if (userAmount === lastAutoSelectAmountRef.current) return;
+		pendingAutoSelectRef.current = true;
+		lastAutoSelectAmountRef.current = userAmount;
+	}, [userAmount]);
+
+	useEffect(() => {
+		if (lastObservedTradingVenueRef.current === tradingVenue) return;
+		lastObservedTradingVenueRef.current = tradingVenue;
+		// External venue change wins over a queued auto-pick. Auto-select
+		// itself sets `pendingAutoSelectRef.current = false` before calling
+		// `onSelectVenue`, so this branch only matters for manual changes.
+		pendingAutoSelectRef.current = false;
+	}, [tradingVenue]);
+
+	useEffect(() => {
+		if (!pendingAutoSelectRef.current) return;
+		if (isLoading) return;
+		// No data yet — nothing to select against. Wait for the next settle.
+		if (!displayRoute && (!sortedVenuePreviews || sortedVenuePreviews.length === 0)) {
+			return;
+		}
+
+		pendingAutoSelectRef.current = false;
+
+		// Top row mirrors the render order below: split (when best/tied) wins,
+		// otherwise the first sorted single-venue preview.
+		const splitIsTop = showSplitBuyRow || showSplitSellRow;
+		if (splitIsTop) {
+			if (tradingVenue !== "all") onSelectVenue("all");
+			return;
+		}
+		if (sortedVenuePreviews && sortedVenuePreviews.length > 0) {
+			const topVenue = sorVenueToTradingVenue(sortedVenuePreviews[0].venue);
+			if (tradingVenue !== topVenue) onSelectVenue(topVenue);
+		}
+	}, [
+		isLoading,
+		showSplitBuyRow,
+		showSplitSellRow,
+		sortedVenuePreviews,
+		displayRoute,
+		tradingVenue,
+		onSelectVenue,
+	]);
+
 	if (!sortedVenuePreviews && !multiVenueSplit && !isLoading) {
 		return null;
 	}
@@ -289,8 +529,32 @@ export default function SmartRoutingSection({
 			? sorRouteSellAvgCentsFromLegs(displayRoute)
 			: null;
 
+	/* Right-column header label mirrors what the row's value cell shows:
+	 *  - buy → totalShares (each share pays $1) → "To Win"
+	 *  - sell → totalCost / proceeds USD → "Receive"
+	 * Falls back to displayRoute.side if the parent didn't pass `side`. */
+	const effectiveSide: SorSide =
+		side ?? displayRoute?.side ?? executionRoute?.side ?? "buy";
+	const rightHeaderLabel = effectiveSide === "buy" ? "To Win" : "Receive";
+
+	/* Only show the column headers when there are actually rows to label.
+	 * Avoids a "Venue / To Win" pair hovering above empty space during the
+	 * initial fetch (when isLoading is true but no previews exist yet). */
+	const hasAnyRow =
+		showSplitBuyRow ||
+		showSplitSellRow ||
+		(sortedVenuePreviews != null && sortedVenuePreviews.length > 0);
+
 	return (
 		<div className="smart-routing-section" data-qa="smart-routing-section">
+			{hasAnyRow && (
+				<div className="smart-routing-section__headers">
+					<span className="smart-routing-section__header-label">Venue</span>
+					<span className="smart-routing-section__header-label">
+						{rightHeaderLabel}
+					</span>
+				</div>
+			)}
 			{showSplitBuyRow && displayRoute && (
 				<div
 					className={`smart-routing-block${splitActive ? " smart-routing-block--selected" : ""}`}
@@ -307,7 +571,7 @@ export default function SmartRoutingSection({
 									className="smart-routing-row__logo smart-routing-row__logo--split"
 									aria-hidden
 								>
-									<PiArrowsSplitBold size={18} />
+									<SplitGradientIcon size={20} />
 								</span>
 								<div className="smart-routing-row__meta">
 									<span className="smart-routing-row__name">Split order</span>
@@ -318,11 +582,6 @@ export default function SmartRoutingSection({
 									)}
 								</div>
 							</div>
-							<FlashingValue
-								value={`$${formatToWinUsdDisplay(displayRoute.totalShares)}`}
-								className={SR_VALUE_CLASS}
-								flashClassName={SR_VALUE_FLASH_CLASS}
-							/>
 						</button>
 						<button
 							type="button"
@@ -335,6 +594,17 @@ export default function SmartRoutingSection({
 								aria-hidden
 							/>
 						</button>
+						<button
+							type="button"
+							className="smart-routing-row__value-btn"
+							onClick={() => onSelectVenue("all")}
+						>
+							<FlashingValue
+								value={`$${formatToWinUsdDisplay(displayRoute.totalShares)}`}
+								className={SR_VALUE_CLASS}
+								flashClassName={SR_VALUE_FLASH_CLASS}
+							/>
+						</button>
 					</div>
 					{expandedKey === "split" && (
 						<div className="smart-routing-drawer" data-qa="smart-routing-split-drawer">
@@ -342,6 +612,8 @@ export default function SmartRoutingSection({
 								legs={displayRoute.legs}
 								side="buy"
 								formatLegAvg={formatLegAvg}
+								showVenueLogo
+								atMaxByVenue={splitBuyAtMaxByVenue}
 							/>
 							<div className="smart-routing-drawer__footer">
 								<div className="smart-routing-drawer__fees">
@@ -349,7 +621,7 @@ export default function SmartRoutingSection({
 								</div>
 								{Number.isFinite(displayRoute.totalCost) && (
 									<div className="smart-routing-drawer__total">
-										<span>Cost</span>
+										<span>Total Cost</span>
 										<span>$ {formatSorBuyCostUsdDisplay(displayRoute.totalCost)}</span>
 									</div>
 								)}
@@ -375,7 +647,7 @@ export default function SmartRoutingSection({
 									className="smart-routing-row__logo smart-routing-row__logo--split"
 									aria-hidden
 								>
-									<PiArrowsSplitBold size={18} />
+									<SplitGradientIcon size={20} />
 								</span>
 								<div className="smart-routing-row__meta">
 									<span className="smart-routing-row__name">Split order</span>
@@ -386,11 +658,6 @@ export default function SmartRoutingSection({
 									)}
 								</div>
 							</div>
-							<FlashingValue
-								value={`$ ${formatSorSellProceedsUsdDisplay(displayRoute.totalCost)}`}
-								className={SR_VALUE_CLASS}
-								flashClassName={SR_VALUE_FLASH_CLASS}
-							/>
 						</button>
 						<button
 							type="button"
@@ -403,6 +670,17 @@ export default function SmartRoutingSection({
 								aria-hidden
 							/>
 						</button>
+						<button
+							type="button"
+							className="smart-routing-row__value-btn"
+							onClick={() => onSelectVenue("all")}
+						>
+							<FlashingValue
+								value={`$ ${formatSorSellProceedsUsdDisplay(displayRoute.totalCost)}`}
+								className={SR_VALUE_CLASS}
+								flashClassName={SR_VALUE_FLASH_CLASS}
+							/>
+						</button>
 					</div>
 					{expandedKey === "split-sell" && (
 						<div className="smart-routing-drawer" data-qa="smart-routing-split-drawer">
@@ -410,6 +688,7 @@ export default function SmartRoutingSection({
 								legs={displayRoute.legs}
 								side="sell"
 								formatLegAvg={formatLegAvg}
+								showVenueLogo
 							/>
 							<div className="smart-routing-drawer__footer">
 								<div className="smart-routing-drawer__fees">
@@ -436,6 +715,13 @@ export default function SmartRoutingSection({
 					.slice(0, 1)
 					.toUpperCase();
 
+				const venueLogoUrl = resolveMarketLogo(preview.venue);
+				const venueLogoNode = venueLogoUrl ? (
+					<MarketLogo venue={preview.venue} size={28} />
+				) : (
+					letter
+				);
+
 				if (preview.side === "sell" && !preview.ok) {
 					return (
 						<div
@@ -445,7 +731,11 @@ export default function SmartRoutingSection({
 						>
 							<div className="smart-routing-row smart-routing-row--message">
 								<div className="smart-routing-row__left">
-									<span className="smart-routing-row__logo">{letter}</span>
+									<span
+										className={`smart-routing-row__logo${venueLogoUrl ? " smart-routing-row__logo--image" : ""}`}
+									>
+										{venueLogoNode}
+									</span>
 									<div className="smart-routing-row__meta">
 										<span className="smart-routing-row__name">
 											{VENUE_DISPLAY_NAMES[preview.venue]}
@@ -496,7 +786,11 @@ export default function SmartRoutingSection({
 									onClick={() => onSelectVenue(sorVenueToTradingVenue(preview.venue))}
 								>
 									<div className="smart-routing-row__left">
-										<span className="smart-routing-row__logo">{letter}</span>
+										<span
+											className={`smart-routing-row__logo${venueLogoUrl ? " smart-routing-row__logo--image" : ""}`}
+										>
+											{venueLogoNode}
+										</span>
 										<div className="smart-routing-row__meta">
 											<span className="smart-routing-row__name">
 												{VENUE_DISPLAY_NAMES[preview.venue]}
@@ -506,11 +800,6 @@ export default function SmartRoutingSection({
 											</span>
 										</div>
 									</div>
-									<FlashingValue
-										value={`$ ${formatSorSellProceedsUsdDisplay(displayProceeds)}`}
-										className={SR_VALUE_CLASS}
-										flashClassName={SR_VALUE_FLASH_CLASS}
-									/>
 								</button>
 								<button
 									type="button"
@@ -521,6 +810,17 @@ export default function SmartRoutingSection({
 									<span
 										className={`smart-routing-row__chev${open ? " smart-routing-row__chev--open" : ""}`}
 										aria-hidden
+									/>
+								</button>
+								<button
+									type="button"
+									className="smart-routing-row__value-btn"
+									onClick={() => onSelectVenue(sorVenueToTradingVenue(preview.venue))}
+								>
+									<FlashingValue
+										value={`$ ${formatSorSellProceedsUsdDisplay(displayProceeds)}`}
+										className={SR_VALUE_CLASS}
+										flashClassName={SR_VALUE_FLASH_CLASS}
 									/>
 								</button>
 							</div>
@@ -579,7 +879,11 @@ export default function SmartRoutingSection({
 								}}
 							>
 								<div className="smart-routing-row__left">
-									<span className="smart-routing-row__logo">{letter}</span>
+									<span
+										className={`smart-routing-row__logo${venueLogoUrl ? " smart-routing-row__logo--image" : ""}`}
+									>
+										{venueLogoNode}
+									</span>
 									<div className="smart-routing-row__meta">
 										<span className="smart-routing-row__name">
 											{VENUE_DISPLAY_NAMES[p.venue]}
@@ -592,11 +896,6 @@ export default function SmartRoutingSection({
 										)}
 									</div>
 								</div>
-								<FlashingValue
-									value={`$${formatToWinUsdDisplay(displayShares)}`}
-									className={SR_VALUE_CLASS}
-									flashClassName={SR_VALUE_FLASH_CLASS}
-								/>
 							</button>
 							<button
 								type="button"
@@ -609,6 +908,22 @@ export default function SmartRoutingSection({
 									aria-hidden
 								/>
 							</button>
+							<button
+								type="button"
+								className="smart-routing-row__value-btn"
+								disabled={theoretical}
+								onClick={() => {
+									if (!theoretical) {
+										onSelectVenue(sorVenueToTradingVenue(p.venue));
+									}
+								}}
+							>
+								<FlashingValue
+									value={`$${formatToWinUsdDisplay(displayShares)}`}
+									className={SR_VALUE_CLASS}
+									flashClassName={SR_VALUE_FLASH_CLASS}
+								/>
+							</button>
 						</div>
 						{open && (
 							<div className="smart-routing-drawer">
@@ -616,6 +931,9 @@ export default function SmartRoutingSection({
 									legs={p.legs}
 									side="buy"
 									formatLegAvg={formatLegAvg}
+									atMaxByVenue={
+										p.insufficientLiquidity ? new Set([p.venue]) : undefined
+									}
 								/>
 								<div className="smart-routing-drawer__footer">
 									<div className="smart-routing-drawer__fees">
@@ -623,7 +941,7 @@ export default function SmartRoutingSection({
 									</div>
 									{Number.isFinite(p.totalCost) && (
 										<div className="smart-routing-drawer__total">
-											<span>Cost</span>
+											<span>Total Cost</span>
 											<span>$ {formatSorBuyCostUsdDisplay(p.totalCost)}</span>
 										</div>
 									)}

@@ -73,6 +73,18 @@ export function AppRoutes() {
 					<Footer />
 				</div>
 			</div>
+			{/*
+			 * Compact, time-dismissable order toast. Matches the pre-existing
+			 * umbrella-page look: no X, no progress bar, no icon, auto-closes
+			 * after `TOAST_AUTO_CLOSE_TIME` (5s). Visual sizing lives in
+			 * `App.scss` (`.Toastify__toast`, `.Toastify__toast-body`).
+			 *
+			 * `pauseOnHover` and `pauseOnFocusLoss` are both off so the toast
+			 * actually disappears at the configured time — leaving them on
+			 * lets the timer freeze whenever the cursor is anywhere near the
+			 * toast or the tab loses focus, which is what was making it
+			 * "stay on the page".
+			 */}
 			<ToastContainer
 				limit={1}
 				transition={Zoom}
@@ -81,8 +93,10 @@ export function AppRoutes() {
 				hideProgressBar={true}
 				newestOnTop={false}
 				closeOnClick={false}
+				closeButton={false}
 				draggable={false}
-				pauseOnHover
+				pauseOnHover={false}
+				pauseOnFocusLoss={false}
 				theme="dark"
 				icon={false}
 			/>

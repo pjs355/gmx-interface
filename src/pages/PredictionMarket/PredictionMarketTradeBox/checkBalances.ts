@@ -118,8 +118,24 @@ export function checkSufficientBalance(
 	}
 }
 
-/** Sub-share tolerance: on-chain `formatUnits` + JS float can be slightly below a rounded UI amount. */
-export const SHARE_SELL_COMPARE_EPS = 1e-7;
+/**
+ * Sell-amount tolerance vs held shares.
+ *
+ * Held share counts come back from chain RPC / venue APIs with up to 6+
+ * decimals (e.g. Predict's `14.143812`). The trade box displays them rounded
+ * DOWN to 2 dp (see `MyPositionsRow.formatShareCount`), so the user types a
+ * value that is always at most ~0.01 share BELOW their actual balance — but
+ * floating-point + indexer lag also means the displayed value can be a hair
+ * ABOVE actual, hence the symmetric tolerance.
+ *
+ * 0.01 share covers the entire 2-dp display window without admitting any
+ * meaningful overshoot (1 ¢ of a share == fractions of a cent in USD on
+ * any sub-$1 outcome). Pair this with the "sell-all clamp" upstream of
+ * SOR (see `clampSellAmountToHeld` in PredictionMarketTradeBox) so the user
+ * actually sells the full fractional remainder when they type the displayed
+ * number.
+ */
+export const SHARE_SELL_COMPARE_EPS = 0.01;
 
 // Function to check if user has sufficient YES/NO token shares for sell orders
 export function checkSufficientShares(

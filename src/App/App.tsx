@@ -3,6 +3,13 @@ import { I18nProvider } from "@lingui/react";
 import { useEffect } from "react";
 
 import "styles/globals.css";
+// react-toastify@9 does NOT auto-inject styles (v10+ does). Without this import the
+// global `<ToastContainer>` in `AppRoutes` loses `position: fixed`, width, z-index,
+// and enter/exit animations, so toasts render inline as a huge static block under
+// the footer (most visible on the home page after submitting an order). Loaded
+// before `App.scss` so our custom theme overrides (`.Toastify__toast--success`,
+// `.Toastify__toast--error`, etc.) cascade on top.
+import "react-toastify/dist/ReactToastify.css";
 import "./App.scss";
 
 import { LANGUAGE_LOCALSTORAGE_KEY } from "config/localStorage";

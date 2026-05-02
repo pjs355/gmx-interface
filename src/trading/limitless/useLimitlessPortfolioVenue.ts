@@ -9,6 +9,7 @@ import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { PrivateApiError } from "@/services/privateApi/errors";
 import { limitlessQueryKeys } from "./limitlessQueryKeys";
 import { canonicalLimitlessTokenId } from "./limitlessTokenId";
+import { mergeLimitlessFetchWithFloors } from "./limitlessPositionsRefetchMerge";
 import {
 	debugLimitlessPortfolio,
 	debugLimitlessPortfolioTable,
@@ -437,10 +438,12 @@ export function useLimitlessVenuePositions(enabled: boolean) {
 			try {
 				raw = await api.getLimitlessPortfolioPositionsVenue();
 			} catch (e) {
-				if (isLimitlessPortfolioProxyMissing(e)) return [];
+				if (isLimitlessPortfolioProxyMissing(e)) {
+					return mergeLimitlessFetchWithFloors([]);
+				}
 				throw e;
 			}
-			if (!Array.isArray(raw)) return [];
+			if (!Array.isArray(raw)) return mergeLimitlessFetchWithFloors([]);
 			const out: VenuePosition[] = [];
 			for (const row of raw) {
 				const v = mapPositionsVenueRow(row);
@@ -477,7 +480,7 @@ export function useLimitlessVenuePositions(enabled: boolean) {
 					rows,
 				);
 			}
-			return out;
+			return mergeLimitlessFetchWithFloors(out);
 		},
 	});
 }

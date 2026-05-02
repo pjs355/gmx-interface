@@ -8,6 +8,7 @@ import { StreamEmbed } from "./StreamEmbed";
 import { Comments } from "./Comments/Comments";
 import { EsportsVenueBooksPanel } from "@/components/EsportsVenueBooksPanel/EsportsVenueBooksPanel";
 import { VenueOrderbooksPanel } from "@/components/VenueOrderbooksPanel/VenueOrderbooksPanel";
+import { MarketHeader } from "./MarketHeader";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { TradingVenue } from "./PredictionMarketTradeBox/types";
@@ -24,6 +25,7 @@ import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
 
 type PanelsProps = {
 	umbrella: Umbrella;
+	titleRef: React.RefObject<HTMLHeadingElement>;
 	sortedQuestions: PredictionMarket[];
 	questionOrderbooks: Record<string, any>;
 	activeMarket: PredictionMarket | null;
@@ -44,6 +46,7 @@ type PanelsProps = {
 
 export const MarketPanels: React.FC<PanelsProps> = ({
 	umbrella,
+	titleRef,
 	sortedQuestions,
 	questionOrderbooks,
 	activeMarket,
@@ -359,6 +362,14 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			{/* Desktop Layout */}
 			<div className="desktop-layout">
 				<div className="left-panel">
+					{/* Sit the umbrella header inside the left column so the
+					    sticky trade box on the right starts at the same Y as
+					    the header (matches the home-page layout) instead of
+					    being pushed down by a full-width black bar. */}
+					{umbrella && (
+						<MarketHeader umbrella={umbrella} titleRef={titleRef} />
+					)}
+
 					{showStream && (
 						<div className="stream-section">
 							<StreamEmbed streamUrl={streamUrl} height="720" />
@@ -397,6 +408,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 			{/* Mobile Layout */}
 			<div className="mobile-layout">
+				{/* Single-column on mobile, so the header sits at the very top
+				    of the stack as the page title. */}
+				{umbrella && (
+					<MarketHeader umbrella={umbrella} titleRef={titleRef} />
+				)}
+
 				{showStream && (
 					<div className="stream-section-mobile">
 						<StreamEmbed streamUrl={streamUrl} height="360" />

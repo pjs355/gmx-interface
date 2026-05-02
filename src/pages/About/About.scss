@@ -135,7 +135,8 @@
 .about-venues__chip {
 	display: inline-flex;
 	align-items: center;
-	padding: 6px 12px;
+	gap: 8px;
+	padding: 6px 12px 6px 8px;
 	border-radius: 999px;
 	border: 1px solid rgba(255, 255, 255, 0.14);
 	background: rgba(255, 255, 255, 0.03);
@@ -144,6 +145,18 @@
 	font-weight: 500;
 	letter-spacing: 0.01em;
 	white-space: nowrap;
+}
+
+.about-venues__logo {
+	width: 22px;
+	height: 22px;
+	object-fit: contain;
+	flex-shrink: 0;
+	border-radius: 4px;
+}
+
+.about-venues__label {
+	line-height: 1.2;
 }
 
 // Steps

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type MutableRefObject } from "react";
 import { useSendTransaction } from "@privy-io/react-auth";
 import { VersionedTransaction } from "@solana/web3.js";
-import { encodeFunctionData, erc20Abi } from "viem";
+import { encodeFunctionData, erc20Abi, formatUnits } from "viem";
 import { base, bsc } from "viem/chains";
 import { Side } from "@polymarket/clob-client-v2";
 import type { TickSize } from "@polymarket/clob-client-v2";
@@ -44,8 +44,13 @@ import {
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import {
 	buildPolygonSafeUsdceWrapTransactions,
+	readPolymarketSafeCtfBalanceWei,
+	readPolymarketSafePusdBalanceWei,
 	readPolymarketSafeUsdceBalanceWei,
 } from "@/trading/polymarket/polygonCollateralWrap";
+import { clampMarketBuyAmountToWallet } from "@/trading/sor/postBridgeOrderResize";
+import { clampMarketSellSharesToCtfBalance } from "@/trading/polymarket/polymarketSellShareClamp";
+import { wireAmountUsdForVenue } from "@/trading/sor/wireAmount";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
 import type { LimitlessOrderRequest } from "@/trading/limitless/limitlessPrivateApiTypes";
@@ -545,46 +550,46 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						}
 					}
 					// CLOB spends pUSD — wrap Safe USDC.e via Collateral Onramp before buys.
-					if (side === "buy") {
-						const rawSafe = fundingAddresses.polymarketSafe?.trim();
-						if (rawSafe && /^0x[a-fA-F0-9]{40}$/i.test(rawSafe)) {
-							let usdceWei: bigint;
+					const rawSafe = fundingAddresses.polymarketSafe?.trim();
+					const safeAddrValid =
+						!!rawSafe && /^0x[a-fA-F0-9]{40}$/i.test(rawSafe);
+					if (side === "buy" && safeAddrValid) {
+						let usdceWei: bigint;
+						try {
+							usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe!);
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error
+									? e.message
+									: "Could not read Polygon USDC.e balance before trade";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+						if (usdceWei > 0n) {
+							const relayClient = await getRelayClient();
+							if (!relayClient) {
+								return {
+									filled: false,
+									filledShares: 0,
+									error:
+										"Polymarket relayer unavailable — cannot wrap USDC.e to pUSD before trading.",
+								};
+							}
 							try {
-								usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe);
+								const txs = buildPolygonSafeUsdceWrapTransactions({
+									safeAddress: rawSafe!,
+									wrapAmountWei: usdceWei,
+								});
+								await executePolygonRelayAndWait(
+									relayClient,
+									txs,
+									"Wrap USDC.e to pUSD for Polymarket",
+								);
 							} catch (e: unknown) {
 								const msg =
 									e instanceof Error
 										? e.message
-										: "Could not read Polygon USDC.e balance before trade";
+										: "USDC.e wrap failed before Polymarket order";
 								return { filled: false, filledShares: 0, error: msg };
-							}
-							if (usdceWei > 0n) {
-								const relayClient = await getRelayClient();
-								if (!relayClient) {
-									return {
-										filled: false,
-										filledShares: 0,
-										error:
-											"Polymarket relayer unavailable — cannot wrap USDC.e to pUSD before trading.",
-									};
-								}
-								try {
-									const txs = buildPolygonSafeUsdceWrapTransactions({
-										safeAddress: rawSafe,
-										wrapAmountWei: usdceWei,
-									});
-									await executePolygonRelayAndWait(
-										relayClient,
-										txs,
-										"Wrap USDC.e to pUSD for Polymarket",
-									);
-								} catch (e: unknown) {
-									const msg =
-										e instanceof Error
-											? e.message
-											: "USDC.e wrap failed before Polymarket order";
-									return { filled: false, filledShares: 0, error: msg };
-								}
 							}
 						}
 					}
@@ -612,17 +617,125 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							tickStyle,
 							negRisk,
 						});
-					} else {
-						await polyClob.placeMarketOrder({
-							tokenId,
-							amount: side === "buy" ? leg.executionAmountUsd : leg.shares,
-							side: side === "buy" ? Side.BUY : Side.SELL,
-							tickStyle,
-							negRisk,
+						return { filled: true, filledShares: leg.shares };
+					}
+					/**
+					 * Wire `amount` for Polymarket BUY is the **notional** USDC
+					 * (`max(0, executionAmountUsd - leg.fee)`). Polymarket's CTF
+					 * pulls exactly `making = wire amount` USDC and deducts the
+					 * protocol fee from outcome tokens (`taking - fee`). The CLOB
+					 * API's pre-trade balance check requires
+					 * `wallet >= wire + fee`, which is satisfied because we bridge
+					 * `executionAmountUsd` (= notional + fee) to the Safe.
+					 *
+					 * If LI.FI under-delivered, `clampMarketBuyAmountToWallet`
+					 * shrinks `wire` to fit `wallet - fee - dust`. The returned
+					 * `scale` propagates to `filledShares` so cost-basis math
+					 * stays in sync until the venue receipt overrides it.
+					 */
+					let buyAmountUsd = wireAmountUsdForVenue(leg);
+					let postBridgeScale = 1;
+					if (side === "buy" && safeAddrValid) {
+						let pusdWei: bigint;
+						try {
+							pusdWei = await readPolymarketSafePusdBalanceWei(rawSafe!);
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error
+									? e.message
+									: "Could not read Polygon pUSD balance before trade";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+						const walletPusdHuman = Number(formatUnits(pusdWei, 6));
+						const clamp = clampMarketBuyAmountToWallet({
+							plannedExecutionUsd: buyAmountUsd,
+							walletUsd: walletPusdHuman,
+							feeEstimateUsd: leg.fee,
+							minOrderUsd: 1,
 						});
+						if (!clamp.ok) {
+							return { filled: false, filledShares: 0, error: clamp.error };
+						}
+						console.warn("[SOR][wire] polymarket", {
+							venue: "polymarket",
+							executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
+							feeUsd: Number(leg.fee.toFixed(6)),
+							plannedWireUsd: Number(buyAmountUsd.toFixed(6)),
+							walletPusdUsd: Number(walletPusdHuman.toFixed(6)),
+							finalWireUsd: Number(clamp.amountUsd.toFixed(6)),
+							scale: Number(clamp.scale.toFixed(6)),
+							resized: clamp.resized,
+						});
+						buyAmountUsd = clamp.amountUsd;
+						postBridgeScale = clamp.scale;
 					}
 
-					return { filled: true, filledShares: leg.shares };
+					// SELL: pre-flight clamp planned shares against the Safe's actual
+					// on-chain CTF balance. The Polymarket Data API that feeds
+					// `sorVenuePositions` lags the chain (and counts CTF locked in
+					// resting limit sells), so a "max" sell often plans 1–3% more
+					// shares than the Safe can transfer. The CTF Exchange's
+					// pre-trade hook is `balanceOf(maker, tokenId) >= makerAmount`,
+					// so the order would be rejected with HTTP 400
+					// `not enough balance / allowance`. Reading the chain here and
+					// shrinking `leg.shares` to fit prevents the rejection on the
+					// first attempt instead of forcing the user into a manual retry.
+					let sellShares = leg.shares;
+					let sellScale = 1;
+					if (side === "sell" && safeAddrValid) {
+						let ctfBalWei: bigint;
+						try {
+							ctfBalWei = await readPolymarketSafeCtfBalanceWei(rawSafe!, tokenId);
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error
+									? e.message
+									: "Could not read Polymarket CTF balance before sell";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+						const tickNumeric =
+							typeof tickStyle === "string" ? Number(tickStyle) : undefined;
+						const clamp = clampMarketSellSharesToCtfBalance({
+							plannedShares: leg.shares,
+							ctfBalanceWei: ctfBalWei,
+							tickSize:
+								tickNumeric != null && Number.isFinite(tickNumeric) && tickNumeric > 0
+									? tickNumeric
+									: undefined,
+						});
+						if (!clamp.ok) {
+							return { filled: false, filledShares: 0, error: clamp.error };
+						}
+						if (clamp.resized) {
+							console.warn("[SOR][sell-clamp] polymarket", {
+								venue: "polymarket",
+								tokenIdTail: tokenId.slice(-8),
+								plannedShares: Number(leg.shares.toFixed(6)),
+								ctfBalanceShares: Number((Number(ctfBalWei) / 1_000_000).toFixed(6)),
+								clampedShares: Number(clamp.amountShares.toFixed(6)),
+								scale: Number(clamp.scale.toFixed(6)),
+								tickSize: tickNumeric ?? null,
+							});
+						}
+						sellShares = clamp.amountShares;
+						sellScale = clamp.scale;
+					}
+
+					await polyClob.placeMarketOrder({
+						tokenId,
+						amount: side === "buy" ? buyAmountUsd : sellShares,
+						side: side === "buy" ? Side.BUY : Side.SELL,
+						tickStyle,
+						negRisk,
+					});
+
+					return {
+						filled: true,
+						filledShares:
+							side === "buy"
+								? leg.shares * postBridgeScale
+								: leg.shares * sellScale,
+					};
 				}
 
 				// ─── DFlow / Kalshi (Solana, USDC) ────────
@@ -825,6 +938,60 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							}
 							return r;
 						};
+						/**
+						 * Wire `makerAmount` for Limitless FOK BUY is the **notional**
+						 * USDC (`max(0, executionAmountUsd - leg.fee)`). Limitless
+						 * deducts the protocol fee from outcome tokens (token-side fee).
+						 * The API's collateral check requires `wallet >= maker + fee`;
+						 * we bridge `executionAmountUsd` (= notional + fee) to the
+						 * maker so the check passes.
+						 *
+						 * `clampMarketBuyAmountToWallet` is the secondary route if
+						 * LI.FI under-delivered. SELL `makerAmount` is shares — leave
+						 * untouched (no collateral check, no clamp needed).
+						 */
+						let limitlessBuyMakerUsd = wireAmountUsdForVenue(leg);
+						let limitlessPostBridgeScale = 1;
+						if (
+							!isLimit &&
+							side === "buy" &&
+							fundingAddresses.limitlessMakerBase?.trim()
+						) {
+							let makerUsdcHuman: number;
+							try {
+								const balances = await readFundingStableBalancesHuman({
+									limitlessMakerBase: fundingAddresses.limitlessMakerBase,
+								});
+								makerUsdcHuman = balances.limitlessMakerBase ?? 0;
+							} catch (e: unknown) {
+								const msg =
+									e instanceof Error
+										? e.message
+										: "Could not read Limitless maker USDC balance before order";
+								return { filled: false, filledShares: 0, error: msg };
+							}
+							const clamp = clampMarketBuyAmountToWallet({
+								plannedExecutionUsd: limitlessBuyMakerUsd,
+								walletUsd: makerUsdcHuman,
+								feeEstimateUsd: leg.fee,
+								minOrderUsd: 1,
+							});
+							if (!clamp.ok) {
+								return { filled: false, filledShares: 0, error: clamp.error };
+							}
+							console.warn("[SOR][wire] limitless", {
+								venue: "limitless",
+								executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
+								feeUsd: Number(leg.fee.toFixed(6)),
+								plannedWireUsd: Number(limitlessBuyMakerUsd.toFixed(6)),
+								walletUsdcUsd: Number(makerUsdcHuman.toFixed(6)),
+								finalWireUsd: Number(clamp.amountUsd.toFixed(6)),
+								scale: Number(clamp.scale.toFixed(6)),
+								resized: clamp.resized,
+							});
+							limitlessBuyMakerUsd = clamp.amountUsd;
+							limitlessPostBridgeScale = clamp.scale;
+						}
 						let limitlessOrderResponse: unknown;
 						if (isLimit) {
 							limitlessOrderResponse = await submitLimitlessOrder({
@@ -842,7 +1009,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								orderType: "FOK",
 								tokenId,
 								side: "BUY",
-								makerAmount: leg.executionAmountUsd,
+								makerAmount: limitlessBuyMakerUsd,
 								feeRateBps,
 							});
 						} else {
@@ -890,7 +1057,16 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						}
 						console.info(sorLx, "leg complete", { routeSlug: slug });
 						// SOR `filled` means the venue accepted the order / execution payload.
-						return { filled: true, filledShares: leg.shares };
+						// `limitlessPostBridgeScale` is 1 for SELL / GTC; for FOK BUY it tracks
+						// any post-bridge resize so cost-basis math stays in sync until the
+						// venue receipt overrides it.
+						return {
+							filled: true,
+							filledShares:
+								!isLimit && side === "buy"
+									? leg.shares * limitlessPostBridgeScale
+									: leg.shares,
+						};
 					} catch (e: unknown) {
 						const msg = e instanceof Error ? e.message : String(e);
 						console.error(sorLx, "phase failed", {
@@ -973,8 +1149,59 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						}
 					}
 
+					/**
+					 * Wire `amount` for Predict.fun BUY is the **notional** USDT
+					 * (`max(0, executionAmountUsd - leg.fee)`). Predict's CTF on
+					 * BNB Chain pulls `wire amount` USDT and deducts the protocol
+					 * fee from outcome tokens (token-side fee). The Predict API's
+					 * collateral check requires `wallet >= wire + fee`; we bridge
+					 * `executionAmountUsd` (= notional + fee) to the EOA so the
+					 * check passes.
+					 *
+					 * If LI.FI under-delivered, `clampMarketBuyAmountToWallet`
+					 * shrinks `wire` to fit `wallet - fee - dust`. The returned
+					 * `scale` propagates to `filledShares`.
+					 */
+					let predictBuyAmountUsd = wireAmountUsdForVenue(leg);
+					let predictPostBridgeScale = 1;
+					if (side === "buy" && fundingAddresses.embeddedEoa?.trim()) {
+						let bnbUsdtHuman: number;
+						try {
+							const balances = await readFundingStableBalancesHuman({
+								embeddedEoa: fundingAddresses.embeddedEoa,
+							});
+							bnbUsdtHuman = balances.bnb ?? 0;
+						} catch (e: unknown) {
+							const msg =
+								e instanceof Error
+									? e.message
+									: "Could not read BNB USDT balance before Predict order";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+						const clamp = clampMarketBuyAmountToWallet({
+							plannedExecutionUsd: predictBuyAmountUsd,
+							walletUsd: bnbUsdtHuman,
+							feeEstimateUsd: leg.fee,
+							minOrderUsd: 1,
+						});
+						if (!clamp.ok) {
+							return { filled: false, filledShares: 0, error: clamp.error };
+						}
+						console.warn("[SOR][wire] predictfun", {
+							venue: "predictfun",
+							executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
+							feeUsd: Number(leg.fee.toFixed(6)),
+							plannedWireUsd: Number(predictBuyAmountUsd.toFixed(6)),
+							walletUsdtUsd: Number(bnbUsdtHuman.toFixed(6)),
+							finalWireUsd: Number(clamp.amountUsd.toFixed(6)),
+							scale: Number(clamp.scale.toFixed(6)),
+							resized: clamp.resized,
+						});
+						predictBuyAmountUsd = clamp.amountUsd;
+						predictPostBridgeScale = clamp.scale;
+					}
 					const amountStr = side === "buy"
-						? leg.executionAmountUsd.toFixed(6)
+						? predictBuyAmountUsd.toFixed(6)
 						: leg.shares.toFixed(6);
 
 					try {
@@ -987,7 +1214,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						});
 						return {
 							filled: true,
-							filledShares: leg.shares,
+							filledShares:
+								side === "buy" ? leg.shares * predictPostBridgeScale : leg.shares,
 							txHash: (resp as { orderHash?: string })?.orderHash,
 						};
 					} catch (e: unknown) {
@@ -1034,6 +1262,15 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			leg: RouteLeg,
 			opts?: {
 				amountUsdOverride?: number;
+				/**
+				 * Strict source-debit ceiling for this corridor. For grouped legs,
+				 * `Σ executionAmountUsd + groupBridgeCostUsd`. For a single leg,
+				 * `leg.executionAmountUsd + leg.bridge.estimatedCost`. The LI.FI quote
+				 * iteration caps `sendHuman` at `min(walletBalance, budgetUsdOverride)`
+				 * so source-wallet debit never exceeds the optimizer's per-corridor
+				 * allocation, regardless of wallet headroom.
+				 */
+				budgetUsdOverride?: number;
 				onPrefundProgress?: (p: { current: number; total: number }) => void;
 			},
 		): Promise<BridgeResult> => {
@@ -1089,6 +1326,19 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					prefundAnchorUsd,
 					LIFI_BRIDGE_AMOUNT_MARGIN,
 				);
+				/**
+				 * Per-corridor source-debit ceiling. For grouped legs the caller
+				 * passes `Σ executionAmountUsd + groupBridgeCostUsd`; for a single
+				 * leg fall back to this leg's `executionAmountUsd + bridge.estimatedCost`.
+				 * Capping `sendHuman` at this budget is what enforces "source debit ≤
+				 * request.amount" even when the source wallet has more available.
+				 */
+				const corridorBudgetUsd =
+					typeof opts?.budgetUsdOverride === "number" &&
+					Number.isFinite(opts.budgetUsdOverride) &&
+					opts.budgetUsdOverride > 0
+						? opts.budgetUsdOverride
+						: leg.executionAmountUsd + Math.max(0, bridge.estimatedCost ?? 0);
 				let balancesHuman = await readFundingStableBalancesHuman(fundingAddresses);
 				const onDestUsd = limitlessBaseDest
 					? Math.max(0, balancesHuman.limitlessMakerBase ?? 0)
@@ -1139,6 +1389,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 				const prefundLogBase = {
 					venue: leg.venue,
+					executionAmountUsd: Number(leg.executionAmountUsd.toFixed(4)),
+					feeUsd: Number((leg.fee ?? 0).toFixed(4)),
 					prefundTargetUsdApprox: Number(needHuman.toFixed(4)),
 					venueSpendAppliedUsdApprox: Number(venueAppliedUsd.toFixed(4)),
 					bridgeShortfallUsdApprox: Number(bridgeShortfallUsd.toFixed(4)),
@@ -1147,6 +1399,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					scwSweepUsdcApprox: plannedSweepMicros > 0n ? sweepAmountHuman : null,
 					bridgeAmountUsd: opts?.amountUsdOverride ?? bridge.amount,
 					prefundAnchorUsdApprox: Number(prefundAnchorUsd.toFixed(4)),
+					corridorBudgetUsdApprox: Number(corridorBudgetUsd.toFixed(4)),
 					sorFrom: bridge.fromChain,
 					sorTo: bridge.toChain,
 					onChainUsd: {
@@ -1264,6 +1517,26 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 				let lastSourceTxHash: string | undefined;
 
+				/**
+				 * Pro-rate corridor budget across prefund steps proportional to each step's
+				 * destination-USD share. Each step's `ensurePrefundQuoteMeetsDestMin` cap is
+				 * `min(walletBalance, perStepBudget + carry)` where `carry` is unspent
+				 * headroom from prior steps. This guarantees Σ sendHuman ≤ corridorBudgetUsd
+				 * AND each step has enough headroom (proportional to its dest demand) to
+				 * absorb LI.FI under-delivery. A single global "remaining" cap fails because
+				 * step 1's iteration can over-consume the budget that step 2 needs.
+				 */
+				const sumStepsHuman = steps.reduce(
+					(s, st) => s + Math.max(0, Number(st.amountHuman)),
+					0,
+				);
+				const stepBudgetShares = steps.map((st) => {
+					const portion = Math.max(0, Number(st.amountHuman));
+					if (sumStepsHuman <= 1e-9) return 0;
+					return (portion / sumStepsHuman) * corridorBudgetUsd;
+				});
+				let corridorBudgetCarryUsd = 0;
+
 				const runPrefundLifiSteps = async (): Promise<void> => {
 					const reportPrefund = opts?.onPrefundProgress;
 					for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
@@ -1295,6 +1568,13 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								? Math.max(0, balancesHuman.base ?? 0)
 								: Math.max(0, balancesHuman[step.fromChain] ?? 0);
 						const destPortionUsd = Math.max(0, Number(step.amountHuman));
+						const perStepShare = Math.max(0, stepBudgetShares[stepIdx] ?? 0);
+						const stepBudgetUsd = perStepShare + corridorBudgetCarryUsd;
+						if (stepBudgetUsd <= 1e-9) {
+							throw new Error(
+								`Prefund step budget is zero (step ${stepIdx + 1}/${steps.length}, corridorBudgetUsd=${corridorBudgetUsd.toFixed(4)}). Optimizer corridor allocation cannot cover this hop — refresh the route.`,
+							);
+						}
 						let quote: LifiQuoteResponse;
 						let spentHumanForLedger = 0;
 						try {
@@ -1306,10 +1586,30 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								toAddress: toAddress.trim(),
 								destPortionUsd,
 								maxFromHuman,
+								budgetUsd: stepBudgetUsd,
 								seedAmountHuman: step.amountHuman,
 							});
 							quote = solved.quote;
 							spentHumanForLedger = Number(solved.amountHuman);
+							// Carry forward unspent share so later steps benefit from earlier under-spend.
+							corridorBudgetCarryUsd = Math.max(
+								0,
+								stepBudgetUsd - spentHumanForLedger,
+							);
+							console.warn("[SOR][prefund] LI.FI quote solved", {
+								venue: leg.venue,
+								corridor: `${step.fromChain}->${bridge.toChain}`,
+								step: `${stepIdx + 1}/${steps.length}`,
+								destPortionUsd: Number(destPortionUsd.toFixed(6)),
+								corridorBudgetUsd: Number(corridorBudgetUsd.toFixed(6)),
+								perStepShareUsd: Number(perStepShare.toFixed(6)),
+								stepBudgetUsd: Number(stepBudgetUsd.toFixed(6)),
+								corridorBudgetCarryUsd: Number(
+									corridorBudgetCarryUsd.toFixed(6),
+								),
+								maxFromHuman: Number(maxFromHuman.toFixed(6)),
+								sendHuman: Number(spentHumanForLedger.toFixed(6)),
+							});
 						} catch (quoteErr) {
 							const msg =
 								quoteErr instanceof Error ? quoteErr.message : String(quoteErr);

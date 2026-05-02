@@ -141,40 +141,6 @@ export default function usePositionsData() {
 		oddsMonitorMarkets: appState?.markets,
 	});
 
-	const resolvedUmbrellaPositions = useResolvedUmbrellaPositions({
-		effectiveAccount,
-		resolvedMarketsByUmbrella,
-		umbrellas,
-		tokenBalances,
-		userDataLoading,
-		claimedMarkets,
-		predictWinnings,
-		polyWinnings,
-		dflowWinnings,
-		limitlessWinnings,
-		predictMarketDetails,
-		predictUmbrellaLookup,
-		oddsMonitorMarkets: appState?.markets,
-	});
-
-	const {
-		positionsTotalValue,
-		getCurrentPriceForSide,
-		umbrellaBalancesPositions,
-		umbrellaBalancesOrders,
-		combinedOrders,
-		returnsByQid,
-		aggregates,
-		spentByQid,
-	} = usePortfolioDerivations({
-		umbrellaPositions,
-		resolvedUmbrellaPositions,
-		umbrellas,
-		getAllQuestionsForUmbrella,
-		orders,
-		allBooksPreview,
-	});
-
 	const venueOrders = useVenueOrders({
 		predictOpenOrders,
 		allPredictPositions,
@@ -208,6 +174,13 @@ export default function usePositionsData() {
 		umbrellas,
 	});
 
+	/**
+	 * History resolve runs first now: it posts `/api/umbrellas/resolve-venue-history`,
+	 * fetches inactive-umbrella docs, and patches each venue row with `levelUpUmbrellaId`
+	 * + `levelUpUmbrellaDisplayName`. Winnings then reuses the same patched rows + catalog
+	 * (`historyCatalogUmbrellas`) so the umbrella display name and side label that already
+	 * work on History also work on Winnings — no second resolve, no extra request.
+	 */
 	const {
 		historyCatalogUmbrellas,
 		venueHistory,
@@ -227,6 +200,41 @@ export default function usePositionsData() {
 			predictFilledOrdersCount: predictFilledOrders.length,
 			predictMatchEventCount: predictMatches.length,
 		},
+	});
+
+	const resolvedUmbrellaPositions = useResolvedUmbrellaPositions({
+		effectiveAccount,
+		resolvedMarketsByUmbrella,
+		umbrellas: historyCatalogUmbrellas,
+		tokenBalances,
+		userDataLoading,
+		claimedMarkets,
+		predictWinnings,
+		polyWinnings,
+		dflowWinnings,
+		limitlessWinnings,
+		predictMarketDetails,
+		predictUmbrellaLookup,
+		oddsMonitorMarkets: appState?.markets,
+		venueHistory,
+	});
+
+	const {
+		positionsTotalValue,
+		getCurrentPriceForSide,
+		umbrellaBalancesPositions,
+		umbrellaBalancesOrders,
+		combinedOrders,
+		returnsByQid,
+		aggregates,
+		spentByQid,
+	} = usePortfolioDerivations({
+		umbrellaPositions,
+		resolvedUmbrellaPositions,
+		umbrellas,
+		getAllQuestionsForUmbrella,
+		orders,
+		allBooksPreview,
 	});
 
 	const {

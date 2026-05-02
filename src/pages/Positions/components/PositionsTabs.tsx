@@ -21,7 +21,8 @@ export default function PositionsTabs({
 				>
 					Positions
 				</Button>
-				<Button
+				{/* Orders tab hidden for now — restore Button below when re-enabling. */}
+				{/* <Button
 					variant="ghost"
 					onClick={() => setActiveTab("orders")}
 					className={`side-btn ${
@@ -29,7 +30,7 @@ export default function PositionsTabs({
 					}`}
 				>
 					Orders
-				</Button>
+				</Button> */}
 				<Button
 					variant="ghost"
 					onClick={() => setActiveTab("history")}

@@ -19,6 +19,25 @@
 	--color-gray-800: #1f2937;
 	--color-gray-300: #d1d5db;
 
+	/*
+	 * Single source of truth for the right-side trade column width.
+	 *
+	 * Derived from the home page layout (Predictions.scss): an outer
+	 * 50px page padding, a 20% game-filter sidebar, then a 1.55fr / 1fr
+	 * inner grid with a 24px gutter. Solving for the right column gives:
+	 *
+	 *   right = ((100vw - 100px) * 0.8 - 24px) / 2.55
+	 *
+	 * Both `.predictions-page__home-trade-grid` (home dock) and
+	 * `.desktop-layout` (umbrella) use this var so the trade module is
+	 * pixel-identical on both pages — it doesn't resize when navigating
+	 * between them. Only used at >= 1101px; below that the layouts
+	 * collapse to single-column and the var is ignored.
+	 */
+	--predictions-trade-panel-width: calc(
+		((100vw - 100px) * 0.8 - 24px) / 2.55
+	);
+
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;

@@ -13,6 +13,7 @@ import {
 	collectOutcomeMintCandidatesFromTrades,
 	toVenuePositions,
 } from "./dflowPositionsApi";
+import { mergeDflowFetchWithFloors } from "./dflowPositionsRefetchMerge";
 
 const connection = createSolanaConnectionForJsonRpcReads();
 
@@ -107,13 +108,15 @@ export function useDflowPositions(
 
 				const out = toVenuePositions(positions, costMap, fillsByMint);
 				mark("mapToVenuePositions");
-				return out;
+				return mergeDflowFetchWithFloors(solanaAddress, out);
 			} catch (err) {
 				if (import.meta.env.DEV) {
 					// eslint-disable-next-line no-console -- DFlow load diagnostic
 					console.error("[DFlow] useDflowPositions queryFn failed; returning empty rows", err);
 				}
-				return [];
+				// Fall through to floors so an indexer hiccup doesn't drop optimistic
+				// fills the user has already seen.
+				return mergeDflowFetchWithFloors(solanaAddress, []);
 			}
 		},
 	});

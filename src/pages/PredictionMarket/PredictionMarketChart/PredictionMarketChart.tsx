@@ -11,6 +11,8 @@ import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
 import type { TimeRange } from "./types";
 import type { MergedExchangePoint } from "./types";
 import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
+import MarketLogo from "@/components/MarketLogo/MarketLogo";
+import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
 import "./PredictionMarketChart.scss";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
@@ -352,6 +354,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 				<div className="venue-checkbox-bar">
 					{availableVenues.map((venue) => {
+						const logoUrl = resolveMarketLogo(venue);
 						const dotStyle = venue === "bestOdds"
 							? {
 									background: `linear-gradient(135deg, ${chartTeamAColor} 50%, ${chartTeamBColor} 50%)`,
@@ -363,7 +366,11 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 								className={`venue-chip${enabledVenues.has(venue) ? " active" : ""}`}
 								onClick={() => toggleVenue(venue)}
 							>
-								<span className="venue-dot" style={dotStyle} />
+								{logoUrl ? (
+									<MarketLogo venue={venue} size={14} className="venue-logo" />
+								) : (
+									<span className="venue-dot" style={dotStyle} />
+								)}
 								{VENUE_LABELS[venue] ?? venue}
 							</button>
 						);

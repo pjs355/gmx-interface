@@ -71,11 +71,24 @@ export type TradeBoxShareBalancesSnapshot = {
 	sellVenueBreakdown: SellVenueBreakdownRow[];
 	sellOutcomeLabel: string;
 	loading: boolean;
-	/** Per-venue share counts for YES/NO when on “All Markets” (keys = `VenuePosition.venue`). */
-	allMarketsOutcomeVenueShares: { yes: Record<string, number>; no: Record<string, number> } | null;
+	/**
+	 * Per-venue share counts for YES/NO across all matched venues for this page market.
+	 * Always computed (never `null`) so the trade box can feed SOR + render the
+	 * highest-bid-where-held strip on every tab, not just All Markets.
+	 */
+	allMarketsOutcomeVenueShares: { yes: Record<string, number>; no: Record<string, number> };
 };
 
-/** Match venue row to open umbrella for trade-box share breakdown. DFlow: event ticker then mint — same contract as {@link matchVenuePositionToUmbrella}. */
+/**
+ * Match venue row to open umbrella for trade-box share breakdown.
+ *
+ * Per-venue identity rules (no title fallback for venues with unique on-chain ids — two
+ * different "Natus vs FaZe" matches share the same `displayName` but distinct mints / tickers,
+ * so a title fallback misattributes last week's winnings to this week's umbrella):
+ *   - polymarket → `conditionId`
+ *   - dflow / kalshi → `dflowEventTicker` then outcome `tokenId` (Solana mint)
+ *   - levelup / limitless / other → fall back to display-name match (legacy contract)
+ */
 function umbrellaForPosition(
 	pos: VenuePosition,
 	umbrellas: Umbrella[],
@@ -105,6 +118,12 @@ function umbrellaForPosition(
 				if (mintMatchesDflowExchange(u.exchangeMatching?.dflow, mint)) return u;
 			}
 		}
+		/**
+		 * No event-ticker / mint hit → position is for a different DFlow market (commonly a
+		 * prior week's match with the same teams). Title-matching here would misattribute
+		 * last week's "Natus vs FaZe" winnings to this week's umbrella.
+		 */
+		return null;
 	}
 	return (
 		umbrellas.find((u) => titlesMatchVenue(u.displayName ?? "", pos.marketTitle ?? "")) ?? null
@@ -117,6 +136,13 @@ function positionMatchesMarket(pos: VenuePosition, market: MarketRef): boolean {
 	if (mid && pid && polymarketConditionLookupKey(mid) === polymarketConditionLookupKey(pid)) {
 		return true;
 	}
+	/**
+	 * DFlow market identity = mint + event ticker. The umbrella-level match above already
+	 * vetted this position belongs to the open umbrella; falling back to a title check here
+	 * pulls in last-week's same-named match (e.g. "Natus vs FaZe Match Winner"). Trust the
+	 * umbrella resolution and gate on it.
+	 */
+	if (pos.venue === "dflow") return true;
 	const mt = (market.displayName || market.question || "").trim();
 	const pt = (pos.marketTitle || "").trim();
 	if (!mt || !pt) return false;
@@ -235,22 +261,17 @@ function venuePositionToYesNo(
 	return outcomeToSide(p.outcome, isVsSingle, yesTeamLabel, noTeamLabel);
 }
 
-function mapTradingVenueFilter(v: TradingVenue): VenueId | "levelup" | "all" {
-	if (v === "levelup") return "levelup";
-	if (v === "polymarket") return "polymarket";
-	if (v === "predictfun") return "predictfun";
-	if (v === "dflow") return "dflow";
-	if (v === "limitless") return "limitless";
-	return "all";
-}
-
 /**
- * Share balances for the trade widget: aggregates across venues on “All Markets”,
- * and venue-scoped lines with a “(Predict)” style suffix on a single-venue tab.
+ * Share balances for the trade widget. Always aggregates across every venue
+ * for the active page market; the `tradingVenue` prop is accepted for API
+ * compatibility but no longer narrows the breakdown — the SmartRoutingSection
+ * auto-selects a single venue mid-render once SOR resolves, and that must not
+ * make existing positions disappear from the widget.
  */
 export function useTradeBoxShareBalances(opts: {
 	umbrellaId: string | undefined;
 	market: MarketRef | null | undefined;
+	/** Accepted for API compatibility; not consulted for the breakdown anymore. */
 	tradingVenue: TradingVenue;
 	yesTeamLabel: string;
 	noTeamLabel: string;
@@ -263,7 +284,6 @@ export function useTradeBoxShareBalances(opts: {
 	const {
 		umbrellaId,
 		market,
-		tradingVenue,
 		yesTeamLabel,
 		noTeamLabel,
 		isVsSingle,
@@ -485,8 +505,11 @@ export function useTradeBoxShareBalances(opts: {
 			(dflowRpcEnabled && dflowQ.isLoading) ||
 			(limitlessPortfolioEnabled && limitlessVenueQ.isLoading));
 
+	// Always aggregate across every venue regardless of `state.tradingVenue` —
+	// the SmartRoutingSection auto-select can flip `tradingVenue` to a single
+	// venue mid-render (when SOR finds a single-venue best route), and we don't
+	// want the breakdown to "drop" the other venues' shares.
 	const lines = useMemo((): TradeBoxShareLine[] => {
-		const mode = mapTradingVenueFilter(tradingVenue);
 		const yesLabel = isVsSingle ? yesTeamLabel : "Yes";
 		const noLabel = isVsSingle ? noTeamLabel : "No";
 
@@ -516,88 +539,42 @@ export function useTradeBoxShareBalances(opts: {
 			return out;
 		}
 
-		if (mode === "all") {
-			let yes = levelBalances.yes;
-			let no = levelBalances.no;
-			for (const p of relevantVenuePositions) {
-				const side = venuePositionToYesNo(
-					p,
-					matchedOddsMarkets,
-					pageMatchedMonitor,
-					isVsSingle,
-					yesTeamLabel,
-					noTeamLabel,
-				);
-				if (side === "yes") yes += p.shares;
-				else if (side === "no") no += p.shares;
-			}
-			const out: TradeBoxShareLine[] = [];
-			if (yes > 0) {
-				out.push({
-					key: "agg-yes",
-					side: "yes",
-					label: yesLabel,
-					shares: yes,
-					venueSuffix: null,
-				});
-			}
-			if (no > 0) {
-				out.push({
-					key: "agg-no",
-					side: "no",
-					label: noLabel,
-					shares: no,
-					venueSuffix: null,
-				});
-			}
-			return out;
+		let yes = levelBalances.yes;
+		let no = levelBalances.no;
+		for (const p of relevantVenuePositions) {
+			const side = venuePositionToYesNo(
+				p,
+				matchedOddsMarkets,
+				pageMatchedMonitor,
+				isVsSingle,
+				yesTeamLabel,
+				noTeamLabel,
+			);
+			if (side === "yes") yes += p.shares;
+			else if (side === "no") no += p.shares;
 		}
-
-		let yes = 0;
-		let no = 0;
-		if (mode === "levelup") {
-			yes = levelBalances.yes;
-			no = levelBalances.no;
-		} else {
-			for (const p of relevantVenuePositions) {
-				if (p.venue !== mode) continue;
-				const side = venuePositionToYesNo(
-					p,
-					matchedOddsMarkets,
-					pageMatchedMonitor,
-					isVsSingle,
-					yesTeamLabel,
-					noTeamLabel,
-				);
-				if (side === "yes") yes += p.shares;
-				else if (side === "no") no += p.shares;
-			}
-		}
-
-		const suffix = `(${VENUE_SUFFIX[mode]})`;
 		const out: TradeBoxShareLine[] = [];
 		if (yes > 0) {
 			out.push({
-				key: `${mode}-yes`,
+				key: "agg-yes",
 				side: "yes",
 				label: yesLabel,
 				shares: yes,
-				venueSuffix: suffix,
+				venueSuffix: null,
 			});
 		}
 		if (no > 0) {
 			out.push({
-				key: `${mode}-no`,
+				key: "agg-no",
 				side: "no",
 				label: noLabel,
 				shares: no,
-				venueSuffix: suffix,
+				venueSuffix: null,
 			});
 		}
 		return out;
 	}, [
 		umbrellaId,
-		tradingVenue,
 		isVsSingle,
 		yesTeamLabel,
 		noTeamLabel,
@@ -621,8 +598,10 @@ export function useTradeBoxShareBalances(opts: {
 		return yesLabel;
 	}, [isVsSingle, yesTeamLabel, noTeamLabel, selectedPosition]);
 
+	// Sell breakdown is always all-venues — same rationale as `lines` above.
+	// SOR sell options surface per-venue rows in SmartRoutingSection; this strip
+	// just shows what's available regardless of the auto-selected route.
 	const { sellTotalShares, sellVenueBreakdown } = useMemo(() => {
-		const mode = mapTradingVenueFilter(tradingVenue);
 		const byVenue = new Map<string, number>();
 		if (!selectedPosition) {
 			return { sellTotalShares: 0, sellVenueBreakdown: [] as SellVenueBreakdownRow[] };
@@ -635,9 +614,7 @@ export function useTradeBoxShareBalances(opts: {
 
 		const lu =
 			selectedPosition === "yes" ? levelBalances.yes : levelBalances.no;
-		if (mode === "all" || mode === "levelup") {
-			add("levelup", lu);
-		}
+		add("levelup", lu);
 
 		for (const p of relevantVenuePositions) {
 			const side = venuePositionToYesNo(
@@ -649,7 +626,6 @@ export function useTradeBoxShareBalances(opts: {
 				noTeamLabel,
 			);
 			if (side !== selectedPosition) continue;
-			if (mode !== "all" && p.venue !== mode) continue;
 			add(p.venue, p.shares);
 		}
 
@@ -673,7 +649,6 @@ export function useTradeBoxShareBalances(opts: {
 		const total = rows.reduce((s, r) => s + r.shares, 0);
 		return { sellTotalShares: total, sellVenueBreakdown: rows };
 	}, [
-		tradingVenue,
 		selectedPosition,
 		isVsSingle,
 		yesTeamLabel,
@@ -685,8 +660,12 @@ export function useTradeBoxShareBalances(opts: {
 		pageMatchedMonitor,
 	]);
 
+	/**
+	 * Per-venue YES/NO share counts for the active page market — computed on every
+	 * tab (not just All Markets). Source of truth for `sorVenuePositions` (Polymarket
+	 * + DFlow) and the highest-bid-where-held strip on the YES/NO buttons.
+	 */
 	const allMarketsOutcomeVenueShares = useMemo(() => {
-		if (mapTradingVenueFilter(tradingVenue) !== "all") return null;
 		const yes: Record<string, number> = {};
 		const no: Record<string, number> = {};
 		const add = (target: Record<string, number>, venueKey: string, sh: number) => {
@@ -709,7 +688,6 @@ export function useTradeBoxShareBalances(opts: {
 		}
 		return { yes, no };
 	}, [
-		tradingVenue,
 		isVsSingle,
 		yesTeamLabel,
 		noTeamLabel,

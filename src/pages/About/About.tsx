@@ -1,9 +1,17 @@
 import type { ReactNode } from "react";
 import Button from "components/Button/Button";
+import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
 
 import "./About.scss";
 
-const VENUES = ["Polymarket", "Kalshi", "Predict", "Limitless", "LevelUp"];
+/** Slugs must match {@link resolveMarketLogo} / `market-logos` basenames. */
+const VENUES: Array<{ slug: string; name: string }> = [
+	{ slug: "polymarket", name: "Polymarket" },
+	{ slug: "kalshi", name: "Kalshi" },
+	{ slug: "predict", name: "Predict" },
+	{ slug: "limitless", name: "Limitless" },
+	{ slug: "levelup", name: "LevelUp" },
+];
 
 const STEPS: Array<{ title: string; body: ReactNode }> = [
 	{
@@ -54,11 +62,23 @@ export function About() {
 
 				<section className="about-section">
 					<div className="about-venues" aria-label="Supported venues">
-						{VENUES.map((venue) => (
-							<span key={venue} className="about-venues__chip">
-								{venue}
-							</span>
-						))}
+						{VENUES.map(({ slug, name }) => {
+							const logoUrl = resolveMarketLogo(slug);
+							return (
+								<span key={slug} className="about-venues__chip">
+									{logoUrl ? (
+										<img
+											className="about-venues__logo"
+											src={logoUrl}
+											alt=""
+											width={22}
+											height={22}
+										/>
+									) : null}
+									<span className="about-venues__label">{name}</span>
+								</span>
+							);
+						})}
 					</div>
 					<p className="about-muted about-muted--small">
 						More venues coming soon.
@@ -171,10 +191,7 @@ export function About() {
 						every message.
 					</p>
 					<div className="about-cta">
-						<Button
-							variant="secondary"
-							to="mailto:brendan@levelup.markets"
-						>
+						<Button variant="primary" to="mailto:brendan@levelup.markets">
 							Send a message
 						</Button>
 					</div>

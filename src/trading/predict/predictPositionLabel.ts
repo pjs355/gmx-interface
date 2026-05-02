@@ -51,9 +51,9 @@ function inferYesNoFromVenueOutcome(outcome: string): "Yes" | "No" | null {
 }
 
 /**
- * Resolved venue history rows: readable Predict.fun / Polymarket labels (same
- * rules as positions). When several rows share one market header, keep raw
- * `outcome` so rows stay distinct.
+ * Resolved venue history rows: readable Predict.fun / Polymarket / DFlow / Limitless labels
+ * (same rules as positions). When several rows share one market header, keep raw `outcome`
+ * so rows stay distinct.
  */
 export function getVenueHistoryMarketColumnLabel(
 	marketTitle: string,
@@ -64,7 +64,8 @@ export function getVenueHistoryMarketColumnLabel(
 	if (
 		pos.venue === "predictfun" ||
 		pos.venue === "polymarket" ||
-		pos.venue === "limitless"
+		pos.venue === "limitless" ||
+		pos.venue === "dflow"
 	) {
 		const inferred =
 			inferYesNoFromVenueOutcome(pos.outcome) ??

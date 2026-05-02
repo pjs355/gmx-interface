@@ -1,4 +1,12 @@
 .prediction-market-page {
+	/*
+	 * Mirror the home page (`.predictions-page` in `Predictions.scss`) so the
+	 * trading column on the right uses the exact same gap and top inset as the
+	 * home dock — visually the right side feels like it stays in place when
+	 * navigating between Markets (home) and an umbrella detail page.
+	 */
+	--predictions-split-gutter: 24px;
+	--predictions-home-column-inset: 8px;
 	padding-left: 50px;
 	padding-right: 50px;
 	max-width: none;
@@ -49,16 +57,27 @@
 }
 
 // Desktop Layout
+//
+// Right column width is locked to the shared `--predictions-trade-panel-width`
+// CSS variable (defined in `globals.css`), the same value the home dock uses.
+// This way the trade module is the EXACT same size on the home page and the
+// umbrella detail page — clicking between them no longer changes the trade
+// module's width. The umbrella has no left game-filter sidebar, so its left
+// content column ends up wider than the home's left grid column; the right
+// column lines up identically.
 .desktop-layout {
 	display: grid;
-	grid-template-columns: 2fr 1fr;
-	gap: 16px;
+	grid-template-columns:
+		minmax(0, 1fr)
+		var(--predictions-trade-panel-width);
+	gap: var(--predictions-split-gutter, 24px);
 	align-items: start;
 }
 
 .left-panel {
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
 	//gap: 16px;
 }
 
@@ -78,6 +97,22 @@
 
 	&::-webkit-scrollbar {
 		display: none;
+	}
+}
+
+/*
+ * Same top inset the home dock uses (`Predictions.scss` lines 1209-1213).
+ * Keeps the trade module's first row at the same vertical offset as the
+ * left column header, matching the home → umbrella visual continuity.
+ *
+ * Scoped to `.prediction-market-page` so this rule cannot leak into the
+ * home page's `.right-panel.predictions-page__home-trade-panel` (which has
+ * its own equivalent rule already).
+ */
+.prediction-market-page .right-panel {
+	.prediction-market-tradebox,
+	.tradebox-skeleton {
+		margin-top: var(--predictions-home-column-inset, 8px);
 	}
 }
 
@@ -139,13 +174,17 @@
 }
 
 .market-header {
+	/*
+	 * Lives inside `.left-panel` (desktop) or at the top of `.mobile-layout`
+	 * (mobile), so it should NOT bleed past its container. The previous
+	 * `margin-left/-right: -50px` was needed when this sat at the page level
+	 * to "escape" the page padding — it caused the header to extend across
+	 * the right column and visually push the trade box down. Now that the
+	 * header is column-scoped, padding alone is enough.
+	 */
 	background: #000000;
-	margin-left: -50px;
-	margin-right: -50px;
-	padding-left: 50px;
-	padding-right: 50px;
-	padding-top: 12px;
-	padding-bottom: 12px;
+	padding: 12px 16px;
+	border-radius: 12px;
 
 	.market-title-container {
 		display: flex;
@@ -244,11 +283,18 @@
 }
 
 @media (max-width: 1100px) {
+	/*
+	 * Mobile: the header sits inside `.mobile-layout` (a single-column
+	 * container under the page padding), so on these widths we still bleed
+	 * past the page padding to the viewport edges. Pairs with the
+	 * `.prediction-market-page.mobile .market-header` overrides below.
+	 */
 	.market-header {
 		margin-left: -16px;
 		margin-right: -16px;
 		padding-left: 16px;
 		padding-right: 16px;
+		border-radius: 0;
 	}
 }
 
@@ -414,6 +460,12 @@
 	cursor: pointer;
 	user-select: none;
 	transition: border-color 0.15s ease, background-color 0.15s ease;
+
+	&__inner {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
 
 	&:hover {
 		background: rgba(255, 255, 255, 0.08);

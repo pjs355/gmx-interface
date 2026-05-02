@@ -4,6 +4,7 @@ import Tooltip from "components/Tooltip/Tooltip";
 import { outcomeSideLabelColor } from "../utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
+import MarketLogo from "@/components/MarketLogo/MarketLogo";
 
 interface TradeHistoryListMobileProps {
 	orders: ProcessedOrder[];
@@ -263,8 +264,18 @@ export default function TradeHistoryListMobile({
 							</div>
 						</div>
 						{/* Market venue */}
-						<div style={{ marginTop: 8, textAlign: "right" }}>
+						<div
+							style={{
+								marginTop: 8,
+								textAlign: "right",
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "flex-end",
+								gap: 6,
+							}}
+						>
 							<span style={{ color: "#666", fontSize: 10, textTransform: "uppercase" }}>Market: </span>
+							<MarketLogo venue={order.venue} size={14} />
 							<span style={{ color: "#888", fontSize: 12 }}>{order.venue ?? "LevelUp"}</span>
 						</div>
 						</div>

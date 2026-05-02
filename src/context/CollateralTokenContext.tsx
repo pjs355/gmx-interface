@@ -1,11 +1,20 @@
 import React, { createContext, useCallback, useContext, useMemo } from "react";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+	useQuery,
+	useQueryClient,
+	type UseQueryResult,
+} from "@tanstack/react-query";
 import { useSignerContext } from "context/SignerContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import {
 	readFundingStableBalancesHuman,
 	type FundingStableBalancesHuman,
 } from "@/trading/sor/fundingStableBalances";
+import {
+	applyCollateralOverlays,
+	registerCollateralOverlay,
+	type CollateralChainKey,
+} from "./collateralTokensOptimisticOverlays";
 
 /**
  * Live collateral-token balances (USDC and bridge stables) keyed off the
@@ -37,6 +46,19 @@ export interface CollateralTokens {
 	 * can read immediately without waiting for the next render.
 	 */
 	refetch: () => Promise<FundingStableBalancesHuman | undefined>;
+	/**
+	 * Register an optimistic post-trade cash change so the displayed balance for
+	 * the given chain immediately reflects the trade and won't regress on the
+	 * next refetch until the on-chain reading converges (or the overlay TTL
+	 * elapses). `direction === "buy"` decreases cash; `direction === "sell"`
+	 * increases it.
+	 */
+	applyOptimisticCashChange: (input: {
+		chain: CollateralChainKey;
+		baseline: number;
+		amountUsd: number;
+		direction: "buy" | "sell";
+	}) => void;
 }
 
 /** TanStack prefix for all collateral balance queries — use with `invalidateQueries`. */
@@ -56,6 +78,7 @@ const COLLATERAL_TOKENS_FALLBACK: CollateralTokens = {
 	isFetched: false,
 	isPending: true,
 	refetch: async () => undefined,
+	applyOptimisticCashChange: () => {},
 };
 
 let collateralProviderMissingLogged = false;
@@ -73,6 +96,7 @@ function normalizeSolanaAddress(input: string | null | undefined): string | unde
 }
 
 export function CollateralTokenProvider({ children }: { children: React.ReactNode }) {
+	const queryClient = useQueryClient();
 	const { account } = useSignerContext();
 	const {
 		polymarketSafe,
@@ -93,8 +117,8 @@ export function CollateralTokenProvider({ children }: { children: React.ReactNod
 		fundingHydrated &&
 		Boolean(baseAddr || safeAddr || bnbAddr || solAddr || limitlessAddr);
 
-	const query: UseQueryResult<FundingStableBalancesHuman> = useQuery({
-		queryKey: [
+	const queryKey = useMemo(
+		() => [
 			COLLATERAL_TOKENS_QUERY_KEY,
 			baseAddr?.toLowerCase() ?? null,
 			safeAddr?.toLowerCase() ?? null,
@@ -102,22 +126,46 @@ export function CollateralTokenProvider({ children }: { children: React.ReactNod
 			solAddr ?? null,
 			limitlessAddr?.toLowerCase() ?? null,
 		],
+		[baseAddr, safeAddr, bnbAddr, solAddr, limitlessAddr],
+	);
+
+	const query: UseQueryResult<FundingStableBalancesHuman> = useQuery({
+		queryKey,
 		enabled,
 		staleTime: COLLATERAL_TOKENS_STALE_TIME_MS,
-		queryFn: () =>
-			readFundingStableBalancesHuman({
+		queryFn: async () => {
+			const fresh = await readFundingStableBalancesHuman({
 				baseSmartWallet: baseAddr ?? null,
 				polymarketSafe: safeAddr ?? null,
 				embeddedEoa: bnbAddr ?? null,
 				solanaAddress: solAddr ?? null,
 				limitlessMakerBase: limitlessAddr ?? null,
-			}),
+			});
+			return applyCollateralOverlays(fresh);
+		},
 	});
 
 	const refetch = useCallback(async () => {
 		const r = await query.refetch();
 		return r.data;
 	}, [query]);
+
+	const applyOptimisticCashChange = useCallback(
+		(input: {
+			chain: CollateralChainKey;
+			baseline: number;
+			amountUsd: number;
+			direction: "buy" | "sell";
+		}) => {
+			registerCollateralOverlay(input);
+			// Re-apply overlays to the cached snapshot so consumers re-render with
+			// the new ceiling/floor without waiting for a refetch.
+			queryClient.setQueryData<FundingStableBalancesHuman>(queryKey, (prev) =>
+				prev ? applyCollateralOverlays(prev) : prev,
+			);
+		},
+		[queryClient, queryKey],
+	);
 
 	const value = useMemo<CollateralTokens>(() => {
 		const data = query.data;
@@ -130,8 +178,15 @@ export function CollateralTokenProvider({ children }: { children: React.ReactNod
 			isFetched: query.isFetched,
 			isPending: query.isPending,
 			refetch,
+			applyOptimisticCashChange,
 		};
-	}, [query.data, query.isFetched, query.isPending, refetch]);
+	}, [
+		query.data,
+		query.isFetched,
+		query.isPending,
+		refetch,
+		applyOptimisticCashChange,
+	]);
 
 	return (
 		<CollateralTokenContext.Provider value={value}>

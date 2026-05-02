@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAnimatedDots } from "../../../../hooks/useAnimatedDots";
 import { getVenueConfig, type TradingVenue } from "@/config/venueConfig";
@@ -273,11 +273,15 @@ function sorUnifiedPrimary(
 		}
 		// Distinguish "books still loading" / "market just resolved" — those
 		// are naturally transient — from "no venue can serve this size".
-		// Prevents the blanket "Route unavailable" that used to pop every
-		// time a book ingest lag crossed the grace window.
+		// By the time these codes surface (after retries + grace) the books are
+		// confirmed missing, so phrase the button as the user-facing reality.
 		const code = sorState.routeErrorCode;
 		if (code === "NO_BOOKS_AVAILABLE" || code === "NO_MARKET_FOUND") {
-			return { text: "Fetching price...", disabled: true, onClick: () => {} };
+			return {
+				text: side === "buy" ? "No shares available" : "No bids available",
+				disabled: true,
+				onClick: () => {},
+			};
 		}
 		if (code === "ALL_BOOKS_STALE") {
 			return { text: "Refreshing venue prices…", disabled: true, onClick: () => {} };
@@ -335,6 +339,94 @@ export interface ButtonStateResult {
   // Info for "sweeping the book" warning
   isSweepingBook?: boolean;
   availableShares?: number;
+}
+
+/* ----------------------------------------------------------------------------
+ * Loading-flicker stabilizer
+ *
+ * On a tab switch the targeted SOR refetch briefly nulls `executableRoute`,
+ * which previously caused the Submit button to flash "Fetching price…" for
+ * the duration of the round-trip (~300ms–1s). To make tab switching feel
+ * instant, we hold the previous settled button result for a short grace
+ * window after the loading text first appears.
+ *
+ * Behavior:
+ *  - During the grace window: render the previous text/numbers but force
+ *    `disabled: true`. The button is non-actionable, so the briefly-stale
+ *    label cannot be clicked into a wrong-tab trade.
+ *  - After the grace window: surface the real "Fetching price…" so the user
+ *    isn't lied to if the fetch is genuinely slow.
+ *  - When loading clears, immediately drop the hold and show the new result.
+ *
+ * The grace window is intentionally short — long enough to absorb a typical
+ * SOR round-trip, short enough that stale digits aren't visible in any
+ * meaningful sense. Note: the button label is venue-agnostic ("Buy YES" /
+ * "Buy {team}"), so the held label doesn't show misleading numbers.
+ * -------------------------------------------------------------------------- */
+const BUTTON_LOADING_HOLD_MS = 450;
+
+const FETCHING_PRICE_TEXTS = new Set<string>([
+  "Fetching price...",
+  "Fetching price",
+  "Finding best price...",
+  "Finding best price",
+]);
+function isFetchingPriceText(text: string): boolean {
+  return FETCHING_PRICE_TEXTS.has(text);
+}
+
+function useStabilizedButtonResult(
+  raw: ButtonStateResult,
+  holdMs: number,
+): ButtonStateResult {
+  const isLoadingNow = isFetchingPriceText(raw.text);
+  const lastSettledRef = useRef<ButtonStateResult | null>(null);
+  const heldRef = useRef<ButtonStateResult | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [, forceTick] = useState(0);
+
+  /* Render-phase bookkeeping: refs persist across renders + strict-mode
+   * double-mount, so capturing the latest non-loading result here is safe. */
+  if (!isLoadingNow) {
+    lastSettledRef.current = raw;
+    if (heldRef.current != null) heldRef.current = null;
+  } else if (heldRef.current == null && lastSettledRef.current != null) {
+    /* Just transitioned into loading and we have a previous result to show. */
+    heldRef.current = lastSettledRef.current;
+  }
+
+  useEffect(() => {
+    /* Clean up the release timer when loading clears. */
+    if (!isLoadingNow) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+    /* Already counting down for this loading streak; don't restart it on
+     * subsequent renders (otherwise rapid re-renders during loading would
+     * indefinitely extend the hold). */
+    if (heldRef.current == null) return;
+    if (timerRef.current != null) return;
+    timerRef.current = setTimeout(() => {
+      heldRef.current = null;
+      timerRef.current = null;
+      forceTick((n) => n + 1);
+    }, holdMs);
+  }, [isLoadingNow, holdMs]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  if (isLoadingNow && heldRef.current != null) {
+    return { ...heldRef.current, disabled: true, onClick: () => {} };
+  }
+  return raw;
 }
 
 export function useButtonState({
@@ -402,7 +494,7 @@ export function useButtonState({
   const animatedDots = useAnimatedDots(400);
   const navigate = useNavigate();
   
-  return useMemo(() => {
+  const rawButtonState = useMemo<ButtonStateResult>(() => {
     if (!authenticated) {
       return { text: "Log In or Sign Up", disabled: false, onClick: () => login() };
     }
@@ -524,7 +616,7 @@ export function useButtonState({
         if (code === "NO_BOOKS_AVAILABLE" || code === "NO_MARKET_FOUND") {
           return {
             text:
-              state.side === "buy" ? "Finding best price..." : "Fetching price...",
+              state.side === "buy" ? "No shares available" : "No bids available",
             disabled: true,
             onClick: () => {},
           };
@@ -551,7 +643,20 @@ export function useButtonState({
         return { text: "Refreshing Odds…", disabled: true, onClick: () => {} };
       }
       if (!sorState?.route) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        // Amount is non-empty here (the L568 guard already short-circuited the
+        // truly-empty case), so "no route yet" is a *loading* condition, not
+        // a missing-input condition. This typically fires for a frame or two
+        // when the user switches markets within the same umbrella: the old
+        // route gets cleared before `isLoading` flips back to true on the next
+        // debounced fetch. Returning a fetching label here keeps
+        // `useStabilizedButtonResult` engaged — it holds the previous settled
+        // text instead of letting the button blink "Enter amount".
+        return {
+          text:
+            state.side === "buy" ? "Finding best price..." : "Fetching price...",
+          disabled: true,
+          onClick: () => {},
+        };
       }
       {
         const tb = buttonIfBuyInsufficientFunds(state.side, sorState.route);
@@ -1167,6 +1272,12 @@ export function useButtonState({
       availableShares,
     };
   }, [authenticated, account, state, login, marketOrderHandler, usdcBalance, yesBalance, noBalance, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictSellShareBalance, limitlessTrading, limitlessSellShareBalance, dflowProofVerified, dflowProofLoading, dflowStartProofFlow, sorMatchedVenues, sorState, navigate]);
+
+  /* Wrapping at the very end ensures every "Fetching price…" branch above
+   * goes through the same flicker shield. The stabilizer preserves any
+   * extra fields (e.g. isSweepingBook, availableShares) on the held result
+   * via spread, so downstream consumers never lose context. */
+  return useStabilizedButtonResult(rawButtonState, BUTTON_LOADING_HOLD_MS);
 }
 
 

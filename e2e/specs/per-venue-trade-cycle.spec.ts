@@ -116,11 +116,11 @@ import {
  * inactive entries commented — the goal is to run all of them in one pass later.
  */
 const REQUESTED_VENUES: RequiredVenueKey[] = [
-	// "polymarket",
-	// "predictFun",
-	// "limitless",
-	// "dflow",
-	"levelup",
+	"polymarket",
+	"predictFun",
+	"limitless",
+	"dflow",
+	// "levelup",
 ];
 
 const TRADE_USD = 5;

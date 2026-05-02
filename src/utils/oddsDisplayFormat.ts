@@ -181,12 +181,16 @@ export function formatImpliedProbabilityAsCents(p: number | null | undefined): s
 	const cents = clamped * 100;
 	if (cents <= 0) return "0¢";
 	if (cents < 1) {
+		/** ≥0.01¢: cap at two decimals (portfolio / UI float noise e.g. 0.990331205¢ → 0.99¢). Below: keep finer precision so tiny quotes are not rounded to 0¢. */
+		const maxFractionDigits = cents >= 0.01 ? 2 : 10;
 		const formatted = new Intl.NumberFormat("en-US", {
-			maximumFractionDigits: 10,
+			maximumFractionDigits: maxFractionDigits,
 			minimumFractionDigits: 0,
 		}).format(cents);
 		const n = Number.parseFloat(formatted.replace(/,/g, ""));
-		if (!Number.isFinite(n) || n <= 0) return "<0.0000000001¢";
+		if (!Number.isFinite(n) || n <= 0) {
+			return maxFractionDigits === 2 ? "<0.01¢" : "<0.0000000001¢";
+		}
 		return `${formatted}¢`;
 	}
 	return `${Math.round(cents)}¢`;

@@ -75,12 +75,12 @@ describe("ensurePrefundQuoteMeetsDestMin", () => {
 		const r = await ensurePrefundQuoteMeetsDestMin({
 			api,
 			fromChainLifi: 8453,
-			// Use 6-decimal dest so `toAmountMin` matches USDC-style atoms in the mock.
 			toChainLifi: 8453,
 			fromAddress: `0x${"1".repeat(40)}`,
 			toAddress: `0x${"2".repeat(40)}`,
 			destPortionUsd: destNeed,
 			maxFromHuman: destNeed,
+			budgetUsd: destNeed,
 			seedAmountHuman: destNeed.toFixed(6),
 		});
 		expect(r.amountHuman).toBe(destNeed.toFixed(6));
@@ -103,9 +103,174 @@ describe("ensurePrefundQuoteMeetsDestMin", () => {
 				toAddress: `0x${"2".repeat(40)}`,
 				destPortionUsd: 5,
 				maxFromHuman: 2,
+				budgetUsd: 5,
 				seedAmountHuman: "2",
 			}),
 		).rejects.toThrow(/source balance cap/);
 		expect(api.postFundingLifiQuote).toHaveBeenCalledTimes(1);
+	});
+
+	it("caps sendHuman at budgetUsd even when wallet balance is much larger", async () => {
+		// Simulate FASTEST under-delivery: LI.FI returns minTo = 0.99 * sendHuman.
+		// Wallet has $50, but per-corridor budget is $25. We need to verify the
+		// iteration never exceeds $25 send and converges within fee slack.
+		const callsSeen: number[] = [];
+		const api = {
+			postFundingLifiQuote: vi.fn(async (req: { amountHuman: string }) => {
+				const send = Number(req.amountHuman);
+				callsSeen.push(send);
+				const minToAtoms = Math.floor(send * 0.99 * 1_000_000).toString();
+				return {
+					steps: [{}],
+					quote: { estimate: { toAmountMin: minToAtoms } },
+				};
+			}),
+		};
+
+		const destNeed = 24.5;
+		const r = await ensurePrefundQuoteMeetsDestMin({
+			api,
+			fromChainLifi: 137,
+			toChainLifi: 8453,
+			fromAddress: `0x${"1".repeat(40)}`,
+			toAddress: `0x${"2".repeat(40)}`,
+			destPortionUsd: destNeed,
+			maxFromHuman: 50,
+			budgetUsd: 25,
+			seedAmountHuman: destNeed.toFixed(6),
+		});
+
+		const finalSend = Number(r.amountHuman);
+		expect(finalSend).toBeLessThanOrEqual(25 + 1e-9);
+		for (const s of callsSeen) {
+			expect(s).toBeLessThanOrEqual(25 + 1e-9);
+		}
+		// Quote-time minTo at $25 send is 24.75 — within `prefundDestNeedFloorAtSendCap`
+		// slack of 24.5 → caller accepts.
+		expect(finalSend).toBeGreaterThanOrEqual(24.5 - 1e-6);
+	});
+
+	it("error message names budget cap when budget < wallet", async () => {
+		const api = {
+			postFundingLifiQuote: vi.fn().mockResolvedValue({
+				steps: [{}],
+				quote: { estimate: { toAmountMin: "1000000" } },
+			}),
+		};
+		await expect(
+			ensurePrefundQuoteMeetsDestMin({
+				api,
+				fromChainLifi: 137,
+				toChainLifi: 8453,
+				fromAddress: `0x${"1".repeat(40)}`,
+				toAddress: `0x${"2".repeat(40)}`,
+				destPortionUsd: 10,
+				maxFromHuman: 100,
+				budgetUsd: 2,
+				seedAmountHuman: "2",
+			}),
+		).rejects.toThrow(/per-corridor budget cap/);
+	});
+
+	it("rejects budgetUsd <= 0 (caller must supply optimizer budget)", async () => {
+		const api = { postFundingLifiQuote: vi.fn() };
+		await expect(
+			ensurePrefundQuoteMeetsDestMin({
+				api,
+				fromChainLifi: 137,
+				toChainLifi: 8453,
+				fromAddress: `0x${"1".repeat(40)}`,
+				toAddress: `0x${"2".repeat(40)}`,
+				destPortionUsd: 5,
+				maxFromHuman: 50,
+				budgetUsd: 0,
+				seedAmountHuman: "5",
+			}),
+		).rejects.toThrow(/budgetUsd/);
+		expect(api.postFundingLifiQuote).not.toHaveBeenCalled();
+	});
+
+	it("multi-step: prorated per-step budget keeps Σ sendHuman within corridorBudget under typical LI.FI under-delivery", async () => {
+		// Mirrors `useSorLegExecutor`'s prorated allocation across prefund steps.
+		// 2 source chains delivering $12 + $8 = $20 to Base; corridorBudget = exec + bridgeCost = $20.15.
+		// LI.FI returns minTo = 0.99 * sendHuman (1% fee, within 3.5% prefund slack).
+		// Each step's budget = (destPortion / Σdest) * corridorBudget + carry.
+		const api = {
+			postFundingLifiQuote: vi.fn(async (req: { amountHuman: string }) => {
+				const send = Number(req.amountHuman);
+				const minToAtoms = Math.floor(send * 0.99 * 1_000_000).toString();
+				return {
+					steps: [{}],
+					quote: { estimate: { toAmountMin: minToAtoms } },
+				};
+			}),
+		};
+
+		const corridorBudget = 20 + 0.15;
+		const stepDestNeeds = [12, 8] as const;
+		const sumDest = stepDestNeeds.reduce((s, d) => s + d, 0);
+		const stepWallets = [50, 50] as const;
+		const sentHumans: number[] = [];
+		let carry = 0;
+
+		for (let i = 0; i < stepDestNeeds.length; i++) {
+			const share = (stepDestNeeds[i]! / sumDest) * corridorBudget;
+			const stepBudget = share + carry;
+			const r = await ensurePrefundQuoteMeetsDestMin({
+				api,
+				fromChainLifi: i === 0 ? 137 : 1151111081099710,
+				toChainLifi: 8453,
+				fromAddress: `0x${"1".repeat(40)}`,
+				toAddress: `0x${"2".repeat(40)}`,
+				destPortionUsd: stepDestNeeds[i]!,
+				maxFromHuman: stepWallets[i]!,
+				budgetUsd: stepBudget,
+				seedAmountHuman: stepDestNeeds[i]!.toFixed(6),
+			});
+			const sent = Number(r.amountHuman);
+			sentHumans.push(sent);
+			carry = Math.max(0, stepBudget - sent);
+		}
+
+		const total = sentHumans.reduce((s, n) => s + n, 0);
+		expect(total).toBeLessThanOrEqual(corridorBudget + 1e-6);
+		expect(sentHumans).toHaveLength(2);
+		expect(sentHumans[0]).toBeGreaterThanOrEqual(stepDestNeeds[0]! * 0.99);
+		expect(sentHumans[1]).toBeGreaterThanOrEqual(stepDestNeeds[1]! * 0.99);
+	});
+
+	it("multi-step: prorated cap fails fast on pathological LI.FI under-delivery (no silent overspend)", async () => {
+		// Step 1 has 5% LI.FI under-delivery (above the 3.5% prefund slack).
+		// Even with carry from step 1, step 2 still cannot meet destNeed within its
+		// per-step share, so the prefund must throw rather than overspending.
+		const api = {
+			postFundingLifiQuote: vi.fn(async (req: { amountHuman: string }) => {
+				const send = Number(req.amountHuman);
+				const minToAtoms = Math.floor(send * 0.95 * 1_000_000).toString();
+				return {
+					steps: [{}],
+					quote: { estimate: { toAmountMin: minToAtoms } },
+				};
+			}),
+		};
+
+		const corridorBudget = 20.05;
+		const stepDestNeeds = [12, 8] as const;
+		const sumDest = stepDestNeeds.reduce((s, d) => s + d, 0);
+		const share1 = (stepDestNeeds[0]! / sumDest) * corridorBudget;
+
+		await expect(
+			ensurePrefundQuoteMeetsDestMin({
+				api,
+				fromChainLifi: 137,
+				toChainLifi: 8453,
+				fromAddress: `0x${"1".repeat(40)}`,
+				toAddress: `0x${"2".repeat(40)}`,
+				destPortionUsd: stepDestNeeds[0]!,
+				maxFromHuman: 50,
+				budgetUsd: share1,
+				seedAmountHuman: stepDestNeeds[0]!.toFixed(6),
+			}),
+		).rejects.toThrow(/per-corridor budget cap/);
 	});
 });
