@@ -1,10 +1,14 @@
 .stream-embed-container {
 	position: relative;
 	width: 100%;
-	background: #0f0f0f;
+	// 16:9 matches Twitch / Kick player content exactly — keeps the
+	// container the same height as the actual video frame so there's no
+	// extra black space above or below the stream. `max-height` (if set
+	// by the caller) caps the box; aspect-ratio still drives the height.
+	aspect-ratio: 16 / 9;
+	background: #000000;
 	border-radius: 12px;
 	overflow: hidden;
-	border: 1px solid rgba(255, 255, 255, 0.12);
 	display: block;
 	flex-shrink: 0;
 }
@@ -12,6 +16,7 @@
 .stream-embed {
 	border: none;
 	width: 100%;
+	height: 100%;
 	display: block;
 	margin: 0;
 	padding: 0;

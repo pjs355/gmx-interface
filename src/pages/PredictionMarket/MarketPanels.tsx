@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useMedia } from "react-use";
+import { FaChartLine } from "react-icons/fa";
 import PredictionMarketChart from "./PredictionMarketChart";
 import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
 import { UmbrellaTradeBoxPanel } from "./UmbrellaTradeBoxPanel";
@@ -58,12 +59,25 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	chartState,
 	settledInfo,
 }) => {
-	useMedia("(max-width: 1100px)");
+	/*
+	 * Drives single-instance rendering of `<UmbrellaTradeBoxPanel>` below.
+	 * Both layouts (`.desktop-layout` / `.mobile-layout`) live in the tree
+	 * for CSS layout reasons, but the trade box renders a `Portal` curtain
+	 * that escapes `display:none`, so mounting both at once stacks two
+	 * curtains on the body. Render only the active viewport's instance.
+	 */
+	const isMobileViewport = useMedia("(max-width: 1100px)");
 
 	// Track buy/sell side state
 	const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
 	const [activeTab, setActiveTab] = useState<"basic" | "orderbooks">("basic");
 	const [venueForTradeBox, setVenueForTradeBox] = useState<TradingVenue | undefined>(undefined);
+	/** Mobile/tablet only: default to chart so the stream iframe doesn't
+	 * auto-load and burn the user's data on page open. The stream embed
+	 * only mounts when the user explicitly selects the Livestream tab. */
+	const [mobileMediaTab, setMobileMediaTab] = useState<"chart" | "livestream">(
+		"chart",
+	);
 
 	const selectVenueBooksTab = useCallback((tab: "basic" | "orderbooks") => {
 		setActiveTab(tab);
@@ -357,6 +371,47 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			<h3 className="prediction-market-odds-heading">{venueBooksSectionTitle}</h3>
 		) : null;
 
+	/* Mobile-only Chart / Livestream toggle. Rendered above the chart inside
+	 * `.venue-books-container` when a stream is attached to this umbrella.
+	 * Defaults to "chart" so the iframe never mounts until the user picks
+	 * Livestream — keeps mobile data usage low on open. */
+	const mobileMediaTabSwitcher = showStream ? (
+		<div
+			className="media-tab-switcher"
+			role="tablist"
+			aria-label="Chart or livestream"
+		>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={mobileMediaTab === "chart"}
+				className={`media-tab-btn${mobileMediaTab === "chart" ? " media-tab-btn--active" : ""}`}
+				onClick={() => setMobileMediaTab("chart")}
+			>
+				<FaChartLine className="media-tab-btn__icon" aria-hidden="true" />
+				<span>Chart</span>
+			</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={mobileMediaTab === "livestream"}
+				className={`media-tab-btn${mobileMediaTab === "livestream" ? " media-tab-btn--active" : ""}`}
+				onClick={() => setMobileMediaTab("livestream")}
+			>
+				<span className="media-tab-btn__live-dot" aria-hidden="true" />
+				<span>Livestream</span>
+			</button>
+		</div>
+	) : null;
+
+	/* Mobile-only stream block — only mounted when the user picks Livestream,
+	 * so the iframe (and its data cost) never loads until requested. */
+	const mobileStreamBlock = showStream ? (
+		<div className="venue-books-stream">
+			<StreamEmbed streamUrl={streamUrl} height="360" />
+		</div>
+	) : null;
+
 	return (
 		<div className="prediction-market-content">
 			{/* Desktop Layout */}
@@ -393,16 +448,18 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				</div>
 
 			<div className="right-panel">
-				<UmbrellaTradeBoxPanel
-					umbrella={umbrella}
-					questionOrderbooks={questionOrderbooks}
-					activeMarket={activeMarket}
-					activePosition={activePosition}
-					onPositionChange={onPositionChange}
-					settledInfo={settledInfo ?? null}
-					tradingPagePrices={tradingPagePrices}
-					venueOverride={venueForTradeBox}
-				/>
+				{!isMobileViewport && (
+					<UmbrellaTradeBoxPanel
+						umbrella={umbrella}
+						questionOrderbooks={questionOrderbooks}
+						activeMarket={activeMarket}
+						activePosition={activePosition}
+						onPositionChange={onPositionChange}
+						settledInfo={settledInfo ?? null}
+						tradingPagePrices={tradingPagePrices}
+						venueOverride={venueForTradeBox}
+					/>
+				)}
 			</div>
 			</div>
 
@@ -414,13 +471,13 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					<MarketHeader umbrella={umbrella} titleRef={titleRef} />
 				)}
 
-				{showStream && (
-					<div className="stream-section-mobile">
-						<StreamEmbed streamUrl={streamUrl} height="360" />
-					</div>
-				)}
 				<div className="venue-books-container">
-					{chartAtTopOfVenueBooks}
+					{/* Chart / Livestream tab sits above the chart so users can
+					    opt in to the stream rather than auto-loading it. */}
+					{mobileMediaTabSwitcher}
+					{mobileMediaTab === "livestream" && showStream
+						? mobileStreamBlock
+						: chartAtTopOfVenueBooks}
 					{tabSwitcher}
 					{predictionMarketOddsHeading}
 					<div className="orderbook-section-mobile">{orderbookSectionBody}</div>
@@ -436,16 +493,18 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 			{/* Mobile Trading Container - Fixed at bottom */}
 			<div className="mobile-trading-container">
-				<UmbrellaTradeBoxPanel
-					umbrella={umbrella}
-					questionOrderbooks={questionOrderbooks}
-					activeMarket={activeMarket}
-					activePosition={activePosition}
-					onPositionChange={onPositionChange}
-					settledInfo={settledInfo ?? null}
-					tradingPagePrices={tradingPagePrices}
-					venueOverride={venueForTradeBox}
-				/>
+				{isMobileViewport && (
+					<UmbrellaTradeBoxPanel
+						umbrella={umbrella}
+						questionOrderbooks={questionOrderbooks}
+						activeMarket={activeMarket}
+						activePosition={activePosition}
+						onPositionChange={onPositionChange}
+						settledInfo={settledInfo ?? null}
+						tradingPagePrices={tradingPagePrices}
+						venueOverride={venueForTradeBox}
+					/>
+				)}
 			</div>
 			</div>
 		</div>

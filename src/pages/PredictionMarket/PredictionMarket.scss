@@ -116,12 +116,17 @@
 	}
 }
 
+// Tight margins — `.stream-embed-container` already drives its own height
+// via aspect-ratio, so the only spacing we need is a small gap between the
+// stream and the venue books below it.
 .stream-section {
-	margin-bottom: 24px;
+	margin-top: 0;
+	margin-bottom: 12px;
 }
 
 .stream-section-mobile {
-	margin-bottom: 16px;
+	margin-top: 0;
+	margin-bottom: 8px;
 }
 
 .chart-section {
@@ -362,6 +367,76 @@
 		padding-right: 0;
 	}
 
+	// Chart / Livestream tab switcher (above the chart on mobile/tablet).
+	// Sits in a single row with both tabs splitting the width like the
+	// Basic/Orderbooks switcher below the chart, but visually distinct so
+	// the user knows it controls the media area and not the books body.
+	.media-tab-switcher {
+		display: flex;
+		gap: 8px;
+		width: 100%;
+		padding: 0 8px;
+		margin-bottom: 10px;
+		box-sizing: border-box;
+	}
+
+	.media-tab-btn {
+		flex: 1 1 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		min-height: 40px;
+		padding: 10px 12px;
+		background: transparent;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: 8px;
+		color: rgba(255, 255, 255, 0.7);
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+		box-sizing: border-box;
+
+		&__icon {
+			font-size: 14px;
+			color: inherit;
+		}
+
+		&__live-dot {
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			background: #ef4444;
+			box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+			animation: media-tab-live-pulse 1.6s ease-in-out infinite;
+		}
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.06);
+			color: #ffffff;
+		}
+
+		&--active {
+			background: rgba(139, 92, 246, 0.18);
+			border-color: #8b5cf6;
+			color: #ffffff;
+		}
+	}
+
+	// Mobile stream block lives inside .venue-books-container — share the
+	// same horizontal inset as the chart so they swap cleanly.
+	.venue-books-stream {
+		margin-bottom: 6px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
+	}
+
 	.venue-books-chart,
 	.venue-books-chart-skeleton {
 		margin-bottom: 6px;
@@ -381,18 +456,27 @@
 		min-width: 0;
 	}
 
+	// Basic / Orderbooks switcher: two tabs split the full row with a small
+	// side gutter so each tab has room to breathe (mobile UX request).
+	// The orderbook venue pill strip overrides this below — it has 4+ pills
+	// and should NOT split full-width.
 	.venue-tab-switcher {
-		justify-content: center;
+		display: flex;
+		gap: 8px;
 		width: 100%;
-		padding-left: 12px;
-		padding-right: 12px;
+		padding-left: 8px;
+		padding-right: 8px;
+		margin-bottom: 28px;
 		box-sizing: border-box;
 	}
 
 	.venue-tab-btn {
+		flex: 1 1 0;
 		min-height: 44px;
-		padding-left: 20px;
-		padding-right: 20px;
+		padding: 14px 12px;
+		font-size: 17px;
+		font-weight: 600;
+		text-align: center;
 		box-sizing: border-box;
 	}
 
@@ -402,8 +486,8 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		margin-top: 6px;
-		margin-bottom: 8px;
+		margin-top: 28px;
+		margin-bottom: 14px;
 		padding-left: 12px;
 		padding-right: 12px;
 		text-align: center;
@@ -411,14 +495,41 @@
 		box-sizing: border-box;
 	}
 
-	.orderbook-section-mobile,
-	.orderbook-section__cross-venue {
+	.orderbook-section-mobile {
 		padding-left: 12px;
 		padding-right: 12px;
 		box-sizing: border-box;
 		width: 100%;
 		max-width: 100%;
 		min-width: 0;
+	}
+
+	// Basic surface: drop side padding to 0 so the venue table fills the
+	// full mobile width and venue/prediction market names get the maximum
+	// horizontal space (no ellipsis required).
+	.orderbook-section__cross-venue {
+		padding-left: 0;
+		padding-right: 0;
+		box-sizing: border-box;
+		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+	}
+
+	// Orderbook venue pills (LevelUp / Kalshi / Predict / Polymarket): keep
+	// pill-sized buttons but space them out for a tappable mobile UX, and
+	// undo the full-width flex from .venue-tab-switcher above.
+	.venue-orderbooks-pill-strip {
+		gap: 8px;
+		row-gap: 8px;
+		padding: 4px 4px 8px;
+		margin-bottom: 12px;
+
+		.venue-tab-btn {
+			flex: 0 0 auto;
+			padding: 10px 14px;
+			font-size: 14px;
+		}
 	}
 
 	.venue-orderbooks-panel {
@@ -491,6 +602,19 @@
 	margin-top: 8px;
 	padding-top: 4px;
 	border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+// Live dot pulse for the mobile Chart / Livestream tab switcher.
+@keyframes media-tab-live-pulse {
+	0% {
+		box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+	}
+	70% {
+		box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+	}
+	100% {
+		box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+	}
 }
 
 // Orderbook section styling

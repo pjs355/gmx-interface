@@ -45,6 +45,19 @@
 	-webkit-text-size-adjust: 100%;
 }
 
+/* Matches Header `useMedia("(max-width: 1335px)")` — hamburger layout; keeps offsets in sync */
+@media (max-width: 1335px) {
+	:root {
+		--app-header-height: 4.25rem;
+	}
+}
+
+@media (max-width: 480px) {
+	:root {
+		--app-header-height: 4rem;
+	}
+}
+
 body {
 	margin: 0;
 	min-width: 320px;
@@ -53,6 +66,30 @@ body {
 	overflow-x: hidden;
 	background-color: #000000;
 	color: white;
+
+	/*
+	 * Privy modal theme overrides — pin the Privy login/auth modal to the
+	 * same palette as the rest of the app so it feels native. Surface
+	 * (#101114) matches `.prediction-market-tradebox` and accent purple
+	 * (#8B5CF6) matches `.trade-btn-mobile`. Privy reads these CSS vars
+	 * off `body` per https://docs.privy.io/basics/get-started/dashboard/configuring-appearance#css-overrides
+	 */
+	--privy-color-background: #101114;
+	--privy-color-background-2: #1a1d24;
+	--privy-color-background-3: #22262e;
+	--privy-color-foreground: #ffffff;
+	--privy-color-foreground-2: #d1d5db;
+	--privy-color-foreground-3: #9ca3af;
+	--privy-color-foreground-4: #6b7280;
+	--privy-color-foreground-accent: #ffffff;
+	--privy-color-accent: #8b5cf6;
+	--privy-color-accent-light: #a78bfa;
+	--privy-color-accent-lightest: rgba(139, 92, 246, 0.15);
+	--privy-color-accent-dark: #7c3aed;
+	--privy-color-accent-darkest: #6d28d9;
+	--privy-color-success: #22c55e;
+	--privy-color-error: #ef4444;
+	--privy-color-error-light: rgba(239, 68, 68, 0.15);
 }
 
 h1,

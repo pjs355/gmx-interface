@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
+	bundledCounterStrikeLogoFromTagLabels,
 	resolveLogoByTags,
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
@@ -36,8 +37,10 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 	// Priority 4: Fallback to game controller
 	const fallbackLogo = gameLogo || gtaIcon;
 
+	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
 	// Determine initial source
-	const initialSrc = serverImage || tagImage || fallbackLogo;
+	const initialSrc =
+		cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {

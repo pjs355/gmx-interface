@@ -1,6 +1,7 @@
 import { useState } from "react";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
+	bundledCounterStrikeLogoFromTagLabels,
 	resolveLogoByTags,
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
@@ -26,7 +27,10 @@ export default function UmbrellaImage({
 	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 	const gameLogo = resolveLogoByTags(tagLabels);
 	const fallbackLogo = gameLogo || gtaIcon;
-	const initialSrc = polyIcon || serverImage || tagImage || fallbackLogo;
+	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
+	const initialSrc =
+		cs2Bundled ??
+		(polyIcon || serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {

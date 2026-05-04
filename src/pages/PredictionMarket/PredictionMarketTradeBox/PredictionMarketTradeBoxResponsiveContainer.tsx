@@ -145,7 +145,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
-	const { openCurtain, closeCurtain } = useCurtainActions();
+	const { openCurtain } = useCurtainActions();
 	const { formatPrice } = useOddsDisplay();
 
 	const finiteOrNull = (v: number | null | undefined): number | null =>
@@ -496,13 +496,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			<div className="curtain-content-inner">
 				<div className="curtain-drag-handle"></div>
 				{executionGateBanner}
-				<button
-					className="curtain-close-btn"
-					aria-label="Close trading panel"
-					onClick={closeCurtain}
-				>
-					▾
-				</button>
 			<PredictionMarketTradeBoxUI
 				market={market}
 				orderbook={orderbook}

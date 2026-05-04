@@ -162,7 +162,7 @@
 
 .prediction-market-page.mobile .esports-venue-books__th,
 .prediction-market-page.mobile .esports-venue-books__td {
-	padding: 8px 6px;
+	padding: 6px 4px;
 	font-size: 0.875rem;
 }
 
@@ -170,13 +170,36 @@
 	font-size: 0.9rem;
 }
 
+// Give the venue (prediction market) column the lion's share of the row so
+// "Polymarket" / "Limitless" / etc. render in full. Team price columns shrink
+// to just enough room for the cents value (e.g. "73¢").
 .prediction-market-page.mobile .esports-venue-books__th--venue {
 	min-width: 0;
-	width: 26%;
+	width: 50%;
 }
 
 .prediction-market-page.mobile .esports-venue-books__th--team {
 	min-width: 0;
 	max-width: none;
-	width: 37%;
+	width: 25%;
+}
+
+// Allow the venue name to wrap onto a second line if needed so it never
+// truncates with an ellipsis on narrow viewports.
+.prediction-market-page.mobile .esports-venue-books__td--label {
+	.esports-venue-books__label-row {
+		max-width: 100%;
+		flex-wrap: nowrap;
+		align-items: center;
+	}
+
+	.esports-venue-books__label-row > span:last-child {
+		overflow: visible;
+		text-overflow: clip;
+		white-space: normal;
+		word-break: normal;
+		overflow-wrap: anywhere;
+		min-width: 0;
+		line-height: 1.2;
+	}
 }

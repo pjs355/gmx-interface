@@ -34,6 +34,7 @@ import {
 	shortPredictFunMarketTitleForPortfolio,
 	stripUmbrellaDisplayPrefix,
 } from "@/helpers/umbrellaDisplayName";
+import { umbrellaWithPredictPortfolioIcon } from "@/trading/predict/predictPortfolioUmbrellaIcon";
 
 type TokenBalanceLike = { yesBalance: string | number; noBalance: string | number };
 
@@ -297,13 +298,21 @@ export function useResolvedUmbrellaPositions({
 						: stripUmbrellaDisplayPrefix(first.marketTitle).trim() ||
 							first.marketTitle;
 				const blockLabel = matchedDisplayName || predictFallbackLabel;
-				const umbrellaForWinBlock =
+				const umbrellaForWinBlockRaw =
 					matchedUmbrella ??
 					buildSyntheticUmbrella(
 						`${idPrefix}-${first.tokenId.slice(0, 10)}`,
 						blockLabel,
 						first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
 					);
+				const umbrellaForWinBlock =
+					venue === "predictfun"
+						? umbrellaWithPredictPortfolioIcon(
+								umbrellaForWinBlockRaw,
+								first,
+								oddsMarkets,
+							)
+						: umbrellaForWinBlockRaw;
 				const blockMarketTitle = blockLabel;
 				const markets: MarketPosition[] = positions
 					.map((pv) => {

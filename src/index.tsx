@@ -94,8 +94,12 @@ createRoot(document.getElementById("root")!).render(
 					defaultChain: baseOverride,
 					supportedChains: [baseOverride, polygonOverride, bscOverride],
 					appearance: {
-						accentColor: "#6A6FF5",
-						theme: "dark",
+						// Brand purple from the trade widget (`.trade-btn-mobile`, etc.)
+						accentColor: "#8B5CF6",
+						// Match the trade widget surface (#101114). Privy auto-derives
+						// the rest of the dark palette from this; precise overrides
+						// for accents/foregrounds live in `globals.css`.
+						theme: "#101114",
 						showWalletLoginFirst: false,
 						loginMessage:
 							"Welcome to LevelUp Predictions! Please create an account or sign in",

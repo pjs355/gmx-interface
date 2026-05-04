@@ -291,7 +291,9 @@
       position: absolute;
       bottom: 10px;
       right: 10px;
-      z-index: 1000;
+      // Stays above the recharts SVG inside this plot area but below the
+      // fixed App-header (z-index 850) so it doesn't bleed through on scroll.
+      z-index: 5;
       display: flex;
       gap: 4px;
       background: rgba(0, 0, 0, 0.8);
@@ -462,7 +464,9 @@
     margin-left: 0;
     margin-right: 0;
     align-self: auto;
-    z-index: 1001;
+    // Match the desktop fix: keep above the recharts SVG but well below the
+    // fixed App-header (z-index 850) so 1H/1D stops painting over it on scroll.
+    z-index: 5;
     background: rgba(0, 0, 0, 0.75);
   }
 
@@ -476,8 +480,8 @@
 
   .venue-checkbox-bar {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 4px;
     justify-content: stretch;
     align-items: stretch;
     margin-top: 6px;
@@ -487,12 +491,12 @@
     box-sizing: border-box;
 
     .venue-chip {
-      min-height: 44px;
+      min-height: 32px;
       min-width: 0;
       justify-content: center;
       text-align: center;
-      font-size: 10px;
-      padding: 6px 8px;
+      font-size: 12px;
+      padding: 4px 8px;
       box-sizing: border-box;
       overflow: hidden;
       text-overflow: ellipsis;

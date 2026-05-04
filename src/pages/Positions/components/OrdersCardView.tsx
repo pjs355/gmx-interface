@@ -10,6 +10,7 @@ import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
+	bundledCounterStrikeLogoFromTagLabels,
 	resolveLogoByTags,
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
@@ -33,7 +34,9 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 	const gameLogo = resolveLogoByTags(tagLabels);
 	const fallbackLogo = gameLogo || gtaIcon;
-	const initialSrc = serverImage || tagImage || fallbackLogo;
+	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
+	const initialSrc =
+		cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {
