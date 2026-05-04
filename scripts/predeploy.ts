@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { REQUESTED_VENUES } from "../e2e/fixtures/requested-venues";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,14 +18,6 @@ const PREDICTIONS_API_PORT = 8080;
 const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
 const PREDICTIONS_API_URL = `http://localhost:${PREDICTIONS_API_PORT}`;
 const E2E_USER_DATA_DIR = path.join(PRINX_INTERFACE_DIR, "e2e", ".user-data");
-
-const REQUIRED_VENUE_KEYS = [
-	"polymarket",
-	"levelup",
-	"predictFun",
-	"limitless",
-	"dflow",
-] as const;
 
 /** When true: build both repos, spawn API + vite preview, run tests, tear down. */
 function parseBootstrapFlag(): boolean {
@@ -164,8 +157,8 @@ interface MatchedMarketRow {
 	exchangeMatching: ExchangeMatching;
 }
 
-function missingVenues(row: MatchedMarketRow): string[] {
-	return REQUIRED_VENUE_KEYS.filter(
+function missingRequestedVenues(row: MatchedMarketRow): string[] {
+	return REQUESTED_VENUES.filter(
 		(k) => row.exchangeMatching?.[k] === undefined,
 	);
 }
@@ -187,8 +180,16 @@ function assertE2eUserDataExists(): void {
 }
 
 async function probeMatchedMarkets(): Promise<void> {
+	if (REQUESTED_VENUES.length === 0) {
+		throw new Error(
+			"REQUESTED_VENUES is empty: uncomment at least one venue in e2e/fixtures/requested-venues.ts before running predeploy.",
+		);
+	}
 	const url = `${PREDICTIONS_API_URL}/matched-markets`;
 	console.log(`[predeploy] probing ${url}`);
+	console.log(
+		`[predeploy] gating on requested venues: ${REQUESTED_VENUES.join(", ")}`,
+	);
 	const res = await fetch(url);
 	if (!res.ok) {
 		throw new Error(`GET ${url} returned ${res.status} ${res.statusText}`);
@@ -203,16 +204,19 @@ async function probeMatchedMarkets(): Promise<void> {
 		const t = Date.parse(r.eventDate);
 		return Number.isFinite(t) && t > now;
 	});
-	const allFive = future.filter((r) => missingVenues(r).length === 0);
-	if (allFive.length === 0) {
+	const allRequested = future.filter(
+		(r) => missingRequestedVenues(r).length === 0,
+	);
+	if (allRequested.length === 0) {
 		const ranked = future
-			.map((r) => ({ row: r, missing: missingVenues(r) }))
+			.map((r) => ({ row: r, missing: missingRequestedVenues(r) }))
 			.sort((a, b) => a.missing.length - b.missing.length)
 			.slice(0, 5);
+		const requestedLabel = REQUESTED_VENUES.join(", ");
 		const lines = [
-			"[predeploy] No upcoming matched-market has all 5 venues populated.",
+			`[predeploy] No upcoming matched-market has all requested venues (${requestedLabel}) populated.`,
 			`[predeploy] Searched ${body.length} rows; ${future.length} are upcoming.`,
-			"[predeploy] Top 5 candidates by venue coverage (fewest missing first):",
+			"[predeploy] Top 5 candidates by requested-venue coverage (fewest missing first):",
 		];
 		for (const e of ranked) {
 			lines.push(
@@ -222,11 +226,11 @@ async function probeMatchedMarkets(): Promise<void> {
 		const msg = lines.join("\n");
 		console.error("error", msg);
 		throw new Error(
-			"No upcoming matched-market has all 5 venues; deploy gate fails. See log above for top candidates.",
+			`No upcoming matched-market has all requested venues (${requestedLabel}); deploy gate fails. See log above for top candidates.`,
 		);
 	}
 	console.log(
-		`[predeploy] found ${allFive.length} upcoming matched-markets with all 5 venues`,
+		`[predeploy] found ${allRequested.length} upcoming matched-markets with all requested venues (${REQUESTED_VENUES.join(", ")})`,
 	);
 }
 

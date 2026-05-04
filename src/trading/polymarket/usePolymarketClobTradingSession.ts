@@ -7,6 +7,7 @@ import {
 	type ApiKeyCreds,
 	type CreateOrderOptions,
 	type Side,
+	type SignedOrder,
 	type TickSize,
 } from "@polymarket/clob-client-v2";
 import { usePrivy } from "@privy-io/react-auth";
@@ -16,6 +17,7 @@ import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import { useAccountOverview } from "@/trading/hooks/useAccountOverview";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { usePolymarketBuilder } from "@/trading/hooks/usePolymarketBuilder";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useTradingWallets } from "@/trading/useWallets";
 import {
 	ensurePolymarketClobOrderSuccess,
@@ -26,6 +28,38 @@ import {
 	wrapEip1193ForPolymarketDevLogging,
 	type Eip1193Like,
 } from "./polymarketOrderDebug";
+import type { PolymarketOrderSubmitBody } from "@/types/trading";
+
+/**
+ * Coerces a signed order returned by `ClobClient.createOrder` /
+ * `createMarketOrder` (typed as `SignedOrderV1 | SignedOrderV2`) into the
+ * `Record<string, string | number>` shape the server expects. The server
+ * detects V1 vs V2 by presence of `timestamp/metadata/builder`.
+ */
+function signedOrderToRecord(
+	order: SignedOrder,
+): Record<string, string | number> {
+	const out: Record<string, string | number> = {};
+	for (const [key, value] of Object.entries(order as Record<string, unknown>)) {
+		if (key === "signature" && value && typeof value === "object") {
+			const sig = value as { signature?: unknown } | string;
+			if (typeof sig === "string") {
+				out[key] = sig;
+			} else if (typeof sig === "object" && typeof sig.signature === "string") {
+				out[key] = sig.signature;
+			}
+			continue;
+		}
+		if (typeof value === "string" || typeof value === "number") {
+			out[key] = value;
+		} else if (typeof value === "bigint") {
+			out[key] = value.toString();
+		} else if (value !== undefined && value !== null) {
+			out[key] = String(value);
+		}
+	}
+	return out;
+}
 
 /**
  * Polymarket CLOB trading session: derives L2 API credentials with the embedded EOA,
@@ -144,6 +178,7 @@ export function usePolymarketClobTradingSession(
 	/** Same resolution as Transfers (`useFundingAddresses`): overview venue + polymarket account. */
 	const wallets = useTradingWallets(overviewQuery.data, poly.data);
 	const eoa = usePolymarketEoaWalletClient();
+	const privateApi = usePrivateApiClient();
 
 	const eip1193ForSigner = eoa.eip1193Provider;
 	const eip1193 = useMemo(
@@ -239,6 +274,21 @@ export function usePolymarketClobTradingSession(
 					writeStoredCreds(eoaAddress, safe, creds);
 				}
 
+				// Sync L2 creds to server-side at-rest store so
+				// `POST /api/polymarket/orders` can compute the L2 HMAC
+				// when forwarding to Polymarket. The endpoint encrypts
+				// with `POLYMARKET_L2_CREDS_ENCRYPTION_KEY` (AES-256-GCM)
+				// and upserts via `mergePolymarketState`, so this is
+				// idempotent — we run it on every session init to handle
+				// fresh devices, sessionStorage clears, and DB state
+				// drift. The server cannot derive these (no wallet);
+				// only the UI can produce them.
+				await privateApi.postPolymarketL2Credentials({
+					key: creds.key,
+					secret: creds.secret,
+					passphrase: creds.passphrase,
+				});
+
 				const tradingClient = new ClobClient({
 					host: CLOB_HOST,
 					chain: Chain.POLYGON,
@@ -273,7 +323,7 @@ export function usePolymarketClobTradingSession(
 		return () => {
 			cancelled = true;
 		};
-	}, [canInit, eoaAddress, eip1193, safe]);
+	}, [canInit, eoaAddress, eip1193, safe, privateApi]);
 
 	const placeLimitOrder = useCallback(
 		async (args: PlaceClobLimitOrderArgs) => {
@@ -288,7 +338,7 @@ export function usePolymarketClobTradingSession(
 			const orderOpts: CreateOrderOptions = { tickSize, negRisk };
 			if (DEV) {
 				// eslint-disable-next-line no-console
-				console.info("[Polymarket CLOB] posting limit order", {
+				console.info("[Polymarket CLOB] signing limit order (server will post)", {
 					tokenId: args.tokenId,
 					price: args.price,
 					size: args.size,
@@ -297,16 +347,23 @@ export function usePolymarketClobTradingSession(
 					negRisk,
 				});
 			}
-			const result = await clobClient.createAndPostOrder(
+			const signedOrder = await clobClient.createOrder(
 				{
 					tokenID: args.tokenId,
 					price: args.price,
 					size: args.size,
 					side: args.side,
 				},
-				orderOpts,
-				OrderType.GTC
+				orderOpts
 			);
+			const submitBody: PolymarketOrderSubmitBody = {
+				signedOrder: signedOrderToRecord(signedOrder),
+				orderType: OrderType.GTC,
+				marketRef: { tokenId: args.tokenId },
+				requestedSize: String(args.size),
+				requestedPrice: String(args.price),
+			};
+			const result = await privateApi.postPolymarketOrder(submitBody);
 			if (DEV) {
 				// eslint-disable-next-line no-console
 				console.info("[Polymarket CLOB] limit order response", summarizeClobResultForLog(result));
@@ -315,7 +372,7 @@ export function usePolymarketClobTradingSession(
 			logPolymarketOrderSuccessResponse(result);
 			return result;
 		},
-		[clobClient]
+		[clobClient, privateApi]
 	);
 
 	const placeMarketOrder = useCallback(
@@ -332,7 +389,7 @@ export function usePolymarketClobTradingSession(
 			const t = args.orderType ?? OrderType.FOK;
 			if (DEV) {
 				// eslint-disable-next-line no-console
-				console.info("[Polymarket CLOB] posting market order", {
+				console.info("[Polymarket CLOB] signing market order (server will post)", {
 					tokenId: args.tokenId,
 					amount: args.amount,
 					side: args.side,
@@ -341,15 +398,21 @@ export function usePolymarketClobTradingSession(
 					negRisk,
 				});
 			}
-			const result = await clobClient.createAndPostMarketOrder(
+			const signedOrder = await clobClient.createMarketOrder(
 				{
 					tokenID: args.tokenId,
 					amount: args.amount,
 					side: args.side,
 				},
-				orderOpts,
-				t
+				orderOpts
 			);
+			const submitBody: PolymarketOrderSubmitBody = {
+				signedOrder: signedOrderToRecord(signedOrder),
+				orderType: t,
+				marketRef: { tokenId: args.tokenId },
+				requestedSize: String(args.amount),
+			};
+			const result = await privateApi.postPolymarketOrder(submitBody);
 			if (DEV) {
 				// eslint-disable-next-line no-console
 				console.info("[Polymarket CLOB] market order response", summarizeClobResultForLog(result));
@@ -358,7 +421,7 @@ export function usePolymarketClobTradingSession(
 			logPolymarketOrderSuccessResponse(result);
 			return result;
 		},
-		[clobClient]
+		[clobClient, privateApi]
 	);
 
 	const ready = Boolean(clobClient && !loading && !error);

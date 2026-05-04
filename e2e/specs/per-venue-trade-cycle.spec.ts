@@ -7,13 +7,16 @@ import {
 	resolvePerVenueBestPicks,
 	partitionRequestedVenuePicks,
 	tradingVenueSlugForKey,
-	type RequiredVenueKey,
 	type PerVenueBestPick,
 } from "../fixtures/matched-market";
+import { REQUESTED_VENUES } from "../fixtures/requested-venues";
 import { fundingPrecheck } from "../fixtures/funding-precheck";
 import { cleanupOpenPositions } from "../fixtures/cleanup";
 import { PredictionsPage } from "../page-objects/predictions-page";
-import { Tradebox, sharesVisiblePollTimeoutMsForVenueKey } from "../page-objects/tradebox";
+import {
+	Tradebox,
+	sharesVisiblePollTimeoutMsForVenueKey,
+} from "../page-objects/tradebox";
 import {
 	expectHeaderCashUsd,
 	postTradeCashMatchTimeoutMsForVenueKey,
@@ -115,14 +118,6 @@ import {
  * Venues are toggled one at a time while each path is validated in E2E; keep
  * inactive entries commented — the goal is to run all of them in one pass later.
  */
-const REQUESTED_VENUES: RequiredVenueKey[] = [
-	"polymarket",
-	"predictFun",
-	"limitless",
-	"dflow",
-	// "levelup",
-];
-
 const TRADE_USD = 5;
 /** $5 round-trip can lose up to ~$0.50 to spread + fees on the tightest venues. */
 const CASH_RECOVERY_TOLERANCE_USD = 0.5;
@@ -185,7 +180,7 @@ test.describe("prinx per-venue trade cycle", () => {
 	test.beforeAll(async () => {
 		if (REQUESTED_VENUES.length === 0) {
 			throw new Error(
-				"REQUESTED_VENUES is empty: uncomment at least one venue to run this spec.",
+				"REQUESTED_VENUES is empty: uncomment at least one venue in e2e/fixtures/requested-venues.ts.",
 			);
 		}
 		const picks = await resolvePerVenueBestPicks();
@@ -264,7 +259,9 @@ test.describe("prinx per-venue trade cycle", () => {
 				try {
 					await cleanupOpenPositions(
 						sharedSession.page,
-						REQUESTED_VENUES.map((key) => tradingVenueSlugForKey(key)),
+						REQUESTED_VENUES.map((key) =>
+							tradingVenueSlugForKey(key),
+						),
 					);
 				} catch (err) {
 					console.error("error", err);
@@ -307,7 +304,8 @@ test.describe("prinx per-venue trade cycle", () => {
 					);
 				}
 				const tradebox = new Tradebox(sharedSession.page);
-				const sharesBefore = await tradebox.readBuyRowTotalSharesOrZero();
+				const sharesBefore =
+					await tradebox.readBuyRowTotalSharesOrZero();
 				const buyCostQuoteUsd = await tradebox.readQuotedBuyCostUsd();
 				const cashBaselineForBuySpend = await expectHeaderCashUsd(
 					sharedSession.page,
@@ -333,7 +331,10 @@ test.describe("prinx per-venue trade cycle", () => {
 					);
 				expect(sharesObserved).toBeGreaterThan(0);
 				const deltaShares = sharesObserved - sharesBefore;
-				const shareTol = buyShareFillDeltaTolerance(venueKey, buyQuotedShares);
+				const shareTol = buyShareFillDeltaTolerance(
+					venueKey,
+					buyQuotedShares,
+				);
 				expect(
 					Math.abs(deltaShares - buyQuotedShares),
 					`shares mismatch on ${venueKey}: quotedShares(test1)=${buyQuotedShares} @${buyQuotedPriceCents}¢ ` +
@@ -404,7 +405,9 @@ test.describe("prinx per-venue trade cycle", () => {
 					);
 				}
 				const tradebox = new Tradebox(sharedSession.page);
-				const cashRightBeforeSell = await expectHeaderCashUsd(sharedSession.page);
+				const cashRightBeforeSell = await expectHeaderCashUsd(
+					sharedSession.page,
+				);
 				// eslint-disable-next-line no-console -- E2E operator visibility (cash vs sell submit)
 				console.log(
 					`[per-venue-cycle] ${venueKey} sell.submit · headerCash=$${cashRightBeforeSell.toFixed(2)} ` +
@@ -436,7 +439,8 @@ test.describe("prinx per-venue trade cycle", () => {
 					postTradeCashMatchTimeoutMsForVenueKey(venueKey),
 				);
 				const impliedReceiveVsPostBuy = cashAfterSell - cashAfterBuy;
-				const impliedReceiveVsPreSubmit = cashAfterSell - cashRightBeforeSell;
+				const impliedReceiveVsPreSubmit =
+					cashAfterSell - cashRightBeforeSell;
 				// eslint-disable-next-line no-console -- E2E operator visibility (actual $ in vs quote)
 				console.log(
 					`[per-venue-cycle] ${venueKey} sell.settled · headerCash=$${cashAfterSell.toFixed(2)} ` +

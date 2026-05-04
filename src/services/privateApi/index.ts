@@ -15,6 +15,8 @@ export type {
 	DflowEventsResponse,
 	DflowOrderParams,
 	DflowOrderResponse,
+	DflowOrderSubmitBody,
+	DflowOrderSubmitResponse,
 	DflowBatchMarket,
 	DflowOnchainTrade,
 } from "./client";

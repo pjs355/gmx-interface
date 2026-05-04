@@ -13,4 +13,10 @@ export type SendTransactionCapable = {
 /** Minimal signer for LI.FI Solana steps (Privy Solana embedded wallet). */
 export type SolanaSignerCapable = {
 	signAndSendTransaction: (serializedTx: Uint8Array) => Promise<string>;
+	/**
+	 * Sign-only path used when the server (not the user) submits the tx to the
+	 * cluster — required for the DFlow `POST /api/dflow/orders` flow so we can
+	 * persist a `VenueOrder` audit row server-side after `confirmed` commitment.
+	 */
+	signTransactionOnly: (serializedTx: Uint8Array) => Promise<Uint8Array>;
 };

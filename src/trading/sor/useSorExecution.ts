@@ -35,7 +35,7 @@ function logDflowClientOrderSigning(
 	if (leg.venue !== "dflow" || route.side !== "buy") return;
 	const micro = Math.round(leg.executionAmountUsd * 1_000_000);
 	console.log(
-		`[SOR][DFlow] client-order-signing phase=${phase} routeId=${route.routeId} requestedAmount=${route.requestedAmount} execUsd=${leg.executionAmountUsd.toFixed(6)} shares=${leg.shares.toFixed(6)} amount_micro=${micro} (compare server [SOR] BUY signing-preview line for same routeId)`,
+		`[SOR][DFlow] client-order-signing phase=${phase} routeId=${route.routeId} requestedAmount=${route.requestedAmount} execUsd=${leg.executionAmountUsd.toFixed(6)} shares=${leg.shares.toFixed(6)} amount_micro=${micro}`,
 	);
 }
 

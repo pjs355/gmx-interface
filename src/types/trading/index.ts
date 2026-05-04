@@ -15,6 +15,7 @@ export type {
 	PolymarketBuilderSignBody,
 	PolymarketBuilderSignResponse,
 	PolymarketL2CredentialsBody,
+	PolymarketOrderSubmitBody,
 	PolymarketRequiredNextAction,
 	PolymarketSyncBody,
 	PolymarketVerifyOnChainBody,

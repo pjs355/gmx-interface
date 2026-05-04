@@ -35,6 +35,7 @@ import type {
 	PolymarketBuilderSignBody,
 	PolymarketBuilderSignResponse,
 	PolymarketL2CredentialsBody,
+	PolymarketOrderSubmitBody,
 	PolymarketSyncBody,
 	PolymarketVerifyOnChainBody,
 } from "@/types/trading";
@@ -160,6 +161,28 @@ export type DflowOrderResponse = {
 	code?: string;
 	msg?: string;
 	[key: string]: unknown;
+};
+
+/** Body for `POST /api/dflow/orders` — server submits the user-signed Solana tx. */
+export type DflowOrderSubmitBody = {
+	signedTx: string;
+	inputMint: string;
+	outputMint: string;
+	amount?: string;
+	side?: "BUY" | "SELL";
+	outcome?: string;
+	marketRef?: {
+		externalMarketId?: string;
+		tokenId?: string;
+		questionId?: string;
+	};
+};
+
+export type DflowOrderSubmitResponse = {
+	success: true;
+	signature: string;
+	confirmationStatus: string;
+	slot: number | null;
 };
 
 /** Market detail from `POST /api/v1/markets/batch` (DFlow Metadata API). */
@@ -556,6 +579,23 @@ export function createPrivateApiClient(
 			return readJson<PolymarketBuilderSignResponse>(res);
 		},
 
+		/**
+		 * Server-mediated Polymarket order placement: UI signs locally via the
+		 * SDK's create-only path (`createOrder` / `createMarketOrder`), then
+		 * POSTs the signed order here. Server uses the user's stored L2 API
+		 * credentials to forward the order to the Polymarket CLOB and persists
+		 * a `VenueOrder` audit row.
+		 */
+		async postPolymarketOrder(
+			body: PolymarketOrderSubmitBody
+		): Promise<unknown> {
+			const res = await authorizedFetch("/api/polymarket/orders", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson<unknown>(res);
+		},
+
 		async postFundingLifiQuote(
 			body: LifiQuoteRequestBody
 		): Promise<LifiQuoteResponse> {
@@ -915,6 +955,17 @@ export function createPrivateApiClient(
 				`/api/dflow/order?${q.toString()}`
 			);
 			return readJson<DflowOrderResponse>(res);
+		},
+
+		/** Server-submit path: send the user-signed Solana tx; server posts to RPC and persists VenueOrder. */
+		async postDflowOrder(
+			body: DflowOrderSubmitBody
+		): Promise<DflowOrderSubmitResponse> {
+			const res = await authorizedFetch("/api/dflow/orders", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson<DflowOrderSubmitResponse>(res);
 		},
 
 		async postDflowFilterOutcomeMints(
