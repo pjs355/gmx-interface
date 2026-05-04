@@ -1234,6 +1234,31 @@ export function createPrivateApiClient(
 			});
 			return readJson<unknown>(res);
 		},
+
+		/**
+		 * Marks the post-signup setup modal flow as complete on the server.
+		 * Returns the canonical `onboardingCompletedAt` timestamp (which may
+		 * be earlier than this call if the field was already set by a
+		 * concurrent tab — the server uses an atomic "only set if missing"
+		 * write so retries are safe). Always called BEFORE triggering Privy
+		 * `fundWallet`: the deposit step has no completion signal, so we
+		 * commit the flag first to guarantee the user never sees the modal
+		 * again, even if they dismiss the deposit popup.
+		 */
+		async postOnboardingComplete(): Promise<{
+			onboardingCompletedAt: string | null;
+		}> {
+			const res = await authorizedFetch(
+				"/profiles/me/onboarding/complete",
+				{ method: "POST" },
+			);
+			const data = (await readJson<{
+				success?: boolean;
+				data?: { onboardingCompletedAt?: string | null };
+			}>(res)) ?? {};
+			const ts = data?.data?.onboardingCompletedAt ?? null;
+			return { onboardingCompletedAt: ts };
+		},
 	};
 }
 

@@ -41,6 +41,21 @@ const TRANSIENT_SOR_ROUTE_CODES: readonly SorErrorCode[] = [
 ];
 
 /**
+ * Auth-shaped errors we never want to surface in the trade box. Logged-out
+ * users hit `getRoute` to preview hypothetical smart-routing payouts; the
+ * primary CTA is already "Log In or Sign Up", so a leaked "Route unavailable:
+ * Not authenticated" or "SOR API error 401" would just be noise. We treat
+ * both the client-side throw (`Not authenticated`) and any server 401 as a
+ * silent "no route" outcome.
+ */
+function isAuthShapedSorError(message: string): boolean {
+	if (!message) return false;
+	if (/^\s*not authenticated\b/i.test(message)) return true;
+	if (/SOR API error 401\b/i.test(message)) return true;
+	return false;
+}
+
+/**
  * Cross-instance last-good route cache.
  *
  * Each `useSorRoute` instance has its own per-channel `lastGoodRouteRef`, but
@@ -523,6 +538,13 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				message: string;
 				transient: boolean;
 			}) => {
+				/* Auth failures get the silent treatment: the primary CTA is
+				 * already "Log In or Sign Up", so we just clear the route and
+				 * leave the error fields null instead of leaking
+				 * "Route unavailable: Not authenticated" into the trade box. */
+				const silentAuthFailure =
+					opts.code == null && isAuthShapedSorError(opts.message);
+
 				if (opts.transient) {
 					if (channelFailureStreakStartRef.current == null) {
 						channelFailureStreakStartRef.current = Date.now();
@@ -543,14 +565,14 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				if (aliasToDisplay) {
 					setDisplayRoute(null);
 					setVenuePreviews(null);
-					setDisplayError(opts.message);
-					setDisplayErrorCode(opts.code);
+					setDisplayError(silentAuthFailure ? null : opts.message);
+					setDisplayErrorCode(silentAuthFailure ? null : opts.code);
 					setDisplayStale(false);
 					displayLastGoodRouteRef.current = null;
 					displayFailureStreakStartRef.current = null;
 				}
-				setErr(opts.message);
-				setErrCode(opts.code);
+				setErr(silentAuthFailure ? null : opts.message);
+				setErrCode(silentAuthFailure ? null : opts.code);
 				setStale(false);
 			};
 

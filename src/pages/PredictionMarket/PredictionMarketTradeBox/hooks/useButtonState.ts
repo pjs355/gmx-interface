@@ -13,6 +13,17 @@ import {
 	type SorPrefundLegProgress,
 } from "@/trading/sor";
 import { SHARE_SELL_COMPARE_EPS } from "../checkBalances";
+import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
+
+/**
+ * Friendly placeholder shown while any of the three background activators
+ * (Polymarket / Predict / Limitless) is mid-setup. We swap this in for the
+ * "Trading setup required" / "Complete venue setup" / "Preparing Predict…"
+ * copy so a brand-new user never sees jargon while we're working in the
+ * background. The button stays disabled — they can't trade yet — but the
+ * label promises the system is doing something on their behalf.
+ */
+const SETUP_IN_PROGRESS_LABEL = "Setting up your account…";
 
 /** Caps console noise when `useMemo` recomputes often with the same bad input. */
 let missingPooledCashWarnCount = 0;
@@ -200,6 +211,13 @@ type SorUnifiedPrimaryOptions = {
 	sellAmountStr?: string;
 	/** Combined held shares for the active outcome + venue scope (from SOR `venuePositions`). */
 	maxSellShares?: number;
+	/**
+	 * True while any global background activator (Polymarket / Predict /
+	 * Limitless) is still bootstrapping. Used to swap "Complete venue setup" /
+	 * "Preparing X" copy for a friendly "Setting up your account…" label so
+	 * brand-new users never see venue jargon mid-onboarding.
+	 */
+	globalSetupInProgress?: boolean;
 };
 
 function sorUnifiedPrimary(
@@ -229,12 +247,14 @@ function sorUnifiedPrimary(
 	let venueAutoSetupInFlight = false;
 	let sellAmountStr: string | undefined;
 	let maxSellShares: number | undefined;
+	let globalSetupInProgress = false;
 	if (typeof options === "boolean") {
 		venueAutoSetupInFlight = options;
 	} else if (options && typeof options === "object") {
 		venueAutoSetupInFlight = options.venueAutoSetupInFlight ?? false;
 		sellAmountStr = options.sellAmountStr;
 		maxSellShares = options.maxSellShares;
+		globalSetupInProgress = options.globalSetupInProgress ?? false;
 	}
 
 	const theoretical = buttonIfBuyInsufficientFunds(side, sorState.route);
@@ -287,6 +307,13 @@ function sorUnifiedPrimary(
 			return { text: "Refreshing venue prices…", disabled: true, onClick: () => {} };
 		}
 		const execNotReady = code === "EXECUTION_NOT_READY";
+		if (execNotReady && globalSetupInProgress) {
+			return {
+				text: SETUP_IN_PROGRESS_LABEL,
+				disabled: true,
+				onClick: () => {},
+			};
+		}
 		return {
 			text: execNotReady
 				? venueAutoSetupInFlight
@@ -493,7 +520,17 @@ export function useButtonState({
 }: any): ButtonStateResult {
   const animatedDots = useAnimatedDots(400);
   const navigate = useNavigate();
-  
+  const setupActivation = useSetupActivationOptional();
+  // True while ANY of the three background activators (Polymarket / Predict /
+  // Limitless) reports `setupInProgress`. We use this to suppress
+  // "Trading setup required" / "Complete venue setup" / "Preparing X" copy in
+  // favor of a single friendly "Setting up your account…" label — the
+  // post-signup flow is hands-off, so we shouldn't expose the venue-specific
+  // jargon to the user mid-bootstrap.
+  const globalSetupInProgress = Boolean(
+    setupActivation?.anyInProgress || setupActivation?.onboardingActive,
+  );
+
   const rawButtonState = useMemo<ButtonStateResult>(() => {
     if (!authenticated) {
       return { text: "Log In or Sign Up", disabled: false, onClick: () => login() };
@@ -625,6 +662,17 @@ export function useButtonState({
           return { text: "Refreshing venue prices…", disabled: true, onClick: () => {} };
         }
         const execNotReady = code === "EXECUTION_NOT_READY";
+        // First-signup gate: if any global activator is still running, an
+        // EXECUTION_NOT_READY response is expected and transient. Don't
+        // expose venue jargon — the SOR will flip ready as soon as the
+        // activators flip `tradingEnabled` on the server.
+        if (execNotReady && globalSetupInProgress) {
+          return {
+            text: SETUP_IN_PROGRESS_LABEL,
+            disabled: true,
+            onClick: () => {},
+          };
+        }
         // If a venue is actively running its automated setup, we expect SOR to flip
         // ready-state momentarily — show a progress label instead of "Complete venue setup".
         const venueAutoSetupInFlight =
@@ -721,16 +769,20 @@ export function useButtonState({
       }
       if (pt.loading && !pt.ready) {
         return {
-          text: "Preparing Polymarket…",
+          text: globalSetupInProgress
+            ? SETUP_IN_PROGRESS_LABEL
+            : "Preparing Polymarket…",
           disabled: true,
           onClick: () => {},
         };
       }
       if (!pt.ready) {
         return {
-          text: pt.blockedReason
-            ? "Polymarket setup required"
-            : "Polymarket unavailable",
+          text: globalSetupInProgress
+            ? SETUP_IN_PROGRESS_LABEL
+            : pt.blockedReason
+              ? "Polymarket setup required"
+              : "Polymarket unavailable",
           disabled: true,
           onClick: () => {},
         };
@@ -783,6 +835,7 @@ export function useButtonState({
         {
           sellAmountStr: state.amount,
           maxSellShares: scopedSellSharesTotal(),
+          globalSetupInProgress,
         },
       );
       if (sorBuy) return sorBuy;
@@ -917,6 +970,7 @@ export function useButtonState({
         {
           sellAmountStr: state.amount,
           maxSellShares: scopedSellSharesTotal(),
+          globalSetupInProgress,
         },
       );
       if (sorLx) return sorLx;
@@ -998,6 +1052,7 @@ export function useButtonState({
         {
           sellAmountStr: state.amount,
           maxSellShares: scopedSellSharesTotal(),
+          globalSetupInProgress,
         },
       );
       if (sorDf) return sorDf;
@@ -1033,16 +1088,20 @@ export function useButtonState({
       }
       if (pt.loading && !pt.ready) {
         return {
-          text: "Preparing Predict…",
+          text: globalSetupInProgress
+            ? SETUP_IN_PROGRESS_LABEL
+            : "Preparing Predict…",
           disabled: true,
           onClick: () => {},
         };
       }
       if (!pt.ready) {
         return {
-          text: pt.blockedReason
-            ? "Predict setup required"
-            : "Predict unavailable",
+          text: globalSetupInProgress
+            ? SETUP_IN_PROGRESS_LABEL
+            : pt.blockedReason
+              ? "Predict setup required"
+              : "Predict unavailable",
           disabled: true,
           onClick: () => {},
         };
@@ -1095,6 +1154,7 @@ export function useButtonState({
           venueAutoSetupInFlight: Boolean(predictTrading?.loading),
           sellAmountStr: state.amount,
           maxSellShares: scopedSellSharesTotal(),
+          globalSetupInProgress,
         },
       );
       if (sorPf) return sorPf;
@@ -1252,6 +1312,7 @@ export function useButtonState({
         {
           sellAmountStr: state.amount,
           maxSellShares: scopedSellSharesTotal(),
+          globalSetupInProgress,
         },
       );
       if (sorLu) {

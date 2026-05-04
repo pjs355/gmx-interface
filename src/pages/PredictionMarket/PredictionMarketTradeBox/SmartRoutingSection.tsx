@@ -860,6 +860,14 @@ export default function SmartRoutingSection({
 							? p.totalCost / p.totalShares
 							: null;
 				const theoretical = p.quoteKind === "theoreticalOnly";
+				/* Kalshi (DFlow) is `theoreticalOnly` until the user completes KYC. We
+				 * still let them click the row so the trade-box flips to the Kalshi tab,
+				 * where the primary CTA reads "Enable Kalshi trading" and routes them
+				 * into the DFlow Proof redirect. Other venues stay disabled — no other
+				 * venue has an in-app onboarding hook to land on. */
+				const kalshiNeedsKyc = theoretical && p.venue === "dflow";
+				const blockClick = theoretical && !kalshiNeedsKyc;
+				const theoreticalLabel = kalshiNeedsKyc ? " (Enable Kalshi)" : " (book only)";
 
 				return (
 					<div
@@ -871,9 +879,9 @@ export default function SmartRoutingSection({
 								type="button"
 								className="smart-routing-row__main"
 								data-qa={`smart-routing-venue-row-${p.venue}`}
-								disabled={theoretical}
+								disabled={blockClick}
 								onClick={() => {
-									if (!theoretical) {
+									if (!blockClick) {
 										onSelectVenue(sorVenueToTradingVenue(p.venue));
 									}
 								}}
@@ -887,7 +895,7 @@ export default function SmartRoutingSection({
 									<div className="smart-routing-row__meta">
 										<span className="smart-routing-row__name">
 											{VENUE_DISPLAY_NAMES[p.venue]}
-											{theoretical ? " (book only)" : ""}
+											{theoretical ? theoreticalLabel : ""}
 										</span>
 										{displayAvgPrice != null && (
 											<span className="smart-routing-row__sub">
@@ -911,9 +919,9 @@ export default function SmartRoutingSection({
 							<button
 								type="button"
 								className="smart-routing-row__value-btn"
-								disabled={theoretical}
+								disabled={blockClick}
 								onClick={() => {
-									if (!theoretical) {
+									if (!blockClick) {
 										onSelectVenue(sorVenueToTradingVenue(p.venue));
 									}
 								}}

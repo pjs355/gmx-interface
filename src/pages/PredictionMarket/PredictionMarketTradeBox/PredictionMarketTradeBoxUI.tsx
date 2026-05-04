@@ -28,6 +28,7 @@ import {
   parseLimitPriceCents,
 } from "@/trading/sor";
 import { getYesNoTeamLabels } from "./teamLabels";
+import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
 import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import {
 	hexToRgba,
@@ -170,6 +171,15 @@ export default function PredictionMarketTradeBoxUI({
 }: PredictionMarketTradeBoxUIProps) {
   const { formatPrice } = useOddsDisplay();
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
+  // Suppression signal for the post-signup setup flow: while any of the
+  // three background activators (Polymarket / Predict / Limitless) is still
+  // bootstrapping, an EXECUTION_NOT_READY error is expected and transient.
+  // We hide the "Trading setup required: …" inline error so brand-new users
+  // never see venue-specific jargon while the modal is doing its job.
+  const setupActivation = useSetupActivationOptional();
+  const globalSetupInProgress = Boolean(
+    setupActivation?.anyInProgress || setupActivation?.onboardingActive,
+  );
 
   /* Reuse the same cash number the AppHeader's "Cash" pill displays, so the
    * "Balance: $X" line under the input is always identical to the header.
@@ -1024,8 +1034,19 @@ export default function PredictionMarketTradeBoxUI({
           warning. Pure buy success cases are intentionally empty here because
           the smart-routing rows above already show the payout. */}
       {tradingVenue === "all" && (() => {
+        // Hide the inline EXECUTION_NOT_READY block while the post-signup
+        // setup is still wrapping up — the disabled CTA already shows
+        // "Setting up your account…" and a duplicate red error line below it
+        // is jarring. Other error codes (NO_BOOKS_AVAILABLE, validation,
+        // floors) still surface normally.
+        const isSetupErrorSuppressed =
+          sorRoute.displayErrorCode === "EXECUTION_NOT_READY" &&
+          globalSetupInProgress;
         const hasError = Boolean(
-          sorRoute.displayError && !sorRoute.displayRoute && !sorRoute.displayLoading,
+          sorRoute.displayError &&
+            !sorRoute.displayRoute &&
+            !sorRoute.displayLoading &&
+            !isSetupErrorSuppressed,
         );
         const route = sorRoute.displayRoute;
         const isSell = route?.side === "sell";
@@ -1038,7 +1059,7 @@ export default function PredictionMarketTradeBoxUI({
         if (!hasAllTabContent) return null;
         return (
         <div className="bet-size-section">
-          {sorRoute.displayError && !sorRoute.displayRoute && !sorRoute.displayLoading && (() => {
+          {sorRoute.displayError && !sorRoute.displayRoute && !sorRoute.displayLoading && !isSetupErrorSuppressed && (() => {
 						const rawErr = sorRoute.displayError ?? "";
 						const isKalshiWholeShareHint =
 							sorRoute.displayErrorCode === "WHOLE_SHARES_ONLY" ||
