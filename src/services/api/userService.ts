@@ -31,6 +31,15 @@ export interface UserProfile {
 	fundEmailSent?: Date | null;
 	fundEmailSentCount?: number;
 	emailPreferences?: EmailPreferences;
+	/**
+	 * Stamped server-side once the user has completed the post-signup setup
+	 * modal flow (and explicitly backfilled to `_id.getTimestamp()` for every
+	 * profile that existed before the modal shipped). Absence of this field
+	 * is the canonical "show the setup modal" signal — never use a heuristic
+	 * like `orderCount === 0` because that misclassifies funded users who
+	 * haven't traded yet.
+	 */
+	onboardingCompletedAt?: string | Date | null;
 	cs?: unknown;
 	[key: string]: unknown;
 }

@@ -323,8 +323,26 @@ export function TransfersModal() {
 			let balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
 			const scwBase = Math.max(0, balancesSnap.base ?? 0);
 			const makerSnap = Math.max(0, balancesSnap.limitlessMakerBase ?? 0);
-			const shortfallOnScw = Math.max(0, gross - scwBase);
-			const pullFromMaker = Math.min(shortfallOnScw, makerSnap);
+			/* Only sweep maker → SCW when no other chain can plug the gap.
+			 * The naive `min(gross - scwBase, maker)` triggers a partner
+			 * withdraw + 120s poll on every transfer that the SCW alone
+			 * doesn't cover — even when Solana / Polygon / BNB already hold
+			 * plenty of stable for Li.Fi to source from. The user perceives
+			 * that wait as "Getting route…" being stuck.
+			 *
+			 * Treat USDC + USDT 1:1 here — exact swap math happens inside
+			 * `postFundingLifiWithdrawPlan`; this gate is only deciding
+			 * whether the maker sweep is necessary.
+			 */
+			const otherChainsTotal =
+				Math.max(0, balancesSnap.polygon ?? 0) +
+				Math.max(0, balancesSnap.solana ?? 0) +
+				Math.max(0, balancesSnap.bnb ?? 0);
+			const shortfallExcludingMaker = Math.max(
+				0,
+				gross - scwBase - otherChainsTotal,
+			);
+			const pullFromMaker = Math.min(shortfallExcludingMaker, makerSnap);
 			if (pullFromMaker >= 0.02) {
 				await prefundLimitlessMakerToScwForTransfersWithdraw({
 					amountFromMakerHuman: pullFromMaker,
@@ -455,9 +473,15 @@ export function TransfersModal() {
 				</div>
 			)}
 			{chainBalances.length === 0 && (
-				<div className="transfers-field-error" style={{ marginBottom: 12 }}>
-					No funded wallets detected yet. Deposit or wait for balances to load.
-				</div>
+				bridgeBalances.isLoading || !bridgeBalances.data ? (
+					<div className="transfers-field-loading" style={{ marginBottom: 12 }}>
+						Loading wallet balances…
+					</div>
+				) : (
+					<div className="transfers-field-error" style={{ marginBottom: 12 }}>
+						No funded wallets detected yet. Deposit or wait for balances to load.
+					</div>
+				)
 			)}
 
 			<div className="transfers-input-group">

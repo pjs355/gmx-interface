@@ -8,24 +8,34 @@ import type {
 	SorVenue,
 } from "./sor-types";
 
+/**
+ * Per-call gate: read-only route previews (`getRoute`) are allowed to ride
+ * through anonymously so logged-out users can see hypothetical smart-routing
+ * payouts. Every execution / status mutation still requires Privy auth — those
+ * paths flip `requireAuth` and we throw early before hitting the network so
+ * the caller surfaces the standard "log in" UI instead of leaking a 401.
+ */
 async function sorFetch(
 	path: string,
 	getToken: () => Promise<string | null>,
-	getIdentityToken?: () => string | undefined,
-	init: RequestInit = {},
+	getIdentityToken: (() => string | undefined) | undefined,
+	init: RequestInit & { requireAuth?: boolean } = {},
 ): Promise<Response> {
+	const { requireAuth = true, ...fetchInit } = init;
 	const token = await getToken();
-	if (!token) throw new Error("Not authenticated");
-	const headers = new Headers(init.headers);
-	headers.set("Authorization", `Bearer ${token}`);
-	const idTok = getIdentityToken?.();
-	if (typeof idTok === "string" && idTok.trim() !== "") {
-		headers.set("privy-id-token", idTok.trim());
+	if (!token && requireAuth) throw new Error("Not authenticated");
+	const headers = new Headers(fetchInit.headers);
+	if (token) {
+		headers.set("Authorization", `Bearer ${token}`);
+		const idTok = getIdentityToken?.();
+		if (typeof idTok === "string" && idTok.trim() !== "") {
+			headers.set("privy-id-token", idTok.trim());
+		}
 	}
-	if (!headers.has("Content-Type") && init.body) {
+	if (!headers.has("Content-Type") && fetchInit.body) {
 		headers.set("Content-Type", "application/json");
 	}
-	return fetch(getPrivateApiRequestUrl(path), { ...init, headers });
+	return fetch(getPrivateApiRequestUrl(path), { ...fetchInit, headers });
 }
 
 export interface SorApiClient {
@@ -46,8 +56,10 @@ export function createSorApiClient(
 	getToken: () => Promise<string | null>,
 	getIdentityToken?: () => string | undefined,
 ): SorApiClient {
-	const authFetch = (path: string, init?: RequestInit) =>
-		sorFetch(path, getToken, getIdentityToken, init);
+	const authFetch = (
+		path: string,
+		init?: RequestInit & { requireAuth?: boolean },
+	) => sorFetch(path, getToken, getIdentityToken, init);
 
 	async function readJson<T>(res: Response): Promise<T> {
 		if (!res.ok) {
@@ -72,10 +84,17 @@ export function createSorApiClient(
 			// body because those paths also return `SorRouteResult` shapes
 			// (e.g. RATE_LIMITED) — callers then handle the `code` like any
 			// other failure instead of catching a thrown exception.
+			//
+			// `requireAuth: false` lets logged-out users see hypothetical routes:
+			// the request is sent without an `Authorization` header, and the
+			// server treats it as a read-only preview (no balances, no execution
+			// readiness checks). `useSorRoute` separately silences any 401
+			// surface so an unauth backend never leaks into the trade box copy.
 			const res = await authFetch("/api/sor/route", {
 				method: "POST",
 				body: JSON.stringify(request),
 				signal,
+				requireAuth: false,
 			});
 			const text = await res.text();
 			let body: unknown;

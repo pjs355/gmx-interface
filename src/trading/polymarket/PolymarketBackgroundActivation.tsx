@@ -3,6 +3,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import { useSignerContext } from "context/SignerContext";
 import { usePolymarketEnsureExecutionReady } from "./usePolymarketEnsureExecutionReady";
+import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
 
 const LOG_TAG = "[PolymarketActivation]";
 
@@ -44,6 +45,7 @@ export function PolymarketBackgroundActivation(): null {
 	const { authenticated, ready: privyReady } = usePrivy();
 	const eoa = usePolymarketEoaWalletClient();
 	const signerCtx = useSignerContext();
+	const setupActivation = useSetupActivationOptional();
 
 	const [idleReached, setIdleReached] = useState(false);
 
@@ -84,12 +86,24 @@ export function PolymarketBackgroundActivation(): null {
 		prerequisitesReady,
 	]);
 
+	const onboardingActive = setupActivation?.onboardingActive ?? false;
+
 	useEffect(() => {
 		if (!prerequisitesReady) {
 			setIdleReached(false);
 			return;
 		}
 		if (idleReached) return;
+
+		// During the post-signup setup modal we skip the idle gate entirely:
+		// the user is staring at a "Setting up Polymarket account…" row and
+		// every 5s of `requestIdleCallback` slack is 5s of dead air. The hook
+		// itself still runs the same flow; we just stop deferring it.
+		if (onboardingActive) {
+			console.info(LOG_TAG, "bg:onboardingActive:skipIdle");
+			setIdleReached(true);
+			return;
+		}
 
 		const w = window as IdleWindow;
 		let idleHandle: number | null = null;
@@ -123,11 +137,24 @@ export function PolymarketBackgroundActivation(): null {
 				w.cancelIdleCallback(idleHandle);
 			}
 		};
-	}, [prerequisitesReady, idleReached]);
+	}, [prerequisitesReady, idleReached, onboardingActive]);
 
-	usePolymarketEnsureExecutionReady({
+	const activation = usePolymarketEnsureExecutionReady({
 		enabled: prerequisitesReady && idleReached,
 	});
+
+	const reportVenueSnapshot = setupActivation?.reportVenueSnapshot;
+	useEffect(() => {
+		if (!reportVenueSnapshot) return;
+		reportVenueSnapshot("polymarket", {
+			setupInProgress: activation.setupInProgress,
+			ready: activation.ready,
+		});
+	}, [
+		reportVenueSnapshot,
+		activation.setupInProgress,
+		activation.ready,
+	]);
 
 	return null;
 }

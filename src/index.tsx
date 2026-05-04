@@ -81,6 +81,10 @@ import { TransfersModalProvider } from "context/TransfersModalContext";
 import { OddsDisplayProvider } from "context/OddsDisplayContext";
 import { StickyTradeAmountProvider } from "context/StickyTradeAmountContext";
 import { PolymarketBackgroundActivation } from "@/trading/polymarket/PolymarketBackgroundActivation";
+import { PredictBackgroundActivation } from "@/trading/predict/PredictBackgroundActivation";
+import { LimitlessBackgroundActivation } from "@/trading/limitless/LimitlessBackgroundActivation";
+import { SetupActivationProvider } from "@/onboarding/SetupActivationContext";
+import { FirstSignupSetupGate } from "@/onboarding/FirstSignupSetupGate";
 
 import App from "./app/App";
 import "./styles/globals.css";
@@ -129,7 +133,24 @@ createRoot(document.getElementById("root")!).render(
 						<OddsMonitorProvider>
 							<SignerProvider>
 									<UserDataProvider>
+										<SetupActivationProvider>
+										{/*
+										 * Three background activators run silently in
+										 * parallel. They share `SetupActivationContext`
+										 * so the first-signup gate can rush them past
+										 * `requestIdleCallback` and the trade box can
+										 * suppress "Trading setup required" copy while
+										 * setup is still wrapping up. The activators
+										 * themselves render nothing.
+										 */}
 										<PolymarketBackgroundActivation />
+										<PredictBackgroundActivation />
+										<LimitlessBackgroundActivation />
+										{/* Modal gates rendering on the user's
+										 * `onboardingCompletedAt` flag. Existing users
+										 * (including everyone backfilled by the migration
+										 * script) never see it. */}
+										<FirstSignupSetupGate />
 										<RecentSettlementClaimProvider>
 										<CollateralTokenProvider>
 											<PostTradeBalanceSyncProvider>
@@ -149,6 +170,7 @@ createRoot(document.getElementById("root")!).render(
 											</PostTradeBalanceSyncProvider>
 										</CollateralTokenProvider>
 										</RecentSettlementClaimProvider>
+										</SetupActivationProvider>
 									</UserDataProvider>
 							</SignerProvider>
 						</OddsMonitorProvider>

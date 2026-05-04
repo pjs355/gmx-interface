@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
+import { tradingQueryKeys } from "@/trading/queryKeys";
 import { usePredictApprovalsStatus } from "./usePredictApprovalsStatus";
 import type { usePredictTradingSession } from "./usePredictTradingSession";
 
@@ -51,6 +54,9 @@ export function usePredictEnsureExecutionReady(args: {
 		args;
 	const { authenticated } = usePrivy();
 	const api = usePrivateApiClient();
+	const qc = useQueryClient();
+	const profileQuery = useCurrentProfile({ enabled: enabled && authenticated });
+	const profileId = profileQuery.data?._id;
 
 	const approvalsQuery = usePredictApprovalsStatus(
 		approvalSubject,
@@ -67,6 +73,8 @@ export function usePredictEnsureExecutionReady(args: {
 	sessionRef.current = predictSession;
 	const apiRef = useRef(api);
 	apiRef.current = api;
+	const profileIdRef = useRef<string | undefined>(profileId);
+	profileIdRef.current = profileId;
 
 	const inFlightRef = useRef(false);
 	const completedKeyRef = useRef<string | null>(null);
@@ -131,6 +139,18 @@ export function usePredictEnsureExecutionReady(args: {
 				tradingEnabled: true,
 			});
 
+			// Invalidate the SOR-facing account overview so the next route fetch
+			// sees `predictFun.canExecute: true`. Without this the user has to
+			// trigger a refetch (tab switch, manual reload) before SOR will
+			// route to Predict, which is exactly the jank the modal is trying
+			// to avoid for new users.
+			const currentProfileId = profileIdRef.current;
+			if (currentProfileId) {
+				await qc.invalidateQueries({
+					queryKey: tradingQueryKeys.accountOverview(currentProfileId),
+				});
+			}
+
 			completedKeyRef.current = runKey;
 			failuresByKeyRef.current.delete(runKey);
 			setPhase("ready");
@@ -162,7 +182,7 @@ export function usePredictEnsureExecutionReady(args: {
 		} finally {
 			inFlightRef.current = false;
 		}
-	}, [onChainApprovalsOk, runKey]);
+	}, [onChainApprovalsOk, qc, runKey]);
 
 	useEffect(() => {
 		return () => {
