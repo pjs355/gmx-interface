@@ -72,6 +72,7 @@ import { SOLANA_USDC_MINT } from "@/config/addresses";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import {
 	useSignAndSendTransaction as useSolanaSignAndSendTransaction,
+	useSignTransaction as useSolanaSignTransaction,
 	useSignMessage as useSolanaSignMessage,
 	useWallets as useSolanaWallets,
 } from "@privy-io/react-auth/solana";
@@ -221,6 +222,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
   const relay = usePolymarketRelay();
   const { signAndSendTransaction: privySolanaSignAndSend } = useSolanaSignAndSendTransaction();
+  const { signTransaction: privySolanaSignTransaction } = useSolanaSignTransaction();
   const { wallets: solanaWallets } = useSolanaWallets();
   const embeddedSolanaWallet = useMemo(
     () => solanaWallets.find((w) => w.address === funding.solanaAddress) ?? solanaWallets[0] ?? null,
@@ -237,9 +239,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
                 embeddedSolanaWallet,
                 serializedTx
               ),
+            signTransactionOnly: async (serializedTx: Uint8Array) => {
+              const out = await privySolanaSignTransaction({
+                transaction: serializedTx,
+                wallet: embeddedSolanaWallet,
+              });
+              return out.signedTransaction;
+            },
           }
         : null,
-    [privySolanaSignAndSend, embeddedSolanaWallet]
+    [privySolanaSignAndSend, privySolanaSignTransaction, embeddedSolanaWallet]
   );
 
   const tradeExecutionService = useTradeExecutionService();

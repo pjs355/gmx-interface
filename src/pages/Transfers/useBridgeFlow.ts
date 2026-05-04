@@ -4,6 +4,7 @@ import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useSendTransaction } from "@privy-io/react-auth";
 import {
 	useSignAndSendTransaction,
+	useSignTransaction as useSolanaSignTransaction,
 	useWallets as useSolanaWallets,
 } from "@privy-io/react-auth/solana";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
@@ -222,6 +223,7 @@ export function useBridgeFlow() {
 	const relay = usePolymarketRelay();
 	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
 	const { signAndSendTransaction: privySolanaSignAndSend } = useSignAndSendTransaction();
+	const { signTransaction: privySolanaSignTransaction } = useSolanaSignTransaction();
 	const { wallets: solanaWallets } = useSolanaWallets();
 	const embeddedSolanaWallet = useMemo(
 		() => solanaWallets.find((w) => w.address === funding.solanaAddress) ?? solanaWallets[0] ?? null,
@@ -238,9 +240,16 @@ export function useBridgeFlow() {
 								embeddedSolanaWallet,
 								serializedTx,
 							),
+						signTransactionOnly: async (serializedTx: Uint8Array) => {
+							const out = await privySolanaSignTransaction({
+								transaction: serializedTx,
+								wallet: embeddedSolanaWallet,
+							});
+							return out.signedTransaction;
+						},
 					}
 				: null,
-		[privySolanaSignAndSend, embeddedSolanaWallet],
+		[privySolanaSignAndSend, privySolanaSignTransaction, embeddedSolanaWallet],
 	);
 
 	const [fromEndpoint, setFromEndpoint] = useState<BridgeEndpoint>("levelup");

@@ -35,8 +35,10 @@ import type {
 	PolymarketBuilderSignBody,
 	PolymarketBuilderSignResponse,
 	PolymarketL2CredentialsBody,
+	PolymarketOrderSubmitBody,
 	PolymarketSyncBody,
 	PolymarketVerifyOnChainBody,
+	CashSummary,
 } from "@/types/trading";
 import { PrivateApiError } from "./errors";
 
@@ -160,6 +162,28 @@ export type DflowOrderResponse = {
 	code?: string;
 	msg?: string;
 	[key: string]: unknown;
+};
+
+/** Body for `POST /api/dflow/orders` — server submits the user-signed Solana tx. */
+export type DflowOrderSubmitBody = {
+	signedTx: string;
+	inputMint: string;
+	outputMint: string;
+	amount?: string;
+	side?: "BUY" | "SELL";
+	outcome?: string;
+	marketRef?: {
+		externalMarketId?: string;
+		tokenId?: string;
+		questionId?: string;
+	};
+};
+
+export type DflowOrderSubmitResponse = {
+	success: true;
+	signature: string;
+	confirmationStatus: string;
+	slot: number | null;
 };
 
 /** Market detail from `POST /api/v1/markets/batch` (DFlow Metadata API). */
@@ -510,6 +534,18 @@ export function createPrivateApiClient(
 			return readJson<AccountOverview>(res);
 		},
 
+		/**
+		 * Server-side replacement for the old per-client `Promise.all` of
+		 * Base/Polygon/BSC/Solana RPC reads. The server resolves the user's
+		 * five wallet roles from Privy + venue accounts, dials its private
+		 * RPCs in parallel, and returns the human-decimal snapshot used by
+		 * `CollateralTokenContext`.
+		 */
+		async getCashSummary(): Promise<CashSummary> {
+			const res = await authorizedFetch("/portfolio/cash-summary");
+			return readJson<CashSummary>(res);
+		},
+
 		async getPolymarketAccount(): Promise<PolymarketAccountResponse> {
 			const res = await authorizedFetch(getPolymarketAccountApiPath());
 			return readJson<PolymarketAccountResponse>(res);
@@ -554,6 +590,23 @@ export function createPrivateApiClient(
 				body: JSON.stringify(body),
 			});
 			return readJson<PolymarketBuilderSignResponse>(res);
+		},
+
+		/**
+		 * Server-mediated Polymarket order placement: UI signs locally via the
+		 * SDK's create-only path (`createOrder` / `createMarketOrder`), then
+		 * POSTs the signed order here. Server uses the user's stored L2 API
+		 * credentials to forward the order to the Polymarket CLOB and persists
+		 * a `VenueOrder` audit row.
+		 */
+		async postPolymarketOrder(
+			body: PolymarketOrderSubmitBody
+		): Promise<unknown> {
+			const res = await authorizedFetch("/api/polymarket/orders", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson<unknown>(res);
 		},
 
 		async postFundingLifiQuote(
@@ -915,6 +968,17 @@ export function createPrivateApiClient(
 				`/api/dflow/order?${q.toString()}`
 			);
 			return readJson<DflowOrderResponse>(res);
+		},
+
+		/** Server-submit path: send the user-signed Solana tx; server posts to RPC and persists VenueOrder. */
+		async postDflowOrder(
+			body: DflowOrderSubmitBody
+		): Promise<DflowOrderSubmitResponse> {
+			const res = await authorizedFetch("/api/dflow/orders", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson<DflowOrderSubmitResponse>(res);
 		},
 
 		async postDflowFilterOutcomeMints(

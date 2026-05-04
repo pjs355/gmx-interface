@@ -1,9 +1,7 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 import { FRONTEND_URL } from "../playwright.config";
+import { expectHeaderCashUsd } from "../helpers/header-cash";
 import { tradeboxRootLocator } from "./tradebox";
-
-/** After hard reload on umbrella page, book/header can lag `load`; let UI settle before trade steps. */
-const POST_UMBRELLA_RELOAD_SETTLE_MS = 3_000;
 
 export class PredictionsPage {
 	constructor(private readonly page: Page) {}
@@ -18,6 +16,11 @@ export class PredictionsPage {
 		);
 	}
 
+	/**
+	 * Click the home-page match card, navigate to the umbrella page, and wait
+	 * for the page to be interactable (tradebox visible + header Cash hydrated).
+	 * No reload — keeps the test within a single SPA session.
+	 */
 	async openCardByUmbrellaId(umbrellaId: string): Promise<void> {
 		const card = this.findCardByUmbrellaId(umbrellaId);
 		await expect(
@@ -29,21 +32,14 @@ export class PredictionsPage {
 		await this.page.waitForURL(`**/predictions/umbrella/${umbrellaId}`, {
 			timeout: 60_000,
 		});
-		await tradeboxRootLocator(this.page).waitFor({
-			state: "visible",
-			timeout: 60_000,
-		});
-		// E2E-only: first paint sometimes shows 0¢ / empty book until a full reload (not reproduced manually).
-		await this.page.reload({ waitUntil: "load" });
-		await new Promise((r) => setTimeout(r, POST_UMBRELLA_RELOAD_SETTLE_MS));
-		await tradeboxRootLocator(this.page).waitFor({
-			state: "visible",
-			timeout: 60_000,
-		});
+		await this.waitForUmbrellaPageReady();
 	}
 
 	/**
-	 * Deep-link to an umbrella market (no home-card click). Reload + settle so books match seed flow.
+	 * Deep-link to an umbrella market by URL (used when the card may not be
+	 * visible on home due to filter state). No reload — waits deterministically
+	 * for tradebox visibility and header Cash hydration so callers get a
+	 * ready page in a single SPA session.
 	 */
 	async openUmbrellaTradingPageById(umbrellaId: string): Promise<void> {
 		const path = `/predictions/umbrella/${encodeURIComponent(umbrellaId)}`;
@@ -51,24 +47,20 @@ export class PredictionsPage {
 			waitUntil: "load",
 			timeout: 120_000,
 		});
-		await this.page.reload({ waitUntil: "load" });
-		await new Promise((r) => setTimeout(r, POST_UMBRELLA_RELOAD_SETTLE_MS));
-		await tradeboxRootLocator(this.page).waitFor({
-			state: "visible",
-			timeout: 60_000,
-		});
+		await this.waitForUmbrellaPageReady();
 	}
 
 	/**
-	 * Full reload so positions / balances refetch (same pattern as `openUmbrellaTradingPageById`).
-	 * Call after a successful fill when `MyPositionsRow` lags the chain until refresh.
+	 * Tradebox is visible AND header Cash has hydrated (i.e. the user-data
+	 * context fetched at least once). Header Cash and positions hydrate from
+	 * the same `PortfolioContext` pipeline, so a settled header value is the
+	 * deterministic signal that user-side data has loaded.
 	 */
-	async reloadUmbrellaPageForE2eBalances(): Promise<void> {
-		await this.page.reload({ waitUntil: "load" });
-		await new Promise((r) => setTimeout(r, POST_UMBRELLA_RELOAD_SETTLE_MS));
+	private async waitForUmbrellaPageReady(): Promise<void> {
 		await tradeboxRootLocator(this.page).waitFor({
 			state: "visible",
 			timeout: 60_000,
 		});
+		await expectHeaderCashUsd(this.page);
 	}
 }

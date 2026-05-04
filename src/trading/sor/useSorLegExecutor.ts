@@ -271,6 +271,24 @@ export interface UseSorLegExecutorDeps {
 			code?: string;
 			msg?: string;
 		}>;
+		postDflowOrder: (body: {
+			signedTx: string;
+			inputMint: string;
+			outputMint: string;
+			amount?: string;
+			side?: "BUY" | "SELL";
+			outcome?: string;
+			marketRef?: {
+				externalMarketId?: string;
+				tokenId?: string;
+				questionId?: string;
+			};
+		}) => Promise<{
+			success: true;
+			signature: string;
+			confirmationStatus: string;
+			slot: number | null;
+		}>;
 		postFundingLifiQuote: (body: {
 			fromChain: number;
 			toChain: number;
@@ -819,11 +837,35 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 					const txBytes = Buffer.from(orderResult.transaction, "base64");
 					const transaction = VersionedTransaction.deserialize(txBytes);
-					const sig = await solanaSigner.signAndSendTransaction(
+					const signedBytes = await solanaSigner.signTransactionOnly(
 						transaction.serialize(),
 					);
+					const signedBase64 =
+						typeof Buffer !== "undefined"
+							? Buffer.from(signedBytes).toString("base64")
+							: btoa(
+									Array.from(signedBytes)
+										.map((b) => String.fromCharCode(b))
+										.join(""),
+								);
+					const submitResult = await privateApi.postDflowOrder({
+						signedTx: signedBase64,
+						inputMint,
+						outputMint,
+						amount: amountBaseUnits,
+						side: side === "buy" ? "BUY" : "SELL",
+						outcome: leg.outcome === "A" ? "yes" : "no",
+						marketRef: {
+							externalMarketId: outcomeMint,
+							tokenId: outcomeMint,
+						},
+					});
 
-					return { filled: true, filledShares: leg.shares, txHash: sig };
+					return {
+						filled: true,
+						filledShares: leg.shares,
+						txHash: submitResult.signature,
+					};
 				}
 
 				// ─── Limitless (Base, USDC) ───────────

@@ -224,12 +224,8 @@ export class Tradebox {
 	}
 
 	async submit(): Promise<void> {
-		// Logs go to the **terminal** that runs `yarn e2e` / `playwright test`, not the browser DevTools console.
-		console.warn("[e2e tradebox] submit() entered");
 		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
 		const button = this.root.locator('[data-qa="tradebox-submit"]');
-		// await logTradeboxDomSnapshot("submit: amount input (initial)", input);
-		// await logTradeboxDomSnapshot("submit: trade button (initial)", button);
 
 		const deadline = Date.now() + SUBMIT_READY_TIMEOUT_MS;
 
@@ -238,13 +234,6 @@ export class Tradebox {
 			const amount = parseTradeboxAmountInput(raw);
 			const enabled = await button.isEnabled().catch(() => false);
 			if (amount > 0 && enabled) {
-				console.warn(
-					`[e2e tradebox] submit: clicking (amount=${amount} enabled=true)`,
-				);
-				await logTradeboxDomSnapshot(
-					"submit: trade button (before click)",
-					button,
-				);
 				await button.click();
 				return;
 			}
