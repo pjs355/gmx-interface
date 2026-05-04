@@ -47,3 +47,4 @@ export type {
 	VenueHistoryFill,
 	PolymarketDataApiPosition,
 } from "./venuePosition";
+export type { CashSummary } from "./portfolio";

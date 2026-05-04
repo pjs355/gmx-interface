@@ -1,6 +1,7 @@
 import React from "react";
 import { useMedia } from "react-use";
 import { TradeBoxSkeleton } from "@/pages/PredictionMarket/Skeletons/TradeBoxSkeleton";
+import "@/pages/PredictionMarket/Skeletons/Skeletons.scss";
 import "./HomeSkeleton.scss";
 
 interface HomeSkeletonProps {

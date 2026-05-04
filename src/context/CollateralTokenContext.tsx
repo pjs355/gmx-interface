@@ -6,10 +6,8 @@ import {
 } from "@tanstack/react-query";
 import { useSignerContext } from "context/SignerContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import {
-	readFundingStableBalancesHuman,
-	type FundingStableBalancesHuman,
-} from "@/trading/sor/fundingStableBalances";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import type { FundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
 import {
 	applyCollateralOverlays,
 	registerCollateralOverlay,
@@ -18,13 +16,15 @@ import {
 
 /**
  * Live collateral-token balances (USDC and bridge stables) keyed off the
- * connected wallet + funding addresses. Single owner of these values for the
- * entire app — components must NOT read chain RPC for collateral directly,
- * NOT keep their own `useState` copy, and NOT call setters. Read here, mutate
- * via {@link CollateralTokens.refetch} only.
+ * connected user. Single owner of these values for the entire app —
+ * components must NOT read chain RPC for collateral directly, NOT keep their
+ * own `useState` copy, and NOT call setters. Read here, mutate via
+ * {@link CollateralTokens.refetch} only.
  *
- * Sources combined into one `Promise.all` (see
- * {@link readFundingStableBalancesHuman}):
+ * Reads now flow through `GET /portfolio/cash-summary`. The server resolves
+ * the user's five wallet roles from Privy + persisted venue accounts and
+ * dials its private RPCs in parallel, returning the human-decimal snapshot.
+ * Sources combined server-side:
  *   - Base USDC                                (`account` smart wallet)
  *   - Polygon USDC.e + pUSD                    (Polymarket Safe)
  *   - BSC USDT                                 (Privy embedded EOA)
@@ -83,50 +83,19 @@ const COLLATERAL_TOKENS_FALLBACK: CollateralTokens = {
 
 let collateralProviderMissingLogged = false;
 
-function normalizeEvmAddress(input: string | null | undefined): string | undefined {
-	if (input === null || input === undefined) return undefined;
-	const trimmed = input.trim();
-	return /^0x[a-fA-F0-9]{40}$/.test(trimmed) ? trimmed : undefined;
-}
-
-function normalizeSolanaAddress(input: string | null | undefined): string | undefined {
-	if (input === null || input === undefined) return undefined;
-	const trimmed = input.trim();
-	return trimmed.length >= 32 && trimmed.length <= 44 ? trimmed : undefined;
-}
-
 export function CollateralTokenProvider({ children }: { children: React.ReactNode }) {
 	const queryClient = useQueryClient();
 	const { account } = useSignerContext();
-	const {
-		polymarketSafe,
-		embeddedEoa,
-		solanaAddress,
-		limitlessMakerBase,
-		fundingHydrated,
-	} = useFundingAddresses();
+	const { fundingHydrated, profileId } = useFundingAddresses();
+	const privateApi = usePrivateApiClient();
 
-	const baseAddr = normalizeEvmAddress(account);
-	const safeAddr = normalizeEvmAddress(polymarketSafe);
-	const bnbAddr = normalizeEvmAddress(embeddedEoa);
-	const solAddr = normalizeSolanaAddress(solanaAddress);
-	const limitlessAddr = normalizeEvmAddress(limitlessMakerBase);
+	const accountKey = typeof account === "string" ? account.toLowerCase() : null;
 
-	const enabled =
-		Boolean(account) &&
-		fundingHydrated &&
-		Boolean(baseAddr || safeAddr || bnbAddr || solAddr || limitlessAddr);
+	const enabled = Boolean(account) && fundingHydrated;
 
 	const queryKey = useMemo(
-		() => [
-			COLLATERAL_TOKENS_QUERY_KEY,
-			baseAddr?.toLowerCase() ?? null,
-			safeAddr?.toLowerCase() ?? null,
-			bnbAddr?.toLowerCase() ?? null,
-			solAddr ?? null,
-			limitlessAddr?.toLowerCase() ?? null,
-		],
-		[baseAddr, safeAddr, bnbAddr, solAddr, limitlessAddr],
+		() => [COLLATERAL_TOKENS_QUERY_KEY, profileId ?? null, accountKey],
+		[profileId, accountKey],
 	);
 
 	const query: UseQueryResult<FundingStableBalancesHuman> = useQuery({
@@ -134,13 +103,14 @@ export function CollateralTokenProvider({ children }: { children: React.ReactNod
 		enabled,
 		staleTime: COLLATERAL_TOKENS_STALE_TIME_MS,
 		queryFn: async () => {
-			const fresh = await readFundingStableBalancesHuman({
-				baseSmartWallet: baseAddr ?? null,
-				polymarketSafe: safeAddr ?? null,
-				embeddedEoa: bnbAddr ?? null,
-				solanaAddress: solAddr ?? null,
-				limitlessMakerBase: limitlessAddr ?? null,
-			});
+			const summary = await privateApi.getCashSummary();
+			const fresh: FundingStableBalancesHuman = {
+				base: summary.base,
+				polygon: summary.polygon,
+				bnb: summary.bnb,
+				solana: summary.solana,
+				limitlessMakerBase: summary.limitlessMakerBase,
+			};
 			return applyCollateralOverlays(fresh);
 		},
 	});

@@ -38,6 +38,7 @@ import type {
 	PolymarketOrderSubmitBody,
 	PolymarketSyncBody,
 	PolymarketVerifyOnChainBody,
+	CashSummary,
 } from "@/types/trading";
 import { PrivateApiError } from "./errors";
 
@@ -531,6 +532,18 @@ export function createPrivateApiClient(
 			const path = getAccountOverviewApiPath(profileId);
 			const res = await authorizedFetch(path);
 			return readJson<AccountOverview>(res);
+		},
+
+		/**
+		 * Server-side replacement for the old per-client `Promise.all` of
+		 * Base/Polygon/BSC/Solana RPC reads. The server resolves the user's
+		 * five wallet roles from Privy + venue accounts, dials its private
+		 * RPCs in parallel, and returns the human-decimal snapshot used by
+		 * `CollateralTokenContext`.
+		 */
+		async getCashSummary(): Promise<CashSummary> {
+			const res = await authorizedFetch("/portfolio/cash-summary");
+			return readJson<CashSummary>(res);
 		},
 
 		async getPolymarketAccount(): Promise<PolymarketAccountResponse> {

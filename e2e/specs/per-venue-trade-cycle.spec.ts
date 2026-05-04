@@ -61,11 +61,11 @@ import {
  * at quote time. We take `readBuyRowTotalSharesOrZero()` **before** submit (`sharesBefore`)
  * and compare **delta** = after − before to `buyQuotedShares` using `buyShareFillDeltaTolerance`
  * (2% + floor; DFlow adds absolute slack when SOR shows fractional shares but on-chain
- * cumulative differs slightly — e.g. quoted 6.40 vs delta 6). After fill we
- * reload the umbrella page (`PredictionsPage.reloadUmbrellaPageForE2eBalances`) so
- * the row catches chain/API lag before we poll for the delta. This runs for **every**
- * entry in `REQUESTED_VENUES` (not Polymarket-only); DFlow / Predict / others use the
- * same path after `waitForFill()`. **DFlow** uses a longer shares poll cap
+ * cumulative differs slightly — e.g. quoted 6.40 vs delta 6). After fill we keep the
+ * SPA session open (no reload) and let `waitForBuySharesIncreaseSince` poll the row
+ * until chain/API lag catches up. This runs for **every** entry in `REQUESTED_VENUES`
+ * (not Polymarket-only); DFlow / Predict / others use the same path after
+ * `waitForFill()`. **DFlow** uses a longer shares poll cap
  * (`sharesVisiblePollTimeoutMsForVenueKey` in `tradebox.ts`) because positions read
  * on-chain trade history, not a fast venue inventory API.
  *
@@ -317,10 +317,8 @@ test.describe("prinx per-venue trade cycle", () => {
 				);
 				await tradebox.submit();
 				await tradebox.waitForFill();
-				// Full-page reload + venue restore: applies to every REQUESTED_VENUES entry
-				// (DFlow, Polymarket, …) so positions row / balances refetch after laggy fills.
-				const predictionsPage = new PredictionsPage(sharedSession.page);
-				await predictionsPage.reloadUmbrellaPageForE2eBalances();
+				// No reload here: position-row and header-cash polls below already
+				// wait for the laggy refetch deterministically.
 				await tradebox.selectVenue(tradingVenueSlugForKey(venueKey));
 				await tradebox.setSide("buy");
 				await tradebox.setPosition("yes");
@@ -416,9 +414,8 @@ test.describe("prinx per-venue trade cycle", () => {
 				);
 				await tradebox.submit();
 				await tradebox.waitForFill();
-				// Same reload rationale as test 2 — sell-side row clearing after DFlow / any venue.
-				const predictionsPage = new PredictionsPage(sharedSession.page);
-				await predictionsPage.reloadUmbrellaPageForE2eBalances();
+				// No reload — sell-row clearing and header-cash poll below wait
+				// for the laggy refetch deterministically.
 				await tradebox.selectVenue(tradingVenueSlugForKey(venueKey));
 				await tradebox.setSide("sell");
 				await tradebox.setPosition("yes");
