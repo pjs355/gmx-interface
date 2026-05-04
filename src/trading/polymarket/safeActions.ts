@@ -1,42 +1,48 @@
 import type {
+	DepositWalletCall,
 	RelayClient,
 	RelayerTransaction,
 	RelayerTransactionResponse,
 	Transaction,
 } from "@polymarket/builder-relayer-client";
-import { deriveSafe } from "@polymarket/builder-relayer-client/dist/builder/derive";
 import {
 	buildPolymarketApprovalTransactions,
 	checkPolymarketApprovals,
 } from "./approvalTxs";
 
 /**
- * Gnosis Safe `GS026` / `GS025` (see safe-smart-account `docs/error_codes.md`): signature
- * bytes do not correspond to valid owners **or** the EIP-712 hash was built with a **nonce
- * that no longer matches the Safe** (stale Polymarket `/nonce` vs chain, or concurrent Safe txs).
+ * The relayer reports `STATE_FAILED` when the deposit-wallet batch reverts on
+ * Polygon. We surface a single sentinel so the LI.FI/SOR retry layer can
+ * decide whether one auto-retry (fresh nonce + re-sign) is worth attempting.
  */
-export const POLYGON_POLYMARKET_SAFE_RELAY_GS_HINT =
-	"If Polygonscan shows GS026 or GS025: the Safe rejected the relay signature (often a stale relay nonce vs on-chain Safe nonce, or two Polygon Safe spends at once). Wait a few seconds and retry once; avoid parallel bridges from the same Polymarket Safe.";
-
-/** `waitRelay` throws this substring when the relayer reports STATE_FAILED after mining. */
 const POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL =
-	"Polymarket Safe relay transaction reverted on-chain";
+	"Polymarket deposit wallet relay transaction reverted on-chain";
 
 /**
- * Whether a failed Polygon Polymarket relay + LI.FI attempt is worth **one automatic retry**
- * (fresh `/nonce` + re-sign). Only for full on-chain reverts — not timeouts (ambiguous).
+ * UX hint shown alongside relayed deposit-wallet failures. Most reverts after
+ * the deposit wallet migration are insufficient pUSD / missing approval / EOA
+ * signature replay; we keep the hint short and non-Safe-specific.
+ */
+export const POLYGON_POLYMARKET_RELAY_HINT =
+	"Wait a few seconds and retry once; avoid running two Polygon spends from the same Polymarket deposit wallet at the same time.";
+
+/**
+ * Whether a failed Polygon Polymarket relay attempt is worth **one automatic
+ * retry** (fresh `/nonce` + re-sign). Only true for full on-chain reverts —
+ * not timeouts (those are ambiguous).
  */
 export function isPolymarketSafeRelayOnchainRevert(err: unknown): boolean {
 	const m = err instanceof Error ? err.message : String(err);
 	return m.includes(POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL);
 }
 
-/** Tail of a promise chain — serializes all Polymarket Safe relay usage (LI.FI, wrap, approvals). */
+/** Tail of a promise chain — serializes all Polymarket relay usage (LI.FI, wrap, approvals). */
 let polygonRelayMutexTail: Promise<unknown> = Promise.resolve();
 
 /**
  * Ensures only one Polymarket `RelayClient` flow runs at a time across the app.
- * Concurrent `execute` / `deploy` calls share one Safe and stale off-chain relay nonces → GS025/GS026.
+ * Concurrent batch calls share one wallet + one relayer nonce, so racing them
+ * causes signature/nonce mismatches at the relayer.
  */
 export function withPolygonRelayMutex<T>(fn: () => Promise<T>): Promise<T> {
 	const run = polygonRelayMutexTail.then(fn) as Promise<T>;
@@ -47,27 +53,61 @@ export function withPolygonRelayMutex<T>(fn: () => Promise<T>): Promise<T> {
 	return run;
 }
 
-/** `execute` + `waitRelay` under the global Polygon relay mutex. */
+/** Default deadline window for a deposit-wallet batch signature (10 minutes). */
+const DEPOSIT_WALLET_BATCH_DEADLINE_S = 10 * 60;
+
+function depositWalletDeadline(): string {
+	return String(Math.floor(Date.now() / 1000) + DEPOSIT_WALLET_BATCH_DEADLINE_S);
+}
+
+/**
+ * Convert the legacy `Transaction` shape (`to`/`value`/`data`) to the
+ * deposit-wallet `DepositWalletCall` shape (`target`/`value`/`data`). The
+ * fields are 1:1; we keep callers using `Transaction[]` so existing
+ * approval / wrap / LI.FI tx builders don't need to change.
+ */
+function txsToDepositWalletCalls(txs: Transaction[]): DepositWalletCall[] {
+	return txs.map((tx) => ({
+		target: tx.to,
+		value: tx.value,
+		data: tx.data,
+	}));
+}
+
+/**
+ * Submit a batch of Polygon transactions through the deposit wallet under the
+ * global mutex, then wait for the relayer to mine. Returns the on-chain tx
+ * hash if available.
+ */
 export async function executePolygonRelayAndWait(
 	client: RelayClient,
 	txs: Transaction[],
+	walletAddress: string,
 	description: string,
 ): Promise<string | undefined> {
 	return withPolygonRelayMutex(async () => {
-		const resp = await client.execute(txs, description);
+		const calls = txsToDepositWalletCalls(txs);
+		const resp = await client.executeDepositWalletBatch(
+			calls,
+			walletAddress,
+			depositWalletDeadline(),
+		);
 		return waitRelay(resp);
 	});
 }
 
 /**
- * Waits for a relayer response to reach a terminal state.
- * Returns the transaction hash if available.
+ * Waits for a relayer response to reach a terminal state. Returns the
+ * transaction hash if available.
  *
- * `resp.wait()` uses a fixed poll budget (~100 × 2s). On failure it returns `undefined`
- * even when the relayer already knows `STATE_FAILED` — we call `getTransaction()` so
- * users see **revert vs timeout** instead of a single generic error.
+ * `resp.wait()` uses a fixed poll budget (~100 × 2s). On failure it returns
+ * `undefined` even when the relayer already knows `STATE_FAILED` — we call
+ * `getTransaction()` so users see **revert vs timeout** instead of a single
+ * generic error.
  */
-export async function waitRelay(resp: RelayerTransactionResponse): Promise<string | undefined> {
+export async function waitRelay(
+	resp: RelayerTransactionResponse,
+): Promise<string | undefined> {
 	const mined = await resp.wait();
 	if (mined) {
 		return mined.transactionHash || resp.transactionHash || undefined;
@@ -90,8 +130,8 @@ export async function waitRelay(resp: RelayerTransactionResponse): Promise<strin
 		const explorer = h ? ` On Polygon, inspect tx ${h} on a block explorer.` : "";
 		throw new Error(
 			h
-				? `${POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL} (tx ${h}).${explorer} Common causes: insufficient pUSD in the Safe for this LI.FI leg, route/slippage mismatch, missing router approval, or Gnosis Safe GS026/GS025 (signature / relay nonce). ${POLYGON_POLYMARKET_SAFE_RELAY_GS_HINT}`
-				: `${POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL} (STATE_FAILED). ${POLYGON_POLYMARKET_SAFE_RELAY_GS_HINT}`,
+				? `${POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL} (tx ${h}).${explorer} Common causes: insufficient pUSD in the deposit wallet for this LI.FI leg, route/slippage mismatch, missing router approval, or replayed/expired EOA signature. ${POLYGON_POLYMARKET_RELAY_HINT}`
+				: `${POLYGON_RELAY_ONCHAIN_REVERT_SENTINEL} (STATE_FAILED). ${POLYGON_POLYMARKET_RELAY_HINT}`,
 		);
 	}
 
@@ -103,28 +143,89 @@ export async function waitRelay(resp: RelayerTransactionResponse): Promise<strin
 	);
 }
 
-/** Deploy Safe if not already deployed (gasless via Polymarket relayer). */
-export async function deployPolymarketSafeIfNeeded(
+/**
+ * Polymarket Polygon deposit wallet `getDeployed` lookup. The relayer needs
+ * the wallet "type" to disambiguate Safe vs deposit wallet; we always pass
+ * `WALLET` because Safe is fully deprecated on this codebase.
+ */
+async function isDepositWalletDeployed(
 	client: RelayClient,
-	signerAddress: `0x${string}`
+	walletAddress: string,
 ): Promise<boolean> {
-	const factory = client.contractConfig.SafeContracts.SafeFactory;
-	const safe = deriveSafe(signerAddress, factory);
-	if (await client.getDeployed(safe)) return false;
+	return client.getDeployed(walletAddress, "WALLET");
+}
+
+/**
+ * After a deploy reaches STATE_MINED the wallet is on-chain, but the
+ * relayer's wallet-registry index can lag a few seconds before it accepts
+ * `executeDepositWalletBatch` for the address. Calling the batch too early
+ * returns 400 `wallet registry validation failed: wallet ... is not registered`.
+ *
+ * We poll `getDeployed(WALLET)` (which is what the registry uses) until it
+ * reports true, with a hard cap. Polling is cheap (single GET) and the
+ * registry typically catches up within 2–6s.
+ */
+const REGISTRY_POLL_INTERVAL_MS = 1500;
+const REGISTRY_POLL_MAX_ATTEMPTS = 20;
+
+async function waitForDepositWalletRegistered(
+	client: RelayClient,
+	walletAddress: string,
+): Promise<void> {
+	for (let attempt = 0; attempt < REGISTRY_POLL_MAX_ATTEMPTS; attempt += 1) {
+		try {
+			if (await isDepositWalletDeployed(client, walletAddress)) return;
+		} catch {
+			/* transient; keep polling */
+		}
+		await new Promise((r) => setTimeout(r, REGISTRY_POLL_INTERVAL_MS));
+	}
+	throw new Error(
+		`Polymarket relayer never registered deposit wallet ${walletAddress} after deploy. Retry in a few seconds; if it persists the relayer is lagging.`,
+	);
+}
+
+/**
+ * Deploy the Polymarket deposit wallet for the connected EOA if it has not
+ * already been deployed on Polygon. Gasless: signed by the embedded EOA and
+ * submitted by the Polymarket relayer.
+ *
+ * Returns `true` when a deploy was actually submitted, `false` when the
+ * wallet was already on-chain. After a fresh deploy this also blocks until
+ * the relayer's wallet-registry index sees the wallet (so the immediate next
+ * `executeDepositWalletBatch` call doesn't 400 with "not registered").
+ */
+export async function deployPolymarketDepositWalletIfNeeded(
+	client: RelayClient,
+	signerAddress: `0x${string}`,
+): Promise<boolean> {
+	void signerAddress;
+	const wallet = await client.deriveDepositWalletAddress();
+	if (await isDepositWalletDeployed(client, wallet)) return false;
 	await withPolygonRelayMutex(async () => {
-		const resp = await client.deploy();
+		const resp = await client.deployDepositWallet();
 		await waitRelay(resp);
 	});
+	await waitForDepositWalletRegistered(client, wallet);
 	return true;
 }
 
-/** One batched relay execute for all Polymarket pUSD + ERC-1155 approvals. */
+/**
+ * One batched relay execute for all Polymarket pUSD + ERC-1155 approvals.
+ * `walletAddress` is the user's deposit wallet (i.e. the value historically
+ * stored as `safeWalletAddress`).
+ */
 export async function executePolymarketApprovalBatch(
 	client: RelayClient,
-	safeAddress: string
+	walletAddress: string,
 ): Promise<void> {
-	const status = await checkPolymarketApprovals(safeAddress);
+	const status = await checkPolymarketApprovals(walletAddress);
 	if (status.allApproved) return;
 	const txs = buildPolymarketApprovalTransactions();
-	await executePolygonRelayAndWait(client, txs, "LevelUp Polymarket approvals");
+	await executePolygonRelayAndWait(
+		client,
+		txs,
+		walletAddress,
+		"LevelUp Polymarket approvals",
+	);
 }

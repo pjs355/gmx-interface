@@ -67,6 +67,7 @@ import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
+import { useDflowOrderQuote } from "@/trading/dflow/useDflowOrderQuote";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import {
@@ -287,6 +288,23 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowLink?.eventTicker,
     (multiVenueEnabled || state.tradingVenue === "dflow") ? dflowLink?.tickerA : null
   );
+
+  // SOR routes a "yes" leg as outcome A → buy YES on tickerA (`yesMintA`), and
+  // a "no" leg as outcome B → buy YES on tickerB (`yesMintB`). Mirror that
+  // here so `/order/quote` uses the same mint the executor will sign with.
+  // PDAs from `MatchedMarketsDflowWire` are deterministic and exist before
+  // the on-chain market is tokenized — so the quote works for uninit markets.
+  const dflowQuote = useDflowOrderQuote({
+    yesMint: dflowLink?.yesMintA ?? undefined,
+    noMint: dflowLink?.yesMintB ?? undefined,
+    position: state.selectedPosition ?? null,
+    side: state.side,
+    amount: state.amount,
+    enabled:
+      state.tradingVenue === "dflow" &&
+      state.orderType === "market" &&
+      Boolean(dflowLink),
+  });
 
   const queryClient = useQueryClient();
   const { signMessage: privySolanaSignMessage } = useSolanaSignMessage();
@@ -1490,12 +1508,20 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   }, [state.tradingVenue]);
 
+  // Whether the DFlow market was uninitialized at the moment Submit was
+  // pressed. The DFlow `/order` endpoint silently injects market tokenization
+  // when needed, so first-mint trades take longer than a normal swap. Snapshot
+  // the flag at submit so a fast post-trade umbrella refresh that flips
+  // `accountsInitialized*` to `true` doesn't hide the notice immediately.
+  const [dflowUninitAtSubmit, setDflowUninitAtSubmit] = useState(false);
+
   // Auto-dismiss order result after 4 seconds
   useEffect(() => {
     if (state.orderResult) {
       const timer = setTimeout(() => {
         setState((prev) => ({ ...prev, orderResult: null }));
-      }, 4000); // Dismiss after 4 seconds
+        setDflowUninitAtSubmit(false);
+      }, 4000);
       return () => clearTimeout(timer);
     }
   }, [state.orderResult]);
@@ -1904,6 +1930,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const handleSorExecute = useCallback(() => {
     if (executableRoute && !sorRouteExpired) {
       console.log("[SOR] Trade button → execute", executableRoute.routeId);
+      // Capture before SOR kicks off so the post-submit "creating market"
+      // notice survives a fast post-trade refresh that flips
+      // `accountsInitialized*` to true once the first mint settles.
+      const executingDflow = executableRoute.legs[0]?.venue === "dflow";
+      const dflowAnyUninit =
+        matchedMonitor?.dflow?.accountsInitializedA === false ||
+        matchedMonitor?.dflow?.accountsInitializedB === false;
+      setDflowUninitAtSubmit(executingDflow && dflowAnyUninit);
       const marketId = (market?._id || (market as any)?.questionId) as
         | string
         | undefined;
@@ -2012,6 +2046,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     market,
     yesBalance,
     noBalance,
+    matchedMonitor,
   ]);
 
   // Forward the freshly-rebound `handleSorExecute` into the late-bound ref
@@ -2277,6 +2312,45 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           };
         }
 
+        // DFlow `/order/quote` overlay: when on the DFlow tab, the SOR route
+        // hasn't returned (or the user just typed), and the orderbook walk
+        // would mis-price an uninit market (single BBO level seeded from
+        // metadata), prefer the upstream quote which already accounts for
+        // any market-tokenization cost.
+        const dflowQuoteData = dflowQuote.data;
+        if (
+          state.tradingVenue === "dflow" &&
+          state.orderType === "market" &&
+          dflowQuoteData &&
+          Number.isFinite(dflowQuoteData.contracts) &&
+          dflowQuoteData.contracts > 0
+        ) {
+          if (state.side === "buy") {
+            return {
+              ...state,
+              calculatedContracts: dflowQuoteData.contracts,
+              remainingUsd: bookData.remainingUsd,
+              spent: dflowQuoteData.usd,
+              tradingFee: 0,
+              estimatedCost: dflowQuoteData.usd,
+              grossReceive: null,
+              sellTradingFee: null,
+              netReceive: null,
+            };
+          }
+          return {
+            ...state,
+            calculatedContracts: dflowQuoteData.contracts,
+            remainingUsd: bookData.remainingUsd,
+            spent: null,
+            tradingFee: null,
+            estimatedCost: null,
+            grossReceive: dflowQuoteData.usd,
+            sellTradingFee: 0,
+            netReceive: dflowQuoteData.usd,
+          };
+        }
+
         return {
           ...state,
           calculatedContracts: bookData.calculatedContracts,
@@ -2318,6 +2392,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       allMarketsSellNoBid={allMarketsSellNoBid}
       shareBalances={tradeBoxShareBalances}
       mobilePeekBar={mobilePeekBar}
+      dflowUninitAtSubmit={dflowUninitAtSubmit}
     />
 		</>
   );

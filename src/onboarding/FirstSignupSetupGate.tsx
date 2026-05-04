@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -71,7 +71,7 @@ export function FirstSignupSetupGate() {
 	// `kalshi` for `deposit` — by then all background activations have
 	// finished and the user has either kicked off Proof or chosen "Later".
 	const committedRef = useRef(false);
-	const commitOnboardingComplete = async (): Promise<void> => {
+	const commitOnboardingComplete = useCallback(async (): Promise<void> => {
 		if (committedRef.current) return;
 		committedRef.current = true;
 		try {
@@ -85,14 +85,30 @@ export function FirstSignupSetupGate() {
 		}
 		// Refresh the profile query so other consumers see the new flag.
 		await qc.invalidateQueries({ queryKey: tradingQueryKeys.profileMe });
-	};
+	}, [api, qc]);
 
-	const handleAdvance = async (next: OnboardingStep) => {
-		if (next === "deposit") {
-			await commitOnboardingComplete();
-		}
-		advanceTo(next);
-	};
+	// `handleAdvance` is passed to `FirstSignupSetupModal` and lands in the
+	// dep array of the modal's deposit-step effect. It MUST be stable —
+	// otherwise Privy's `fundWallet` (which schedules its own setState on
+	// open) re-renders the gate, mints a new arrow, re-runs the effect, and
+	// re-fires `fundWallet` in an infinite loop ("Maximum update depth
+	// exceeded").
+	const handleAdvance = useCallback(
+		async (next: OnboardingStep) => {
+			if (next === "deposit") {
+				await commitOnboardingComplete();
+			}
+			advanceTo(next);
+		},
+		[advanceTo, commitOnboardingComplete],
+	);
+
+	const onAdvance = useCallback(
+		(next: OnboardingStep) => {
+			void handleAdvance(next);
+		},
+		[handleAdvance],
+	);
 
 	const returnPath = useMemo(() => {
 		// Re-entry path after the DFlow Proof redirect.
@@ -107,7 +123,7 @@ export function FirstSignupSetupGate() {
 	return (
 		<FirstSignupSetupModal
 			step={step}
-			onAdvance={(next) => void handleAdvance(next)}
+			onAdvance={onAdvance}
 			returnPath={returnPath}
 		/>
 	);

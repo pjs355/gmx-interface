@@ -3776,9 +3776,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polymarket/builder-relayer-client@npm:^0.0.8":
-  version: 0.0.8
-  resolution: "@polymarket/builder-relayer-client@npm:0.0.8"
+"@polymarket/builder-relayer-client@npm:^0.0.9":
+  version: 0.0.9
+  resolution: "@polymarket/builder-relayer-client@npm:0.0.9"
   dependencies:
     "@polymarket/builder-abstract-signer": 0.0.1
     "@polymarket/builder-signing-sdk": ^0.0.8
@@ -3788,7 +3788,7 @@ __metadata:
     tsx: ^4.20.3
     typescript: ^5.8.3
     viem: ^2.31.4
-  checksum: 38ab4910f3c1dd341d21cb75a76f689a6e17887077eaaa2fba5eaf08e8a9cb46afa899794d859bb8a3333e29df20ad5c4cf6132433cd0bb0f36c21a1a6f1ce84
+  checksum: 0767af770064ac5689e3a168769dabdb0c76fa27dd165f44d91f9d853c6b3596f6084bc483e15b7a40dd0528b4b2f94f9af553503f07fe352b8b39ac26bf7a2a
   languageName: node
   linkType: hard
 
@@ -3812,9 +3812,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@polymarket/clob-client-v2@npm:^1.0.2":
-  version: 1.0.2
-  resolution: "@polymarket/clob-client-v2@npm:1.0.2"
+"@polymarket/clob-client-v2@npm:1.0.3-canary.0":
+  version: 1.0.3-canary.0
+  resolution: "@polymarket/clob-client-v2@npm:1.0.3-canary.0"
   dependencies:
     "@ethersproject/providers": ^5.8.0
     "@ethersproject/wallet": ^5.8.0
@@ -3822,7 +3822,7 @@ __metadata:
     browser-or-node: ^3.0.0
     tslib: ^2.8.1
     viem: ^2.46.3
-  checksum: d0932ba8197070a2ac9d7871c7f5ed0f0d02597da8798f1199af5429aff3031442a79046089e1ffa94aa0f32b417e62d693cc63693c3862fce22c0ff3ce61318
+  checksum: e033c030c7b7860a461509872c4b249d36f6bd371ed4aef6c159d43082ed76139b73930e9505e95ad2356c98d1a1f0de375be6eed73c59829aca4c93f17c36f0
   languageName: node
   linkType: hard
 
@@ -11577,9 +11577,9 @@ __metadata:
     "@noble/curves": 1.6.0
     "@noble/hashes": 1.5.0
     "@playwright/test": ^1.59.1
-    "@polymarket/builder-relayer-client": ^0.0.8
+    "@polymarket/builder-relayer-client": ^0.0.9
     "@polymarket/builder-signing-sdk": ^1.0.0
-    "@polymarket/clob-client-v2": ^1.0.2
+    "@polymarket/clob-client-v2": 1.0.3-canary.0
     "@predictdotfun/sdk": ^1.3.0
     "@privy-io/react-auth": ^3.13.0
     "@sentry/react": ^10.22.0

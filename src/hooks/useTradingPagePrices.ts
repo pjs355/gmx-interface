@@ -102,6 +102,54 @@ function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | un
 	return book?.snapshotStatus;
 }
 
+/**
+ * Extract bestBid for one DFlow leg from metadata BBO. Mirrors Kalshi: prefer
+ * the explicit `yesBid`; fall back to the complement of `noAsk` since
+ * `yesBid = 1 - noAsk` for a binary outcome. Used as a fallback for
+ * uninitialized markets where the WS orderbook channel is empty.
+ */
+function bestBidFromDflowBbo(
+	bbo:
+		| {
+				yesBid?: number;
+				yesAsk?: number;
+				noBid?: number;
+				noAsk?: number;
+		  }
+		| undefined,
+): number | null {
+	if (!bbo) return null;
+	if (typeof bbo.yesBid === "number" && isValidPrice(bbo.yesBid)) {
+		return bbo.yesBid;
+	}
+	if (typeof bbo.noAsk === "number") {
+		const p = 1 - bbo.noAsk;
+		if (isValidPrice(p)) return p;
+	}
+	return null;
+}
+
+function bestAskFromDflowBbo(
+	bbo:
+		| {
+				yesBid?: number;
+				yesAsk?: number;
+				noBid?: number;
+				noAsk?: number;
+		  }
+		| undefined,
+): number | null {
+	if (!bbo) return null;
+	if (typeof bbo.yesAsk === "number" && isValidPrice(bbo.yesAsk)) {
+		return bbo.yesAsk;
+	}
+	if (typeof bbo.noBid === "number") {
+		const p = 1 - bbo.noBid;
+		if (isValidPrice(p)) return p;
+	}
+	return null;
+}
+
 function buildVenueRowsFromWs(
 	m: MatchedMarket,
 	directBooks: DirectVenueBooks | null | undefined,
@@ -113,19 +161,37 @@ function buildVenueRowsFromWs(
 
 	const dflowWire = getDflowKalshiMonitorLink(m);
 	const dflowBaseLinked = Boolean(dflowWire);
+	// DFlow metadata BBO mirrors the Kalshi book and is published for any
+	// active Kalshi market regardless of whether the on-chain DFlow YES/NO
+	// mints exist yet (uninitialized markets). Fall back to it after WS / direct
+	// books are exhausted so the row still shows a price for not-yet-tokenized
+	// markets — the first trader's order will mint the market via DFlow.
+	const dflowMetaBboA = dflowBaseLinked ? m.dflow?.bboA : undefined;
+	const dflowMetaBboB = dflowBaseLinked ? m.dflow?.bboB : undefined;
 	const dflowAskA = dflowBaseLinked
-		? (bestAskProb(m.dflowPriceA ?? m.kalshiPriceA) ?? bestAskFromSnapshot(directBooks?.dflowBookA))
+		? (bestAskProb(m.dflowPriceA ?? m.kalshiPriceA) ??
+			bestAskFromSnapshot(directBooks?.dflowBookA) ??
+			bestAskFromDflowBbo(dflowMetaBboA))
 		: null;
 	const dflowAskB = dflowBaseLinked
-		? (bestAskProb(m.dflowPriceB ?? m.kalshiPriceB) ?? bestAskFromSnapshot(directBooks?.dflowBookB))
+		? (bestAskProb(m.dflowPriceB ?? m.kalshiPriceB) ??
+			bestAskFromSnapshot(directBooks?.dflowBookB) ??
+			bestAskFromDflowBbo(dflowMetaBboB))
 		: null;
 	const dflowBidA = dflowBaseLinked
-		? (bestBidProb(m.dflowPriceA ?? m.kalshiPriceA) ?? bestBidFromSnapshot(directBooks?.dflowBookA))
+		? (bestBidProb(m.dflowPriceA ?? m.kalshiPriceA) ??
+			bestBidFromSnapshot(directBooks?.dflowBookA) ??
+			bestBidFromDflowBbo(dflowMetaBboA))
 		: null;
 	const dflowBidB = dflowBaseLinked
-		? (bestBidProb(m.dflowPriceB ?? m.kalshiPriceB) ?? bestBidFromSnapshot(directBooks?.dflowBookB))
+		? (bestBidProb(m.dflowPriceB ?? m.kalshiPriceB) ??
+			bestBidFromSnapshot(directBooks?.dflowBookB) ??
+			bestBidFromDflowBbo(dflowMetaBboB))
 		: null;
 
+	// Only hide the row when DFlow says both sides are uninitialized AND every
+	// pricing channel (WS book / direct book / metadata BBO) is empty. With BBO
+	// available we can still price the first-mint trade via `/order/quote`.
 	const dflowKalshiRowHidden =
 		dflowBaseLinked &&
 		m.dflow?.accountsInitializedA === false &&

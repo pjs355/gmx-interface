@@ -23,7 +23,7 @@ import { useLifiQuoteMutation } from "@/trading/hooks/useLifiBridge";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { checkPolymarketApprovals } from "@/trading/polymarket/approvalTxs";
 import {
-	deployPolymarketSafeIfNeeded,
+	deployPolymarketDepositWalletIfNeeded,
 	executePolymarketApprovalBatch,
 } from "@/trading/polymarket/safeActions";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
@@ -623,7 +623,9 @@ export function useBridgeFlow() {
 		abortRef.current = ac;
 
 		try {
-			let polygonRelay: { client: RelayClient } | undefined;
+			let polygonRelay:
+				| { client: RelayClient; walletAddress: string }
+				| undefined;
 
 			if (needsPolymarketRelay && funding.polymarketSafe) {
 				setStatusNote("Preparing Polymarket wallet…");
@@ -637,7 +639,7 @@ export function useBridgeFlow() {
 				if (!eoa) {
 					throw new Error("Embedded wallet address unavailable \u2014 cannot use Polymarket relay.");
 				}
-				await deployPolymarketSafeIfNeeded(client, eoa);
+				await deployPolymarketDepositWalletIfNeeded(client, eoa);
 
 				setStatusNote("Checking Polymarket approvals…");
 				const approvalState = await checkPolymarketApprovals(funding.polymarketSafe);
@@ -646,7 +648,7 @@ export function useBridgeFlow() {
 					await executePolymarketApprovalBatch(client, funding.polymarketSafe);
 				}
 
-				polygonRelay = { client };
+				polygonRelay = { client, walletAddress: funding.polymarketSafe };
 			}
 
 			if (routeIncludesSolana && !solanaSigner) {
@@ -723,7 +725,8 @@ export function useBridgeFlow() {
 	]);
 
 	const safeOk =
-		funding.integrationMode === "builder_privy_safe" || funding.integrationMode == null;
+		funding.integrationMode === "builder_privy_deposit_wallet" ||
+		funding.integrationMode == null;
 
 	const isConfirming = phase === "executing" || phase === "polling";
 

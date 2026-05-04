@@ -28,10 +28,12 @@ import {
 } from "./polymarketOrderDebug";
 
 /**
- * Polymarket CLOB trading session: derives L2 API credentials with the embedded EOA,
- * then builds a `ClobClient` with `POLY_GNOSIS_SAFE` + Safe funder so orders settle
- * against the Polymarket Safe. See `POLYMARKET_TRADING.md` in this folder for the
- * full wallet, collateral, and Data API model.
+ * Polymarket CLOB trading session: derives L2 API credentials with the embedded
+ * EOA, then builds a `ClobClient` with `POLY_1271` + the user's **deposit
+ * wallet** as the funder. The CLOB validates orders via ERC-1271 against the
+ * deposit wallet (which is owned by the Privy embedded EOA). See
+ * `POLYMARKET_TRADING.md` in this folder for the full wallet, collateral, and
+ * Data API model.
  */
 const CLOB_HOST =
 	import.meta.env.VITE_POLYMARKET_CLOB_PROXY === "true"
@@ -40,7 +42,13 @@ const CLOB_HOST =
 
 const DEV = import.meta.env.DEV;
 
-const CREDS_STORAGE_PREFIX = "levelup:pm-clob-creds:";
+/**
+ * Bumped to `:v2` after the deposit-wallet migration so any creds derived
+ * against the legacy Safe funder cohort are not reused — the funder address
+ * changed for every existing user, which would otherwise cause cred rejection
+ * on first order.
+ */
+const CREDS_STORAGE_PREFIX = "levelup:pm-clob-creds:v2:";
 
 function credsStorageKey(eoa: string, safe: string): string {
 	return `${CREDS_STORAGE_PREFIX}${eoa.toLowerCase()}:${safe.toLowerCase()}`;
@@ -88,7 +96,7 @@ function formatBlockedReason(
 		return "Sign in and open your embedded wallet to trade on Polymarket.";
 	}
 	if (!safe) {
-		return "Polymarket Safe not found. Use Transfers to link your Safe, or deploy it from there.";
+		return "Polymarket deposit wallet not found. Open Transfers to finish onboarding it.";
 	}
 	if (requiredNextAction == null) return null;
 	if (typeof requiredNextAction === "string") {
@@ -156,6 +164,9 @@ export function usePolymarketClobTradingSession(
 		[eip1193ForSigner]
 	);
 	const eoaAddress = eoa.address;
+	// `wallets.polymarketSafe` is the historical name; after the deposit-wallet
+	// migration this value is the deposit wallet address (used as the CLOB
+	// funder under `SignatureTypeV2.POLY_1271`).
 	const safe = wallets.polymarketSafe;
 
 	const blockedReason = useMemo(() => {
@@ -244,7 +255,7 @@ export function usePolymarketClobTradingSession(
 					chain: Chain.POLYGON,
 					signer,
 					creds,
-					signatureType: SignatureTypeV2.POLY_GNOSIS_SAFE,
+					signatureType: SignatureTypeV2.POLY_1271,
 					funderAddress: safe,
 					builderConfig: { builderCode: POLYMARKET_BUILDER_CODE },
 				});

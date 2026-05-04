@@ -1,4 +1,9 @@
-import type { RelayClient, Transaction } from "@polymarket/builder-relayer-client";
+import type {
+	DepositWalletCall,
+	RelayClient,
+	RelayerTransactionResponse,
+	Transaction,
+} from "@polymarket/builder-relayer-client";
 import {
 	createPublicClient,
 	encodeFunctionData,
@@ -25,6 +30,40 @@ import {
 	waitRelay,
 	withPolygonRelayMutex,
 } from "@/trading/polymarket/safeActions";
+
+/** Window the relayer accepts the EOA's deposit-wallet batch signature within. */
+const DEPOSIT_WALLET_BATCH_DEADLINE_S = 10 * 60;
+
+function depositWalletDeadline(): string {
+	return String(Math.floor(Date.now() / 1000) + DEPOSIT_WALLET_BATCH_DEADLINE_S);
+}
+
+/**
+ * The deposit-wallet batch API takes `{ target, value, data }` instead of the
+ * legacy `{ to, value, data }` shape. Convert in one place so the rest of the
+ * LI.FI builder code keeps using the historical `Transaction` shape.
+ */
+function txsToDepositWalletCalls(txs: Transaction[]): DepositWalletCall[] {
+	return txs.map((tx) => ({
+		target: tx.to,
+		value: tx.value,
+		data: tx.data,
+	}));
+}
+
+async function executeWalletBatch(
+	relay: RelayClient,
+	walletAddress: string,
+	txs: Transaction[],
+	_label: string,
+): Promise<RelayerTransactionResponse> {
+	void _label;
+	return relay.executeDepositWalletBatch(
+		txsToDepositWalletCalls(txs),
+		walletAddress,
+		depositWalletDeadline(),
+	);
+}
 import type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import {
 	handleTransferFromFailedIfPresent,
@@ -50,11 +89,15 @@ export type ExecuteLifiStepsOptions = {
 	 */
 	allowanceOwnerByChainId?: Partial<Record<number, string>>;
 	/**
-	 * When set, steps on Polygon (137) run as **Polymarket Safe** txs via RelayClient.
-	 * Steps on other chains still use `getSignerForChain` (e.g. Coinbase SCW on Base).
+	 * When set, steps on Polygon (137) run as **Polymarket deposit wallet**
+	 * batches via RelayClient (`executeDepositWalletBatch` under the hood).
+	 * Steps on other chains still use `getSignerForChain` (e.g. Coinbase SCW
+	 * on Base). `walletAddress` is the user's deposit wallet address (the same
+	 * value historically tracked as `safeWalletAddress`).
 	 */
 	polygonRelay?: {
 		client: RelayClient;
+		walletAddress: string;
 	};
 	/**
 	 * When set, steps on Solana (1151111081099710) are signed and sent via this signer.
@@ -325,28 +368,35 @@ export async function executeLifiSteps(
 		ordered = sorted;
 	}
 	const relay = options?.polygonRelay?.client;
+	const polygonWalletAddress = options?.polygonRelay?.walletAddress;
 
 	const unwrapPre = options?.polygonSafeUnwrapPrerequisite;
-	if (relay && unwrapPre?.calls?.length) {
+	if (relay && polygonWalletAddress && unwrapPre?.calls?.length) {
 		const txs = relayTransactionsFromUnwrapPrerequisite(unwrapPre.calls);
 		const runUnwrapPre = async (suffix: string) => {
 			await withPolygonRelayMutex(async () => {
 				if (txs.length === 2) {
-					const r0 = await relay.execute(
+					const r0 = await executeWalletBatch(
+						relay,
+						polygonWalletAddress,
 						[txs[0]!],
 						`Polygon pUSD → Offramp approval (pre-LI.FI)${suffix}`,
 					);
 					const h0 = await waitRelay(r0);
 					if (h0) txHashes.push(h0);
 					await new Promise((r) => setTimeout(r, 2_500));
-					const r1 = await relay.execute(
+					const r1 = await executeWalletBatch(
+						relay,
+						polygonWalletAddress,
 						[txs[1]!],
 						`Polygon pUSD unwrap → USDC.e (pre-LI.FI)${suffix}`,
 					);
 					const h1 = await waitRelay(r1);
 					if (h1) txHashes.push(h1);
 				} else if (txs.length === 1) {
-					const resp = await relay.execute(
+					const resp = await executeWalletBatch(
+						relay,
+						polygonWalletAddress,
 						txs,
 						`Polygon unwrap prerequisite before LI.FI${suffix}`,
 					);
@@ -355,7 +405,9 @@ export async function executeLifiSteps(
 				} else {
 					for (let j = 0; j < txs.length; j++) {
 						if (j > 0) await new Promise((r) => setTimeout(r, 2_500));
-						const rj = await relay.execute(
+						const rj = await executeWalletBatch(
+							relay,
+							polygonWalletAddress,
 							[txs[j]!],
 							`Polygon unwrap prerequisite ${j + 1}/${txs.length} (pre-LI.FI)${suffix}`,
 						);
@@ -449,7 +501,7 @@ export async function executeLifiSteps(
 			continue;
 		}
 
-		if (relay && chainId === polygon.id) {
+		if (relay && polygonWalletAddress && chainId === polygon.id) {
 			const batch: Transaction[] = [];
 			const relayHint = normalizeHint(step, tr);
 			if (relayHint) {
@@ -472,26 +524,35 @@ export async function executeLifiSteps(
 			}
 			batch.push(relayTransactionFromTr(tr));
 			const relayMetadataBase = `LI.FI Polygon step ${i}`;
-			/** One mutex segment: if ERC-20 approve + router tx, mine approve first (relay nonce advances), then pause before swap — avoids GS026 from batched multicall simulation races. */
+			/** One mutex segment: if ERC-20 approve + router tx, mine approve first (relay nonce advances), then pause before swap — avoids batched simulation races on the deposit wallet. */
 			const runPolygonRelayOnce = async (suffix: string) => {
 				await withPolygonRelayMutex(async () => {
 					if (batch.length === 2) {
 						const approveTx = batch[0]!;
 						const mainTx = batch[1]!;
-						const rA = await relay.execute(
+						const rA = await executeWalletBatch(
+							relay,
+							polygonWalletAddress,
 							[approveTx],
 							`${relayMetadataBase} (token approval)${suffix}`,
 						);
 						await waitRelay(rA);
 						await new Promise((r) => setTimeout(r, 2_500));
-						const rS = await relay.execute(
+						const rS = await executeWalletBatch(
+							relay,
+							polygonWalletAddress,
 							[mainTx],
 							`${relayMetadataBase} (route step)${suffix}`,
 						);
 						const txHash = await waitRelay(rS);
 						if (txHash) txHashes.push(txHash);
 					} else {
-						const resp = await relay.execute(batch, `${relayMetadataBase}${suffix}`);
+						const resp = await executeWalletBatch(
+							relay,
+							polygonWalletAddress,
+							batch,
+							`${relayMetadataBase}${suffix}`,
+						);
 						const txHash = await waitRelay(resp);
 						if (txHash) txHashes.push(txHash);
 					}

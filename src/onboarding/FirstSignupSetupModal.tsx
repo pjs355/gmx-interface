@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { RemoveScroll } from "react-remove-scroll";
 import { RegisterPrivyOpenFundAction } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { SetupChecklist } from "./SetupChecklist";
@@ -40,8 +40,20 @@ export function FirstSignupSetupModal(props: {
 	const { fundTarget, fundActionRef, triggerFund, fundReady } =
 		useFundWalletAfterSetup();
 
+	// Hard guard: `triggerFund` may NEVER fire more than once per visit to
+	// the deposit step. Privy's `fundWallet` opens a modal that schedules
+	// internal setState, which can ripple back into this tree and cause the
+	// effect's deps to churn. Without this ref we'd loop ("Maximum update
+	// depth exceeded"). Reset when leaving the deposit step so a future
+	// re-entry (e.g. localStorage hydration) can fire again.
+	const firedRef = useRef(false);
+	useEffect(() => {
+		if (step !== "deposit") firedRef.current = false;
+	}, [step]);
+
 	useEffect(() => {
 		if (step !== "deposit") return;
+		if (firedRef.current) return;
 		// Privy's `fundWallet` is fire-and-forget — user can dismiss the
 		// modal with no completion signal. The gate has already POSTed
 		// `/profiles/me/onboarding/complete` before transitioning here, so
@@ -51,7 +63,7 @@ export function FirstSignupSetupModal(props: {
 		let cancelled = false;
 		let timer: ReturnType<typeof setTimeout> | null = null;
 		const tryFire = async () => {
-			if (cancelled) return;
+			if (cancelled) return false;
 			if (!fundReady) {
 				// fundTarget not yet resolved (account overview or polymarket
 				// query still loading). Retry shortly. After 5 attempts at
@@ -60,11 +72,8 @@ export function FirstSignupSetupModal(props: {
 				return false;
 			}
 			const ok = await triggerFund();
-			if (!ok && !cancelled) {
-				// Privy modal might not be ready yet. Try once more.
-				timer = setTimeout(() => void triggerFund(), 600);
-			}
-			return true;
+			if (ok) firedRef.current = true;
+			return ok;
 		};
 
 		let attempts = 0;

@@ -5,7 +5,12 @@ import { usePolymarketBuilder } from "./usePolymarketBuilder";
 import { useTradingWallets } from "@/trading/useWallets";
 
 /**
- * Resolves Base smart wallet + Polymarket Safe + signer for LI.FI funding flows.
+ * Resolves Base smart wallet + Polymarket trading wallet + signer for LI.FI
+ * funding flows. The Polymarket wallet is exposed as `polymarketSafe` for
+ * historical reasons; after the deposit-wallet migration that field carries
+ * the user's **deposit wallet** address (an ERC-1967 proxy from the deposit
+ * wallet factory, owned by the Privy embedded EOA, used as the CLOB funder
+ * under `SignatureTypeV2.POLY_1271`).
  */
 export function useFundingAddresses() {
 	const profileQuery = useCurrentProfile();

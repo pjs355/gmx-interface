@@ -130,6 +130,14 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   allMarketsSellNoBid?: number | null;
   /** Share balance snapshot from parent (single `useTradeBoxShareBalances` instance). */
   shareBalances: TradeBoxShareBalancesSnapshot;
+  /**
+   * Snapshot of `accountsInitialized*` from the umbrella's `exchangeMatching.dflow`
+   * captured at the moment the user pressed Submit. The DFlow `/order` endpoint
+   * silently injects market tokenization when needed, so first-mint trades take
+   * longer than a normal swap — surface that explicitly under the trade box so
+   * users understand why a successful submit isn't yet reflected on-chain.
+   */
+  dflowUninitAtSubmit?: boolean;
 }
 
 export default function PredictionMarketTradeBoxUI({
@@ -168,6 +176,7 @@ export default function PredictionMarketTradeBoxUI({
   allMarketsSellYesBid = null,
   allMarketsSellNoBid = null,
   shareBalances,
+  dflowUninitAtSubmit = false,
 }: PredictionMarketTradeBoxUIProps) {
   const { formatPrice } = useOddsDisplay();
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
@@ -1385,6 +1394,24 @@ export default function PredictionMarketTradeBoxUI({
           <span className="trade-notification-e2e-sentinel__label">
             {orderResult.success ? "Order Submitted!" : "Order Failed"}
           </span>
+        </div>
+      )}
+
+      {orderResult?.success && dflowUninitAtSubmit && (
+        <div
+          data-qa="tradebox-dflow-uninit-notice"
+          style={{
+            marginTop: 8,
+            padding: "8px 12px",
+            borderRadius: 8,
+            backgroundColor: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#9ca3af",
+            fontSize: 12,
+            lineHeight: 1.4,
+          }}
+        >
+          Order may take longer as Kalshi via DFlow is creating this market
         </div>
       )}
 

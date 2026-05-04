@@ -360,6 +360,13 @@ export interface UseSorLegExecutorDeps {
 
 type SorChainKey = "base" | "polygon" | "solana" | "bnb";
 
+/**
+ * Per-chain destination address for SOR funding moves. The Polygon entry
+ * returns `addrs.polymarketSafe`, which after the deposit-wallet migration is
+ * the user's Polymarket **deposit wallet** (ERC-1967 proxy from the deposit
+ * wallet factory) — same downstream consumers, different wallet type. The
+ * field name is kept for back-compat with all existing callers.
+ */
 function addressForChain(
 	chain: SorChainKey,
 	addrs: UseSorLegExecutorDeps["fundingAddresses"],
@@ -582,6 +589,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								await executePolygonRelayAndWait(
 									relayClient,
 									txs,
+									rawSafe!,
 									"Wrap USDC.e to pUSD for Polymarket",
 								);
 							} catch (e: unknown) {
@@ -1689,7 +1697,13 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									bridgeGetSigner,
 									{
 										allowanceOwnerByChainId,
-										polygonRelay: needsRelay && relayClient ? { client: relayClient } : undefined,
+										polygonRelay:
+											needsRelay && relayClient && fundingAddresses.polymarketSafe
+												? {
+														client: relayClient,
+														walletAddress: fundingAddresses.polymarketSafe,
+													}
+												: undefined,
 										solanaSigner: solanaSigner ?? undefined,
 										rawLifiRoute: quote.quote,
 										polygonSafeUnwrapPrerequisite: quote.polygonSafeUnwrapPrerequisite ?? undefined,

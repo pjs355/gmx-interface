@@ -102,6 +102,13 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	allMarketsSellYesBid?: number | null;
 	allMarketsSellNoBid?: number | null;
 	shareBalances: TradeBoxShareBalancesSnapshot;
+	/**
+	 * True when the user just submitted an order that will route through DFlow
+	 * **and** the underlying Kalshi market was not yet on-chain tokenized. The
+	 * UI surfaces a "Kalshi via DFlow is creating this market" notice under
+	 * the trade box for the lifetime of the current `orderResult`.
+	 */
+	dflowUninitAtSubmit?: boolean;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -142,6 +149,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	allMarketsSellNoBid = null,
 	shareBalances,
 	mobilePeekBar = "default",
+	dflowUninitAtSubmit = false,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -352,6 +360,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				allMarketsSellYesBid={allMarketsSellYesBid}
 				allMarketsSellNoBid={allMarketsSellNoBid}
 				shareBalances={shareBalances}
+				dflowUninitAtSubmit={dflowUninitAtSubmit}
 			/>
 		</div>
 	);
@@ -532,6 +541,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				allMarketsSellYesBid={allMarketsSellYesBid}
 				allMarketsSellNoBid={allMarketsSellNoBid}
 				shareBalances={shareBalances}
+				dflowUninitAtSubmit={dflowUninitAtSubmit}
 			/>
 			</div>
 	</PredictionCurtain>

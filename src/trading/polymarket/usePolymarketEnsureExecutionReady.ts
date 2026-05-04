@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
-import { deriveSafe } from "@polymarket/builder-relayer-client/dist/builder/derive";
 
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
@@ -13,11 +12,16 @@ import type {
 import { usePolymarketRelay } from "./usePolymarketRelay";
 import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import {
-	deployPolymarketSafeIfNeeded,
+	deployPolymarketDepositWalletIfNeeded,
 	executePolymarketApprovalBatch,
 } from "./safeActions";
 import { checkPolymarketApprovals } from "./approvalTxs";
 
+/**
+ * `deploying-safe` is preserved verbatim because the rest of the activation UI
+ * keys off this string. Behaviorally it now deploys the **deposit wallet**
+ * (ERC-1967 proxy) — see `deployPolymarketDepositWalletIfNeeded`.
+ */
 export type PolymarketEnsureExecutionSetupPhase =
 	| "idle"
 	| "checking"
@@ -76,14 +80,16 @@ type BuilderReadiness = {
  *
  * Flow when `enabled` + Privy EOA is hydrated:
  *  1. GET /polymarket/account; fast-path if `builderReadiness.executionReady`.
- *  2. Deploy counterfactual Gnosis Safe via the Polymarket relayer (gasless;
- *     one EIP-712 signature from the embedded EOA).
- *  3. Check on-chain allowances; if any are missing, run the batched
- *     pUSD + ERC-1155 `setApprovalForAll` relay execute (gasless; one
- *     Safe-message signature).
- *  4. POST `/polymarket/account/verify-on-chain` — the server re-reads Safe
- *     deployment + allowances and flips `tradingEnabled: true` atomically
- *     (see `register-polymarket.ts` and `trading-enabled-gate.ts`).
+ *  2. Deploy the deterministic **deposit wallet** (ERC-1967 proxy from the
+ *     deposit wallet factory) via the Polymarket relayer
+ *     (`relay.deployDepositWallet()`, gasless — one EOA signature).
+ *  3. Check on-chain allowances; if any are missing, run the batched pUSD +
+ *     ERC-1155 `setApprovalForAll` calls via
+ *     `relay.executeDepositWalletBatch(...)` (gasless — one EOA batch
+ *     signature scoped to a 10-minute deadline).
+ *  4. POST `/polymarket/account/verify-on-chain` — the server re-reads
+ *     deposit wallet deployment + allowances and flips `tradingEnabled: true`
+ *     atomically (see `register-polymarket.ts` and `trading-enabled-gate.ts`).
  *  5. Invalidate the `polymarketAccount` and `accountOverview` queries so
  *     the next SOR quote sees `canExecute: true`.
  *
@@ -191,38 +197,39 @@ export function usePolymarketEnsureExecutionReady(args: {
 				return;
 			}
 
+			// `safeWalletAddress` is the historical field name; for the
+			// deposit-wallet flow it stores the deposit wallet address.
 			let safe =
 				typeof state.safeWalletAddress === "string"
 					? state.safeWalletAddress.trim()
 					: "";
 
-			// Phase 2: deploy Safe if needed.
+			// Phase 2: deploy the deposit wallet if needed.
 			if (readiness.safeDeployed !== true) {
 				if (mountedRef.current) setPhase("deploying-safe");
 				logInfo("phase:deploying-safe", { safe });
 				const client = await currentRelay.getRelayClient();
 				if (!client) throw new Error("Polymarket relay client unavailable");
 				if (!safe) {
-					const factory = client.contractConfig.SafeContracts.SafeFactory;
-					safe = deriveSafe(eoaAddress, factory);
-					logInfo("safe:derivedClientSide", { safe });
+					safe = await client.deriveDepositWalletAddress();
+					logInfo("depositWallet:derivedClientSide", { safe });
 				}
-				const deployed = await deployPolymarketSafeIfNeeded(
+				const deployed = await deployPolymarketDepositWalletIfNeeded(
 					client,
 					eoaAddress,
 				);
-				logInfo("safe:deployResult", {
+				logInfo("depositWallet:deployResult", {
 					safe,
 					deployedThisCall: deployed,
 				});
 			} else {
-				logInfo("phase:safeAlreadyDeployed", { safe });
+				logInfo("phase:depositWalletAlreadyDeployed", { safe });
 			}
 
 			if (!safe) {
-				// Refetch to pick up a server-derived safeWalletAddress after
-				// deploy; deriveSafe is deterministic but the server is the
-				// canonical record.
+				// Refetch to pick up a server-derived deposit wallet address
+				// after deploy; derivation is deterministic but the server is
+				// the canonical record.
 				const refreshed = await apiClient.getPolymarketAccount();
 				const refreshedState: PolymarketAccountState =
 					refreshed.polymarketAccount ?? {};
@@ -231,7 +238,8 @@ export function usePolymarketEnsureExecutionReady(args: {
 						? refreshedState.safeWalletAddress.trim()
 						: "";
 			}
-			if (!safe) throw new Error("Polymarket Safe address not resolved");
+			if (!safe)
+				throw new Error("Polymarket deposit wallet address not resolved");
 
 			// Phase 3: approvals. Re-check on-chain even when server says
 			// approved — the user may have revoked from a different app.
@@ -251,11 +259,11 @@ export function usePolymarketEnsureExecutionReady(args: {
 				logInfo("approvals:batchSubmitted", { safe });
 			}
 
-			// Phase 4: verify-on-chain. Server re-reads Safe deployment +
-			// allowances and flips `tradingEnabled: true` atomically
-			// (see register-polymarket.ts and trading-enabled-gate.ts). L2
-			// creds are intentionally out of this path — see the module
-			// doc-block.
+			// Phase 4: verify-on-chain. Server re-reads deposit wallet
+			// deployment + allowances and flips `tradingEnabled: true`
+			// atomically (see register-polymarket.ts and
+			// trading-enabled-gate.ts). L2 creds are intentionally out of
+			// this path — see the module doc-block.
 			if (mountedRef.current) setPhase("verifying");
 			logInfo("phase:verifying");
 			const verifyRes = await apiClient.postPolymarketVerifyOnChain({});

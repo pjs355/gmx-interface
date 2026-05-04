@@ -5,7 +5,10 @@ import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 
 /**
- * Single ERC-20 transfer for same-chain withdrawals (Base / BNB smart wallet or Polygon Polymarket Safe relay).
+ * Single ERC-20 transfer for same-chain withdrawals (Base / BNB smart wallet or
+ * Polygon Polymarket deposit wallet relay). On Polygon the relay batch needs
+ * the deposit wallet address (`polygonRelayWalletAddress`) so the relayer can
+ * route to the right wallet.
  */
 export async function executeDirectErc20Withdraw(args: {
 	chainId: number;
@@ -14,6 +17,7 @@ export async function executeDirectErc20Withdraw(args: {
 	amount: bigint;
 	getSignerForChain: (chainId: number) => Promise<SendTransactionCapable | null>;
 	polygonRelayClient?: RelayClient;
+	polygonRelayWalletAddress?: string;
 }): Promise<string> {
 	const data = encodeFunctionData({
 		abi: erc20Abi,
@@ -21,13 +25,18 @@ export async function executeDirectErc20Withdraw(args: {
 		args: [args.recipient, args.amount],
 	});
 
-	if (args.chainId === polygon.id && args.polygonRelayClient) {
+	if (
+		args.chainId === polygon.id &&
+		args.polygonRelayClient &&
+		args.polygonRelayWalletAddress
+	) {
 		const batch: Transaction[] = [
 			{ to: args.tokenAddress, value: "0", data },
 		];
 		const h = await executePolygonRelayAndWait(
 			args.polygonRelayClient,
 			batch,
+			args.polygonRelayWalletAddress,
 			"LevelUp withdraw direct",
 		);
 		if (!h) throw new Error("Relayer did not return a transaction hash");

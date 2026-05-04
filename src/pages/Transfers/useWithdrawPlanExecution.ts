@@ -23,7 +23,7 @@ import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { checkPolymarketApprovals } from "@/trading/polymarket/approvalTxs";
 import {
-	deployPolymarketSafeIfNeeded,
+	deployPolymarketDepositWalletIfNeeded,
 	executePolymarketApprovalBatch,
 } from "@/trading/polymarket/safeActions";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
@@ -206,7 +206,7 @@ export function useWithdrawPlanExecution() {
 						if (!eoa) {
 							throw new Error("Embedded wallet address unavailable.");
 						}
-						await deployPolymarketSafeIfNeeded(client, eoa);
+						await deployPolymarketDepositWalletIfNeeded(client, eoa);
 						if (funding.polymarketSafe) {
 							const approvalState = await checkPolymarketApprovals(
 								funding.polymarketSafe
@@ -228,6 +228,7 @@ export function useWithdrawPlanExecution() {
 						amount: BigInt(leg.amountAtomic),
 						getSignerForChain,
 						polygonRelayClient,
+						polygonRelayWalletAddress: funding.polymarketSafe || undefined,
 					});
 
 					await refreshUserData();
@@ -257,7 +258,9 @@ export function useWithdrawPlanExecution() {
 					);
 				}
 
-				let polygonRelay: { client: RelayClient } | undefined;
+				let polygonRelay:
+					| { client: RelayClient; walletAddress: string }
+					| undefined;
 				if (needsPolymarketRelay && funding.polymarketSafe) {
 					const client = await relay.getRelayClient();
 					if (!client) {
@@ -269,14 +272,17 @@ export function useWithdrawPlanExecution() {
 					if (!eoa) {
 						throw new Error("Embedded wallet address unavailable.");
 					}
-					await deployPolymarketSafeIfNeeded(client, eoa);
+					await deployPolymarketDepositWalletIfNeeded(client, eoa);
 					const approvalState = await checkPolymarketApprovals(
 						funding.polymarketSafe
 					);
 					if (!approvalState.allApproved) {
 						await executePolymarketApprovalBatch(client, funding.polymarketSafe);
 					}
-					polygonRelay = { client };
+					polygonRelay = {
+						client,
+						walletAddress: funding.polymarketSafe,
+					};
 				}
 
 				if (routeIncludesSolana && !solanaSigner) {

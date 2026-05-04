@@ -131,7 +131,7 @@ export function TransfersBridgePanel() {
 					Integration mode is{" "}
 					<code className="transfers-bridge__code">{String(flow.funding.integrationMode)}</code>
 					{" — expected "}
-					<code className="transfers-bridge__code">builder_privy_safe</code> for standard setup.
+					<code className="transfers-bridge__code">builder_privy_deposit_wallet</code> for standard setup.
 				</div>
 			) : null}
 

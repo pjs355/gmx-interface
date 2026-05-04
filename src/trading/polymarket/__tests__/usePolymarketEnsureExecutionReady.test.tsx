@@ -33,7 +33,7 @@ vi.mock("../usePolymarketEoaWalletClient", () => ({
 const deployPolymarketSafeIfNeededMock = vi.fn();
 const executePolymarketApprovalBatchMock = vi.fn();
 vi.mock("../safeActions", () => ({
-	deployPolymarketSafeIfNeeded: (
+	deployPolymarketDepositWalletIfNeeded: (
 		...args: Parameters<typeof deployPolymarketSafeIfNeededMock>
 	) => deployPolymarketSafeIfNeededMock(...args),
 	executePolymarketApprovalBatch: (
@@ -46,10 +46,6 @@ vi.mock("../approvalTxs", () => ({
 	checkPolymarketApprovals: (
 		...args: Parameters<typeof checkPolymarketApprovalsMock>
 	) => checkPolymarketApprovalsMock(...args),
-}));
-
-vi.mock("@polymarket/builder-relayer-client/dist/builder/derive", () => ({
-	deriveSafe: vi.fn(() => "0xsafe"),
 }));
 
 import { usePolymarketEnsureExecutionReady } from "../usePolymarketEnsureExecutionReady";
@@ -122,7 +118,13 @@ function baseMocks({
 	});
 
 	const relayClient = {
-		contractConfig: { SafeContracts: { SafeFactory: "0xfactory" } },
+		contractConfig: {
+			DepositWalletContracts: {
+				DepositWalletFactory: "0xfactory",
+				DepositWalletImplementation: "0ximpl",
+			},
+		},
+		deriveDepositWalletAddress: vi.fn().mockResolvedValue("0xsafe"),
 	};
 	usePolymarketRelayMock.mockReturnValue({
 		getRelayClient: vi.fn().mockResolvedValue(relayClient),

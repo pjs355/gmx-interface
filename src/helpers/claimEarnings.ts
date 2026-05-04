@@ -172,7 +172,8 @@ export function useClaimForVenue(
 	const iface = useMemo(() => new ethers.Interface(CTF_ABI), []);
 
 	const privateApi = usePrivateApiClient();
-	const { solanaAddress } = useFundingAddresses();
+	const { solanaAddress, polymarketSafe: polymarketDepositWallet } =
+		useFundingAddresses();
 	const { signAndSendTransaction: privySolanaSignAndSend } =
 		useSolanaSignAndSendTransaction();
 	const { wallets: solanaWallets } = useSolanaWallets();
@@ -283,6 +284,11 @@ export function useClaimForVenue(
 				throw new Error(
 					"Polymarket wallet not ready — connect your wallet and try again"
 				);
+			if (!polymarketDepositWallet) {
+				throw new Error(
+					"Polymarket deposit wallet not ready — finish Polymarket onboarding and try again"
+				);
+			}
 
 			const redeemData = iface.encodeFunctionData("redeemPositions", [
 				POLYGON_PUSD,
@@ -291,9 +297,10 @@ export function useClaimForVenue(
 				[YES_INDEX_SET, NO_INDEX_SET],
 			]);
 
-			console.log("CLAIM DEBUG: Polymarket redeem via Safe relay", {
+			console.log("CLAIM DEBUG: Polymarket redeem via deposit wallet relay", {
 				ctf: POLYGON_CTF,
 				collateral: POLYGON_PUSD,
+				depositWallet: polymarketDepositWallet,
 				conditionId: market.conditionId,
 				indexSets: [YES_INDEX_SET, NO_INDEX_SET],
 			});
@@ -301,6 +308,7 @@ export function useClaimForVenue(
 			const respOrHash = await executePolygonRelayAndWait(
 				relayClient,
 				[{ to: POLYGON_CTF as string, value: "0", data: redeemData }],
+				polymarketDepositWallet,
 				"Redeem Polymarket winnings",
 			);
 			return respOrHash;
