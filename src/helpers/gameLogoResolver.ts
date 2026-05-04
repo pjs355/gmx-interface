@@ -1,6 +1,6 @@
 // Reusable resolver for picking a game logo from game-logos by tags, with fallback
 
-import cs2GameLogoUrl from "@/assets/game-logos/3093-logo-1739063238.443.svg";
+import cs2GameLogoUrl from "@/assets/game-logos/cs2.png";
 
 /** Same asset as the CS2 / Counter-Strike pill and trading-card game fallback. */
 export const CS2_GAME_LOGO_URL = cs2GameLogoUrl;
@@ -88,6 +88,17 @@ export function resolveLogoByTags(
 		}
 	}
 	return fallbackLogoUrl;
+}
+
+/**
+ * When tag labels resolve to Counter-Strike / CS2, prefer bundled {@link CS2_GAME_LOGO_URL}
+ * over remote venue icons, Firebase umbrella art, and per-tag image URLs.
+ */
+export function bundledCounterStrikeLogoFromTagLabels(
+	tagLabels: string[] | undefined | null
+): string | null {
+	const logo = resolveLogoByTags(tagLabels);
+	return logo === CS2_GAME_LOGO_URL ? logo : null;
 }
 
 // Server-based resolver for umbrella icons using Firebase Storage

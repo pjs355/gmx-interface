@@ -274,16 +274,6 @@
 	color: #9ca3af;
 }
 
-@media (max-width: 1099px) {
-	.game-link__count {
-		display: none;
-	}
-
-	.game-link__inner {
-		justify-content: flex-start;
-	}
-}
-
 .game-link__label {
 	min-width: 0;
 }

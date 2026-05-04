@@ -37,6 +37,10 @@ import {
 } from "../utils/historyOutcomeWinner";
 import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
 import {
+	predictPortfolioUmbrellaIconUrl,
+	umbrellaWithPredictPortfolioIcon,
+} from "@/trading/predict/predictPortfolioUmbrellaIcon";
+import {
 	buildPredictUmbrellaLookup,
 	matchVenuePositionToUmbrellaForHistory,
 } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
@@ -161,17 +165,28 @@ export default function HistoryView({
 					pos.levelUpUmbrellaDisplayName ?? pos.marketTitle,
 				).trim() || pos.marketTitle;
 			const rowUmbrella: Umbrella =
-				fromCatalog ??
-				({
-					_id: uid,
-					displayName: dn || `Umbrella ${uid.slice(0, 8)}...`,
-					children: [],
-					originalChildren: [],
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-					__v: 0,
-					_polyIcon: pos.iconUrl,
-				} as Umbrella);
+				fromCatalog != null
+					? pos.venue === "predictfun"
+						? umbrellaWithPredictPortfolioIcon(
+								fromCatalog,
+								pos,
+								matchedMarkets ?? undefined,
+							)
+						: fromCatalog
+					: ({
+							_id: uid,
+							displayName: dn || `Umbrella ${uid.slice(0, 8)}...`,
+							children: [],
+							originalChildren: [],
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+							__v: 0,
+							_polyIcon:
+								pos.venue === "predictfun"
+									? predictPortfolioUmbrellaIconUrl(pos, matchedMarkets ?? undefined) ??
+										undefined
+									: pos.iconUrl,
+						} as Umbrella);
 			const existing = blocks.get(uid);
 			if (!existing) {
 				blocks.set(uid, {
@@ -213,10 +228,18 @@ export default function HistoryView({
 			);
 			if (matchedUmb) {
 				const id = matchedUmb._id;
+				const blockUmbrella =
+					pos.venue === "predictfun"
+						? umbrellaWithPredictPortfolioIcon(
+								matchedUmb,
+								pos,
+								matchedMarkets ?? undefined,
+							)
+						: matchedUmb;
 				if (!blocks.has(id)) {
 					blocks.set(id, {
 						id,
-						umbrella: matchedUmb,
+						umbrella: blockUmbrella,
 						luMarkets: [],
 						venuePositions: [],
 					});
@@ -236,13 +259,30 @@ export default function HistoryView({
 		}
 		for (const [title, positions] of unmatchedByTitle) {
 			const matched = umbrellas.find((u) => u.displayName && titlesMatchVenue(u.displayName, title));
-			const synth = matched ?? {
-				_id: venueHistorySyntheticUmbrellaId(title, positions),
-				displayName: title,
-				children: [], originalChildren: [],
-				createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), __v: 0,
-				_polyIcon: positions[0].iconUrl,
-			} as any;
+			const p0 = positions[0];
+			const synth =
+				matched != null
+					? p0?.venue === "predictfun"
+						? umbrellaWithPredictPortfolioIcon(
+								matched,
+								p0,
+								matchedMarkets ?? undefined,
+							)
+						: matched
+					: ({
+							_id: venueHistorySyntheticUmbrellaId(title, positions),
+							displayName: title,
+							children: [],
+							originalChildren: [],
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+							__v: 0,
+							_polyIcon:
+								p0?.venue === "predictfun"
+									? predictPortfolioUmbrellaIconUrl(p0, matchedMarkets ?? undefined) ??
+										undefined
+									: p0?.iconUrl,
+						} as Umbrella);
 			blocks.set(synth._id, { id: synth._id, umbrella: synth, luMarkets: [], venuePositions: positions });
 		}
 
@@ -256,6 +296,7 @@ export default function HistoryView({
 		predictUmbrellaLookup,
 		umbrellaLookupByDflowOutcomeMint,
 		umbrellaLookupByDflowEventTicker,
+		matchedMarkets,
 	]);
 
 	useEffect(() => {

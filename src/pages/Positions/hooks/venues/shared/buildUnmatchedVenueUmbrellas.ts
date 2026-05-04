@@ -25,6 +25,7 @@ import {
 	mergeMarketPositions,
 } from "../../../utils/positionHelpers";
 import { buildVenueMarketPosition } from "./buildVenueMarketPosition";
+import { umbrellaWithPredictPortfolioIcon } from "@/trading/predict/predictPortfolioUmbrellaIcon";
 
 /**
  * Group venue positions whose `tokenId` is not present in `matchedIds` (i.e. they did not merge
@@ -109,7 +110,7 @@ export function buildUnmatchedVenueUmbrellas(
 						).trim() ||
 						first.marketTitle
 					: first.marketTitle;
-		const umbrellaForBlock =
+		let umbrellaForBlock: Umbrella =
 			resolvedPredict ??
 			resolvedDflowCatalog ??
 			buildSyntheticUmbrella(
@@ -117,6 +118,13 @@ export function buildUnmatchedVenueUmbrellas(
 				syntheticBlockTitle,
 				first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
 			);
+		if (venue === "predictfun") {
+			umbrellaForBlock = umbrellaWithPredictPortfolioIcon(
+				umbrellaForBlock,
+				first,
+				matchedOddsMarkets,
+			);
+		}
 		const displayOverride =
 			resolvedPredict?.displayName?.trim() ||
 			resolvedDflowCatalog?.displayName?.trim() ||

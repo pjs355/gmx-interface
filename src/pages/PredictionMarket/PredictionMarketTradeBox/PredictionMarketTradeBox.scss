@@ -1043,9 +1043,28 @@
 	}
 }
 
+@keyframes prediction-curtain-slide-in {
+	from {
+		transform: translateY(100%);
+	}
+	to {
+		transform: translateY(0);
+	}
+}
+
+@keyframes prediction-curtain-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
 .prediction-curtain-content {
-	background: black;
-	// border-top: 1px solid #4b5563;
+	/* Match the inner trade widget so the panel reads as one surface (was `black`). */
+	background: #101114;
+	border-top: 1px solid #4b5563;
 	border-radius: 12px 12px 0 0;
 	height: 85vh; /* take up most of the screen */
 	max-height: 85vh;
@@ -1053,10 +1072,47 @@
 	position: relative;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
+	/* Mount animation. Inline `transform`/`transition` set by the swipe
+	   handlers in `PredictionCurtain.tsx` take over once the user grabs it. */
+	animation: prediction-curtain-slide-in 240ms cubic-bezier(0.2, 0, 0, 1);
+	will-change: transform;
 
 	&::-webkit-scrollbar {
 		display: none;
 	}
+
+	/* The inner tradebox card has its own border + bg; drop them inside the
+	   curtain so the colors blend instead of stacking another framed card. */
+	.prediction-market-tradebox {
+		background: transparent;
+		border: none;
+		box-shadow: none;
+		margin-top: 0;
+		padding: 0;
+	}
+}
+
+/* Dim + block interaction with the rest of the app while the curtain is open. */
+.prediction-curtain-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.55);
+	z-index: 1000;
+	pointer-events: auto;
+	-webkit-tap-highlight-color: transparent;
+	animation: prediction-curtain-fade-in 200ms ease-out;
+}
+
+/* Body scroll lock applied while the curtain is open (toggled in PredictionCurtain). */
+body.curtain-open {
+	position: fixed !important;
+	width: 100% !important;
+	overflow: hidden !important;
+	overscroll-behavior: none !important;
+}
+
+html.curtain-open {
+	overflow: hidden !important;
 }
 
 .prediction-curtain-header {
@@ -1107,25 +1163,6 @@
 
 	&:active {
 		cursor: grabbing;
-	}
-}
-
-.curtain-close-btn {
-	position: absolute;
-	right: 8px;
-	top: 8px;
-	background: transparent;
-	color: #9ca3af;
-	border: 1px solid #4b5563;
-	border-radius: 6px;
-	line-height: 1;
-	padding: 6px 10px;
-	cursor: pointer;
-
-	&:hover {
-		color: #ffffff;
-		border-color: #6b7280;
-		background: #111827;
 	}
 }
 

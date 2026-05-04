@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useRef, useEffect, useLayoutEffect } from 'react';
 import Portal from 'components/Common/Portal';
 
 // Simplified curtain context for prediction markets
@@ -43,6 +43,45 @@ export function PredictionCurtain({ header, children, dataQa }: { header?: React
   const startY = useRef<number>(0);
   const currentY = useRef<number>(0);
   const isDragging = useRef<boolean>(false);
+
+  /*
+   * Safety net for the React node-reuse issue described in `handleTouchEnd`.
+   * If a previous swipe-dismiss was interrupted (page hidden, gesture cancelled,
+   * etc.) the inline `transform`/`transition` set on `contentRef.current` may
+   * survive to the next render and pin the reused `<div>` offscreen. When the
+   * curtain just closed, query the still-mounted wrapper for a child div with
+   * a leftover `translateY` and reset it before paint.
+   */
+  useLayoutEffect(() => {
+    if (isCurtainOpen) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const child = wrapper.firstElementChild as HTMLElement | null;
+    if (child && (child.style.transform || child.style.transition)) {
+      child.style.transition = '';
+      child.style.transform = '';
+    }
+  }, [isCurtainOpen]);
+
+  // Lock background page scroll while the curtain is open so only the
+  // tradebox can scroll. Mirrors the pattern used by the header drawer
+  // (Header.tsx) — restores `scrollY` on close to avoid jump.
+  useEffect(() => {
+    if (!isCurtainOpen) return;
+    const scrollY = window.scrollY;
+    document.body.setAttribute('data-curtain-scroll-y', scrollY.toString());
+    document.documentElement.classList.add('curtain-open');
+    document.body.classList.add('curtain-open');
+    document.body.style.top = `-${scrollY}px`;
+    return () => {
+      document.documentElement.classList.remove('curtain-open');
+      document.body.classList.remove('curtain-open');
+      const saved = document.body.getAttribute('data-curtain-scroll-y');
+      document.body.removeAttribute('data-curtain-scroll-y');
+      document.body.style.top = '';
+      if (saved) window.scrollTo(0, parseInt(saved, 10));
+    };
+  }, [isCurtainOpen]);
 
   // Keep the fixed bar visually pinned to the bottom when browser UI shows/hides (iOS Safari, Chrome Android)
   useEffect(() => {
@@ -118,6 +157,8 @@ export function PredictionCurtain({ header, children, dataQa }: { header?: React
       startY.current = e.touches[0].clientY;
       currentY.current = e.touches[0].clientY;
       isDragging.current = true;
+      // Drag tracks the finger 1:1 — kill any pending settle/close transition.
+      contentRef.current.style.transition = 'none';
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -125,22 +166,54 @@ export function PredictionCurtain({ header, children, dataQa }: { header?: React
       e.preventDefault();
       currentY.current = e.touches[0].clientY;
       const deltaY = currentY.current - startY.current;
-      
+
       if (deltaY > 0) {
-        contentRef.current.style.transform = `translateY(${Math.min(deltaY, 100)}px)`;
+        // No upper clamp: let the panel follow the finger off-screen so the
+        // close gesture feels physical instead of stalling at 100px.
+        contentRef.current.style.transform = `translateY(${deltaY}px)`;
+      } else {
+        contentRef.current.style.transform = '';
       }
     };
 
     const handleTouchEnd = () => {
       if (!isDragging.current || !contentRef.current) return;
       isDragging.current = false;
-      
+
+      const el = contentRef.current;
       const deltaY = currentY.current - startY.current;
-      if (deltaY > 50) {
-        closeCurtain?.();
+
+      if (deltaY > 80) {
+        // Past dismiss threshold — glide the rest of the way off-screen
+        // before unmounting so the user doesn't see a hard jump cut.
+        el.style.transition =
+          'transform 220ms cubic-bezier(0.4, 0, 1, 1)';
+        el.style.transform = 'translateY(100%)';
+        const onEnd = () => {
+          el.removeEventListener('transitionend', onEnd);
+          /*
+           * IMPORTANT: clear inline styles BEFORE closeCurtain triggers a
+           * re-render. The conditional in this component renders a `<div>`
+           * for both the open content and the closed peek-bar header, and
+           * React reuses the same DOM node when swapping between two divs
+           * at the same position. The inline `transform: translateY(100%)`
+           * we set above is not managed by React, so without this reset
+           * it persists on the reused node and pushes the freshly-rendered
+           * peek bar (the yes/no buttons at the bottom) offscreen.
+           */
+          el.style.transition = '';
+          el.style.transform = '';
+          closeCurtain?.();
+        };
+        el.addEventListener('transitionend', onEnd);
+        return;
       }
-      
-      contentRef.current.style.transform = '';
+
+      // Spring back to the resting position. (Same node-reuse concern doesn't
+      // apply here because the curtain stays open.)
+      el.style.transition =
+        'transform 180ms cubic-bezier(0.2, 0, 0, 1)';
+      el.style.transform = '';
     };
 
     const content = contentRef.current;
@@ -161,6 +234,13 @@ export function PredictionCurtain({ header, children, dataQa }: { header?: React
 
   return (
     <Portal>
+      {isCurtainOpen && (
+        <div
+          className="prediction-curtain-backdrop"
+          onClick={() => closeCurtain?.()}
+          aria-hidden="true"
+        />
+      )}
       <div ref={wrapperRef} className="prediction-curtain" data-qa={dataQa}>
         {isCurtainOpen ? (
           <div className="prediction-curtain-content" ref={contentRef}>

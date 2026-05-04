@@ -21,6 +21,7 @@ import { useHomeTradeDockOptional } from "./HomeInlineTradeLayout";
 import { useCurtainActions } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
+	bundledCounterStrikeLogoFromTagLabels,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
 	resolveLogoByTags,
@@ -109,7 +110,7 @@ const resolveTeamLogoUrl = (team: UmbrellaTeamMapping): string | undefined => {
 	return undefined;
 };
 
-/** Same fallback order as Winnings / UmbrellaImage: tag art → game-by-tags → GTA. */
+/** Same idea as Winnings / UmbrellaImage: team logo, then CS2 bundled asset before remote tag art when applicable, then GTA. */
 function PredictionOutcomeTeamImg({
 	umbrella,
 	tags,
@@ -125,10 +126,14 @@ function PredictionOutcomeTeamImg({
 		const tagImg = getTagImageFromUmbrella(umbrella, tags);
 		const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 		const gameLogo = resolveLogoByTags(tagLabels);
+		const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
 		const list: string[] = [];
 		if (teamLogoUrl) list.push(teamLogoUrl);
-		if (tagImg) list.push(tagImg);
-		if (gameLogo) list.push(gameLogo);
+		if (cs2Bundled) list.push(cs2Bundled);
+		else {
+			if (tagImg) list.push(tagImg);
+			if (gameLogo) list.push(gameLogo);
+		}
 		list.push(gtaIcon);
 		const out: string[] = [];
 		const seen = new Set<string>();

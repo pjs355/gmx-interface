@@ -57,7 +57,7 @@ function getStreamEmbedUrl(streamUrl: string, hostname: string): string {
 	return "";
 }
 
-export function StreamEmbed({ streamUrl, height = "600" }: StreamEmbedProps) {
+export function StreamEmbed({ streamUrl, height }: StreamEmbedProps) {
 	const trimmedUrl = streamUrl.trim();
 	if (trimmedUrl.length === 0) {
 		return null;
@@ -69,26 +69,24 @@ export function StreamEmbed({ streamUrl, height = "600" }: StreamEmbedProps) {
 	if (embedUrl.length === 0) {
 		return null;
 	}
-	const heightPx =
+	/* `height` is treated as a maximum so the container can never grow
+	 * taller than the source layout expected. The container itself uses a
+	 * 16:9 aspect ratio so the iframe matches the actual video frame —
+	 * which eliminates the top/bottom black bars Twitch/Kick used to add
+	 * when the iframe was forced to a fixed height. */
+	const maxHeightPx =
 		typeof height === "string"
 			? height.includes("px")
 				? height
 				: `${height}px`
-			: `${height}px`;
+			: undefined;
 	return (
 		<div
 			className="stream-embed-container"
-			style={{ height: heightPx, minHeight: heightPx }}
+			style={maxHeightPx ? { maxHeight: maxHeightPx } : undefined}
 		>
 			<iframe
 				src={embedUrl}
-				style={{
-					height: heightPx,
-					width: "100%",
-					display: "block",
-					border: "none",
-					flexShrink: 0,
-				}}
 				allowFullScreen
 				frameBorder="0"
 				scrolling="no"
