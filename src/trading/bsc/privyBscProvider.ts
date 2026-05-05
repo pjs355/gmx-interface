@@ -91,23 +91,24 @@ function toUnsignedTransactionRequest(
 }
 
 /**
- * Serialize all sponsored `eth_sendTransaction` calls per embedded wallet and insert a
- * short spacing between them. Privy's TEE wallet RPC (`/api/v1/wallets/:id/rpc`) enforces
- * a per-wallet request rate limit; without serialization, bursts that fan out 4-step
- * retry loops compound and 429 the entire bucket.
+ * Serialize all sponsored `eth_sendTransaction` calls per embedded wallet so two
+ * code paths can't fire concurrent Privy `signAndSubmit` requests for the same
+ * wallet. Privy's TEE wallet RPC (`/api/v1/wallets/:id/rpc`) enforces a
+ * per-wallet rate limit, and each sponsored send actually dispatches 2-3
+ * internal RPC calls (`recoverEmbeddedWallet`, `signWithUserSigner`,
+ * sponsorship validation) — concurrent fires from two unrelated callers
+ * (e.g. JIT trade-box approval racing against the background activator)
+ * would 429 the bucket immediately.
  *
- * Each sponsored send actually dispatches **2–3 internal Privy wallet-RPC calls**
- * (`recoverEmbeddedWallet`, `signWithUserSigner`, sponsorship validation), so the
- * effective rate from one user-visible "send" is much higher than 1 req. Pacing
- * conservatively lets the Privy window refresh between sends.
- *
- * The Predict.fun SDK's `OrderBuilder.setApprovals()` would otherwise fire all 10
- * cross-product approvals on cold onboarding — see
- * `usePredictTradingSession.setApprovals` for the LevelUp-specific 2-tx scoping
- * that keeps onboarding inside Privy's per-wallet bucket on the first try.
+ * Tasks run back-to-back with no artificial spacing: the post-completion
+ * pad we used to insert here was needed back when `OrderBuilder.setApprovals()`
+ * fired 10 cross-product approvals on cold onboarding. Now Predict only
+ * fires 2 scoped sends per `usePredictTradingSession.setApprovals`, well
+ * inside Privy's per-wallet bucket, so the only safeguard we still need is
+ * the serialization itself. If a real 429 surfaces, `sendWithBackoffForBscPrivy`
+ * picks it up and applies its own retry backoff schedule.
  */
 const sponsoredSendQueues = new Map<string, Promise<unknown>>();
-const MIN_SPONSORED_SEND_SPACING_MS = 1500;
 
 function enqueueSponsoredSend<T>(
 	address: `0x${string}`,
@@ -119,21 +120,7 @@ function enqueueSponsoredSend<T>(
 		.catch(() => {
 			/* chain survives prior failures */
 		})
-		.then(task)
-		.then(
-			async (result) => {
-				await new Promise((r) =>
-					setTimeout(r, MIN_SPONSORED_SEND_SPACING_MS),
-				);
-				return result;
-			},
-			async (err) => {
-				await new Promise((r) =>
-					setTimeout(r, MIN_SPONSORED_SEND_SPACING_MS),
-				);
-				throw err;
-			},
-		);
+		.then(task);
 	sponsoredSendQueues.set(key, next);
 	// GC: clear slot once this task settles so Map doesn't grow unbounded.
 	// `.catch(() => {})` is required: `next.finally(...)` returns a sibling

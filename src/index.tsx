@@ -81,6 +81,7 @@ import { TransfersModalProvider } from "context/TransfersModalContext";
 import { OddsDisplayProvider } from "context/OddsDisplayContext";
 import { StickyTradeAmountProvider } from "context/StickyTradeAmountContext";
 import { PolymarketBackgroundActivation } from "@/trading/polymarket/PolymarketBackgroundActivation";
+import { PolymarketDepositDeployBackgroundActivation } from "@/trading/polymarket/PolymarketDepositDeployBackgroundActivation";
 import { PredictBackgroundActivation } from "@/trading/predict/PredictBackgroundActivation";
 import { LimitlessBackgroundActivation } from "@/trading/limitless/LimitlessBackgroundActivation";
 import { SetupActivationProvider } from "@/onboarding/SetupActivationContext";
@@ -135,14 +136,23 @@ createRoot(document.getElementById("root")!).render(
 									<UserDataProvider>
 										<SetupActivationProvider>
 										{/*
-										 * Three background activators run silently in
-										 * parallel. They share `SetupActivationContext`
-										 * so the first-signup gate can rush them past
-										 * `requestIdleCallback` and the trade box can
-										 * suppress "Trading setup required" copy while
-										 * setup is still wrapping up. The activators
-										 * themselves render nothing.
+										 * Background activators run silently. Three of
+										 * them publish to `SetupActivationContext` so the
+										 * first-signup gate can rush them past
+										 * `requestIdleCallback` and paint the checklist:
+										 *
+										 *   Predict -> Limitless -> Polymarket
+										 *
+										 * `PolymarketDepositDeployBackgroundActivation`
+										 * is a 4th, silent activator that pre-warms the
+										 * Polymarket deposit-wallet deploy + relayer
+										 * registry at boot, in parallel with Predict.
+										 * That removes ~12-15s from the visible
+										 * Polymarket activation later. It does NOT
+										 * publish to `SetupActivationContext` — the user
+										 * sees no UI for it.
 										 */}
+										<PolymarketDepositDeployBackgroundActivation />
 										<PolymarketBackgroundActivation />
 										<PredictBackgroundActivation />
 										<LimitlessBackgroundActivation />

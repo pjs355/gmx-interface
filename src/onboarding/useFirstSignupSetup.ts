@@ -26,10 +26,16 @@ const ROW_LABELS: Record<SetupVenueId, string> = {
 	limitless: "Setting up Limitless account",
 };
 
+// Visible activation order: Predict -> Limitless -> Polymarket. The
+// gates in `PredictBackgroundActivation`, `LimitlessBackgroundActivation`,
+// and `PolymarketBackgroundActivation` chain in this order, and a 4th
+// silent activator (`PolymarketDepositDeployBackgroundActivation`)
+// pre-warms the Polymarket deposit-wallet deploy at boot in parallel
+// with Predict so the visible Polymarket row no longer waits on it.
 const ROW_ORDER: readonly SetupVenueId[] = [
-	"polymarket",
-	"limitless",
 	"predict",
+	"limitless",
+	"polymarket",
 ];
 
 export type FirstSignupSetupSnapshot = {
