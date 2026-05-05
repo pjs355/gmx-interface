@@ -81,6 +81,29 @@ function sleepMs(ms: number): Promise<void> {
 }
 
 /**
+ * Detect Polymarket order errors that imply a missing/revoked allowance on the
+ * Safe and would be cured by re-running the onboarding approval batch.
+ *
+ * - "not approved" — CLOB pre-trade check failure
+ * - "not enough balance / allowance" — CLOB error string when the maker
+ *   (Safe) hasn't approved the CTF Exchange or pUSD spender
+ * - "ERC20: transfer amount exceeds allowance" — on-chain revert reason from
+ *   the wrap/unwrap path or pUSD `transferFrom` inside CLOB settlement
+ * - The Polymarket relay revert sentinel from `safeActions.ts` — wraps the
+ *   above on-chain message when the relayer reports STATE_FAILED
+ */
+function isPolymarketAllowanceRecoverableError(message: string): boolean {
+	const m = message.toLowerCase();
+	return (
+		m.includes("not approved") ||
+		m.includes("not enough balance / allowance") ||
+		m.includes("transfer amount exceeds allowance") ||
+		m.includes("insufficient allowance") ||
+		m.includes("polymarket deposit wallet relay transaction reverted on-chain")
+	);
+}
+
+/**
  * Limitless maker USDC is custodied by the partner; we cannot sign LI.FI from that address in
  * the browser. Before a Base-sourced LI.FI prefund leg, move just enough USDC to the user’s
  * Base smart wallet via `POST …/portfolio/withdraw`, then poll RPC until `balancesHuman.base`
@@ -346,8 +369,23 @@ export interface UseSorLegExecutorDeps {
 	 * Runs Polymarket approvals (Safe deploy + USDC/CTF approvals batch)
 	 * just-in-time before submitting the order. Throws with a user-visible
 	 * message if the batch fails — never fails silently.
+	 *
+	 * Default fast path: trusts the persisted venue-state flags from the
+	 * polymarket-account query (set by `verify-on-chain` after onboarding) and
+	 * skips the on-chain `checkPolymarketApprovals` multicall. Pass
+	 * `{ force: true }` to bypass the fast path — used by the order-error
+	 * recovery branch to repair an externally-revoked allowance.
+	 *
+	 * `onApprovalWorkStart` fires only when the callback is about to submit
+	 * the on-chain relay batch (i.e. approvals are actually being set). The
+	 * SOR executor uses it to flip the trade-button phase to "Approving
+	 * trades..." just for that window — so the fast path doesn't briefly
+	 * flash an "Approving" label when no approval work is happening.
 	 */
-	ensurePolymarketApprovals?: () => Promise<void>;
+	ensurePolymarketApprovals?: (opts?: {
+		force?: boolean;
+		onApprovalWorkStart?: () => void;
+	}) => Promise<void>;
 	/**
 	 * Before `postLimitlessOrder`: verify Limitless allowance for this slug; for
 	 * BUYs without minimum allowance, submits Base USDC `approve` txs via the
@@ -560,65 +598,44 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					}
 					// Approvals are ungated from SOR eligibility — the user
 					// sees Polymarket in the plan regardless — but we must
-					// satisfy them JIT before signing an order, otherwise the
+					// satisfy them before signing an order, otherwise the
 					// CLOB rejects with a cryptic "not approved" error.
+					//
+					// Fast path: trust the persisted venue-state flags from
+					// `verify-on-chain` (set after onboarding). On the rare
+					// event of an externally revoked allowance we re-run with
+					// `{ force: true }` from the order-error recovery branch
+					// below.
+					//
+					// `onApprovalWorkStart` only fires when the callback is
+					// about to submit the on-chain relay batch — keeps the
+					// trade-button label as "Executing trade..." in the
+					// common case (fast path) and only briefly flashes
+					// "Approving trades..." when we're truly approving.
 					if (ensurePolymarketApprovals) {
-						reportSorExecutionPhase("approving_trades");
+						let didApprovalWork = false;
 						try {
-							await ensurePolymarketApprovals();
+							await ensurePolymarketApprovals({
+								onApprovalWorkStart: () => {
+									didApprovalWork = true;
+									reportSorExecutionPhase("approving_trades");
+								},
+							});
 						} catch (e: unknown) {
 							const msg =
 								e instanceof Error ? e.message : "Polymarket approvals failed";
 							return { filled: false, filledShares: 0, error: msg };
 						} finally {
-							reportSorExecutionPhase("executing_trade");
+							if (didApprovalWork) {
+								reportSorExecutionPhase("executing_trade");
+							}
 						}
 					}
 					// CLOB spends pUSD — wrap Safe USDC.e via Collateral Onramp before buys.
 					const rawSafe = fundingAddresses.polymarketSafe?.trim();
 					const safeAddrValid =
 						!!rawSafe && /^0x[a-fA-F0-9]{40}$/i.test(rawSafe);
-					if (side === "buy" && safeAddrValid) {
-						let usdceWei: bigint;
-						try {
-							usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe!);
-						} catch (e: unknown) {
-							const msg =
-								e instanceof Error
-									? e.message
-									: "Could not read Polygon USDC.e balance before trade";
-							return { filled: false, filledShares: 0, error: msg };
-						}
-						if (usdceWei > 0n) {
-							const relayClient = await getRelayClient();
-							if (!relayClient) {
-								return {
-									filled: false,
-									filledShares: 0,
-									error:
-										"Polymarket relayer unavailable — cannot wrap USDC.e to pUSD before trading.",
-								};
-							}
-							try {
-								const txs = buildPolygonSafeUsdceWrapTransactions({
-									safeAddress: rawSafe!,
-									wrapAmountWei: usdceWei,
-								});
-								await executePolygonRelayAndWait(
-									relayClient,
-									txs,
-									rawSafe!,
-									"Wrap USDC.e to pUSD for Polymarket",
-								);
-							} catch (e: unknown) {
-								const msg =
-									e instanceof Error
-										? e.message
-										: "USDC.e wrap failed before Polymarket order";
-								return { filled: false, filledShares: 0, error: msg };
-							}
-						}
-					}
+
 					const tokenId =
 						leg.outcome === "A"
 							? leg.venueMarketIds.polyTokenIdA
@@ -634,134 +651,242 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						? Boolean(matchedMonitor.polyNegRisk)
 						: undefined;
 
-					if (isLimit) {
-						await polyClob.placeLimitOrder({
+					/**
+					 * Wrap + place order. Extracted so the order-error branch
+					 * below can re-execute the whole sequence after a one-shot
+					 * approval repair, since both the wrap (Onramp.wrap) and the
+					 * CLOB pre-trade hook can revert with allowance errors when
+					 * pre-approved allowances have been externally revoked.
+					 */
+					const attemptWrapAndPlace = async (): Promise<{
+						filled: boolean;
+						filledShares: number;
+						error?: string;
+					}> => {
+						if (side === "buy" && safeAddrValid) {
+							let usdceWei: bigint;
+							try {
+								usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe!);
+							} catch (e: unknown) {
+								const msg =
+									e instanceof Error
+										? e.message
+										: "Could not read Polygon USDC.e balance before trade";
+								return { filled: false, filledShares: 0, error: msg };
+							}
+							if (usdceWei > 0n) {
+								const relayClient = await getRelayClient();
+								if (!relayClient) {
+									return {
+										filled: false,
+										filledShares: 0,
+										error:
+											"Polymarket relayer unavailable — cannot wrap USDC.e to pUSD before trading.",
+									};
+								}
+								const txs = buildPolygonSafeUsdceWrapTransactions({
+									safeAddress: rawSafe!,
+									wrapAmountWei: usdceWei,
+								});
+								// Throws — caught by outer recovery block when
+								// the revert is allowance-related.
+								await executePolygonRelayAndWait(
+									relayClient,
+									txs,
+									rawSafe!,
+									"Wrap USDC.e to pUSD for Polymarket",
+								);
+							}
+						}
+
+						if (isLimit) {
+							await polyClob.placeLimitOrder({
+								tokenId,
+								price: limitPrice as number,
+								size: leg.shares,
+								side: side === "buy" ? Side.BUY : Side.SELL,
+								tickStyle,
+								negRisk,
+							});
+							return { filled: true, filledShares: leg.shares };
+						}
+						/**
+						 * Wire `amount` for Polymarket BUY is the **notional** USDC
+						 * (`max(0, executionAmountUsd - leg.fee)`). Polymarket's CTF
+						 * pulls exactly `making = wire amount` USDC and deducts the
+						 * protocol fee from outcome tokens (`taking - fee`). The CLOB
+						 * API's pre-trade balance check requires
+						 * `wallet >= wire + fee`, which is satisfied because we bridge
+						 * `executionAmountUsd` (= notional + fee) to the Safe.
+						 *
+						 * If LI.FI under-delivered, `clampMarketBuyAmountToWallet`
+						 * shrinks `wire` to fit `wallet - fee - dust`. The returned
+						 * `scale` propagates to `filledShares` so cost-basis math
+						 * stays in sync until the venue receipt overrides it.
+						 */
+						let buyAmountUsd = wireAmountUsdForVenue(leg);
+						let postBridgeScale = 1;
+						if (side === "buy" && safeAddrValid) {
+							let pusdWei: bigint;
+							try {
+								pusdWei = await readPolymarketSafePusdBalanceWei(rawSafe!);
+							} catch (e: unknown) {
+								const msg =
+									e instanceof Error
+										? e.message
+										: "Could not read Polygon pUSD balance before trade";
+								return { filled: false, filledShares: 0, error: msg };
+							}
+							const walletPusdHuman = Number(formatUnits(pusdWei, 6));
+							const clamp = clampMarketBuyAmountToWallet({
+								plannedExecutionUsd: buyAmountUsd,
+								walletUsd: walletPusdHuman,
+								feeEstimateUsd: leg.fee,
+								minOrderUsd: 1,
+							});
+							if (!clamp.ok) {
+								return { filled: false, filledShares: 0, error: clamp.error };
+							}
+							console.warn("[SOR][wire] polymarket", {
+								venue: "polymarket",
+								executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
+								feeUsd: Number(leg.fee.toFixed(6)),
+								plannedWireUsd: Number(buyAmountUsd.toFixed(6)),
+								walletPusdUsd: Number(walletPusdHuman.toFixed(6)),
+								finalWireUsd: Number(clamp.amountUsd.toFixed(6)),
+								scale: Number(clamp.scale.toFixed(6)),
+								resized: clamp.resized,
+							});
+							buyAmountUsd = clamp.amountUsd;
+							postBridgeScale = clamp.scale;
+						}
+
+						// SELL: pre-flight clamp planned shares against the Safe's actual
+						// on-chain CTF balance. The Polymarket Data API that feeds
+						// `sorVenuePositions` lags the chain (and counts CTF locked in
+						// resting limit sells), so a "max" sell often plans 1–3% more
+						// shares than the Safe can transfer. The CTF Exchange's
+						// pre-trade hook is `balanceOf(maker, tokenId) >= makerAmount`,
+						// so the order would be rejected with HTTP 400
+						// `not enough balance / allowance`. Reading the chain here and
+						// shrinking `leg.shares` to fit prevents the rejection on the
+						// first attempt instead of forcing the user into a manual retry.
+						let sellShares = leg.shares;
+						let sellScale = 1;
+						if (side === "sell" && safeAddrValid) {
+							let ctfBalWei: bigint;
+							try {
+								ctfBalWei = await readPolymarketSafeCtfBalanceWei(rawSafe!, tokenId);
+							} catch (e: unknown) {
+								const msg =
+									e instanceof Error
+										? e.message
+										: "Could not read Polymarket CTF balance before sell";
+								return { filled: false, filledShares: 0, error: msg };
+							}
+							const tickNumeric =
+								typeof tickStyle === "string" ? Number(tickStyle) : undefined;
+							const clamp = clampMarketSellSharesToCtfBalance({
+								plannedShares: leg.shares,
+								ctfBalanceWei: ctfBalWei,
+								tickSize:
+									tickNumeric != null && Number.isFinite(tickNumeric) && tickNumeric > 0
+										? tickNumeric
+										: undefined,
+							});
+							if (!clamp.ok) {
+								return { filled: false, filledShares: 0, error: clamp.error };
+							}
+							if (clamp.resized) {
+								console.warn("[SOR][sell-clamp] polymarket", {
+									venue: "polymarket",
+									tokenIdTail: tokenId.slice(-8),
+									plannedShares: Number(leg.shares.toFixed(6)),
+									ctfBalanceShares: Number((Number(ctfBalWei) / 1_000_000).toFixed(6)),
+									clampedShares: Number(clamp.amountShares.toFixed(6)),
+									scale: Number(clamp.scale.toFixed(6)),
+									tickSize: tickNumeric ?? null,
+								});
+							}
+							sellShares = clamp.amountShares;
+							sellScale = clamp.scale;
+						}
+
+						await polyClob.placeMarketOrder({
 							tokenId,
-							price: limitPrice as number,
-							size: leg.shares,
+							amount: side === "buy" ? buyAmountUsd : sellShares,
 							side: side === "buy" ? Side.BUY : Side.SELL,
 							tickStyle,
 							negRisk,
 						});
-						return { filled: true, filledShares: leg.shares };
-					}
-					/**
-					 * Wire `amount` for Polymarket BUY is the **notional** USDC
-					 * (`max(0, executionAmountUsd - leg.fee)`). Polymarket's CTF
-					 * pulls exactly `making = wire amount` USDC and deducts the
-					 * protocol fee from outcome tokens (`taking - fee`). The CLOB
-					 * API's pre-trade balance check requires
-					 * `wallet >= wire + fee`, which is satisfied because we bridge
-					 * `executionAmountUsd` (= notional + fee) to the Safe.
-					 *
-					 * If LI.FI under-delivered, `clampMarketBuyAmountToWallet`
-					 * shrinks `wire` to fit `wallet - fee - dust`. The returned
-					 * `scale` propagates to `filledShares` so cost-basis math
-					 * stays in sync until the venue receipt overrides it.
-					 */
-					let buyAmountUsd = wireAmountUsdForVenue(leg);
-					let postBridgeScale = 1;
-					if (side === "buy" && safeAddrValid) {
-						let pusdWei: bigint;
-						try {
-							pusdWei = await readPolymarketSafePusdBalanceWei(rawSafe!);
-						} catch (e: unknown) {
-							const msg =
-								e instanceof Error
-									? e.message
-									: "Could not read Polygon pUSD balance before trade";
-							return { filled: false, filledShares: 0, error: msg };
-						}
-						const walletPusdHuman = Number(formatUnits(pusdWei, 6));
-						const clamp = clampMarketBuyAmountToWallet({
-							plannedExecutionUsd: buyAmountUsd,
-							walletUsd: walletPusdHuman,
-							feeEstimateUsd: leg.fee,
-							minOrderUsd: 1,
-						});
-						if (!clamp.ok) {
-							return { filled: false, filledShares: 0, error: clamp.error };
-						}
-						console.warn("[SOR][wire] polymarket", {
-							venue: "polymarket",
-							executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
-							feeUsd: Number(leg.fee.toFixed(6)),
-							plannedWireUsd: Number(buyAmountUsd.toFixed(6)),
-							walletPusdUsd: Number(walletPusdHuman.toFixed(6)),
-							finalWireUsd: Number(clamp.amountUsd.toFixed(6)),
-							scale: Number(clamp.scale.toFixed(6)),
-							resized: clamp.resized,
-						});
-						buyAmountUsd = clamp.amountUsd;
-						postBridgeScale = clamp.scale;
-					}
 
-					// SELL: pre-flight clamp planned shares against the Safe's actual
-					// on-chain CTF balance. The Polymarket Data API that feeds
-					// `sorVenuePositions` lags the chain (and counts CTF locked in
-					// resting limit sells), so a "max" sell often plans 1–3% more
-					// shares than the Safe can transfer. The CTF Exchange's
-					// pre-trade hook is `balanceOf(maker, tokenId) >= makerAmount`,
-					// so the order would be rejected with HTTP 400
-					// `not enough balance / allowance`. Reading the chain here and
-					// shrinking `leg.shares` to fit prevents the rejection on the
-					// first attempt instead of forcing the user into a manual retry.
-					let sellShares = leg.shares;
-					let sellScale = 1;
-					if (side === "sell" && safeAddrValid) {
-						let ctfBalWei: bigint;
-						try {
-							ctfBalWei = await readPolymarketSafeCtfBalanceWei(rawSafe!, tokenId);
-						} catch (e: unknown) {
-							const msg =
-								e instanceof Error
-									? e.message
-									: "Could not read Polymarket CTF balance before sell";
-							return { filled: false, filledShares: 0, error: msg };
-						}
-						const tickNumeric =
-							typeof tickStyle === "string" ? Number(tickStyle) : undefined;
-						const clamp = clampMarketSellSharesToCtfBalance({
-							plannedShares: leg.shares,
-							ctfBalanceWei: ctfBalWei,
-							tickSize:
-								tickNumeric != null && Number.isFinite(tickNumeric) && tickNumeric > 0
-									? tickNumeric
-									: undefined,
-						});
-						if (!clamp.ok) {
-							return { filled: false, filledShares: 0, error: clamp.error };
-						}
-						if (clamp.resized) {
-							console.warn("[SOR][sell-clamp] polymarket", {
-								venue: "polymarket",
-								tokenIdTail: tokenId.slice(-8),
-								plannedShares: Number(leg.shares.toFixed(6)),
-								ctfBalanceShares: Number((Number(ctfBalWei) / 1_000_000).toFixed(6)),
-								clampedShares: Number(clamp.amountShares.toFixed(6)),
-								scale: Number(clamp.scale.toFixed(6)),
-								tickSize: tickNumeric ?? null,
-							});
-						}
-						sellShares = clamp.amountShares;
-						sellScale = clamp.scale;
-					}
-
-					await polyClob.placeMarketOrder({
-						tokenId,
-						amount: side === "buy" ? buyAmountUsd : sellShares,
-						side: side === "buy" ? Side.BUY : Side.SELL,
-						tickStyle,
-						negRisk,
-					});
-
-					return {
-						filled: true,
-						filledShares:
-							side === "buy"
-								? leg.shares * postBridgeScale
-								: leg.shares * sellScale,
+						return {
+							filled: true,
+							filledShares:
+								side === "buy"
+									? leg.shares * postBridgeScale
+									: leg.shares * sellScale,
+						};
 					};
+
+					try {
+						return await attemptWrapAndPlace();
+					} catch (e: unknown) {
+						const msg = e instanceof Error ? e.message : String(e);
+						// Allowance/approval revoked externally between
+						// onboarding and now — repair once and retry.
+						// Patterns covered: CLOB "not approved", CLOB
+						// "not enough balance / allowance", on-chain
+						// `ERC20: transfer amount exceeds allowance`,
+						// and the Polygon relay revert sentinel.
+						if (
+							isPolymarketAllowanceRecoverableError(msg) &&
+							ensurePolymarketApprovals
+						) {
+							console.warn(
+								"[SOR][polymarket] allowance error, attempting one-shot recovery",
+								{ error: msg.slice(0, 240) },
+							);
+							let didRecoveryWork = false;
+							try {
+								await ensurePolymarketApprovals({
+									force: true,
+									onApprovalWorkStart: () => {
+										didRecoveryWork = true;
+										reportSorExecutionPhase("approving_trades");
+									},
+								});
+							} catch (recovErr: unknown) {
+								const recovMsg =
+									recovErr instanceof Error
+										? recovErr.message
+										: String(recovErr);
+								return {
+									filled: false,
+									filledShares: 0,
+									error: `Polymarket order failed; approval repair also failed: ${recovMsg}`,
+								};
+							} finally {
+								if (didRecoveryWork) {
+									reportSorExecutionPhase("executing_trade");
+								}
+							}
+							try {
+								return await attemptWrapAndPlace();
+							} catch (retryErr: unknown) {
+								const retryMsg =
+									retryErr instanceof Error
+										? retryErr.message
+										: String(retryErr);
+								return {
+									filled: false,
+									filledShares: 0,
+									error: retryMsg,
+								};
+							}
+						}
+						return { filled: false, filledShares: 0, error: msg };
+					}
 				}
 
 				// ─── DFlow / Kalshi (Solana, USDC) ────────

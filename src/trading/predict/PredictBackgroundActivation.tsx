@@ -66,8 +66,31 @@ export function PredictBackgroundActivation(): null {
 		return embedded?.address ?? null;
 	}, [wallets]);
 
+	// Predict gates on **Limitless** finishing rather than on Polymarket
+	// directly. The chain is Polymarket → Limitless → Predict.
+	//
+	// Why: Privy applies its rate limit per *wallet*, not per chain — the
+	// embedded EOA has one shared bucket across Polygon (Polymarket) and
+	// BSC (Predict). After Polymarket's signing burst that bucket is
+	// drained, and if Predict fires immediately every retry attempt
+	// counts against the same window, so the 4-step backoff
+	// (2/5/10/20s) can't recover within its own retry timeline. A fixed
+	// artificial cooldown was the previous fix, but Limitless's
+	// `ensure-account` is pure server work — zero Privy from the client
+	// — so running it between Polymarket and Predict gives the bucket a
+	// real, productive recovery window instead of an idle wait. By the
+	// time Limitless reports ready, the Privy quota has had several
+	// seconds of true silence and Predict's first sponsored send lands
+	// on a fresh bucket.
+	const limitlessReady =
+		setupActivation?.venues.limitless.ready ?? false;
+
 	const prerequisitesReady =
-		privyReady && authenticated && signerCtx.ready && Boolean(approvalSubject);
+		privyReady &&
+		authenticated &&
+		signerCtx.ready &&
+		Boolean(approvalSubject) &&
+		limitlessReady;
 
 	const onboardingActive = setupActivation?.onboardingActive ?? false;
 
@@ -145,6 +168,12 @@ export function PredictBackgroundActivation(): null {
 		if (key === lastSnapshotRef.current) return;
 		lastSnapshotRef.current = key;
 		reportVenueSnapshot("predict", { setupInProgress: inProgress, ready });
+		console.info(LOG_TAG, "bg:snapshot", {
+			at: new Date().toISOString(),
+			setupInProgress: inProgress,
+			ready,
+			phase: ensureState.phase,
+		});
 	}, [
 		reportVenueSnapshot,
 		sessionEnabled,
@@ -152,6 +181,7 @@ export function PredictBackgroundActivation(): null {
 		predictSession.ready,
 		ensureState.setupInProgress,
 		ensureState.ready,
+		ensureState.phase,
 	]);
 
 	return null;

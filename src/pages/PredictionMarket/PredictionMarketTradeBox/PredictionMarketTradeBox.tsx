@@ -1182,44 +1182,100 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }, [checkApproval, approveToken]);
 
   /**
-   * Just-in-time Polymarket approvals. Polymarket approvals are ungated from
-   * SOR eligibility, so every trade path must satisfy them on the click:
-   * probe the four USDC spenders + three CTF operators, batch-approve via
-   * the Polymarket relayer if anything is missing, then re-probe. A loud
-   * throw on failure is intentional — the SOR leg executor surfaces it as
-   * a trade error instead of silently dropping the venue.
+   * Polymarket approval gate for the trade hot path.
+   *
+   * Fast path (default): trust the persisted venue-state flags from the
+   * polymarket-account query. Onboarding's relay batch sets all approvals at
+   * once and `verify-on-chain` flips the booleans, so once a user is fully
+   * onboarded every subsequent trade can skip the on-chain
+   * `checkPolymarketApprovals` multicall entirely (~150-300ms saved per
+   * trade). Pass `{ force: true }` to bypass the fast path — the SOR leg
+   * executor's order-error recovery branch uses this to repair an
+   * externally-revoked allowance.
+   *
+   * `onApprovalWorkStart` is fired by the callback **only** right before
+   * `executePolymarketApprovalBatch` actually submits the relay batch. The
+   * SOR executor uses it to flip the trade-button label to "Approving
+   * trades..." just for that window — so the common fast-path case never
+   * shows an "Approving" flash when no approvals are running.
    */
-  const ensurePolymarketApprovalsForTrade = useCallback(async () => {
-    const safe = funding.polymarketSafe;
-    if (!safe) {
-      throw new Error(
-        "Polymarket Safe not provisioned. Open the Polymarket tab to initialize it.",
-      );
-    }
-    const { checkPolymarketApprovals } = await import(
-      "@/trading/polymarket/approvalTxs"
-    );
-    const status = await checkPolymarketApprovals(safe);
-    if (status.allApproved) return;
+  const ensurePolymarketApprovalsForTrade = useCallback(
+    async (opts?: {
+      force?: boolean;
+      onApprovalWorkStart?: () => void;
+    }) => {
+      const safe = funding.polymarketSafe;
+      if (!safe) {
+        throw new Error(
+          "Polymarket Safe not provisioned. Open the Polymarket tab to initialize it.",
+        );
+      }
 
-    const client = await relay.getRelayClient();
-    if (!client) {
-      throw new Error(
-        "Polymarket relayer unavailable. Retry in a moment or refresh the page.",
-      );
-    }
-    const { executePolymarketApprovalBatch } = await import(
-      "@/trading/polymarket/safeActions"
-    );
-    await executePolymarketApprovalBatch(client, safe);
+      const force = opts?.force === true;
+      if (!force) {
+        const state = funding.polymarketAccount?.polymarketAccount;
+        const flagsAllSet =
+          !!state &&
+          state.safeDeployed === true &&
+          state.usdcApprovalComplete === true &&
+          state.ctfApprovalComplete === true &&
+          state.collateralOnrampUsdceApprovalComplete === true &&
+          state.collateralOfframpPusdApprovalComplete === true;
+        if (flagsAllSet) return;
+      }
 
-    const recheck = await checkPolymarketApprovals(safe);
-    if (!recheck.allApproved) {
-      throw new Error(
-        "Polymarket approvals batch did not complete. Retry the trade.",
+      const { checkPolymarketApprovals } = await import(
+        "@/trading/polymarket/approvalTxs"
       );
-    }
-  }, [funding.polymarketSafe, relay]);
+      const status = await checkPolymarketApprovals(safe);
+      if (status.allApproved) return;
+
+      const client = await relay.getRelayClient();
+      if (!client) {
+        throw new Error(
+          "Polymarket relayer unavailable. Retry in a moment or refresh the page.",
+        );
+      }
+      const { executePolymarketApprovalBatch } = await import(
+        "@/trading/polymarket/safeActions"
+      );
+      opts?.onApprovalWorkStart?.();
+      await executePolymarketApprovalBatch(client, safe);
+
+      const recheck = await checkPolymarketApprovals(safe);
+      if (!recheck.allApproved) {
+        throw new Error(
+          "Polymarket approvals batch did not complete. Retry the trade.",
+        );
+      }
+
+      // Refresh the polymarket-account query so the next trade's fast path
+      // sees the freshly-set on-chain allowances reflected in the persisted
+      // flags. Best-effort — the recovery path is rare (external revoke) and
+      // we already re-approved on-chain, so failure here doesn't block.
+      // `verifyOnChain.onSuccess` already invalidates the polymarket-account
+      // query, so a separate invalidate is only needed if the mutation
+      // itself fails.
+      try {
+        await funding.verifyOnChain.mutateAsync({});
+      } catch (e) {
+        console.warn(
+          "[Polymarket] verify-on-chain after approval recovery failed",
+          e,
+        );
+        await queryClient.invalidateQueries({
+          queryKey: tradingQueryKeys.polymarketAccount,
+        });
+      }
+    },
+    [
+      funding.polymarketSafe,
+      funding.polymarketAccount,
+      funding.verifyOnChain,
+      queryClient,
+      relay,
+    ],
+  );
 
   /**
    * Just-in-time Limitless: `verify-allowance`, then on-chain approvals by side
@@ -1535,28 +1591,46 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
   }, [state.orderResult]);
 
-  /** Same toast on umbrella page and home inline dock (`ToastContainer` in AppRoutes). */
-  const lastOrderResultToastKeyRef = useRef<string | null>(null);
+  /**
+   * Same toast on umbrella page and home inline dock (`ToastContainer` in AppRoutes).
+   *
+   * Dismissal is enforced two ways: (1) `autoClose: TOAST_AUTO_CLOSE_TIME` on the
+   * toast, and (2) a hard `toast.dismiss(toastId)` scheduled `TOAST_AUTO_CLOSE_TIME`
+   * later. The hard dismiss is a belt-and-suspenders guarantee — if anything (a
+   * re-render, a duplicate `setState` from the SOR effect, a frozen animation
+   * timer) keeps the toast around past its autoClose, this still yanks it.
+   */
+  const orderResultToastSigRef = useRef<string | null>(null);
+  const orderResultToastDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!state.orderResult) {
-      lastOrderResultToastKeyRef.current = null;
+      orderResultToastSigRef.current = null;
       return;
     }
     const r = state.orderResult;
-    const key = [
+    const sig = [
       r.success ? "ok" : "fail",
       r.error ?? "",
       r.transactionHash ?? "",
       r.orderId ?? "",
     ].join("|");
-    if (lastOrderResultToastKeyRef.current === key) {
+    if (orderResultToastSigRef.current === sig) {
       return;
     }
-    lastOrderResultToastKeyRef.current = key;
+    orderResultToastSigRef.current = sig;
+
+    const toastId = r.success
+      ? "prediction-trade-result-ok"
+      : "prediction-trade-result-fail";
+
+    toast.dismiss();
 
     const toastOpts = {
-      toastId: `prediction-trade-result-${key}`,
+      toastId,
       autoClose: TOAST_AUTO_CLOSE_TIME,
+      pauseOnHover: false,
+      pauseOnFocusLoss: false,
+      closeOnClick: true,
     } as const;
 
     if (r.success) {
@@ -1568,7 +1642,26 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         toastOpts,
       );
     }
+
+    if (orderResultToastDismissTimerRef.current) {
+      clearTimeout(orderResultToastDismissTimerRef.current);
+    }
+    orderResultToastDismissTimerRef.current = setTimeout(() => {
+      toast.dismiss(toastId);
+      orderResultToastDismissTimerRef.current = null;
+    }, TOAST_AUTO_CLOSE_TIME);
   }, [state.orderResult]);
+
+  useEffect(() => {
+    return () => {
+      if (orderResultToastDismissTimerRef.current) {
+        clearTimeout(orderResultToastDismissTimerRef.current);
+        orderResultToastDismissTimerRef.current = null;
+      }
+      toast.dismiss("prediction-trade-result-ok");
+      toast.dismiss("prediction-trade-result-fail");
+    };
+  }, []);
 
   // Expose methods for testing via ref
   useImperativeHandle(ref, () => ({

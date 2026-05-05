@@ -372,49 +372,21 @@ export async function executeLifiSteps(
 
 	const unwrapPre = options?.polygonSafeUnwrapPrerequisite;
 	if (relay && polygonWalletAddress && unwrapPre?.calls?.length) {
+		// pUSD -> Offramp allowance is now pre-approved at onboarding
+		// (`approvalTxs.ts`), so the server's prerequisite ships a single
+		// `[unwrap]` call. Submit as one relay batch with no inter-call
+		// sleep — saves ~3-15s on every withdraw with an unwrap step.
 		const txs = relayTransactionsFromUnwrapPrerequisite(unwrapPre.calls);
 		const runUnwrapPre = async (suffix: string) => {
 			await withPolygonRelayMutex(async () => {
-				if (txs.length === 2) {
-					const r0 = await executeWalletBatch(
-						relay,
-						polygonWalletAddress,
-						[txs[0]!],
-						`Polygon pUSD → Offramp approval (pre-LI.FI)${suffix}`,
-					);
-					const h0 = await waitRelay(r0);
-					if (h0) txHashes.push(h0);
-					await new Promise((r) => setTimeout(r, 2_500));
-					const r1 = await executeWalletBatch(
-						relay,
-						polygonWalletAddress,
-						[txs[1]!],
-						`Polygon pUSD unwrap → USDC.e (pre-LI.FI)${suffix}`,
-					);
-					const h1 = await waitRelay(r1);
-					if (h1) txHashes.push(h1);
-				} else if (txs.length === 1) {
-					const resp = await executeWalletBatch(
-						relay,
-						polygonWalletAddress,
-						txs,
-						`Polygon unwrap prerequisite before LI.FI${suffix}`,
-					);
-					const h = await waitRelay(resp);
-					if (h) txHashes.push(h);
-				} else {
-					for (let j = 0; j < txs.length; j++) {
-						if (j > 0) await new Promise((r) => setTimeout(r, 2_500));
-						const rj = await executeWalletBatch(
-							relay,
-							polygonWalletAddress,
-							[txs[j]!],
-							`Polygon unwrap prerequisite ${j + 1}/${txs.length} (pre-LI.FI)${suffix}`,
-						);
-						const hj = await waitRelay(rj);
-						if (hj) txHashes.push(hj);
-					}
-				}
+				const resp = await executeWalletBatch(
+					relay,
+					polygonWalletAddress,
+					txs,
+					`Polygon unwrap prerequisite before LI.FI${suffix}`,
+				);
+				const h = await waitRelay(resp);
+				if (h) txHashes.push(h);
 			});
 		};
 		try {

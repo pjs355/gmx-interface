@@ -204,6 +204,22 @@ export function usePolymarketClobTradingSession(
 	// funder under `SignatureTypeV2.POLY_1271`).
 	const safe = wallets.polymarketSafe;
 
+	/**
+	 * The deposit wallet record exists in the server DB the moment the on-login
+	 * seeder backfills it, but the on-chain ERC-1967 proxy isn't deployed until
+	 * `usePolymarketEnsureExecutionReady` finishes its `WALLET-CREATE` relay tx
+	 * and the verify-on-chain handler flips `tradingEnabled: true`. Polymarket's
+	 * `/auth/api-key` endpoint refuses to mint creds for a funder address with
+	 * no contract code, returning `400 "Could not create api key"`.
+	 *
+	 * Gate the entire CLOB session on `tradingEnabled === true` so we don't fire
+	 * `createOrDeriveApiKey` against a not-yet-deployed deposit wallet. This
+	 * also indirectly defers `postPolymarketL2Credentials` until the server has
+	 * a real funder to attach the encrypted creds to.
+	 */
+	const depositWalletReadyOnChain =
+		poly.data?.polymarketAccount?.tradingEnabled === true;
+
 	const blockedReason = useMemo(() => {
 		if (!enabled) return null;
 		if (!privyReady || !authenticated) return "Sign in to trade.";
@@ -213,8 +229,12 @@ export function usePolymarketClobTradingSession(
 		if (profileId && overviewQuery.isLoading && !safe) {
 			return "Loading Polymarket account…";
 		}
-		/* Once Safe + signer match Transfers, try CLOB — don’t block on stale requiredNextAction. */
-		if (safe && eoa.ready) {
+		/* Activation hook is still deploying the deposit wallet — don't bring up CLOB yet. */
+		if (safe && eoa.ready && !depositWalletReadyOnChain) {
+			return "Setting up Polymarket account…";
+		}
+		/* Once deposit wallet + signer match Transfers AND the wallet is on-chain, try CLOB. */
+		if (safe && eoa.ready && depositWalletReadyOnChain) {
 			return null;
 		}
 		return formatBlockedReason(poly.requiredNextAction, safe, Boolean(eoa.ready));
@@ -229,6 +249,7 @@ export function usePolymarketClobTradingSession(
 		eoa.ready,
 		profileId,
 		overviewQuery.isLoading,
+		depositWalletReadyOnChain,
 	]);
 
 	const canInit = Boolean(
@@ -239,6 +260,7 @@ export function usePolymarketClobTradingSession(
 			eoaAddress &&
 			eip1193 &&
 			safe &&
+			depositWalletReadyOnChain &&
 			!eoa.error
 	);
 

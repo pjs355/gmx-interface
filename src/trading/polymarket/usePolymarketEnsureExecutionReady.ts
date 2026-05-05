@@ -199,21 +199,33 @@ export function usePolymarketEnsureExecutionReady(args: {
 
 			// `safeWalletAddress` is the historical field name; for the
 			// deposit-wallet flow it stores the deposit wallet address.
-			let safe =
+			const storedSafe =
 				typeof state.safeWalletAddress === "string"
 					? state.safeWalletAddress.trim()
 					: "";
+
+			// The deposit wallet address is fully deterministic from the EOA +
+			// the relayer's factory/implementation config — derive it from the
+			// SDK as the source of truth. This is the single fix for the class
+			// of bugs where a legacy account still has the old Safe address
+			// stored in `safeWalletAddress`: deploys would succeed for the
+			// real deposit wallet but `executeDepositWalletBatch` would 400
+			// because the relayer's wallet registry has no record of the old
+			// Safe at this address.
+			const client = await currentRelay.getRelayClient();
+			if (!client) throw new Error("Polymarket relay client unavailable");
+			const safe = await client.deriveDepositWalletAddress();
+			if (storedSafe && storedSafe.toLowerCase() !== safe.toLowerCase()) {
+				logWarn("depositWallet:storedAddressMismatch", {
+					storedSafe,
+					derivedSafe: safe,
+				});
+			}
 
 			// Phase 2: deploy the deposit wallet if needed.
 			if (readiness.safeDeployed !== true) {
 				if (mountedRef.current) setPhase("deploying-safe");
 				logInfo("phase:deploying-safe", { safe });
-				const client = await currentRelay.getRelayClient();
-				if (!client) throw new Error("Polymarket relay client unavailable");
-				if (!safe) {
-					safe = await client.deriveDepositWalletAddress();
-					logInfo("depositWallet:derivedClientSide", { safe });
-				}
 				const deployed = await deployPolymarketDepositWalletIfNeeded(
 					client,
 					eoaAddress,
@@ -226,37 +238,34 @@ export function usePolymarketEnsureExecutionReady(args: {
 				logInfo("phase:depositWalletAlreadyDeployed", { safe });
 			}
 
-			if (!safe) {
-				// Refetch to pick up a server-derived deposit wallet address
-				// after deploy; derivation is deterministic but the server is
-				// the canonical record.
-				const refreshed = await apiClient.getPolymarketAccount();
-				const refreshedState: PolymarketAccountState =
-					refreshed.polymarketAccount ?? {};
-				safe =
-					typeof refreshedState.safeWalletAddress === "string"
-						? refreshedState.safeWalletAddress.trim()
-						: "";
-			}
-			if (!safe)
-				throw new Error("Polymarket deposit wallet address not resolved");
-
 			// Phase 3: approvals. Re-check on-chain even when server says
 			// approved — the user may have revoked from a different app.
+			//
+			// `collateral` covers the two pre-set wrap/unwrap allowances
+			// (USDC.e -> Onramp, pUSD -> Offramp) so wrap/unwrap relay
+			// batches can ship as a single call instead of `[approve, wrap]`.
+			// Visible in this log so it's easy to confirm in devtools that
+			// onboarding submitted (and verify-on-chain saw) all 9 approvals.
 			const approvalStatus = await checkPolymarketApprovals(safe);
 			logInfo("approvals:check", {
 				safe,
 				usdc: approvalStatus.usdc,
 				erc1155: approvalStatus.erc1155,
+				collateral: approvalStatus.collateral,
 				all: approvalStatus.allApproved,
 			});
 			if (!approvalStatus.allApproved) {
 				if (mountedRef.current) setPhase("approving");
 				logInfo("phase:approving", { safe });
-				const client = await currentRelay.getRelayClient();
-				if (!client) throw new Error("Polymarket relay client unavailable");
 				await executePolymarketApprovalBatch(client, safe);
-				logInfo("approvals:batchSubmitted", { safe });
+				const postBatchStatus = await checkPolymarketApprovals(safe);
+				logInfo("approvals:batchSubmitted", {
+					safe,
+					usdc: postBatchStatus.usdc,
+					erc1155: postBatchStatus.erc1155,
+					collateral: postBatchStatus.collateral,
+					all: postBatchStatus.allApproved,
+				});
 			}
 
 			// Phase 4: verify-on-chain. Server re-reads deposit wallet

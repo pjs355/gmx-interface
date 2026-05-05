@@ -28,13 +28,16 @@ function isPrivyWalletHttp400(err: unknown): boolean {
  * `useSendTransaction({ sponsor: true })` so the user never needs native gas.
  *
  * **BNB (56):** uses the same per-wallet queue as Predict (`runQueuedBnbPrivyTask`) so
- * approve + LI.FI swap do not burst Privy's wallet RPC. If **sponsored** submission
- * returns HTTP **400** only for **policy / rate-limit** style failures (no on-chain revert
- * data), we **retry once with `sponsor: false`** so the user can pay BNB gas.
+ * approve + LI.FI swap do not burst Privy's wallet RPC. We retry **once with
+ * `sponsor: false`** *only* when sponsored submission returns HTTP **400** for an
+ * unknown LI.FI `to` contract that's missing from the gas policy — in that case the
+ * fallback at least lets a user with BNB self-fund through. The TEE-stack rejection
+ * is *not* in this category: those users have no BNB and the only correct response
+ * is to retry sponsorship (handled inside `sendWithBackoffForBscPrivy`).
  *
- * Privy often returns **400** for **UserOperation simulation reverts** too (e.g.
- * `0x7939f424` / `TransferFromFailed`). Retrying without sponsorship does not fix those;
- * we **rethrow** so the LI.FI layer can surface allowance/balance guidance.
+ * Privy wraps **UserOperation simulation reverts** as HTTP 400 too (e.g.
+ * `0x7939f424` / `TransferFromFailed`). Retrying without sponsorship does not fix
+ * those; we **rethrow** so the LI.FI layer can surface allowance/balance guidance.
  */
 export function createPrivyEmbeddedSendTransactionCapable(
 	address: `0x${string}`,

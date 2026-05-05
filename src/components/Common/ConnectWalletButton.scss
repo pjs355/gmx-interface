@@ -34,34 +34,48 @@
 
 @media (max-width: 768px) {
   .connect-wallet-btn {
-    padding: 0.6rem 1rem;
-    font-size: 14px;
-    
-    .btn-label {
-      font-size: 14px;
-    }
-  }
-}
-
-@media (max-width: 450px) {
-  .connect-wallet-btn {
-    padding: 0.5rem 0.8rem;
+    padding: 0.5rem 0.85rem;
     font-size: 13px;
-    
+    border-radius: 0.6rem;
+
     .btn-label {
       font-size: 13px;
     }
   }
 }
 
+@media (max-width: 450px) {
+  .connect-wallet-btn {
+    padding: 0.4rem 0.7rem;
+    font-size: 12px;
+    gap: 0.4rem;
+
+    .btn-label {
+      font-size: 12px;
+    }
+  }
+}
+
+@media (max-width: 380px) {
+  .connect-wallet-btn {
+    padding: 0.35rem 0.55rem;
+    font-size: 11px;
+
+    .btn-label {
+      font-size: 11px;
+    }
+  }
+}
+
 @media (max-width: 350px) {
   .connect-wallet-btn {
-    height: 3.6rem;
+    padding: 0.3rem 0.5rem;
     .btn-icon {
       display: none;
     }
     .btn-label {
       margin-left: 0px;
+      font-size: 11px;
     }
   }
 }

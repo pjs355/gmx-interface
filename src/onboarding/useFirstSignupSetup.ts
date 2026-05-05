@@ -28,8 +28,8 @@ const ROW_LABELS: Record<SetupVenueId, string> = {
 
 const ROW_ORDER: readonly SetupVenueId[] = [
 	"polymarket",
-	"predict",
 	"limitless",
+	"predict",
 ];
 
 export type FirstSignupSetupSnapshot = {

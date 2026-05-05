@@ -19,6 +19,15 @@ export const POLYGON_USDC_E = getAddress(
 export const POLYGON_COLLATERAL_ONRAMP = getAddress(
 	"0x93070a847efef7f70739046a929d47a521f5b8ee"
 );
+/**
+ * Collateral Offramp — unwrap pUSD → USDC.e on the Safe.
+ * Approved at onboarding so the pre-bridge unwrap relay batch ships as a single
+ * `[unwrap]` call instead of `[approve, unwrap]` (server mirror:
+ * `predictions/domain/polymarket/constants.ts#POLYGON_COLLATERAL_OFFRAMP_ADDRESS`).
+ */
+export const POLYGON_COLLATERAL_OFFRAMP = getAddress(
+	"0x2957922eb93258b93368531d39facca3b4dc5854"
+);
 export const POLYGON_CTF = getAddress("0x4d97dcd97ec945f40cf65f87097ace5ea0476045");
 /** CTF Exchange V2 — https://docs.polymarket.com/resources/contracts */
 export const POLYGON_CTF_EXCHANGE = getAddress("0xE111180000d2663C0091e4f400237545B87B996B");

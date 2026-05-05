@@ -78,6 +78,12 @@ function txsToDepositWalletCalls(txs: Transaction[]): DepositWalletCall[] {
  * Submit a batch of Polygon transactions through the deposit wallet under the
  * global mutex, then wait for the relayer to mine. Returns the on-chain tx
  * hash if available.
+ *
+ * If the relayer rejects the first attempt with `wallet is not registered`
+ * (its /submit registry lags behind `getDeployed` by a few seconds after a
+ * fresh deploy), we retry with `POST_DEPLOY_BATCH_RETRY_DELAYS_MS`. Every
+ * other relayer 400 is surfaced unchanged — those are genuine batch errors
+ * (bad signature, expired deadline, revert) and must not be silently retried.
  */
 export async function executePolygonRelayAndWait(
 	client: RelayClient,
@@ -87,12 +93,37 @@ export async function executePolygonRelayAndWait(
 ): Promise<string | undefined> {
 	return withPolygonRelayMutex(async () => {
 		const calls = txsToDepositWalletCalls(txs);
-		const resp = await client.executeDepositWalletBatch(
-			calls,
-			walletAddress,
-			depositWalletDeadline(),
-		);
-		return waitRelay(resp);
+		const delays = POST_DEPLOY_BATCH_RETRY_DELAYS_MS;
+		let lastErr: unknown;
+		for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+			try {
+				// Re-derive the deadline on every retry — the SDK rejects a
+				// signed batch whose 10-minute window already started ticking
+				// against the very first attempt.
+				const resp = await client.executeDepositWalletBatch(
+					calls,
+					walletAddress,
+					depositWalletDeadline(),
+				);
+				return await waitRelay(resp);
+			} catch (err) {
+				lastErr = err;
+				if (
+					attempt === delays.length ||
+					!isRelayWalletNotRegisteredError(err)
+				) {
+					throw err;
+				}
+				if (import.meta.env.DEV) {
+					console.warn(
+						`[polymarket-relay] ${description} hit "wallet not registered" — retry ${attempt + 1}/${delays.length} in ${delays[attempt]}ms`,
+						err,
+					);
+				}
+				await new Promise((r) => setTimeout(r, delays[attempt]));
+			}
+		}
+		throw lastErr;
 	});
 }
 
@@ -184,6 +215,35 @@ async function waitForDepositWalletRegistered(
 		`Polymarket relayer never registered deposit wallet ${walletAddress} after deploy. Retry in a few seconds; if it persists the relayer is lagging.`,
 	);
 }
+
+/**
+ * Detects the relayer's "wallet not registered" 400. The /submit endpoint's
+ * acceptance index lags behind `getDeployed`, so the first batch after a
+ * fresh deploy can fail even though `waitForDepositWalletRegistered` already
+ * returned true. Catch that specific 400 and let the caller retry — every
+ * other 400 (bad signature, stale deadline, malformed call) must surface
+ * unchanged so genuine bugs are not silently retried into a long stall.
+ */
+function isRelayWalletNotRegisteredError(err: unknown): boolean {
+	if (!err) return false;
+	const msg = err instanceof Error ? err.message : String(err);
+	const lc = msg.toLowerCase();
+	return (
+		lc.includes("wallet is not registered") ||
+		lc.includes("wallet registry validation") ||
+		(lc.includes("not registered") && lc.includes("wallet"))
+	);
+}
+
+/**
+ * Backoff schedule for retrying a relay batch when the relayer's submission
+ * index hasn't caught up yet. Total ceiling ~30s before we give up — past
+ * that the lag is unusual and the activation hook's outer FAILURE_BACKOFF_MS
+ * will pick the slack up on the next run.
+ */
+const POST_DEPLOY_BATCH_RETRY_DELAYS_MS = [
+	1_500, 3_000, 5_000, 8_000, 13_000,
+] as const;
 
 /**
  * Deploy the Polymarket deposit wallet for the connected EOA if it has not

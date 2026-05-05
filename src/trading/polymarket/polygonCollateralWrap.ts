@@ -1,11 +1,18 @@
 /**
  * USDC.e → pUSD via Polymarket Collateral Onramp on the Polymarket Gnosis Safe.
  * CLOB settles against pUSD only; LI.FI delivers USDC.e first — wrap before trading.
+ *
+ * USDC.e -> Onramp and pUSD -> Offramp allowances are now pre-approved during
+ * onboarding (`approvalTxs.ts#buildPolymarketApprovalTransactions`), so the JIT
+ * wrap relay batch ships as a single `[wrap]` call. The standalone approve tx
+ * builders below remain exported for the onboarding batch and the recovery
+ * path in `useSorLegExecutor.ts`.
  */
 import type { Transaction } from "@polymarket/builder-relayer-client";
 import { encodeFunctionData, erc20Abi, maxUint256, getAddress, type Address } from "viem";
 import { getPolygonPublicClient } from "@/config/polygonPublicClient";
 import {
+	POLYGON_COLLATERAL_OFFRAMP,
 	POLYGON_COLLATERAL_ONRAMP,
 	POLYGON_CTF,
 	POLYGON_PUSD,
@@ -103,7 +110,13 @@ export async function readPolymarketSafeCtfBalanceWei(
 	});
 }
 
-/** Approve Onramp on USDC.e, then wrap full `wrapAmountWei` into pUSD on the Safe. */
+/**
+ * Wrap full `wrapAmountWei` USDC.e into pUSD on the Safe. Returns ONE call
+ * (the `wrap`) — USDC.e -> Onramp allowance is pre-approved at onboarding via
+ * `buildPolygonSafeOnrampApproveTx` so we don't pay for an `approve(MAX)` on
+ * every wrap. If the allowance has been revoked externally, the wrap reverts
+ * and the caller's recovery path re-runs `executePolymarketApprovalBatch`.
+ */
 export function buildPolygonSafeUsdceWrapTransactions(input: {
 	safeAddress: string;
 	wrapAmountWei: bigint;
@@ -114,15 +127,6 @@ export function buildPolygonSafeUsdceWrapTransactions(input: {
 	const safe = getAddress(input.safeAddress.trim());
 	return [
 		{
-			to: POLYGON_USDC_E,
-			value: "0",
-			data: encodeFunctionData({
-				abi: erc20Abi,
-				functionName: "approve",
-				args: [POLYGON_COLLATERAL_ONRAMP, maxUint256],
-			}),
-		},
-		{
 			to: POLYGON_COLLATERAL_ONRAMP,
 			value: "0",
 			data: encodeFunctionData({
@@ -132,4 +136,34 @@ export function buildPolygonSafeUsdceWrapTransactions(input: {
 			}),
 		},
 	];
+}
+
+/**
+ * Standalone `USDC.e.approve(Onramp, MAX)` tx for the onboarding batch.
+ * Co-located with the wrap builder so the approve target stays in sync if the
+ * Onramp address ever changes.
+ */
+export function buildPolygonSafeOnrampApproveTx(): Transaction {
+	return {
+		to: POLYGON_USDC_E,
+		value: "0",
+		data: encodeFunctionData({
+			abi: erc20Abi,
+			functionName: "approve",
+			args: [POLYGON_COLLATERAL_ONRAMP, maxUint256],
+		}),
+	};
+}
+
+/** Standalone `pUSD.approve(Offramp, MAX)` tx for the onboarding batch. */
+export function buildPolygonSafeOfframpApproveTx(): Transaction {
+	return {
+		to: POLYGON_PUSD,
+		value: "0",
+		data: encodeFunctionData({
+			abi: erc20Abi,
+			functionName: "approve",
+			args: [POLYGON_COLLATERAL_OFFRAMP, maxUint256],
+		}),
+	};
 }

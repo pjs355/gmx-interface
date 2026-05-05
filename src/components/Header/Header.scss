@@ -472,11 +472,15 @@ html.drawer-open {
 	}
 
 	.App-header-logo-img {
-		height: 22px;
+		height: 20px;
 	}
 
 	a.App-header-user-account {
 		margin-right: 0;
+	}
+
+	.App-header .App-header-link-main {
+		margin-right: 0.6rem;
 	}
 }
 
@@ -487,6 +491,10 @@ html.drawer-open {
 
 	.App-header-logo-text.small {
 		display: inline-block;
+	}
+
+	.App-header-logo-img {
+		height: 17px;
 	}
 }
 
@@ -499,32 +507,60 @@ html.drawer-open {
 }
 
 @media (max-width: 450px) {
+	.App-header {
+		padding: 0 12px;
+	}
+
 	.App-header-user-link {
 		margin-right: 0.6rem;
 	}
 
 	.App-header-menu-icon-block {
 		margin-left: 0;
-		margin-right: 0.4rem;
+		margin-right: 0.2rem;
 	}
 
 	.App-header-menu-icon {
-		margin: 0.4rem 0.5rem;
+		margin: 0.4rem 0.4rem;
+		font-size: 1.8rem;
 	}
 
 	.App-header .App-header-link-main {
 		padding: 0.155rem !important;
 		margin-left: 0rem !important;
+		margin-right: 0.4rem !important;
 	}
 
 	.App-header-logo-img {
-		height: 19px;
+		height: 15px;
+	}
+
+	.App-header-user {
+		gap: 6px;
 	}
 
 	.login-text-link {
 		padding: 5px 6px !important;
 		font-size: 13px !important;
 		margin-right: 4px !important;
+	}
+}
+
+@media (max-width: 380px) {
+	.App-header {
+		padding: 0 8px;
+	}
+
+	.App-header-logo-img {
+		height: 13px;
+	}
+
+	.App-header .App-header-link-main {
+		margin-right: 0.2rem !important;
+	}
+
+	.App-header-user {
+		gap: 4px;
 	}
 }
 

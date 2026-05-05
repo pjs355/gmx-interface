@@ -96,9 +96,16 @@ function toUnsignedTransactionRequest(
  * a per-wallet request rate limit; SDKs like the Predict.fun SDK fire several approval
  * transactions back-to-back (CTF exchange allowance + `setApprovalForAll` + neg-risk
  * adapter) which otherwise burst past the limit and fan out into 429 loops.
+ *
+ * Each sponsored send actually dispatches **2–3 internal Privy wallet-RPC calls**
+ * (`recoverEmbeddedWallet`, `signWithUserSigner`, sponsorship validation), so the
+ * effective rate from one user-visible "send" is much higher than 1 req. We pace
+ * conservatively so the Privy window can refresh between sends, otherwise the very
+ * first attempt of each follow-up tx lands inside the throttled window and burns
+ * the entire 4-step retry schedule before succeeding.
  */
 const sponsoredSendQueues = new Map<string, Promise<unknown>>();
-const MIN_SPONSORED_SEND_SPACING_MS = 350;
+const MIN_SPONSORED_SEND_SPACING_MS = 1500;
 
 function enqueueSponsoredSend<T>(
 	address: `0x${string}`,
@@ -127,17 +134,55 @@ function enqueueSponsoredSend<T>(
 		);
 	sponsoredSendQueues.set(key, next);
 	// GC: clear slot once this task settles so Map doesn't grow unbounded.
-	void next.finally(() => {
-		if (sponsoredSendQueues.get(key) === next) {
-			sponsoredSendQueues.delete(key);
-		}
-	});
+	// `.catch(() => {})` is required: `next.finally(...)` returns a sibling
+	// promise that re-rejects when `next` rejects. Without swallowing it
+	// here we'd produce a duplicate "Uncaught (in promise)" alongside the
+	// caller's own awaited rejection — which is what shows up as repeated
+	// "Sponsoring is only supported for wallets on the TEE stack" lines in
+	// the console for non-TEE users.
+	next
+		.finally(() => {
+			if (sponsoredSendQueues.get(key) === next) {
+				sponsoredSendQueues.delete(key);
+			}
+		})
+		.catch(() => {
+			/* caller's await owns the real error */
+		});
 	return next;
+}
+
+/**
+ * Privy throws this exact message from `useSendTransaction({ sponsor: true })`
+ * when the embedded wallet is not (yet) on the TEE execution stack. With
+ * automatic migration enabled (the default and only sane setting), this is
+ * *transient*: existing wallets get migrated on next login and brand-new
+ * wallets are TEE-native, but the migration is asynchronous — the SDK exposes
+ * the wallet as "ready" before the on-server TEE provisioning finishes. If we
+ * fire a sponsored send inside that window, Privy reports the wallet's *prior*
+ * stack and rejects sponsorship.
+ *
+ * Treated as retryable below: the existing 4-step backoff will land outside
+ * the migration window. We deliberately do *not* fall back to `sponsor: false`
+ * — these users have zero BNB, so an unsponsored send only swaps one error
+ * for another while hiding the real cause.
+ */
+export function isPrivyTeeSponsorError(err: unknown): boolean {
+	const m =
+		err instanceof Error
+			? err.message
+			: typeof err === "string"
+				? err
+				: typeof err === "object" && err && "message" in err
+					? String((err as { message?: unknown }).message ?? "")
+					: "";
+	return m.includes("Sponsoring is only supported for wallets on the TEE stack");
 }
 
 /** Retryable statuses from Privy's wallet-RPC. */
 function isRetryableSendError(err: unknown): boolean {
 	if (!err || typeof err !== "object") return false;
+	if (isPrivyTeeSponsorError(err)) return true;
 	const e = err as { status?: number; code?: number; message?: string };
 	if (e.status === 429 || e.status === 408 || e.status === 502 || e.status === 503 || e.status === 504) {
 		return true;
@@ -159,11 +204,20 @@ export function runQueuedBnbPrivyTask<T>(
 	return enqueueSponsoredSend(address, task);
 }
 
+/**
+ * Privy's per-wallet rate-limit bucket replenishes on the order of seconds, not
+ * milliseconds, so the first retry needs to wait long enough for the window to
+ * actually move. The previous schedule started at 500ms and exhausted all four
+ * retries before the bucket recovered, producing 13s+ stalls per approval tx
+ * and uncaught `PrivyApiError: Too many requests` rejections at the end.
+ */
+const BSC_PRIVY_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000] as const;
+
 export async function sendWithBackoffForBscPrivy<T>(
 	fn: () => Promise<T>,
 	label: string,
 ): Promise<T> {
-	const delays = [500, 1500, 3500, 7000];
+	const delays = BSC_PRIVY_RETRY_DELAYS_MS;
 	let lastErr: unknown;
 	for (let i = 0; i <= delays.length; i++) {
 		try {

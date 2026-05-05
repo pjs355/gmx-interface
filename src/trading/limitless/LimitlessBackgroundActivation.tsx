@@ -21,16 +21,31 @@ const START_DELAY_MS = 250;
  * Global background activator for Limitless, mirroring
  * `PolymarketBackgroundActivation` and `PredictBackgroundActivation`.
  *
+ * Activation chain: **Polymarket → Limitless → Predict**.
+ *
+ * Limitless sits in the middle on purpose. Its `ensure-account` call is
+ * pure server work — zero Privy RPC from the client — so running it
+ * between Polymarket and Predict gives the Privy embedded-wallet rate
+ * bucket (which is shared across all chains, not per-chain) time to
+ * recover from Polymarket's Polygon signing burst before Predict starts
+ * hammering it for sponsored BSC `setApprovalForAll` sends. Without this
+ * gap, Predict's first `eth_sendTransaction` lands while the bucket is
+ * still drained, every retry counts against the same bucket, and the
+ * 4-step backoff (2/5/10/20s) can't recover within its window — the user
+ * is stuck watching a spinner until they hard-refresh.
+ *
  * Behavior:
- *  - Waits for Privy + signer context to settle, then optionally for an idle
- *    window (skipped when the post-signup setup modal is active so the user
- *    isn't watching their checklist stall on a 5s `requestIdleCallback`).
+ *  - Waits for Privy + signer context + Polymarket ready.
+ *  - Then optionally waits for an idle window (skipped when the post-
+ *    signup setup modal is active so the user isn't watching their
+ *    checklist stall on a 5s `requestIdleCallback`).
  *  - Mounts `useLimitlessEnsureExecutionReady`, which fires the idempotent
  *    `POST /api/limitless/ensure-account` and invalidates `accountOverview`
  *    so the SOR sees `limitless.canExecute: true`.
  *  - Reports its `setupInProgress` / `ready` to the shared
  *    `SetupActivationContext` so both the modal and the trade box can render
- *    coherent state without duplicate ensure calls.
+ *    coherent state without duplicate ensure calls, AND so Predict's
+ *    activator knows when to start.
  */
 export function LimitlessBackgroundActivation(): null {
 	const { authenticated, ready: privyReady } = usePrivy();
@@ -39,8 +54,33 @@ export function LimitlessBackgroundActivation(): null {
 
 	const [idleReached, setIdleReached] = useState(false);
 
-	const prerequisitesReady = privyReady && authenticated && signerCtx.ready;
+	// Gate Limitless on Polymarket completing. Limitless does no Privy work
+	// from the client, so it can start the moment Polymarket reports ready
+	// — its server-side provisioning then naturally provides cooldown time
+	// for the shared per-wallet Privy quota before Predict's BSC sends
+	// fire. See the file header for the full rationale.
+	const polymarketReady =
+		setupActivation?.venues.polymarket.ready ?? false;
+
+	const prerequisitesReady =
+		privyReady && authenticated && signerCtx.ready && polymarketReady;
 	const onboardingActive = setupActivation?.onboardingActive ?? false;
+
+	// Surface the gate transition once so we can correlate slow first-run
+	// `ensure-account` calls against when Limitless was actually unblocked.
+	const gateLoggedRef = useRef(false);
+	useEffect(() => {
+		if (!prerequisitesReady) {
+			gateLoggedRef.current = false;
+			return;
+		}
+		if (gateLoggedRef.current) return;
+		gateLoggedRef.current = true;
+		console.info(LOG_TAG, "bg:gateOpened", {
+			at: new Date().toISOString(),
+			polymarketReady,
+		});
+	}, [prerequisitesReady, polymarketReady]);
 
 	useEffect(() => {
 		if (!prerequisitesReady) {
@@ -100,6 +140,11 @@ export function LimitlessBackgroundActivation(): null {
 		if (key === lastSnapshotRef.current) return;
 		lastSnapshotRef.current = key;
 		reportVenueSnapshot("limitless", {
+			setupInProgress: ensureState.setupInProgress,
+			ready: ensureState.ready,
+		});
+		console.info(LOG_TAG, "bg:snapshot", {
+			at: new Date().toISOString(),
 			setupInProgress: ensureState.setupInProgress,
 			ready: ensureState.ready,
 		});
