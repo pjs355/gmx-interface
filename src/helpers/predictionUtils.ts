@@ -56,8 +56,18 @@ export function getListingYesNoPricesForUmbrella(
 
 /**
  * True when listing odds look "settled" for UX ordering (demote in live lists).
- * Handles inverses (100-0 vs 0-100). Treats null-null, 0-null, null-0, and one-sided
- * ~0¢ / ~100¢ with the other side missing as deemphasized.
+ *
+ * Demotion rules (any of these → demote to the bottom of the live list):
+ *  - Either side of the book is missing / non-finite. A one-sided book on a
+ *    live esports match almost always means the match is over and the
+ *    losing side has dried up — nobody wants to lay odds on the winner —
+ *    so these are pushed to the bottom regardless of the surviving side's
+ *    price (previously we only demoted the missing-side case when the
+ *    other side was at the ~0¢ / ~99¢ extremes, which let visibly-dead
+ *    markets sit at the top of Live whenever the lone remaining quote
+ *    happened to be mid-range).
+ *  - Both sides present but at extremes (100-0, 99-1, 0-0, 99-99…), which
+ *    means the book has converged on a winner.
  */
 export function isDeemphasizedSettledLeanOdds(
 	yes: number | null | undefined,
@@ -68,16 +78,8 @@ export function isDeemphasizedSettledLeanOdds(
 	const nOk =
 		no !== undefined && no !== null && Number.isFinite(no);
 
-	if (!yOk && !nOk) return true;
-
-	if (!yOk && nOk) {
-		const n = Math.round(Math.max(0, Math.min(1, Number(no))) * 100);
-		return n <= 1 || n >= 99;
-	}
-	if (yOk && !nOk) {
-		const y = Math.round(Math.max(0, Math.min(1, Number(yes))) * 100);
-		return y <= 1 || y >= 99;
-	}
+	// Either side missing → demote.
+	if (!yOk || !nOk) return true;
 
 	const y = Math.round(Math.max(0, Math.min(1, Number(yes))) * 100);
 	const n = Math.round(Math.max(0, Math.min(1, Number(no))) * 100);

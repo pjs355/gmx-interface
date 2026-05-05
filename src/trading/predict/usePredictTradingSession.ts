@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { usePrivy, useWallets, useSendTransaction } from "@privy-io/react-auth";
 import { parseUnits, type Signer } from "ethers";
-import type { Book } from "@predictdotfun/sdk";
+import type { Book, TransactionResult } from "@predictdotfun/sdk";
 import { ChainId, OrderBuilder, Side } from "@predictdotfun/sdk";
 import type { PrivateApiClient } from "@/services/privateApi";
 import { ensurePredictChain, getBscBrowserSigner } from "./bnbWallet";
@@ -140,36 +140,115 @@ export function usePredictTradingSession(enabled: boolean) {
 		return p;
 	}, [authenticated, wallets, chainId, predictAccount, privateApi, privyEvmSendTransaction]);
 
-	const setApprovals = useCallback(async () => {
-		setLoading(true);
-		setError(null);
-		try {
-			const { builder } = await ensureSession();
-			const result = await builder.setApprovals();
-			if (!result.success) {
-				const failedTxs = result.transactions.filter((t) => !t.success);
-				const detail = failedTxs
-					.map((t) => {
-						const c = "cause" in t ? t.cause : undefined;
-						return c instanceof Error ? c.message : c ? String(c) : null;
-					})
-					.filter((s): s is string => Boolean(s && s.trim()))
-					.join("; ");
-				const raw = detail ? `Predict approvals failed: ${detail}` : "Predict approvals failed";
-				throw new Error(raw);
+	/**
+	 * Approve **only** the contracts needed for the user's current market type.
+	 *
+	 * Predict's SDK ships a `builder.setApprovals()` helper that fires the full
+	 * cross-product of `{regular, neg-risk} × {regular, yield-bearing} ×
+	 * {CTF→Exchange, CTF→NegRiskAdapter, USDT→Exchange}` — **10 sponsored
+	 * `eth_sendTransaction` calls per cold setup**. Every sponsored send through
+	 * Privy's TEE wallet RPC dispatches 2-3 internal calls
+	 * (`recoverEmbeddedWallet`, `signWithUserSigner`, sponsorship validation) plus
+	 * `eth_estimateGas` + receipt polling, so 10 user-visible approvals burn
+	 * 40+ requests against a single wallet's `/api/v1/wallets/:id/rpc` bucket
+	 * inside ~15s. That trips Privy's per-wallet rate limit and the 4-step
+	 * backoff inside `privyBscProvider.sendWithBackoffForBscPrivy` then makes it
+	 * worse — every retry burns more bucket while the previous tx is still queued.
+	 *
+	 * For LevelUp, `isNegRisk` and `isYieldBearing` are *always* `false` (we only
+	 * ingest binary YES/NO sports markets — never the multi-outcome election or
+	 * sUSDe-collateralized markets that those flags exist for). So 8 of the 10
+	 * approvals target contracts our markets never touch, e.g. tx #7 in the
+	 * SDK's list approves `YIELD_BEARING_NEG_RISK_CONDITIONAL_TOKENS`
+	 * (`0xF64b…A07F`) — visible as the 429 spam in the activation logs.
+	 *
+	 * This function fires only what's actually needed for the supplied
+	 * `(isNegRisk, isYieldBearing)` pair. The SDK still skips any approval that
+	 * already passes its on-chain `isApprovedForAll` / `allowance` check, so
+	 * subsequent runs for an already-approved user are still 0 sends.
+	 *
+	 *   `(false, false)` — our hot path           → 2 sends (CTF→Exchange, USDT→Exchange)
+	 *   `(true,  false)` — neg-risk markets       → 3 sends (+ CTF→NegRiskAdapter)
+	 *   `(false, true )` — yield-bearing markets  → 2 sends on yield-bearing variants
+	 *   `(true,  true )` — neg-risk + yield       → 3 sends on yield+neg-risk variants
+	 */
+	const setApprovals = useCallback(
+		async (
+			scope: { isNegRisk: boolean; isYieldBearing: boolean } = {
+				isNegRisk: false,
+				isYieldBearing: false,
+			},
+		) => {
+			setLoading(true);
+			setError(null);
+			try {
+				const { builder } = await ensureSession();
+				const { isNegRisk, isYieldBearing } = scope;
+				const steps: Array<{
+					label: string;
+					run: () => Promise<TransactionResult>;
+				}> = [
+					{
+						label: "ctfExchangeApproval",
+						run: () =>
+							builder.setCtfExchangeApproval(isNegRisk, isYieldBearing),
+					},
+					{
+						label: "ctfExchangeAllowance",
+						run: () =>
+							builder.setCtfExchangeAllowance(isNegRisk, isYieldBearing),
+					},
+				];
+				if (isNegRisk) {
+					// Only neg-risk markets route through the adapter; non-neg-risk
+					// trades never call `mergePositions` / `redeemPositions` on the
+					// adapter contract, so this approval is dead weight for binary
+					// sports markets. Inserted before the USDT allowance to mirror
+					// the SDK's ordering inside `setApprovals()`.
+					steps.splice(1, 0, {
+						label: "negRiskAdapterApproval",
+						run: () => builder.setNegRiskAdapterApproval(isYieldBearing),
+					});
+				}
+
+				const results: TransactionResult[] = [];
+				for (const step of steps) {
+					results.push(await step.run());
+				}
+
+				const failed = results.filter((r) => !r.success);
+				if (failed.length > 0) {
+					const detail = failed
+						.map((t) => {
+							const c = "cause" in t ? t.cause : undefined;
+							return c instanceof Error
+								? c.message
+								: c
+									? String(c)
+									: null;
+						})
+						.filter((s): s is string => Boolean(s && s.trim()))
+						.join("; ");
+					throw new Error(
+						detail
+							? `Predict approvals failed: ${detail}`
+							: "Predict approvals failed",
+					);
+				}
+			} catch (e: unknown) {
+				const base = e instanceof Error ? e.message : String(e);
+				const msg = enrichPredictGasOrFundsErrorMessage(base);
+				setError(msg);
+				if (e instanceof Error) {
+					throw new Error(msg, { cause: e });
+				}
+				throw new Error(msg);
+			} finally {
+				setLoading(false);
 			}
-		} catch (e: unknown) {
-			const base = e instanceof Error ? e.message : String(e);
-			const msg = enrichPredictGasOrFundsErrorMessage(base);
-			setError(msg);
-			if (e instanceof Error) {
-				throw new Error(msg, { cause: e });
-			}
-			throw new Error(msg);
-		} finally {
-			setLoading(false);
-		}
-	}, [ensureSession]);
+		},
+		[ensureSession],
+	);
 
 	const placeLimitOrder = useCallback(
 		async (args: {

@@ -36,7 +36,9 @@ const FAILURE_BACKOFF_MS = [3_000, 10_000, 30_000, 60_000];
  *  1. Fetch server-side venue state via `getPredictAccount`.
  *  2. If JWT missing/expired, run `predictSession.ensureSession()` (which signs + auths).
  *  3. Read on-chain USDT + CTF approvals for the approval subject. If any are missing,
- *     call `predictSession.setApprovals()` (Privy TEE sponsors BSC gas).
+ *     call `predictSession.setApprovals({ isNegRisk, isYieldBearing })` — scoped to the
+ *     **current** market type so we fire 2-3 sponsored sends instead of the SDK's full
+ *     10-tx cross-product. See `usePredictTradingSession.setApprovals` for why.
  *  4. Post `/api/predict/account/sync` with `{ makerAddress, signerAddress, approvalComplete: true, tradingEnabled: true }`
  *     so the backend's SOR routing eligibility flips `executionReady: true`.
  *
@@ -125,9 +127,12 @@ export function usePredictEnsureExecutionReady(args: {
 			const makerAddress = session.predictAccount ?? signerAddress;
 
 			// Step 2: on-chain approvals (only if not already satisfied on-chain).
+			// Scoped to the current market type — non-scoped `setApprovals()`
+			// would fire 10 sponsored sends, blow past Privy's per-wallet RPC
+			// rate limit, and stall onboarding for minutes.
 			if (!onChainApprovalsOk) {
 				setPhase("approving");
-				await session.setApprovals();
+				await session.setApprovals({ isNegRisk, isYieldBearing });
 			}
 
 			// Step 3: sync backend state so SOR `executionReady` flips true.

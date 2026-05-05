@@ -257,6 +257,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     enabled: oddsMonitorEnabled,
     connected: oddsMonitorConnected,
     appState: oddsAppState,
+    sendGetState: refetchMatchedMarkets,
   } = useOddsMonitor();
   const matchedMonitor = useMemo(() => {
     const base = findOddsMatchedMarket(
@@ -1159,7 +1160,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const ensurePredictApprovalsForTrade = useCallback(async () => {
     if (predictApprovalsQuery.data === true) return;
-    await predictSession.setApprovals();
+    await predictSession.setApprovals({
+      isNegRisk: predictMarketDetail?.isNegRisk ?? false,
+      isYieldBearing: predictMarketDetail?.isYieldBearing ?? false,
+    });
     await queryClient.invalidateQueries({ queryKey: ["predict-approvals"] });
     const refreshed = await predictApprovalsQuery.refetch();
     if (!refreshed.data) {
@@ -1167,7 +1171,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         "Predict trading approvals did not complete. Check your wallet and try again.",
       );
     }
-  }, [predictApprovalsQuery, predictSession, queryClient]);
+  }, [predictApprovalsQuery, predictSession, predictMarketDetail, queryClient]);
 
   const ensureLevelUpApprovalsForTrade = useCallback(async () => {
     let ok = await checkApproval();
@@ -1579,17 +1583,73 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   // the flag at submit so a fast post-trade umbrella refresh that flips
   // `accountsInitialized*` to `true` doesn't hide the notice immediately.
   const [dflowUninitAtSubmit, setDflowUninitAtSubmit] = useState(false);
+  /**
+   * True when the order that just settled the `orderResult` routed through
+   * DFlow. We mark the SOR leg `filled` immediately on Solana broadcast, so
+   * the trade button completes fast — but the actual Kalshi share balance is
+   * only reflected once DFlow's settlement authority routes to Kalshi
+   * off-chain and settles back on-chain (~30-90s). The notice in
+   * `PredictionMarketTradeBoxUI` tells the user this so they don't think the
+   * trade silently failed when their balance hasn't updated yet.
+   */
+  const [dflowSubmittedAtSubmit, setDflowSubmittedAtSubmit] = useState(false);
 
-  // Auto-dismiss order result after 4 seconds
-  useEffect(() => {
-    if (state.orderResult) {
-      const timer = setTimeout(() => {
-        setState((prev) => ({ ...prev, orderResult: null }));
-        setDflowUninitAtSubmit(false);
-      }, 4000);
-      return () => clearTimeout(timer);
+  /**
+   * First-mint DFlow nudge: when a trade tokenizes a Kalshi market for the
+   * first time, the freshly-minted YES/NO mints + `accountsInitialized*` flags
+   * only land in `exchangeMatching.dflow` after the predictions-API cron
+   * re-scrapes DFlow (~5 min). Until then the umbrella has no token ids and
+   * the user's balance can't be located. We re-call the same `fetchMappings`
+   * that the cron uses (exposed as `sendGetState`) on a short backoff so the
+   * umbrella picks up the new mints as soon as the server has them — without
+   * introducing any new endpoint or replacing the existing refresh path.
+   *
+   * Schedule deliberately overlaps the typical first-mint settlement window
+   * (~30-90s). Extra calls past convergence are harmless: each one is the
+   * exact same GET the cron fires every 5 minutes anyway.
+   */
+  const DFLOW_FIRST_MINT_REFRESH_DELAYS_MS = useMemo(
+    () => [0, 5_000, 15_000, 30_000, 60_000, 120_000],
+    [],
+  );
+  const dflowFirstMintRefreshTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const cancelDflowFirstMintRefresh = useCallback(() => {
+    for (const t of dflowFirstMintRefreshTimersRef.current) {
+      clearTimeout(t);
     }
-  }, [state.orderResult]);
+    dflowFirstMintRefreshTimersRef.current = [];
+  }, []);
+  const scheduleDflowFirstMintRefresh = useCallback(() => {
+    cancelDflowFirstMintRefresh();
+    for (const delay of DFLOW_FIRST_MINT_REFRESH_DELAYS_MS) {
+      const handle = setTimeout(() => {
+        refetchMatchedMarkets();
+      }, delay);
+      dflowFirstMintRefreshTimersRef.current.push(handle);
+    }
+  }, [
+    DFLOW_FIRST_MINT_REFRESH_DELAYS_MS,
+    cancelDflowFirstMintRefresh,
+    refetchMatchedMarkets,
+  ]);
+  useEffect(() => () => cancelDflowFirstMintRefresh(), [cancelDflowFirstMintRefresh]);
+
+  /**
+   * Auto-dismiss the order result. Default 4s; extended to 12s for DFlow
+   * trades so the user has time to read the "balance will update shortly"
+   * notice before it disappears.
+   */
+  useEffect(() => {
+    if (!state.orderResult) return;
+    const isDflowResult = dflowUninitAtSubmit || dflowSubmittedAtSubmit;
+    const dismissAfterMs = isDflowResult ? 12_000 : 4_000;
+    const timer = setTimeout(() => {
+      setState((prev) => ({ ...prev, orderResult: null }));
+      setDflowUninitAtSubmit(false);
+      setDflowSubmittedAtSubmit(false);
+    }, dismissAfterMs);
+    return () => clearTimeout(timer);
+  }, [state.orderResult, dflowUninitAtSubmit, dflowSubmittedAtSubmit]);
 
   /**
    * Same toast on umbrella page and home inline dock (`ToastContainer` in AppRoutes).
@@ -2040,6 +2100,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         matchedMonitor?.dflow?.accountsInitializedA === false ||
         matchedMonitor?.dflow?.accountsInitializedB === false;
       setDflowUninitAtSubmit(executingDflow && dflowAnyUninit);
+      setDflowSubmittedAtSubmit(executingDflow);
       const marketId = (market?._id || (market as any)?.questionId) as
         | string
         | undefined;
@@ -2217,6 +2278,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         );
       }
 
+      // First-mint DFlow trades only: nudge the matched-markets refresh so the
+      // umbrella picks up the freshly-tokenized YES/NO mints + `accountsInitialized*`
+      // flags as soon as the predictions-API cron has them, instead of waiting up to
+      // 5 minutes for the next cron tick. Reuses `sendGetState` (== `fetchMappings`).
+      if (dflowUninitAtSubmit) {
+        scheduleDflowFirstMintRefresh();
+      }
+
       latestBaselineRef.current = null;
       setState((s) => ({ ...s, amount: "", orderResult: { success: true } }));
       sorExecution.resetExecution();
@@ -2251,6 +2320,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     umbrellaDisplayName,
     postTradeSync,
     applyOptimisticLevelUpFill,
+    dflowUninitAtSubmit,
+    scheduleDflowFirstMintRefresh,
   ]);
 
   useEffect(() => {
@@ -2495,6 +2566,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       shareBalances={tradeBoxShareBalances}
       mobilePeekBar={mobilePeekBar}
       dflowUninitAtSubmit={dflowUninitAtSubmit}
+      dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
     />
 		</>
   );

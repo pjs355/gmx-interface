@@ -1,7 +1,6 @@
 import React, {
 	useState,
 	useEffect,
-	useLayoutEffect,
 	useRef,
 	useCallback,
 } from "react";
@@ -31,7 +30,6 @@ import {
 	isDeemphasizedSettledLeanOdds,
 } from "@/helpers/predictionUtils";
 import {
-	GAME_FILTER_COMPACT_MEDIA,
 	gameFilterResetSelection,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
@@ -183,36 +181,56 @@ export default function FilteredPredictions({
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
-	const sentinelRef = useRef<HTMLDivElement>(null);
-
-	useLayoutEffect(() => {
-		const mq = window.matchMedia(GAME_FILTER_COMPACT_MEDIA);
-		if (!mq.matches) return;
-		setSelectedGame((prev) => (prev === null ? LIVE_PILL_ID : prev));
-	}, []);
 
 	// Reset visible count when filters change
 	useEffect(() => {
 		setVisibleCount(INITIAL_VISIBLE);
 	}, [selectedGame, filterType]);
 
-	// IntersectionObserver to load more cards on scroll
 	const loadMore = useCallback(() => {
 		setVisibleCount((prev) => prev + LOAD_MORE_COUNT);
 	}, []);
 
-	useEffect(() => {
-		const sentinel = sentinelRef.current;
-		if (!sentinel) return;
-		const observer = new IntersectionObserver(
-			([entry]) => {
-				if (entry.isIntersecting) loadMore();
-			},
-			{ rootMargin: "400px" }
-		);
-		observer.observe(sentinel);
-		return () => observer.disconnect();
-	}, [loadMore]);
+	/*
+	 * Callback ref instead of `useRef` + `useEffect`. The sentinel element
+	 * only mounts AFTER `loading`/`tagsLoading` flip to false (the early
+	 * `<HomeSkeleton/>` return means it does not exist on initial mount).
+	 * A traditional `useEffect(..., [loadMore])` runs once on mount, finds
+	 * `sentinelRef.current === null`, and never re-runs — leaving the
+	 * IntersectionObserver permanently unattached so infinite scroll never
+	 * fires (only the first 20 cards are reachable). A callback ref runs
+	 * exactly when the node attaches/detaches, so the observer is wired up
+	 * the moment the sentinel appears in the DOM.
+	 */
+	const observerRef = useRef<IntersectionObserver | null>(null);
+	const sentinelCallbackRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			if (observerRef.current) {
+				observerRef.current.disconnect();
+				observerRef.current = null;
+			}
+			if (!node) return;
+			const observer = new IntersectionObserver(
+				([entry]) => {
+					if (entry.isIntersecting) loadMore();
+				},
+				{ rootMargin: "400px" },
+			);
+			observer.observe(node);
+			observerRef.current = observer;
+		},
+		[loadMore],
+	);
+
+	useEffect(
+		() => () => {
+			if (observerRef.current) {
+				observerRef.current.disconnect();
+				observerRef.current = null;
+			}
+		},
+		[],
+	);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -756,7 +774,7 @@ export default function FilteredPredictions({
 						{content}
 						{hasMoreItems && (
 							<div
-								ref={sentinelRef}
+								ref={sentinelCallbackRef}
 								style={{ height: 1, width: "100%" }}
 								aria-hidden
 							/>

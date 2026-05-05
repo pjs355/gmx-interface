@@ -8,12 +8,16 @@ export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
 /** Horizontal pill bar; vertical sidebar uses `min-width: 1100px` in Predictions.scss. */
 export const GAME_FILTER_COMPACT_MEDIA = "(max-width: 1099px)";
 
-/** Value to use when clearing the game filter (desktop = all; compact = Live default). */
+/**
+ * Value to use when clearing the game filter. We intentionally default both
+ * desktop AND mobile to "no pill selected" (null) so the user lands on the
+ * full set of markets we offer (Counter-Strike, esports calendar, etc.) on
+ * first load and on every reset. Previously mobile defaulted to `LIVE_PILL_ID`
+ * which made it look like only a handful of markets existed when a tournament
+ * wasn't actively in-progress.
+ */
 export function gameFilterResetSelection(): string | null {
-	if (typeof window === "undefined") return null;
-	return window.matchMedia(GAME_FILTER_COMPACT_MEDIA).matches
-		? LIVE_PILL_ID
-		: null;
+	return null;
 }
 
 /** Same 4h post-start window as PredictionCard / FilteredPredictions calendar / Home. */

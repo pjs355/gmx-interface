@@ -18,6 +18,11 @@ import {
 	normalizePredictMatchesList,
 	type PredictMatchEventRow,
 } from "@/trading/predict/predictMatchesApi";
+import {
+	normalizePredictActivityList,
+	type PredictActivityEvent,
+	type PredictActivityEventName,
+} from "@/trading/predict/predictActivityApi";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { UmbrellaExchangeResolveQuery } from "@/trading/umbrellaVenueResolveKey";
 import type { VenuePosition } from "@/types/trading/venuePosition";
@@ -159,6 +164,14 @@ export type DflowOrderResponse = {
 	transaction?: string;
 	outAmount?: string;
 	minOutAmount?: string;
+	/**
+	 * From DFlow's `/order` response — the last block height at which the
+	 * returned `transaction`'s `recentBlockhash` is valid. Forward this to
+	 * `POST /api/dflow/orders` and `GET /api/dflow/order-status` so confirmation
+	 * polling and lifecycle polling both bound against the tx's true validity
+	 * window.
+	 */
+	lastValidBlockHeight?: number;
 	code?: string;
 	msg?: string;
 	[key: string]: unknown;
@@ -177,6 +190,8 @@ export type DflowOrderSubmitBody = {
 		tokenId?: string;
 		questionId?: string;
 	};
+	/** Forwarded from the `/order` response that produced `signedTx`. */
+	lastValidBlockHeight?: number;
 };
 
 export type DflowOrderSubmitResponse = {
@@ -184,7 +199,51 @@ export type DflowOrderSubmitResponse = {
 	signature: string;
 	confirmationStatus: string;
 	slot: number | null;
+	/**
+	 * The `lastValidBlockHeight` the server actually used for confirmation —
+	 * either echoed from the request body or freshly fetched as fallback. Pass
+	 * to `getDflowOrderStatus` so DFlow can short-circuit its lookup once the
+	 * blockhash is past expiration.
+	 */
+	lastValidBlockHeight: number;
 };
+
+/**
+ * Response from `GET /api/dflow/order-status` — mirrors DFlow's
+ * `OrderStatusResponse` 1:1. Terminal statuses are `closed` (success),
+ * `failed`, and `expired`. For prediction-market orders the lifecycle runs
+ * `pending` → `open` → `pendingClose` → terminal as DFlow's settlement
+ * authority routes the order through Kalshi off-chain and settles back
+ * on-chain (typically 1-2 minutes end-to-end).
+ */
+export type DflowOrderStatusResponse = {
+	status: "pending" | "open" | "pendingClose" | "closed" | "failed" | "expired";
+	inAmount: string;
+	outAmount: string;
+	fills?: Array<{
+		signature: string;
+		inputMint: string;
+		inAmount: string;
+		outputMint: string;
+		outAmount: string;
+	}>;
+	reverts?: Array<{
+		signature: string;
+		mint: string;
+		amount: string;
+	}>;
+	code?: string;
+	msg?: string;
+};
+
+export const DFLOW_ORDER_STATUS_TERMINAL = ["closed", "failed", "expired"] as const;
+export type DflowTerminalOrderStatus = (typeof DFLOW_ORDER_STATUS_TERMINAL)[number];
+
+export function isDflowOrderStatusTerminal(
+	status: DflowOrderStatusResponse["status"],
+): status is DflowTerminalOrderStatus {
+	return (DFLOW_ORDER_STATUS_TERMINAL as readonly string[]).includes(status);
+}
 
 /** Market detail from `POST /api/v1/markets/batch` (DFlow Metadata API). */
 export type DflowBatchMarket = {
@@ -845,6 +904,38 @@ export function createPrivateApiClient(
 			return normalizePredictMatchesList(body);
 		},
 
+		/**
+		 * Proxies `GET /v1/account/activity` (JWT, per-user). Returns the user's full trading
+		 * activity feed — `MATCH_SUCCESS` (fills) and `REDEEM` (claims) included — so the
+		 * History tab keeps showing claimed/redeemed Predict winners after their ERC1155
+		 * tokens are burned and disappear from `/v1/positions/{address}`.
+		 */
+		async getPredictAccountActivity(params?: {
+			first?: number;
+			after?: string;
+			eventTypes?: PredictActivityEventName[];
+		}): Promise<PredictActivityEvent[]> {
+			const q = new URLSearchParams();
+			q.set("first", String(params?.first ?? 200));
+			if (params?.after) q.set("after", params.after);
+			if (params?.eventTypes?.length) {
+				q.set("eventTypes", params.eventTypes.join(","));
+			}
+			const res = await authorizedFetch(
+				`/api/predict/account/activity?${q.toString()}`
+			);
+			if (import.meta.env.DEV && res.status === 404) {
+				console.warn(
+					"[PrivateApi] getPredictAccountActivity:",
+					res.status,
+					"— nothing is listening at /api/predict/account/activity on your private API.",
+					"Deploy/register GET /api/predict/account/activity (proxy of GET /v1/account/activity)."
+				);
+			}
+			const body = await readJson<unknown>(res);
+			return normalizePredictActivityList(body);
+		},
+
 		/** Batch-resolve venue keys to LevelUp umbrella id + displayName (Mongo `exchangeMatching`). */
 		async postUmbrellaResolveExchangeKeys(body: {
 			queries: UmbrellaExchangeResolveQuery[];
@@ -979,6 +1070,30 @@ export function createPrivateApiClient(
 				body: JSON.stringify(body),
 			});
 			return readJson<DflowOrderSubmitResponse>(res);
+		},
+
+		/**
+		 * Lifecycle status for a previously-submitted DFlow prediction-market
+		 * order. Poll until `status` is one of `closed | failed | expired`
+		 * (use `isDflowOrderStatusTerminal`). Returns the actual `inAmount` /
+		 * `outAmount` filled and any `fills` / `reverts` once terminal.
+		 */
+		async getDflowOrderStatus(
+			signature: string,
+			lastValidBlockHeight?: number,
+		): Promise<DflowOrderStatusResponse> {
+			const q = new URLSearchParams({ signature });
+			if (
+				typeof lastValidBlockHeight === "number" &&
+				Number.isInteger(lastValidBlockHeight) &&
+				lastValidBlockHeight > 0
+			) {
+				q.set("lastValidBlockHeight", String(lastValidBlockHeight));
+			}
+			const res = await authorizedFetch(
+				`/api/dflow/order-status?${q.toString()}`
+			);
+			return readJson<DflowOrderStatusResponse>(res);
 		},
 
 		async postDflowFilterOutcomeMints(

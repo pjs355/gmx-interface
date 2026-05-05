@@ -93,16 +93,18 @@ function toUnsignedTransactionRequest(
 /**
  * Serialize all sponsored `eth_sendTransaction` calls per embedded wallet and insert a
  * short spacing between them. Privy's TEE wallet RPC (`/api/v1/wallets/:id/rpc`) enforces
- * a per-wallet request rate limit; SDKs like the Predict.fun SDK fire several approval
- * transactions back-to-back (CTF exchange allowance + `setApprovalForAll` + neg-risk
- * adapter) which otherwise burst past the limit and fan out into 429 loops.
+ * a per-wallet request rate limit; without serialization, bursts that fan out 4-step
+ * retry loops compound and 429 the entire bucket.
  *
  * Each sponsored send actually dispatches **2–3 internal Privy wallet-RPC calls**
  * (`recoverEmbeddedWallet`, `signWithUserSigner`, sponsorship validation), so the
- * effective rate from one user-visible "send" is much higher than 1 req. We pace
- * conservatively so the Privy window can refresh between sends, otherwise the very
- * first attempt of each follow-up tx lands inside the throttled window and burns
- * the entire 4-step retry schedule before succeeding.
+ * effective rate from one user-visible "send" is much higher than 1 req. Pacing
+ * conservatively lets the Privy window refresh between sends.
+ *
+ * The Predict.fun SDK's `OrderBuilder.setApprovals()` would otherwise fire all 10
+ * cross-product approvals on cold onboarding — see
+ * `usePredictTradingSession.setApprovals` for the LevelUp-specific 2-tx scoping
+ * that keeps onboarding inside Privy's per-wallet bucket on the first try.
  */
 const sponsoredSendQueues = new Map<string, Promise<unknown>>();
 const MIN_SPONSORED_SEND_SPACING_MS = 1500;

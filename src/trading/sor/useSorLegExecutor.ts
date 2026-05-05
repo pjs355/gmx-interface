@@ -21,6 +21,7 @@ import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
 import type { LifiStatusResponse, LifiQuoteResponse } from "@/types/trading";
 import { withTimeout } from "@/utils/withTimeout";
 import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
+import type { DflowOrderStatusResponse } from "@/services/privateApi/client";
 import type { SorExecutionPhase } from "./useSorExecution";
 import {
 	readFundingStableBalancesHuman,
@@ -71,6 +72,21 @@ const SOR_LIFI_PREFUND_POLL = { maxAttempts: 15, intervalMs: 4_000 } as const;
 
 /** Same-chain Base USDC `transfer` (SCW → Limitless maker); much shorter than LiFi legs. */
 const SOR_BASE_USDC_TRANSFER_TIMEOUT_MS = 120_000;
+
+/**
+ * DFlow prediction-market orders are `executionMode: "async"` — after the
+ * Solana tx is broadcast, DFlow's settlement authority routes the order to
+ * Kalshi off-chain and settles back on-chain (end-to-end ~30-90s). We mark the
+ * SOR leg as filled the moment broadcast succeeds (UX decision: don't make the
+ * user stare at a spinner while DFlow + Kalshi do their async work). The
+ * Kalshi-specific notice in `PredictionMarketTradeBoxUI` tells the user that
+ * the on-chain balance reflection is delayed; post-trade balance refetch
+ * (`usePostTradeBalanceSync`) eventually picks up the actual fill.
+ *
+ * Lifecycle reconciliation against `GET /api/dflow/order-status` is still
+ * available via `privateApi.getDflowOrderStatus(signature, lvbh)` if a future
+ * background reconciler / failure-toast path wants it.
+ */
 
 /** Partner withdraw maker → SCW; poll until SCW can cover the upcoming Base LI.FI leg. */
 const SOR_LX_WITHDRAW_TO_SCW_TIMEOUT_MS = 120_000;
@@ -291,6 +307,7 @@ export interface UseSorLegExecutorDeps {
 		}) => Promise<{
 			transaction?: string;
 			outAmount?: string;
+			lastValidBlockHeight?: number;
 			code?: string;
 			msg?: string;
 		}>;
@@ -306,12 +323,18 @@ export interface UseSorLegExecutorDeps {
 				tokenId?: string;
 				questionId?: string;
 			};
+			lastValidBlockHeight?: number;
 		}) => Promise<{
 			success: true;
 			signature: string;
 			confirmationStatus: string;
 			slot: number | null;
+			lastValidBlockHeight: number;
 		}>;
+		getDflowOrderStatus: (
+			signature: string,
+			lastValidBlockHeight?: number,
+		) => Promise<DflowOrderStatusResponse>;
 		postFundingLifiQuote: (body: {
 			fromChain: number;
 			toChain: number;
@@ -984,6 +1007,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							externalMarketId: outcomeMint,
 							tokenId: outcomeMint,
 						},
+						lastValidBlockHeight: orderResult.lastValidBlockHeight,
 					});
 
 					return {

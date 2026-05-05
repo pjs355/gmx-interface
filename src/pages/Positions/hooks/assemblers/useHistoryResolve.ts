@@ -110,11 +110,34 @@ export function useHistoryResolve(
 		diag,
 	} = args;
 
+	/**
+	 * Active catalog ids — rows whose `levelUpUmbrellaId` is *not* already in the active
+	 * catalog still need the full umbrella doc (children, exchangeMatching, displayName)
+	 * so `HistoryView` can render the correct icon. Without this, server-injected ids on
+	 * still-held Predict positions (`mapPredictPositionRows`) point at inactive umbrellas
+	 * that the active catalog doesn't have, the synthetic umbrella in `HistoryView` has
+	 * empty `children`, and `UmbrellaImage` can't resolve tags → falls back to `gtaIcon`.
+	 */
+	const activeUmbrellaIds = useMemo(() => {
+		const s = new Set<string>();
+		for (const u of umbrellas) {
+			if (u?._id) s.add(String(u._id));
+		}
+		return s;
+	}, [umbrellas]);
+
 	const venueHistoryResolveQueries = useMemo(() => {
 		const seen = new Set<string>();
 		const out: UmbrellaExchangeResolveQuery[] = [];
 		for (const item of venueHistoryRawItems) {
-			if (!shouldRequestVenueHistoryUmbrellaResolve(item)) continue;
+			const linkedId = item.levelUpUmbrellaId?.trim();
+			const linkedDocPresent = linkedId
+				? activeUmbrellaIds.has(linkedId)
+				: false;
+			if (linkedDocPresent) continue;
+			// `shouldRequestVenueHistoryUmbrellaResolve` only short-circuits on the *id*; we
+			// already covered that case above, so just confirm we have a usable resolve key.
+			if (!linkedId && !shouldRequestVenueHistoryUmbrellaResolve(item)) continue;
 			const k = venueHistoryExchangeResolveKey(item);
 			if (!k || seen.has(k)) continue;
 			seen.add(k);
@@ -122,7 +145,7 @@ export function useHistoryResolve(
 			if (q) out.push(q);
 		}
 		return out;
-	}, [venueHistoryRawItems]);
+	}, [venueHistoryRawItems, activeUmbrellaIds]);
 
 	/** Order-independent payload fingerprint so query identity does not churn on row order alone. */
 	const venueHistoryResolveQueriesKeyStable = useMemo(() => {

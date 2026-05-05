@@ -48,19 +48,24 @@ export function useDflowBundle({
 
 	/**
 	 * Routing rules (mirrors how the rest of the Positions page interprets venues):
-	 *   - WON  + shares > 0  → winnings (claimable; rendered with a Claim button)
-	 *   - WON  + shares ≤ 0  → history  (already redeemed/closed; would phantom-block in winnings)
-	 *   - LOST                → history
-	 *   - everything else     → active (open / pending settlement)
+	 *   - WON  + shares > 0       → winnings (claimable; rendered with a Claim button)
+	 *   - WON  + shares ≤ 0       → history  (already redeemed/closed; would phantom-block in winnings)
+	 *   - LOST                    → history
+	 *   - open + shares > epsilon → active   (currently held, open / pending settlement)
+	 *   - open + shares ≤ epsilon → dropped  (ghost rows from `useDflowPositions` exist purely to
+	 *                                          carry past fills/cost into History once a market
+	 *                                          finalizes — they must NOT show up on the Positions
+	 *                                          tab while the market is still open.)
 	 *
 	 * Do **not** push rows to history on `isVenueMarketResolvedLike` alone: DFlow `CLOSED` means
 	 * trading ended but the outcome may still be pending — the user still holds outcome tokens and
 	 * must see them under Positions. Only explicit `LOST` (or `WON` with zero shares) belongs in history.
 	 *
-	 * Why: the user reported a DFlow market they lost popping into the Winnings tab without a
-	 * claim button. That can only happen when a `WON` row with 0 shares (post-redemption) flows
-	 * through `appendVenueWinnings` and renders an empty umbrella block. Filtering on `shares > 0`
-	 * here keeps the contract tight at the source.
+	 * Why the `shares > 0.0001` gate on `active`: DFlow `useDflowPositions` intentionally emits
+	 * zero-balance "ghost" `VenuePosition`s for mints the user previously held (so cost/fills carry
+	 * forward). Without this filter, a market the user fully sold out of stays on the Positions tab
+	 * until DFlow flips its `status` to `finalized` — sometimes hours or days late. Mirrors the
+	 * `mapPredictPositionRows` `> 0.0001` epsilon.
 	 */
 	const { active, winnings, history } = useMemo(() => {
 		const a: VenuePosition[] = [];
@@ -72,7 +77,7 @@ export function useDflowBundle({
 				else h.push(pos);
 			} else if (pos.outcomeResult === "LOST") {
 				h.push(pos);
-			} else {
+			} else if (pos.shares > 0.0001) {
 				a.push(pos);
 			}
 		}
