@@ -37,6 +37,28 @@ const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 const SOLANA_LIFI_CHAIN_ID = 1151111081099710;
 
+/**
+ * Withdraw "type-the-displayed-balance ⇒ send max" tolerance.
+ *
+ * `cashBalance` and on-chain stable balances arrive with up to 6 decimals
+ * (e.g. `6.749876` USDT on BNB), but the available figure is shown floored
+ * to 2 dp ($6.75). Users naturally retype that displayed number, which is
+ * almost always a hair ABOVE the actual penny-truncated maximum.
+ *
+ * Mirror the share-sell clamp (see `SHARE_SELL_COMPARE_EPS` in
+ * `checkBalances.ts`): when the input is within 1¢ of the cap, treat it
+ * as "send max" — relax the over-cap validator AND substitute the exact
+ * `maxWithdrawAmount` in the value forwarded to the plan API so we never
+ * overshoot the actual on-chain balance.
+ */
+const WITHDRAW_AMOUNT_COMPARE_EPS = 0.01;
+
+/** Stable token (USDC/USDT) precision is 6 decimals; trim trailing zeros. */
+function formatStableAmountHuman(amount: number): string {
+	if (!Number.isFinite(amount) || amount <= 0) return "0";
+	return amount.toFixed(6).replace(/\.?0+$/, "");
+}
+
 const DEST_CHAINS: { label: string; chainId: number }[] = [
 	{ label: "Base", chainId: 8453 },
 	{ label: "Polygon", chainId: 137 },
@@ -184,12 +206,44 @@ export function TransfersModal() {
 	const [error, setError] = useState<string | null>(null);
 	const [plan, setPlan] = useState<LifiWithdrawPlanData | null>(null);
 
+	const amountHasInput = withdrawAmount.length > 0;
+	const parsedAmount = parseFloat(withdrawAmount);
+	const isAmountWithinSendMaxClamp =
+		amountHasInput &&
+		!isNaN(parsedAmount) &&
+		maxWithdrawAmount > 0 &&
+		Math.abs(parsedAmount - maxWithdrawAmount) <= WITHDRAW_AMOUNT_COMPARE_EPS;
+	/**
+	 * Amount actually forwarded downstream (validation, prefund math, plan API,
+	 * review screen). When the user types within 1¢ of the cap, use the exact
+	 * `maxWithdrawAmount` so the route can drain dust precisely.
+	 */
+	const effectiveWithdrawAmount = isAmountWithinSendMaxClamp
+		? maxWithdrawAmount
+		: !isNaN(parsedAmount)
+			? parsedAmount
+			: 0;
+	const effectiveWithdrawAmountStr = isAmountWithinSendMaxClamp
+		? formatStableAmountHuman(maxWithdrawAmount)
+		: withdrawAmount.trim();
+	const isAmountOverMaxWithdraw =
+		amountHasInput &&
+		!isNaN(parsedAmount) &&
+		maxWithdrawAmount > 0 &&
+		parsedAmount > maxWithdrawAmount + WITHDRAW_AMOUNT_COMPARE_EPS;
+	const isAmountValid =
+		amountHasInput &&
+		!isNaN(parsedAmount) &&
+		parsedAmount > 0 &&
+		parsedAmount <= maxWithdrawAmount + WITHDRAW_AMOUNT_COMPARE_EPS &&
+		chainBalances.length > 0;
+
 	/**
 	 * Protocol fees (LI.FI feeCosts) + route spread (remainder to match send vs receive).
 	 * combinedCostUsd = protocolFees + routeSpread (2dp). Gas excluded.
 	 */
 	const reviewFeeAndReceive = useMemo(() => {
-		const grossHuman = parseFloat(withdrawAmount.trim()) || 0;
+		const grossHuman = effectiveWithdrawAmount;
 		if (
 			!plan ||
 			toChain == null ||
@@ -233,7 +287,7 @@ export function TransfersModal() {
 			combinedCostUsd,
 			receiveHuman,
 		};
-	}, [plan, withdrawAmount, toChain]);
+	}, [plan, effectiveWithdrawAmount, toChain]);
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -285,20 +339,6 @@ export function TransfersModal() {
 		: EVM_ADDRESS_RE.test(recipientAddress.trim());
 	const isAddressInvalid = addressHasInput && !isAddressValid;
 
-	const amountHasInput = withdrawAmount.length > 0;
-	const parsedAmount = parseFloat(withdrawAmount);
-	const isAmountOverMaxWithdraw =
-		amountHasInput &&
-		!isNaN(parsedAmount) &&
-		maxWithdrawAmount > 0 &&
-		parsedAmount > maxWithdrawAmount + 1e-9;
-	const isAmountValid =
-		amountHasInput &&
-		!isNaN(parsedAmount) &&
-		parsedAmount > 0 &&
-		parsedAmount <= maxWithdrawAmount + 1e-9 &&
-		chainBalances.length > 0;
-
 	const canRequestReview =
 		networkChosen &&
 		assetChosen &&
@@ -312,7 +352,7 @@ export function TransfersModal() {
 		setIsPlanning(true);
 		setPlan(null);
 		try {
-			const gross = parseFloat(withdrawAmount.trim()) || 0;
+			const gross = effectiveWithdrawAmount;
 			const fundingSnap = {
 				baseSmartWallet: funding.baseSmartWallet?.trim() || null,
 				limitlessMakerBase: funding.limitlessMakerBase?.trim() || null,
@@ -371,7 +411,7 @@ export function TransfersModal() {
 			});
 
 			const planPayload = await api.postFundingLifiWithdrawPlan({
-				amountHuman: withdrawAmount.trim(),
+				amountHuman: effectiveWithdrawAmountStr,
 				toChain,
 				toAsset,
 				toAddress: recipientAddress.trim(),
@@ -398,6 +438,8 @@ export function TransfersModal() {
 		api,
 		bridgeBalances,
 		canRequestReview,
+		effectiveWithdrawAmount,
+		effectiveWithdrawAmountStr,
 		funding.baseSmartWallet,
 		funding.embeddedEoa,
 		funding.limitlessMakerBase,
@@ -408,7 +450,6 @@ export function TransfersModal() {
 		refreshUserData,
 		toAsset,
 		toChain,
-		withdrawAmount,
 	]);
 
 	const handleBackToForm = useCallback(() => {

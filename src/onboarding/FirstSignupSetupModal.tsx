@@ -121,7 +121,7 @@ export function FirstSignupSetupModal(props: {
 								Setting up your accounts
 							</h3>
 							<p className="first-signup-setup-modal__sub">
-								We're getting everything ready so you can trade across all
+								We are getting everything ready so you can trade across all
 								markets. This takes a moment.
 							</p>
 							<SetupChecklist rows={setup.rows} />
