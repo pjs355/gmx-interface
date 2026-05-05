@@ -86,7 +86,13 @@
 	top: var(--app-header-height, 6.2rem);
 	/* Taller than the viewport: keep layout unchanged; scroll this column when the pointer is here. */
 	min-width: 0;
-	max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
+	/*
+	 * Fill the full space between header and viewport bottom (no trailing
+	 * 24px gap). Without this, the column ended 24px above the viewport
+	 * bottom and showed a black strip before the page footer scrolled up,
+	 * which read as a stray bar under the trade module.
+	 */
+	max-height: calc(100vh - var(--app-header-height, 6.2rem));
 	overflow-y: auto;
 	overflow-x: hidden;
 	overscroll-behavior-y: contain;

@@ -1193,7 +1193,14 @@
 		position: sticky;
 		top: var(--app-header-height, 6.2rem);
 		min-width: 0;
-		max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
+		/*
+		 * Fill the full space between header and viewport bottom — no 24px
+		 * gap. Combined with `margin-top: 0` on the trade box below, this
+		 * makes the panel cut off cleanly against the header (top) and the
+		 * footer (bottom) when scrolling, instead of showing a black strip
+		 * before the footer scrolls up.
+		 */
+		max-height: calc(100vh - var(--app-header-height, 6.2rem));
 		overflow-y: auto;
 		overflow-x: hidden;
 		overscroll-behavior-y: contain;
@@ -1206,10 +1213,15 @@
 		}
 	}
 
-	/* Align trade module top with first sidebar pill (shared inset vs global tradebox margin-top). */
+	/*
+	 * Trade module is flush with the header on the home/markets page —
+	 * `.prediction-market-tradebox` ships with `margin-top: 15px` globally,
+	 * so we explicitly zero it out here (a missing rule would let that
+	 * 15px through and recreate the "small black bar above" the user saw).
+	 */
 	.predictions-page__home-trade-panel .prediction-market-tradebox,
 	.predictions-page__home-trade-panel .tradebox-skeleton {
-		margin-top: var(--predictions-home-column-inset, 8px);
+		margin-top: 0;
 	}
 }
 
