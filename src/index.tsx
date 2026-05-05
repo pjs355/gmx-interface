@@ -21,7 +21,8 @@ Sentry.init({
 	// For example, automatic IP address collection on events
 	sendDefaultPii: true,
 	beforeSend(event) {
-		if (shouldDropPrivyDuplicateSolanaInsufficientUnhandled(event)) return null;
+		if (shouldDropPrivyDuplicateSolanaInsufficientUnhandled(event))
+			return null;
 		return event;
 	},
 });
@@ -49,7 +50,7 @@ import {
 
 const baseOverride = addRpcUrlOverrideToChain(
 	base,
-	"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih"
+	"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih",
 );
 
 /** Embedded-wallet / viem JSON-RPC — overrides Privy defaults (e.g. thirdweb) that often 429 or block CORS from localhost. */
@@ -96,7 +97,11 @@ createRoot(document.getElementById("root")!).render(
 				appId="cmb7ccvbd011hl50m62vf8epr"
 				config={{
 					defaultChain: baseOverride,
-					supportedChains: [baseOverride, polygonOverride, bscOverride],
+					supportedChains: [
+						baseOverride,
+						polygonOverride,
+						bscOverride,
+					],
 					appearance: {
 						// Brand purple from the trade widget (`.trade-btn-mobile`, etc.)
 						accentColor: "#8B5CF6",
@@ -108,7 +113,7 @@ createRoot(document.getElementById("root")!).render(
 						loginMessage:
 							"Welcome to LevelUp Predictions! Please create an account or sign in",
 					},
-					loginMethods: ["email", "google", "wallet"],
+					loginMethods: ["email", "google"],
 					embeddedWallets: {
 						ethereum: {
 							createOnLogin: "users-without-wallets",
@@ -129,55 +134,55 @@ createRoot(document.getElementById("root")!).render(
 			>
 				<SmartWalletsProvider>
 					<WalletProvider>
-					<PredictionDataProvider>
-						<OddsMonitorProvider>
-							<SignerProvider>
+						<PredictionDataProvider>
+							<OddsMonitorProvider>
+								<SignerProvider>
 									<UserDataProvider>
 										<SetupActivationProvider>
-										{/*
-										 * Three background activators run silently in
-										 * parallel. They share `SetupActivationContext`
-										 * so the first-signup gate can rush them past
-										 * `requestIdleCallback` and the trade box can
-										 * suppress "Trading setup required" copy while
-										 * setup is still wrapping up. The activators
-										 * themselves render nothing.
-										 */}
-										<PolymarketBackgroundActivation />
-										<PredictBackgroundActivation />
-										<LimitlessBackgroundActivation />
-										{/* Modal gates rendering on the user's
-										 * `onboardingCompletedAt` flag. Existing users
-										 * (including everyone backfilled by the migration
-										 * script) never see it. */}
-										<FirstSignupSetupGate />
-										<RecentSettlementClaimProvider>
-										<CollateralTokenProvider>
-											<PostTradeBalanceSyncProvider>
-												<PortfolioProvider>
-													<PositionsPageMetricsGateProvider>
-														<RPGProvider>
-															<TransfersModalProvider>
-																<OddsDisplayProvider>
-																	<StickyTradeAmountProvider>
-																		<App />
-																	</StickyTradeAmountProvider>
-																</OddsDisplayProvider>
-															</TransfersModalProvider>
-														</RPGProvider>
-													</PositionsPageMetricsGateProvider>
-												</PortfolioProvider>
-											</PostTradeBalanceSyncProvider>
-										</CollateralTokenProvider>
-										</RecentSettlementClaimProvider>
+											{/*
+											 * Three background activators run silently in
+											 * parallel. They share `SetupActivationContext`
+											 * so the first-signup gate can rush them past
+											 * `requestIdleCallback` and the trade box can
+											 * suppress "Trading setup required" copy while
+											 * setup is still wrapping up. The activators
+											 * themselves render nothing.
+											 */}
+											<PolymarketBackgroundActivation />
+											<PredictBackgroundActivation />
+											<LimitlessBackgroundActivation />
+											{/* Modal gates rendering on the user's
+											 * `onboardingCompletedAt` flag. Existing users
+											 * (including everyone backfilled by the migration
+											 * script) never see it. */}
+											<FirstSignupSetupGate />
+											<RecentSettlementClaimProvider>
+												<CollateralTokenProvider>
+													<PostTradeBalanceSyncProvider>
+														<PortfolioProvider>
+															<PositionsPageMetricsGateProvider>
+																<RPGProvider>
+																	<TransfersModalProvider>
+																		<OddsDisplayProvider>
+																			<StickyTradeAmountProvider>
+																				<App />
+																			</StickyTradeAmountProvider>
+																		</OddsDisplayProvider>
+																	</TransfersModalProvider>
+																</RPGProvider>
+															</PositionsPageMetricsGateProvider>
+														</PortfolioProvider>
+													</PostTradeBalanceSyncProvider>
+												</CollateralTokenProvider>
+											</RecentSettlementClaimProvider>
 										</SetupActivationProvider>
 									</UserDataProvider>
-							</SignerProvider>
-						</OddsMonitorProvider>
-					</PredictionDataProvider>
+								</SignerProvider>
+							</OddsMonitorProvider>
+						</PredictionDataProvider>
 					</WalletProvider>
 				</SmartWalletsProvider>
 			</PrivyProvider>
 		</Router>
-	</React.StrictMode>
+	</React.StrictMode>,
 );
