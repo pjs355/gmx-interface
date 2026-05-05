@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ToastContainer, cssTransition } from "react-toastify";
+import { ToastContainer, Zoom } from "react-toastify";
 // Removed Hash import - not used
 
 import {
@@ -26,13 +26,18 @@ function BackgroundPrefetch() {
 	return null;
 }
 
-const Zoom = cssTransition({
-	enter: "zoomIn",
-	exit: "zoomOut",
-	appendPosition: false,
-	collapse: true,
-	collapseDuration: 200,
-});
+/*
+ * IMPORTANT: use react-toastify's built-in `Zoom` transition. We previously
+ * defined a custom `cssTransition({ enter: "zoomIn", exit: "zoomOut" })`
+ * pointing at hand-rolled `.zoomIn` / `.zoomOut` keyframes in `App.scss` —
+ * but those classes never set `animation-duration`, so the browser never
+ * actually ran the animation and never dispatched `animationend`. Toastify
+ * waits for `animationend` to finish its exit, so the toast (and every
+ * subsequent `toast.dismiss()` call) silently hung in the DOM and "followed"
+ * the user across pages because `<ToastContainer>` lives at the app root.
+ * The built-in `Zoom` ships with `animation-duration: 0.7s` baked in via
+ * `react-toastify/dist/ReactToastify.css`, so exits actually complete.
+ */
 
 export function AppRoutes() {
 	const [isSettingsVisible, setIsSettingsVisible] = useState(false);

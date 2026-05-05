@@ -195,6 +195,7 @@ export function Header({
 	const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 	const [isNativeSelectorModalVisible, setIsNativeSelectorModalVisible] =
 		useState(false);
+	const [isHeaderHidden, setIsHeaderHidden] = useState(false);
 
 	const toggleDrawer = useCallback(() => {
 		setIsDrawerVisible(!isDrawerVisible);
@@ -267,6 +268,43 @@ export function Header({
 		}
 	}, [isDrawerVisible]);
 
+	// Hide-on-scroll-down / show-on-scroll-up for mobile + tablet.
+	// Threshold avoids jitter from tiny scroll deltas; rAF avoids layout thrash.
+	useEffect(() => {
+		if (!isMobile || isDrawerVisible) {
+			setIsHeaderHidden(false);
+			return;
+		}
+
+		const SCROLL_DELTA = 6;
+		const TOP_REVEAL_OFFSET = 80;
+		let lastY = window.scrollY;
+		let ticking = false;
+
+		const update = () => {
+			const currentY = window.scrollY;
+			const diff = currentY - lastY;
+
+			if (currentY <= TOP_REVEAL_OFFSET) {
+				setIsHeaderHidden(false);
+			} else if (Math.abs(diff) >= SCROLL_DELTA) {
+				setIsHeaderHidden(diff > 0);
+			}
+
+			lastY = currentY;
+			ticking = false;
+		};
+
+		const onScroll = () => {
+			if (ticking) return;
+			ticking = true;
+			window.requestAnimationFrame(update);
+		};
+
+		window.addEventListener("scroll", onScroll, { passive: true });
+		return () => window.removeEventListener("scroll", onScroll);
+	}, [isMobile, isDrawerVisible]);
+
 	const isHome = isHomeSite();
 	const drawerOpenSettings = isHome ? undefined : openSettings;
 	const drawerDisconnect = isHome
@@ -280,7 +318,12 @@ export function Header({
 				onClick={closeSelectorModal}
 			/>
 			<header data-qa="header">
-				<div className={cx("App-header", { active: isDrawerVisible })}>
+				<div
+					className={cx("App-header", {
+						active: isDrawerVisible,
+						"is-hidden": isHeaderHidden && !isDrawerVisible,
+					})}
+				>
 					<HeaderLeft
 						isMobile={isMobile}
 						navigate={navigate}

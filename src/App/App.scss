@@ -588,39 +588,14 @@ button.App-button {
 	backdrop-filter: blur(2rem);
 }
 
-@keyframes zoomIn {
-	from {
-		opacity: 0;
-		transform: scale3d(0.3, 0.3, 0.3);
-	}
-
-	50% {
-		opacity: 1;
-	}
-}
-
-.zoomIn {
-	animation-name: zoomIn;
-}
-
-@keyframes zoomOut {
-	from {
-		opacity: 1;
-	}
-
-	50% {
-		opacity: 0;
-		transform: scale3d(0.3, 0.3, 0.3);
-	}
-
-	to {
-		opacity: 0;
-	}
-}
-
-.zoomOut {
-	animation-name: zoomOut;
-}
+/*
+ * Toast enter/exit animations now come from react-toastify's built-in
+ * `Zoom` transition (see `AppRoutes.tsx`). The previous hand-rolled
+ * `@keyframes zoomIn / zoomOut` and `.zoomIn / .zoomOut` classes were
+ * removed because they never set `animation-duration`, which broke
+ * Toastify's `animationend`-driven exit and made the "Order confirmed!"
+ * toast hang on screen across navigations.
+ */
 
 .positive {
 	color: #06c285;

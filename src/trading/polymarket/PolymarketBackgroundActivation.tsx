@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import { useSignerContext } from "context/SignerContext";
@@ -7,29 +7,21 @@ import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext"
 
 const LOG_TAG = "[PolymarketActivation]";
 
-type IdleWindow = Window & {
-	requestIdleCallback?: (
-		cb: (deadline: { didTimeout: boolean; timeRemaining(): number }) => void,
-		opts?: { timeout?: number }
-	) => number;
-	cancelIdleCallback?: (handle: number) => void;
-};
-
-/** How long to wait before we force the callback even if the browser is busy. */
-const IDLE_TIMEOUT_MS = 5_000;
-/**
- * A small wall-clock delay before even scheduling idle work — keeps the first
- * paint lean on slow devices. Activation takes ~20-30s total when a user is
- * bootstrapping fresh, so 250ms of upfront slack is immaterial but avoids
- * fighting initial auth + query fan-out.
- */
-const START_DELAY_MS = 250;
-
 /**
  * Mounts {@link usePolymarketEnsureExecutionReady} for every authenticated
  * session and fires it during a browser idle window, so by the time the user
  * opens a trade box the SOR's `routingEligibility.polymarket.canExecute` is
  * already `true`.
+ *
+ * Activation chain: **Predict -> Limitless -> Polymarket**. The visible
+ * Polymarket activator runs **last** so that the slow steps of the
+ * Polymarket flow (deposit-wallet deploy + relayer registry catch-up)
+ * have already been completed in the background by
+ * `PolymarketDepositDeployBackgroundActivation`, which fires at boot.
+ * By the time this activator mounts the ensure hook, the deploy phase
+ * is a no-op (`isDepositWalletDeployed` returns true) and
+ * `executeDepositWalletBatch` lands on its first try without the
+ * "wallet not registered" 400 + retry storm.
  *
  * Renders nothing; all effects live inside the activation hook.
  *
@@ -37,6 +29,8 @@ const START_DELAY_MS = 250;
  *  - Privy to report `authenticated: true`
  *  - The Privy embedded EOA wallet client to be hydrated (signer + provider)
  *  - `SignerContext` to settle so downstream queries resolve profileId
+ *  - Limitless ready (so we don't compete with Predict + Limitless for
+ *    the shared per-wallet Privy bucket)
  *
  * Only then do we flip `enabled: true`, which lets the activation hook take
  * over its own state machine and backoff logic.
@@ -47,7 +41,15 @@ export function PolymarketBackgroundActivation(): null {
 	const signerCtx = useSignerContext();
 	const setupActivation = useSetupActivationOptional();
 
-	const [idleReached, setIdleReached] = useState(false);
+	// Gate the visible Polymarket activation on Limitless completing.
+	// The deposit-wallet deploy itself is already pre-warmed at boot by
+	// `PolymarketDepositDeployBackgroundActivation` running in parallel
+	// with Predict, so by the time Limitless reports ready the deploy
+	// phase here is effectively a no-op and `executeDepositWalletBatch`
+	// can submit its first batch without the relayer-registry retry
+	// storm. See the file header for the full rationale.
+	const limitlessReady =
+		setupActivation?.venues.limitless.ready ?? false;
 
 	const prerequisitesReady =
 		privyReady &&
@@ -55,7 +57,8 @@ export function PolymarketBackgroundActivation(): null {
 		eoa.ready &&
 		!!eoa.address &&
 		!!eoa.eip1193Provider &&
-		signerCtx.ready;
+		signerCtx.ready &&
+		limitlessReady;
 
 	// Surface every gate flip so users can tell whether the mounted component
 	// is actually arming the hook. This was invisible before, so a stuck
@@ -69,6 +72,7 @@ export function PolymarketBackgroundActivation(): null {
 			hasEoaAddress: !!eoa.address,
 			hasEip1193: !!eoa.eip1193Provider,
 			signerReady: signerCtx.ready,
+			limitlessReady,
 		});
 		if (snapshot === lastPrereqSnapshotRef.current) return;
 		lastPrereqSnapshotRef.current = snapshot;
@@ -83,64 +87,17 @@ export function PolymarketBackgroundActivation(): null {
 		eoa.address,
 		eoa.eip1193Provider,
 		signerCtx.ready,
+		limitlessReady,
 		prerequisitesReady,
 	]);
 
-	const onboardingActive = setupActivation?.onboardingActive ?? false;
-
-	useEffect(() => {
-		if (!prerequisitesReady) {
-			setIdleReached(false);
-			return;
-		}
-		if (idleReached) return;
-
-		// During the post-signup setup modal we skip the idle gate entirely:
-		// the user is staring at a "Setting up Polymarket account…" row and
-		// every 5s of `requestIdleCallback` slack is 5s of dead air. The hook
-		// itself still runs the same flow; we just stop deferring it.
-		if (onboardingActive) {
-			console.info(LOG_TAG, "bg:onboardingActive:skipIdle");
-			setIdleReached(true);
-			return;
-		}
-
-		const w = window as IdleWindow;
-		let idleHandle: number | null = null;
-		let startTimer: ReturnType<typeof setTimeout> | null = null;
-		let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-		const fire = () => {
-			console.info(LOG_TAG, "bg:idleFired");
-			setIdleReached(true);
-		};
-
-		startTimer = setTimeout(() => {
-			startTimer = null;
-			if (typeof w.requestIdleCallback === "function") {
-				idleHandle = w.requestIdleCallback(fire, {
-					timeout: IDLE_TIMEOUT_MS,
-				});
-			} else {
-				// Safari / older browsers: fall back to a macrotask.
-				fallbackTimer = setTimeout(fire, 0);
-			}
-		}, START_DELAY_MS);
-
-		return () => {
-			if (startTimer) clearTimeout(startTimer);
-			if (fallbackTimer) clearTimeout(fallbackTimer);
-			if (
-				idleHandle !== null &&
-				typeof w.cancelIdleCallback === "function"
-			) {
-				w.cancelIdleCallback(idleHandle);
-			}
-		};
-	}, [prerequisitesReady, idleReached, onboardingActive]);
-
+	// No idle gate. The activation hook owns its own gating + backoff
+	// logic, and the visible activator already waits on `limitlessReady`
+	// upstream — there's no reason to layer an additional 250ms +
+	// requestIdleCallback delay on top of that. Fire as soon as
+	// prereqs are satisfied.
 	const activation = usePolymarketEnsureExecutionReady({
-		enabled: prerequisitesReady && idleReached,
+		enabled: prerequisitesReady,
 	});
 
 	const reportVenueSnapshot = setupActivation?.reportVenueSnapshot;
