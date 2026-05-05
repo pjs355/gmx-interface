@@ -365,9 +365,9 @@ export interface SmartRoutingSectionProps {
 }
 
 export default function SmartRoutingSection({
-	displayRoute,
+	displayRoute: rawDisplayRoute,
 	executionRoute,
-	venuePreviews,
+	venuePreviews: rawVenuePreviews,
 	tradingVenue,
 	isLoading,
 	onSelectVenue,
@@ -380,6 +380,52 @@ export default function SmartRoutingSection({
 		(p: number) => formatSorLegAvgForDisplay(p, oddsDisplayStyle),
 		[oddsDisplayStyle],
 	);
+
+	/* ---------------------------------------------------------------------
+	 * Sticky-render shield against transient upstream nulls.
+	 *
+	 * When the user toggles the position (Team A ↔ Team B) the SOR hook fires
+	 * a fresh request for the new outcome. If anything in that pipeline (an
+	 * upstream `blankAll`, a transient failure inside the grace window, an
+	 * abort race) momentarily flips `displayRoute` / `venuePreviews` to null,
+	 * this whole grid would unmount and snap back in once the refetch settles
+	 * — the "pop-out / pop-in" jank.
+	 *
+	 * To make the rendering layer resilient regardless of upstream timing, we
+	 * keep refs to the last MEANINGFUL plan + previews and fall back to them
+	 * whenever the live props are null/empty. The refs update during render
+	 * (no setState, no extra commits) so the user always sees the most recent
+	 * legitimate row layout. A sibling key tied to the side prop resets the
+	 * cache on a buy↔sell flip (different shape: "To Win" vs "Receive") so
+	 * we never strand mismatched data on screen.
+	 *
+	 * Rows already use stable keys (`buy-${venue}` / `sell-${venue}`), so once
+	 * fresh data arrives React reconciles in place: existing venues update
+	 * their `FlashingValue` numbers, venues missing in the new payload
+	 * unmount, brand-new venues mount. Exactly the smooth swap requested.
+	 * ------------------------------------------------------------------- */
+	const stableDisplayRouteRef = useRef<RoutePlan | null>(null);
+	const stableVenuePreviewsRef = useRef<VenueRoutePreview[] | null>(null);
+	const lastSideKeyRef = useRef<string | null>(null);
+	const sideKey = `${side ?? rawDisplayRoute?.side ?? "buy"}`;
+	if (lastSideKeyRef.current !== sideKey) {
+		lastSideKeyRef.current = sideKey;
+		stableDisplayRouteRef.current = null;
+		stableVenuePreviewsRef.current = null;
+	}
+	/* Update sticky refs on every render that has live data. We treat an empty
+	 * array as legitimate ("server explicitly returned no venues") so the
+	 * existing null-section render guard can fire normally; only `null` /
+	 * `undefined` triggers the fallback. */
+	if (rawDisplayRoute != null) {
+		stableDisplayRouteRef.current = rawDisplayRoute;
+	}
+	if (rawVenuePreviews != null) {
+		stableVenuePreviewsRef.current = rawVenuePreviews;
+	}
+	const displayRoute = rawDisplayRoute ?? stableDisplayRouteRef.current;
+	const venuePreviews =
+		rawVenuePreviews ?? stableVenuePreviewsRef.current;
 
 	const toggle = useCallback((key: string) => {
 		setExpandedKey((k) => (k === key ? null : key));
