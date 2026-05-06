@@ -128,10 +128,12 @@ export const HomeSkeleton: React.FC<HomeSkeletonProps> = ({ filterType }) => {
 		>
 			<div className="predictions-page__body">
 				<aside className="game-links-wrapper home-skeleton__sidebar">
-					<nav
-						className="game-links-bar game-links-scroll"
-						aria-hidden
-					>
+					<div className="game-links-underlay" aria-hidden />
+					<div className="game-links-sticky">
+						<nav
+							className="game-links-bar game-links-scroll"
+							aria-hidden
+						>
 						<SkeletonPill withDot labelWidth={42} />
 						<SkeletonPill labelWidth={120} />
 						{Array.from({ length: SIDEBAR_PILLS - 2 }).map((_, i) => (
@@ -140,7 +142,8 @@ export const HomeSkeleton: React.FC<HomeSkeletonProps> = ({ filterType }) => {
 								labelWidth={70 + ((i * 17) % 60)}
 							/>
 						))}
-					</nav>
+						</nav>
+					</div>
 				</aside>
 				<div
 					className={

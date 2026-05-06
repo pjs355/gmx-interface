@@ -1,18 +1,20 @@
 /* Global styles for LevelUp Predictions */
 @import "./fonts.css";
+@import "./themes/fonts.css";
 
 :root {
-	font-family: "Akkurat", -apple-system, BlinkMacSystemFont, system-ui,
-		sans-serif;
+	font-family: var(--font-primary);
 	line-height: 1.5;
-	font-weight: 400;
+	/* Matches `folio-std-light.woff2` (@font-face weight 300). */
+	font-weight: 300;
 
 	color-scheme: dark;
 	color: rgba(255, 255, 255, 0.87);
 	background-color: #000000;
 
 	/* CSS Variables */
-	--app-header-height: 5rem;
+	/* Shorter nav bar — keep in sync with `.App-header` / drawer row / sticky offsets */
+	--app-header-height: 4.25rem;
 	--color-slate-800: #1e293b;
 	--color-slate-700: #334155;
 	--color-slate-100: #f1f5f9;
@@ -33,6 +35,10 @@
 	 * pixel-identical on both pages — it doesn't resize when navigating
 	 * between them. Only used at >= 1101px; below that the layouts
 	 * collapse to single-column and the var is ignored.
+	 *
+	 * `.predictions-page.predictions-page--market-bg` and umbrella
+	 * `.prediction-market-page:not(.mobile)` override this per-element for a
+	 * flush-right rail (one horizontal gutter); other pages keep this :root value.
 	 */
 	--predictions-trade-panel-width: calc(
 		((100vw - 100px) * 0.8 - 24px) / 2.55
@@ -45,16 +51,23 @@
 	-webkit-text-size-adjust: 100%;
 }
 
+/* Same value as `.App-header` horizontal padding — keeps nav / page columns aligned ≥1100px. */
+@media (min-width: 1100px) {
+	:root {
+		--app-content-inline-gutter: 50px;
+	}
+}
+
 /* Matches Header `useMedia("(max-width: 1335px)")` — hamburger layout; keeps offsets in sync */
 @media (max-width: 1335px) {
 	:root {
-		--app-header-height: 4.25rem;
+		--app-header-height: 4rem;
 	}
 }
 
 @media (max-width: 480px) {
 	:root {
-		--app-header-height: 4rem;
+		--app-header-height: 3.75rem;
 	}
 }
 
@@ -98,7 +111,7 @@ h3,
 h4,
 h5,
 h6 {
-	font-family: "Akkurat", "Knockout", sans-serif;
+	font-family: var(--font-heading);
 	font-weight: 300;
 }
 

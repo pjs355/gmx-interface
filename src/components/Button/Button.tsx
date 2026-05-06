@@ -56,6 +56,13 @@ export default function Button({
     return <img className={cx("btn-image", imgClassName)} src={imgSrc} alt={imgAlt} />;
   }, [imgSrc, imgAlt, imgClassName]);
 
+  const contents = (
+    <span className="button__label-nudge">
+      {img}
+      {children}
+    </span>
+  );
+
   function handleClick(event: ReactMouseEvent) {
     if (disabled || !onClick) {
       return;
@@ -79,8 +86,7 @@ export default function Button({
         qa={qa}
         {...rest}
       >
-        {img}
-        {children}
+        {contents}
       </ButtonLink>
     );
   }
@@ -96,16 +102,14 @@ export default function Button({
         disabled={disabled}
         {...rest}
       >
-        {img}
-        {children}
+        {contents}
       </button>
     );
   }
 
   return (
     <button data-qa={qa} ref={buttonRef} type={type} className={classNames} disabled={disabled} {...rest}>
-      {img}
-      {children}
+      {contents}
     </button>
   );
 }

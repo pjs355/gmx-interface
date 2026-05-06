@@ -232,22 +232,24 @@ export default function GameLinks({
 
 	return (
 		<div className="game-links-wrapper">
-			{canScrollLeft && (
-				<button
-					type="button"
-					className="scroll-arrow left"
-					aria-label="Scroll left"
-					onClick={() => scrollByAmount(-240)}
+			<div className="game-links-underlay" aria-hidden />
+			<div className="game-links-sticky">
+				{canScrollLeft && (
+					<button
+						type="button"
+						className="scroll-arrow left"
+						aria-label="Scroll left"
+						onClick={() => scrollByAmount(-240)}
+					>
+						‹
+					</button>
+				)}
+				{canScrollLeft && <div className="fade-left" aria-hidden />}
+				<nav
+					className="game-links-bar game-links-scroll"
+					aria-label="Game links"
+					ref={scrollRef}
 				>
-					‹
-				</button>
-			)}
-			{canScrollLeft && <div className="fade-left" aria-hidden />}
-			<nav
-				className="game-links-bar game-links-scroll"
-				aria-label="Game links"
-				ref={scrollRef}
-			>
 				<button
 					type="button"
 					className={`game-link game-link--live ${
@@ -314,6 +316,7 @@ export default function GameLinks({
 					›
 				</button>
 			)}
+			</div>
 		</div>
 	);
 }

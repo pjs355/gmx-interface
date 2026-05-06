@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useMedia } from "react-use";
 import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarketTradeBox";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -32,6 +33,21 @@ export function UmbrellaTradeBoxPanel({
 	mobilePeekBar = "default",
 }: UmbrellaTradeBoxPanelProps) {
 	const [, setTradeSide] = useState<"buy" | "sell">("buy");
+	/* Match desktop market grid (`predictions-page__home-trade-grid` @ 1101px). */
+	const wideTradeDock = useMedia("(min-width: 1101px)");
+
+	const desktopTradeDockShell = (child: React.ReactNode) =>
+		wideTradeDock ? (
+			<div
+				className="prediction-trade-column-shell"
+				data-qa="prediction-tradebox"
+			>
+				<div className="prediction-trade-column-underlay" aria-hidden />
+				<div className="prediction-trade-column-body">{child}</div>
+			</div>
+		) : (
+			child
+		);
 
 	const pandascoreMatchId =
 		typeof umbrella?.pandascore_matchId === "string"
@@ -41,7 +57,7 @@ export function UmbrellaTradeBoxPanel({
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 
 	if (settledInfo) {
-		return (
+		return desktopTradeDockShell(
 			<div className="prediction-market-tradebox match-settled-banner">
 				<div className="match-settled-banner__content">
 					<div className="match-settled-banner__winner">
@@ -59,7 +75,7 @@ export function UmbrellaTradeBoxPanel({
 	// This prevents the "skeleton flash" the user sees when clicking between markets,
 	// and the typed amount survives via `StickyTradeAmountContext`.
 	if (!activeMarket) {
-		return <TradeBoxSkeleton />;
+		return desktopTradeDockShell(<TradeBoxSkeleton />);
 	}
 
 	const orderbook = questionOrderbooks[getMarketId(activeMarket)] as any;

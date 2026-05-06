@@ -1,158 +1,186 @@
 .button {
-  cursor: pointer;
-  font-size: var(--font-size-body-medium);
-  line-height: var(--line-height-body-medium);
-  display: inline-flex;
-  align-items: center;
-  font-weight: normal;
-  padding: 1.1rem 1.6rem;
-  border: none;
-  user-select: none;
+	cursor: pointer;
+	font-size: var(--font-size-body-medium);
+	line-height: var(--line-height-body-medium);
+	display: inline-flex;
+	align-items: center;
+	font-weight: normal;
+	padding: 1.1rem 1.6rem;
+	border: none;
+	user-select: none;
 
-  &.center {
-    justify-content: center;
-  }
+	&.center {
+		justify-content: center;
+	}
 
-  &.left {
-    justify-content: start;
-  }
+	&.left {
+		justify-content: start;
+	}
 
-  &.right {
-    justify-content: end;
-  }
+	&.right {
+		justify-content: end;
+	}
 
-  &.primary {
-    background: var(--primary-btn-bg);
-    color: var(--color-white);
-    border-radius: 0.625rem;
-    padding: 1.65rem 1.6rem;
+	&.primary {
+		background: var(--primary-btn-bg);
+		color: var(--color-white);
+		border-radius: 0.625rem;
+		padding: 1.65rem 1.6rem;
 
-    &:not([disabled]):hover {
-      background: var(--primary-btn-hover);
-    }
+		&:not([disabled]):hover {
+			background: var(--primary-btn-hover);
+		}
 
-    &:not([disabled]):active {
-      background-color: var(--primary-btn-active);
-    }
-  }
+		&:not([disabled]):active {
+			background-color: var(--primary-btn-active);
+		}
+	}
 
-  &.primary-action {
-    background: var(--primary-btn-bg);
-    color: var(--color-white);
-    border-radius: 0.625rem;
-    padding: 1.65rem 1.6rem;
-    font-weight: bold;
+	&.primary-action {
+		background: var(--primary-btn-bg);
+		color: var(--color-white);
+		border-radius: 0.625rem;
+		padding: 1.65rem 1.6rem;
+		font-weight: bold;
 
-    &:not([disabled], .disabled):hover {
-      background: var(--primary-btn-hover);
-      box-shadow: 0 0 0.4rem 0.5rem color-mix(in srgb, #9285f3 10%, transparent);
-    }
+		&:not([disabled], .disabled):hover {
+			background: var(--primary-btn-hover);
+			box-shadow: 0 0 0.4rem 0.5rem
+				color-mix(in srgb, #9285f3 10%, transparent);
+		}
 
-    &:not([disabled], .disabled):active {
-      background-color: var(--primary-btn-active);
-      box-shadow: 0 0 0.4rem 0.6rem color-mix(in srgb, #9285f3 10%, transparent);
-    }
-  }
+		&:not([disabled], .disabled):active {
+			background-color: var(--primary-btn-active);
+			box-shadow: 0 0 0.4rem 0.6rem
+				color-mix(in srgb, #9285f3 10%, transparent);
+		}
+	}
 
-  &.secondary {
-    background-color: var(--color-slate-700);
-    border-radius: 0.625rem;
-    color: var(--color-white);
-    padding: 1.1rem 1.25rem;
-    font-weight: normal;
-    position: relative;
-    letter-spacing: 0;
+	&.secondary {
+		background-color: var(--color-slate-700);
+		border-radius: 0.625rem;
+		color: var(--color-white);
+		padding: 1.1rem 1.25rem;
+		font-weight: normal;
+		position: relative;
+		letter-spacing: 0;
 
-    > .btn-image {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      max-height: 2.3rem;
-      max-width: 2.3rem;
-      margin-right: 1.15rem;
-    }
+		.btn-image {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			max-height: 2.3rem;
+			max-width: 2.3rem;
+			margin-right: 1.15rem;
+		}
 
-    > .arrow-icon {
-      position: absolute;
-      right: 0.5rem;
-      top: 0.5rem;
-      max-width: 0.8rem;
-    }
+		> .arrow-icon {
+			position: absolute;
+			right: 0.5rem;
+			top: 0.5rem;
+			max-width: 0.8rem;
+		}
 
-    &:not([disabled], .disabled):hover {
-      background-color: var(--color-cold-blue-700);
-    }
+		&:not([disabled], .disabled):hover {
+			background-color: var(--color-cold-blue-700);
+		}
 
-    &:not([disabled], .disabled):active {
-      background: var(--color-cold-blue-500);
-    }
-  }
+		&:not([disabled], .disabled):active {
+			background: var(--color-cold-blue-500);
+		}
+	}
 
-  &.ghost {
-    background-color: transparent;
-    border-radius: 0.625rem;
-    color: var(--color-white);
-    padding: 1.1rem 1.25rem;
-    font-weight: normal;
-    position: relative;
-    letter-spacing: 0;
+	&.ghost {
+		background-color: transparent;
+		border-radius: 0.625rem;
+		color: var(--color-white);
+		padding: 1.1rem 1.25rem;
+		font-weight: normal;
+		position: relative;
+		letter-spacing: 0;
 
-    > .btn-image {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      max-height: 2.3rem;
-      max-width: 2.3rem;
-      margin-right: 1.15rem;
-    }
+		.btn-image {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			max-height: 2.3rem;
+			max-width: 2.3rem;
+			margin-right: 1.15rem;
+		}
 
-    > .arrow-icon {
-      position: absolute;
-      right: 0.5rem;
-      top: 0.5rem;
-      max-width: 0.8rem;
-    }
+		> .arrow-icon {
+			position: absolute;
+			right: 0.5rem;
+			top: 0.5rem;
+			max-width: 0.8rem;
+		}
 
-    &:not([disabled], .disabled):hover {
-      background-color: var(--color-cold-blue-700);
-    }
+		&:not([disabled], .disabled):hover {
+			background-color: var(--color-cold-blue-700);
+		}
 
-    &:not([disabled], .disabled):active {
-      background: var(--color-cold-blue-500);
-    }
-  }
+		&:not([disabled], .disabled):active {
+			background: var(--color-cold-blue-500);
+		}
+	}
 
-  &.link {
-    color: var(--color-slate-100);
-    text-decoration: underline;
-    padding: 0;
+	&.link {
+		color: var(--color-slate-100);
+		text-decoration: underline;
+		padding: 0;
 
-    &.disabled {
-      text-decoration: none;
-    }
+		&.disabled {
+			text-decoration: none;
+		}
 
-    &:not([disabled], .disabled):hover {
-      color: var(--color-white);
-    }
-  }
+		&:not([disabled], .disabled):hover {
+			color: var(--color-white);
+		}
+	}
 
-  &.disabled,
-  &:disabled {
-    box-shadow: none;
-    cursor: not-allowed;
+	&.disabled,
+	&:disabled {
+		box-shadow: none;
+		cursor: not-allowed;
 
-    &.primary-action,
-    &.primary {
-      background-color: #1d235f;
-    }
+		&.primary-action,
+		&.primary {
+			background-color: #1d235f;
+		}
 
-    &.secondary {
-      background-color: #1b1e32;
-      color: var(--color-slate-500);
-    }
-  }
+		&.secondary {
+			background-color: #1b1e32;
+			color: var(--color-slate-500);
+		}
+	}
 
-  &.slim {
-    padding: 6px 10px;
-  }
+	&.slim {
+		padding: 6px 10px;
+	}
+
+	/*
+	 * Shifts visible label (~3px) without changing tap targets or padding —
+	 * spans img + text from `Button.tsx`.
+	 */
+	> .button__label-nudge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: inherit;
+		min-width: 0;
+		position: relative;
+		top: 2px;
+	}
+
+	&.trade-button > .button__label-nudge {
+		justify-content: center;
+		flex: 1 1 0%;
+		width: 100%;
+	}
+}
+
+/* Markets mobile header Buy/Sell: native `<button>`, same 3px nudge as `.button`. */
+.side-btn-mobile > .button__label-nudge {
+	position: relative;
+	top: 3px;
+	display: inline-block;
 }

@@ -49,16 +49,18 @@ export function AppHeaderUser({
 	disconnectAccountAndCloseSettings,
 	showRedirectModal,
 }: Props) {
-    // Simplified for prediction markets - centralized signer context
-    const { authenticated: active, account, ready: signerReady } = useSignerContext();
-	const { login, user, authenticated } = usePrivy();
+	// Simplified for prediction markets - centralized signer context
+	const { authenticated: active, account, ready: signerReady } =
+		useSignerContext();
+	const { login, user } = usePrivy();
 	const { refresh: refreshUserData } = useUserData();
 	const funding = useFundingAddresses();
 	const fundEvmTarget = resolvePrivyEvmFundTarget(
 		funding.baseSmartWallet,
-		account
+		account,
 	);
-	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
+	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
+		usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
 	// Cash: do not block on positions page shell — show when balance fetches complete
@@ -66,13 +68,13 @@ export function AppHeaderUser({
 
 	// Detect if user logged in with email (smart wallet) or external wallet
 	const hasSmartWallet = user?.linkedAccounts?.some(
-		(acct: any) => acct?.type === "smart_wallet"
+		(acct: any) => acct?.type === "smart_wallet",
 	);
 	const userEmail = user?.email?.address || user?.google?.email;
 	const isSmartWallet = Boolean(hasSmartWallet && userEmail);
 
 	const formatCurrency = (
-		value: number | string | null | undefined
+		value: number | string | null | undefined,
 	): string => {
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || num === undefined || !isFinite(num)) return "--";
@@ -158,129 +160,119 @@ export function AppHeaderUser({
 	}
 
 	// Build simple Base explorer URL
-	const accountUrl = account ? `https://basescan.org/address/${account}` : "";
+	const accountUrl = account
+		? `https://basescan.org/address/${account}`
+		: "";
 
-	return (
-		<div className="App-header-user">
-			{/* Removed isHomeSite check - not needed for prediction markets */}
-			{false ? (
+	/* Desktop: three direct siblings under `.App-header-container-right` (no extra row wrapper). */
+	if (!small) {
+		return (
+			<>
 				<div
-					data-qa="trade"
-					className="App-header-trade-link text-body-medium"
+					className="App-header-nav-portfolio"
+					data-qa="header-portfolio-wrap"
 				>
 					<HeaderLink
-						className="default-btn"
-						to="/"
+						className="header-metric-box header-metric-box--portfolio"
+						to="/positions"
 						showRedirectModal={showRedirectModal}
 					>
-						Launch App
+						<div className="header-metric-row">
+							<span className="header-metric-label">Portfolio</span>
+							<span className="header-metric-value">
+								{showPortfolioMetricSkeleton ? (
+									<span
+										className="skeleton-box"
+										style={{
+											display: "inline-block",
+											width: 64,
+											height: 14,
+											borderRadius: 4,
+											backgroundColor:
+												"rgba(255, 255, 255, 0.1)",
+										}}
+									/>
+								) : portfolioTotal === null ||
+								  !isFinite(portfolioTotal) ? (
+									"--"
+								) : (
+									`$${formatCurrency(portfolioTotal)}`
+								)}
+							</span>
+						</div>
 					</HeaderLink>
 				</div>
-			) : null}
-
-			{true ? ( // Always show for prediction markets
-				<>
-					{/* Portfolio Display - Hidden on mobile */}
-					{!small && (
-						<HeaderLink
-							className="header-metric-box mr-4"
-							to="/positions"
-							showRedirectModal={showRedirectModal}
-						>
-							<div className="flex flex-col items-center">
-								<span
-									className="text-xs font-bold text-white"
-									style={{ color: "white" }}
-								>
-									Portfolio
-								</span>
-								<span
-									className="text-sm font-normal text-white"
-									style={{ color: "white", minHeight: 20, display: "inline-flex", alignItems: "center" }}
-								>
-									{showPortfolioMetricSkeleton ? (
-										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
-									) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
-										"--"
-									) : (
-										`$${formatCurrency(portfolioTotal)}`
-									)}
-								</span>
+				<div
+					className="App-header-nav-cash"
+					data-qa="header-cash-wrap"
+				>
+					<PrivyGatedFundTrigger
+						fundTarget={fundEvmTarget}
+						ready={signerReady}
+						onAfterFund={refreshUserData}
+					>
+						{({ openFund, canFund }) => (
+							<div
+								data-qa="header-cash"
+								data-qa-cash-amount={
+									!cashLoading &&
+									typeof cashBalance === "number" &&
+									isFinite(cashBalance)
+										? cashBalance
+										: undefined
+								}
+								className="header-metric-box header-metric-box--cash"
+								onClick={() => {
+									if (canFund) void openFund();
+								}}
+								style={{
+									cursor: canFund ? "pointer" : "default",
+								}}
+							>
+								<div className="header-metric-row">
+									<span className="header-metric-label">
+										Cash
+									</span>
+									<span className="header-metric-value">
+										{showCashMetricSkeleton ? (
+											<span
+												className="skeleton-box"
+												style={{
+													display: "inline-block",
+													width: 64,
+													height: 14,
+													borderRadius: 4,
+													backgroundColor:
+														"rgba(255, 255, 255, 0.1)",
+												}}
+											/>
+										) : (
+											`$${formatCurrency(cashBalance)}`
+										)}
+									</span>
+								</div>
 							</div>
-						</HeaderLink>
-					)}
-					{/* USDC Balance Display - Hidden on mobile - Clicks open Privy deposit */}
-					{!small && (
-						<PrivyGatedFundTrigger
-							fundTarget={fundEvmTarget}
-							ready={signerReady}
-							onAfterFund={refreshUserData}
-						>
-							{({ openFund, canFund }) => (
-						<div
-							data-qa="header-cash"
-							data-qa-cash-amount={
-								!cashLoading &&
-								typeof cashBalance === "number" &&
-								isFinite(cashBalance)
-									? cashBalance
-									: undefined
-							}
-							className="header-metric-box mr-4"
-							onClick={() => {
-								if (canFund) void openFund();
-							}}
-							style={{ cursor: canFund ? "pointer" : "default" }}
-						>
-							<div className="flex flex-col items-center">
-								<span
-									className="text-xs font-bold text-white"
-									style={{ color: "white" }}
-								>
-									Cash
-								</span>
-								<span
-									className="text-sm font-normal text-white"
-									style={{ color: "white", minHeight: 20, display: "inline-flex", alignItems: "center" }}
-								>
-									{showCashMetricSkeleton ? (
-										<span className="skeleton-box" style={{ display: 'inline-block', width: 70, height: 16, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
-									) : (
-										`$${formatCurrency(cashBalance)}`
-									)}
-								</span>
-							</div>
-						</div>
-							)}
-						</PrivyGatedFundTrigger>
-					)}
+						)}
+					</PrivyGatedFundTrigger>
+				</div>
+				<div
+					data-qa="user-address"
+					className="App-header-nav-email App-header-user-address"
+				>
+					<AddressDropdown
+						account={account as string}
+						accountUrl={accountUrl}
+						disconnectAccountAndCloseSettings={
+							disconnectAccountAndCloseSettings
+						}
+						userEmail={userEmail}
+						isSmartWallet={isSmartWallet}
+					/>
+				</div>
+			</>
+		);
+	}
 
-                    {!small && (
-                        <div
-                            data-qa="user-address"
-                            className="App-header-user-address"
-                        >
-                            <AddressDropdown
-                                account={account as string}
-                                accountUrl={accountUrl}
-                                disconnectAccountAndCloseSettings={
-                                    disconnectAccountAndCloseSettings
-                                }
-                                userEmail={userEmail}
-                                isSmartWallet={isSmartWallet}
-                            />
-                        </div>
-                    )}
-					{!small && <OneClickButton openSettings={openSettings} />}
-					{/* <NetworkDropdown
-            small={small}
-            networkOptions={NETWORK_OPTIONS}
-            selectorLabel={selectorLabel}
-            openSettings={openSettings}
-          /> */}
-				</>
-			) : null}
-			{menuToggle}
-		</div>
-	);
+	/* Logged-in mobile: metrics + address live in drawer; bar shows menu only. */
+	return <>{menuToggle}</>;
 }

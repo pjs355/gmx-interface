@@ -328,53 +328,57 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	if (!isMobile) {
 		return (
 			<div
-				className="text-body-medium flex flex-col rounded-12 shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
-				style={{ backgroundColor: "transparent", marginBottom: "80px" }}
+				className="prediction-trade-column-shell text-body-medium flex flex-col"
 				data-qa="prediction-tradebox"
 			>
-				{executionGateBanner}
-			<PredictionMarketTradeBoxUI
-				market={market}
-				orderbook={orderbook}
-				pandascoreMatchId={pandascoreMatchId}
-				umbrellaId={umbrellaId}
-				umbrellaDisplayName={umbrellaDisplayName}
-				crossBuyYes={crossBuyYes}
-				crossBuyNo={crossBuyNo}
-				state={state}
-				onPositionChange={onPositionChange}
-				onAmountChange={onAmountChange}
-				onPriceChange={onPriceChange}
-				onTradingVenueChange={onTradingVenueChange}
-				onOrderTypeChange={onOrderTypeChange}
-				onSideChange={onSideChange}
-				polymarketVenueHint={polymarketVenueHint}
-				predictVenueHint={predictVenueHint}
-				predictVenueBookHints={predictVenueBookHints}
-				dflowVenueHint={dflowVenueHint}
-				matchedVenues={matchedVenues}
-				onTrade={onTrade}
-				buttonState={buttonState}
-				approvalState={approvalState}
-				walletAddress={walletAddress}
-				usdcBalance={usdcBalance}
-				calculateContractsForMarketOrder={calculateContractsForMarketOrder}
-				getEffectivePrice={getEffectivePrice}
-				sorRoute={sorRoute}
-				sorExecution={sorExecution}
-				sorRouteExpired={sorRouteExpired}
-				handleSorExecute={handleSorExecute}
-				maxScopedSellShares={maxScopedSellShares}
-				matchedMonitor={matchedMonitor}
-				allMarketsSellYesBid={allMarketsSellYesBid}
-				allMarketsSellNoBid={allMarketsSellNoBid}
-				shareBalances={shareBalances}
-				dflowUninitAtSubmit={dflowUninitAtSubmit}
-				dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
-			/>
-		</div>
-	);
-}
+				<div className="prediction-trade-column-underlay" aria-hidden />
+				<div className="prediction-trade-column-body">
+					{executionGateBanner}
+					<PredictionMarketTradeBoxUI
+						market={market}
+						orderbook={orderbook}
+						pandascoreMatchId={pandascoreMatchId}
+						umbrellaId={umbrellaId}
+						umbrellaDisplayName={umbrellaDisplayName}
+						crossBuyYes={crossBuyYes}
+						crossBuyNo={crossBuyNo}
+						state={state}
+						onPositionChange={onPositionChange}
+						onAmountChange={onAmountChange}
+						onPriceChange={onPriceChange}
+						onTradingVenueChange={onTradingVenueChange}
+						onOrderTypeChange={onOrderTypeChange}
+						onSideChange={onSideChange}
+						polymarketVenueHint={polymarketVenueHint}
+						predictVenueHint={predictVenueHint}
+						predictVenueBookHints={predictVenueBookHints}
+						dflowVenueHint={dflowVenueHint}
+						matchedVenues={matchedVenues}
+						onTrade={onTrade}
+						buttonState={buttonState}
+						approvalState={approvalState}
+						walletAddress={walletAddress}
+						usdcBalance={usdcBalance}
+						calculateContractsForMarketOrder={
+							calculateContractsForMarketOrder
+						}
+						getEffectivePrice={getEffectivePrice}
+						sorRoute={sorRoute}
+						sorExecution={sorExecution}
+						sorRouteExpired={sorRouteExpired}
+						handleSorExecute={handleSorExecute}
+						maxScopedSellShares={maxScopedSellShares}
+						matchedMonitor={matchedMonitor}
+						allMarketsSellYesBid={allMarketsSellYesBid}
+						allMarketsSellNoBid={allMarketsSellNoBid}
+						shareBalances={shareBalances}
+						dflowUninitAtSubmit={dflowUninitAtSubmit}
+						dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
+					/>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<PredictionCurtain

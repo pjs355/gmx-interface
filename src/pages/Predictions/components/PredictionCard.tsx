@@ -115,11 +115,13 @@ function PredictionOutcomeTeamImg({
 	umbrella,
 	tags,
 	teamLogoUrl,
+	invertRemoteLogo,
 	displayName,
 }: {
 	umbrella: Umbrella;
 	tags: Array<{ _id: string; label: string; imageUrl?: string }>;
 	teamLogoUrl: string | null;
+	invertRemoteLogo: boolean;
 	displayName: string;
 }) {
 	const candidates = useMemo(() => {
@@ -153,12 +155,14 @@ function PredictionOutcomeTeamImg({
 
 	const src = candidates[index] ?? gtaIcon;
 	const showController = !teamLogoUrl || index > 0;
+	const invertActive =
+		invertRemoteLogo && index === 0 && Boolean(teamLogoUrl);
 
 	return (
 		<img
 			className={`prediction-card-outcome-logo-img${
 				showController ? " prediction-card-outcome-logo-img--controller" : ""
-			}`}
+			}${invertActive ? " prediction-card-outcome-logo-img--invert" : ""}`}
 			src={src}
 			alt={displayName}
 			onError={() =>
@@ -291,6 +295,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			return [] as Array<{
 				logoUrl: string | null;
 				displayName: string;
+				invertLogo: boolean;
 			}>;
 		}
 
@@ -300,6 +305,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		const resolved: Array<{
 			logoUrl: string | null;
 			displayName: string;
+			invertLogo: boolean;
 		}> = [];
 		for (let index = 0; index < mappings.length; index += 1) {
 			const mapping = mappings[index];
@@ -312,6 +318,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					? resolvedLogoUrl
 					: null,
 				displayName: mapping.displayName,
+				invertLogo: mapping.invertLogo === true,
 			});
 		}
 		return resolved;
@@ -763,6 +770,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				umbrella={umbrella}
 				tags={tags}
 				teamLogoUrl={t.logoUrl}
+				invertRemoteLogo={t.invertLogo}
 				displayName={t.displayName}
 			/>
 		);

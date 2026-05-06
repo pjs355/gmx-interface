@@ -84,13 +84,13 @@ export default function MobileTradingBoxHeader({
               className={`side-btn-mobile ${side === 'buy' ? 'active' : ''}`}
               onClick={() => onSideChange('buy')}
             >
-              Buy
+              <span className="button__label-nudge">Buy</span>
             </button>
             <button
               className={`side-btn-mobile ${side === 'sell' ? 'active' : ''}`}
               onClick={() => onSideChange('sell')}
             >
-              Sell
+              <span className="button__label-nudge">Sell</span>
             </button>
           </div>
 

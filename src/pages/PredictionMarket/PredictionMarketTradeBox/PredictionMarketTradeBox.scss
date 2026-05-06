@@ -1,11 +1,14 @@
+@use "../../../styles/themes/predictions-glass" as *;
+@use "./PredictionMarketTradeBoxDesktop.scss";
+
 .prediction-market-tradebox {
 	position: relative;
-	background: #101114;
+	@include predictions-glass-backdrop($predictions-glass-overlay-tradebox);
 	border-radius: 12px;
 	/* Clip children (inputs, tabs, shadows) to rounded rect — avoids painting above the top edge */
 	overflow: hidden;
 	padding: 15px;
-	margin-top: 15px;
+	margin-top: 0;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	border: 1px solid #4b5563;
 	color: #333;
@@ -118,16 +121,21 @@
 			gap: 4px;
 			margin-bottom: 0;
 
-			.side-btn {
+			/* Outranks shared `.button.primary` / `.button.secondary` from `Button.tsx`. */
+			.button.side-btn {
 				flex: 1;
 				padding: 8px 12px;
 				border-radius: 6px;
 				font-size: 16px;
 				font-weight: 400;
-				transition: all 0.2s ease;
+				transition:
+					color 0.2s ease,
+					border-color 0.2s ease,
+					background 0.2s ease;
 				border: 1px solid #6b7280;
 				color: #6b7280;
-				background: transparent;
+				background: transparent !important;
+				box-shadow: none !important;
 				transform: none !important; // Prevent any size changes
 				min-width: 60px; // Fixed minimum width
 				width: 60px; // Fixed width
@@ -137,27 +145,17 @@
 				justify-content: center;
 				box-sizing: border-box;
 
-				&:hover {
-					border-color: #7c3aed;
-					color: #7c3aed;
+				&:hover:not(.selected) {
+					border-color: #9ca3af !important;
+					color: #9ca3af !important;
+					background: transparent !important;
 					transform: none !important; // Prevent any size changes
 				}
 
-				&.selected.primary {
-					background: transparent;
-					border-color: #7c3aed;
-					color: #7c3aed;
-					font-weight: 700;
-					transform: none !important; // Prevent any size changes
-					min-width: 60px; // Maintain fixed width
-					width: 60px; // Maintain fixed width
-					height: 36px; // Maintain fixed height
-				}
-
-				&.selected.secondary {
-					background: transparent;
-					border-color: #7c3aed;
-					color: #7c3aed;
+				&.selected {
+					background: transparent !important;
+					border-color: #ffffff !important;
+					color: #ffffff !important;
 					font-weight: 700;
 					transform: none !important; // Prevent any size changes
 					min-width: 60px; // Maintain fixed width
@@ -1063,7 +1061,7 @@
 
 .prediction-curtain-content {
 	/* Match the inner trade widget so the panel reads as one surface (was `black`). */
-	background: #101114;
+	@include predictions-glass-backdrop($predictions-glass-overlay-tradebox);
 	border-top: 1px solid #4b5563;
 	border-radius: 12px 12px 0 0;
 	height: 85vh; /* take up most of the screen */
@@ -1089,6 +1087,16 @@
 		box-shadow: none;
 		margin-top: 0;
 		padding: 0;
+	}
+}
+
+/* Solid black sheet on phone/tablet trade curtain (glass mixin reads transparent when tint is off). */
+@media (max-width: 1100px) {
+	.prediction-curtain-content {
+		background-color: #000000 !important;
+		background-image: none !important;
+		-webkit-backdrop-filter: none !important;
+		backdrop-filter: none !important;
 	}
 }
 
@@ -1780,9 +1788,12 @@ html.curtain-open {
 	}
 }
 
-/* Portaled fee breakdown tooltip — match `.prediction-market-tradebox` surface (#101114). */
+/* Portaled fee breakdown tooltip — match `.prediction-market-tradebox` frosted surface. */
 .sor-fees-tooltip-popup--tradebox {
-	background-color: #101114 !important;
+	background-color: predictions-glass-tint-color($predictions-glass-overlay-tradebox)
+		!important;
+	-webkit-backdrop-filter: blur($predictions-glass-blur) !important;
+	backdrop-filter: blur($predictions-glass-blur) !important;
 	border: 1px solid #4b5563 !important;
 	border-radius: 8px !important;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
@@ -1793,5 +1804,84 @@ html.curtain-open {
 
 	svg.fill-slate-600 {
 		fill: #101114 !important;
+	}
+}
+
+/* -------------------------------------------------------------------------- */
+/* Desktop trade column (≥1101px): stretch host + frosted underlay + sticky   */
+/* scrolling inner — same pattern as `.game-links-wrapper` / `.game-links-sticky`. */
+/* -------------------------------------------------------------------------- */
+@media (max-width: 1100px) {
+	.prediction-trade-column-underlay {
+		display: none !important;
+	}
+
+	.prediction-trade-column-shell {
+		display: contents;
+	}
+}
+
+@media (min-width: 1101px) {
+	.prediction-trade-column-shell {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		align-self: stretch;
+		min-height: 0;
+		width: 100%;
+		box-sizing: border-box;
+		background: transparent;
+		margin-bottom: 80px;
+		border-left: 1px solid rgba(229, 231, 235, 0.22);
+	}
+
+	.prediction-trade-column-underlay {
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		@include predictions-glass-backdrop($predictions-glass-overlay-tradebox);
+	}
+
+	.prediction-trade-column-body {
+		position: sticky;
+		top: var(--app-header-height, 6.2rem);
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
+		align-self: stretch;
+		max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
+		overflow-y: auto;
+		overflow-x: hidden;
+		overscroll-behavior-y: contain;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+		padding-top: 10px;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+	}
+
+	/* Flatten the old “card” chrome; the column underlay provides the frost. */
+	.prediction-trade-column-body > .prediction-market-tradebox {
+		background-color: transparent;
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+		border: none;
+		box-shadow: none;
+		border-radius: 0;
+		overflow: visible;
+	}
+
+	.prediction-trade-column-body > .tradebox-skeleton {
+		background: transparent;
+		border: none;
+		border-radius: 0;
+		box-shadow: none;
 	}
 }

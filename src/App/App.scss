@@ -129,16 +129,6 @@ button.App-connect-wallet:hover {
 	margin-right: 0.8rem;
 }
 
-.App-header-user-address {
-	border: 1px solid var(--color-stroke-primary);
-	height: 3.6rem;
-	border-radius: 0.4rem;
-	display: inline-flex;
-	align-items: center;
-	color: var(--color-white);
-	position: relative;
-}
-
 .mobile-menu-divider {
 	height: 1px;
 	background: var(--color-slate-500);
@@ -285,7 +275,6 @@ button.App-connect-wallet:hover {
 
 .App-header-link-main img {
 	display: inline-block;
-	height: 3.15rem;
 	vertical-align: middle;
 }
 
@@ -381,8 +370,7 @@ button.App-connect-wallet:hover {
 	width: auto;
 	flex: 0 0 auto;
 	text-align: center;
-	font: 500 13px/1.3 "Akkurat", -apple-system, BlinkMacSystemFont, system-ui,
-		sans-serif;
+	font: 500 13px/1.3 $font-primary;
 }
 
 .App-icon {
@@ -447,17 +435,6 @@ button.App-cta.option,
 a.App-cta.option {
 	padding: 0.8rem 1.5rem;
 	font-size: var(--font-size-body-small);
-}
-
-.App-header-container-right {
-	display: flex;
-	align-items: center;
-}
-
-.App-header-user {
-	display: flex;
-	align-items: center;
-	gap: 1.6rem;
 }
 
 .Network-icon {
@@ -697,7 +674,7 @@ button.App-button {
 	.long-connect-btn {
 		display: none !important;
 	}
-	.App-header-user-address {
+	.App-header .App-header-user-address {
 		padding: 0 0px;
 	}
 
@@ -718,7 +695,7 @@ button.App-button {
 		margin-bottom: 4.65rem;
 	}
 
-	.App-header-user {
+	.App-header .App-header-user {
 		padding-bottom: 0;
 	}
 
@@ -783,7 +760,7 @@ button.App-button {
 }
 
 @media (max-width: 450px) {
-	.App-header-user {
+	.App-header .App-header-user {
 		gap: 0.6rem;
 	}
 	.App-header-trade-link a {

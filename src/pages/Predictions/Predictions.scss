@@ -1,3 +1,8 @@
+@use "../../styles/themes/predictions-glass" as *;
+
+/* Compact cards + calendar headings (Counter-Strike, Today, date) share this inset. */
+$predictions-compact-card-inline: 60px;
+
 .predictions-page {
 	--predictions-split-gutter: 24px;
 	/* Same top inset for left nav pills and right trade column (below page padding). */
@@ -15,6 +20,11 @@
 	padding-top: 12px;
 	padding-bottom: 50px;
 
+	@media (min-width: 1100px) {
+		padding-left: var(--app-content-inline-gutter);
+		padding-right: var(--app-content-inline-gutter);
+	}
+
 	// Promotion bar should extend full width (only used when shown on predictions page for non-authenticated users)
 	.promotion-bar {
 		margin-top: -10px;
@@ -26,6 +36,136 @@
 	.search-container {
 		margin-top: 24px;
 		margin-bottom: 24px;
+	}
+}
+
+/* Hero sits under the fixed header ≥1100px; drop extra top gutter (mobile / ipad keep `.predictions-page` + max-width rules). */
+@media (min-width: 1100px) {
+	.predictions-page.predictions-page--market-bg.page-layout {
+		padding-top: 0;
+	}
+}
+
+/*
+ * Markets hero: keep the left page gutter (nav / logo alignment) but run flush
+ * to the viewport on the right so the trade rail can use that space.
+ * `--predictions-trade-panel-width` is recalculated here only; umbrella pages
+ * keep the shared :root formula (both sides padded).
+ */
+.predictions-page.predictions-page--market-bg {
+	padding-right: 0;
+
+	@media (min-width: 1101px) {
+		--predictions-trade-panel-width: calc(
+			((100vw - var(--app-content-inline-gutter)) * 0.8 - 24px) / 2.55
+		);
+	}
+}
+
+/* Per-game backdrop (see `resolveMarketBackgroundUrl` + `.predictions-page__market-background` in FilteredPredictions). */
+.predictions-page--market-bg {
+	position: relative;
+	isolation: isolate;
+	overflow-x: clip;
+
+	.predictions-page__market-background {
+		position: absolute;
+		/*
+		 * Span the full padded box (inside borders). Using 100vw + translate
+		 * left a strip at page gutters unpainted beside `overflow-x: clip`.
+		 */
+		left: 0;
+		right: 0;
+		top: 0;
+		transform: none;
+		width: auto;
+		/*
+		 * Tall band: image + fades over most of the viewport; flat black below starts much lower.
+		 */
+		height: min(88vh, 1100px);
+		max-height: min(96vh, 1200px);
+		z-index: 0;
+		pointer-events: none;
+		overflow: hidden;
+		background-color: #000000;
+
+		/*
+		 * Photo layer (mask fades the JPEG itself). Overlays below are separate—
+		 * without this mask, rapid “fade” mostly comes from the bitmap + cover crop + hard band bottom edge.
+		 */
+		.predictions-page__market-background-photo {
+			position: absolute;
+			inset: 0;
+			background-size: cover;
+			background-position: center top;
+			background-repeat: no-repeat;
+			z-index: 0;
+			-webkit-mask-image: linear-gradient(
+				to bottom,
+				#000 0%,
+				#000 36%,
+				rgba(0, 0, 0, 0.93) 48%,
+				rgba(0, 0, 0, 0.65) 62%,
+				rgba(0, 0, 0, 0.32) 78%,
+				transparent 98%
+			);
+			mask-image: linear-gradient(
+				to bottom,
+				#000 0%,
+				#000 36%,
+				rgba(0, 0, 0, 0.93) 48%,
+				rgba(0, 0, 0, 0.65) 62%,
+				rgba(0, 0, 0, 0.32) 78%,
+				transparent 98%
+			);
+			mask-size: 100% 100%;
+			-webkit-mask-size: 100% 100%;
+			mask-repeat: no-repeat;
+			-webkit-mask-repeat: no-repeat;
+		}
+
+		/* Uniform dim over the hero — slightly heavier at top (pairs with ::after ramp). */
+		&::before {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.58);
+			z-index: 1;
+			pointer-events: none;
+		}
+
+		/* Gradual deepening; top of band starts darker than before. */
+		&::after {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background: linear-gradient(
+				to bottom,
+				rgba(0, 0, 0, 0.18) 0%,
+				rgba(0, 0, 0, 0.1) 32%,
+				rgba(0, 0, 0, 0.04) 38%,
+				rgba(0, 0, 0, 0.1) 45%,
+				rgba(0, 0, 0, 0.22) 56%,
+				rgba(0, 0, 0, 0.4) 68%,
+				rgba(0, 0, 0, 0.58) 82%,
+				rgba(0, 0, 0, 0.8) 94%,
+				#000000 100%
+			);
+			z-index: 2;
+			pointer-events: none;
+		}
+	}
+
+	.predictions-page__body {
+		position: relative;
+		z-index: 1;
+	}
+
+	/* Horizontal pill strip: frosted wash on `.game-links-wrapper`. Laptop column uses `.game-links-underlay` instead (see `@media min-width 1100px`). */
+	@media (max-width: 1099px) {
+		.game-links-wrapper {
+			@include predictions-glass-backdrop;
+		}
 	}
 }
 
@@ -111,6 +251,20 @@
 	}
 }
 
+/* Laptop column shell: `.game-links-underlay` stretches with the row height; `.game-links-sticky` pins the pills. Hidden on compact layouts (display handled in laptop block below). */
+.game-links-underlay {
+	display: none;
+}
+
+.game-links-sticky {
+	position: relative;
+	z-index: 1;
+
+	@media (max-width: 1099px) {
+		display: contents;
+	}
+}
+
 /* Consistent spacing approach across all screen sizes */
 /* Mobile: Use global padding-top (4.7rem) with negative margin */
 /* Medium and Desktop: Use reduced padding-top (2.4rem) with negative margin */
@@ -156,7 +310,9 @@
 	min-height: 28px;
 	max-width: 28px;
 	max-height: 28px;
-	transition: border-color 0.2s ease, background-color 0.2s ease,
+	transition:
+		border-color 0.2s ease,
+		background-color 0.2s ease,
 		color 0.2s ease;
 
 	&:hover {
@@ -228,7 +384,9 @@
 	width: 100%;
 	box-sizing: border-box;
 	text-align: left;
-	transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+	transition:
+		background-color 0.15s ease-in-out,
+		color 0.15s ease-in-out;
 
 	&:hover {
 		background-color: #1a1a1a;
@@ -322,12 +480,17 @@
 .predictions-grid {
 	display: grid;
 	grid-template-columns: 1fr;
-	gap: 24px;
+	gap: 0;
 	margin-bottom: 32px;
 
-	@media (max-width: 767px) {
-		gap: 16px;
+	/* Spacing inside the card box so frosted layers can cover it (grid gap is empty). */
+	> .prediction-card:not(:last-child),
+	> .view-all-card-filtered:not(:last-child) {
+		padding-bottom: 24px;
+		box-sizing: border-box;
+	}
 
+	@media (max-width: 767px) {
 		.prediction-card {
 			width: 100%;
 			max-width: 100%;
@@ -341,7 +504,7 @@
 		display: grid !important;
 		grid-template-columns: 1fr !important;
 		overflow: visible !important;
-		gap: 16px;
+		gap: 0;
 		padding-bottom: 8px;
 
 		.prediction-card,
@@ -355,26 +518,64 @@
 }
 
 .prediction-card {
-	background: #101114;
-	border: 1px solid #6b7280;
-	border-radius: 16px;
+	position: relative;
+	isolation: isolate;
+	border: none;
+	border-radius: 0;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-	transition: background 0.2s ease-in-out, border-color 0.2s ease-in-out,
-		box-shadow 0.2s ease-in-out;
+	transition: box-shadow 0.2s ease-in-out;
 	display: flex;
 	flex-direction: column;
 	height: auto;
 	min-height: 0;
-	overflow: hidden;
+	/*
+	 * Backdrop blur on the root + overflow:hidden clips edge samples in WebKit/Blink,
+	 * which reads as narrow vertical gaps. A full-bleed ::before carries the glass
+	 * across the entire card width; content stacks above it.
+	 */
+	overflow: visible;
+
+	&::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		@include predictions-glass-backdrop;
+	}
+
+	/* Bottom rule above the blur so it is not covered by ::before. */
+	&::after {
+		content: "";
+		position: absolute;
+		left: var(--prediction-card-inline, 20px);
+		right: var(--prediction-card-inline, 20px);
+		bottom: 0;
+		z-index: 1;
+		pointer-events: none;
+		border-bottom: 1px solid #6b7280;
+		transition: border-bottom-color 0.2s ease-in-out;
+	}
+
+	& > * {
+		position: relative;
+		z-index: 2;
+	}
 
 	&:hover {
-		background: #171a20;
-		border-color: #7b8494;
 		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 
 		.prediction-card__headline-main {
 			color: #8b5cf6;
 		}
+	}
+
+	&:hover::after {
+		border-bottom-color: #7b8494;
+	}
+
+	&:hover::before {
+		@include predictions-glass-backdrop($predictions-glass-overlay-hover);
 	}
 }
 
@@ -389,7 +590,7 @@
 }
 
 .prediction-card--compact {
-	--prediction-card-inline: 20px;
+	--prediction-card-inline: #{$predictions-compact-card-inline};
 }
 
 .prediction-card--compact .prediction-card__top {
@@ -419,7 +620,9 @@
 	text-align: right;
 }
 
-.prediction-card--compact .prediction-card__top-headline .prediction-card__headline {
+.prediction-card--compact
+	.prediction-card__top-headline
+	.prediction-card__headline {
 	display: block;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -553,6 +756,10 @@
 	height: 40px;
 	object-fit: contain;
 	object-position: center;
+}
+
+.prediction-card-outcome-logo-img--invert {
+	filter: invert(1);
 }
 
 /* Umbrella-style fallbacks (tag / game logo); boxed look when not the primary team asset */
@@ -702,10 +909,40 @@
 	display: flex;
 	flex-direction: column;
 	width: 100%;
+	/*
+	 * Counter-Strike / Today / date headings: target the same visual inset as
+	 * compact card content (`--prediction-card-inline`). Inside
+	 * `.predictions-page__home-trade-main`, cards negate the split gutter via
+	 * negative margin; subtract that gutter here so we do not stack padding.
+	 */
+	--prediction-calendar-heading-inline: #{$predictions-compact-card-inline};
 
 	/* Add spacing at bottom on mobile to prevent hitting footer */
 	@media (max-width: 767px) {
 		padding-bottom: 32px;
+	}
+}
+
+.prediction-calendar-page-heading {
+	display: flex;
+	flex-direction: column;
+	margin: 0 0 72px;
+	padding-left: var(--prediction-calendar-heading-inline);
+	padding-right: var(--prediction-calendar-heading-inline);
+	max-width: 42rem;
+	/*
+	 * Subtitle removed; preserve vertical rhythm before day groups (~gap + subtitle block).
+	 */
+	padding-bottom: 52px;
+
+	&__title {
+		margin-top: 30px;
+		margin-bottom: 0;
+		font-size: clamp(1.5rem, 2.2vw + 1rem, 2rem);
+		font-weight: 300;
+		color: #f9fafb;
+		letter-spacing: 0.02em;
+		line-height: 1.2;
 	}
 }
 
@@ -724,7 +961,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 0 8px;
+	padding: 0 var(--prediction-calendar-heading-inline);
 	gap: 12px;
 }
 
@@ -741,20 +978,16 @@
 	border: none;
 	border-radius: 8px;
 	background: transparent;
-	color: #9ca3af;
+	color: #f9fafb;
 	cursor: pointer;
-	transition:
-		color 0.15s ease,
-		background-color 0.15s ease;
+	transition: background-color 0.15s ease;
 
 	&:hover {
-		color: #f9fafb;
 		background: rgba(255, 255, 255, 0.06);
 	}
 
 	&[data-hover],
 	&[data-active] {
-		color: #f9fafb;
 		background: rgba(255, 255, 255, 0.06);
 	}
 }
@@ -823,6 +1056,28 @@
 	margin-top: 4px;
 	margin-bottom: 24px;
 
+	/*
+	 * First card's glass (::before) is a full rectangle, so backdrop blur reads as a
+	 * hard top edge vs the transparent header strip. Feather the blur layer downward
+	 * so the frost ramps in (~5× blur radius; keeps pace with `$predictions-glass-blur`).
+	 */
+	$prediction-calendar-grid-top-feather: $predictions-glass-blur * 5;
+
+	> .prediction-card:first-child::before {
+		-webkit-mask-image: linear-gradient(
+			to bottom,
+			rgba(0, 0, 0, 0) 0%,
+			#000 $prediction-calendar-grid-top-feather,
+			#000 100%
+		);
+		mask-image: linear-gradient(
+			to bottom,
+			rgba(0, 0, 0, 0) 0%,
+			#000 $prediction-calendar-grid-top-feather,
+			#000 100%
+		);
+	}
+
 	/* Mobile: same as tablet/desktop — use parent `.predictions-grid` (vertical scroll, no horizontal row). */
 }
 
@@ -856,7 +1111,7 @@
 	color: #d1d5db;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
-	padding: 0 8px;
+	padding: 0 var(--prediction-calendar-heading-inline);
 }
 
 .single-market-actions {
@@ -864,7 +1119,6 @@
 	flex-direction: column;
 	gap: 12px;
 	width: 100%;
-
 }
 
 .single-market-actions--compact .prediction-card-outcome-rows {
@@ -1028,7 +1282,7 @@
 	justify-content: center;
 
 	strong {
-		font-family: "Akkurat", sans-serif;
+		font-family: $font-primary;
 		font-weight: 700 !important;
 		white-space: nowrap;
 		overflow: hidden;
@@ -1082,10 +1336,13 @@
 		border-radius: 16px;
 		padding: 2px;
 		background: linear-gradient(135deg, #1e3a8a 0%, #8b5cf6 100%);
-		-webkit-mask: linear-gradient(#fff 0 0) content-box,
+		-webkit-mask:
+			linear-gradient(#fff 0 0) content-box,
 			linear-gradient(#fff 0 0);
 		-webkit-mask-composite: xor;
-		mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+		mask:
+			linear-gradient(#fff 0 0) content-box,
+			linear-gradient(#fff 0 0);
 		mask-composite: exclude;
 		pointer-events: none;
 	}
@@ -1128,24 +1385,36 @@
 	font-weight: 600;
 }
 
-// Responsive design
-@media (max-width: 1100px) {
+// Responsive design — keep max-width ≤1099 aligned with GAME_FILTER_COMPACT_MEDIA (sidebar is ≥1100)
+// Same page + pill-strip inset as legacy “mobile” (<768): avoids an extra pad jump crossing 768px.
+@media (max-width: 1099px) {
 	.predictions-page {
-		padding-left: 16px;
-		padding-right: 16px;
-		padding-top: 16px;
-		padding-bottom: 16px;
+		padding-left: 8px;
+		padding-right: 8px;
+		padding-top: 8px;
+		padding-bottom: 8px;
 	}
 
 	.game-links-wrapper {
-		margin-left: -16px;
-		margin-right: -16px;
-		padding-left: 16px;
-		padding-right: 16px;
+		margin-left: -8px;
+		margin-right: -8px;
+		padding-left: 8px;
+		padding-right: 8px;
 	}
 
 	.predictions-grid {
 		grid-template-columns: 1fr;
+		gap: 0;
+
+		&:not(.predictions-grid--carousel) {
+			padding-left: 0;
+			padding-right: 0;
+		}
+
+		> .prediction-card:not(:last-child),
+		> .view-all-card-filtered:not(:last-child) {
+			padding-bottom: 16px;
+		}
 	}
 
 	.prediction-actions {
@@ -1181,35 +1450,31 @@
 		grid-template-columns:
 			minmax(0, 1fr)
 			var(--predictions-trade-panel-width);
-		gap: var(--predictions-split-gutter, 24px);
-		align-items: start;
+		/*
+		 * No column gap — grid gaps are transparent. Use `.predictions-page__home-trade-main`
+		 * horizontal padding (`min-width: 1100px`) for the gutter next to the trade rail.
+		 */
+		gap: 0;
+		align-items: stretch;
 	}
 
 	.predictions-page__home-trade-main {
 		min-width: 0;
 	}
 
+	/* Matches `.prediction-market-page .desktop-layout > .right-panel`: column shell handles wash + inner scroll. */
 	.predictions-page__home-trade-panel.right-panel {
-		position: sticky;
-		top: var(--app-header-height, 6.2rem);
+		position: relative;
+		display: flex;
+		flex-direction: column;
 		min-width: 0;
-		max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
-		overflow-y: auto;
-		overflow-x: hidden;
-		overscroll-behavior-y: contain;
-		-webkit-overflow-scrolling: touch;
-		scrollbar-width: none;
-		-ms-overflow-style: none;
-
-		&::-webkit-scrollbar {
-			display: none;
-		}
+		min-height: 0;
+		align-self: stretch;
+		overflow: visible;
 	}
 
-	/* Align trade module top with first sidebar pill (shared inset vs global tradebox margin-top). */
-	.predictions-page__home-trade-panel .prediction-market-tradebox,
-	.predictions-page__home-trade-panel .tradebox-skeleton {
-		margin-top: var(--predictions-home-column-inset, 8px);
+	.predictions-page--market-bg .prediction-trade-column-underlay {
+		@include predictions-glass-backdrop;
 	}
 }
 
@@ -1242,6 +1507,34 @@
 		align-items: stretch;
 	}
 
+	/*
+	 * Cards column insets — match gutter next to sidebar (left) and trade rail (right).
+	 * Home trade grid uses `gap: 0`; right inset is padding on `.predictions-page__home-trade-main`.
+	 */
+	.predictions-page__body > .predictions-page__main {
+		padding-left: var(--predictions-split-gutter, 24px);
+	}
+
+	/* When predictions live inside the home-trade dock (nested main). */
+	.predictions-page__home-trade-main {
+		padding-left: var(--predictions-split-gutter, 24px);
+		padding-right: var(--predictions-split-gutter, 24px);
+
+		.prediction-calendar {
+			--prediction-calendar-heading-inline: calc(
+				#{$predictions-compact-card-inline} -
+					var(--predictions-split-gutter, 24px)
+			);
+		}
+
+		/* Offset parent padding so cards / view-all tile span the full column width. */
+		.prediction-card,
+		.view-all-card-filtered {
+			margin-left: calc(-1 * var(--predictions-split-gutter, 24px));
+			margin-right: calc(-1 * var(--predictions-split-gutter, 24px));
+		}
+	}
+
 	.predictions-page__body > .predictions-page__main,
 	.predictions-page__body > .predictions-page__home-trade-grid {
 		flex: 1;
@@ -1251,14 +1544,58 @@
 	.predictions-page__body > .game-links-wrapper {
 		flex: 0 0 20%;
 		max-width: 20%;
-		align-self: start;
-		position: sticky;
-		top: var(--app-header-height, 6.2rem);
-		margin-left: 0;
+		align-self: stretch;
+		position: relative;
+		overflow: visible;
+		margin-left: calc(-1 * var(--app-content-inline-gutter));
 		margin-right: 0;
-		padding: var(--predictions-home-column-inset, 8px)
-			var(--predictions-split-gutter, 24px) 24px 0;
+		padding-top: 0;
+		padding-right: 0;
+		padding-bottom: 24px;
+		padding-left: var(--app-content-inline-gutter);
 		box-sizing: border-box;
+		min-height: 0;
+		background: transparent;
+		/* Full column height; not the sticky pills scroller. */
+		border-right: 1px solid rgba(229, 231, 235, 0.22);
+
+		> .game-links-underlay {
+			display: block;
+			position: absolute;
+			inset: 0;
+			z-index: 0;
+			pointer-events: none;
+			background-color: #000000;
+		}
+
+		> .game-links-sticky {
+			position: sticky;
+			top: var(--app-header-height, 6.2rem);
+			padding-top: 10px;
+			/*
+			 * Hover `::before` on `.game-link` uses `left: -16px`; reserve that
+			 * inset inside our scroll clips so rounding + fill are not cropped.
+			 */
+			padding-left: 16px;
+			margin-left: -16px;
+			width: calc(100% + 16px);
+			box-sizing: border-box;
+			max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
+			overflow-y: auto;
+			overflow-x: hidden;
+			overscroll-behavior-y: contain;
+			-webkit-overflow-scrolling: touch;
+			scrollbar-width: none;
+			-ms-overflow-style: none;
+
+			&::-webkit-scrollbar {
+				display: none;
+			}
+		}
+	}
+
+	.predictions-page--market-bg .predictions-page__body > .game-links-wrapper > .game-links-underlay {
+		@include predictions-glass-backdrop;
 	}
 
 	.predictions-page__body > .game-links-wrapper .scroll-arrow,
@@ -1274,59 +1611,60 @@
 		overflow-x: visible;
 		overflow-y: visible;
 		white-space: normal;
-		gap: 12px;
+		gap: 6px;
 	}
 
 	.predictions-page__body > .game-links-wrapper .game-link {
+		position: relative;
+		isolation: isolate;
 		width: 100%;
 		justify-content: flex-start;
 		box-sizing: border-box;
 		margin: 0;
 		font-size: 17px;
-		font-weight: 600;
-		padding: 12px 16px;
-		min-height: 48px;
+		font-weight: 200;
+		/* No extra inset: align pill content with `.App-header` logo (same page gutter edge). */
+		padding: 6px 16px 6px 0;
+		min-height: 36px;
 		border-radius: 8px;
 		border: none;
 		white-space: normal;
 		text-align: left;
+		transition: color 0.15s ease-in-out;
+
+		/* Hover/active fill extends left so the block matches symmetric padding visually; text does not shift. */
+		&::before {
+			content: "";
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			left: -16px;
+			right: 0;
+			border-radius: 8px;
+			background-color: transparent;
+			transition: background-color 0.15s ease-in-out;
+			z-index: 0;
+			pointer-events: none;
+		}
+
+		&:hover,
+		&.active {
+			background-color: transparent;
+			color: #ffffff;
+		}
+
+		&:hover::before,
+		&.active::before {
+			background-color: #1a1a1a;
+		}
+	}
+
+	.predictions-page__body > .game-links-wrapper .game-link__inner {
+		position: relative;
+		z-index: 1;
 	}
 
 	.predictions-page__body > .game-links-wrapper .game-link__count {
 		font-size: 17px;
-	}
-}
-
-@media (max-width: 768px) {
-	.predictions-page {
-		padding-left: 8px;
-		padding-right: 8px;
-		padding-top: 8px;
-		padding-bottom: 8px;
-	}
-
-	.game-links-wrapper {
-		margin-left: -8px;
-		margin-right: -8px;
-	}
-
-	.predictions-grid {
-		grid-template-columns: 1fr;
-		gap: 16px;
-
-		/* For non-carousel grids on mobile, make cards wider */
-		&:not(.predictions-grid--carousel) {
-			padding-left: 0;
-			padding-right: 0;
-		}
-	}
-
-	.prediction-actions {
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.prediction-btn {
-		min-height: 48px;
 	}
 }

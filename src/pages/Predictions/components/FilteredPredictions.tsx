@@ -38,6 +38,7 @@ import {
 	STARTING_SOON_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
+import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
@@ -686,6 +687,11 @@ export default function FilteredPredictions({
 
 			content = (
 				<div className="prediction-calendar">
+					<header className="prediction-calendar-page-heading">
+						<h2 className="prediction-calendar-page-heading__title">
+							Counter-Strike
+						</h2>
+					</header>
 					{calendarSections}
 				</div>
 			);
@@ -755,8 +761,16 @@ export default function FilteredPredictions({
 		);
 	}
 
+	const marketBgUrl = resolveMarketBackgroundUrl(selectedGame);
+
 	return (
-		<div className="predictions-page page-layout">
+		<div className="predictions-page predictions-page--market-bg page-layout">
+			<div className="predictions-page__market-background" aria-hidden>
+				<div
+					className="predictions-page__market-background-photo"
+					style={{ backgroundImage: `url(${marketBgUrl})` }}
+				/>
+			</div>
 			<div className="predictions-page__body">
 				<GameLinks
 					selectedGame={selectedGame}

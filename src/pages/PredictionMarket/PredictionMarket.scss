@@ -43,6 +43,20 @@
 	}
 }
 
+/*
+ * Desktop: match `.predictions-page.predictions-page--market-bg` — left gutter
+ * only (header / logo alignment), flush right so the trade rail matches Markets home.
+ */
+@media (min-width: 1101px) {
+	.prediction-market-page:not(.mobile) {
+		padding-left: var(--app-content-inline-gutter);
+		padding-right: 0;
+		--predictions-trade-panel-width: calc(
+			((100vw - var(--app-content-inline-gutter)) * 0.8 - 24px) / 2.55
+		);
+	}
+}
+
 .prediction-market-content {
 	margin-top: 0;
 	width: 100%;
@@ -71,7 +85,7 @@
 		minmax(0, 1fr)
 		var(--predictions-trade-panel-width);
 	gap: var(--predictions-split-gutter, 24px);
-	align-items: start;
+	align-items: stretch;
 }
 
 .left-panel {
@@ -81,39 +95,15 @@
 	//gap: 16px;
 }
 
+/* Host for `.prediction-trade-column-shell` — scroll + sticky live on `.prediction-trade-column-body` (see `PredictionMarketTradeBox.scss`). */
 .right-panel {
-	position: sticky;
-	top: var(--app-header-height, 6.2rem);
-	/* Taller than the viewport: keep layout unchanged; scroll this column when the pointer is here. */
+	position: relative;
+	display: flex;
+	flex-direction: column;
 	min-width: 0;
-	max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
-	overflow-y: auto;
-	overflow-x: hidden;
-	overscroll-behavior-y: contain;
-	-webkit-overflow-scrolling: touch;
-	/* Scroll without visible scrollbar (wheel / trackpad / touch still work). */
-	scrollbar-width: none;
-	-ms-overflow-style: none;
-
-	&::-webkit-scrollbar {
-		display: none;
-	}
-}
-
-/*
- * Same top inset the home dock uses (`Predictions.scss` lines 1209-1213).
- * Keeps the trade module's first row at the same vertical offset as the
- * left column header, matching the home → umbrella visual continuity.
- *
- * Scoped to `.prediction-market-page` so this rule cannot leak into the
- * home page's `.right-panel.predictions-page__home-trade-panel` (which has
- * its own equivalent rule already).
- */
-.prediction-market-page .right-panel {
-	.prediction-market-tradebox,
-	.tradebox-skeleton {
-		margin-top: var(--predictions-home-column-inset, 8px);
-	}
+	min-height: 0;
+	align-self: stretch;
+	overflow: visible;
 }
 
 // Tight margins — `.stream-embed-container` already drives its own height

@@ -53,11 +53,14 @@ export default function AddressDropdown({
 
 	return (
 		<Menu>
-			<Menu.Button as="div">
+			<Menu.Button as="div" className="address-dropdown-trigger">
 				<button className="App-cta small transparent address-btn">
 					{/* avatar intentionally omitted */}
 					<span className="user-address">{displayText}</span>
-					<FaChevronDown />
+					<FaChevronDown
+						className="address-btn__chevron"
+						aria-hidden
+					/>
 				</button>
 			</Menu.Button>
 			<div>

@@ -22,6 +22,8 @@ export interface UmbrellaTeamMapping {
 	backgroundUrl?: string | null;
 	primaryColor?: string | null;
 	secondaryColor?: string | null;
+	/** When true, UI inverts remote PNG (e.g. dark logo on dark background). From `teams.invertLogo` at read time. */
+	invertLogo?: boolean;
 }
 
 /** Mirrors predictions-api / DB `ExchangeMatching.limitless` when present on the umbrella. */

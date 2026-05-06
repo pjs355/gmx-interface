@@ -1,17 +1,9 @@
 /* Custom Fonts */
 
 @font-face {
-	font-family: "Akkurat";
-	src: url("@/assets/fonts/Akkurat-Light.ttf") format("truetype");
+	font-family: "Folio Std";
+	src: url("@/assets/fonts/folio-std-light.woff2") format("woff2");
 	font-weight: 300;
-	font-style: normal;
-	font-display: swap;
-}
-
-@font-face {
-	font-family: "Akkurat";
-	src: url("@/assets/fonts/akkurat-bold.ttf") format("truetype");
-	font-weight: 700;
 	font-style: normal;
 	font-display: swap;
 }

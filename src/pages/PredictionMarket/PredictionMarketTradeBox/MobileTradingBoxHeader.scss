@@ -40,15 +40,15 @@
       color: #6B7280;
       background: transparent;
 
-      &:hover {
-        border-color: #8B5CF6;
-        color: #8B5CF6;
+      &:hover:not(.active) {
+        border-color: #9ca3af;
+        color: #9ca3af;
       }
 
       &.active {
-        background: rgba(139, 92, 246, 0.1);
-        border-color: #8B5CF6;
-        color: #8B5CF6;
+        background: transparent;
+        border-color: #ffffff;
+        color: #ffffff;
         font-weight: 700;
       }
     }

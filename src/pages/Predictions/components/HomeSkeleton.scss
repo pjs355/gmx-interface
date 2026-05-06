@@ -63,7 +63,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 6px 0 12px;
+	padding: 6px var(--prediction-calendar-heading-inline) 12px;
 }
 
 .home-skeleton__heading {
@@ -82,7 +82,6 @@
 
 	&:hover {
 		background: #101114;
-		border-color: #6b7280;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	}
 }

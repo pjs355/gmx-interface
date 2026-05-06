@@ -1,0 +1,28 @@
+// Frosted translucent panels (game filter sidebar, prediction cards, tradebox).
+// Tune here so all surfaces stay in sync.
+
+/*
+ * EXPERIMENT: false = blur only (no dark rgba tint on these glass layers).
+ * Set to true to restore the default dimmed frosted look everywhere the mixin runs.
+ */
+$predictions-glass-tint-enabled: false;
+
+$predictions-glass-overlay: rgba(0, 0, 0, 0.5);
+$predictions-glass-overlay-hover: rgba(0, 0, 0, 0.58);
+// Trade widget + curtain: slightly heavier wash when global tint is enabled.
+$predictions-glass-overlay-tradebox: rgba(0, 0, 0, 0.62);
+$predictions-glass-blur: 8px;
+
+/// When tint is off (above), returns transparent so only backdrop blur shows.
+@function predictions-glass-tint-color($overlay) {
+	@if $predictions-glass-tint-enabled {
+		@return $overlay;
+	}
+	@return transparent;
+}
+
+@mixin predictions-glass-backdrop($overlay: $predictions-glass-overlay) {
+	background-color: predictions-glass-tint-color($overlay);
+	-webkit-backdrop-filter: blur($predictions-glass-blur);
+	backdrop-filter: blur($predictions-glass-blur);
+}

@@ -412,6 +412,8 @@ export default defineConfig(({ mode }) => {
 				scss: {
 					api: "modern-compiler",
 					silenceDeprecations: ["legacy-js-api"],
+					includePaths: [path.join(projectRoot, "src/styles")],
+					additionalData: `@use "themes/fonts" as *;\n`,
 				},
 			},
 		},

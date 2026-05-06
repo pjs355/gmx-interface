@@ -42,7 +42,7 @@ html.drawer-open {
 	will-change: transform;
 
 	@media (min-width: 1100px) {
-		padding: 0 50px;
+		padding: 0 var(--app-content-inline-gutter);
 	}
 }
 
@@ -249,7 +249,9 @@ html.drawer-open {
 	padding: 1rem 2rem !important;
 	text-decoration: none !important;
 	display: block !important;
-	transition: color 0.2s ease, background-color 0.2s ease !important;
+	transition:
+		color 0.2s ease,
+		background-color 0.2s ease !important;
 	text-align: left !important;
 	width: 100% !important;
 	white-space: normal !important;
@@ -305,7 +307,7 @@ html.drawer-open {
 	align-items: center;
 	border: none;
 	border-radius: 4px;
-	height: 3.6rem;
+	height: 2.75rem;
 }
 
 .App-header-menu-icon {
@@ -346,7 +348,7 @@ html.drawer-open {
 }
 
 .App-header-logo-img {
-	height: 32px;
+	height: 22px;
 	width: auto;
 	object-fit: contain;
 	vertical-align: middle;
@@ -418,44 +420,165 @@ html.drawer-open {
 	align-items: center;
 }
 
-.App-header-user {
+/* Logged-in desktop: three siblings from `AppHeaderUser` — portfolio | cash | email */
+.App-header .App-header-container-right {
+	gap: 12px;
+	flex-wrap: nowrap;
+	min-width: 0;
+}
+
+.App-header .App-header-container-right > .App-header-nav-portfolio,
+.App-header .App-header-container-right > .App-header-nav-cash,
+.App-header .App-header-container-right > .App-header-nav-email {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	min-width: 0;
+}
+
+.App-header .App-header-container-right > .App-header-nav-email {
+	flex: 0 1 auto;
+	max-width: 16rem;
+}
+
+.App-header .App-header-container-right > .App-header-nav-portfolio {
+	margin-left: 8px;
+}
+
+.App-header .App-header-user {
 	display: flex;
 	align-items: center;
 	gap: 12px;
 }
 
+.header-metric-row {
+	display: inline-flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+	line-height: 1.15;
+}
+
+.header-metric-label {
+	font-size: 0.875rem;
+	font-weight: 700;
+	color: #ffffff;
+}
+
+.header-metric-value {
+	font-size: 0.875rem;
+	font-weight: 400;
+	color: #ffffff;
+	display: inline-flex;
+	align-items: center;
+}
+
 .header-metric-box {
 	background-color: #000000;
 	border-radius: 8px;
-	padding: 8px 12px;
+	padding: 0 10px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	text-decoration: none;
 	transition: background-color 0.15s ease-in-out;
-	margin-left: 8px;
+	margin-left: 0;
+	min-height: 2.75rem;
+	height: 2.75rem;
+	box-sizing: border-box;
 }
 
 .header-metric-box:hover {
 	background-color: #1a1a1a;
 }
 
+/*
+ * `.App-header .a { display: inline-block }` wins over `.header-metric-box`'s inline-flex,
+ * which top-aligns text inside the header row — restore flex centering on metric links.
+ */
+.App-header .App-header-container-right a.header-metric-box {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	vertical-align: unset;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	height: 2.75rem;
+}
+
 .App-header-user-link {
 	margin-right: 2.4rem;
 }
 
-.App-header-user-address {
+.App-header .App-header-user-address {
 	border: 1px solid var(--color-stroke-primary);
-	height: 3.6rem;
-	border-radius: 0.8rem;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	height: 2.75rem;
+	border-radius: 0.6rem;
 	display: inline-flex;
 	align-items: center;
+	min-width: 0;
+	padding: 0;
 	color: #ffffff;
 	position: relative;
+
+	.address-dropdown-trigger {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		height: 100%;
+	}
+
+	/*
+	 * Out-prioritize `App.scss` `button.App-cta` (inline-block + large padding) and
+	 * match `.header-metric-*` (0.875rem / tight line box).
+	 */
+	button.App-cta.small.transparent.address-btn {
+		flex: 1;
+		min-width: 0;
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		padding: 0 0.75rem;
+		border: none;
+		background: none;
+		box-shadow: none;
+		font-family: inherit;
+		font-size: 0.875rem;
+		line-height: 1.15;
+		font-weight: 400;
+		color: #ffffff;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		cursor: pointer;
+	}
+
+	.user-address {
+		margin-left: 0;
+		margin-right: 0;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		line-height: 1.15;
+	}
+
+	.address-btn__chevron {
+		flex-shrink: 0;
+		width: 0.875rem;
+		height: 0.875rem;
+		display: block;
+	}
 }
 
 @media (max-width: 1335px) {
-	.App-header-user-address {
+	.App-header .App-header-user-address {
 		padding: 0 0px;
 	}
 
@@ -467,7 +590,7 @@ html.drawer-open {
 		display: block;
 	}
 
-	.App-header-user {
+	.App-header .App-header-user {
 		padding-bottom: 0;
 	}
 
@@ -485,7 +608,7 @@ html.drawer-open {
 	}
 
 	.App-header-logo-img {
-		height: 20px;
+		height: 22px;
 	}
 
 	a.App-header-user-account {
@@ -548,7 +671,7 @@ html.drawer-open {
 		height: 15px;
 	}
 
-	.App-header-user {
+	.App-header .App-header-user {
 		gap: 6px;
 	}
 
@@ -572,7 +695,7 @@ html.drawer-open {
 		margin-right: 0.2rem !important;
 	}
 
-	.App-header-user {
+	.App-header .App-header-user {
 		gap: 4px;
 	}
 }
