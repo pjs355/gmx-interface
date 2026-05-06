@@ -479,6 +479,19 @@ export function useButtonState({
         ready: boolean;
         loading: boolean;
         blockedReason: string | null;
+        /**
+         * On-chain CTF + USDT approvals snapshot for the active market scope.
+         * `true`  → bypass the "Preparing Predict…" bootstrap gate (returning user).
+         * `false` → keep the gate (brand-new buyer who genuinely needs approvals run).
+         * `undefined` → BSC RPC still loading; behave like `false` for buys.
+         */
+        approvalsOk?: boolean;
+        /**
+         * True while the BSC RPC `balanceOf` for the active outcome is still in
+         * flight. Distinguishes "we're checking your shares" from "you have 0
+         * shares" so we don't show "No shares to sell" before we actually know.
+         */
+        sellShareLoading?: boolean;
       }
     | undefined,
   predictSellShareBalance = undefined as number | null | undefined,
@@ -1086,28 +1099,55 @@ export function useButtonState({
           onClick: () => {},
         };
       }
-      if (pt.loading && !pt.ready) {
-        return {
-          text: globalSetupInProgress
-            ? SETUP_IN_PROGRESS_LABEL
-            : "Preparing Predict…",
-          disabled: true,
-          onClick: () => {},
-        };
-      }
-      if (!pt.ready) {
-        return {
-          text: globalSetupInProgress
-            ? SETUP_IN_PROGRESS_LABEL
-            : pt.blockedReason
-              ? "Predict setup required"
-              : "Predict unavailable",
-          disabled: true,
-          onClick: () => {},
-        };
+      // Sells lazy-handle every prerequisite at execute time:
+      //   • `placeMarketOrder` / `placeLimitOrder` call `ensureSession()` for JWT.
+      //   • `ensurePredictApprovalsForTrade` runs CTF approval if missing.
+      // Buys with `approvalsOk === true` are also fully lazy.
+      // The "Preparing Predict…" gate is only meaningful for first-time BUYERS
+      // whose on-chain approvals are confirmed missing — gating sells (or
+      // returning buyers) on it just freezes the UI behind a redundant
+      // server roundtrip + BSC RPC every time the user navigates markets.
+      const skipPredictBootstrapGate =
+        state.side === "sell" || pt.approvalsOk === true;
+      if (!skipPredictBootstrapGate) {
+        if (pt.loading && !pt.ready) {
+          return {
+            text: globalSetupInProgress
+              ? SETUP_IN_PROGRESS_LABEL
+              : "Preparing Predict…",
+            disabled: true,
+            onClick: () => {},
+          };
+        }
+        if (!pt.ready) {
+          return {
+            text: globalSetupInProgress
+              ? SETUP_IN_PROGRESS_LABEL
+              : pt.blockedReason
+                ? "Predict setup required"
+                : "Predict unavailable",
+            disabled: true,
+            onClick: () => {},
+          };
+        }
       }
       if (!state.selectedPosition) {
         return { text: "Enter amount", disabled: true, onClick: () => {} };
+      }
+      // Distinguish "still fetching share balance from BSC" from "confirmed
+      // zero shares". Without this, the BSC RPC roundtrip (200ms-2s on a
+      // cold load) makes the button claim "No shares to sell" for users who
+      // do hold the position.
+      if (
+        state.side === "sell" &&
+        scopedSellSharesTotal() <= 0 &&
+        pt.sellShareLoading
+      ) {
+        return {
+          text: "Loading your Predict shares…",
+          disabled: true,
+          onClick: () => {},
+        };
       }
       if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
         return noSharesToSellButton();
@@ -1121,6 +1161,15 @@ export function useButtonState({
       {
         const chk = checkInputMin("predictfun");
         if (chk.below) return belowMinButton(chk);
+      }
+      if (pt.sellShareLoading && state.side === "sell" && sellExceedsScopedHoldings()) {
+        // Same race as the zero-shares case: balance just hasn't landed yet.
+        // Don't tell the user their amount is invalid before we actually know.
+        return {
+          text: "Loading your Predict shares…",
+          disabled: true,
+          onClick: () => {},
+        };
       }
       if (sellExceedsScopedHoldings()) {
         return { text: "Not enough shares", disabled: true, onClick: () => {} };
@@ -1145,13 +1194,20 @@ export function useButtonState({
           buttonText = `${actionText} ${teamName}`;
         }
       }
+      // `venueAutoSetupInFlight` only governs SOR's EXECUTION_NOT_READY copy
+      // ("Preparing Predict…" vs "Complete venue setup"). When approvals are
+      // already on-chain, EXECUTION_NOT_READY is genuinely a server-side
+      // tradingEnabled drift — surfacing "Preparing Predict…" implies we're
+      // doing something we're not. Suppress it for sells / approved buyers.
+      const venueAutoSetupInFlight =
+        Boolean(predictTrading?.loading) && !skipPredictBootstrapGate;
       const sorPf = sorUnifiedPrimary(
         state.side,
         sorState,
         buttonText,
         animatedDots,
         {
-          venueAutoSetupInFlight: Boolean(predictTrading?.loading),
+          venueAutoSetupInFlight,
           sellAmountStr: state.amount,
           maxSellShares: scopedSellSharesTotal(),
           globalSetupInProgress,

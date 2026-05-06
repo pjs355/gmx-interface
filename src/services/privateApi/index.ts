@@ -5,6 +5,9 @@ export {
 	type GetIdentityToken,
 } from "./client";
 export type {
+	PredictAccountResponse,
+	PredictAccountSyncBody,
+	PredictPublicVenueState,
 	DflowAccountResponse,
 	DflowAccountSyncBody,
 	DflowProofState,

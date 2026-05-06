@@ -4,7 +4,6 @@ import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { useUserData } from "context/UserDataContext";
 import { useCollateralTokens } from "context/CollateralTokenContext";
-import { BalanceProvider, useBalances } from "context/BalanceContext";
 import { usePredictionData } from "context/PredictionDataContext";
 import { OrderbookService } from "@/services/api/orderbookService";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
@@ -26,11 +25,7 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./TradeBoxTest.scss";
 
 export default function TradeBoxTest() {
-	return (
-		<BalanceProvider>
-			<TradeBoxTestInner />
-		</BalanceProvider>
-	);
+	return <TradeBoxTestInner />;
 }
 
 function TradeBoxTestInner() {
@@ -40,7 +35,6 @@ function TradeBoxTestInner() {
 	const { account, ready, signer, signerAddress } = useSignerContext(); // Get signer and account from context like production
 	const { wallets: privyWallets, ready: walletsReady } = usePrivyWallets(); // Same as production line 32
 	const userData = useUserData();
-	const balanceContext = useBalances();
 	const collateralTokens = useCollateralTokens();
 	const predictionData = usePredictionData();
 	const [checkingAdmin, setCheckingAdmin] = useState(true);
@@ -91,7 +85,6 @@ function TradeBoxTestInner() {
 	// Safely destructure with fallbacks
 	const { getTokenBalance } = userData || {};
 	const usdcBalance = collateralTokens.baseUsdc;
-	const { getBalance, refreshBalances } = balanceContext || {};
 	const { getQuestionsForUmbrella, umbrellas } = predictionData || {};
 
 	const [market, setMarket] = useState<PredictionMarket | null>(null);

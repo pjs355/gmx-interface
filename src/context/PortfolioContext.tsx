@@ -15,6 +15,7 @@ import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import { sumPredictPositionMarkValue } from "@/trading/predict/sumPredictPositionMarkValue";
 import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
@@ -96,9 +97,15 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		);
 	}, [polyPositionsDataNetClaim]);
 
-	// Match usePositionsData: Predict.fun keys off the embedded signer (BNB), not the Base smart wallet.
-	const predictQueryAddress = signerAddress ?? account;
-	const predictPositionsQuery = usePredictPositions(predictQueryAddress ?? null);
+	// Match usePositionsData: Predict.fun keys off the embedded signer (BNB),
+	// not the Base smart wallet. `resolvePredictAccountAddress` is the single
+	// source of truth so PortfolioContext / usePredictBundle / TradeBox all
+	// produce the same TanStack key (no double-fetch on resolution skew).
+	const predictQueryAddress = resolvePredictAccountAddress(
+		signerAddress,
+		account,
+	);
+	const predictPositionsQuery = usePredictPositions(predictQueryAddress);
 	const predictPositionsDataNetClaim = useMemo(() => {
 		if (!predictPositionsQuery.data) return null;
 		return predictPositionsQuery.data.filter(
@@ -222,46 +229,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		return sum;
 	}, [acknowledgedClearedPayoutKeys, resolvedMarketsByUmbrella, tokenBalances]);
 
-	// Track portfolio loading state separately. Cash loading comes from `collateral.isFetched`.
-	const [hasInitialPortfolioLoad, setHasInitialPortfolioLoad] =
-		React.useState(false);
-	const initialLoadTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
-	// Reset loading state when account changes
+	// Reset position-tracking refs when account changes so a fresh login can't
+	// inherit the previous user's snap-to-zero floor.
 	React.useEffect(() => {
-		setHasInitialPortfolioLoad(false);
 		lastMarkToMarketAndVenueRef.current = 0;
 		lastPortfolioPositionColumnRef.current = 0;
-		if (initialLoadTimeoutRef.current) {
-			clearTimeout(initialLoadTimeoutRef.current);
-			initialLoadTimeoutRef.current = null;
-		}
 	}, [account]);
-
-	React.useEffect(() => {
-		if (portfolioTotal !== null && portfolioTotal !== undefined) {
-			setHasInitialPortfolioLoad(true);
-		}
-	}, [portfolioTotal]);
-
-	// Set a timeout to force initial portfolio load complete after reasonable wait
-	// This handles new users with no trading history where data loads quickly but portfolioTotal might be 0
-	React.useEffect(() => {
-		if (account && !hasInitialPortfolioLoad && !userDataLoading) {
-			// If user data has finished loading and we still haven't set portfolio, give it 2 seconds max
-			initialLoadTimeoutRef.current = setTimeout(() => {
-				if (!hasInitialPortfolioLoad) {
-					console.log('Portfolio: Forcing initial load complete after timeout');
-					setHasInitialPortfolioLoad(true);
-				}
-			}, 2000);
-		}
-		return () => {
-			if (initialLoadTimeoutRef.current) {
-				clearTimeout(initialLoadTimeoutRef.current);
-			}
-		};
-	}, [account, hasInitialPortfolioLoad, userDataLoading]);
 
 	// Cash loading is now driven entirely by the single CollateralTokenContext query —
 	// either pending or not yet fetched once for the current address set.
@@ -276,11 +249,20 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		dflowRpcEnabled &&
 		dflowPositionsQuery.isPending;
 
-	// Portfolio is loading if we haven't loaded it yet OR if balances/prices are still being fetched
+	/**
+	 * Portfolio is "loading" only while the underlying queries that feed
+	 * `cashBalance` + LevelUp shares haven't settled at least once. The old
+	 * `setHasInitialPortfolioLoad` + 2-second `setTimeout` fallback existed
+	 * because new users with no positions never tripped the
+	 * `portfolioTotal !== null` write; gating directly on the fetch states
+	 * gets us out of "loading" deterministically (cash:0 + positions:0 is a
+	 * valid loaded state for a fresh wallet).
+	 */
 	const portfolioLoading =
-		!hasInitialPortfolioLoad ||
-		(userDataLoading && tokenBalances.size === 0) ||
-		dflowBlockingPortfolio;
+		Boolean(account) &&
+		(cashLoading ||
+			(userDataLoading && tokenBalances.size === 0) ||
+			dflowBlockingPortfolio);
 
 	// Single sum from CollateralTokenContext — `null` until that query has settled at least once.
 	const cashBalance: number | null = useMemo(() => {
@@ -432,14 +414,20 @@ export function usePortfolio(): PortfolioContextValue {
 	if (ctx) {
 		return ctx;
 	}
-	if (import.meta.env.DEV && !portfolioProviderMissingLogged) {
-		portfolioProviderMissingLogged = true;
-		// eslint-disable-next-line no-console -- intentional once-per-session diagnostic
-		console.error(
-			"[usePortfolio] No PortfolioProvider context (duplicate React/context bundle or provider order bug). Using loading fallback — hard-refresh the dev server if this persists.",
-		);
+	// In dev we keep the loading-shaped fallback so HMR or accidental
+	// detachment doesn't crash the app while you're iterating. In production
+	// a missing provider is a bug — silently returning fake "loading" data
+	// would mask broken portfolio displays for real users.
+	if (import.meta.env.DEV) {
+		if (!portfolioProviderMissingLogged) {
+			portfolioProviderMissingLogged = true;
+			console.error(
+				"[usePortfolio] No PortfolioProvider context (duplicate React/context bundle or provider order bug). Using loading fallback — hard-refresh the dev server if this persists.",
+			);
+		}
+		return PORTFOLIO_CONTEXT_FALLBACK;
 	}
-	return PORTFOLIO_CONTEXT_FALLBACK;
+	throw new Error("usePortfolio must be used within a <PortfolioProvider>");
 }
 
 export default PortfolioContext;

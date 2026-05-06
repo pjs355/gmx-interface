@@ -129,6 +129,34 @@ export function useVenueHistoryRawItems({
 		for (const pos of dflowPositions) seen.add(pos.tokenId);
 		for (const pos of limitlessPositions) seen.add(pos.tokenId);
 
+		/**
+		 * Polymarket trade-history rows come from `/activity?type=TRADE` aggregated
+		 * by `conditionId+outcome`. The aggregator marks `outcomeResult = "WON"`
+		 * only when a `REDEEM` activity exists, so an unclaimed winning market
+		 * falls through to "LOST" via the negative interim PnL — the user sees
+		 * "AM Gaming won the match, you lost" while the Winnings tab simultaneously
+		 * shows a Claim button. Resolve from the actual venue position outcome:
+		 * any `polyWinnings` row tags the leg as WON; any `polyHistory` row
+		 * (resolved + redeemable + 0 value) tags it as LOST. Otherwise fall back
+		 * to the redeem/PnL heuristic for legacy trades with no current position.
+		 */
+		const polyOutcomeResultByKey = new Map<string, "WON" | "LOST">();
+		const polyResultKey = (cid: string | undefined, outcome: string | undefined) => {
+			const c = (cid ?? "").trim();
+			if (!c) return "";
+			return `${polymarketConditionLookupKey(c)}::${(outcome ?? "").trim().toLowerCase()}`;
+		};
+		for (const w of polyWinnings) {
+			const k = polyResultKey(w.conditionId, w.outcome);
+			if (k) polyOutcomeResultByKey.set(k, "WON");
+		}
+		for (const h of polyHistory) {
+			const k = polyResultKey(h.conditionId, h.outcome);
+			if (k && !polyOutcomeResultByKey.has(k)) {
+				polyOutcomeResultByKey.set(k, "LOST");
+			}
+		}
+
 		const polyTradesArr = polyTrades ?? [];
 		for (const trade of polyTradesArr) {
 			const cid = trade.conditionId?.trim();
@@ -139,9 +167,13 @@ export function useVenueHistoryRawItems({
 					: `polyhist:token:${tok ?? "unknown"}`;
 			if (seen.has(histKey)) continue;
 			seen.add(histKey);
+			const venueOutcomeResult = polyOutcomeResultByKey.get(
+				polyResultKey(trade.conditionId, trade.outcome),
+			);
 			items.push({
 				...trade,
 				outcomeResult:
+					venueOutcomeResult ??
 					trade.outcomeResult ??
 					(trade.pnl !== null && trade.pnl !== undefined && trade.pnl > 0
 						? "WON"

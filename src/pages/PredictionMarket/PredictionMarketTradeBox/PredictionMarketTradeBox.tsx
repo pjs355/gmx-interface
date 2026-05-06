@@ -55,7 +55,6 @@ import {
 	predictOutcomeTokenId,
 } from "@/trading/predict/predictMarketApi";
 import { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
-import { usePredictOutcomeShareOnChain } from "@/trading/predict/usePredictBnbBalances";
 import {
 	bboFromSnapshot,
 	logPolymarketTradePreflight,
@@ -162,7 +161,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     approveToken,
     refresh,
     refreshTokenPositions,
-    applyOptimisticLevelUpFill,
+    getTokenBalance,
   } = useUserData();
   const collateralTokens = useCollateralTokens();
   const postTradeSync = usePostTradeBalanceSync();
@@ -530,16 +529,48 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     noTeamLabel,
   ]);
 
-  const predictShareQuery = usePredictOutcomeShareOnChain(
-    predictApprovalSubject,
-    predictTokenIdForPosition,
-    predictMarketDetail?.isNegRisk ?? false,
-    predictMarketDetail?.isYieldBearing ?? false,
-    (multiVenueEnabled || predictVenueActive) &&
-      authenticated &&
-      Boolean(predictTokenIdForPosition)
-  );
-  const predictSellShareBalance = predictShareQuery.data ?? null;
+  /**
+   * Single source of truth for Predict share balances — the same value
+   * `MyPositionsRow` displays under "Your Position".
+   *
+   * Previously this read from a separate BSC `balanceOf` RPC call
+   * (`usePredictOutcomeShareOnChain`) keyed off `predictApprovalSubject` (the
+   * embedded Privy EOA). The trade-box position display reads from
+   * `usePredictPositions(signerAddress)` (LevelUp's authenticated Predict
+   * proxy). When those two addresses or queries disagreed — different wallet
+   * resolution, BSC RPC slow / failing, wrong CTF contract picked from
+   * `isNegRisk`/`isYieldBearing` flags, token-id resolution race against
+   * `matchedMonitor` / `predictMarketDetail` — the trade-box would render
+   * "Your Position: 7.35 paiN Academy" while the Sell button says "No shares
+   * to sell" and locks the input. Two sources of truth for the user's own
+   * holdings is unforgivable UX; collapse to one.
+   *
+   * `tradeBoxShareBalances.allMarketsOutcomeVenueShares` already aggregates
+   * `usePredictPositions` rows scoped to the active umbrella+market, so
+   * gating on it is, by construction, exactly what the user sees.
+   */
+  const predictSellShareBalance = useMemo<number | null>(() => {
+    if (!state.selectedPosition) return null;
+    const sideMap =
+      state.selectedPosition === "yes"
+        ? tradeBoxShareBalances.allMarketsOutcomeVenueShares.yes
+        : tradeBoxShareBalances.allMarketsOutcomeVenueShares.no;
+    const v = sideMap.predictfun;
+    if (typeof v !== "number" || !Number.isFinite(v)) return null;
+    return v;
+  }, [
+    state.selectedPosition,
+    tradeBoxShareBalances.allMarketsOutcomeVenueShares,
+  ]);
+
+  /**
+   * True while the Predict positions API is still resolving for the active
+   * page market. Drives the "Loading your Predict shares…" button copy and
+   * keeps the sell input UNLOCKED through the API roundtrip — same source
+   * of truth as the display, so the UI can never disagree with itself.
+   */
+  const predictSellShareLoading =
+    tradeBoxShareBalances.loading && predictSellShareBalance == null;
 
   const limitlessTokenIdForSell = useMemo(() => {
     if (!limitlessVenueActive || !matchedMonitor || !state.selectedPosition) return null;
@@ -976,6 +1007,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         predictSession.error ||
         predictEnsureReady.error ||
         (predictMarketQuery.isError ? "Predict market API error" : null),
+      /**
+       * On-chain CTF + USDT approvals snapshot. When `true`, the trade-box
+       * "Preparing Predict…" gate is bypassed for buys — `useButtonState`
+       * trusts the lazy `ensurePredictApprovalsForTrade` path at execute time
+       * instead of blocking the UI on the redundant ensure roundtrip.
+       */
+      approvalsOk: predictApprovalsQuery.data === true,
+      /** True while the BSC RPC outcome `balanceOf` is in flight. */
+      sellShareLoading: predictSellShareLoading,
     }),
     [
       pandaId,
@@ -991,6 +1031,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       predictMarketQuery.isLoading,
       predictMarketQuery.isError,
       predictOrderbookQuery.isLoading,
+      predictApprovalsQuery.data,
+      predictSellShareLoading,
     ]
   );
 
@@ -1856,12 +1898,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   // --- SOR sell: per-venue share positions ---
-  // Single source of truth for share counts is `tradeBoxShareBalances.allMarketsOutcomeVenueShares`
-  // (Polymarket + DFlow), which already routes through `inferPolymarketYesNoFromToken`'s
-  // BigInt-normalized tokenId comparison. Predict / Limitless still come from the per-token
-  // queries (`predictSellShareBalance` / `limitlessSellShareBalance`) to preserve exact
-  // page-market scoping (their share-balance snapshot has a sibling-title fallback that
-  // could over-include shares from a sibling sub-market under the same umbrella).
+  // Single source of truth = `tradeBoxShareBalances.allMarketsOutcomeVenueShares`,
+  // the same aggregate that powers `MyPositionsRow`'s "Your Position" line.
+  // Polymarket + DFlow already route through `inferPolymarketYesNoFromToken`'s
+  // BigInt-normalized tokenId comparison. Predict + Limitless are sourced
+  // directly from their venue positions queries (`usePredictPositions` /
+  // `useLimitlessPortfolioVenue`) inside `useTradeBoxShareBalances`, so the
+  // gate the user sees is, by construction, the gate they get.
   const sorVenuePositions: VenuePositionEntry[] = useMemo(() => {
     if (!state.selectedPosition) return [];
     const entries: VenuePositionEntry[] = [];
@@ -1878,8 +1921,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       entries.push({ venue: "polymarket", shares: polyShares });
     }
 
-    const pfBal = predictSellShareBalance;
-    if (typeof pfBal === "number" && pfBal > 0) {
+    const pfBal = sideMap.predictfun;
+    if (typeof pfBal === "number" && Number.isFinite(pfBal) && pfBal > 0) {
       entries.push({ venue: "predictfun", shares: pfBal });
     }
 
@@ -1888,8 +1931,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       entries.push({ venue: "dflow", shares: dfBal });
     }
 
-    const lxBal = limitlessSellShareBalance;
-    if (typeof lxBal === "number" && lxBal > 0) {
+    const lxBal = sideMap.limitless;
+    if (typeof lxBal === "number" && Number.isFinite(lxBal) && lxBal > 0) {
       entries.push({ venue: "limitless", shares: lxBal });
     }
 
@@ -1898,9 +1941,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     state.selectedPosition,
     yesBalance,
     noBalance,
-    predictSellShareBalance,
     tradeBoxShareBalances.allMarketsOutcomeVenueShares,
-    limitlessSellShareBalance,
   ]);
 
   /** Sell routing + button state: single-venue tabs only include that venue’s shares. */
@@ -2248,19 +2289,17 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     if (status === "complete" && everyLegFilled) {
       const cached = latestBaselineRef.current;
       if (cached && cached.routeId === routeId) {
-        // Hand off to the centralised post-trade sync: applies optimistic
-        // updates per venue + cash, then runs delta-aware backoff polling that
-        // stops the moment observed balances catch up. Survives trade-box
-        // unmount because the provider lives at the app root.
+        const syncUiKey =
+          String(
+            (market as { _id?: string })?._id ??
+              (market as { questionId?: string })?.questionId ??
+              "",
+          ).trim() || null;
         postTradeSync.start({
           queryClient,
           route: cached.route,
           execution: sorExecution.execution,
           baseline: cached.baseline,
-          matchedMonitor: matchedMonitor ?? null,
-          marketTitleHint: String(
-            market?.displayName ?? market?.question ?? umbrellaDisplayName ?? "",
-          ).trim(),
           addresses: {
             polymarketSafe: funding.polymarketSafe,
             predictWallet: account,
@@ -2268,8 +2307,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           },
           refreshLevelUpPositions: refreshTokenPositions,
           refetchCollateral: collateralTokens.refetch,
-          applyOptimisticLevelUpFill,
-          applyOptimisticCashChange: collateralTokens.applyOptimisticCashChange,
+          readLevelUpSide: (mid, side) => {
+            const tb = getTokenBalance(mid);
+            if (!tb) return 0;
+            const raw = side === "yes" ? tb.yesBalance : tb.noBalance;
+            const n = parseFloat(raw);
+            return Number.isFinite(n) ? n : 0;
+          },
+          syncUiKey,
         });
       } else if (import.meta.env.DEV) {
         console.warn(
@@ -2315,11 +2360,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     funding.polymarketSafe,
     funding.solanaAddress,
     account,
-    matchedMonitor,
     market,
-    umbrellaDisplayName,
     postTradeSync,
-    applyOptimisticLevelUpFill,
+    getTokenBalance,
     dflowUninitAtSubmit,
     scheduleDflowFirstMintRefresh,
   ]);
@@ -2396,6 +2439,24 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
     return buttonState;
   }, [executionGate.blocked, buttonState, state.tradingVenue]);
+
+  /**
+   * True when the active tab's share-balance query is still in flight. The UI
+   * uses this to keep the sell input UNLOCKED during the BSC/Base RPC
+   * roundtrip — locking it during loading was the root cause of "it blocks me
+   * because it thinks I do not have shares". Scoped per-tab so we don't
+   * unlock when the active venue's query has finished but a different
+   * venue's hasn't.
+   */
+  const sharesLoadingForActiveTab = useMemo(() => {
+    if (state.tradingVenue === "predictfun") return predictSellShareLoading;
+    if (state.tradingVenue === "all") {
+      // SOR-routed sells aggregate every venue's positions, so any venue's
+      // pending share lookup can falsely zero out `maxScopedSellShares`.
+      return predictSellShareLoading;
+    }
+    return false;
+  }, [state.tradingVenue, predictSellShareLoading]);
 
   // executionGateBanner removed — internal plumbing not shown to users
   const executionGateBanner = null;
@@ -2560,6 +2621,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       sorRouteExpired={sorRouteExpired}
       handleSorExecute={handleSorExecute}
       maxScopedSellShares={maxScopedSellShares}
+      sharesLoadingForActiveTab={sharesLoadingForActiveTab}
       matchedMonitor={matchedMonitor}
       allMarketsSellYesBid={allMarketsSellYesBid}
       allMarketsSellNoBid={allMarketsSellNoBid}

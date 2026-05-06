@@ -107,6 +107,14 @@ export interface VenuePosition {
 	 * Summary row still uses aggregated `shares` / `cost` / `pnl` on this position.
 	 */
 	historyFills?: VenueHistoryFill[];
+	/**
+	 * Polymarket Data API `negativeRisk` flag — true for multi-outcome (Match Winner,
+	 * Election, etc.) NegRisk markets. Required so claim routing knows to call
+	 * `NegRiskAdapter.redeemPositions(conditionId, [yesAmt, noAmt])` instead of
+	 * the standard `CTF.redeemPositions(...)`. Without this the redeem tx mines
+	 * but pays out 0 pUSD and the row vanishes from Winnings (silent claim bug).
+	 */
+	isNegRisk?: boolean;
 }
 
 /**

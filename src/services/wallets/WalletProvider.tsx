@@ -11,6 +11,9 @@ const queryClient = new QueryClient({
 			 * switching to DevTools or another tab (e.g. `/positions` “reloads” visually).
 			 * Production keeps the default refresh-on-focus so returning to the tab still
 			 * reconciles stale TanStack data with the server.
+			 *
+			 * Note: `React.StrictMode` in dev double-mounts; compare Network against
+			 * production when auditing duplicate fetches.
 			 */
 			refetchOnWindowFocus: import.meta.env.PROD,
 		},

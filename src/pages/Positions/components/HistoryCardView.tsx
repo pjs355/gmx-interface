@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import {
 	getFinalAmount,
-	getTradingReturns,
 	type ProcessedOrder,
 } from "@/services/api/simplifiedOrderService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -407,15 +406,24 @@ export default function HistoryCardView({
 				if (!b.hasData) continue;
 
 				const sideLower = side.toLowerCase();
+				/**
+				 * Cash-flow accounting (replaces the old FIFO `getFinalAmount` /
+				 * `getTradingReturns` denominator). Total Cost = the actual net dollars
+				 * deployed across every fill on this side. The previous code normalized
+				 * the percent against the FIFO cost basis of leftover shares only — for
+				 * a near-flat round trip (e.g. bought 7.03, sold 7.02) that denominator
+				 * collapses to ~$0.01 and any tiny loss reads as `-2200%`. Using
+				 * `usdcValue` directly also avoids the rounded `price` field producing
+				 * wrong realized P&L. Mirror of `HistoryView.tsx` table layout.
+				 */
 				let finalShares = 0;
-				let finalCost = 0;
+				let totalCashOut = 0;
+				let totalCashIn = 0;
 				let payout = 0;
-				let realized = 0;
 				let tradeCount = 0;
 
 				for (const qid of b.marketIds) {
-					let bought = 0;
-					let sold = 0;
+					let qidShares = 0;
 					for (const o of allOrders) {
 						if (o.questionId !== qid) continue;
 						if (!o.filled) continue;
@@ -424,27 +432,33 @@ export default function HistoryCardView({
 							typeof o.tokenValue === "number" && Number.isFinite(o.tokenValue)
 								? o.tokenValue
 								: 0;
-						if (o.side === "buy") bought += shares;
-						else if (o.side === "sell") sold += shares;
+						const cash =
+							typeof o.usdcValue === "number" && Number.isFinite(o.usdcValue)
+								? o.usdcValue
+								: 0;
+						if (o.side === "buy") {
+							qidShares += shares;
+							totalCashOut += cash;
+						} else if (o.side === "sell") {
+							qidShares -= shares;
+							totalCashIn += cash;
+						}
 					}
-					const sharesHeld = bought - sold;
-					finalShares += sharesHeld;
+					finalShares += qidShares;
 
-					const fa = getFinalAmount(allOrders, qid);
-					finalCost += side === "Yes" ? fa.yesCost : fa.noCost;
-
-					const tr = getTradingReturns(allOrders, qid);
-					realized += side === "Yes" ? tr.yesPnL : tr.noPnL;
-
-					if (b.wonByQid[qid] && sharesHeld > 0) {
-						payout += sharesHeld;
+					if (b.wonByQid[qid] && qidShares > 0) {
+						payout += qidShares;
 					}
 
 					tradeCount += getTradeCount(allOrders, qid, side);
 				}
 
-				const totalReturn = (payout - finalCost) + realized;
-				const retPct = finalCost > 0 ? (totalReturn / finalCost) * 100 : null;
+				const netCashSpent = totalCashOut - totalCashIn;
+				const displayCost = Math.max(netCashSpent, 0);
+				const totalReturn = payout + totalCashIn - totalCashOut;
+				const retDenom = displayCost > 0 ? displayCost : totalCashOut;
+				const retPct =
+					retDenom > 0 ? (totalReturn / retDenom) * 100 : null;
 				const outcomeColor = totalReturn >= 0 ? "#16a34a" : "#ef4444";
 				const fallbackOutcome = b.outcomeText
 					? shortTeamDisplayName(b.outcomeText)
@@ -455,7 +469,7 @@ export default function HistoryCardView({
 					finalPosition: finalShares,
 					outcomeText: blockOutcomeShort ?? fallbackOutcome,
 					outcomeColor,
-					totalCost: finalCost,
+					totalCost: displayCost,
 					totalPayout: payout,
 					totalReturn,
 					totalReturnPct: retPct,

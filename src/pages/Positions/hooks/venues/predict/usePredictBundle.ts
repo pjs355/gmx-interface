@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import { usePredictOrders } from "@/trading/predict/usePredictOrders";
 import { usePredictOrderMatches } from "@/trading/predict/usePredictOrderMatches";
 import { usePredictAccountActivity } from "@/trading/predict/usePredictAccountActivity";
@@ -67,7 +68,14 @@ export function usePredictBundle({
 	effectiveAccount,
 	activeTab,
 }: UsePredictBundleArgs): UsePredictBundleResult {
-	const positionsQuery = usePredictPositions(signerAddress ?? effectiveAccount);
+	// Single source of truth for the predict-positions cache key — three call
+	// sites used to compute this slightly differently, producing duplicate
+	// `/api/predict/positions/:addr` reads at boot.
+	const predictAddress = resolvePredictAccountAddress(
+		signerAddress,
+		effectiveAccount,
+	);
+	const positionsQuery = usePredictPositions(predictAddress);
 	const all = positionsQuery.data ?? [];
 
 	const ordersEnabled =

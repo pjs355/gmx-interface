@@ -2,93 +2,68 @@ import {
 	createContext,
 	useCallback,
 	useContext,
-	useEffect,
 	useMemo,
 	useRef,
+	useState,
 	type ReactNode,
 } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { VenuePosition } from "@/types/trading/venuePosition";
-import type { MatchedMarket } from "@/types/odds-monitor";
 import {
 	COLLATERAL_TOKENS_QUERY_KEY,
-	useCollateralTokens,
 } from "@/context/CollateralTokenContext";
-import type { CollateralChainKey } from "@/context/collateralTokensOptimisticOverlays";
-import { useUserData } from "@/context/UserDataContext";
+import type { CollateralChainKey } from "@/trading/sor/fundingStableBalances";
 import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import { LIMITLESS_QUERY_ROOT } from "@/trading/limitless/limitlessQueryKeys";
-import { applyOptimisticPolymarketFillToQueryCache } from "@/trading/polymarket/optimisticPolymarketPositionsCache";
-import { applyOptimisticPredictFillToQueryCache } from "@/trading/predict/optimisticPredictPositionsCache";
-import { applyOptimisticDflowFillToQueryCache } from "@/trading/dflow/optimisticDflowPositionsCache";
-import { applyOptimisticLimitlessFillToQueryCache } from "@/trading/limitless/optimisticLimitlessPositionsCache";
 import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
 import type { FundingStableBalancesHuman } from "./fundingStableBalances";
 import type { RouteExecution, RoutePlan } from "./sor-types";
 import {
 	CASH_CONVERGENCE_TOL_USD,
 	SHARES_CONVERGENCE_TOL,
-	chainToCollateralKey,
 	computeExpectedDeltas,
 	shareIdentityForVenuePosition,
 	type PostTradeBaseline,
 	type PostTradeBaselineAddresses,
 } from "./postTradeBaseline";
 
-/**
- * Backoff schedule for the post-trade convergence poller. Total ≈ 80s, with
- * the first refetch at 1s after submit. Each tick refreshes only the queries
- * we still expect to converge.
- */
-const POLL_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 12_000, 15_000, 15_000, 15_000];
+/** Fixed cadence between refetches while waiting for server-backed divergence from baseline. */
+const POLL_INTERVAL_MS = 5_000;
+/** Immediate first refetch + subsequent polls — wall ~80s max. */
+const MAX_REFETCH_ATTEMPTS = 17;
+/** Allow React state (e.g. LevelUp tokenBalances) to settle after RPC refresh. */
+const LEVELUP_READ_DELAY_MS = 64;
 
 export type PostTradeSyncRequest = {
 	queryClient: QueryClient;
 	route: RoutePlan;
 	execution: RouteExecution;
 	baseline: PostTradeBaseline;
-	matchedMonitor: MatchedMarket | null;
-	marketTitleHint: string;
 	addresses: PostTradeBaselineAddresses;
 	/** Forces an RPC refresh of LevelUp positions (not in React Query). */
 	refreshLevelUpPositions: () => Promise<void>;
-	/** Refetch the collateral context. */
+	/** Refetch the collateral context (`GET /portfolio/cash-summary`). */
 	refetchCollateral: () => Promise<FundingStableBalancesHuman | undefined>;
-	/** Apply an optimistic LevelUp share bump. */
-	applyOptimisticLevelUpFill: (input: {
-		marketId: string;
-		side: "yes" | "no";
-		deltaShares: number;
-		direction: "buy" | "sell";
-	}) => void;
-	/** Apply an optimistic per-chain cash overlay. */
-	applyOptimisticCashChange: (input: {
-		chain: CollateralChainKey;
-		baseline: number;
-		amountUsd: number;
-		direction: "buy" | "sell";
-	}) => void;
+	/** Read LevelUp YES/NO numeric balance for `marketId` after refresh (same source as trade box). */
+	readLevelUpSide: (marketId: string, side: "yes" | "no") => number;
+	/** Page market id — when post-trade sync is active for this key, trade box shows share spinner. */
+	syncUiKey: string | null;
 };
 
-type ActiveSync = {
-	routeId: string;
-	cancelled: boolean;
-	timer: ReturnType<typeof setTimeout> | null;
-};
-
-export type PostTradeBalanceSyncApi = {
-	start: (req: PostTradeSyncRequest) => void;
-};
-
-const PostTradeBalanceSyncContext = createContext<PostTradeBalanceSyncApi | null>(
-	null,
-);
-
-/** Polling targets we still need to verify per sync. */
 type PendingTarget =
-	| { kind: "shares"; venue: VenuePosition["venue"]; identity: string; expected: number }
-	| { kind: "cash"; chain: CollateralChainKey; expected: number; direction: "buy" | "sell" }
-	| { kind: "levelup"; marketId: string; side: "yes" | "no"; expected: number; direction: "buy" | "sell" };
+	| {
+			kind: "shares";
+			venue: VenuePosition["venue"];
+			identity: string;
+			baselineShares: number;
+	  }
+	| { kind: "cash"; chain: CollateralChainKey; baselineCash: number }
+	| {
+			kind: "levelup";
+			marketId: string;
+			side: "yes" | "no";
+			baselineLevelUp: number;
+	  };
 
 function readVenueShares(
 	queryClient: QueryClient,
@@ -175,84 +150,70 @@ function readCashForChain(
 	return null;
 }
 
-function buildInitialPending(
-	req: PostTradeSyncRequest,
+function buildWatchTargets(
+	route: RoutePlan,
+	execution: RouteExecution,
+	baseline: PostTradeBaseline,
 ): PendingTarget[] {
-	const { route, execution, baseline } = req;
 	const deltas = computeExpectedDeltas(route, execution, baseline);
 	const out: PendingTarget[] = [];
-
-	for (const [identity, expected] of deltas.expectedShares) {
+	const seenShare = new Set<string>();
+	for (const identity of deltas.expectedShares.keys()) {
+		if (seenShare.has(identity)) continue;
+		seenShare.add(identity);
 		const venue = identity.split(":", 1)[0] as VenuePosition["venue"];
-		out.push({ kind: "shares", venue, identity, expected });
+		out.push({
+			kind: "shares",
+			venue,
+			identity,
+			baselineShares: baseline.shares.get(identity) ?? 0,
+		});
 	}
+	const seenCash = new Set<CollateralChainKey>();
 	for (const [chainKey, delta] of Object.entries(deltas.cashDeltas) as [
 		CollateralChainKey,
 		number,
 	][]) {
 		if (!Number.isFinite(delta) || delta === 0) continue;
+		if (seenCash.has(chainKey)) continue;
+		seenCash.add(chainKey);
 		const baselineCash = baseline.cash[chainKey];
 		if (baselineCash == null) continue;
-		const expected = baselineCash + delta;
-		out.push({
-			kind: "cash",
-			chain: chainKey,
-			expected,
-			direction: route.side,
-		});
+		out.push({ kind: "cash", chain: chainKey, baselineCash });
 	}
-	if (deltas.levelUp && baseline.levelUp) {
-		const cur =
+	if (
+		deltas.levelUp &&
+		baseline.levelUp &&
+		baseline.levelUp.marketId === deltas.levelUp.marketId
+	) {
+		const baselineLevelUp =
 			deltas.levelUp.side === "yes"
 				? baseline.levelUp.yes
 				: baseline.levelUp.no;
-		const expected =
-			route.side === "buy"
-				? cur + deltas.levelUp.deltaShares
-				: Math.max(0, cur - deltas.levelUp.deltaShares);
 		out.push({
 			kind: "levelup",
 			marketId: deltas.levelUp.marketId,
 			side: deltas.levelUp.side,
-			expected,
-			direction: route.side,
+			baselineLevelUp,
 		});
 	}
-
 	return out;
 }
 
-function targetReached(t: PendingTarget, observed: number | null): boolean {
+function valueDiverged(
+	observed: number | null,
+	baseline: number,
+	tol: number,
+): boolean {
 	if (observed == null || !Number.isFinite(observed)) return false;
-	switch (t.kind) {
-		case "shares": {
-			// Buys: shares went up — converged when observed >= expected.
-			// Sells: shares went down — converged when observed <= expected.
-			// We don't carry direction on shares targets, so treat both directions
-			// as "within tolerance of expected" — close enough either way.
-			return Math.abs(observed - t.expected) <= SHARES_CONVERGENCE_TOL ||
-				observed >= t.expected - SHARES_CONVERGENCE_TOL;
-		}
-		case "cash": {
-			if (t.direction === "buy") {
-				return observed <= t.expected + CASH_CONVERGENCE_TOL_USD;
-			}
-			return observed >= t.expected - CASH_CONVERGENCE_TOL_USD;
-		}
-		case "levelup": {
-			if (t.direction === "buy") {
-				return observed >= t.expected - SHARES_CONVERGENCE_TOL;
-			}
-			return observed <= t.expected + SHARES_CONVERGENCE_TOL;
-		}
-	}
+	return Math.abs(observed - baseline) > tol;
 }
 
 async function refetchForPending(
 	queryClient: QueryClient,
 	pending: PendingTarget[],
 	req: PostTradeSyncRequest,
-): Promise<void> {
+): Promise<boolean> {
 	const venueSharePending = new Set<VenuePosition["venue"]>();
 	let cashPending = false;
 	let levelUpPending = false;
@@ -306,196 +267,119 @@ async function refetchForPending(
 		tasks.push(req.refreshLevelUpPositions());
 	}
 	await Promise.allSettled(tasks);
+	return levelUpPending;
 }
 
-function applyOptimisticForRequest(req: PostTradeSyncRequest): void {
-	const { queryClient, route, execution, baseline, matchedMonitor } = req;
-
-	if (matchedMonitor && req.addresses.polymarketSafe) {
-		applyOptimisticPolymarketFillToQueryCache(
-			queryClient,
-			req.addresses.polymarketSafe,
-			route,
-			execution,
-			matchedMonitor,
-			req.marketTitleHint,
-		);
-	}
-	applyOptimisticPredictFillToQueryCache(
-		queryClient,
-		req.addresses.predictWallet ?? null,
-		route,
-		execution,
-		req.marketTitleHint,
-	);
-	applyOptimisticDflowFillToQueryCache(
-		queryClient,
-		req.addresses.solanaAddress ?? null,
-		route,
-		execution,
-		req.marketTitleHint,
-	);
-	applyOptimisticLimitlessFillToQueryCache(
-		queryClient,
-		route,
-		execution,
-		req.marketTitleHint,
-	);
-
-	const deltas = computeExpectedDeltas(route, execution, baseline);
-
-	if (deltas.levelUp) {
-		req.applyOptimisticLevelUpFill({
-			marketId: deltas.levelUp.marketId,
-			side: deltas.levelUp.side,
-			deltaShares: deltas.levelUp.deltaShares,
-			direction: route.side,
-		});
-	}
-
-	for (const [chainKey, delta] of Object.entries(deltas.cashDeltas) as [
-		CollateralChainKey,
-		number,
-	][]) {
-		if (!Number.isFinite(delta) || delta === 0) continue;
-		const baselineCash = baseline.cash[chainKey];
-		if (baselineCash == null) continue;
-		req.applyOptimisticCashChange({
-			chain: chainKey,
-			baseline: baselineCash,
-			amountUsd: Math.abs(delta),
-			direction: route.side,
-		});
-	}
-
-	// chainToCollateralKey is used inside computeExpectedDeltas; keep import side-effect free.
-	void chainToCollateralKey;
+function sleep(ms: number): Promise<void> {
+	return new Promise((r) => setTimeout(r, ms));
 }
+
+export type PostTradeBalanceSyncApi = {
+	start: (req: PostTradeSyncRequest) => void;
+};
+
+const PostTradeBalanceSyncContext = createContext<PostTradeBalanceSyncApi | null>(
+	null,
+);
+
+const PostTradeBalanceSyncUiContext = createContext<string | null>(null);
 
 /**
- * Provider that hosts a single shared post-trade sync registry. Mount once
- * near the app root so syncs survive trade-box unmounts (navigation away).
+ * Provider that hosts post-trade refetch + baseline-divergence checks. Mount once
+ * near the app root so sync survives trade-box unmounts.
  */
 export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode }) {
 	const queryClient = useQueryClient();
-	const collateral = useCollateralTokens();
-	const userData = useUserData();
-	const activeRef = useRef<ActiveSync | null>(null);
+	const sessionRef = useRef(0);
+	const [pendingSyncUiKey, setPendingSyncUiKey] = useState<string | null>(null);
 
 	const start = useCallback(
 		(req: PostTradeSyncRequest) => {
-			// Cancel any in-flight previous sync — latest trade wins.
-			if (activeRef.current) {
-				activeRef.current.cancelled = true;
-				if (activeRef.current.timer) {
-					clearTimeout(activeRef.current.timer);
-				}
-			}
-			const sync: ActiveSync = {
-				routeId: req.execution.routeId,
-				cancelled: false,
-				timer: null,
-			};
-			activeRef.current = sync;
+			const session = ++sessionRef.current;
+			setPendingSyncUiKey(req.syncUiKey ?? null);
 
-			// 1. Apply optimistic updates immediately so the UI reflects the trade.
-			applyOptimisticForRequest(req);
-
-			// 2. Build the convergence target list.
-			let pending = buildInitialPending(req);
-			if (pending.length === 0) {
-				activeRef.current = null;
-				return;
-			}
-
-			let stepIdx = 0;
-
-			const tick = async () => {
-				if (sync.cancelled) return;
-				try {
-					await refetchForPending(req.queryClient, pending, req);
-				} catch (e) {
-					if (import.meta.env.DEV) {
-						console.warn("[postTradeSync] refetch failed", e);
-					}
-				}
-				if (sync.cancelled) return;
-
-				// Re-evaluate which targets are still pending.
-				pending = pending.filter((t) => {
-					let observed: number | null = null;
-					if (t.kind === "shares") {
-						observed = readVenueShares(
-							req.queryClient,
-							t.venue,
-							t.identity,
-							req.addresses,
-						);
-					} else if (t.kind === "cash") {
-						observed = readCashForChain(req.queryClient, t.chain);
-					} else if (t.kind === "levelup") {
-						// Read from UserDataContext via the `req.baseline` proxy is
-						// unavailable here — instead we trust the optimistic-fill +
-						// floor merge to keep the displayed value correct, and clear
-						// the LevelUp target after a single refresh cycle.
-						return false;
-					}
-					return !targetReached(t, observed);
-				});
-
+			void (async () => {
+				let pending = buildWatchTargets(
+					req.route,
+					req.execution,
+					req.baseline,
+				);
 				if (pending.length === 0) {
-					if (import.meta.env.DEV) {
-						console.log("[postTradeSync] converged in", stepIdx + 1, "tick(s)");
+					if (sessionRef.current === session) {
+						setPendingSyncUiKey(null);
 					}
-					activeRef.current = null;
 					return;
 				}
 
-				if (stepIdx >= POLL_DELAYS_MS.length - 1) {
-					if (import.meta.env.DEV) {
-						console.warn(
-							"[postTradeSync] timeout — leaving optimistic overlays in place. Pending:",
-							pending,
-						);
+				for (let attempt = 0; attempt < MAX_REFETCH_ATTEMPTS; attempt++) {
+					if (sessionRef.current !== session) return;
+
+					const levelUpRan = await refetchForPending(
+						req.queryClient,
+						pending,
+						req,
+					);
+					if (sessionRef.current !== session) return;
+
+					if (levelUpRan) {
+						await sleep(LEVELUP_READ_DELAY_MS);
+						if (sessionRef.current !== session) return;
 					}
-					activeRef.current = null;
-					return;
+
+					pending = pending.filter((t) => {
+						if (t.kind === "shares") {
+							const obs = readVenueShares(
+								req.queryClient,
+								t.venue,
+								t.identity,
+								req.addresses,
+							);
+							return !valueDiverged(obs, t.baselineShares, SHARES_CONVERGENCE_TOL);
+						}
+						if (t.kind === "cash") {
+							const obs = readCashForChain(req.queryClient, t.chain);
+							return !valueDiverged(obs, t.baselineCash, CASH_CONVERGENCE_TOL_USD);
+						}
+						const obs = req.readLevelUpSide(t.marketId, t.side);
+						return !valueDiverged(obs, t.baselineLevelUp, SHARES_CONVERGENCE_TOL);
+					});
+
+					if (pending.length === 0) {
+						if (import.meta.env.DEV) {
+							console.log("[postTradeSync] diverged from baseline after attempt", attempt + 1);
+						}
+						break;
+					}
+
+					if (attempt < MAX_REFETCH_ATTEMPTS - 1) {
+						await sleep(POLL_INTERVAL_MS);
+					}
 				}
 
-				stepIdx += 1;
-				sync.timer = setTimeout(tick, POLL_DELAYS_MS[stepIdx]);
-			};
+				if (pending.length > 0 && import.meta.env.DEV) {
+					console.warn(
+						"[postTradeSync] timeout — balances may still match baseline. Pending:",
+						pending,
+					);
+				}
 
-			sync.timer = setTimeout(tick, POLL_DELAYS_MS[0]);
+				if (sessionRef.current === session) {
+					setPendingSyncUiKey(null);
+				}
+			})();
 		},
-		// queryClient/collateral/userData captured via closure on the request.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[],
+		[queryClient],
 	);
-
-	useEffect(() => {
-		return () => {
-			if (activeRef.current?.timer) {
-				clearTimeout(activeRef.current.timer);
-			}
-			if (activeRef.current) {
-				activeRef.current.cancelled = true;
-				activeRef.current = null;
-			}
-		};
-	}, []);
 
 	const api = useMemo<PostTradeBalanceSyncApi>(() => ({ start }), [start]);
 
-	// Side-effect-free use of these contexts to keep the provider re-rendering
-	// when relevant identity changes (so consumers always see fresh `req`).
 	void queryClient;
-	void collateral;
-	void userData;
 
 	return (
 		<PostTradeBalanceSyncContext.Provider value={api}>
-			{children}
+			<PostTradeBalanceSyncUiContext.Provider value={pendingSyncUiKey}>
+				{children}
+			</PostTradeBalanceSyncUiContext.Provider>
 		</PostTradeBalanceSyncContext.Provider>
 	);
 }
@@ -503,8 +387,6 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 export function usePostTradeBalanceSync(): PostTradeBalanceSyncApi {
 	const ctx = useContext(PostTradeBalanceSyncContext);
 	if (!ctx) {
-		// Safe fallback: no-op so consumers (e.g. trade box outside provider in tests)
-		// don't crash. In production the provider should always be mounted.
 		if (import.meta.env.DEV) {
 			console.warn(
 				"[usePostTradeBalanceSync] No PostTradeBalanceSyncProvider in tree — sync disabled",
@@ -513,4 +395,10 @@ export function usePostTradeBalanceSync(): PostTradeBalanceSyncApi {
 		return { start: () => {} };
 	}
 	return ctx;
+}
+
+/** True while post-trade sync is waiting for server-backed divergence for this page market. */
+export function usePostTradeBalanceSyncPending(syncUiKey: string | null): boolean {
+	const pendingKey = useContext(PostTradeBalanceSyncUiContext);
+	return Boolean(syncUiKey && pendingKey && pendingKey === syncUiKey);
 }

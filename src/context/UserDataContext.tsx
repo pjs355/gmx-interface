@@ -42,12 +42,37 @@ type ApprovalState = {
 	isApproving: boolean;
 };
 
+/**
+ * Where the LevelUp share-position rows came from on the most recent fetch.
+ *  - `"subgraph"` — happy path, Studio served the request.
+ *  - `"rpc"`      — subgraph failed (rate limit / outage); we fell back to
+ *                   per-token ERC1155 `balanceOf` reads. Trustworthy for
+ *                   tokens the UI knows about, but cannot enumerate unknown
+ *                   markets.
+ *  - `"none"`     — no fetch has settled yet for the current account, or no
+ *                   account is connected.
+ */
+export type LevelUpPositionsSource = "subgraph" | "rpc" | "none";
+
 type UserDataContextValue = {
 	orders: ProcessedOrder[];
 	tokenBalances: Map<string, TokenBalance>; // marketId -> TokenBalance
 	approvalState: ApprovalState;
 	loading: boolean;
+	/**
+	 * @deprecated Use `levelUpPositionsSource` ("rpc") and `levelUpPositionsError`
+	 * for the explicit signal. Kept for the few legacy reads still in tree.
+	 */
 	usingRpcFallback: boolean; // True when subgraph failed and using RPC
+	/** Explicit replacement for `usingRpcFallback` — what produced the rows. */
+	levelUpPositionsSource: LevelUpPositionsSource;
+	/**
+	 * Subgraph error message captured when we had to fall back to RPC, or when
+	 * the RPC fallback also blew up. `null` on the happy path. Use to render a
+	 * non-blocking "positions data is degraded" banner instead of pretending
+	 * the rows are authoritative.
+	 */
+	levelUpPositionsError: string | null;
 	refresh: () => Promise<void>;
 	/**
 	 * Force RPC refresh of share-position balances (bypasses subgraph indexing delay).
@@ -57,18 +82,6 @@ type UserDataContextValue = {
 	refreshTokenPositions: () => Promise<void>;
 	loadOrders: () => Promise<void>; // Lazy: call when orders are needed (e.g. Positions page)
 	getTokenBalance: (marketId: string) => TokenBalance | null;
-	/**
-	 * Apply an optimistic LevelUp fill to `tokenBalances` immediately and remember
-	 * the resulting balance so subsequent subgraph/RPC refreshes can't regress it
-	 * until the indexer catches up (or the floor TTL expires). Use after a
-	 * confirmed SOR LevelUp leg.
-	 */
-	applyOptimisticLevelUpFill: (input: {
-		marketId: string;
-		side: "yes" | "no";
-		deltaShares: number;
-		direction: "buy" | "sell";
-	}) => void;
 	/** Refreshes on-chain approval flags; returns whether LevelUp trading is fully approved. */
 	checkApproval: () => Promise<boolean>;
 	approveToken: () => Promise<void>;
@@ -92,6 +105,11 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		isApproving: false,
 	});
 	const [usingRpcFallback, setUsingRpcFallback] = useState(false);
+	const [levelUpPositionsSource, setLevelUpPositionsSource] =
+		useState<LevelUpPositionsSource>("none");
+	const [levelUpPositionsError, setLevelUpPositionsError] = useState<
+		string | null
+	>(null);
 
 	// Cache a single provider instance to avoid repeated EIP-1193 calls (eth_accounts, eth_chainId)
 	// Reserved for future signer-based flows
@@ -202,140 +220,6 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	const rawTokenBalancesRef = useRef<Array<{ tokenId: string; balance: string }>>([]);
 	const subgraphFetchedRef = useRef<string | null>(null);
 
-	// Optimistic post-trade floors / ceilings, keyed by `${marketId}|${side}`.
-	// `min` (buy floor): displayed balance never falls below this until indexer catches up.
-	// `max` (sell ceiling): displayed balance never rises above this until indexer catches up.
-	// Floors auto-clear on refresh once the server-reported value crosses the threshold,
-	// or when the TTL expires.
-	type LevelUpFloorEntry = {
-		min?: number;
-		max?: number;
-		expiresAt: number;
-	};
-	const optimisticLevelUpFloorsRef = useRef<Map<string, LevelUpFloorEntry>>(
-		new Map(),
-	);
-	const LEVELUP_FLOOR_TTL_MS = 120_000;
-
-	/**
-	 * Apply pending optimistic floors/ceilings to a freshly-mapped balances map.
-	 * Mutates the input map in place and clears entries that have converged or expired.
-	 */
-	const applyOptimisticFloorsToMap = useCallback(
-		(balances: Map<string, TokenBalance>): Map<string, TokenBalance> => {
-			const floors = optimisticLevelUpFloorsRef.current;
-			if (floors.size === 0) return balances;
-			const now = Date.now();
-			for (const [key, entry] of Array.from(floors.entries())) {
-				if (entry.expiresAt <= now) {
-					floors.delete(key);
-					continue;
-				}
-				const sep = key.indexOf("|");
-				if (sep < 0) {
-					floors.delete(key);
-					continue;
-				}
-				const marketId = key.slice(0, sep);
-				const side = key.slice(sep + 1) as "yes" | "no";
-				const tb = balances.get(marketId);
-				if (!tb) continue;
-				const balanceStr = side === "yes" ? tb.yesBalance : tb.noBalance;
-				const balanceNum = parseFloat(balanceStr);
-
-				if (entry.min !== undefined) {
-					if (Number.isFinite(balanceNum) && balanceNum >= entry.min) {
-						delete entry.min;
-					} else {
-						const next = entry.min.toFixed(6);
-						balances.set(marketId, {
-							...tb,
-							...(side === "yes"
-								? { yesBalance: next }
-								: { noBalance: next }),
-						});
-					}
-				}
-
-				if (entry.max !== undefined) {
-					const tbAfterFloor = balances.get(marketId)!;
-					const afterFloorStr =
-						side === "yes" ? tbAfterFloor.yesBalance : tbAfterFloor.noBalance;
-					const afterFloorNum = parseFloat(afterFloorStr);
-					if (Number.isFinite(afterFloorNum) && afterFloorNum <= entry.max) {
-						delete entry.max;
-					} else {
-						const next = entry.max.toFixed(6);
-						balances.set(marketId, {
-							...tbAfterFloor,
-							...(side === "yes"
-								? { yesBalance: next }
-								: { noBalance: next }),
-						});
-					}
-				}
-
-				if (entry.min === undefined && entry.max === undefined) {
-					floors.delete(key);
-				}
-			}
-			return balances;
-		},
-		[],
-	);
-
-	const applyOptimisticLevelUpFill = useCallback(
-		(input: {
-			marketId: string;
-			side: "yes" | "no";
-			deltaShares: number;
-			direction: "buy" | "sell";
-		}) => {
-			const { marketId, side, deltaShares, direction } = input;
-			if (!marketId || !(deltaShares > 0)) return;
-
-			const key = `${marketId}|${side}`;
-			const existing = optimisticLevelUpFloorsRef.current.get(key);
-
-			setTokenBalances((prev) => {
-				const tb = prev.get(marketId);
-				if (!tb) return prev;
-				const sideBalanceStr = side === "yes" ? tb.yesBalance : tb.noBalance;
-				const cur = parseFloat(sideBalanceStr) || 0;
-
-				let nextValue: number;
-				if (direction === "buy") {
-					nextValue = cur + deltaShares;
-					optimisticLevelUpFloorsRef.current.set(key, {
-						...(existing ?? {}),
-						min: Math.max(existing?.min ?? 0, nextValue),
-						expiresAt: Date.now() + LEVELUP_FLOOR_TTL_MS,
-					});
-				} else {
-					nextValue = Math.max(0, cur - deltaShares);
-					optimisticLevelUpFloorsRef.current.set(key, {
-						...(existing ?? {}),
-						max:
-							existing?.max !== undefined
-								? Math.min(existing.max, nextValue)
-								: nextValue,
-						expiresAt: Date.now() + LEVELUP_FLOOR_TTL_MS,
-					});
-				}
-
-				const next = new Map(prev);
-				next.set(marketId, {
-					...tb,
-					...(side === "yes"
-						? { yesBalance: nextValue.toFixed(6) }
-						: { noBalance: nextValue.toFixed(6) }),
-				});
-				return next;
-			});
-		},
-		[],
-	);
-
 	// Keep ref in sync with state
 	useEffect(() => {
 		rawTokenBalancesRef.current = rawTokenBalances;
@@ -409,6 +293,8 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				setRawTokenBalances([]);
 				subgraphFetchedRef.current = walletAddress;
 				setUsingRpcFallback(false);
+				setLevelUpPositionsSource("subgraph");
+				setLevelUpPositionsError(null);
 				return;
 			}
 
@@ -416,8 +302,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			setRawTokenBalances(subgraphAccount.tokenBalances);
 			subgraphFetchedRef.current = walletAddress;
 			setUsingRpcFallback(false);
+			setLevelUpPositionsSource("subgraph");
+			setLevelUpPositionsError(null);
 		} catch (error) {
 			console.error("Error loading token balances from subgraph:", error);
+			const subgraphErrorMessage =
+				error instanceof Error ? error.message : String(error);
 
 			try {
 				// Build market data map from current context
@@ -459,10 +349,21 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 				setRawTokenBalances(rpcBalances);
 				subgraphFetchedRef.current = walletAddress;
 				setUsingRpcFallback(true);
+				setLevelUpPositionsSource("rpc");
+				// Subgraph failed but RPC succeeded — surface the upstream
+				// failure so consumers can render a "data is degraded" banner
+				// even though we have rows to show.
+				setLevelUpPositionsError(subgraphErrorMessage);
 			} catch (rpcError) {
 				console.error("[UserDataContext] RPC fallback also failed:", rpcError);
 				setRawTokenBalances([]);
 				subgraphFetchedRef.current = null; // Allow retry
+				setLevelUpPositionsSource("none");
+				const rpcMsg =
+					rpcError instanceof Error ? rpcError.message : String(rpcError);
+				setLevelUpPositionsError(
+					`Subgraph: ${subgraphErrorMessage}. RPC fallback: ${rpcMsg}`,
+				);
 			}
 		}
 	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchTokenBalancesFromRpc]);
@@ -596,9 +497,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			const currentRawBalances = rawTokenBalancesRef.current;
 			if (currentRawBalances.length > 0) {
 				setTokenBalances(
-					applyOptimisticFloorsToMap(
-						mapTokenBalancesToMarkets(currentRawBalances, marketDataMap),
-					),
+					mapTokenBalancesToMarkets(currentRawBalances, marketDataMap),
 				);
 			}
 		} finally {
@@ -641,8 +540,8 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		}
 
 		const mappedBalances = mapTokenBalancesToMarkets(rawTokenBalances, marketDataMap);
-		setTokenBalances(applyOptimisticFloorsToMap(mappedBalances));
-	}, [rawTokenBalances, mapTokenBalancesToMarkets, applyOptimisticFloorsToMap]);
+		setTokenBalances(mappedBalances);
+	}, [rawTokenBalances, mapTokenBalancesToMarkets]);
 
 	const getTokenBalance = useCallback(
 		(marketId: string) => {
@@ -852,8 +751,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			const rpcBalances = await fetchTokenBalancesFromRpc(account, marketDataMap);
 			setRawTokenBalances(rpcBalances);
 			setUsingRpcFallback(true);
+			setLevelUpPositionsSource("rpc");
+			setLevelUpPositionsError(null);
 		} catch (err) {
-			console.error("error", err);
+			console.error("[UserDataContext] refreshTokenPositions RPC failed:", err);
+			const msg = err instanceof Error ? err.message : String(err);
+			setLevelUpPositionsError(msg);
 		}
 	}, [account, umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchTokenBalancesFromRpc]);
 
@@ -864,11 +767,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			approvalState,
 			loading,
 			usingRpcFallback,
+			levelUpPositionsSource,
+			levelUpPositionsError,
 			refresh,
 			refreshTokenPositions,
 			loadOrders,
 			getTokenBalance,
-			applyOptimisticLevelUpFill,
 			checkApproval,
 			approveToken,
 		}),
@@ -878,11 +782,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			approvalState,
 			loading,
 			usingRpcFallback,
+			levelUpPositionsSource,
+			levelUpPositionsError,
 			refresh,
 			refreshTokenPositions,
 			loadOrders,
 			getTokenBalance,
-			applyOptimisticLevelUpFill,
 			checkApproval,
 			approveToken,
 		]

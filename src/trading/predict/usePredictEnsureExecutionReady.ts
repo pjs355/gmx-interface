@@ -104,9 +104,26 @@ export function usePredictEnsureExecutionReady(args: {
 		try {
 			const apiClient = apiRef.current;
 			const session = sessionRef.current;
+			const currentProfileIdAtStart = profileIdRef.current;
+
+			// Never call `getPredictAccount()` without `profileId` — that bypasses
+			// `tradingQueryKeys.predictAccount` and duplicates `AccountDataProvider`'s
+			// boot fetch. `useEffect` below re-runs when profile hydrates.
+			if (!currentProfileIdAtStart) {
+				setPhase("idle");
+				return;
+			}
 
 			setPhase("checking");
-			const account = await apiClient.getPredictAccount();
+			// Read through the canonical TanStack cache so the result is shared
+			// with `AccountDataContext` and any other observer of
+			// `tradingQueryKeys.predictAccount(profileId)`. Without this, the
+			// background activator + the trade-box mount each fired their own
+			// `GET /api/predict/account` (3+ requests at boot).
+			const account = await qc.fetchQuery({
+				queryKey: tradingQueryKeys.predictAccount(currentProfileIdAtStart),
+				queryFn: () => apiClient.getPredictAccount(),
+			});
 			const st = account.predictAccount;
 			const jwtOk = st.hasJwt && !st.jwtExpired;
 			const approvalServerOk = Boolean(st.approvalComplete);
@@ -148,12 +165,18 @@ export function usePredictEnsureExecutionReady(args: {
 			// sees `predictFun.canExecute: true`. Without this the user has to
 			// trigger a refetch (tab switch, manual reload) before SOR will
 			// route to Predict, which is exactly the jank the modal is trying
-			// to avoid for new users.
+			// to avoid for new users. Also drop the cached predictAccount so
+			// any AccountDataContext observer re-reads the post-sync state.
 			const currentProfileId = profileIdRef.current;
 			if (currentProfileId) {
-				await qc.invalidateQueries({
-					queryKey: tradingQueryKeys.accountOverview(currentProfileId),
-				});
+				await Promise.all([
+					qc.invalidateQueries({
+						queryKey: tradingQueryKeys.accountOverview(currentProfileId),
+					}),
+					qc.invalidateQueries({
+						queryKey: tradingQueryKeys.predictAccount(currentProfileId),
+					}),
+				]);
 			}
 
 			completedKeyRef.current = runKey;
@@ -234,6 +257,7 @@ export function usePredictEnsureExecutionReady(args: {
 		predictSession.ready,
 		runKey,
 		approvalsQueryReady,
+		profileId,
 		runSetup,
 	]);
 

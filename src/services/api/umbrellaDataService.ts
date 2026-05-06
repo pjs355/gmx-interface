@@ -215,16 +215,21 @@ class UmbrellaDataService {
 		} catch (error) {
 			console.error("❌ Error fetching umbrellas:", error);
 
-			// Last resort: try localStorage even if it's very old
+			// Last resort: try localStorage even if it's very old. Stale data
+			// is still better than a blank front page when the API is down.
 			const fallback = this.readLocalStorageCache();
 			if (fallback) {
 				this.umbrellasCache = fallback;
 				return fallback;
 			}
 
-			const sample: Umbrella[] = [];
-			this.umbrellasCache = sample;
-			return sample;
+			// No network AND no cache — there is genuinely nothing to render.
+			// Throw instead of returning `[]` so the caller can show an outage
+			// banner. Returning `[]` here used to make the home page look like
+			// "no markets" during real Predictions API downtime.
+			throw error instanceof Error
+				? error
+				: new Error(String(error ?? "Failed to load umbrellas"));
 		}
 	}
 

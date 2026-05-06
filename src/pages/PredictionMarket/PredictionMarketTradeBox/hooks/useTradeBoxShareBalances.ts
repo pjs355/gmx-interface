@@ -10,6 +10,7 @@ import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioD
 import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
@@ -322,8 +323,17 @@ export function useTradeBoxShareBalances(opts: {
 		venueReady && Boolean(account && (polymarketSafe || (account as string)?.length));
 
 	const polyQ = usePolymarketPositions(venueEnabled ? polymarketSafe : null);
-	/** Same wallet as {@link usePositionsData} / {@link PortfolioProvider}: Predict.fun is keyed off the embedded signer (BNB), not the Base SCW `account` when they differ. */
-	const predictQueryWallet = (signerAddress?.trim() || account?.trim()) || null;
+	/**
+	 * Same wallet as {@link usePositionsData} / {@link PortfolioProvider}: Predict.fun
+	 * is keyed off the embedded signer (BNB), not the Base SCW `account` when they
+	 * differ. `resolvePredictAccountAddress` is the canonical normalizer so all
+	 * three call sites (here, PortfolioContext, usePredictBundle) hit the same
+	 * TanStack key.
+	 */
+	const predictQueryWallet = resolvePredictAccountAddress(
+		signerAddress,
+		account,
+	);
 	const predictQ = usePredictPositions(
 		venueEnabled && predictQueryWallet ? predictQueryWallet : null,
 	);

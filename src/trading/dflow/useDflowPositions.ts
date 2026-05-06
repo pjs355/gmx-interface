@@ -13,7 +13,6 @@ import {
 	collectOutcomeMintCandidatesFromTrades,
 	toVenuePositions,
 } from "./dflowPositionsApi";
-import { mergeDflowFetchWithFloors } from "./dflowPositionsRefetchMerge";
 
 const connection = createSolanaConnectionForJsonRpcReads();
 
@@ -60,64 +59,63 @@ export function useDflowPositions(
 		queryFn: async () => {
 			if (!owner || !solanaAddress) return [];
 
-			try {
-				const debugPerf =
-					import.meta.env.DEV && import.meta.env.VITE_DEBUG_DFLOW_PERF === "1";
-				const t0 = debugPerf ? performance.now() : 0;
-				const mark = (label: string) => {
-					if (debugPerf) {
-						console.log(
-							`[DFlowPerf] ${label}: ${(performance.now() - t0).toFixed(0)}ms`,
-						);
-					}
-				};
-
-				const trades = await api.getDflowOnchainTrades(solanaAddress);
-				mark("onchainTrades");
-
-				const tradeMintCandidates = collectOutcomeMintCandidatesFromTrades(trades);
-				const outcomeMints =
-					tradeMintCandidates.length > 0
-						? await api.postDflowFilterOutcomeMints(tradeMintCandidates)
-						: [];
-				mark("filterOutcomeMints");
-
-				if (outcomeMints.length === 0) return [];
-
-				const outcomeMintsDeduped = [...new Set(outcomeMints)];
-
-				const [tokens, markets] = await Promise.all([
-					fetchToken2022BalancesForMints(connection, owner, outcomeMintsDeduped),
-					api.postDflowMarketsBatch(outcomeMintsDeduped),
-				]);
-				mark("tokenBalancesAndMarketsBatch");
-
-				const outcomeMintSet = new Set(outcomeMintsDeduped);
-				const outcomeTokens = tokens.filter((t) => outcomeMintSet.has(t.mint));
-				const matched = matchTokensToMarkets(outcomeTokens, markets);
-				const costMap = buildCostMap(trades);
-				const fillsByMint = buildDflowHistoryFillsByMint(trades);
-
-				const matchedMints = new Set(matched.map((p) => p.mint));
-				const ghostMints = outcomeMintsDeduped.filter((m) => {
-					if (matchedMints.has(m)) return false;
-					return fillsByMint.has(m) || costMap.has(m);
-				});
-				const ghosts = buildGhostDflowMarketPositions(ghostMints, markets);
-				const positions = [...matched, ...ghosts];
-
-				const out = toVenuePositions(positions, costMap, fillsByMint);
-				mark("mapToVenuePositions");
-				return mergeDflowFetchWithFloors(solanaAddress, out);
-			} catch (err) {
-				if (import.meta.env.DEV) {
-					// eslint-disable-next-line no-console -- DFlow load diagnostic
-					console.error("[DFlow] useDflowPositions queryFn failed; returning empty rows", err);
+			// Note: this used to wrap the whole pipeline in a `try { … } catch
+			// { return mergeDflowFetchWithFloors(addr, []) }`. That made any
+			// failure (Solana RPC outage, DFlow API 5xx, JSON parse) look
+			// identical to "user has no DFlow positions". We now let the
+			// query throw so React Query records `isError`, the Positions
+			// tab can render an explicit "DFlow temporarily unavailable"
+			// row, and `useAccountData().positions.dflow.error` is non-null.
+			const debugPerf =
+				import.meta.env.DEV && import.meta.env.VITE_DEBUG_DFLOW_PERF === "1";
+			const t0 = debugPerf ? performance.now() : 0;
+			const mark = (label: string) => {
+				if (debugPerf) {
+					console.log(
+						`[DFlowPerf] ${label}: ${(performance.now() - t0).toFixed(0)}ms`,
+					);
 				}
-				// Fall through to floors so an indexer hiccup doesn't drop optimistic
-				// fills the user has already seen.
-				return mergeDflowFetchWithFloors(solanaAddress, []);
+			};
+
+			const trades = await api.getDflowOnchainTrades(solanaAddress);
+			mark("onchainTrades");
+
+			const tradeMintCandidates = collectOutcomeMintCandidatesFromTrades(trades);
+			const outcomeMints =
+				tradeMintCandidates.length > 0
+					? await api.postDflowFilterOutcomeMints(tradeMintCandidates)
+					: [];
+			mark("filterOutcomeMints");
+
+			if (outcomeMints.length === 0) {
+				return [];
 			}
+
+			const outcomeMintsDeduped = [...new Set(outcomeMints)];
+
+			const [tokens, markets] = await Promise.all([
+				fetchToken2022BalancesForMints(connection, owner, outcomeMintsDeduped),
+				api.postDflowMarketsBatch(outcomeMintsDeduped),
+			]);
+			mark("tokenBalancesAndMarketsBatch");
+
+			const outcomeMintSet = new Set(outcomeMintsDeduped);
+			const outcomeTokens = tokens.filter((t) => outcomeMintSet.has(t.mint));
+			const matched = matchTokensToMarkets(outcomeTokens, markets);
+			const costMap = buildCostMap(trades);
+			const fillsByMint = buildDflowHistoryFillsByMint(trades);
+
+			const matchedMints = new Set(matched.map((p) => p.mint));
+			const ghostMints = outcomeMintsDeduped.filter((m) => {
+				if (matchedMints.has(m)) return false;
+				return fillsByMint.has(m) || costMap.has(m);
+			});
+			const ghosts = buildGhostDflowMarketPositions(ghostMints, markets);
+			const positions = [...matched, ...ghosts];
+
+			const out = toVenuePositions(positions, costMap, fillsByMint);
+			mark("mapToVenuePositions");
+			return out;
 		},
 	});
 }

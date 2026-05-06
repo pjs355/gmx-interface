@@ -93,8 +93,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		pandascoreMatchId,
 	} = useUmbrellaTradePricing({
 		umbrella,
-		sortedQuestions,
-		questionOrderbooks,
 	});
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;

@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
+import { useMemo, useCallback } from 'react';
 
 import Button from "components/Button/Button";
 import SpinningLoader from "@/components/Common/SpinningLoader";
@@ -36,7 +36,7 @@ import {
 	mixHexOnBlack,
 } from "@/helpers/predictionUtils";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
-import { SHARE_SELL_COMPARE_EPS } from "./checkBalances";
+import { usePostTradeBalanceSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
 import SmartRoutingSection from "./SmartRoutingSection";
 import { FlashingValue } from "@/utils/FlashingValue";
 import { usePortfolio } from "@/context/PortfolioContext";
@@ -124,6 +124,14 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   crossBuyNo: number | null;
   /** Max sellable shares for active tab + selected outcome (from SOR-scoped positions). */
   maxScopedSellShares: number;
+  /**
+   * True while the active tab's per-token share-balance query is still in
+   * flight. Used to suppress `sellFieldsLocked` so we don't disable the
+   * amount input during the BSC RPC roundtrip (Predict's `balanceOf` takes
+   * up to ~2s on a cold load — locking the input for that window made the
+   * trade box feel like it had no idea the user owned shares).
+   */
+  sharesLoadingForActiveTab?: boolean;
   /** Best sell bid for YES among venues where the user holds shares (All Markets sell only). */
   allMarketsSellYesBid?: number | null;
   /** Best sell bid for NO among venues where the user holds shares (All Markets sell only). */
@@ -181,6 +189,7 @@ export default function PredictionMarketTradeBoxUI({
   crossBuyYes,
   crossBuyNo,
   maxScopedSellShares,
+  sharesLoadingForActiveTab = false,
   matchedMonitor,
   allMarketsSellYesBid = null,
   allMarketsSellNoBid = null,
@@ -213,144 +222,20 @@ export default function PredictionMarketTradeBoxUI({
         }).format(cashBalance)
       : null;
 
-  /** Last completed All Markets SOR fill (no success banner — timing only for post-trade position sync). */
-  const sorFilledBannerVisible =
-    tradingVenue === "all" &&
-    sorExecution.execution != null &&
-    !sorExecution.isExecuting &&
-    sorExecution.execution.status === "complete";
-
-  const [positionSharesChainSyncUi, setPositionSharesChainSyncUi] = useState(false);
-
-  /** Latest snapshot for effects that must not re-run on every balance poll. */
-  const shareBalancesRef = useRef(shareBalances);
-  shareBalancesRef.current = shareBalances;
-
-  /** Baseline share totals when a fill completes or “Order Submitted!” fires (any venue). */
-  const positionSyncBaselineRef = useRef<{
-    buySum: number;
-    sellTotal: number;
-  } | null>(null);
-  const fillBannerRouteIdRef = useRef<string | undefined>(undefined);
-  /** True after `orderResult.success` rising edge until balances catch up or max wait (toast clears in 4s). */
-  const orderSubmitSyncActiveRef = useRef(false);
-  const prevOrderResultSuccessRef = useRef(false);
-  const positionSyncMaxTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-
-  const clearPositionSyncMaxTimer = useCallback(() => {
-    if (positionSyncMaxTimerRef.current != null) {
-      window.clearTimeout(positionSyncMaxTimerRef.current);
-      positionSyncMaxTimerRef.current = null;
-    }
-  }, []);
-
-  const armPositionSyncMaxTimer = useCallback(() => {
-    clearPositionSyncMaxTimer();
-    positionSyncMaxTimerRef.current = window.setTimeout(() => {
-      positionSyncMaxTimerRef.current = null;
-      setPositionSharesChainSyncUi(false);
-      orderSubmitSyncActiveRef.current = false;
-    }, 30_000);
-  }, [clearPositionSyncMaxTimer]);
-
-  const capturePositionSyncBaseline = useCallback(() => {
-    const sb = shareBalancesRef.current;
-    const buySum = sb.buyLines.reduce(
-      (s, l) => s + (Number.isFinite(l.shares) ? l.shares : 0),
-      0,
-    );
-    positionSyncBaselineRef.current = {
-      buySum,
-      sellTotal: sb.sellTotalShares,
-    };
-  }, []);
-
-  /** All Markets: green “Filled / Sold” row — same timing as post-trade polling. */
-  useEffect(() => {
-    if (!sorFilledBannerVisible) {
-      fillBannerRouteIdRef.current = undefined;
-      if (!orderSubmitSyncActiveRef.current) {
-        positionSyncBaselineRef.current = null;
-        setPositionSharesChainSyncUi(false);
-        clearPositionSyncMaxTimer();
-      }
-      return;
-    }
-    const routeId = sorExecution.execution?.routeId;
-    if (fillBannerRouteIdRef.current !== routeId) {
-      fillBannerRouteIdRef.current = routeId;
-      capturePositionSyncBaseline();
-      setPositionSharesChainSyncUi(true);
-      armPositionSyncMaxTimer();
-    }
-  }, [
-    sorFilledBannerVisible,
-    sorExecution.execution?.routeId,
-    capturePositionSyncBaseline,
-    armPositionSyncMaxTimer,
-    clearPositionSyncMaxTimer,
-  ]);
-
-  /** Any venue: “Order Submitted!” — single-venue Predict/Poly/etc. never shows the All Markets green row. */
-  useEffect(() => {
-    const success = !!orderResult?.success;
-    const rising = success && !prevOrderResultSuccessRef.current;
-    prevOrderResultSuccessRef.current = success;
-    if (!rising) return;
-
-    orderSubmitSyncActiveRef.current = true;
-    capturePositionSyncBaseline();
-    setPositionSharesChainSyncUi(true);
-    armPositionSyncMaxTimer();
-  }, [orderResult?.success, capturePositionSyncBaseline, armPositionSyncMaxTimer]);
-
-  useEffect(() => {
-    return () => {
-      clearPositionSyncMaxTimer();
-    };
-  }, [clearPositionSyncMaxTimer]);
-
-  useEffect(() => {
-    if (!positionSharesChainSyncUi) return;
-
-    const base = positionSyncBaselineRef.current;
-    const sellT = shareBalances.sellTotalShares;
-    const buySum = shareBalances.buyLines.reduce(
-      (s, l) => s + (Number.isFinite(l.shares) ? l.shares : 0),
-      0,
-    );
-    const filled = sorExecution.execution?.totalFilledShares;
-    const haveFilled = Number.isFinite(filled) && filled !== undefined && filled > 1e-6;
-
-    const endSync = () => {
-      setPositionSharesChainSyncUi(false);
-      orderSubmitSyncActiveRef.current = false;
-      clearPositionSyncMaxTimer();
-    };
-
-    if (side === "sell") {
-      if (haveFilled && sellT <= SHARE_SELL_COMPARE_EPS) {
-        endSync();
-        return;
-      }
-      if (base != null && sellT < base.sellTotal - 1e-6) {
-        endSync();
-      }
-      return;
-    }
-
-    if (side === "buy" && base != null && buySum > base.buySum + 1e-6) {
-      endSync();
-    }
-  }, [
-    positionSharesChainSyncUi,
-    shareBalances.buyLines,
-    shareBalances.sellTotalShares,
-    side,
-    sorExecution.execution?.totalFilledShares,
-    clearPositionSyncMaxTimer,
-  ]);
-  const sellFieldsLocked = side === "sell" && maxScopedSellShares <= 0;
+  const syncUiKey =
+    String(
+      (market as { _id?: string })?._id ??
+        (market as { questionId?: string })?.questionId ??
+        "",
+    ).trim() || null;
+  const positionSharesChainSyncUi = usePostTradeBalanceSyncPending(syncUiKey);
+  // While the active venue's share-balance query is still resolving (e.g.
+  // Predict's BSC `balanceOf`), `maxScopedSellShares` reads as 0 even when
+  // the user holds shares. Don't lock the input for that ~1-2s window —
+  // the button will say "Loading your Predict shares…" and re-enable as
+  // soon as the balance lands. Locks only fire on a confirmed zero.
+  const sellFieldsLocked =
+    side === "sell" && maxScopedSellShares <= 0 && !sharesLoadingForActiveTab;
   const venueConfig = getVenueConfig(tradingVenue);
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
 

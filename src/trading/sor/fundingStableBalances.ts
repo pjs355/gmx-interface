@@ -14,9 +14,21 @@ import {
 	getUSDCAddress,
 } from "@/config/addresses";
 import { getPolygonPublicClient } from "@/config/polygonPublicClient";
-import { BSC_RPC_URL, DEFAULT_RPC_URL, SOLANA_RPC_URL } from "@/config/rpc";
+import {
+	BSC_RPC_URL,
+	createSolanaConnectionForJsonRpcReads,
+	DEFAULT_RPC_URL,
+} from "@/config/rpc";
 import { POLYGON_PUSD, POLYGON_USDC_E } from "@/trading/polymarket/constants";
 import type { SorChain } from "./sor-types";
+
+/** Keys aligned with `GET /portfolio/cash-summary` / collateral query slices. */
+export type CollateralChainKey =
+	| "base"
+	| "polygon"
+	| "bnb"
+	| "solana"
+	| "limitlessMakerBase";
 
 const basePublic = createPublicClient({
 	chain: base,
@@ -28,7 +40,8 @@ const bscPublic = createPublicClient({
 	transport: http(BSC_RPC_URL),
 });
 
-const solanaConnection = new Connection(SOLANA_RPC_URL);
+/** Same Connection factory as DFlow reads — shares RPC failover with `rpc.ts`. */
+const solanaConnection = createSolanaConnectionForJsonRpcReads();
 const SOLANA_USDC_MINT_PK = new PublicKey(SOLANA_USDC_MINT);
 
 async function readSolanaUsdcHuman(walletAddress: string): Promise<number> {

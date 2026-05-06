@@ -324,11 +324,12 @@ function computeBestIndices(rows: VenueRowModel[]): { bestAIdx: number; bestBIdx
 /**
  * Single source of truth for venue prices on the trading page.
  * Uses OddsMonitor (`/ws/venue-prices` → `MatchedMarket`) only for displayed strip prices;
- * no REST venue-bbo or REST LevelUp orderbook merge.
+ * no REST venue-bbo or REST LevelUp orderbook merge — the LevelUp orderbook is
+ * consumed by the orderbook panels directly (`MarketPanels`, `VenueOrderbooksPanel`)
+ * and never participated in this hook's price computation.
  */
 export function useTradingPagePrices(
 	pandascoreMatchId: string,
-	_levelUpOrderbook: OrderbookSnapshot | null | undefined,
 	directBooks: DirectVenueBooks | null | undefined,
 	umbrellaId?: string | null,
 	/** When `/matched-markets` omits limitless but the umbrella has it (env skew). */

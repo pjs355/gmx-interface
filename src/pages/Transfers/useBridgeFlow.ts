@@ -15,11 +15,9 @@ import { getPrivateApiErrorMessage } from "@/services/privateApi";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
 import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
-import {
-	BRIDGE_FUNDING_BALANCES_QUERY_KEY,
-	useBridgeFundingBalances,
-} from "@/trading/hooks/useBridgeFundingBalances";
+import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useAccountData } from "@/context/AccountDataContext";
 import { useLifiQuoteMutation } from "@/trading/hooks/useLifiBridge";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { checkPolymarketApprovals } from "@/trading/polymarket/approvalTxs";
@@ -164,6 +162,11 @@ export type BridgeFundingBalanceRow = {
 	solanaUsdcHuman: string | null;
 };
 
+/** Same fields as `BridgeFundingBalanceRow` plus the Limitless maker pocket — exposed on `flow.fundingBalances.data` so `TransfersBridgePanel` can show every wallet pill. */
+export type BridgeFundingBalanceRowDisplay = BridgeFundingBalanceRow & {
+	baseLimitlessUsdcHuman: string | null;
+};
+
 function parseHumanUsd(h: string | null | undefined): number {
 	if (h == null || h === "") return 0;
 	const n = parseFloat(h);
@@ -208,14 +211,37 @@ export function pickAutoFromForBridgeTransfer(
 export function useBridgeFlow() {
 	const queryClient = useQueryClient();
 	const funding = useFundingAddresses();
-	const fundingBalances = useBridgeFundingBalances({
-		baseSmartWallet: funding.baseSmartWallet,
-		limitlessMakerBase: funding.limitlessMakerBase,
-		polymarketSafe: funding.polymarketSafe,
-		embeddedEoa: funding.embeddedEoa,
-		solanaAddress: funding.solanaAddress,
-		enabled: !funding.isLoading,
-	});
+	// Display + auto-from-pick read the server's `/portfolio/cash-summary`
+	// snapshot via `AccountDataContext` instead of fanning out to per-chain
+	// RPCs. The transactional `executeLifiSteps` path below still calls
+	// `readFundingStableBalancesHuman` directly when it needs a verified
+	// fresh on-chain read at submit time.
+	const { cash: accountCash, refresh: refreshAccount } = useAccountData();
+	const fundingBalances = useMemo(
+		() => ({
+			data: accountCash.isFetched
+				? ({
+						baseUsdcHuman: accountCash.base.toFixed(6),
+						baseLimitlessUsdcHuman: accountCash.limitlessMaker.toFixed(6),
+						polygonUsdcEHuman: accountCash.polygon.toFixed(6),
+						bscUsdtHuman: accountCash.bnb.toFixed(6),
+						solanaUsdcHuman: accountCash.solana.toFixed(6),
+					} satisfies BridgeFundingBalanceRowDisplay)
+				: null,
+			isLoading: accountCash.status === "pending" && !accountCash.isFetched,
+			refetch: refreshAccount.cash,
+		}),
+		[
+			accountCash.isFetched,
+			accountCash.status,
+			accountCash.base,
+			accountCash.limitlessMaker,
+			accountCash.polygon,
+			accountCash.bnb,
+			accountCash.solana,
+			refreshAccount.cash,
+		]
+	);
 	const { refresh: refreshUserData } = useUserData();
 	const api = usePrivateApiClient();
 	const quoteMutation = useLifiQuoteMutation();

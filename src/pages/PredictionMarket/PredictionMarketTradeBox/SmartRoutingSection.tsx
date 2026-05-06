@@ -382,50 +382,75 @@ export default function SmartRoutingSection({
 	);
 
 	/* ---------------------------------------------------------------------
-	 * Sticky-render shield against transient upstream nulls.
+	 * Sticky-render shield against transient upstream nulls — gated on side.
 	 *
-	 * When the user toggles the position (Team A ↔ Team B) the SOR hook fires
-	 * a fresh request for the new outcome. If anything in that pipeline (an
-	 * upstream `blankAll`, a transient failure inside the grace window, an
-	 * abort race) momentarily flips `displayRoute` / `venuePreviews` to null,
-	 * this whole grid would unmount and snap back in once the refetch settles
-	 * — the "pop-out / pop-in" jank.
+	 * Team A ↔ Team B (same side):
+	 *   The SOR hook leaves `displayRoute` / `venuePreviews` mounted across
+	 *   the outcome flip; rows already use stable keys (`buy-${venue}` /
+	 *   `sell-${venue}`) so React reconciles in place, `FlashingValue`
+	 *   animates the per-row numbers, venues missing in the new payload
+	 *   unmount, and venues that gain liquidity for the new outcome mount.
+	 *   If anything upstream (an abort race, a transient failure inside the
+	 *   grace window) momentarily flips a prop to null, the sticky refs
+	 *   below keep the last good rows on screen so the grid does not
+	 *   pop-out / pop-in.
 	 *
-	 * To make the rendering layer resilient regardless of upstream timing, we
-	 * keep refs to the last MEANINGFUL plan + previews and fall back to them
-	 * whenever the live props are null/empty. The refs update during render
-	 * (no setState, no extra commits) so the user always sees the most recent
-	 * legitimate row layout. A sibling key tied to the side prop resets the
-	 * cache on a buy↔sell flip (different shape: "To Win" vs "Receive") so
-	 * we never strand mismatched data on screen.
-	 *
-	 * Rows already use stable keys (`buy-${venue}` / `sell-${venue}`), so once
-	 * fresh data arrives React reconciles in place: existing venues update
-	 * their `FlashingValue` numbers, venues missing in the new payload
-	 * unmount, brand-new venues mount. Exactly the smooth swap requested.
+	 * Buy ↔ Sell (the case that motivated this comment):
+	 *   The two sides share nothing — different value semantics ("To Win"
+	 *   vs "Receive"), different sort orders, different overlay rules.
+	 *   On a side flip we MUST do a full reset, not a smooth swap. Two
+	 *   subtle traps fight against that:
+	 *     1. The parent re-renders with the new `side` prop the same tick
+	 *        the user clicks; `useSorRoute`'s `blankAll()` runs in an
+	 *        effect AFTER render, so for one render `rawDisplayRoute` is
+	 *        still the old buy route while `side === "sell"`.
+	 *     2. If we naively stamp every non-null `rawDisplayRoute` into
+	 *        the sticky ref, that stale buy route would BECOME the sticky
+	 *        snapshot — and the next render (after `blankAll`) would
+	 *        recover it via `??`, holding buy rows on screen under a
+	 *        "Receive" header until fresh sell data lands.
+	 *   The fix: gate every read AND every write on `data.side ===
+	 *   expectedSide`. Mismatched-side data is treated like `null` — never
+	 *   rendered, never cached — so the section renders empty (no rows,
+	 *   no header) for the brief loading window between buy and sell, and
+	 *   only mounts again with data the user actually asked for.
 	 * ------------------------------------------------------------------- */
 	const stableDisplayRouteRef = useRef<RoutePlan | null>(null);
 	const stableVenuePreviewsRef = useRef<VenueRoutePreview[] | null>(null);
 	const lastSideKeyRef = useRef<string | null>(null);
-	const sideKey = `${side ?? rawDisplayRoute?.side ?? "buy"}`;
-	if (lastSideKeyRef.current !== sideKey) {
-		lastSideKeyRef.current = sideKey;
+	const expectedSide: SorSide = side ?? rawDisplayRoute?.side ?? "buy";
+	if (lastSideKeyRef.current !== expectedSide) {
+		lastSideKeyRef.current = expectedSide;
 		stableDisplayRouteRef.current = null;
 		stableVenuePreviewsRef.current = null;
 	}
-	/* Update sticky refs on every render that has live data. We treat an empty
-	 * array as legitimate ("server explicitly returned no venues") so the
-	 * existing null-section render guard can fire normally; only `null` /
-	 * `undefined` triggers the fallback. */
-	if (rawDisplayRoute != null) {
-		stableDisplayRouteRef.current = rawDisplayRoute;
+	/* Promote upstream data to "live" only when its side matches the side the
+	 * user is actually trading. The first preview's `.side` is enough — the
+	 * SOR API always returns a homogeneous list per fetch. Empty arrays
+	 * carry no side, so we accept them as legitimate ("server explicitly
+	 * returned no venues") rather than treating them as a mismatch. */
+	const liveDisplayRoute: RoutePlan | null =
+		rawDisplayRoute && rawDisplayRoute.side === expectedSide
+			? rawDisplayRoute
+			: null;
+	const liveVenuePreviews: VenueRoutePreview[] | null =
+		rawVenuePreviews == null
+			? null
+			: rawVenuePreviews.length === 0 ||
+				  rawVenuePreviews[0]!.side === expectedSide
+				? rawVenuePreviews
+				: null;
+	/* Sticky refs only ever hold same-side data, so the fallback below can
+	 * never resurrect a stale-side route after a buy↔sell flip. */
+	if (liveDisplayRoute != null) {
+		stableDisplayRouteRef.current = liveDisplayRoute;
 	}
-	if (rawVenuePreviews != null) {
-		stableVenuePreviewsRef.current = rawVenuePreviews;
+	if (liveVenuePreviews != null) {
+		stableVenuePreviewsRef.current = liveVenuePreviews;
 	}
-	const displayRoute = rawDisplayRoute ?? stableDisplayRouteRef.current;
+	const displayRoute = liveDisplayRoute ?? stableDisplayRouteRef.current;
 	const venuePreviews =
-		rawVenuePreviews ?? stableVenuePreviewsRef.current;
+		liveVenuePreviews ?? stableVenuePreviewsRef.current;
 
 	const toggle = useCallback((key: string) => {
 		setExpandedKey((k) => (k === key ? null : key));

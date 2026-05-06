@@ -31,11 +31,6 @@ export interface PredictionMarket {
 	}>;
 }
 
-interface ApiResponse {
-	success: boolean;
-	data: PredictionMarket[];
-}
-
 interface PandaMatchTeam {
 	id: number | null;
 	name: string;
@@ -66,33 +61,17 @@ export interface PandaScoreMatch {
 	}>;
 }
 
+/** Dedupes concurrent `fetchMatchFromPandascore` (e.g. StrictMode / sibling mounts). */
+const pandascoreMatchInFlight = new Map<
+	string,
+	Promise<PandaScoreMatch | null>
+>();
+
 class PredictionMarketDataService {
 	// NOTE: API_BASE_URL is now fetched dynamically via getter to prevent
 	// stale URL caching issues that caused production bugs
 	private get API_BASE_URL(): string {
 		return getPredictionApiBaseUrl();
-	}
-
-	async fetchAllMarkets(): Promise<PredictionMarket[]> {
-		try {
-			const response = await fetch(`${this.API_BASE_URL}/umbrellas`);
-			if (!response.ok) {
-				throw new Error(
-					`HTTP error! status: ${response.status} - ${response.statusText}`
-				);
-			}
-			const apiResponse: ApiResponse = await response.json();
-			if (!apiResponse.success || !Array.isArray(apiResponse.data)) {
-				throw new Error("Invalid API response structure");
-			}
-			const markets = apiResponse.data;
-			markets.forEach((market) => {
-				predictionMarketCache.setMarketData(market);
-			});
-			return markets;
-		} catch (error) {
-			throw error;
-		}
 	}
 
 	async fetchMarketById(id: string): Promise<PredictionMarket | null> {
@@ -128,34 +107,45 @@ class PredictionMarketDataService {
 		matchId: string | number,
 		accessToken?: string | null
 	): Promise<PandaScoreMatch | null> {
-		try {
-			const requestedUrl = `${this.API_BASE_URL}/admin/pandascore/matches/${matchId}`;
-			const headers: Record<string, string> = {};
-			if (accessToken) {
-				headers.Authorization = `Bearer ${accessToken}`;
-			}
-			const response = await fetch(requestedUrl, {
-				headers,
-			});
-			if (!response.ok) {
-				return null;
-			}
-			const json = await response.json().catch(() => null);
-			if (json && (json.success === undefined || json.success === true)) {
-				const payload = json.data ?? json;
-				if (payload) {
-					const teams = payload.opponents || payload.teams;
-					if (Array.isArray(teams) && teams.length > 0) {
-						return payload;
-					}
+		const key = String(matchId);
+		const inflight = pandascoreMatchInFlight.get(key);
+		if (inflight) return inflight;
+
+		const promise = (async (): Promise<PandaScoreMatch | null> => {
+			try {
+				const requestedUrl = `${this.API_BASE_URL}/admin/pandascore/matches/${matchId}`;
+				const headers: Record<string, string> = {};
+				if (accessToken) {
+					headers.Authorization = `Bearer ${accessToken}`;
 				}
-				return payload;
+				const response = await fetch(requestedUrl, {
+					headers,
+				});
+				if (!response.ok) {
+					return null;
+				}
+				const json = await response.json().catch(() => null);
+				if (json && (json.success === undefined || json.success === true)) {
+					const payload = json.data ?? json;
+					if (payload) {
+						const teams = payload.opponents || payload.teams;
+						if (Array.isArray(teams) && teams.length > 0) {
+							return payload;
+						}
+					}
+					return payload;
+				}
+				return null;
+			} catch (error) {
+				console.error("error", error);
+				return null;
+			} finally {
+				pandascoreMatchInFlight.delete(key);
 			}
-			return null;
-		} catch (error) {
-			console.error("error", error);
-			return null;
-		}
+		})();
+
+		pandascoreMatchInFlight.set(key, promise);
+		return promise;
 	}
 
 	getCachedMarketData(questionId: string): PredictionMarket | null {

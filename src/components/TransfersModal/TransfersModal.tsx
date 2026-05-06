@@ -15,9 +15,8 @@ import { useTransfersModal } from "@/context/TransfersModalContext";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
-import { useCollateralTokens } from "@/context/CollateralTokenContext";
+import { useAccountData } from "@/context/AccountDataContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import { useBridgeFundingBalances } from "@/trading/hooks/useBridgeFundingBalances";
 import { buildChainBalances } from "@/trading/sor/buildChainBalances";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import {
@@ -127,53 +126,42 @@ export function TransfersModal() {
 	const { cashBalance } = usePortfolio();
 	const { account } = useSignerContext();
 	const { refresh: refreshUserData } = useUserData();
-	const collateralTokens = useCollateralTokens();
-	const usdcBalance = collateralTokens.baseUsdc;
+	const { cash: accountCash, refresh: refreshAccount } = useAccountData();
 	const funding = useFundingAddresses();
 	const api = usePrivateApiClient();
 	const queryClient = useQueryClient();
 	const { executePlan } = useWithdrawPlanExecution();
 
-	const bridgeBalances = useBridgeFundingBalances({
-		baseSmartWallet: funding.baseSmartWallet,
-		limitlessMakerBase: funding.limitlessMakerBase,
-		polymarketSafe: funding.polymarketSafe,
-		embeddedEoa: funding.embeddedEoa,
-		solanaAddress: funding.solanaAddress,
-		enabled: !funding.isLoading && Boolean(account),
-	});
-
+	// Display balances come from the server's `/portfolio/cash-summary`
+	// snapshot (already aggregated across all five wallets), not from a
+	// duplicate per-chain RPC fan-out. The transactional `readFundingStableBalancesHuman`
+	// reads further below stay in place — those are the verify-before-tx
+	// path, not display.
 	const chainBalances = useMemo(
 		() =>
 			buildChainBalances({
-				baseUsdcBalance: usdcBalance,
+				baseUsdcBalance: accountCash.base,
 				baseWalletAddress: funding.baseSmartWallet ?? "",
-				polygonUsdcBalance: parseFloat(
-					bridgeBalances.data?.polygonUsdcEHuman ?? "0"
-				),
+				polygonUsdcBalance: accountCash.polygon,
 				polygonWalletAddress: funding.polymarketSafe,
-				solanaUsdcBalance: parseFloat(
-					bridgeBalances.data?.solanaUsdcHuman ?? "0"
-				),
+				solanaUsdcBalance: accountCash.solana,
 				solanaWalletAddress: funding.solanaAddress,
-				bnbUsdtBalance: parseFloat(bridgeBalances.data?.bscUsdtHuman ?? "0"),
+				bnbUsdtBalance: accountCash.bnb,
 				bnbWalletAddress: funding.embeddedEoa,
 			}),
 		[
-			usdcBalance,
+			accountCash.base,
+			accountCash.polygon,
+			accountCash.solana,
+			accountCash.bnb,
 			funding.baseSmartWallet,
 			funding.polymarketSafe,
 			funding.embeddedEoa,
 			funding.solanaAddress,
-			bridgeBalances.data,
 		]
 	);
 
-	const limitlessOnMaker = useMemo(() => {
-		const raw = bridgeBalances.data?.baseLimitlessUsdcHuman;
-		const n = raw == null || raw === "" ? Number.NaN : parseFloat(raw);
-		return Number.isFinite(n) ? Math.max(0, n) : 0;
-	}, [bridgeBalances.data]);
+	const limitlessOnMaker = Math.max(0, accountCash.limitlessMaker || 0);
 
 	const totalFundingOnRails = useMemo(
 		() =>
@@ -392,10 +380,14 @@ export function TransfersModal() {
 					},
 					privateApi: api,
 				});
+				// `BRIDGE_FUNDING_BALANCES_QUERY_KEY` is still consumed by the
+				// SOR / useBridgeFlow transaction-time path; invalidate it so
+				// those callers re-read the post-prefund balances. Refresh the
+				// canonical cash snapshot so this modal's display updates too.
 				await queryClient.invalidateQueries({
 					queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
 				});
-				await bridgeBalances.refetch();
+				await refreshAccount.cash();
 				await refreshUserData();
 				balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
 			}
@@ -436,7 +428,7 @@ export function TransfersModal() {
 		}
 	}, [
 		api,
-		bridgeBalances,
+		refreshAccount,
 		canRequestReview,
 		effectiveWithdrawAmount,
 		effectiveWithdrawAmountStr,
@@ -514,7 +506,7 @@ export function TransfersModal() {
 				</div>
 			)}
 			{chainBalances.length === 0 && (
-				bridgeBalances.isLoading || !bridgeBalances.data ? (
+				accountCash.status === "pending" || !accountCash.isFetched ? (
 					<div className="transfers-field-loading" style={{ marginBottom: 12 }}>
 						Loading wallet balances…
 					</div>
