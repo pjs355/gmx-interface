@@ -596,6 +596,11 @@ export default function HistoryView({
 												isExpanded={isExp}
 												position={row.side}
 												positionDisplayLabel={row.label}
+												marketTitle={
+													(block.venuePositions.find((p) => p.marketTitle?.trim())
+														?.marketTitle ?? "")
+														.trim() || undefined
+												}
 											/>
 										)}
 									</React.Fragment>

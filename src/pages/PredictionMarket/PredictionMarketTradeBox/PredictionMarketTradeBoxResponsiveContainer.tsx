@@ -118,14 +118,6 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	 * the trade box for the lifetime of the current `orderResult`.
 	 */
 	dflowUninitAtSubmit?: boolean;
-	/**
-	 * True whenever the user just submitted a DFlow-routed order (whether the
-	 * Kalshi market is already initialized or not). The UI uses this to show a
-	 * generic "balance reflected shortly" notice — broadcast-only completion
-	 * means the SOR leg returns success the moment Solana accepts the tx, and
-	 * the user needs to know their actual Kalshi shares are still settling.
-	 */
-	dflowSubmittedAtSubmit?: boolean;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -168,7 +160,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	shareBalances,
 	mobilePeekBar = "default",
 	dflowUninitAtSubmit = false,
-	dflowSubmittedAtSubmit = false,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -381,7 +372,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				allMarketsSellNoBid={allMarketsSellNoBid}
 				shareBalances={shareBalances}
 				dflowUninitAtSubmit={dflowUninitAtSubmit}
-				dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
 			/>
 		</div>
 	);
@@ -564,7 +554,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				allMarketsSellNoBid={allMarketsSellNoBid}
 				shareBalances={shareBalances}
 				dflowUninitAtSubmit={dflowUninitAtSubmit}
-				dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
 			/>
 			</div>
 	</PredictionCurtain>

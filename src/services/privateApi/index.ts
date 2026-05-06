@@ -20,6 +20,7 @@ export type {
 	DflowOrderResponse,
 	DflowOrderSubmitBody,
 	DflowOrderSubmitResponse,
+	DflowUmbrellaMappingResult,
 	DflowBatchMarket,
 	DflowOnchainTrade,
 } from "./client";

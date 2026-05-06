@@ -54,6 +54,11 @@ export interface VenueHistoryFill {
 	sourceId?: string;
 	/** Execution price when API provides it (probability 0–1 or cents) */
 	price?: number | null;
+	/**
+	 * Kalshi/DFlow leg ticker from `onchain-trades` (`marketTicker`). Each fill may
+	 * belong to a different leg market while the umbrella title stays “A vs B”.
+	 */
+	marketTicker?: string;
 }
 
 export interface VenuePosition {
@@ -85,6 +90,11 @@ export interface VenuePosition {
 	levelUpUmbrellaId?: string;
 	/** Optional display label from the same join (for UI only). */
 	levelUpUmbrellaDisplayName?: string;
+	/**
+	 * DFlow/Kalshi: display label for the portfolio **Yes** / **No** column for this mint (see
+	 * {@link portfolioColumnTeamLabels} / {@link patchDflowVenuePositionOutcomes}). Trade-history Side text.
+	 */
+	dflowTradeSideLabel?: string;
 	/** Market-level status from the venue (e.g. "RESOLVED") */
 	marketStatus?: string;
 	/** Limitless `PositionMarket.closed` — when false, treat row as live for Positions vs History split. */

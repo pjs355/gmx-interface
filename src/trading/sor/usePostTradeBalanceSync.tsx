@@ -26,11 +26,16 @@ import {
 	type PostTradeBaseline,
 	type PostTradeBaselineAddresses,
 } from "./postTradeBaseline";
+import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
 
 /** Fixed cadence between refetches while waiting for server-backed divergence from baseline. */
 const POLL_INTERVAL_MS = 5_000;
 /** Immediate first refetch + subsequent polls — wall ~80s max. */
 const MAX_REFETCH_ATTEMPTS = 17;
+
+/** DFlow: faster polls so server-backed `dflow-positions` converges within ~30s wall. */
+const DFLOW_POST_TRADE_POLL_MS = 2_000;
+const DFLOW_POST_TRADE_MAX_ATTEMPTS = 15;
 /** Allow React state (e.g. LevelUp tokenBalances) to settle after RPC refresh. */
 const LEVELUP_READ_DELAY_MS = 64;
 
@@ -64,6 +69,12 @@ type PendingTarget =
 			side: "yes" | "no";
 			baselineLevelUp: number;
 	  };
+
+function pendingHasDflowShares(pending: PendingTarget[]): boolean {
+	return pending.some(
+		(t) => t.kind === "shares" && t.venue === "dflow",
+	);
+}
 
 function readVenueShares(
 	queryClient: QueryClient,
@@ -106,12 +117,7 @@ function readVenueShares(
 		case "dflow": {
 			const owner = addresses.solanaAddress?.trim() ?? null;
 			if (!owner) return null;
-			return findShares(
-				queryClient.getQueryData<VenuePosition[]>([
-					"dflow-positions",
-					owner,
-				]),
-			);
+			return findShares(getCachedDflowPositions(queryClient, owner));
 		}
 		case "limitless": {
 			return findShares(
@@ -311,8 +317,18 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 					return;
 				}
 
-				for (let attempt = 0; attempt < MAX_REFETCH_ATTEMPTS; attempt++) {
+				for (let attempt = 0; ; attempt++) {
 					if (sessionRef.current !== session) return;
+
+					const dflowPoll = pendingHasDflowShares(pending);
+					const maxAttempts = dflowPoll
+						? DFLOW_POST_TRADE_MAX_ATTEMPTS
+						: MAX_REFETCH_ATTEMPTS;
+					const pollMs = dflowPoll
+						? DFLOW_POST_TRADE_POLL_MS
+						: POLL_INTERVAL_MS;
+
+					if (attempt >= maxAttempts) break;
 
 					const levelUpRan = await refetchForPending(
 						req.queryClient,
@@ -351,8 +367,8 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 						break;
 					}
 
-					if (attempt < MAX_REFETCH_ATTEMPTS - 1) {
-						await sleep(POLL_INTERVAL_MS);
+					if (attempt < maxAttempts - 1) {
+						await sleep(pollMs);
 					}
 				}
 

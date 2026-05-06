@@ -1,9 +1,9 @@
-import { Connection, PublicKey, type AccountInfo } from "@solana/web3.js";
-import {
-	TOKEN_2022_PROGRAM_ID,
-	getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { VenueHistoryFill, VenuePosition } from "@/types/trading/venuePosition";
+import {
+	lookupUmbrellaByDflowEventTicker,
+	portfolioColumnTeamLabels,
+} from "@/trading/dflow/dflowUmbrellaLookup";
 import type {
 	DflowBatchMarket,
 	DflowMarketAccountInfo,
@@ -27,24 +27,10 @@ export function dflowEventTickerFromBatchMarket(market: DflowBatchMarket): strin
 }
 
 /*
- * DFlow on-chain balances (Positions / trade box) — maintainers
- * -----------------------------------------------------------
- * Why not one RPC? Solana stores each outcome mint in a separate SPL Token-2022 account (often
- * the ATA). There is no single "wallet balance" call for all prediction outcomes.
- *
- * Why not full-wallet scan? `getParsedTokenAccountsByOwner` without mint filter enumerates
- * every Token-2022 account — slow and rate-limit prone on public RPC.
- *
- * Flow: outcome mints come from API trade history → filter_outcome_mints → this module reads
- * balances only for those mints. Primary: batched `getMultipleParsedAccounts` on ATAs
- * (see constants DFLOW_*). Fallback: per-mint `getParsedTokenAccountsByOwner` when the ATA
- * cell is missing or unparsable (non-ATA custody).
- *
- * Known limitation: ATA exists with 0 uiAmount but shares live only in a non-ATA account — we
- * skip extra RPC on the "zero" path; revisit if that case appears in prod.
- *
- * Tunables: DFLOW_OUTCOME_MINT_RPC_CONCURRENCY, DFLOW_PER_MINT_BALANCE_TIMEOUT_MS,
- * DFLOW_BALANCE_MULTIREAD_CHUNK, DFLOW_MULTIREAD_CHUNK_TIMEOUT_MS.
+ * DFlow positions transforms — maintainers
+ * ---------------------------------------
+ * Outcome balances are read via `POST /api/dflow/token-balances` (predictions API, private
+ * `SOLANA_RPC_URL`) in `useDflowPositions`, not in the browser.
  */
 
 export type DflowSolanaToken = {
@@ -57,215 +43,6 @@ export type DflowMarketPosition = DflowSolanaToken & {
 	side: "yes" | "no";
 	market: DflowBatchMarket;
 };
-
-/** Parallelism for per-mint fallback reads (non-ATA or failed batch cell). */
-export const DFLOW_OUTCOME_MINT_RPC_CONCURRENCY = 20;
-
-/** Per-mint ceiling so a few bad mints cannot stall the whole DFlow positions query. */
-export const DFLOW_PER_MINT_BALANCE_TIMEOUT_MS = 10_000;
-
-/** `getMultipleParsedAccounts` chunk size (RPC max is typically 100). */
-export const DFLOW_BALANCE_MULTIREAD_CHUNK = 100;
-
-/** Whole-batch timeout for multi-account balance reads. */
-export const DFLOW_MULTIREAD_CHUNK_TIMEOUT_MS = 22_000;
-
-type AtaParseResult =
-	| { kind: "positive"; balance: number; decimals: number }
-	| { kind: "zero" }
-	| { kind: "fallback" };
-
-function parsedToken2022AtaBalance(
-	account: AccountInfo<Buffer | { parsed?: unknown }> | null,
-	expectedMintBase58: string,
-): AtaParseResult {
-	if (!account?.data || typeof account.data !== "object") return { kind: "fallback" };
-	const data = account.data as {
-		parsed?: { type?: string; info?: Record<string, unknown> };
-	};
-	const inner = data.parsed;
-	if (!inner || inner.type !== "account" || !inner.info) return { kind: "fallback" };
-	const info = inner.info as {
-		mint?: string;
-		tokenAmount?: { uiAmount?: number | null; decimals?: number };
-	};
-	const mint = info.mint?.trim() ?? "";
-	if (mint !== expectedMintBase58.trim()) return { kind: "fallback" };
-	const uiAmount = info.tokenAmount?.uiAmount;
-	const decimals = info.tokenAmount?.decimals ?? 0;
-	if (uiAmount == null || !Number.isFinite(uiAmount) || uiAmount <= 0) {
-		return { kind: "zero" };
-	}
-	return { kind: "positive", balance: uiAmount, decimals };
-}
-
-function mergeMintBalance(
-	map: Map<string, { balance: number; decimals: number }>,
-	mintStr: string,
-	balance: number,
-	decimals: number,
-): void {
-	const prev = map.get(mintStr);
-	if (prev) {
-		map.set(mintStr, {
-			balance: prev.balance + balance,
-			decimals: prev.decimals || decimals,
-		});
-	} else {
-		map.set(mintStr, { balance, decimals });
-	}
-}
-
-/**
- * Reads Token-2022 balances for outcome mints the wallet has traded.
- *
- * Primary path: batched `getMultipleParsedAccounts` on Token-2022 ATAs (~1 RPC per 100 mints).
- * Fallback: `getParsedTokenAccountsByOwner` per mint when ATA is missing or unparsable (non-ATA custody).
- */
-export async function fetchToken2022BalancesForMints(
-	connection: Connection,
-	owner: PublicKey,
-	mints: string[],
-	options?: {
-		timeoutMsPerMint?: number;
-		concurrency?: number;
-		chunkSize?: number;
-		chunkTimeoutMs?: number;
-	},
-): Promise<DflowSolanaToken[]> {
-	const timeoutMsPerMint =
-		options?.timeoutMsPerMint ?? DFLOW_PER_MINT_BALANCE_TIMEOUT_MS;
-	const concurrency =
-		options?.concurrency ?? DFLOW_OUTCOME_MINT_RPC_CONCURRENCY;
-	const chunkTimeoutMs =
-		options?.chunkTimeoutMs ?? DFLOW_MULTIREAD_CHUNK_TIMEOUT_MS;
-	const chunkSize = options?.chunkSize ?? DFLOW_BALANCE_MULTIREAD_CHUNK;
-
-	const unique = [...new Set(mints.map((m) => m.trim()).filter(Boolean))];
-	const balanceByMint = new Map<string, { balance: number; decimals: number }>();
-
-	type MintRow = { mintStr: string; mintPk: PublicKey };
-	const rows: MintRow[] = [];
-	for (const mintStr of unique) {
-		try {
-			rows.push({ mintStr, mintPk: new PublicKey(mintStr) });
-		} catch {
-			/* skip invalid mint */
-		}
-	}
-
-	if (rows.length === 0) return [];
-
-	const fallbackMints = new Set<string>();
-
-	for (let i = 0; i < rows.length; i += chunkSize) {
-		const chunk = rows.slice(i, i + chunkSize);
-		const atas = chunk.map((r) =>
-			getAssociatedTokenAddressSync(
-				r.mintPk,
-				owner,
-				false,
-				TOKEN_2022_PROGRAM_ID,
-			),
-		);
-		try {
-			const res = await Promise.race([
-				connection.getMultipleParsedAccounts(atas),
-				new Promise<never>((_, reject) => {
-					setTimeout(() => {
-						reject(new Error("DFlow Solana: getMultipleParsedAccounts chunk timeout"));
-					}, chunkTimeoutMs);
-				}),
-			]);
-			const accounts = res.value;
-			for (let j = 0; j < chunk.length; j++) {
-				const { mintStr } = chunk[j];
-				const acc = accounts[j] ?? null;
-				if (acc == null) {
-					fallbackMints.add(mintStr);
-					continue;
-				}
-				const pr = parsedToken2022AtaBalance(acc, mintStr);
-				if (pr.kind === "fallback") {
-					fallbackMints.add(mintStr);
-				} else if (pr.kind === "positive") {
-					mergeMintBalance(balanceByMint, mintStr, pr.balance, pr.decimals);
-				}
-			}
-		} catch (err) {
-			for (const { mintStr } of chunk) fallbackMints.add(mintStr);
-			if (import.meta.env.DEV) {
-				// eslint-disable-next-line no-console -- DFlow RPC diagnostic
-				console.warn(
-					"[DFlow] ATA batch Token-2022 read failed; per-mint fallback for chunk",
-					err,
-				);
-			}
-		}
-	}
-
-	async function readOneMintOwnerFilter(mintStr: string): Promise<void> {
-		let mintPk: PublicKey;
-		try {
-			mintPk = new PublicKey(mintStr);
-		} catch {
-			return;
-		}
-		try {
-			const resp = await Promise.race([
-				connection.getParsedTokenAccountsByOwner(owner, {
-					programId: TOKEN_2022_PROGRAM_ID,
-					mint: mintPk,
-				}),
-				new Promise<never>((_, reject) => {
-					setTimeout(() => {
-						reject(
-							new Error(
-								`DFlow Solana: balance read for mint exceeded ${timeoutMsPerMint}ms`,
-							),
-						);
-					}, timeoutMsPerMint);
-				}),
-			]);
-			let sum = 0;
-			let decimals = 0;
-			for (const { account } of resp.value) {
-				const info = account.data.parsed?.info as
-					| { mint?: string; tokenAmount?: { uiAmount?: number | null; decimals?: number } }
-					| undefined;
-				if (!info) continue;
-				if ((info.mint?.trim() ?? "") !== mintStr.trim()) continue;
-				const uiAmount: number | null = info.tokenAmount?.uiAmount ?? null;
-				if (uiAmount == null || !Number.isFinite(uiAmount) || uiAmount <= 0) continue;
-				sum += uiAmount;
-				decimals = info.tokenAmount?.decimals ?? decimals;
-			}
-			if (sum > 0) mergeMintBalance(balanceByMint, mintStr, sum, decimals);
-		} catch (err) {
-			if (import.meta.env.DEV) {
-				// eslint-disable-next-line no-console -- DFlow RPC diagnostic
-				console.warn(
-					"[DFlow] Per-mint Token-2022 read failed or timed out; skipping mint",
-					mintStr,
-					err,
-				);
-			}
-		}
-	}
-
-	const fallbackList = [...fallbackMints];
-	const workers = Math.max(1, Math.min(concurrency, fallbackList.length || 1));
-	for (let i = 0; i < fallbackList.length; i += workers) {
-		const slice = fallbackList.slice(i, i + workers);
-		await Promise.all(slice.map((m) => readOneMintOwnerFilter(m)));
-	}
-
-	const tokens: DflowSolanaToken[] = [];
-	for (const [mintStr, { balance, decimals }] of balanceByMint) {
-		if (balance > 0) tokens.push({ mint: mintStr, balance, decimals });
-	}
-	return tokens;
-}
 
 /**
  * Given outcome mints and a market from `markets/batch`, determine
@@ -281,6 +58,184 @@ function resolveSide(
 		if (acct.noMint === mint) return "no";
 	}
 	return null;
+}
+
+/** When Metadata sends exactly two account buckets labeled `A` / `B`, map mint → column. */
+function bucketFromExplicitABAccountKeys(
+	mint: string,
+	accounts: Record<string, DflowMarketAccountInfo>,
+): "Yes" | "No" | null {
+	const ks = Object.keys(accounts);
+	if (ks.length !== 2) return null;
+	const up = ks.map((k) => k.toUpperCase());
+	if (!up.includes("A") || !up.includes("B")) return null;
+	const keyA = ks.find((k) => k.toUpperCase() === "A")!;
+	const keyB = ks.find((k) => k.toUpperCase() === "B")!;
+	const a = accounts[keyA]!;
+	const b = accounts[keyB]!;
+	/** A's YES = first column; A's NO = second (same as B winning). B's YES = second; B's NO = first. */
+	if (mint === a.yesMint) return "Yes";
+	if (mint === a.noMint) return "No";
+	if (mint === b.yesMint) return "No";
+	if (mint === b.noMint) return "Yes";
+	return null;
+}
+
+/**
+ * When Metadata sends exactly two account buckets (any key names), map lexicographic key order
+ * → team slots (first → portfolio Yes, second → No). Within each slot: contract YES → that team,
+ * contract NO → opposite team (Kalshi encodes both legs per row).
+ */
+function bucketFromTwoSortedAccountKeys(
+	mint: string,
+	accounts: Record<string, DflowMarketAccountInfo>,
+): "Yes" | "No" | null {
+	const ks = Object.keys(accounts).sort((a, b) =>
+		a.localeCompare(b, undefined, { sensitivity: "base" }),
+	);
+	if (ks.length !== 2) return null;
+	const ac0 = accounts[ks[0]!]!;
+	const ac1 = accounts[ks[1]!]!;
+	if (mint === ac0.yesMint) return "Yes";
+	if (mint === ac0.noMint) return "No";
+	if (mint === ac1.yesMint) return "No";
+	if (mint === ac1.noMint) return "Yes";
+	return null;
+}
+
+function dflowEventGroupKey(market: DflowBatchMarket): string {
+	const et =
+		dflowEventTickerFromBatchMarket(market) ?? market.eventTicker?.trim() ?? "";
+	return et.toUpperCase();
+}
+
+/**
+ * Kalshi exposes four outcome mints (YES/NO × each leg). Economically, **NO on team A** pays when
+ * **team B wins** — same as **YES on team B**. Portfolio columns are “who you’re rooting for”
+ * (first vs second team in the title): map contract YES to that team’s column and contract NO to
+ * the opposite column.
+ *
+ * Group `markets/batch` rows by event; when exactly **two** rows share an event, sort by ticker and
+ * treat the first row as the first team’s leg and the second as the second team’s leg.
+ */
+function buildDflowMintToPortfolioColumnMap(
+	markets: DflowBatchMarket[],
+): Map<string, "Yes" | "No"> {
+	const byEvent = new Map<string, DflowBatchMarket[]>();
+	for (const m of markets) {
+		const k = dflowEventGroupKey(m);
+		if (!k) continue;
+		const arr = byEvent.get(k) ?? [];
+		arr.push(m);
+		byEvent.set(k, arr);
+	}
+	const out = new Map<string, "Yes" | "No">();
+	for (const rows of byEvent.values()) {
+		if (rows.length !== 2) continue;
+		const sorted = [...rows].sort((a, b) =>
+			(a.ticker ?? "").localeCompare(b.ticker ?? "", undefined, {
+				sensitivity: "base",
+			}),
+		);
+		const first = sorted[0]!;
+		const second = sorted[1]!;
+		assignTeamLegMintsToPortfolioColumns(out, first.accounts, "Yes");
+		assignTeamLegMintsToPortfolioColumns(out, second.accounts, "No");
+	}
+	return out;
+}
+
+/** `teamPortfolioColumn` = Yes (first team) or No (second team) for this batch row’s leg. */
+function assignTeamLegMintsToPortfolioColumns(
+	out: Map<string, "Yes" | "No">,
+	accounts: Record<string, DflowMarketAccountInfo>,
+	teamPortfolioColumn: "Yes" | "No",
+): void {
+	const opposite = teamPortfolioColumn === "Yes" ? "No" : "Yes";
+	for (const ac of Object.values(accounts)) {
+		const ym = typeof ac.yesMint === "string" ? ac.yesMint.trim() : "";
+		const nm = typeof ac.noMint === "string" ? ac.noMint.trim() : "";
+		if (ym) out.set(ym, teamPortfolioColumn);
+		if (nm) out.set(nm, opposite);
+	}
+}
+
+function dflowPortfolioColumnForPosition(
+	pos: DflowMarketPosition,
+	columnMap: Map<string, "Yes" | "No">,
+): "Yes" | "No" {
+	const mint = pos.mint.trim();
+
+	const fromPair = columnMap.get(mint);
+	if (fromPair) return fromPair;
+
+	const ab = bucketFromExplicitABAccountKeys(mint, pos.market.accounts);
+	if (ab) return ab;
+
+	const slot = bucketFromTwoSortedAccountKeys(mint, pos.market.accounts);
+	if (slot) return slot;
+
+	return pos.side === "yes" ? "Yes" : "No";
+}
+
+/**
+ * After {@link toVenuePositions}, align `outcome` with catalog mint→column when possible and set
+ * {@link VenuePosition.dflowTradeSideLabel} from {@link portfolioColumnTeamLabels} for trade-history Side text.
+ */
+export function patchDflowVenuePositionOutcomes(
+	rows: VenuePosition[],
+	catalogColumnMap: Map<string, "Yes" | "No">,
+	options?: {
+		/** Same index as {@link buildUmbrellaLookupByDflowOutcomeMint} — aligns Side labels with umbrella team order. */
+		outcomeMintToUmbrella?: Map<string, Umbrella> | null;
+		/** When a mint is not yet on `exchangeMatching.dflow`, match {@link VenuePosition.dflowEventTicker} to the catalog umbrella. */
+		eventTickerLookup?: Map<string, Umbrella> | null;
+		umbrellasForEventLookup?: Umbrella[] | null;
+	},
+): VenuePosition[] {
+	if (!rows.length) return rows;
+
+	const mintUmb = options?.outcomeMintToUmbrella;
+	const etMap = options?.eventTickerLookup;
+	const umbrellasEt = options?.umbrellasForEventLookup;
+
+	const next = rows.map((row) => {
+		if (row.venue !== "dflow") return row;
+
+		const tid = typeof row.tokenId === "string" ? row.tokenId.trim() : "";
+		let outcome = row.outcome;
+		if (catalogColumnMap.size > 0 && tid) {
+			const col = catalogColumnMap.get(tid);
+			if (col) outcome = col;
+		}
+
+		const bucket: "Yes" | "No" =
+			outcome.trim().toLowerCase() === "no" ? "No" : "Yes";
+		let umb: Umbrella | undefined =
+			tid && mintUmb ? mintUmb.get(tid) : undefined;
+		if (!umb && row.dflowEventTicker?.trim() && etMap && umbrellasEt?.length) {
+			umb =
+				lookupUmbrellaByDflowEventTicker(
+					row.dflowEventTicker.trim(),
+					etMap,
+					umbrellasEt,
+				) ?? undefined;
+		}
+		const colLabels = portfolioColumnTeamLabels(umb);
+		const dflowTradeSideLabel =
+			bucket === "Yes" ? colLabels.columnYes : colLabels.columnNo;
+
+		if (
+			outcome === row.outcome &&
+			dflowTradeSideLabel === row.dflowTradeSideLabel
+		) {
+			return row;
+		}
+
+		return { ...row, outcome, dflowTradeSideLabel };
+	});
+
+	return next;
 }
 
 /**
@@ -306,6 +261,30 @@ export function matchTokensToMarkets(
 		}
 	}
 	return positions;
+}
+
+/**
+ * When {@link matchTokensToMarkets} returns nothing for a wallet token (batch/metadata edge
+ * cases) but Solana balance is positive, recover a row by locating the mint on any returned
+ * market — same resolution as {@link buildGhostDflowMarketPositions}, but preserving balances.
+ */
+export function marketPositionsForUnmatchedTokens(
+	tokens: DflowSolanaToken[],
+	matchedMints: ReadonlySet<string>,
+	markets: DflowBatchMarket[],
+): DflowMarketPosition[] {
+	const out: DflowMarketPosition[] = [];
+	for (const token of tokens) {
+		if (!(token.balance > 0)) continue;
+		if (matchedMints.has(token.mint)) continue;
+		for (const market of markets) {
+			const side = resolveSide(token.mint, market.accounts);
+			if (!side) continue;
+			out.push({ ...token, side, market });
+			break;
+		}
+	}
+	return out;
 }
 
 type CostEntry = {
@@ -512,6 +491,7 @@ export function buildDflowHistoryFillsByMint(
 					tradedAt,
 					sourceId: `${baseSrc}:buy-out`,
 					price,
+					marketTicker: t.marketTicker?.trim() || undefined,
 				});
 			}
 		}
@@ -547,6 +527,7 @@ export function buildDflowHistoryFillsByMint(
 					tradedAt,
 					sourceId: `${baseSrc}:sell-in`,
 					price,
+					marketTicker: t.marketTicker?.trim() || undefined,
 				});
 			}
 		}
@@ -614,7 +595,9 @@ export function toVenuePositions(
 	positions: DflowMarketPosition[],
 	costMap: Map<string, CostEntry>,
 	fillsByMint?: Map<string, VenueHistoryFill[]>,
+	markets?: DflowBatchMarket[],
 ): VenuePosition[] {
+	const columnMap = buildDflowMintToPortfolioColumnMap(markets ?? []);
 	return positions.map((pos) => {
 		const isFinalized = pos.market.status === "finalized";
 		const isWon = isFinalized && pos.market.result?.toLowerCase() === pos.side;
@@ -656,7 +639,7 @@ export function toVenuePositions(
 		return {
 			venue: "dflow",
 			marketTitle: pos.market.title,
-			outcome: pos.side === "yes" ? "Yes" : "No",
+			outcome: dflowPortfolioColumnForPosition(pos, columnMap),
 			shares: pos.balance,
 			avgPrice,
 			currentPrice,

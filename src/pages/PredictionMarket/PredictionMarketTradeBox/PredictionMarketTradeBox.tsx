@@ -98,6 +98,8 @@ import type {
 } from "@/trading/sor";
 import { usePostTradeBalanceSync } from "@/trading/sor/usePostTradeBalanceSync";
 import { capturePostTradeBaseline, type PostTradeBaseline } from "@/trading/sor/postTradeBaseline";
+import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
+import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import { maxAllMarketsSellBidForOutcome } from "@/hooks/useTradingPagePrices";
@@ -1625,16 +1627,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   // the flag at submit so a fast post-trade umbrella refresh that flips
   // `accountsInitialized*` to `true` doesn't hide the notice immediately.
   const [dflowUninitAtSubmit, setDflowUninitAtSubmit] = useState(false);
-  /**
-   * True when the order that just settled the `orderResult` routed through
-   * DFlow. We mark the SOR leg `filled` immediately on Solana broadcast, so
-   * the trade button completes fast — but the actual Kalshi share balance is
-   * only reflected once DFlow's settlement authority routes to Kalshi
-   * off-chain and settles back on-chain (~30-90s). The notice in
-   * `PredictionMarketTradeBoxUI` tells the user this so they don't think the
-   * trade silently failed when their balance hasn't updated yet.
-   */
-  const [dflowSubmittedAtSubmit, setDflowSubmittedAtSubmit] = useState(false);
 
   /**
    * First-mint DFlow nudge: when a trade tokenizes a Kalshi market for the
@@ -1677,21 +1669,18 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   useEffect(() => () => cancelDflowFirstMintRefresh(), [cancelDflowFirstMintRefresh]);
 
   /**
-   * Auto-dismiss the order result. Default 4s; extended to 12s for DFlow
-   * trades so the user has time to read the "balance will update shortly"
-   * notice before it disappears.
+   * Auto-dismiss the order result. Default 4s; extended to 12s when the Kalshi
+   * market-init notice is shown so the user can read it.
    */
   useEffect(() => {
     if (!state.orderResult) return;
-    const isDflowResult = dflowUninitAtSubmit || dflowSubmittedAtSubmit;
-    const dismissAfterMs = isDflowResult ? 12_000 : 4_000;
+    const dismissAfterMs = dflowUninitAtSubmit ? 12_000 : 4_000;
     const timer = setTimeout(() => {
       setState((prev) => ({ ...prev, orderResult: null }));
       setDflowUninitAtSubmit(false);
-      setDflowSubmittedAtSubmit(false);
     }, dismissAfterMs);
     return () => clearTimeout(timer);
-  }, [state.orderResult, dflowUninitAtSubmit, dflowSubmittedAtSubmit]);
+  }, [state.orderResult, dflowUninitAtSubmit]);
 
   /**
    * Same toast on umbrella page and home inline dock (`ToastContainer` in AppRoutes).
@@ -1840,6 +1829,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     privateApi,
     market,
     matchedMonitor,
+    umbrellaId: propUmbrellaId ?? null,
     predictNumericId,
     predictMarketDetail,
     account,
@@ -2141,7 +2131,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         matchedMonitor?.dflow?.accountsInitializedA === false ||
         matchedMonitor?.dflow?.accountsInitializedB === false;
       setDflowUninitAtSubmit(executingDflow && dflowAnyUninit);
-      setDflowSubmittedAtSubmit(executingDflow);
       const marketId = (market?._id || (market as any)?.questionId) as
         | string
         | undefined;
@@ -2287,6 +2276,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       legs.length > 0 && legs.every((l) => l.status === "filled");
 
     if (status === "complete" && everyLegFilled) {
+      const hasDflowFilledLeg = legs.some(
+        (l) =>
+          l.venue === "dflow" &&
+          l.status === "filled" &&
+          l.filledShares > 0,
+      );
+      if (hasDflowFilledLeg) {
+        void queryClient.invalidateQueries({ queryKey: ["dflow-positions"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["dflow-outcome-balance"],
+        });
+      }
+
       const cached = latestBaselineRef.current;
       if (cached && cached.routeId === routeId) {
         const syncUiKey =
@@ -2295,6 +2297,18 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
               (market as { questionId?: string })?.questionId ??
               "",
           ).trim() || null;
+        for (let i = 0; i < legs.length; i++) {
+          const rl = cached.route.legs[i];
+          const el = legs[i];
+          if (
+            rl?.venue === "dflow" &&
+            el?.status === "filled" &&
+            el.filledShares > 0
+          ) {
+            const m = dflowOutcomeMintForRouteLeg(rl);
+            if (m) registerPendingDflowOutcomeMints([m]);
+          }
+        }
         postTradeSync.start({
           queryClient,
           route: cached.route,
@@ -2628,7 +2642,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       shareBalances={tradeBoxShareBalances}
       mobilePeekBar={mobilePeekBar}
       dflowUninitAtSubmit={dflowUninitAtSubmit}
-      dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
     />
 		</>
   );

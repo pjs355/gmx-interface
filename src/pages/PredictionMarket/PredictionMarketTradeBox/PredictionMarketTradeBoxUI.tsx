@@ -146,15 +146,6 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
    * users understand why a successful submit isn't yet reflected on-chain.
    */
   dflowUninitAtSubmit?: boolean;
-  /**
-   * True for any DFlow-routed order (whether the Kalshi market is initialized
-   * or not). Surfaces a generic "balance reflected shortly" notice — the SOR
-   * marks the leg `filled` the moment Solana accepts the broadcast, but the
-   * actual Kalshi share balance lands ~30-90s later through DFlow's async
-   * settlement. When `dflowUninitAtSubmit` is also true we prefer that more
-   * specific message.
-   */
-  dflowSubmittedAtSubmit?: boolean;
 }
 
 export default function PredictionMarketTradeBoxUI({
@@ -195,7 +186,6 @@ export default function PredictionMarketTradeBoxUI({
   allMarketsSellNoBid = null,
   shareBalances,
   dflowUninitAtSubmit = false,
-  dflowSubmittedAtSubmit = false,
 }: PredictionMarketTradeBoxUIProps) {
   const { formatPrice } = useOddsDisplay();
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
@@ -1307,24 +1297,6 @@ export default function PredictionMarketTradeBoxUI({
           }}
         >
           Order may take longer as Kalshi via DFlow is creating this market
-        </div>
-      )}
-
-      {orderResult?.success && dflowSubmittedAtSubmit && !dflowUninitAtSubmit && (
-        <div
-          data-qa="tradebox-dflow-submitted-notice"
-          style={{
-            marginTop: 8,
-            padding: "8px 12px",
-            borderRadius: 8,
-            backgroundColor: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "#9ca3af",
-            fontSize: 12,
-            lineHeight: 1.4,
-          }}
-        >
-          Kalshi trade submitted. It may take a moment for your balance to be reflected.
         </div>
       )}
 

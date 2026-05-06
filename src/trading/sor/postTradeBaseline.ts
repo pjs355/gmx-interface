@@ -17,6 +17,8 @@ import { COLLATERAL_TOKENS_QUERY_KEY } from "@/context/CollateralTokenContext";
 import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
 import { normalizePolymarketPositionTokenId } from "@/trading/polymarket/polymarketPositionsRefetchMerge";
 import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
+import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
+import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
 
 /** Maps a route leg's source-of-funds chain → collateral context key. */
 export function chainToCollateralKey(
@@ -91,12 +93,8 @@ export function shareIdentityForRouteLeg(leg: RouteLeg): string | null {
 			return `predictfun:${n}|yes`;
 		}
 		case "dflow": {
-			const raw =
-				leg.outcome === "A"
-					? leg.venueMarketIds.dflowYesMintA
-					: leg.venueMarketIds.dflowYesMintB;
-			const t = (raw ?? "").trim();
-			return t ? `dflow:${t}` : null;
+			const mint = dflowOutcomeMintForRouteLeg(leg);
+			return mint ? `dflow:${mint}` : null;
 		}
 		case "limitless": {
 			const raw =
@@ -159,12 +157,7 @@ function lookupCachedShares(
 		case "dflow": {
 			const owner = addresses.solanaAddress?.trim() ?? null;
 			if (!owner) return 0;
-			return findShares(
-				queryClient.getQueryData<VenuePosition[]>([
-					"dflow-positions",
-					owner,
-				]),
-			);
+			return findShares(getCachedDflowPositions(queryClient, owner));
 		}
 		case "limitless": {
 			return findShares(

@@ -573,6 +573,11 @@ export default function HistoryCardView({
 													isExpanded={true}
 													position={row.side}
 													positionDisplayLabel={row.label}
+													marketTitle={
+														(block.venuePositions.find((p) => p.marketTitle?.trim())
+															?.marketTitle ?? "")
+															.trim() || undefined
+													}
 												/>
 											)}
 										</div>

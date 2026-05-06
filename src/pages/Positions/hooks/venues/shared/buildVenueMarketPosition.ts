@@ -79,6 +79,9 @@ export function buildVenueMarketPosition(
 						pv.avgPrice,
 						pv.cost,
 						pv.historyTradeAt,
+						venue === "dflow"
+							? (pv as VenuePosition).dflowTradeSideLabel
+							: undefined,
 					),
 				]
 			: [];

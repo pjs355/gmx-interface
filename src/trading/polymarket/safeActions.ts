@@ -81,9 +81,16 @@ function txsToDepositWalletCalls(txs: Transaction[]): DepositWalletCall[] {
  *
  * If the relayer rejects the first attempt with `wallet is not registered`
  * (its /submit registry lags behind `getDeployed` by a few seconds after a
- * fresh deploy), we retry with `POST_DEPLOY_BATCH_RETRY_DELAYS_MS`. Every
- * other relayer 400 is surfaced unchanged — those are genuine batch errors
- * (bad signature, expired deadline, revert) and must not be silently retried.
+ * fresh deploy), we retry with `POST_DEPLOY_BATCH_RETRY_DELAYS_MS`.
+ *
+ * We also retry on `wallet busy: active action exists` — the relayer keeps an
+ * in-flight action open briefly after a batch mines; back-to-back submits
+ * (e.g. CTF redeem with pUSD then USDC.e) otherwise get HTTP 400 until the
+ * slot clears.
+ *
+ * Every other relayer 400 is surfaced unchanged — those are genuine batch
+ * errors (bad signature, expired deadline, revert) and must not be silently
+ * retried.
  */
 export async function executePolygonRelayAndWait(
 	client: RelayClient,
@@ -108,16 +115,18 @@ export async function executePolygonRelayAndWait(
 				return await waitRelay(resp);
 			} catch (err) {
 				lastErr = err;
-				if (
-					attempt === delays.length ||
-					!isRelayWalletNotRegisteredError(err)
-				) {
+				const retryable =
+					isRelayWalletNotRegisteredError(err) ||
+					isRelayWalletBusyError(err);
+				if (attempt === delays.length || !retryable) {
 					throw err;
 				}
 				if (import.meta.env.DEV) {
-					console.warn(
-						`[polymarket-relay] ${description} hit "wallet not registered" — retry ${attempt + 1}/${delays.length} in ${delays[attempt]}ms`,
-						err,
+					const reason = isRelayWalletBusyError(err)
+						? "wallet busy"
+						: "wallet not registered";
+					console.debug(
+						`[polymarket-relay] ${description}: ${reason}, retry ${attempt + 1}/${delays.length} in ${delays[attempt]}ms`,
 					);
 				}
 				await new Promise((r) => setTimeout(r, delays[attempt]));
@@ -232,6 +241,18 @@ function isRelayWalletNotRegisteredError(err: unknown): boolean {
 		lc.includes("wallet is not registered") ||
 		lc.includes("wallet registry validation") ||
 		(lc.includes("not registered") && lc.includes("wallet"))
+	);
+}
+
+/** Relayer /submit 400 when another batch for this deposit wallet is still settling. */
+function isRelayWalletBusyError(err: unknown): boolean {
+	if (!err) return false;
+	const msg = err instanceof Error ? err.message : String(err);
+	const lc = msg.toLowerCase();
+	return (
+		lc.includes("wallet busy") ||
+		lc.includes("active action exists") ||
+		lc.includes("active action")
 	);
 }
 

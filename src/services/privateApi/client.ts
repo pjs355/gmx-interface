@@ -47,6 +47,9 @@ import type {
 } from "@/types/trading";
 import { PrivateApiError } from "./errors";
 
+/** Browser fetch budget for `POST /api/dflow/orders` — must exceed server order-status poll (~180s). */
+export const DFLOW_ORDER_SUBMIT_FETCH_TIMEOUT_MS = 240_000;
+
 function parseWithdrawPlanLeg(value: unknown): LifiWithdrawPlanLeg | null {
 	if (!value || typeof value !== "object") return null;
 	const mode = (value as Record<string, unknown>).mode;
@@ -166,10 +169,9 @@ export type DflowOrderResponse = {
 	minOutAmount?: string;
 	/**
 	 * From DFlow's `/order` response — the last block height at which the
-	 * returned `transaction`'s `recentBlockhash` is valid. Forward this to
-	 * `POST /api/dflow/orders` and `GET /api/dflow/order-status` so confirmation
-	 * polling and lifecycle polling both bound against the tx's true validity
-	 * window.
+	 * returned `transaction`'s `recentBlockhash` is valid. Forward to
+	 * `POST /api/dflow/orders` (required) — the server polls `/order-status` until
+	 * terminal. `GET /api/dflow/order-status` remains available for ad-hoc checks.
 	 */
 	lastValidBlockHeight?: number;
 	code?: string;
@@ -185,27 +187,45 @@ export type DflowOrderSubmitBody = {
 	amount?: string;
 	side?: "BUY" | "SELL";
 	outcome?: string;
+	/** Mongo Umbrella `_id` — used for post-init `exchangeMatching.dflow` patch. */
+	umbrellaId?: string;
 	marketRef?: {
 		externalMarketId?: string;
 		tokenId?: string;
 		questionId?: string;
 	};
-	/** Forwarded from the `/order` response that produced `signedTx`. */
-	lastValidBlockHeight?: number;
+	/** Forwarded from the `/order` response that produced `signedTx` — required by the server for `/order-status` polling. */
+	lastValidBlockHeight: number;
+	/**
+	 * YES/NO outcome mints for this Kalshi leg — lets the API persist `exchangeMatching.dflow`
+	 * when DFlow metadata is slow after market init.
+	 */
+	outcomePairMints?: {
+		yesMint: string;
+		noMint: string;
+	};
+};
+
+export type DflowUmbrellaMappingResult = {
+	applied: boolean;
+	reason?: string;
 };
 
 export type DflowOrderSubmitResponse = {
 	success: true;
 	signature: string;
 	confirmationStatus: string;
-	slot: number | null;
 	/**
-	 * The `lastValidBlockHeight` the server actually used for confirmation —
-	 * either echoed from the request body or freshly fetched as fallback. Pass
-	 * to `getDflowOrderStatus` so DFlow can short-circuit its lookup once the
-	 * blockhash is past expiration.
+	 * Echoed from the submit request — same window DFlow used while polling
+	 * `/order-status` server-side until `closed`.
 	 */
 	lastValidBlockHeight: number;
+	/** True when the tx initialized a new prediction market (multi-signer init-payer path). */
+	initializedMarket: boolean;
+	/** Terminal DFlow `/order-status` payload — server returns 200 only when `status === "closed"`. */
+	orderStatus: DflowOrderStatusResponse;
+	/** Present when init mapping was attempted; omitted on older servers. */
+	umbrellaMapping?: DflowUmbrellaMappingResult;
 };
 
 /**
@@ -234,6 +254,22 @@ export type DflowOrderStatusResponse = {
 	}>;
 	code?: string;
 	msg?: string;
+};
+
+/** Structured DFlow terminal fields echoed on submit failures (predictions API). */
+export type DflowOrderSubmitErrorDflow = {
+	status: string;
+	code?: string;
+	msg?: string;
+	reverts?: DflowOrderStatusResponse["reverts"];
+	fills?: unknown[];
+};
+
+/** JSON body for failed `POST /api/dflow/orders` (422 / 502 / 504, etc.). */
+export type DflowOrderSubmitErrorBody = {
+	error: string;
+	dflow?: DflowOrderSubmitErrorDflow;
+	signature?: string;
 };
 
 export const DFLOW_ORDER_STATUS_TERMINAL = ["closed", "failed", "expired"] as const;
@@ -477,6 +513,19 @@ function normalizePredictOrdersList(raw: unknown): PredictOrderRow[] {
 	return [];
 }
 
+function appendDflowOrderSubmitDetailMessage(
+	primary: string,
+	body: Record<string, unknown>,
+): string {
+	const dflow = body.dflow;
+	if (!dflow || typeof dflow !== "object") return primary;
+	const msg = (dflow as Record<string, unknown>).msg;
+	if (typeof msg !== "string") return primary;
+	const t = msg.trim();
+	if (!t || primary.includes(t)) return primary;
+	return `${primary} — ${t}`;
+}
+
 /** Best-effort message from LevelUp / Express / Nest / Predict-shaped error bodies. */
 function privateApiHttpErrorMessage(body: unknown, status: number): string {
 	if (body == null || body === "") return `HTTP ${status}`;
@@ -488,22 +537,29 @@ function privateApiHttpErrorMessage(body: unknown, status: number): string {
 	const o = body as Record<string, unknown>;
 	const tryStr = (v: unknown) =>
 		typeof v === "string" && v.trim() ? v.trim() : null;
-	if (tryStr(o.error)) return tryStr(o.error)!;
-	if (tryStr(o.message)) return tryStr(o.message)!;
-	if (tryStr(o.detail)) return tryStr(o.detail)!;
+	if (tryStr(o.error))
+		return appendDflowOrderSubmitDetailMessage(tryStr(o.error)!, o);
+	if (tryStr(o.message))
+		return appendDflowOrderSubmitDetailMessage(tryStr(o.message)!, o);
+	if (tryStr(o.detail))
+		return appendDflowOrderSubmitDetailMessage(tryStr(o.detail)!, o);
 	if (Array.isArray(o.message)) {
 		const parts = o.message
 			.filter((x): x is string => typeof x === "string")
 			.map((x) => x.trim())
 			.filter(Boolean);
-		if (parts.length) return parts.join("; ");
+		if (parts.length)
+			return appendDflowOrderSubmitDetailMessage(parts.join("; "), o);
 	}
 	const nested = o.data;
 	if (nested && typeof nested === "object") {
 		const d = nested as Record<string, unknown>;
-		if (tryStr(d.error)) return tryStr(d.error)!;
-		if (tryStr(d.message)) return tryStr(d.message)!;
-		if (tryStr(d.detail)) return tryStr(d.detail)!;
+		if (tryStr(d.error))
+			return appendDflowOrderSubmitDetailMessage(tryStr(d.error)!, o);
+		if (tryStr(d.message))
+			return appendDflowOrderSubmitDetailMessage(tryStr(d.message)!, o);
+		if (tryStr(d.detail))
+			return appendDflowOrderSubmitDetailMessage(tryStr(d.detail)!, o);
 	}
 	try {
 		const s = JSON.stringify(body);
@@ -1061,15 +1117,39 @@ export function createPrivateApiClient(
 			return readJson<DflowOrderResponse>(res);
 		},
 
-		/** Server-submit path: send the user-signed Solana tx; server posts to RPC and persists VenueOrder. */
+		/**
+		 * Server submits the signed tx, polls DFlow `/order-status` until `closed`,
+		 * then returns 200 with `orderStatus`. Non-2xx carries DFlow failure (`error`, optional `dflow`).
+		 */
 		async postDflowOrder(
 			body: DflowOrderSubmitBody
 		): Promise<DflowOrderSubmitResponse> {
-			const res = await authorizedFetch("/api/dflow/orders", {
-				method: "POST",
-				body: JSON.stringify(body),
-			});
-			return readJson<DflowOrderSubmitResponse>(res);
+			const controller = new AbortController();
+			const timer = setTimeout(() => {
+				controller.abort();
+			}, DFLOW_ORDER_SUBMIT_FETCH_TIMEOUT_MS);
+			try {
+				const res = await authorizedFetch("/api/dflow/orders", {
+					method: "POST",
+					body: JSON.stringify(body),
+					signal: controller.signal,
+				});
+				return readJson<DflowOrderSubmitResponse>(res);
+			} catch (e: unknown) {
+				if (
+					e instanceof Error &&
+					e.name === "AbortError"
+				) {
+					throw new PrivateApiError(
+						"Kalshi order confirmation timed out waiting for the server. Check Positions or try again.",
+						504,
+						null,
+					);
+				}
+				throw e;
+			} finally {
+				clearTimeout(timer);
+			}
 		},
 
 		/**
@@ -1114,6 +1194,24 @@ export function createPrivateApiClient(
 				body: JSON.stringify({ mints }),
 			});
 			return readJson<DflowBatchMarket[]>(res);
+		},
+
+		async postDflowTokenBalances(
+			wallet: string,
+			mints: string[],
+		): Promise<
+			Array<{ mint: string; balance: number; decimals: number }>
+		> {
+			const res = await authorizedFetch("/api/dflow/token-balances", {
+				method: "POST",
+				body: JSON.stringify({
+					wallet: wallet.trim(),
+					mints,
+				}),
+			});
+			return readJson<
+				Array<{ mint: string; balance: number; decimals: number }>
+			>(res);
 		},
 
 		async getDflowOnchainTrades(

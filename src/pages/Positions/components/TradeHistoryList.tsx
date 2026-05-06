@@ -5,6 +5,10 @@ import { outcomeSideLabelColor } from "../utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
+import {
+	getPredictPositionRowLabel,
+	isGenericBinaryOutcomeLabel,
+} from "@/trading/predict/predictPositionLabel";
 
 interface TradeHistoryListProps {
 	orders: ProcessedOrder[];
@@ -13,6 +17,8 @@ interface TradeHistoryListProps {
 	position?: "Yes" | "No";
 	/** For vs / esports markets, show team name (e.g. Keyd) instead of Yes/No */
 	positionDisplayLabel?: string;
+	/** Match title — used to map each fill’s Yes/No to the correct team name */
+	marketTitle?: string;
 }
 
 export default function TradeHistoryList({
@@ -21,6 +27,7 @@ export default function TradeHistoryList({
 	isExpanded,
 	position,
 	positionDisplayLabel,
+	marketTitle,
 }: TradeHistoryListProps) {
 	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
 	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
@@ -138,11 +145,24 @@ export default function TradeHistoryList({
 			{/* Trade Rows */}
 			{marketOrders.map((order, index) => {
 				const isBuy = order.side === "buy";
-				const sideDisplayText = (
-					positionDisplayLabel?.trim() ||
-					order.position ||
-					""
-				).trim();
+				const mt = (marketTitle ?? "").trim();
+				const op = (order.position ?? "").trim();
+				const ol = op.toLowerCase();
+				const pdl = order.positionDisplayLabel?.trim();
+				const yn =
+					ol === "yes"
+						? ("Yes" as const)
+						: ol === "no"
+							? ("No" as const)
+							: null;
+				const titleMapped =
+					mt && yn ? getPredictPositionRowLabel(mt, undefined, yn) : "";
+				const sideDisplayText =
+					yn && mt && isGenericBinaryOutcomeLabel(pdl)
+						? titleMapped
+						: pdl ||
+							(yn && mt ? titleMapped : "") ||
+							(positionDisplayLabel?.trim() || op || "").trim();
 				// Buy = cash out (negative), Sell = cash in (positive)
 				const cashFlow = isBuy ? -order.usdcValue : order.usdcValue;
 				const shareChange = isBuy ? order.tokenValue : -order.tokenValue;

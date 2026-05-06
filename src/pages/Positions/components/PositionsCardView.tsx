@@ -4,6 +4,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
+import { portfolioColumnTeamLabels } from "@/trading/dflow/dflowUmbrellaLookup";
 import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
@@ -66,6 +67,14 @@ export default function PositionsCardView({
 
 	const mergedByUmbrella = useMemo(() => {
 		return umbrellaBalances.map(({ umbrella, markets }: any) => {
+			const hasDflowVenue = markets.some(
+				(m: { venue?: string; includesDflowVenue?: boolean }) =>
+					m.venue === "dflow" || Boolean(m.includesDflowVenue),
+			);
+			const dflowUmbrellaCols = hasDflowVenue
+				? portfolioColumnTeamLabels(umbrella)
+				: null;
+
 			const sideBuckets: Record<"Yes" | "No", {
 				shares: number; marketValue: number; totalCost: number;
 				hasCost: boolean; marketIds: string[];
@@ -77,7 +86,15 @@ export default function PositionsCardView({
 				No: { shares: 0, marketValue: 0, totalCost: 0, hasCost: false, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
 			};
 
-			for (const { market, yes, no, venue, predictOutcomeLabelYes, predictOutcomeLabelNo } of markets) {
+			for (const {
+				market,
+				yes,
+				no,
+				venue,
+				includesDflowVenue,
+				predictOutcomeLabelYes,
+				predictOutcomeLabelNo,
+			} of markets) {
 				const qid = market._id || market.questionId || market.marketId;
 				const title = (market?.displayName || (market as any)?.question || "").trim();
 				const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
@@ -108,7 +125,15 @@ export default function PositionsCardView({
 					if (effectiveAvgPrice !== null) { bucket.weightedAvgSum += effectiveAvgPrice * amount; bucket.avgShares += amount; }
 
 					if (!bucket.label) {
-						if (venue === "predictfun" || venue === "dflow" || venue === "limitless") {
+						if (
+							(venue === "dflow" || includesDflowVenue) &&
+							dflowUmbrellaCols
+						) {
+							bucket.label =
+								(side === "Yes"
+									? dflowUmbrellaCols.columnYes
+									: dflowUmbrellaCols.columnNo) || side;
+						} else if (venue === "predictfun" || venue === "limitless") {
 							bucket.label =
 								getPredictPositionRowLabel(
 									title,
@@ -314,6 +339,12 @@ export default function PositionsCardView({
 													isExpanded={isThExpanded}
 													position={row.side}
 													positionDisplayLabel={row.label}
+													marketTitle={
+														(row.primaryMarket?.displayName ||
+															(row.primaryMarket as { question?: string })?.question ||
+															"")
+															.trim() || undefined
+													}
 												/>
 											)}
 										</div>
