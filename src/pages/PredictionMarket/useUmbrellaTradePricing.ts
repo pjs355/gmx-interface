@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import { resolveLevelUpOrderbookKey } from "./utils";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 import { useDirectVenueBooks } from "@/trading/venue-books";
@@ -20,15 +19,11 @@ function orderbookDataHasDepth(book: OrderbookData | null | undefined): boolean 
 
 export type UseUmbrellaTradePricingArgs = {
 	umbrella: Umbrella | null | undefined;
-	sortedQuestions: PredictionMarket[];
-	questionOrderbooks: Record<string, unknown>;
 };
 
-/** Shared venue monitor + LevelUp book + `useTradingPagePrices` for MarketPanels and home trade dock. */
+/** Shared venue monitor + `useTradingPagePrices` for MarketPanels and home trade dock. */
 export function useUmbrellaTradePricing({
 	umbrella,
-	sortedQuestions,
-	questionOrderbooks,
 }: UseUmbrellaTradePricingArgs) {
 	const pandascoreMatchId =
 		typeof umbrella?.pandascore_matchId === "string"
@@ -74,18 +69,8 @@ export function useUmbrellaTradePricing({
 		disabled: serverVenueDepthParity,
 	});
 
-	const levelUpOrderbookKey = resolveLevelUpOrderbookKey(
-		sortedQuestions,
-		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)
-			?.levelup?.questionId ?? null,
-	);
-	const levelUpOrderbook = levelUpOrderbookKey
-		? (questionOrderbooks[levelUpOrderbookKey] as any) ?? null
-		: null;
-
 	const tradingPagePrices = useTradingPagePrices(
 		pandascoreMatchId,
-		levelUpOrderbook,
 		directBooks,
 		umbrella?._id,
 		umbrellaLimitless,

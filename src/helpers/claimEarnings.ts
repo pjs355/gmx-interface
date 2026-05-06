@@ -14,9 +14,21 @@ import { useCallback, useMemo, useState } from "react";
 import { AddressesByChainId, ChainId, OrderBuilder } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getCTFAddress, getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
-import { POLYGON_CTF, POLYGON_PUSD } from "@/trading/polymarket/constants";
+import {
+	POLYGON_CTF,
+	POLYGON_NEG_RISK_ADAPTER,
+	POLYGON_PUSD,
+	POLYGON_USDC_E,
+} from "@/trading/polymarket/constants";
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
+import { readPolymarketSafeCtfBalanceWei } from "@/trading/polymarket/polygonCollateralWrap";
+import {
+	encodePacked,
+	keccak256,
+	type Address,
+	type Hex,
+} from "viem";
 import { predictCtfKey } from "@/trading/predict/predictContractKeys";
 import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
@@ -34,6 +46,17 @@ function getContracts() {
 
 const CTF_ABI = [
 	"function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets) returns (uint256)",
+];
+
+/**
+ * Polymarket NegRisk redeem — multi-outcome (Match Winner, election, etc.)
+ * positions are minted via the NegRiskAdapter and MUST be redeemed through it.
+ * Calling the standard CTF `redeemPositions(...)` for a NegRisk condition
+ * mines but pays out 0 pUSD (silent failure). Signature mirrors the official
+ * Polymarket builder-relayer-client `redeem.ts` example.
+ */
+const NEG_RISK_ADAPTER_ABI = [
+	"function redeemPositions(bytes32 _conditionId, uint256[] _amounts)",
 ];
 
 const YES_INDEX_SET = 1;
@@ -72,6 +95,114 @@ async function readPredictOutcomeTokenBalance(args: {
 	);
 	const positionId = await ctf.getPositionId(collateral, collectionId);
 	return ctf.balanceOf(args.holder, positionId) as Promise<bigint>;
+}
+
+/**
+ * Standard CTF position-id derivation (parentCollectionId == ZeroHash):
+ *   collectionId = keccak256(abi.encodePacked(conditionId, indexSet))
+ *   positionId   = uint(keccak256(abi.encodePacked(collateralToken, collectionId)))
+ *
+ * Polymarket markets are minted with one of two collaterals on the same CTF
+ * (`0x4d97DCd97eC945f40cF65F87097ACe5EA0476045`): older markets use USDC.e
+ * (`0x2791…`), newer pUSD-native markets use pUSD (`0xC011…`). Calling
+ * `redeemPositions(WRONG_COLLATERAL, …)` mines successfully but pays 0 because
+ * the derived position-id has zero balance — confirmed on-chain by the
+ * `PayoutRedemption` event with `payout=0` even though `Status: Success`.
+ *
+ * We attempt `redeemPositions` with pUSD then USDC.e when the optional match
+ * below fails (API collateral migration / asset id shape).
+ */
+function computeStandardCtfCollectionId(
+	conditionId: Hex,
+	indexSet: bigint,
+): Hex {
+	return keccak256(
+		encodePacked(["bytes32", "uint256"], [conditionId, indexSet]),
+	);
+}
+
+function computeStandardCtfPositionId(
+	collateralToken: Address,
+	collectionId: Hex,
+): bigint {
+	return BigInt(
+		keccak256(
+			encodePacked(["address", "bytes32"], [collateralToken, collectionId]),
+		),
+	);
+}
+
+/**
+ * Standard binary redeem tries collaterals in this order. Polymarket moved from
+ * USDC.e to pUSD; some positions/API rows don't match off-chain position-id
+ * math, so we attempt both instead of failing detection.
+ */
+const POLYMARKET_STANDARD_REDEEM_COLLATERALS: readonly Address[] = [
+	POLYGON_PUSD,
+	POLYGON_USDC_E,
+];
+
+function detectPolymarketCollateralForAsset(
+	conditionId: string,
+	assetTokenId: string,
+): { collateral: Address; matchedIndexSet: 1 | 2 } | null {
+	let cid: Hex;
+	try {
+		const trimmed = conditionId.trim();
+		cid = (trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`) as Hex;
+	} catch {
+		return null;
+	}
+	let expected: bigint;
+	try {
+		expected = BigInt(assetTokenId.trim());
+	} catch {
+		return null;
+	}
+	for (const indexSet of [1n, 2n] as const) {
+		const collectionId = computeStandardCtfCollectionId(cid, indexSet);
+		for (const collateral of POLYMARKET_STANDARD_REDEEM_COLLATERALS) {
+			const positionId = computeStandardCtfPositionId(collateral, collectionId);
+			if (positionId === expected) {
+				return {
+					collateral,
+					matchedIndexSet: Number(indexSet) as 1 | 2,
+				};
+			}
+		}
+	}
+	return null;
+}
+
+/** Dev-only — keeps production consoles clean (errors still surface via UI `setError`). */
+function claimDev(message: string, data?: Record<string, unknown>): void {
+	if (!import.meta.env.DEV) return;
+	if (data !== undefined) console.debug(`[claim] ${message}`, data);
+	else console.debug(`[claim] ${message}`);
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * After a no-op redeem (wrong collateral), wait before the next `/submit` so
+ * the Polymarket relayer can clear `wallet busy` without noisy SDK retries.
+ */
+const RELAYER_INTER_COLLATERAL_SETTLE_MS = 2800;
+
+/**
+ * When position-id detection matches a collateral, try it first; otherwise
+ * default to pUSD then USDC.e (Polymarket’s migration direction).
+ */
+function polymarketCtfRedeemCollateralOrder(
+	hint: ReturnType<typeof detectPolymarketCollateralForAsset>,
+): Address[] {
+	const pusd = POLYGON_PUSD;
+	const usdce = POLYGON_USDC_E;
+	if (hint?.collateral === usdce) return [usdce, pusd];
+	if (hint?.collateral === pusd) return [pusd, usdce];
+	return [pusd, usdce];
 }
 
 type MarketVenue = "levelup" | "polymarket" | "predictfun" | "dflow";
@@ -200,7 +331,7 @@ export function useClaimForVenue(
 				throw new Error("Market conditionId not found");
 			}
 
-			console.log("CLAIM DEBUG: Claiming for market:", {
+			claimDev("start", {
 				venue,
 				marketId: market._id,
 				conditionId: market.conditionId,
@@ -223,10 +354,13 @@ export function useClaimForVenue(
 			}
 
 			if (hash) setTxHash(hash);
-			console.log("CLAIM SUCCESS: Transaction hash:", hash);
+			claimDev("success", { txHash: hash ?? null });
 			return true;
 		} catch (e: any) {
-			console.error("❌ CLAIM ERROR:", e);
+			claimDev("error", {
+				message: e?.message ?? String(e),
+				name: e?.name,
+			});
 			setError(e?.message || String(e));
 			return false;
 		} finally {
@@ -290,28 +424,201 @@ export function useClaimForVenue(
 				);
 			}
 
-			const redeemData = iface.encodeFunctionData("redeemPositions", [
-				POLYGON_PUSD,
-				ethers.ZeroHash,
-				market.conditionId,
-				[YES_INDEX_SET, NO_INDEX_SET],
-			]);
+			const polyMarket = market as PredictionMarket & {
+				_isNegRisk?: boolean;
+				_polyAssetTokenId?: string;
+			};
+			const polyAssetTokenId = String(
+				polyMarket._polyAssetTokenId ?? "",
+			).trim();
+			const polyIsNegRisk = polyMarket._isNegRisk === true;
 
-			console.log("CLAIM DEBUG: Polymarket redeem via deposit wallet relay", {
-				ctf: POLYGON_CTF,
-				collateral: POLYGON_PUSD,
-				depositWallet: polymarketDepositWallet,
+			async function assertPolymarketOutcomeBurned(
+				lastTxHash: string | undefined,
+			): Promise<void> {
+				if (!polyAssetTokenId) return;
+				try {
+					const postBalance = await readPolymarketSafeCtfBalanceWei(
+						polymarketDepositWallet,
+						polyAssetTokenId,
+					);
+					if (postBalance > 0n) {
+						claimDev("negRisk post-check: ERC1155 still > 0 after redeem", {
+							txHash: lastTxHash,
+							conditionId: market.conditionId,
+							assetTokenId: polyAssetTokenId,
+							postBalanceWei: postBalance.toString(),
+						});
+						throw new Error(
+							"Polymarket redeem mined but paid out $0 — your outcome tokens are still in your deposit wallet. The market may not be fully resolved on-chain yet (UMA dispute window). Please try again in a few minutes or claim from polymarket.com.",
+						);
+					}
+				} catch (postErr) {
+					if (
+						postErr instanceof Error &&
+						postErr.message.startsWith("Polymarket redeem mined")
+					) {
+						throw postErr;
+					}
+					claimDev("negRisk post-check: balance read failed (non-fatal)", {
+						err: String(postErr),
+					});
+				}
+			}
+
+			if (polyIsNegRisk) {
+				/**
+				 * NegRisk Adapter `redeemPositions(conditionId, [yesAmt, noAmt])` — see
+				 * `https://docs.polymarket.com/advanced/neg-risk` and the official
+				 * `Polymarket/builder-relayer-client/examples/redeem.ts`. Amounts are
+				 * raw 6-decimal CTF base units (Polymarket outcome tokens are minted
+				 * 1:1 against pUSD). Read from chain — `pv.shares` from the Data API
+				 * lags and the `polyWinnings` row only carries the winning side, so
+				 * the OTHER side stays `0` and the user's actual ERC1155 balance for
+				 * `_polyAssetTokenId` becomes the YES or NO leg based on
+				 * `resolvedOutcome`.
+				 */
+				if (!polyAssetTokenId) {
+					throw new Error(
+						"Polymarket NegRisk claim missing on-chain asset id — refresh and try again",
+					);
+				}
+				const balanceWei = await readPolymarketSafeCtfBalanceWei(
+					polymarketDepositWallet,
+					polyAssetTokenId,
+				);
+				if (balanceWei <= 0n) {
+					throw new Error(
+						"No redeemable Polymarket tokens on your deposit wallet for this market",
+					);
+				}
+				const amounts: [bigint, bigint] =
+					resolvedOutcome === "yes"
+						? [balanceWei, 0n]
+						: [0n, balanceWei];
+				const nrIface = new ethers.Interface(NEG_RISK_ADAPTER_ABI);
+				const redeemData = nrIface.encodeFunctionData("redeemPositions", [
+					market.conditionId,
+					amounts,
+				]);
+
+				claimDev("polymarket NegRiskAdapter redeem", {
+					conditionId: market.conditionId,
+					resolvedOutcome,
+					balanceWei: balanceWei.toString(),
+				});
+
+				const respOrHash = await executePolygonRelayAndWait(
+					relayClient,
+					[
+						{
+							to: POLYGON_NEG_RISK_ADAPTER as string,
+							value: "0",
+							data: redeemData,
+						},
+					],
+					polymarketDepositWallet,
+					"Redeem Polymarket NegRisk winnings",
+				);
+				await assertPolymarketOutcomeBurned(respOrHash);
+				return respOrHash;
+			}
+
+			/**
+			 * Standard binary market. Polymarket used USDC.e then migrated to pUSD;
+			 * both collaterals share the same CTF. Wrong `collateralToken` mines but
+			 * pays 0. Off-chain asset-id detection sometimes fails (API / NegRisk
+			 * edge cases), so we try pUSD first, then USDC.e, and succeed when the
+			 * ERC1155 balance for `_polyAssetTokenId` hits zero.
+			 */
+			if (!polyAssetTokenId) {
+				throw new Error(
+					"Polymarket claim missing on-chain asset id — refresh and try again",
+				);
+			}
+			const balanceWeiPre = await readPolymarketSafeCtfBalanceWei(
+				polymarketDepositWallet,
+				polyAssetTokenId,
+			);
+			if (balanceWeiPre <= 0n) {
+				throw new Error(
+					"No redeemable Polymarket tokens on your deposit wallet for this market",
+				);
+			}
+
+			const detectionHint = detectPolymarketCollateralForAsset(
+				market.conditionId,
+				polyAssetTokenId,
+			);
+			const collateralsToTry =
+				polymarketCtfRedeemCollateralOrder(detectionHint);
+			claimDev("polymarket CTF redeem order", {
 				conditionId: market.conditionId,
-				indexSets: [YES_INDEX_SET, NO_INDEX_SET],
+				detectionHint: detectionHint?.collateral ?? null,
+				tryCollaterals: collateralsToTry.map((c) =>
+					c === POLYGON_PUSD ? "pUSD" : c === POLYGON_USDC_E ? "USDC.e" : c,
+				),
 			});
 
-			const respOrHash = await executePolygonRelayAndWait(
-				relayClient,
-				[{ to: POLYGON_CTF as string, value: "0", data: redeemData }],
-				polymarketDepositWallet,
-				"Redeem Polymarket winnings",
+			let lastHash: string | undefined;
+			for (let i = 0; i < collateralsToTry.length; i++) {
+				if (i > 0) {
+					await sleep(RELAYER_INTER_COLLATERAL_SETTLE_MS);
+				}
+
+				const collateral = collateralsToTry[i];
+				const collateralLabel =
+					collateral === POLYGON_PUSD
+						? "pUSD"
+						: collateral === POLYGON_USDC_E
+							? "USDC.e"
+							: "unknown";
+				const redeemData = iface.encodeFunctionData("redeemPositions", [
+					collateral,
+					ethers.ZeroHash,
+					market.conditionId,
+					[YES_INDEX_SET, NO_INDEX_SET],
+				]);
+
+				claimDev(`polymarket CTF attempt ${i + 1}/${collateralsToTry.length}`, {
+					collateral: collateralLabel,
+				});
+
+				lastHash = await executePolygonRelayAndWait(
+					relayClient,
+					[
+						{
+							to: POLYGON_CTF as string,
+							value: "0",
+							data: redeemData,
+						},
+					],
+					polymarketDepositWallet,
+					"Redeem Polymarket winnings",
+				);
+
+				const postBalance = await readPolymarketSafeCtfBalanceWei(
+					polymarketDepositWallet,
+					polyAssetTokenId,
+				);
+				if (postBalance === 0n) {
+					return lastHash;
+				}
+
+				claimDev("CTF redeem no burn (wrong collateral or unresolved)", {
+					attemptCollateral: collateralLabel,
+					postBalanceWei: postBalance.toString(),
+					txHash: lastHash ?? null,
+				});
+			}
+
+			claimDev("CTF redeem exhausted both collaterals", {
+				lastTxHash: lastHash ?? null,
+				conditionId: market.conditionId,
+			});
+			throw new Error(
+				"Could not redeem this Polymarket position (tried both collateral types). The market may not be fully resolved on-chain yet — try again shortly, or redeem on polymarket.com.",
 			);
-			return respOrHash;
 		}
 
 		async function redeemPredict(): Promise<string> {
@@ -383,12 +690,11 @@ export function useClaimForVenue(
 				}
 			}
 
-			console.log("CLAIM DEBUG: Predict redeem on BNB (OrderBuilder)", {
+			claimDev("predictfun redeem", {
 				conditionId: market.conditionId,
 				indexSet,
 				isNegRisk,
 				isYieldBearing,
-				predictAccount: predictAccount ?? null,
 				negRiskAmount: amount?.toString() ?? null,
 			});
 
@@ -426,11 +732,9 @@ export function useClaimForVenue(
 				[indexSet],
 			]);
 
-			console.log("CLAIM DEBUG: LevelUp redeem on Base", {
-				ctf: getContracts().CTF,
-				collateral: getContracts().COLLATERAL,
+			claimDev("levelup redeem on Base", {
 				conditionId: market.conditionId,
-				indexSets: [indexSet],
+				indexSet,
 				resolvedOutcome,
 				hasSmartWallet,
 			});

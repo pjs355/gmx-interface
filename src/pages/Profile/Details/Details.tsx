@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMedia } from "react-use";
-import { userService, type EmailPreferences } from "@/services/api/userService";
+import { userService, type EmailPreferences, type UserProfile } from "@/services/api/userService";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import {
 	parseOddsDisplayStyle,
 	ODDS_DISPLAY_SELECT_OPTIONS,
 } from "@/utils/oddsDisplayFormat";
+import { useAccountData } from "@/context/AccountDataContext";
+import { tradingQueryKeys } from "@/trading/queryKeys";
 import RPGPane from "../RPGPane/RPGPane";
 import AchievementPane from "../AchievementPane/AchievementPane";
 import DflowProofSection from "./DflowProofSection";
@@ -14,102 +17,55 @@ import "./Details.scss";
 
 const isMobileBreakpoint = "(max-width: 768px)";
 
-interface UserDetails {
-	id?: string;
-	userId?: string;
-	username?: string;
-	email?: string;
-	createdAt?: string;
-	lastLogin?: string;
-	walletAddress?: string;
-	exp?: number;
-	[key: string]: any;
-}
+const DEFAULT_EMAIL_PREFERENCES: EmailPreferences = {
+	generalNotifications: true,
+	tradeConfirmations: true,
+	winningsNotifications: true,
+	levelUpAnnouncements: true,
+};
 
 export default function Details() {
-	const { getAccessToken, ready, authenticated, user } = usePrivy();
+	const { getAccessToken, user } = usePrivy();
 	const { identityToken } = useIdentityToken();
 	const isMobile = useMedia(isMobileBreakpoint);
-	const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
-	const [isLoading, setIsLoading] = useState(true);
+	const queryClient = useQueryClient();
+	const { profile: profileSlice } = useAccountData();
+	const userDetails = profileSlice.data;
+	const isLoading =
+		profileSlice.status === "pending" && !profileSlice.isFetched;
 	const [isEditingUsername, setIsEditingUsername] = useState(false);
 	const [usernameValue, setUsernameValue] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 	const [usernameError, setUsernameError] = useState<string | null>(null);
-	// Email preferences state
-	const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>({
-		generalNotifications: true,
-		tradeConfirmations: true,
-		winningsNotifications: true,
-		levelUpAnnouncements: true,
-	});
+	// Email preferences are derived from the canonical profile; the local
+	// state is only the *unsaved edit* the user is composing.
+	const [emailPreferences, setEmailPreferences] =
+		useState<EmailPreferences>(DEFAULT_EMAIL_PREFERENCES);
 	const [isSavingPreferences, setIsSavingPreferences] = useState(false);
 	const [preferencesSaved, setPreferencesSaved] = useState(false);
 	const [emailPrefsExpanded, setEmailPrefsExpanded] = useState(false);
 	const { oddsDisplayStyle, setOddsDisplayStyle } = useOddsDisplay();
 
-	// Account deletion modal state - COMMENTED OUT FOR NOW
-	// const [showDeleteModal, setShowDeleteModal] = useState(false);
-	// const [acceptInput, setAcceptInput] = useState("");
+	// Sync the editor's email-preferences state whenever the canonical
+	// profile changes (login, refetch after save, etc.).
+	useEffect(() => {
+		if (userDetails?.emailPreferences) {
+			setEmailPreferences(userDetails.emailPreferences);
+		}
+	}, [userDetails?.emailPreferences]);
 
 	// Extract email and phone from Privy user object
 	const userEmail = user?.email?.address || null;
 	const userPhone = user?.phone?.number || null;
 
-	useEffect(() => {
-		// Wait for Privy to be ready and user to be authenticated
-		if (!ready || !authenticated) {
-			console.log(
-				"Privy not ready yet - ready:",
-				ready,
-				"authenticated:",
-				authenticated
-			);
-			return;
-		}
-
-		// Also wait for identity token to be available
-		if (!identityToken) {
-			console.log("Waiting for identity token...");
-			return;
-		}
-
-		console.log(
-			"Privy ready, authenticated, and identity token available - fetching details"
-		);
-		fetchUserDetails();
-	}, [ready, authenticated, identityToken]);
-
-	const fetchUserDetails = async () => {
-		try {
-			const accessToken = await getAccessToken();
-			if (!accessToken) {
-				console.warn(
-					"No access token available for fetching user details"
-				);
-				setIsLoading(false);
-				return;
-			}
-
-			if (!identityToken) {
-				throw new Error("No identity token available");
-			}
-
-			const profile = await userService.getUserProfile(
-				accessToken,
-				identityToken
-			);
-			setUserDetails(profile);
-
-			// Initialize email preferences from profile or use defaults
-			if (profile.emailPreferences) {
-				setEmailPreferences(profile.emailPreferences);
-			}
-		} catch (error) {
-			console.error("Failed to fetch user details:", error);
-		} finally {
-			setIsLoading(false);
-		}
+	/**
+	 * Optimistically write a freshly returned profile into the canonical
+	 * `tradingQueryKeys.profileMe` cache so every consumer (header username,
+	 * GamingAccounts, Comments, AccountDataContext) updates without a
+	 * separate refetch round-trip.
+	 */
+	const writeProfileToCache = (next: UserProfile) => {
+		queryClient.setQueryData(tradingQueryKeys.profileMe, next);
 	};
 
 	const handleEditUsername = () => {
@@ -149,7 +105,7 @@ export default function Details() {
 				identityToken
 			);
 
-			setUserDetails(updatedProfile);
+			writeProfileToCache(updatedProfile);
 			setIsEditingUsername(false);
 			setUsernameValue("");
 			setUsernameError(null);
@@ -230,7 +186,7 @@ export default function Details() {
 				accessToken,
 				identityToken
 			);
-			setUserDetails(updatedProfile);
+			writeProfileToCache(updatedProfile);
 			setPreferencesSaved(true);
 			setTimeout(() => setPreferencesSaved(false), 3000);
 		} catch (error) {

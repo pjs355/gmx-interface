@@ -23,6 +23,8 @@ export interface ProcessedOrder {
 	tokenId: string;
 	side: "buy" | "sell";
 	position: "Yes" | "No";
+	/** When set (e.g. DFlow vs markets), overrides generic Yes/No → team mapping in trade lists. */
+	positionDisplayLabel?: string;
 	price: number;
 	size: number;
 	filled: boolean;

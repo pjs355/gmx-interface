@@ -103,7 +103,40 @@
 	min-width: 0;
 	min-height: 0;
 	align-self: stretch;
-	overflow: visible;
+	/*
+	 * Fill the full space between header and viewport bottom (no trailing
+	 * 24px gap). Without this, the column ended 24px above the viewport
+	 * bottom and showed a black strip before the page footer scrolled up,
+	 * which read as a stray bar under the trade module.
+	 */
+	max-height: calc(100vh - var(--app-header-height, 6.2rem));
+	overflow-y: auto;
+	overflow-x: hidden;
+	overscroll-behavior-y: contain;
+	-webkit-overflow-scrolling: touch;
+	/* Scroll without visible scrollbar (wheel / trackpad / touch still work). */
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+/*
+ * Same top inset the home dock uses (`Predictions.scss` lines 1209-1213).
+ * Keeps the trade module's first row at the same vertical offset as the
+ * left column header, matching the home → umbrella visual continuity.
+ *
+ * Scoped to `.prediction-market-page` so this rule cannot leak into the
+ * home page's `.right-panel.predictions-page__home-trade-panel` (which has
+ * its own equivalent rule already).
+ */
+.prediction-market-page .right-panel {
+	.prediction-market-tradebox,
+	.tradebox-skeleton {
+		margin-top: var(--predictions-home-column-inset, 8px);
+	}
 }
 
 // Tight margins — `.stream-embed-container` already drives its own height

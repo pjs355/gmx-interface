@@ -194,8 +194,6 @@ export function HomeInlineTradeLayout({
 
 	const { tradingPagePrices } = useUmbrellaTradePricing({
 		umbrella: enabled ? focusedUmbrella : null,
-		sortedQuestions,
-		questionOrderbooks,
 	});
 
 	const pandascoreMatchIdRaw =

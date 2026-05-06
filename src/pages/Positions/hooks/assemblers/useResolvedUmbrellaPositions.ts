@@ -372,22 +372,39 @@ export function useResolvedUmbrellaPositions({
 							labelOutcomeName,
 							side,
 						);
-						const dflowRedeemShares =
-							venue === "dflow" ? pv.shares : undefined;
-						return {
-							market: {
-								_id: `${idPrefix}-${pv.tokenId.slice(0, 12)}`,
-								displayName: blockMarketTitle,
-								questionId: pv.conditionId ?? pv.tokenId,
-								conditionId: pv.conditionId,
-								resolvedOutcome: isYes ? "yes" : "no",
-								_venue: venue,
-								_isNegRisk: mDetail?.isNegRisk ?? false,
-								_isYieldBearing: mDetail?.isYieldBearing ?? false,
-								...(dflowRedeemShares != null
-									? { _dflowRedeemShares: dflowRedeemShares }
-									: {}),
-							} as unknown as PredictionMarket,
+					const dflowRedeemShares =
+						venue === "dflow" ? pv.shares : undefined;
+					/**
+					 * Polymarket NegRisk redeem path needs the ERC1155 outcome-token id
+					 * (`pv.tokenId` = `asset` from the Data API) so `redeemPolymarket()`
+					 * can read on-chain `balanceOf(safe, asset)` and pass the real holding
+					 * to `NegRiskAdapter.redeemPositions(conditionId, [yes, no])`. Without
+					 * the real balance the tx mines but pays 0 pUSD and the row disappears.
+					 */
+					const polyAssetTokenId =
+						venue === "polymarket" ? pv.tokenId : undefined;
+					const polyIsNegRisk =
+						venue === "polymarket" ? pv.isNegRisk === true : undefined;
+					return {
+						market: {
+							_id: `${idPrefix}-${pv.tokenId.slice(0, 12)}`,
+							displayName: blockMarketTitle,
+							questionId: pv.conditionId ?? pv.tokenId,
+							conditionId: pv.conditionId,
+							resolvedOutcome: isYes ? "yes" : "no",
+							_venue: venue,
+							_isNegRisk:
+								venue === "polymarket"
+									? polyIsNegRisk ?? false
+									: mDetail?.isNegRisk ?? false,
+							_isYieldBearing: mDetail?.isYieldBearing ?? false,
+							...(dflowRedeemShares != null
+								? { _dflowRedeemShares: dflowRedeemShares }
+								: {}),
+							...(polyAssetTokenId != null
+								? { _polyAssetTokenId: polyAssetTokenId }
+								: {}),
+						} as unknown as PredictionMarket,
 							yesBalance: isYes ? pv.shares : 0,
 							noBalance: isYes ? 0 : pv.shares,
 							yesPrice: null,

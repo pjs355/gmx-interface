@@ -777,11 +777,49 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		prevOrderTypeRef.current = orderType;
 		prevTargetVenueRef.current = targetVenue;
 
-		const identityReset =
-			questionIdChanged || outcomeChanged || sideChanged || orderTypeChanged;
+		/* Hard reset = brand-new market or a semantic shift big enough that the
+		 * old smart-routing rows would render the wrong shape (buy ↔ sell flips
+		 * "To Win" ↔ "Receive"; market ↔ limit collapses the omnibus surface).
+		 * For those we blank everything so consumers don't render mismatched
+		 * data for a frame.
+		 *
+		 * Outcome flip (Team A ↔ Team B) is intentionally NOT a hard reset.
+		 * The venue lineup is the same, the rows already use stable keys
+		 * (`buy-${venue}` / `sell-${venue}`), and every value is wrapped in
+		 * `FlashingValue` — so leaving the previous omnibus + per-venue
+		 * previews on screen lets React reconcile in place and the numbers
+		 * flash-update when the fresh fetch lands, instead of the whole grid
+		 * unmounting and re-mounting (the "pop-out / pop-in" jank). Execution
+		 * data still clears so Submit can never fire on the stale identity. */
+		const hardReset = questionIdChanged || sideChanged || orderTypeChanged;
+		const outcomeOnlyFlip = outcomeChanged && !hardReset;
 
-		if (identityReset) {
+		if (hardReset) {
 			blankAll();
+		} else if (outcomeOnlyFlip) {
+			// Try to seed display from the module cache for the new outcome —
+			// if the user has toggled this market before, that's an instant,
+			// correct swap with no stale frame. Otherwise leave the previous
+			// rows on screen and let `FlashingValue` animate the fresh fetch
+			// in-place. Either way, execution must clear so a click-through
+			// before the fresh fetch lands cannot sign the prior outcome.
+			const newDisplayCacheKey = buildSorRouteCacheKey({
+				questionId,
+				outcome,
+				side,
+				amount,
+				targetVenue: undefined,
+				orderType: orderType ?? "market",
+				limitPriceCents,
+			});
+			const cached = readSorRouteCache(newDisplayCacheKey);
+			if (cached) {
+				setDisplayRoute(cached.route);
+				setVenuePreviews(cached.venuePreviews ?? null);
+				displayLastGoodRouteRef.current = cached.route;
+				displayFailureStreakStartRef.current = null;
+			}
+			blankExecutionOnly();
 		} else if (targetVenueChanged) {
 			// Tab switch: re-target execution only; leave display untouched.
 			blankExecutionOnly();
@@ -791,7 +829,8 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		setExecutionStale(true);
 
 		// Identity / tab-switch fires immediately; amount + balance changes debounce.
-		const fireImmediately = identityReset || targetVenueChanged;
+		const fireImmediately =
+			hardReset || outcomeOnlyFlip || targetVenueChanged;
 		if (fireImmediately) {
 			fireChannelsRef.current();
 		} else {

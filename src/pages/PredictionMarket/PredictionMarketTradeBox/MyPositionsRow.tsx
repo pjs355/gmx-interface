@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import SpinningLoader from "@/components/Common/SpinningLoader";
 import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
 import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import type { MatchedMarket } from "@/types/odds-monitor";
@@ -46,7 +47,7 @@ export function MyPositionsRow({
 	selectedPosition,
 	matchedMonitor,
 	shareBalances,
-	/** All Markets SOR “Filled” banner is up — position counts may still be catching up on-chain. */
+	/** Post-trade sync — hide numeric amount until server-backed balances update. */
 	positionSharesRefreshing = false,
 }: {
 	market: MarketLike;
@@ -77,11 +78,20 @@ export function MyPositionsRow({
 	};
 
 	if (side === "buy") {
-		if (buyLines.length === 0) return null;
+		const pendingEmptyPosition =
+			positionSharesRefreshing && buyLines.length === 0;
+		if (buyLines.length === 0 && !pendingEmptyPosition) return null;
+
 		const buyTotalShares = buyLines.reduce(
 			(sum, line) => sum + (Number.isFinite(line.shares) ? line.shares : 0),
 			0,
 		);
+		const pendingOutcomeLabel =
+			selectedPosition === "no" ? noTeamLabel : yesTeamLabel;
+		const pendingLineColor = colorForLine(
+			selectedPosition === "no" ? "no" : "yes",
+		);
+
 		return (
 			<div
 				data-qa="my-positions-row"
@@ -108,19 +118,52 @@ export function MyPositionsRow({
 						textAlign: "right",
 					}}
 				>
-					{buyLines.map((line) => (
+					{pendingEmptyPosition ? (
 						<div
-							key={line.key}
 							style={{
 								fontSize: 14,
 								fontWeight: 700,
-								color: colorForLine(line.side),
+								color: pendingLineColor,
 								lineHeight: 1.35,
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "flex-end",
+								gap: 8,
 							}}
 						>
-							{formatShareCount(line.shares)} Shares {line.label}
+							<SpinningLoader size="1rem" />
+							<span>Shares {pendingOutcomeLabel}</span>
 						</div>
-					))}
+					) : (
+						buyLines.map((line) => (
+							<div
+								key={line.key}
+								style={{
+									fontSize: 14,
+									fontWeight: 700,
+									color: colorForLine(line.side),
+									lineHeight: 1.35,
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "flex-end",
+									gap: 8,
+								}}
+							>
+								{positionSharesRefreshing ? (
+									<>
+										<SpinningLoader size="1rem" />
+										<span>
+											Shares {line.label}
+										</span>
+									</>
+								) : (
+									<>
+										{formatShareCount(line.shares)} Shares {line.label}
+									</>
+								)}
+							</div>
+						))
+					)}
 				</div>
 			</div>
 		);
@@ -132,7 +175,7 @@ export function MyPositionsRow({
 			? colorForLine("no")
 			: colorForLine("yes");
 
-	if (sellTotalShares <= 0) {
+	if (sellTotalShares <= 0 && !positionSharesRefreshing) {
 		return (
 			<div
 				data-qa="my-positions-row"
@@ -174,7 +217,25 @@ export function MyPositionsRow({
 	}
 
 	const headlineRight = `${formatShareCount(sellTotalShares)} Shares ${sellOutcomeLabel}`;
-	const showDetails = tradingVenue === "all" && sellVenueBreakdown.length > 1;
+	const headlineContent = positionSharesRefreshing ? (
+		<span
+			style={{
+				display: "inline-flex",
+				alignItems: "center",
+				justifyContent: "flex-end",
+				gap: 8,
+			}}
+		>
+			<SpinningLoader size="1rem" />
+			<span>Shares {sellOutcomeLabel}</span>
+		</span>
+	) : (
+		headlineRight
+	);
+	const showDetails =
+		tradingVenue === "all" &&
+		sellVenueBreakdown.length > 1 &&
+		!positionSharesRefreshing;
 
 	return (
 		<div
@@ -212,7 +273,7 @@ export function MyPositionsRow({
 							lineHeight: 1.35,
 						}}
 					>
-						{headlineRight}
+						{headlineContent}
 					</div>
 				</div>
 			</div>

@@ -81,7 +81,18 @@ function tryMessageFromRelayerClientError(message: string): string | null {
 }
 
 export function getPrivateApiErrorMessage(err: unknown): string {
-	if (err instanceof PrivateApiError) return err.message;
+	if (err instanceof PrivateApiError) {
+		let base = err.message;
+		const b = err.body;
+		if (b && typeof b === "object") {
+			const o = b as Record<string, unknown>;
+			const sig = typeof o.signature === "string" ? o.signature.trim() : "";
+			if (sig.length > 0 && !base.includes(sig)) {
+				base = `${base} (submit tx ${sig})`;
+			}
+		}
+		return base;
+	}
 	const axiosLike = tryAxiosLikeErrorMessage(err);
 	if (axiosLike) return axiosLike;
 	if (err instanceof Error) {

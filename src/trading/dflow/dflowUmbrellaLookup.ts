@@ -1,3 +1,7 @@
+import {
+	parseVsTeamsFromTitle,
+	shortTeamDisplayName,
+} from "@/pages/Positions/utils/historyOutcomeWinner";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 
 /** `exchangeMatching.dflow` on umbrellas / matched-markets (yes + optional no mints per side). */
@@ -156,4 +160,155 @@ export function buildUmbrellaLookupByDflowOutcomeMint(
 		}
 	}
 	return map;
+}
+
+/**
+ * Portfolio columns = first vs second team on the umbrella (same A/B as {@link buildDflowPortfolioColumnMapFromCatalog}).
+ * Aligns with SOR A/B legs: **contract YES** on a side pays when that team wins; **contract NO** pays
+ * when the opponent wins (same economics as YES on the other team — show under the team the user
+ * is effectively backing).
+ */
+export function buildDflowPortfolioColumnMapFromCatalog(
+	umbrellas: Umbrella[],
+): Map<string, "Yes" | "No"> {
+	const out = new Map<string, "Yes" | "No">();
+	for (const u of umbrellas) {
+		const d = u.exchangeMatching?.dflow;
+		if (!d || typeof d !== "object") continue;
+		const w = d as DflowExchangeWire;
+		const assign = (mintRaw: unknown, col: "Yes" | "No") => {
+			const m = coerceDflowMintField(mintRaw);
+			if (m) out.set(m, col);
+		};
+		assign(w.yesMintA, "Yes");
+		assign(w.noMintA, "No");
+		assign(w.yesMintB, "No");
+		assign(w.noMintB, "Yes");
+	}
+	return out;
+}
+
+/**
+ * When any seed mint appears on an umbrella’s `exchangeMatching.dflow`, union in **all** wire
+ * mints (`yesMintA`/`noMintA`/`yesMintB`/`noMintB`). Ensures we still query Solana for co-listed legs
+ * if trade history only mentioned one outcome mint (common when splitting fills across txs).
+ */
+export function expandDflowMintsWithCoListedLegs(
+	seedMints: readonly string[],
+	umbrellas: Umbrella[],
+): string[] {
+	const seed = new Set(seedMints.map((m) => m.trim()).filter(Boolean));
+	const out = new Set(seed);
+	for (const u of umbrellas) {
+		const d = u.exchangeMatching?.dflow;
+		if (!d || typeof d !== "object") continue;
+		const w = d as DflowExchangeWire;
+		const legs: string[] = [];
+		for (const k of ["yesMintA", "yesMintB", "noMintA", "noMintB"] as const) {
+			const m = coerceDflowMintField(w[k]);
+			if (m) legs.push(m);
+		}
+		if (legs.length === 0) continue;
+		if (!legs.some((m) => seed.has(m))) continue;
+		for (const m of legs) out.add(m);
+	}
+	return [...out];
+}
+
+/**
+ * Every Solana outcome mint listed on any umbrella `exchangeMatching.dflow`
+ * (`yesMintA` / `yesMintB` / `noMintA` / `noMintB`). Same source as
+ * {@link stableDflowUmbrellaMintCatalogSig}; use for drift checks vs wallet balances.
+ */
+export function collectAllDflowCatalogWireMints(umbrellas: Umbrella[]): Set<string> {
+	const m = new Set<string>();
+	for (const u of umbrellas) {
+		const d = u.exchangeMatching?.dflow;
+		if (!d || typeof d !== "object") continue;
+		const w = d as DflowExchangeWire;
+		for (const k of ["yesMintA", "yesMintB", "noMintA", "noMintB"] as const) {
+			const x = coerceDflowMintField(w[k]);
+			if (x) m.add(x);
+		}
+	}
+	return m;
+}
+
+/**
+ * Stable fingerprint for React Query — refetch on-chain DFlow reads when any catalog mint on an
+ * umbrella’s `exchangeMatching.dflow` changes (so co-listed leg expansion stays in sync).
+ */
+export function stableDflowUmbrellaMintCatalogSig(umbrellas: Umbrella[]): string {
+	return [...collectAllDflowCatalogWireMints(umbrellas)].sort().join("\0");
+}
+
+function pickCatalogH2HTitleString(umbrella: Umbrella): string {
+	const children = umbrella.children ?? [];
+	for (const c of children) {
+		const d = (c.displayName ?? "").trim();
+		if (d && /\bmatch winner\b/i.test(d)) return d;
+	}
+	for (const c of children) {
+		const d = (c.displayName ?? "").trim();
+		if (d && /\bvs\.?\b/i.test(d)) return d;
+	}
+	return umbrella.displayName?.trim() ?? "";
+}
+
+/**
+ * Display labels for portfolio **Yes** / **No** columns — same team slots as `exchangeMatching.dflow`
+ * mint mapping ({@link buildDflowPortfolioColumnMapFromCatalog}). Uses umbrella data only (no DFlow
+ * batch titles, no Predict.fun API).
+ */
+export function portfolioColumnTeamLabels(
+	umbrella: Umbrella | null | undefined,
+): { columnYes: string; columnNo: string } {
+	const fallback = (): { columnYes: string; columnNo: string } => ({
+		columnYes: "Yes",
+		columnNo: "No",
+	});
+
+	if (!umbrella) return fallback();
+
+	const tm = umbrella.teamMappings;
+	if (tm && tm.length >= 2) {
+		const y = tm[0]?.displayName?.trim();
+		const n = tm[1]?.displayName?.trim();
+		if (y && n) {
+			return {
+				columnYes: shortTeamDisplayName(y),
+				columnNo: shortTeamDisplayName(n),
+			};
+		}
+	}
+
+	const mwTitle = pickCatalogH2HTitleString(umbrella);
+	const fromChild = parseVsTeamsFromTitle(mwTitle);
+	if (fromChild) {
+		return {
+			columnYes: shortTeamDisplayName(fromChild[0]!),
+			columnNo: shortTeamDisplayName(fromChild[1]!),
+		};
+	}
+
+	const { tickerA, tickerB } = readDflowWireForEventLookup(
+		umbrella.exchangeMatching?.dflow,
+	);
+	if (tickerA && tickerB) {
+		return {
+			columnYes: shortTeamDisplayName(tickerA),
+			columnNo: shortTeamDisplayName(tickerB),
+		};
+	}
+
+	const dn = umbrella.displayName?.trim() ?? "";
+	const fromDisplay = parseVsTeamsFromTitle(dn);
+	if (fromDisplay) {
+		return {
+			columnYes: shortTeamDisplayName(fromDisplay[0]!),
+			columnNo: shortTeamDisplayName(fromDisplay[1]!),
+		};
+	}
+
+	return fallback();
 }

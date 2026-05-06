@@ -243,6 +243,12 @@ export function useSorExecution(
 				return result;
 			} catch (err) {
 				if (retriesLeft > 0) {
+					console.warn("[SOR] Retrying leg after error (transient upstream / timing)", {
+						venue: leg.venue,
+						retriesLeftBeforeThisAttempt: retriesLeft,
+						message:
+							err instanceof Error ? err.message : String(err),
+					});
 					await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
 					return executeLegWithRetry(leg, retriesLeft - 1, side);
 				}

@@ -1,10 +1,11 @@
 import { useState, useCallback, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useWallets as useSolanaWallets } from "@privy-io/react-auth/solana";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Tooltip from "@/components/Tooltip/Tooltip";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { startDflowProofRedirect } from "@/trading/dflow/startDflowProofRedirect";
+import { useAccountData } from "@/context/AccountDataContext";
 
 const KALSHI_NOT_VERIFIED_TOOLTIP =
 	"You must verify your identity via DFlow in order to place trades with Kalshi.";
@@ -14,20 +15,14 @@ export default function DflowProofSection() {
 	const { signMessage } = useSignMessage();
 	const { wallets: solanaWallets } = useSolanaWallets();
 	const api = usePrivateApiClient();
-	const queryClient = useQueryClient();
+	const { dflowProof, refresh } = useAccountData();
 
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-	const accountQuery = useQuery({
-		queryKey: ["dflow", "account"],
-		queryFn: () => api.getDflowAccount(),
-		enabled: authenticated,
-		staleTime: 30_000,
-	});
-
-	const proofState = accountQuery.data?.proofState;
+	const proofState = dflowProof.data?.proofState;
+	const accountLoading = dflowProof.status === "pending" && !dflowProof.isFetched;
 
 	const solanaLinked = user?.linkedAccounts?.find(
 		(a: any) => a.type === "wallet" && a.chainType === "solana"
@@ -40,28 +35,28 @@ export default function DflowProofSection() {
 		[solanaWallets, solanaAddress],
 	);
 
-	const isVerified =
-		proofState?.identityVerified && proofState?.ownershipProofValid;
+	const isVerified = dflowProof.isVerified;
 
 	/**
 	 * Proof may show you as verified before LevelUp Mongo updates. The private API
 	 * only syncs when `GET /api/dflow/verify` runs (same as returning from Proof with `?dflow_proof=1`).
+	 *
+	 * On verified result, refresh the canonical `dflowProof` slice in
+	 * `AccountDataContext` instead of invalidating a duplicate cache key.
 	 */
 	const verifySyncQuery = useQuery({
 		queryKey: ["dflow", "verify-status-sync", solanaAddress ?? ""],
 		queryFn: async () => {
 			const result = await api.getDflowVerify();
 			if (result.verified) {
-				await queryClient.invalidateQueries({
-					queryKey: ["dflow", "account"],
-				});
+				await refresh.dflowProof();
 			}
 			return result;
 		},
 		enabled:
 			authenticated &&
 			Boolean(solanaAddress) &&
-			accountQuery.isSuccess &&
+			dflowProof.isFetched &&
 			!isVerified,
 		staleTime: 120_000,
 		retry: false,
@@ -90,9 +85,7 @@ export default function DflowProofSection() {
 				returnUrl,
 			);
 			if (out === "already_verified") {
-				await queryClient.invalidateQueries({
-					queryKey: ["dflow", "account"],
-				});
+				await refresh.dflowProof();
 				setSuccessMsg("Proof KYC verified.");
 			}
 		} catch (e: unknown) {
@@ -102,7 +95,7 @@ export default function DflowProofSection() {
 		} finally {
 			setBusy(false);
 		}
-	}, [api, signMessage, embeddedSolanaWallet, queryClient]);
+	}, [api, signMessage, embeddedSolanaWallet, refresh]);
 
 	if (!authenticated) return null;
 
@@ -122,7 +115,7 @@ export default function DflowProofSection() {
 			<div style={{ marginTop: 8 }}>
 				<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
 					<span style={{ color: "#888", fontSize: 13 }}>Status:</span>
-					{accountQuery.isLoading ? (
+					{accountLoading ? (
 						<span style={{ color: "#888", fontSize: 13 }}>Loading…</span>
 					) : verifySyncQuery.isFetching ? (
 						<span style={{ color: "#888", fontSize: 13 }}>Syncing with Proof…</span>
@@ -156,7 +149,7 @@ export default function DflowProofSection() {
 							type="button"
 							className="Details-button"
 							onClick={() => void handleVerify()}
-							disabled={busy || accountQuery.isLoading || verifySyncQuery.isFetching}
+							disabled={busy || accountLoading || verifySyncQuery.isFetching}
 							style={{ minWidth: 180, opacity: 0.92 }}
 						>
 							{busy ? "Verifying…" : "Get Verified"}

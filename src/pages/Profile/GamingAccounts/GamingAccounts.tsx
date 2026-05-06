@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Trans } from "@lingui/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { useAccountData } from "@/context/AccountDataContext";
 import "./GamingAccounts.css";
 
 interface LinkedAccount {
@@ -12,29 +13,44 @@ interface LinkedAccount {
 	verified: boolean;
 }
 
-interface UserProfile {
-	id: string;
-	steamId?: string;
-	steamUsername?: string;
-	lolId?: string;
-	lolUsername?: string;
-	cs?: {
-		steamId64?: string;
-		handle?: string;
-	};
-	// Add other profile fields as needed
+type CsAccount = { steamId64?: string; handle?: string };
+
+function parseCsAccount(value: unknown): CsAccount | null {
+	if (!value || typeof value !== "object") return null;
+	const v = value as Record<string, unknown>;
+	const steamId64 =
+		typeof v.steamId64 === "string" ? v.steamId64 : undefined;
+	const handle = typeof v.handle === "string" ? v.handle : undefined;
+	if (!steamId64 && !handle) return null;
+	return { steamId64, handle };
+}
+
+function readStringField(
+	value: unknown,
+	key: string
+): string | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	const v = (value as Record<string, unknown>)[key];
+	return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
 export default function GamingAccounts() {
 	const { getAccessToken } = usePrivy();
+	const { profile: profileSlice, refresh } = useAccountData();
+	const userProfile = profileSlice.data;
+	const csAccount = parseCsAccount(userProfile?.cs);
+	// `UserProfile` declares Steam-related fields via the `[key: string]: unknown`
+	// index signature, so direct access is `unknown`. Narrow once here.
+	const profileSteamId = readStringField(userProfile, "steamId");
+	const profileSteamUsername = readStringField(userProfile, "steamUsername");
+	const isLoadingProfile =
+		profileSlice.status === "pending" && !profileSlice.isFetched;
 	const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
-	const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 	const [isLinkingSteam, setIsLinkingSteam] = useState(false);
 	const [isLinkingLoL, setIsLinkingLoL] = useState(false);
 	const [steamLinkStatus, setSteamLinkStatus] = useState<
 		"idle" | "success" | "error"
 	>("idle");
-	const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 	const [isUnlinking, setIsUnlinking] = useState<"steam" | "lol" | null>(
 		null
 	);
@@ -49,8 +65,9 @@ export default function GamingAccounts() {
 			setSteamLinkStatus("success");
 			console.log("Steam account linked successfully!");
 
-			// Refresh user profile and linked accounts to show the newly linked Steam account
-			fetchUserProfile();
+			// Refresh canonical profile (cached) + linked accounts (local) so
+			// the freshly linked Steam account shows up immediately.
+			void refresh.profile();
 			fetchLinkedAccounts();
 
 			// Clean up URL parameters
@@ -64,63 +81,12 @@ export default function GamingAccounts() {
 			const newUrl = window.location.pathname;
 			window.history.replaceState({}, document.title, newUrl);
 		}
-	}, []);
+	}, [refresh]);
 
-	// Fetch user profile and linked accounts on component mount
+	// Fetch linked accounts on component mount (profile is already in context).
 	useEffect(() => {
-		fetchUserProfile();
 		fetchLinkedAccounts();
 	}, []);
-
-	// Function to fetch user profile from backend
-	const fetchUserProfile = async () => {
-		try {
-			const serverUrl = getPredictionApiBaseUrl();
-			const apiUrl = `${serverUrl}/profiles/me`;
-
-			console.log("Fetching user profile from:", apiUrl);
-
-			const accessToken = await getAccessToken();
-			if (!accessToken) {
-				console.warn(
-					"No access token available for fetching user profile"
-				);
-				setIsLoadingProfile(false);
-				return;
-			}
-
-			const response = await fetch(apiUrl, {
-				method: "GET",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${accessToken}`,
-				},
-			});
-
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-
-			const result = await response.json();
-			console.log("User profile response:", result);
-
-			if (result.success && result.data) {
-				setUserProfile(result.data);
-				console.log("Steam ID check:", {
-					steamId: result.data.steamId,
-					csSteamId64: result.data.cs?.steamId64,
-					csHandle: result.data.cs?.handle,
-					hasSteam: !!(
-						result.data.steamId || result.data.cs?.steamId64
-					),
-				});
-			}
-		} catch (error) {
-			console.error("Failed to fetch user profile:", error);
-		} finally {
-			setIsLoadingProfile(false);
-		}
-	};
 
 	const handleSteamLink = async () => {
 		setIsLinkingSteam(true);
@@ -274,8 +240,8 @@ export default function GamingAccounts() {
 			console.log(`Unlink ${platform} response:`, result);
 
 			if (result.success) {
-				// Refresh user profile to reflect the unlink
-				await fetchUserProfile();
+				// Refresh canonical profile so the unlink reflects everywhere.
+				await refresh.profile();
 
 				// Remove from local state
 				setLinkedAccounts((prev) =>
@@ -461,8 +427,8 @@ export default function GamingAccounts() {
 					) : linkedAccounts.find(
 							(acc) => acc.platform === "steam"
 					  ) ||
-					  userProfile?.steamId ||
-					  userProfile?.cs?.steamId64 ? (
+					  profileSteamId ||
+					  csAccount?.steamId64 ? (
 						<div
 							style={{
 								display: "flex",
@@ -499,8 +465,8 @@ export default function GamingAccounts() {
 									{linkedAccounts.find(
 										(acc) => acc.platform === "steam"
 									)?.username ||
-										userProfile?.steamUsername ||
-										userProfile?.cs?.handle ||
+										profileSteamUsername ||
+										csAccount?.handle ||
 										"Steam User"}
 								</div>
 								<div style={{ fontSize: 12, opacity: 0.6 }}>

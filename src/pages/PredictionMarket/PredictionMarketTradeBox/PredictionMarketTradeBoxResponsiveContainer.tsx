@@ -99,6 +99,15 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	crossBuyNo: number | null;
 	/** Max sellable shares for the active venue tab and selected outcome (SOR-scoped). */
 	maxScopedSellShares: number;
+	/**
+	 * True while the active tab's per-token share-balance query is still in
+	 * flight (today: Predict's BSC `balanceOf` and the All-Markets aggregator
+	 * that includes it). The UI uses this to keep the sell input UNLOCKED
+	 * during the BSC RPC roundtrip — locking it for the ~1-2s fetch window
+	 * was making the trade box claim "No shares to sell" before we actually
+	 * knew whether the user holds any.
+	 */
+	sharesLoadingForActiveTab?: boolean;
 	allMarketsSellYesBid?: number | null;
 	allMarketsSellNoBid?: number | null;
 	shareBalances: TradeBoxShareBalancesSnapshot;
@@ -109,14 +118,6 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	 * the trade box for the lifetime of the current `orderResult`.
 	 */
 	dflowUninitAtSubmit?: boolean;
-	/**
-	 * True whenever the user just submitted a DFlow-routed order (whether the
-	 * Kalshi market is already initialized or not). The UI uses this to show a
-	 * generic "balance reflected shortly" notice — broadcast-only completion
-	 * means the SOR leg returns success the moment Solana accepts the tx, and
-	 * the user needs to know their actual Kalshi shares are still settling.
-	 */
-	dflowSubmittedAtSubmit?: boolean;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -152,13 +153,13 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	crossBuyYes,
 	crossBuyNo,
 	maxScopedSellShares,
+	sharesLoadingForActiveTab = false,
 	matchedMonitor,
 	allMarketsSellYesBid = null,
 	allMarketsSellNoBid = null,
 	shareBalances,
 	mobilePeekBar = "default",
 	dflowUninitAtSubmit = false,
-	dflowSubmittedAtSubmit = false,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -368,12 +369,12 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 						sorRouteExpired={sorRouteExpired}
 						handleSorExecute={handleSorExecute}
 						maxScopedSellShares={maxScopedSellShares}
+						sharesLoadingForActiveTab={sharesLoadingForActiveTab}
 						matchedMonitor={matchedMonitor}
 						allMarketsSellYesBid={allMarketsSellYesBid}
 						allMarketsSellNoBid={allMarketsSellNoBid}
 						shareBalances={shareBalances}
 						dflowUninitAtSubmit={dflowUninitAtSubmit}
-						dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
 					/>
 				</div>
 			</div>
@@ -551,12 +552,12 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				sorRouteExpired={sorRouteExpired}
 				handleSorExecute={handleSorExecute}
 				maxScopedSellShares={maxScopedSellShares}
+				sharesLoadingForActiveTab={sharesLoadingForActiveTab}
 				matchedMonitor={matchedMonitor}
 				allMarketsSellYesBid={allMarketsSellYesBid}
 				allMarketsSellNoBid={allMarketsSellNoBid}
 				shareBalances={shareBalances}
 				dflowUninitAtSubmit={dflowUninitAtSubmit}
-				dflowSubmittedAtSubmit={dflowSubmittedAtSubmit}
 			/>
 			</div>
 	</PredictionCurtain>

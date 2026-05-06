@@ -72,8 +72,8 @@ import { PredictionDataProvider } from "context/PredictionDataContext";
 import { OddsMonitorProvider } from "context/OddsMonitorContext";
 import { UserDataProvider } from "context/UserDataContext";
 import { RecentSettlementClaimProvider } from "context/RecentSettlementClaimContext";
-import { CollateralTokenProvider } from "@/context/CollateralTokenContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
+import { AccountDataProvider } from "@/context/AccountDataContext";
 import { PostTradeBalanceSyncProvider } from "@/trading/sor/usePostTradeBalanceSync";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
@@ -90,6 +90,8 @@ import { FirstSignupSetupGate } from "@/onboarding/FirstSignupSetupGate";
 import App from "./app/App";
 import "./styles/globals.css";
 
+// Dev-only: React.StrictMode double-mounts children; you may see duplicate
+// TanStack-driven HTTP in the Network panel compared to production.
 createRoot(document.getElementById("root")!).render(
 	<React.StrictMode>
 		<Router>
@@ -133,6 +135,14 @@ createRoot(document.getElementById("root")!).render(
 					<PredictionDataProvider>
 						<OddsMonitorProvider>
 							<SignerProvider>
+								{/*
+								 * `AccountDataProvider` nests `CollateralTokenProvider` and
+								 * maps `useCollateralTokens()` into `useAccountData().cash` so
+								 * `GET /portfolio/cash-summary` runs once. Other per-user
+								 * queries (profile, overview, venue accounts, positions)
+								 * live in the same provider tree.
+								 */}
+								<AccountDataProvider>
 									<UserDataProvider>
 										<SetupActivationProvider>
 										{/*
@@ -162,7 +172,6 @@ createRoot(document.getElementById("root")!).render(
 										 * script) never see it. */}
 										<FirstSignupSetupGate />
 										<RecentSettlementClaimProvider>
-										<CollateralTokenProvider>
 											<PostTradeBalanceSyncProvider>
 												<PortfolioProvider>
 													<PositionsPageMetricsGateProvider>
@@ -178,10 +187,10 @@ createRoot(document.getElementById("root")!).render(
 													</PositionsPageMetricsGateProvider>
 												</PortfolioProvider>
 											</PostTradeBalanceSyncProvider>
-										</CollateralTokenProvider>
 										</RecentSettlementClaimProvider>
 										</SetupActivationProvider>
 									</UserDataProvider>
+								</AccountDataProvider>
 							</SignerProvider>
 						</OddsMonitorProvider>
 					</PredictionDataProvider>
