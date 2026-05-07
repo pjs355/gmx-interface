@@ -384,18 +384,15 @@ $predictions-compact-card-inline: 60px;
 	width: 100%;
 	box-sizing: border-box;
 	text-align: left;
-	transition:
-		background-color 0.15s ease-in-out,
-		color 0.15s ease-in-out;
+	transition: color 0.15s ease-in-out;
 
 	&:hover {
-		background-color: #1a1a1a;
-		color: #ffffff;
+		color: #9285f3;
 	}
 
 	&.active {
-		background-color: #1a1a1a;
-		color: #ffffff;
+		color: #9285f3;
+		font-weight: bold;
 	}
 }
 
@@ -429,7 +426,7 @@ $predictions-compact-card-inline: 60px;
 
 .game-link:hover .game-link__count,
 .game-link.active .game-link__count {
-	color: #9ca3af;
+	color: #9285f3;
 }
 
 .game-link__label {
@@ -669,7 +666,7 @@ $predictions-compact-card-inline: 60px;
 .prediction-card--compact .prediction-card-outcome-odds-bar {
 	position: relative;
 	width: 100%;
-	height: 3px;
+	height: 1px;
 	border-radius: 9999px;
 	background: transparent;
 	overflow: visible;
@@ -677,7 +674,7 @@ $predictions-compact-card-inline: 60px;
 }
 
 .prediction-card--compact .prediction-card-outcome-odds-bar__fill {
-	height: 100%;
+	height: 50%;
 	border-radius: 9999px;
 	min-width: 0;
 	transition: width 0.2s ease;
@@ -1389,17 +1386,16 @@ $predictions-compact-card-inline: 60px;
 // Same page + pill-strip inset as legacy “mobile” (<768): avoids an extra pad jump crossing 768px.
 @media (max-width: 1099px) {
 	.predictions-page {
-		padding-left: 8px;
-		padding-right: 8px;
-		padding-top: 8px;
-		padding-bottom: 8px;
+		/* Match `.prediction-calendar-header` horizontal inset (see `.prediction-calendar`). */
+		--prediction-calendar-heading-inline: #{$predictions-compact-card-inline};
+		padding: 0;
 	}
 
 	.game-links-wrapper {
-		margin-left: -8px;
-		margin-right: -8px;
-		padding-left: 8px;
-		padding-right: 8px;
+		margin-left: 0;
+		margin-right: 0;
+		padding-left: var(--prediction-calendar-heading-inline);
+		padding-right: var(--prediction-calendar-heading-inline);
 	}
 
 	.predictions-grid {
@@ -1462,14 +1458,18 @@ $predictions-compact-card-inline: 60px;
 		min-width: 0;
 	}
 
-	/* Matches `.prediction-market-page .desktop-layout > .right-panel`: column shell handles wash + inner scroll. */
+	/*
+	 * Sticky rail (same idea as `.prediction-market-page .desktop-layout > .right-panel`):
+	 * main column sets page height; trade panel stays under the header while scrolling.
+	 */
 	.predictions-page__home-trade-panel.right-panel {
-		position: relative;
+		position: sticky;
+		top: var(--app-header-height, 6.2rem);
+		align-self: start;
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		min-height: 0;
-		align-self: stretch;
+		border-left: 1px solid rgba(229, 231, 235, 0.22);
 		/*
 		 * Fill the full space between header and viewport bottom — no 24px
 		 * gap. Combined with `margin-top: 0` on the trade box below, this
@@ -1477,8 +1477,9 @@ $predictions-compact-card-inline: 60px;
 		 * footer (bottom) when scrolling, instead of showing a black strip
 		 * before the footer scrolls up.
 		 */
+		min-height: calc(100vh - var(--app-header-height, 6.2rem));
 		max-height: calc(100vh - var(--app-header-height, 6.2rem));
-		overflow-y: auto;
+		overflow-y: hidden;
 		overflow-x: hidden;
 		overscroll-behavior-y: contain;
 		-webkit-overflow-scrolling: touch;
@@ -1600,10 +1601,7 @@ $predictions-compact-card-inline: 60px;
 			position: sticky;
 			top: var(--app-header-height, 6.2rem);
 			padding-top: 10px;
-			/*
-			 * Hover `::before` on `.game-link` uses `left: -16px`; reserve that
-			 * inset inside our scroll clips so rounding + fill are not cropped.
-			 */
+			/* Reserve inset so scroll clipping does not crop link focus rings / edges. */
 			padding-left: 16px;
 			margin-left: -16px;
 			width: calc(100% + 16px);
@@ -1660,31 +1658,19 @@ $predictions-compact-card-inline: 60px;
 		text-align: left;
 		transition: color 0.15s ease-in-out;
 
-		/* Hover/active fill extends left so the block matches symmetric padding visually; text does not shift. */
-		&::before {
-			content: "";
-			position: absolute;
-			top: 0;
-			bottom: 0;
-			left: -16px;
-			right: 0;
-			border-radius: 8px;
-			background-color: transparent;
-			transition: background-color 0.15s ease-in-out;
-			z-index: 0;
-			pointer-events: none;
+		&:hover {
+			color: #9285f3;
 		}
 
-		&:hover,
 		&.active {
-			background-color: transparent;
-			color: #ffffff;
+			color: #9285f3;
+			font-weight: bold;
 		}
+	}
 
-		&:hover::before,
-		&.active::before {
-			background-color: #1a1a1a;
-		}
+	.predictions-page__body > .game-links-wrapper .game-link:hover .game-link__count,
+	.predictions-page__body > .game-links-wrapper .game-link.active .game-link__count {
+		color: #9285f3;
 	}
 
 	.predictions-page__body > .game-links-wrapper .game-link__inner {

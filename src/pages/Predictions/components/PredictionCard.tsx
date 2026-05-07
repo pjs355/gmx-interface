@@ -795,6 +795,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					compact
 					yesLogoSlot={renderOutcomeLogoSlot(0)}
 					noLogoSlot={renderOutcomeLogoSlot(1)}
+					yesInvertLogo={teamLogos[0]?.invertLogo === true}
+					noInvertLogo={teamLogos[1]?.invertLogo === true}
 				/>
 			);
 		} else if (umbrella.children && umbrella.children.length >= 2) {
