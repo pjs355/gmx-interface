@@ -96,7 +96,12 @@ import "./styles/globals.css";
 // TanStack-driven HTTP in the Network panel compared to production.
 createRoot(document.getElementById("root")!).render(
 	<React.StrictMode>
-		<Router>
+		<Router
+			future={{
+				v7_startTransition: true,
+				v7_relativeSplatPath: true,
+			}}
+		>
 			<PrivyProvider
 				appId="cmb7ccvbd011hl50m62vf8epr"
 				config={{

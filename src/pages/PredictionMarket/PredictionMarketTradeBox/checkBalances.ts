@@ -19,7 +19,7 @@ export function useYesNoBalances(market: {
 	_id?: string;
 }) {
 	const { account } = useSignerContext();
-	const { getTokenBalance } = useUserData();
+	const { getTokenBalance, tokenBalances } = useUserData();
 	const [yesBalance, setYesBalance] = useState<number>(0);
 	const [noBalance, setNoBalance] = useState<number>(0);
 
@@ -68,6 +68,7 @@ export function useYesNoBalances(market: {
 		market?.noTokenId,
 		market?._id,
 		getTokenBalance,
+		tokenBalances,
 	]);
 
 	return { yesBalance, noBalance };
@@ -136,6 +137,51 @@ export function checkSufficientBalance(
  * number.
  */
 export const SHARE_SELL_COMPARE_EPS = 0.01;
+
+/** Display helper — rounds DOWN like MyPositionsRow so headline counts match typed caps. */
+export function formatShareCountDisplay(n: number): string {
+	if (!Number.isFinite(n)) return String(n);
+	if (Number.isInteger(n) || Math.abs(n - Math.round(n)) < 1e-9) {
+		return String(Math.round(n));
+	}
+	const floored = Math.floor(n * 100) / 100;
+	return new Intl.NumberFormat("en-US", {
+		maximumFractionDigits: 2,
+		minimumFractionDigits: 0,
+	}).format(floored);
+}
+
+/** Clamp sell share quantity to scoped max; optionally floor for whole-share venues. */
+export function clampSellSharesNumeric(
+	n: number,
+	maxScoped: number,
+	requiresWholeShares: boolean,
+): number {
+	if (!Number.isFinite(n) || maxScoped <= 0) return n;
+	let cap = maxScoped;
+	if (requiresWholeShares) {
+		cap = Math.floor(cap);
+	}
+	let v = Math.min(n, cap);
+	if (requiresWholeShares) {
+		v = Math.floor(v);
+	}
+	return v;
+}
+
+/** String to pass to amount state after sell share clamp (stable decimals when fractional). */
+export function clampedSellSharesAmountString(
+	clamped: number,
+	requiresWholeShares: boolean,
+): string {
+	if (!Number.isFinite(clamped)) return "";
+	if (requiresWholeShares) return String(Math.round(clamped));
+	if (Number.isInteger(clamped) || Math.abs(clamped - Math.round(clamped)) < 1e-9) {
+		return String(Math.round(clamped));
+	}
+	const t = Math.floor(clamped * 1e8) / 1e8;
+	return String(t);
+}
 
 // Function to check if user has sufficient YES/NO token shares for sell orders
 export function checkSufficientShares(

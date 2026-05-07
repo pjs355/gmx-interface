@@ -1,7 +1,6 @@
 import { useCallback, useMemo, type MutableRefObject } from "react";
-import { useSendTransaction } from "@privy-io/react-auth";
 import { encodeFunctionData, erc20Abi, formatUnits } from "viem";
-import { base, bsc } from "viem/chains";
+import { base } from "viem/chains";
 import { Side } from "@polymarket/clob-client-v2";
 import type { TickSize } from "@polymarket/clob-client-v2";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
@@ -15,6 +14,7 @@ import { validateLegMinimum } from "./sorPreflight";
 import { CHAIN_LIFI_IDS } from "./sor-types";
 import type { SolanaSignerCapable, SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
+import { useFundingLifiExecution } from "@/trading/lifi/useFundingLifiExecution";
 import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
 import type { LifiStatusResponse, LifiQuoteResponse } from "@/types/trading";
@@ -46,7 +46,6 @@ import {
 	ensurePrefundQuoteMeetsDestMin,
 	type PrefundLifiQuoteClient,
 } from "@/trading/sor/lifiPrefundQuoteSolve";
-import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import {
 	buildPolygonSafeUsdceWrapTransactions,
 	readPolymarketSafeCtfBalanceWei,
@@ -56,6 +55,10 @@ import {
 import { clampMarketBuyAmountToWallet } from "@/trading/sor/postBridgeOrderResize";
 import { clampMarketSellSharesToCtfBalance } from "@/trading/polymarket/polymarketSellShareClamp";
 import { wireAmountUsdForVenue } from "@/trading/sor/wireAmount";
+import {
+	levelUpBuySignedPremiumUsdHuman,
+	resolveLevelUpSigningPrice,
+} from "@/trading/sor/levelUpSorSigning";
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
@@ -502,7 +505,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		reportExecutionPhaseRef,
 	} = deps;
 
-	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
+	const {
+		getSignerForChain,
+		preparePolygonRelay,
+		buildExecuteLifiStepsOptions,
+	} = useFundingLifiExecution();
 
 	const reportSorExecutionPhase = (phase: SorExecutionPhase) => {
 		reportExecutionPhaseRef?.current?.(phase);
@@ -567,14 +574,12 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 					const position: "yes" | "no" = leg.outcome === "A" ? "yes" : "no";
 					const shares = Math.round(leg.shares);
-					const maxPx = leg.maxPrice;
-					const signingPrice = isLimit
-						? Math.round((limitPrice as number) * 100) / 100
-						: maxPx != null && Number.isFinite(maxPx) && maxPx > 0 && maxPx <= 1
-							? Math.round(maxPx * 100) / 100
-							: side === "buy"
-								? Math.round(Math.min(leg.avgPrice * 1.15, 0.99) * 100) / 100
-								: Math.round(Math.max(leg.avgPrice * 0.85, 0.01) * 100) / 100;
+					const signingPrice = resolveLevelUpSigningPrice({
+						leg,
+						side,
+						isLimit,
+						limitPrice,
+					});
 
 					const params: TradeExecutionParams = {
 						marketId: questionId,
@@ -1473,6 +1478,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				 */
 				budgetUsdOverride?: number;
 				onPrefundProgress?: (p: { current: number; total: number }) => void;
+				/** LevelUp: require quoted LiFi min-dest ≥ full prefund step need at send cap. */
+				strictLifiDestMinAtSendCap?: boolean;
 			},
 		): Promise<BridgeResult> => {
 			const bridge = leg.bridge;
@@ -1502,7 +1509,6 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				};
 			}
 
-			const BNB_CHAIN_ID = bsc.id;
 			const POLYGON_CHAIN_ID = 137;
 
 			try {
@@ -1522,6 +1528,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				const prefundAnchorUsd = resolveBuyPrefundAnchorUsd(
 					routeBridgeUsd,
 					leg.executionAmountUsd,
+					opts?.amountUsdOverride != null
+						? undefined
+						: leg.venue === "levelup"
+							? levelUpBuySignedPremiumUsdHuman(leg)
+							: undefined,
 				);
 				const needHuman = computePrefundNeedUsdHuman(
 					prefundAnchorUsd,
@@ -1789,6 +1800,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								maxFromHuman,
 								budgetUsd: stepBudgetUsd,
 								seedAmountHuman: step.amountHuman,
+								strictDestMinAtSendCap:
+									opts?.strictLifiDestMinAtSendCap === true,
 							});
 							quote = solved.quote;
 							spentHumanForLedger = Number(solved.amountHuman);
@@ -1835,43 +1848,18 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						}
 
 						const needsRelay = fromChainLifi === POLYGON_CHAIN_ID;
-						let relayClient: RelayClient | null = null;
-						if (needsRelay) {
-							relayClient = await getRelayClient();
-						}
+						const polygonRelay = await preparePolygonRelay(needsRelay);
 
-						const allowanceOwnerByChainId: Partial<Record<number, string>> = {};
-						if (fundingAddresses.baseSmartWallet) {
-							allowanceOwnerByChainId[8453] = fundingAddresses.baseSmartWallet;
-						}
-						if (fundingAddresses.polymarketSafe) {
-							allowanceOwnerByChainId[POLYGON_CHAIN_ID] = fundingAddresses.polymarketSafe;
-						}
-						if (fundingAddresses.embeddedEoa) {
-							allowanceOwnerByChainId[BNB_CHAIN_ID] = fundingAddresses.embeddedEoa;
-						}
+						const routeIncludesSolana =
+							fromChainLifi === SOLANA_LIFI_CHAIN_ID ||
+							toChainLifi === SOLANA_LIFI_CHAIN_ID;
 
-						const bridgeGetSigner = async (
-							chainId: number,
-						): Promise<SendTransactionCapable | null> => {
-							if (chainId === BNB_CHAIN_ID) {
-								const addr = fundingAddresses.embeddedEoa as `0x${string}` | undefined;
-								if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
-									return null;
-								}
-								return createPrivyEmbeddedSendTransactionCapable(
-									addr,
-									bsc,
-									privyEvmSendTransaction,
-								);
-							}
-							const client = await getClientForChain({ id: chainId });
-							if (!client) return null;
-							return {
-								sendTransaction: (
-									args: Parameters<SendTransactionCapable["sendTransaction"]>[0],
-								) => client.sendTransaction(args),
-							};
+						const lifiStepOptions = {
+							...buildExecuteLifiStepsOptions(quote, {
+								routeIncludesSolana,
+								polygonRelay,
+							}),
+							...(solanaSigner != null ? { solanaSigner } : {}),
 						};
 
 						console.warn("[SOR][prefund] executing LI.FI on-chain steps (wallet may prompt)…", {
@@ -1887,23 +1875,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							const lifiOnchain = await withTimeout(
 								executeLifiSteps(
 									quote.steps as Parameters<typeof executeLifiSteps>[0],
-									bridgeGetSigner,
-									{
-										allowanceOwnerByChainId,
-										polygonRelay:
-											needsRelay && relayClient && fundingAddresses.polymarketSafe
-												? {
-														client: relayClient,
-														walletAddress: fundingAddresses.polymarketSafe,
-													}
-												: undefined,
-										solanaSigner: solanaSigner ?? undefined,
-										rawLifiRoute: quote.quote,
-										polygonSafeUnwrapPrerequisite: quote.polygonSafeUnwrapPrerequisite ?? undefined,
-										...(fundingAddresses.solanaAddress?.trim()
-											? { solanaTokenOwnerAddress: fundingAddresses.solanaAddress.trim() }
-											: {}),
-									},
+									getSignerForChain,
+									lifiStepOptions,
 								),
 								SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS,
 								"SOR LI.FI on-chain steps (approvals / bridge tx)",
@@ -1992,6 +1965,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			getClientForChain,
 			getRelayClient,
 			solanaSigner,
+			getSignerForChain,
+			preparePolygonRelay,
+			buildExecuteLifiStepsOptions,
 		],
 	);
 

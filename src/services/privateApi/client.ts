@@ -46,6 +46,7 @@ import type {
 	CashSummary,
 } from "@/types/trading";
 import { PrivateApiError } from "./errors";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 /** Browser fetch budget for `POST /api/dflow/orders` — must exceed server order-status poll (~180s). */
 export const DFLOW_ORDER_SUBMIT_FETCH_TIMEOUT_MS = 240_000;
@@ -1306,7 +1307,11 @@ export function createPrivateApiClient(
 				body: JSON.stringify({}),
 			});
 			const data = await readJson<LimitlessEnsureAccountResponse>(res);
-			if (import.meta.env.DEV && data?.canonicalSlugMissing) {
+			if (
+				import.meta.env.DEV &&
+				isTradingDebugLoggingEnabled() &&
+				data?.canonicalSlugMissing
+			) {
 				console.info("[Limitless/API]", "ensure-account", {
 					canonicalSlugMissing: true,
 					note: "Warmup allowance probe skipped — configure an active Umbrella with exchangeMatching.limitless.slug for server-side spender snapshot.",
@@ -1321,7 +1326,7 @@ export function createPrivateApiClient(
 		): Promise<LimitlessVerifyAllowanceResult> {
 			const slug = marketSlug.trim();
 			const tokenId = opts?.tokenId?.trim();
-			if (import.meta.env.DEV) {
+			if (import.meta.env.DEV && isTradingDebugLoggingEnabled()) {
 				console.info("[Limitless/API]", "POST verify-allowance", {
 					marketSlug: slug,
 					tokenId: tokenId ? `${tokenId.slice(0, 14)}…` : undefined,
@@ -1334,7 +1339,12 @@ export function createPrivateApiClient(
 				),
 			});
 			const out = await readJson<LimitlessVerifyAllowanceResult>(res);
-			if (import.meta.env.DEV && out && typeof out === "object") {
+			if (
+				import.meta.env.DEV &&
+				isTradingDebugLoggingEnabled() &&
+				out &&
+				typeof out === "object"
+			) {
 				const o = out as Record<string, unknown>;
 				const clip = (s: unknown, n = 12) =>
 					typeof s === "string" && s.length > n ? `${s.slice(0, n)}…` : s;
@@ -1381,7 +1391,7 @@ export function createPrivateApiClient(
 		},
 
 		async postLimitlessOrder(body: LimitlessOrderRequest): Promise<unknown> {
-			if (import.meta.env.DEV) {
+			if (import.meta.env.DEV && isTradingDebugLoggingEnabled()) {
 				console.info("[Limitless/API]", "POST orders (submit)", {
 					marketSlug: body.marketSlug,
 					orderType: body.orderType,
@@ -1395,7 +1405,7 @@ export function createPrivateApiClient(
 			});
 			try {
 				const parsed = await readJson<unknown>(res);
-				if (import.meta.env.DEV) {
+				if (import.meta.env.DEV && isTradingDebugLoggingEnabled()) {
 					const po = parsed as Record<string, unknown> | null;
 					const meta =
 						po && typeof po === "object" && "_meta" in po

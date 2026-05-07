@@ -11,7 +11,7 @@ import {
 } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 // import { ethers } from "ethers";
-import type { TradeBoxProps, TradeExecutionParams } from "./types";
+import type { TradeBoxProps, TradeExecutionParams, TradingVenue } from "./types";
 import { useMarketOrderHandler } from "./MarketOrderHandler";
 // import { useLimitOrderHandler } from "./LimitOrderHandler";
 import { useTradeExecutionService } from "./TradeExecutionService";
@@ -95,6 +95,7 @@ import type {
 	ChainBalance,
 	VenuePositionEntry,
 	SorOutcome,
+	SorVenue,
 	RoutePlan,
 } from "@/trading/sor";
 import { usePostTradeBalanceSync } from "@/trading/sor/usePostTradeBalanceSync";
@@ -103,6 +104,7 @@ import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOu
 import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+import { getMarketId } from "@/pages/PredictionMarket/utils";
 import { maxAllMarketsSellBidForOutcome } from "@/hooks/useTradingPagePrices";
 import { useTradeBoxShareBalances } from "./hooks/useTradeBoxShareBalances";
 import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
@@ -112,10 +114,6 @@ import {
 	limitlessOrderbookForPosition,
 	limitlessOutcomeTokenId,
 } from "@/trading/limitless/limitlessOrderbook";
-import {
-	useLimitlessPositions,
-	limitlessSharesForToken,
-} from "@/trading/limitless/useLimitlessPositions";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "./feeLimitless";
 import {
 	getLimitlessEnsureTradeGate,
@@ -137,6 +135,15 @@ export interface PredictionMarketTradeBoxHandle {
   executeTrade: () => Promise<void>;
   getState: () => any;
 }
+
+/** Venue keys when reading `allMarketsOutcomeVenueShares` into SOR sell legs. */
+const SOR_VENUE_POSITION_KEYS: readonly SorVenue[] = [
+	"levelup",
+	"polymarket",
+	"predictfun",
+	"dflow",
+	"limitless",
+];
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
   ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip, mobilePeekBar = "default", tradeRouteIsolationKey }, ref) => {
@@ -280,12 +287,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     return set;
   }, [matchedMonitor]);
 
-  useEffect(() => {
-    const v = state.tradingVenue;
-    if (v === "all") return;
-    if (matchedVenues.has(v)) return;
-    handleTradingVenueChange(pandaId ? "all" : "levelup");
-  }, [matchedVenues, state.tradingVenue, pandaId, handleTradingVenueChange]);
+  /** Mirrors `PredictionMarketTradeBoxUI` smart-routing strip: pandascore link + 2+ tradeable venues → "All Markets" row. */
+  const smartRoutingSurfaceActive = useMemo(
+    () => Boolean(pandaId && matchedVenues.size > 1),
+    [pandaId, matchedVenues],
+  );
 
   useEffect(() => {
     if (!isPredictionPricingDebugEnabled()) return;
@@ -538,76 +544,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     yesTeamLabel,
     noTeamLabel,
   ]);
-
-  /**
-   * Single source of truth for Predict share balances — the same value
-   * `MyPositionsRow` displays under "Your Position".
-   *
-   * Previously this read from a separate BSC `balanceOf` RPC call
-   * (`usePredictOutcomeShareOnChain`) keyed off `predictApprovalSubject` (the
-   * embedded Privy EOA). The trade-box position display reads from
-   * `usePredictPositions(signerAddress)` (LevelUp's authenticated Predict
-   * proxy). When those two addresses or queries disagreed — different wallet
-   * resolution, BSC RPC slow / failing, wrong CTF contract picked from
-   * `isNegRisk`/`isYieldBearing` flags, token-id resolution race against
-   * `matchedMonitor` / `predictMarketDetail` — the trade-box would render
-   * "Your Position: 7.35 paiN Academy" while the Sell button says "No shares
-   * to sell" and locks the input. Two sources of truth for the user's own
-   * holdings is unforgivable UX; collapse to one.
-   *
-   * `tradeBoxShareBalances.allMarketsOutcomeVenueShares` already aggregates
-   * `usePredictPositions` rows scoped to the active umbrella+market, so
-   * gating on it is, by construction, exactly what the user sees.
-   */
-  const predictSellShareBalance = useMemo<number | null>(() => {
-    if (!state.selectedPosition) return null;
-    const sideMap =
-      state.selectedPosition === "yes"
-        ? tradeBoxShareBalances.allMarketsOutcomeVenueShares.yes
-        : tradeBoxShareBalances.allMarketsOutcomeVenueShares.no;
-    const v = sideMap.predictfun;
-    if (typeof v !== "number" || !Number.isFinite(v)) return null;
-    return v;
-  }, [
-    state.selectedPosition,
-    tradeBoxShareBalances.allMarketsOutcomeVenueShares,
-  ]);
-
-  /**
-   * True while the Predict positions API is still resolving for the active
-   * page market. Drives the "Loading your Predict shares…" button copy and
-   * keeps the sell input UNLOCKED through the API roundtrip — same source
-   * of truth as the display, so the UI can never disagree with itself.
-   */
-  const predictSellShareLoading =
-    tradeBoxShareBalances.loading && predictSellShareBalance == null;
-
-  const limitlessTokenIdForSell = useMemo(() => {
-    if (!limitlessVenueActive || !matchedMonitor || !state.selectedPosition) return null;
-    return limitlessOutcomeTokenId(
-      matchedMonitor,
-      state.selectedPosition,
-      yesTeamLabel,
-      noTeamLabel,
-    );
-  }, [
-    limitlessVenueActive,
-    matchedMonitor,
-    state.selectedPosition,
-    yesTeamLabel,
-    noTeamLabel,
-  ]);
-
-  // SOR sell on the always-on All-Markets tab needs Limitless shares regardless of the
-  // active venue tab. Mirrors the Predict gate (`multiVenueEnabled || predictVenueActive`).
-  const limitlessPositionsQuery = useLimitlessPositions(
-    (multiVenueEnabled || limitlessVenueActive) && authenticated && Boolean(profileId),
-  );
-  const limitlessSellShareBalance = useMemo(
-    () =>
-      limitlessSharesForToken(limitlessPositionsQuery.data, limitlessTokenIdForSell),
-    [limitlessPositionsQuery.data, limitlessTokenIdForSell],
-  );
 
   const predictVenueBookHints = useMemo(() => {
     if (!predictVenueActive || !matchedMonitor) return null;
@@ -1024,8 +960,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
        * instead of blocking the UI on the redundant ensure roundtrip.
        */
       approvalsOk: predictApprovalsQuery.data === true,
-      /** True while the BSC RPC outcome `balanceOf` is in flight. */
-      sellShareLoading: predictSellShareLoading,
     }),
     [
       pandaId,
@@ -1042,7 +976,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       predictMarketQuery.isError,
       predictOrderbookQuery.isLoading,
       predictApprovalsQuery.data,
-      predictSellShareLoading,
     ]
   );
 
@@ -1070,6 +1003,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   // Notify parent when position changes; SOR ("all") buy: sync reference limit cents to cross-venue best
   const onPositionChangeWrapper = useCallback((position: "yes" | "no") => {
+    if (state.side === "sell") {
+      handleAmountChange("");
+    }
     handlePositionChange(position);
     onPositionChange?.(position);
     if (state.tradingVenue === "all") {
@@ -1079,7 +1015,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         if (cents != null) handlePriceChange(cents);
       }
     }
-  }, [handlePositionChange, onPositionChange, state.tradingVenue, crossBuyPrices.crossBuyYes, crossBuyPrices.crossBuyNo, handlePriceChange]);
+  }, [
+    handleAmountChange,
+    handlePositionChange,
+    onPositionChange,
+    state.side,
+    state.tradingVenue,
+    crossBuyPrices.crossBuyYes,
+    crossBuyPrices.crossBuyNo,
+    handlePriceChange,
+  ]);
 
   useEffect(() => {
     if (state.tradingVenue !== "all" || !state.selectedPosition) return;
@@ -1099,11 +1044,30 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     handlePriceChange,
   ]);
 
+  /** Latest venue/tab lock — `onSideChangeWrapper` is declared before `useSorExecution`
+   *  so it reads this ref, which we sync right after computing `venueSelectionLocked`. */
+  const venueSelectionLockedRef = useRef(false);
+
   // Notify parent when side changes (buy/sell)
-  const onSideChangeWrapper = useCallback((side: "buy" | "sell") => {
-    handleSideChange(side);
-    onSideChangeCallback?.(side);
-  }, [handleSideChange, onSideChangeCallback]);
+  const onSideChangeWrapper = useCallback(
+    (side: "buy" | "sell") => {
+      handleSideChange(side);
+      if (
+        side === "sell" &&
+        smartRoutingSurfaceActive &&
+        !venueSelectionLockedRef.current
+      ) {
+        handleTradingVenueChange("all");
+      }
+      onSideChangeCallback?.(side);
+    },
+    [
+      handleSideChange,
+      smartRoutingSurfaceActive,
+      handleTradingVenueChange,
+      onSideChangeCallback,
+    ],
+  );
 
   // Market-order sizing: walks effectiveOrderbook, applies venue-specific fees.
   const calculatedMarketOrderData = useMemo(() => {
@@ -1778,6 +1742,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     },
     setSide: (side: 'buy' | 'sell') => {
       handleSideChange(side);
+      if (side === "sell" && smartRoutingSurfaceActive) {
+        handleTradingVenueChange("all");
+      }
     },
     executeTrade: async () => {
       if (!authenticated) {
@@ -1823,7 +1790,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       runSor();
     },
     getState: () => state,
-  }), [handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, state, authenticated, account, yesBalance, noBalance, checkSufficientShares]);
+  }), [
+    handlePositionChange,
+    handleAmountChange,
+    handlePriceChange,
+    handleOrderTypeChange,
+    handleSideChange,
+    handleTradingVenueChange,
+    smartRoutingSurfaceActive,
+    state,
+    authenticated,
+    account,
+    yesBalance,
+    noBalance,
+    checkSufficientShares,
+  ]);
 
   // SOR execution wiring: executor callbacks + multi-chain wallet balances
   const sorReportExecutionPhaseRef = useRef<
@@ -1896,51 +1877,29 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   // --- SOR sell: per-venue share positions ---
-  // Single source of truth = `tradeBoxShareBalances.allMarketsOutcomeVenueShares`,
-  // the same aggregate that powers `MyPositionsRow`'s "Your Position" line.
-  // Polymarket + DFlow already route through `inferPolymarketYesNoFromToken`'s
-  // BigInt-normalized tokenId comparison. Predict + Limitless are sourced
-  // directly from their venue positions queries (`usePredictPositions` /
-  // `useLimitlessPortfolioVenue`) inside `useTradeBoxShareBalances`, so the
-  // gate the user sees is, by construction, the gate they get.
+  // Single source of truth = `tradeBoxShareBalances.allMarketsOutcomeVenueShares`
+  // (same as MyPositionsRow / smart-routing sell breakdown).
+  //
+  // Do not mix in `useYesNoBalances` here: it keys off `market._id` only, while
+  // UserData token balances may live under `questionId`. That drift dropped LevelUp
+  // from `sorVenuePositions` (0 YES/NO from the hook) while Kalshi still showed from
+  // venue portfolios — `maxScopedSellShares` looked like "Kalshi only" (e.g. 5) and
+  // the sell input clamped there even though LevelUp + Kalshi = 9.
   const sorVenuePositions: VenuePositionEntry[] = useMemo(() => {
     if (!state.selectedPosition) return [];
-    const entries: VenuePositionEntry[] = [];
-
-    const luBal = state.selectedPosition === "yes" ? yesBalance : noBalance;
-    if (luBal > 0) entries.push({ venue: "levelup", shares: luBal });
-
     const byOutcome = tradeBoxShareBalances.allMarketsOutcomeVenueShares;
     const sideMap =
       state.selectedPosition === "yes" ? byOutcome.yes : byOutcome.no;
 
-    const polyShares = sideMap.polymarket;
-    if (typeof polyShares === "number" && Number.isFinite(polyShares) && polyShares > 0) {
-      entries.push({ venue: "polymarket", shares: polyShares });
+    const entries: VenuePositionEntry[] = [];
+    for (const venue of SOR_VENUE_POSITION_KEYS) {
+      const sh = sideMap[venue];
+      if (typeof sh === "number" && Number.isFinite(sh) && sh > 0) {
+        entries.push({ venue, shares: sh });
+      }
     }
-
-    const pfBal = sideMap.predictfun;
-    if (typeof pfBal === "number" && Number.isFinite(pfBal) && pfBal > 0) {
-      entries.push({ venue: "predictfun", shares: pfBal });
-    }
-
-    const dfBal = sideMap.dflow;
-    if (typeof dfBal === "number" && Number.isFinite(dfBal) && dfBal > 0) {
-      entries.push({ venue: "dflow", shares: dfBal });
-    }
-
-    const lxBal = sideMap.limitless;
-    if (typeof lxBal === "number" && Number.isFinite(lxBal) && lxBal > 0) {
-      entries.push({ venue: "limitless", shares: lxBal });
-    }
-
     return entries;
-  }, [
-    state.selectedPosition,
-    yesBalance,
-    noBalance,
-    tradeBoxShareBalances.allMarketsOutcomeVenueShares,
-  ]);
+  }, [state.selectedPosition, tradeBoxShareBalances.allMarketsOutcomeVenueShares]);
 
   /** Sell routing + button state: single-venue tabs only include that venue’s shares. */
   const sorVenuePositionsForActiveTab = useMemo(() => {
@@ -2003,8 +1962,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   // Respect the product-wide SOR floors so we never call the route API below
   // a minimum — avoids stale/broken previews and keeps the button on the
-  // "Trade minimum is $5" / "$5 minimum limit order value" / "Minimum sell is
-  // 1 share" disabled state until the user types a valid amount.
+  // "Trade minimum is $2." / "$2 minimum limit order value." / "Minimum sell is
+  // 1 share." disabled state until the user types a valid amount.
   const sorAmountMeetsFloor = (() => {
     if (sorAmountUsd <= 0) return false;
     if (state.orderType === "limit") {
@@ -2025,10 +1984,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     350,
   );
 
-  const smartRoutingMarketKey = useMemo(() => {
-    const id = market?._id ?? (market as { questionId?: string })?.questionId;
-    return typeof id === "string" ? id.trim() : "";
-  }, [market]);
+  /** Same identity as orderbook keys / umbrella pills (`marketId` fallback, not only `_id`). */
+  const smartRoutingMarketKey = useMemo(() => getMarketId(market).trim(), [market]);
+
+  const sorQuestionId = useMemo(
+    () => getMarketId(market) || undefined,
+    [market],
+  );
 
   const sorRouteEnabled = !!state.selectedPosition
     && sorAmountMeetsFloor
@@ -2047,7 +2009,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const sorTargetVenue = state.tradingVenue !== "all" ? state.tradingVenue : undefined;
 
   const sorRoute = useSorRoute({
-    questionId: market?._id || (market as any)?.questionId,
+    questionId: sorQuestionId,
     outcome: sorRouteOutcome,
     side: state.side,
     amount: sorAmountUsd,
@@ -2140,6 +2102,60 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     reportExecutionPhaseRef: sorReportExecutionPhaseRef,
   });
 
+  const venueSelectionLocked =
+    sorExecution.isExecuting || state.isLoading;
+  venueSelectionLockedRef.current = venueSelectionLocked;
+
+  const handleTradingVenueChangeGuarded = useCallback(
+    (next: TradingVenue) => {
+      if (sorExecution.isExecuting || state.isLoading) return;
+      handleTradingVenueChange(next);
+    },
+    [sorExecution.isExecuting, state.isLoading, handleTradingVenueChange],
+  );
+
+  useEffect(() => {
+    if (venueSelectionLocked) return;
+    const v = state.tradingVenue;
+    if (v === "all") return;
+    if (matchedVenues.has(v)) return;
+    handleTradingVenueChangeGuarded(pandaId ? "all" : "levelup");
+  }, [
+    venueSelectionLocked,
+    matchedVenues,
+    state.tradingVenue,
+    pandaId,
+    handleTradingVenueChangeGuarded,
+  ]);
+
+  useEffect(() => {
+    if (venueSelectionLocked) return;
+    if (state.side !== "sell" || !propUmbrellaId || !account) return;
+    if (tradeBoxShareBalances.loading) return;
+    if (!(tradeBoxShareBalances.sellTotalShares > 0)) return;
+    if (maxScopedSellShares > 0) return;
+
+    if (multiVenueEnabled) {
+      handleTradingVenueChangeGuarded("all");
+      return;
+    }
+    const first = sorVenuePositions[0]?.venue;
+    if (first) {
+      handleTradingVenueChangeGuarded(first);
+    }
+  }, [
+    venueSelectionLocked,
+    state.side,
+    propUmbrellaId,
+    account,
+    tradeBoxShareBalances.loading,
+    tradeBoxShareBalances.sellTotalShares,
+    maxScopedSellShares,
+    multiVenueEnabled,
+    sorVenuePositions,
+    handleTradingVenueChangeGuarded,
+  ]);
+
   const prevSmartRoutingMarketKeyRef = useRef<string | null>(null);
   useEffect(() => {
     const key = smartRoutingMarketKey;
@@ -2191,9 +2207,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         matchedMonitor?.dflow?.accountsInitializedA === false ||
         matchedMonitor?.dflow?.accountsInitializedB === false;
       setDflowUninitAtSubmit(executingDflow && dflowAnyUninit);
-      const marketId = (market?._id || (market as any)?.questionId) as
-        | string
-        | undefined;
+      const marketId = sorQuestionId as string | undefined;
       const baseline = capturePostTradeBaseline({
         queryClient,
         route: executableRoute,
@@ -2442,17 +2456,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   ]);
 
   useEffect(() => {
+    if (venueSelectionLocked) return;
     if (pandaId && state.tradingVenue !== "all") {
-      handleTradingVenueChange("all");
+      handleTradingVenueChangeGuarded("all");
     } else if (!pandaId && state.tradingVenue === "all") {
-      handleTradingVenueChange("levelup");
+      handleTradingVenueChangeGuarded("levelup");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pandaId]);
 
   useEffect(() => {
+    if (venueSelectionLocked) return;
     if (venueOverride && venueOverride !== state.tradingVenue) {
-      handleTradingVenueChange(venueOverride);
+      handleTradingVenueChangeGuarded(venueOverride);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venueOverride]);
@@ -2474,9 +2490,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     polymarketTrading,
     orderbookWalkPosition,
     predictTrading,
-    predictSellShareBalance,
     limitlessTrading,
-    limitlessSellShareBalance,
     dflowProofVerified: dflowProof.isVerified,
     dflowProofLoading: dflowProof.isLoading,
     dflowStartProofFlow: handleStartDflowProofForTrade,
@@ -2515,22 +2529,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }, [executionGate.blocked, buttonState, state.tradingVenue]);
 
   /**
-   * True when the active tab's share-balance query is still in flight. The UI
-   * uses this to keep the sell input UNLOCKED during the BSC/Base RPC
-   * roundtrip — locking it during loading was the root cause of "it blocks me
-   * because it thinks I do not have shares". Scoped per-tab so we don't
-   * unlock when the active venue's query has finished but a different
-   * venue's hasn't.
+   * Unlock sell UX whenever aggregate holdings are already known (`sellTotalShares`),
+   * even if some venue queries are still catching up — same numbers as MyPositionsRow.
    */
   const sharesLoadingForActiveTab = useMemo(() => {
-    if (state.tradingVenue === "predictfun") return predictSellShareLoading;
-    if (state.tradingVenue === "all") {
-      // SOR-routed sells aggregate every venue's positions, so any venue's
-      // pending share lookup can falsely zero out `maxScopedSellShares`.
-      return predictSellShareLoading;
-    }
-    return false;
-  }, [state.tradingVenue, predictSellShareLoading]);
+    if (!authenticated || !propUmbrellaId) return false;
+    if (tradeBoxShareBalances.sellTotalShares > 0) return false;
+    return tradeBoxShareBalances.loading;
+  }, [
+    authenticated,
+    propUmbrellaId,
+    tradeBoxShareBalances.sellTotalShares,
+    tradeBoxShareBalances.loading,
+  ]);
 
   // executionGateBanner removed — internal plumbing not shown to users
   const executionGateBanner = null;
@@ -2674,7 +2685,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       onPositionChange={onPositionChangeWrapper}
       onAmountChange={handleAmountChange}
       onPriceChange={handlePriceChange}
-      onTradingVenueChange={handleTradingVenueChange}
+      onTradingVenueChange={handleTradingVenueChangeGuarded}
       onOrderTypeChange={handleOrderTypeChange}
       onSideChange={onSideChangeWrapper}
       polymarketVenueHint={polymarketVenueHint}

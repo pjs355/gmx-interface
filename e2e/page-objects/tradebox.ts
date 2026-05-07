@@ -35,13 +35,13 @@ const SETTLE_AFTER_FILL_MS = 5_000;
 /** Slow down automation so React / SOR can keep up with real user timing. */
 const BETWEEN_TRADEBOX_ACTIONS_MS = 200;
 
-/** SOR route + price quote should arrive after a $5 buy/sell amount is typed. */
+/** SOR route + price quote should arrive after a valid trade amount is typed. */
 const QUOTE_READY_TIMEOUT_MS = 30_000;
 /**
  * Default buy-side USD typed by `selectVenue` when neither the smart routing
- * rows nor the legacy venue dropdown are mounted yet. Matches the SOR floor
- * (`SOR_MIN_MARKET_BUY_USD = 5`) and the spec's `TRADE_USD` so subsequent
- * `setAmount(TRADE_USD)` calls don't trigger an extra SOR refetch / auto-select.
+ * rows nor the legacy venue dropdown are mounted yet. Uses $5 to match
+ * `TRADE_USD` in per-venue specs (must stay ≥ `SOR_MIN_MARKET_BUY_USD`) so
+ * subsequent `setAmount(TRADE_USD)` calls don't trigger an extra SOR refetch / auto-select.
  */
 const SELECT_VENUE_PRIME_AMOUNT_USD = 5;
 /** How long to wait for a venue surface to mount after priming SOR. */

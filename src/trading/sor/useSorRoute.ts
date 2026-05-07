@@ -175,7 +175,10 @@ function formatSorRouteFailureMessage(
 		return "Below trade minimum. Increase trade size";
 	}
 	if (code === "WHOLE_SHARES_ONLY") {
-		return server || "Fractional share amounts are not supported on Kalshi. Enter a whole number";
+		return (
+			server ||
+			"Fractional shares aren't supported on LevelUp or Kalshi. Enter a whole number"
+		);
 	}
 	if (code === "RATE_LIMITED") {
 		return "Too many requests. Wait a moment and try again.";

@@ -256,7 +256,7 @@ export default function PositionsTableView({
 					}}
 				>
 					<div>Market</div>
-					<div style={{ textAlign: "center" }}>Current Price</div>
+					<div style={{ textAlign: "center" }}>Last traded price</div>
 					<div style={{ textAlign: "center" }}>Shares</div>
 					<div style={{ textAlign: "center" }}>Avg Price</div>
 					<div style={{ textAlign: "center" }}>Cost</div>

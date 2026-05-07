@@ -1,6 +1,7 @@
 /**
- * Opt-in verbose trading / SOR / umbrella logs (`VITE_DEBUG_TRADING=true`).
- * Keeps default dev builds quiet so real failures stand out.
+ * Opt-in verbose trading / SOR / umbrella / venue-activation telemetry
+ * (`VITE_DEBUG_TRADING=true`). Keeps default dev builds quiet so real failures stand out.
+ * Production builds also strip `console.info` via `initConsoleSuppress()` in `index.tsx`.
  */
 export function isTradingDebugLoggingEnabled(): boolean {
 	return (

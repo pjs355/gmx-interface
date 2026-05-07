@@ -9,6 +9,7 @@ import {
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "./limitlessEnsureTradeGate";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 const LOG_TAG = "[LimitlessActivation]";
 
@@ -98,19 +99,23 @@ export function useLimitlessEnsureExecutionReady(args: {
 		queryKey: ensureQueryKey,
 		queryFn: async () => {
 			const startedAt = performance.now();
-			console.info(LOG_TAG, "ensure:start", {
-				at: new Date().toISOString(),
-				profileId,
-			});
+			if (isTradingDebugLoggingEnabled()) {
+				console.info(LOG_TAG, "ensure:start", {
+					at: new Date().toISOString(),
+					profileId,
+				});
+			}
 			try {
 				const data = await api.postLimitlessEnsureAccount();
 				const elapsedMs = Math.round(performance.now() - startedAt);
 				const gate = getLimitlessEnsureTradeGate(data ?? null);
-				console.info(LOG_TAG, "ensure:done", {
-					elapsedMs,
-					ready: gate.ready,
-					notReady: limitlessEnsureNotReadyCodeToWhy(gate.notReadyCode),
-				});
+				if (isTradingDebugLoggingEnabled()) {
+					console.info(LOG_TAG, "ensure:done", {
+						elapsedMs,
+						ready: gate.ready,
+						notReady: limitlessEnsureNotReadyCodeToWhy(gate.notReadyCode),
+					});
+				}
 				return data;
 			} catch (e) {
 				const elapsedMs = Math.round(performance.now() - startedAt);
@@ -135,11 +140,10 @@ export function useLimitlessEnsureExecutionReady(args: {
 	// stale-refetch effect below uses this to detect that case.
 	const gate = getLimitlessEnsureTradeGate(ensureQuery.data ?? null);
 
-	// Detailed React Query state logging — fires on every transition so we
-	// can see whether the queryFn was actually invoked (`fetchStatus:
-	// "fetching"`) vs. silently waiting (`fetchStatus: "idle"` while
-	// `enabled: true` and `data: undefined`). The latter is the symptom
-	// the watchdog below handles.
+	// React Query state logging (gated by `VITE_DEBUG_TRADING` / `isTradingDebugLoggingEnabled`) —
+	// fires on every transition so we can see whether the queryFn was actually invoked
+	// (`fetchStatus: "fetching"`) vs. silently waiting (`fetchStatus: "idle"` while
+	// `enabled: true` and `data: undefined`). The latter is the symptom the watchdog below handles.
 	const lastQueryStateRef = useRef<string>("");
 	useEffect(() => {
 		const snap = JSON.stringify({
@@ -154,10 +158,12 @@ export function useLimitlessEnsureExecutionReady(args: {
 		});
 		if (snap === lastQueryStateRef.current) return;
 		lastQueryStateRef.current = snap;
-		console.info(LOG_TAG, "ensure:rqState", {
-			at: new Date().toISOString(),
-			...JSON.parse(snap),
-		});
+		if (isTradingDebugLoggingEnabled()) {
+			console.info(LOG_TAG, "ensure:rqState", {
+				at: new Date().toISOString(),
+				...JSON.parse(snap),
+			});
+		}
 	}, [
 		queryEnabled,
 		profileId,

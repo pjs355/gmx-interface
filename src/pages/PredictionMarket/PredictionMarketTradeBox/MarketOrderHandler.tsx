@@ -20,6 +20,14 @@ export function useMarketOrderHandler(orderbook: OrderbookSnapshot | null, whole
       // For SELL "Yes": use bids (people buying YES tokens)
       // For SELL "No": use asks (people selling YES tokens, which gives us NO tokens)
       const relevantOrders = position === 'yes' ? orderbook.bids : orderbook.asks;
+      if (!relevantOrders || !Array.isArray(relevantOrders)) {
+        return {
+          contracts: 0,
+          remainingUsd: 0,
+          maxPrice: 0,
+          minPrice: 0,
+        };
+      }
       // IMPORTANT: never mutate the original orderbook arrays; copy before sorting
       const sortedOrders = (position === 'yes'
         ? [...relevantOrders].sort((a, b) => b.price - a.price) // Highest bid first for YES

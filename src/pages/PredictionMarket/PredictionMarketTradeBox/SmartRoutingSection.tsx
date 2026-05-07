@@ -25,6 +25,7 @@ import QuoteMetricSkeleton from "./QuoteMetricSkeleton";
 import { SorRouteConsolidatedFeesSummary } from "./SorRouteConsolidatedFeesSummary";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
+import { SHARE_SELL_COMPARE_EPS } from "./checkBalances";
 
 const SR_VALUE_CLASS = "smart-routing-row__value";
 const SR_VALUE_FLASH_CLASS = "smart-routing-row__value--flash";
@@ -274,12 +275,61 @@ function MaxBadgeInline({ measureKey }: { measureKey: string }) {
 	);
 }
 
+/** Sell drawer: leg size matches user's outcome balance on that venue. */
+function MaxBalanceBadgeInline({ measureKey }: { measureKey: string }) {
+	const ref = useRef<HTMLSpanElement | null>(null);
+	const [compact, setCompact] = useState(false);
+
+	useEffect(() => {
+		setCompact(false);
+	}, [measureKey]);
+
+	useLayoutEffect(() => {
+		if (compact) return;
+		const span = ref.current;
+		if (!span) return;
+		const line = span.parentElement;
+		if (!line) return;
+		if (line.scrollWidth > line.clientWidth + 0.5) {
+			setCompact(true);
+		}
+	}, [compact, measureKey]);
+
+	return (
+		<span ref={ref} className="smart-routing-drawer__leg-max smart-routing-drawer__leg-max--inline">
+			{compact ? " (Max Bal)" : " (Max Balance)"}
+		</span>
+	);
+}
+
+function sellLegVenuesAtUserBalance(
+	legs: RouteLeg[],
+	held: Partial<Record<SorVenue, number>> | undefined,
+): Set<SorVenue> | undefined {
+	if (!held || legs.length === 0) return undefined;
+	const out = new Set<SorVenue>();
+	for (const leg of legs) {
+		const h = held[leg.venue];
+		if (
+			h != null &&
+			Number.isFinite(h) &&
+			h > 0 &&
+			Number.isFinite(leg.shares) &&
+			Math.abs(leg.shares - h) <= SHARE_SELL_COMPARE_EPS
+		) {
+			out.add(leg.venue);
+		}
+	}
+	return out.size > 0 ? out : undefined;
+}
+
 function SmartRoutingLegRows({
 	legs,
 	side,
 	formatLegAvg,
 	showVenueLogo = false,
 	atMaxByVenue,
+	sellLegAtUserBalanceVenues,
 }: {
 	legs: RouteLeg[];
 	side: "buy" | "sell";
@@ -293,6 +343,8 @@ function SmartRoutingLegRows({
 	 *  cap. Drives the "Max shares available" hint. Server already exposes this as
 	 *  `VenueRoutePreviewBuy.insufficientLiquidity`; callers translate. */
 	atMaxByVenue?: Set<SorVenue>;
+	/** Sell only: leg fills user's entire venue outcome balance (within EPS). */
+	sellLegAtUserBalanceVenues?: Set<SorVenue>;
 }) {
 	return (
 		<div className="smart-routing-drawer__legs">
@@ -308,7 +360,10 @@ function SmartRoutingLegRows({
 					leg.avgPrice > 0
 						? leg.shares * leg.avgPrice
 						: null;
-				const atMax = atMaxByVenue?.has(leg.venue) === true;
+				const atBuyDepthMax =
+					side === "buy" && atMaxByVenue?.has(leg.venue) === true;
+				const atSellUserBalanceMax =
+					side === "sell" && sellLegAtUserBalanceVenues?.has(leg.venue) === true;
 				return (
 					<div
 						key={`${leg.venue}-${idx}`}
@@ -335,15 +390,25 @@ function SmartRoutingLegRows({
 									{" @ avg "}
 									{priceStr}
 								</span>
-								{atMax && showVenueLogo ? (
+								{atBuyDepthMax && showVenueLogo ? (
 									<MaxBadgeInline
 										measureKey={`${leg.venue}-${leg.shares}-${leg.avgPrice}`}
 									/>
 								) : null}
+								{atSellUserBalanceMax && showVenueLogo ? (
+									<MaxBalanceBadgeInline
+										measureKey={`sell-bal-${leg.venue}-${leg.shares}-${leg.avgPrice}`}
+									/>
+								) : null}
 							</span>
-							{atMax && !showVenueLogo ? (
+							{atBuyDepthMax && !showVenueLogo ? (
 								<span className="smart-routing-drawer__leg-max smart-routing-drawer__leg-max--block">
 									(Max shares available)
+								</span>
+							) : null}
+							{atSellUserBalanceMax && !showVenueLogo ? (
+								<span className="smart-routing-drawer__leg-max smart-routing-drawer__leg-max--block">
+									(Max Balance)
 								</span>
 							) : null}
 						</span>
@@ -384,6 +449,10 @@ export interface SmartRoutingSectionProps {
 	selectedOutcome: SorOutcome;
 	/** Execution channel loading — gates overlay rows when the targeted plan is in flight. */
 	executionLoading: boolean;
+	/** Parent locks venue rows while a trade executes or the box is loading — no auto-select or clicks. */
+	venueSelectionLocked?: boolean;
+	/** User outcome shares per venue (sell breakdown) — marks legs that fully consume venue balance. */
+	userSellSharesByVenue?: Partial<Record<SorVenue, number>>;
 }
 
 export default function SmartRoutingSection({
@@ -399,8 +468,10 @@ export default function SmartRoutingSection({
 	smartRoutingMarketKey,
 	selectedOutcome,
 	executionLoading,
+	venueSelectionLocked = false,
+	userSellSharesByVenue,
 }: SmartRoutingSectionProps) {
-	const { formatAvgOdds, oddsDisplayStyle } = useOddsDisplay();
+	const { oddsDisplayStyle } = useOddsDisplay();
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
 	const formatLegAvg = useCallback(
 		(p: number) => formatSorLegAvgForDisplay(p, oddsDisplayStyle),
@@ -451,17 +522,15 @@ export default function SmartRoutingSection({
 		stableVenuePreviewsRef.current = null;
 	}
 	const prevMarketKeyRef = useRef<string | null>(null);
+	const marketKeyForSticky = smartRoutingMarketKey ?? "";
 	if (
-		smartRoutingMarketKey &&
-		prevMarketKeyRef.current != null &&
-		prevMarketKeyRef.current !== smartRoutingMarketKey
+		prevMarketKeyRef.current !== null &&
+		prevMarketKeyRef.current !== marketKeyForSticky
 	) {
 		stableDisplayRouteRef.current = null;
 		stableVenuePreviewsRef.current = null;
 	}
-	if (smartRoutingMarketKey) {
-		prevMarketKeyRef.current = smartRoutingMarketKey;
-	}
+	prevMarketKeyRef.current = marketKeyForSticky;
 	/* Promote upstream data to "live" only when its side matches the side the
 	 * user is actually trading. The first preview's `.side` is enough — the
 	 * SOR API always returns a homogeneous list per fetch. Empty arrays
@@ -512,13 +581,7 @@ export default function SmartRoutingSection({
 			trustCtx,
 			isLoading,
 		);
-	}, [
-		trustCtx,
-		routePreviewAllowed,
-		liveDisplayRoute,
-		displayRoute,
-		isLoading,
-	]);
+	}, [trustCtx, routePreviewAllowed, liveDisplayRoute, displayRoute]);
 
 	const splitMetricsPending =
 		Boolean(trustCtx && routePreviewAllowed && !omnibusMetricsTrusted);
@@ -540,7 +603,6 @@ export default function SmartRoutingSection({
 			trustCtx,
 			routePreviewAllowed,
 			executionRoute,
-			executionLoading,
 			omnibusMetricsTrusted,
 		],
 	);
@@ -595,14 +657,13 @@ export default function SmartRoutingSection({
 		}
 	}, [routePreviewAllowed]);
 
+	/** Correct an impossible tab (venue not in current preview list). Do not force
+	 *  `"all"` just because split-order is best — that fought every manual single-venue
+	 *  row click (effect re-ran → `onSelectVenue("all")` → looked like clicks did nothing). */
 	useEffect(() => {
+		if (venueSelectionLocked) return;
 		if (!routePreviewAllowed) return;
 		if (tradingVenue === "all") return;
-		const splitTop = showSplitBuyRow || showSplitSellRow;
-		if (splitTop) {
-			onSelectVenue("all");
-			return;
-		}
 		if (!sortedVenuePreviews || sortedVenuePreviews.length === 0) return;
 		const allowed = new Set(
 			sortedVenuePreviews.map((p) => sorVenueToTradingVenue(p.venue)),
@@ -611,9 +672,8 @@ export default function SmartRoutingSection({
 			onSelectVenue(sorVenueToTradingVenue(sortedVenuePreviews[0]!.venue));
 		}
 	}, [
+		venueSelectionLocked,
 		routePreviewAllowed,
-		showSplitBuyRow,
-		showSplitSellRow,
 		sortedVenuePreviews,
 		tradingVenue,
 		onSelectVenue,
@@ -679,6 +739,12 @@ export default function SmartRoutingSection({
 	const lastObservedTradingVenueRef = useRef<TradingVenue>(tradingVenue);
 
 	useEffect(() => {
+		if (venueSelectionLocked) {
+			pendingAutoSelectRef.current = false;
+		}
+	}, [venueSelectionLocked]);
+
+	useEffect(() => {
 		if (userAmount === undefined) return;
 		if (userAmount === lastAutoSelectAmountRef.current) return;
 		pendingAutoSelectRef.current = true;
@@ -695,6 +761,7 @@ export default function SmartRoutingSection({
 	}, [tradingVenue]);
 
 	useEffect(() => {
+		if (venueSelectionLocked) return;
 		if (!pendingAutoSelectRef.current) return;
 		if (isLoading) return;
 		// No data yet — nothing to select against. Wait for the next settle.
@@ -716,6 +783,7 @@ export default function SmartRoutingSection({
 			if (tradingVenue !== topVenue) onSelectVenue(topVenue);
 		}
 	}, [
+		venueSelectionLocked,
 		isLoading,
 		showSplitBuyRow,
 		showSplitSellRow,
@@ -751,7 +819,11 @@ export default function SmartRoutingSection({
 		(sortedVenuePreviews != null && sortedVenuePreviews.length > 0);
 
 	return (
-		<div className="smart-routing-section" data-qa="smart-routing-section">
+		<div
+			className={`smart-routing-section${venueSelectionLocked ? " smart-routing-section--interaction-locked" : ""}`}
+			data-qa="smart-routing-section"
+			aria-busy={venueSelectionLocked || undefined}
+		>
 			{hasAnyRow && (
 				<div className="smart-routing-section__headers">
 					<span className="smart-routing-section__header-label">Venue</span>
@@ -786,7 +858,7 @@ export default function SmartRoutingSection({
 												<QuoteMetricSkeleton variant="smart-sub" />
 											) : (
 												<>
-													{formatAvgOdds(
+													{formatLegAvg(
 														displayRoute.totalCost / displayRoute.totalShares,
 													)}{" "}
 													avg.
@@ -917,6 +989,10 @@ export default function SmartRoutingSection({
 								side="sell"
 								formatLegAvg={formatLegAvg}
 								showVenueLogo
+								sellLegAtUserBalanceVenues={sellLegVenuesAtUserBalance(
+									displayRoute.legs,
+									userSellSharesByVenue,
+								)}
 							/>
 							<div className="smart-routing-drawer__footer">
 								<div className="smart-routing-drawer__fees">
@@ -1032,7 +1108,7 @@ export default function SmartRoutingSection({
 													<QuoteMetricSkeleton variant="smart-sub" />
 												) : (
 													<>
-														{formatAvgOdds(displayAvgPrice)} avg.
+														{formatLegAvg(displayAvgPrice)} avg.
 													</>
 												)}
 											</span>
@@ -1073,6 +1149,10 @@ export default function SmartRoutingSection({
 										legs={preview.legs}
 										side="sell"
 										formatLegAvg={formatLegAvg}
+										sellLegAtUserBalanceVenues={sellLegVenuesAtUserBalance(
+											preview.legs,
+											userSellSharesByVenue,
+										)}
 									/>
 									<div className="smart-routing-drawer__footer">
 										<div className="smart-routing-drawer__fees">
@@ -1147,7 +1227,7 @@ export default function SmartRoutingSection({
 													<QuoteMetricSkeleton variant="smart-sub" />
 												) : displayAvgPrice != null ? (
 													<>
-														{formatAvgOdds(displayAvgPrice)} avg.
+														{formatLegAvg(displayAvgPrice)} avg.
 													</>
 												) : null}
 											</span>

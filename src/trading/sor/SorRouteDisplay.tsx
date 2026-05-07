@@ -23,7 +23,7 @@ interface SorRouteDisplayProps {
 	route: RoutePlan | null;
 	isLoading: boolean;
 	error: string | null;
-	/** When set, styles the error row (e.g. Kalshi whole-share hint = warning yellow). */
+	/** When set, styles the error row (e.g. whole-share hint = plain amber text). */
 	routeErrorCode?: SorErrorCode | null;
 	isStale: boolean;
 	onExecute: () => void;
@@ -96,19 +96,37 @@ export function SorRouteDisplay({
 
 	if (error && !isLoading) {
 		const rawErr = error;
-		const kalshiHint =
+		const wholeShareContractHint =
 			routeErrorCode === "WHOLE_SHARES_ONLY" ||
-			rawErr.includes("Fractional share amounts are not supported on Kalshi");
+			rawErr.includes("Fractional share amounts") ||
+			rawErr.includes("Fractional shares aren't supported");
 		const displayErr = rawErr.replace(/^\s*Route unavailable:\s*/i, "").trim();
-		const warn = kalshiHint;
-		const boxStyle = warn ? styles.warningBox : styles.errorBox;
-		const iconStyle = warn ? styles.warningIcon : styles.errorIcon;
+		if (wholeShareContractHint) {
+			return (
+				<div style={styles.container}>
+					<p
+						style={{
+							margin: 0,
+							fontSize: 12,
+							fontWeight: 500,
+							color: "#f59e0b",
+							lineHeight: 1.35,
+						}}
+					>
+						<SorTransientRouteErrorText message={displayErr} />
+					</p>
+					<button type="button" onClick={onFallback} style={styles.fallbackBtn}>
+						Trade on LevelUp instead
+					</button>
+				</div>
+			);
+		}
 		return (
 			<div style={styles.container}>
-				<div style={boxStyle}>
-					<span style={iconStyle}>!</span>
-					<span style={warn ? { color: "#eab308" } : undefined}>
-						{warn ? "" : "Route unavailable: "}
+				<div style={styles.errorBox}>
+					<span style={styles.errorIcon}>!</span>
+					<span>
+						Route unavailable:{" "}
 						<SorTransientRouteErrorText message={displayErr} />
 					</span>
 				</div>

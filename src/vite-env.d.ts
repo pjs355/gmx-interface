@@ -1,5 +1,9 @@
 /// <reference types="vite/client" />
 
+declare module "*.po" {
+	export const messages: Record<string, string>;
+}
+
 interface ImportMetaEnv {
 	/** Optional Polygon mainnet JSON-RPC URL (Infura, Alchemy, etc.); falls back to a public node */
 	readonly VITE_POLYGON_RPC_URL?: string;

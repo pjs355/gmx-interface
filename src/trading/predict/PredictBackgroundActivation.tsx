@@ -4,6 +4,7 @@ import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext"
 import { useSignerContext } from "context/SignerContext";
 import { usePredictTradingSession } from "./usePredictTradingSession";
 import { usePredictEnsureExecutionReady } from "./usePredictEnsureExecutionReady";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 const LOG_TAG = "[PredictActivation]";
 
@@ -118,12 +119,14 @@ export function PredictBackgroundActivation(): null {
 		if (key === lastSnapshotRef.current) return;
 		lastSnapshotRef.current = key;
 		reportVenueSnapshot("predict", { setupInProgress: inProgress, ready });
-		console.info(LOG_TAG, "bg:snapshot", {
-			at: new Date().toISOString(),
-			setupInProgress: inProgress,
-			ready,
-			phase: ensureState.phase,
-		});
+		if (isTradingDebugLoggingEnabled()) {
+			console.info(LOG_TAG, "bg:snapshot", {
+				at: new Date().toISOString(),
+				setupInProgress: inProgress,
+				ready,
+				phase: ensureState.phase,
+			});
+		}
 	}, [
 		reportVenueSnapshot,
 		sessionEnabled,

@@ -1,5 +1,4 @@
 import type {
-	DepositWalletCall,
 	RelayClient,
 	RelayerTransactionResponse,
 	Transaction,
@@ -27,42 +26,18 @@ import {
 } from "@/config/rpc";
 import {
 	isPolymarketSafeRelayOnchainRevert,
+	submitDepositWalletBatchWithRetries,
 	waitRelay,
 	withPolygonRelayMutex,
 } from "@/trading/polymarket/safeActions";
-
-/** Window the relayer accepts the EOA's deposit-wallet batch signature within. */
-const DEPOSIT_WALLET_BATCH_DEADLINE_S = 10 * 60;
-
-function depositWalletDeadline(): string {
-	return String(Math.floor(Date.now() / 1000) + DEPOSIT_WALLET_BATCH_DEADLINE_S);
-}
-
-/**
- * The deposit-wallet batch API takes `{ target, value, data }` instead of the
- * legacy `{ to, value, data }` shape. Convert in one place so the rest of the
- * LI.FI builder code keeps using the historical `Transaction` shape.
- */
-function txsToDepositWalletCalls(txs: Transaction[]): DepositWalletCall[] {
-	return txs.map((tx) => ({
-		target: tx.to,
-		value: tx.value,
-		data: tx.data,
-	}));
-}
 
 async function executeWalletBatch(
 	relay: RelayClient,
 	walletAddress: string,
 	txs: Transaction[],
-	_label: string,
+	label: string,
 ): Promise<RelayerTransactionResponse> {
-	void _label;
-	return relay.executeDepositWalletBatch(
-		txsToDepositWalletCalls(txs),
-		walletAddress,
-		depositWalletDeadline(),
-	);
+	return submitDepositWalletBatchWithRetries(relay, txs, walletAddress, label);
 }
 import type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import {

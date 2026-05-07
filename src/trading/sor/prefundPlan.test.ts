@@ -65,6 +65,11 @@ describe("resolveBuyPrefundAnchorUsd", () => {
 			expect(resolveBuyPrefundAnchorUsd(r, e)).toBeCloseTo(Math.max(r, e), 10);
 		}
 	});
+
+	it("includes LevelUp signed premium USDC when higher than optimizer executionAmountUsd", () => {
+		expect(resolveBuyPrefundAnchorUsd(3, 3, 3.1)).toBeCloseTo(3.1, 8);
+		expect(resolveBuyPrefundAnchorUsd(5, 4, 3)).toBeCloseTo(5, 8);
+	});
 });
 
 describe("groupBridgeLegsByCorridor", () => {
@@ -128,5 +133,35 @@ describe("groupBridgeLegsByCorridor", () => {
 		expect(groups).toHaveLength(1);
 		expect(groups[0]!.totalAmountUsd).toBeCloseTo(24.889 + 15, 4);
 		expect(groups[0]!.groupBridgeCostUsd).toBeCloseTo(0.2, 8);
+	});
+
+	it("raises prefund anchor for LevelUp buy when signed premium exceeds alloc.cost", () => {
+		const legs: RouteLeg[] = [
+			{
+				venue: "levelup",
+				chain: "base",
+				outcome: "A",
+				shares: 10,
+				avgPrice: 0.3,
+				executionAmountUsd: 3,
+				fee: 0.06,
+				priceImpact: 0,
+				estimatedTimeSeconds: 60,
+				minSharesAtSlippage: 9,
+				maxPrice: 0.31,
+				venueMarketIds: { venue: "levelup", levelUpQuestionId: "q1" },
+				orderType: "market",
+				bridge: {
+					fromChain: "bnb",
+					toChain: "base",
+					amount: 3,
+					estimatedCost: 0.1,
+					estimatedTimeSeconds: 60,
+				},
+			},
+		];
+		const groups = groupBridgeLegsByCorridor(legs, "buy");
+		expect(groups).toHaveLength(1);
+		expect(groups[0]!.totalAmountUsd).toBeCloseTo(3.1, 8);
 	});
 });

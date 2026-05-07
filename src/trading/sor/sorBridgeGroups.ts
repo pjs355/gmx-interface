@@ -1,4 +1,5 @@
 import type { RouteLeg } from "./sor-types";
+import { levelUpBuySignedPremiumUsdHuman } from "./levelUpSorSigning";
 import { resolveBuyPrefundAnchorUsd } from "./prefundPlan";
 
 /**
@@ -12,15 +13,12 @@ export type SorBridgeGroup = {
 	legs: RouteLeg[];
 	/**
 	 * Aggregated prefund anchor — passed as `amountUsdOverride` for one prefund.
-	 * `Σ max(bridge.amount, executionAmountUsd)` per leg. `bridge.amount` is the
-	 * optimizer **shortfall** (what must still cross from source chains); the venue
-	 * order spends **`executionAmountUsd`** on the destination. Anchoring on shortfall
-	 * alone skips LI.FI when the dest wallet is short of the full trade notional.
+	 * Per leg: `resolveBuyPrefundAnchorUsd(shortfall, executionAmountUsd[, levelUpPremium])`.
+	 * LevelUp adds signed USDC premium (`makerAmount`) when it exceeds optimizer cost.
 	 *
-	 * Venue fee is **not** added on top — `executionAmountUsd = notional + fee` from
-	 * the optimizer already encodes the fee. Fee headroom for the venue API balance
-	 * check is satisfied at the wire layer (see `wireAmountUsdForVenue` in
-	 * `useSorLegExecutor`), not by bridging more.
+	 * Venue fee is **not** doubled — `executionAmountUsd = notional + fee` from the
+	 * optimizer already encodes fee. Token-side venues satisfy API checks via
+	 * `wireAmountUsdForVenue` instead of inflating the corridor aggregate.
 	 */
 	totalAmountUsd: number;
 	/**
@@ -34,7 +32,10 @@ export type SorBridgeGroup = {
 	representativeLeg: RouteLeg;
 };
 
-export function groupBridgeLegsByCorridor(bridgeLegs: RouteLeg[]): SorBridgeGroup[] {
+export function groupBridgeLegsByCorridor(
+	bridgeLegs: RouteLeg[],
+	routeSide: "buy" | "sell" = "buy",
+): SorBridgeGroup[] {
 	const map = new Map<string, SorBridgeGroup>();
 	for (const leg of bridgeLegs) {
 		const b = leg.bridge;
@@ -52,7 +53,15 @@ export function groupBridgeLegsByCorridor(bridgeLegs: RouteLeg[]): SorBridgeGrou
 			map.set(key, g);
 		}
 		g.legs.push(leg);
-		g.totalAmountUsd += resolveBuyPrefundAnchorUsd(b.amount, leg.executionAmountUsd);
+		const premium =
+			routeSide === "buy" && leg.venue === "levelup"
+				? levelUpBuySignedPremiumUsdHuman(leg)
+				: undefined;
+		g.totalAmountUsd += resolveBuyPrefundAnchorUsd(
+			b.amount,
+			leg.executionAmountUsd,
+			premium,
+		);
 		g.groupBridgeCostUsd += Math.max(0, b.estimatedCost ?? 0);
 	}
 	return [...map.values()];

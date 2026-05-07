@@ -41,25 +41,25 @@ export function routeMatchesTradeContext(
 }
 
 /**
- * Omnibus (display) channel: sticky refs may hold a prior quote while `displayLoading`
- * is true and live data is still null or from an older fetch — suppress stale digits until
- * live confirms the plan matches the current context, or loading finishes with a matching sticky snapshot.
+ * Omnibus (display) channel.
+ *
+ * Trust whenever the **effective** display route (live response or sticky fallback from
+ * SmartRoutingSection) matches the user's typed context. We intentionally do **not** gate on
+ * `displayLoading`: background polls set loading while `liveRoute` is briefly null; the sticky
+ * snapshot still matches the amount/outcome and must not flash skeleton on every refresh
+ * (common after a fill when SOR re-poller runs).
+ *
+ * If the user changes amount/outcome, `routeMatchesTradeContext` fails on the stale sticky
+ * route until a matching response arrives — that still suppresses wrong digits without loading gates.
  */
 export function isOmnibusDisplayMetricsTrusted(
-	liveRoute: RoutePlan | null,
+	_liveRoute: RoutePlan | null,
 	effectiveDisplayRoute: RoutePlan | null,
 	ctx: SorTradeTrustContext,
-	displayLoading: boolean,
+	_displayLoading: boolean,
 ): boolean {
 	if (!effectiveDisplayRoute) return false;
-	if (!routeMatchesTradeContext(effectiveDisplayRoute, ctx)) return false;
-	if (
-		displayLoading &&
-		(!liveRoute || !routeMatchesTradeContext(liveRoute, ctx))
-	) {
-		return false;
-	}
-	return true;
+	return routeMatchesTradeContext(effectiveDisplayRoute, ctx);
 }
 
 /** Venue-tab overlay row: numbers come from `executionRoute` when it targets this venue. */
@@ -67,10 +67,9 @@ export function isExecutionOverlayRowTrusted(
 	executionRoute: RoutePlan | null,
 	overlayRoute: RoutePlan | null,
 	ctx: SorTradeTrustContext,
-	executionLoading: boolean,
+	_executionLoading: boolean,
 ): boolean {
 	if (!overlayRoute || !executionRoute) return false;
-	if (executionLoading) return false;
 	return routeMatchesTradeContext(executionRoute, ctx);
 }
 
@@ -92,23 +91,25 @@ export function venueSellPreviewMatchesContext(
 
 /**
  * Single-venue market buy: avg-odds / SOR quote row — same gates as legacy `sorRouteFreshForAmount`
- * (loading + stale + cent match + outcome/side), expressed via `routeMatchesTradeContext`.
+ * (stale + cent match + outcome/side). Loading is **not** a gate: during background polls the
+ * previous matching route stays mounted while `executionLoading` flips, and we must not bounce
+ * between skeleton and numbers.
  */
 export function executionRouteTrustedForSingleVenueMarketBuy(
 	route: RoutePlan | null,
 	ctx: SorTradeTrustContext,
-	executionLoading: boolean,
+	_executionLoading: boolean,
 	executionStale: boolean,
 ): boolean {
-	if (executionLoading) return false;
 	if (executionStale) return false;
 	return routeMatchesTradeContext(route, ctx);
 }
 
 /**
  * To Win + smart-routing overlay: parent trade state intentionally does **not** drop SOR for
- * `executionStale` alone (avoids requote flicker). Only treat as “pending” when a fetch is
- * in flight or the route is for a different amount/outcome.
+ * `executionStale` alone (avoids requote flicker). Treat as pending only when there is no
+ * matching plan yet (initial fetch) or the plan doesn't match the typed context — **not** on
+ * every `executionLoading` tick while a matching route is still mounted (post-trade refresh).
  */
 export function executionRoutePendingForToWinOverlay(
 	executionRoute: RoutePlan | null,
@@ -116,9 +117,9 @@ export function executionRoutePendingForToWinOverlay(
 	executionLoading: boolean,
 ): boolean {
 	if (!ctx) return false;
-	if (executionLoading) return true;
-	if (executionRoute == null) return false;
-	return !routeMatchesTradeContext(executionRoute, ctx);
+	if (executionRoute && routeMatchesTradeContext(executionRoute, ctx)) return false;
+	if (executionLoading && executionRoute == null) return true;
+	return executionRoute != null && !routeMatchesTradeContext(executionRoute, ctx);
 }
 
 /** Market sell avg cents line — trusted when SOR execution row matches (includes stale gate). */

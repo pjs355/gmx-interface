@@ -4,6 +4,7 @@ import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
 import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { TradingVenue } from "./types";
+import { formatShareCountDisplay } from "./checkBalances";
 
 type MarketLike = {
 	_id: string;
@@ -14,25 +15,6 @@ type MarketLike = {
 	conditionId?: string;
 	umbrellaChildrenCount?: number;
 };
-
-/**
- * Display helper — always rounds DOWN so the user never sees a share count
- * larger than what they actually hold. This pairs with the sell-side EPS
- * (`SHARE_SELL_COMPARE_EPS = 0.01`) and the "sell-all clamp" so that typing
- * the displayed amount sells the user's full position (including any
- * fractional remainder hidden by the floor).
- */
-function formatShareCount(n: number): string {
-	if (!Number.isFinite(n)) return String(n);
-	if (Number.isInteger(n) || Math.abs(n - Math.round(n)) < 1e-9) {
-		return String(Math.round(n));
-	}
-	const floored = Math.floor(n * 100) / 100;
-	return new Intl.NumberFormat("en-US", {
-		maximumFractionDigits: 2,
-		minimumFractionDigits: 0,
-	}).format(floored);
-}
 
 export function MyPositionsRow({
 	market,
@@ -65,8 +47,14 @@ export function MyPositionsRow({
 	positionSharesRefreshing?: boolean;
 }) {
 	const [detailsOpen, setDetailsOpen] = useState(false);
-	const { buyLines, sellTotalShares, sellVenueBreakdown, sellOutcomeLabel } =
-		shareBalances;
+	const [buyDetailsOpen, setBuyDetailsOpen] = useState<Record<string, boolean>>({});
+	const {
+		buyLines,
+		buyVenueBreakdownByOutcome,
+		sellTotalShares,
+		sellVenueBreakdown,
+		sellOutcomeLabel,
+	} = shareBalances;
 
 	/** Same treatment as chart team lines on black: dark team hex is lightened so text stays readable. */
 	const colorForLine = (lineSide: "yes" | "no") => {
@@ -135,34 +123,132 @@ export function MyPositionsRow({
 							<span>Shares {pendingOutcomeLabel}</span>
 						</div>
 					) : (
-						buyLines.map((line) => (
-							<div
-								key={line.key}
-								style={{
-									fontSize: 14,
-									fontWeight: 700,
-									color: colorForLine(line.side),
-									lineHeight: 1.35,
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "flex-end",
-									gap: 8,
-								}}
-							>
-								{positionSharesRefreshing ? (
-									<>
-										<SpinningLoader size="1rem" />
-										<span>
-											Shares {line.label}
-										</span>
-									</>
-								) : (
-									<>
-										{formatShareCount(line.shares)} Shares {line.label}
-									</>
-								)}
-							</div>
-						))
+						buyLines.map((line) => {
+							const breakdown = buyVenueBreakdownByOutcome[line.side];
+							const showBuyDetails =
+								breakdown.length > 1 && !positionSharesRefreshing;
+							const lineDetailsOpen = buyDetailsOpen[line.key] ?? false;
+							const headlineRight = `${formatShareCountDisplay(line.shares)} Shares ${line.label}`;
+							const headlineContent = positionSharesRefreshing ? (
+								<span
+									style={{
+										display: "inline-flex",
+										alignItems: "center",
+										justifyContent: "flex-end",
+										gap: 8,
+									}}
+								>
+									<SpinningLoader size="1rem" />
+									<span>Shares {line.label}</span>
+								</span>
+							) : (
+								headlineRight
+							);
+							const lineHeadlineColor = colorForLine(line.side);
+							const headlineBlock = showBuyDetails ? (
+								<button
+									type="button"
+									onClick={() =>
+										setBuyDetailsOpen((o) => ({
+											...o,
+											[line.key]: !o[line.key],
+										}))
+									}
+									data-qa={`my-positions-row-details-toggle-buy-${line.side}`}
+									aria-expanded={lineDetailsOpen}
+									aria-label={
+										lineDetailsOpen
+											? "Hide position breakdown"
+											: "Show position breakdown"
+									}
+									style={{
+										display: "inline-flex",
+										alignItems: "center",
+										justifyContent: "flex-end",
+										gap: 8,
+										background: "none",
+										border: "none",
+										padding: 0,
+										cursor: "pointer",
+										fontSize: 14,
+										fontWeight: 700,
+										lineHeight: 1.35,
+										textAlign: "right",
+									}}
+								>
+									<span
+										style={{
+											fontSize: 10,
+											color: "#ffffff",
+											transform: lineDetailsOpen
+												? "rotate(180deg)"
+												: "rotate(0deg)",
+											display: "inline-block",
+											transition: "transform 0.15s ease",
+										}}
+										aria-hidden
+									>
+										▼
+									</span>
+									<span style={{ color: lineHeadlineColor }}>
+										{headlineContent}
+									</span>
+								</button>
+							) : (
+								<div
+									style={{
+										fontSize: 14,
+										fontWeight: 700,
+										color: lineHeadlineColor,
+										lineHeight: 1.35,
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "flex-end",
+										gap: 8,
+									}}
+								>
+									{headlineContent}
+								</div>
+							);
+							return (
+								<div
+									key={line.key}
+									style={{
+										display: "flex",
+										flexDirection: "column",
+										alignItems: "flex-end",
+										gap: 4,
+									}}
+								>
+									{headlineBlock}
+									{showBuyDetails && lineDetailsOpen ? (
+										<div
+											style={{
+												display: "flex",
+												flexDirection: "column",
+												alignItems: "flex-end",
+												gap: 4,
+											}}
+										>
+											{breakdown.map((row) => (
+												<div
+													key={row.key}
+													style={{
+														fontSize: 13,
+														fontWeight: 600,
+														color: "#ffffff",
+														lineHeight: 1.35,
+													}}
+												>
+													{formatShareCountDisplay(row.shares)} Shares{" "}
+													{line.label} ({row.venueDisplay})
+												</div>
+											))}
+										</div>
+									) : null}
+								</div>
+							);
+						})
 					)}
 				</div>
 			</div>
@@ -216,7 +302,7 @@ export function MyPositionsRow({
 		);
 	}
 
-	const headlineRight = `${formatShareCount(sellTotalShares)} Shares ${sellOutcomeLabel}`;
+	const headlineRight = `${formatShareCountDisplay(sellTotalShares)} Shares ${sellOutcomeLabel}`;
 	const headlineContent = positionSharesRefreshing ? (
 		<span
 			style={{
@@ -233,9 +319,59 @@ export function MyPositionsRow({
 		headlineRight
 	);
 	const showDetails =
-		tradingVenue === "all" &&
-		sellVenueBreakdown.length > 1 &&
-		!positionSharesRefreshing;
+		sellVenueBreakdown.length > 1 && !positionSharesRefreshing;
+
+	const headlineBlock =
+		showDetails ? (
+			<button
+				type="button"
+				onClick={() => setDetailsOpen((o) => !o)}
+				data-qa="my-positions-row-details-toggle"
+				aria-expanded={detailsOpen}
+				aria-label={
+					detailsOpen ? "Hide position breakdown" : "Show position breakdown"
+				}
+				style={{
+					display: "inline-flex",
+					alignItems: "center",
+					justifyContent: "flex-end",
+					gap: 8,
+					background: "none",
+					border: "none",
+					padding: 0,
+					cursor: "pointer",
+					fontSize: 14,
+					fontWeight: 700,
+					lineHeight: 1.35,
+					textAlign: "right",
+				}}
+			>
+				<span
+					style={{
+						fontSize: 10,
+						color: "#ffffff",
+						transform: detailsOpen ? "rotate(180deg)" : "rotate(0deg)",
+						display: "inline-block",
+						transition: "transform 0.15s ease",
+					}}
+					aria-hidden
+				>
+					▼
+				</span>
+				<span style={{ color: headlineColor }}>{headlineContent}</span>
+			</button>
+		) : (
+			<div
+				style={{
+					fontSize: 14,
+					fontWeight: 700,
+					color: headlineColor,
+					lineHeight: 1.35,
+				}}
+			>
+				{headlineContent}
+			</div>
+		);
 
 	return (
 		<div
@@ -265,52 +401,10 @@ export function MyPositionsRow({
 						textAlign: "right",
 					}}
 				>
-					<div
-						style={{
-							fontSize: 14,
-							fontWeight: 700,
-							color: headlineColor,
-							lineHeight: 1.35,
-						}}
-					>
-						{headlineContent}
-					</div>
-				</div>
-			</div>
-			{showDetails ? (
-				<div style={{ marginTop: 8, textAlign: "right" }}>
-					<button
-						type="button"
-						onClick={() => setDetailsOpen((o) => !o)}
-						style={{
-							display: "inline-flex",
-							alignItems: "center",
-							gap: 6,
-							background: "none",
-							border: "none",
-							padding: 0,
-							cursor: "pointer",
-							fontSize: 13,
-							fontWeight: 600,
-							color: "#9ca3af",
-						}}
-					>
-						<span
-							style={{
-								fontSize: 10,
-								transform: detailsOpen ? "rotate(180deg)" : "rotate(0deg)",
-								display: "inline-block",
-								transition: "transform 0.15s ease",
-							}}
-						>
-							▼
-						</span>
-						Details
-					</button>
-					{detailsOpen ? (
+					{headlineBlock}
+					{showDetails && detailsOpen ? (
 						<div
 							style={{
-								marginTop: 8,
 								display: "flex",
 								flexDirection: "column",
 								alignItems: "flex-end",
@@ -323,17 +417,17 @@ export function MyPositionsRow({
 									style={{
 										fontSize: 13,
 										fontWeight: 600,
-										color: headlineColor,
+										color: "#ffffff",
 										lineHeight: 1.35,
 									}}
 								>
-									{formatShareCount(row.shares)} Shares {sellOutcomeLabel} ({row.venueDisplay})
+									{formatShareCountDisplay(row.shares)} Shares {sellOutcomeLabel} ({row.venueDisplay})
 								</div>
 							))}
 						</div>
 					) : null}
 				</div>
-			) : null}
+			</div>
 		</div>
 	);
 }

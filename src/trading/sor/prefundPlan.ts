@@ -56,10 +56,19 @@ export function computePrefundNeedUsdHuman(
 export function resolveBuyPrefundAnchorUsd(
 	routeBridgeUsd: number,
 	executionAmountUsd: number,
+	/** LevelUp: signed `makerAmount` USDC can exceed optimizer `alloc.cost`. */
+	levelUpSignedPremiumUsd?: number,
 ): number {
 	const r = Number.isFinite(routeBridgeUsd) ? Math.max(0, routeBridgeUsd) : 0;
 	const e = Number.isFinite(executionAmountUsd) ? Math.max(0, executionAmountUsd) : 0;
-	return Math.max(r, e);
+	const base = Math.max(r, e);
+	const lu =
+		levelUpSignedPremiumUsd != null &&
+		Number.isFinite(levelUpSignedPremiumUsd) &&
+		levelUpSignedPremiumUsd > 0
+			? levelUpSignedPremiumUsd
+			: 0;
+	return Math.max(base, lu);
 }
 
 /**
