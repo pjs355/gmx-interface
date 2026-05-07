@@ -4,6 +4,7 @@ import React, {
 	useRef,
 	useCallback,
 } from "react";
+import { useMedia } from "react-use";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
@@ -182,6 +183,7 @@ export default function FilteredPredictions({
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+	const isCompactLayout = useMedia("(max-width: 1099px)");
 
 	// Reset visible count when filters change
 	useEffect(() => {
@@ -501,6 +503,14 @@ export default function FilteredPredictions({
 	}, [calendarData]);
 
 	const shouldUseCalendar = filterType === "esports" || filterType === "all";
+	const listTotalForVisibility =
+		shouldUseCalendar && calendarData
+			? calendarTotalCount
+			: filteredUmbrellas.length;
+	const effectiveVisibleCount = isCompactLayout
+		? listTotalForVisibility
+		: visibleCount;
+
 	const { subscribePandaMatchId, unsubscribePandaMatchId } =
 		useVenuePandaSubscription();
 
@@ -510,13 +520,13 @@ export default function FilteredPredictions({
 				shouldUseCalendar,
 				shouldUseCalendar ? calendarData : null,
 				filteredUmbrellas,
-				visibleCount,
+				effectiveVisibleCount,
 			),
 		[
 			shouldUseCalendar,
 			calendarData,
 			filteredUmbrellas,
-			visibleCount,
+			effectiveVisibleCount,
 		],
 	);
 
@@ -588,9 +598,11 @@ export default function FilteredPredictions({
 
 	let content: React.ReactNode = null;
 
-	const hasMoreItems = shouldUseCalendar
-		? visibleCount < calendarTotalCount
-		: visibleCount < filteredUmbrellas.length;
+	const hasMoreItems =
+		!isCompactLayout &&
+		(shouldUseCalendar
+			? visibleCount < calendarTotalCount
+			: visibleCount < filteredUmbrellas.length);
 
 	if (shouldUseCalendar && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
@@ -614,14 +626,14 @@ export default function FilteredPredictions({
 				</div>
 			);
 		} else {
-			// Progressive rendering: only render up to visibleCount cards across all day groups
+			// Progressive rendering on desktop; compact shows full list (no sentinel).
 			let rendered = 0;
 			let calendarOddsPickerShown = false;
 			const calendarSections: React.ReactNode[] = [];
 
 			for (const day of calendarData.upcomingDays) {
-				if (rendered >= visibleCount) break;
-				const remaining = visibleCount - rendered;
+				if (rendered >= effectiveVisibleCount) break;
+				const remaining = effectiveVisibleCount - rendered;
 				const eventsToShow = day.events.slice(0, remaining);
 				rendered += eventsToShow.length;
 
@@ -653,8 +665,8 @@ export default function FilteredPredictions({
 				);
 			}
 
-			if (rendered < visibleCount && hasUnscheduled) {
-				const remaining = visibleCount - rendered;
+			if (rendered < effectiveVisibleCount && hasUnscheduled) {
+				const remaining = effectiveVisibleCount - rendered;
 				const unscheduledToShow = calendarData.unscheduled.slice(0, remaining);
 				rendered += unscheduledToShow.length;
 
@@ -702,7 +714,10 @@ export default function FilteredPredictions({
 				? "predictions-grid predictions-grid--carousel"
 				: "predictions-grid";
 
-		const visibleUmbrellas = filteredUmbrellas.slice(0, visibleCount);
+		const visibleUmbrellas = filteredUmbrellas.slice(
+			0,
+			effectiveVisibleCount,
+		);
 
 		content = (
 			<div className={gridClassName}>

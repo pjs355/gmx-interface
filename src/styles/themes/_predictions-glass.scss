@@ -9,6 +9,8 @@ $predictions-glass-tint-enabled: false;
 
 $predictions-glass-overlay: rgba(0, 0, 0, 0.5);
 $predictions-glass-overlay-hover: rgba(0, 0, 0, 0.58);
+// Home grid cards: visible hover even when global glass tint is off (`$predictions-glass-tint-enabled`).
+$prediction-card-hover-wash: rgba(31, 41, 55, 0.55);
 // Trade widget + curtain: slightly heavier wash when global tint is enabled.
 $predictions-glass-overlay-tradebox: rgba(0, 0, 0, 0.62);
 $predictions-glass-blur: 8px;

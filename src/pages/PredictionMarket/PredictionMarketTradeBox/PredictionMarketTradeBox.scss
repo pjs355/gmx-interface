@@ -1,4 +1,5 @@
 @use "../../../styles/themes/predictions-glass" as *;
+@use "../../../components/OddsFormatMenu/odds-format-menu" as *;
 @use "./PredictionMarketTradeBoxDesktop.scss";
 
 .prediction-market-tradebox {
@@ -112,9 +113,24 @@
 
 	.tradebox-header {
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
+		gap: 12px;
 		margin-bottom: 12px;
+
+		&__left {
+			flex-shrink: 0;
+		}
+
+		&__center {
+			flex: 1;
+			display: flex;
+			justify-content: center;
+			min-width: 0;
+		}
+
+		&__right {
+			flex-shrink: 0;
+		}
 
 		.side-selector {
 			display: flex;
@@ -644,10 +660,10 @@
 	}
 
 	.bet-size-section {
-		background: #101114 !important;
+		background: transparent;
 		border: none;
-		border-radius: 8px;
-		padding: 12px;
+		border-radius: 0;
+		padding: 0;
 		transition: opacity 0.15s ease;
 		margin-bottom: 16px;
 
@@ -1832,7 +1848,7 @@ html.curtain-open {
 		width: 100%;
 		box-sizing: border-box;
 		background: transparent;
-		margin-bottom: 80px;
+		margin-bottom: 0;
 		border-left: 1px solid rgba(229, 231, 235, 0.22);
 	}
 
@@ -1853,7 +1869,7 @@ html.curtain-open {
 		flex: 1 1 auto;
 		min-height: 0;
 		align-self: stretch;
-		max-height: calc(100vh - var(--app-header-height, 6.2rem) - 24px);
+		max-height: calc(100vh - var(--app-header-height, 6.2rem));
 		overflow-y: auto;
 		overflow-x: hidden;
 		overscroll-behavior-y: contain;

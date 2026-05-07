@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 
 import Button from "components/Button/Button";
 import SpinningLoader from "@/components/Common/SpinningLoader";
@@ -38,6 +38,7 @@ import {
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { usePostTradeBalanceSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
 import SmartRoutingSection from "./SmartRoutingSection";
+import OddsFormatMenu from "@/components/OddsFormatMenu/OddsFormatMenu";
 import { FlashingValue } from "@/utils/FlashingValue";
 import { usePortfolio } from "@/context/PortfolioContext";
 
@@ -146,6 +147,8 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
    * users understand why a successful submit isn't yet reflected on-chain.
    */
   dflowUninitAtSubmit?: boolean;
+  routePreviewAllowed: boolean;
+  smartRoutingMarketKey: string;
 }
 
 export default function PredictionMarketTradeBoxUI({
@@ -186,9 +189,18 @@ export default function PredictionMarketTradeBoxUI({
   allMarketsSellNoBid = null,
   shareBalances,
   dflowUninitAtSubmit = false,
+  routePreviewAllowed,
+  smartRoutingMarketKey,
 }: PredictionMarketTradeBoxUIProps) {
   const { formatPrice } = useOddsDisplay();
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
+  /** Ensure outcome buttons never appear both unselected — core state should always be yes/no; this covers stale typings / edge transitions. */
+  const outcomeSelection = selectedPosition ?? "yes";
+
+  useEffect(() => {
+    if (selectedPosition != null) return;
+    onPositionChange("yes");
+  }, [selectedPosition, onPositionChange]);
   // Suppression signal for the post-signup setup flow: while any of the
   // three background activators (Polymarket / Predict / Limitless) is still
   // bootstrapping, an EXECUTION_NOT_READY error is expected and transient.
@@ -251,6 +263,21 @@ export default function PredictionMarketTradeBoxUI({
     const opts = venueDropdownOptions[0]?.options;
     return Boolean(opts?.length && opts[0]?.value === "all");
   }, [venueDropdownOptions]);
+
+  useEffect(() => {
+    if (smartRoutingSurfaceActive) return;
+    const opts = venueDropdownOptions[0]?.options;
+    if (!opts?.length) return;
+    const allowed = opts.map((o) => o.value);
+    if (!allowed.includes(state.tradingVenue)) {
+      onTradingVenueChange(allowed[0] as TradingVenue);
+    }
+  }, [
+    smartRoutingSurfaceActive,
+    venueDropdownOptions,
+    state.tradingVenue,
+    onTradingVenueChange,
+  ]);
 
   const predictHints = predictVenueBookHints;
   const yesHintPrices = predictHints?.yes
@@ -631,38 +658,45 @@ export default function PredictionMarketTradeBoxUI({
       </div>
 
       <div className="tradebox-header">
-        <div className="side-selector">
-          <Button
-            qa="tradebox-side-buy"
-            variant={side === 'buy' ? 'primary' : 'secondary'}
-            onClick={() => onSideChange('buy')}
-            className={`side-btn ${side === 'buy' ? 'selected primary' : ''}`}
-          >
-            Buy
-          </Button>
-          
-          <Button
-            qa="tradebox-side-sell"
-            variant={side === 'sell' ? 'primary' : 'secondary'}
-            onClick={() => onSideChange('sell')}
-            className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
-          >
-            Sell
-          </Button>
+        <div className="tradebox-header__left">
+          <div className="side-selector">
+            <Button
+              qa="tradebox-side-buy"
+              variant={side === 'buy' ? 'primary' : 'secondary'}
+              onClick={() => onSideChange('buy')}
+              className={`side-btn ${side === 'buy' ? 'selected primary' : ''}`}
+            >
+              Buy
+            </Button>
+
+            <Button
+              qa="tradebox-side-sell"
+              variant={side === 'sell' ? 'primary' : 'secondary'}
+              onClick={() => onSideChange('sell')}
+              className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
+            >
+              Sell
+            </Button>
+          </div>
         </div>
         {/* Market/Limit hidden on pandascore multi-venue pages (market-only smart routing). */}
-        {tradingVenue !== "all" && !smartRoutingSurfaceActive && (
-          <div className="trade-mode-selector">
-            <Tabs
-              options={orderTypeDropdownOptions}
-              regularOptionClassname="py-10"
-              type="inline"
-              selectedValue={orderType}
-              onChange={(value) => onOrderTypeChange(value as 'market' | 'limit')}
-              qa="trade-mode"
-            />
-          </div>
-        )}
+        <div className="tradebox-header__center">
+          {tradingVenue !== "all" && !smartRoutingSurfaceActive && (
+            <div className="trade-mode-selector">
+              <Tabs
+                options={orderTypeDropdownOptions}
+                regularOptionClassname="py-10"
+                type="inline"
+                selectedValue={orderType}
+                onChange={(value) => onOrderTypeChange(value as 'market' | 'limit')}
+                qa="trade-mode"
+              />
+            </div>
+          )}
+        </div>
+        <div className="tradebox-header__right">
+          <OddsFormatMenu iconSize={20} />
+        </div>
       </div>
       
       <div className="tradebox-separator" />
@@ -673,19 +707,19 @@ export default function PredictionMarketTradeBoxUI({
           qa="tradebox-position-yes"
           variant="secondary"
           onClick={() => onPositionChange('yes')}
-          className={`position-btn ${selectedPosition === 'yes' ? 'selected primary' : ''}`}
+          className={`position-btn ${outcomeSelection === 'yes' ? 'selected primary' : ''}`}
           style={isVsSingle ? {
-            background: selectedPosition === 'yes' ? yesTeamColor : hexToRgba(yesTeamColor, 0.35),
-            color: selectedPosition === 'yes' ? yesTeamTextSolid : yesTeamTextTint,
-            border: `2px solid ${selectedPosition === 'yes' ? getBorderColorForSelected(yesTeamColor) : hexToRgba(yesTeamColor, 0.35)}`,
+            background: outcomeSelection === 'yes' ? yesTeamColor : hexToRgba(yesTeamColor, 0.35),
+            color: outcomeSelection === 'yes' ? yesTeamTextSolid : yesTeamTextTint,
+            border: `2px solid ${outcomeSelection === 'yes' ? getBorderColorForSelected(yesTeamColor) : hexToRgba(yesTeamColor, 0.35)}`,
           } : undefined}
           onMouseEnter={(e) => {
-            if (isVsSingle && selectedPosition !== 'yes') {
+            if (isVsSingle && outcomeSelection !== 'yes') {
               e.currentTarget.style.border = `2px solid ${yesTeamColor}`;
             }
           }}
           onMouseLeave={(e) => {
-            if (isVsSingle && selectedPosition !== 'yes') {
+            if (isVsSingle && outcomeSelection !== 'yes') {
               e.currentTarget.style.border = `2px solid ${hexToRgba(yesTeamColor, 0.35)}`;
             }
           }}
@@ -700,19 +734,19 @@ export default function PredictionMarketTradeBoxUI({
           qa="tradebox-position-no"
           variant="secondary"
           onClick={() => onPositionChange('no')}
-          className={`position-btn ${selectedPosition === 'no' ? 'selected secondary' : ''}`}
+          className={`position-btn ${outcomeSelection === 'no' ? 'selected secondary' : ''}`}
           style={isVsSingle ? {
-            background: selectedPosition === 'no' ? noTeamColor : hexToRgba(noTeamColor, 0.35),
-            color: selectedPosition === 'no' ? noTeamTextSolid : noTeamTextTint,
-            border: `2px solid ${selectedPosition === 'no' ? getBorderColorForSelected(noTeamColor) : hexToRgba(noTeamColor, 0.35)}`,
+            background: outcomeSelection === 'no' ? noTeamColor : hexToRgba(noTeamColor, 0.35),
+            color: outcomeSelection === 'no' ? noTeamTextSolid : noTeamTextTint,
+            border: `2px solid ${outcomeSelection === 'no' ? getBorderColorForSelected(noTeamColor) : hexToRgba(noTeamColor, 0.35)}`,
           } : undefined}
           onMouseEnter={(e) => {
-            if (isVsSingle && selectedPosition !== 'no') {
+            if (isVsSingle && outcomeSelection !== 'no') {
               e.currentTarget.style.border = `2px solid ${noTeamColor}`;
             }
           }}
           onMouseLeave={(e) => {
-            if (isVsSingle && selectedPosition !== 'no') {
+            if (isVsSingle && outcomeSelection !== 'no') {
               e.currentTarget.style.border = `2px solid ${hexToRgba(noTeamColor, 0.35)}`;
             }
           }}
@@ -919,6 +953,8 @@ export default function PredictionMarketTradeBoxUI({
           onSelectVenue={onTradingVenueChange}
           userAmount={amount}
           side={side}
+          routePreviewAllowed={routePreviewAllowed}
+          smartRoutingMarketKey={smartRoutingMarketKey}
         />
       )}
 

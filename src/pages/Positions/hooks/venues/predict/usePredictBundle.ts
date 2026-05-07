@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { usePredictPositions } from "@/trading/predict/usePredictPositions";
+import { useAccountData } from "@/context/AccountDataContext";
 import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import { usePredictOrders } from "@/trading/predict/usePredictOrders";
 import { usePredictOrderMatches } from "@/trading/predict/usePredictOrderMatches";
@@ -36,6 +36,7 @@ import {
 } from "@/types/trading/venuePosition";
 import { mergePredictHistoryFillMaps } from "./predictHistoryRows";
 import { shortPredictFunMarketTitleForPortfolio } from "@/helpers/umbrellaDisplayName";
+import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 
 export type UsePredictBundleArgs = {
 	signerAddress: string | null | undefined;
@@ -68,18 +69,25 @@ export function usePredictBundle({
 	effectiveAccount,
 	activeTab,
 }: UsePredictBundleArgs): UsePredictBundleResult {
-	// Single source of truth for the predict-positions cache key — three call
-	// sites used to compute this slightly differently, producing duplicate
-	// `/api/predict/positions/:addr` reads at boot.
-	const predictAddress = resolvePredictAccountAddress(
+	// Rows + fetch state come from `AccountDataProvider` (same TanStack cache as `usePredictPositions`).
+	const predictSlice = useAccountData().positions.predict;
+	const all = predictSlice.rows;
+	const predictQueryAddress = resolvePredictAccountAddress(
 		signerAddress,
 		effectiveAccount,
 	);
-	const positionsQuery = usePredictPositions(predictAddress);
-	const all = positionsQuery.data ?? [];
+	const predictPositionsQueryEnabled = Boolean(
+		predictQueryAddress?.trim().toLowerCase().startsWith("0x"),
+	);
+
+	const positionsQuery = useMemo(
+		() =>
+			accountPositionsQueryShim(predictSlice, all, predictPositionsQueryEnabled),
+		[predictSlice, all, predictPositionsQueryEnabled],
+	);
 
 	const ordersEnabled =
-		(positionsQuery.isSuccess && (positionsQuery.data?.length ?? 0) > 0) ||
+		(predictSlice.isFetched && all.length > 0) ||
 		activeTab === "orders" ||
 		activeTab === "history";
 

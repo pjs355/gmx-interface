@@ -163,6 +163,19 @@ export function HomeInlineTradeLayout({
 		return firstVisible;
 	}, [enabled, visibleUmbrellas, pinnedUmbrellaId, firstVisible]);
 
+	const focusedUmbrellaIdRef = useRef<string | null>(null);
+	useEffect(() => {
+		focusedUmbrellaIdRef.current = focusedUmbrella?._id ?? null;
+	}, [focusedUmbrella?._id]);
+
+	/** After closing the mobile sheet, selecting odds on a *different* umbrella resets dock hydration from storage. */
+	const lastClosedUmbrellaIdRef = useRef<string | null>(null);
+
+	const handleCurtainClosed = useCallback(() => {
+		if (!enabled || !isMobile) return;
+		lastClosedUmbrellaIdRef.current = focusedUmbrellaIdRef.current;
+	}, [enabled, isMobile]);
+
 	const questions = useMemo(() => {
 		if (!focusedUmbrella?._id) return [] as PredictionMarket[];
 		const qs = getQuestionsForUmbrella(focusedUmbrella._id);
@@ -191,6 +204,10 @@ export function HomeInlineTradeLayout({
 		questionOrderbooks,
 		orderbooksReady,
 	);
+
+	/** Same idea as `MarketPanels`: never leave the dock trade column on skeleton while we have questions. */
+	const tradeBoxActiveMarket =
+		activeMarket ?? sortedQuestions[0] ?? null;
 
 	const { tradingPagePrices } = useUmbrellaTradePricing({
 		umbrella: enabled ? focusedUmbrella : null,
@@ -260,6 +277,18 @@ export function HomeInlineTradeLayout({
 			if (!activeMarket || idOf(activeMarket) !== idOf(top)) {
 				setActiveMarket(top);
 			}
+			return;
+		}
+
+		// Pinned umbrella in the dock but no stored market id, or current market left the list
+		// (e.g. storage cleared, bad id). Without this branch `activeMarket` stays null forever
+		// while `hasUserSelected` is true → permanent `TradeBoxSkeleton`.
+		const curId = activeMarket ? idOf(activeMarket) : "";
+		const inList =
+			Boolean(curId) &&
+			sortedQuestions.some((q) => idOf(q) === curId);
+		if (!activeMarket || !inList) {
+			setActiveMarket(sortedQuestions[0]);
 		}
 	}, [enabled, hasUserSelected, sortedQuestions, activeMarket]);
 
@@ -282,13 +311,24 @@ export function HomeInlineTradeLayout({
 
 	const handleHomeOddsSelect = useCallback(
 		(payload: HomeOddsSelectPayload) => {
+			const closedFrom = lastClosedUmbrellaIdRef.current;
+			if (
+				isMobile &&
+				closedFrom !== null &&
+				payload.umbrella._id !== closedFrom
+			) {
+				writeStoredId(HOME_DOCK_ACTIVE_MARKET_KEY, null);
+				setHasUserSelected(false);
+			}
+			lastClosedUmbrellaIdRef.current = null;
+
 			setPinnedUmbrellaId(payload.umbrella._id);
 			setHasUserSelected(true);
 			setActiveMarket(payload.question);
 			setActivePosition(payload.position);
 			localStorage.setItem("activePosition", payload.position);
 		},
-		[],
+		[isMobile],
 	);
 
 	const handlePositionChange = useCallback((p: "yes" | "no") => {
@@ -313,7 +353,7 @@ export function HomeInlineTradeLayout({
 
 	return (
 		<HomeTradeDockContext.Provider value={contextValue}>
-			<PredictionCurtainProvider>
+			<PredictionCurtainProvider onCurtainClosed={handleCurtainClosed}>
 				<div className="predictions-page__home-trade-grid">
 					<div className="predictions-page__home-trade-main">{children}</div>
 					{isDesktop && focusedUmbrella && (
@@ -321,7 +361,7 @@ export function HomeInlineTradeLayout({
 							<UmbrellaTradeBoxPanel
 								umbrella={focusedUmbrella}
 								questionOrderbooks={questionOrderbooks}
-								activeMarket={activeMarket}
+								activeMarket={tradeBoxActiveMarket}
 								activePosition={activePosition}
 								onPositionChange={handlePositionChange}
 								settledInfo={settledInfo}
@@ -336,7 +376,7 @@ export function HomeInlineTradeLayout({
 						<UmbrellaTradeBoxPanel
 							umbrella={focusedUmbrella}
 							questionOrderbooks={questionOrderbooks}
-							activeMarket={activeMarket}
+							activeMarket={tradeBoxActiveMarket}
 							activePosition={activePosition}
 							onPositionChange={handlePositionChange}
 							settledInfo={settledInfo}

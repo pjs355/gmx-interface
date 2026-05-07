@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useEffect, useState, useRef, forwardRef, useImperativeHandle } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { toast } from "react-toastify";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // Link import removed — executionGateBanner no longer rendered
@@ -278,6 +279,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     if (matchedMonitor.limitless) set.add("limitless");
     return set;
   }, [matchedMonitor]);
+
+  useEffect(() => {
+    const v = state.tradingVenue;
+    if (v === "all") return;
+    if (matchedVenues.has(v)) return;
+    handleTradingVenueChange(pandaId ? "all" : "levelup");
+  }, [matchedVenues, state.tradingVenue, pandaId, handleTradingVenueChange]);
 
   useEffect(() => {
     if (!isPredictionPricingDebugEnabled()) return;
@@ -2012,6 +2020,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     );
   })();
 
+  const debouncedSorRoutePreviewAllowed = useDebouncedValue(
+    sorAmountMeetsFloor,
+    350,
+  );
+
+  const smartRoutingMarketKey = useMemo(() => {
+    const id = market?._id ?? (market as { questionId?: string })?.questionId;
+    return typeof id === "string" ? id.trim() : "";
+  }, [market]);
+
   const sorRouteEnabled = !!state.selectedPosition
     && sorAmountMeetsFloor
     && (state.orderType !== "limit" ||
@@ -2096,6 +2114,23 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     executeBridge: sorExecutor.executeBridge,
     reportExecutionPhaseRef: sorReportExecutionPhaseRef,
   });
+
+  const prevSmartRoutingMarketKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = smartRoutingMarketKey;
+    if (!key) return;
+    const prev = prevSmartRoutingMarketKeyRef.current;
+    prevSmartRoutingMarketKeyRef.current = key;
+    if (prev !== null && prev !== key && state.side === "buy") {
+      sorExecution.resetExecution();
+      setState((s) => ({ ...s, orderResult: null }));
+    }
+  }, [
+    smartRoutingMarketKey,
+    state.side,
+    sorExecution.resetExecution,
+    setState,
+  ]);
 
   const [sorRouteExpired, setSorRouteExpired] = useState(false);
   useEffect(() => {
@@ -2642,6 +2677,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       shareBalances={tradeBoxShareBalances}
       mobilePeekBar={mobilePeekBar}
       dflowUninitAtSubmit={dflowUninitAtSubmit}
+      routePreviewAllowed={debouncedSorRoutePreviewAllowed}
+      smartRoutingMarketKey={smartRoutingMarketKey}
     />
 		</>
   );

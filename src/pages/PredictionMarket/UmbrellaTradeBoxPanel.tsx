@@ -36,6 +36,8 @@ export function UmbrellaTradeBoxPanel({
 	/* Match desktop market grid (`predictions-page__home-trade-grid` @ 1101px). */
 	const wideTradeDock = useMedia("(min-width: 1101px)");
 
+	/* Shell is only for states that do not mount `PredictionMarketTradeBox`
+	 * (that component’s responsive container already wraps desktop with the shell). */
 	const desktopTradeDockShell = (child: React.ReactNode) =>
 		wideTradeDock ? (
 			<div
@@ -82,10 +84,6 @@ export function UmbrellaTradeBoxPanel({
 
 	return (
 		<PredictionMarketTradeBox
-			// Key by umbrella so switching matches gets a clean re-init (correct
-			// initialVenue / pandascore wiring), while switching markets within the
-			// same umbrella keeps the same component mounted (no unmount, no flash).
-			key={umbrella._id}
 			market={
 				{
 					...(activeMarket as any),

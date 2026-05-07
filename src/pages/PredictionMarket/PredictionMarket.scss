@@ -13,11 +13,11 @@
 	min-height: calc(100vh - var(--app-header-height, 6.2rem));
 	display: flex;
 	flex-direction: column;
-	padding-bottom: 2.4rem;
+	padding-bottom: 0;
 	&.mobile {
 		padding-left: 16px;
 		padding-right: 16px;
-		padding-bottom: 3.2rem; // compact mobile bottom spacing
+		padding-bottom: 0;
 		overflow-x: hidden;
 		max-width: 100%;
 		box-sizing: border-box;
@@ -95,7 +95,12 @@
 	//gap: 16px;
 }
 
-/* Host for `.prediction-trade-column-shell` — scroll + sticky live on `.prediction-trade-column-body` (see `PredictionMarketTradeBox.scss`). */
+/*
+ * Host for `.prediction-trade-column-shell`.
+ * Do not make this column its own scroll container: `overflow-y: auto` here
+ * breaks viewport `position: sticky` on `.prediction-trade-column-body`.
+ * Document scroll + sticky inner body handle the trade rail (see `PredictionMarketTradeBox.scss`).
+ */
 .right-panel {
 	position: relative;
 	display: flex;
@@ -103,24 +108,7 @@
 	min-width: 0;
 	min-height: 0;
 	align-self: stretch;
-	/*
-	 * Fill the full space between header and viewport bottom (no trailing
-	 * 24px gap). Without this, the column ended 24px above the viewport
-	 * bottom and showed a black strip before the page footer scrolled up,
-	 * which read as a stray bar under the trade module.
-	 */
-	max-height: calc(100vh - var(--app-header-height, 6.2rem));
-	overflow-y: auto;
-	overflow-x: hidden;
-	overscroll-behavior-y: contain;
-	-webkit-overflow-scrolling: touch;
-	/* Scroll without visible scrollbar (wheel / trackpad / touch still work). */
-	scrollbar-width: none;
-	-ms-overflow-style: none;
-
-	&::-webkit-scrollbar {
-		display: none;
-	}
+	overflow: visible;
 }
 
 /*

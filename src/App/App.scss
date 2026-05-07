@@ -33,6 +33,15 @@ $app-card-padding: 1.5rem;
 	flex: 1;
 }
 
+/*
+ * RPG widget is `position: fixed`; its flex item must not grow or it reserves a
+ * blank band of flex space (reads as an unexplained black strip in the layout).
+ */
+.App-content > .rpg-panel {
+	flex: 0 0 auto;
+	min-height: 0;
+}
+
 .App-content footer {
 	margin-top: auto;
 }

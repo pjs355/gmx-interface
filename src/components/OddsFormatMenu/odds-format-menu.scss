@@ -1,0 +1,66 @@
+/* Shared odds format dropdown (Predictions calendar header + prediction trade box). */
+.odds-format-menu {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.odds-format-menu__trigger {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 6px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: #f9fafb;
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	&[data-hover],
+	&[data-active] {
+		background: rgba(255, 255, 255, 0.06);
+	}
+}
+
+.odds-format-menu__items {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 6px);
+	z-index: 60;
+	min-width: min(260px, calc(100vw - 32px));
+	padding: 6px;
+	border-radius: 8px;
+	background: #141414;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+	outline: none;
+}
+
+.odds-format-menu__item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 10px 12px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.92);
+	font-size: 14px;
+	font-weight: 500;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+
+	&--focus {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	&--selected {
+		color: #f9fafb;
+		background: rgba(255, 255, 255, 0.06);
+	}
+}

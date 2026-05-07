@@ -1,15 +1,11 @@
 import { useEffect, useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
-import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import type { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useAccountData } from "@/context/AccountDataContext";
 import type { VenuePosition } from "@/types/trading/venuePosition";
-
-type PrivateApi = ReturnType<typeof usePrivateApiClient>;
+import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 
 export type UseDflowBundleArgs = {
 	solanaAddress: string | null | undefined;
-	privateApi: PrivateApi;
 	authenticated: boolean;
 };
 
@@ -19,20 +15,14 @@ export type UseDflowBundleResult = {
 	winnings: VenuePosition[];
 	history: VenuePosition[];
 	positionsQuery: UseQueryResult<VenuePosition[], unknown>;
-	/**
-	 * Gate consumed by `useReadinessGates` and the slim `[positions-gate]` log so the
-	 * Positions shell waits 10s on a verified DFlow user (vs. 5s) before bypass — keeps
-	 * DFlow rows from disappearing under their own latency budget.
-	 */
 	dflowRpcEnabled: boolean;
 };
 
 export function useDflowBundle({
 	solanaAddress,
-	privateApi,
 	authenticated,
 }: UseDflowBundleArgs): UseDflowBundleResult {
-	const dflowProof = useDflowProofStatus();
+	const { positions, dflowProof } = useAccountData();
 	const solanaLinked = Boolean(solanaAddress?.trim());
 
 	const dflowRpcEnabled =
@@ -41,10 +31,13 @@ export function useDflowBundle({
 		dflowProof.isFetched &&
 		dflowProof.isVerified;
 
-	const positionsQuery = useDflowPositions(solanaAddress, privateApi, {
-		enabled: dflowRpcEnabled,
-	});
-	const all = positionsQuery.data ?? [];
+	const dflow = positions.dflow;
+	const all = dflow.rows;
+
+	const positionsQuery = useMemo(
+		() => accountPositionsQueryShim(dflow, all, dflowRpcEnabled),
+		[dflow, all, dflowRpcEnabled],
+	);
 
 	useEffect(() => {
 		if (!import.meta.env.DEV) return;
@@ -54,10 +47,8 @@ export function useDflowBundle({
 			authenticated,
 			proofFetched: dflowProof.isFetched,
 			proofVerified: dflowProof.isVerified,
-			queryStatus: positionsQuery.status,
-			fetchStatus: positionsQuery.fetchStatus,
-			isPending: positionsQuery.isPending,
-			isFetched: positionsQuery.isFetched,
+			sliceStatus: dflow.status,
+			isFetched: dflow.isFetched,
 			rowCount: all.length,
 		});
 		console.log(
@@ -70,34 +61,11 @@ export function useDflowBundle({
 		dflowProof.isFetched,
 		dflowProof.isVerified,
 		dflowRpcEnabled,
-		positionsQuery.fetchStatus,
-		positionsQuery.isFetched,
-		positionsQuery.isPending,
-		positionsQuery.status,
+		dflow.isFetched,
+		dflow.status,
 		solanaLinked,
 	]);
 
-	/**
-	 * Routing rules (mirrors how the rest of the Positions page interprets venues):
-	 *   - WON  + shares > 0       → winnings (claimable; rendered with a Claim button)
-	 *   - WON  + shares ≤ 0       → history  (already redeemed/closed; would phantom-block in winnings)
-	 *   - LOST                    → history
-	 *   - open + shares > epsilon → active   (currently held, open / pending settlement)
-	 *   - open + shares ≤ epsilon → dropped  (ghost rows from `useDflowPositions` exist purely to
-	 *                                          carry past fills/cost into History once a market
-	 *                                          finalizes — they must NOT show up on the Positions
-	 *                                          tab while the market is still open.)
-	 *
-	 * Do **not** push rows to history on `isVenueMarketResolvedLike` alone: DFlow `CLOSED` means
-	 * trading ended but the outcome may still be pending — the user still holds outcome tokens and
-	 * must see them under Positions. Only explicit `LOST` (or `WON` with zero shares) belongs in history.
-	 *
-	 * Why the `shares > 0.0001` gate on `active`: DFlow `useDflowPositions` intentionally emits
-	 * zero-balance "ghost" `VenuePosition`s for mints the user previously held (so cost/fills carry
-	 * forward). Without this filter, a market the user fully sold out of stays on the Positions tab
-	 * until DFlow flips its `status` to `finalized` — sometimes hours or days late. Mirrors the
-	 * `mapPredictPositionRows` `> 0.0001` epsilon.
-	 */
 	const { active, winnings, history } = useMemo(() => {
 		const a: VenuePosition[] = [];
 		const w: VenuePosition[] = [];

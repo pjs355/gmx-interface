@@ -7,6 +7,7 @@ import { useRecentSettlementClaim } from "context/RecentSettlementClaimContext";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useOddsMonitor } from "context/OddsMonitorContext";
 import { usePortfolio } from "@/context/PortfolioContext";
+import { useAccountData } from "@/context/AccountDataContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { buildPredictUmbrellaLookup } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
@@ -66,8 +67,10 @@ export default function usePositionsData() {
 		solanaAddress,
 		limitlessMakerBase,
 		isLoading: fundingAddressesLoading,
+		fundingHydrated,
 	} = useFundingAddresses();
 	const { authenticated } = usePrivy();
+	const { dflowProof } = useAccountData();
 	const {
 		active: polyPositions,
 		winnings: polyWinnings,
@@ -115,7 +118,7 @@ export default function usePositionsData() {
 		history: dflowHistory,
 		positionsQuery: dflowPositionsQuery,
 		dflowRpcEnabled,
-	} = useDflowBundle({ solanaAddress, privateApi, authenticated });
+	} = useDflowBundle({ solanaAddress, authenticated });
 
 	const handleClaimSuccess = useHandleClaimSuccess({
 		acknowledgeClearedPayouts,
@@ -182,6 +185,7 @@ export default function usePositionsData() {
 	 * work on History also work on Winnings — no second resolve, no extra request.
 	 */
 	const {
+		venueHistoryResolveQueries,
 		historyCatalogUmbrellas,
 		venueHistory,
 		historyResolveStage,
@@ -241,10 +245,13 @@ export default function usePositionsData() {
 		isDataFullyLoaded,
 		isPositionsTabContentReady,
 		isHistoryTabContentReady,
-		positionsShellBypassMaxWaitMs,
 	} = useReadinessGates({
 		account,
 		effectiveAccount,
+		authenticated,
+		solanaLinked: Boolean(solanaAddress?.trim()),
+		dflowProofIsFetched: dflowProof.isFetched,
+		fundingHydrated,
 		predictionLoading,
 		userDataLoading,
 		portfolioLoading,
@@ -265,6 +272,7 @@ export default function usePositionsData() {
 		limitlessTradeHistoryQueryIsFetched: limitlessTradeHistoryQuery.isFetched,
 		limitlessTradeHistoryQueryIsError: limitlessTradeHistoryQuery.isError,
 		historyUmbrellaResolveSettled,
+		venueHistoryResolveQueryCount: venueHistoryResolveQueries.length,
 	});
 
 	return {
@@ -301,7 +309,5 @@ export default function usePositionsData() {
 		resolvedMarketsByUmbrella,
 		activeTab,
 		setActiveTab,
-		/** See comment above `POSITIONS_SHELL_BYPASS_MS_*` — consumed by `Positions.tsx` shell timer. */
-		positionsShellBypassMaxWaitMs,
 	};
 }

@@ -10,11 +10,21 @@ interface CurtainContextType {
 
 const CurtainContext = createContext<CurtainContextType | null>(null);
 
-export function PredictionCurtainProvider({ children }: { children: ReactNode }) {
-  const [isCurtainOpen, setIsCurtainOpen] = useState(false);
+export function PredictionCurtainProvider({
+	children,
+	onCurtainClosed,
+}: {
+	children: ReactNode;
+	onCurtainClosed?: () => void;
+}) {
+	const [isCurtainOpen, setIsCurtainOpen] = useState(false);
 
-  const openCurtain = () => setIsCurtainOpen(true);
-  const closeCurtain = () => setIsCurtainOpen(false);
+	const closeCurtain = () => {
+		setIsCurtainOpen(false);
+		onCurtainClosed?.();
+	};
+
+	const openCurtain = () => setIsCurtainOpen(true);
 
   return (
     <CurtainContext.Provider value={{ isCurtainOpen, openCurtain, closeCurtain }}>

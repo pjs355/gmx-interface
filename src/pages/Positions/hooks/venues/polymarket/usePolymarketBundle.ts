@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
+import { useAccountData } from "@/context/AccountDataContext";
 import { usePolymarketTradeHistory } from "@/trading/polymarket/usePolymarketTradeHistory";
 import type { VenuePosition } from "@/types/trading/venuePosition";
+import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 
 export type UsePolymarketBundleArgs = {
 	polymarketSafe: string | undefined | null;
@@ -20,9 +21,16 @@ export type UsePolymarketBundleResult = {
 export function usePolymarketBundle({
 	polymarketSafe,
 }: UsePolymarketBundleArgs): UsePolymarketBundleResult {
-	const positionsQuery = usePolymarketPositions(polymarketSafe);
+	const { positions } = useAccountData();
+	const poly = positions.polymarket;
+	const all = poly.rows;
 	const tradeHistoryQuery = usePolymarketTradeHistory(polymarketSafe);
-	const all = positionsQuery.data ?? [];
+
+	const polyEnabled = Boolean(polymarketSafe?.trim());
+	const positionsQuery = useMemo(
+		() => accountPositionsQueryShim(poly, all, polyEnabled),
+		[poly, all, polyEnabled],
+	);
 
 	const { active, winnings, history } = useMemo(() => {
 		const a: VenuePosition[] = [];

@@ -1,4 +1,4 @@
-import cs2BgRaw from "@/assets/market-backgrounds/cs2_bg_raw.jpg";
+import cs2BgRaw from "@/assets/market-backgrounds/cs2.jpg";
 import {
 	LIVE_PILL_ID,
 	normalizeTagLabel,

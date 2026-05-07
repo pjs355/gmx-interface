@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useAnimatedDots } from "../../../../hooks/useAnimatedDots";
 import { getVenueConfig, type TradingVenue } from "@/config/venueConfig";
 import {
@@ -544,6 +545,9 @@ export function useButtonState({
     setupActivation?.anyInProgress || setupActivation?.onboardingActive,
   );
 
+  /** Debounced for button copy only — avoids flashing "Trade minimum is $5" while typing toward a valid order size. */
+  const debouncedAmountForMinLabel = useDebouncedValue(state.amount ?? "", 300);
+
   const rawButtonState = useMemo<ButtonStateResult>(() => {
     if (!authenticated) {
       return { text: "Log In or Sign Up", disabled: false, onClick: () => login() };
@@ -558,7 +562,7 @@ export function useButtonState({
     const limitPriceCentsForMin =
       state.orderType === "limit" ? parseLimitPriceCents(state.price) : undefined;
 
-    const checkInputMin = (
+    const checkInputMinForButtonLabel = (
       tradingVenue: string,
       matched?: Iterable<string> | null,
     ) =>
@@ -567,14 +571,14 @@ export function useButtonState({
         matchedVenues: matched ?? undefined,
         side: state.side,
         orderType: state.orderType,
-        amountStr: state.amount,
+        amountStr: debouncedAmountForMinLabel,
         limitPriceCents: limitPriceCentsForMin,
       });
 
     /** `check === true` branch helper that returns the product-specific copy. */
     const belowMinButton = (
       check: Extract<
-        ReturnType<typeof checkInputMin>,
+        ReturnType<typeof checkInputMinForButtonLabel>,
         { below: true }
       >,
     ): ButtonStateResult => ({
@@ -621,8 +625,16 @@ export function useButtonState({
       ) {
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
+      if (sorState?.isLoading && !sorState?.route) {
+        return {
+          text:
+            state.side === "buy" ? "Finding best price..." : "Fetching price...",
+          disabled: true,
+          onClick: () => {},
+        };
+      }
       {
-        const chk = checkInputMin("all", sorMatchedVenues ?? null);
+        const chk = checkInputMinForButtonLabel("all", sorMatchedVenues ?? null);
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
@@ -635,14 +647,6 @@ export function useButtonState({
             animatedDots,
             sorState.prefundLegProgress,
           ),
-          disabled: true,
-          onClick: () => {},
-        };
-      }
-      if (sorState?.isLoading && !sorState?.route) {
-        return {
-          text:
-            state.side === "buy" ? "Finding best price..." : "Fetching price...",
           disabled: true,
           onClick: () => {},
         };
@@ -813,7 +817,7 @@ export function useButtonState({
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
       {
-        const chk = checkInputMin("polymarket");
+        const chk = checkInputMinForButtonLabel("polymarket");
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
@@ -909,7 +913,7 @@ export function useButtonState({
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
       {
-        const chk = checkInputMin("limitless");
+        const chk = checkInputMinForButtonLabel("limitless");
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
@@ -1031,7 +1035,7 @@ export function useButtonState({
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
       {
-        const chk = checkInputMin("dflow");
+        const chk = checkInputMinForButtonLabel("dflow");
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
@@ -1159,7 +1163,7 @@ export function useButtonState({
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
       {
-        const chk = checkInputMin("predictfun");
+        const chk = checkInputMinForButtonLabel("predictfun");
         if (chk.below) return belowMinButton(chk);
       }
       if (pt.sellShareLoading && state.side === "sell" && sellExceedsScopedHoldings()) {
@@ -1251,7 +1255,7 @@ export function useButtonState({
     }
 
     if (state.tradingVenue === "levelup") {
-      const chk = checkInputMin("levelup");
+      const chk = checkInputMinForButtonLabel("levelup");
       if (chk.below) return belowMinButton(chk);
     }
 
@@ -1388,7 +1392,7 @@ export function useButtonState({
       isSweepingBook,
       availableShares,
     };
-  }, [authenticated, account, state, login, marketOrderHandler, usdcBalance, yesBalance, noBalance, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictSellShareBalance, limitlessTrading, limitlessSellShareBalance, dflowProofVerified, dflowProofLoading, dflowStartProofFlow, sorMatchedVenues, sorState, navigate]);
+  }, [authenticated, account, state, login, marketOrderHandler, usdcBalance, yesBalance, noBalance, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictSellShareBalance, limitlessTrading, limitlessSellShareBalance, dflowProofVerified, dflowProofLoading, dflowStartProofFlow, sorMatchedVenues, sorState, navigate, debouncedAmountForMinLabel]);
 
   /* Wrapping at the very end ensures every "Fetching price…" branch above
    * goes through the same flicker shield. The stabilizer preserves any

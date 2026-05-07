@@ -11,19 +11,12 @@ import { useUserData } from "context/UserDataContext";
 import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
-import { usePredictPositions } from "@/trading/predict/usePredictPositions";
-import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
+import { useAccountData } from "@/context/AccountDataContext";
+import { limitlessPositionsForPortfolioMtm } from "@/trading/limitless/splitLimitlessVenuePositions";
 import { sumPredictPositionMarkValue } from "@/trading/predict/sumPredictPositionMarkValue";
 import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
-import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
-import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
-import { limitlessPositionsForPortfolioMtm } from "@/trading/limitless/splitLimitlessVenuePositions";
 import { debugLimitlessPortfolioTable } from "@/trading/limitless/limitlessPortfolioDebug";
 import { isVenueMarketResolvedLike } from "@/types/trading/venuePosition";
-import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useOddsMonitor } from "context/OddsMonitorContext";
 import { getListingYesNoPricesForUmbrella } from "@/helpers/predictionUtils";
 import {
@@ -60,7 +53,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const lastMarkToMarketAndVenueRef = React.useRef<number>(0);
 	/** Last full "positions" column (mtm+venue+LevelUp unclaimed) — for snap-to-zero guard only. */
 	const lastPortfolioPositionColumnRef = React.useRef<number>(0);
-	const { account, signerAddress } = useSignerContext();
+	const { account } = useSignerContext();
 	const {
 		umbrellas,
 		getQuestionsForUmbrella,
@@ -70,54 +63,43 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const { tokenBalances, loading: userDataLoading } = useUserData();
 	const collateral = useCollateralTokens();
 
-	const {
-		polymarketSafe,
-		solanaAddress,
-		limitlessMakerBase,
-	} = useFundingAddresses();
+	const { positions, dflowProof, addresses } = useAccountData();
 	const { authenticated } = usePrivy();
-	const dflowProof = useDflowProofStatus();
-	const solanaLinked = Boolean(solanaAddress?.trim());
+	const solanaLinked = Boolean(addresses.solanaAddress?.trim());
+	const dflowRpcEnabled =
+		solanaLinked &&
+		Boolean(authenticated) &&
+		dflowProof.isFetched &&
+		dflowProof.isVerified;
 
-	const polyPositionsQuery = usePolymarketPositions(polymarketSafe);
 	const polyPositionsDataNetClaim = useMemo(() => {
-		if (!polyPositionsQuery.data) return null;
-		return polyPositionsQuery.data.filter(
+		return positions.polymarket.rows.filter(
 			(p) =>
 				!acknowledgedClearedPayoutKeys.has(
 					syntheticVenueWinningsRowId("polymarket", p.tokenId),
 				),
 		);
-	}, [acknowledgedClearedPayoutKeys, polyPositionsQuery.data]);
+	}, [acknowledgedClearedPayoutKeys, positions.polymarket.rows]);
 	const polyPositionsTotal = useMemo(() => {
-		if (!polyPositionsDataNetClaim) return 0;
 		return polyPositionsDataNetClaim.reduce(
 			(sum, p) => sum + (p.currentValue ?? 0),
-			0
+			0,
 		);
 	}, [polyPositionsDataNetClaim]);
 
-	// Match usePositionsData: Predict.fun keys off the embedded signer (BNB),
-	// not the Base smart wallet. `resolvePredictAccountAddress` is the single
-	// source of truth so PortfolioContext / usePredictBundle / TradeBox all
-	// produce the same TanStack key (no double-fetch on resolution skew).
-	const predictQueryAddress = resolvePredictAccountAddress(
-		signerAddress,
-		account,
-	);
-	const predictPositionsQuery = usePredictPositions(predictQueryAddress);
+	// Match `AccountDataProvider` + Positions: Predict.fun keys off the embedded signer (BNB),
+	// not the Base smart wallet.
 	const predictPositionsDataNetClaim = useMemo(() => {
-		if (!predictPositionsQuery.data) return null;
-		return predictPositionsQuery.data.filter(
+		return positions.predict.rows.filter(
 			(p) =>
 				!acknowledgedClearedPayoutKeys.has(
 					syntheticVenueWinningsRowId("predictfun", p.tokenId),
 				),
 		);
-	}, [acknowledgedClearedPayoutKeys, predictPositionsQuery.data]);
+	}, [acknowledgedClearedPayoutKeys, positions.predict.rows]);
 	const predictPortfolioMarketIds = useMemo(() => {
 		const ids = new Set<number>();
-		for (const p of predictPositionsDataNetClaim ?? []) {
+		for (const p of predictPositionsDataNetClaim) {
 			if (p.numericMarketId) ids.add(p.numericMarketId);
 		}
 		return Array.from(ids);
@@ -127,7 +109,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		predictPortfolioMarketIds.length > 0,
 	);
 	const predictPositionsTotal = useMemo(() => {
-		if (!predictPositionsDataNetClaim) return 0;
 		return sumPredictPositionMarkValue(
 			predictPositionsDataNetClaim,
 			umbrellas,
@@ -143,43 +124,23 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		predictMarketDetailsPortfolioQuery.data,
 	]);
 
-	const privateApi = usePrivateApiClient();
-	const dflowRpcEnabled =
-		solanaLinked &&
-		Boolean(authenticated) &&
-		dflowProof.isFetched &&
-		dflowProof.isVerified;
-	const dflowPositionsQuery = useDflowPositions(
-		solanaAddress,
-		privateApi,
-		{ enabled: dflowRpcEnabled },
-	);
 	const dflowPositionsTotal = useMemo(() => {
-		if (!dflowPositionsQuery.data) return 0;
-		return dflowPositionsQuery.data.reduce(
+		return positions.dflow.rows.reduce(
 			(sum, p) => sum + (p.currentValue ?? 0),
-			0
+			0,
 		);
-	}, [dflowPositionsQuery.data]);
+	}, [positions.dflow.rows]);
 
-	const limitlessPortfolioEnabled =
-		Boolean(authenticated) && Boolean(limitlessMakerBase?.trim());
-	const limitlessVenuePositionsQuery =
-		useLimitlessVenuePositions(limitlessPortfolioEnabled);
 	const limitlessPositionsDataNetClaim = useMemo(() => {
-		const src = limitlessVenuePositionsQuery.data;
-		if (!src) return null;
-		// Exclude History-bucket rows so header MTM matches Positions tab (no double-count on settled CLOB).
-		const mtm = limitlessPositionsForPortfolioMtm(src);
+		const mtm = limitlessPositionsForPortfolioMtm(positions.limitless.rows);
 		return mtm.filter(
 			(p) =>
 				!acknowledgedClearedPayoutKeys.has(
 					syntheticVenueWinningsRowId("limitless", p.tokenId),
 				),
 		);
-	}, [acknowledgedClearedPayoutKeys, limitlessVenuePositionsQuery.data]);
+	}, [acknowledgedClearedPayoutKeys, positions.limitless.rows]);
 	const limitlessPositionsTotal = useMemo(() => {
-		if (!limitlessPositionsDataNetClaim) return 0;
 		return limitlessPositionsDataNetClaim.reduce(
 			(sum, p) => sum + (p.currentValue ?? 0),
 			0,
@@ -247,7 +208,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 		Boolean(account) &&
 		Boolean(authenticated) &&
 		dflowRpcEnabled &&
-		dflowPositionsQuery.isPending;
+		positions.dflow.status === "pending";
 
 	/**
 	 * Portfolio is "loading" only while the underlying queries that feed

@@ -13,7 +13,7 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import usePositionsData from "./hooks/usePositionsData";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { toCentsString } from "./utils/formatCurrency";
 
 function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
@@ -88,7 +88,6 @@ export default function Positions() {
 		resolvedMarketsByUmbrella,
 		activeTab,
 		setActiveTab,
-		positionsShellBypassMaxWaitMs,
 	} = data;
 
 	/** Orders tab removed from UI — normalize stale state (e.g. hot-reload) so a tab stays selected. */
@@ -96,39 +95,13 @@ export default function Positions() {
 		if (activeTab === "orders") setActiveTab("positions");
 	}, [activeTab, setActiveTab]);
 
-	/** One shell for header + tab: no mismatch between portfolio row and table/cards. */
-	const pageShellLoadingStrict =
+	/** Tab-scoped body skeleton; header cash stays independent via `PositionsHeader`. */
+	const pageContentLoading =
 		activeTab === "positions" || activeTab === "orders"
 			? !isPositionsTabContentReady
 			: activeTab === "history"
 				? !isHistoryTabContentReady
 				: !isPositionsTabContentReady;
-
-	const [positionsShellBypass, setPositionsShellBypass] = useState(false);
-
-	/** Read inside timer only — omitting from effect deps avoids resetting bypass when DFlow settles (10s→5s) while the shell is still strict (skeleton flicker). */
-	const shellBypassMsRef = useRef(positionsShellBypassMaxWaitMs);
-	shellBypassMsRef.current = positionsShellBypassMaxWaitMs;
-
-	/** Shell bypass delay comes from `usePositionsData` (5s default, 10s while DFlow query pending). */
-	useEffect(() => {
-		if (!account) {
-			setPositionsShellBypass(false);
-			return;
-		}
-		if (!pageShellLoadingStrict) {
-			setPositionsShellBypass(false);
-			return;
-		}
-		setPositionsShellBypass(false);
-		const t = window.setTimeout(
-			() => setPositionsShellBypass(true),
-			shellBypassMsRef.current,
-		);
-		return () => window.clearTimeout(t);
-	}, [account, pageShellLoadingStrict]);
-
-	const pageShellLoading = positionsShellBypass ? false : pageShellLoadingStrict;
 
 	const { setBlockHeaderMetrics } = usePositionsPageMetricsGate();
 	useEffect(() => {
@@ -136,9 +109,9 @@ export default function Positions() {
 			setBlockHeaderMetrics(false);
 			return;
 		}
-		setBlockHeaderMetrics(pageShellLoading);
+		setBlockHeaderMetrics(pageContentLoading);
 		return () => setBlockHeaderMetrics(false);
-	}, [account, pageShellLoading, setBlockHeaderMetrics]);
+	}, [account, pageContentLoading, setBlockHeaderMetrics]);
 
 	const renderPositionsTab = () => {
 		const hasPositions = umbrellaPositions.length > 0;
@@ -300,9 +273,9 @@ export default function Positions() {
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
 						cashLoading={portfolioCashLoading}
-						positionsLoading={pageShellLoading}
+						positionsLoading={pageContentLoading}
 						portfolioLoading={portfolioLoading}
-						summariesLocked={Boolean(account) && pageShellLoading}
+						summariesLocked={Boolean(account) && pageContentLoading}
 					/>
 					<PositionsTabs activeTab={activeTab} setActiveTab={setActiveTab} />
 				</div>
@@ -311,7 +284,7 @@ export default function Positions() {
 					{!account && <p className="text-body">Log in to view balances.</p>}
 					{account && (
 						<>
-							{pageShellLoading ? (
+							{pageContentLoading ? (
 								<PortfolioSkeleton />
 							) : activeTab === "positions" || activeTab === "orders" ? (
 								renderPositionsTab()

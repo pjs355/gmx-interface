@@ -362,6 +362,13 @@ export interface SmartRoutingSectionProps {
 	userAmount?: string;
 	/** Side of the active trade — drives the right-hand column header label. */
 	side?: SorSide;
+	/**
+	 * Debounced gate from parent (`sorAmountMeetsFloor`). When false, sticky preview
+	 * refs are cleared so stale payouts don't linger after the user drops below SOR floors.
+	 */
+	routePreviewAllowed?: boolean;
+	/** Stable market id — when it changes, clear sticky omnibus state (match switch without remount). */
+	smartRoutingMarketKey?: string;
 }
 
 export default function SmartRoutingSection({
@@ -373,6 +380,8 @@ export default function SmartRoutingSection({
 	onSelectVenue,
 	userAmount,
 	side,
+	routePreviewAllowed = true,
+	smartRoutingMarketKey,
 }: SmartRoutingSectionProps) {
 	const { formatAvgOdds, oddsDisplayStyle } = useOddsDisplay();
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -424,6 +433,18 @@ export default function SmartRoutingSection({
 		stableDisplayRouteRef.current = null;
 		stableVenuePreviewsRef.current = null;
 	}
+	const prevMarketKeyRef = useRef<string | null>(null);
+	if (
+		smartRoutingMarketKey &&
+		prevMarketKeyRef.current != null &&
+		prevMarketKeyRef.current !== smartRoutingMarketKey
+	) {
+		stableDisplayRouteRef.current = null;
+		stableVenuePreviewsRef.current = null;
+	}
+	if (smartRoutingMarketKey) {
+		prevMarketKeyRef.current = smartRoutingMarketKey;
+	}
 	/* Promote upstream data to "live" only when its side matches the side the
 	 * user is actually trading. The first preview's `.side` is enough — the
 	 * SOR API always returns a homogeneous list per fetch. Empty arrays
@@ -442,15 +463,18 @@ export default function SmartRoutingSection({
 				: null;
 	/* Sticky refs only ever hold same-side data, so the fallback below can
 	 * never resurrect a stale-side route after a buy↔sell flip. */
-	if (liveDisplayRoute != null) {
+	if (routePreviewAllowed && liveDisplayRoute != null) {
 		stableDisplayRouteRef.current = liveDisplayRoute;
 	}
-	if (liveVenuePreviews != null) {
+	if (routePreviewAllowed && liveVenuePreviews != null) {
 		stableVenuePreviewsRef.current = liveVenuePreviews;
 	}
-	const displayRoute = liveDisplayRoute ?? stableDisplayRouteRef.current;
-	const venuePreviews =
-		liveVenuePreviews ?? stableVenuePreviewsRef.current;
+	const displayRoute = routePreviewAllowed
+		? (liveDisplayRoute ?? stableDisplayRouteRef.current)
+		: null;
+	const venuePreviews = routePreviewAllowed
+		? (liveVenuePreviews ?? stableVenuePreviewsRef.current)
+		: null;
 
 	const toggle = useCallback((key: string) => {
 		setExpandedKey((k) => (k === key ? null : key));
@@ -484,6 +508,47 @@ export default function SmartRoutingSection({
 			splitSellIsBestOrTied(displayRoute, venuePreviews),
 		[multiVenueSplit, displayRoute, venuePreviews],
 	);
+
+	/** When on "All Markets" without a split row, no venue string equals `"all"` — highlight the top preview row so one row always looks selected. */
+	const omnibusHighlightsTopVenueRow = useMemo(
+		() =>
+			tradingVenue === "all" &&
+			!showSplitBuyRow &&
+			!showSplitSellRow &&
+			Boolean(sortedVenuePreviews?.length),
+		[tradingVenue, showSplitBuyRow, showSplitSellRow, sortedVenuePreviews],
+	);
+
+	useEffect(() => {
+		if (!routePreviewAllowed) {
+			stableDisplayRouteRef.current = null;
+			stableVenuePreviewsRef.current = null;
+		}
+	}, [routePreviewAllowed]);
+
+	useEffect(() => {
+		if (!routePreviewAllowed) return;
+		if (tradingVenue === "all") return;
+		const splitTop = showSplitBuyRow || showSplitSellRow;
+		if (splitTop) {
+			onSelectVenue("all");
+			return;
+		}
+		if (!sortedVenuePreviews || sortedVenuePreviews.length === 0) return;
+		const allowed = new Set(
+			sortedVenuePreviews.map((p) => sorVenueToTradingVenue(p.venue)),
+		);
+		if (!allowed.has(tradingVenue)) {
+			onSelectVenue(sorVenueToTradingVenue(sortedVenuePreviews[0]!.venue));
+		}
+	}, [
+		routePreviewAllowed,
+		showSplitBuyRow,
+		showSplitSellRow,
+		sortedVenuePreviews,
+		tradingVenue,
+		onSelectVenue,
+	]);
 
 	/* Split-buy drawer: which venues did the route fully consume?
 	 *
@@ -781,7 +846,10 @@ export default function SmartRoutingSection({
 						? `buy-${preview.venue}`
 						: `sell-${preview.venue}`;
 				const selected =
-					tradingVenue === sorVenueToTradingVenue(preview.venue);
+					tradingVenue === sorVenueToTradingVenue(preview.venue) ||
+					(omnibusHighlightsTopVenueRow &&
+						sortedVenuePreviews &&
+						preview === sortedVenuePreviews[0]);
 				const letter = (VENUE_DISPLAY_NAMES[preview.venue] ?? "?")
 					.slice(0, 1)
 					.toUpperCase();

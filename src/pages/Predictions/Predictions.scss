@@ -1,4 +1,5 @@
 @use "../../styles/themes/predictions-glass" as *;
+@use "../../components/OddsFormatMenu/odds-format-menu" as *;
 
 /* Compact cards + calendar headings (Counter-Strike, Today, date) share this inset. */
 $predictions-compact-card-inline: 60px;
@@ -18,7 +19,7 @@ $predictions-compact-card-inline: 60px;
 	padding-left: 50px;
 	padding-right: 50px;
 	padding-top: 12px;
-	padding-bottom: 50px;
+	padding-bottom: 0;
 
 	@media (min-width: 1100px) {
 		padding-left: var(--app-content-inline-gutter);
@@ -163,6 +164,23 @@ $predictions-compact-card-inline: 60px;
 
 	/* Horizontal pill strip: frosted wash on `.game-links-wrapper`. Laptop column uses `.game-links-underlay` instead (see `@media min-width 1100px`). */
 	@media (max-width: 1099px) {
+		/* Compact home: no hero photo — solid black only; drop the tall band so content starts normally. */
+		.predictions-page__market-background {
+			height: 0;
+			min-height: 0;
+			max-height: 0;
+			overflow: hidden;
+
+			.predictions-page__market-background-photo {
+				display: none;
+			}
+
+			&::before,
+			&::after {
+				content: none;
+			}
+		}
+
 		.game-links-wrapper {
 			@include predictions-glass-backdrop;
 		}
@@ -542,6 +560,10 @@ $predictions-compact-card-inline: 60px;
 		z-index: 0;
 		pointer-events: none;
 		@include predictions-glass-backdrop;
+		transition:
+			background-color 0.2s ease-in-out,
+			-webkit-backdrop-filter 0.2s ease-in-out,
+			backdrop-filter 0.2s ease-in-out;
 	}
 
 	/* Bottom rule above the blur so it is not covered by ::before. */
@@ -576,6 +598,8 @@ $predictions-compact-card-inline: 60px;
 
 	&:hover::before {
 		@include predictions-glass-backdrop($predictions-glass-overlay-hover);
+		/* Always-visible affordance: mixin can be transparent when glass tint experiment is off */
+		background-color: $prediction-card-hover-wash;
 	}
 }
 
@@ -965,72 +989,6 @@ $predictions-compact-card-inline: 60px;
 	gap: 12px;
 }
 
-.prediction-calendar-odds-menu {
-	position: relative;
-	flex-shrink: 0;
-}
-
-.prediction-calendar-odds-trigger {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 6px;
-	border: none;
-	border-radius: 8px;
-	background: transparent;
-	color: #f9fafb;
-	cursor: pointer;
-	transition: background-color 0.15s ease;
-
-	&:hover {
-		background: rgba(255, 255, 255, 0.06);
-	}
-
-	&[data-hover],
-	&[data-active] {
-		background: rgba(255, 255, 255, 0.06);
-	}
-}
-
-.prediction-calendar-odds-items {
-	position: absolute;
-	right: 0;
-	top: calc(100% + 6px);
-	z-index: 60;
-	min-width: min(260px, calc(100vw - 32px));
-	padding: 6px;
-	border-radius: 8px;
-	background: #141414;
-	border: 1px solid rgba(255, 255, 255, 0.12);
-	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
-	outline: none;
-}
-
-.prediction-calendar-odds-item {
-	display: block;
-	width: 100%;
-	text-align: left;
-	padding: 10px 12px;
-	border: none;
-	border-radius: 6px;
-	background: transparent;
-	color: rgba(255, 255, 255, 0.92);
-	font-size: 14px;
-	font-weight: 500;
-	font-family: inherit;
-	cursor: pointer;
-	transition: background-color 0.12s ease;
-
-	&--focus {
-		background: rgba(255, 255, 255, 0.08);
-	}
-
-	&--selected {
-		color: #f9fafb;
-		background: rgba(255, 255, 255, 0.06);
-	}
-}
-
 .prediction-calendar-title {
 	display: flex;
 	flex-direction: column;
@@ -1392,7 +1350,46 @@ $predictions-compact-card-inline: 60px;
 		padding-left: 8px;
 		padding-right: 8px;
 		padding-top: 8px;
-		padding-bottom: 8px;
+		padding-bottom: 0;
+	}
+
+	/*
+	 * `.predictions-page--market-bg` sets `padding-right: 0` for the desktop trade rail.
+	 * That rule wins over the single-class compact padding above — restore symmetric gutters on tablet/phone.
+	 */
+	.predictions-page.predictions-page--market-bg {
+		padding-right: 8px;
+	}
+
+	/* Calendar headings + compact cards share one tight inset so rows align near the viewport edges. */
+	.prediction-calendar {
+		--prediction-calendar-heading-inline: 14px;
+	}
+
+	.prediction-card--compact {
+		--prediction-card-inline: 14px;
+	}
+
+	/*
+	 * Desktop split row uses `space-between` + `flex: 1` on status so the headline
+	 * pins to the right — that leaves a huge empty flex “lane” on mobile/tablet.
+	 * Pack from the start; status only as wide as its content; headline fills the rest.
+	 */
+	.prediction-card--compact .prediction-card__top.prediction-card__top--split {
+		justify-content: flex-start;
+		gap: 8px;
+	}
+
+	.prediction-card--compact .prediction-card__top-status {
+		flex: 0 1 auto;
+		column-gap: 6px;
+		row-gap: 4px;
+	}
+
+	.prediction-card--compact .prediction-card__top-headline {
+		flex: 1 1 0;
+		min-width: 0;
+		max-width: none;
 	}
 
 	.game-links-wrapper {
@@ -1462,7 +1459,7 @@ $predictions-compact-card-inline: 60px;
 		min-width: 0;
 	}
 
-	/* Matches `.prediction-market-page .desktop-layout > .right-panel`: column shell handles wash + inner scroll. */
+	/* Matches umbrella `.right-panel`: no nested scroll so sticky trade column sticks to the viewport. */
 	.predictions-page__home-trade-panel.right-panel {
 		position: relative;
 		display: flex;
@@ -1470,24 +1467,7 @@ $predictions-compact-card-inline: 60px;
 		min-width: 0;
 		min-height: 0;
 		align-self: stretch;
-		/*
-		 * Fill the full space between header and viewport bottom — no 24px
-		 * gap. Combined with `margin-top: 0` on the trade box below, this
-		 * makes the panel cut off cleanly against the header (top) and the
-		 * footer (bottom) when scrolling, instead of showing a black strip
-		 * before the footer scrolls up.
-		 */
-		max-height: calc(100vh - var(--app-header-height, 6.2rem));
-		overflow-y: auto;
-		overflow-x: hidden;
-		overscroll-behavior-y: contain;
-		-webkit-overflow-scrolling: touch;
-		scrollbar-width: none;
-		-ms-overflow-style: none;
-
-		&::-webkit-scrollbar {
-			display: none;
-		}
+		overflow: visible;
 	}
 
 	/*

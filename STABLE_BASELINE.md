@@ -9,7 +9,7 @@ Use this file as a checkpoint: compare diffs against it when refactoring, and co
 - **Subgraph**: `getSubgraphUrl()` defaults to The Graph Studio; optional `VITE_LEVELUP_SUBGRAPH_URL` with known-removed Goldsky slug `s111630` falls back to the default with a console warning.
 - **Positions hook**: Portfolio perf logging / effects run **after** `isHistoryTabContentReady` / `venueTradeHistoryLoading` so React does not hit a TDZ (`Cannot access before initialization`).
 - **Post-claim portfolio math**: `handleClaimSuccess` calls **`acknowledgeClearedPayouts`** with the same payout keys as `claimedMarkets`, so the header `PortfolioContext` does not double-count venue winnings while queries refetch.
-- **DFlow + loading gates**: Header `portfolioLoading` and Positions `dflowVenueSettled` only wait on DFlow when **`dflowRpcEnabled`** (Solana + auth + proof fetched + verified) and the positions query is **`isPending`**, not for every Privy-linked Solana wallet or ambiguous `isLoading` stalls.
+- **DFlow + loading gates**: Header `portfolioLoading` and Positions readiness wait on DFlow **proof** when the user has a linked Solana funding address (`authenticated && solanaLinked && !dflowProof.isFetched` blocks the positions gate). Once proof is fetched, the positions query is waited on only when **`dflowRpcEnabled`** (verified Kalshi / DFlow RPC path). `fundingHydrated` is part of the positions strict gate so Solana does not flip on after an early paint. The old timed shell bypass was removed in favor of tab-scoped skeletons.
 
 ## Intent
 

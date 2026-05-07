@@ -118,6 +118,8 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	 * the trade box for the lifetime of the current `orderResult`.
 	 */
 	dflowUninitAtSubmit?: boolean;
+	routePreviewAllowed: boolean;
+	smartRoutingMarketKey: string;
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -160,6 +162,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	shareBalances,
 	mobilePeekBar = "default",
 	dflowUninitAtSubmit = false,
+	routePreviewAllowed,
+	smartRoutingMarketKey,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -375,6 +379,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 						allMarketsSellNoBid={allMarketsSellNoBid}
 						shareBalances={shareBalances}
 						dflowUninitAtSubmit={dflowUninitAtSubmit}
+						routePreviewAllowed={routePreviewAllowed}
+						smartRoutingMarketKey={smartRoutingMarketKey}
 					/>
 				</div>
 			</div>
@@ -558,6 +564,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				allMarketsSellNoBid={allMarketsSellNoBid}
 				shareBalances={shareBalances}
 				dflowUninitAtSubmit={dflowUninitAtSubmit}
+				routePreviewAllowed={routePreviewAllowed}
+				smartRoutingMarketKey={smartRoutingMarketKey}
 			/>
 			</div>
 	</PredictionCurtain>

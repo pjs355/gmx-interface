@@ -47,9 +47,8 @@ import {
  * throw in `queryFn`, return `[]` so the query settles and Positions shell does not stick
  * pending (other venues still render).
  *
- * UX coupling: `usePositionsData` exposes `positionsShellBypassMaxWaitMs` — while this query
- * is `isPending` and DFlow RPC is enabled, Positions waits 10s before bypassing the shell
- * (vs 5s for non-DFlow-pending states). Align any gate changes with `positionsShellBlockers`.
+ * Readiness: `useReadinessGates` + `accountPositionsQueryShim` wait on this slice when
+ * `dflowRpcEnabled` (see `useDflowBundle` / `AccountDataProvider`); keep gate logic aligned.
  */
 export function useDflowPositions(
 	solanaAddress: string | null | undefined,

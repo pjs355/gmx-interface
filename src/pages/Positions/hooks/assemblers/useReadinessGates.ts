@@ -1,8 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+/** After reverse umbrella lookup settles, hold skeletons briefly so merged display names + images are stable (Positions + History). */
+const POSITIONS_TAB_UMBRELLA_REVERSE_HOLD_MS = 1_000;
 
 export type UseReadinessGatesArgs = {
 	account: string | null | undefined;
 	effectiveAccount: string | null;
+
+	authenticated: boolean;
+	/** Trimmed Solana funding address from `useFundingAddresses`; when set, DFlow proof must resolve before positions paint. */
+	solanaLinked: boolean;
+	dflowProofIsFetched: boolean;
+	fundingHydrated: boolean;
 
 	// Top-level context loading flags
 	predictionLoading: boolean;
@@ -31,6 +40,8 @@ export type UseReadinessGatesArgs = {
 	limitlessTradeHistoryQueryIsFetched: boolean;
 	limitlessTradeHistoryQueryIsError: boolean;
 	historyUmbrellaResolveSettled: boolean;
+	/** Rows that need `POST /api/umbrellas/resolve-venue-history`; when > 0, Positions + History wait for settle + short paint hold. */
+	venueHistoryResolveQueryCount: number;
 };
 
 export type UseReadinessGatesResult = {
@@ -38,24 +49,15 @@ export type UseReadinessGatesResult = {
 	isPositionsTabContentReady: boolean;
 	isHistoryTabContentReady: boolean;
 	venueTradeHistoryLoading: boolean;
-	positionsShellBypassMaxWaitMs: number;
 };
-
-/**
- * Full-page Positions shell bypass (`Positions.tsx`): after this delay with the strict shell
- * still up, we show partial data so Poly/Predict are not blocked by a slow DFlow stack.
- *
- * DFlow path = paginated `GET /api/dflow/onchain-trades` + `filter_outcome_mints` + parallel
- * (`markets/batch` + batched Solana Token-2022 reads). Public RPC can be slow; keep the
- * skeleton up longer **only while** `dflowPositionsQuery.isPending` so verified Kalshi users
- * see fewer empty-state flashes. Other venues stay on the shorter budget.
- */
-const POSITIONS_SHELL_BYPASS_MS_DEFAULT = 5_000;
-const POSITIONS_SHELL_BYPASS_MS_DFLOW_PENDING = 10_000;
 
 export function useReadinessGates({
 	account,
 	effectiveAccount,
+	authenticated,
+	solanaLinked,
+	dflowProofIsFetched,
+	fundingHydrated,
 	predictionLoading,
 	userDataLoading,
 	portfolioLoading,
@@ -76,6 +78,7 @@ export function useReadinessGates({
 	limitlessTradeHistoryQueryIsFetched,
 	limitlessTradeHistoryQueryIsError,
 	historyUmbrellaResolveSettled,
+	venueHistoryResolveQueryCount,
 }: UseReadinessGatesArgs): UseReadinessGatesResult {
 	/**
 	 * After the Positions shell has gone strict-ready once for this `account`, do not drop back
@@ -86,12 +89,43 @@ export function useReadinessGates({
 	const positionsTabReadyLatchForRef = useRef<string | null>(null);
 	const historyTabReadyLatchForRef = useRef<string | null>(null);
 
-	// --- Atomic loading gate: core portfolio + venue positions (not History-only feeds) ---
-	// Polymarket activity / Limitless portfolio **history** APIs must not block the global shell —
-	// History tab uses `isHistoryTabContentReady` (see Positions.tsx).
-	// Match PortfolioContext: only wait on DFlow when `useDflowPositions` is actually enabled.
+	const [positionsUmbrellaReverseHoldDone, setPositionsUmbrellaReverseHoldDone] =
+		useState(false);
+
+	useEffect(() => {
+		if (!account) {
+			setPositionsUmbrellaReverseHoldDone(true);
+			return;
+		}
+		if (venueHistoryResolveQueryCount === 0) {
+			setPositionsUmbrellaReverseHoldDone(true);
+			return;
+		}
+		if (!historyUmbrellaResolveSettled) {
+			setPositionsUmbrellaReverseHoldDone(false);
+			return;
+		}
+		setPositionsUmbrellaReverseHoldDone(false);
+		const t = window.setTimeout(
+			() => setPositionsUmbrellaReverseHoldDone(true),
+			POSITIONS_TAB_UMBRELLA_REVERSE_HOLD_MS,
+		);
+		return () => window.clearTimeout(t);
+	}, [account, venueHistoryResolveQueryCount, historyUmbrellaResolveSettled]);
+
+	const umbrellaVenueHistoryReversePaintReady =
+		venueHistoryResolveQueryCount === 0 ||
+		(historyUmbrellaResolveSettled && positionsUmbrellaReverseHoldDone);
+
+	// --- DFlow: do not treat the venue as "settled" while proof is still in flight ---
+	// When `dflowRpcEnabled` is false only because `/dflow/account` has not returned yet, the old
+	// `!dflowRpcEnabled` shortcut falsely marked DFlow settled and latched the tab before rows loaded.
+	const dflowProofPending =
+		authenticated && solanaLinked && !dflowProofIsFetched;
+	const dflowPositionsPending =
+		dflowRpcEnabled && dflowPositionsQueryIsPending;
 	const dflowVenueSettled =
-		!dflowRpcEnabled || !dflowPositionsQueryIsPending;
+		!dflowProofPending && !dflowPositionsPending;
 
 	const limitlessVenueSettled =
 		!limitlessPortfolioEnabled ||
@@ -111,27 +145,23 @@ export function useReadinessGates({
 
 	// `predictMarketsQuery` stays in this gate on purpose: without market details, Predict rows
 	// would all appear under active Positions first, then jump to Winnings when RESOLVED — bad UX.
-	// If perf logs show this dominates, prefer backend batching or accept that tradeoff explicitly.
-	const strictIsDataFullyLoaded =
+	const fundingAndCoreReady =
+		fundingHydrated &&
 		!predictionLoading &&
 		!userDataLoading &&
-		!portfolioLoading &&
+		!portfolioLoading;
+
+	const strictIsDataFullyLoaded =
+		fundingAndCoreReady &&
 		venueQueriesSettled &&
 		(predictMarketIdsLength === 0 || !predictMarketsQueryIsLoading);
 
-	/** Positions tab: same shell for header + body — includes DFlow when verified (no second skeleton strip). */
 	const strictIsPositionsTabContentReady =
-		!predictionLoading &&
-		!userDataLoading &&
-		!portfolioLoading &&
+		fundingAndCoreReady &&
 		venueQueriesSettledForPositionsBody &&
 		dflowVenueSettled &&
-		(predictMarketIdsLength === 0 || !predictMarketsQueryIsLoading);
-
-	const positionsShellBypassMaxWaitMs =
-		dflowRpcEnabled && dflowPositionsQueryIsPending
-			? POSITIONS_SHELL_BYPASS_MS_DFLOW_PENDING
-			: POSITIONS_SHELL_BYPASS_MS_DEFAULT;
+		(predictMarketIdsLength === 0 || !predictMarketsQueryIsLoading) &&
+		umbrellaVenueHistoryReversePaintReady;
 
 	/** Trade history streams (Poly + Limitless) for the History tab; not part of global `isDataFullyLoaded`. */
 	const venueTradeHistoryLoading =
@@ -142,12 +172,12 @@ export function useReadinessGates({
 			!limitlessTradeHistoryQueryIsFetched &&
 			!limitlessTradeHistoryQueryIsError);
 
-	/** Single gate for History body + header: core data, funding addresses, activity history, batch resolve. */
+	/** Single gate for History body + header: core data, funding addresses, activity history, batch resolve + paint hold. */
 	const strictIsHistoryTabContentReady =
 		strictIsDataFullyLoaded &&
 		!fundingAddressesLoading &&
 		!venueTradeHistoryLoading &&
-		historyUmbrellaResolveSettled;
+		umbrellaVenueHistoryReversePaintReady;
 
 	useEffect(() => {
 		positionsDataFullyLoadedLatchForRef.current = null;
@@ -183,18 +213,13 @@ export function useReadinessGates({
 		strictIsHistoryTabContentReady ||
 		historyTabReadyLatchForRef.current === account;
 
-	/**
-	 * Slim DEV-only gate trace: prints the mirrored shell blockers from `Positions.tsx`
-	 * (`pageShellLoading`) whenever the readiness fingerprint changes. Mirrors
-	 * `isPositionsTabContentReady` / `isHistoryTabContentReady` so a skeleton flash on dev
-	 * is easy to attribute to a specific blocker. Production: no-op.
-	 */
 	const positionsLoadingGateFingerprintRef = useRef("");
 	useEffect(() => {
 		if (!import.meta.env.DEV) return;
 		if (!effectiveAccount) return;
 
 		const positionsShellBlockers: string[] = [];
+		if (!fundingHydrated) positionsShellBlockers.push("!fundingHydrated");
 		if (predictionLoading) positionsShellBlockers.push("predictionLoading");
 		if (userDataLoading) positionsShellBlockers.push("userDataLoading");
 		if (portfolioLoading) positionsShellBlockers.push("portfolioLoading");
@@ -206,12 +231,21 @@ export function useReadinessGates({
 		if (limitlessPortfolioEnabled && limitlessVenuePositionsQueryIsLoading) {
 			positionsShellBlockers.push("limitlessVenuePositionsQuery.isLoading");
 		}
-		if (dflowRpcEnabled && dflowPositionsQueryIsPending) {
-			// Coupled to `positionsShellBypassMaxWaitMs` (10s shell grace while DFlow loads).
+		if (dflowProofPending) {
+			positionsShellBlockers.push("dflowProofPending");
+		}
+		if (dflowPositionsPending) {
 			positionsShellBlockers.push("dflowPositionsQuery.isPending");
 		}
 		if (predictMarketIdsLength > 0 && predictMarketsQueryIsLoading) {
 			positionsShellBlockers.push("predictMarketsQuery.isLoading");
+		}
+		if (!umbrellaVenueHistoryReversePaintReady) {
+			if (!historyUmbrellaResolveSettled) {
+				positionsShellBlockers.push("!historyUmbrellaResolveSettled");
+			} else if (!positionsUmbrellaReverseHoldDone) {
+				positionsShellBlockers.push("positionsUmbrellaReverseHold");
+			}
 		}
 
 		const historyShellBlockers: string[] = [];
@@ -220,8 +254,12 @@ export function useReadinessGates({
 			historyShellBlockers.push("fundingAddressesLoading");
 		if (venueTradeHistoryLoading)
 			historyShellBlockers.push("venueTradeHistoryLoading");
-		if (!historyUmbrellaResolveSettled) {
-			historyShellBlockers.push("!historyUmbrellaResolveSettled");
+		if (!umbrellaVenueHistoryReversePaintReady) {
+			if (!historyUmbrellaResolveSettled) {
+				historyShellBlockers.push("!historyUmbrellaResolveSettled");
+			} else {
+				historyShellBlockers.push("umbrellaReversePaintHold");
+			}
 		}
 
 		const fingerprint = [
@@ -250,6 +288,7 @@ export function useReadinessGates({
 		});
 	}, [
 		effectiveAccount,
+		fundingHydrated,
 		predictionLoading,
 		userDataLoading,
 		portfolioLoading,
@@ -257,13 +296,15 @@ export function useReadinessGates({
 		predictPositionsQueryIsLoading,
 		limitlessPortfolioEnabled,
 		limitlessVenuePositionsQueryIsLoading,
-		dflowRpcEnabled,
-		dflowPositionsQueryIsPending,
+		dflowProofPending,
+		dflowPositionsPending,
 		predictMarketIdsLength,
 		predictMarketsQueryIsLoading,
 		fundingAddressesLoading,
 		venueTradeHistoryLoading,
 		historyUmbrellaResolveSettled,
+		umbrellaVenueHistoryReversePaintReady,
+		positionsUmbrellaReverseHoldDone,
 		isDataFullyLoaded,
 		isPositionsTabContentReady,
 		isHistoryTabContentReady,
@@ -274,6 +315,5 @@ export function useReadinessGates({
 		isPositionsTabContentReady,
 		isHistoryTabContentReady,
 		venueTradeHistoryLoading,
-		positionsShellBypassMaxWaitMs,
 	};
 }

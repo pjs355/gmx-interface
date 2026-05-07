@@ -98,6 +98,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 
 	const firstQuestion = sortedQuestions[0] ?? null;
+	/** `PredictionMarket` `activeMarket` can lag one frame; trade box skeletons forever on null. */
+	const tradeBoxActiveMarket = activeMarket ?? firstQuestion;
 	const levelUpOrderbookKey = resolveLevelUpOrderbookKey(
 		sortedQuestions,
 		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)
@@ -450,7 +452,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					<UmbrellaTradeBoxPanel
 						umbrella={umbrella}
 						questionOrderbooks={questionOrderbooks}
-						activeMarket={activeMarket}
+						activeMarket={tradeBoxActiveMarket}
 						activePosition={activePosition}
 						onPositionChange={onPositionChange}
 						settledInfo={settledInfo ?? null}
@@ -495,7 +497,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					<UmbrellaTradeBoxPanel
 						umbrella={umbrella}
 						questionOrderbooks={questionOrderbooks}
-						activeMarket={activeMarket}
+						activeMarket={tradeBoxActiveMarket}
 						activePosition={activePosition}
 						onPositionChange={onPositionChange}
 						settledInfo={settledInfo ?? null}

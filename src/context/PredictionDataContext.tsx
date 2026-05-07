@@ -12,7 +12,22 @@ import {
 } from "@/services/api/umbrellaDataService";
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
-import { usePrivy } from "@privy-io/react-auth";
+
+/** Avoid an infinite home skeleton when `fetch` hangs (no browser timeout on stalled TCP). */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => {
+			reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
+		}, ms);
+	});
+	return Promise.race([promise, timeoutPromise]).finally(() => {
+		if (timer !== undefined) clearTimeout(timer);
+	}) as Promise<T>;
+}
+
+const UMBRELLAS_FETCH_TIMEOUT_MS = 60_000;
+const TAGS_FETCH_TIMEOUT_MS = 30_000;
 
 type MarketLite = any;
 
@@ -90,7 +105,6 @@ export function PredictionDataProvider({
 }: {
 	children: React.ReactNode;
 }) {
-	const { getAccessToken } = usePrivy();
 	const [loading, setLoading] = useState(false);
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
 	const [marketsByUmbrella, setMarketsByUmbrella] = useState<
@@ -122,7 +136,11 @@ export function PredictionDataProvider({
 		if (!hasDataRef.current) setLoading(true);
 		setError(undefined);
 		try {
-			const umbrellas = await umbrellaDataService.fetchAllUmbrellas();
+			const umbrellas = await withTimeout(
+				umbrellaDataService.fetchAllUmbrellas(),
+				UMBRELLAS_FETCH_TIMEOUT_MS,
+				"Markets catalog (GET /umbrellas)",
+			);
 			const entries = await Promise.all(
 				umbrellas.map(async (umbrella: any) => {
 					const markets = umbrella.children;
@@ -346,7 +364,11 @@ export function PredictionDataProvider({
 				if (!tagsInFlightRef.current) {
 					tagsInFlightRef.current = tagService.fetchAllTags();
 				}
-				const fetchedTags = await tagsInFlightRef.current;
+				const fetchedTags = await withTimeout(
+					tagsInFlightRef.current,
+					TAGS_FETCH_TIMEOUT_MS,
+					"Game filters (GET /tags)",
+				);
 				if (mounted) {
 					setTags(fetchedTags);
 					setTagsLoading(false);

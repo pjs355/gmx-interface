@@ -424,6 +424,31 @@ function PredictionMarketContent() {
 		getMarketId,
 	]);
 
+	/**
+	 * Guarantees a non-null `activeMarket` whenever we have markets — `UmbrellaTradeBoxPanel`
+	 * shows an indefinite `TradeBoxSkeleton` when `activeMarket` is null. The selection effect
+	 * above can miss (e.g. `hasProcessedStoredSelection` already true after StrictMode, or race
+	 * with `sortedQuestions` hydration), so this is a cheap safety net.
+	 */
+	useEffect(() => {
+		if (sortedQuestions.length === 0) return;
+		if (activeMarket != null) {
+			const id = getMarketId(activeMarket);
+			if (!id) {
+				setActiveMarket(sortedQuestions[0]);
+				return;
+			}
+			const stillInUmbrella = sortedQuestions.some(
+				(q) => getMarketId(q) === id,
+			);
+			if (!stillInUmbrella) {
+				setActiveMarket(sortedQuestions[0]);
+			}
+			return;
+		}
+		setActiveMarket(sortedQuestions[0]);
+	}, [sortedQuestions, activeMarket, getMarketId]);
+
 	// Hooks must be called unconditionally on every render
 	const chartOnlyState = useChartState(
 		sortedQuestions as any[],
