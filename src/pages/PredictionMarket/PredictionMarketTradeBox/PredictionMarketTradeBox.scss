@@ -1823,6 +1823,57 @@ html.curtain-open {
 	}
 }
 
+/* Quote metric loading placeholders (smart routing + single-venue To Win). */
+.quote-metric-skeleton {
+	display: inline-block;
+	border-radius: 6px;
+	background: linear-gradient(
+		90deg,
+		rgba(148, 163, 184, 0.15) 0%,
+		rgba(148, 163, 184, 0.35) 50%,
+		rgba(148, 163, 184, 0.15) 100%
+	);
+	background-size: 200% 100%;
+	animation: quote-metric-skeleton-shimmer 1.15s ease-in-out infinite;
+	vertical-align: middle;
+
+	&--smart-value {
+		min-width: 72px;
+		min-height: 22px;
+	}
+
+	&--smart-sub {
+		min-width: 96px;
+		min-height: 12px;
+		margin-top: 2px;
+	}
+
+	&--tradebox-value {
+		min-width: 72px;
+		min-height: 28px;
+	}
+}
+
+.smart-routing-block--selected .quote-metric-skeleton--smart-value {
+	min-height: 28px;
+}
+
+@keyframes quote-metric-skeleton-shimmer {
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.quote-metric-skeleton {
+		animation: none;
+		opacity: 0.42;
+	}
+}
+
 /* -------------------------------------------------------------------------- */
 /* Desktop trade column (≥1101px): stretch host + frosted underlay + sticky   */
 /* scrolling inner — same pattern as `.game-links-wrapper` / `.game-links-sticky`. */

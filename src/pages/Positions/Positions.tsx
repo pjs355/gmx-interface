@@ -11,8 +11,9 @@ import ResolvedPositionsCardView from "./components/ResolvedPositionsCardView";
 import HistoryView from "./components/HistoryView";
 import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
-import usePositionsData from "./hooks/usePositionsData";
+import { usePositionsPageData } from "@/context/PositionsDataContext";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
+import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
 import { useEffect } from "react";
 import { toCentsString } from "./utils/formatCurrency";
 
@@ -54,7 +55,7 @@ function PortfolioSkeleton() {
 export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
 
-	const data = usePositionsData();
+	const data = usePositionsPageData();
 
 	const {
 		account,
@@ -89,6 +90,8 @@ export default function Positions() {
 		activeTab,
 		setActiveTab,
 	} = data;
+
+	const claimCashSyncPending = useClaimCashSyncPending();
 
 	/** Orders tab removed from UI — normalize stale state (e.g. hot-reload) so a tab stays selected. */
 	useEffect(() => {
@@ -272,7 +275,7 @@ export default function Positions() {
 						}
 						positionsTotalValue={positionsTotalValue}
 						usdcBalance={Number(cashBalanceCtx)}
-						cashLoading={portfolioCashLoading}
+						cashLoading={portfolioCashLoading || claimCashSyncPending}
 						positionsLoading={pageContentLoading}
 						portfolioLoading={portfolioLoading}
 						summariesLocked={Boolean(account) && pageContentLoading}

@@ -57,6 +57,11 @@ export interface TradeBoxProps {
 	matchedMonitor?: MatchedMarket | null;
 	/** Home: hide fixed Yes/No peek until `openCurtain()` (e.g. from card price tap). */
 	mobilePeekBar?: "default" | "hidden";
+	/**
+	 * When set (e.g. mobile/tablet trade dock ≤1100px), changing this key clears sticky
+	 * venue/amount/order-type session state so venue tabs do not carry across markets.
+	 */
+	tradeRouteIsolationKey?: string;
 }
 
 export interface MarketOrderCalculation {

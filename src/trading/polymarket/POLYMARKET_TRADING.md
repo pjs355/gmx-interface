@@ -55,11 +55,11 @@ In `venueConfig.ts`, **Polymarket** uses:
 
 ---
 
-## 5. Live order book (WebSocket)
+## 5. Live venue prices (cross-venue strip / orderbooks)
 
-`PolymarketBookClient` connects to `wss://ws-subscriptions-clob.polymarket.com/ws/market`, subscribes by **outcome token IDs** from matched markets, and feeds `useDirectVenueBooks`.
+Cross-venue Polymarket **display** prices and depth come only from the LevelUp prediction service **`/ws/venue-prices`** (`MatchedMarket` in `OddsMonitorContext`). The browser does **not** open Polymarket’s public CLOB WebSocket for listing or umbrella trade UI.
 
-**Why:** For single-venue tabs and SOR pricing we need **fresh** bids/asks without polling REST. The client includes reconnect, ping, and stale detection so the UI can fall back if WS fails.
+**Why:** One controlled connection to LevelUp infrastructure; if the server stream lacks books, trading UI is gated until ingest catches up.
 
 ---
 
@@ -106,7 +106,7 @@ Playwright specs that assert **MyPositionsRow** vs **quoted leg** use **share de
 | SOR Polygon leg | `useSorLegExecutor.ts` (`case "polymarket"`) |
 | Collateral / relay | `polygonCollateralWrap.ts`, `safeActions.ts`, `approvalTxs.ts` |
 | Positions + floors | `usePolymarketPositions.ts`, `optimisticPolymarketPositionsCache.ts`, `polymarketPositionsRefetchMerge.ts` |
-| Live book | `../venue-books/polymarket-book-client.ts` |
+| Cross-venue venue-prices UI | `OddsMonitorContext`, `useTradingPagePrices`, `useUmbrellaTradePricing` |
 | Venue fees / chain | `../../config/venueConfig.ts`, `constants.ts` |
 | Funding bridge UI | `../venues/polymarket/PolymarketVenueCard.tsx` |
 

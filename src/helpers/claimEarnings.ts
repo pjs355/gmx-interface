@@ -1,5 +1,4 @@
 import { Contract, ethers, type Provider } from "ethers";
-import { VersionedTransaction } from "@solana/web3.js";
 import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import {
@@ -7,7 +6,7 @@ import {
 	useSendTransaction,
 } from "@privy-io/react-auth";
 import {
-	useSignAndSendTransaction as useSolanaSignAndSendTransaction,
+	useSignTransaction as useSolanaSignTransaction,
 	useWallets as useSolanaWallets,
 } from "@privy-io/react-auth/solana";
 import { useCallback, useMemo, useState } from "react";
@@ -33,7 +32,8 @@ import { predictCtfKey } from "@/trading/predict/predictContractKeys";
 import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
+import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
+import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
 
 const BASE_CHAIN_ID = 8453;
 
@@ -305,8 +305,8 @@ export function useClaimForVenue(
 	const privateApi = usePrivateApiClient();
 	const { solanaAddress, polymarketSafe: polymarketDepositWallet } =
 		useFundingAddresses();
-	const { signAndSendTransaction: privySolanaSignAndSend } =
-		useSolanaSignAndSendTransaction();
+	const { signTransaction: privySolanaSignTransaction } =
+		useSolanaSignTransaction();
 	const { wallets: solanaWallets } = useSolanaWallets();
 	const embeddedSolanaWallet = useMemo(
 		() =>
@@ -388,28 +388,38 @@ export function useClaimForVenue(
 				);
 			}
 			const amountBaseUnits = Math.round(shares * 1_000_000).toString();
-			const orderResult = await privateApi.getDflowOrder({
-				inputMint: outcomeMint,
-				outputMint: SOLANA_USDC_MINT,
-				amount: amountBaseUnits,
+			const { signature } = await quoteSignAndSubmitDflowOrder({
+				privateApi,
+				submitFn: (body) => privateApi.postClaimDflow(body),
+				solanaSigner: {
+					signTransactionOnly: async (serializedTx: Uint8Array) => {
+						const out = await privySolanaSignTransaction({
+							transaction: serializedTx,
+							wallet: embeddedSolanaWallet,
+						});
+						return out.signedTransaction;
+					},
+				},
+				orderParams: {
+					inputMint: outcomeMint,
+					outputMint: SOLANA_USDC_MINT,
+					amount: amountBaseUnits,
+					slippageBps: "auto",
+					predictionMarketSlippageBps: "auto",
+				},
+				submitExtras: {
+					inputMint: outcomeMint,
+					outputMint: SOLANA_USDC_MINT,
+					amount: amountBaseUnits,
+					side: "SELL",
+					outcome: resolvedOutcome,
+					marketRef: {
+						externalMarketId: outcomeMint,
+						tokenId: outcomeMint,
+					},
+				} satisfies Omit<DflowOrderSubmitBody, "signedTx" | "lastValidBlockHeight">,
 			});
-			if (orderResult.code || orderResult.msg) {
-				throw new Error(
-					orderResult.msg ??
-						orderResult.code ??
-						"Kalshi redeem order failed",
-				);
-			}
-			if (!orderResult.transaction) {
-				throw new Error("Kalshi returned no transaction to sign");
-			}
-			const txBytes = Buffer.from(orderResult.transaction, "base64");
-			const transaction = VersionedTransaction.deserialize(txBytes);
-			return sendPrivySponsoredSolanaTransaction(
-				privySolanaSignAndSend,
-				embeddedSolanaWallet,
-				transaction.serialize(),
-			);
+			return signature;
 		}
 
 		async function redeemPolymarket(): Promise<string | undefined> {
@@ -436,7 +446,7 @@ export function useClaimForVenue(
 			async function assertPolymarketOutcomeBurned(
 				lastTxHash: string | undefined,
 			): Promise<void> {
-				if (!polyAssetTokenId) return;
+				if (!polyAssetTokenId || !polymarketDepositWallet) return;
 				try {
 					const postBalance = await readPolymarketSafeCtfBalanceWei(
 						polymarketDepositWallet,
@@ -781,7 +791,7 @@ export function useClaimForVenue(
 		privyEvmSendTransaction,
 		privateApi,
 		embeddedSolanaWallet,
-		privySolanaSignAndSend,
+		privySolanaSignTransaction,
 	]);
 
 	return { claim, isClaiming, error, txHash, isExternalClaim: false };

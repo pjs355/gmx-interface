@@ -1344,16 +1344,34 @@ $predictions-compact-card-inline: 60px;
 // Same page + pill-strip inset as legacy “mobile” (<768): avoids an extra pad jump crossing 768px.
 @media (max-width: 1099px) {
 	.predictions-page {
-		/* Match `.prediction-calendar-header` horizontal inset (see `.prediction-calendar`). */
-		--prediction-calendar-heading-inline: #{$predictions-compact-card-inline};
-		padding: 0;
+		padding-left: 8px;
+		padding-right: 8px;
+		padding-top: 8px;
+		padding-bottom: 0;
+	}
+
+	/*
+	 * `.predictions-page--market-bg` sets `padding-right: 0` for the desktop trade rail.
+	 * That rule is more specific than the rule above — restore symmetric gutters on tablet/phone.
+	 */
+	.predictions-page.predictions-page--market-bg {
+		padding-right: 8px;
+	}
+
+	/* Calendar headings + compact cards share one tight inset (matches our mobile home layout). */
+	.prediction-calendar {
+		--prediction-calendar-heading-inline: 14px;
+	}
+
+	.prediction-card--compact {
+		--prediction-card-inline: 14px;
 	}
 
 	.game-links-wrapper {
-		margin-left: 0;
-		margin-right: 0;
-		padding-left: var(--prediction-calendar-heading-inline);
-		padding-right: var(--prediction-calendar-heading-inline);
+		margin-left: -8px;
+		margin-right: -8px;
+		padding-left: 8px;
+		padding-right: 8px;
 	}
 
 	.predictions-grid {

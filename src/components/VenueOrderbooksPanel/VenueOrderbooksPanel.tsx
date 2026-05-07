@@ -8,7 +8,6 @@ import type { TradingVenue } from "@/pages/PredictionMarket/PredictionMarketTrad
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
-import type { DirectVenueBooks } from "@/trading/venue-books";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
@@ -43,7 +42,6 @@ type VenueEntry = {
 function buildVenueEntries(
 	matched: MatchedMarket,
 	levelUpOrderbook: OrderbookSnapshot | null,
-	directBooks?: DirectVenueBooks | null,
 ): VenueEntry[] {
 	const entries: VenueEntry[] = [];
 
@@ -67,29 +65,22 @@ function buildVenueEntries(
 	}
 
 	if (matched.polyConditionId || matched.polyTokenIdA) {
-		const polyRestricted = directBooks !== undefined
-			&& directBooks !== null
-			&& directBooks.polyFailed
-			&& !directBooks.polyBookA;
 		entries.push({
 			id: "poly",
 			label: "Polymarket",
-			bookA: directBooks?.polyBookA ?? monitorBookToSnapshot(matched.polyPriceA),
-			bookB: directBooks?.polyBookB ?? monitorBookToSnapshot(matched.polyPriceB),
-			restricted: polyRestricted,
+			bookA: monitorBookToSnapshot(matched.polyPriceA),
+			bookB: monitorBookToSnapshot(matched.polyPriceB),
+			restricted: false,
 		});
 	}
 
 	if (getDflowKalshiMonitorLink(matched)) {
-		const useDirect = directBooks && !directBooks.dflowFallback;
-		const dflowRestricted = directBooks?.dflowFallback === true
-			&& !matched.dflowPriceA;
 		entries.push({
 			id: "dflow",
 			label: "Kalshi",
-			bookA: (useDirect ? directBooks.dflowBookA : null) ?? monitorBookToSnapshot(matched.dflowPriceA ?? matched.kalshiPriceA),
-			bookB: (useDirect ? directBooks.dflowBookB : null) ?? monitorBookToSnapshot(matched.dflowPriceB ?? matched.kalshiPriceB),
-			restricted: dflowRestricted,
+			bookA: monitorBookToSnapshot(matched.dflowPriceA ?? matched.kalshiPriceA),
+			bookB: monitorBookToSnapshot(matched.dflowPriceB ?? matched.kalshiPriceB),
+			restricted: false,
 		});
 	}
 
@@ -97,8 +88,8 @@ function buildVenueEntries(
 		entries.push({
 			id: "limitless",
 			label: "Limitless",
-			bookA: directBooks?.limitlessBookA ?? monitorBookToSnapshot(matched.limitlessPriceA),
-			bookB: directBooks?.limitlessBookB ?? monitorBookToSnapshot(matched.limitlessPriceB),
+			bookA: monitorBookToSnapshot(matched.limitlessPriceA),
+			bookB: monitorBookToSnapshot(matched.limitlessPriceB),
 			restricted: false,
 		});
 	}
@@ -141,7 +132,6 @@ export type VenueOrderbooksPanelProps = {
 	onVenueSelect?: (venue: TradingVenue) => void;
 	activePosition?: "yes" | "no";
 	side?: "buy" | "sell";
-	directBooks?: DirectVenueBooks | null;
 };
 
 export function VenueOrderbooksPanel({
@@ -155,7 +145,6 @@ export function VenueOrderbooksPanel({
 	onVenueSelect,
 	activePosition,
 	side = "buy",
-	directBooks,
 }: VenueOrderbooksPanelProps) {
 	const { appState } = useOddsMonitor();
 	const [selectedVenueId, setSelectedVenueId] = useState("");
@@ -173,8 +162,8 @@ export function VenueOrderbooksPanel({
 
 	const venues = useMemo(() => {
 		if (!matched) return [];
-		return buildVenueEntries(matched, levelUpOrderbook, directBooks);
-	}, [matched, levelUpOrderbook, directBooks]);
+		return buildVenueEntries(matched, levelUpOrderbook);
+	}, [matched, levelUpOrderbook]);
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
@@ -199,7 +188,7 @@ export function VenueOrderbooksPanel({
 				bookA: depth(v.bookA),
 				bookB: depth(v.bookB),
 			})),
-			note: "Books from MatchedMarket (venue-prices WS) + directBooks browser WS when enabled + LevelUp orderbook REST snapshot.",
+			note: "Books from MatchedMarket (venue-prices WS) + multiplex LevelUp orderbook snapshot.",
 		});
 	}, [pandascoreMatchId, matched, venues]);
 

@@ -29,6 +29,7 @@ import ConnectWalletButton from "../Common/ConnectWalletButton";
 import "./Header.scss";
 import { usePortfolio as usePortfolioContext } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
+import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
 
 type Props = {
 	openSettings: () => void;
@@ -62,9 +63,10 @@ export function AppHeaderUser({
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
 		usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
+	const claimCashSyncPending = useClaimCashSyncPending();
 	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
 	// Cash: do not block on positions page shell — show when balance fetches complete
-	const showCashMetricSkeleton = cashLoading;
+	const showCashMetricSkeleton = cashLoading || claimCashSyncPending;
 
 	// Detect if user logged in with email (smart wallet) or external wallet
 	const hasSmartWallet = user?.linkedAccounts?.some(

@@ -91,3 +91,18 @@ export {
 	getSorBuyCashShortfall,
 } from "./sorUiUtils";
 export type { SorBuyCashShortfall, SorCashGateInput } from "./sorUiUtils";
+
+export {
+	usdAmountMatchesRoute,
+	shareAmountMatchesRoute,
+	positionToSorOutcome,
+	routeMatchesTradeContext,
+	isOmnibusDisplayMetricsTrusted,
+	isExecutionOverlayRowTrusted,
+	venueBuyPreviewMatchesContext,
+	venueSellPreviewMatchesContext,
+	executionRouteTrustedForSingleVenueMarketBuy,
+	executionRoutePendingForToWinOverlay,
+	executionRouteTrustedForSingleVenueMarketSell,
+} from "./sorQuoteTrust";
+export type { SorTradeTrustContext } from "./sorQuoteTrust";

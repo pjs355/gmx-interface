@@ -1,21 +1,7 @@
-import { useEffect, useMemo } from "react";
-import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import { useEffect } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
-import { useDirectVenueBooks } from "@/trading/venue-books";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
-import type { OrderbookData } from "@/types/odds-monitor";
 import { useTradingPagePrices } from "@/hooks/useTradingPagePrices";
-import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
-import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
-
-function orderbookDataHasDepth(book: OrderbookData | null | undefined): boolean {
-	if (!book) return false;
-	const asks = book.asks?.some((a) => (a.size ?? 0) > 0);
-	const bids = book.bids?.some((b) => (b.size ?? 0) > 0);
-	return Boolean(asks || bids);
-}
 
 export type UseUmbrellaTradePricingArgs = {
 	umbrella: Umbrella | null | undefined;
@@ -40,46 +26,14 @@ export function useUmbrellaTradePricing({
 		return () => unsubscribePandaMatchId(pandascoreMatchId);
 	}, [pandascoreMatchId, subscribePandaMatchId, unsubscribePandaMatchId]);
 
-	const { appState: oddsAppState } = useOddsMonitor();
-	const matchedForVenueBooks = useMemo(() => {
-		const base = findOddsMatchedMarket(
-			oddsAppState?.markets,
-			pandascoreMatchId,
-			umbrella?._id,
-		);
-		return mergeMonitorLimitlessFromUmbrella(base, umbrellaLimitless);
-	}, [oddsAppState?.markets, pandascoreMatchId, umbrella?._id, umbrellaLimitless]);
-
-	const serverVenueDepthParity = useMemo(() => {
-		const m = matchedForVenueBooks;
-		if (!m) return false;
-		const polyLinked = Boolean(m.polyConditionId || m.polyTokenIdA);
-		const polyOk =
-			!polyLinked ||
-			(orderbookDataHasDepth(m.polyPriceA) && orderbookDataHasDepth(m.polyPriceB));
-		const dflowLinked = Boolean(getDflowKalshiMonitorLink(m));
-		const dflowOk =
-			!dflowLinked ||
-			(orderbookDataHasDepth(m.dflowPriceA ?? m.kalshiPriceA) &&
-				orderbookDataHasDepth(m.dflowPriceB ?? m.kalshiPriceB));
-		return polyOk && dflowOk;
-	}, [matchedForVenueBooks]);
-
-	const directBooks = useDirectVenueBooks(matchedForVenueBooks, {
-		disabled: serverVenueDepthParity,
-	});
-
 	const tradingPagePrices = useTradingPagePrices(
 		pandascoreMatchId,
-		directBooks,
 		umbrella?._id,
 		umbrellaLimitless,
 	);
 
 	return {
 		tradingPagePrices,
-		directBooks,
-		serverVenueDepthParity,
 		pandascoreMatchId,
 	};
 }

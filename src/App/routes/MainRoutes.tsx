@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useEffect, type ErrorInfo, type ReactNode } 
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
+import { loadPositionsPage } from "@/App/routes/positionsRouteLazy";
 
 // Eager: homepage and listing pages (most common entry points)
 import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";
@@ -12,7 +13,7 @@ import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
 const PredictionMarket = lazy(() => import("@/pages/PredictionMarket/PredictionMarket"));
 const Profile = lazy(() => import("pages/Profile/Profile"));
 const Admin = lazy(() => import("pages/Admin/Admin"));
-const Positions = lazy(() => import("pages/Positions/Positions"));
+const Positions = lazy(loadPositionsPage);
 const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));

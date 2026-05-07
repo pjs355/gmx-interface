@@ -374,87 +374,73 @@
 	margin-top: 12px;
 	padding: 4px 12px 12px;
 
-	// Chart first; spacing before Basic | Orderbooks tabs
-	.venue-books-chart,
-	.venue-books-chart-skeleton {
-		margin-bottom: 12px;
-	}
-
-	// After tabs, before esports / orderbook body
-	.prediction-market-odds-heading {
-		margin: 10px 0 10px 0;
-		padding: 0;
-	}
-}
-
-// Mobile / tablet trading: wider chart column, inset tabs + odds body (no negative margins)
-.prediction-market-page.mobile {
-	.venue-books-container {
-		padding-left: 0;
-		padding-right: 0;
-	}
-
-	// Chart / Livestream tab switcher (above the chart on mobile/tablet).
-	// Sits in a single row with both tabs splitting the width like the
-	// Basic/Orderbooks switcher below the chart, but visually distinct so
-	// the user knows it controls the media area and not the books body.
+	// Chart / Livestream tabs — compact, equal width, only as wide as labels + padding.
 	.media-tab-switcher {
-		display: flex;
-		gap: 8px;
-		width: 100%;
-		padding: 0 8px;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 6px;
+		width: max-content;
+		max-width: 100%;
 		margin-bottom: 10px;
 		box-sizing: border-box;
 	}
 
 	.media-tab-btn {
-		flex: 1 1 0;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		min-height: 40px;
-		padding: 10px 12px;
+		gap: 5px;
+		min-width: 0;
+		min-height: 28px;
+		padding: 4px 10px;
 		background: transparent;
 		border: 1px solid rgba(255, 255, 255, 0.12);
-		border-radius: 8px;
+		border-radius: 6px;
 		color: rgba(255, 255, 255, 0.7);
-		font-size: 14px;
+		font-size: 12px;
 		font-weight: 600;
 		cursor: pointer;
 		transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 		box-sizing: border-box;
+		white-space: nowrap;
 
 		&__icon {
-			font-size: 14px;
+			font-size: 12px;
 			color: inherit;
+			flex-shrink: 0;
 		}
 
 		&__live-dot {
-			width: 8px;
-			height: 8px;
+			width: 6px;
+			height: 6px;
 			border-radius: 50%;
 			background: #ef4444;
 			box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
 			animation: media-tab-live-pulse 1.6s ease-in-out infinite;
+			flex-shrink: 0;
 		}
 
 		&:hover {
-			background: rgba(255, 255, 255, 0.06);
+			background: transparent;
 			color: #ffffff;
+			border-color: rgba(255, 255, 255, 0.35);
 		}
 
 		&--active {
-			background: rgba(139, 92, 246, 0.18);
-			border-color: #8b5cf6;
+			background: transparent;
+			border-color: #ffffff;
+			color: #ffffff;
+		}
+
+		&--active:hover {
+			background: transparent;
+			border-color: #ffffff;
 			color: #ffffff;
 		}
 	}
 
-	// Mobile stream block lives inside .venue-books-container — share the
-	// same horizontal inset as the chart so they swap cleanly.
 	.venue-books-stream {
-		margin-bottom: 6px;
+		margin-bottom: 12px;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -464,9 +450,10 @@
 		box-sizing: border-box;
 	}
 
+	// Chart first; spacing before Basic | Orderbooks tabs
 	.venue-books-chart,
 	.venue-books-chart-skeleton {
-		margin-bottom: 6px;
+		margin-bottom: 12px;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -481,6 +468,30 @@
 		width: 100%;
 		max-width: 100%;
 		min-width: 0;
+	}
+
+	// After tabs, before esports / orderbook body
+	.prediction-market-odds-heading {
+		margin: 10px 0 10px 0;
+		padding: 0;
+	}
+}
+
+// Mobile / tablet trading: wider chart column, inset tabs + odds body (no negative margins)
+.prediction-market-page.mobile {
+	.venue-books-container {
+		padding-left: 0;
+		padding-right: 0;
+
+		.media-tab-switcher {
+			padding: 0 8px;
+		}
+
+		.venue-books-stream,
+		.venue-books-chart,
+		.venue-books-chart-skeleton {
+			margin-bottom: 6px;
+		}
 	}
 
 	// Basic / Orderbooks switcher: two tabs split the full row with a small
@@ -631,7 +642,7 @@
 	border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-// Live dot pulse for the mobile Chart / Livestream tab switcher.
+// Live dot pulse for the Chart / Livestream tab switcher.
 @keyframes media-tab-live-pulse {
 	0% {
 		box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);

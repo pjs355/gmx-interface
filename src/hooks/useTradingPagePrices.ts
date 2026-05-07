@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { MatchedMarket, OrderbookData, SnapshotStatus } from "@/types/odds-monitor";
-import type { OrderbookSnapshot } from "@/services/api/orderbookService";
-import type { DirectVenueBooks } from "@/trading/venue-books";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
@@ -64,15 +62,6 @@ function bestAskProb(book: OrderbookData | null | undefined): number | null {
 	return null;
 }
 
-function bestAskFromSnapshot(snap: OrderbookSnapshot | null | undefined): number | null {
-	if (!snap?.asks?.length) return null;
-	let min = Infinity;
-	for (const a of snap.asks) {
-		if ((a.size ?? 0) > 0 && a.price >= MIN_VALID_PRICE && a.price <= MAX_VALID_PRICE && a.price < min) min = a.price;
-	}
-	return min === Infinity ? null : min;
-}
-
 function bestBidProb(book: OrderbookData | null | undefined): number | null {
 	if (!book) return null;
 	if (book.bestBid !== null && book.bestBid !== undefined) {
@@ -89,109 +78,31 @@ function bestBidProb(book: OrderbookData | null | undefined): number | null {
 	return null;
 }
 
-function bestBidFromSnapshot(snap: OrderbookSnapshot | null | undefined): number | null {
-	if (!snap?.bids?.length) return null;
-	let max = -Infinity;
-	for (const b of snap.bids) {
-		if ((b.size ?? 0) > 0 && b.price >= MIN_VALID_PRICE && b.price <= MAX_VALID_PRICE && b.price > max) max = b.price;
-	}
-	return max === -Infinity ? null : max;
-}
-
 function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | undefined {
 	return book?.snapshotStatus;
 }
 
-/**
- * Extract bestBid for one DFlow leg from metadata BBO. Mirrors Kalshi: prefer
- * the explicit `yesBid`; fall back to the complement of `noAsk` since
- * `yesBid = 1 - noAsk` for a binary outcome. Used as a fallback for
- * uninitialized markets where the WS orderbook channel is empty.
- */
-function bestBidFromDflowBbo(
-	bbo:
-		| {
-				yesBid?: number;
-				yesAsk?: number;
-				noBid?: number;
-				noAsk?: number;
-		  }
-		| undefined,
-): number | null {
-	if (!bbo) return null;
-	if (typeof bbo.yesBid === "number" && isValidPrice(bbo.yesBid)) {
-		return bbo.yesBid;
-	}
-	if (typeof bbo.noAsk === "number") {
-		const p = 1 - bbo.noAsk;
-		if (isValidPrice(p)) return p;
-	}
-	return null;
-}
-
-function bestAskFromDflowBbo(
-	bbo:
-		| {
-				yesBid?: number;
-				yesAsk?: number;
-				noBid?: number;
-				noAsk?: number;
-		  }
-		| undefined,
-): number | null {
-	if (!bbo) return null;
-	if (typeof bbo.yesAsk === "number" && isValidPrice(bbo.yesAsk)) {
-		return bbo.yesAsk;
-	}
-	if (typeof bbo.noBid === "number") {
-		const p = 1 - bbo.noBid;
-		if (isValidPrice(p)) return p;
-	}
-	return null;
-}
-
-function buildVenueRowsFromWs(
-	m: MatchedMarket,
-	directBooks: DirectVenueBooks | null | undefined,
-): VenueRowModel[] {
-	const polyAskA = bestAskProb(m.polyPriceA) ?? bestAskFromSnapshot(directBooks?.polyBookA);
-	const polyAskB = bestAskProb(m.polyPriceB) ?? bestAskFromSnapshot(directBooks?.polyBookB);
-	const polyBidA = bestBidProb(m.polyPriceA) ?? bestBidFromSnapshot(directBooks?.polyBookA);
-	const polyBidB = bestBidProb(m.polyPriceB) ?? bestBidFromSnapshot(directBooks?.polyBookB);
+function buildVenueRowsFromWs(m: MatchedMarket): VenueRowModel[] {
+	const polyAskA = bestAskProb(m.polyPriceA);
+	const polyAskB = bestAskProb(m.polyPriceB);
+	const polyBidA = bestBidProb(m.polyPriceA);
+	const polyBidB = bestBidProb(m.polyPriceB);
 
 	const dflowWire = getDflowKalshiMonitorLink(m);
 	const dflowBaseLinked = Boolean(dflowWire);
-	// DFlow metadata BBO mirrors the Kalshi book and is published for any
-	// active Kalshi market regardless of whether the on-chain DFlow YES/NO
-	// mints exist yet (uninitialized markets). Fall back to it after WS / direct
-	// books are exhausted so the row still shows a price for not-yet-tokenized
-	// markets — the first trader's order will mint the market via DFlow.
-	const dflowMetaBboA = dflowBaseLinked ? m.dflow?.bboA : undefined;
-	const dflowMetaBboB = dflowBaseLinked ? m.dflow?.bboB : undefined;
 	const dflowAskA = dflowBaseLinked
-		? (bestAskProb(m.dflowPriceA ?? m.kalshiPriceA) ??
-			bestAskFromSnapshot(directBooks?.dflowBookA) ??
-			bestAskFromDflowBbo(dflowMetaBboA))
+		? bestAskProb(m.dflowPriceA ?? m.kalshiPriceA)
 		: null;
 	const dflowAskB = dflowBaseLinked
-		? (bestAskProb(m.dflowPriceB ?? m.kalshiPriceB) ??
-			bestAskFromSnapshot(directBooks?.dflowBookB) ??
-			bestAskFromDflowBbo(dflowMetaBboB))
+		? bestAskProb(m.dflowPriceB ?? m.kalshiPriceB)
 		: null;
 	const dflowBidA = dflowBaseLinked
-		? (bestBidProb(m.dflowPriceA ?? m.kalshiPriceA) ??
-			bestBidFromSnapshot(directBooks?.dflowBookA) ??
-			bestBidFromDflowBbo(dflowMetaBboA))
+		? bestBidProb(m.dflowPriceA ?? m.kalshiPriceA)
 		: null;
 	const dflowBidB = dflowBaseLinked
-		? (bestBidProb(m.dflowPriceB ?? m.kalshiPriceB) ??
-			bestBidFromSnapshot(directBooks?.dflowBookB) ??
-			bestBidFromDflowBbo(dflowMetaBboB))
+		? bestBidProb(m.dflowPriceB ?? m.kalshiPriceB)
 		: null;
 
-	// Only hide the row when DFlow says both sides are uninitialized AND every
-	// pricing channel (WS book / direct book / metadata BBO) is empty. With BBO
-	// available we can still price the first-mint trade via `/order/quote`.
 	const dflowKalshiRowHidden =
 		dflowBaseLinked &&
 		m.dflow?.accountsInitializedA === false &&
@@ -229,18 +140,10 @@ function buildVenueRowsFromWs(
 			id: "limitless",
 			label: "Limitless",
 			linked: Boolean(m.limitless),
-			askA: m.limitless
-				? (bestAskProb(m.limitlessPriceA) ?? bestAskFromSnapshot(directBooks?.limitlessBookA))
-				: null,
-			askB: m.limitless
-				? (bestAskProb(m.limitlessPriceB) ?? bestAskFromSnapshot(directBooks?.limitlessBookB))
-				: null,
-			bidA: m.limitless
-				? (bestBidProb(m.limitlessPriceA) ?? bestBidFromSnapshot(directBooks?.limitlessBookA))
-				: null,
-			bidB: m.limitless
-				? (bestBidProb(m.limitlessPriceB) ?? bestBidFromSnapshot(directBooks?.limitlessBookB))
-				: null,
+			askA: m.limitless ? bestAskProb(m.limitlessPriceA) : null,
+			askB: m.limitless ? bestAskProb(m.limitlessPriceB) : null,
+			bidA: m.limitless ? bestBidProb(m.limitlessPriceA) : null,
+			bidB: m.limitless ? bestBidProb(m.limitlessPriceB) : null,
 			statusA: bookStatus(m.limitlessPriceA),
 			statusB: bookStatus(m.limitlessPriceB),
 		},
@@ -323,14 +226,10 @@ function computeBestIndices(rows: VenueRowModel[]): { bestAIdx: number; bestBIdx
 
 /**
  * Single source of truth for venue prices on the trading page.
- * Uses OddsMonitor (`/ws/venue-prices` → `MatchedMarket`) only for displayed strip prices;
- * no REST venue-bbo or REST LevelUp orderbook merge — the LevelUp orderbook is
- * consumed by the orderbook panels directly (`MarketPanels`, `VenueOrderbooksPanel`)
- * and never participated in this hook's price computation.
+ * Uses OddsMonitor (`/ws/venue-prices` → `MatchedMarket`) only — no direct venue sockets or REST merge.
  */
 export function useTradingPagePrices(
 	pandascoreMatchId: string,
-	directBooks: DirectVenueBooks | null | undefined,
 	umbrellaId?: string | null,
 	/** When `/matched-markets` omits limitless but the umbrella has it (env skew). */
 	limitlessFromUmbrella?: UmbrellaExchangeMatchingLimitless | null,
@@ -351,7 +250,7 @@ export function useTradingPagePrices(
 		const base = { wsConnected: connected, wsEnabled, restError: false, matched, appState };
 
 		if (connected && matched) {
-			const rows = buildVenueRowsFromWs(matched, directBooks);
+			const rows = buildVenueRowsFromWs(matched);
 			const { bestAIdx, bestBIdx } = computeBestIndices(rows);
 			const bestYes = bestAIdx >= 0 ? rows[bestAIdx].askA : null;
 			const bestNo = bestBIdx >= 0 ? rows[bestBIdx].askB : null;
@@ -384,7 +283,7 @@ export function useTradingPagePrices(
 			...base,
 			isLoading,
 		};
-	}, [connected, matched, directBooks, wsEnabled, appState, pandascoreMatchId]);
+	}, [connected, matched, wsEnabled, appState, pandascoreMatchId]);
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
@@ -407,8 +306,7 @@ export function useTradingPagePrices(
 			venueRows: rowSummary,
 			isLoading: result.isLoading,
 			restError: result.restError,
-			note:
-				"Strip prices: venue-prices WS MatchedMarket + direct browser books when linked; no REST venue-bbo.",
+			note: "Strip prices: venue-prices WS MatchedMarket only (no direct venue WS or metadata BBO fallbacks).",
 		});
 	}, [
 		pandascoreMatchId,

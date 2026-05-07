@@ -1,6 +1,5 @@
 import { useCallback, useMemo, type MutableRefObject } from "react";
 import { useSendTransaction } from "@privy-io/react-auth";
-import { VersionedTransaction } from "@solana/web3.js";
 import { encodeFunctionData, erc20Abi, formatUnits } from "viem";
 import { base, bsc } from "viem/chains";
 import { Side } from "@polymarket/clob-client-v2";
@@ -57,6 +56,7 @@ import {
 import { clampMarketBuyAmountToWallet } from "@/trading/sor/postBridgeOrderResize";
 import { clampMarketSellSharesToCtfBalance } from "@/trading/polymarket/polymarketSellShareClamp";
 import { wireAmountUsdForVenue } from "@/trading/sor/wireAmount";
+import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
 import type { LimitlessOrderRequest } from "@/trading/limitless/limitlessPrivateApiTypes";
@@ -945,36 +945,6 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						? Math.round(leg.executionAmountUsd * 1_000_000).toString()
 						: Math.round(leg.shares * 1_000_000).toString();
 
-					const orderResult = await privateApi.getDflowOrder({
-						inputMint,
-						outputMint,
-						amount: amountBaseUnits,
-						slippageBps: "auto",
-						predictionMarketSlippageBps: "auto",
-					});
-
-					if (orderResult.code || orderResult.msg) {
-						return { filled: false, filledShares: 0, error: orderResult.msg ?? orderResult.code ?? "Kalshi order failed" };
-					}
-					if (!orderResult.transaction) {
-						throw new Error("Kalshi returned no transaction to sign");
-					}
-
-					const lvbh = orderResult.lastValidBlockHeight;
-					if (
-						typeof lvbh !== "number" ||
-						!Number.isFinite(lvbh) ||
-						lvbh <= 0 ||
-						!Number.isInteger(lvbh)
-					) {
-						return {
-							filled: false,
-							filledShares: 0,
-							error:
-								"Kalshi quote missing lastValidBlockHeight — refresh the route and try again.",
-						};
-					}
-
 					if (!solanaSigner) {
 						return {
 							filled: false,
@@ -982,20 +952,6 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							error: "Solana signer unavailable — connect your Solana embedded wallet",
 						};
 					}
-
-					const txBytes = Buffer.from(orderResult.transaction, "base64");
-					const transaction = VersionedTransaction.deserialize(txBytes);
-					const signedBytes = await solanaSigner.signTransactionOnly(
-						transaction.serialize(),
-					);
-					const signedBase64 =
-						typeof Buffer !== "undefined"
-							? Buffer.from(signedBytes).toString("base64")
-							: btoa(
-									Array.from(signedBytes)
-										.map((b) => String.fromCharCode(b))
-										.join(""),
-								);
 
 					const ids = leg.venueMarketIds;
 					const yesPairMint =
@@ -1007,8 +963,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							? ids.dflowNoMintA?.trim()
 							: ids.dflowNoMintB?.trim();
 
-					const submitBody: DflowOrderSubmitBody = {
-						signedTx: signedBase64,
+					const submitExtras: Omit<
+						DflowOrderSubmitBody,
+						"signedTx" | "lastValidBlockHeight"
+					> = {
 						inputMint,
 						outputMint,
 						amount: amountBaseUnits,
@@ -1019,16 +977,35 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							externalMarketId: outcomeMint,
 							tokenId: outcomeMint,
 						},
-						lastValidBlockHeight: lvbh,
 					};
 					if (yesPairMint && noPairMint) {
-						submitBody.outcomePairMints = {
+						submitExtras.outcomePairMints = {
 							yesMint: yesPairMint,
 							noMint: noPairMint,
 						};
 					}
 
-					const submitResult = await privateApi.postDflowOrder(submitBody);
+					let signature: string;
+					try {
+						const r = await quoteSignAndSubmitDflowOrder({
+							privateApi,
+							submitFn: (body) => privateApi.postDflowOrder(body),
+							solanaSigner,
+							orderParams: {
+								inputMint,
+								outputMint,
+								amount: amountBaseUnits,
+								slippageBps: "auto",
+								predictionMarketSlippageBps: "auto",
+							},
+							submitExtras,
+						});
+						signature = r.signature;
+					} catch (e: unknown) {
+						const msg =
+							e instanceof Error ? e.message : "Kalshi order failed";
+						return { filled: false, filledShares: 0, error: msg };
+					}
 
 					if (side === "buy" && outputMint.trim()) {
 						registerPendingDflowOutcomeMints([outputMint.trim()]);
@@ -1037,7 +1014,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					return {
 						filled: true,
 						filledShares: leg.shares,
-						txHash: submitResult.signature,
+						txHash: signature,
 					};
 				}
 

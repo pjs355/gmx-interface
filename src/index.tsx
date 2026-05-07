@@ -74,6 +74,8 @@ import { UserDataProvider } from "context/UserDataContext";
 import { RecentSettlementClaimProvider } from "context/RecentSettlementClaimContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
 import { AccountDataProvider } from "@/context/AccountDataContext";
+import { PositionsDataProvider } from "@/context/PositionsDataContext";
+import { PositionsRouteChunkPreloader } from "@/context/PositionsRouteChunkPreloader";
 import { PostTradeBalanceSyncProvider } from "@/trading/sor/usePostTradeBalanceSync";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
@@ -143,6 +145,7 @@ createRoot(document.getElementById("root")!).render(
 								 * live in the same provider tree.
 								 */}
 								<AccountDataProvider>
+									<PositionsRouteChunkPreloader />
 									<UserDataProvider>
 										<SetupActivationProvider>
 										{/*
@@ -174,6 +177,7 @@ createRoot(document.getElementById("root")!).render(
 										<RecentSettlementClaimProvider>
 											<PostTradeBalanceSyncProvider>
 												<PortfolioProvider>
+													<PositionsDataProvider>
 													<PositionsPageMetricsGateProvider>
 														<RPGProvider>
 															<TransfersModalProvider>
@@ -185,6 +189,7 @@ createRoot(document.getElementById("root")!).render(
 															</TransfersModalProvider>
 														</RPGProvider>
 													</PositionsPageMetricsGateProvider>
+													</PositionsDataProvider>
 												</PortfolioProvider>
 											</PostTradeBalanceSyncProvider>
 										</RecentSettlementClaimProvider>

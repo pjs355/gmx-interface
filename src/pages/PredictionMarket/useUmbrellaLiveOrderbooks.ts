@@ -7,7 +7,7 @@ import {
 	useState,
 } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { getOrderbookApiBaseUrl, getPredictionWebSocketUrl } from "@/config/predictionApiBase";
+import { getPredictionWebSocketUrl } from "@/config/predictionApiBase";
 import {
 	normalizeOrderbookPayload,
 	hasUsableOrderbookSnapshot,
@@ -28,7 +28,7 @@ export function useUmbrellaLiveOrderbooks(
 	umbrellaId: string | undefined,
 	questions: PredictionMarket[],
 	getOrderbookForQuestion: GetOrderbookForQuestion,
-	refreshOrderbook: RefreshOrderbook,
+	_refreshOrderbook: RefreshOrderbook,
 ) {
 	const [questionOrderbooks, setQuestionOrderbooks] = useState<
 		Record<string, any>
@@ -65,55 +65,6 @@ export function useUmbrellaLiveOrderbooks(
 		}
 		setQuestionOrderbooks(seeded);
 	}, [umbrellaId, marketIdsKey, getOrderbookForQuestion]);
-
-	// REST bootstrap
-	useEffect(() => {
-		if (!umbrellaId || !marketIdsKey) return;
-		const qids = marketIdsKey.split("|");
-		let cancelled = false;
-		(async () => {
-			const pairs = await Promise.all(
-				qids.map(async (qid) => {
-					const ob = await refreshOrderbook(umbrellaId, qid);
-					return { qid, ob };
-				}),
-			);
-			if (cancelled) return;
-			if (isPredictionPricingDebugEnabled()) {
-				priceDebugLog("PredictionMarket REST orderbook bootstrap", {
-					orderbookApiBaseUrl: getOrderbookApiBaseUrl(),
-					umbrellaId,
-					questionIds: qids,
-					note: "Orderbook REST uses getOrderbookApiBaseUrl() (Railway by default; follows VITE_PREDICTION_API_BASE_URL when set).",
-				});
-				for (const { qid, ob } of pairs) {
-					const normalized = ob != null ? normalizeOrderbookPayload(ob) : null;
-					const snap = normalized as {
-						asks?: unknown[];
-						bids?: unknown[];
-					} | null;
-					priceDebugLog(`PredictionMarket orderbook snapshot ${qid}`, {
-						hadRaw: ob != null,
-						askCount: snap?.asks?.length ?? 0,
-						bidCount: snap?.bids?.length ?? 0,
-						usable: normalized
-							? hasUsableOrderbookSnapshot(normalized)
-							: false,
-					});
-				}
-			}
-			setQuestionOrderbooks((prev) => {
-				const next = { ...prev };
-				for (const { qid, ob } of pairs) {
-					if (ob != null) next[qid] = normalizeOrderbookPayload(ob);
-				}
-				return next;
-			});
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [umbrellaId, marketIdsKey, refreshOrderbook]);
 
 	// Multiplex WebSocket
 	useEffect(() => {
@@ -261,31 +212,20 @@ export function useUmbrellaLiveOrderbooks(
 	const fetchAllOrderbooks = useCallback(
 		async (qs: PredictionMarket[]) => {
 			if (!umbrellaId) return;
-			const rows = await Promise.all(
-				(qs || []).map(async (q) => {
-					const qid =
-						(q as { _id?: string })._id ||
-						(q as { questionId?: string }).questionId ||
-						(q as { marketId?: string }).marketId;
-					if (!qid) return null;
-					const sid = String(qid);
-					const ob = await refreshOrderbook(umbrellaId, sid);
-					return { qid: sid, ob };
-				}),
-			);
 			const updated: Record<string, unknown> = {};
-			for (const row of rows) {
-				if (!row) continue;
-				let ob = row.ob;
-				if (ob == null) {
-					ob = getOrderbookForQuestion(umbrellaId, row.qid);
-				}
-				if (ob != null)
-					updated[row.qid] = normalizeOrderbookPayload(ob);
+			for (const q of qs || []) {
+				const qid =
+					(q as { _id?: string })._id ||
+					(q as { questionId?: string }).questionId ||
+					(q as { marketId?: string }).marketId;
+				if (!qid) continue;
+				const sid = String(qid);
+				const ob = getOrderbookForQuestion(umbrellaId, sid);
+				if (ob != null) updated[sid] = normalizeOrderbookPayload(ob);
 			}
-			setQuestionOrderbooks(updated);
+			setQuestionOrderbooks((prev) => ({ ...prev, ...updated }));
 		},
-		[umbrellaId, refreshOrderbook, getOrderbookForQuestion],
+		[umbrellaId, getOrderbookForQuestion],
 	);
 
 	return {

@@ -1153,6 +1153,41 @@ export function createPrivateApiClient(
 		},
 
 		/**
+		 * DFlow claim / redeem — same body and response as `postDflowOrder`, but POSTs
+		 * `/api/claims/dflow` so winnings use the dedicated claims namespace on the API.
+		 */
+		async postClaimDflow(
+			body: DflowOrderSubmitBody
+		): Promise<DflowOrderSubmitResponse> {
+			const controller = new AbortController();
+			const timer = setTimeout(() => {
+				controller.abort();
+			}, DFLOW_ORDER_SUBMIT_FETCH_TIMEOUT_MS);
+			try {
+				const res = await authorizedFetch("/api/claims/dflow", {
+					method: "POST",
+					body: JSON.stringify(body),
+					signal: controller.signal,
+				});
+				return readJson<DflowOrderSubmitResponse>(res);
+			} catch (e: unknown) {
+				if (
+					e instanceof Error &&
+					e.name === "AbortError"
+				) {
+					throw new PrivateApiError(
+						"Kalshi claim confirmation timed out waiting for the server. Check Positions or try again.",
+						504,
+						null,
+					);
+				}
+				throw e;
+			} finally {
+				clearTimeout(timer);
+			}
+		},
+
+		/**
 		 * Lifecycle status for a previously-submitted DFlow prediction-market
 		 * order. Poll until `status` is one of `closed | failed | expired`
 		 * (use `isDflowOrderStatusTerminal`). Returns the actual `inAmount` /

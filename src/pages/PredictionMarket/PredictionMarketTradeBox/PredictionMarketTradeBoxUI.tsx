@@ -18,6 +18,8 @@ import type {
   SorExecutionPhase,
   SorPrefundLegProgress,
   VenueRoutePreview,
+  SorSide,
+  SorTradeTrustContext,
 } from "@/trading/sor";
 import {
   VENUE_COLORS,
@@ -26,6 +28,11 @@ import {
   formatSorDetailsSharesDisplay,
   rawInputBelowVenueMinimum,
   parseLimitPriceCents,
+  positionToSorOutcome,
+  routeMatchesTradeContext,
+  executionRouteTrustedForSingleVenueMarketBuy,
+  executionRoutePendingForToWinOverlay,
+  executionRouteTrustedForSingleVenueMarketSell,
 } from "@/trading/sor";
 import { getYesNoTeamLabels } from "./teamLabels";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
@@ -38,6 +45,7 @@ import {
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { usePostTradeBalanceSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
 import SmartRoutingSection from "./SmartRoutingSection";
+import QuoteMetricSkeleton from "./QuoteMetricSkeleton";
 import OddsFormatMenu from "@/components/OddsFormatMenu/OddsFormatMenu";
 import { FlashingValue } from "@/utils/FlashingValue";
 import { usePortfolio } from "@/context/PortfolioContext";
@@ -523,6 +531,29 @@ export default function PredictionMarketTradeBoxUI({
     return Number.isFinite(profit) && profit > 0 ? profit : null;
   })();
 
+  const sorTrustCtxMarket = useMemo((): SorTradeTrustContext | null => {
+    if (!amount || !selectedPosition) return null;
+    const n = Number(amount);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return {
+      side: side as SorSide,
+      outcome: positionToSorOutcome(selectedPosition),
+      amountNumber: n,
+    };
+  }, [amount, selectedPosition, side]);
+
+  const toWinQuotePending =
+    orderType === "market" &&
+    side === "buy" &&
+    tradingVenue !== "all" &&
+    routePreviewAllowed &&
+    !belowTradeFloor &&
+    executionRoutePendingForToWinOverlay(
+      sorRoute.executionRoute,
+      sorTrustCtxMarket,
+      sorRoute.executionLoading,
+    );
+
   // Compute Odds % for market BUY orders using weighted average fill price.
   // Prefers SOR route data (server-side book walk) when available; falls back to local book walk.
   const oddsData = useMemo(() => {
@@ -532,14 +563,16 @@ export default function PredictionMarketTradeBoxUI({
     const usdAmount = Number(amount);
     if (!Number.isFinite(usdAmount) || usdAmount <= 0) return null;
 
-    const sorRouteFreshForAmount =
-      sorRoute.executionRoute &&
-      sorRoute.executionRoute.legs.length > 0 &&
-      !sorRoute.executionStale &&
-      Math.round(sorRoute.executionRoute.requestedAmount * 100) ===
-        Math.round(usdAmount * 100);
+    if (!sorTrustCtxMarket) return null;
 
-    if (sorRouteFreshForAmount) {
+    const sorTrustedBuy = executionRouteTrustedForSingleVenueMarketBuy(
+      sorRoute.executionRoute,
+      sorTrustCtxMarket,
+      sorRoute.executionLoading,
+      sorRoute.executionStale,
+    );
+
+    if (sorTrustedBuy) {
       const leg = sorRoute.executionRoute!.legs[0];
       const avgPrice = leg.avgPrice;
       if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
@@ -555,7 +588,16 @@ export default function PredictionMarketTradeBoxUI({
       return { pct, avgPrice, isUpdated, fromPct };
     }
 
-    // Local book walk while SOR is loading/stale or amount does not match the current route
+    // Avoid local book walk while SOR is in flight or returned a non-matching plan for this tab/outcome.
+    if (sorRoute.executionLoading) return null;
+    if (
+      sorRoute.executionRoute &&
+      !routeMatchesTradeContext(sorRoute.executionRoute, sorTrustCtxMarket)
+    ) {
+      return null;
+    }
+
+    // Local book walk when SOR has no executable targeted quote for this context.
     const walkUsd = venueConfig.effectiveBuyBudget(usdAmount, {
       approxPrice: bestAsk ?? undefined,
     });
@@ -605,6 +647,8 @@ export default function PredictionMarketTradeBoxUI({
     noHintPrices,
     sorRoute.executionRoute,
     sorRoute.executionStale,
+    sorRoute.executionLoading,
+    sorTrustCtxMarket,
   ]);
 
   // Compute Avg Price (¢) for market SELL orders using weighted average sale price.
@@ -615,17 +659,28 @@ export default function PredictionMarketTradeBoxUI({
     const shares = Number(amount);
     if (!Number.isFinite(shares) || shares <= 0) return null;
 
-    const sorRouteFreshForAmount =
-      sorRoute.executionRoute &&
-      sorRoute.executionRoute.legs.length > 0 &&
-      !sorRoute.executionStale &&
-      Math.abs(sorRoute.executionRoute.requestedAmount - shares) < 0.0001;
+    if (!sorTrustCtxMarket) return null;
 
-    if (sorRouteFreshForAmount) {
+    const sorTrustedSell = executionRouteTrustedForSingleVenueMarketSell(
+      sorRoute.executionRoute,
+      sorTrustCtxMarket,
+      sorRoute.executionLoading,
+      sorRoute.executionStale,
+    );
+
+    if (sorTrustedSell) {
       const leg = sorRoute.executionRoute!.legs[0];
       const avgPrice = leg.avgPrice;
       if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
       return Math.round(avgPrice * 100);
+    }
+
+    if (sorRoute.executionLoading) return null;
+    if (
+      sorRoute.executionRoute &&
+      !routeMatchesTradeContext(sorRoute.executionRoute, sorTrustCtxMarket)
+    ) {
+      return null;
     }
 
     const { contracts, remainingUsd } = calculateContractsForMarketOrder(shares, selectedPosition, 'sell');
@@ -634,7 +689,7 @@ export default function PredictionMarketTradeBoxUI({
     if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
     const cents = Math.round(avgPrice * 100);
     return cents;
-  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, sorRoute.executionRoute, sorRoute.executionStale]);
+  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, sorRoute.executionRoute, sorRoute.executionStale, sorRoute.executionLoading, sorTrustCtxMarket]);
 
   return (
     <div className="prediction-market-tradebox">
@@ -955,6 +1010,8 @@ export default function PredictionMarketTradeBoxUI({
           side={side}
           routePreviewAllowed={routePreviewAllowed}
           smartRoutingMarketKey={smartRoutingMarketKey}
+          selectedOutcome={positionToSorOutcome(outcomeSelection)}
+          executionLoading={sorRoute.executionLoading}
         />
       )}
 
@@ -1089,13 +1146,17 @@ export default function PredictionMarketTradeBoxUI({
               smart routing still rely on this line as the only payout display. */}
           {toWinNumeric !== null && side === 'buy' && !smartRoutingSurfaceActive && (
             <div className="bet-size-info">
-              <div className="bet-size-main-row">
+              <div className="bet-size-main-row" aria-busy={toWinQuotePending || undefined}>
                 <span className={`bet-size-label to-win-label`}>To Win</span>
-                <FlashingValue
-                  value={`$ ${formatToWinUsdDisplay(toWinNumeric)}`}
-                  className={BET_VALUE_CLASS}
-                  flashClassName={BET_VALUE_FLASH_CLASS}
-                />
+                {toWinQuotePending ? (
+                  <QuoteMetricSkeleton variant="tradebox-value" />
+                ) : (
+                  <FlashingValue
+                    value={`$ ${formatToWinUsdDisplay(toWinNumeric)}`}
+                    className={BET_VALUE_CLASS}
+                    flashClassName={BET_VALUE_FLASH_CLASS}
+                  />
+                )}
               </div>
             </div>
           )}

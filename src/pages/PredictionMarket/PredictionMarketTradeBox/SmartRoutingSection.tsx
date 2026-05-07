@@ -1,7 +1,17 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { RoutePlan, RouteLeg, SorSide, SorVenue, VenueRoutePreview } from "@/trading/sor";
+import type {
+	RoutePlan,
+	RouteLeg,
+	SorOutcome,
+	SorSide,
+	SorVenue,
+	VenueRoutePreview,
+	SorTradeTrustContext,
+} from "@/trading/sor";
 import {
 	VENUE_DISPLAY_NAMES,
+	isExecutionOverlayRowTrusted,
+	isOmnibusDisplayMetricsTrusted,
 	formatToWinUsdDisplay,
 	formatSorDetailsSharesDisplay,
 	formatSorBuyCostUsdDisplay,
@@ -11,6 +21,7 @@ import {
 import type { TradingVenue } from "@/config/venueConfig";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { FlashingValue } from "@/utils/FlashingValue";
+import QuoteMetricSkeleton from "./QuoteMetricSkeleton";
 import { SorRouteConsolidatedFeesSummary } from "./SorRouteConsolidatedFeesSummary";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
@@ -369,6 +380,10 @@ export interface SmartRoutingSectionProps {
 	routePreviewAllowed?: boolean;
 	/** Stable market id — when it changes, clear sticky omnibus state (match switch without remount). */
 	smartRoutingMarketKey?: string;
+	/** Selected outcome for omnibus + venue quotes — gates stale digits on Yes/No flips. */
+	selectedOutcome: SorOutcome;
+	/** Execution channel loading — gates overlay rows when the targeted plan is in flight. */
+	executionLoading: boolean;
 }
 
 export default function SmartRoutingSection({
@@ -382,6 +397,8 @@ export default function SmartRoutingSection({
 	side,
 	routePreviewAllowed = true,
 	smartRoutingMarketKey,
+	selectedOutcome,
+	executionLoading,
 }: SmartRoutingSectionProps) {
 	const { formatAvgOdds, oddsDisplayStyle } = useOddsDisplay();
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -475,6 +492,58 @@ export default function SmartRoutingSection({
 	const venuePreviews = routePreviewAllowed
 		? (liveVenuePreviews ?? stableVenuePreviewsRef.current)
 		: null;
+
+	const trustCtx = useMemo((): SorTradeTrustContext | null => {
+		if (userAmount === undefined) return null;
+		const n = parseFloat(userAmount);
+		if (!Number.isFinite(n) || n <= 0) return null;
+		return {
+			side: expectedSide,
+			outcome: selectedOutcome,
+			amountNumber: n,
+		};
+	}, [userAmount, expectedSide, selectedOutcome]);
+
+	const omnibusMetricsTrusted = useMemo(() => {
+		if (!trustCtx || !routePreviewAllowed) return true;
+		return isOmnibusDisplayMetricsTrusted(
+			liveDisplayRoute,
+			displayRoute,
+			trustCtx,
+			isLoading,
+		);
+	}, [
+		trustCtx,
+		routePreviewAllowed,
+		liveDisplayRoute,
+		displayRoute,
+		isLoading,
+	]);
+
+	const splitMetricsPending =
+		Boolean(trustCtx && routePreviewAllowed && !omnibusMetricsTrusted);
+
+	const rowMetricsPending = useCallback(
+		(overlayRoute: RoutePlan | null) => {
+			if (!trustCtx || !routePreviewAllowed) return false;
+			if (overlayRoute) {
+				return !isExecutionOverlayRowTrusted(
+					executionRoute,
+					overlayRoute,
+					trustCtx,
+					executionLoading,
+				);
+			}
+			return !omnibusMetricsTrusted;
+		},
+		[
+			trustCtx,
+			routePreviewAllowed,
+			executionRoute,
+			executionLoading,
+			omnibusMetricsTrusted,
+		],
+	);
 
 	const toggle = useCallback((key: string) => {
 		setExpandedKey((k) => (k === key ? null : key));
@@ -713,7 +782,16 @@ export default function SmartRoutingSection({
 									<span className="smart-routing-row__name">Split order</span>
 									{displayRoute.totalShares > 0 && (
 										<span className="smart-routing-row__sub">
-											{formatAvgOdds(displayRoute.totalCost / displayRoute.totalShares)} avg.
+											{splitMetricsPending ? (
+												<QuoteMetricSkeleton variant="smart-sub" />
+											) : (
+												<>
+													{formatAvgOdds(
+														displayRoute.totalCost / displayRoute.totalShares,
+													)}{" "}
+													avg.
+												</>
+											)}
 										</span>
 									)}
 								</div>
@@ -734,12 +812,17 @@ export default function SmartRoutingSection({
 							type="button"
 							className="smart-routing-row__value-btn"
 							onClick={() => onSelectVenue("all")}
+							aria-busy={splitMetricsPending || undefined}
 						>
-							<FlashingValue
-								value={`$${formatToWinUsdDisplay(displayRoute.totalShares)}`}
-								className={SR_VALUE_CLASS}
-								flashClassName={SR_VALUE_FLASH_CLASS}
-							/>
+							{splitMetricsPending ? (
+								<QuoteMetricSkeleton variant="smart-value" />
+							) : (
+								<FlashingValue
+									value={`$${formatToWinUsdDisplay(displayRoute.totalShares)}`}
+									className={SR_VALUE_CLASS}
+									flashClassName={SR_VALUE_FLASH_CLASS}
+								/>
+							)}
 						</button>
 					</div>
 					{expandedKey === "split" && (
@@ -789,7 +872,11 @@ export default function SmartRoutingSection({
 									<span className="smart-routing-row__name">Split order</span>
 									{splitSellAvgCents != null && (
 										<span className="smart-routing-row__sub">
-											{formatLegAvg(splitSellAvgCents / 100)} avg.
+											{splitMetricsPending ? (
+												<QuoteMetricSkeleton variant="smart-sub" />
+											) : (
+												<>{formatLegAvg(splitSellAvgCents / 100)} avg.</>
+											)}
 										</span>
 									)}
 								</div>
@@ -810,12 +897,17 @@ export default function SmartRoutingSection({
 							type="button"
 							className="smart-routing-row__value-btn"
 							onClick={() => onSelectVenue("all")}
+							aria-busy={splitMetricsPending || undefined}
 						>
-							<FlashingValue
-								value={`$ ${formatSorSellProceedsUsdDisplay(displayRoute.totalCost)}`}
-								className={SR_VALUE_CLASS}
-								flashClassName={SR_VALUE_FLASH_CLASS}
-							/>
+							{splitMetricsPending ? (
+								<QuoteMetricSkeleton variant="smart-value" />
+							) : (
+								<FlashingValue
+									value={`$ ${formatSorSellProceedsUsdDisplay(displayRoute.totalCost)}`}
+									className={SR_VALUE_CLASS}
+									flashClassName={SR_VALUE_FLASH_CLASS}
+								/>
+							)}
 						</button>
 					</div>
 					{expandedKey === "split-sell" && (
@@ -894,6 +986,7 @@ export default function SmartRoutingSection({
 						preview.venue,
 						"sell",
 					);
+					const rowPending = rowMetricsPending(overlayRoute);
 					const open = expandedKey === key;
 					const feeR = overlayRoute ?? feeRouteFromSellPreview(preview);
 					const overlayLeg = overlayRoute?.legs[0] ?? null;
@@ -935,7 +1028,13 @@ export default function SmartRoutingSection({
 												{VENUE_DISPLAY_NAMES[preview.venue]}
 											</span>
 											<span className="smart-routing-row__sub">
-												{formatAvgOdds(displayAvgPrice)} avg.
+												{rowPending ? (
+													<QuoteMetricSkeleton variant="smart-sub" />
+												) : (
+													<>
+														{formatAvgOdds(displayAvgPrice)} avg.
+													</>
+												)}
 											</span>
 										</div>
 									</div>
@@ -955,12 +1054,17 @@ export default function SmartRoutingSection({
 									type="button"
 									className="smart-routing-row__value-btn"
 									onClick={() => onSelectVenue(sorVenueToTradingVenue(preview.venue))}
+									aria-busy={rowPending || undefined}
 								>
-									<FlashingValue
-										value={`$ ${formatSorSellProceedsUsdDisplay(displayProceeds)}`}
-										className={SR_VALUE_CLASS}
-										flashClassName={SR_VALUE_FLASH_CLASS}
-									/>
+									{rowPending ? (
+										<QuoteMetricSkeleton variant="smart-value" />
+									) : (
+										<FlashingValue
+											value={`$ ${formatSorSellProceedsUsdDisplay(displayProceeds)}`}
+											className={SR_VALUE_CLASS}
+											flashClassName={SR_VALUE_FLASH_CLASS}
+										/>
+									)}
 								</button>
 							</div>
 							{open && (
@@ -989,6 +1093,7 @@ export default function SmartRoutingSection({
 
 				const p = preview;
 				const overlayRoute = pickExecutionOverlay(executionRoute, tradingVenue, p.venue, "buy");
+				const rowPending = rowMetricsPending(overlayRoute);
 				const open = expandedKey === key;
 				const feeR = overlayRoute ?? feeRouteFromBuyPreview(p);
 				const displayShares = overlayRoute ? overlayRoute.totalShares : p.totalShares;
@@ -1036,9 +1141,15 @@ export default function SmartRoutingSection({
 											{VENUE_DISPLAY_NAMES[p.venue]}
 											{theoretical ? theoreticalLabel : ""}
 										</span>
-										{displayAvgPrice != null && (
+										{(displayAvgPrice != null || rowPending) && (
 											<span className="smart-routing-row__sub">
-												{formatAvgOdds(displayAvgPrice)} avg.
+												{rowPending ? (
+													<QuoteMetricSkeleton variant="smart-sub" />
+												) : displayAvgPrice != null ? (
+													<>
+														{formatAvgOdds(displayAvgPrice)} avg.
+													</>
+												) : null}
 											</span>
 										)}
 									</div>
@@ -1064,12 +1175,17 @@ export default function SmartRoutingSection({
 										onSelectVenue(sorVenueToTradingVenue(p.venue));
 									}
 								}}
+								aria-busy={rowPending || undefined}
 							>
-								<FlashingValue
-									value={`$${formatToWinUsdDisplay(displayShares)}`}
-									className={SR_VALUE_CLASS}
-									flashClassName={SR_VALUE_FLASH_CLASS}
-								/>
+								{rowPending ? (
+									<QuoteMetricSkeleton variant="smart-value" />
+								) : (
+									<FlashingValue
+										value={`$${formatToWinUsdDisplay(displayShares)}`}
+										className={SR_VALUE_CLASS}
+										flashClassName={SR_VALUE_FLASH_CLASS}
+									/>
+								)}
 							</button>
 						</div>
 						{open && (

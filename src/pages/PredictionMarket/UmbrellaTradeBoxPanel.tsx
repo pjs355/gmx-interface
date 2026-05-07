@@ -35,6 +35,7 @@ export function UmbrellaTradeBoxPanel({
 	const [, setTradeSide] = useState<"buy" | "sell">("buy");
 	/* Match desktop market grid (`predictions-page__home-trade-grid` @ 1101px). */
 	const wideTradeDock = useMedia("(min-width: 1101px)");
+	const compactTradeDock = !wideTradeDock;
 
 	/* Shell is only for states that do not mount `PredictionMarketTradeBox`
 	 * (that component’s responsive container already wraps desktop with the shell). */
@@ -74,16 +75,19 @@ export function UmbrellaTradeBoxPanel({
 	// umbrella picked). Once an `activeMarket` exists, render the trade box even if its
 	// orderbook hasn't arrived — the trade box already handles a null/empty book
 	// gracefully (the Submit button shows "Fetching price…" and inputs stay editable).
-	// This prevents the "skeleton flash" the user sees when clicking between markets,
-	// and the typed amount survives via `StickyTradeAmountContext`.
+	// Desktop (≥1101px): amount/venue can persist across market switches (sticky context).
+	// Mobile/tablet: we remount the trade box per market + clear sticky so venue rows reset.
 	if (!activeMarket) {
 		return desktopTradeDockShell(<TradeBoxSkeleton />);
 	}
 
 	const orderbook = questionOrderbooks[getMarketId(activeMarket)] as any;
 
+	const tradeRouteIsolationKey = `${umbrella._id}-${getMarketId(activeMarket)}`;
+
 	return (
 		<PredictionMarketTradeBox
+			key={compactTradeDock ? tradeRouteIsolationKey : undefined}
 			market={
 				{
 					...(activeMarket as any),
@@ -105,6 +109,9 @@ export function UmbrellaTradeBoxPanel({
 				pandascoreMatchId ? tradingPagePrices.venueRows : undefined
 			}
 			mobilePeekBar={mobilePeekBar}
+			tradeRouteIsolationKey={
+				compactTradeDock ? tradeRouteIsolationKey : undefined
+			}
 		/>
 	);
 }

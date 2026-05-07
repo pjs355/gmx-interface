@@ -1,4 +1,11 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import {
+	useEffect,
+	useLayoutEffect,
+	useState,
+	useCallback,
+	useMemo,
+	useRef,
+} from "react";
 import type { TradingVenue } from "@/config/venueConfig";
 import { useStickyTradeAmount } from "@/context/StickyTradeAmountContext";
 
@@ -46,8 +53,28 @@ type StateUpdater = FullTradeState | ((prev: FullTradeState) => FullTradeState);
 export function useTradeState(
 	initialPosition?: "yes" | "no",
 	initialVenue?: TradingVenue,
+	tradeRouteIsolationKey?: string,
 ) {
 	const sticky = useStickyTradeAmount();
+
+	/** Last route key we committed sticky session for — drives one-frame bypass + reset on change. */
+	const lastCommittedRouteKeyRef = useRef<string | undefined>(undefined);
+
+	const shouldBypassSticky =
+		tradeRouteIsolationKey !== undefined &&
+		tradeRouteIsolationKey !== lastCommittedRouteKeyRef.current;
+
+	useLayoutEffect(() => {
+		if (tradeRouteIsolationKey === undefined) {
+			lastCommittedRouteKeyRef.current = undefined;
+			return;
+		}
+		if (lastCommittedRouteKeyRef.current === tradeRouteIsolationKey) return;
+		lastCommittedRouteKeyRef.current = tradeRouteIsolationKey;
+		sticky.setAmount("");
+		sticky.setTradingVenue(null);
+		sticky.setOrderType(null);
+	}, [tradeRouteIsolationKey, sticky]);
 
 	/**
 	 * Resolve the starting venue + orderType once on mount:
@@ -68,8 +95,9 @@ export function useTradeState(
 		remainingUsd: null,
 	});
 
-	const stickyVenue = sticky.tradingVenue;
-	const stickyOrderType = sticky.orderType;
+	const stickyVenue = shouldBypassSticky ? null : sticky.tradingVenue;
+	const stickyOrderType = shouldBypassSticky ? null : sticky.orderType;
+	const stickyAmount = shouldBypassSticky ? "" : sticky.amount;
 
 	/** Effective values that downstream consumers see. Reads sticky every
 	 *  render so live updates by sibling components propagate. */
@@ -86,11 +114,11 @@ export function useTradeState(
 	const state = useMemo<FullTradeState>(
 		() => ({
 			...coreState,
-			amount: sticky.amount,
+			amount: stickyAmount,
 			tradingVenue,
 			orderType,
 		}),
-		[coreState, sticky.amount, tradingVenue, orderType],
+		[coreState, stickyAmount, tradingVenue, orderType],
 	);
 
 	useEffect(() => {
@@ -115,14 +143,14 @@ export function useTradeState(
 				typeof updater === "function"
 					? {
 							...coreStateRef.current,
-							amount: sticky.amount,
+							amount: stickyAmount,
 							tradingVenue,
 							orderType,
 						}
 					: ({} as FullTradeState);
 			const next =
 				typeof updater === "function" ? updater(prevFull) : updater;
-			if (next.amount !== sticky.amount) sticky.setAmount(next.amount);
+			if (next.amount !== stickyAmount) sticky.setAmount(next.amount);
 			if (next.tradingVenue !== tradingVenue) {
 				sticky.setTradingVenue(next.tradingVenue);
 			}
@@ -137,7 +165,7 @@ export function useTradeState(
 			} = next;
 			setCoreState(nextCore);
 		},
-		[sticky, tradingVenue, orderType],
+		[sticky, stickyAmount, tradingVenue, orderType],
 	);
 
 	const handlePositionChange = useCallback((position: "yes" | "no") => {

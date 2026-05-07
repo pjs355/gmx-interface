@@ -36,10 +36,7 @@ export interface VenueBestPrices {
  *       and multi-venue optimization overhead. If slow for single-venue,
  *       consider a fast path: skip optimizer, just walkBook → return single leg.
  *
- *  3. DFlow browser paths
- *     ─ WS: keyless `wss://.../api/v1/ws` (see DflowBookClient).
- *     ─ REST seed: `GET {predictionApi}/api/public/dflow-orderbook?ticker=` (server attaches
- *       Metadata `x-api-key` / relay); prod Metadata returns 403 without a key.
- *     ─ If WS fails outright, `dflowFallback` still flags fallback to venue-prices WS.
+ *  3. DFlow / Polymarket venue display books
+ *     ─ Provided only via `/ws/venue-prices` on the prediction API (no direct browser WS to venues for display).
  * ═══════════════════════════════════════════════════════════════════
  */

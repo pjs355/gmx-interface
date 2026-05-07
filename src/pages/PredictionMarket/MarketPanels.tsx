@@ -72,12 +72,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
 	const [activeTab, setActiveTab] = useState<"basic" | "orderbooks">("basic");
 	const [venueForTradeBox, setVenueForTradeBox] = useState<TradingVenue | undefined>(undefined);
-	/** Mobile/tablet only: default to chart so the stream iframe doesn't
-	 * auto-load and burn the user's data on page open. The stream embed
-	 * only mounts when the user explicitly selects the Livestream tab. */
-	const [mobileMediaTab, setMobileMediaTab] = useState<"chart" | "livestream">(
-		"chart",
-	);
+	/** Default to chart so the stream iframe doesn't auto-load on page open.
+	 * The embed only mounts when the user selects Livestream (desktop + mobile). */
+	const [mediaTab, setMediaTab] = useState<"chart" | "livestream">("chart");
 
 	const selectVenueBooksTab = useCallback((tab: "basic" | "orderbooks") => {
 		setActiveTab(tab);
@@ -86,12 +83,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		}
 	}, []);
 
-	const {
-		tradingPagePrices,
-		directBooks,
-		serverVenueDepthParity,
-		pandascoreMatchId,
-	} = useUmbrellaTradePricing({
+	const { tradingPagePrices, pandascoreMatchId } = useUmbrellaTradePricing({
 		umbrella,
 	});
 
@@ -108,7 +100,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const levelUpOrderbook = levelUpOrderbookKey
 		? questionOrderbooks[levelUpOrderbookKey] ?? null
 		: null;
-	/** Chart LevelUp series: canonical REST book only (venue WS may still show depth in Orderbooks tab). */
+	/** Chart LevelUp series: multiplex + context orderbook (venue-prices for cross-venue). */
 	const chartLevelUpBookHasRestingShares =
 		levelUpOrderbookHasRestingShares(levelUpOrderbook);
 	const levelUpContextMarket =
@@ -129,28 +121,15 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			pandascoreMatchId: pandascoreMatchId || null,
 			activeTab,
 			showCrossVenueBooks,
-			serverVenueDepthParity,
-			directBooks: directBooks
-				? {
-						polyFailed: directBooks.polyFailed,
-						dflowFallback: directBooks.dflowFallback,
-						hasPolyA: Boolean(directBooks.polyBookA),
-						hasPolyB: Boolean(directBooks.polyBookB),
-						hasDflowA: Boolean(directBooks.dflowBookA),
-						hasDflowB: Boolean(directBooks.dflowBookB),
-					}
-				: null,
 			tradingPageSource: tradingPagePrices.source,
 			tradingPageBestYes: tradingPagePrices.bestYesPrice,
 			tradingPageBestNo: tradingPagePrices.bestNoPrice,
-			note: "Basic tab = EsportsVenueBooksPanel; Orderbooks = VenueOrderbooksPanel (MatchedMarket + directBooks + LevelUp REST snapshot).",
+			note: "Basic tab = EsportsVenueBooksPanel; Orderbooks = VenueOrderbooksPanel (MatchedMarket + multiplex LevelUp orderbook).",
 		});
 	}, [
 		pandascoreMatchId,
 		activeTab,
 		showCrossVenueBooks,
-		serverVenueDepthParity,
-		directBooks,
 		tradingPagePrices.source,
 		tradingPagePrices.bestYesPrice,
 		tradingPagePrices.bestNoPrice,
@@ -290,7 +269,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					onVenueSelect={setVenueForTradeBox}
 					activePosition={activePosition}
 					side={tradeSide}
-					directBooks={directBooks}
 				/>
 				{/* <RulesSection umbrella={umbrella} /> */}
 			</>
@@ -356,8 +334,20 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			</div>
 		</div>
 	) : showChartPlaceholder ? (
-		<div className="venue-books-chart-skeleton">
-			<ChartSkeleton />
+		<div
+			className="ExchangeChart venue-books-chart venue-books-chart-skeleton"
+			style={{
+				display: "flex",
+				flexDirection: "column",
+				minHeight: 300,
+			}}
+		>
+			<div
+				className="prediction-market-chart-shell flex grow flex-col overflow-visible rounded-4 bg-black"
+				style={{ minHeight: 300 }}
+			>
+				<ChartSkeleton />
+			</div>
 		</div>
 	) : null;
 
@@ -371,11 +361,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			<h3 className="prediction-market-odds-heading">{venueBooksSectionTitle}</h3>
 		) : null;
 
-	/* Mobile-only Chart / Livestream toggle. Rendered above the chart inside
-	 * `.venue-books-container` when a stream is attached to this umbrella.
-	 * Defaults to "chart" so the iframe never mounts until the user picks
-	 * Livestream — keeps mobile data usage low on open. */
-	const mobileMediaTabSwitcher = showStream ? (
+	/* Chart / Livestream toggle when this umbrella has a stream URL. */
+	const mediaTabSwitcher = showStream ? (
 		<div
 			className="media-tab-switcher"
 			role="tablist"
@@ -384,9 +371,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			<button
 				type="button"
 				role="tab"
-				aria-selected={mobileMediaTab === "chart"}
-				className={`media-tab-btn${mobileMediaTab === "chart" ? " media-tab-btn--active" : ""}`}
-				onClick={() => setMobileMediaTab("chart")}
+				aria-selected={mediaTab === "chart"}
+				className={`media-tab-btn${mediaTab === "chart" ? " media-tab-btn--active" : ""}`}
+				onClick={() => setMediaTab("chart")}
 			>
 				<FaChartLine className="media-tab-btn__icon" aria-hidden="true" />
 				<span>Chart</span>
@@ -394,9 +381,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			<button
 				type="button"
 				role="tab"
-				aria-selected={mobileMediaTab === "livestream"}
-				className={`media-tab-btn${mobileMediaTab === "livestream" ? " media-tab-btn--active" : ""}`}
-				onClick={() => setMobileMediaTab("livestream")}
+				aria-selected={mediaTab === "livestream"}
+				className={`media-tab-btn${mediaTab === "livestream" ? " media-tab-btn--active" : ""}`}
+				onClick={() => setMediaTab("livestream")}
 			>
 				<span className="media-tab-btn__live-dot" aria-hidden="true" />
 				<span>Livestream</span>
@@ -404,11 +391,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		</div>
 	) : null;
 
-	/* Mobile-only stream block — only mounted when the user picks Livestream,
-	 * so the iframe (and its data cost) never loads until requested. */
-	const mobileStreamBlock = showStream ? (
+	const streamBlock = showStream ? (
 		<div className="venue-books-stream">
-			<StreamEmbed streamUrl={streamUrl} height="360" />
+			<StreamEmbed
+				streamUrl={streamUrl}
+				height={isMobileViewport ? "360" : "720"}
+			/>
 		</div>
 	) : null;
 
@@ -425,14 +413,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						<MarketHeader umbrella={umbrella} titleRef={titleRef} />
 					)}
 
-					{showStream && (
-						<div className="stream-section">
-							<StreamEmbed streamUrl={streamUrl} height="720" />
-						</div>
-					)}
-
 					<div className="venue-books-container">
-						{chartAtTopOfVenueBooks}
+						{mediaTabSwitcher}
+						{mediaTab === "livestream" && showStream
+							? streamBlock
+							: chartAtTopOfVenueBooks}
 						{tabSwitcher}
 						{predictionMarketOddsHeading}
 						<div className="orderbook-section">{orderbookSectionBody}</div>
@@ -474,9 +459,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				<div className="venue-books-container">
 					{/* Chart / Livestream tab sits above the chart so users can
 					    opt in to the stream rather than auto-loading it. */}
-					{mobileMediaTabSwitcher}
-					{mobileMediaTab === "livestream" && showStream
-						? mobileStreamBlock
+					{mediaTabSwitcher}
+					{mediaTab === "livestream" && showStream
+						? streamBlock
 						: chartAtTopOfVenueBooks}
 					{tabSwitcher}
 					{predictionMarketOddsHeading}

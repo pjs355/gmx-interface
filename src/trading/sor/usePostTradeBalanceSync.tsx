@@ -7,7 +7,7 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { type QueryClient } from "@tanstack/react-query";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import {
 	COLLATERAL_TOKENS_QUERY_KEY,
@@ -27,6 +27,26 @@ import {
 	type PostTradeBaselineAddresses,
 } from "./postTradeBaseline";
 import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
+
+/** Same total as `PortfolioContext` cashBalance — sum of stable slices from cached collateral queries. */
+export function readTotalCashHumanFromQueryClient(
+	queryClient: QueryClient,
+): number | null {
+	const all = queryClient.getQueriesData<FundingStableBalancesHuman>({
+		queryKey: [COLLATERAL_TOKENS_QUERY_KEY],
+	});
+	for (const [, data] of all) {
+		if (!data) continue;
+		return (
+			data.base +
+			data.polygon +
+			data.bnb +
+			data.solana +
+			(data.limitlessMakerBase ?? 0)
+		);
+	}
+	return null;
+}
 
 /** Fixed cadence between refetches while waiting for server-backed divergence from baseline. */
 const POLL_INTERVAL_MS = 5_000;
@@ -276,12 +296,35 @@ async function refetchForPending(
 	return levelUpPending;
 }
 
+async function refetchCollateralCachesForClaim(
+	queryClient: QueryClient,
+	refetchCollateral: () => Promise<FundingStableBalancesHuman | undefined>,
+): Promise<void> {
+	await Promise.allSettled([
+		queryClient.invalidateQueries({
+			queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
+		}),
+		queryClient.invalidateQueries({ queryKey: [COLLATERAL_TOKENS_QUERY_KEY] }),
+		refetchCollateral(),
+	]);
+}
+
 function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
 export type PostTradeBalanceSyncApi = {
 	start: (req: PostTradeSyncRequest) => void;
+	/**
+	 * After a winnings claim, keep the header cash skeleton up until the
+	 * collateral query shows a total that diverges from `baselineTotalCash`
+	 * (same tolerance as post-trade cash convergence).
+	 */
+	startCashAfterClaim: (req: {
+		queryClient: QueryClient;
+		refetchCollateral: () => Promise<FundingStableBalancesHuman | undefined>;
+		baselineTotalCash: number;
+	}) => void;
 };
 
 const PostTradeBalanceSyncContext = createContext<PostTradeBalanceSyncApi | null>(
@@ -290,14 +333,17 @@ const PostTradeBalanceSyncContext = createContext<PostTradeBalanceSyncApi | null
 
 const PostTradeBalanceSyncUiContext = createContext<string | null>(null);
 
+const ClaimCashSyncPendingContext = createContext(false);
+
 /**
  * Provider that hosts post-trade refetch + baseline-divergence checks. Mount once
  * near the app root so sync survives trade-box unmounts.
  */
 export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode }) {
-	const queryClient = useQueryClient();
 	const sessionRef = useRef(0);
+	const claimCashSessionRef = useRef(0);
 	const [pendingSyncUiKey, setPendingSyncUiKey] = useState<string | null>(null);
+	const [claimCashSyncPending, setClaimCashSyncPending] = useState(false);
 
 	const start = useCallback(
 		(req: PostTradeSyncRequest) => {
@@ -384,17 +430,64 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 				}
 			})();
 		},
-		[queryClient],
+		[],
 	);
 
-	const api = useMemo<PostTradeBalanceSyncApi>(() => ({ start }), [start]);
+	const startCashAfterClaim = useCallback(
+		(req: {
+			queryClient: QueryClient;
+			refetchCollateral: () => Promise<FundingStableBalancesHuman | undefined>;
+			baselineTotalCash: number;
+		}) => {
+			const session = ++claimCashSessionRef.current;
+			setClaimCashSyncPending(true);
+			void (async () => {
+				try {
+					for (let attempt = 0; attempt < MAX_REFETCH_ATTEMPTS; attempt++) {
+						if (claimCashSessionRef.current !== session) return;
 
-	void queryClient;
+						await refetchCollateralCachesForClaim(
+							req.queryClient,
+							req.refetchCollateral,
+						);
+
+						const obs = readTotalCashHumanFromQueryClient(req.queryClient);
+						if (
+							obs != null &&
+							valueDiverged(
+								obs,
+								req.baselineTotalCash,
+								CASH_CONVERGENCE_TOL_USD,
+							)
+						) {
+							break;
+						}
+
+						if (attempt < MAX_REFETCH_ATTEMPTS - 1) {
+							await sleep(POLL_INTERVAL_MS);
+						}
+					}
+				} finally {
+					if (claimCashSessionRef.current === session) {
+						setClaimCashSyncPending(false);
+					}
+				}
+			})();
+		},
+		[],
+	);
+
+	const api = useMemo<PostTradeBalanceSyncApi>(
+		() => ({ start, startCashAfterClaim }),
+		[start, startCashAfterClaim],
+	);
 
 	return (
 		<PostTradeBalanceSyncContext.Provider value={api}>
 			<PostTradeBalanceSyncUiContext.Provider value={pendingSyncUiKey}>
-				{children}
+				<ClaimCashSyncPendingContext.Provider value={claimCashSyncPending}>
+					{children}
+				</ClaimCashSyncPendingContext.Provider>
 			</PostTradeBalanceSyncUiContext.Provider>
 		</PostTradeBalanceSyncContext.Provider>
 	);
@@ -408,9 +501,14 @@ export function usePostTradeBalanceSync(): PostTradeBalanceSyncApi {
 				"[usePostTradeBalanceSync] No PostTradeBalanceSyncProvider in tree — sync disabled",
 			);
 		}
-		return { start: () => {} };
+		return { start: () => {}, startCashAfterClaim: () => {} };
 	}
 	return ctx;
+}
+
+/** True while post-claim polling waits for header cash to diverge from the pre-claim snapshot. */
+export function useClaimCashSyncPending(): boolean {
+	return useContext(ClaimCashSyncPendingContext);
 }
 
 /** True while post-trade sync is waiting for server-backed divergence for this page market. */

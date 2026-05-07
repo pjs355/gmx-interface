@@ -2,6 +2,11 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
+import type { FundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
+import {
+	readTotalCashHumanFromQueryClient,
+	usePostTradeBalanceSync,
+} from "@/trading/sor/usePostTradeBalanceSync";
 
 export type UseHandleClaimSuccessArgs = {
 	acknowledgeClearedPayouts: (keys: string[]) => void;
@@ -10,7 +15,9 @@ export type UseHandleClaimSuccessArgs = {
 	) => void;
 	refreshUserData: () => Promise<void> | void;
 	refreshTokenPositions: () => Promise<void> | void;
-	collateralTokens: { refetch: () => Promise<unknown> | unknown };
+	collateralTokens: {
+		refetch: () => Promise<FundingStableBalancesHuman | undefined>;
+	};
 };
 
 export type HandleClaimSuccess = (
@@ -26,9 +33,19 @@ export function useHandleClaimSuccess({
 	collateralTokens,
 }: UseHandleClaimSuccessArgs): HandleClaimSuccess {
 	const queryClient = useQueryClient();
+	const { startCashAfterClaim } = usePostTradeBalanceSync();
 
 	return useCallback<HandleClaimSuccess>(
 		async (marketId, _umbrellaId) => {
+			const baselineTotalCash = readTotalCashHumanFromQueryClient(queryClient);
+			if (baselineTotalCash != null && Number.isFinite(baselineTotalCash)) {
+				startCashAfterClaim({
+					queryClient,
+					refetchCollateral: collateralTokens.refetch,
+					baselineTotalCash,
+				});
+			}
+
 			const ids = Array.isArray(marketId) ? marketId : [marketId];
 			const payoutKeys = ids
 				.map((id) => String(id ?? "").trim())
@@ -76,6 +93,7 @@ export function useHandleClaimSuccess({
 			refreshTokenPositions,
 			collateralTokens,
 			queryClient,
+			startCashAfterClaim,
 		],
 	);
 }
