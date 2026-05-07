@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useEffect, type ErrorInfo, type ReactNode } 
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
-import { loadPositionsPage } from "@/App/routes/positionsRouteLazy";
+import { loadPositionsPage } from "@/app/routes/positionsRouteLazy";
 
 // Eager: homepage and listing pages (most common entry points)
 import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";

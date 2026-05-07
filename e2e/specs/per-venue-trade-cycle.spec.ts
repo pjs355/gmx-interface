@@ -7,6 +7,7 @@ import {
 	resolvePerVenueBestPicks,
 	partitionRequestedVenuePicks,
 	tradingVenueSlugForKey,
+	MAX_E2E_VENUE_SPREAD_USD,
 	type PerVenueBestPick,
 } from "../fixtures/matched-market";
 import { REQUESTED_VENUES } from "../fixtures/requested-venues";
@@ -111,7 +112,9 @@ import {
  *
  * Config: 5 numbered tests per venue in `describe.serial`. Comment a venue in
  * `REQUESTED_VENUES` to skip. Listed venues must have a live bid/ask in
- * matched-markets + venue-prices or `beforeAll` throws. **LevelUp** runs whenever
+ * matched-markets + venue-prices or `beforeAll` throws. If the best tightest
+ * spread for that venue is ≥ `MAX_E2E_VENUE_SPREAD_USD` (20¢), the venue block
+ * is skipped with a warning (no spend). **LevelUp** runs whenever
  * `resolvePerVenueBestPicks` finds an upcoming row with `exchangeMatching.levelup`
  * and venue-prices returns a live `levelup` snapshot (same gate as other venues).
  *
@@ -227,7 +230,7 @@ test.describe("prinx per-venue trade cycle", () => {
 			let cashAfterSell = 0;
 			let buyShares = 0;
 
-			test.beforeAll(async () => {
+			test.beforeAll(async ({}, testInfo) => {
 				if (sharedSession === null) {
 					throw new Error("sharedSession not initialized");
 				}
@@ -237,6 +240,17 @@ test.describe("prinx per-venue trade cycle", () => {
 				const found = allPicks.find((p) => p.venueKey === venueKey);
 				if (found === undefined) {
 					throw new Error(`No PerVenueBestPick for ${venueKey}`);
+				}
+				if (found.spread >= MAX_E2E_VENUE_SPREAD_USD) {
+					console.warn(
+						`[per-venue-cycle] skipping ${venueKey}: best spread ${found.spread.toFixed(4)} ` +
+							`≥ E2E cap ${MAX_E2E_VENUE_SPREAD_USD} (umbrella ${found.umbrellaId}, panda ${found.pandaMatchId}).`,
+					);
+					testInfo.skip(
+						true,
+						`${venueKey} spread ${found.spread.toFixed(4)} ≥ ${MAX_E2E_VENUE_SPREAD_USD} — not trading this book in E2E`,
+					);
+					return;
 				}
 				pick = found;
 				const predictions = new PredictionsPage(sharedSession.page);

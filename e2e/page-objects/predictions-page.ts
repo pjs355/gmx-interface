@@ -16,12 +16,35 @@ export class PredictionsPage {
 		);
 	}
 
+	locatorHomeTradeboxForUmbrella(umbrellaId: string): Locator {
+		return this.page.locator(
+			`[data-qa="prediction-tradebox"][data-qa-umbrella-id="${umbrellaId}"]`,
+		);
+	}
+
+	/** `/` only — inline home trade dock is not mounted on umbrella routes. */
+	private async ensureHomePathForInlineDock(): Promise<void> {
+		let pathname = "/";
+		try {
+			pathname = new URL(this.page.url()).pathname;
+		} catch {
+			/* ignore */
+		}
+		if (pathname !== "/") {
+			await this.page.goto(`${FRONTEND_URL}/`, {
+				waitUntil: "domcontentloaded",
+				timeout: 120_000,
+			});
+			await this.page.waitForLoadState("load").catch(() => {});
+		}
+	}
+
 	/**
-	 * Click the home-page match card, navigate to the umbrella page, and wait
-	 * for the page to be interactable (tradebox visible + header Cash hydrated).
-	 * No reload — keeps the test within a single SPA session.
+	 * Click the home-page match card, keep the SPA on `/`, and wait until the
+	 * right-rail tradebox is bound to `umbrellaId` (visible + header Cash hydrated).
 	 */
 	async openCardByUmbrellaId(umbrellaId: string): Promise<void> {
+		await this.ensureHomePathForInlineDock();
 		const card = this.findCardByUmbrellaId(umbrellaId);
 		await expect(
 			card,
@@ -29,34 +52,28 @@ export class PredictionsPage {
 		).toBeVisible({ timeout: 60_000 });
 		await card.scrollIntoViewIfNeeded();
 		await card.click();
-		await this.page.waitForURL(`**/predictions/umbrella/${umbrellaId}`, {
+		await this.locatorHomeTradeboxForUmbrella(umbrellaId).waitFor({
+			state: "visible",
 			timeout: 60_000,
 		});
-		await this.waitForUmbrellaPageReady();
+		await this.waitForTradeShellReady();
 	}
 
 	/**
-	 * Deep-link to an umbrella market by URL (used when the card may not be
-	 * visible on home due to filter state). No reload — waits deterministically
-	 * for tradebox visibility and header Cash hydration so callers get a
-	 * ready page in a single SPA session.
+	 * Open trading for an umbrella from the home inline dock (stay on `/`).
+	 * Ensures we are on `/` first (e.g. after a prior non-home route in the same session).
 	 */
 	async openUmbrellaTradingPageById(umbrellaId: string): Promise<void> {
-		const path = `/predictions/umbrella/${encodeURIComponent(umbrellaId)}`;
-		await this.page.goto(`${FRONTEND_URL}${path}`, {
-			waitUntil: "load",
-			timeout: 120_000,
-		});
-		await this.waitForUmbrellaPageReady();
+		await this.openCardByUmbrellaId(umbrellaId);
 	}
 
 	/**
-	 * Tradebox is visible AND header Cash has hydrated (i.e. the user-data
+	 * Tradebox body is visible AND header Cash has hydrated (i.e. the user-data
 	 * context fetched at least once). Header Cash and positions hydrate from
 	 * the same `PortfolioContext` pipeline, so a settled header value is the
 	 * deterministic signal that user-side data has loaded.
 	 */
-	private async waitForUmbrellaPageReady(): Promise<void> {
+	private async waitForTradeShellReady(): Promise<void> {
 		await tradeboxRootLocator(this.page).waitFor({
 			state: "visible",
 			timeout: 60_000,

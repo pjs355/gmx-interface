@@ -183,6 +183,14 @@ export default function FilteredPredictions({
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+	const homeDockPinSeqRef = useRef(0);
+	const [pendingHomeDockPinRequest, setPendingHomeDockPinRequest] = useState<{
+		seq: number;
+		id: string;
+	} | null>(null);
+	const flushPendingHomeDockPin = useCallback(() => {
+		setPendingHomeDockPinRequest(null);
+	}, []);
 	const isCompactLayout = useMedia("(max-width: 1099px)");
 
 	// Reset visible count when filters change
@@ -443,6 +451,14 @@ export default function FilteredPredictions({
 		// (generic card click), pin only the umbrella and let the dock pick
 		// its own active market when the user comes back.
 		pinHomeDockForUmbrella(umbrella._id, null);
+		if (filterType === "all") {
+			homeDockPinSeqRef.current += 1;
+			setPendingHomeDockPinRequest({
+				seq: homeDockPinSeqRef.current,
+				id: umbrella._id,
+			});
+			return;
+		}
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
@@ -798,6 +814,10 @@ export default function FilteredPredictions({
 					enabled={filterType === "all"}
 					visibleUmbrellas={visibleUmbrellasForVenueWs}
 					selectedGame={selectedGame}
+					pendingPinRequest={
+						filterType === "all" ? pendingHomeDockPinRequest : null
+					}
+					onPendingPinConsumed={flushPendingHomeDockPin}
 				>
 					<div className="predictions-page__main">
 						{content}

@@ -335,6 +335,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			<div
 				className="prediction-trade-column-shell text-body-medium flex flex-col"
 				data-qa="prediction-tradebox"
+				data-qa-umbrella-id={umbrellaId ?? undefined}
 			>
 				<div className="prediction-trade-column-underlay" aria-hidden />
 				<div className="prediction-trade-column-body">

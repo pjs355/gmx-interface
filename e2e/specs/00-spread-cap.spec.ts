@@ -1,12 +1,9 @@
 import { test, expect } from "../fixtures/test";
-import {
-	assertPerVenueSpreadsWithinE2eCap,
-	MAX_E2E_VENUE_SPREAD_USD,
-} from "../fixtures/matched-market";
+import { warnPerVenueSpreadsAboveE2eCap } from "../fixtures/matched-market";
 import { REQUESTED_VENUES } from "../fixtures/requested-venues";
 
 test.describe("per-venue spread cap", () => {
-	test("each requested venue with a live best book has tightest spread under 20¢", async ({
+	test("each requested venue with a live best book reports spread; warns when above 20¢ (trades skip)", async ({
 		perVenueBestPicks,
 	}) => {
 		if (REQUESTED_VENUES.length === 0) {
@@ -27,11 +24,8 @@ test.describe("per-venue spread cap", () => {
 			);
 		}
 		expect(requestedPicks.length).toBeGreaterThan(0);
-		assertPerVenueSpreadsWithinE2eCap(requestedPicks);
+		warnPerVenueSpreadsAboveE2eCap(requestedPicks);
 		for (const p of requestedPicks) {
-			expect(p.spread, `${p.venueKey} spread`).toBeLessThan(
-				MAX_E2E_VENUE_SPREAD_USD,
-			);
 			expect(p.spread, `${p.venueKey} spread`).toBeGreaterThan(0);
 		}
 	});

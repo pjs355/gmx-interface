@@ -185,7 +185,7 @@ export function createVenueSnapshotGetter(
 	};
 }
 
-/** When venue-prices has no bid/ask for LevelUp but matched-markets still lists `exchangeMatching.levelup`, pick an umbrella for E2E using this synthetic spread (must be in (0, MAX_E2E_VENUE_SPREAD_USD) for `00-spread-cap.spec.ts`). */
+/** When venue-prices has no bid/ask for LevelUp but matched-markets still lists `exchangeMatching.levelup`, pick an umbrella for E2E using this synthetic spread (must be in (0, MAX_E2E_VENUE_SPREAD_USD) so trade cycle does not skip LevelUp for spread cap). */
 const LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK = 0.1;
 
 function jsonFiniteNumber(x: unknown): number | null {
@@ -490,12 +490,14 @@ function logPerVenueSummaryFromPicks(picks: PerVenueBestPick[]): void {
 	}
 }
 
-export function assertPerVenueSpreadsWithinE2eCap(picks: PerVenueBestPick[]): void {
+/** Warn-only: wide books are skipped in trade specs (avoid expensive E2E on toxic spreads). */
+export function warnPerVenueSpreadsAboveE2eCap(picks: readonly PerVenueBestPick[]): void {
 	for (const p of picks) {
 		if (p.spread >= MAX_E2E_VENUE_SPREAD_USD) {
-			throw new Error(
-				`E2E spread cap: ${p.venueKey} best tightest spread is ${p.spread.toFixed(4)} ` +
-					`(umbrella ${p.umbrellaId}, panda ${p.pandaMatchId}) — max allowed is ${MAX_E2E_VENUE_SPREAD_USD} (20¢).`,
+			console.warn(
+				`[e2e spread cap] ${p.venueKey} best tightest spread is ${p.spread.toFixed(4)} ` +
+					`(umbrella ${p.umbrellaId}, panda ${p.pandaMatchId}) — exceeds ${MAX_E2E_VENUE_SPREAD_USD} (20¢); ` +
+					`per-venue trade cycle will skip this venue.`,
 			);
 		}
 	}
