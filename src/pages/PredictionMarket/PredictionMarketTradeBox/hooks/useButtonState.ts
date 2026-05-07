@@ -487,15 +487,8 @@ export function useButtonState({
          * `undefined` → BSC RPC still loading; behave like `false` for buys.
          */
         approvalsOk?: boolean;
-        /**
-         * True while the BSC RPC `balanceOf` for the active outcome is still in
-         * flight. Distinguishes "we're checking your shares" from "you have 0
-         * shares" so we don't show "No shares to sell" before we actually know.
-         */
-        sellShareLoading?: boolean;
       }
     | undefined,
-  predictSellShareBalance = undefined as number | null | undefined,
   limitlessTrading = undefined as
     | {
         hasPandascoreLink: boolean;
@@ -508,7 +501,6 @@ export function useButtonState({
         approvalComplete?: boolean;
       }
     | undefined,
-  limitlessSellShareBalance = undefined as number | null | undefined,
   dflowProofVerified = undefined as boolean | undefined,
   dflowProofLoading = undefined as boolean | undefined,
   dflowStartProofFlow = undefined as (() => void | Promise<void>) | undefined,
@@ -545,7 +537,7 @@ export function useButtonState({
     setupActivation?.anyInProgress || setupActivation?.onboardingActive,
   );
 
-  /** Debounced for button copy only — avoids flashing "Trade minimum is $5" while typing toward a valid order size. */
+  /** Debounced for button copy only — avoids flashing "Trade minimum is $2." while typing toward a valid order size. */
   const debouncedAmountForMinLabel = useDebouncedValue(state.amount ?? "", 300);
 
   const rawButtonState = useMemo<ButtonStateResult>(() => {
@@ -1138,21 +1130,6 @@ export function useButtonState({
       if (!state.selectedPosition) {
         return { text: "Enter amount", disabled: true, onClick: () => {} };
       }
-      // Distinguish "still fetching share balance from BSC" from "confirmed
-      // zero shares". Without this, the BSC RPC roundtrip (200ms-2s on a
-      // cold load) makes the button claim "No shares to sell" for users who
-      // do hold the position.
-      if (
-        state.side === "sell" &&
-        scopedSellSharesTotal() <= 0 &&
-        pt.sellShareLoading
-      ) {
-        return {
-          text: "Loading your Predict shares…",
-          disabled: true,
-          onClick: () => {},
-        };
-      }
       if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
         return noSharesToSellButton();
       }
@@ -1165,15 +1142,6 @@ export function useButtonState({
       {
         const chk = checkInputMinForButtonLabel("predictfun");
         if (chk.below) return belowMinButton(chk);
-      }
-      if (pt.sellShareLoading && state.side === "sell" && sellExceedsScopedHoldings()) {
-        // Same race as the zero-shares case: balance just hasn't landed yet.
-        // Don't tell the user their amount is invalid before we actually know.
-        return {
-          text: "Loading your Predict shares…",
-          disabled: true,
-          onClick: () => {},
-        };
       }
       if (sellExceedsScopedHoldings()) {
         return { text: "Not enough shares", disabled: true, onClick: () => {} };
@@ -1337,13 +1305,7 @@ export function useButtonState({
       state.selectedPosition,
       yesBalance,
       noBalance,
-      state.tradingVenue === "predictfun"
-        ? predictSellShareBalance ?? null
-        : state.tradingVenue === "limitless"
-          ? limitlessSellShareBalance ?? null
-          : scopedSellForShareCheck != null
-            ? scopedSellForShareCheck
-            : null
+      scopedSellForShareCheck != null ? scopedSellForShareCheck : null,
     );
     if (!sharesCheck.hasSufficientShares) return { text: "Not enough shares", disabled: true, onClick: () => {}, isSweepingBook, availableShares };
     
@@ -1392,7 +1354,7 @@ export function useButtonState({
       isSweepingBook,
       availableShares,
     };
-  }, [authenticated, account, state, login, marketOrderHandler, usdcBalance, yesBalance, noBalance, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, predictSellShareBalance, limitlessTrading, limitlessSellShareBalance, dflowProofVerified, dflowProofLoading, dflowStartProofFlow, sorMatchedVenues, sorState, navigate, debouncedAmountForMinLabel]);
+  }, [authenticated, account, state, login, marketOrderHandler, usdcBalance, yesBalance, noBalance, checkSufficientBalance, checkSufficientShares, market, animatedDots, handleAddFunds, polymarketTrading, orderbookWalkPosition, predictTrading, limitlessTrading, dflowProofVerified, dflowProofLoading, dflowStartProofFlow, sorMatchedVenues, sorState, navigate, debouncedAmountForMinLabel]);
 
   /* Wrapping at the very end ensures every "Fetching price…" branch above
    * goes through the same flicker shield. The stabilizer preserves any

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
+
 /** After reverse umbrella lookup settles, hold skeletons briefly so merged display names + images are stable (Positions + History). */
 const POSITIONS_TAB_UMBRELLA_REVERSE_HOLD_MS = 1_000;
 
@@ -277,15 +279,17 @@ export function useReadinessGates({
 			effectiveAccount.length >= 10
 				? `${effectiveAccount.slice(0, 6)}…${effectiveAccount.slice(-4)}`
 				: effectiveAccount;
-		console.log("[positions-gate]", {
-			wallet,
-			positionsShellBlockers:
-				positionsShellBlockers.join(" · ") || "(none)",
-			historyShellBlockers: historyShellBlockers.join(" · ") || "(none)",
-			isDataFullyLoaded,
-			isPositionsTabContentReady,
-			isHistoryTabContentReady,
-		});
+		if (isTradingDebugLoggingEnabled()) {
+			console.log("[positions-gate]", {
+				wallet,
+				positionsShellBlockers:
+					positionsShellBlockers.join(" · ") || "(none)",
+				historyShellBlockers: historyShellBlockers.join(" · ") || "(none)",
+				isDataFullyLoaded,
+				isPositionsTabContentReady,
+				isHistoryTabContentReady,
+			});
+		}
 	}, [
 		effectiveAccount,
 		fundingHydrated,

@@ -4,6 +4,7 @@ import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import { useSignerContext } from "context/SignerContext";
 import { usePolymarketEnsureExecutionReady } from "./usePolymarketEnsureExecutionReady";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 const LOG_TAG = "[PolymarketActivation]";
 
@@ -76,10 +77,12 @@ export function PolymarketBackgroundActivation(): null {
 		});
 		if (snapshot === lastPrereqSnapshotRef.current) return;
 		lastPrereqSnapshotRef.current = snapshot;
-		console.info(LOG_TAG, "bg:prereqChange", {
-			prerequisitesReady,
-			...JSON.parse(snapshot),
-		});
+		if (isTradingDebugLoggingEnabled()) {
+			console.info(LOG_TAG, "bg:prereqChange", {
+				prerequisitesReady,
+				...JSON.parse(snapshot),
+			});
+		}
 	}, [
 		privyReady,
 		authenticated,

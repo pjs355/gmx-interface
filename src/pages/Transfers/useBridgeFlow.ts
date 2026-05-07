@@ -1,13 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-import { useSendTransaction } from "@privy-io/react-auth";
-import {
-	useSignAndSendTransaction,
-	useSignTransaction as useSolanaSignTransaction,
-	useWallets as useSolanaWallets,
-} from "@privy-io/react-auth/solana";
-import type { RelayClient } from "@polymarket/builder-relayer-client";
 import { getAddress, isAddress } from "viem";
 import { bsc } from "viem/chains";
 import { useUserData } from "@/context/UserDataContext";
@@ -20,16 +12,8 @@ import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useAccountData } from "@/context/AccountDataContext";
 import { useLifiQuoteMutation } from "@/trading/hooks/useLifiBridge";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { checkPolymarketApprovals } from "@/trading/polymarket/approvalTxs";
-import {
-	deployPolymarketDepositWalletIfNeeded,
-	executePolymarketApprovalBatch,
-} from "@/trading/polymarket/safeActions";
-import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import { getBridgeQuoteFingerprint } from "@/trading/lifi/quoteDisplay";
-import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
-import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
-import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
+import { useFundingLifiExecution } from "@/trading/lifi/useFundingLifiExecution";
 import type { LifiQuoteResponse } from "@/types/trading";
 
 const BASE = 8453;
@@ -245,38 +229,13 @@ export function useBridgeFlow() {
 	const { refresh: refreshUserData } = useUserData();
 	const api = usePrivateApiClient();
 	const quoteMutation = useLifiQuoteMutation();
-	const { getClientForChain } = useSmartWallets();
-	const relay = usePolymarketRelay();
-	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
-	const { signAndSendTransaction: privySolanaSignAndSend } = useSignAndSendTransaction();
-	const { signTransaction: privySolanaSignTransaction } = useSolanaSignTransaction();
-	const { wallets: solanaWallets } = useSolanaWallets();
-	const embeddedSolanaWallet = useMemo(
-		() => solanaWallets.find((w) => w.address === funding.solanaAddress) ?? solanaWallets[0] ?? null,
-		[solanaWallets, funding.solanaAddress],
-	);
-
-	const solanaSigner = useMemo<SolanaSignerCapable | null>(
-		() =>
-			embeddedSolanaWallet
-				? {
-						signAndSendTransaction: (serializedTx: Uint8Array) =>
-							sendPrivySponsoredSolanaTransaction(
-								privySolanaSignAndSend,
-								embeddedSolanaWallet,
-								serializedTx,
-							),
-						signTransactionOnly: async (serializedTx: Uint8Array) => {
-							const out = await privySolanaSignTransaction({
-								transaction: serializedTx,
-								wallet: embeddedSolanaWallet,
-							});
-							return out.signedTransaction;
-						},
-					}
-				: null,
-		[privySolanaSignAndSend, privySolanaSignTransaction, embeddedSolanaWallet],
-	);
+	const {
+		getSignerForChain,
+		solanaSigner,
+		preparePolygonRelay,
+		buildExecuteLifiStepsOptions,
+		polymarketRelay,
+	} = useFundingLifiExecution();
 
 	const [fromEndpoint, setFromEndpoint] = useState<BridgeEndpoint>("levelup");
 	const [toEndpoint, setToEndpoint] = useState<BridgeEndpoint>("polymarket");
@@ -373,42 +332,6 @@ export function useBridgeFlow() {
 	const needsPolymarketRelay = fromChain === POLYGON;
 
 	const applyDepositSlippage = fromChain === BASE && toChain === POLYGON;
-
-	const allowanceOwnerByChainId = useMemo(() => {
-		const m: Partial<Record<number, string>> = {};
-		if (funding.baseSmartWallet) m[BASE] = funding.baseSmartWallet;
-		if (funding.polymarketSafe) m[POLYGON] = funding.polymarketSafe;
-		if (funding.embeddedEoa) m[BNB] = funding.embeddedEoa;
-		return m;
-	}, [funding.baseSmartWallet, funding.polymarketSafe, funding.embeddedEoa]);
-
-	const getSignerForChain = useCallback(
-		async (chainId: number) => {
-			if (chainId === BNB) {
-				const addr = funding.embeddedEoa as `0x${string}` | undefined;
-				if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
-					return null;
-				}
-				return createPrivyEmbeddedSendTransactionCapable(
-					addr,
-					bsc,
-					privyEvmSendTransaction,
-				);
-			}
-			const client = await getClientForChain({ id: chainId });
-			if (!client) return null;
-			return {
-				sendTransaction: (args: {
-					to: `0x${string}`;
-					data?: `0x${string}`;
-					value?: bigint;
-					chainId?: number;
-					sponsor?: boolean;
-				}) => client.sendTransaction(args),
-			};
-		},
-		[getClientForChain, funding.embeddedEoa, privyEvmSendTransaction]
-	);
 
 	const setFromEndpointValidated = useCallback((e: BridgeEndpoint) => {
 		setFromEndpoint(e);
@@ -630,7 +553,7 @@ export function useBridgeFlow() {
 		}
 		if (!routeHasRequiredAddresses(fromEndpoint, toEndpoint, funding)) return;
 
-		if (needsPolymarketRelay && !relay.walletReady) {
+		if (needsPolymarketRelay && !polymarketRelay.walletReady) {
 			setError(
 				"Transfers from Polymarket need your embedded wallet. Wait for it to finish loading or reconnect."
 			);
@@ -658,49 +581,24 @@ export function useBridgeFlow() {
 		abortRef.current = ac;
 
 		try {
-			let polygonRelay:
-				| { client: RelayClient; walletAddress: string }
-				| undefined;
-
-			if (needsPolymarketRelay && funding.polymarketSafe) {
+			if (needsPolymarketRelay) {
 				setStatusNote("Preparing Polymarket wallet…");
-				const client = await relay.getRelayClient();
-				if (!client) {
-					throw new Error(
-						"Polymarket relay requires your embedded Privy wallet. Ensure you\u2019re logged in with an embedded wallet."
-					);
-				}
-				const eoa = relay.eoaAddress;
-				if (!eoa) {
-					throw new Error("Embedded wallet address unavailable \u2014 cannot use Polymarket relay.");
-				}
-				await deployPolymarketDepositWalletIfNeeded(client, eoa);
-
-				setStatusNote("Checking Polymarket approvals…");
-				const approvalState = await checkPolymarketApprovals(funding.polymarketSafe);
-				if (!approvalState.allApproved) {
-					setStatusNote("Signing Polymarket approvals…");
-					await executePolymarketApprovalBatch(client, funding.polymarketSafe);
-				}
-
-				polygonRelay = { client, walletAddress: funding.polymarketSafe };
 			}
+			const polygonRelay = await preparePolygonRelay(needsPolymarketRelay);
 
 			if (routeIncludesSolana && !solanaSigner) {
 				throw new Error("Solana embedded wallet is unavailable — reload and try again.");
 			}
 
 			setStatusNote("Signing transfer transactions…");
-			const { txHashes } = await executeLifiSteps(quote.steps, getSignerForChain, {
-				allowanceOwnerByChainId,
-				rawLifiRoute: quote.quote,
-				polygonSafeUnwrapPrerequisite: quote.polygonSafeUnwrapPrerequisite ?? undefined,
-				...(funding.solanaAddress?.trim()
-					? { solanaTokenOwnerAddress: funding.solanaAddress.trim() }
-					: {}),
-				...(polygonRelay ? { polygonRelay } : {}),
-				...(routeIncludesSolana && solanaSigner ? { solanaSigner } : {}),
-			});
+			const { txHashes } = await executeLifiSteps(
+				quote.steps,
+				getSignerForChain,
+				buildExecuteLifiStepsOptions(quote, {
+					routeIncludesSolana,
+					polygonRelay,
+				}),
+			);
 			const statusTxHash = pickTxHashForLifiStatusPoll(txHashes, quote, fromChain);
 			if (!statusTxHash) throw new Error("No transaction hash returned from wallet");
 
@@ -749,10 +647,11 @@ export function useBridgeFlow() {
 		toChain,
 		needsPolymarketRelay,
 		routeIncludesSolana,
-		relay,
+		polymarketRelay,
 		getSignerForChain,
 		solanaSigner,
-		allowanceOwnerByChainId,
+		preparePolygonRelay,
+		buildExecuteLifiStepsOptions,
 		api,
 		refreshUserData,
 		queryClient,
@@ -768,7 +667,7 @@ export function useBridgeFlow() {
 	return {
 		funding,
 		fundingBalances,
-		relay,
+		relay: polymarketRelay,
 		fromEndpoint,
 		toEndpoint,
 		setFromEndpoint: setFromEndpointValidated,

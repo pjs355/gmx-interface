@@ -5,6 +5,8 @@ import type {
 } from "@/types/trading/venuePosition";
 
 const POLYMARKET_DATA_API = "https://data-api.polymarket.com";
+/** Avoid an indefinite React Query pending state when Polymarket's API hangs. */
+const POLY_POSITIONS_FETCH_MS = 25_000;
 
 function toVenuePosition(raw: PolymarketDataApiPosition): VenuePosition {
 	return {
@@ -31,7 +33,14 @@ async function fetchPolymarketPositions(
 	safeAddress: string
 ): Promise<VenuePosition[]> {
 	const url = `${POLYMARKET_DATA_API}/positions?user=${safeAddress}`;
-	const res = await fetch(url);
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), POLY_POSITIONS_FETCH_MS);
+	let res: Response;
+	try {
+		res = await fetch(url, { signal: controller.signal });
+	} finally {
+		clearTimeout(timeoutId);
+	}
 	if (!res.ok) {
 		throw new Error(`Polymarket positions API returned ${res.status}`);
 	}

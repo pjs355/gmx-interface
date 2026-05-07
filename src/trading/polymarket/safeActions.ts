@@ -75,6 +75,51 @@ function txsToDepositWalletCalls(txs: Transaction[]): DepositWalletCall[] {
 }
 
 /**
+ * Submit `executeDepositWalletBatch` with retries when the relayer returns a
+ * transient 400 (`wallet busy`, `not registered`). Does **not** wait for
+ * mining — pair with {@link waitRelay}. Does **not** take the global mutex;
+ * callers already inside {@link withPolygonRelayMutex} use this so back-to-back
+ * unwrap → LI.FI submits get the same busy/backoff behavior as
+ * {@link executePolygonRelayAndWait}.
+ */
+export async function submitDepositWalletBatchWithRetries(
+	client: RelayClient,
+	txs: Transaction[],
+	walletAddress: string,
+	description: string,
+): Promise<RelayerTransactionResponse> {
+	const calls = txsToDepositWalletCalls(txs);
+	const delays = POST_DEPLOY_BATCH_RETRY_DELAYS_MS;
+	let lastErr: unknown;
+	for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+		try {
+			return await client.executeDepositWalletBatch(
+				calls,
+				walletAddress,
+				depositWalletDeadline(),
+			);
+		} catch (err) {
+			lastErr = err;
+			const retryable =
+				isRelayWalletNotRegisteredError(err) || isRelayWalletBusyError(err);
+			if (attempt === delays.length || !retryable) {
+				throw err;
+			}
+			if (import.meta.env.DEV) {
+				const reason = isRelayWalletBusyError(err)
+					? "wallet busy"
+					: "wallet not registered";
+				console.debug(
+					`[polymarket-relay] ${description}: ${reason}, submit retry ${attempt + 1}/${delays.length} in ${delays[attempt]}ms`,
+				);
+			}
+			await new Promise((r) => setTimeout(r, delays[attempt]));
+		}
+	}
+	throw lastErr;
+}
+
+/**
  * Submit a batch of Polygon transactions through the deposit wallet under the
  * global mutex, then wait for the relayer to mine. Returns the on-chain tx
  * hash if available.
@@ -99,40 +144,13 @@ export async function executePolygonRelayAndWait(
 	description: string,
 ): Promise<string | undefined> {
 	return withPolygonRelayMutex(async () => {
-		const calls = txsToDepositWalletCalls(txs);
-		const delays = POST_DEPLOY_BATCH_RETRY_DELAYS_MS;
-		let lastErr: unknown;
-		for (let attempt = 0; attempt <= delays.length; attempt += 1) {
-			try {
-				// Re-derive the deadline on every retry — the SDK rejects a
-				// signed batch whose 10-minute window already started ticking
-				// against the very first attempt.
-				const resp = await client.executeDepositWalletBatch(
-					calls,
-					walletAddress,
-					depositWalletDeadline(),
-				);
-				return await waitRelay(resp);
-			} catch (err) {
-				lastErr = err;
-				const retryable =
-					isRelayWalletNotRegisteredError(err) ||
-					isRelayWalletBusyError(err);
-				if (attempt === delays.length || !retryable) {
-					throw err;
-				}
-				if (import.meta.env.DEV) {
-					const reason = isRelayWalletBusyError(err)
-						? "wallet busy"
-						: "wallet not registered";
-					console.debug(
-						`[polymarket-relay] ${description}: ${reason}, retry ${attempt + 1}/${delays.length} in ${delays[attempt]}ms`,
-					);
-				}
-				await new Promise((r) => setTimeout(r, delays[attempt]));
-			}
-		}
-		throw lastErr;
+		const resp = await submitDepositWalletBatchWithRetries(
+			client,
+			txs,
+			walletAddress,
+			description,
+		);
+		return await waitRelay(resp);
 	});
 }
 

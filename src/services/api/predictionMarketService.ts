@@ -11,6 +11,7 @@ import {
 	getPredictionApiBaseUrl,
 	getPredictionOrderApiBaseUrl,
 } from "@/config/predictionApiBase";
+import { predictionBuyMakerMicroUsdc } from "@/trading/sor/predictionBuyCollateralMicro";
 
 // Utility function to round dollar amounts based on buy/sell direction
 function roundDollarAmount(amount: number, side: "buy" | "sell"): number {
@@ -291,12 +292,15 @@ export class PredictionMarketService {
 		// Calculate makerAmount and takerAmount based on buy/sell side
 		// BUY orders: maker gives USDC (amount × price), wants tokens (amount)
 		// SELL orders: maker gives tokens (amount), wants USDC (amount × price)
-		const usdcAmount = ethers
-			.parseUnits(
-				roundToDecimals(roundDollarAmount(amount * price, side), 6),
-				6
-			)
-			.toString();
+		const usdcAmount =
+			side === "buy"
+				? predictionBuyMakerMicroUsdc(amount, price).toString()
+				: ethers
+						.parseUnits(
+							roundToDecimals(roundDollarAmount(amount * price, side), 6),
+							6,
+						)
+						.toString();
 		const tokenAmount = ethers
 			.parseUnits(roundToDecimals(Number(amount), 6), 6)
 			.toString();

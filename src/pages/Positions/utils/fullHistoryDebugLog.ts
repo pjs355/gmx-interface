@@ -6,6 +6,7 @@ import {
 } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { VenueHistoryFill, VenuePosition } from "@/types/trading/venuePosition";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 export type FullHistoryUnifiedBlock = {
 	id: string;
@@ -310,9 +311,10 @@ export type LogFullHistoryDebugParams = {
 	} | null;
 };
 
-/** Dev-only: merged venue history + orders + resolve stage (no full umbrella tree — see UMBRELLAS_FULL). */
+/** Dev-only: merged venue history + orders + resolve stage. Requires `VITE_DEBUG_TRADING=true` (`isTradingDebugLoggingEnabled`). */
 export function logFullHistoryDebug(params: LogFullHistoryDebugParams): void {
 	if (!import.meta.env.DEV) return;
+	if (!isTradingDebugLoggingEnabled()) return;
 
 	const snap = snapshot(
 		params.layout,

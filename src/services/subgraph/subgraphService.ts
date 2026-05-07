@@ -19,7 +19,7 @@ function getSubgraphUrl(): string {
 	const fromEnv = import.meta.env.VITE_LEVELUP_SUBGRAPH_URL?.trim();
 	if (!fromEnv || fromEnv.length === 0) return DEFAULT_SUBGRAPH_URL;
 	/** Goldsky slug `s111630` was removed; env copies still hit `deployment … does not exist`. */
-	if (fromEnv.includes("s111630")) {
+	if (fromEnv.toLowerCase().includes("s111630")) {
 		console.warn(
 			"[Subgraph] VITE_LEVELUP_SUBGRAPH_URL references removed deployment s111630 — using default The Graph Studio URL. Update or clear the env var.",
 		);

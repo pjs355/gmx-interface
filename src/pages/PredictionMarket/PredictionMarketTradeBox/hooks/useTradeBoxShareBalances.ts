@@ -43,6 +43,46 @@ const VENUE_SUFFIX: Record<VenueId | "levelup", string> = {
 	limitless: "Limitless",
 };
 
+/**
+ * Trade-box `loading` should not block on venue portfolios that are irrelevant to the
+ * open match — otherwise one hung Limitless / Polymarket fetch keeps Predict-only flows
+ * spinning forever. When the monitor row is not wired yet, stay conservative and wait on
+ * every enabled venue query.
+ */
+function shareBalanceLoadingWaitsForVenue(
+	matchedMonitor: MatchedMarket | null | undefined,
+	venue: "polymarket" | "predictfun" | "dflow" | "limitless",
+): boolean {
+	if (!matchedMonitor) return true;
+	switch (venue) {
+		case "polymarket":
+			return Boolean(matchedMonitor.polyConditionId?.trim());
+		case "predictfun": {
+			const pf = matchedMonitor.predictFun;
+			return Boolean(
+				(pf?.marketIdA != null && String(pf.marketIdA).trim() !== "") ||
+					(pf?.marketIdB != null && String(pf.marketIdB).trim() !== "") ||
+					(pf?.tokenIdA != null && String(pf.tokenIdA).trim() !== "") ||
+					(pf?.tokenIdB != null && String(pf.tokenIdB).trim() !== ""),
+			);
+		}
+		case "dflow":
+			return Boolean(
+				matchedMonitor.dflow?.eventTicker?.trim() ||
+					matchedMonitor.kalshi?.eventTicker?.trim(),
+			);
+		case "limitless": {
+			const lx = matchedMonitor.limitless;
+			return Boolean(
+				lx?.slug?.trim() ||
+					(Boolean(lx?.tokenIdA?.trim()) && Boolean(lx?.tokenIdB?.trim())),
+			);
+		}
+		default:
+			return true;
+	}
+}
+
 type MarketRef = {
 	_id?: string;
 	questionId?: string;
@@ -68,6 +108,11 @@ export type SellVenueBreakdownRow = {
 /** Snapshot from `useTradeBoxShareBalances` for child components (single hook instance in parent). */
 export type TradeBoxShareBalancesSnapshot = {
 	buyLines: TradeBoxShareLine[];
+	/** Per-venue rows for YES / NO long positions — powers buy-tab breakdown like sell. */
+	buyVenueBreakdownByOutcome: {
+		yes: SellVenueBreakdownRow[];
+		no: SellVenueBreakdownRow[];
+	};
 	sellTotalShares: number;
 	sellVenueBreakdown: SellVenueBreakdownRow[];
 	sellOutcomeLabel: string;
@@ -260,6 +305,54 @@ function venuePositionToYesNo(
 		}
 	}
 	return outcomeToSide(p.outcome, isVsSingle, yesTeamLabel, noTeamLabel);
+}
+
+function buildOutcomeVenueBreakdownRows(
+	outcome: "yes" | "no",
+	levelBalances: { yes: number; no: number },
+	relevantVenuePositions: VenuePosition[],
+	matchedOddsMarkets: MatchedMarket[] | null | undefined,
+	pageMatchedMonitor: MatchedMarket | null | undefined,
+	isVsSingle: boolean,
+	yesTeamLabel: string,
+	noTeamLabel: string,
+): SellVenueBreakdownRow[] {
+	const byVenue = new Map<string, number>();
+	const add = (venueKey: string, shares: number) => {
+		if (!Number.isFinite(shares) || shares <= 0) return;
+		byVenue.set(venueKey, (byVenue.get(venueKey) ?? 0) + shares);
+	};
+	const lu = outcome === "yes" ? levelBalances.yes : levelBalances.no;
+	add("levelup", lu);
+	for (const p of relevantVenuePositions) {
+		const side = venuePositionToYesNo(
+			p,
+			matchedOddsMarkets,
+			pageMatchedMonitor,
+			isVsSingle,
+			yesTeamLabel,
+			noTeamLabel,
+		);
+		if (side !== outcome) continue;
+		add(p.venue, p.shares);
+	}
+	const venueOrder = ["levelup", "polymarket", "predictfun", "dflow"] as const;
+	const rows: SellVenueBreakdownRow[] = [];
+	for (const key of venueOrder) {
+		const sh = byVenue.get(key);
+		if (sh != null && sh > 0) {
+			const display =
+				key === "levelup"
+					? VENUE_SUFFIX.levelup
+					: VENUE_SUFFIX[key as VenueId];
+			rows.push({ key, venueDisplay: display, shares: sh });
+		}
+	}
+	for (const [key, sh] of byVenue) {
+		if (venueOrder.includes(key as (typeof venueOrder)[number])) continue;
+		if (sh > 0) rows.push({ key, venueDisplay: key, shares: sh });
+	}
+	return rows;
 }
 
 /**
@@ -508,12 +601,23 @@ export function useTradeBoxShareBalances(opts: {
 		};
 	}, [market?._id, market?.questionId, getTokenBalance]);
 
+	const waitPoly = shareBalanceLoadingWaitsForVenue(pageMatchedMonitor, "polymarket");
+	const waitPredict = shareBalanceLoadingWaitsForVenue(
+		pageMatchedMonitor,
+		"predictfun",
+	);
+	const waitDflow = shareBalanceLoadingWaitsForVenue(pageMatchedMonitor, "dflow");
+	const waitLimitless = shareBalanceLoadingWaitsForVenue(
+		pageMatchedMonitor,
+		"limitless",
+	);
+
 	const loading =
 		Boolean(umbrellaId && account) &&
-		(polyQ.isLoading ||
-			predictQ.isLoading ||
-			(dflowRpcEnabled && dflowQ.isLoading) ||
-			(limitlessPortfolioEnabled && limitlessVenueQ.isLoading));
+		((waitPoly && polyQ.isLoading) ||
+			(waitPredict && predictQ.isLoading) ||
+			(waitDflow && dflowRpcEnabled && dflowQ.isLoading) ||
+			(waitLimitless && limitlessPortfolioEnabled && limitlessVenueQ.isLoading));
 
 	// Always aggregate across every venue regardless of `state.tradingVenue` —
 	// the SmartRoutingSection auto-select can flip `tradingVenue` to a single
@@ -600,6 +704,40 @@ export function useTradeBoxShareBalances(opts: {
 		[lines],
 	);
 
+	const buyVenueBreakdownByOutcome = useMemo(
+		() => ({
+			yes: buildOutcomeVenueBreakdownRows(
+				"yes",
+				levelBalances,
+				relevantVenuePositions,
+				matchedOddsMarkets,
+				pageMatchedMonitor,
+				isVsSingle,
+				yesTeamLabel,
+				noTeamLabel,
+			),
+			no: buildOutcomeVenueBreakdownRows(
+				"no",
+				levelBalances,
+				relevantVenuePositions,
+				matchedOddsMarkets,
+				pageMatchedMonitor,
+				isVsSingle,
+				yesTeamLabel,
+				noTeamLabel,
+			),
+		}),
+		[
+			levelBalances,
+			relevantVenuePositions,
+			matchedOddsMarkets,
+			pageMatchedMonitor,
+			isVsSingle,
+			yesTeamLabel,
+			noTeamLabel,
+		],
+	);
+
 	const sellOutcomeLabel = useMemo(() => {
 		const yesLabel = isVsSingle ? yesTeamLabel : "Yes";
 		const noLabel = isVsSingle ? noTeamLabel : "No";
@@ -612,50 +750,19 @@ export function useTradeBoxShareBalances(opts: {
 	// SOR sell options surface per-venue rows in SmartRoutingSection; this strip
 	// just shows what's available regardless of the auto-selected route.
 	const { sellTotalShares, sellVenueBreakdown } = useMemo(() => {
-		const byVenue = new Map<string, number>();
 		if (!selectedPosition) {
 			return { sellTotalShares: 0, sellVenueBreakdown: [] as SellVenueBreakdownRow[] };
 		}
-
-		const add = (venueKey: string, shares: number) => {
-			if (!Number.isFinite(shares) || shares <= 0) return;
-			byVenue.set(venueKey, (byVenue.get(venueKey) ?? 0) + shares);
-		};
-
-		const lu =
-			selectedPosition === "yes" ? levelBalances.yes : levelBalances.no;
-		add("levelup", lu);
-
-		for (const p of relevantVenuePositions) {
-			const side = venuePositionToYesNo(
-				p,
-				matchedOddsMarkets,
-				pageMatchedMonitor,
-				isVsSingle,
-				yesTeamLabel,
-				noTeamLabel,
-			);
-			if (side !== selectedPosition) continue;
-			add(p.venue, p.shares);
-		}
-
-		const venueOrder = ["levelup", "polymarket", "predictfun", "dflow"] as const;
-		const rows: SellVenueBreakdownRow[] = [];
-		for (const key of venueOrder) {
-			const sh = byVenue.get(key);
-			if (sh != null && sh > 0) {
-				const display =
-					key === "levelup"
-						? VENUE_SUFFIX.levelup
-						: VENUE_SUFFIX[key as VenueId];
-				rows.push({ key, venueDisplay: display, shares: sh });
-			}
-		}
-		for (const [key, sh] of byVenue) {
-			if (venueOrder.includes(key as (typeof venueOrder)[number])) continue;
-			if (sh > 0) rows.push({ key, venueDisplay: key, shares: sh });
-		}
-
+		const rows = buildOutcomeVenueBreakdownRows(
+			selectedPosition,
+			levelBalances,
+			relevantVenuePositions,
+			matchedOddsMarkets,
+			pageMatchedMonitor,
+			isVsSingle,
+			yesTeamLabel,
+			noTeamLabel,
+		);
 		const total = rows.reduce((s, r) => s + r.shares, 0);
 		return { sellTotalShares: total, sellVenueBreakdown: rows };
 	}, [
@@ -665,8 +772,7 @@ export function useTradeBoxShareBalances(opts: {
 		noTeamLabel,
 		levelBalances,
 		relevantVenuePositions,
-		appState?.markets,
-		appState?.timestamp,
+		matchedOddsMarkets,
 		pageMatchedMonitor,
 	]);
 
@@ -710,6 +816,7 @@ export function useTradeBoxShareBalances(opts: {
 
 	return {
 		buyLines,
+		buyVenueBreakdownByOutcome,
 		sellTotalShares,
 		sellVenueBreakdown,
 		sellOutcomeLabel,

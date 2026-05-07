@@ -52,17 +52,17 @@ const VENUE_MINIMUMS: Record<SorVenue, VenueMinProfile> = {
  * `predictions/src/sor/sor-floors.ts`.
  *
  * These are request-level gates — they sit on top of the per-venue minimums
- * above so sub-$5 buys / limits and sub-1-share sells are never sent to the
+ * above so sub-$2 buys / limits and sub-1-share sells are never sent to the
  * route API (and the trade button disables with the exact copy).
  */
-export const SOR_MIN_MARKET_BUY_USD = 5;
-export const SOR_MIN_LIMIT_ORDER_USD = 5;
+export const SOR_MIN_MARKET_BUY_USD = 2;
+export const SOR_MIN_LIMIT_ORDER_USD = 2;
 export const SOR_MIN_MARKET_SELL_SHARES = 1;
 
 export const SOR_FLOOR_MESSAGES = {
-	marketBuy: "Trade minimum is $5",
-	limitOrder: "$5 minimum limit order value",
-	marketSell: "Minimum sell is 1 share",
+	marketBuy: "Trade minimum is $2.",
+	limitOrder: "$2 minimum limit order value.",
+	marketSell: "Minimum sell is 1 share.",
 } as const;
 
 const ALL_SOR_VENUES: readonly SorVenue[] = [
@@ -279,7 +279,7 @@ export function checkRawInputAgainstVenueMinimum(args: {
 				message: SOR_FLOOR_MESSAGES.limitOrder,
 			};
 		}
-		// $5 notional floor applies to both sides. Only checked when we have
+		// $2 notional floor applies to both sides. Only checked when we have
 		// a valid price to compute notional; otherwise the caller should be
 		// showing "Enter amount" anyway.
 		if (

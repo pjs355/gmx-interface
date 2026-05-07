@@ -3,6 +3,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import { usePolymarketEnsureDepositWalletDeployed } from "./usePolymarketEnsureDepositWalletDeployed";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 const LOG_TAG = "[PolymarketDepositDeployEarly]";
 
@@ -57,10 +58,12 @@ export function PolymarketDepositDeployBackgroundActivation(): null {
 		});
 		if (snapshot === lastPrereqSnapshotRef.current) return;
 		lastPrereqSnapshotRef.current = snapshot;
-		console.info(LOG_TAG, "bg:prereqChange", {
-			prerequisitesReady,
-			...JSON.parse(snapshot),
-		});
+		if (isTradingDebugLoggingEnabled()) {
+			console.info(LOG_TAG, "bg:prereqChange", {
+				prerequisitesReady,
+				...JSON.parse(snapshot),
+			});
+		}
 	}, [
 		privyReady,
 		authenticated,

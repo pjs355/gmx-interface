@@ -38,6 +38,12 @@ import { getYesNoTeamLabels } from "./teamLabels";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
 import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import {
+  SHARE_SELL_COMPARE_EPS,
+  formatShareCountDisplay,
+  clampSellSharesNumeric,
+  clampedSellSharesAmountString,
+} from "./checkBalances";
+import {
 	hexToRgba,
 	getContrastingTextColor,
 	mixHexOnBlack,
@@ -246,7 +252,26 @@ export default function PredictionMarketTradeBoxUI({
   // soon as the balance lands. Locks only fire on a confirmed zero.
   const sellFieldsLocked =
     side === "sell" && maxScopedSellShares <= 0 && !sharesLoadingForActiveTab;
+  const tradeInteractionLocked =
+    sorExecution.isExecuting || state.isLoading;
   const venueConfig = getVenueConfig(tradingVenue);
+  /** Integer share amounts: LevelUp / Kalshi tabs, or All Markets when those venues are in the match. */
+  const matchedVenuesNeedWholeShareContracts =
+    tradingVenue === "all" &&
+    matchedVenues != null &&
+    (matchedVenues.has("levelup") || matchedVenues.has("dflow"));
+  const shareAmountRequiresWholeContracts =
+    (venueConfig.requiresWholeShares || matchedVenuesNeedWholeShareContracts) &&
+    (orderType === "limit" || (orderType === "market" && side === "sell"));
+
+  const userSellSharesByVenue = useMemo((): Partial<Record<SorVenue, number>> => {
+    const o: Partial<Record<SorVenue, number>> = {};
+    for (const row of shareBalances.sellVenueBreakdown) {
+      o[row.key as SorVenue] = row.shares;
+    }
+    return o;
+  }, [shareBalances.sellVenueBreakdown]);
+
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
 
   const venueDropdownOptions = useMemo(() => {
@@ -273,6 +298,7 @@ export default function PredictionMarketTradeBoxUI({
   }, [venueDropdownOptions]);
 
   useEffect(() => {
+    if (tradeInteractionLocked) return;
     if (smartRoutingSurfaceActive) return;
     const opts = venueDropdownOptions[0]?.options;
     if (!opts?.length) return;
@@ -281,6 +307,7 @@ export default function PredictionMarketTradeBoxUI({
       onTradingVenueChange(allowed[0] as TradingVenue);
     }
   }, [
+    tradeInteractionLocked,
     smartRoutingSurfaceActive,
     venueDropdownOptions,
     state.tradingVenue,
@@ -697,7 +724,12 @@ export default function PredictionMarketTradeBoxUI({
       <div className="market-name-header">
         <h3 className="market-name-header__title">{displayMarketTitle}</h3>
         {!smartRoutingSurfaceActive ? (
-          <div className="market-name-header__venue trade-mode-selector">
+          <div
+            className={`market-name-header__venue trade-mode-selector${tradeInteractionLocked ? " trade-control--locked" : ""}`}
+            title={
+              tradeInteractionLocked ? "Trade in progress — venue locked" : undefined
+            }
+          >
             <Tabs
               options={venueDropdownOptions}
               regularOptionClassname="py-10"
@@ -718,6 +750,7 @@ export default function PredictionMarketTradeBoxUI({
             <Button
               qa="tradebox-side-buy"
               variant={side === 'buy' ? 'primary' : 'secondary'}
+              disabled={tradeInteractionLocked}
               onClick={() => onSideChange('buy')}
               className={`side-btn ${side === 'buy' ? 'selected primary' : ''}`}
             >
@@ -727,6 +760,7 @@ export default function PredictionMarketTradeBoxUI({
             <Button
               qa="tradebox-side-sell"
               variant={side === 'sell' ? 'primary' : 'secondary'}
+              disabled={tradeInteractionLocked}
               onClick={() => onSideChange('sell')}
               className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
             >
@@ -737,7 +771,14 @@ export default function PredictionMarketTradeBoxUI({
         {/* Market/Limit hidden on pandascore multi-venue pages (market-only smart routing). */}
         <div className="tradebox-header__center">
           {tradingVenue !== "all" && !smartRoutingSurfaceActive && (
-            <div className="trade-mode-selector">
+            <div
+              className={`trade-mode-selector${tradeInteractionLocked ? " trade-control--locked" : ""}`}
+              title={
+                tradeInteractionLocked
+                  ? "Trade in progress — order type locked"
+                  : undefined
+              }
+            >
               <Tabs
                 options={orderTypeDropdownOptions}
                 regularOptionClassname="py-10"
@@ -757,10 +798,17 @@ export default function PredictionMarketTradeBoxUI({
       <div className="tradebox-separator" />
 
       {/* Position Selection */}
-      <div className="position-selector" style={{ marginBottom: 24 }}>
+      <div
+        className={`position-selector${tradeInteractionLocked ? " trade-control--locked" : ""}`}
+        style={{ marginBottom: 24 }}
+        title={
+          tradeInteractionLocked ? "Trade in progress — outcome locked" : undefined
+        }
+      >
         <Button
           qa="tradebox-position-yes"
           variant="secondary"
+          disabled={tradeInteractionLocked}
           onClick={() => onPositionChange('yes')}
           className={`position-btn ${outcomeSelection === 'yes' ? 'selected primary' : ''}`}
           style={isVsSingle ? {
@@ -788,6 +836,7 @@ export default function PredictionMarketTradeBoxUI({
         <Button
           qa="tradebox-position-no"
           variant="secondary"
+          disabled={tradeInteractionLocked}
           onClick={() => onPositionChange('no')}
           className={`position-btn ${outcomeSelection === 'no' ? 'selected secondary' : ''}`}
           style={isVsSingle ? {
@@ -877,7 +926,7 @@ export default function PredictionMarketTradeBoxUI({
           <input
             data-qa="tradebox-amount-input"
             type="text"
-            disabled={sellFieldsLocked}
+            disabled={sellFieldsLocked || tradeInteractionLocked}
             value={amount ? (amountInputShowsDollarPrefix ? `$${formatNumberWithCommas(amount)}` : formatNumberWithCommas(amount)) : ''}
             onFocus={() => {
               try {
@@ -898,9 +947,8 @@ export default function PredictionMarketTradeBoxUI({
               // Remove $ and commas for processing
               const cleanValue = value.replace(/[$,\s]/g, '');
               
-              // LevelUp requires whole shares; other venues allow fractional
-              const forceWholeShares = venueConfig.requiresWholeShares &&
-                (orderType === 'limit' || (orderType === 'market' && side === 'sell'));
+              // Whole-share venues (LevelUp, Kalshi) and All Markets when those venues match
+              const forceWholeShares = shareAmountRequiresWholeContracts;
               if (forceWholeShares) {
                 if (cleanValue.includes('.')) {
                   return;
@@ -920,8 +968,33 @@ export default function PredictionMarketTradeBoxUI({
                   return;
                 }
               }
-              
-              onAmountChange(cleanValue);
+
+              let next = cleanValue;
+              if (
+                side === "sell" &&
+                !amountInputShowsDollarPrefix &&
+                maxScopedSellShares > 0 &&
+                cleanValue !== ""
+              ) {
+                const n = parseFloat(cleanValue);
+                if (Number.isFinite(n) && n > 0) {
+                  const clamped = clampSellSharesNumeric(
+                    n,
+                    maxScopedSellShares,
+                    shareAmountRequiresWholeContracts,
+                  );
+                  // Cap at scoped holdings (same helper as submit/SOR). Update state to the
+                  // canonical clamped string — avoids silent rejects that left the field stuck.
+                  if (Math.abs(clamped - n) > SHARE_SELL_COMPARE_EPS) {
+                    next = clampedSellSharesAmountString(
+                      clamped,
+                      shareAmountRequiresWholeContracts,
+                    );
+                  }
+                }
+              }
+
+              onAmountChange(next);
             }}
             onKeyDown={(e) => {
               const char = e.key;
@@ -929,9 +1002,8 @@ export default function PredictionMarketTradeBoxUI({
               const isDecimal = char === '.';
               const isControlKey = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(char);
               
-              // Only block decimals when venue requires whole shares and input is shares
-              const blockDecimal = venueConfig.requiresWholeShares &&
-                (orderType === 'limit' || (orderType === 'market' && side === 'sell'));
+              // Block decimals when share amount must be a whole number
+              const blockDecimal = shareAmountRequiresWholeContracts;
               if (blockDecimal && isDecimal) {
                 e.preventDefault();
                 return;
@@ -965,6 +1037,7 @@ export default function PredictionMarketTradeBoxUI({
           <div className={`input-container prediction-input-container ${(!price || price === '') ? 'empty-input' : ''}`}>
             <input
               type="number"
+              disabled={tradeInteractionLocked}
               value={price}
               onChange={(e) => {
                 const value = e.target.value;
@@ -1012,6 +1085,8 @@ export default function PredictionMarketTradeBoxUI({
           smartRoutingMarketKey={smartRoutingMarketKey}
           selectedOutcome={positionToSorOutcome(outcomeSelection)}
           executionLoading={sorRoute.executionLoading}
+          userSellSharesByVenue={userSellSharesByVenue}
+          venueSelectionLocked={tradeInteractionLocked}
         />
       )}
 
@@ -1048,11 +1123,9 @@ export default function PredictionMarketTradeBoxUI({
         <div className="bet-size-section">
           {sorRoute.displayError && !sorRoute.displayRoute && !sorRoute.displayLoading && !isSetupErrorSuppressed && (() => {
 						const rawErr = sorRoute.displayError ?? "";
-						const isKalshiWholeShareHint =
+						const isWholeShareContractHint =
 							sorRoute.displayErrorCode === "WHOLE_SHARES_ONLY" ||
-							rawErr.includes(
-								"Fractional share amounts are not supported on Kalshi",
-							);
+							rawErr.includes("Fractional share amounts");
 						// `NO_BOOKS_AVAILABLE` / `NO_MARKET_FOUND` are already phrased as a
 						// complete, user-facing sentence in the SOR route formatter
 						// ("No shares available" / "No bids available"). Don't double up
@@ -1068,21 +1141,19 @@ export default function PredictionMarketTradeBoxUI({
               <div className="bet-size-main-row">
                 <span
                   style={
-                    isKalshiWholeShareHint
+                    isWholeShareContractHint
                       ? {
 							fontSize: 12,
-							color: "#eab308",
-							display: "inline-block",
-							padding: "6px 8px",
-							borderRadius: 6,
-							backgroundColor: "rgba(234, 179, 8, 0.12)",
+							fontWeight: 500,
+							color: "#f59e0b",
+							lineHeight: 1.35,
 						}
                       : { color: "#ef4444", fontSize: 12 }
                   }
                 >
                   {sorRoute.displayErrorCode === "EXECUTION_NOT_READY"
                     ? "Trading setup required: "
-                    : isKalshiWholeShareHint || isNoLiquidityHint
+                    : isWholeShareContractHint || isNoLiquidityHint
                       ? ""
                       : "Route unavailable: "}
                   {displayErr}
@@ -1163,6 +1234,39 @@ export default function PredictionMarketTradeBoxUI({
         </div>
       )}
 
+      {(() => {
+        const route =
+          tradingVenue === "all"
+            ? sorRoute.displayRoute
+            : sorRoute.executionRoute;
+        if (!route?.insufficientLiquidity) return null;
+        const isSellRoute = route.side === "sell";
+        return (
+          <div className="trade-partial-fill-hint trade-button-above-hint">
+            {isSellRoute
+              ? "Not enough bids to sell all shares"
+              : "Not enough shares to fill your order. Will fill partial order"}
+          </div>
+        );
+      })()}
+      {side === "sell" &&
+        buttonState.text === "Not enough shares" &&
+        maxScopedSellShares > 0 &&
+        amount &&
+        (() => {
+          const n = parseFloat(amount);
+          return (
+            Number.isFinite(n) &&
+            n > maxScopedSellShares + SHARE_SELL_COMPARE_EPS
+          );
+        })() && (
+          <div className="trade-share-cap-hint trade-button-above-hint">
+            {`${formatShareCountDisplay(maxScopedSellShares)} Shares ${
+              outcomeSelection === "no" ? noTeamLabel : yesTeamLabel
+            } on ${venueConfig.displayName}`}
+          </div>
+        )}
+
       {/* Trade Button */}
       <Button
         qa="tradebox-submit"
@@ -1211,66 +1315,6 @@ export default function PredictionMarketTradeBoxUI({
           text via `useButtonState`'s `trySorDepositToTrade` path, so the
           standalone "Deposit needed $X" banner under the button was redundant
           and noisy — removed. */}
-      {/* Partial-fill warning lives directly under the Buy button so it's the
-          last thing the user reads before clicking. Pulls from the active
-          executable route — `displayRoute` (omnibus) on the "all" tab,
-          `executionRoute` (targeted) on a single-venue tab — so it covers
-          both surfaces with one render path. */}
-      {(() => {
-        const route =
-          tradingVenue === "all"
-            ? sorRoute.displayRoute
-            : sorRoute.executionRoute;
-        if (!route?.insufficientLiquidity) return null;
-        const isSell = route.side === "sell";
-        return (
-          <div className="trade-partial-fill-hint">
-            {isSell
-              ? "Not enough bids to sell all shares"
-              : "Not enough shares to fill your order. Will fill partial order"}
-          </div>
-        );
-      })()}
-      {tradingVenue === "all" &&
-        side === "buy" &&
-        sorRoute.displayRoute?.sizeSuggestion &&
-        (() => {
-          const s = sorRoute.displayRoute!.sizeSuggestion!;
-          const suggested = s.suggestedAmount;
-          return (
-            <div
-              className="trade-size-suggestion-hint"
-              style={{
-                marginTop: 8,
-                padding: "6px 10px",
-                fontSize: 12,
-                color: "#93c5fd",
-                fontWeight: 500,
-                textAlign: "center",
-                lineHeight: 1.4,
-                borderRadius: 6,
-                backgroundColor: "rgba(59, 130, 246, 0.08)",
-                cursor: "pointer",
-                border: "1px solid rgba(59, 130, 246, 0.25)",
-              }}
-              onClick={() => {
-                onAmountChange(suggested.toFixed(2));
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onAmountChange(suggested.toFixed(2));
-                }
-              }}
-              title={s.reason}
-            >
-              Increase to ${suggested.toFixed(2)} for a better price (
-              {formatPrice(s.unlockedEffectivePrice)} / share)
-            </div>
-          );
-        })()}
       {tradingVenue === "all" && sorRoute.displayRoute && (
         <SorKalshiKycShortfallBanner route={sorRoute.displayRoute} variant="tradebox" />
       )}

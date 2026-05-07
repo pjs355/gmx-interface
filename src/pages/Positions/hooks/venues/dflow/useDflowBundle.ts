@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 import { useAccountData } from "@/context/AccountDataContext";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
@@ -40,7 +41,7 @@ export function useDflowBundle({
 	);
 
 	useEffect(() => {
-		if (!import.meta.env.DEV) return;
+		if (!import.meta.env.DEV || !isTradingDebugLoggingEnabled()) return;
 		console.log("[DFlow positions][Positions UI] gate", {
 			dflowRpcEnabled,
 			solanaLinked,

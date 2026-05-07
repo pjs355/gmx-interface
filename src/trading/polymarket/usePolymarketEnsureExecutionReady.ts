@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { tradingQueryKeys } from "@/trading/queryKeys";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 import { PrivateApiError } from "@/services/privateApi/errors";
 import type { PrivateApiClient } from "@/services/privateApi";
 import type {
@@ -69,11 +70,13 @@ const FAILURE_BACKOFF_MS = [3_000, 10_000, 30_000, 60_000];
  * setup is invisible — the only symptom is `canExecute: false` on the SOR
  * response, which looks identical to "user never logged in".
  *
- * We intentionally use `console.info` for normal state transitions so logs
- * survive production builds without requiring explicit debug flags.
+ * Normal-path traces use `console.info`, gated by `VITE_DEBUG_TRADING=true`
+ * (`isTradingDebugLoggingEnabled`). Production also strips `console.info` via
+ * `suppressConsole`.
  */
 const LOG_TAG = "[PolymarketActivation]";
 function logInfo(event: string, extra?: Record<string, unknown>): void {
+	if (!isTradingDebugLoggingEnabled()) return;
 	if (extra) console.info(LOG_TAG, event, extra);
 	else console.info(LOG_TAG, event);
 }

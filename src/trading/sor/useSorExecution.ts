@@ -69,6 +69,11 @@ export type BridgeExecutor = (
 		budgetUsdOverride?: number;
 		/** Fired at the start of each `buildPrefundSteps` LI.FI hop (same-chain sweeps run inside that hop). */
 		onPrefundProgress?: (p: SorPrefundLegProgress) => void;
+		/**
+		 * LevelUp collateral matches signed `makerAmount`; forbid LiFi send-cap slack that
+		 * accepts quoted min-dest below nominal `destNeed`.
+		 */
+		strictLifiDestMinAtSendCap?: boolean;
 	},
 ) => Promise<{
 	success: boolean;
@@ -428,7 +433,10 @@ export function useSorExecution(
 				// against POST /orders before USDC arrives. Limit buys that include a bridge hint use
 				// the same bridge-first ordering as market buys.
 
-				const bridgeGroups = groupBridgeLegsByCorridor(bridgeLegs);
+				const bridgeGroups = groupBridgeLegsByCorridor(
+					bridgeLegs,
+					isSell ? "sell" : "buy",
+				);
 				for (const group of bridgeGroups) {
 					console.log("[SOR] Bridge start", {
 						routeId: route.routeId,
@@ -447,6 +455,9 @@ export function useSorExecution(
 								amountUsdOverride: group.totalAmountUsd,
 								budgetUsdOverride:
 									group.totalAmountUsd + group.groupBridgeCostUsd,
+								strictLifiDestMinAtSendCap: group.legs.some(
+									(l) => l.venue === "levelup",
+								),
 								onPrefundProgress: (p) => {
 									if (mountedRef.current) {
 										setPrefundLegProgress(p);

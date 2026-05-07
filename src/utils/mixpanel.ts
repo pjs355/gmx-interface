@@ -16,11 +16,6 @@ export const mixpanelTrack = (
 	properties?: Record<string, any>
 ) => {
 	if (isLocalhost()) {
-		console.log(
-			"[Mixpanel - Disabled on localhost]",
-			eventName,
-			properties
-		);
 		return;
 	}
 	try {
@@ -32,7 +27,6 @@ export const mixpanelTrack = (
 
 export const mixpanelIdentify = (userId: string) => {
 	if (isLocalhost()) {
-		console.log("[Mixpanel - Disabled on localhost] identify:", userId);
 		return;
 	}
 	try {
@@ -44,10 +38,6 @@ export const mixpanelIdentify = (userId: string) => {
 
 export const mixpanelPeopleSet = (properties: Record<string, any>) => {
 	if (isLocalhost()) {
-		console.log(
-			"[Mixpanel - Disabled on localhost] people.set:",
-			properties
-		);
 		return;
 	}
 	try {
@@ -60,9 +50,6 @@ export const mixpanelPeopleSet = (properties: Record<string, any>) => {
 // Initialize mixpanel only if not on localhost
 export const initMixpanel = (token: string, options?: any) => {
 	if (isLocalhost()) {
-		console.log(
-			"[Mixpanel - Disabled on localhost] Initialization skipped"
-		);
 		return;
 	}
 	try {

@@ -190,22 +190,24 @@ export function useDflowPositions(
 				}
 				const mintTail = (addr: string) =>
 					addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-6)}` : addr;
-				console.log(
-					"%c[DFlow positions] Network mint coverage",
-					"color:#a78bfa;font-weight:bold",
-					{
-						catalogWireMintCount: catalogWire.size,
-						postFilterOutcomeMintCount: outcomeMintsDeduped.length,
-						outcomeMintsRequestedTails: outcomeMintsDeduped.map(mintTail),
-						tokenBalancesRowCount: tokens.length,
-						positiveBalanceTails: positive.map((t) => ({
-							mint: mintTail(t.mint),
-							balance: t.balance,
-							onCatalogWire: catalogWire.has(t.mint.trim()),
-						})),
-						marketsBatchRowCount: markets.length,
-					},
-				);
+				if (import.meta.env.VITE_DEBUG_DFLOW_PERF === "1") {
+					console.log(
+						"%c[DFlow positions] Network mint coverage",
+						"color:#a78bfa;font-weight:bold",
+						{
+							catalogWireMintCount: catalogWire.size,
+							postFilterOutcomeMintCount: outcomeMintsDeduped.length,
+							outcomeMintsRequestedTails: outcomeMintsDeduped.map(mintTail),
+							tokenBalancesRowCount: tokens.length,
+							positiveBalanceTails: positive.map((t) => ({
+								mint: mintTail(t.mint),
+								balance: t.balance,
+								onCatalogWire: catalogWire.has(t.mint.trim()),
+							})),
+							marketsBatchRowCount: markets.length,
+						},
+					);
+				}
 			}
 
 			const outcomeMintSet = new Set(outcomeMintsDeduped);

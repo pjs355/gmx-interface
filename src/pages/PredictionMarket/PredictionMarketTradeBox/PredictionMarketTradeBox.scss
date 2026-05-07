@@ -1392,6 +1392,17 @@ html.curtain-open {
 	margin-bottom: 16px;
 }
 
+.smart-routing-section--interaction-locked {
+	pointer-events: none;
+	opacity: 0.72;
+}
+
+.trade-control--locked {
+	pointer-events: none;
+	opacity: 0.65;
+	cursor: not-allowed;
+}
+
 /* Small "Balance: $X" hint that sits directly under the Amount input, mirroring
  * the AppHeader "Cash" pill. Tucks up close to the input (negative top) so it
  * reads as part of the input cluster, then preserves the standard 16px rhythm
@@ -1404,11 +1415,24 @@ html.curtain-open {
 	color: #94a3b8;
 }
 
-/* Partial-fill warning under the Buy button. Same amber treatment the warning
- * had when it lived in `bet-size-info`, just centered to read as a button
- * subcaption. */
+/* Partial-fill warning above the trade button (SOR omnibus vs targeted route). */
 .trade-partial-fill-hint {
 	margin-top: 10px;
+	padding: 0 4px;
+	font-size: 12px;
+	font-weight: 500;
+	color: #f59e0b;
+	text-align: center;
+	line-height: 1.35;
+}
+
+.trade-button-above-hint {
+	margin-top: 0;
+	margin-bottom: 10px;
+}
+
+/* Scoped sell cap (e.g. "N Shares Team on Kalshi") — same visual weight as partial-fill hint. */
+.trade-share-cap-hint {
 	padding: 0 4px;
 	font-size: 12px;
 	font-weight: 500;

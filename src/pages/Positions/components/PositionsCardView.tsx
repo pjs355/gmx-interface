@@ -303,7 +303,7 @@ export default function PositionsCardView({
 										<div style={{ padding: "16px", borderTop: "1px solid #2a2a2a", background: "#0f0f0f" }}>
 											<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 												<div style={{ display: "flex", justifyContent: "space-between" }}>
-													<span style={{ color: "#888", fontSize: 13 }}>Current Price</span>
+													<span style={{ color: "#888", fontSize: 13 }}>Last traded price</span>
 													<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{formatPrice(row.currentPrice, portfolioPriceLayout)}</span>
 												</div>
 												<div style={{ display: "flex", justifyContent: "space-between" }}>

@@ -164,6 +164,12 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 	 */
 	budgetUsd: number;
 	seedAmountHuman: string;
+	/**
+	 * When prefunding for LevelUp `POST /orders`, quoted **min** destination stable at the
+	 * send cap must still clear **full** `destNeed` — collateral matches signed `makerAmount`
+	 * micros; the default slack (`prefundDestNeedFloorAtSendCap`) can otherwise accept cents short.
+	 */
+	strictDestMinAtSendCap?: boolean;
 }): Promise<{ quote: LifiQuoteResponse; amountHuman: string }> {
 	const destNeed = Math.max(0, args.destPortionUsd);
 	let sendHuman = Math.max(0, Number(args.seedAmountHuman));
@@ -213,7 +219,9 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 		// Already sending the cap but quoted min destination is still short:
 		// further iterations only repeat the same capped quote — fail fast unless within fee slack.
 		if (sendHuman + 1e-9 >= cap && cap > 1e-12) {
-			const floor = prefundDestNeedFloorAtSendCap(destNeed);
+			const floor = args.strictDestMinAtSendCap
+				? destNeed
+				: prefundDestNeedFloorAtSendCap(destNeed);
 			if (minTo + 1e-6 >= floor) {
 				return { quote: q, amountHuman: sendHuman.toFixed(6) };
 			}

@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { isDevelopment } from "config/env";
 import { LANGUAGE_LOCALSTORAGE_KEY } from "config/localStorage";
+import { messages as enMessages } from "../../locales/en/messages.po";
 
 // uses BCP-47 codes from https://unicode-org.github.io/cldr-staging/charts/latest/supplemental/language_plural_rules.html
 export const locales = {
@@ -35,6 +36,9 @@ export async function dynamicActivate(locale: string) {
 	i18n.activate(locale);
 }
 
+i18n.load(defaultLocale, enMessages);
+i18n.activate(defaultLocale);
+
 export function useLocalizedMap<T extends Record<string, MessageDescriptor>>(
 	map: T
 ): Record<keyof T, string> {
@@ -42,6 +46,3 @@ export function useLocalizedMap<T extends Record<string, MessageDescriptor>>(
 
 	return useMemo(() => mapValues(map, (value) => _(value)), [_, map]);
 }
-
-// Initialize i18n with default locale immediately
-dynamicActivate(defaultLocale);

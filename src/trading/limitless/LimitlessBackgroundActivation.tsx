@@ -3,6 +3,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
 import { useSignerContext } from "context/SignerContext";
 import { useLimitlessEnsureExecutionReady } from "./useLimitlessEnsureExecutionReady";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 const LOG_TAG = "[LimitlessActivation]";
 
@@ -61,10 +62,12 @@ export function LimitlessBackgroundActivation(): null {
 		}
 		if (gateLoggedRef.current) return;
 		gateLoggedRef.current = true;
-		console.info(LOG_TAG, "bg:gateOpened", {
-			at: new Date().toISOString(),
-			predictReady,
-		});
+		if (isTradingDebugLoggingEnabled()) {
+			console.info(LOG_TAG, "bg:gateOpened", {
+				at: new Date().toISOString(),
+				predictReady,
+			});
+		}
 	}, [prerequisitesReady, predictReady]);
 
 	const ensureState = useLimitlessEnsureExecutionReady({
@@ -82,11 +85,13 @@ export function LimitlessBackgroundActivation(): null {
 			setupInProgress: ensureState.setupInProgress,
 			ready: ensureState.ready,
 		});
-		console.info(LOG_TAG, "bg:snapshot", {
-			at: new Date().toISOString(),
-			setupInProgress: ensureState.setupInProgress,
-			ready: ensureState.ready,
-		});
+		if (isTradingDebugLoggingEnabled()) {
+			console.info(LOG_TAG, "bg:snapshot", {
+				at: new Date().toISOString(),
+				setupInProgress: ensureState.setupInProgress,
+				ready: ensureState.ready,
+			});
+		}
 	}, [reportVenueSnapshot, ensureState.setupInProgress, ensureState.ready]);
 
 	return null;

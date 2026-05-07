@@ -80,7 +80,7 @@ describe("sorQuoteTrust", () => {
 		expect(routeMatchesTradeContext(minimalRoute({ ...ok, side: "sell" }), ctx)).toBe(false);
 	});
 
-	it("isOmnibusDisplayMetricsTrusted rejects sticky snapshot while loading without live match", () => {
+	it("isOmnibusDisplayMetricsTrusted matches effective route only (no per-poll loading flicker)", () => {
 		const ctx = {
 			side: "buy" as const,
 			outcome: "A" as const,
@@ -99,5 +99,7 @@ describe("sorQuoteTrust", () => {
 		expect(isOmnibusDisplayMetricsTrusted(null, stale, ctx, true)).toBe(false);
 		expect(isOmnibusDisplayMetricsTrusted(live, live, ctx, true)).toBe(true);
 		expect(isOmnibusDisplayMetricsTrusted(null, stale, ctx, false)).toBe(false);
+		// Poll in flight, live cleared, sticky still holds matching quote — trust (no skeleton flash).
+		expect(isOmnibusDisplayMetricsTrusted(null, live, ctx, true)).toBe(true);
 	});
 });

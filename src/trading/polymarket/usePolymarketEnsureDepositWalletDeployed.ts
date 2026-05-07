@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 import { deployPolymarketDepositWalletIfNeeded } from "./safeActions";
 import { usePolymarketRelay } from "./usePolymarketRelay";
 
@@ -73,12 +74,16 @@ export function usePolymarketEnsureDepositWalletDeployed(args: {
 			try {
 				const client = await relay.getRelayClient();
 				if (!client) {
-					console.info(LOG_TAG, "skip:noRelayClient");
+					if (isTradingDebugLoggingEnabled()) {
+						console.info(LOG_TAG, "skip:noRelayClient");
+					}
 					return;
 				}
-				console.info(LOG_TAG, "deploy:start", {
-					eoa: relay.eoaAddress,
-				});
+				if (isTradingDebugLoggingEnabled()) {
+					console.info(LOG_TAG, "deploy:start", {
+						eoa: relay.eoaAddress,
+					});
+				}
 				const deployedThisCall = await deployPolymarketDepositWalletIfNeeded(
 					client,
 					relay.eoaAddress as `0x${string}`,
@@ -86,10 +91,12 @@ export function usePolymarketEnsureDepositWalletDeployed(args: {
 				if (cancelled) return;
 				completedKeyRef.current = runKey;
 				setDeployed(true);
-				console.info(LOG_TAG, "deploy:done", {
-					deployedThisCall,
-					elapsedMs: Math.round(performance.now() - startedAt),
-				});
+				if (isTradingDebugLoggingEnabled()) {
+					console.info(LOG_TAG, "deploy:done", {
+						deployedThisCall,
+						elapsedMs: Math.round(performance.now() - startedAt),
+					});
+				}
 			} catch (e) {
 				// Best-effort. The visible Polymarket activator runs the same
 				// deploy step inside its own retry/backoff schedule, so a
