@@ -9,7 +9,6 @@ import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { PrivateApiError } from "@/services/privateApi/errors";
 import { limitlessQueryKeys } from "./limitlessQueryKeys";
 import { canonicalLimitlessTokenId } from "./limitlessTokenId";
-import { mergeLimitlessFetchWithFloors } from "./limitlessPositionsRefetchMerge";
 import {
 	debugLimitlessPortfolio,
 	debugLimitlessPortfolioTable,
@@ -26,11 +25,15 @@ function str(v: unknown): string {
 	return typeof v === "string" ? v.trim() : "";
 }
 
-/** Local / staging API often omits Limitless routes — treat as empty portfolio instead of hanging retries. */
-function isLimitlessPortfolioProxyMissing(err: unknown): boolean {
+/**
+ * Local / staging API often omits Limitless routes entirely (501/405).
+ * A real 404 is a routing or auth bug — surface it so React Query records
+ * `isError` instead of silently returning an empty portfolio.
+ */
+function isLimitlessRouteUnavailable(err: unknown): boolean {
 	return (
 		err instanceof PrivateApiError &&
-		(err.status === 404 || err.status === 501 || err.status === 405)
+		(err.status === 501 || err.status === 405)
 	);
 }
 
@@ -438,12 +441,12 @@ export function useLimitlessVenuePositions(enabled: boolean) {
 			try {
 				raw = await api.getLimitlessPortfolioPositionsVenue();
 			} catch (e) {
-				if (isLimitlessPortfolioProxyMissing(e)) {
-					return mergeLimitlessFetchWithFloors([]);
+				if (isLimitlessRouteUnavailable(e)) {
+					return [];
 				}
 				throw e;
 			}
-			if (!Array.isArray(raw)) return mergeLimitlessFetchWithFloors([]);
+			if (!Array.isArray(raw)) return [];
 			const out: VenuePosition[] = [];
 			for (const row of raw) {
 				const v = mapPositionsVenueRow(row);
@@ -480,7 +483,7 @@ export function useLimitlessVenuePositions(enabled: boolean) {
 					rows,
 				);
 			}
-			return mergeLimitlessFetchWithFloors(out);
+			return out;
 		},
 	});
 }
@@ -497,7 +500,7 @@ export function useLimitlessOpenOrders(enabled: boolean) {
 			try {
 				raw = await api.getLimitlessOpenOrders();
 			} catch (e) {
-				if (isLimitlessPortfolioProxyMissing(e)) return [];
+				if (isLimitlessRouteUnavailable(e)) return [];
 				throw e;
 			}
 			if (!Array.isArray(raw)) return [];
@@ -524,7 +527,7 @@ export function useLimitlessTradeHistory(enabled: boolean) {
 					api.getLimitlessPortfolioHistory(q),
 				);
 			} catch (e) {
-				if (isLimitlessPortfolioProxyMissing(e)) return [];
+				if (isLimitlessRouteUnavailable(e)) return [];
 				throw e;
 			}
 		},

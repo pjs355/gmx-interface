@@ -56,8 +56,9 @@ export interface DflowOrderQuoteResult {
  * for uninitialized markets — so the trade box can show an accurate preview
  * even when the WS orderbook is empty.
  *
- * Quotes are intentionally fetched with no `userPublicKey` (works for
- * unverified users; see DFlow KYC FAQ) and are not used to drive Submit —
+ * Quotes hit `GET /api/dflow/order/quote`; the API injects the user's Solana
+ * `userPublicKey` (and init payer when configured) so previews match executable
+ * `GET /api/dflow/order` routing.
  * `useSorRoute` / SOR execution remains authoritative for actually placing
  * the order.
  */

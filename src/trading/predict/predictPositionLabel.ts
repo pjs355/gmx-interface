@@ -3,10 +3,16 @@ import {
 	shortTeamDisplayName,
 } from "@/pages/Positions/utils/historyOutcomeWinner";
 
+/** True when the label is empty or only the literal binary tokens (not a team name). */
+export function isGenericBinaryOutcomeLabel(label: string | undefined): boolean {
+	const s = (label ?? "").trim().toLowerCase();
+	return !s || s === "yes" || s === "no";
+}
+
 /**
- * Human-readable row label for Predict.fun positions on the Positions page.
- * Prefer API outcome name when it’s a real team/title; otherwise map Yes/No to
- * teams parsed from “A vs B … Match Winner” style market titles.
+ * Shared **head-to-head** row-label helper for Positions / History (Predict.fun, Polymarket,
+ * Limitless, and generic “A vs B … Match Winner” titles). Not tied to the Predict.fun API — only
+ * parses display strings and maps portfolio Yes/No to team slots when needed.
  */
 export function getPredictPositionRowLabel(
 	marketTitle: string,

@@ -14,9 +14,9 @@ export type SendTransactionCapable = {
 export type SolanaSignerCapable = {
 	signAndSendTransaction: (serializedTx: Uint8Array) => Promise<string>;
 	/**
-	 * Sign-only path used when the server (not the user) submits the tx to the
-	 * cluster — required for the DFlow `POST /api/dflow/orders` flow so we can
-	 * persist a `VenueOrder` audit row server-side after `confirmed` commitment.
+	 * Sign-only path when the LevelUp API submits the tx via `POST /api/dflow/orders`.
+	 * The server broadcasts then polls DFlow `/order-status` until terminal before
+	 * responding — HTTP 200 means `closed`, not merely RPC acceptance.
 	 */
 	signTransactionOnly: (serializedTx: Uint8Array) => Promise<Uint8Array>;
 };

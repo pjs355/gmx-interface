@@ -18,6 +18,15 @@ type SignerContextValue = {
   hasEmbeddedWallet: boolean;
   hasExternalWallet: boolean;
   ready: boolean; // true when computed for current auth/wallets state
+  /**
+   * Surface the most recent signer-resolution failure, if any. Previously
+   * `resolveSigner` swallowed every error silently and reported
+   * `walletType: 'none'`, which made Privy / EIP-1193 hiccups look identical
+   * to "user logged out". UI code should treat a non-null `error` as a
+   * recoverable warning (offer "Retry"); a null `error` with `walletType:
+   * 'none'` is the genuine logged-out state.
+   */
+  error: string | null;
   refresh: () => Promise<void>;
   // Debug mode properties
   isDebugMode: boolean; // true when DEBUG_ACCOUNT_OVERRIDE is set
@@ -52,6 +61,7 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
   const [hasEmbeddedWallet, setHasEmbeddedWallet] = useState<boolean>(false);
   const [hasExternalWallet, setHasExternalWallet] = useState<boolean>(false);
   const [ready, setReady] = useState(false);
+  const [signerError, setSignerError] = useState<string | null>(null);
   
   // Debug mode state
   const [debugAccount, setDebugAccount] = useState<string | undefined>(getDebugAccountOverride);
@@ -63,6 +73,7 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
     setDebugAccount(currentDebugOverride);
     
     // Single, authoritative resolution based on Privy state
+    setSignerError(null);
     try {
       if (!authenticated) {
         setSigner(undefined);
@@ -130,7 +141,13 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
       const nextType: 'smart' | 'embedded' | 'external' | 'none' = hasSmart ? 'smart' : (embedded ? 'embedded' : (external ? 'external' : 'none'));
       setWalletType(nextType);
       setReady(true);
-    } catch {
+    } catch (err) {
+      // Previously a silent `catch {}` — that turned a Privy / EIP-1193
+      // hiccup into "walletType: 'none'" which UI couldn't distinguish from
+      // an actual logged-out user. Log + surface so callers can react.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[SignerContext] resolveSigner failed:', err);
+      setSignerError(msg);
       setSigner(undefined);
       setSignerAddress(undefined);
       setWalletType('none');
@@ -162,12 +179,13 @@ export function SignerProvider({ children }: { children: React.ReactNode }) {
     hasEmbeddedWallet,
     hasExternalWallet,
     ready,
+    error: signerError,
     refresh: resolveSigner,
     // Debug mode properties
     isDebugMode,
     debugAccount,
     realAccount,
-  }), [authenticated, user, walletType, account, signer, signerAddress, hasSmartWallet, hasEmbeddedWallet, hasExternalWallet, ready, resolveSigner, isDebugMode, debugAccount, realAccount]);
+  }), [authenticated, user, walletType, account, signer, signerAddress, hasSmartWallet, hasEmbeddedWallet, hasExternalWallet, ready, signerError, resolveSigner, isDebugMode, debugAccount, realAccount]);
 
   return <SignerContext.Provider value={value}>{children}</SignerContext.Provider>;
 }

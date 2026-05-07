@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
+import { tradingQueryKeys } from "@/trading/queryKeys";
 import { usePrivateApiClient } from "./usePrivateApiClient";
 import type { DflowAccountResponse } from "@/services/privateApi";
 
@@ -14,7 +15,7 @@ export function useDflowProofStatus() {
 	const api = usePrivateApiClient();
 
 	const query = useQuery<DflowAccountResponse>({
-		queryKey: ["dflow", "account"],
+		queryKey: tradingQueryKeys.dflowAccount,
 		queryFn: () => api.getDflowAccount(),
 		enabled: authenticated,
 		staleTime: 5 * 60_000,
@@ -39,6 +40,10 @@ export function useDflowProofStatus() {
 		isFetched: query.isFetched,
 		isSuccess: query.isSuccess,
 		data: query.data ?? null,
+		error: query.error,
+		refetch: async (): Promise<void> => {
+			await query.refetch();
+		},
 		/**
 		 * Force a fresh read of `/dflow/account` and return the updated
 		 * verification boolean. Used by the SOR leg executor to avoid

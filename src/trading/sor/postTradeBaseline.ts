@@ -12,11 +12,13 @@ import type {
 	SorVenue,
 } from "./sor-types";
 import type { FundingStableBalancesHuman } from "./fundingStableBalances";
-import type { CollateralChainKey } from "@/context/collateralTokensOptimisticOverlays";
+import type { CollateralChainKey } from "@/trading/sor/fundingStableBalances";
 import { COLLATERAL_TOKENS_QUERY_KEY } from "@/context/CollateralTokenContext";
 import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
 import { normalizePolymarketPositionTokenId } from "@/trading/polymarket/polymarketPositionsRefetchMerge";
 import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
+import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
+import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
 
 /** Maps a route leg's source-of-funds chain → collateral context key. */
 export function chainToCollateralKey(
@@ -43,8 +45,8 @@ export type PostTradeBaseline = {
 };
 
 /**
- * Stable identity for a position row, matching the venue-specific keying we
- * use in the per-venue floor merges.
+ * Stable identity for a position row, matching the venue-specific keying used
+ * in post-trade baseline capture.
  */
 export function shareIdentityForVenuePosition(p: VenuePosition): string | null {
 	switch (p.venue) {
@@ -91,12 +93,8 @@ export function shareIdentityForRouteLeg(leg: RouteLeg): string | null {
 			return `predictfun:${n}|yes`;
 		}
 		case "dflow": {
-			const raw =
-				leg.outcome === "A"
-					? leg.venueMarketIds.dflowYesMintA
-					: leg.venueMarketIds.dflowYesMintB;
-			const t = (raw ?? "").trim();
-			return t ? `dflow:${t}` : null;
+			const mint = dflowOutcomeMintForRouteLeg(leg);
+			return mint ? `dflow:${mint}` : null;
 		}
 		case "limitless": {
 			const raw =
@@ -159,12 +157,7 @@ function lookupCachedShares(
 		case "dflow": {
 			const owner = addresses.solanaAddress?.trim() ?? null;
 			if (!owner) return 0;
-			return findShares(
-				queryClient.getQueryData<VenuePosition[]>([
-					"dflow-positions",
-					owner,
-				]),
-			);
+			return findShares(getCachedDflowPositions(queryClient, owner));
 		}
 		case "limitless": {
 			return findShares(
@@ -192,9 +185,8 @@ export type PostTradeBaselineInput = {
 };
 
 /**
- * Snapshot the pre-trade balances we'll need to (a) compute optimistic deltas
- * and (b) detect convergence after the trade. Read directly from the React
- * Query cache — no fresh fetches at submit time.
+ * Snapshot the pre-trade balances used to detect server-backed divergence after
+ * a trade. Read directly from the React Query cache — no fresh fetches at submit time.
  */
 export function capturePostTradeBaseline(
 	input: PostTradeBaselineInput,
@@ -263,8 +255,8 @@ export function capturePostTradeBaseline(
 }
 
 /**
- * Filled-leg deltas grouped by venue identity and source chain. Used to drive
- * both the optimistic apply step and the convergence check.
+ * Filled-leg deltas grouped by venue identity and source chain. Used to select
+ * which share rows and cash chains to watch during post-trade sync.
  */
 export type ExpectedDeltas = {
 	/** Per share-identity → expected post-trade absolute share count. */

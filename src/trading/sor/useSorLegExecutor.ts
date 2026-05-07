@@ -21,7 +21,12 @@ import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
 import type { LifiStatusResponse, LifiQuoteResponse } from "@/types/trading";
 import { withTimeout } from "@/utils/withTimeout";
 import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
-import type { DflowOrderStatusResponse } from "@/services/privateApi/client";
+import type {
+	DflowOrderParams,
+	DflowOrderStatusResponse,
+	DflowOrderSubmitBody,
+	DflowOrderSubmitResponse,
+} from "@/services/privateApi/client";
 import type { SorExecutionPhase } from "./useSorExecution";
 import {
 	readFundingStableBalancesHuman,
@@ -60,6 +65,7 @@ import {
 	parsePrivyEvmTxHash,
 	waitForBaseTransactionSuccess,
 } from "@/trading/base/waitPrivyBaseTxReceipt";
+import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
 
 /**
  * Must exceed Polymarket `RelayClient` poll budget for `wait()` (~100 polls × 2s ≈ 200s)
@@ -74,18 +80,11 @@ const SOR_LIFI_PREFUND_POLL = { maxAttempts: 15, intervalMs: 4_000 } as const;
 const SOR_BASE_USDC_TRANSFER_TIMEOUT_MS = 120_000;
 
 /**
- * DFlow prediction-market orders are `executionMode: "async"` — after the
- * Solana tx is broadcast, DFlow's settlement authority routes the order to
- * Kalshi off-chain and settles back on-chain (end-to-end ~30-90s). We mark the
- * SOR leg as filled the moment broadcast succeeds (UX decision: don't make the
- * user stare at a spinner while DFlow + Kalshi do their async work). The
- * Kalshi-specific notice in `PredictionMarketTradeBoxUI` tells the user that
- * the on-chain balance reflection is delayed; post-trade balance refetch
- * (`usePostTradeBalanceSync`) eventually picks up the actual fill.
- *
- * Lifecycle reconciliation against `GET /api/dflow/order-status` is still
- * available via `privateApi.getDflowOrderStatus(signature, lvbh)` if a future
- * background reconciler / failure-toast path wants it.
+ * DFlow prediction-market orders are async end-to-end. `POST /api/dflow/orders`
+ * does not return until the server observes DFlow `/order-status` === `closed`
+ * (or returns a non-2xx with DFlow `msg`/`code`/`reverts` on failure). The SOR leg
+ * is marked filled only on HTTP 200 from that route. Post-trade balance refetch
+ * (`usePostTradeBalanceSync`) still converges positions after settlement.
  */
 
 /** Partner withdraw maker → SCW; poll until SCW can cover the upcoming Base LI.FI leg. */
@@ -300,37 +299,18 @@ export interface UseSorLegExecutorDeps {
 		}) => Promise<{ orderHash?: string } | unknown>;
 	};
 	privateApi: {
-		getDflowOrder: (params: {
-			inputMint: string;
-			outputMint: string;
-			amount: string;
-		}) => Promise<{
+		getDflowOrder: (
+			params: DflowOrderParams,
+		) => Promise<{
 			transaction?: string;
 			outAmount?: string;
 			lastValidBlockHeight?: number;
 			code?: string;
 			msg?: string;
 		}>;
-		postDflowOrder: (body: {
-			signedTx: string;
-			inputMint: string;
-			outputMint: string;
-			amount?: string;
-			side?: "BUY" | "SELL";
-			outcome?: string;
-			marketRef?: {
-				externalMarketId?: string;
-				tokenId?: string;
-				questionId?: string;
-			};
-			lastValidBlockHeight?: number;
-		}) => Promise<{
-			success: true;
-			signature: string;
-			confirmationStatus: string;
-			slot: number | null;
-			lastValidBlockHeight: number;
-		}>;
+		postDflowOrder: (
+			body: DflowOrderSubmitBody,
+		) => Promise<DflowOrderSubmitResponse>;
 		getDflowOrderStatus: (
 			signature: string,
 			lastValidBlockHeight?: number,
@@ -364,6 +344,8 @@ export interface UseSorLegExecutorDeps {
 
 	market: PredictionMarket;
 	matchedMonitor: MatchedMarket | null;
+	/** Mongo Umbrella `_id` — sent with DFlow submit for init-market umbrella mapping. */
+	umbrellaId?: string | null;
 	predictNumericId: number | null;
 	predictMarketDetail: PredictMarketDetail | null;
 	account: string | undefined;
@@ -501,6 +483,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		privateApi,
 		market,
 		matchedMonitor,
+		umbrellaId,
 		predictNumericId,
 		predictMarketDetail,
 		account,
@@ -966,6 +949,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						inputMint,
 						outputMint,
 						amount: amountBaseUnits,
+						slippageBps: "auto",
+						predictionMarketSlippageBps: "auto",
 					});
 
 					if (orderResult.code || orderResult.msg) {
@@ -973,6 +958,21 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					}
 					if (!orderResult.transaction) {
 						throw new Error("Kalshi returned no transaction to sign");
+					}
+
+					const lvbh = orderResult.lastValidBlockHeight;
+					if (
+						typeof lvbh !== "number" ||
+						!Number.isFinite(lvbh) ||
+						lvbh <= 0 ||
+						!Number.isInteger(lvbh)
+					) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error:
+								"Kalshi quote missing lastValidBlockHeight — refresh the route and try again.",
+						};
 					}
 
 					if (!solanaSigner) {
@@ -996,19 +996,43 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 										.map((b) => String.fromCharCode(b))
 										.join(""),
 								);
-					const submitResult = await privateApi.postDflowOrder({
+
+					const ids = leg.venueMarketIds;
+					const yesPairMint =
+						leg.outcome === "A"
+							? ids.dflowYesMintA?.trim()
+							: ids.dflowYesMintB?.trim();
+					const noPairMint =
+						leg.outcome === "A"
+							? ids.dflowNoMintA?.trim()
+							: ids.dflowNoMintB?.trim();
+
+					const submitBody: DflowOrderSubmitBody = {
 						signedTx: signedBase64,
 						inputMint,
 						outputMint,
 						amount: amountBaseUnits,
 						side: side === "buy" ? "BUY" : "SELL",
 						outcome: leg.outcome === "A" ? "yes" : "no",
+						umbrellaId: umbrellaId?.trim() || undefined,
 						marketRef: {
 							externalMarketId: outcomeMint,
 							tokenId: outcomeMint,
 						},
-						lastValidBlockHeight: orderResult.lastValidBlockHeight,
-					});
+						lastValidBlockHeight: lvbh,
+					};
+					if (yesPairMint && noPairMint) {
+						submitBody.outcomePairMints = {
+							yesMint: yesPairMint,
+							noMint: noPairMint,
+						};
+					}
+
+					const submitResult = await privateApi.postDflowOrder(submitBody);
+
+					if (side === "buy" && outputMint.trim()) {
+						registerPendingDflowOutcomeMints([outputMint.trim()]);
+					}
 
 					return {
 						filled: true,
@@ -1436,6 +1460,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			tradeExecutionService,
 			polyClob,
 			matchedMonitor,
+			umbrellaId,
 			dflowProofVerified,
 			privateApi,
 			solanaSigner,

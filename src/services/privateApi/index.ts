@@ -5,6 +5,9 @@ export {
 	type GetIdentityToken,
 } from "./client";
 export type {
+	PredictAccountResponse,
+	PredictAccountSyncBody,
+	PredictPublicVenueState,
 	DflowAccountResponse,
 	DflowAccountSyncBody,
 	DflowProofState,
@@ -17,6 +20,7 @@ export type {
 	DflowOrderResponse,
 	DflowOrderSubmitBody,
 	DflowOrderSubmitResponse,
+	DflowUmbrellaMappingResult,
 	DflowBatchMarket,
 	DflowOnchainTrade,
 } from "./client";

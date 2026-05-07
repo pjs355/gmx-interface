@@ -1,26 +1,31 @@
 import { useMemo } from "react";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { useAccountOverview } from "./useAccountOverview";
 import { useCurrentProfile } from "./useCurrentProfile";
 import { usePolymarketBuilder } from "./usePolymarketBuilder";
 import { useTradingWallets } from "@/trading/useWallets";
+import type { UserProfile } from "@/services/api/userService";
+import type { AccountOverview } from "@/types/trading";
+
+export type PolymarketBuilderBundle = ReturnType<typeof usePolymarketBuilder>;
 
 /**
- * Resolves Base smart wallet + Polymarket trading wallet + signer for LI.FI
- * funding flows. The Polymarket wallet is exposed as `polymarketSafe` for
- * historical reasons; after the deposit-wallet migration that field carries
- * the user's **deposit wallet** address (an ERC-1967 proxy from the deposit
- * wallet factory, owned by the Privy embedded EOA, used as the CLOB funder
- * under `SignatureTypeV2.POLY_1271`).
+ * Derives funding / wallet fields from already-mounted profile, overview, and
+ * Polymarket queries — does **not** subscribe to those queries again.
+ * Use from `AccountDataProvider` so we do not double-call
+ * `useCurrentProfile` / `useAccountOverview` / `usePolymarketBuilder` alongside
+ * the provider's own observers.
  */
-export function useFundingAddresses() {
-	const profileQuery = useCurrentProfile();
+export function useFundingAddressesFromQueries(
+	profileQuery: UseQueryResult<UserProfile, Error>,
+	overviewQuery: UseQueryResult<AccountOverview, Error>,
+	polymarketQuery: PolymarketBuilderBundle
+) {
 	const profileId = profileQuery.data?._id;
-	const overviewQuery = useAccountOverview(profileId);
-	const polymarketQuery = usePolymarketBuilder({
-		profileId,
-		enabled: Boolean(profileId),
-	});
-	const wallets = useTradingWallets(overviewQuery.data, polymarketQuery.data);
+	const wallets = useTradingWallets(
+		overviewQuery.data,
+		polymarketQuery.data
+	);
 
 	const integrationMode =
 		polymarketQuery.data?.polymarketAccount?.integrationMode ?? undefined;
@@ -35,9 +40,9 @@ export function useFundingAddresses() {
 
 	const isLoading =
 		profileQuery.isLoading ||
-		(Boolean(profileId) && (overviewQuery.isLoading || polymarketQuery.isFetching));
+		(Boolean(profileId) &&
+			(overviewQuery.isLoading || polymarketQuery.isFetching));
 
-	/** One-time: profile + (when linked) overview + polymarket have settled. Not true during refetch. */
 	const fundingHydrated =
 		profileQuery.isFetched &&
 		(!profileId ||
@@ -57,7 +62,6 @@ export function useFundingAddresses() {
 			refetchPolymarket: polymarketQuery.refetch,
 			refetchOverview: overviewQuery.refetch,
 			verifyOnChain: polymarketQuery.verifyOnChain,
-			/** Dev / support: React Query state for GET /polymarket/account */
 			polymarketAccountQuery: {
 				status: polymarketQuery.status,
 				isFetched: polymarketQuery.isFetched,
@@ -103,5 +107,28 @@ export function useFundingAddresses() {
 			overviewQuery.refetch,
 			polymarketQuery.verifyOnChain,
 		]
+	);
+}
+
+/**
+ * Resolves Base smart wallet + Polymarket trading wallet + signer for LI.FI
+ * funding flows. The Polymarket wallet is exposed as `polymarketSafe` for
+ * historical reasons; after the deposit-wallet migration that field carries
+ * the user's **deposit wallet** address (an ERC-1967 proxy from the deposit
+ * wallet factory, owned by the Privy embedded EOA, used as the CLOB funder
+ * under `SignatureTypeV2.POLY_1271`).
+ */
+export function useFundingAddresses() {
+	const profileQuery = useCurrentProfile();
+	const profileId = profileQuery.data?._id;
+	const overviewQuery = useAccountOverview(profileId);
+	const polymarketQuery = usePolymarketBuilder({
+		profileId,
+		enabled: Boolean(profileId),
+	});
+	return useFundingAddressesFromQueries(
+		profileQuery,
+		overviewQuery,
+		polymarketQuery
 	);
 }

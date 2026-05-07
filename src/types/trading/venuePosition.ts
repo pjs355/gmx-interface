@@ -54,6 +54,11 @@ export interface VenueHistoryFill {
 	sourceId?: string;
 	/** Execution price when API provides it (probability 0–1 or cents) */
 	price?: number | null;
+	/**
+	 * Kalshi/DFlow leg ticker from `onchain-trades` (`marketTicker`). Each fill may
+	 * belong to a different leg market while the umbrella title stays “A vs B”.
+	 */
+	marketTicker?: string;
 }
 
 export interface VenuePosition {
@@ -85,6 +90,11 @@ export interface VenuePosition {
 	levelUpUmbrellaId?: string;
 	/** Optional display label from the same join (for UI only). */
 	levelUpUmbrellaDisplayName?: string;
+	/**
+	 * DFlow/Kalshi: display label for the portfolio **Yes** / **No** column for this mint (see
+	 * {@link portfolioColumnTeamLabels} / {@link patchDflowVenuePositionOutcomes}). Trade-history Side text.
+	 */
+	dflowTradeSideLabel?: string;
 	/** Market-level status from the venue (e.g. "RESOLVED") */
 	marketStatus?: string;
 	/** Limitless `PositionMarket.closed` — when false, treat row as live for Positions vs History split. */
@@ -107,6 +117,14 @@ export interface VenuePosition {
 	 * Summary row still uses aggregated `shares` / `cost` / `pnl` on this position.
 	 */
 	historyFills?: VenueHistoryFill[];
+	/**
+	 * Polymarket Data API `negativeRisk` flag — true for multi-outcome (Match Winner,
+	 * Election, etc.) NegRisk markets. Required so claim routing knows to call
+	 * `NegRiskAdapter.redeemPositions(conditionId, [yesAmt, noAmt])` instead of
+	 * the standard `CTF.redeemPositions(...)`. Without this the redeem tx mines
+	 * but pays out 0 pUSD and the row vanishes from Winnings (silent claim bug).
+	 */
+	isNegRisk?: boolean;
 }
 
 /**

@@ -31,46 +31,43 @@ class TagService {
 	private tagsCache: Tag[] | null = null;
 
 	/**
-	 * Fetch all tags from the server
+	 * Fetch all tags from the server.
+	 *
+	 * Throws on network/parse failure rather than returning `[]`. The previous
+	 * silent `[]` swallow made the tag-filter UI look broken (visible chips
+	 * vanished without explanation). Callers should handle the throw — see
+	 * `PredictionDataContext` which now sets `tagsError: true` so the UI can
+	 * decide whether to retry or hide the filter.
 	 */
 	async fetchAllTags(): Promise<Tag[]> {
-		try {
-			if (this.tagsCache && this.tagsCache.length > 0) {
-				return this.tagsCache;
-			}
-
-			const response = await fetch(this.publicTagsUrl);
-
-			if (!response.ok) {
-				throw new Error(
-					`HTTP error! status: ${response.status} - ${response.statusText}`
-				);
-			}
-
-			const apiResponse = await response.json();
-
-			// Handle different possible response formats
-			let tags: Tag[];
-			if (Array.isArray(apiResponse)) {
-				// Direct array response
-				tags = apiResponse;
-			} else if (apiResponse.success && Array.isArray(apiResponse.data)) {
-				// Wrapped in success/data object
-				tags = apiResponse.data;
-			} else if (Array.isArray(apiResponse.tags)) {
-				// Wrapped in tags property
-				tags = apiResponse.tags;
-			} else {
-				console.error("Unexpected API response format:", apiResponse);
-				throw new Error("Invalid API response structure");
-			}
-
-			this.tagsCache = tags;
+		if (this.tagsCache && this.tagsCache.length > 0) {
 			return this.tagsCache;
-		} catch (error) {
-			console.error("error", error);
-			return [];
 		}
+
+		const response = await fetch(this.publicTagsUrl);
+
+		if (!response.ok) {
+			throw new Error(
+				`HTTP error! status: ${response.status} - ${response.statusText}`
+			);
+		}
+
+		const apiResponse = await response.json();
+
+		let tags: Tag[];
+		if (Array.isArray(apiResponse)) {
+			tags = apiResponse;
+		} else if (apiResponse.success && Array.isArray(apiResponse.data)) {
+			tags = apiResponse.data;
+		} else if (Array.isArray(apiResponse.tags)) {
+			tags = apiResponse.tags;
+		} else {
+			console.error("[tagService] Unexpected API response format:", apiResponse);
+			throw new Error("Invalid API response structure for /tags");
+		}
+
+		this.tagsCache = tags;
+		return this.tagsCache;
 	}
 
 	/**

@@ -5,6 +5,10 @@ import { outcomeSideLabelColor } from "../utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
+import {
+	getPredictPositionRowLabel,
+	isGenericBinaryOutcomeLabel,
+} from "@/trading/predict/predictPositionLabel";
 
 interface TradeHistoryListMobileProps {
 	orders: ProcessedOrder[];
@@ -13,6 +17,7 @@ interface TradeHistoryListMobileProps {
 	position?: "Yes" | "No";
 	/** For vs / esports markets, show team name (e.g. Keyd) instead of Yes/No */
 	positionDisplayLabel?: string;
+	marketTitle?: string;
 }
 
 export default function TradeHistoryListMobile({
@@ -21,6 +26,7 @@ export default function TradeHistoryListMobile({
 	isExpanded,
 	position,
 	positionDisplayLabel,
+	marketTitle,
 }: TradeHistoryListMobileProps) {
 	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
 	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
@@ -111,11 +117,24 @@ export default function TradeHistoryListMobile({
 			<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 				{marketOrders.map((order) => {
 					const isBuy = order.side === "buy";
-					const sideText = (
-						positionDisplayLabel?.trim() ||
-						order.position ||
-						""
-					).trim();
+					const mt = (marketTitle ?? "").trim();
+					const op = (order.position ?? "").trim();
+					const ol = op.toLowerCase();
+					const pdl = order.positionDisplayLabel?.trim();
+					const yn =
+						ol === "yes"
+							? ("Yes" as const)
+							: ol === "no"
+								? ("No" as const)
+								: null;
+					const titleMapped =
+						mt && yn ? getPredictPositionRowLabel(mt, undefined, yn) : "";
+					const sideText =
+						yn && mt && isGenericBinaryOutcomeLabel(pdl)
+							? titleMapped
+							: pdl ||
+								(yn && mt ? titleMapped : "") ||
+								(positionDisplayLabel?.trim() || op || "").trim();
 					const tl = sideText.toLowerCase();
 					const binaryYesNoBg =
 						tl === "yes"

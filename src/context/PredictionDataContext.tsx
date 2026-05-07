@@ -31,6 +31,13 @@ type PredictionDataContextValue = {
 	allBooksPreview: Record<string, BookPreview>;
 	tags: Tag[];
 	tagsLoading: boolean;
+	/**
+	 * Set when the `/tags` request fails. `tagService.fetchAllTags()` used to
+	 * silently return `[]` on error, which made the filter UI look broken with
+	 * no diagnostic. Consumers can show a "tags unavailable" hint or just hide
+	 * the filter when this is non-null.
+	 */
+	tagsError: string | null;
 	// Legacy fields expected by existing pages/components
 	singleMarketQuestions: Record<string, any>;
 	singleMarketOrderbooks: Record<string, any>;
@@ -62,6 +69,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	allBooksPreview: {},
 	tags: [],
 	tagsLoading: true,
+	tagsError: null,
 	singleMarketQuestions: {},
 	singleMarketOrderbooks: {},
 	multiMarketData: {},
@@ -105,6 +113,7 @@ export function PredictionDataProvider({
 	);
 	const [tags, setTags] = useState<Tag[]>([]);
 	const [tagsLoading, setTagsLoading] = useState(true);
+	const [tagsError, setTagsError] = useState<string | null>(null);
 	const [error, setError] = useState<string | undefined>(undefined);
 
 	const hasDataRef = React.useRef(false);
@@ -324,22 +333,34 @@ export function PredictionDataProvider({
 		return unsubscribe;
 	}, [load]);
 
-	// Fetch tags from tagService
+	// Fetch tags from tagService.
+	// Module-level in-flight ref so React 18 StrictMode's double-mount doesn't
+	// fire two parallel `/tags` requests (matches the `hasDataRef` pattern
+	// already used by the umbrellas effect above).
+	const tagsInFlightRef = React.useRef<Promise<Tag[]> | null>(null);
 	useEffect(() => {
 		let mounted = true;
 
 		async function fetchTags() {
 			try {
-				const fetchedTags = await tagService.fetchAllTags();
+				if (!tagsInFlightRef.current) {
+					tagsInFlightRef.current = tagService.fetchAllTags();
+				}
+				const fetchedTags = await tagsInFlightRef.current;
 				if (mounted) {
 					setTags(fetchedTags);
 					setTagsLoading(false);
+					setTagsError(null);
 				}
 			} catch (err) {
 				console.error("Failed to fetch tags:", err);
 				if (mounted) {
+					setTags([]);
 					setTagsLoading(false);
+					setTagsError(err instanceof Error ? err.message : String(err));
 				}
+			} finally {
+				tagsInFlightRef.current = null;
 			}
 		}
 
@@ -359,6 +380,7 @@ export function PredictionDataProvider({
 			allBooksPreview: {} as Record<string, BookPreview>,
 			tags,
 			tagsLoading,
+			tagsError,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,
@@ -380,6 +402,7 @@ export function PredictionDataProvider({
 			resolvedMarketsByUmbrella,
 			tags,
 			tagsLoading,
+			tagsError,
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,

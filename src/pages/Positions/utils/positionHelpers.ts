@@ -25,6 +25,11 @@ export type MarketPosition = {
 	orders: ProcessedOrder[];
 	aggregates: OrderAggregates;
 	venue?: VenueId;
+	/**
+	 * After {@link mergeMarketPositions}, `venue` is cleared — set when any merged leg was DFlow
+	 * so Positions views still use {@link portfolioColumnTeamLabels} for Yes/No column headers.
+	 */
+	includesDflowVenue?: boolean;
 	predictOutcomeLabelYes?: string;
 	predictOutcomeLabelNo?: string;
 };
@@ -62,6 +67,15 @@ export function outcomeSideLabelColor(
 	return neutralColor;
 }
 
+function dflowSyntheticPositionBucket(pos: VenuePosition): "Yes" | "No" {
+	return pos.outcome.trim().toLowerCase() === "no" ? "No" : "Yes";
+}
+
+function syntheticOrderPositionFromVenue(pos: VenuePosition): "Yes" | "No" {
+	if (pos.venue === "dflow") return dflowSyntheticPositionBucket(pos);
+	return inferVenueHistoryYesNoSide(pos.marketTitle, pos.outcome);
+}
+
 /**
  * Use FIFO remaining cost/shares from the same filled-order stream as expanded trade history,
  * when they match portfolio row shares (fixes mismatch vs venue aggregate cost).
@@ -97,6 +111,7 @@ export function buildSyntheticOrder(
 	avgPrice: number | null,
 	cost: number | null,
 	tradeAt?: string | null,
+	positionDisplayLabel?: string,
 ): ProcessedOrder {
 	const price = avgPrice ?? 0;
 	const usdcValue = cost ?? shares * price;
@@ -115,6 +130,9 @@ export function buildSyntheticOrder(
 		usdcValue,
 		tokenValue: shares,
 		venue,
+		...(positionDisplayLabel?.trim()
+			? { positionDisplayLabel: positionDisplayLabel.trim() }
+			: {}),
 	};
 }
 
@@ -188,6 +206,8 @@ export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[
 	const blendedYesPrice = weightedYes ?? impliedYesFromValue ?? bestYesPrice;
 	const blendedNoPrice = weightedNo ?? impliedNoFromValue ?? bestNoPrice;
 
+	const includesDflowVenue = markets.some((m) => m.venue === "dflow");
+
 	return [
 		{
 			market: primaryMarket,
@@ -204,6 +224,7 @@ export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[
 				No: { totalSize: totalNoShares, totalValue: totalNoCost, avgPrice: noAvg, count: 0 },
 			},
 			venue: undefined,
+			...(includesDflowVenue ? { includesDflowVenue: true } : {}),
 			predictOutcomeLabelYes,
 			predictOutcomeLabelNo,
 		},
@@ -241,7 +262,11 @@ function venueHistoryFillToSyntheticOrder(
 	index: number,
 ): ProcessedOrder | null {
 	if (!(f.usdc > 0 || f.shares > 0)) return null;
-	const position = inferVenueHistoryYesNoSide(pos.marketTitle, pos.outcome);
+	const position = syntheticOrderPositionFromVenue(pos);
+	const positionDisplayLabel =
+		pos.venue === "dflow" && pos.dflowTradeSideLabel?.trim()
+			? pos.dflowTradeSideLabel.trim()
+			: undefined;
 	const shares = Math.max(f.shares, 0);
 	const probPrice =
 		shares > 0
@@ -266,6 +291,7 @@ function venueHistoryFillToSyntheticOrder(
 		usdcValue: f.usdc,
 		tokenValue: shares,
 		venue: venueDisplayLabel(pos.venue),
+		...(positionDisplayLabel ? { positionDisplayLabel } : {}),
 	};
 }
 
@@ -276,7 +302,11 @@ export function venueHistoryRowToSyntheticOrder(pos: VenuePosition): ProcessedOr
 		const c = pos.cost;
 		if (c == null || c <= 0) return null;
 	}
-	const position = inferVenueHistoryYesNoSide(pos.marketTitle, pos.outcome);
+	const position = syntheticOrderPositionFromVenue(pos);
+	const positionDisplayLabel =
+		pos.venue === "dflow" && pos.dflowTradeSideLabel?.trim()
+			? pos.dflowTradeSideLabel.trim()
+			: undefined;
 	const effShares =
 		pos.shares > 0
 			? pos.shares
@@ -316,6 +346,7 @@ export function venueHistoryRowToSyntheticOrder(pos: VenuePosition): ProcessedOr
 		usdcValue,
 		tokenValue: effShares,
 		venue: venueDisplayLabel(pos.venue),
+		...(positionDisplayLabel ? { positionDisplayLabel } : {}),
 	};
 }
 

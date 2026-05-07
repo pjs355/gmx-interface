@@ -5,10 +5,30 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { tradingQueryKeys } from "@/trading/queryKeys";
+import { PrivateApiError } from "@/services/privateApi/errors";
+import type { PrivateApiClient } from "@/services/privateApi";
 import type {
 	PolymarketAccountResponse,
 	PolymarketAccountState,
 } from "@/types/trading";
+
+/**
+ * Mirrors the 404 → `_clientPolymarketAccountNotFound` translation in
+ * `usePolymarketBuilder`. Used as the queryFn for `qc.fetchQuery` here so the
+ * cache shape stays identical regardless of which observer populated it.
+ */
+async function fetchPolymarketAccountForCache(
+	apiClient: PrivateApiClient
+): Promise<PolymarketAccountResponse> {
+	try {
+		return await apiClient.getPolymarketAccount();
+	} catch (e) {
+		if (e instanceof PrivateApiError && e.status === 404) {
+			return { _clientPolymarketAccountNotFound: true };
+		}
+		throw e;
+	}
+}
 import { usePolymarketRelay } from "./usePolymarketRelay";
 import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
 import {
@@ -166,8 +186,13 @@ export function usePolymarketEnsureExecutionReady(args: {
 
 			if (mountedRef.current) setPhase("checking");
 			logInfo("phase:checking", { eoa: eoaAddress });
-			const account: PolymarketAccountResponse =
-				await apiClient.getPolymarketAccount();
+			// Read through the canonical TanStack cache so the result is shared
+			// with `usePolymarketBuilder` / `AccountDataContext` instead of
+			// firing a duplicate `GET /polymarket/account` per setup attempt.
+			const account: PolymarketAccountResponse = await qc.fetchQuery({
+				queryKey: tradingQueryKeys.polymarketAccount,
+				queryFn: () => fetchPolymarketAccountForCache(apiClient),
+			});
 			if (account._clientPolymarketAccountNotFound) {
 				// 404 means the backend has no Polymarket row for this user and
 				// no sync route was hit — cannot silently bootstrap, stay idle.

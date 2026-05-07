@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
@@ -22,7 +22,7 @@ export type UseDflowBundleResult = {
 	/**
 	 * Gate consumed by `useReadinessGates` and the slim `[positions-gate]` log so the
 	 * Positions shell waits 10s on a verified DFlow user (vs. 5s) before bypass — keeps
-	 * Kalshi/DFlow rows from disappearing under their own latency budget.
+	 * DFlow rows from disappearing under their own latency budget.
 	 */
 	dflowRpcEnabled: boolean;
 };
@@ -45,6 +45,37 @@ export function useDflowBundle({
 		enabled: dflowRpcEnabled,
 	});
 	const all = positionsQuery.data ?? [];
+
+	useEffect(() => {
+		if (!import.meta.env.DEV) return;
+		console.log("[DFlow positions][Positions UI] gate", {
+			dflowRpcEnabled,
+			solanaLinked,
+			authenticated,
+			proofFetched: dflowProof.isFetched,
+			proofVerified: dflowProof.isVerified,
+			queryStatus: positionsQuery.status,
+			fetchStatus: positionsQuery.fetchStatus,
+			isPending: positionsQuery.isPending,
+			isFetched: positionsQuery.isFetched,
+			rowCount: all.length,
+		});
+		console.log(
+			"[DFlow positions][Positions UI] RAW (useDflowBundle.all — same rows fed into umbrella assembly)",
+			all,
+		);
+	}, [
+		all,
+		authenticated,
+		dflowProof.isFetched,
+		dflowProof.isVerified,
+		dflowRpcEnabled,
+		positionsQuery.fetchStatus,
+		positionsQuery.isFetched,
+		positionsQuery.isPending,
+		positionsQuery.status,
+		solanaLinked,
+	]);
 
 	/**
 	 * Routing rules (mirrors how the rest of the Positions page interprets venues):

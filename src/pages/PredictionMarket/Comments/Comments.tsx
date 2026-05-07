@@ -7,7 +7,7 @@ import {
 	commentsService,
 	type UmbrellaComment,
 } from "@/services/api/commentsService";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { useAccountData } from "@/context/AccountDataContext";
 
 import "./Comment.scss";
 
@@ -100,53 +100,22 @@ function resolveTokenMeta(
 	return { label: option.label, side: option.side };
 }
 
-async function fetchProfileId(
-	getAccessToken: () => Promise<string | null>,
-	identityToken: string | null
-): Promise<string | null> {
-	const accessToken = await getAccessToken();
-	if (accessToken === null) {
-		return null;
-	}
-	if (identityToken === null) {
-		return null;
-	}
-	const requestUrl = `${getPredictionApiBaseUrl()}/profiles/me`;
-	const response = await fetch(requestUrl, {
-		headers: {
-			Authorization: `Bearer ${accessToken}`,
-			"Content-Type": "application/json",
-			"privy-id-token": identityToken,
-		},
-	});
-	if (!response.ok) {
-		return null;
-	}
-	const payload = await response.json();
-	if (payload === null || payload === undefined) {
-		return null;
-	}
-	if (payload.success !== true) {
-		return null;
-	}
-	const data = payload.data;
-	if (data === null || data === undefined) {
-		return null;
-	}
-	if (typeof data.id === "string" && data.id.length > 0) {
-		return data.id;
-	}
-	return null;
-}
-
 export function Comments({ umbrellaId, markets }: CommentsProps) {
 	const [comments, setComments] = useState<UmbrellaComment[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
-	const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
 	const [isDeleting, setIsDeleting] = useState<string | null>(null);
 	const { authenticated, getAccessToken, login } = usePrivy();
 	const { identityToken } = useIdentityToken();
+	const { profile: profileSlice } = useAccountData();
+	// Identifier used to determine which comments the current user can delete.
+	// The server returns both `id` (Mongoose virtual) and `_id` for the same
+	// document — we standardize on `_id` here since it matches the canonical
+	// `UserProfile._id` already in `AccountDataContext`.
+	const currentProfileId = authenticated
+		? (profileSlice.data?._id ?? null)
+		: null;
+	const currentIdentityToken = identityToken ?? null;
 
 	const tokenOptions = useMemo(() => buildTokenOptions(markets), [markets]);
 
@@ -171,39 +140,12 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 		loadComments();
 	}, [loadComments]);
 
-	useEffect(() => {
-		let cancelled = false;
-		async function resolveProfileId() {
-			if (!authenticated) {
-				setCurrentProfileId(null);
-				return;
-			}
-			if (typeof getAccessToken !== "function") {
-				return;
-			}
-			const identityForRequest = identityToken !== undefined ? identityToken : null;
-			const profileId = await fetchProfileId(getAccessToken, identityForRequest);
-			if (cancelled) {
-				return;
-			}
-			if (profileId !== null) {
-				setCurrentProfileId(profileId);
-			}
-		}
-		resolveProfileId();
-		return () => {
-			cancelled = true;
-		};
-	}, [authenticated, getAccessToken, identityToken]);
-
 	const handleCreated = useCallback<CreateResponseHandler>(
 		(newComment) => {
 			setComments((prev) => [newComment, ...prev]);
 		},
 		[]
 	);
-
-	const currentIdentityToken = identityToken ?? null;
 
 	const handleDeleted = useCallback(
 		async (commentId: string) => {
