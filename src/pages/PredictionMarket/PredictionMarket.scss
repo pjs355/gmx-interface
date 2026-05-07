@@ -88,6 +88,27 @@
 	align-items: stretch;
 }
 
+@media (min-width: 1101px) {
+	/*
+	 * Sticky rail: left column drives page scroll length; trade column stays
+	 * pinned under the app header instead of scrolling off with an equally
+	 * tall stretched grid cell.
+	 */
+	.prediction-market-page .desktop-layout > .right-panel {
+		border-left: 1px solid rgba(229, 231, 235, 0.22);
+		align-self: start;
+		position: sticky;
+		top: var(--app-header-height, 6.2rem);
+		/*
+		 * Match max-height: stretch the rail to the viewport under the header so
+		 * `.prediction-trade-column-underlay` (inset: 0 on the shell) frosts the
+		 * full column — not just the content band.
+		 */
+		min-height: calc(100vh - var(--app-header-height, 6.2rem));
+		overflow-y: hidden;
+	}
+}
+
 .left-panel {
 	display: flex;
 	flex-direction: column;
@@ -95,12 +116,7 @@
 	//gap: 16px;
 }
 
-/*
- * Host for `.prediction-trade-column-shell`.
- * Do not make this column its own scroll container: `overflow-y: auto` here
- * breaks viewport `position: sticky` on `.prediction-trade-column-body`.
- * Document scroll + sticky inner body handle the trade rail (see `PredictionMarketTradeBox.scss`).
- */
+/* Host for `.prediction-trade-column-shell` — umbrella/home desktop rail scroll lives on `.prediction-trade-column-body`; outer `.right-panel` keeps overflow hidden so the underlay fills the full-height sticky column. */
 .right-panel {
 	position: relative;
 	display: flex;

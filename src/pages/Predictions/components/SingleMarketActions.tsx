@@ -26,6 +26,9 @@ interface SingleMarketActionsProps {
 	compact?: boolean;
 	yesLogoSlot?: React.ReactNode;
 	noLogoSlot?: React.ReactNode;
+	/** Match-winner vs row: odds bar uses white fill when logo uses CSS invert on dark BG */
+	yesInvertLogo?: boolean;
+	noInvertLogo?: boolean;
 }
 
 export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
@@ -39,6 +42,8 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	compact = false,
 	yesLogoSlot,
 	noLogoSlot,
+	yesInvertLogo = false,
+	noInvertLogo = false,
 }) => {
 	const { formatPrice } = useOddsDisplay();
 	const lookupKey = question?.questionId ?? question?._id;
@@ -198,8 +203,16 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	if (compact) {
 		const yesBarPct = oddsBarPercent(yesPrice);
 		const noBarPct = oddsBarPercent(noPrice);
-		const yesBarColor = isVsSingle ? yesColor : "#22c55e";
-		const noBarColor = isVsSingle ? noColor : "#ef4444";
+		const yesBarColor = isVsSingle
+			? yesInvertLogo
+				? "#ffffff"
+				: yesColor
+			: "#22c55e";
+		const noBarColor = isVsSingle
+			? noInvertLogo
+				? "#ffffff"
+				: noColor
+			: "#ef4444";
 
 		return (
 			<div className="single-market-actions single-market-actions--compact">

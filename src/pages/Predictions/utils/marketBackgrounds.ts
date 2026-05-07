@@ -1,4 +1,4 @@
-import cs2BgRaw from "@/assets/market-backgrounds/cs2.jpg";
+import cs2Background from "@/assets/market-backgrounds/cs2.jpg";
 import {
 	LIVE_PILL_ID,
 	normalizeTagLabel,
@@ -10,16 +10,16 @@ import {
  * without a dedicated image (Live, Starting Soon, “all”, unmapped tags).
  * Replace or extend {@link MARKET_BACKGROUND_BY_NORMALIZED_TAG} as you add games.
  */
-const DEFAULT_MARKET_BACKGROUND: string = cs2BgRaw;
+const DEFAULT_MARKET_BACKGROUND: string = cs2Background;
 
 /**
  * Resolved URLs keyed by {@link normalizeTagLabel} output for the tag pill label.
  * Add an entry whenever a game should show a dedicated backdrop image.
  */
 const MARKET_BACKGROUND_BY_NORMALIZED_TAG: Record<string, string> = {
-	CS2: cs2BgRaw,
-	CS_2: cs2BgRaw,
-	COUNTER_STRIKE_2: cs2BgRaw,
+	CS2: cs2Background,
+	CS_2: cs2Background,
+	COUNTER_STRIKE_2: cs2Background,
 };
 
 /**

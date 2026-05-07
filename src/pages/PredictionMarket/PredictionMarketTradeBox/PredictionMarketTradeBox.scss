@@ -1842,14 +1842,13 @@ html.curtain-open {
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		flex: 1 1 auto;
+		/* Fill `.right-panel` so the underlay covers the full sticky rail. */
+		flex: 1 1 0;
 		align-self: stretch;
 		min-height: 0;
 		width: 100%;
 		box-sizing: border-box;
 		background: transparent;
-		margin-bottom: 0;
-		border-left: 1px solid rgba(229, 231, 235, 0.22);
 	}
 
 	.prediction-trade-column-underlay {
@@ -1861,15 +1860,13 @@ html.curtain-open {
 	}
 
 	.prediction-trade-column-body {
-		position: sticky;
-		top: var(--app-header-height, 6.2rem);
+		position: relative;
 		z-index: 1;
 		display: flex;
 		flex-direction: column;
-		flex: 1 1 auto;
+		flex: 1 1 0;
 		min-height: 0;
 		align-self: stretch;
-		max-height: calc(100vh - var(--app-header-height, 6.2rem));
 		overflow-y: auto;
 		overflow-x: hidden;
 		overscroll-behavior-y: contain;
