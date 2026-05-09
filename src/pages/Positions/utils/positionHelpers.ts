@@ -4,6 +4,7 @@ import {
 	type ProcessedOrder,
 	type OrderAggregates,
 	getFinalAmount,
+	normalizeOrderQuestionIdKey,
 } from "@/services/api/simplifiedOrderService";
 import type {
 	VenueHistoryFill,
@@ -11,7 +12,9 @@ import type {
 	VenuePosition,
 } from "@/types/trading/venuePosition";
 import { venueDisplayLabel } from "@/types/trading/venuePosition";
-import { inferVenueHistoryYesNoSide } from "@/pages/Positions/utils/historyOutcomeWinner";
+import {
+	inferVenueHistoryYesNoSide,
+} from "@/pages/Positions/utils/historyOutcomeWinner";
 
 export type MarketPosition = {
 	market: PredictionMarket;
@@ -74,6 +77,11 @@ function dflowSyntheticPositionBucket(pos: VenuePosition): "Yes" | "No" {
 function syntheticOrderPositionFromVenue(pos: VenuePosition): "Yes" | "No" {
 	if (pos.venue === "dflow") return dflowSyntheticPositionBucket(pos);
 	return inferVenueHistoryYesNoSide(pos.marketTitle, pos.outcome);
+}
+
+/** History merged rows: same bucket rule as venue synthetic orders (DFlow uses catalog Yes/No). */
+export function historyVenueRowPortfolioYesNoSide(pos: VenuePosition): "Yes" | "No" {
+	return syntheticOrderPositionFromVenue(pos);
 }
 
 /**
@@ -392,8 +400,12 @@ export function getTradeCount(
 	marketId: string,
 	position?: "Yes" | "No",
 ): number {
+	const want = normalizeOrderQuestionIdKey(marketId);
 	return orders.filter((order) => {
-		if (order.questionId !== marketId || !order.filled) return false;
+		if (!order.filled) return false;
+		if (normalizeOrderQuestionIdKey(String(order.questionId ?? "")) !== want) {
+			return false;
+		}
 		if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
 		return true;
 	}).length;

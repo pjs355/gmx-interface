@@ -125,6 +125,12 @@ export interface VenuePosition {
 	 * but pays out 0 pUSD and the row vanishes from Winnings (silent claim bug).
 	 */
 	isNegRisk?: boolean;
+	/**
+	 * Limitless `market.group.negRiskMarketId` — parent condition id for NegRisk
+	 * group legs. Claim uses Limitless Base NegRisk adapter + this parent while
+	 * balances are read for the leg outcome `tokenId`.
+	 */
+	negRiskParentConditionId?: string;
 }
 
 /**

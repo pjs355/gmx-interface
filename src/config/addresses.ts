@@ -61,6 +61,24 @@ export function getFeeModuleAddress(): string {
 	return getAddresses().FEE_MODULE_ADDRESS;
 }
 
+// =============================================================================
+// LIMITLESS (Base mainnet) — not the same as LevelUp `CTF_ADDRESS` on Base.
+// Outcome ERC1155 + settlement for Limitless venue markets live here.
+// =============================================================================
+const LIMITLESS_BASE_MAINNET_CTF =
+	"0xC9c98965297Bc527861c898329Ee280632B76e18" as const;
+/** NegRisk adapter v3 on Base — `redeemPositions(bytes32,uint256[])` for group markets. */
+const LIMITLESS_BASE_MAINNET_NEG_RISK_ADAPTER_V3 =
+	"0x6151EF8368b6316c1aa3C68453EF083ad31E712D" as const;
+
+export function getLimitlessBaseCtfAddress(): string {
+	return LIMITLESS_BASE_MAINNET_CTF;
+}
+
+export function getLimitlessBaseNegRiskAdapterAddress(): string {
+	return LIMITLESS_BASE_MAINNET_NEG_RISK_ADAPTER_V3;
+}
+
 // Legacy exports for backward compatibility
 // IMPORTANT: Since environment is now locked to production for deployed sites,
 // these const values are safe. They're evaluated once at module load, but

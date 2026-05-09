@@ -3,10 +3,12 @@ import { useEffect, useMemo, useRef } from "react";
 import { type Umbrella } from "@/services/api/umbrellaDataService";
 import { getPrivateApiBaseUrl } from "@/config/privateApiBase";
 import {
+	buildDflowPortfolioColumnMapFromCatalog,
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
 	lookupUmbrellaByDflowEventTicker,
 } from "@/trading/dflow/dflowUmbrellaLookup";
+import { patchDflowVenuePositionOutcomes } from "@/trading/dflow/dflowPositionsApi";
 import {
 	buildUmbrellaLookupByPolymarketConditionId,
 	polymarketConditionIdForResolveWire,
@@ -474,7 +476,7 @@ export function useHistoryResolve(
 			});
 		}
 
-		return rows.map((item) => {
+		const mappedRows = rows.map((item) => {
 			if (item.venue === "polymarket" && item.conditionId?.trim()) {
 				const wire = polymarketConditionIdForResolveWire(item.conditionId);
 				const key = wire ? polymarketConditionLookupKey(wire) : "";
@@ -586,6 +588,20 @@ export function useHistoryResolve(
 				return { ...item, ...idPatch };
 			}
 			return item;
+		});
+
+		const catalogColumnMap =
+			buildDflowPortfolioColumnMapFromCatalog(historyCatalogUmbrellas);
+		const outcomeMintToUmbrella = buildUmbrellaLookupByDflowOutcomeMint(
+			historyCatalogUmbrellas,
+		);
+		const eventTickerLookup = buildUmbrellaLookupByDflowEventTicker(
+			historyCatalogUmbrellas,
+		);
+		return patchDflowVenuePositionOutcomes(mappedRows, catalogColumnMap, {
+			outcomeMintToUmbrella,
+			eventTickerLookup,
+			umbrellasForEventLookup: historyCatalogUmbrellas,
 		});
 	}, [
 		venueHistoryRawItems,

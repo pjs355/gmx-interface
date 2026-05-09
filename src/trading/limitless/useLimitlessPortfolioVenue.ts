@@ -81,6 +81,11 @@ function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 		redeemable,
 		marketStatus: status || undefined,
 	};
+	const negParent = str(o.negRiskParentConditionId);
+	if (negParent) {
+		posOut.negRiskParentConditionId = negParent;
+		posOut.isNegRisk = true;
+	}
 	if (typeof o.marketClosed === "boolean") {
 		posOut.marketClosed = o.marketClosed;
 	}
@@ -444,6 +449,10 @@ export function useLimitlessVenuePositions(enabled: boolean) {
 				if (isLimitlessRouteUnavailable(e)) {
 					return [];
 				}
+				const msg = e instanceof Error ? e.message : String(e);
+				debugLimitlessPortfolio("GET portfolio/positions-venue request failed", {
+					message: msg,
+				});
 				throw e;
 			}
 			if (!Array.isArray(raw)) return [];

@@ -338,6 +338,14 @@ export function useResolvedUmbrellaPositions({
 										polyWinLabels.noTeamLabel,
 									)
 								: null;
+						const lxNegParent = (
+							venue === "limitless"
+								? String(pv.negRiskParentConditionId ?? "").trim()
+								: ""
+						).trim();
+						const lxIsNegRisk =
+							venue === "limitless" &&
+							(pv.isNegRisk === true || Boolean(lxNegParent));
 						const isYes =
 							venue === "limitless"
 								? pv.outcome.trim().toLowerCase() === "yes"
@@ -385,24 +393,39 @@ export function useResolvedUmbrellaPositions({
 						venue === "polymarket" ? pv.tokenId : undefined;
 					const polyIsNegRisk =
 						venue === "polymarket" ? pv.isNegRisk === true : undefined;
+					const limitlessConditionForClaim =
+						venue === "limitless" && lxIsNegRisk && lxNegParent
+							? lxNegParent
+							: pv.conditionId;
 					return {
 						market: {
 							_id: `${idPrefix}-${pv.tokenId.slice(0, 12)}`,
 							displayName: blockMarketTitle,
 							questionId: pv.conditionId ?? pv.tokenId,
-							conditionId: pv.conditionId,
+							conditionId: limitlessConditionForClaim,
 							resolvedOutcome: isYes ? "yes" : "no",
 							_venue: venue,
 							_isNegRisk:
 								venue === "polymarket"
 									? polyIsNegRisk ?? false
-									: mDetail?.isNegRisk ?? false,
+									: venue === "limitless"
+										? lxIsNegRisk
+										: mDetail?.isNegRisk ?? false,
 							_isYieldBearing: mDetail?.isYieldBearing ?? false,
 							...(dflowRedeemShares != null
 								? { _dflowRedeemShares: dflowRedeemShares }
 								: {}),
 							...(polyAssetTokenId != null
 								? { _polyAssetTokenId: polyAssetTokenId }
+								: {}),
+							...(venue === "limitless" && pv.tokenId
+								? { _limitlessOutcomeTokenId: pv.tokenId }
+								: {}),
+							...(venue === "limitless" &&
+							lxIsNegRisk &&
+							lxNegParent &&
+							pv.conditionId
+								? { _limitlessLegConditionId: pv.conditionId }
 								: {}),
 						} as unknown as PredictionMarket,
 							yesBalance: isYes ? pv.shares : 0,

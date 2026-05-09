@@ -207,6 +207,11 @@ export interface UseSorRouteInput {
 	limitPriceCents?: number;
 	limitlessMakerBaseUsdc?: number;
 	limitlessFeeRateBps?: number;
+	/**
+	 * When true, abort in-flight route requests, skip debounced refetch and the 3s
+	 * poll so omnibus / venue previews cannot change (e.g. during SOR execution).
+	 */
+	suspendBackgroundRefetch?: boolean;
 }
 
 /**
@@ -265,6 +270,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		limitPriceCents,
 		limitlessMakerBaseUsdc,
 		limitlessFeeRateBps,
+		suspendBackgroundRefetch = false,
 	} = input;
 
 	/**
@@ -761,6 +767,12 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	}, []);
 
 	useEffect(() => {
+		if (!suspendBackgroundRefetch) return;
+		displayAbortRef.current?.abort();
+		executionAbortRef.current?.abort();
+	}, [suspendBackgroundRefetch]);
+
+	useEffect(() => {
 		if (!canFetch) {
 			blankAll();
 			return;
@@ -828,6 +840,12 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			blankExecutionOnly();
 		}
 
+		if (suspendBackgroundRefetch) {
+			return () => {
+				if (debounceRef.current) clearTimeout(debounceRef.current);
+			};
+		}
+
 		setDisplayStale(true);
 		setExecutionStale(true);
 
@@ -847,6 +865,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		};
 	}, [
 		canFetch,
+		suspendBackgroundRefetch,
 		questionId,
 		outcome,
 		side,
@@ -878,6 +897,13 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	useEffect(() => {
 		if (!canFetch) return;
 		if (!hasAnyRoute) return;
+		if (suspendBackgroundRefetch) {
+			if (refreshRef.current) {
+				clearInterval(refreshRef.current);
+				refreshRef.current = null;
+			}
+			return;
+		}
 
 		const clearPolling = () => {
 			if (refreshRef.current) {
@@ -935,7 +961,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			document.removeEventListener("visibilitychange", handleVisibility);
 			window.removeEventListener("focus", resumeNow);
 		};
-	}, [canFetch, hasAnyRoute, orderType, targetVenue]);
+	}, [canFetch, hasAnyRoute, orderType, targetVenue, suspendBackgroundRefetch]);
 
 	useEffect(() => {
 		return () => {
@@ -947,10 +973,11 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	}, []);
 
 	const refresh = useCallback(() => {
+		if (suspendBackgroundRefetch) return;
 		setDisplayStale(true);
 		setExecutionStale(true);
 		fireChannelsRef.current();
-	}, []);
+	}, [suspendBackgroundRefetch]);
 
 	return {
 		displayRoute,

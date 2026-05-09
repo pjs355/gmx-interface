@@ -1,4 +1,5 @@
 import type { VenuePosition } from "@/types/trading/venuePosition";
+import { normalizeOrderQuestionIdKey } from "@/services/api/simplifiedOrderService";
 
 export type UnifiedHistoryBlockLike = {
 	luMarkets: Array<{ market: { _id?: string; questionId?: string; marketId?: string } }>;
@@ -36,8 +37,10 @@ export function blockLatestActivityMs(
 	for (const { market } of block.luMarkets) {
 		const qid = marketQuestionId(market);
 		if (!qid) continue;
+		const want = normalizeOrderQuestionIdKey(qid);
 		for (const o of orders) {
-			if (!o.filled || o.questionId !== qid) continue;
+			if (!o.filled) continue;
+			if (normalizeOrderQuestionIdKey(String(o.questionId ?? "")) !== want) continue;
 			const raw = o.filledAt || o.createdAt;
 			if (!raw) continue;
 			const t = new Date(raw).getTime();

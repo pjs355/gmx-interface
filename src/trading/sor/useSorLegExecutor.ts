@@ -79,6 +79,11 @@ const SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS = 210_000;
 /** ~15 × 4s ≈ 60s of idle wait between polls, plus ~15 status calls (outer bridge timeout still applies). */
 const SOR_LIFI_PREFUND_POLL = { maxAttempts: 15, intervalMs: 4_000 } as const;
 
+/** Limitless SDK `calculateFOKAmounts` rejects `makerAmount` when `.toString()` has more than 6 fractional digits. */
+function roundLimitlessFokMakerAmountHuman(n: number): number {
+	return Number(n.toFixed(6));
+}
+
 /** Same-chain Base USDC `transfer` (SCW → Limitless maker); much shorter than LiFi legs. */
 const SOR_BASE_USDC_TRANSFER_TIMEOUT_MS = 120_000;
 
@@ -1214,7 +1219,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								orderType: "FOK",
 								tokenId,
 								side: "BUY",
-								makerAmount: limitlessBuyMakerUsd,
+								makerAmount: roundLimitlessFokMakerAmountHuman(limitlessBuyMakerUsd),
 								feeRateBps,
 							});
 						} else {
@@ -1223,7 +1228,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								orderType: "FOK",
 								tokenId,
 								side: "SELL",
-								makerAmount: leg.shares,
+								makerAmount: roundLimitlessFokMakerAmountHuman(leg.shares),
 								feeRateBps,
 							});
 						}

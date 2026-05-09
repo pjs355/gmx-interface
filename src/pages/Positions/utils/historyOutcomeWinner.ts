@@ -82,13 +82,23 @@ export function winnerLabelFromLevelUpTitle(
 	return r === "yes" ? "Yes" : "No";
 }
 
+export type WinnerLabelFromVenuePositionOptions = {
+	/** When `marketTitle` omits "A vs B", try parsing teams from umbrella / header text. */
+	vsTitleHint?: string | null;
+};
+
 /** External venue resolved row: who actually won the match/event. */
-export function winnerLabelFromVenuePosition(pos: {
-	marketTitle: string;
-	outcome: string;
-	outcomeResult?: "WON" | "LOST" | null;
-}): string {
-	const pair = parseVsTeamsFromTitle(pos.marketTitle);
+export function winnerLabelFromVenuePosition(
+	pos: {
+		marketTitle: string;
+		outcome: string;
+		outcomeResult?: "WON" | "LOST" | null;
+	},
+	opts?: WinnerLabelFromVenuePositionOptions,
+): string {
+	const pair =
+		parseVsTeamsFromTitle(pos.marketTitle) ??
+		(opts?.vsTitleHint ? parseVsTeamsFromTitle(opts.vsTitleHint) : null);
 	const hasResult = pos.outcomeResult === "WON" || pos.outcomeResult === "LOST";
 	const isWon = pos.outcomeResult === "WON";
 	const o = (pos.outcome || "").trim();

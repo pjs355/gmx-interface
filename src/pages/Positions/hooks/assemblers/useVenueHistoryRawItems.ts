@@ -14,6 +14,7 @@ import type { PredictMatchEventRow } from "@/trading/predict/predictMatchesApi";
 import type { VenueHistoryFill } from "@/types/trading/venuePosition";
 import type { computePredictCostByToken } from "@/trading/predict/predictOrdersApi";
 import { predictFilledOrdersToVenueHistoryRows } from "../venues/predict/predictHistoryRows";
+import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
 
 export type UseVenueHistoryRawItemsArgs = {
 	predictPositions: VenuePosition[];
@@ -237,6 +238,19 @@ export function useVenueHistoryRawItems({
 			seen.add(p.tokenId);
 			items.push(p);
 		}
+
+		let limitlessRowsInMerged = 0;
+		for (const it of items) {
+			if (it.venue === "limitless") limitlessRowsInMerged++;
+		}
+		debugLimitlessPortfolio("useVenueHistoryRawItems merged snapshot", {
+			limitlessTradesInputCount: limitlessTradesArr.length,
+			limitlessOpenPositionsCount: limitlessPositions.length,
+			limitlessWinningsCount: limitlessWinnings.length,
+			limitlessHistoryCount: limitlessHistory.length,
+			limitlessRowsInMergedItems: limitlessRowsInMerged,
+			totalMergedItems: items.length,
+		});
 
 		return items;
 	}, [

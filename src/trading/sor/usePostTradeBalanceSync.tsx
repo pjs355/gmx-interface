@@ -14,8 +14,11 @@ import {
 } from "@/context/CollateralTokenContext";
 import type { CollateralChainKey } from "@/trading/sor/fundingStableBalances";
 import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
-import { LIMITLESS_QUERY_ROOT } from "@/trading/limitless/limitlessQueryKeys";
-import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
+import {
+	LIMITLESS_QUERY_ROOT,
+	limitlessQueryKeys,
+} from "@/trading/limitless/limitlessQueryKeys";
+import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
 import type { FundingStableBalancesHuman } from "./fundingStableBalances";
 import type { RouteExecution, RoutePlan } from "./sor-types";
 import {
@@ -277,6 +280,9 @@ async function refetchForPending(
 		tasks.push(
 			queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] }),
 		);
+		debugLimitlessPortfolio("postTradeSync: invalidated LIMITLESS_QUERY_ROOT", {
+			queryKey: [...LIMITLESS_QUERY_ROOT],
+		});
 	}
 	if (cashPending) {
 		tasks.push(

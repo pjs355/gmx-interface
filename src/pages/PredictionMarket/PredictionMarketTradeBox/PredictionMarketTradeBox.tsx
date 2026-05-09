@@ -120,6 +120,7 @@ import {
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
+import { hasLevelUpCrossVenueOrderbook } from "@/trading/levelUp/levelUpCrossVenueBookPresence";
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
@@ -278,14 +279,20 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }, [oddsAppState?.markets, pandaId, propUmbrellaId, limitlessMappingFromUmbrella]);
 
   const matchedVenues = useMemo(() => {
-    const set = new Set<string>(["levelup"]);
+    const set = new Set<string>();
+    if (
+      !multiVenueEnabled ||
+      hasLevelUpCrossVenueOrderbook(matchedMonitor ?? null, levelUpOrderbook)
+    ) {
+      set.add("levelup");
+    }
     if (!matchedMonitor) return set;
     if (matchedMonitor.polyConditionId || matchedMonitor.polyTokenIdA) set.add("polymarket");
     if (matchedMonitor.dflow || matchedMonitor.kalshi) set.add("dflow");
     if (matchedMonitor.predictFun) set.add("predictfun");
     if (matchedMonitor.limitless) set.add("limitless");
     return set;
-  }, [matchedMonitor]);
+  }, [multiVenueEnabled, matchedMonitor, levelUpOrderbook]);
 
   /** Mirrors `PredictionMarketTradeBoxUI` smart-routing strip: pandascore link + 2+ tradeable venues → "All Markets" row. */
   const smartRoutingSurfaceActive = useMemo(
@@ -301,9 +308,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       hasMatchedMonitor: Boolean(matchedMonitor),
       matchedVenues: list,
       note:
-        "Venue list is derived from OddsMonitor MatchedMarket (venue-prices WS / matched-markets), not from all-books-preview. LevelUp is always included.",
+        "Venue list: OddsMonitor MatchedMarket + REST orderbook prop. On pandascore pages LevelUp is included only when cross-venue book presence matches VenueOrderbooksPanel (resting depth / REST ladder rule).",
     });
-  }, [pandaId, matchedMonitor, matchedVenues]);
+  }, [pandaId, matchedMonitor, matchedVenues, levelUpOrderbook]);
 
   const dflowLink = useMemo(
     () => (matchedMonitor ? getDflowKalshiMonitorLink(matchedMonitor) : undefined),
@@ -589,9 +596,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           yesTeamLabel,
           noTeamLabel,
         );
-        const wsSnap = monitorBookToOrderbookSnapshot(raw, {
-          includeBboSyntheticLevels: true,
-        });
+        const wsSnap = monitorBookToOrderbookSnapshot(raw);
         if (wsSnap) return wsSnap;
       }
       return levelUpOrderbook;
@@ -1843,6 +1848,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     reportExecutionPhaseRef: sorReportExecutionPhaseRef,
   });
 
+  const sorExecution = useSorExecution({
+    executeLeg: sorExecutor.executeLeg,
+    executeBridge: sorExecutor.executeBridge,
+    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
+  });
+
   /**
    * Single source with `CollateralTokenContext` — do not use `useBridgeFundingBalances`
    * gated on `multiVenueEnabled` here. Predict (and other single-tab) flows still need
@@ -2037,6 +2048,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     targetVenue: sorTargetVenue,
     orderType: state.orderType,
     limitPriceCents: sorLimitPriceCents,
+    suspendBackgroundRefetch:
+      sorExecution.isExecuting || state.isLoading,
   });
 
   /** True when `executionRoute` has no usable legs but `displayRoute` (omnibus) still does. */
@@ -2095,12 +2108,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   // On a venue tab this is usually the targeted `executionRoute`, but we may sign the
   // omnibus plan when the targeted channel fails while omnibus still has legs (see above).
   sorRouteRef.current = executableRoute;
-
-  const sorExecution = useSorExecution({
-    executeLeg: sorExecutor.executeLeg,
-    executeBridge: sorExecutor.executeBridge,
-    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
-  });
 
   const venueSelectionLocked =
     sorExecution.isExecuting || state.isLoading;
@@ -2199,14 +2206,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const handleSorExecute = useCallback(() => {
     if (executableRoute && !sorRouteExpired) {
       console.log("[SOR] Trade button → execute", executableRoute.routeId);
-      // Capture before SOR kicks off so the post-submit "creating market"
-      // notice survives a fast post-trade refresh that flips
-      // `accountsInitialized*` to true once the first mint settles.
-      const executingDflow = executableRoute.legs[0]?.venue === "dflow";
-      const dflowAnyUninit =
-        matchedMonitor?.dflow?.accountsInitializedA === false ||
-        matchedMonitor?.dflow?.accountsInitializedB === false;
-      setDflowUninitAtSubmit(executingDflow && dflowAnyUninit);
+      // Kalshi/DFlow: each outcome has its own `accountsInitialized*` flag. Only show
+      // the "creating this market" notice when the leg(s) we execute still report
+      // `false` for that outcome — not when the other team's leg is uninitialized.
+      const dflowLink = matchedMonitor?.dflow;
+      const dflowExecutedLegNeedsMarketInit =
+        Boolean(dflowLink) &&
+        executableRoute.legs.some((leg) => {
+          if (leg.venue !== "dflow" || !dflowLink) return false;
+          const initialized =
+            leg.outcome === "A"
+              ? dflowLink.accountsInitializedA
+              : dflowLink.accountsInitializedB;
+          return initialized === false;
+        });
+      setDflowUninitAtSubmit(dflowExecutedLegNeedsMarketInit);
       const marketId = sorQuestionId as string | undefined;
       const baseline = capturePostTradeBaseline({
         queryClient,

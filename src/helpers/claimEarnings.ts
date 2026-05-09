@@ -12,7 +12,14 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { AddressesByChainId, ChainId, OrderBuilder } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { getCTFAddress, getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
+import {
+	getCTFAddress,
+	getLimitlessBaseCtfAddress,
+	getLimitlessBaseNegRiskAdapterAddress,
+	getUSDCAddress,
+	SOLANA_USDC_MINT,
+} from "@/config/addresses";
+import { DEFAULT_RPC_URL } from "@/config/rpc";
 import {
 	POLYGON_CTF,
 	POLYGON_NEG_RISK_ADAPTER,
@@ -67,6 +74,20 @@ const CTF_READ_ABI = [
 	"function getPositionId(address collateralToken, bytes32 collectionId) view returns (uint256)",
 	"function balanceOf(address account, uint256 id) view returns (uint256)",
 ] as const;
+
+const LIMITLESS_CTF_READ_ABI = [
+	...CTF_READ_ABI,
+	"function payoutDenominator(bytes32 conditionId) view returns (uint256)",
+] as const;
+
+function normalizeBytes32ConditionId(raw: string): `0x${string}` {
+	const t = raw.trim().toLowerCase();
+	const h = (t.startsWith("0x") ? t : `0x${t}`) as `0x${string}`;
+	if (h.length !== 66 || !/^0x[0-9a-f]{64}$/.test(h)) {
+		throw new Error("Invalid condition id (expected 32-byte hex)");
+	}
+	return h;
+}
 
 /**
  * ERC1155 outcome balance for a resolved binary market (used for NegRisk
@@ -205,7 +226,12 @@ function polymarketCtfRedeemCollateralOrder(
 	return [pusd, usdce];
 }
 
-type MarketVenue = "levelup" | "polymarket" | "predictfun" | "dflow";
+type MarketVenue =
+	| "levelup"
+	| "polymarket"
+	| "predictfun"
+	| "dflow"
+	| "limitless";
 
 // Legacy hook for backward compatibility (hardcoded market)
 export function useClaimEarnings() {
@@ -283,6 +309,7 @@ export function useClaimEarnings() {
  *   - polymarket:  Polygon CTF via Polymarket Safe relay
  *   - predictfun:  BNB CTF via embedded wallet switched to BSC
  *   - dflow:       Solana — Kalshi/DFlow trade API (sell winning outcome mint → USDC), same as SOR sell leg
+ *   - limitless:   Base — Limitless CTF / NegRisk adapter (not LevelUp `getCTFAddress()` on Base)
  */
 export function useClaimForVenue(
 	market: PredictionMarket,
@@ -349,6 +376,8 @@ export function useClaimForVenue(
 				hash = await redeemPredict();
 			} else if (venue === "dflow") {
 				hash = await redeemDflow();
+			} else if (venue === "limitless") {
+				hash = await redeemLimitless();
 			} else {
 				hash = await redeemLevelUp();
 			}
@@ -769,6 +798,119 @@ export function useClaimForVenue(
 
 			const tx = await signer.sendTransaction({
 				to: getContracts().CTF,
+				data: redeemData,
+				value: 0,
+			});
+			await tx.wait();
+			return tx.hash;
+		}
+
+		async function redeemLimitless(): Promise<string> {
+			const m = market as PredictionMarket & {
+				_limitlessOutcomeTokenId?: string;
+			};
+			const limitlessCtf = getLimitlessBaseCtfAddress();
+			const collateral = getUSDCAddress();
+			const cidHex = normalizeBytes32ConditionId(market.conditionId!);
+			const provider = new ethers.JsonRpcProvider(DEFAULT_RPC_URL);
+			const read = new ethers.Contract(
+				limitlessCtf,
+				LIMITLESS_CTF_READ_ABI,
+				provider,
+			);
+			const payoutDenom = (await read.payoutDenominator(cidHex)) as bigint;
+			if (payoutDenom === 0n) {
+				throw new Error(
+					"This market is resolved in the app, but the on-chain payout is not available on Limitless yet. Try again later or redeem on limitless.exchange.",
+				);
+			}
+			const holder = account!.trim();
+			if (isNegRisk) {
+				const tokenIdStr = String(m._limitlessOutcomeTokenId ?? "").trim();
+				if (!tokenIdStr) {
+					throw new Error(
+						"Limitless NegRisk claim missing outcome token id — refresh and try again",
+					);
+				}
+				const tokenId = BigInt(tokenIdStr);
+				const bal = (await read.balanceOf(holder, tokenId)) as bigint;
+				if (bal <= 0n) {
+					throw new Error(
+						"No redeemable Limitless outcome tokens in this wallet for this market",
+					);
+				}
+				const amounts: [bigint, bigint] =
+					resolvedOutcome === "yes" ? [bal, 0n] : [0n, bal];
+				const nrIface = new ethers.Interface(NEG_RISK_ADAPTER_ABI);
+				const redeemData = nrIface.encodeFunctionData("redeemPositions", [
+					cidHex,
+					amounts,
+				]);
+				const adapter = getLimitlessBaseNegRiskAdapterAddress();
+				claimDev("limitless NegRisk adapter redeem on Base", {
+					conditionId: cidHex,
+					resolvedOutcome,
+					balanceWei: bal.toString(),
+					adapter,
+					hasSmartWallet,
+				});
+				if (hasSmartWallet) {
+					const smartWalletClient = await getClientForChain({
+						id: BASE_CHAIN_ID,
+					});
+					if (!smartWalletClient) {
+						throw new Error(
+							"No smart wallet client available for Base chain",
+						);
+					}
+					return await smartWalletClient.sendTransaction({
+						to: adapter as `0x${string}`,
+						data: redeemData as `0x${string}`,
+						value: 0n,
+					});
+				}
+				if (!signer) throw new Error("No signer available");
+				const tx = await signer.sendTransaction({
+					to: adapter,
+					data: redeemData,
+					value: 0,
+				});
+				await tx.wait();
+				return tx.hash;
+			}
+			const indexSet =
+				resolvedOutcome === "yes" ? YES_INDEX_SET : NO_INDEX_SET;
+			const redeemData = iface.encodeFunctionData("redeemPositions", [
+				collateral,
+				ethers.ZeroHash,
+				cidHex,
+				[indexSet],
+			]);
+			claimDev("limitless CTF redeem on Base", {
+				conditionId: cidHex,
+				limitlessCtf,
+				indexSet,
+				resolvedOutcome,
+				hasSmartWallet,
+			});
+			if (hasSmartWallet) {
+				const smartWalletClient = await getClientForChain({
+					id: BASE_CHAIN_ID,
+				});
+				if (!smartWalletClient) {
+					throw new Error(
+						"No smart wallet client available for Base chain",
+					);
+				}
+				return await smartWalletClient.sendTransaction({
+					to: limitlessCtf as `0x${string}`,
+					data: redeemData as `0x${string}`,
+					value: 0n,
+				});
+			}
+			if (!signer) throw new Error("No signer available");
+			const tx = await signer.sendTransaction({
+				to: limitlessCtf,
 				data: redeemData,
 				value: 0,
 			});

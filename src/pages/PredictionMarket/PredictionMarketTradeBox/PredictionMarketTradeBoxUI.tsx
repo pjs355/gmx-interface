@@ -55,6 +55,10 @@ import QuoteMetricSkeleton from "./QuoteMetricSkeleton";
 import OddsFormatMenu from "@/components/OddsFormatMenu/OddsFormatMenu";
 import { FlashingValue } from "@/utils/FlashingValue";
 import { usePortfolio } from "@/context/PortfolioContext";
+import {
+	dflowKalshiOutcomeDisplayPrices,
+	hasDflowKalshiMonitorLink,
+} from "@/trading/dflow/monitorDflowBooks";
 
 const BET_VALUE_CLASS = "bet-size-value";
 const BET_VALUE_FLASH_CLASS = "bet-size-value--flash";
@@ -274,6 +278,28 @@ export default function PredictionMarketTradeBoxUI({
 
   const { bestBid, bestAsk } = calculateOrderbookPrices(orderbook || null);
 
+  const { yesTeamLabel, noTeamLabel } = useMemo(
+    () => getYesNoTeamLabels(market, umbrellaDisplayName),
+    [market, umbrellaDisplayName],
+  );
+
+  /** Kalshi/DFlow: two outcome-native YES books — do not derive both buttons via 1−p on one book. */
+  const dflowOutcomeDisplayPrices = useMemo(() => {
+    if (
+      tradingVenue !== "dflow" ||
+      !matchedMonitor ||
+      !hasDflowKalshiMonitorLink(matchedMonitor)
+    ) {
+      return null;
+    }
+    return dflowKalshiOutcomeDisplayPrices(
+      matchedMonitor,
+      yesTeamLabel,
+      noTeamLabel,
+      side,
+    );
+  }, [tradingVenue, matchedMonitor, yesTeamLabel, noTeamLabel, side]);
+
   const venueDropdownOptions = useMemo(() => {
     const all: { value: string; label: string }[] = [
       { value: "levelup", label: "LevelUp" },
@@ -283,7 +309,7 @@ export default function PredictionMarketTradeBoxUI({
       { value: "dflow", label: "Kalshi" },
     ];
     const venues = matchedVenues
-      ? all.filter((v) => v.value === "levelup" || matchedVenues.has(v.value))
+      ? all.filter((v) => matchedVenues.has(v.value))
       : all;
     if (pandascoreMatchId && venues.length > 1) {
       venues.unshift({ value: "all", label: "All Markets" });
@@ -342,15 +368,12 @@ export default function PredictionMarketTradeBoxUI({
     return formattedInteger;
   };
 
-  // For polymarket/dflow the effective orderbook is the *selected* outcome's native
-  // book.  When the user selects NO, bestAsk/bestBid come from the NO book, so we
-  // must swap the display formulas: the NO button shows the book directly while the
-  // YES button shows the 1−p complement.  LevelUp always uses a single YES book.
-  // Predict uses separate per-outcome monitor hints so no complement is needed.
+  // Polymarket/Limitless: selected outcome's native book; when NO is selected that
+  // book is the NO token, so swap formulas (NO direct, YES via 1−p). Kalshi/DFlow
+  // uses two YES books (A/B) — both buttons use `dflowOutcomeDisplayPrices`. LevelUp:
+  // single YES book. Predict: per-outcome hints.
   const bookRepresentsNo =
-    (tradingVenue === "polymarket" ||
-      tradingVenue === "dflow" ||
-      tradingVenue === "limitless") &&
+    (tradingVenue === "polymarket" || tradingVenue === "limitless") &&
     selectedPosition === "no";
 
   const yesPrice =
@@ -363,13 +386,15 @@ export default function PredictionMarketTradeBoxUI({
         ? side === "buy"
           ? yesHintPrices.bestAsk
           : yesHintPrices.bestBid
-        : bookRepresentsNo
-          ? side === "buy"
-            ? (bestBid === null ? null : 1 - bestBid)
-            : (bestAsk === null ? null : 1 - bestAsk)
-          : side === "buy"
-            ? bestAsk
-            : bestBid;
+        : tradingVenue === "dflow" && dflowOutcomeDisplayPrices
+          ? dflowOutcomeDisplayPrices.yes
+          : bookRepresentsNo
+            ? side === "buy"
+              ? (bestBid === null ? null : 1 - bestBid)
+              : (bestAsk === null ? null : 1 - bestAsk)
+            : side === "buy"
+              ? bestAsk
+              : bestBid;
   const noPrice =
     tradingVenue === "all" &&
     side === "buy" &&
@@ -380,13 +405,15 @@ export default function PredictionMarketTradeBoxUI({
         ? side === "buy"
           ? noHintPrices.bestAsk
           : noHintPrices.bestBid
-        : bookRepresentsNo
-          ? side === "buy"
-            ? bestAsk
-            : bestBid
-          : side === "buy"
-            ? (bestBid === null ? null : 1 - bestBid)
-            : (bestAsk === null ? null : 1 - bestAsk);
+        : tradingVenue === "dflow" && dflowOutcomeDisplayPrices
+          ? dflowOutcomeDisplayPrices.no
+          : bookRepresentsNo
+            ? side === "buy"
+              ? bestAsk
+              : bestBid
+            : side === "buy"
+              ? (bestBid === null ? null : 1 - bestBid)
+              : (bestAsk === null ? null : 1 - bestAsk);
   
   // Sell-side YES/NO buttons show the highest bid among venues where the user holds
   // shares (regardless of tab). When no held venue has a valid bid, fall back to the
@@ -462,11 +489,6 @@ export default function PredictionMarketTradeBoxUI({
     const match = title.match(/^Over\s+([\d,]+)/i);
     return match ? match[1] : null;
   }, [market?.displayName, (market as any)?.question]);
-
-  const { yesTeamLabel, noTeamLabel } = useMemo(
-    () => getYesNoTeamLabels(market, umbrellaDisplayName),
-    [market, umbrellaDisplayName],
-  );
 
   // Transform the display title for Over/Under markets
   const displayMarketTitle = useMemo(() => {
