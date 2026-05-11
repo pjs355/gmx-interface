@@ -45,6 +45,10 @@ import {
 	type LogFullHistoryDebugParams,
 } from "../utils/fullHistoryDebugLog";
 import { sortUnifiedHistoryBlocksByLatest } from "../utils/historyActivitySort";
+import {
+	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
+	polymarketSplitSettlementBadgeVisible,
+} from "../utils/polymarketHistorySplitSettlementBadge";
 
 type UnifiedHistoryBlock = {
 	id: string;
@@ -65,6 +69,8 @@ type MergedHistoryRow = {
 	totalReturnPct: number | null;
 	tradeCount: number;
 	marketIds: string[];
+	/** Polymarket 50/50-style settlement notice (orphan REDEEM heuristic — post-claim). */
+	polymarketSplitBadge?: boolean;
 };
 
 export default function HistoryView({
@@ -476,6 +482,10 @@ export default function HistoryView({
 				const fallbackOutcome = b.outcomeText
 					? shortTeamDisplayName(b.outcomeText)
 					: "—";
+				const polymarketSplitBadge = polymarketSplitSettlementBadgeVisible(
+					block.venuePositions,
+					side,
+				);
 				rows.push({
 					side,
 					label: b.label || side,
@@ -488,6 +498,7 @@ export default function HistoryView({
 					totalReturnPct: retPct,
 					tradeCount,
 					marketIds: b.marketIds,
+					...(polymarketSplitBadge ? { polymarketSplitBadge: true } : {}),
 				});
 			}
 			return { block, rows };
@@ -571,7 +582,20 @@ export default function HistoryView({
 											onMouseEnter={(e) => { if (row.tradeCount > 0) e.currentTarget.style.background = "#1a1a1a"; }}
 											onMouseLeave={(e) => { if (row.tradeCount > 0) e.currentTarget.style.background = "transparent"; }}
 										>
-											<div style={{ color: "#fff", fontWeight: 600 }}>{row.label}</div>
+											<div style={{ color: "#fff", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+												{row.polymarketSplitBadge === true ? (
+													<Tooltip content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY} position="top">
+														<span
+															aria-label={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
+															role="img"
+															style={{ cursor: "help", color: "#f59e0b", flexShrink: 0, fontSize: 16, lineHeight: 1 }}
+														>
+															⚠
+														</span>
+													</Tooltip>
+												) : null}
+												<span>{row.label}</span>
+											</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{posText}</div>
 											<div style={{ textAlign: "center", color: row.outcomeColor, fontWeight: 600 }}>{row.outcomeText}</div>
 											<div style={{ textAlign: "center", color: "#fff", fontWeight: 500 }}>{costText}</div>

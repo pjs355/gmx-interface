@@ -7,9 +7,10 @@ import {
 	resolvePerVenueBestPicks,
 	partitionRequestedVenuePicks,
 	tradingVenueSlugForKey,
-	MAX_E2E_VENUE_SPREAD_USD,
+	E2E_TRADE_NOTIONAL_USD,
 	type PerVenueBestPick,
 } from "../fixtures/matched-market";
+import { evaluateVenueLiquidityBeforeTrade } from "../fixtures/e2e-venue-liquidity-at-test";
 import { REQUESTED_VENUES } from "../fixtures/requested-venues";
 import { fundingPrecheck } from "../fixtures/funding-precheck";
 import { cleanupOpenPositions } from "../fixtures/cleanup";
@@ -46,7 +47,7 @@ import {
  * independent: header Cash is driven by `CollateralTokenContext` (multi-chain RPC),
  * while share counts come from venue position state. See the long comment at the
  * top of `e2e/helpers/header-cash.ts` for the exact failure mode we fixed (quoted
- * Cost ~$5 vs header implying ~$0 spend until refetch completed).
+ * Cost ~$2 vs header implying ~$0 spend until refetch completed).
  *
  * `cashBeforeUsd` is captured once in `beforeAll` after venue selection — before
  * test 1 — and is used for test 5 round-trip recovery vs the venue block start.
@@ -112,17 +113,18 @@ import {
  *
  * Config: 5 numbered tests per venue in `describe.serial`. Comment a venue in
  * `REQUESTED_VENUES` to skip. Listed venues must have a live bid/ask in
- * matched-markets + venue-prices or `beforeAll` throws. If the best tightest
- * spread for that venue is ≥ `MAX_E2E_VENUE_SPREAD_USD` (20¢), the venue block
- * is skipped with a warning (no spend). **LevelUp** runs whenever
+ * matched-markets + venue-prices or `beforeAll` throws. Immediately before each
+ * venue block, `evaluateVenueLiquidityBeforeTrade` GETs **fresh** `/venue-prices` for
+ * that panda only and skips if best-case round-trip loss on `E2E_TRADE_NOTIONAL_USD`
+ * exceeds the live threshold, or (no ladders) if top-of-book spread is too wide.
  * `resolvePerVenueBestPicks` finds an upcoming row with `exchangeMatching.levelup`
  * and venue-prices returns a live `levelup` snapshot (same gate as other venues).
  *
  * Venues are toggled one at a time while each path is validated in E2E; keep
  * inactive entries commented — the goal is to run all of them in one pass later.
  */
-const TRADE_USD = 5;
-/** $5 round-trip can lose up to ~$0.50 to spread + fees on the tightest venues. */
+const TRADE_USD = E2E_TRADE_NOTIONAL_USD;
+/** Small-$ round-trip can lose to spread + fees; keep slack for header vs quote drift. */
 const CASH_RECOVERY_TOLERANCE_USD = 0.5;
 /**
  * How close header `Cash` must be to the tradebox quoted Cost (buy) and
@@ -136,7 +138,7 @@ const SHARE_FILL_SLIPPAGE_PCT = 0.02;
 /** Floor so tiny floats / rounding don’t flake on near-zero quotes. */
 const SHARE_FILL_MIN_ABS = 0.0005;
 /**
- * DFlow/Kalshi only: SOR market-buy leg can show fractional shares (e.g. 6.402 @ 77¢ for $5),
+ * DFlow/Kalshi only: SOR market-buy leg can show fractional shares (e.g. 6.402 @ 77¢ for small notional),
  * while cumulative YES from `useDflowPositions` / on-chain balances may land ~0.4–1 share away
  * from that quote (venue rounding, contract lots, indexer). E2E compares **delta**
  * `(data-qa-shares-count after − before)` to `buyQuotedShares`; `before` already includes any
@@ -160,7 +162,7 @@ function buyShareFillDeltaTolerance(
  * stablecoin rounding). Separate from share slippage.
  */
 const BUDGET_OVERSPEND_EPS_USD = 0.05;
-/** Typed $5 notional cap on spend (`TRADE_USD`), with small epsilon (matches effectiveBuyBudget intent). */
+/** Typed notional cap on spend (`TRADE_USD`), with small epsilon (matches effectiveBuyBudget intent). */
 const TRADE_NOTIONAL_CAP_EPS_USD = 0.05;
 /**
  * 2% relative on header Cash receive vs quoted Estimated Receive (test 4).
@@ -241,15 +243,14 @@ test.describe("prinx per-venue trade cycle", () => {
 				if (found === undefined) {
 					throw new Error(`No PerVenueBestPick for ${venueKey}`);
 				}
-				if (found.spread >= MAX_E2E_VENUE_SPREAD_USD) {
-					console.warn(
-						`[per-venue-cycle] skipping ${venueKey}: best spread ${found.spread.toFixed(4)} ` +
-							`≥ E2E cap ${MAX_E2E_VENUE_SPREAD_USD} (umbrella ${found.umbrellaId}, panda ${found.pandaMatchId}).`,
-					);
-					testInfo.skip(
-						true,
-						`${venueKey} spread ${found.spread.toFixed(4)} ≥ ${MAX_E2E_VENUE_SPREAD_USD} — not trading this book in E2E`,
-					);
+				const gate = await evaluateVenueLiquidityBeforeTrade({
+					venueKey,
+					pandaMatchId: found.pandaMatchId,
+					spreadAtPickTime: found.spread,
+				});
+				if (gate.skip) {
+					console.warn(gate.warning);
+					testInfo.skip(true, gate.reason);
 					return;
 				}
 				pick = found;

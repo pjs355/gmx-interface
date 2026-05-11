@@ -39,11 +39,11 @@ const BETWEEN_TRADEBOX_ACTIONS_MS = 200;
 const QUOTE_READY_TIMEOUT_MS = 30_000;
 /**
  * Default buy-side USD typed by `selectVenue` when neither the smart routing
- * rows nor the legacy venue dropdown are mounted yet. Uses $5 to match
- * `TRADE_USD` in per-venue specs (must stay ≥ `SOR_MIN_MARKET_BUY_USD`) so
+ * rows nor the legacy venue dropdown are mounted yet. Uses $2 to match
+ * `E2E_TRADE_NOTIONAL_USD` in per-venue specs (must stay ≥ `SOR_MIN_MARKET_BUY_USD`) so
  * subsequent `setAmount(TRADE_USD)` calls don't trigger an extra SOR refetch / auto-select.
  */
-const SELECT_VENUE_PRIME_AMOUNT_USD = 5;
+const SELECT_VENUE_PRIME_AMOUNT_USD = 2;
 /** How long to wait for a venue surface to mount after priming SOR. */
 const SELECT_VENUE_SURFACE_TIMEOUT_MS = 30_000;
 /**

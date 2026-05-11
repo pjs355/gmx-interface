@@ -51,6 +51,10 @@ const VENUE_MINIMUMS: Record<SorVenue, VenueMinProfile> = {
  * Product-wide SOR floors. **Keep in sync with**
  * `predictions/src/sor/sor-floors.ts`.
  *
+ * `SOR_MIN_MARKET_BUY_USD` is the app-wide market-buy floor (trade box + API gate).
+ * E2E uses the same number as `e2e/fixtures/matched-market.ts` `E2E_TRADE_NOTIONAL_USD`
+ * as the exercised notional (≥ this floor).
+ *
  * These are request-level gates — they sit on top of the per-venue minimums
  * above so sub-$2 buys / limits and sub-1-share sells are never sent to the
  * route API (and the trade button disables with the exact copy).

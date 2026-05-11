@@ -125,6 +125,11 @@ export interface VenuePosition {
 	 * but pays out 0 pUSD and the row vanishes from Winnings (silent claim bug).
 	 */
 	isNegRisk?: boolean;
+	/**
+	 * Polymarket trade history: orphan `REDEEM` (empty outcome) attributed to this
+	 * leg with ~$0.50 USDC per net outcome share — used for History tab badge only.
+	 */
+	polymarketSplitSettlementLikely?: boolean;
 }
 
 /**

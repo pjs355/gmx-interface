@@ -9,6 +9,7 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";
+import Tooltip from "components/Tooltip/Tooltip";
 import {
 	stripUmbrellaDisplayPrefix,
 	titlesMatchVenue,
@@ -43,6 +44,10 @@ import {
 	type LogFullHistoryDebugParams,
 } from "../utils/fullHistoryDebugLog";
 import { sortUnifiedHistoryBlocksByLatest } from "../utils/historyActivitySort";
+import {
+	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
+	polymarketSplitSettlementBadgeVisible,
+} from "../utils/polymarketHistorySplitSettlementBadge";
 
 type UnifiedBlock = {
 	id: string;
@@ -63,6 +68,7 @@ type MergedHistoryRow = {
 	totalReturnPct: number | null;
 	tradeCount: number;
 	marketIds: string[];
+	polymarketSplitBadge?: boolean;
 };
 
 export default function HistoryCardView({
@@ -463,6 +469,10 @@ export default function HistoryCardView({
 				const fallbackOutcome = b.outcomeText
 					? shortTeamDisplayName(b.outcomeText)
 					: "—";
+				const polymarketSplitBadge = polymarketSplitSettlementBadgeVisible(
+					block.venuePositions,
+					side,
+				);
 				rows.push({
 					side,
 					label: b.label || side,
@@ -475,6 +485,7 @@ export default function HistoryCardView({
 					totalReturnPct: retPct,
 					tradeCount,
 					marketIds: b.marketIds,
+					...(polymarketSplitBadge ? { polymarketSplitBadge: true } : {}),
 				});
 			}
 			return { block, rows };
@@ -520,7 +531,20 @@ export default function HistoryCardView({
 											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
 												{blockUmbrellaTitle}
 											</div>
-											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>{row.label}</div>
+											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+												{row.polymarketSplitBadge === true ? (
+													<Tooltip content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY} position="top">
+														<span
+															aria-label={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
+															role="img"
+															style={{ cursor: "help", color: "#f59e0b", flexShrink: 0, fontSize: 16, lineHeight: 1 }}
+														>
+															⚠
+														</span>
+													</Tooltip>
+												) : null}
+												<span>{row.label}</span>
+											</div>
 										</div>
 									</div>
 

@@ -52,6 +52,7 @@ export default function usePositionsData() {
 		getQuestionsForUmbrella,
 		getAllQuestionsForUmbrella,
 		resolvedMarketsByUmbrella,
+		marketsByUmbrella,
 		loading: predictionLoading,
 		allBooksPreview,
 	} = usePredictionData();
@@ -175,6 +176,7 @@ export default function usePositionsData() {
 		limitlessHistory,
 		limitlessTrades: limitlessTradeHistoryQuery.data,
 		umbrellas,
+		marketsByUmbrella,
 	});
 
 	/**

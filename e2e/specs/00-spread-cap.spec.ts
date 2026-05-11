@@ -2,8 +2,8 @@ import { test, expect } from "../fixtures/test";
 import { warnPerVenueSpreadsAboveE2eCap } from "../fixtures/matched-market";
 import { REQUESTED_VENUES } from "../fixtures/requested-venues";
 
-test.describe("per-venue spread cap", () => {
-	test("each requested venue with a live best book reports spread; warns when above 20¢ (trades skip)", async ({
+test.describe("per-venue spread cap (preflight)", () => {
+	test("each requested venue with a live best book reports spread; warns at ≥25¢ top-of-book (no ladders)", async ({
 		perVenueBestPicks,
 	}) => {
 		if (REQUESTED_VENUES.length === 0) {

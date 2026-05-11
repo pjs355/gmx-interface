@@ -2,18 +2,71 @@ import { useMemo } from "react";
 import { type Umbrella } from "@/services/api/umbrellaDataService";
 import {
 	type VenuePosition,
+	type VenueId,
+	type VenueHistoryFill,
 	isVenueMarketResolvedLike,
 } from "@/types/trading/venuePosition";
 import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
 import {
 	type PredictUmbrellaLookup,
+	matchVenuePositionToUmbrellaForHistory,
 } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import type { PredictOrderRow } from "@/trading/predict/predictOrdersApi";
 import type { PredictMatchEventRow } from "@/trading/predict/predictMatchesApi";
-import type { VenueHistoryFill } from "@/types/trading/venuePosition";
+
+
 import type { computePredictCostByToken } from "@/trading/predict/predictOrdersApi";
 import { predictFilledOrdersToVenueHistoryRows } from "../venues/predict/predictHistoryRows";
+import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
+import {
+	buildUmbrellaLookupByDflowEventTicker,
+	buildUmbrellaLookupByDflowOutcomeMint,
+} from "@/trading/dflow/dflowUmbrellaLookup";
+import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+
+/** Mirrors {@link PredictionDataContext.marketsByUmbrella}: active (non-resolved) listing markets only. */
+export type VenueHistoryMarketsByUmbrella = Record<string, unknown[]>;
+
+/** True when this umbrella id still has ≥1 listing market (not resolved) in Prediction context — match is catalog-“live”. */
+function umbrellaIdHasCatalogLiveMarkets(
+	umbrellaId: string | null | undefined,
+	marketsByUmbrella: VenueHistoryMarketsByUmbrella,
+): boolean {
+	const id = umbrellaId?.trim();
+	if (!id) return false;
+	const mk = marketsByUmbrella[id];
+	return Array.isArray(mk) && mk.length > 0;
+}
+
+function umbrellaMatchedForVenueTradeHistoryRaw(
+	row: VenuePosition,
+	venue: VenueId,
+	umbrellas: Umbrella[],
+	predictUmbrellaLookup: PredictUmbrellaLookup,
+	polyConditionLookup: Map<string, Umbrella>,
+	dflowMintLookup: Map<string, Umbrella>,
+	dflowEventTickerLookup: Map<string, Umbrella>,
+): Umbrella | null {
+	const predictHint =
+		venue === "predictfun"
+			? stripUmbrellaDisplayPrefix(row.marketTitle) || undefined
+			: undefined;
+	const limitlessHint =
+		venue === "limitless"
+			? stripUmbrellaDisplayPrefix(row.marketTitle) || undefined
+			: undefined;
+	return matchVenuePositionToUmbrellaForHistory(
+		row,
+		venue,
+		polyConditionLookup,
+		umbrellas,
+		predictUmbrellaLookup,
+		(predictHint ?? limitlessHint ?? null) as string | null,
+		dflowMintLookup,
+		dflowEventTickerLookup,
+	);
+}
 
 export type UseVenueHistoryRawItemsArgs = {
 	predictPositions: VenuePosition[];
@@ -37,6 +90,8 @@ export type UseVenueHistoryRawItemsArgs = {
 	limitlessHistory: VenuePosition[];
 	limitlessTrades: VenuePosition[] | undefined;
 	umbrellas: Umbrella[];
+	/** Prediction catalog slice: exclude History trade echoes while this umbrella still has active listings. */
+	marketsByUmbrella: VenueHistoryMarketsByUmbrella;
 };
 
 export function useVenueHistoryRawItems({
@@ -61,6 +116,7 @@ export function useVenueHistoryRawItems({
 	limitlessHistory,
 	limitlessTrades,
 	umbrellas,
+	marketsByUmbrella,
 }: UseVenueHistoryRawItemsArgs): VenuePosition[] {
 	return useMemo(() => {
 		const items: VenuePosition[] = [];
@@ -157,6 +213,12 @@ export function useVenueHistoryRawItems({
 			}
 		}
 
+		const polyConditionLookup =
+			buildUmbrellaLookupByPolymarketConditionId(umbrellas);
+		const dflowMintLookup = buildUmbrellaLookupByDflowOutcomeMint(umbrellas);
+		const dflowEventTickerLookup =
+			buildUmbrellaLookupByDflowEventTicker(umbrellas);
+
 		const polyTradesArr = polyTrades ?? [];
 		for (const trade of polyTradesArr) {
 			const cid = trade.conditionId?.trim();
@@ -166,6 +228,20 @@ export function useVenueHistoryRawItems({
 					? `polyhist:${polymarketConditionLookupKey(cid)}:${tok}:${String(trade.outcome ?? "")}`
 					: `polyhist:token:${tok ?? "unknown"}`;
 			if (seen.has(histKey)) continue;
+			const matchedPm = umbrellaMatchedForVenueTradeHistoryRaw(
+				trade,
+				"polymarket",
+				umbrellas,
+				predictUmbrellaLookup,
+				polyConditionLookup,
+				dflowMintLookup,
+				dflowEventTickerLookup,
+			);
+			if (
+				umbrellaIdHasCatalogLiveMarkets(matchedPm?._id, marketsByUmbrella)
+			) {
+				continue;
+			}
 			seen.add(histKey);
 			const venueOutcomeResult = polyOutcomeResultByKey.get(
 				polyResultKey(trade.conditionId, trade.outcome),
@@ -192,6 +268,20 @@ export function useVenueHistoryRawItems({
 				trade.historySourceId?.trim() ||
 				`lxhist:${trade.tokenId}:${trade.shares}:${trade.cost ?? ""}:${trade.marketTitle?.slice(0, 40) ?? ""}`;
 			if (seen.has(histKey)) continue;
+			const matchedLx = umbrellaMatchedForVenueTradeHistoryRaw(
+				trade,
+				"limitless",
+				umbrellas,
+				predictUmbrellaLookup,
+				polyConditionLookup,
+				dflowMintLookup,
+				dflowEventTickerLookup,
+			);
+			if (
+				umbrellaIdHasCatalogLiveMarkets(matchedLx?._id, marketsByUmbrella)
+			) {
+				continue;
+			}
 			seen.add(histKey);
 			items.push({
 				...trade,
@@ -261,5 +351,6 @@ export function useVenueHistoryRawItems({
 		umbrellas,
 		predictHistoryFillsByToken,
 		predictMatches,
+		marketsByUmbrella,
 	]);
 }

@@ -24,8 +24,13 @@ const EXCHANGE_KEY_TO_VENUE_SLUG: Record<RequiredVenueKey, string> = {
 	dflow: "dflow",
 };
 
-/** Tightest live bid–ask on a venue must be below this (20¢ in probability space) for E2E. */
-export const MAX_E2E_VENUE_SPREAD_USD = 0.2;
+/** Tightest live bid–ask (probability space). Used for logging and for spread-only fallback when per-venue ladders are missing (see `e2e-venue-liquidity-at-test.ts`). */
+export const MAX_E2E_VENUE_SPREAD_USD = 0.25;
+
+/**
+ * Playwright trade size. Keep **≥** app `SOR_MIN_MARKET_BUY_USD` (`src/trading/sor/sorPreflight.ts`, currently $2).
+ */
+export const E2E_TRADE_NOTIONAL_USD = 2;
 
 export type E2eTradingVenueSlug =
 	| "polymarket"
@@ -185,7 +190,7 @@ export function createVenueSnapshotGetter(
 	};
 }
 
-/** When venue-prices has no bid/ask for LevelUp but matched-markets still lists `exchangeMatching.levelup`, pick an umbrella for E2E using this synthetic spread (must be in (0, MAX_E2E_VENUE_SPREAD_USD) so trade cycle does not skip LevelUp for spread cap). */
+/** When venue-prices has no bid/ask for LevelUp but matched-markets still lists `exchangeMatching.levelup`, pick an umbrella for E2E using this synthetic spread (must stay below `MAX_E2E_VENUE_SPREAD_USD` for spread-only fallback). */
 const LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK = 0.1;
 
 function jsonFiniteNumber(x: unknown): number | null {
@@ -490,14 +495,14 @@ function logPerVenueSummaryFromPicks(picks: PerVenueBestPick[]): void {
 	}
 }
 
-/** Warn-only: wide books are skipped in trade specs (avoid expensive E2E on toxic spreads). */
+/** Warn-only: per-venue trade cycle may skip venues with wide top-of-book spread when ladders are absent (see `e2e-venue-liquidity-at-test.ts` for the live gate). */
 export function warnPerVenueSpreadsAboveE2eCap(picks: readonly PerVenueBestPick[]): void {
 	for (const p of picks) {
-		if (p.spread >= MAX_E2E_VENUE_SPREAD_USD) {
+		if (p.spread + 1e-9 >= MAX_E2E_VENUE_SPREAD_USD) {
 			console.warn(
 				`[e2e spread cap] ${p.venueKey} best tightest spread is ${p.spread.toFixed(4)} ` +
-					`(umbrella ${p.umbrellaId}, panda ${p.pandaMatchId}) — exceeds ${MAX_E2E_VENUE_SPREAD_USD} (20¢); ` +
-					`per-venue trade cycle will skip this venue.`,
+					`(umbrella ${p.umbrellaId}, panda ${p.pandaMatchId}) — ≥ ${MAX_E2E_VENUE_SPREAD_USD} when no depth; ` +
+					`per-venue block may skip on fresh read.`,
 			);
 		}
 	}
