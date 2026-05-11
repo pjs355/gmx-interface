@@ -1,4 +1,4 @@
-import { type Locator, type Page, expect } from "@playwright/test";
+import { type Locator, type Page } from "@playwright/test";
 import { FRONTEND_URL } from "../playwright.config";
 import { expectHeaderCashUsd } from "../helpers/header-cash";
 import { tradeboxRootLocator } from "./tradebox";
@@ -22,49 +22,25 @@ export class PredictionsPage {
 		);
 	}
 
-	/** `/` only — inline home trade dock is not mounted on umbrella routes. */
-	private async ensureHomePathForInlineDock(): Promise<void> {
-		let pathname = "/";
-		try {
-			pathname = new URL(this.page.url()).pathname;
-		} catch {
-			/* ignore */
-		}
-		if (pathname !== "/") {
-			await this.page.goto(`${FRONTEND_URL}/`, {
+	/**
+	 * Open `/predictions/umbrella/:id` directly — matches production UX after a card
+	 * click and avoids coupling tests to homepage card routing. Use homepage Yes/No
+	 * odds buttons only when the scenario intentionally exercises the inline dock on `/`.
+	 */
+	async openUmbrellaTradingPageById(umbrellaId: string): Promise<void> {
+		await this.page.goto(
+			`${FRONTEND_URL}/predictions/umbrella/${encodeURIComponent(umbrellaId)}`,
+			{
 				waitUntil: "domcontentloaded",
 				timeout: 120_000,
-			});
-			await this.page.waitForLoadState("load").catch(() => {});
-		}
-	}
-
-	/**
-	 * Click the home-page match card, keep the SPA on `/`, and wait until the
-	 * right-rail tradebox is bound to `umbrellaId` (visible + header Cash hydrated).
-	 */
-	async openCardByUmbrellaId(umbrellaId: string): Promise<void> {
-		await this.ensureHomePathForInlineDock();
-		const card = this.findCardByUmbrellaId(umbrellaId);
-		await expect(
-			card,
-			`prediction card for umbrellaId ${umbrellaId} not found on /`,
-		).toBeVisible({ timeout: 60_000 });
-		await card.scrollIntoViewIfNeeded();
-		await card.click();
+			},
+		);
+		await this.page.waitForLoadState("load").catch(() => {});
 		await this.locatorHomeTradeboxForUmbrella(umbrellaId).waitFor({
 			state: "visible",
 			timeout: 60_000,
 		});
 		await this.waitForTradeShellReady();
-	}
-
-	/**
-	 * Open trading for an umbrella from the home inline dock (stay on `/`).
-	 * Ensures we are on `/` first (e.g. after a prior non-home route in the same session).
-	 */
-	async openUmbrellaTradingPageById(umbrellaId: string): Promise<void> {
-		await this.openCardByUmbrellaId(umbrellaId);
 	}
 
 	/**
