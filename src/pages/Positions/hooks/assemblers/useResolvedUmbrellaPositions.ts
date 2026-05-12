@@ -34,6 +34,11 @@ import {
 	shortPredictFunMarketTitleForPortfolio,
 	stripUmbrellaDisplayPrefix,
 } from "@/helpers/umbrellaDisplayName";
+import { isMarketClaimAcked, claimAckKeysFromMarket } from "@/trading/limitless/limitlessClaimAck";
+
+/** Dev: at most one console line per limitless row per full page load (useMemo re-runs constantly). */
+const limitlessWinningsPreFilterDevLoggedOnce = new Set<string>();
+
 type TokenBalanceLike = { yesBalance: string | number; noBalance: string | number };
 
 export type UseResolvedUmbrellaPositionsArgs = {
@@ -51,6 +56,10 @@ export type UseResolvedUmbrellaPositionsArgs = {
 	predictWinnings: VenuePosition[];
 	polyWinnings: VenuePosition[];
 	dflowWinnings: VenuePosition[];
+	/**
+	 * Limitless rows for the Winnings tab: partner-redeemable split bucket plus
+	 * `redeemPending` rows merged from the history split (see `limitlessVenueRowsForWinningsTab`).
+	 */
 	limitlessWinnings: VenuePosition[];
 	predictMarketDetails: Map<number, PredictMarketDetail>;
 	predictUmbrellaLookup: PredictUmbrellaLookup;
@@ -179,6 +188,8 @@ export function useResolvedUmbrellaPositions({
 					.filter((mp) => {
 						const balanceId = (mp.market as { _id?: string })._id;
 						if (balanceId && claimedMarkets.has(balanceId)) return false;
+						if (isMarketClaimAcked(mp.market as PredictionMarket, claimedMarkets))
+							return false;
 						const outcome = String(
 							(mp.market as { resolvedOutcome?: string }).resolvedOutcome || "",
 						).toLowerCase();
@@ -304,8 +315,7 @@ export function useResolvedUmbrellaPositions({
 						first.iconUrl ? { _polyIcon: first.iconUrl } : undefined,
 					);
 				const blockMarketTitle = blockLabel;
-				const markets: MarketPosition[] = positions
-					.map((pv) => {
+				const marketsPre: MarketPosition[] = positions.map((pv) => {
 						const mDetail =
 							venue === "predictfun" && pv.numericMarketId != null
 								? predictMarketDetails.get(pv.numericMarketId)
@@ -379,6 +389,14 @@ export function useResolvedUmbrellaPositions({
 							titleForLabel,
 							labelOutcomeName,
 							side,
+							venue === "dflow" &&
+								pv.dflowYesSubTitle?.trim() &&
+								pv.dflowNoSubTitle?.trim()
+								? {
+										propositionYesLabel: pv.dflowYesSubTitle,
+										propositionNoLabel: pv.dflowNoSubTitle,
+									}
+								: undefined,
 						);
 					const dflowRedeemShares =
 						venue === "dflow" ? pv.shares : undefined;
@@ -393,16 +411,24 @@ export function useResolvedUmbrellaPositions({
 						venue === "polymarket" ? pv.tokenId : undefined;
 					const polyIsNegRisk =
 						venue === "polymarket" ? pv.isNegRisk === true : undefined;
-					const limitlessConditionForClaim =
-						venue === "limitless" && lxIsNegRisk && lxNegParent
-							? lxNegParent
-							: pv.conditionId;
+					/**
+					 * Limitless redeem: primary **leg** `conditionId`; predictions proxy may
+					 * retry with `group.negRiskMarketId` when the leg returns “no position balance”.
+					 */
 					return {
 						market: {
-							_id: `${idPrefix}-${pv.tokenId.slice(0, 12)}`,
+							/**
+							 * Limitless `tokenId` is the full ERC1155 id (often >12 digits). Truncating
+							 * breaks claim preflight / recovery from `_id` alone; other venues keep a
+							 * short id for display and dedupe.
+							 */
+							_id:
+								venue === "limitless"
+									? `${idPrefix}-${pv.tokenId}`
+									: `${idPrefix}-${pv.tokenId.slice(0, 12)}`,
 							displayName: blockMarketTitle,
 							questionId: pv.conditionId ?? pv.tokenId,
-							conditionId: limitlessConditionForClaim,
+							conditionId: pv.conditionId,
 							resolvedOutcome: isYes ? "yes" : "no",
 							_venue: venue,
 							_isNegRisk:
@@ -421,11 +447,18 @@ export function useResolvedUmbrellaPositions({
 							...(venue === "limitless" && pv.tokenId
 								? { _limitlessOutcomeTokenId: pv.tokenId }
 								: {}),
-							...(venue === "limitless" &&
-							lxIsNegRisk &&
-							lxNegParent &&
-							pv.conditionId
-								? { _limitlessLegConditionId: pv.conditionId }
+							...(venue === "limitless" && lxNegParent
+								? { _limitlessNegRiskParentConditionId: lxNegParent }
+								: {}),
+							...(venue === "limitless"
+								? {
+										_limitlessPartnerRedeemableSignal:
+											pv.limitlessPartnerRedeemableSignal ?? "omit",
+										...(typeof pv.marketStatus === "string" &&
+										pv.marketStatus.trim()
+											? { _limitlessMarketStatusApi: pv.marketStatus.trim() }
+											: {}),
+									}
 								: {}),
 						} as unknown as PredictionMarket,
 							yesBalance: isYes ? pv.shares : 0,
@@ -454,11 +487,54 @@ export function useResolvedUmbrellaPositions({
 							predictOutcomeLabelYes: isYes ? rowLabel : undefined,
 							predictOutcomeLabelNo: isYes ? undefined : rowLabel,
 						};
-					})
-					.filter(
-						(mp) =>
-							!claimedMarkets.has((mp.market as { _id: string })._id),
-					);
+					});
+				if (import.meta.env.DEV && venue === "limitless") {
+					for (const mp of marketsPre) {
+						const m = mp.market as PredictionMarket;
+						const traceKey = `${m._id}|${String(m.conditionId ?? "")}`;
+						if (limitlessWinningsPreFilterDevLoggedOnce.has(traceKey)) continue;
+						limitlessWinningsPreFilterDevLoggedOnce.add(traceKey);
+						const keys = claimAckKeysFromMarket(m);
+						let rawVenueRow: {
+							tokenIdTail?: string;
+							shares?: number;
+							redeemable?: boolean;
+							redeemPending?: boolean;
+							limitlessPartnerRedeemableSignal?: string;
+							currentValue?: number;
+						} = {};
+						if (venue === "limitless" && String(m._id).startsWith(`${idPrefix}-`)) {
+							const tid = String(m._id).slice(`${idPrefix}-`.length);
+							const pvRow = positions.find((p) => p.tokenId === tid);
+							if (pvRow) {
+								rawVenueRow = {
+									tokenIdTail: pvRow.tokenId?.slice(-18),
+									shares: pvRow.shares,
+									redeemable: pvRow.redeemable,
+									redeemPending: pvRow.redeemPending === true,
+									limitlessPartnerRedeemableSignal:
+										pvRow.limitlessPartnerRedeemableSignal,
+									currentValue: pvRow.currentValue,
+								};
+							}
+						}
+						console.debug("[LimitlessRedeemTrace] limitless winnings row (pre-filter)", {
+							_id: m._id,
+							conditionId: m.conditionId,
+							_venue: (m as { _venue?: string })._venue,
+							claimAckKeys: keys,
+							isClaimed: isMarketClaimAcked(m, claimedMarkets),
+							rawVenueRow,
+						});
+					}
+				}
+				const markets: MarketPosition[] = marketsPre.filter(
+					(mp) =>
+						!isMarketClaimAcked(
+							mp.market as PredictionMarket,
+							claimedMarkets,
+						),
+				);
 				if (markets.length > 0) {
 					if (venue === "predictfun" && !matchedUmbrella) {
 						logPredictUmbrellaOnce(

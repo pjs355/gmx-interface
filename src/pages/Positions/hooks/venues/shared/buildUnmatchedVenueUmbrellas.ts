@@ -8,13 +8,17 @@ import {
 	findMatchedMarketByPolyConditionId,
 	parseVsTeamLabelsFromDisplayTitle,
 } from "@/trading/polymarket/polyPositionSide";
+import { lookupLimitlessCatalogTokenPairForVenueToken } from "@/trading/limitless/limitlessCatalogTokenPair";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import {
 	type PredictUmbrellaLookup,
 	resolvePredictUmbrellaForDisplay,
 } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
 import type { MatchedMarket } from "@/types/odds-monitor";
-import { type VenueId } from "@/types/trading/venuePosition";
+import {
+	type VenueId,
+	venuePositionPortfolioDedupeKey,
+} from "@/types/trading/venuePosition";
 import {
 	shortPredictFunMarketTitleForPortfolio,
 	stripUmbrellaDisplayPrefix,
@@ -45,7 +49,9 @@ export function buildUnmatchedVenueUmbrellas(
 	matchedOddsMarkets: MatchedMarket[] = [],
 	catalogUmbrellas: Umbrella[] = [],
 ): UmbrellaPositions[] {
-	const unmatched = positions.filter((p) => !matchedIds.has(p.tokenId));
+	const unmatched = positions.filter(
+		(p) => !matchedIds.has(venuePositionPortfolioDedupeKey(p)),
+	);
 	const byGroup = new Map<string, any[]>();
 	const dflowMintLookup =
 		venue === "dflow" && catalogUmbrellas.length > 0
@@ -139,6 +145,15 @@ export function buildUnmatchedVenueUmbrellas(
 							noTeamLabel: polyLabels.noTeamLabel,
 						}
 					: null;
+			const limitlessCatalogWire =
+				venue === "limitless" && catalogUmbrellas.length > 0
+					? lookupLimitlessCatalogTokenPairForVenueToken(
+							p.tokenId,
+							catalogUmbrellas,
+							p.eventSlug,
+							p.limitlessGroupSlug,
+						)
+					: null;
 			return buildVenueMarketPosition(
 				p,
 				venue,
@@ -150,6 +165,7 @@ export function buildUnmatchedVenueUmbrellas(
 					? predictMarketDetails.get(p.numericMarketId) ?? null
 					: null,
 				polyInference,
+				limitlessCatalogWire,
 			);
 		});
 		umbrellas.push({ umbrella: umbrellaForBlock, markets: mergeMarketPositions(rawMarkets) });

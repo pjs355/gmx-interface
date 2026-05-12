@@ -33,6 +33,11 @@ export type MarketPosition = {
 	 * so Positions views still use {@link portfolioColumnTeamLabels} for Yes/No column headers.
 	 */
 	includesDflowVenue?: boolean;
+	/**
+	 * Same pattern as `includesDflowVenue`: merged rows lose `venue === "limitless"` but Positions
+	 * table/card need catalog team labels for Yes/No buckets (dual CLOB → tokenIdA/B → columns).
+	 */
+	includesLimitlessVenue?: boolean;
 	predictOutcomeLabelYes?: string;
 	predictOutcomeLabelNo?: string;
 };
@@ -215,6 +220,7 @@ export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[
 	const blendedNoPrice = weightedNo ?? impliedNoFromValue ?? bestNoPrice;
 
 	const includesDflowVenue = markets.some((m) => m.venue === "dflow");
+	const includesLimitlessVenue = markets.some((m) => m.venue === "limitless");
 
 	return [
 		{
@@ -233,6 +239,7 @@ export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[
 			},
 			venue: undefined,
 			...(includesDflowVenue ? { includesDflowVenue: true } : {}),
+			...(includesLimitlessVenue ? { includesLimitlessVenue: true } : {}),
 			predictOutcomeLabelYes,
 			predictOutcomeLabelNo,
 		},

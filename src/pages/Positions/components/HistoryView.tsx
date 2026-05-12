@@ -17,7 +17,10 @@ import {
 import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
 import { buildUmbrellaLookupByDflowEventTicker, buildUmbrellaLookupByDflowOutcomeMint } from "@/trading/dflow/dflowUmbrellaLookup";
 import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/levelUpQuestionIdsForVenueHistory";
-import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
+import {
+	getVenueHistoryMarketColumnLabel,
+	isGenericBinaryOutcomeLabel,
+} from "@/trading/predict/predictPositionLabel";
 import {
 	getTradeCount,
 	formatHistoryReturnPctAbs,
@@ -300,9 +303,18 @@ export default function HistoryView({
 					if (bucket.wonByQid[qid] === undefined) bucket.wonByQid[qid] = venueWon;
 				}
 
-				if (!bucket.label) {
-					const singleInGroup = block.venuePositions.length === 1 && block.luMarkets.length === 0;
-					bucket.label = getVenueHistoryMarketColumnLabel(pos.marketTitle, pos, singleInGroup);
+				const singleInGroup = block.venuePositions.length === 1 && block.luMarkets.length === 0;
+				const columnLabel = getVenueHistoryMarketColumnLabel(
+					pos.marketTitle,
+					pos,
+					singleInGroup,
+				);
+				if (
+					!bucket.label ||
+					(isGenericBinaryOutcomeLabel(bucket.label) &&
+						!isGenericBinaryOutcomeLabel(columnLabel))
+				) {
+					bucket.label = columnLabel;
 				}
 				if (!bucket.outcomeText) {
 					bucket.outcomeText = winnerLabelFromVenuePosition(pos, {

@@ -2052,26 +2052,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       sorExecution.isExecuting || state.isLoading,
   });
 
-  /** True when `executionRoute` has no usable legs but `displayRoute` (omnibus) still does. */
-  const sorUsingOmnibusFallbackForVenueTab = useMemo(() => {
-    if (state.tradingVenue === "all") return false;
-    const exec = sorRoute.executionRoute;
-    const execOk = Boolean(exec && exec.legs.length > 0);
-    const disp = sorRoute.displayRoute;
-    const dispOk = Boolean(disp && disp.legs.length > 0);
-    return !execOk && dispOk;
-  }, [state.tradingVenue, sorRoute.displayRoute, sorRoute.executionRoute]);
-
   /**
    * Resolved executable plan + status for the active tab:
-   * - "all"  → omnibus (display channel) is the executable plan.
-   * - venue  → targeted (execution channel) when it returns legs; **otherwise** fall back to
-   *   omnibus when it still has legs. The targeted channel can return NO_BOOKS for one venue
-   *   while omnibus still found liquidity across books — without this fallback the button shows
-   *   "No shares available" despite quotes on the smart-routing rows.
-   *
-   * Errors fall through to display only when execution is still loading and has no code yet — keeps
-   * the button copy useful (display omnibus error) instead of flashing blank during the first tick.
+   * - "all" → omnibus (`displayRoute` / display channel).
+   * - specific venue → **only** the targeted `executionRoute` with legs. Never use omnibus here:
+   *   executing `displayRoute` while a venue tab is selected sent orders to the wrong venue.
    */
   const executableRoute = useMemo(() => {
     if (state.tradingVenue === "all") {
@@ -2081,10 +2066,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     if (exec && exec.legs.length > 0) {
       return exec;
     }
-    const omnibus = sorRoute.displayRoute;
-    if (omnibus && omnibus.legs.length > 0) {
-      return omnibus;
-    }
     return null;
   }, [state.tradingVenue, sorRoute.displayRoute, sorRoute.executionRoute]);
   const executableLoading =
@@ -2092,21 +2073,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const executableStale =
     state.tradingVenue === "all" ? sorRoute.displayStale : sorRoute.executionStale;
   const executableError =
-    state.tradingVenue === "all"
-      ? sorRoute.displayError
-      : sorUsingOmnibusFallbackForVenueTab
-        ? sorRoute.displayError
-        : (sorRoute.executionError ?? sorRoute.displayError);
+    state.tradingVenue === "all" ? sorRoute.displayError : sorRoute.executionError;
   const executableErrorCode =
     state.tradingVenue === "all"
       ? sorRoute.displayErrorCode
-      : sorUsingOmnibusFallbackForVenueTab
-        ? sorRoute.displayErrorCode
-        : (sorRoute.executionErrorCode ?? sorRoute.displayErrorCode);
+      : sorRoute.executionErrorCode;
 
   // Keep ref in sync so handleTrade (defined above) can access latest SOR data.
-  // On a venue tab this is usually the targeted `executionRoute`, but we may sign the
-  // omnibus plan when the targeted channel fails while omnibus still has legs (see above).
   sorRouteRef.current = executableRoute;
 
   const venueSelectionLocked =
@@ -2205,6 +2178,26 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const handleSorExecute = useCallback(() => {
     if (executableRoute && !sorRouteExpired) {
+      const tv = state.tradingVenue;
+      const legsMatchVenueTab =
+        tv === "all" ||
+        executableRoute.legs.every((l) => l.venue === tv);
+      if (!legsMatchVenueTab) {
+        console.error("[SOR] execute blocked: route legs do not match selected venue tab", {
+          tradingVenue: tv,
+          legVenues: executableRoute.legs.map((l) => l.venue),
+          routeId: executableRoute.routeId,
+        });
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              "Venue mismatch — wait for the quote to refresh, then try again.",
+          },
+        }));
+        return;
+      }
       console.log("[SOR] Trade button → execute", executableRoute.routeId);
       // Kalshi/DFlow: each outcome has its own `accountsInitialized*` flag. Only show
       // the "creating this market" notice when the leg(s) we execute still report
@@ -2328,6 +2321,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     yesBalance,
     noBalance,
     matchedMonitor,
+    state.tradingVenue,
   ]);
 
   // Forward the freshly-rebound `handleSorExecute` into the late-bound ref
@@ -2510,9 +2504,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowStartProofFlow: handleStartDflowProofForTrade,
     sorMatchedVenues: matchedVenues,
     sorState: {
-      // Executable channel: omnibus on "all", targeted on a venue tab. Preserves
-      // useButtonState semantics (route gates Submit; isLoading + isStale together
-      // suppress getSorBuyCashShortfall flicker during background polls).
+      // Omnibus route on "all"; single-venue execution route only on a venue tab (never omnibus).
       route: executableRoute,
       isLoading: executableLoading,
       isStale: executableStale,

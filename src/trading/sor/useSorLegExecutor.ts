@@ -29,6 +29,7 @@ import type {
 import type { SorExecutionPhase } from "./useSorExecution";
 import {
 	readFundingStableBalancesHuman,
+	readBnbUsdtBalanceWei,
 	type FundingStableBalancesHuman,
 } from "@/trading/sor/fundingStableBalances";
 import {
@@ -46,6 +47,13 @@ import {
 	ensurePrefundQuoteMeetsDestMin,
 	type PrefundLifiQuoteClient,
 } from "@/trading/sor/lifiPrefundQuoteSolve";
+import {
+	SOR_BASE_SWEEP_RECEIPT_TIMEOUT_MS,
+	SOR_BASE_USDC_TRANSFER_TIMEOUT_MS,
+	SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS,
+	SOR_LIFI_PREFUND_POLL_CONFIG,
+} from "@/trading/sor/sorBridgeWallTimeBudget";
+import { waitForScwUsdcAfterLimitlessPortfolioWithdraw } from "@/trading/sor/limitlessMakerToScwWithdrawWait";
 import {
 	buildPolygonSafeUsdceWrapTransactions,
 	readPolymarketSafeCtfBalanceWei,
@@ -70,22 +78,10 @@ import {
 } from "@/trading/base/waitPrivyBaseTxReceipt";
 import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
 
-/**
- * Must exceed Polymarket `RelayClient` poll budget for `wait()` (~100 polls × 2s ≈ 200s)
- * so we do not abort LI.FI Polygon legs while the relayer is still legitimately polling.
- * `useSorExecution`’s `LEG_OR_BRIDGE_TIMEOUT_MS` must cover this plus `pollLifiUntilTerminal`.
- */
-const SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS = 210_000;
-/** ~15 × 4s ≈ 60s of idle wait between polls, plus ~15 status calls (outer bridge timeout still applies). */
-const SOR_LIFI_PREFUND_POLL = { maxAttempts: 15, intervalMs: 4_000 } as const;
-
 /** Limitless SDK `calculateFOKAmounts` rejects `makerAmount` when `.toString()` has more than 6 fractional digits. */
 function roundLimitlessFokMakerAmountHuman(n: number): number {
 	return Number(n.toFixed(6));
 }
-
-/** Same-chain Base USDC `transfer` (SCW → Limitless maker); much shorter than LiFi legs. */
-const SOR_BASE_USDC_TRANSFER_TIMEOUT_MS = 120_000;
 
 /**
  * DFlow prediction-market orders are async end-to-end. `POST /api/dflow/orders`
@@ -94,14 +90,6 @@ const SOR_BASE_USDC_TRANSFER_TIMEOUT_MS = 120_000;
  * is marked filled only on HTTP 200 from that route. Post-trade balance refetch
  * (`usePostTradeBalanceSync`) still converges positions after settlement.
  */
-
-/** Partner withdraw maker → SCW; poll until SCW can cover the upcoming Base LI.FI leg. */
-const SOR_LX_WITHDRAW_TO_SCW_TIMEOUT_MS = 120_000;
-const SOR_LX_WITHDRAW_POLL_INTERVAL_MS = 2500;
-
-function sleepMs(ms: number): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
-}
 
 /**
  * Detect Polymarket order errors that imply a missing/revoked allowance on the
@@ -155,7 +143,7 @@ async function consolidateLimitlessMakerUsdcOntoScwForBaseLifiStep(input: {
 	if (!swAddr || !/^0x[a-fA-F0-9]{40}$/i.test(swAddr) || !mkAddr) {
 		return;
 	}
-	let sw = Math.max(0, input.balancesHuman.base ?? 0);
+	const sw = Math.max(0, input.balancesHuman.base ?? 0);
 	const mk = Math.max(0, input.balancesHuman.limitlessMakerBase ?? 0);
 	const shortfall = Math.max(0, need - sw);
 	if (shortfall + 1e-9 < MIN_PREFUND_CHUNK_USD) {
@@ -168,24 +156,19 @@ async function consolidateLimitlessMakerUsdcOntoScwForBaseLifiStep(input: {
 	console.warn("[SOR][prefund] Limitless maker → Base SCW (partner withdraw) before LI.FI", {
 		usdcApprox: withdrawHuman,
 	});
-	await input.privateApi.postLimitlessPortfolioWithdraw({
+	const withdrawOut = await input.privateApi.postLimitlessPortfolioWithdraw({
 		amountHuman: withdrawHuman,
 		destination: swAddr,
 	});
-	const deadline = Date.now() + SOR_LX_WITHDRAW_TO_SCW_TIMEOUT_MS;
-	while (Date.now() < deadline) {
-		await sleepMs(SOR_LX_WITHDRAW_POLL_INTERVAL_MS);
-		const b = await readFundingStableBalancesHuman(input.fundingAddresses);
-		input.balancesHuman.base = b.base;
-		input.balancesHuman.limitlessMakerBase = b.limitlessMakerBase;
-		sw = Math.max(0, b.base ?? 0);
-		if (sw + PREFUND_SHORTFALL_COVERED_EPS_USD >= need) {
-			return;
-		}
-	}
-	throw new Error(
-		"Timed out waiting for Limitless withdrawal to credit your Base smart wallet. Check Transfers or try again.",
-	);
+	await waitForScwUsdcAfterLimitlessPortfolioWithdraw({
+		fundingAddresses: input.fundingAddresses,
+		withdrawResponse: withdrawOut,
+		targetScwMinUsd: need,
+		balancesHuman: input.balancesHuman,
+		scwUsdcBeforeWithdraw: sw,
+		withdrawCreditsScwUsdApprox: withdrawHuman,
+		limitlessMakerUsdcBeforeWithdraw: mk,
+	});
 }
 
 type LegResult = {
@@ -1687,9 +1670,13 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						"Base USDC transfer (SCW → Limitless maker)",
 					);
 					const hash = parsePrivyEvmTxHash(sent);
-					await waitForBaseTransactionSuccess(
-						hash,
-						"USDC transfer smart wallet → Limitless maker",
+					await withTimeout(
+						waitForBaseTransactionSuccess(
+							hash,
+							"USDC transfer smart wallet → Limitless maker",
+						),
+						SOR_BASE_SWEEP_RECEIPT_TIMEOUT_MS,
+						"Base USDC transfer receipt (SCW → Limitless maker)",
 					);
 					return hash;
 				};
@@ -1792,6 +1779,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								`Prefund step budget is zero (step ${stepIdx + 1}/${steps.length}, corridorBudgetUsd=${corridorBudgetUsd.toFixed(4)}). Optimizer corridor allocation cannot cover this hop — refresh the route.`,
 							);
 						}
+						const maxFromWei =
+							fromChainLifi === 56
+								? await readBnbUsdtBalanceWei(fundingAddresses.embeddedEoa)
+								: undefined;
 						let quote: LifiQuoteResponse;
 						let spentHumanForLedger = 0;
 						try {
@@ -1807,6 +1798,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								seedAmountHuman: step.amountHuman,
 								strictDestMinAtSendCap:
 									opts?.strictLifiDestMinAtSendCap === true,
+								maxFromWei,
 							});
 							quote = solved.quote;
 							spentHumanForLedger = Number(solved.amountHuman);
@@ -1918,7 +1910,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									fromChain: fromChainLifi,
 									toChain: toChainLifi,
 								}) as Promise<LifiStatusResponse>,
-							SOR_LIFI_PREFUND_POLL,
+							SOR_LIFI_PREFUND_POLL_CONFIG,
 						);
 
 						if (Number.isFinite(spentHumanForLedger) && spentHumanForLedger > 0) {

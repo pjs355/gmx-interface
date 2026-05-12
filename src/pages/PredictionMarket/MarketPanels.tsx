@@ -234,6 +234,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						activePosition={activePosition}
 						isCollapsed={false}
 						side={tradeSide}
+						wholeContractRestingBook
 					/>
 				</div>
 			)}

@@ -85,13 +85,16 @@ export function syntheticVenueWinningsRowId(
 	venue: "polymarket" | "predictfun" | "dflow" | "limitless",
 	tokenId: string,
 ): string {
+	const tid = String(tokenId ?? "").trim();
+	/** Must match Winnings `market._id` from {@link useResolvedUmbrellaPositions} `appendVenueWinnings`. */
+	if (venue === "limitless") {
+		return `lx-win-${tid}`;
+	}
 	const p =
 		venue === "polymarket"
 			? "poly-win"
 			: venue === "dflow"
 				? "dflow-win"
-				: venue === "limitless"
-					? "lx-win"
-					: "predict-win";
-	return `${p}-${(tokenId ?? "").slice(0, 12)}`;
+				: "predict-win";
+	return `${p}-${tid.slice(0, 12)}`;
 }

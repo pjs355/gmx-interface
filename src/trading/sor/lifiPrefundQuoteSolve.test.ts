@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { parseUnits, formatUnits } from "viem";
 import {
 	ensurePrefundQuoteMeetsDestMin,
 	parseLifiQuoteMinToStableHuman,
@@ -83,7 +84,7 @@ describe("ensurePrefundQuoteMeetsDestMin", () => {
 			budgetUsd: destNeed,
 			seedAmountHuman: destNeed.toFixed(6),
 		});
-		expect(r.amountHuman).toBe(destNeed.toFixed(6));
+		expect(parseUnits(r.amountHuman, 6)).toEqual(parseUnits(destNeed.toFixed(6), 6));
 		expect(api.postFundingLifiQuote).toHaveBeenCalledTimes(1);
 	});
 
@@ -272,5 +273,50 @@ describe("ensurePrefundQuoteMeetsDestMin", () => {
 				seedAmountHuman: stepDestNeeds[0]!.toFixed(6),
 			}),
 		).rejects.toThrow(/per-corridor budget cap/);
+	});
+
+	it("rejects BNB chain quotes without maxFromWei", async () => {
+		await expect(
+			ensurePrefundQuoteMeetsDestMin({
+				api: { postFundingLifiQuote: vi.fn() },
+				fromChainLifi: 56,
+				toChainLifi: 8453,
+				fromAddress: `0x${"1".repeat(40)}`,
+				toAddress: `0x${"2".repeat(40)}`,
+				destPortionUsd: 0.5,
+				maxFromHuman: 1,
+				budgetUsd: 1,
+				seedAmountHuman: "0.5",
+			}),
+		).rejects.toThrow(/maxFromWei is required/);
+	});
+
+	it("BNB 18-dec: posts amountHuman whose parsed wei is <= maxFromWei", async () => {
+		const maxFromWei = 373117663992041258n;
+		const api = {
+			postFundingLifiQuote: vi.fn(async (req: { amountHuman: string }) => {
+				const atoms = parseUnits(req.amountHuman, 18);
+				expect(atoms).toBeLessThanOrEqual(maxFromWei);
+				return {
+					steps: [{}],
+					quote: { estimate: { toAmountMin: "1000000" } },
+				};
+			}),
+		};
+		const destNeed = Number(formatUnits(maxFromWei, 18));
+		const r = await ensurePrefundQuoteMeetsDestMin({
+			api,
+			fromChainLifi: 56,
+			toChainLifi: 8453,
+			fromAddress: `0x${"1".repeat(40)}`,
+			toAddress: `0x${"2".repeat(40)}`,
+			destPortionUsd: destNeed,
+			maxFromHuman: destNeed,
+			budgetUsd: destNeed,
+			seedAmountHuman: "0.373118",
+			maxFromWei,
+		});
+		expect(parseUnits(r.amountHuman, 18)).toBeLessThanOrEqual(maxFromWei);
+		expect(api.postFundingLifiQuote).toHaveBeenCalled();
 	});
 });

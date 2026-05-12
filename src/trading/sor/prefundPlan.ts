@@ -91,7 +91,7 @@ export function computePrefundBridgeShortfallUsdHuman(
 
 export type PrefundStep = {
 	fromChain: SorChain;
-	/** Human stable amount for `postFundingLifiQuote.amountHuman` (6 dp). */
+	/** Human stable amount for `postFundingLifiQuote.amountHuman` (floored; up to 18 dp on BNB USDT). */
 	amountHuman: string;
 };
 

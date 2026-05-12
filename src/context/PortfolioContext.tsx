@@ -12,7 +12,10 @@ import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccountData } from "@/context/AccountDataContext";
-import { limitlessPositionsForPortfolioMtm } from "@/trading/limitless/splitLimitlessVenuePositions";
+import {
+	limitlessPositionPortfolioUsdValue,
+	limitlessPositionsForPortfolioMtm,
+} from "@/trading/limitless/splitLimitlessVenuePositions";
 import { sumPredictPositionMarkValue } from "@/trading/predict/sumPredictPositionMarkValue";
 import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
 import { debugLimitlessPortfolioTable } from "@/trading/limitless/limitlessPortfolioDebug";
@@ -142,7 +145,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	}, [acknowledgedClearedPayoutKeys, positions.limitless.rows]);
 	const limitlessPositionsTotal = useMemo(() => {
 		return limitlessPositionsDataNetClaim.reduce(
-			(sum, p) => sum + (p.currentValue ?? 0),
+			(sum, p) => sum + limitlessPositionPortfolioUsdValue(p),
 			0,
 		);
 	}, [limitlessPositionsDataNetClaim]);
@@ -161,6 +164,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 				marketStatus: p.marketStatus ?? "(missing)",
 				resolvedLike: isVenueMarketResolvedLike(p.marketStatus),
 				redeemable: p.redeemable,
+				redeemPending: p.redeemPending === true,
 				tokenTail: (p.tokenId ?? "").slice(-14),
 			})),
 		);

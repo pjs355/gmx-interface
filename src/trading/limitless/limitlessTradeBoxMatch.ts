@@ -1,7 +1,8 @@
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { VenuePosition } from "@/types/trading/venuePosition";
-import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
+import { limitlessPositionHitsCatalogLeg } from "@/trading/limitless/limitlessCatalogTokenPair";
+import { coerceLimitlessWireForInference } from "@/utils/mergeMonitorLimitlessFromUmbrella";
 
 /**
  * True when a Limitless CLOB row belongs to the current trade page market
@@ -13,18 +14,10 @@ export function limitlessVenuePositionMatchesPageMarket(
 	matchedMonitor: MatchedMarket | null | undefined,
 ): boolean {
 	if (pos.venue !== "limitless") return false;
-	const lx = matchedMonitor?.limitless ?? umbrella?.exchangeMatching?.limitless;
-	if (!lx?.tokenIdA || !lx?.tokenIdB) return false;
-	const tid = canonicalLimitlessTokenId(pos.tokenId);
-	const a = canonicalLimitlessTokenId(String(lx.tokenIdA));
-	const b = canonicalLimitlessTokenId(String(lx.tokenIdB));
-	if (!tid || (tid !== a && tid !== b)) return false;
-	const slugPos = (pos.eventSlug ?? "").trim();
-	if (!slugPos) return true;
-	const slugParent = (lx.slug ?? "").trim();
-	const oa = (lx.orderbookSlugA ?? "").trim();
-	const ob = (lx.orderbookSlugB ?? "").trim();
-	if (slugParent && slugPos === slugParent) return true;
-	if ((oa && slugPos === oa) || (ob && slugPos === ob)) return true;
-	return true;
+	const wire = coerceLimitlessWireForInference(
+		matchedMonitor?.limitless,
+		umbrella?.exchangeMatching?.limitless,
+	);
+	if (!wire?.tokenIdA?.trim() || !wire?.tokenIdB?.trim()) return false;
+	return limitlessPositionHitsCatalogLeg(pos, wire);
 }

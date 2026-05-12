@@ -6,6 +6,7 @@ import {
 	lookupUmbrellaByDflowEventTicker,
 	mintMatchesDflowExchange,
 } from "@/trading/dflow/dflowUmbrellaLookup";
+import { limitlessPositionHitsCatalogLeg } from "@/trading/limitless/limitlessCatalogTokenPair";
 import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
 import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
@@ -288,6 +289,7 @@ export function matchVenuePositionToUmbrella(
 		| "levelUpUmbrellaId"
 		| "levelUpUmbrellaDisplayName"
 		| "eventSlug"
+		| "limitlessGroupSlug"
 		| "dflowEventTicker"
 	>,
 	venue: VenueId,
@@ -338,15 +340,22 @@ export function matchVenuePositionToUmbrella(
 	if (venue === "limitless") {
 		const slug = (pos.eventSlug ?? "").trim();
 		const tid = canonicalLimitlessTokenId(String(pos.tokenId ?? ""));
-		if (!tid) return null;
+		if (!slug && !tid) return null;
 
 		const byToken: Umbrella[] = [];
 		for (const u of umbrellas) {
 			const lx = u.exchangeMatching?.limitless;
 			if (!lx?.tokenIdA?.trim() || !lx?.tokenIdB?.trim()) continue;
-			const a = canonicalLimitlessTokenId(String(lx.tokenIdA));
-			const b = canonicalLimitlessTokenId(String(lx.tokenIdB));
-			if (tid === a || tid === b) byToken.push(u);
+			const wire = {
+				tokenIdA: lx.tokenIdA,
+				tokenIdB: lx.tokenIdB,
+				orderbookSlugA: lx.orderbookSlugA,
+				orderbookSlugB: lx.orderbookSlugB,
+				groupSlug: lx.slug,
+			};
+			if (limitlessPositionHitsCatalogLeg(pos as VenuePosition, wire)) {
+				byToken.push(u);
+			}
 		}
 		if (byToken.length === 0) return null;
 		if (byToken.length === 1) return byToken[0]!;
@@ -418,6 +427,7 @@ export function matchVenuePositionToUmbrellaForHistory(
 		| "levelUpUmbrellaId"
 		| "levelUpUmbrellaDisplayName"
 		| "eventSlug"
+		| "limitlessGroupSlug"
 		| "dflowEventTicker"
 	>,
 	venue: VenueId,

@@ -460,13 +460,16 @@ export function TransfersModal() {
 		try {
 			await executePlan(plan);
 			setView("submitted");
-			await refreshUserData();
+			// `refreshUserData` reloads LevelUp positions / orders — it does not hit
+			// `GET /portfolio/cash-summary`. Repull cash so Transfers + header match
+			// post-withdraw balances (same path as maker prefund in review flow).
+			await Promise.allSettled([refreshUserData(), refreshAccount.cash()]);
 		} catch (err) {
 			setError(getWithdrawExecutionErrorMessage(err));
 		} finally {
 			setIsSubmitting(false);
 		}
-	}, [executePlan, plan, refreshUserData]);
+	}, [executePlan, plan, refreshAccount, refreshUserData]);
 
 	const handleDone = useCallback(() => {
 		closeModal();

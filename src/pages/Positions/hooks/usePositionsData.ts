@@ -21,6 +21,7 @@ import { useVenueHistoryRawItems } from "./assemblers/useVenueHistoryRawItems";
 import { useVenueOrders } from "./assemblers/useVenueOrders";
 import { useDflowBundle } from "./venues/dflow/useDflowBundle";
 import { useLimitlessBundle } from "./venues/limitless/useLimitlessBundle";
+import { limitlessVenueRowsForWinningsTab } from "@/trading/limitless/splitLimitlessVenuePositions";
 import { usePolymarketBundle } from "./venues/polymarket/usePolymarketBundle";
 import { usePredictBundle } from "./venues/predict/usePredictBundle";
 
@@ -88,6 +89,11 @@ export default function usePositionsData() {
 		tradeHistoryQuery: limitlessTradeHistoryQuery,
 		limitlessPortfolioEnabled,
 	} = useLimitlessBundle({ authenticated, limitlessMakerBase });
+
+	const limitlessWinningsForResolvedTab = useMemo(
+		() => limitlessVenueRowsForWinningsTab(limitlessWinnings, limitlessHistory),
+		[limitlessWinnings, limitlessHistory],
+	);
 
 	const [claimedMarkets, setClaimedMarkets] = useState<Set<string>>(new Set());
 	const [activeTab, setActiveTab] = useState<"positions" | "orders" | "history">("positions");
@@ -216,7 +222,7 @@ export default function usePositionsData() {
 		predictWinnings,
 		polyWinnings,
 		dflowWinnings,
-		limitlessWinnings,
+		limitlessWinnings: limitlessWinningsForResolvedTab,
 		predictMarketDetails,
 		predictUmbrellaLookup,
 		oddsMonitorMarkets: appState?.markets,

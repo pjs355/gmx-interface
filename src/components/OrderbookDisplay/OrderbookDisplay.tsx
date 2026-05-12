@@ -2,22 +2,6 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useCurtainActions } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
-// Helper function to calculate prices from orderbook
-const calculateOrderbookPrices = (orderbook: OrderbookSnapshot | null) => {
-	if (!orderbook) return { bestAsk: null, bestBid: null };
-
-	const bestAsk =
-		orderbook.asks && orderbook.asks.length > 0
-			? Math.min(...orderbook.asks.map((a) => a.price))
-			: null;
-
-	const bestBid =
-		orderbook.bids && orderbook.bids.length > 0
-			? Math.max(...orderbook.bids.map((b) => b.price))
-			: null;
-
-	return { bestAsk, bestBid };
-};
 import {
 	shortenTeamLabelForButton,
 	hexToRgba,
@@ -34,6 +18,14 @@ import {
 	formatOrderbookLevelShares,
 	oddsDualLayoutForStyle,
 } from "@/utils/oddsDisplayFormat";
+import type { ConsolidatedRestingLevel } from "./orderbookDisplayLevels";
+import {
+	bestBidAskFromConsolidatedSides,
+	effectiveMinDisplayableRestingSize,
+	filterRestingLevelsByMinSize,
+	flattenAndConsolidateRestingLevels,
+	safeOrderbookNumber,
+} from "./orderbookDisplayLevels";
 
 interface OrderbookDisplayProps {
 	orderbook: OrderbookSnapshot | null;
@@ -56,6 +48,16 @@ interface OrderbookDisplayProps {
 	umbrellaDisplayName?: string;
 	/** Single always-visible book: team row above ladder; no accordion header. */
 	layout?: "accordion" | "embedded";
+	/**
+	 * When true, resting rows below ~1 full contract are hidden and BBO uses the same floor
+	 * (LevelUp on-chain, Kalshi / DFlow monitor books).
+	 */
+	wholeContractRestingBook?: boolean;
+	/**
+	 * Optional minimum resting `size` for ladder + BBO. Defaults: fractional books 1e-6,
+	 * whole-contract books ~1. Pass `0` on fractional books to disable the dust floor.
+	 */
+	minDisplayableRestingSize?: number;
 }
 
 export default function OrderbookDisplay({
@@ -75,6 +77,8 @@ export default function OrderbookDisplay({
 	side = "buy",
 	umbrellaDisplayName,
 	layout = "accordion",
+	wholeContractRestingBook = false,
+	minDisplayableRestingSize,
 }: OrderbookDisplayProps) {
 	const isEmbedded = layout === "embedded";
 	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
@@ -114,10 +118,99 @@ export default function OrderbookDisplay({
 		return () => window.clearTimeout(t);
 	}, [ladderExpanded, orderbook, activeTab]);
 
-	// Calculate prices for this market's orderbook
-	const { bestBid: marketBestBid, bestAsk: marketBestAsk } = useMemo(() => {
-		return calculateOrderbookPrices(orderbook);
-	}, [orderbook]);
+	const effectiveMinDisplayable = useMemo(
+		() =>
+			effectiveMinDisplayableRestingSize(
+				wholeContractRestingBook,
+				minDisplayableRestingSize,
+			),
+		[wholeContractRestingBook, minDisplayableRestingSize],
+	);
+
+	const orderbookDerived = useMemo(() => {
+		const empty = {
+			marketBestBid: null as number | null,
+			marketBestAsk: null as number | null,
+			noBestBid: null as number | null,
+			noBestAsk: null as number | null,
+			sortedAsksYes: [] as ConsolidatedRestingLevel[],
+			sortedBidsYes: [] as ConsolidatedRestingLevel[],
+			noTabAsks: [] as ConsolidatedRestingLevel[],
+			noTabBids: [] as ConsolidatedRestingLevel[],
+		};
+		if (!orderbook) return empty;
+
+		const min = effectiveMinDisplayable;
+		const yesAskF = filterRestingLevelsByMinSize(
+			flattenAndConsolidateRestingLevels(orderbook.asks || []),
+			min,
+		);
+		const yesBidF = filterRestingLevelsByMinSize(
+			flattenAndConsolidateRestingLevels(orderbook.bids || []),
+			min,
+		);
+		const yesBbo = bestBidAskFromConsolidatedSides(yesAskF, yesBidF);
+		const sortedAsksYes = [...yesAskF]
+			.sort((a, b) => a.price - b.price)
+			.reverse();
+		const sortedBidsYes = [...yesBidF].sort((a, b) => b.price - a.price);
+
+		if (noSideOrderbook) {
+			const noAskF = filterRestingLevelsByMinSize(
+				flattenAndConsolidateRestingLevels(noSideOrderbook.asks || []),
+				min,
+			);
+			const noBidF = filterRestingLevelsByMinSize(
+				flattenAndConsolidateRestingLevels(noSideOrderbook.bids || []),
+				min,
+			);
+			const noBbo = bestBidAskFromConsolidatedSides(noAskF, noBidF);
+			const noTabAsks = [...noAskF]
+				.sort((a, b) => a.price - b.price)
+				.reverse();
+			const noTabBids = [...noBidF].sort((a, b) => b.price - a.price);
+			return {
+				marketBestBid: yesBbo.bestBid,
+				marketBestAsk: yesBbo.bestAsk,
+				noBestBid: noBbo.bestBid,
+				noBestAsk: noBbo.bestAsk,
+				sortedAsksYes,
+				sortedBidsYes,
+				noTabAsks,
+				noTabBids,
+			};
+		}
+
+		const noTabAsks = sortedBidsYes
+			.map((bid) => ({
+				...bid,
+				price: 1 - bid.price,
+				id: `inverted-${bid.id}`,
+			}))
+			.sort((a, b) => a.price - b.price)
+			.reverse();
+		const noTabBids = sortedAsksYes
+			.map((ask) => ({
+				...ask,
+				price: 1 - ask.price,
+				id: `inverted-${ask.id}`,
+			}))
+			.sort((a, b) => b.price - a.price);
+
+		return {
+			marketBestBid: yesBbo.bestBid,
+			marketBestAsk: yesBbo.bestAsk,
+			noBestBid: null,
+			noBestAsk: null,
+			sortedAsksYes,
+			sortedBidsYes,
+			noTabAsks,
+			noTabBids,
+		};
+	}, [orderbook, noSideOrderbook, effectiveMinDisplayable]);
+
+	const marketBestBid = orderbookDerived.marketBestBid;
+	const marketBestAsk = orderbookDerived.marketBestAsk;
 
 	// Check if this is an "Over {number}" market (daily player count style)
 	const overUnderMatch = useMemo(() => {
@@ -193,10 +286,8 @@ export default function OrderbookDisplay({
 		[noColor],
 	);
 
-	const { bestBid: noBestBid, bestAsk: noBestAsk } = useMemo(() => {
-		if (noSideOrderbook) return calculateOrderbookPrices(noSideOrderbook);
-		return { bestBid: null, bestAsk: null };
-	}, [noSideOrderbook]);
+	const noBestBid = orderbookDerived.noBestBid;
+	const noBestAsk = orderbookDerived.noBestAsk;
 
 	const yesLabelPrice = side === "buy" ? marketBestAsk : marketBestBid;
 	const noLabelPrice = noSideOrderbook
@@ -571,157 +662,24 @@ export default function OrderbookDisplay({
 		);
 	}
 
-	// Helper function to safely format numbers
-	const safeNumber = (value: any): number => {
-		if (typeof value === "number" && !isNaN(value) && isFinite(value)) {
-			return value;
-		}
-		if (typeof value === "string") {
-			const parsed = parseFloat(value);
-			if (!isNaN(parsed) && isFinite(parsed)) {
-				return parsed;
-			}
-		}
-		return 0;
-	};
-
-	// Helper function to flatten and consolidate orders with same price
-	const flattenAndConsolidateOrders = (
-		priceLevels: any[]
-	): Array<{ price: number; size: number; id: string }> => {
-		const priceMap = new Map<number, { size: number; id: string }>();
-
-		priceLevels?.forEach((level, levelIndex) => {
-			if (
-				level &&
-				typeof level === "object" &&
-				level.price !== undefined
-			) {
-				const price = safeNumber(level.price);
-
-				if (price > 0) {
-					// Handle nested orders array structure
-					if (level.orders && Array.isArray(level.orders)) {
-						level.orders.forEach(
-							(order: any, orderIndex: number) => {
-								if (order && typeof order === "object") {
-									const size = safeNumber(
-										order.size || order.amount || 1
-									);
-									if (size > 0) {
-										if (priceMap.has(price)) {
-											priceMap.get(price)!.size += size;
-										} else {
-											priceMap.set(price, {
-												size,
-												id:
-													order.id ||
-													order.salt ||
-													`level-${levelIndex}-order-${orderIndex}`,
-											});
-										}
-									}
-								}
-							}
-						);
-					} else {
-						// Handle direct size property
-						const size = safeNumber(
-							level.size || level.amount || 1
-						);
-						if (size > 0) {
-							if (priceMap.has(price)) {
-								priceMap.get(price)!.size += size;
-							} else {
-								priceMap.set(price, {
-									size,
-									id:
-										level.id ||
-										level.salt ||
-										`level-${levelIndex}`,
-								});
-							}
-						}
-					}
-				}
-			}
-		});
-
-		// Convert map back to array
-		const consolidated: Array<{ price: number; size: number; id: string }> =
-			[];
-		priceMap.forEach((value, price) => {
-			consolidated.push({
-				price,
-				size: value.size,
-				id: value.id,
-			});
-		});
-
-		return consolidated;
-	};
-
-	// Flatten and consolidate orders with same price
-	const flattenedAsks = flattenAndConsolidateOrders(orderbook.asks || []);
-	const flattenedBids = flattenAndConsolidateOrders(orderbook.bids || []);
-
-	// Debug flattened data (commented out)
-	// console.log('🔍 Flattened orders:', {
-	//   asks: flattenedAsks,
-	//   bids: flattenedBids,
-	//   originalAsks: orderbook.asks,
-	//   originalBids: orderbook.bids
-	// });
-
-	// Sort asks (sell orders) by price ascending (lowest ask first), then reverse to show best ask at bottom
-	const sortedAsks = flattenedAsks
-		.sort((a, b) => a.price - b.price)
-		.reverse();
-
-	// Sort bids (buy orders) by price descending (highest bid first)
-	const sortedBids = flattenedBids.sort((a, b) => b.price - a.price);
-
-	// NO tab data: use separate noSideOrderbook when available, otherwise invert the primary book
-	const noTabAsks = (() => {
-		if (noSideOrderbook) {
-			return flattenAndConsolidateOrders(noSideOrderbook.asks || [])
-				.sort((a, b) => a.price - b.price)
-				.reverse();
-		}
-		return flattenedBids
-			.map((bid) => ({
-				...bid,
-				price: 1 - bid.price,
-				id: `inverted-${bid.id}`,
-			}))
-			.sort((a, b) => a.price - b.price)
-			.reverse();
-	})();
-
-	const noTabBids = (() => {
-		if (noSideOrderbook) {
-			return flattenAndConsolidateOrders(noSideOrderbook.bids || [])
-				.sort((a, b) => b.price - a.price);
-		}
-		return flattenedAsks
-			.map((ask) => ({
-				...ask,
-				price: 1 - ask.price,
-				id: `inverted-${ask.id}`,
-			}))
-			.sort((a, b) => b.price - a.price);
-	})();
-
-	const displayAsks = activeTab === "yes" ? sortedAsks : noTabAsks;
-	const displayBids = activeTab === "yes" ? sortedBids : noTabBids;
+	const displayAsks =
+		activeTab === "yes"
+			? orderbookDerived.sortedAsksYes
+			: orderbookDerived.noTabAsks;
+	const displayBids =
+		activeTab === "yes"
+			? orderbookDerived.sortedBidsYes
+			: orderbookDerived.noTabBids;
 
 	// Get best prices and spread based on active tab
 	const bestAsk =
 		displayAsks.length > 0
-			? safeNumber(displayAsks[displayAsks.length - 1].price)
+			? safeOrderbookNumber(displayAsks[displayAsks.length - 1].price)
 			: null;
 	const bestBid =
-		displayBids.length > 0 ? safeNumber(displayBids[0].price) : null;
+		displayBids.length > 0
+			? safeOrderbookNumber(displayBids[0].price)
+			: null;
 	const spread = bestBid && bestAsk ? bestAsk - bestBid : null;
 	const spreadPercentage =
 		spread && bestBid ? (spread / bestBid) * 100 : null;

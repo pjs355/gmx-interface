@@ -1,4 +1,5 @@
 import type { VenuePosition } from "@/types/trading/venuePosition";
+import { isVenueMarketResolvedLike } from "@/types/trading/venuePosition";
 
 export type LimitlessVenueBucket = "active" | "winnings" | "history";
 
@@ -8,24 +9,16 @@ export type LimitlessVenueSplit = {
 	history: VenuePosition[];
 };
 
-const st = (s: string | undefined) => (s ?? "").toUpperCase().trim();
-
 /**
  * Same routing as {@link usePositionsData}: open positions vs Winnings vs History.
  * Used so portfolio MTM does not count settled History-bucket rows (often still carry cost-like notionals).
  */
 export function getLimitlessVenueBucket(p: VenuePosition): LimitlessVenueBucket {
-	const status = st(p.marketStatus);
-	const resolved =
-		status === "RESOLVED" ||
-		status === "CLOSED" ||
-		status === "SETTLED" ||
-		status === "FINALIZED";
 	if (p.marketClosed === false) {
 		return "active";
 	}
-	if (resolved) {
-		if (p.redeemable && (p.currentValue ?? 0) > 0) {
+	if (isVenueMarketResolvedLike(p.marketStatus)) {
+		if (p.redeemable === true && (p.currentValue ?? 0) > 0) {
 			return "winnings";
 		}
 		return "history";
@@ -48,10 +41,56 @@ export function splitLimitlessVenuePositions(
 	return { active, winnings, history };
 }
 
-/** Rows whose `currentValue` feeds portfolio header MTM — mirrors active + Winnings tab, not History. */
+/**
+ * Rows whose value feeds portfolio header MTM — active + partner-redeemable Winnings +
+ * resolved rows awaiting CTF settlement (`redeemPending`, History tab bucket).
+ */
 export function limitlessPositionsForPortfolioMtm(
 	positions: readonly VenuePosition[],
 ): VenuePosition[] {
-	const { active, winnings } = splitLimitlessVenuePositions(positions);
-	return [...active, ...winnings];
+	const { active, winnings, history } = splitLimitlessVenuePositions(positions);
+	const pendingMtm = history.filter((p) => p.redeemPending === true);
+	return [...active, ...winnings, ...pendingMtm];
+}
+
+/**
+ * Header portfolio should match Winnings economics: resolved redeemable rows pay $1 per
+ * winning share. Limitless `currentValue` is often below that until cash lands; using
+ * `shares` here aligns Portfolio with Positions (`unclaimedWinningsPayoutTotal`).
+ */
+export function limitlessPositionPortfolioUsdValue(p: VenuePosition): number {
+	if (getLimitlessVenueBucket(p) === "winnings") {
+		const s = Number(p.shares);
+		return Number.isFinite(s) && s > 0 ? s : 0;
+	}
+	if (
+		p.venue === "limitless" &&
+		p.redeemPending === true &&
+		isVenueMarketResolvedLike(p.marketStatus)
+	) {
+		const s = Number(p.shares);
+		return Number.isFinite(s) && s > 0 ? s : 0;
+	}
+	return Number(p.currentValue) || 0;
+}
+
+/**
+ * Rows for the Winnings tab resolver: partner-redeemable (`split→winnings`) plus resolved
+ * settlement-pending rows that live in the History split (`redeemPending`) so portfolio MTM
+ * and Winnings stay aligned.
+ */
+export function limitlessVenueRowsForWinningsTab(
+	winnings: readonly VenuePosition[],
+	history: readonly VenuePosition[],
+): VenuePosition[] {
+	const tokens = new Set(
+		winnings.map((p) => String(p.tokenId ?? "").trim()).filter(Boolean),
+	);
+	const extra = history.filter(
+		(p) =>
+			p.venue === "limitless" &&
+			p.redeemPending === true &&
+			!tokens.has(String(p.tokenId ?? "").trim()),
+	);
+	return [...winnings, ...extra];
 }

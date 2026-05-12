@@ -50,6 +50,13 @@ export function useHandleClaimSuccess({
 			const payoutKeys = ids
 				.map((id) => String(id ?? "").trim())
 				.filter((k) => k.length > 0);
+			if (import.meta.env.DEV) {
+				console.debug("[LimitlessRedeemTrace] handleClaimSuccess payoutKeys", {
+					payoutKeys,
+					count: payoutKeys.length,
+					umbrellaId: _umbrellaId,
+				});
+			}
 			// Same keys as Winnings rows (`predict-win-*`, LevelUp `balanceId`, etc.).
 			// PortfolioContext uses this set to drop stale venue MTM until predict/poly
 			// queries refetch after redeem.

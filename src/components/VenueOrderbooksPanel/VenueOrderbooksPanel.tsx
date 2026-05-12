@@ -290,6 +290,10 @@ export function VenueOrderbooksPanel({
 						activePosition={activePosition}
 						isCollapsed={false}
 						side={side}
+						wholeContractRestingBook={
+							selectedVenue.id === "dflow" ||
+							selectedVenue.id === "levelup"
+						}
 					/>
 				)}
 			</div>

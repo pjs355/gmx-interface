@@ -17,6 +17,7 @@ If your checkout layout differs, navigate to `predictions/docs/PREFUND_LIFI_STAT
 - `src/trading/sor/useSorLegExecutor.ts` — prefund loop, quote solve, `executeLifiSteps`, `pollLifiUntilTerminal`
 - `src/trading/sor/prefundPlan.ts` — `buildPrefundSteps`
 - `src/trading/sor/lifiPrefundQuoteSolve.ts` — `ensurePrefundQuoteMeetsDestMin`, cap slack
+- `src/trading/lifi/prefundFromAmountHuman.ts` — floored `amountHuman` + BNB `maxFromWei` cap (no round-up past `balanceOf`)
 - `src/trading/lifi/pollLifiStatus.ts` — transient status errors, terminal assertions
 - `src/services/privateApi/client.ts` — `getFundingLifiStatus`, error envelope parsing
 

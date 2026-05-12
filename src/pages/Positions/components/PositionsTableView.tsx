@@ -82,9 +82,14 @@ export default function PositionsTableView({
 				(m: { venue?: string; includesDflowVenue?: boolean }) =>
 					m.venue === "dflow" || Boolean(m.includesDflowVenue),
 			);
-			const dflowUmbrellaCols = hasDflowVenue
-				? portfolioColumnTeamLabels(umbrella)
-				: null;
+			const hasLimitlessVenue = markets.some(
+				(m: { venue?: string; includesLimitlessVenue?: boolean }) =>
+					m.venue === "limitless" || Boolean(m.includesLimitlessVenue),
+			);
+			const teamPortfolioCols =
+				hasDflowVenue || hasLimitlessVenue
+					? portfolioColumnTeamLabels(umbrella)
+					: null;
 
 			const sideBuckets: Record<"Yes" | "No", {
 				shares: number; marketValue: number; totalCost: number;
@@ -103,6 +108,7 @@ export default function PositionsTableView({
 				no,
 				venue,
 				includesDflowVenue,
+				includesLimitlessVenue,
 				predictOutcomeLabelYes,
 				predictOutcomeLabelNo,
 			} of markets) {
@@ -142,14 +148,17 @@ export default function PositionsTableView({
 					}
 
 					if (!bucket.label) {
-						if (
-							(venue === "dflow" || includesDflowVenue) &&
-							dflowUmbrellaCols
-						) {
+						const useCatalogTeamCols =
+							teamPortfolioCols &&
+							(venue === "dflow" ||
+								includesDflowVenue ||
+								venue === "limitless" ||
+								Boolean(includesLimitlessVenue));
+						if (useCatalogTeamCols) {
 							bucket.label =
 								(side === "Yes"
-									? dflowUmbrellaCols.columnYes
-									: dflowUmbrellaCols.columnNo) || side;
+									? teamPortfolioCols!.columnYes
+									: teamPortfolioCols!.columnNo) || side;
 						} else if (venue === "predictfun" || venue === "limitless") {
 							bucket.label =
 								getPredictPositionRowLabel(

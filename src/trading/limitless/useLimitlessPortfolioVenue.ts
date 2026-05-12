@@ -5,6 +5,7 @@ import {
 	isVenueMarketResolvedLike,
 	venueDisplayLabel,
 } from "@/types/trading/venuePosition";
+import { getLimitlessVenueBucket } from "@/trading/limitless/splitLimitlessVenuePositions";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { PrivateApiError } from "@/services/privateApi/errors";
 import { limitlessQueryKeys } from "./limitlessQueryKeys";
@@ -23,6 +24,79 @@ function num(v: unknown): number {
 
 function str(v: unknown): string {
 	return typeof v === "string" ? v.trim() : "";
+}
+
+/** Partner `market.group.slug` for neg-risk sibling CLOB legs (same group, different leg slugs). */
+function readLimitlessGroupSlugFromRaw(o: Record<string, unknown>): string {
+	const top = str(o.groupSlug);
+	if (top) return top;
+	const mk = o.market;
+	if (mk && typeof mk === "object") {
+		const g = (mk as Record<string, unknown>).group;
+		if (g && typeof g === "object") {
+			return str((g as Record<string, unknown>).slug);
+		}
+	}
+	return "";
+}
+
+const BYTES32_HEX = /^0x[a-fA-F0-9]{64}$/i;
+
+/** Accepts `0x` + 64 hex or bare 64 hex; returns lowercased `0x…` or `""`. */
+function normalizeBytes32HexLoose(raw: string): string {
+	const t = raw.trim();
+	if (!t) return "";
+	const with0x = /^0x/i.test(t)
+		? t
+		: /^[a-fA-F0-9]{64}$/i.test(t)
+			? `0x${t}`
+			: "";
+	if (!BYTES32_HEX.test(with0x)) return "";
+	return with0x.toLowerCase();
+}
+
+/**
+ * NegRisk groups expose `group.negRiskMarketId` (parent). Partner redeem may try the
+ * leg `conditionId` first, then this parent when Limitless returns “no position balance”.
+ */
+function negRiskParentConditionIdFromPositionsRow(
+	o: Record<string, unknown>,
+	legConditionId: string,
+): string {
+	const group =
+		o.group && typeof o.group === "object"
+			? (o.group as Record<string, unknown>)
+			: null;
+	const market =
+		o.market && typeof o.market === "object"
+			? (o.market as Record<string, unknown>)
+			: null;
+	const nestedGroup =
+		market?.group && typeof market.group === "object"
+			? (market.group as Record<string, unknown>)
+			: null;
+	const leg = legConditionId.trim().toLowerCase();
+	/** Match predictions `collectNegRiskParentRawCandidates`: group on market, then on row, then roots. */
+	for (const v of [
+		o.negRiskParentConditionId,
+		nestedGroup?.negRiskMarketId,
+		nestedGroup?.neg_risk_market_id,
+		nestedGroup?.negRiskMarketID,
+		group?.negRiskMarketId,
+		group?.neg_risk_market_id,
+		group?.negRiskMarketID,
+		market?.negRiskMarketId,
+		market?.neg_risk_market_id,
+		market?.negRiskMarketID,
+		o.negRiskMarketId,
+		o.neg_risk_market_id,
+		o.negRiskMarketID,
+	]) {
+		const s = str(v);
+		const n = normalizeBytes32HexLoose(s);
+		if (n && n !== leg) return n;
+	}
+	return "";
 }
 
 /**
@@ -44,6 +118,9 @@ function isLimitlessRouteUnavailable(err: unknown): boolean {
  * [AMM positions](https://docs.limitless.exchange/developers/sdk/typescript/portfolio#amm-positions)).
  * Limitless also notes that `RESOLVED` on a market does not guarantee on-chain payout yet —
  * [Get Positions](https://docs.limitless.exchange/api-reference/portfolio/positions).
+ * The proxy adds `limitlessPartnerRedeemableSignal` (`omit` | `true` | `false`) so the client
+ * does not conflate “flag omitted” with “not redeemable”. In-app Claim is disabled only when
+ * the partner explicitly sends `false`.
  */
 function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 	if (!raw || typeof raw !== "object") return null;
@@ -53,8 +130,15 @@ function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 	const shares = num(o.shares);
 	if (shares <= 0) return null;
 	const slug = str(o.marketSlug);
+	const limitlessGroupSlug = readLimitlessGroupSlugFromRaw(o);
 	const status = str(o.marketStatus);
 	const redeemable = o.redeemable === true;
+	const redeemPending = o.redeemPending === true;
+	const sigRaw = o.limitlessPartnerRedeemableSignal;
+	const limitlessPartnerRedeemableSignal =
+		sigRaw === "omit" || sigRaw === "true" || sigRaw === "false"
+			? sigRaw
+			: undefined;
 	const posOut: VenuePosition = {
 		venue: "limitless",
 		marketTitle: str(o.marketTitle) || slug || venueDisplayLabel("limitless"),
@@ -78,12 +162,20 @@ function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 		tokenId,
 		conditionId: str(o.conditionId) || undefined,
 		eventSlug: slug || undefined,
+		...(limitlessGroupSlug ? { limitlessGroupSlug } : {}),
 		redeemable,
+		...(redeemPending ? { redeemPending: true } : {}),
+		...(limitlessPartnerRedeemableSignal
+			? { limitlessPartnerRedeemableSignal }
+			: {}),
 		marketStatus: status || undefined,
 	};
-	const negParent = str(o.negRiskParentConditionId);
+	const legCid = posOut.conditionId ?? "";
+	const negParent = negRiskParentConditionIdFromPositionsRow(o, legCid);
 	if (negParent) {
 		posOut.negRiskParentConditionId = negParent;
+		posOut.isNegRisk = true;
+	} else if (o.isNegRisk === true) {
 		posOut.isNegRisk = true;
 	}
 	if (typeof o.marketClosed === "boolean") {
@@ -461,29 +553,37 @@ export function useLimitlessVenuePositions(enabled: boolean) {
 				const v = mapPositionsVenueRow(row);
 				if (v) out.push(v);
 			}
+
 			if (import.meta.env.DEV && out.length > 0) {
 				const rows = out.map((p) => {
 					const resolvedLike = isVenueMarketResolvedLike(p.marketStatus);
+					const splitBucket = getLimitlessVenueBucket(p);
 					const bucket =
 						p.marketClosed === false
 							? "split→active (market.closed false)"
-							: resolvedLike && p.redeemable && (p.currentValue ?? 0) > 0
+							: splitBucket === "winnings"
 								? "split→limitlessWinnings"
-								: resolvedLike
-									? "split→limitlessHistory (shows under History tab)"
-									: "split→active Positions only";
+								: splitBucket === "history" && p.redeemPending === true
+									? "split→limitlessHistory (resolved; partner redeemable omitted — Claim allowed unless partner sends false)"
+									: splitBucket === "history"
+										? "split→limitlessHistory (shows under History tab)"
+										: "split→active Positions only";
 					return {
 						bucket,
+						splitBucket,
 						resolvedLikeApi: resolvedLike,
 						marketClosed: p.marketClosed,
 						winningOutcomeIndex: p.winningOutcomeIndex,
 						marketStatus: p.marketStatus ?? "(missing)",
 						redeemable: p.redeemable,
+						redeemPending: p.redeemPending === true,
 						currentValue: p.currentValue,
 						shares: p.shares,
 						outcome: p.outcome,
 						title: (p.marketTitle ?? "").slice(0, 64),
 						slug: p.eventSlug ?? "",
+						limitlessGroupSlug: p.limitlessGroupSlug ?? "",
+						conditionId: p.conditionId ?? "",
 						tokenTail: (p.tokenId ?? "").slice(-14),
 					};
 				});

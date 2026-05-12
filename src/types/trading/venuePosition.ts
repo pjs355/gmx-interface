@@ -23,7 +23,8 @@ export function isVenueMarketResolvedLike(
 		s === "RESOLVED" ||
 		s === "CLOSED" ||
 		s === "SETTLED" ||
-		s === "FINALIZED"
+		s === "FINALIZED" ||
+		s === "DETERMINED"
 	);
 }
 
@@ -82,8 +83,27 @@ export interface VenuePosition {
 	dflowEventTicker?: string;
 	conditionId?: string;
 	eventSlug?: string;
+	/**
+	 * Limitless neg-risk: `market.group.slug` from partner (e.g. `passion-ua-vs-sinners-…`).
+	 * Used when per-leg `eventSlug` / mints do not line up with catalog `orderbookSlugA/B`.
+	 */
+	limitlessGroupSlug?: string;
 	iconUrl?: string;
+	/**
+	 * Limitless partner `GET /portfolio/positions`: only true when the venue sends an explicit
+	 * redeemable flag — drives Winnings + Claim (never inferred from MTM alone).
+	 */
 	redeemable?: boolean;
+	/**
+	 * Limitless: resolved winning leg with value/shares in the API response, but the partner
+	 * has not yet marked the row claim-ready (CTF settlement can lag API resolution).
+	 */
+	redeemPending?: boolean;
+	/**
+	 * Explicit partner signal from the predictions proxy: `omit` = no boolean in upstream
+	 * payload (do not treat as “not redeemable”), `true` / `false` = Limitless sent a boolean.
+	 */
+	limitlessPartnerRedeemableSignal?: "omit" | "true" | "false";
 	/** Predict.fun numeric market id (used for settlement lookups) */
 	numericMarketId?: number;
 	/** Server-resolved LevelUp umbrella id (Predict positions proxy join). */
@@ -95,6 +115,12 @@ export interface VenuePosition {
 	 * {@link portfolioColumnTeamLabels} / {@link patchDflowVenuePositionOutcomes}). Trade-history Side text.
 	 */
 	dflowTradeSideLabel?: string;
+	/**
+	 * Kalshi/DFlow Metadata `yesSubTitle` / `noSubTitle` from `markets/batch` — used so
+	 * "Will X win …" rows label Yes/No with outcome names instead of splitting on the wrong `vs`.
+	 */
+	dflowYesSubTitle?: string;
+	dflowNoSubTitle?: string;
 	/** Market-level status from the venue (e.g. "RESOLVED") */
 	marketStatus?: string;
 	/** Limitless `PositionMarket.closed` — when false, treat row as live for Positions vs History split. */
@@ -131,6 +157,19 @@ export interface VenuePosition {
 	 * balances are read for the leg outcome `tokenId`.
 	 */
 	negRiskParentConditionId?: string;
+}
+
+/**
+ * Dedupe key while attaching venue rows to umbrellas. Limitless (and some partner payloads)
+ * can repeat the same outcome `tokenId` on two neg-risk legs; `conditionId` disambiguates.
+ */
+export function venuePositionPortfolioDedupeKey(
+	p: Pick<VenuePosition, "tokenId"> & { conditionId?: string },
+): string {
+	const tid = String(p.tokenId ?? "").trim();
+	const cid = String(p.conditionId ?? "").trim().toLowerCase();
+	if (cid) return `${tid}::${cid}`;
+	return tid;
 }
 
 /**

@@ -17,7 +17,6 @@ import { useMatchSettled } from "./useMatchSettled";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
 import { hasUsableOrderbookSnapshot } from "./utils";
-import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -184,22 +183,29 @@ function PredictionMarketContent() {
 	]);
 
 	useEffect(() => {
-		if (!umbrella || !isTradingDebugLoggingEnabled()) return;
+		if (!umbrella) return;
+		const label = `[PredictionMarket] full umbrella — ${umbrella.displayName ?? umbrella._id} (${umbrella._id})`;
 		try {
-			const clone = JSON.parse(JSON.stringify(umbrella)) as Umbrella;
-			console.log("[PredictionMarket] full umbrella object:", clone);
+			const umbrellaDump = JSON.parse(JSON.stringify(umbrella)) as Umbrella;
+			const questionsDump =
+				questions.length > 0
+					? JSON.parse(JSON.stringify(questions))
+					: questions;
+			console.groupCollapsed(label);
+			console.log("umbrella:", umbrellaDump);
 			console.log(
-				"[PredictionMarket] umbrella.exchangeMatching.limitless (DB-shaped; not what Basic tab uses):",
-				clone.exchangeMatching?.limitless ?? "(absent — Limitless tab still works if GET /matched-markets + WS include it)",
+				`child markets (questions under this umbrella, ${questions.length}):`,
+				questionsDump,
 			);
-		} catch {
-			console.log("[PredictionMarket] full umbrella object (non-serializable fields omitted):", umbrella);
-			console.log(
-				"[PredictionMarket] umbrella.exchangeMatching.limitless:",
-				umbrella.exchangeMatching?.limitless ?? "(absent)",
-			);
+			console.groupEnd();
+		} catch (err) {
+			console.groupCollapsed(label);
+			console.log("umbrella (live object; JSON dump failed):", umbrella);
+			console.log("questions (live):", questions);
+			console.warn("[PredictionMarket] umbrella/questions serialize error:", err);
+			console.groupEnd();
 		}
-	}, [umbrella]);
+	}, [umbrella, questions]);
 
 	const {
 		questionOrderbooks,

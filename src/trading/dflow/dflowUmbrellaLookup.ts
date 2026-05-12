@@ -163,10 +163,13 @@ export function buildUmbrellaLookupByDflowOutcomeMint(
 }
 
 /**
- * Portfolio columns = first vs second team on the umbrella (same A/B as {@link buildDflowPortfolioColumnMapFromCatalog}).
- * Aligns with SOR A/B legs: **contract YES** on a side pays when that team wins; **contract NO** pays
- * when the opponent wins (same economics as YES on the other team — show under the team the user
- * is effectively backing).
+ * Portfolio columns = first vs second team on the umbrella (`teamMappings` / display title).
+ *
+ * Kalshi exposes **four** SPLs (YES/NO × team A leg × team B leg). They collapse to **two** buckets:
+ * **YES A + NO B** pay together (A wins → portfolio **Yes**); **NO A + YES B** pay together (B wins → portfolio **No**).
+ *
+ * Wire: Mongo `exchangeMatching.dflow` — **yesMintA** / **noMintB** → portfolio **Yes**; **noMintA** / **yesMintB** → **No**.
+ * {@link patchDflowVenuePositionOutcomes} uses this map as the **only** mint → column remap for UI.
  */
 export function buildDflowPortfolioColumnMapFromCatalog(
 	umbrellas: Umbrella[],

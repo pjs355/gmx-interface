@@ -164,6 +164,8 @@ export interface RoutePlan {
 	 * @deprecated Legacy preview flag from older API. Prefer `sufficientFunds`.
 	 */
 	theoreticalLiquidity?: boolean;
+	/** When set server-side, every leg must use this venue (HMAC-bound). */
+	lockedExecutionVenue?: SorVenue;
 	hmac: string;
 	expiresAt: number;
 	computedInMs: number;
