@@ -19,6 +19,7 @@ import { normalizePolymarketPositionTokenId } from "@/trading/polymarket/polymar
 import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
 import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
 import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
+import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
 
 /** Maps a route leg's source-of-funds chain → collateral context key. */
 export function chainToCollateralKey(
@@ -47,7 +48,17 @@ export type PostTradeBaseline = {
 /**
  * Stable identity for a position row, matching the venue-specific keying used
  * in post-trade baseline capture.
+ *
+ * Optional monitor hints on `ShareIdentityRouteLegContext` align route legs with
+ * the same keys as cached positions (Predict.fun outcome token ids).
  */
+export type ShareIdentityRouteLegContext = {
+	predictFun?: {
+		tokenIdA?: string;
+		tokenIdB?: string;
+	} | null;
+};
+
 export function shareIdentityForVenuePosition(p: VenuePosition): string | null {
 	switch (p.venue) {
 		case "polymarket": {
@@ -55,6 +66,8 @@ export function shareIdentityForVenuePosition(p: VenuePosition): string | null {
 			return tok ? `polymarket:${tok}` : null;
 		}
 		case "predictfun": {
+			const tok = normalizePredictTokenId(p.tokenId ?? "");
+			if (tok) return `predictfun:${tok}`;
 			if (p.numericMarketId == null || !p.outcome) return null;
 			return `predictfun:${p.numericMarketId}|${p.outcome.trim().toLowerCase()}`;
 		}
@@ -72,7 +85,10 @@ export function shareIdentityForVenuePosition(p: VenuePosition): string | null {
 }
 
 /** Identity for a route leg, mirroring `shareIdentityForVenuePosition`. */
-export function shareIdentityForRouteLeg(leg: RouteLeg): string | null {
+export function shareIdentityForRouteLeg(
+	leg: RouteLeg,
+	ctx?: ShareIdentityRouteLegContext | null,
+): string | null {
 	switch (leg.venue) {
 		case "polymarket": {
 			const raw =
@@ -83,6 +99,12 @@ export function shareIdentityForRouteLeg(leg: RouteLeg): string | null {
 			return tok ? `polymarket:${tok}` : null;
 		}
 		case "predictfun": {
+			const tokRaw =
+				leg.outcome === "A"
+					? ctx?.predictFun?.tokenIdA
+					: ctx?.predictFun?.tokenIdB;
+			const fromMonitor = normalizePredictTokenId(tokRaw ?? "");
+			if (fromMonitor) return `predictfun:${fromMonitor}`;
 			const raw =
 				leg.outcome === "A"
 					? leg.venueMarketIds.predictFunMarketIdA
@@ -182,6 +204,8 @@ export type PostTradeBaselineInput = {
 	route: RoutePlan;
 	addresses: PostTradeBaselineAddresses;
 	levelUp: { marketId: string; yesBalance: number; noBalance: number } | null;
+	/** Same as post-trade sync — keeps baseline Map keys aligned with `usePredictPositions` rows. */
+	shareIdentityCtx?: ShareIdentityRouteLegContext | null;
 };
 
 /**
@@ -196,7 +220,7 @@ export function capturePostTradeBaseline(
 
 	for (const leg of input.route.legs) {
 		if (leg.venue === "levelup") continue;
-		const identity = shareIdentityForRouteLeg(leg);
+		const identity = shareIdentityForRouteLeg(leg, input.shareIdentityCtx);
 		if (!identity) continue;
 		if (shares.has(identity)) continue;
 		shares.set(
@@ -275,6 +299,7 @@ export function computeExpectedDeltas(
 	route: RoutePlan,
 	execution: RouteExecution,
 	baseline: PostTradeBaseline,
+	shareIdentityCtx?: ShareIdentityRouteLegContext | null,
 ): ExpectedDeltas {
 	const expectedShares = new Map<string, number>();
 	const cashDeltas: Partial<Record<CollateralChainKey, number>> = {};
@@ -311,7 +336,7 @@ export function computeExpectedDeltas(
 			}
 			continue;
 		}
-		const identity = shareIdentityForRouteLeg(rl);
+		const identity = shareIdentityForRouteLeg(rl, shareIdentityCtx);
 		if (!identity) continue;
 		const cur = expectedShares.get(identity) ?? baseline.shares.get(identity) ?? 0;
 		const next =

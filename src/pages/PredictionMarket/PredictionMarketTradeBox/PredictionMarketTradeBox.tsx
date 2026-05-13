@@ -56,6 +56,7 @@ import {
 	predictOutcomeTokenId,
 } from "@/trading/predict/predictMarketApi";
 import { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
+import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import {
 	bboFromSnapshot,
 	logPolymarketTradePreflight,
@@ -161,7 +162,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
   }, [pandaId, state.orderType, handleOrderTypeChange]);
   const { getClientForChain } = useSmartWallets();
-  const { account, ready: signerReady } = useSignerContext();
+  const { account, signerAddress, ready: signerReady } = useSignerContext();
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
@@ -276,6 +277,24 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     );
     return mergeMonitorLimitlessFromUmbrella(base, limitlessMappingFromUmbrella);
   }, [oddsAppState?.markets, pandaId, propUmbrellaId, limitlessMappingFromUmbrella]);
+
+  /** Same wallet + token hints as `usePredictPositions` / post-trade cache reads (`predict-positions`). */
+  const predictPostTradeWallet = resolvePredictAccountAddress(
+    signerAddress,
+    account,
+  );
+  const predictShareIdentityCtx = useMemo(
+    () =>
+      matchedMonitor?.predictFun
+        ? {
+            predictFun: {
+              tokenIdA: matchedMonitor.predictFun.tokenIdA,
+              tokenIdB: matchedMonitor.predictFun.tokenIdB,
+            },
+          }
+        : null,
+    [matchedMonitor?.predictFun],
+  );
 
   const matchedVenues = useMemo(() => {
     const set = new Set<string>(["levelup"]);
@@ -2213,7 +2232,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         route: executableRoute,
         addresses: {
           polymarketSafe: funding.polymarketSafe,
-          predictWallet: account,
+          predictWallet: predictPostTradeWallet,
           solanaAddress: funding.solanaAddress,
         },
         levelUp: marketId
@@ -2223,6 +2242,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
               noBalance,
             }
           : null,
+        shareIdentityCtx: predictShareIdentityCtx,
       });
       latestBaselineRef.current = {
         routeId: executableRoute.routeId,
@@ -2309,7 +2329,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     queryClient,
     funding.polymarketSafe,
     funding.solanaAddress,
-    account,
+    predictPostTradeWallet,
+    predictShareIdentityCtx,
     market,
     yesBalance,
     noBalance,
@@ -2390,7 +2411,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           baseline: cached.baseline,
           addresses: {
             polymarketSafe: funding.polymarketSafe,
-            predictWallet: account,
+            predictWallet: predictPostTradeWallet,
             solanaAddress: funding.solanaAddress,
           },
           refreshLevelUpPositions: refreshTokenPositions,
@@ -2403,6 +2424,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             return Number.isFinite(n) ? n : 0;
           },
           syncUiKey,
+          shareIdentityCtx: predictShareIdentityCtx,
         });
       } else if (import.meta.env.DEV) {
         console.warn(
@@ -2447,7 +2469,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     collateralTokens,
     funding.polymarketSafe,
     funding.solanaAddress,
-    account,
+    predictPostTradeWallet,
+    predictShareIdentityCtx,
     market,
     postTradeSync,
     getTokenBalance,

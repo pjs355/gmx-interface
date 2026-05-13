@@ -299,7 +299,7 @@ export default function Details() {
 
 						{!isSettingNewUsername && (
 							<div className="Details-hint">
-								Username will be displayed on leaderboard and comments.
+								Username will be displayed on comments.
 							</div>
 						)}
 					</div>

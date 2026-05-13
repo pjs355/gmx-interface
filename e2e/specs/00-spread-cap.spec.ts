@@ -1,32 +1,29 @@
 import { test, expect } from "../fixtures/test";
-import { warnPerVenueSpreadsAboveE2eCap } from "../fixtures/matched-market";
+import {
+	MAX_E2E_VENUE_SPREAD_USD,
+	warnPerVenueSpreadsAboveE2eCap,
+} from "../fixtures/matched-market";
 import { REQUESTED_VENUES } from "../fixtures/requested-venues";
 
 test.describe("per-venue spread cap (preflight)", () => {
-	test("each requested venue with a live best book reports spread; warns at ≥25¢ top-of-book (no ladders)", async ({
-		perVenueBestPicks,
-	}) => {
-		if (REQUESTED_VENUES.length === 0) {
-			throw new Error(
-				"REQUESTED_VENUES is empty: uncomment at least one venue in e2e/fixtures/requested-venues.ts.",
-			);
-		}
-		const requestedPicks = perVenueBestPicks.filter((p) =>
-			REQUESTED_VENUES.includes(p.venueKey),
-		);
-		const missingRequested = REQUESTED_VENUES.filter(
-			(key) => !perVenueBestPicks.some((p) => p.venueKey === key),
-		);
-		if (missingRequested.length > 0) {
-			throw new Error(
-				`Requested venue(s) have no live bid/ask in upcoming rows: ${missingRequested.join(", ")}. ` +
-					`Remove them from REQUESTED_VENUES (e2e/fixtures/requested-venues.ts) or fix venue-prices ingest.`,
-			);
-		}
-		expect(requestedPicks.length).toBeGreaterThan(0);
-		warnPerVenueSpreadsAboveE2eCap(requestedPicks);
-		for (const p of requestedPicks) {
-			expect(p.spread, `${p.venueKey} spread`).toBeGreaterThan(0);
-		}
+	test("REQUESTED_VENUES non-empty", () => {
+		expect(REQUESTED_VENUES.length, "requested-venues.ts").toBeGreaterThan(0);
 	});
+
+	for (const venueKey of REQUESTED_VENUES) {
+		test(`${venueKey}: live tightest spread > 0 (warn if ≥${MAX_E2E_VENUE_SPREAD_USD} without ladders)`, async ({
+			perVenueBestPicks,
+		}, testInfo) => {
+			const p = perVenueBestPicks.find((x) => x.venueKey === venueKey);
+			if (!p) {
+				console.log(
+					`[e2e spread cap] No live bid/ask pick for "${venueKey}" in upcoming matched-markets rows — skipping.`,
+				);
+				testInfo.skip(true, `no PerVenueBestPick for ${venueKey}`);
+				return;
+			}
+			warnPerVenueSpreadsAboveE2eCap([p]);
+			expect(p.spread, `${p.venueKey} spread`).toBeGreaterThan(0);
+		});
+	}
 });

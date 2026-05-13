@@ -142,9 +142,13 @@ export default function MobileTradingBoxHeader({
                   return;
                 }
                 
-                // Shares (sell, limit, etc.): 8 dp; USD market buy: 2 dp
+                // USD market buy: 2 dp. Sell shares: 2 dp (match position headline). Else: 8 dp.
                 const maxFractionDigits =
-                  side === "buy" && orderType === "market" ? 2 : 8;
+                  side === "buy" && orderType === "market"
+                    ? 2
+                    : side === "sell"
+                      ? 2
+                      : 8;
                 const frac = cleanValue.includes(".") ? cleanValue.split(".")[1] : "";
                 if (frac && frac.length > maxFractionDigits) {
                   return;

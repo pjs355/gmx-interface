@@ -70,7 +70,7 @@ export function buildVenueMarketPosition(
 		historyFills && historyFills.length > 0
 			? venueHistoryPositionToSyntheticOrders(pv as VenuePosition)
 			: pv.shares > 0 && (pv.avgPrice || pv.cost)
-			? [
+			? 				[
 					buildSyntheticOrder(
 						qid,
 						venueName,
@@ -82,6 +82,7 @@ export function buildVenueMarketPosition(
 						venue === "dflow"
 							? (pv as VenuePosition).dflowTradeSideLabel
 							: undefined,
+						String(pv.tokenId),
 					),
 				]
 			: [];
@@ -104,6 +105,13 @@ export function buildVenueMarketPosition(
 			_id: qid,
 			displayName: marketDisplayName?.trim() || pv.marketTitle,
 			questionId: pv.conditionId ?? pv.tokenId,
+			conditionId:
+				typeof pv.conditionId === "string" ? pv.conditionId : undefined,
+			/** Dedup Positions strip vs History (same encoding as winnings rows). */
+			_venueHeldTokenId: String(pv.tokenId),
+			...(venue === "polymarket"
+				? { _polyAssetTokenId: pv.tokenId }
+				: {}),
 		} as unknown as PredictionMarket,
 		yesBalance: isYes ? pv.shares : 0,
 		noBalance: isYes ? 0 : pv.shares,

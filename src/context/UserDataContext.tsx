@@ -24,10 +24,8 @@ import {
 	parsePrivyEvmTxHash,
 	waitForBaseTransactionSuccess,
 } from "@/trading/base/waitPrivyBaseTxReceipt";
-import {
-	subgraphService,
-	fromMicroUnits,
-} from "@/services/subgraph/subgraphService";
+import { fromMicroUnits } from "@/helpers/ctfMicroUnits";
+import { fetchNonZeroCtfBalancesRpc } from "@/helpers/fetchNonZeroCtfBalancesRpc";
 
 type TokenBalance = {
 	yesTokenId: string;
@@ -43,16 +41,10 @@ type ApprovalState = {
 };
 
 /**
- * Where the LevelUp share-position rows came from on the most recent fetch.
- *  - `"subgraph"` — happy path, Studio served the request.
- *  - `"rpc"`      — subgraph failed (rate limit / outage); we fell back to
- *                   per-token ERC1155 `balanceOf` reads. Trustworthy for
- *                   tokens the UI knows about, but cannot enumerate unknown
- *                   markets.
- *  - `"none"`     — no fetch has settled yet for the current account, or no
- *                   account is connected.
+ * Where LevelUp share-position rows came from on the most recent fetch.
+ * Token balances are read via Base RPC (`balanceOf` on the CTF contract).
  */
-export type LevelUpPositionsSource = "subgraph" | "rpc" | "none";
+export type LevelUpPositionsSource = "rpc" | "none";
 
 type UserDataContextValue = {
 	orders: ProcessedOrder[];
@@ -60,24 +52,18 @@ type UserDataContextValue = {
 	approvalState: ApprovalState;
 	loading: boolean;
 	/**
-	 * @deprecated Use `levelUpPositionsSource` ("rpc") and `levelUpPositionsError`
-	 * for the explicit signal. Kept for the few legacy reads still in tree.
+	 * @deprecated Always false (positions are RPC-only). Kept for legacy consumers.
 	 */
-	usingRpcFallback: boolean; // True when subgraph failed and using RPC
+	usingRpcFallback: boolean;
 	/** Explicit replacement for `usingRpcFallback` — what produced the rows. */
 	levelUpPositionsSource: LevelUpPositionsSource;
 	/**
-	 * Subgraph error message captured when we had to fall back to RPC, or when
-	 * the RPC fallback also blew up. `null` on the happy path. Use to render a
-	 * non-blocking "positions data is degraded" banner instead of pretending
-	 * the rows are authoritative.
+	 * Set when the last on-chain positions fetch failed. `null` on success.
 	 */
 	levelUpPositionsError: string | null;
 	refresh: () => Promise<void>;
 	/**
-	 * Force RPC refresh of share-position balances (bypasses subgraph indexing delay).
-	 * Cash-side collateral balances live in {@link useCollateralTokens} — call its
-	 * `refetch()` separately for post-trade USDC/USDT updates.
+	 * Force refresh of outcome-token balances (`balanceOf` on CTF).
 	 */
 	refreshTokenPositions: () => Promise<void>;
 	loadOrders: () => Promise<void>; // Lazy: call when orders are needed (e.g. Positions page)
@@ -213,12 +199,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	// Store filtered market data map for balance mapping (declared early for use in load)
 	const filteredMarketDataMapRef = useRef<Map<string, { yesTokenId: string; noTokenId: string }>>(new Map());
 
-	// Store raw subgraph token balances (by tokenId) for later mapping
+	// Raw CTF balances by token id (micro-units as decimal string); mapped via `PredictionData`.
 	const [rawTokenBalances, setRawTokenBalances] = useState<
 		Array<{ tokenId: string; balance: string }>
 	>([]);
 	const rawTokenBalancesRef = useRef<Array<{ tokenId: string; balance: string }>>([]);
-	const subgraphFetchedRef = useRef<string | null>(null);
+	const positionsFetchedRef = useRef<string | null>(null);
 
 	// Keep ref in sync with state
 	useEffect(() => {
@@ -226,172 +212,27 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	}, [rawTokenBalances]);
 
 	/**
-	 * Fetch token balances via RPC as fallback when subgraph fails
+	 * Fetch on-chain CTF outcome token balances for known markets (`balanceOf`).
 	 * This queries the ERC1155 contract directly for each token ID
 	 */
-	const fetchTokenBalancesFromRpc = useCallback(async (
-		walletAddress: string,
-		marketDataMap: Map<string, { yesTokenId: string; noTokenId: string }>
-	): Promise<Array<{ tokenId: string; balance: string }>> => {
-		const provider = getReadProvider();
-		const ctfContract = new Contract(
-			getCTFAddress(),
-			["function balanceOf(address account, uint256 id) view returns (uint256)"],
-			provider
-		);
-
-		const results: Array<{ tokenId: string; balance: string }> = [];
-		
-		// Collect all unique token IDs from markets
-		const tokenIds = new Set<string>();
-		for (const { yesTokenId, noTokenId } of marketDataMap.values()) {
-			if (yesTokenId) tokenIds.add(yesTokenId);
-			if (noTokenId) tokenIds.add(noTokenId);
-		}
-
-		// Batch fetch in groups of 20 to avoid overwhelming RPC
-		const tokenIdArray = Array.from(tokenIds);
-		const batchSize = 20;
-		
-		for (let i = 0; i < tokenIdArray.length; i += batchSize) {
-			const batch = tokenIdArray.slice(i, i + batchSize);
-			const balancePromises = batch.map(async (tokenId) => {
-				try {
-					const balance = await ctfContract.balanceOf(walletAddress, tokenId);
-					// Only include non-zero balances
-					if (balance > 0n) {
-						return { tokenId, balance: balance.toString() };
-					}
-					return null;
-				} catch (err) {
-					console.error(`[RPC Fallback] Error fetching tokenId ${tokenId}:`, err);
-					return null;
-				}
-			});
-
-			const batchResults = await Promise.all(balancePromises);
-			results.push(...batchResults.filter((r): r is { tokenId: string; balance: string } => r !== null));
-		}
-
-		return results;
-	}, [getReadProvider]);
-
-	/**
-	 * Fetch token balances from subgraph (positions only, not USDC)
-	 * Falls back to RPC if subgraph is rate limited or fails
-	 */
-	const fetchTokenBalancesFromSubgraph = useCallback(async (walletAddress: string, forceRefresh: boolean = false) => {
-		// Skip if we've already fetched for this account (prevents StrictMode double-fetch)
-		// Unless forceRefresh is true
-		if (!forceRefresh && subgraphFetchedRef.current === walletAddress) return;
-
-		try {
-			const subgraphAccount = await subgraphService.getUserAccount(walletAddress);
-
-			if (!subgraphAccount) {
-				// User has never interacted with the contracts
-				setRawTokenBalances([]);
-				subgraphFetchedRef.current = walletAddress;
-				setUsingRpcFallback(false);
-				setLevelUpPositionsSource("subgraph");
-				setLevelUpPositionsError(null);
-				return;
+	const fetchTokenBalancesFromRpc = useCallback(
+		async (
+			walletAddress: string,
+			marketDataMap: Map<string, { yesTokenId: string; noTokenId: string }>,
+		): Promise<Array<{ tokenId: string; balance: string }>> => {
+			const provider = getReadProvider();
+			const tokenIds = new Set<string>();
+			for (const { yesTokenId, noTokenId } of marketDataMap.values()) {
+				if (yesTokenId) tokenIds.add(yesTokenId);
+				if (noTokenId) tokenIds.add(noTokenId);
 			}
-
-				// Store raw token balances for later mapping (NOT usdc - that comes from RPC)
-			setRawTokenBalances(subgraphAccount.tokenBalances);
-			subgraphFetchedRef.current = walletAddress;
-			setUsingRpcFallback(false);
-			setLevelUpPositionsSource("subgraph");
-			setLevelUpPositionsError(null);
-		} catch (error) {
-			console.error("Error loading token balances from subgraph:", error);
-			const subgraphErrorMessage =
-				error instanceof Error ? error.message : String(error);
-
-			try {
-				// Build market data map from current context
-				const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
-				// CRITICAL: Always use _id as the key for consistency with Positions.tsx lookups
-				umbrellas.forEach(umbrella => {
-					const questions = getAllQuestionsForUmbrella(umbrella._id) || [];
-					questions.forEach((market: any) => {
-						const marketId = market._id; // ALWAYS use _id only
-						if (marketId && market.yesTokenId && market.noTokenId) {
-							marketDataMap.set(marketId, {
-								yesTokenId: market.yesTokenId,
-								noTokenId: market.noTokenId,
-							});
-						}
-					});
-				});
-
-				// Also include resolved markets
-				Object.values(resolvedMarketsByUmbrella).forEach((markets: any[]) => {
-					markets.forEach((market: any) => {
-						const marketId = market._id; // ALWAYS use _id only
-						if (marketId && market.yesTokenId && market.noTokenId) {
-							marketDataMap.set(marketId, {
-								yesTokenId: market.yesTokenId,
-								noTokenId: market.noTokenId,
-							});
-						}
-					});
-				});
-
-				if (marketDataMap.size === 0) {
-					setRawTokenBalances([]);
-					subgraphFetchedRef.current = null; // Allow retry
-					return;
-				}
-
-				const rpcBalances = await fetchTokenBalancesFromRpc(walletAddress, marketDataMap);
-				setRawTokenBalances(rpcBalances);
-				subgraphFetchedRef.current = walletAddress;
-				setUsingRpcFallback(true);
-				setLevelUpPositionsSource("rpc");
-				// Subgraph failed but RPC succeeded — surface the upstream
-				// failure so consumers can render a "data is degraded" banner
-				// even though we have rows to show.
-				setLevelUpPositionsError(subgraphErrorMessage);
-			} catch (rpcError) {
-				console.error("[UserDataContext] RPC fallback also failed:", rpcError);
-				setRawTokenBalances([]);
-				subgraphFetchedRef.current = null; // Allow retry
-				setLevelUpPositionsSource("none");
-				const rpcMsg =
-					rpcError instanceof Error ? rpcError.message : String(rpcError);
-				setLevelUpPositionsError(
-					`Subgraph: ${subgraphErrorMessage}. RPC fallback: ${rpcMsg}`,
-				);
-			}
-		}
-	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchTokenBalancesFromRpc]);
-
-	// Fetch token positions IMMEDIATELY when account is available
-	useEffect(() => {
-		if (account) {
-			fetchTokenBalancesFromSubgraph(account);
-		} else {
-			setRawTokenBalances([]);
-			subgraphFetchedRef.current = null;
-		}
-	}, [account, fetchTokenBalancesFromSubgraph]);
-
-	// RETRY: If initial balance fetch failed (no market data yet), retry when umbrellas load
-	// This handles the case where subgraph fails in production and RPC fallback needs market data
-	useEffect(() => {
-		if (!account) return;
-		if (!Array.isArray(umbrellas) || umbrellas.length === 0) return;
-		// Only retry if we haven't successfully fetched yet (ref is null from failed attempt)
-		if (subgraphFetchedRef.current !== null) return;
-
-		fetchTokenBalancesFromSubgraph(account, true);
-	}, [account, umbrellas, fetchTokenBalancesFromSubgraph]);
+			return fetchNonZeroCtfBalancesRpc(provider, walletAddress, tokenIds);
+		},
+		[getReadProvider],
+	);
 
 	/**
 	 * Map raw token balances to market IDs once market data is available.
-	 * This runs separately from subgraph fetch.
 	 */
 	const mapTokenBalancesToMarkets = useCallback(
 		(
@@ -477,6 +318,61 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		return marketDataMap;
 	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella]);
 
+	const fetchLevelUpPositions = useCallback(
+		async (walletAddress: string, force: boolean) => {
+			if (!force && positionsFetchedRef.current === walletAddress) return;
+			const marketDataMap = buildMarketDataMap();
+			if (marketDataMap.size === 0) {
+				setRawTokenBalances([]);
+				if (!Array.isArray(umbrellas) || umbrellas.length === 0) {
+					positionsFetchedRef.current = null;
+					setLevelUpPositionsSource("none");
+				} else {
+					positionsFetchedRef.current = walletAddress;
+					setLevelUpPositionsSource("rpc");
+				}
+				setUsingRpcFallback(false);
+				setLevelUpPositionsError(null);
+				return;
+			}
+			try {
+				const rpcBalances = await fetchTokenBalancesFromRpc(
+					walletAddress,
+					marketDataMap,
+				);
+				setRawTokenBalances(rpcBalances);
+				positionsFetchedRef.current = walletAddress;
+				setUsingRpcFallback(false);
+				setLevelUpPositionsSource("rpc");
+				setLevelUpPositionsError(null);
+			} catch (err) {
+				console.error("Error loading token balances from RPC:", err);
+				setRawTokenBalances([]);
+				positionsFetchedRef.current = null;
+				setLevelUpPositionsSource("none");
+				const msg = err instanceof Error ? err.message : String(err);
+				setLevelUpPositionsError(msg);
+			}
+		},
+		[buildMarketDataMap, fetchTokenBalancesFromRpc, umbrellas],
+	);
+
+	useEffect(() => {
+		if (!account) {
+			setRawTokenBalances([]);
+			positionsFetchedRef.current = null;
+			setLevelUpPositionsSource("none");
+			setLevelUpPositionsError(null);
+			return;
+		}
+		if (!Array.isArray(umbrellas) || umbrellas.length === 0) {
+			setRawTokenBalances([]);
+			positionsFetchedRef.current = null;
+			return;
+		}
+		void fetchLevelUpPositions(account, false);
+	}, [account, umbrellas, fetchLevelUpPositions]);
+
 	const load = useCallback(async () => {
 		if (!account) {
 			setOrders([]);
@@ -493,7 +389,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			const marketDataMap = buildMarketDataMap();
 			filteredMarketDataMapRef.current = marketDataMap;
 
-			// Map any already-available subgraph balances to market IDs
+			// Map any already-available raw token balances to market IDs
 			const currentRawBalances = rawTokenBalancesRef.current;
 			if (currentRawBalances.length > 0) {
 				setTokenBalances(
@@ -526,8 +422,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, [account, buildMarketDataMap]);
 
-	// Effect to map subgraph balances when they arrive AFTER market data is ready
-	// (handles the case where subgraph is slower than market data loading)
+	// When raw balances update, remap into `tokenBalances` if market data is ready
 	useEffect(() => {
 		if (rawTokenBalances.length === 0) {
 			return; // Don't reset to empty - let initial state or load() handle it
@@ -702,18 +597,13 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		if (!account) return;
 		loadedForAccountRef.current = null;
 		ordersLoadedRef.current = null;
-		subgraphFetchedRef.current = null;
-		subgraphService.clearSubgraphCache();
-		await Promise.all([
-			fetchTokenBalancesFromSubgraph(account, true),
-			load(),
-		]);
-	}, [account, fetchTokenBalancesFromSubgraph, load]);
+		positionsFetchedRef.current = null;
+		await Promise.all([fetchLevelUpPositions(account, true), load()]);
+	}, [account, fetchLevelUpPositions, load]);
 
 	/**
-	 * Force RPC refresh of share-position balances. Use after trades, when subgraph
-	 * indexing delay would show stale token balances. Cash-side collateral balances
-	 * are NOT refreshed here — call `useCollateralTokens().refetch()` separately.
+	 * Force refresh of CTF outcome balances from RPC.
+	 * Collateral balances: use `useCollateralTokens().refetch()` separately.
 	 */
 	const refreshTokenPositions = useCallback(async () => {
 		if (!account) return;
@@ -750,7 +640,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		try {
 			const rpcBalances = await fetchTokenBalancesFromRpc(account, marketDataMap);
 			setRawTokenBalances(rpcBalances);
-			setUsingRpcFallback(true);
+			setUsingRpcFallback(false);
 			setLevelUpPositionsSource("rpc");
 			setLevelUpPositionsError(null);
 		} catch (err) {

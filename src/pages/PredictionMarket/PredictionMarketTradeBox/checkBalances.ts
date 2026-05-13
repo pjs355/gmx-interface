@@ -169,18 +169,24 @@ export function clampSellSharesNumeric(
 	return v;
 }
 
-/** String to pass to amount state after sell share clamp (stable decimals when fractional). */
+/** String to pass to amount state after sell share clamp — max 2 fractional digits, truncated down (matches `formatShareCountDisplay` / position headline). */
 export function clampedSellSharesAmountString(
 	clamped: number,
 	requiresWholeShares: boolean,
 ): string {
 	if (!Number.isFinite(clamped)) return "";
 	if (requiresWholeShares) return String(Math.round(clamped));
-	if (Number.isInteger(clamped) || Math.abs(clamped - Math.round(clamped)) < 1e-9) {
+	if (
+		Number.isInteger(clamped) ||
+		Math.abs(clamped - Math.round(clamped)) < 1e-9
+	) {
 		return String(Math.round(clamped));
 	}
-	const t = Math.floor(clamped * 1e8) / 1e8;
-	return String(t);
+	const hundredths = Math.floor(clamped * 100 + 1e-9);
+	const whole = Math.trunc(hundredths / 100);
+	const frac = hundredths % 100;
+	if (frac === 0) return String(whole);
+	return `${whole}.${frac.toString().padStart(2, "0")}`;
 }
 
 // Function to check if user has sufficient YES/NO token shares for sell orders

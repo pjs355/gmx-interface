@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useAccountData } from "@/context/AccountDataContext";
+import type { AccountPositionsSlice } from "@/context/AccountDataContext";
 import {
 	useLimitlessOpenOrders,
 	useLimitlessTradeHistory,
@@ -12,6 +12,8 @@ import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 export type UseLimitlessBundleArgs = {
 	authenticated: boolean;
 	limitlessMakerBase: string | undefined | null;
+	/** Limitless venue slice from `useAccountData()` — passed in so this module never calls `useAccountData` (avoids duplicate `AccountDataContext` module under Vite chunking). */
+	limitless: AccountPositionsSlice;
 };
 
 export type UseLimitlessBundleResult = {
@@ -28,12 +30,10 @@ export type UseLimitlessBundleResult = {
 export function useLimitlessBundle({
 	authenticated,
 	limitlessMakerBase,
+	limitless,
 }: UseLimitlessBundleArgs): UseLimitlessBundleResult {
-	const { positions } = useAccountData();
 	const limitlessPortfolioEnabled =
 		Boolean(authenticated) && Boolean(limitlessMakerBase?.trim());
-
-	const limitless = positions.limitless;
 	const all = limitless.rows;
 
 	const positionsQuery = useMemo(

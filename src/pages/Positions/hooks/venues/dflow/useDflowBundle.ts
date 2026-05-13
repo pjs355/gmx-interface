@@ -1,13 +1,19 @@
 import { useEffect, useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
-import { useAccountData } from "@/context/AccountDataContext";
+import type {
+	AccountDflowProofSlice,
+	AccountPositionsSlice,
+} from "@/context/AccountDataContext";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 
 export type UseDflowBundleArgs = {
 	solanaAddress: string | null | undefined;
 	authenticated: boolean;
+	/** DFlow venue slice from `useAccountData()` — passed in so this module never calls `useAccountData` (avoids duplicate `AccountDataContext` module under Vite chunking). */
+	dflow: AccountPositionsSlice;
+	dflowProof: AccountDflowProofSlice;
 };
 
 export type UseDflowBundleResult = {
@@ -22,8 +28,9 @@ export type UseDflowBundleResult = {
 export function useDflowBundle({
 	solanaAddress,
 	authenticated,
+	dflow,
+	dflowProof,
 }: UseDflowBundleArgs): UseDflowBundleResult {
-	const { positions, dflowProof } = useAccountData();
 	const solanaLinked = Boolean(solanaAddress?.trim());
 
 	const dflowRpcEnabled =
@@ -32,7 +39,6 @@ export function useDflowBundle({
 		dflowProof.isFetched &&
 		dflowProof.isVerified;
 
-	const dflow = positions.dflow;
 	const all = dflow.rows;
 
 	const positionsQuery = useMemo(

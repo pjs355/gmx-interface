@@ -25,20 +25,6 @@ import {
 } from "@/trading/dflow/dflowUmbrellaLookup";
 import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
 
-/** Mirrors {@link PredictionDataContext.marketsByUmbrella}: active (non-resolved) listing markets only. */
-export type VenueHistoryMarketsByUmbrella = Record<string, unknown[]>;
-
-/** True when this umbrella id still has ≥1 listing market (not resolved) in Prediction context — match is catalog-“live”. */
-function umbrellaIdHasCatalogLiveMarkets(
-	umbrellaId: string | null | undefined,
-	marketsByUmbrella: VenueHistoryMarketsByUmbrella,
-): boolean {
-	const id = umbrellaId?.trim();
-	if (!id) return false;
-	const mk = marketsByUmbrella[id];
-	return Array.isArray(mk) && mk.length > 0;
-}
-
 function umbrellaMatchedForVenueTradeHistoryRaw(
 	row: VenuePosition,
 	venue: VenueId,
@@ -90,8 +76,6 @@ export type UseVenueHistoryRawItemsArgs = {
 	limitlessHistory: VenuePosition[];
 	limitlessTrades: VenuePosition[] | undefined;
 	umbrellas: Umbrella[];
-	/** Prediction catalog slice: exclude History trade echoes while this umbrella still has active listings. */
-	marketsByUmbrella: VenueHistoryMarketsByUmbrella;
 };
 
 export function useVenueHistoryRawItems({
@@ -116,7 +100,6 @@ export function useVenueHistoryRawItems({
 	limitlessHistory,
 	limitlessTrades,
 	umbrellas,
-	marketsByUmbrella,
 }: UseVenueHistoryRawItemsArgs): VenuePosition[] {
 	return useMemo(() => {
 		const items: VenuePosition[] = [];
@@ -237,11 +220,6 @@ export function useVenueHistoryRawItems({
 				dflowMintLookup,
 				dflowEventTickerLookup,
 			);
-			if (
-				umbrellaIdHasCatalogLiveMarkets(matchedPm?._id, marketsByUmbrella)
-			) {
-				continue;
-			}
 			seen.add(histKey);
 			const venueOutcomeResult = polyOutcomeResultByKey.get(
 				polyResultKey(trade.conditionId, trade.outcome),
@@ -277,11 +255,6 @@ export function useVenueHistoryRawItems({
 				dflowMintLookup,
 				dflowEventTickerLookup,
 			);
-			if (
-				umbrellaIdHasCatalogLiveMarkets(matchedLx?._id, marketsByUmbrella)
-			) {
-				continue;
-			}
 			seen.add(histKey);
 			items.push({
 				...trade,
@@ -351,6 +324,5 @@ export function useVenueHistoryRawItems({
 		umbrellas,
 		predictHistoryFillsByToken,
 		predictMatches,
-		marketsByUmbrella,
 	]);
 }

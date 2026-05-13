@@ -154,6 +154,7 @@ export function MyPositionsRow({
 											[line.key]: !o[line.key],
 										}))
 									}
+									data-qa-line-shares={line.shares}
 									data-qa={`my-positions-row-details-toggle-buy-${line.side}`}
 									aria-expanded={lineDetailsOpen}
 									aria-label={
@@ -196,6 +197,8 @@ export function MyPositionsRow({
 								</button>
 							) : (
 								<div
+									data-qa="my-positions-buy-headline"
+									data-qa-line-shares={line.shares}
 									style={{
 										fontSize: 14,
 										fontWeight: 700,
@@ -213,6 +216,8 @@ export function MyPositionsRow({
 							return (
 								<div
 									key={line.key}
+									data-qa="my-positions-buy-line"
+									data-qa-line-shares={line.shares}
 									style={{
 										display: "flex",
 										flexDirection: "column",

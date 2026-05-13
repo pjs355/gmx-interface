@@ -57,7 +57,7 @@ const POST_TRADE_CASH_POLL_MS = 400;
  * Collateral reads multiple chains in `readFundingStableBalancesHuman`; can exceed
  * a few seconds in CI or slow RPC.
  */
-const POST_TRADE_CASH_MATCH_TIMEOUT_MS = 60_000;
+const POST_TRADE_CASH_MATCH_TIMEOUT_MS = 45_000;
 /** DFlow / Kalshi: same SOR fill still hits Solana + multi-chain collateral refetch — often slower than EVM-only venues. */
 const POST_TRADE_CASH_MATCH_TIMEOUT_DFLOW_MS = 180_000;
 

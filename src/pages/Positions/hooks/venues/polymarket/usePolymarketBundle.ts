@@ -1,12 +1,14 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useAccountData } from "@/context/AccountDataContext";
+import type { AccountPositionsSlice } from "@/context/AccountDataContext";
 import { usePolymarketTradeHistory } from "@/trading/polymarket/usePolymarketTradeHistory";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 
 export type UsePolymarketBundleArgs = {
 	polymarketSafe: string | undefined | null;
+	/** Polymarket venue slice from `useAccountData()` — passed in so this module never calls `useAccountData` (avoids duplicate `AccountDataContext` module under Vite chunking). */
+	poly: AccountPositionsSlice;
 };
 
 export type UsePolymarketBundleResult = {
@@ -20,9 +22,8 @@ export type UsePolymarketBundleResult = {
 
 export function usePolymarketBundle({
 	polymarketSafe,
+	poly,
 }: UsePolymarketBundleArgs): UsePolymarketBundleResult {
-	const { positions } = useAccountData();
-	const poly = positions.polymarket;
 	const all = poly.rows;
 	const tradeHistoryQuery = usePolymarketTradeHistory(polymarketSafe);
 

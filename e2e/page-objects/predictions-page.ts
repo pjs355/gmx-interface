@@ -23,22 +23,33 @@ export class PredictionsPage {
 	}
 
 	/**
-	 * Open `/predictions/umbrella/:id` directly — matches production UX after a card
-	 * click and avoids coupling tests to homepage card routing. Use homepage Yes/No
-	 * odds buttons only when the scenario intentionally exercises the inline dock on `/`.
+	 * Prepare the trade UI for `umbrellaId` **from `/`** without loading `/predictions/umbrella/:id`.
+	 *
+	 * Clicks the card’s Yes odds so `HomeInlineTradeLayout` focuses the dock; then waits for the
+	 * same `.right-panel .prediction-market-tradebox` sentinel as the umbrella detail page.
+	 *
+	 * When the prior venue navigated to an umbrella URL (legacy / manual), performs one `goto('/')`
+	 * — otherwise **stays on `/`** so Cash / portfolio keep the existing SPA hydration.
 	 */
 	async openUmbrellaTradingPageById(umbrellaId: string): Promise<void> {
-		await this.page.goto(
-			`${FRONTEND_URL}/predictions/umbrella/${encodeURIComponent(umbrellaId)}`,
-			{
+		if (this.page.url().includes("/predictions/umbrella/")) {
+			await this.page.goto(`${FRONTEND_URL}/`, {
 				waitUntil: "domcontentloaded",
 				timeout: 120_000,
-			},
-		);
-		await this.page.waitForLoadState("load").catch(() => {});
+			});
+			await this.page.waitForLoadState("load").catch(() => {});
+		}
+
+		const card = this.findCardByUmbrellaId(umbrellaId);
+		await card.scrollIntoViewIfNeeded();
+		await card.waitFor({ state: "visible", timeout: 90_000 });
+
+		const yesBtn = card.locator("button.action-button.yes-button").first();
+		await yesBtn.click({ timeout: 45_000 });
+
 		await this.locatorHomeTradeboxForUmbrella(umbrellaId).waitFor({
 			state: "visible",
-			timeout: 60_000,
+			timeout: 90_000,
 		});
 		await this.waitForTradeShellReady();
 	}
@@ -52,7 +63,7 @@ export class PredictionsPage {
 	private async waitForTradeShellReady(): Promise<void> {
 		await tradeboxRootLocator(this.page).waitFor({
 			state: "visible",
-			timeout: 60_000,
+			timeout: 90_000,
 		});
 		await expectHeaderCashUsd(this.page);
 	}

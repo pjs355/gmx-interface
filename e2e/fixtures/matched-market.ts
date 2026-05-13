@@ -1,4 +1,9 @@
 import { PREDICTIONS_API_URL } from "../playwright.config";
+import {
+	MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD,
+	smallestRoundTripLossUsdForSnapshot,
+	type VenuePriceSnapshotLite,
+} from "./e2e-venue-book-depth";
 
 export type RequiredVenueKey =
 	| "polymarket"
@@ -24,7 +29,7 @@ const EXCHANGE_KEY_TO_VENUE_SLUG: Record<RequiredVenueKey, string> = {
 	dflow: "dflow",
 };
 
-/** Tightest live bid–ask (probability space). Used for logging and for spread-only fallback when per-venue ladders are missing (see `e2e-venue-liquidity-at-test.ts`). */
+/** Tightest live bid–ask (probability space). Used by spread-cap preflight warnings only (`00-spread-cap.spec.ts`). */
 export const MAX_E2E_VENUE_SPREAD_USD = 0.25;
 
 /**
@@ -109,6 +114,10 @@ interface VenueTeam {
 	bestBid: number | null;
 	bestAsk: number | null;
 	indicativeMid?: number | null;
+	bids?: { price: number; size: number }[];
+	asks?: { price: number; size: number }[];
+	totalBidLiquidity?: number;
+	totalAskLiquidity?: number;
 }
 
 interface VenuePriceSnapshot {
@@ -190,7 +199,7 @@ export function createVenueSnapshotGetter(
 	};
 }
 
-/** When venue-prices has no bid/ask for LevelUp but matched-markets still lists `exchangeMatching.levelup`, pick an umbrella for E2E using this synthetic spread (must stay below `MAX_E2E_VENUE_SPREAD_USD` for spread-only fallback). */
+/** When venue-prices has no computable LevelUp tightest spread pick a row aligned with anchors; liquidity still gates on executable depth (`e2e-venue-book-depth.ts`). */
 const LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK = 0.1;
 
 function jsonFiniteNumber(x: unknown): number | null {
@@ -356,6 +365,21 @@ export async function computePerVenueBestPicks(
 				continue;
 			}
 			const snaps = await getSnaps(row.pandaMatchId);
+			const slug = EXCHANGE_KEY_TO_VENUE_SLUG[key];
+			const snap = findVenueSnapshot(snaps, slug);
+			if (!snap) {
+				continue;
+			}
+			const lossProbe = smallestRoundTripLossUsdForSnapshot(
+				snap as unknown as VenuePriceSnapshotLite,
+				E2E_TRADE_NOTIONAL_USD,
+			);
+			if (
+				lossProbe === null ||
+				lossProbe > MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD
+			) {
+				continue;
+			}
 			const sp = spreadForVenueOnRow(row, key, snaps);
 			if (sp === null || !Number.isFinite(sp)) {
 				continue;
@@ -453,46 +477,42 @@ export async function computePerVenueBestPicks(
 			}
 
 			if (fallbackRow !== null) {
-				const sp = LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK;
 				const fr = fallbackRow;
-				console.warn(
-					`[matched-market] levelup: no computable venue-prices spread — using synthetic spread=${sp} ` +
-						`for E2E pick only (umbrella ${fr.umbrellaId}, panda ${fr.pandaMatchId}).`,
+				const fbSnaps = await getSnaps(fr.pandaMatchId);
+				const luSnap = findVenueSnapshot(
+					fbSnaps,
+					EXCHANGE_KEY_TO_VENUE_SLUG.levelup,
 				);
-				picks.push({
-					venueKey: "levelup",
-					umbrellaId: String(fr.umbrellaId),
-					pandaMatchId: String(fr.pandaMatchId),
-					spread: sp,
-					displayName: fr.displayName,
-					pandaTeamA: fr.pandaTeamA,
-					pandaTeamB: fr.pandaTeamB,
-				});
+				if (luSnap) {
+					const lossProbe = smallestRoundTripLossUsdForSnapshot(
+						luSnap as unknown as VenuePriceSnapshotLite,
+						E2E_TRADE_NOTIONAL_USD,
+					);
+					if (
+						lossProbe !== null &&
+						lossProbe <= MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD
+					) {
+						const sp =
+							LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK;
+						console.warn(
+							`[matched-market] levelup: no computable venue-prices tightest spread — using synthetic spread=${sp} ` +
+								`for logging only; depth gate passed (umbrella ${fr.umbrellaId}, panda ${fr.pandaMatchId}).`,
+						);
+						picks.push({
+							venueKey: "levelup",
+							umbrellaId: String(fr.umbrellaId),
+							pandaMatchId: String(fr.pandaMatchId),
+							spread: sp,
+							displayName: fr.displayName,
+							pandaTeamA: fr.pandaTeamA,
+							pandaTeamB: fr.pandaTeamB,
+						});
+					}
+				}
 			}
 		}
 	}
 	return picks;
-}
-
-function logPerVenueSummaryFromPicks(picks: PerVenueBestPick[]): void {
-	console.log(
-		"[matched-market] best live tightest-spread per venue (all upcoming rows that include that venue):",
-	);
-	const byKey = new Map(picks.map((p) => [p.venueKey, p]));
-	for (const key of REQUIRED_VENUE_KEYS) {
-		const p = byKey.get(key);
-		if (p === undefined) {
-			console.log(
-				`${key} - Best Spread = n/a // n/a // n/a (no live bid/ask in upcoming rows)`,
-			);
-			continue;
-		}
-		const ta = p.pandaTeamA?.trim() || "TeamA";
-		const tb = p.pandaTeamB?.trim() || "TeamB";
-		console.log(
-			`${key} - Best Spread = ${p.spread.toFixed(4)} // ${p.pandaMatchId} // ${ta} - ${tb}`,
-		);
-	}
 }
 
 /** Warn-only: per-venue trade cycle may skip venues with wide top-of-book spread when ladders are absent (see `e2e-venue-liquidity-at-test.ts` for the live gate). */
@@ -515,7 +535,6 @@ export async function resolvePerVenueBestPicks(
 	const future = all.filter(hasFutureEventDate);
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const picks = await computePerVenueBestPicks(future, getSnaps);
-	logPerVenueSummaryFromPicks(picks);
 	return picks;
 }
 
@@ -531,7 +550,6 @@ export async function resolveAllVenuesUmbrella(
 	const future = all.filter(hasFutureEventDate);
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const perVenuePicks = await computePerVenueBestPicks(future, getSnaps);
-	logPerVenueSummaryFromPicks(perVenuePicks);
 
 	const allFive = future.filter((row) => missingVenues(row).length === 0);
 

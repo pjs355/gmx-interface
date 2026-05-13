@@ -957,12 +957,19 @@ export default function PredictionMarketTradeBoxUI({
                   return;
                 }
               } else {
-                // USD (market buy only in UI): 2 dp. Shares (sell, limit, All buy amount): up to 8 dp.
+                // USD (market buy only in UI): 2 dp. Sell shares: 2 dp (truncate-only UX
+                // matches position headline; never show 6–8 dp from chain). Other share
+                // modes (e.g. limit buy sizing): up to 8 dp.
                 const decimalCount = (cleanValue.match(/\./g) || []).length;
                 if (decimalCount > 1) {
                   return;
                 }
-                const maxFractionDigits = amountInputShowsDollarPrefix ? 2 : 8;
+                const maxFractionDigits =
+                  amountInputShowsDollarPrefix
+                    ? 2
+                    : side === "sell"
+                      ? 2
+                      : 8;
                 const frac = cleanValue.includes(".") ? cleanValue.split(".")[1] : "";
                 if (frac && frac.length > maxFractionDigits) {
                   return;

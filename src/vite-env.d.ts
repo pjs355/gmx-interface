@@ -52,12 +52,6 @@ interface ImportMetaEnv {
 	/** Optional DFlow tooling / server URLs (not used by removed browser book clients). */
 	readonly VITE_DFLOW_REST_BASE?: string;
 	readonly VITE_DFLOW_WS_URL?: string;
-	/**
-	 * Optional override for LevelUp subgraph GraphQL HTTP endpoint (user token balances).
-	 * When unset, defaults to The Graph Studio `levelup-subgraph`. Use this if your
-	 * Goldsky or Studio deployment slug changes (fixes `deployment … does not exist`).
-	 */
-	readonly VITE_LEVELUP_SUBGRAPH_URL?: string;
 }
 
 // Image module declarations

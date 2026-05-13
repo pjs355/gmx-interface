@@ -48,6 +48,11 @@ import {
 	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
 	polymarketSplitSettlementBadgeVisible,
 } from "../utils/polymarketHistorySplitSettlementBadge";
+import type { UmbrellaPositions } from "../utils/positionHelpers";
+import {
+	buildHistoryHoldingsBlockedKeys,
+	filterUnifiedHistoryBlocksByOpenPositions,
+} from "../utils/filterHistoryBlocksByOpenPositions";
 
 type UnifiedBlock = {
 	id: string;
@@ -79,6 +84,8 @@ export default function HistoryCardView({
 	catalogUmbrellas,
 	venueHistoryRawItemsForDebug,
 	historyResolveStage,
+	resolvedUmbrellaPositions,
+	openUmbrellaPositions,
 }: {
 	umbrellaBalances?: Array<{ umbrella: Umbrella; markets: any[] }>;
 	orders: any[];
@@ -87,6 +94,8 @@ export default function HistoryCardView({
 	catalogUmbrellas?: Umbrella[];
 	venueHistoryRawItemsForDebug?: VenuePosition[];
 	historyResolveStage?: LogFullHistoryDebugParams["resolveStage"];
+	resolvedUmbrellaPositions: UmbrellaPositions[];
+	openUmbrellaPositions: UmbrellaPositions[];
 }) {
 	const { umbrellas: contextUmbrellas } = usePredictionData();
 	const umbrellas = catalogUmbrellas ?? contextUmbrellas;
@@ -272,11 +281,25 @@ export default function HistoryCardView({
 		umbrellaLookupByDflowEventTicker,
 	]);
 
+	const historyHoldingsBlocked = useMemo(
+		() =>
+			buildHistoryHoldingsBlockedKeys(
+				openUmbrellaPositions,
+				resolvedUmbrellaPositions,
+			),
+		[openUmbrellaPositions, resolvedUmbrellaPositions],
+	);
+	const unifiedBlocksForDisplay = useMemo(
+		() =>
+			filterUnifiedHistoryBlocksByOpenPositions(unifiedBlocks, historyHoldingsBlocked),
+		[unifiedBlocks, historyHoldingsBlocked],
+	);
+
 	useEffect(() => {
 		logFullHistoryDebug({
 			layout: "card",
 			venueHistory,
-			unifiedBlocks: unifiedBlocks as FullHistoryUnifiedBlock[],
+			unifiedBlocks: unifiedBlocksForDisplay as FullHistoryUnifiedBlock[],
 			umbrellas,
 			umbrellaLookupByConditionId,
 			predictLookup: predictUmbrellaLookup,
@@ -290,7 +313,7 @@ export default function HistoryCardView({
 		});
 	}, [
 		venueHistory,
-		unifiedBlocks,
+		unifiedBlocksForDisplay,
 		umbrellas,
 		umbrellaLookupByConditionId,
 		predictUmbrellaLookup,
@@ -305,7 +328,7 @@ export default function HistoryCardView({
 
 	const mergedRowsByBlock = useMemo(() => {
 		let limitlessHistUiLog = 0;
-		return unifiedBlocks.map((block) => {
+		return unifiedBlocksForDisplay.map((block) => {
 			const resolvedList = resolvedMarketsByUmbrella[block.id] ?? [];
 			const luSample = block.luMarkets[0]?.market ?? null;
 			const blockCanonical = resolveCanonicalMatchWinner({
@@ -490,9 +513,9 @@ export default function HistoryCardView({
 			}
 			return { block, rows };
 		});
-	}, [unifiedBlocks, allOrders, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
+	}, [unifiedBlocksForDisplay, allOrders, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
 
-	if (unifiedBlocks.length === 0) {
+	if (unifiedBlocksForDisplay.length === 0) {
 		return (
 			<div style={{ textAlign: "center", padding: "40px", color: "#888" }}>
 				<p>No resolved markets with trading history found.</p>

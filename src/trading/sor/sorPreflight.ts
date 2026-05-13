@@ -49,7 +49,7 @@ const VENUE_MINIMUMS: Record<SorVenue, VenueMinProfile> = {
 
 /**
  * Product-wide SOR floors. **Keep in sync with**
- * `predictions/src/sor/sor-floors.ts`.
+ * `predictions-api/src/sor/sor-floors.ts`.
  *
  * `SOR_MIN_MARKET_BUY_USD` is the app-wide market-buy floor (trade box + API gate).
  * E2E uses the same number as `e2e/fixtures/matched-market.ts` `E2E_TRADE_NOTIONAL_USD`

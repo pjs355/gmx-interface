@@ -25,6 +25,7 @@ import {
 	shareIdentityForVenuePosition,
 	type PostTradeBaseline,
 	type PostTradeBaselineAddresses,
+	type ShareIdentityRouteLegContext,
 } from "./postTradeBaseline";
 import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
 
@@ -73,6 +74,8 @@ export type PostTradeSyncRequest = {
 	readLevelUpSide: (marketId: string, side: "yes" | "no") => number;
 	/** Page market id — when post-trade sync is active for this key, trade box shows share spinner. */
 	syncUiKey: string | null;
+	/** Same object passed to `capturePostTradeBaseline` so watch targets match baseline Map keys. */
+	shareIdentityCtx?: ShareIdentityRouteLegContext | null;
 };
 
 type PendingTarget =
@@ -180,8 +183,14 @@ function buildWatchTargets(
 	route: RoutePlan,
 	execution: RouteExecution,
 	baseline: PostTradeBaseline,
+	shareIdentityCtx?: ShareIdentityRouteLegContext | null,
 ): PendingTarget[] {
-	const deltas = computeExpectedDeltas(route, execution, baseline);
+	const deltas = computeExpectedDeltas(
+		route,
+		execution,
+		baseline,
+		shareIdentityCtx,
+	);
 	const out: PendingTarget[] = [];
 	const seenShare = new Set<string>();
 	for (const identity of deltas.expectedShares.keys()) {
@@ -355,6 +364,7 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 					req.route,
 					req.execution,
 					req.baseline,
+					req.shareIdentityCtx,
 				);
 				if (pending.length === 0) {
 					if (sessionRef.current === session) {

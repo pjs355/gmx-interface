@@ -68,12 +68,6 @@ export function AppHeaderLinks({
 		}).format(num);
 	};
 
-	// const isLeaderboardActive = useCallback(
-	//   (match: any, location: any) => Boolean(match) || location.pathname.startsWith("/competitions"),
-	//   []
-	// );
-
-	// TODO: Re-enable when language support is fully implemented
 	// const handleLanguageModalClose = useCallback(() => {
 	//   setIsLanguageModalOpen(false);
 	// }, []);
@@ -231,20 +225,6 @@ export function AppHeaderLinks({
 					Markets
 				</HeaderLink>
 			</div> */}
-				{/* Commented out for production - leaderboard page disabled */}
-				{/* <div className="App-header-link-container">
-					<HeaderLink
-						qa="leaderboard"
-						to="/leaderboard"
-						showRedirectModal={showRedirectModal}
-						onClick={small ? clickCloseIcon : undefined}
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/leaderboard"
-						}
-					>
-						Leaderboard
-					</HeaderLink>
-				</div> */}
 				{active && (
 					<div className="App-header-link-container">
 						<HeaderLink

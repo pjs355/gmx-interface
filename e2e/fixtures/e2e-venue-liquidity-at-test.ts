@@ -1,164 +1,31 @@
 import { PREDICTIONS_API_URL } from "../playwright.config";
 import {
 	E2E_TRADE_NOTIONAL_USD,
-	MAX_E2E_VENUE_SPREAD_USD,
 	tradingVenueSlugForKey,
 	type RequiredVenueKey,
 } from "./matched-market";
+import {
+	smallestRoundTripLossUsdForSnapshot,
+	type VenuePriceSnapshotLite,
+	MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD,
+} from "./e2e-venue-book-depth";
 
 /**
- * Right before trading each venue, call GET `/venue-prices/:panda` once (same
- * snapshots the WS-backed server already aggregates — no change to matched-markets).
- * If bid/ask ladders exist, estimate **best-case** round-trip loss on
- * `E2E_TRADE_NOTIONAL_USD` (smallest loss across the two outcome columns). If that
- * loss exceeds {@link MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD}, skip. If ladders are
- * missing, fall back to top-of-book tightest spread vs {@link MAX_E2E_VENUE_SPREAD_USD}.
+ * Immediately before trading each venue, GET `/venue-prices/:panda` and require **executable**
+ * clip depth for {@link E2E_TRADE_NOTIONAL_USD}: full simulated buy→sell loop on ladders or,
+ * only when nowhere on the snapshot has ladders, best-ask/best-bid **`totalAskLiquidity` /
+ * `totalBidLiquidity`** (TOB totals). Thin top-of-book without sizes is rejected.
+ *
+ * Spread-only fallback was removed — it drove “quotes” without fillable contracts.
  */
 
-/** Skip when best-case synthetic loss exceeds this (e.g. 25¢ on a $2 clip). */
-export const MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD = 0.25;
+export { MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD };
 
-interface DepthLevel {
-	price: number;
-	size: number;
-}
-
-interface VenueTeamBook {
-	bestBid: number | null;
-	bestAsk: number | null;
-	bids?: DepthLevel[];
-	asks?: DepthLevel[];
-}
-
-interface VenuePriceSnapshot {
+interface VenuePriceSnapshotRaw {
 	venue: string;
-	teamA: VenueTeamBook;
-	teamB: VenueTeamBook;
+	teamA: VenuePriceSnapshotLite["teamA"];
+	teamB: VenuePriceSnapshotLite["teamB"];
 	status?: string;
-}
-
-const DEPTH_EPS = 1e-12;
-const BUDGET_LEFT_COMPLETE = 1e-6;
-
-function sortDepthLevels(
-	levels: DepthLevel[] | undefined,
-	dir: "asc" | "desc",
-): DepthLevel[] {
-	if (!levels?.length) return [];
-	return [...levels].sort((a, b) =>
-		dir === "asc" ? a.price - b.price : b.price - a.price,
-	);
-}
-
-function simulateBuyNotional(
-	asks: ReadonlyArray<DepthLevel>,
-	usdBudget: number,
-): { shares: number; complete: boolean } {
-	let remaining = usdBudget;
-	let shares = 0;
-	for (const lvl of asks) {
-		const p = lvl.price;
-		const sz = lvl.size;
-		if (!(p > DEPTH_EPS && p < 1 - DEPTH_EPS && sz > DEPTH_EPS)) {
-			continue;
-		}
-		const maxCostHere = p * sz;
-		if (maxCostHere <= remaining + DEPTH_EPS) {
-			shares += sz;
-			remaining -= maxCostHere;
-		} else {
-			const partial = remaining / p;
-			shares += partial;
-			remaining = 0;
-			break;
-		}
-		if (remaining <= BUDGET_LEFT_COMPLETE) break;
-	}
-	return {
-		shares,
-		complete: remaining <= BUDGET_LEFT_COMPLETE,
-	};
-}
-
-function simulateSellShares(
-	bids: ReadonlyArray<DepthLevel>,
-	sharesToSell: number,
-): { usd: number; complete: boolean } {
-	let rem = sharesToSell;
-	let usd = 0;
-	for (const lvl of bids) {
-		const p = lvl.price;
-		const sz = lvl.size;
-		if (!(p > DEPTH_EPS && p < 1 - DEPTH_EPS && sz > DEPTH_EPS)) {
-			continue;
-		}
-		const take = Math.min(sz, rem);
-		usd += take * p;
-		rem -= take;
-		if (rem <= DEPTH_EPS) {
-			return { usd, complete: true };
-		}
-	}
-	return { usd, complete: rem <= 1e-9 };
-}
-
-function roundTripSellbackUsd(
-	team: VenueTeamBook,
-	notionalUsd: number,
-): number | null {
-	const asks = sortDepthLevels(team.asks, "asc");
-	const bids = sortDepthLevels(team.bids, "desc");
-	if (asks.length === 0 || bids.length === 0) {
-		return null;
-	}
-	const buy = simulateBuyNotional(asks, notionalUsd);
-	if (!buy.complete || buy.shares <= DEPTH_EPS) {
-		return null;
-	}
-	const sell = simulateSellShares(bids, buy.shares);
-	if (!sell.complete) {
-		return null;
-	}
-	return sell.usd;
-}
-
-function jsonFiniteNumber(x: unknown): number | null {
-	if (typeof x === "number" && Number.isFinite(x)) {
-		return x;
-	}
-	if (typeof x === "string" && x.trim() !== "") {
-		const n = Number(x);
-		if (Number.isFinite(n)) return n;
-	}
-	return null;
-}
-
-function teamSpread(team: VenueTeamBook): number | null {
-	const bid = jsonFiniteNumber(team.bestBid);
-	const ask = jsonFiniteNumber(team.bestAsk);
-	if (bid === null || ask === null) return null;
-	const s = ask - bid;
-	if (s < -1e-6 || s > 1 + 1e-6) return null;
-	return s;
-}
-
-function snapshotTightestSpread(snap: VenuePriceSnapshot): number | null {
-	if (snap.status && String(snap.status).toLowerCase() !== "live") {
-		return null;
-	}
-	const a = teamSpread(snap.teamA);
-	const b = teamSpread(snap.teamB);
-	const vals = [a, b].filter((x): x is number => x !== null);
-	if (vals.length === 0) return null;
-	return Math.min(...vals);
-}
-
-function findSnapshotForVenue(
-	snaps: VenuePriceSnapshot[],
-	slug: string,
-): VenuePriceSnapshot | undefined {
-	const want = slug.toLowerCase();
-	return snaps.find((s) => String(s.venue ?? "").toLowerCase() === want);
 }
 
 export type E2eVenueLiquidityGate = {
@@ -175,13 +42,13 @@ export type E2eVenueLiquidityGate = {
 export async function evaluateVenueLiquidityBeforeTrade(args: {
 	venueKey: RequiredVenueKey;
 	pandaMatchId: string;
-	/** Tightest spread stored on the per-venue pick (from earlier matched-markets pass); used only if ladders are absent. */
+	/** Legacy field from pick bookkeeping; retained for log lines only. */
 	spreadAtPickTime: number;
 	apiBaseUrl?: string;
 }): Promise<E2eVenueLiquidityGate> {
 	const base = (args.apiBaseUrl ?? PREDICTIONS_API_URL).replace(/\/$/, "");
 	const url = `${base}/venue-prices/${encodeURIComponent(args.pandaMatchId)}`;
-	let snaps: VenuePriceSnapshot[];
+	let snaps: VenuePriceSnapshotRaw[];
 	try {
 		const res = await fetch(url, { signal: AbortSignal.timeout(25_000) });
 		if (!res.ok) {
@@ -203,7 +70,7 @@ export async function evaluateVenueLiquidityBeforeTrade(args: {
 					`[e2e liquidity] skipping ${args.venueKey}: bad venue-prices body for panda ${args.pandaMatchId}`,
 			};
 		}
-		snaps = body as VenuePriceSnapshot[];
+		snaps = body as VenuePriceSnapshotRaw[];
 	} catch (err) {
 		console.error("error", err);
 		return {
@@ -215,7 +82,7 @@ export async function evaluateVenueLiquidityBeforeTrade(args: {
 	}
 
 	const slug = tradingVenueSlugForKey(args.venueKey);
-	const snap = findSnapshotForVenue(snaps, slug);
+	const snap = snaps.find((s) => String(s.venue ?? "").toLowerCase() === slug);
 	if (!snap) {
 		return {
 			skip: true,
@@ -226,46 +93,28 @@ export async function evaluateVenueLiquidityBeforeTrade(args: {
 	}
 
 	const n = E2E_TRADE_NOTIONAL_USD;
-	const ra = roundTripSellbackUsd(snap.teamA, n);
-	const rb = roundTripSellbackUsd(snap.teamB, n);
-	const sellbacks = [ra, rb].filter((x): x is number => x !== null);
+	const snapLite = snap as VenuePriceSnapshotLite;
 
-	if (sellbacks.length > 0) {
-		const bestSellback = Math.max(...sellbacks);
-		const smallestLossUsd = n - bestSellback;
-		if (smallestLossUsd + 1e-9 > MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD) {
-			const w =
-				`[e2e liquidity] skipping ${args.venueKey}: best-case ${n} round-trip loss ≈ $${smallestLossUsd.toFixed(2)} ` +
-				`(>${MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD}) on fresh book — panda ${args.pandaMatchId}, umbrella pick spread was ${args.spreadAtPickTime.toFixed(4)}.`;
-			return {
-				skip: true,
-				reason: `best-case round-trip loss ${smallestLossUsd.toFixed(2)} > ${MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD}`,
-				warning: w,
-			};
-		}
-		return {
-			skip: false,
-			reason: "",
-			warning: "",
-		};
-	}
-
-	const topSpread = snapshotTightestSpread(snap);
-	if (topSpread === null) {
-		return {
-			skip: true,
-			reason: "no depth and no top-of-book spread",
-			warning:
-				`[e2e liquidity] skipping ${args.venueKey}: no ladders and no spread for "${slug}" panda ${args.pandaMatchId}`,
-		};
-	}
-	if (topSpread + 1e-9 >= MAX_E2E_VENUE_SPREAD_USD) {
+	const smallestLoss = smallestRoundTripLossUsdForSnapshot(snapLite, n);
+	if (smallestLoss === null) {
 		const w =
-			`[e2e liquidity] skipping ${args.venueKey}: no order-book ladders; tightest top-of-book spread ${topSpread.toFixed(4)} ` +
-			`≥ ${MAX_E2E_VENUE_SPREAD_USD} — panda ${args.pandaMatchId}.`;
+			`[e2e liquidity] skipping ${args.venueKey}: insufficient depth — cannot simulate full $${n} buy + sell-through ` +
+			`(ladders incomplete or missing TOB totalAskLiquidity/totalBidLiquidity pairs) — panda ${args.pandaMatchId}, spreadAtPick=${args.spreadAtPickTime.toFixed(4)}.`;
 		return {
 			skip: true,
-			reason: `spread fallback ${topSpread.toFixed(4)} ≥ ${MAX_E2E_VENUE_SPREAD_USD}`,
+			reason:
+				"no executable ladder or TOB-total liquidity for configured notional",
+			warning: w,
+		};
+	}
+
+	if (smallestLoss + 1e-9 > MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD) {
+		const w =
+			`[e2e liquidity] skipping ${args.venueKey}: executable best-case round-trip loss ≈ $${smallestLoss.toFixed(2)} ` +
+			`(>${MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD}) on fresh book — panda ${args.pandaMatchId}.`;
+		return {
+			skip: true,
+			reason: `best-case round-trip loss ${smallestLoss.toFixed(2)} > ${MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD}`,
 			warning: w,
 		};
 	}
