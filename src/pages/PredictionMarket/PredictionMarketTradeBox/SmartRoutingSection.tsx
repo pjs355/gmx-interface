@@ -30,6 +30,9 @@ import { SHARE_SELL_COMPARE_EPS } from "./checkBalances";
 const SR_VALUE_CLASS = "smart-routing-row__value";
 const SR_VALUE_FLASH_CLASS = "smart-routing-row__value--flash";
 
+/** Only snap away from a missing venue after previews stay without it — avoids jumping to "best" on one stale poll tick. */
+const VENUE_IMPOSSIBLE_TAB_DEBOUNCE_MS = 650;
+
 /** Brand blue→purple gradient (matches Header / RPGPanel). Inline SVG so the
  *  fork lines paint a real gradient instead of a flat color. */
 function SplitGradientIcon({ size = 18 }: { size?: number }) {
@@ -434,7 +437,7 @@ export interface SmartRoutingSectionProps {
 	tradingVenue: TradingVenue;
 	isLoading: boolean;
 	onSelectVenue: (venue: TradingVenue) => void;
-	/** Raw input amount string. When this changes we auto-select the top row again. */
+	/** Raw input amount string. When it changes we may auto-select the split row only (never a single-venue "best" jump). */
 	userAmount?: string;
 	/** Side of the active trade — drives the right-hand column header label. */
 	side?: SorSide;
@@ -650,6 +653,15 @@ export default function SmartRoutingSection({
 		[tradingVenue, showSplitBuyRow, showSplitSellRow, sortedVenuePreviews],
 	);
 
+	const sortedVenuePreviewsRef = useRef(sortedVenuePreviews);
+	sortedVenuePreviewsRef.current = sortedVenuePreviews;
+	const tradingVenueRef = useRef(tradingVenue);
+	tradingVenueRef.current = tradingVenue;
+	const venueSelectionLockedRef = useRef(venueSelectionLocked);
+	venueSelectionLockedRef.current = venueSelectionLocked;
+	const routePreviewAllowedRef = useRef(routePreviewAllowed);
+	routePreviewAllowedRef.current = routePreviewAllowed;
+
 	useEffect(() => {
 		if (!routePreviewAllowed) {
 			stableDisplayRouteRef.current = null;
@@ -657,9 +669,12 @@ export default function SmartRoutingSection({
 		}
 	}, [routePreviewAllowed]);
 
-	/** Correct an impossible tab (venue not in current preview list). Do not force
-	 *  `"all"` just because split-order is best — that fought every manual single-venue
-	 *  row click (effect re-ran → `onSelectVenue("all")` → looked like clicks did nothing). */
+	/**
+	 * When the user's venue tab is absent from the latest preview list, do **not**
+	 * immediately snap to the sorted "best" row — transient SOR gaps caused wrong-venue
+	 * trades. After a stable debounce, if the venue is still missing, move to the first
+	 * preview row so the tab is never permanently orphaned.
+	 */
 	useEffect(() => {
 		if (venueSelectionLocked) return;
 		if (!routePreviewAllowed) return;
@@ -668,9 +683,23 @@ export default function SmartRoutingSection({
 		const allowed = new Set(
 			sortedVenuePreviews.map((p) => sorVenueToTradingVenue(p.venue)),
 		);
-		if (!allowed.has(tradingVenue)) {
-			onSelectVenue(sorVenueToTradingVenue(sortedVenuePreviews[0]!.venue));
-		}
+		if (allowed.has(tradingVenue)) return;
+
+		const timer = window.setTimeout(() => {
+			if (venueSelectionLockedRef.current) return;
+			if (!routePreviewAllowedRef.current) return;
+			const tv = tradingVenueRef.current;
+			if (tv === "all") return;
+			const previews = sortedVenuePreviewsRef.current;
+			if (!previews || previews.length === 0) return;
+			const allowedNow = new Set(
+				previews.map((p) => sorVenueToTradingVenue(p.venue)),
+			);
+			if (allowedNow.has(tv)) return;
+			onSelectVenue(sorVenueToTradingVenue(previews[0]!.venue));
+		}, VENUE_IMPOSSIBLE_TAB_DEBOUNCE_MS);
+
+		return () => window.clearTimeout(timer);
 	}, [
 		venueSelectionLocked,
 		routePreviewAllowed,
@@ -707,21 +736,15 @@ export default function SmartRoutingSection({
 	}, [displayRoute, venuePreviews]);
 
 	/* ---------------------------------------------------------------------
-	 * Auto-select top row when the input amount changes.
-	 *
-	 * Goal: if the user types a new amount, the row that's now the best
-	 * payout (split when shown, else the first single-venue row) becomes
-	 * the selected row. Avoids stranding them on a stale single-venue
-	 * pick when more size makes split the winner.
+	 * Auto-select when the input amount changes: only promote **split** ("all")
+	 * when it is the top row — never auto-switch single-venue tabs to the sorted
+	 * "best" preview. That jump raced user clicks and sent trades on the wrong venue.
 	 *
 	 * Notes:
-	 *  - We mark "dirty" the moment `userAmount` changes, then commit the
-	 *    selection only AFTER the SOR channel settles (`isLoading === false`),
-	 *    so we choose based on fresh data — not stale pre-fetch state.
-	 *  - First mount is intentionally NOT auto-selected; we honor the
-	 *    initial `tradingVenue` (sticky / venue tab) the parent passed in.
-	 *  - No-op on `executionRoute` updates: we only react to amount edits,
-	 *    so polling refreshes never fight the user's manual selection.
+	 *  - We mark "dirty" the moment `userAmount` changes, then commit only AFTER
+	 *    `isLoading === false`, so split vs not uses fresh data.
+	 *  - First mount does not auto-select; parent sticky `tradingVenue` wins.
+	 *  - Manual `tradingVenue` changes clear the pending auto-select (effect below).
 	 * ------------------------------------------------------------------- */
 	const lastAutoSelectAmountRef = useRef<string | null>(
 		userAmount === undefined ? null : userAmount,
@@ -771,16 +794,9 @@ export default function SmartRoutingSection({
 
 		pendingAutoSelectRef.current = false;
 
-		// Top row mirrors the render order below: split (when best/tied) wins,
-		// otherwise the first sorted single-venue preview.
 		const splitIsTop = showSplitBuyRow || showSplitSellRow;
-		if (splitIsTop) {
-			if (tradingVenue !== "all") onSelectVenue("all");
-			return;
-		}
-		if (sortedVenuePreviews && sortedVenuePreviews.length > 0) {
-			const topVenue = sorVenueToTradingVenue(sortedVenuePreviews[0].venue);
-			if (tradingVenue !== topVenue) onSelectVenue(topVenue);
+		if (splitIsTop && tradingVenue !== "all") {
+			onSelectVenue("all");
 		}
 	}, [
 		venueSelectionLocked,

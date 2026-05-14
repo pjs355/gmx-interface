@@ -16,9 +16,15 @@ import type { RequiredVenueKey } from "./matched-market";
  * `E2E_TRADE_NOTIONAL_USD` exceeds `MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD`, or
  * (without ladders) top-of-book spread is too wide — see
  * `e2e/fixtures/e2e-venue-liquidity-at-test.ts`.
+ *
+ * Local dev: if every row is skipped because matched-markets `eventDate` is missing
+ * or venue-prices uses `status: "no_liquidity"` while TOB still exists, see
+ * `venueSnapshotStatusAllowsBookProbe` in `e2e-venue-book-depth.ts`. To run a
+ * specific umbrella, set `E2E_PIN_UMBRELLA_ID=<mongo _id>` when invoking Playwright
+ * (row must still appear in GET `{PREDICTIONS_API_URL}/matched-markets`).
  */
 export const REQUESTED_VENUES: RequiredVenueKey[] = [
-	//"polymarket",
+	"polymarket",
 	"predictFun",
 	// "dflow",
 	// "levelup",

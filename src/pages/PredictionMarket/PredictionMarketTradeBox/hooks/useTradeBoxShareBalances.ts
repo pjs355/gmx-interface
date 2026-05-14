@@ -7,7 +7,7 @@ import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
 import { limitlessVenuePositionMatchesPageMarket } from "@/trading/limitless/limitlessTradeBoxMatch";
 import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
-import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
+import { inferLimitlessCatalogYesColumn } from "@/trading/limitless/limitlessCatalogTokenPair";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
@@ -18,6 +18,7 @@ import { titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
+import type { LimitlessInferenceWire } from "@/trading/limitless/limitlessCatalogTokenPair";
 import type { VenuePosition, VenueId } from "@/types/trading/venuePosition";
 import {
 	findMatchedMarketByPolyConditionId,
@@ -33,6 +34,7 @@ import {
 	lookupUmbrellaByDflowEventTicker,
 	mintMatchesDflowExchange,
 } from "@/trading/dflow/dflowUmbrellaLookup";
+import { coerceLimitlessWireForInference } from "@/utils/mergeMonitorLimitlessFromUmbrella";
 import type { TradingVenue } from "../types";
 
 const VENUE_SUFFIX: Record<VenueId | "levelup", string> = {
@@ -280,6 +282,7 @@ function venuePositionToYesNo(
 	p: VenuePosition,
 	matchedMarkets: MatchedMarket[] | null | undefined,
 	pageMatchedMonitor: MatchedMarket | null | undefined,
+	resolvedLimitlessWire: LimitlessInferenceWire | null | undefined,
 	isVsSingle: boolean,
 	yesTeamLabel: string,
 	noTeamLabel: string,
@@ -295,14 +298,12 @@ function venuePositionToYesNo(
 		);
 	}
 	if (p.venue === "limitless") {
-		const lx = pageMatchedMonitor?.limitless;
-		if (lx?.tokenIdA && lx?.tokenIdB) {
-			const tid = canonicalLimitlessTokenId(p.tokenId);
-			const a = canonicalLimitlessTokenId(String(lx.tokenIdA));
-			const b = canonicalLimitlessTokenId(String(lx.tokenIdB));
-			if (tid === a) return "yes";
-			if (tid === b) return "no";
-		}
+		const slot = inferLimitlessCatalogYesColumn(
+			p.tokenId,
+			p.eventSlug,
+			resolvedLimitlessWire ?? undefined,
+		);
+		if (slot !== null) return slot ? "yes" : "no";
 	}
 	return outcomeToSide(p.outcome, isVsSingle, yesTeamLabel, noTeamLabel);
 }
@@ -313,6 +314,7 @@ function buildOutcomeVenueBreakdownRows(
 	relevantVenuePositions: VenuePosition[],
 	matchedOddsMarkets: MatchedMarket[] | null | undefined,
 	pageMatchedMonitor: MatchedMarket | null | undefined,
+	resolvedLimitlessWire: LimitlessInferenceWire | null | undefined,
 	isVsSingle: boolean,
 	yesTeamLabel: string,
 	noTeamLabel: string,
@@ -329,6 +331,7 @@ function buildOutcomeVenueBreakdownRows(
 			p,
 			matchedOddsMarkets,
 			pageMatchedMonitor,
+			resolvedLimitlessWire,
 			isVsSingle,
 			yesTeamLabel,
 			noTeamLabel,
@@ -462,6 +465,20 @@ export function useTradeBoxShareBalances(opts: {
 		[umbrellaId, market, allMarketsByUmbrella],
 	);
 
+	const umbrellaForPage = useMemo(
+		() => (umbrellaId ? umbrellas.find((u) => u._id === umbrellaId) : undefined),
+		[umbrellas, umbrellaId],
+	);
+
+	const resolvedLimitlessMapping = useMemo(
+		() =>
+			coerceLimitlessWireForInference(
+				pageMatchedMonitor?.limitless,
+				umbrellaForPage?.exchangeMatching?.limitless,
+			),
+		[pageMatchedMonitor?.limitless, umbrellaForPage?.exchangeMatching?.limitless],
+	);
+
 	const relevantVenuePositions = useMemo(() => {
 		if (!umbrellaId || !market) return [];
 		const out: VenuePosition[] = [];
@@ -563,6 +580,7 @@ export function useTradeBoxShareBalances(opts: {
 					p,
 					matchedOddsMarkets,
 					pageMatchedMonitor,
+					resolvedLimitlessMapping,
 					isVsSingle,
 					yesTeamLabel,
 					noTeamLabel,
@@ -575,7 +593,7 @@ export function useTradeBoxShareBalances(opts: {
 					tokenTail: (p.tokenId ?? "").slice(-16),
 					matchedBySlugTokenMonitor: Boolean(bySlugToken),
 					tradeBoxYesNo: yn,
-					note: "Uses monitor tokenIdA/B for Yes/No when present; History tab uses inferVenueHistoryYesNoSide(title,outcome) on venueHistory rows instead",
+					note: "Yes/No from inferLimitlessCatalogYesColumn (mint + orderbookSlug vs eventSlug); monitor/umbrella wire via coerceLimitlessWireForInference",
 				};
 			}),
 		});
@@ -588,6 +606,7 @@ export function useTradeBoxShareBalances(opts: {
 		isVsSingle,
 		yesTeamLabel,
 		noTeamLabel,
+		resolvedLimitlessMapping,
 	]);
 
 	const levelBalances = useMemo(() => {
@@ -620,9 +639,8 @@ export function useTradeBoxShareBalances(opts: {
 			(waitLimitless && limitlessPortfolioEnabled && limitlessVenueQ.isLoading));
 
 	// Always aggregate across every venue regardless of `state.tradingVenue` —
-	// the SmartRoutingSection auto-select can flip `tradingVenue` to a single
-	// venue mid-render (when SOR finds a single-venue best route), and we don't
-	// want the breakdown to "drop" the other venues' shares.
+	// venue tab can change from SmartRoutingSection or parent effects; the sell
+	// breakdown should still list every venue where the user holds shares.
 	const lines = useMemo((): TradeBoxShareLine[] => {
 		const yesLabel = isVsSingle ? yesTeamLabel : "Yes";
 		const noLabel = isVsSingle ? noTeamLabel : "No";
@@ -660,6 +678,7 @@ export function useTradeBoxShareBalances(opts: {
 				p,
 				matchedOddsMarkets,
 				pageMatchedMonitor,
+				resolvedLimitlessMapping,
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
@@ -697,6 +716,7 @@ export function useTradeBoxShareBalances(opts: {
 		appState?.markets,
 		appState?.timestamp,
 		pageMatchedMonitor,
+		resolvedLimitlessMapping,
 	]);
 
 	const buyLines = useMemo(
@@ -712,6 +732,7 @@ export function useTradeBoxShareBalances(opts: {
 				relevantVenuePositions,
 				matchedOddsMarkets,
 				pageMatchedMonitor,
+				resolvedLimitlessMapping,
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
@@ -722,6 +743,7 @@ export function useTradeBoxShareBalances(opts: {
 				relevantVenuePositions,
 				matchedOddsMarkets,
 				pageMatchedMonitor,
+				resolvedLimitlessMapping,
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
@@ -732,6 +754,7 @@ export function useTradeBoxShareBalances(opts: {
 			relevantVenuePositions,
 			matchedOddsMarkets,
 			pageMatchedMonitor,
+			resolvedLimitlessMapping,
 			isVsSingle,
 			yesTeamLabel,
 			noTeamLabel,
@@ -759,6 +782,7 @@ export function useTradeBoxShareBalances(opts: {
 			relevantVenuePositions,
 			matchedOddsMarkets,
 			pageMatchedMonitor,
+			resolvedLimitlessMapping,
 			isVsSingle,
 			yesTeamLabel,
 			noTeamLabel,
@@ -774,6 +798,7 @@ export function useTradeBoxShareBalances(opts: {
 		relevantVenuePositions,
 		matchedOddsMarkets,
 		pageMatchedMonitor,
+		resolvedLimitlessMapping,
 	]);
 
 	/**
@@ -795,6 +820,7 @@ export function useTradeBoxShareBalances(opts: {
 				p,
 				matchedOddsMarkets,
 				pageMatchedMonitor,
+				resolvedLimitlessMapping,
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
@@ -812,6 +838,7 @@ export function useTradeBoxShareBalances(opts: {
 		appState?.markets,
 		appState?.timestamp,
 		pageMatchedMonitor,
+		resolvedLimitlessMapping,
 	]);
 
 	return {

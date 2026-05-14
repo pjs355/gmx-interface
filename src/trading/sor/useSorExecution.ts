@@ -17,6 +17,7 @@ import type {
 	SorVenue,
 } from "./sor-types";
 import { groupBridgeLegsByCorridor } from "./sorBridgeGroups";
+import { LEG_OR_BRIDGE_TIMEOUT_MS } from "@/trading/sor/sorBridgeWallTimeBudget";
 import { withTimeout } from "@/utils/withTimeout";
 import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
 
@@ -42,10 +43,9 @@ function logDflowClientOrderSigning(
 const RETRY_COUNT = 2;
 const RETRY_DELAY_MS = 2000;
 /**
- * Max wall time per bridge or leg (wallet prompts, LI.FI, venue APIs).
- * Polygon prefund uses the Polymarket relayer (~200s poll budget) plus LI.FI status polling.
+ * Max wall time per bridge or leg — derived in `sorBridgeWallTimeBudget` so it stays
+ * ≥ Limitless withdraw + quote iterations + LI.FI on-chain + status poll (and parallel sweep).
  */
-const LEG_OR_BRIDGE_TIMEOUT_MS = 300_000;
 
 export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<{
 	filled: boolean;
@@ -471,6 +471,12 @@ export function useSorExecution(
 						console.error("error", err);
 						const msg = sorExecutionFailureMessage(err);
 						console.warn("[SOR] Bridge error", group.key, msg);
+						console.warn("[SOR][diagnostics][bridge]", {
+							routeId: route.routeId,
+							corridor: group.key,
+							outerTimeoutMs: LEG_OR_BRIDGE_TIMEOUT_MS,
+							hint: "Limitless prefund: Network → POST …/portfolio/withdraw (504 = upstream/server limit). Client errors prefixed [SOR][limitless-withdraw] are maker→SCW. Outer timeout here means the whole executeBridge exceeded outerTimeoutMs while inner steps may still be running.",
+						});
 						bridgeResult = { success: false, error: msg };
 					}
 					if (mountedRef.current) {
@@ -526,6 +532,11 @@ export function useSorExecution(
 							console.error("error", err);
 							const msg = sorExecutionFailureMessage(err);
 							console.warn("[SOR] Post-bridge leg failed", leg.venue, msg);
+							console.warn("[SOR][diagnostics][post_bridge_leg]", {
+								routeId: route.routeId,
+								venue: leg.venue,
+								outerTimeoutMs: LEG_OR_BRIDGE_TIMEOUT_MS,
+							});
 							tradeResult = { filled: false, filledShares: 0, error: msg };
 						}
 						console.log("[SOR] Bridge+trade leg end", leg.venue, {
@@ -570,6 +581,11 @@ export function useSorExecution(
 						console.error("error", err);
 						const msg = sorExecutionFailureMessage(err);
 						console.warn("[SOR] Leg failed", leg.venue, msg);
+						console.warn("[SOR][diagnostics][immediate_leg]", {
+							routeId: route.routeId,
+							venue: leg.venue,
+							outerTimeoutMs: LEG_OR_BRIDGE_TIMEOUT_MS,
+						});
 						result = { filled: false, filledShares: 0, error: msg };
 					}
 					console.log("[SOR] Leg end", leg.venue, {

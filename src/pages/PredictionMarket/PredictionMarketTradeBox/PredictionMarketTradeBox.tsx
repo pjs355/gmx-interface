@@ -121,6 +121,7 @@ import {
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
+import { hasLevelUpCrossVenueOrderbook } from "@/trading/levelUp/levelUpCrossVenueBookPresence";
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
@@ -147,7 +148,7 @@ const SOR_VENUE_POSITION_KEYS: readonly SorVenue[] = [
 ];
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip, mobilePeekBar = "default", tradeRouteIsolationKey }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, predictFunMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip, mobilePeekBar = "default", tradeRouteIsolationKey }, ref) => {
 
   const pandaId = pandascoreMatchId?.trim() ?? "";
   const multiVenueEnabled = Boolean(pandaId);
@@ -283,28 +284,36 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     signerAddress,
     account,
   );
-  const predictShareIdentityCtx = useMemo(
-    () =>
-      matchedMonitor?.predictFun
-        ? {
-            predictFun: {
-              tokenIdA: matchedMonitor.predictFun.tokenIdA,
-              tokenIdB: matchedMonitor.predictFun.tokenIdB,
-            },
-          }
-        : null,
-    [matchedMonitor?.predictFun],
-  );
+  /** Post-trade share identity: umbrella `exchangeMatching.predictFun` only (single source). */
+  const predictShareIdentityCtx = useMemo(() => {
+    const umb = predictFunMappingFromUmbrella;
+    if (!umb) return null;
+    const tokenIdA = String(umb.tokenIdA ?? "").trim();
+    const tokenIdB = String(umb.tokenIdB ?? "").trim();
+    if (!tokenIdA && !tokenIdB) return null;
+    return {
+      predictFun: {
+        ...(tokenIdA ? { tokenIdA } : {}),
+        ...(tokenIdB ? { tokenIdB } : {}),
+      },
+    };
+  }, [predictFunMappingFromUmbrella]);
 
   const matchedVenues = useMemo(() => {
-    const set = new Set<string>(["levelup"]);
+    const set = new Set<string>();
+    if (
+      !multiVenueEnabled ||
+      hasLevelUpCrossVenueOrderbook(matchedMonitor ?? null, levelUpOrderbook)
+    ) {
+      set.add("levelup");
+    }
     if (!matchedMonitor) return set;
     if (matchedMonitor.polyConditionId || matchedMonitor.polyTokenIdA) set.add("polymarket");
     if (matchedMonitor.dflow || matchedMonitor.kalshi) set.add("dflow");
     if (matchedMonitor.predictFun) set.add("predictfun");
     if (matchedMonitor.limitless) set.add("limitless");
     return set;
-  }, [matchedMonitor]);
+  }, [multiVenueEnabled, matchedMonitor, levelUpOrderbook]);
 
   /** Mirrors `PredictionMarketTradeBoxUI` smart-routing strip: pandascore link + 2+ tradeable venues → "All Markets" row. */
   const smartRoutingSurfaceActive = useMemo(
@@ -320,9 +329,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       hasMatchedMonitor: Boolean(matchedMonitor),
       matchedVenues: list,
       note:
-        "Venue list is derived from OddsMonitor MatchedMarket (venue-prices WS / matched-markets), not from all-books-preview. LevelUp is always included.",
+        "Venue list: OddsMonitor MatchedMarket + REST orderbook prop. On pandascore pages LevelUp is included only when cross-venue book presence matches VenueOrderbooksPanel (resting depth / REST ladder rule).",
     });
-  }, [pandaId, matchedMonitor, matchedVenues]);
+  }, [pandaId, matchedMonitor, matchedVenues, levelUpOrderbook]);
 
   const dflowLink = useMemo(
     () => (matchedMonitor ? getDflowKalshiMonitorLink(matchedMonitor) : undefined),
@@ -608,9 +617,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           yesTeamLabel,
           noTeamLabel,
         );
-        const wsSnap = monitorBookToOrderbookSnapshot(raw, {
-          includeBboSyntheticLevels: true,
-        });
+        const wsSnap = monitorBookToOrderbookSnapshot(raw);
         if (wsSnap) return wsSnap;
       }
       return levelUpOrderbook;
@@ -1862,6 +1869,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     reportExecutionPhaseRef: sorReportExecutionPhaseRef,
   });
 
+  const sorExecution = useSorExecution({
+    executeLeg: sorExecutor.executeLeg,
+    executeBridge: sorExecutor.executeBridge,
+    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
+  });
+
   /**
    * Single source with `CollateralTokenContext` — do not use `useBridgeFundingBalances`
    * gated on `multiVenueEnabled` here. Predict (and other single-tab) flows still need
@@ -2056,28 +2069,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     targetVenue: sorTargetVenue,
     orderType: state.orderType,
     limitPriceCents: sorLimitPriceCents,
+    suspendBackgroundRefetch:
+      sorExecution.isExecuting || state.isLoading,
   });
-
-  /** True when `executionRoute` has no usable legs but `displayRoute` (omnibus) still does. */
-  const sorUsingOmnibusFallbackForVenueTab = useMemo(() => {
-    if (state.tradingVenue === "all") return false;
-    const exec = sorRoute.executionRoute;
-    const execOk = Boolean(exec && exec.legs.length > 0);
-    const disp = sorRoute.displayRoute;
-    const dispOk = Boolean(disp && disp.legs.length > 0);
-    return !execOk && dispOk;
-  }, [state.tradingVenue, sorRoute.displayRoute, sorRoute.executionRoute]);
 
   /**
    * Resolved executable plan + status for the active tab:
-   * - "all"  → omnibus (display channel) is the executable plan.
-   * - venue  → targeted (execution channel) when it returns legs; **otherwise** fall back to
-   *   omnibus when it still has legs. The targeted channel can return NO_BOOKS for one venue
-   *   while omnibus still found liquidity across books — without this fallback the button shows
-   *   "No shares available" despite quotes on the smart-routing rows.
-   *
-   * Errors fall through to display only when execution is still loading and has no code yet — keeps
-   * the button copy useful (display omnibus error) instead of flashing blank during the first tick.
+   * - "all" → omnibus (`displayRoute` / display channel).
+   * - specific venue → **only** the targeted `executionRoute` with legs. Never use omnibus here:
+   *   executing `displayRoute` while a venue tab is selected sent orders to the wrong venue.
    */
   const executableRoute = useMemo(() => {
     if (state.tradingVenue === "all") {
@@ -2087,10 +2087,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     if (exec && exec.legs.length > 0) {
       return exec;
     }
-    const omnibus = sorRoute.displayRoute;
-    if (omnibus && omnibus.legs.length > 0) {
-      return omnibus;
-    }
     return null;
   }, [state.tradingVenue, sorRoute.displayRoute, sorRoute.executionRoute]);
   const executableLoading =
@@ -2098,28 +2094,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const executableStale =
     state.tradingVenue === "all" ? sorRoute.displayStale : sorRoute.executionStale;
   const executableError =
-    state.tradingVenue === "all"
-      ? sorRoute.displayError
-      : sorUsingOmnibusFallbackForVenueTab
-        ? sorRoute.displayError
-        : (sorRoute.executionError ?? sorRoute.displayError);
+    state.tradingVenue === "all" ? sorRoute.displayError : sorRoute.executionError;
   const executableErrorCode =
     state.tradingVenue === "all"
       ? sorRoute.displayErrorCode
-      : sorUsingOmnibusFallbackForVenueTab
-        ? sorRoute.displayErrorCode
-        : (sorRoute.executionErrorCode ?? sorRoute.displayErrorCode);
+      : sorRoute.executionErrorCode;
 
   // Keep ref in sync so handleTrade (defined above) can access latest SOR data.
-  // On a venue tab this is usually the targeted `executionRoute`, but we may sign the
-  // omnibus plan when the targeted channel fails while omnibus still has legs (see above).
   sorRouteRef.current = executableRoute;
-
-  const sorExecution = useSorExecution({
-    executeLeg: sorExecutor.executeLeg,
-    executeBridge: sorExecutor.executeBridge,
-    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
-  });
 
   const venueSelectionLocked =
     sorExecution.isExecuting || state.isLoading;
@@ -2217,15 +2199,42 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const handleSorExecute = useCallback(() => {
     if (executableRoute && !sorRouteExpired) {
+      const tv = state.tradingVenue;
+      const legsMatchVenueTab =
+        tv === "all" ||
+        executableRoute.legs.every((l) => l.venue === tv);
+      if (!legsMatchVenueTab) {
+        console.error("[SOR] execute blocked: route legs do not match selected venue tab", {
+          tradingVenue: tv,
+          legVenues: executableRoute.legs.map((l) => l.venue),
+          routeId: executableRoute.routeId,
+        });
+        setState((prev) => ({
+          ...prev,
+          orderResult: {
+            success: false,
+            error:
+              "Venue mismatch — wait for the quote to refresh, then try again.",
+          },
+        }));
+        return;
+      }
       console.log("[SOR] Trade button → execute", executableRoute.routeId);
-      // Capture before SOR kicks off so the post-submit "creating market"
-      // notice survives a fast post-trade refresh that flips
-      // `accountsInitialized*` to true once the first mint settles.
-      const executingDflow = executableRoute.legs[0]?.venue === "dflow";
-      const dflowAnyUninit =
-        matchedMonitor?.dflow?.accountsInitializedA === false ||
-        matchedMonitor?.dflow?.accountsInitializedB === false;
-      setDflowUninitAtSubmit(executingDflow && dflowAnyUninit);
+      // Kalshi/DFlow: each outcome has its own `accountsInitialized*` flag. Only show
+      // the "creating this market" notice when the leg(s) we execute still report
+      // `false` for that outcome — not when the other team's leg is uninitialized.
+      const dflowLink = matchedMonitor?.dflow;
+      const dflowExecutedLegNeedsMarketInit =
+        Boolean(dflowLink) &&
+        executableRoute.legs.some((leg) => {
+          if (leg.venue !== "dflow" || !dflowLink) return false;
+          const initialized =
+            leg.outcome === "A"
+              ? dflowLink.accountsInitializedA
+              : dflowLink.accountsInitializedB;
+          return initialized === false;
+        });
+      setDflowUninitAtSubmit(dflowExecutedLegNeedsMarketInit);
       const marketId = sorQuestionId as string | undefined;
       const baseline = capturePostTradeBaseline({
         queryClient,
@@ -2335,6 +2344,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     yesBalance,
     noBalance,
     matchedMonitor,
+    state.tradingVenue,
   ]);
 
   // Forward the freshly-rebound `handleSorExecute` into the late-bound ref
@@ -2519,9 +2529,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowStartProofFlow: handleStartDflowProofForTrade,
     sorMatchedVenues: matchedVenues,
     sorState: {
-      // Executable channel: omnibus on "all", targeted on a venue tab. Preserves
-      // useButtonState semantics (route gates Submit; isLoading + isStale together
-      // suppress getSorBuyCashShortfall flicker during background polls).
+      // Omnibus route on "all"; single-venue execution route only on a venue tab (never omnibus).
       route: executableRoute,
       isLoading: executableLoading,
       isStale: executableStale,

@@ -1,4 +1,8 @@
-import { Contract, ethers, type Provider } from "ethers";
+import {
+	Contract,
+	ethers,
+	type Provider,
+} from "ethers";
 import { useSignerContext } from "context/SignerContext";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import {
@@ -10,9 +14,14 @@ import {
 	useWallets as useSolanaWallets,
 } from "@privy-io/react-auth/solana";
 import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AddressesByChainId, ChainId, OrderBuilder } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { getCTFAddress, getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
+import {
+	getCTFAddress,
+	getUSDCAddress,
+	SOLANA_USDC_MINT,
+} from "@/config/addresses";
 import {
 	POLYGON_CTF,
 	POLYGON_NEG_RISK_ADAPTER,
@@ -31,11 +40,39 @@ import {
 import { predictCtfKey } from "@/trading/predict/predictContractKeys";
 import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
+import { PrivateApiError } from "@/services/privateApi/errors";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { tradingQueryKeys } from "@/trading/queryKeys";
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
-
 const BASE_CHAIN_ID = 8453;
+
+/** `POST /api/limitless/ensure-account` payload (unwrapped) or rare `{ data }` cache shape. */
+function parseLimitlessOwnerIdFromEnsureData(data: unknown): number | undefined {
+	if (data == null || typeof data !== "object") return undefined;
+	const d = data as Record<string, unknown>;
+	const inner =
+		d.data != null && typeof d.data === "object"
+			? (d.data as Record<string, unknown>)
+			: d;
+	const la = inner.limitlessAccount;
+	if (!la || typeof la !== "object") return undefined;
+	const oid = (la as Record<string, unknown>).ownerId;
+	if (typeof oid === "number" && Number.isFinite(oid) && oid > 0) return oid;
+	return undefined;
+}
+
+/** Dev-only — keeps production consoles clean (errors still surface via UI `setError`). */
+function claimDev(message: string, data?: Record<string, unknown>): void {
+	if (!import.meta.env.DEV) return;
+	if (data !== undefined) console.debug(`[claim] ${message}`, data);
+	else console.debug(`[claim] ${message}`);
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((r) => setTimeout(r, ms));
+}
 
 function getContracts() {
 	return {
@@ -67,6 +104,107 @@ const CTF_READ_ABI = [
 	"function getPositionId(address collateralToken, bytes32 collectionId) view returns (uint256)",
 	"function balanceOf(address account, uint256 id) view returns (uint256)",
 ] as const;
+
+function isLimitlessPartnerRedeemRouteMissing(err: unknown): boolean {
+	return err instanceof PrivateApiError && [404, 405, 501].includes(err.status);
+}
+
+function isLikelyEvmTxHash(s: string): boolean {
+	const t = s.trim();
+	return /^0x[a-fA-F0-9]{64}$/i.test(t);
+}
+
+/** Partner / Limitless HTTP redeem bodies vary; pick a Base tx hash when present. */
+function extractLimitlessPartnerRedeemTxHash(data: unknown): string | null {
+	const pickHash = (o: unknown): string | null => {
+		if (!o || typeof o !== "object") return null;
+		const r = o as Record<string, unknown>;
+		for (const k of [
+			"transactionHash",
+			"txHash",
+			"hash",
+			/** Limitless server-wallet envelope often exposes the user-op first. */
+			"userOperationHash",
+			"userOpHash",
+			"transaction_hash",
+		]) {
+			const v = r[k];
+			if (typeof v === "string" && isLikelyEvmTxHash(v)) {
+				return v.trim();
+			}
+		}
+		const nested = r.transaction ?? r.tx ?? r.result;
+		if (nested && typeof nested === "object") {
+			const h = (nested as Record<string, unknown>).hash;
+			if (typeof h === "string" && isLikelyEvmTxHash(h)) {
+				return h.trim();
+			}
+		}
+		return null;
+	};
+	return (
+		pickHash(data) ??
+		(data &&
+		typeof data === "object" &&
+		"data" in data
+			? pickHash((data as Record<string, unknown>).data)
+			: null)
+	);
+}
+
+/** Partner message on unwrapped `data` or rare full `{ success, data }` envelopes. */
+function getLimitlessRedeemPartnerMessageDeep(raw: unknown): string | undefined {
+	if (!raw || typeof raw !== "object") return undefined;
+	const r = raw as Record<string, unknown>;
+	const top = r.message;
+	if (typeof top === "string" && top.trim()) return top.trim();
+	const d = r.data;
+	if (d && typeof d === "object") {
+		const m = (d as Record<string, unknown>).message;
+		if (typeof m === "string" && m.trim()) return m.trim();
+	}
+	return undefined;
+}
+
+function summarizeForRedeemDebug(raw: unknown): string {
+	if (raw === null) return "null";
+	if (raw === undefined) return "undefined";
+	if (typeof raw === "string")
+		return `string(len=${raw.length}): ${raw.slice(0, 600)}`;
+	if (typeof raw !== "object") return String(raw);
+	const o = raw as Record<string, unknown>;
+	const keys = Object.keys(o);
+	let json = "";
+	try {
+		json = JSON.stringify(raw);
+	} catch {
+		json = "<stringify failed>";
+	}
+	return `type=object keys=[${keys.join(",")}] json=${json.slice(0, 1800)}`;
+}
+
+function normalizeBytes32ConditionId(raw: string): `0x${string}` {
+	const t = raw.trim().toLowerCase();
+	const h = (t.startsWith("0x") ? t : `0x${t}`) as `0x${string}`;
+	if (h.length !== 66 || !/^0x[0-9a-f]{64}$/.test(h)) {
+		throw new Error("Invalid condition id (expected 32-byte hex)");
+	}
+	return h;
+}
+
+function normalizeBytes32ConditionIdOptional(
+	raw: unknown,
+): `0x${string}` | undefined {
+	if (raw == null) return undefined;
+	if (typeof raw !== "string") return undefined;
+	const t = raw.trim();
+	if (!t) return undefined;
+	try {
+		return normalizeBytes32ConditionId(t);
+	} catch {
+		return undefined;
+	}
+}
 
 /**
  * ERC1155 outcome balance for a resolved binary market (used for NegRisk
@@ -174,17 +312,6 @@ function detectPolymarketCollateralForAsset(
 	return null;
 }
 
-/** Dev-only — keeps production consoles clean (errors still surface via UI `setError`). */
-function claimDev(message: string, data?: Record<string, unknown>): void {
-	if (!import.meta.env.DEV) return;
-	if (data !== undefined) console.debug(`[claim] ${message}`, data);
-	else console.debug(`[claim] ${message}`);
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
-}
-
 /**
  * After a no-op redeem (wrong collateral), wait before the next `/submit` so
  * the Polymarket relayer can clear `wallet busy` without noisy SDK retries.
@@ -205,7 +332,12 @@ function polymarketCtfRedeemCollateralOrder(
 	return [pusd, usdce];
 }
 
-type MarketVenue = "levelup" | "polymarket" | "predictfun" | "dflow";
+type MarketVenue =
+	| "levelup"
+	| "polymarket"
+	| "predictfun"
+	| "dflow"
+	| "limitless";
 
 // Legacy hook for backward compatibility (hardcoded market)
 export function useClaimEarnings() {
@@ -283,6 +415,7 @@ export function useClaimEarnings() {
  *   - polymarket:  Polygon CTF via Polymarket Safe relay
  *   - predictfun:  BNB CTF via embedded wallet switched to BSC
  *   - dflow:       Solana — Kalshi/DFlow trade API (sell winning outcome mint → USDC), same as SOR sell leg
+ *   - limitless:   Base — Limitless CTF / NegRisk adapter (not LevelUp `getCTFAddress()` on Base)
  */
 export function useClaimForVenue(
 	market: PredictionMarket,
@@ -302,9 +435,15 @@ export function useClaimForVenue(
 
 	const iface = useMemo(() => new ethers.Interface(CTF_ABI), []);
 
+	const queryClient = useQueryClient();
 	const privateApi = usePrivateApiClient();
-	const { solanaAddress, polymarketSafe: polymarketDepositWallet } =
-		useFundingAddresses();
+	const profileQuery = useCurrentProfile();
+	const profileId = profileQuery.data?._id;
+
+	const {
+		solanaAddress,
+		polymarketSafe: polymarketDepositWallet,
+	} = useFundingAddresses();
 	const { signTransaction: privySolanaSignTransaction } =
 		useSolanaSignTransaction();
 	const { wallets: solanaWallets } = useSolanaWallets();
@@ -341,6 +480,20 @@ export function useClaimForVenue(
 				isYieldBearing,
 			});
 
+			if (venue === "limitless") {
+				const sig = String(
+					(market as { _limitlessPartnerRedeemableSignal?: string })
+						._limitlessPartnerRedeemableSignal ?? "omit",
+				);
+				if (sig === "false") {
+					claimDev(
+						"limitless skip: partner sent redeemable false for this position",
+						{ marketId: market._id, conditionId: market.conditionId },
+					);
+					return false;
+				}
+			}
+
 			let hash: string | undefined;
 
 			if (venue === "polymarket") {
@@ -349,6 +502,8 @@ export function useClaimForVenue(
 				hash = await redeemPredict();
 			} else if (venue === "dflow") {
 				hash = await redeemDflow();
+			} else if (venue === "limitless") {
+				hash = await redeemLimitless();
 			} else {
 				hash = await redeemLevelUp();
 			}
@@ -356,12 +511,27 @@ export function useClaimForVenue(
 			if (hash) setTxHash(hash);
 			claimDev("success", { txHash: hash ?? null });
 			return true;
-		} catch (e: any) {
+		} catch (e: unknown) {
+			const rec =
+				e !== null && typeof e === "object"
+					? (e as {
+							message?: unknown;
+							reason?: unknown;
+							name?: unknown;
+							code?: unknown;
+						})
+					: {};
+			const msg =
+				(typeof rec.message === "string" && rec.message.trim()) ||
+				(typeof rec.reason === "string" && rec.reason.trim()) ||
+				String(e ?? "unknown error");
 			claimDev("error", {
-				message: e?.message ?? String(e),
-				name: e?.name,
+				message: msg,
+				name: typeof rec.name === "string" ? rec.name : undefined,
+				code: typeof rec.code === "string" ? rec.code : undefined,
+				stack: e instanceof Error ? e.stack : undefined,
 			});
-			setError(e?.message || String(e));
+			setError(msg);
 			return false;
 		} finally {
 			setIsClaiming(false);
@@ -775,6 +945,114 @@ export function useClaimForVenue(
 			await tx.wait();
 			return tx.hash;
 		}
+
+		/**
+		 * Limitless delegated positions live on the **server-wallet** sub-account.
+		 * Official flow: POST https://api.limitless.exchange/portfolio/redeem with
+		 * `conditionId` — proxied here as POST /api/limitless/portfolio/redeem (same
+		 * pattern as portfolio/withdraw). There is no supported on-chain path from the
+		 * user’s Base smart wallet for these positions.
+		 */
+		async function redeemLimitless(): Promise<string> {
+			const cidHex = normalizeBytes32ConditionId(market.conditionId!);
+			const negRiskParentHex = normalizeBytes32ConditionIdOptional(
+				(market as { _limitlessNegRiskParentConditionId?: string })
+					._limitlessNegRiskParentConditionId,
+			);
+			let onBehalfOf: number | undefined;
+			if (!profileId) {
+				throw new Error(
+					"Profile not loaded yet — wait a moment and try Claim again.",
+				);
+			}
+			const ensureKey = tradingQueryKeys.limitlessEnsureAccount(profileId);
+			let ensureData = queryClient.getQueryData(ensureKey);
+			onBehalfOf = parseLimitlessOwnerIdFromEnsureData(ensureData);
+			if (onBehalfOf == null) {
+				ensureData = await queryClient.fetchQuery({
+					queryKey: ensureKey,
+					queryFn: () => privateApi.postLimitlessEnsureAccount(),
+				});
+				onBehalfOf = parseLimitlessOwnerIdFromEnsureData(ensureData);
+			}
+			if (onBehalfOf == null) {
+				throw new Error(
+					"Limitless partner account is not ready (missing ownerId). Finish Limitless setup from a market trade box, then try Claim again.",
+				);
+			}
+			claimDev(
+				"limitless redeem: partner POST /portfolio/redeem (server sub-account, not SCW)",
+				{
+					conditionId: cidHex,
+					onBehalfOf: "set",
+					isNegRisk,
+					negRiskParentSent: negRiskParentHex ? "yes" : "no",
+					note: "Same ownerId as GET /portfolio/positions partner flow (`onBehalfOf` in redeem body). Base smart wallet is not sent to Limitless for redeem.",
+				},
+			);
+			try {
+				const raw = await privateApi.postLimitlessPortfolioRedeem({
+					conditionId: cidHex,
+					onBehalfOf,
+					...(negRiskParentHex
+						? { negRiskParentConditionId: negRiskParentHex }
+						: {}),
+				});
+				const partnerMsg = getLimitlessRedeemPartnerMessageDeep(raw);
+				if (
+					partnerMsg &&
+					/no\s+position\s+balance\s+to\s+redeem/i.test(partnerMsg)
+				) {
+					claimDev(
+						"limitless redeem: Limitless reports nothing to redeem on server-wallet for this conditionId",
+						{
+							conditionId: cidHex,
+							message: partnerMsg,
+							hint: "Limitless can mark a market resolved in the API before on-chain CTF settlement finishes; POST /portfolio/redeem is authoritative. Retry later, refresh Positions, or redeem the same condition on https://limitless.exchange if it persists.",
+						},
+					);
+					throw new Error(
+						`${partnerMsg} Limitless has not posted a redeemable on-chain balance for this condition on your server-wallet yet (API resolution often leads settlement). Retry after a few minutes, refresh Winnings, or complete redemption on https://limitless.exchange.`,
+					);
+				}
+				const hash = extractLimitlessPartnerRedeemTxHash(raw);
+				if (hash) {
+					claimDev("limitless redeem API ok", { txHash: hash });
+					return hash;
+				}
+				if (
+					raw &&
+					typeof raw === "object" &&
+					(raw as Record<string, unknown>).success === true
+				) {
+					claimDev("limitless redeem API ok (no tx hash in body)", {});
+					return `limitless-api:${cidHex.slice(2, 18)}`;
+				}
+				/** Limitless sometimes returns `{ message }` (no hash) with HTTP 200. */
+				if (partnerMsg) {
+					claimDev("limitless redeem partner message", { message: partnerMsg });
+					throw new Error(partnerMsg);
+				}
+				claimDev("limitless redeem unexpected response detail", {
+					summary: summarizeForRedeemDebug(raw),
+				});
+				throw new Error(
+					"Limitless redeem returned an unexpected response. " +
+						summarizeForRedeemDebug(raw) +
+						" Refresh Positions or claim on limitless.exchange.",
+				);
+			} catch (e) {
+				if (isLimitlessPartnerRedeemRouteMissing(e)) {
+					const st = e instanceof PrivateApiError ? e.status : "?";
+					throw new Error(
+						`Your private API must implement POST /api/limitless/portfolio/redeem — it returned HTTP ${st}. ` +
+							`Proxy the request to https://api.limitless.exchange/portfolio/redeem with the same credentials you use for /api/limitless/portfolio/withdraw (body: { "conditionId": "<bytes32>", "onBehalfOf": <ownerId> } for partner sub-accounts). ` +
+							`Winnings sit on the Limitless server-wallet, not your Base smart wallet, so in-app claim cannot work until that route exists. You can redeem on https://limitless.exchange meanwhile.`,
+					);
+				}
+				throw e;
+			}
+		}
 	}, [
 		account,
 		hasSmartWallet,
@@ -792,6 +1070,8 @@ export function useClaimForVenue(
 		privateApi,
 		embeddedSolanaWallet,
 		privySolanaSignTransaction,
+		queryClient,
+		profileId,
 	]);
 
 	return { claim, isClaiming, error, txHash, isExternalClaim: false };

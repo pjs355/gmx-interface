@@ -15,6 +15,8 @@ export interface RawOrder {
 	usdcTotalMicro: number;
 	tokenTotalMicro: number;
 	committedMicro?: number;
+	/** Mongo Umbrella `_id` when stored on OrderMeta (GET /orders enrich). */
+	umbrellaId?: string;
 }
 
 export interface ProcessedOrder {
@@ -25,6 +27,8 @@ export interface ProcessedOrder {
 	position: "Yes" | "No";
 	/** When set (e.g. DFlow vs markets), overrides generic Yes/No → team mapping in trade lists. */
 	positionDisplayLabel?: string;
+	/** When set, History can merge orphan fills onto the umbrella block without catalog scan. */
+	umbrellaId?: string;
 	price: number;
 	size: number;
 	filled: boolean;
@@ -62,12 +66,21 @@ function getApiBaseUrl(): string {
 // For now, we'll use a simple heuristic or require the API to provide this
 const TOKEN_POSITION_MAP = new Map<string, "Yes" | "No">();
 
+/** Case-insensitive key for matching REST `questionId` to catalog `_id` / `questionId`. */
+export function normalizeOrderQuestionIdKey(
+	raw: string | null | undefined,
+): string {
+	return String(raw ?? "").trim().toLowerCase();
+}
+
 export async function fetchUserOrders(
 	account: string,
 	marketData?: Map<string, { yesTokenId: string; noTokenId: string }>
 ): Promise<ProcessedOrder[]> {
 	try {
-		const response = await fetch(`${getApiBaseUrl()}/orders/${account}`);
+		const response = await fetch(`${getApiBaseUrl()}/orders/${account}`, {
+			cache: "no-store",
+		});
 		if (!response.ok) {
 			throw new Error(`Failed to fetch orders: ${response.status}`);
 		}
@@ -109,9 +122,9 @@ export async function fetchUserOrders(
 						return !uOk || !tOk;
 					};
 
-					// Determine position from tokenId using market data
+					// Determine position: API may already include `position` (GET /orders enrich).
 					let position: "Yes" | "No";
-					if (order.position) {
+					if (order.position === "Yes" || order.position === "No") {
 						position = order.position;
 					} else if (marketData) {
 						// Use market data to determine position
@@ -179,8 +192,21 @@ export async function fetchUserOrders(
 
 					// Calculate size from available data if not provided
 					let size: number;
-					if (typeof order.size === "number" && !isNaN(order.size)) {
+					if (
+						typeof order.size === "number" &&
+						!isNaN(order.size) &&
+						order.size > 0
+					) {
 						size = order.size;
+					} else if (
+						order.filled &&
+						typeof order.size === "number" &&
+						!isNaN(order.size) &&
+						order.size === 0 &&
+						order.tokenTotalMicro &&
+						order.tokenTotalMicro > 0
+					) {
+						size = order.tokenTotalMicro / 1_000_000;
 					} else if (
 						order.tokenTotalMicro &&
 						order.tokenTotalMicro > 0
@@ -234,6 +260,8 @@ export async function fetchUserOrders(
 						throw new Error("Invalid calculated price");
 					if (typeof size !== "number" || isNaN(size) || size < 0)
 						throw new Error("Invalid calculated size");
+					if (order.filled && size <= 0)
+						throw new Error("Invalid calculated size for filled order");
 					if (
 						typeof order.usdcTotalMicro !== "number" ||
 						isNaN(order.usdcTotalMicro)
@@ -253,6 +281,14 @@ export async function fetchUserOrders(
 						throw new Error("Invalid tokenTotalMicro");
 					}
 
+					const rawUmb = (order as { umbrellaId?: unknown }).umbrellaId;
+					const umbrellaId =
+						typeof rawUmb === "string" && rawUmb.trim()
+							? rawUmb.trim()
+							: rawUmb != null && String(rawUmb).trim()
+								? String(rawUmb).trim()
+								: undefined;
+
 					return {
 						orderId: order.orderId,
 						questionId: order.questionId,
@@ -266,6 +302,7 @@ export async function fetchUserOrders(
 						createdAt: order.createdAt,
 						usdcValue: order.usdcTotalMicro / 1_000_000, // Convert from micro to regular units
 						tokenValue: order.tokenTotalMicro / 1_000_000,
+						...(umbrellaId ? { umbrellaId } : {}),
 					};
 				} catch (error) {
 					console.warn("Error processing order:", {
@@ -310,7 +347,10 @@ export async function fetchOrdersForMarket(
 	questionId: string
 ): Promise<ProcessedOrder[]> {
 	const allOrders = await fetchUserOrders(account);
-	return allOrders.filter((order) => order.questionId === questionId);
+	const want = normalizeOrderQuestionIdKey(questionId);
+	return allOrders.filter(
+		(order) => normalizeOrderQuestionIdKey(order.questionId) === want,
+	);
 }
 
 // Cancel a specific order by ID via backend route
@@ -344,8 +384,9 @@ export function getOrderAggregates(
 	orders: ProcessedOrder[],
 	questionId: string
 ): OrderAggregates {
+	const want = normalizeOrderQuestionIdKey(questionId);
 	const marketOrders = orders
-		.filter((order) => order.questionId === questionId)
+		.filter((order) => normalizeOrderQuestionIdKey(order.questionId) === want)
 		.filter((order) => order.filled); // exclude pending/unfilled orders from calculations
 
 	const yesOrders = marketOrders.filter((order) => order.position === "Yes");
@@ -485,8 +526,11 @@ export function getFinalAmount(
 	orders: ProcessedOrder[],
 	questionId: string
 ): { yesShares: number; noShares: number; yesCost: number; noCost: number } {
+	const want = normalizeOrderQuestionIdKey(questionId);
 	const marketOrders = orders
-		.filter((o) => o.questionId === questionId && o.filled)
+		.filter(
+			(o) => normalizeOrderQuestionIdKey(o.questionId) === want && o.filled,
+		)
 		.slice()
 		.sort(
 			(a, b) =>

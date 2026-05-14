@@ -4,6 +4,7 @@ import {
 	type ProcessedOrder,
 	type OrderAggregates,
 	getFinalAmount,
+	normalizeOrderQuestionIdKey,
 } from "@/services/api/simplifiedOrderService";
 import type {
 	VenueHistoryFill,
@@ -11,7 +12,9 @@ import type {
 	VenuePosition,
 } from "@/types/trading/venuePosition";
 import { venueDisplayLabel } from "@/types/trading/venuePosition";
-import { inferVenueHistoryYesNoSide } from "@/pages/Positions/utils/historyOutcomeWinner";
+import {
+	inferVenueHistoryYesNoSide,
+} from "@/pages/Positions/utils/historyOutcomeWinner";
 
 export type MarketPosition = {
 	market: PredictionMarket;
@@ -30,6 +33,11 @@ export type MarketPosition = {
 	 * so Positions views still use {@link portfolioColumnTeamLabels} for Yes/No column headers.
 	 */
 	includesDflowVenue?: boolean;
+	/**
+	 * Same pattern as `includesDflowVenue`: merged rows lose `venue === "limitless"` but Positions
+	 * table/card need catalog team labels for Yes/No buckets (dual CLOB → tokenIdA/B → columns).
+	 */
+	includesLimitlessVenue?: boolean;
 	predictOutcomeLabelYes?: string;
 	predictOutcomeLabelNo?: string;
 };
@@ -74,6 +82,11 @@ function dflowSyntheticPositionBucket(pos: VenuePosition): "Yes" | "No" {
 function syntheticOrderPositionFromVenue(pos: VenuePosition): "Yes" | "No" {
 	if (pos.venue === "dflow") return dflowSyntheticPositionBucket(pos);
 	return inferVenueHistoryYesNoSide(pos.marketTitle, pos.outcome);
+}
+
+/** History merged rows: same bucket rule as venue synthetic orders (DFlow uses catalog Yes/No). */
+export function historyVenueRowPortfolioYesNoSide(pos: VenuePosition): "Yes" | "No" {
+	return syntheticOrderPositionFromVenue(pos);
 }
 
 /**
@@ -241,6 +254,7 @@ export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[
 	const blendedNoPrice = weightedNo ?? impliedNoFromValue ?? bestNoPrice;
 
 	const includesDflowVenue = markets.some((m) => m.venue === "dflow");
+	const includesLimitlessVenue = markets.some((m) => m.venue === "limitless");
 
 	return [
 		{
@@ -259,6 +273,7 @@ export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[
 			},
 			venue: undefined,
 			...(includesDflowVenue ? { includesDflowVenue: true } : {}),
+			...(includesLimitlessVenue ? { includesLimitlessVenue: true } : {}),
 			predictOutcomeLabelYes,
 			predictOutcomeLabelNo,
 		},
@@ -426,8 +441,12 @@ export function getTradeCount(
 	marketId: string,
 	position?: "Yes" | "No",
 ): number {
+	const want = normalizeOrderQuestionIdKey(marketId);
 	return orders.filter((order) => {
-		if (order.questionId !== marketId || !order.filled) return false;
+		if (!order.filled) return false;
+		if (normalizeOrderQuestionIdKey(String(order.questionId ?? "")) !== want) {
+			return false;
+		}
 		if (position && order.position?.toLowerCase() !== position.toLowerCase()) return false;
 		return true;
 	}).length;

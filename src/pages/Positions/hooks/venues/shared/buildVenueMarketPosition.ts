@@ -2,6 +2,10 @@ import { type PredictionMarket } from "@/services/api/predictionMarketDataServic
 import { type ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import { inferPredictSideFromMarketDetail } from "@/trading/predict/predictPositionSide";
+import {
+	inferLimitlessCatalogYesColumn,
+	type LimitlessInferenceWire,
+} from "@/trading/limitless/limitlessCatalogTokenPair";
 import { inferPolymarketYesNoFromToken } from "@/trading/polymarket/polyPositionSide";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import {
@@ -17,7 +21,9 @@ import {
 /**
  * Convert a venue-level position (`VenuePosition`-shaped row) into the umbrella-catalog
  * `MarketPosition` shape used by `PositionsTableView` / `PositionsCardView`. Handles:
- * - Side inference (Polymarket via `inferPolymarketYesNoFromToken`, Predict via market details).
+ * - Side inference (Polymarket via `inferPolymarketYesNoFromToken`, Predict via market details,
+ *   Limitless via merged catalog wire (`tokenIdA`/`B` + `orderbookSlugA`/`B`): dual neg-risk CLOB legs
+ *   share one umbrella but wrong `tokenIdB` in Mongo is common — slug match still maps the sibling leg.
  * - Synthetic order rows from history fills, or a fallback synthetic order from `avgPrice` / `cost`.
  * - Optional price/value overrides used by the umbrella merge when an authoritative price exists.
  */
@@ -39,6 +45,8 @@ export function buildVenueMarketPosition(
 		yesTeamLabel: string;
 		noTeamLabel: string;
 	} | null,
+	/** Merged monitor + umbrella limitless wire (tokens + per-leg slugs). */
+	limitlessCatalogWire?: LimitlessInferenceWire | null,
 ): MarketPosition {
 	const predictInferred =
 		venue === "predictfun"
@@ -56,14 +64,30 @@ export function buildVenueMarketPosition(
 					polyTeamInference.noTeamLabel,
 				)
 			: null;
+	const limitlessCatalogSide =
+		venue === "limitless" && limitlessCatalogWire
+			? inferLimitlessCatalogYesColumn(
+					pv.tokenId,
+					pv.eventSlug,
+					limitlessCatalogWire,
+				)
+			: null;
 	const isYes = polyInferredSide
 		? polyInferredSide.side === "Yes"
 		: predictInferred
 			? predictInferred.side === "Yes"
-			: pv.outcome.toLowerCase() === "yes" ||
-				(pv.outcome.toLowerCase() !== "no" &&
-					(pv.marketTitle?.toLowerCase() ?? "").includes(pv.outcome.toLowerCase()));
-	const qid = `${qidPrefix}-${pv.tokenId.slice(0, 12)}`;
+			: limitlessCatalogSide !== null
+				? limitlessCatalogSide
+				: pv.outcome.toLowerCase() === "yes" ||
+					(pv.outcome.toLowerCase() !== "no" &&
+						(pv.marketTitle?.toLowerCase() ?? "").includes(pv.outcome.toLowerCase()));
+	const legKey =
+		typeof pv.conditionId === "string" && pv.conditionId.trim().length > 0
+			? pv.conditionId.trim().toLowerCase().replace(/^0x/i, "").slice(0, 16)
+			: String(pv.tokenId ?? "")
+					.replace(/^0x/i, "")
+					.slice(0, 16);
+	const qid = `${qidPrefix}-${legKey}`;
 	const side: "Yes" | "No" = isYes ? "Yes" : "No";
 	const historyFills = (pv as VenuePosition).historyFills;
 	const synthOrder: ProcessedOrder[] =

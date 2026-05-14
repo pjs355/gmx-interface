@@ -2,6 +2,7 @@ import { PREDICTIONS_API_URL } from "../playwright.config";
 import {
 	MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD,
 	smallestRoundTripLossUsdForSnapshot,
+	venueSnapshotStatusAllowsBookProbe,
 	type VenuePriceSnapshotLite,
 } from "./e2e-venue-book-depth";
 
@@ -134,11 +135,14 @@ function missingVenues(row: MatchedMarketRow): RequiredVenueKey[] {
 	);
 }
 
+/** Past kickoff, keep the row eligible for E2E picks for this long (typical start-time field). */
+const E2E_MATCHED_MARKET_EVENT_GRACE_MS = 2 * 60 * 60 * 1000;
+
 export function hasFutureEventDate(row: MatchedMarketRow): boolean {
 	if (row.eventDate === undefined) return false;
 	const t = Date.parse(row.eventDate);
 	if (!Number.isFinite(t)) return false;
-	return t > Date.now();
+	return t + E2E_MATCHED_MARKET_EVENT_GRACE_MS > Date.now();
 }
 
 export async function fetchMatchedMarkets(
@@ -235,7 +239,7 @@ function teamSpread(team: VenueTeam): number | null {
 }
 
 function snapshotTightestSpread(snap: VenuePriceSnapshot): number | null {
-	if (snap.status && String(snap.status).toLowerCase() !== "live") {
+	if (!venueSnapshotStatusAllowsBookProbe(snap.status)) {
 		return null;
 	}
 	const a = teamSpread(snap.teamA);
@@ -532,7 +536,25 @@ export async function resolvePerVenueBestPicks(
 	apiBaseUrl: string = PREDICTIONS_API_URL,
 ): Promise<PerVenueBestPick[]> {
 	const all = await fetchMatchedMarkets(apiBaseUrl);
-	const future = all.filter(hasFutureEventDate);
+	let future = all.filter(hasFutureEventDate);
+	const pinRaw =
+		typeof process.env.E2E_PIN_UMBRELLA_ID === "string"
+			? process.env.E2E_PIN_UMBRELLA_ID.trim()
+			: "";
+	if (pinRaw) {
+		const pinned = all.find((r) => String(r.umbrellaId) === pinRaw);
+		if (!pinned) {
+			console.warn(
+				`[matched-market] E2E_PIN_UMBRELLA_ID=${pinRaw}: umbrella not in GET /matched-markets (check local predictions-api + id).`,
+			);
+		} else if (!future.some((r) => String(r.umbrellaId) === pinRaw)) {
+			console.warn(
+				`[matched-market] E2E_PIN_UMBRELLA_ID=${pinRaw}: forcing candidate row ` +
+					`(${pinned.displayName ?? "unnamed"}, panda ${pinned.pandaMatchId}) despite eventDate / upcoming filter — local E2E.`,
+			);
+			future = [...future, pinned];
+		}
+	}
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const picks = await computePerVenueBestPicks(future, getSnaps);
 	return picks;

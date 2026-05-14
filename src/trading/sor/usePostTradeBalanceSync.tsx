@@ -14,8 +14,11 @@ import {
 } from "@/context/CollateralTokenContext";
 import type { CollateralChainKey } from "@/trading/sor/fundingStableBalances";
 import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
-import { LIMITLESS_QUERY_ROOT } from "@/trading/limitless/limitlessQueryKeys";
-import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
+import {
+	LIMITLESS_QUERY_ROOT,
+	limitlessQueryKeys,
+} from "@/trading/limitless/limitlessQueryKeys";
+import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
 import type { FundingStableBalancesHuman } from "./fundingStableBalances";
 import type { RouteExecution, RoutePlan } from "./sor-types";
 import {
@@ -27,7 +30,8 @@ import {
 	type PostTradeBaselineAddresses,
 	type ShareIdentityRouteLegContext,
 } from "./postTradeBaseline";
-import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
+import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
+import { withTimeout } from "@/utils/withTimeout";
 
 /** Same total as `PortfolioContext` cashBalance — sum of stable slices from cached collateral queries. */
 export function readTotalCashHumanFromQueryClient(
@@ -57,6 +61,30 @@ const MAX_REFETCH_ATTEMPTS = 17;
 /** DFlow: faster polls so server-backed `dflow-positions` converges within ~30s wall. */
 const DFLOW_POST_TRADE_POLL_MS = 2_000;
 const DFLOW_POST_TRADE_MAX_ATTEMPTS = 15;
+/**
+ * Polymarket: same fast cadence as DFlow because the Goldsky-backed Data API
+ * usually catches up within seconds of the on-chain CTF transfer. A fresh
+ * hard-reload sees the new shares in ~10 s; the in-page poll loop must match
+ * that user expectation. 2 s × 30 attempts = ~60 s of fast polling, after
+ * which the per-task timeout + wall-clock guard take over.
+ */
+const POLYMARKET_POST_TRADE_POLL_MS = 2_000;
+const POLYMARKET_POST_TRADE_MAX_ATTEMPTS = 30;
+/**
+ * Per-task cap inside `Promise.allSettled` so a single slow refetch (notably
+ * `req.refetchCollateral()` after a LiFi prefund — `/portfolio/cash-summary`
+ * has no client-side timeout) cannot stall the polymarket-positions polling
+ * cadence. Long enough for a healthy `data-api.polymarket.com` round-trip.
+ */
+const REFETCH_TASK_TIMEOUT_MS = 20_000;
+/**
+ * Hard wall-clock cap on the spinner: even if every task hangs, the spinner
+ * must clear so the user (or the E2E suite) doesn't see a forever spinner.
+ * 180 s comfortably exceeds the longest healthy poll budget (Polymarket
+ * cadence: 30 × 2 s = 60 s polling + per-iteration `Promise.allSettled` time)
+ * while still bounding the worst-case observable spinner time.
+ */
+const POST_TRADE_SYNC_WALL_CLOCK_MS = 180_000;
 /** Allow React state (e.g. LevelUp tokenBalances) to settle after RPC refresh. */
 const LEVELUP_READ_DELAY_MS = 64;
 
@@ -99,6 +127,12 @@ function pendingHasDflowShares(pending: PendingTarget[]): boolean {
 	);
 }
 
+function pendingHasPolymarketShares(pending: PendingTarget[]): boolean {
+	return pending.some(
+		(t) => t.kind === "shares" && t.venue === "polymarket",
+	);
+}
+
 function readVenueShares(
 	queryClient: QueryClient,
 	venue: VenuePosition["venue"],
@@ -130,12 +164,27 @@ function readVenueShares(
 			const wallet =
 				(addresses.predictWallet ?? "").trim().toLowerCase() || null;
 			if (!wallet) return null;
-			return findShares(
-				queryClient.getQueryData<VenuePosition[]>([
-					"predict-positions",
-					wallet,
-				]),
-			);
+			const rows = queryClient.getQueryData<VenuePosition[]>([
+				"predict-positions",
+				wallet,
+			]);
+			let n = findShares(rows);
+			if (n > 0) return n;
+			// Same REST rows as the trade box: if watch key is `predictfun:<token>` but
+			// the row only lines up by normalized on-chain id, count that position.
+			const body = identity.startsWith("predictfun:")
+				? identity.slice("predictfun:".length)
+				: "";
+			if (body !== "" && !body.includes("|")) {
+				const want = normalizePredictTokenId(body);
+				if (want && rows?.length) {
+					for (const r of rows) {
+						if (r.venue !== "predictfun") continue;
+						if (normalizePredictTokenId(r.tokenId) === want) return r.shares;
+					}
+				}
+			}
+			return n;
 		}
 		case "dflow": {
 			const owner = addresses.solanaAddress?.trim() ?? null;
@@ -260,46 +309,74 @@ async function refetchForPending(
 	}
 
 	const tasks: Promise<unknown>[] = [];
+	const pushTask = (label: string, p: Promise<unknown>): void => {
+		// Per-task cap: a single slow refetch (notably `req.refetchCollateral()`
+		// after a LiFi prefund — `/portfolio/cash-summary` has no client-side
+		// timeout) must not stall the polymarket-positions polling cadence. The
+		// outer `Promise.allSettled` already swallows rejections, so a timeout
+		// here only frees the loop to start its next iteration.
+		tasks.push(withTimeout(p, REFETCH_TASK_TIMEOUT_MS, label));
+	};
 	if (venueSharePending.has("polymarket")) {
-		tasks.push(
-			queryClient.invalidateQueries({ queryKey: ["polymarket-positions"] }),
+		// `refetchQueries({ type: "all" })` instead of `invalidateQueries` so the
+		// fetch fires even if the trade-box observer momentarily detached during
+		// LiFi-induced re-renders. Same rationale as the predictfun branch below.
+		pushTask(
+			"postTradeSync polymarket-positions",
+			queryClient.refetchQueries({
+				queryKey: ["polymarket-positions"],
+				type: "all",
+			}),
 		);
 	}
 	if (venueSharePending.has("predictfun")) {
-		tasks.push(
-			queryClient.invalidateQueries({ queryKey: ["predict-positions"] }),
-		);
-		tasks.push(
-			queryClient.invalidateQueries({ queryKey: ["predict-outcome-shares"] }),
-		);
-		tasks.push(
-			queryClient.invalidateQueries({ queryKey: ["predict-usdt-balance"] }),
+		// Same source as page load / trade box: GET /api/predict/positions. Await refetch
+		// so `getQueryData` after this sees fresh REST, not just a scheduled invalidation.
+		pushTask(
+			"postTradeSync predict-positions",
+			queryClient.refetchQueries({
+				queryKey: ["predict-positions"],
+				type: "all",
+			}),
 		);
 	}
 	if (venueSharePending.has("dflow")) {
-		tasks.push(queryClient.invalidateQueries({ queryKey: ["dflow-positions"] }));
-		tasks.push(
+		pushTask(
+			"postTradeSync dflow-positions",
+			queryClient.invalidateQueries({ queryKey: ["dflow-positions"] }),
+		);
+		pushTask(
+			"postTradeSync dflow-outcome-balance",
 			queryClient.invalidateQueries({ queryKey: ["dflow-outcome-balance"] }),
 		);
 	}
 	if (venueSharePending.has("limitless")) {
-		tasks.push(
+		pushTask(
+			"postTradeSync limitless",
 			queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] }),
 		);
+		debugLimitlessPortfolio("postTradeSync: invalidated LIMITLESS_QUERY_ROOT", {
+			queryKey: [...LIMITLESS_QUERY_ROOT],
+		});
 	}
 	if (cashPending) {
-		tasks.push(
+		pushTask(
+			"postTradeSync bridge-funding-balances",
 			queryClient.invalidateQueries({
 				queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
 			}),
 		);
-		tasks.push(
+		pushTask(
+			"postTradeSync collateral-tokens",
 			queryClient.invalidateQueries({ queryKey: [COLLATERAL_TOKENS_QUERY_KEY] }),
 		);
-		tasks.push(req.refetchCollateral());
+		pushTask("postTradeSync refetchCollateral", req.refetchCollateral());
 	}
 	if (levelUpPending) {
-		tasks.push(req.refreshLevelUpPositions());
+		pushTask(
+			"postTradeSync refreshLevelUpPositions",
+			req.refreshLevelUpPositions(),
+		);
 	}
 	await Promise.allSettled(tasks);
 	return levelUpPending;
@@ -359,84 +436,117 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 			const session = ++sessionRef.current;
 			setPendingSyncUiKey(req.syncUiKey ?? null);
 
+			/**
+			 * Wall-clock fail-safe: if the IIFE below somehow stalls (e.g. a
+			 * future regression re-introduces an un-bounded await), the spinner
+			 * must still clear so the user does not see "forever spinner". We
+			 * also bump `sessionRef.current` to cancel the in-flight loop on
+			 * its next checkpoint.
+			 */
+			const wallClockTimer = setTimeout(() => {
+				if (sessionRef.current !== session) return;
+				if (import.meta.env.DEV) {
+					console.warn(
+						"[postTradeSync] wall-clock fail-safe fired; forcing spinner clear",
+						{ wallClockMs: POST_TRADE_SYNC_WALL_CLOCK_MS },
+					);
+				}
+				sessionRef.current += 1;
+				setPendingSyncUiKey(null);
+			}, POST_TRADE_SYNC_WALL_CLOCK_MS);
+
 			void (async () => {
-				let pending = buildWatchTargets(
-					req.route,
-					req.execution,
-					req.baseline,
-					req.shareIdentityCtx,
-				);
-				if (pending.length === 0) {
+				try {
+					let pending = buildWatchTargets(
+						req.route,
+						req.execution,
+						req.baseline,
+						req.shareIdentityCtx,
+					);
+					if (pending.length === 0) {
+						if (sessionRef.current === session) {
+							setPendingSyncUiKey(null);
+						}
+						return;
+					}
+
+					for (let attempt = 0; ; attempt++) {
+						if (sessionRef.current !== session) return;
+
+						/**
+						 * Cadence preference order: DFlow (Solana-on-chain lag) > Polymarket
+						 * (Goldsky indexer usually catches up in seconds — match the
+						 * hard-reload feel of ~10 s shares-visible) > default.
+						 */
+						const dflowPoll = pendingHasDflowShares(pending);
+						const polyPoll = !dflowPoll && pendingHasPolymarketShares(pending);
+						const maxAttempts = dflowPoll
+							? DFLOW_POST_TRADE_MAX_ATTEMPTS
+							: polyPoll
+								? POLYMARKET_POST_TRADE_MAX_ATTEMPTS
+								: MAX_REFETCH_ATTEMPTS;
+						const pollMs = dflowPoll
+							? DFLOW_POST_TRADE_POLL_MS
+							: polyPoll
+								? POLYMARKET_POST_TRADE_POLL_MS
+								: POLL_INTERVAL_MS;
+
+						if (attempt >= maxAttempts) break;
+
+						const levelUpRan = await refetchForPending(
+							req.queryClient,
+							pending,
+							req,
+						);
+						if (sessionRef.current !== session) return;
+
+						if (levelUpRan) {
+							await sleep(LEVELUP_READ_DELAY_MS);
+							if (sessionRef.current !== session) return;
+						}
+
+						pending = pending.filter((t) => {
+							if (t.kind === "shares") {
+								const obs = readVenueShares(
+									req.queryClient,
+									t.venue,
+									t.identity,
+									req.addresses,
+								);
+								return !valueDiverged(obs, t.baselineShares, SHARES_CONVERGENCE_TOL);
+							}
+							if (t.kind === "cash") {
+								const obs = readCashForChain(req.queryClient, t.chain);
+								return !valueDiverged(obs, t.baselineCash, CASH_CONVERGENCE_TOL_USD);
+							}
+							const obs = req.readLevelUpSide(t.marketId, t.side);
+							return !valueDiverged(obs, t.baselineLevelUp, SHARES_CONVERGENCE_TOL);
+						});
+
+						if (pending.length === 0) {
+							if (import.meta.env.DEV) {
+								console.log("[postTradeSync] diverged from baseline after attempt", attempt + 1);
+							}
+							break;
+						}
+
+						if (attempt < maxAttempts - 1) {
+							await sleep(pollMs);
+						}
+					}
+
+					if (pending.length > 0 && import.meta.env.DEV) {
+						console.warn(
+							"[postTradeSync] timeout — balances may still match baseline. Pending:",
+							pending,
+						);
+					}
+
 					if (sessionRef.current === session) {
 						setPendingSyncUiKey(null);
 					}
-					return;
-				}
-
-				for (let attempt = 0; ; attempt++) {
-					if (sessionRef.current !== session) return;
-
-					const dflowPoll = pendingHasDflowShares(pending);
-					const maxAttempts = dflowPoll
-						? DFLOW_POST_TRADE_MAX_ATTEMPTS
-						: MAX_REFETCH_ATTEMPTS;
-					const pollMs = dflowPoll
-						? DFLOW_POST_TRADE_POLL_MS
-						: POLL_INTERVAL_MS;
-
-					if (attempt >= maxAttempts) break;
-
-					const levelUpRan = await refetchForPending(
-						req.queryClient,
-						pending,
-						req,
-					);
-					if (sessionRef.current !== session) return;
-
-					if (levelUpRan) {
-						await sleep(LEVELUP_READ_DELAY_MS);
-						if (sessionRef.current !== session) return;
-					}
-
-					pending = pending.filter((t) => {
-						if (t.kind === "shares") {
-							const obs = readVenueShares(
-								req.queryClient,
-								t.venue,
-								t.identity,
-								req.addresses,
-							);
-							return !valueDiverged(obs, t.baselineShares, SHARES_CONVERGENCE_TOL);
-						}
-						if (t.kind === "cash") {
-							const obs = readCashForChain(req.queryClient, t.chain);
-							return !valueDiverged(obs, t.baselineCash, CASH_CONVERGENCE_TOL_USD);
-						}
-						const obs = req.readLevelUpSide(t.marketId, t.side);
-						return !valueDiverged(obs, t.baselineLevelUp, SHARES_CONVERGENCE_TOL);
-					});
-
-					if (pending.length === 0) {
-						if (import.meta.env.DEV) {
-							console.log("[postTradeSync] diverged from baseline after attempt", attempt + 1);
-						}
-						break;
-					}
-
-					if (attempt < maxAttempts - 1) {
-						await sleep(pollMs);
-					}
-				}
-
-				if (pending.length > 0 && import.meta.env.DEV) {
-					console.warn(
-						"[postTradeSync] timeout — balances may still match baseline. Pending:",
-						pending,
-					);
-				}
-
-				if (sessionRef.current === session) {
-					setPendingSyncUiKey(null);
+				} finally {
+					clearTimeout(wallClockTimer);
 				}
 			})();
 		},

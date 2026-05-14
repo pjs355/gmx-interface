@@ -81,9 +81,9 @@ import {
  * `data-leg-num-shares` / price from the SOR leg row, `readQuotedBuyCostUsd` uses
  * `data-cost-usd`, `readQuotedSellReceiveUsd` uses `data-receive-usd`, and positions
  * use `data-qa-shares-count`. For **sell input**, the spec types
- * `sellShareAmountTextRoundedDownLikeUi` (same rule as `formatShareCountDisplay` /
- * MyPositionsRow headlines: floor to 2 dp) so automation does not type a value above
- * scoped max when the attribute still carries extra fractional precision.
+ * `sellShareAmountTextRoundedDownLikeUi` (same rule as sell `formatShareCountDataQa` /
+ * `data-qa-shares-count`: floor to 2 dp, always two fractional digits) so automation
+ * does not type a value above scoped max when the attribute still carries extra fractional precision.
  *
  * ---------------------------------------------------------------------------
  * Slippage (2% relative)
@@ -267,6 +267,16 @@ test.describe("prinx per-venue trade cycle", () => {
 				const tradebox = new Tradebox(sharedSession.page);
 				await predictions.openUmbrellaTradingPageById(found.umbrellaId);
 				await tradebox.waitVisible();
+				// The inline trade dock keeps the same `PredictionMarketTradeBox`
+				// instance mounted across umbrella switches (see
+				// `PredictionsPage.openUmbrellaTradingPageById`), so internal
+				// `coreState.side` survives. After the prior venue's test 4 it is
+				// "sell"; on a venue with 0 held shares that triggers
+				// `sellFieldsLocked` and disables the amount input the moment the
+				// per-venue `balanceOf` query resolves to 0. Force "buy" before
+				// `selectVenue()` (which itself primes the SOR row via
+				// `setAmount`) so the input is always editable here.
+				await tradebox.setSide("buy");
 				await tradebox.selectVenue(tradingVenueSlugForKey(venueKey));
 				cashBeforeUsd = await expectHeaderCashUsd(sharedSession.page);
 				console.log(
@@ -453,22 +463,37 @@ test.describe("prinx per-venue trade cycle", () => {
 						? POLYMARKET_SELL_SUBMIT_ENABLED_TIMEOUT_MS
 						: MARKET_SELL_LEG_TIMEOUT_MS;
 				await tradebox.expectSubmitEnabled(sellSubmitTimeoutMs);
-				const leg = await tradebox.readLegAttrs("market-sell");
+				// Sell-side reads come from the visible smart-routing-row preview
+				// (`SmartRoutingSection.tsx` lines 1100-1160), not the SOR
+				// `[data-qa="sor-leg"][data-leg-side="market-sell"]` sentinel —
+				// that sentinel only renders when `sorRoute.executionRoute` is
+				// non-null (`PredictionMarketTradeBoxUI.tsx` lines 1488-1534), and
+				// on Polymarket sells right after a buy fill the targeted execution
+				// channel can lag (`venuePositions` empty in `useSorRoute.ts`)
+				// while the omnibus display channel already populates the row.
+				const venueSlug = tradingVenueSlugForKey(venueKey);
+				const priceCents = await tradebox.readVenueRowAvgCents(
+					venueSlug,
+					sellSubmitTimeoutMs,
+				);
 				expect(
-					leg.priceCents,
-					`market-sell leg priceCents must be >0 for ${venueKey}`,
+					priceCents,
+					`market-sell smart-routing-row priceCents must be >0 for ${venueKey}`,
 				).toBeGreaterThan(0);
 				expect(
-					leg.priceCents,
-					`market-sell leg priceCents must be <100 for ${venueKey}`,
+					priceCents,
+					`market-sell smart-routing-row priceCents must be <100 for ${venueKey}`,
 				).toBeLessThan(100);
-				sellReceiveQuoteUsd = await tradebox.readQuotedSellReceiveUsd();
+				sellReceiveQuoteUsd = await tradebox.readVenueRowSellReceiveUsd(
+					venueSlug,
+					sellSubmitTimeoutMs,
+				);
 				// eslint-disable-next-line no-console -- E2E operator visibility (sell quote vs later cash)
 				console.log(
 					`[per-venue-cycle] ${venueKey} sell.quote · sharesToSell=${sellOrderShares} ` +
 						`(postBuyRow≈${buyShares}) ` +
-						`quotedReceiveUsd=$${sellReceiveQuoteUsd.toFixed(4)} ` +
-						`marketSell@${leg.priceCents}¢ legNumShares=${leg.numShares}`,
+						`quotedReceiveUsd=$${sellReceiveQuoteUsd.toFixed(4)} (from smart-routing-row preview) ` +
+						`marketSell@${priceCents}¢`,
 				);
 			});
 

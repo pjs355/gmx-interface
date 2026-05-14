@@ -15,6 +15,12 @@ export function usePredictPositions(address: string | undefined | null) {
 		retry: 2,
 		retryDelay: (i) => Math.min(1500 * 2 ** i, 8000),
 		placeholderData: (previousData) => previousData,
-		queryFn: async () => api.getPredictPositions(address!),
+		queryFn: async ({ queryKey }) => {
+			const addr = queryKey[1];
+			if (typeof addr !== "string" || !addr.startsWith("0x")) {
+				throw new Error("predict-positions: invalid address in query key");
+			}
+			return api.getPredictPositions(addr);
+		},
 	});
 }

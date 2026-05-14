@@ -14,8 +14,39 @@ import BalanceChecker from "./components/BalanceChecker";
 import { usePositionsPageData } from "@/context/PositionsDataContext";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
 import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
+import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useEffect } from "react";
 import { toCentsString } from "./utils/formatCurrency";
+import type { MarketPosition } from "./utils/positionHelpers";
+import { shortTeamDisplayName } from "./utils/historyOutcomeWinner";
+import { isLimitlessWinningsTabClaimBlocked } from "@/trading/limitless/limitlessClaimAck";
+
+/** Human-readable match / market winner for Winnings debug logs (mirrors ResolvedPositionsTable label routing). */
+function winningsDebugWhoWon(
+	market: PredictionMarket,
+	mp: Pick<
+		MarketPosition,
+		"venue" | "predictOutcomeLabelYes" | "predictOutcomeLabelNo"
+	>,
+	winningSide: "Yes" | "No",
+): string {
+	if (
+		mp.venue === "predictfun" ||
+		mp.venue === "dflow" ||
+		mp.venue === "limitless" ||
+		mp.venue === "polymarket"
+	) {
+		const label =
+			winningSide === "Yes" ? mp.predictOutcomeLabelYes : mp.predictOutcomeLabelNo;
+		if (label?.trim()) return label.trim();
+	}
+	const title = (market.displayName || market.question || "").trim();
+	const parts = title.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
+	if (parts.length === 2) {
+		return shortTeamDisplayName(winningSide === "Yes" ? parts[0]! : parts[1]!);
+	}
+	return winningSide;
+}
 
 function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: number }) {
 	return (
@@ -97,6 +128,74 @@ export default function Positions() {
 	useEffect(() => {
 		if (activeTab === "orders") setActiveTab("positions");
 	}, [activeTab, setActiveTab]);
+
+	useEffect(() => {
+		if (!import.meta.env.DEV) return;
+		if (resolvedUmbrellaPositions.length === 0) return;
+		const winnings = resolvedUmbrellaPositions.flatMap((up) =>
+			up.markets.map((mp) => {
+				const m = mp.market;
+				const outcome = String(
+					(m as { resolvedOutcome?: string }).resolvedOutcome || "",
+				).toLowerCase();
+				const winningSide: "Yes" | "No" | null =
+					outcome === "yes" ? "Yes" : outcome === "no" ? "No" : null;
+				const marketTitle =
+					(m as { displayName?: string }).displayName?.trim() ||
+					m.question?.trim() ||
+					m.questionId ||
+					m._id;
+				const whoWonTheMatch = winningSide
+					? winningsDebugWhoWon(m, mp, winningSide)
+					: "(unknown resolved outcome)";
+				const payoutUsd =
+					outcome === "yes"
+						? mp.yesBalance
+						: outcome === "no"
+							? mp.noBalance
+							: 0;
+				const venue = mp.venue ?? "levelup";
+				const limitlessMeta =
+					venue === "limitless"
+						? (() => {
+								const x = m as {
+									_limitlessPartnerRedeemableSignal?: string;
+									_limitlessMarketStatusApi?: string;
+								};
+								return {
+									limitlessPartnerRedeemableSignal:
+										x._limitlessPartnerRedeemableSignal ?? "omit",
+									limitlessMarketStatusApi: x._limitlessMarketStatusApi,
+									inAppClaimBlockedByPartnerFalse:
+										isLimitlessWinningsTabClaimBlocked(m),
+									note: "Shape is LevelUp Winnings-tab projection from resolvedUmbrellaPositions; balances/outcome trace to GET /api/limitless/portfolio/positions-venue (Limitless GET /portfolio/positions via proxy).",
+								};
+							})()
+						: undefined;
+				return {
+					umbrellaId: up.umbrella._id,
+					umbrellaDisplayName: up.umbrella.displayName,
+					venue,
+					marketId: m._id,
+					marketTitle,
+					questionId: m.questionId,
+					conditionId: m.conditionId,
+					resolvedOutcomeYesNo: outcome,
+					whoWonTheMatch,
+					yesShares: mp.yesBalance,
+					noShares: mp.noBalance,
+					yourWinningSide: winningSide,
+					yourWinningShares: payoutUsd,
+					estimatedPayoutUsd: payoutUsd,
+					...(limitlessMeta ? { limitlessHandler: limitlessMeta } : {}),
+				};
+			}),
+		);
+		console.debug("[Limitless / winnings-tab handler → Positions.tsx]", {
+			rowCount: winnings.length,
+			winnings,
+		});
+	}, [resolvedUmbrellaPositions]);
 
 	/** Tab-scoped body skeleton; header cash stays independent via `PositionsHeader`. */
 	const pageContentLoading =

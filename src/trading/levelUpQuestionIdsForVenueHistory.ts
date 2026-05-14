@@ -5,7 +5,7 @@ import {
 	mintMatchesDflowExchange,
 	normalizeDflowEventTickerKey,
 } from "@/trading/dflow/dflowUmbrellaLookup";
-import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
+import { limitlessPositionHitsCatalogLeg } from "@/trading/limitless/limitlessCatalogTokenPair";
 import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
 
@@ -69,21 +69,18 @@ export function levelUpQuestionIdsForVenueHistoryRow(
 		return out;
 	}
 
-	if (pos.venue === "limitless" && pos.tokenId?.trim()) {
-		const tid = canonicalLimitlessTokenId(pos.tokenId);
-		const slug = (pos.eventSlug ?? "").trim().toLowerCase();
+	if (pos.venue === "limitless" && (pos.tokenId?.trim() || (pos.eventSlug ?? "").trim())) {
 		for (const u of umbrellas) {
 			const lxM = u.exchangeMatching?.limitless;
 			if (!lxM?.tokenIdA?.trim() || !lxM?.tokenIdB?.trim()) continue;
-			const a = canonicalLimitlessTokenId(lxM.tokenIdA);
-			const b = canonicalLimitlessTokenId(lxM.tokenIdB);
-			if (tid !== a && tid !== b) continue;
-			if (slug) {
-				const cand = [lxM.slug, lxM.orderbookSlugA, lxM.orderbookSlugB]
-					.map((s) => String(s ?? "").trim().toLowerCase())
-					.filter(Boolean);
-				if (cand.length > 0 && !cand.includes(slug)) continue;
-			}
+			const wire = {
+				tokenIdA: lxM.tokenIdA,
+				tokenIdB: lxM.tokenIdB,
+				orderbookSlugA: lxM.orderbookSlugA,
+				orderbookSlugB: lxM.orderbookSlugB,
+				groupSlug: lxM.slug,
+			};
+			if (!limitlessPositionHitsCatalogLeg(pos, wire)) continue;
 			push(levelUpQ(u));
 			for (const ch of childrenOf(u)) push(ch._id);
 		}

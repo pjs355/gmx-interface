@@ -151,6 +151,31 @@ export function formatShareCountDisplay(n: number): string {
 	}).format(floored);
 }
 
+/**
+ * Two-decimal string floored to centi-shares for sell `data-qa-shares-count` and E2E caps.
+ * Always includes fractional digits (`20` → `"20.00"`) so the attribute matches typed sell amounts.
+ */
+export function formatShareCountDataQa(n: number): string {
+	if (!Number.isFinite(n) || n < 0) return String(n);
+	const hundredths = Math.floor(n * 100 + 1e-9);
+	const whole = Math.trunc(hundredths / 100);
+	const frac = hundredths % 100;
+	return `${whole}.${frac.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Integer-only sell typing (no `.` in the amount field) should apply only when
+ * **every** venue line in the sell breakdown is LevelUp or DFlow. Umbrellas that
+ * merely *match* Kalshi on the board must not strip decimals while the user
+ * only holds Polymarket / Predict / Limitless fractional shares.
+ */
+export function sellBreakdownIsOnlyWholeContractVenues(
+	rows: readonly { key: string }[],
+): boolean {
+	if (rows.length === 0) return false;
+	return rows.every((r) => r.key === "levelup" || r.key === "dflow");
+}
+
 /** Clamp sell share quantity to scoped max; optionally floor for whole-share venues. */
 export function clampSellSharesNumeric(
 	n: number,

@@ -1,7 +1,10 @@
 import type { Book } from "@predictdotfun/sdk";
 import { getAccountOverviewApiPath } from "@/config/accountOverviewApi";
 import { getPolymarketAccountApiPath } from "@/config/polymarketPrivateApiPath";
-import { getPrivateApiRequestUrl } from "@/config/privateApiBase";
+import {
+	getPrivateApiAbsoluteUrl,
+	getPrivateApiRequestUrl,
+} from "@/config/privateApiBase";
 import type { CreateOrderPayload } from "@/trading/predict/predictOrderSubmit";
 import type {
 	LimitlessEnsureAccountResponse,
@@ -538,8 +541,17 @@ function privateApiHttpErrorMessage(body: unknown, status: number): string {
 	const o = body as Record<string, unknown>;
 	const tryStr = (v: unknown) =>
 		typeof v === "string" && v.trim() ? v.trim() : null;
-	if (tryStr(o.error))
-		return appendDflowOrderSubmitDetailMessage(tryStr(o.error)!, o);
+	const errCode = tryStr(o.error);
+	const errDetail = tryStr(o.detail);
+	if (errCode) {
+		if (errDetail && !errCode.includes(errDetail)) {
+			return appendDflowOrderSubmitDetailMessage(
+				`${errCode}: ${errDetail}`,
+				o,
+			);
+		}
+		return appendDflowOrderSubmitDetailMessage(errCode, o);
+	}
 	if (tryStr(o.message))
 		return appendDflowOrderSubmitDetailMessage(tryStr(o.message)!, o);
 	if (tryStr(o.detail))
@@ -732,7 +744,24 @@ export function createPrivateApiClient(
 				method: "POST",
 				body: JSON.stringify(body),
 			});
-			return readJson<LifiQuoteResponse>(res);
+			const out = await readJson<LifiQuoteResponse>(res);
+			if (
+				typeof import.meta.env !== "undefined" &&
+				(import.meta.env.DEV === true ||
+					import.meta.env.VITE_DEBUG_TRADING === "true")
+			) {
+				try {
+					console.warn(
+						"[PrivateApi][LifiQuote] data.quote_raw_json",
+						out?.quote != null
+							? JSON.stringify(out.quote)
+							: "(no quote)",
+					);
+				} catch (e) {
+					console.error("error", e);
+				}
+			}
+			return out;
 		},
 
 		async postFundingLifiWithdrawPlan(
@@ -1491,6 +1520,107 @@ export function createPrivateApiClient(
 				}),
 			});
 			return readJson<unknown>(res);
+		},
+
+		/**
+		 * Limitless official redeem: POST https://api.limitless.exchange/portfolio/redeem
+		 * (proxied). Redeems from the **server-wallet** sub-account — this is the path
+		 * delegated LevelUp trades use; raw Base SCW → CTF calls often pay out $0.
+		 */
+		async postLimitlessPortfolioRedeem(body: {
+			conditionId: string;
+			onBehalfOf?: number;
+			/** NegRisk parent id — predictions may retry redeem after leg “no balance”. */
+			negRiskParentConditionId?: string;
+		}): Promise<unknown> {
+			const path = "/api/limitless/portfolio/redeem";
+			const payload: Record<string, unknown> = {
+				conditionId: body.conditionId.trim(),
+			};
+			if (
+				typeof body.onBehalfOf === "number" &&
+				Number.isFinite(body.onBehalfOf)
+			) {
+				payload.onBehalfOf = body.onBehalfOf;
+			}
+			const nrp = body.negRiskParentConditionId?.trim();
+			if (nrp) payload.negRiskParentConditionId = nrp;
+			const res = await authorizedFetch(path, {
+				method: "POST",
+				body: JSON.stringify(payload),
+			});
+			const raw = await parseJsonSafe(res);
+
+			let unwrappedForTrace: unknown = raw;
+			if (raw && typeof raw === "object" && "data" in raw) {
+				const env = raw as Record<string, unknown>;
+				if (env.data !== undefined && env.data !== null) {
+					unwrappedForTrace = env.data;
+				} else {
+					unwrappedForTrace = raw;
+				}
+			}
+
+			if (import.meta.env.DEV) {
+				const idTok = getIdentityToken?.();
+				let rawBodyJson = "";
+				try {
+					rawBodyJson = JSON.stringify(raw);
+				} catch {
+					rawBodyJson = "<stringify failed>";
+				}
+				let unwrappedJson = "";
+				try {
+					unwrappedJson = JSON.stringify(unwrappedForTrace);
+				} catch {
+					unwrappedJson = "<stringify failed>";
+				}
+				console.debug("[privateApi][limitless/redeem] request", {
+					resolvedUrl: getPrivateApiAbsoluteUrl(path),
+					method: "POST",
+					requestJson: payload,
+					onBehalfOf: payload.onBehalfOf != null ? "set" : "absent",
+					auth: {
+						bearerAccessToken: "set (redacted)",
+						privyIdToken:
+							typeof idTok === "string" && idTok.trim()
+								? "set (redacted)"
+								: "absent",
+					},
+					note: "No client-side signing of redeem JSON. Your API verifies Bearer (+ optional privy-id-token); Limitless partner HMAC is server-only.",
+				});
+				console.debug("[privateApi][limitless/redeem] response", {
+					httpStatus: res.status,
+					ok: res.ok,
+					contentType: res.headers.get("content-type"),
+					parsedBody: raw,
+					parsedBodyJson: rawBodyJson.slice(0, 8000),
+					parsedBodyType: raw === null ? "null" : typeof raw,
+					unwrappedForRedeemLimitless: unwrappedForTrace,
+					unwrappedJson: unwrappedJson.slice(0, 8000),
+				});
+				console.debug("[LimitlessRedeemTrace] privateApi redeem envelope unwrap", {
+					returnsInnerDataOnly:
+						raw &&
+						typeof raw === "object" &&
+						"data" in raw &&
+						(raw as Record<string, unknown>).data != null,
+				});
+			}
+
+			if (!res.ok) {
+				throw new PrivateApiError(
+					privateApiHttpErrorMessage(raw, res.status),
+					res.status,
+					raw,
+				);
+			}
+			if (raw && typeof raw === "object" && "data" in raw) {
+				const env = raw as Record<string, unknown>;
+				if (env.data !== undefined && env.data !== null) return env.data;
+				return raw;
+			}
+			return raw;
 		},
 
 		/**

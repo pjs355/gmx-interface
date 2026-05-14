@@ -12,6 +12,7 @@ import {
 	titlesMatchVenue,
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
+import { claimAckKeysFromMarket, allWinningsMarketsAreLimitlessSettlementBlocked, LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP } from "@/trading/limitless/limitlessClaimAck";
 
 type MarketEntry = {
 	market: PredictionMarket;
@@ -247,22 +248,53 @@ function MultiClaimButton({
 	const [isClaiming, setIsClaiming] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	const allLimitlessWinningsClaimBlocked = useMemo(
+		() => allWinningsMarketsAreLimitlessSettlementBlocked(markets),
+		[markets],
+	);
+
 	const handleClick = useCallback(async () => {
-		if (isClaiming) return;
+		if (isClaiming || allLimitlessWinningsClaimBlocked) return;
 		setIsClaiming(true);
 		setError(null);
 
 		if (btnRef.current) triggerFireworksForElement(btnRef.current);
 
 		const claimed: string[] = [];
+		if (import.meta.env.DEV) {
+			console.debug("[LimitlessRedeemTrace] MultiClaimButton start", {
+				umbrellaId,
+				marketCount: markets.length,
+				marketIds: markets.map((m) => ({
+					_id: m.market._id,
+					conditionId: m.market.conditionId,
+					venue: (m.market as { _venue?: string })._venue,
+				})),
+			});
+		}
 		try {
 			for (let i = 0; i < markets.length; i++) {
 				const slot = slotRefs.current.get(i);
+				const keysFromClaimAck = claimAckKeysFromMarket(markets[i].market);
+				if (import.meta.env.DEV) {
+					console.debug("[LimitlessRedeemTrace] MultiClaimButton slot", {
+						index: i,
+						hasSlot: Boolean(slot),
+						claimAckKeys: keysFromClaimAck,
+					});
+				}
 				if (slot) {
 					const ok = await slot.fire();
+					if (import.meta.env.DEV) {
+						console.debug("[LimitlessRedeemTrace] MultiClaimButton fire result", {
+							index: i,
+							ok,
+						});
+					}
 					if (ok) {
-						const mid = markets[i].market._id || markets[i].market.questionId || markets[i].market.marketId;
-						if (mid) claimed.push(mid);
+						for (const k of keysFromClaimAck) {
+							if (k) claimed.push(k);
+						}
 					}
 				}
 			}
@@ -270,15 +302,27 @@ function MultiClaimButton({
 			console.error("MULTI-CLAIM ERROR:", e);
 			setError(e?.message || String(e));
 		} finally {
+			if (import.meta.env.DEV) {
+				console.debug("[LimitlessRedeemTrace] MultiClaimButton done", {
+					claimedKeysCount: claimed.length,
+					claimedKeys: [...claimed],
+					willCallOnClaimSuccess: Boolean(onClaimSuccess && claimed.length > 0),
+					umbrellaId,
+				});
+			}
 			if (onClaimSuccess && claimed.length > 0) {
 				await new Promise((r) => setTimeout(r, 2000));
 				await Promise.resolve(onClaimSuccess(claimed, umbrellaId));
 			}
 			setIsClaiming(false);
 		}
-	}, [isClaiming, markets, onClaimSuccess, umbrellaId]);
+	}, [isClaiming, markets, onClaimSuccess, umbrellaId, allLimitlessWinningsClaimBlocked]);
 
-	const label = isClaiming ? "Claiming..." : "Claim";
+	const label = isClaiming
+		? "Claiming..."
+		: allLimitlessWinningsClaimBlocked
+			? "Can't claim yet"
+			: "Claim";
 
 	return (
 		<>
@@ -293,25 +337,44 @@ function MultiClaimButton({
 			<button
 				ref={btnRef}
 				className="side-btn"
-				disabled={isClaiming}
+				disabled={isClaiming || allLimitlessWinningsClaimBlocked}
 				style={{
-					background: isClaiming ? "#6d28d9" : "#7c3aed",
+					background:
+						isClaiming || allLimitlessWinningsClaimBlocked ? "#6d28d9" : "#7c3aed",
 					color: "#fff",
 					border: "none",
 					padding: "10px 16px",
 					borderRadius: 6,
 					fontWeight: 600,
-					cursor: isClaiming ? "not-allowed" : "pointer",
-					opacity: isClaiming ? 0.7 : 1,
+					cursor:
+						isClaiming || allLimitlessWinningsClaimBlocked
+							? "not-allowed"
+							: "pointer",
+					opacity: isClaiming || allLimitlessWinningsClaimBlocked ? 0.7 : 1,
 					transition: "background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
 					boxShadow: isClaiming ? "0 0 0 0 rgba(0,0,0,0)" : "0 4px 10px rgba(124, 58, 237, 0.35)",
 				}}
-				onMouseEnter={(e) => { if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.background = "#8b5cf6"; }}
-				onMouseLeave={(e) => { if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.background = "#7c3aed"; }}
-				onMouseDown={(e) => { if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(1px)"; }}
+				onMouseEnter={(e) => {
+					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
+						(e.currentTarget as HTMLButtonElement).style.background = "#8b5cf6";
+				}}
+				onMouseLeave={(e) => {
+					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
+						(e.currentTarget as HTMLButtonElement).style.background = "#7c3aed";
+				}}
+				onMouseDown={(e) => {
+					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
+						(e.currentTarget as HTMLButtonElement).style.transform = "translateY(1px)";
+				}}
 				onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
 				onClick={handleClick}
-				title={error ? `Error: ${error}` : undefined}
+				title={
+					error
+						? `Error: ${error}`
+						: allLimitlessWinningsClaimBlocked
+							? LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP
+							: undefined
+				}
 			>
 				{label}
 			</button>

@@ -34,10 +34,6 @@ function formatUsd(n: number): string {
 	}).format(n);
 }
 
-function formatUsdFromCents(cents: number): string {
-	return formatUsd(cents / 100);
-}
-
 /**
  * Parse LI.FI / server amount: plain digit strings are **base units** using `decimals`
  * (e.g. 6 for USDC, 18 for BEP-20 USDT); otherwise treat as human decimal string.
@@ -207,10 +203,9 @@ function sumNonGasFeesFromCostArray(feeCosts: unknown): number {
 }
 
 /**
- * Send $x · Receive $y · Fee $z for the bridge card.
- * When both send and receive are known, **Fee** is the reconciled remainder
- * (rounded send − rounded receive in cents) so the three lines always add up for users.
- * Otherwise falls back to summed non-gas fee line items only.
+ * Send / receive / fee in USD for the bridge card.
+ * **Fee** is summed from LI.FI `feeCosts` rows (`amountUSD`, excluding items tagged as gas-related),
+ * falling back to `estimate.feeCosts` when the top-level list is empty — never an implied `send − receive`.
  */
 export function formatBridgeQuoteUsdLines(response: LifiQuoteResponse): BridgeQuoteUsdLines {
 	let sendN = findEstimateAmountUsd(response, "from");
@@ -234,17 +229,6 @@ export function formatBridgeQuoteUsdLines(response: LifiQuoteResponse): BridgeQu
 		const list =
 			Array.isArray(primary) && primary.length > 0 ? primary : fallback;
 		feeSum = sumNonGasFeesFromCostArray(list);
-	}
-
-	if (sendN != null && recvN != null) {
-		const sendCents = Math.round(sendN * 100);
-		const recvCents = Math.round(recvN * 100);
-		const feeCents = Math.max(0, sendCents - recvCents);
-		return {
-			sendUsd: formatUsdFromCents(sendCents),
-			receiveUsd: formatUsdFromCents(recvCents),
-			feeUsd: feeCents > 0 ? formatUsdFromCents(feeCents) : null,
-		};
 	}
 
 	return {

@@ -5,31 +5,16 @@ import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { TradingVenue } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
-import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
+import type { MatchedMarket } from "@/types/odds-monitor";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
 import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
-
-/** Only real resting depth (positive size). No BBO-only or zero-size synthetic rows. */
-function monitorBookToSnapshot(book: OrderbookData | null | undefined): OrderbookSnapshot | null {
-	if (!book) return null;
-	const asks = (book.asks ?? [])
-		.filter((l) => Number(l.size) > 0)
-		.map((l, i) => ({ price: l.price, size: l.size, id: `a-${i}` }));
-	const bids = (book.bids ?? [])
-		.filter((l) => Number(l.size) > 0)
-		.map((l, i) => ({ price: l.price, size: l.size, id: `b-${i}` }));
-	if (asks.length === 0 && bids.length === 0) return null;
-	return {
-		asks,
-		bids,
-		stopBook: { asks: [], bids: [] },
-		ts: book.lastUpdated ?? Date.now(),
-		lastOp: 0,
-	};
-}
+import {
+	computeLevelUpCrossVenueBooks,
+	monitorOrderbookDataToRestingSnapshot,
+} from "@/trading/levelUp/levelUpCrossVenueBookPresence";
 
 type VenueEntry = {
 	id: string;
@@ -45,14 +30,10 @@ function buildVenueEntries(
 ): VenueEntry[] {
 	const entries: VenueEntry[] = [];
 
-	const wsBookA = monitorBookToSnapshot(matched.levelUpPriceA);
-	const wsBookB = monitorBookToSnapshot(matched.levelUpPriceB);
-
-	const restHasDepth = levelUpOrderbook &&
-		((levelUpOrderbook.asks?.length ?? 0) + (levelUpOrderbook.bids?.length ?? 0)) > 2;
-	const luBookA = restHasDepth ? levelUpOrderbook : (wsBookA ?? levelUpOrderbook);
-	const luBookB = restHasDepth ? null : wsBookB;
-	const hasLevelUp = Boolean(luBookA || luBookB);
+	const { hasLevelUp, luBookA, luBookB } = computeLevelUpCrossVenueBooks(
+		matched,
+		levelUpOrderbook,
+	);
 
 	if (hasLevelUp) {
 		entries.push({
@@ -68,8 +49,8 @@ function buildVenueEntries(
 		entries.push({
 			id: "poly",
 			label: "Polymarket",
-			bookA: monitorBookToSnapshot(matched.polyPriceA),
-			bookB: monitorBookToSnapshot(matched.polyPriceB),
+			bookA: monitorOrderbookDataToRestingSnapshot(matched.polyPriceA),
+			bookB: monitorOrderbookDataToRestingSnapshot(matched.polyPriceB),
 			restricted: false,
 		});
 	}
@@ -78,8 +59,12 @@ function buildVenueEntries(
 		entries.push({
 			id: "dflow",
 			label: "Kalshi",
-			bookA: monitorBookToSnapshot(matched.dflowPriceA ?? matched.kalshiPriceA),
-			bookB: monitorBookToSnapshot(matched.dflowPriceB ?? matched.kalshiPriceB),
+			bookA: monitorOrderbookDataToRestingSnapshot(
+				matched.dflowPriceA ?? matched.kalshiPriceA,
+			),
+			bookB: monitorOrderbookDataToRestingSnapshot(
+				matched.dflowPriceB ?? matched.kalshiPriceB,
+			),
 			restricted: false,
 		});
 	}
@@ -88,8 +73,8 @@ function buildVenueEntries(
 		entries.push({
 			id: "limitless",
 			label: "Limitless",
-			bookA: monitorBookToSnapshot(matched.limitlessPriceA),
-			bookB: monitorBookToSnapshot(matched.limitlessPriceB),
+			bookA: monitorOrderbookDataToRestingSnapshot(matched.limitlessPriceA),
+			bookB: monitorOrderbookDataToRestingSnapshot(matched.limitlessPriceB),
 			restricted: false,
 		});
 	}
@@ -99,9 +84,11 @@ function buildVenueEntries(
 		entries.push({
 			id: "predictFun",
 			label: "Predict",
-			bookA: monitorBookToSnapshot(matched.predictFunPriceA),
+			bookA: monitorOrderbookDataToRestingSnapshot(matched.predictFunPriceA),
 			// One CLOB: second tab inverts team A ladder (same model as trade box), not a separate B stream.
-			bookB: singleMarket ? null : monitorBookToSnapshot(matched.predictFunPriceB),
+			bookB: singleMarket
+				? null
+				: monitorOrderbookDataToRestingSnapshot(matched.predictFunPriceB),
 			restricted: false,
 		});
 	}
@@ -303,6 +290,10 @@ export function VenueOrderbooksPanel({
 						activePosition={activePosition}
 						isCollapsed={false}
 						side={side}
+						wholeContractRestingBook={
+							selectedVenue.id === "dflow" ||
+							selectedVenue.id === "levelup"
+						}
 					/>
 				)}
 			</div>

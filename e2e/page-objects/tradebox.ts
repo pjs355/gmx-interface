@@ -75,7 +75,9 @@ const SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS = 120_000;
 export const SHARES_VISIBLE_TIMEOUT_DFLOW_MS = 180_000;
 
 /** Longer share-row polling for Kalshi/DFlow on-chain lag; other venues use 60s (`SHARES_VISIBLE_TIMEOUT_MS`). */
-export function sharesVisiblePollTimeoutMsForVenueKey(venueKey: string): number {
+export function sharesVisiblePollTimeoutMsForVenueKey(
+	venueKey: string,
+): number {
 	if (venueKey === "dflow") return SHARES_VISIBLE_TIMEOUT_DFLOW_MS;
 	if (venueKey === "polymarket") return SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS;
 	return SHARES_VISIBLE_TIMEOUT_MS;
@@ -99,10 +101,9 @@ function parseTradeboxAmountInput(raw: string): number {
 }
 
 /**
- * Truncate toward zero at 2 decimal places (never round up). Matches the user-visible
- * rule in `formatShareCountDisplay` (`Math.floor(n * 100) / 100`) but builds the
- * typed string from integer hundredths so binary floats do not leak extra digits
- * into `pressSequentially` (e.g. 4.542423 → `"4.54"`, never `"4.4500000001"`).
+ * Truncate toward zero at 2 decimal places (never round up). Matches
+ * `formatShareCountDataQa` / sell `data-qa-shares-count` — always two fractional
+ * digits (`20` → `"20.00"`) so the typed amount matches the DOM cap.
  */
 export function sellShareAmountTextRoundedDownLikeUi(n: number): string {
 	if (!Number.isFinite(n) || n < 0) {
@@ -111,9 +112,6 @@ export function sellShareAmountTextRoundedDownLikeUi(n: number): string {
 	const hundredths = Math.floor(n * 100 + 1e-9);
 	const whole = Math.trunc(hundredths / 100);
 	const frac = hundredths % 100;
-	if (frac === 0) {
-		return String(whole);
-	}
 	return `${whole}.${frac.toString().padStart(2, "0")}`;
 }
 
@@ -212,7 +210,9 @@ export class Tradebox {
 
 		if (rowVisible) {
 			if (venue === "all") {
-				await smartRow.locator("button.smart-routing-row__main").click();
+				await smartRow
+					.locator("button.smart-routing-row__main")
+					.click();
 			} else {
 				await smartRow.click();
 			}
@@ -314,11 +314,12 @@ export class Tradebox {
 	}
 
 	/**
-	 * Sell/share amount on the controlled React input: `fill()` often does not
-	 * commit — type with `pressSequentially` so `onChange` runs like a real user.
+	 * Sell share amount on the controlled React input. Prefer `fill()` (same as
+	 * `setAmount`) so a formatted value is replaced atomically; fall back to
+	 * select-all + `pressSequentially` if verification fails.
 	 *
 	 * @param expectedForParse — numeric target for `inputValue` verification (e.g. `buyShares`).
-	 * @param textToType — optional exact string to type (e.g. headline `data-qa-line-shares`);
+	 * @param textToType — optional exact string to type (e.g. sell row `data-qa-shares-count`);
 	 *   defaults to `String(expectedForParse)`.
 	 */
 	async setSellShareAmountVerified(
@@ -333,10 +334,7 @@ export class Tradebox {
 		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
 		for (let attempt = 0; attempt < 12; attempt++) {
 			await input.click();
-			await this.page.keyboard.press(
-				process.platform === "darwin" ? "Meta+a" : "Control+a",
-			);
-			await input.pressSequentially(text, { delay: 25 });
+			await input.fill(text);
 			await sleepBetweenTradeboxActions();
 			await sleepBetweenTradeboxActions();
 
@@ -349,8 +347,11 @@ export class Tradebox {
 				return;
 			}
 
-			// Second try this round: single fill can work after Sequentially primed focus.
-			await input.fill(text, { force: true });
+			await input.click();
+			await this.page.keyboard.press(
+				process.platform === "darwin" ? "Meta+a" : "Control+a",
+			);
+			await input.pressSequentially(text, { delay: 25 });
 			await sleepBetweenTradeboxActions();
 			const raw2 = await input.inputValue().catch(() => "");
 			const parsed2 = parseTradeboxAmountInput(raw2);
@@ -377,7 +378,9 @@ export class Tradebox {
 		absTolerance: number,
 		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS,
 	): Promise<void> {
-		const headline = this.root.locator('[data-qa="my-positions-buy-headline"]');
+		const headline = this.root.locator(
+			'[data-qa="my-positions-buy-headline"]',
+		);
 		const start = Date.now();
 		while (Date.now() - start < timeoutMs) {
 			const n = await headline.count().catch(() => 0);
@@ -458,6 +461,107 @@ export class Tradebox {
 			timeout: 10_000,
 		});
 		await sleepBetweenTradeboxActions();
+	}
+
+	/**
+	 * Visible smart-routing-row sub-text price reader.
+	 *
+	 * Used as the sell-side fallback for tests 3/4 because the SOR
+	 * `[data-qa="sor-leg"][data-leg-side="market-sell"]` sentinel only renders
+	 * when `sorRoute.executionRoute` is non-null (see `PredictionMarketTradeBoxUI.tsx`
+	 * lines 1488-1534). On Polymarket sells right after a buy fill, the targeted
+	 * execution channel can lag (`venuePositions` empty) while the omnibus display
+	 * channel already populates `[data-qa="smart-routing-venue-row-${venue}"]`'s
+	 * `.smart-routing-row__sub` with `formatLegAvg(displayAvgPrice) avg.` (see
+	 * `SmartRoutingSection.tsx` line 1127). This helper polls past the
+	 * `QuoteMetricSkeleton` state and parses the cents number.
+	 *
+	 * Assumes the seeded profile uses the **default** odds display style (cents,
+	 * e.g. "71¢"). If a non-default style is in effect (american / decimal / etc.)
+	 * the regex will not match and this throws with the raw text so the operator
+	 * can flip the profile back to default.
+	 */
+	async readVenueRowAvgCents(
+		venue: TradingVenue,
+		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
+	): Promise<number> {
+		const row = this.root.locator(
+			`[data-qa="smart-routing-venue-row-${venue}"]`,
+		);
+		const sub = row.locator(".smart-routing-row__sub").first();
+		const start = Date.now();
+		let lastText = "";
+		while (Date.now() - start < timeoutMs) {
+			await row
+				.waitFor({ state: "attached", timeout: 1_000 })
+				.catch(() => {});
+			const visible = await sub.isVisible().catch(() => false);
+			if (visible) {
+				const text = (await sub.innerText().catch(() => "")).trim();
+				lastText = text;
+				const match = text.match(/(\d+(?:\.\d+)?)¢/);
+				if (match !== null) {
+					const parsed = Number(match[1]);
+					if (Number.isFinite(parsed)) {
+						return parsed;
+					}
+				}
+			}
+			await new Promise((r) => setTimeout(r, BETWEEN_TRADEBOX_ACTIONS_MS));
+		}
+		throw new Error(
+			`readVenueRowAvgCents: smart-routing-venue-row-${venue} sub never produced a "X¢" value within ${timeoutMs}ms ` +
+				`(lastText=${JSON.stringify(lastText)}). Likely a non-default oddsDisplayStyle in the seeded profile, ` +
+				`or the row is still showing a QuoteMetricSkeleton.`,
+		);
+	}
+
+	/**
+	 * Visible smart-routing-row USD value reader.
+	 *
+	 * Sell-side companion to `readVenueRowAvgCents`. Reads the row's
+	 * `.smart-routing-row__value-btn` text (`$ ${formatSorSellProceedsUsdDisplay(displayProceeds)}`
+	 * — see `SmartRoutingSection.tsx` line 1155) and parses USD. Independent of
+	 * `oddsDisplayStyle` (always rendered with `$` and 2 fractional digits).
+	 */
+	async readVenueRowSellReceiveUsd(
+		venue: TradingVenue,
+		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
+	): Promise<number> {
+		const row = this.root.locator(
+			`[data-qa="smart-routing-venue-row-${venue}"]`,
+		);
+		// `data-qa="smart-routing-venue-row-${venue}"` is on the inner main button
+		// (`SmartRoutingSection.tsx` line 1109), so the value-btn is a sibling under
+		// the parent `.smart-routing-block`. Walk up to that block, then locate the
+		// value-btn so we read the same row's USD figure.
+		const block = row.locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' smart-routing-block ')][1]");
+		const valueBtn = block.locator(".smart-routing-row__value-btn").first();
+		const start = Date.now();
+		let lastText = "";
+		while (Date.now() - start < timeoutMs) {
+			await row
+				.waitFor({ state: "attached", timeout: 1_000 })
+				.catch(() => {});
+			const visible = await valueBtn.isVisible().catch(() => false);
+			if (visible) {
+				const text = (await valueBtn.innerText().catch(() => "")).trim();
+				lastText = text;
+				const match = text.match(/\$\s*([\d,]+\.\d{2})/);
+				if (match !== null) {
+					const cleaned = match[1].replace(/[,\s]/g, "");
+					const parsed = Number.parseFloat(cleaned);
+					if (Number.isFinite(parsed) && parsed > 0) {
+						return parsed;
+					}
+				}
+			}
+			await new Promise((r) => setTimeout(r, BETWEEN_TRADEBOX_ACTIONS_MS));
+		}
+		throw new Error(
+			`readVenueRowSellReceiveUsd: smart-routing-venue-row-${venue} value-btn never produced a "$X.XX" value within ${timeoutMs}ms ` +
+				`(lastText=${JSON.stringify(lastText)}). Likely a QuoteMetricSkeleton that never resolved.`,
+		);
 	}
 
 	/** Read `data-leg-*` attributes from the currently rendered SOR leg row for the given side. */

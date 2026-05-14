@@ -42,6 +42,8 @@ export type UsePortfolioDerivationsResult = {
 			yes: string;
 			no: string;
 			venue: string;
+			includesDflowVenue?: boolean;
+			includesLimitlessVenue?: boolean;
 			predictOutcomeLabelYes?: string;
 			predictOutcomeLabelNo?: string;
 		}>;
@@ -155,6 +157,8 @@ export function usePortfolioDerivations({
 					yes: mp.yesBalance.toString(),
 					no: mp.noBalance.toString(),
 					venue: mp.venue ?? "levelup",
+					...(mp.includesDflowVenue ? { includesDflowVenue: true as const } : {}),
+					...(mp.includesLimitlessVenue ? { includesLimitlessVenue: true as const } : {}),
 					predictOutcomeLabelYes: mp.predictOutcomeLabelYes,
 					predictOutcomeLabelNo: mp.predictOutcomeLabelNo,
 				})),

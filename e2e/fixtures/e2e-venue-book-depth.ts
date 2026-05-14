@@ -8,6 +8,21 @@
 /** Best-case round-trip loss cap for the $2 clip (see `e2e-venue-liquidity-at-test.ts`). */
 export const MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD = 0.25;
 
+/**
+ * Venue-prices snapshots use `status: "live"` when the ingester sees depth, and
+ * `"no_liquidity"` in some feeds while bestBid/bestAsk totals are still populated.
+ * E2E selection probes TOB / ladders either way; other explicit statuses stay blocked.
+ */
+export function venueSnapshotStatusAllowsBookProbe(
+	status: string | undefined,
+): boolean {
+	if (status === undefined || String(status).trim() === "") {
+		return true;
+	}
+	const s = String(status).toLowerCase();
+	return s === "live" || s === "no_liquidity";
+}
+
 export type DepthLevelLite = {
 	price: number;
 	size: number;
@@ -205,7 +220,7 @@ export function smallestRoundTripLossUsdForSnapshot(
 	snap: VenuePriceSnapshotLite,
 	notionalUsd: number,
 ): number | null {
-	if (snap.status && String(snap.status).toLowerCase() !== "live") {
+	if (!venueSnapshotStatusAllowsBookProbe(snap.status)) {
 		return null;
 	}
 	const teamALad = teamHasNonemptyLadders(snap.teamA);

@@ -27,6 +27,7 @@ import {
 	type VenueId,
 	type VenuePosition,
 	venueDisplayLabel,
+	venuePositionPortfolioDedupeKey,
 } from "@/types/trading/venuePosition";
 import {
 	type MarketPosition,
@@ -35,6 +36,7 @@ import {
 } from "../../utils/positionHelpers";
 import { buildVenueMarketPosition } from "../venues/shared/buildVenueMarketPosition";
 import { buildUnmatchedVenueUmbrellas } from "../venues/shared/buildUnmatchedVenueUmbrellas";
+import { coerceLimitlessWireForInference } from "@/utils/mergeMonitorLimitlessFromUmbrella";
 
 type TokenBalanceLike = { yesBalance: string | number; noBalance: string | number };
 type BookPreview = { lowestAsk: number | null; highestBid: number | null };
@@ -150,7 +152,8 @@ export function useUmbrellaPositions({
 				) => {
 					const matches: MarketPosition[] = [];
 					for (const pv of venuePositions) {
-						if (matchedIds.has(pv.tokenId)) continue;
+						const dedupeKey = venuePositionPortfolioDedupeKey(pv);
+						if (matchedIds.has(dedupeKey)) continue;
 						const predictDetail =
 							venue === "predictfun" && pv.numericMarketId != null
 								? predictMarketDetails.get(pv.numericMarketId)
@@ -171,7 +174,7 @@ export function useUmbrellaPositions({
 							umbrellaLookupByDflowEventTicker,
 						);
 						if (matched && matched._id === umbrella._id) {
-							matchedIds.add(pv.tokenId);
+							matchedIds.add(dedupeKey);
 							let overrides:
 								| { yesPrice: number | null; noPrice: number | null; yesValue: number; noValue: number }
 								| undefined;
@@ -194,6 +197,17 @@ export function useUmbrellaPositions({
 											yesTeamLabel: polyLabelsForMatch.yesTeamLabel,
 											noTeamLabel: polyLabelsForMatch.noTeamLabel,
 										}
+									: null;
+							const monitorForUmbrella = oddsMarkets.find(
+								(mm) =>
+									String(mm.umbrellaId ?? "").trim() === String(umbrella._id).trim(),
+							);
+							const limitlessCatalogWire =
+								venue === "limitless"
+									? coerceLimitlessWireForInference(
+											monitorForUmbrella?.limitless,
+											matched.exchangeMatching?.limitless,
+										)
 									: null;
 							if (venue === "predictfun") {
 								let liveYesPrice: number | null = null;
@@ -258,6 +272,7 @@ export function useUmbrellaPositions({
 									displayOverride,
 									venue === "predictfun" ? (predictDetail ?? null) : null,
 									polyInferenceForMatch,
+									limitlessCatalogWire,
 								),
 							);
 						}
@@ -355,7 +370,7 @@ export function useUmbrellaPositions({
 			null,
 			undefined,
 			[],
-			[],
+			umbrellas,
 		);
 
 		return [

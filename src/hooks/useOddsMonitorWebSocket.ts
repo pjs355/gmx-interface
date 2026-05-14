@@ -12,11 +12,51 @@ import {
 	isLimitlessConsoleDebugEnabled,
 	isLimitlessOrderbookVerboseDebug,
 } from "@/trading/limitless/limitlessConsoleDebug";
+import { isPredictionPricingDebugEnabled } from "@/utils/debugPredictionPricing";
 
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
 const MAPPING_REFRESH_MS = 5 * 60_000;
 const MAX_RECONNECT_ATTEMPTS = 8;
+
+/** Dedupe plan-verify logs: microscopic resting sizes on DFlow/Kalshi venue_prices. */
+const dflowKalshiMicroSizeLogged = new Set<string>();
+
+function logDflowKalshiMicroscopicRestingSizesIfDebug(
+	pandaMatchId: string,
+	venueWire: string,
+	dataA: OrderbookData,
+	dataB: OrderbookData,
+): void {
+	if (!isPredictionPricingDebugEnabled()) return;
+	const pid = String(pandaMatchId ?? "").trim();
+	if (!pid) return;
+	const levels = [
+		...(dataA.asks ?? []),
+		...(dataA.bids ?? []),
+		...(dataB.asks ?? []),
+		...(dataB.bids ?? []),
+	];
+	const micro = levels.filter(
+		(l) => Number(l.size) > 0 && Number(l.size) < 1e-6,
+	);
+	if (micro.length === 0) return;
+	const key = `${pid}\0${venueWire}`;
+	if (dflowKalshiMicroSizeLogged.has(key)) return;
+	dflowKalshiMicroSizeLogged.add(key);
+	console.info(
+		"[venue-monitor] Microscopic resting sizes on venue_prices (debug verify)",
+		{
+			pandaMatchId: pid,
+			venue: venueWire,
+			count: micro.length,
+			sample: micro.slice(0, 8).map((l) => ({
+				price: l.price,
+				size: l.size,
+			})),
+		},
+	);
+}
 
 function nextReconnectDelayMs(attempt: number): number {
 	const exp = Math.min(MAX_BACKOFF_MS, INITIAL_BACKOFF_MS * Math.pow(2, attempt));
@@ -301,6 +341,14 @@ function applyPriceUpdates(
 
 		const dataA = teamToOrderbookData(snap.teamA, snap.status);
 		const dataB = teamToOrderbookData(snap.teamB, snap.status);
+		if (venue === "dflow" || venue === "kalshi") {
+			logDflowKalshiMicroscopicRestingSizesIfDebug(
+				String(snap.pandaMatchId ?? "").trim(),
+				snap.venue,
+				dataA,
+				dataB,
+			);
+		}
 		let assignA = dataA;
 		let assignB = dataB;
 		if (venue === "limitless") {

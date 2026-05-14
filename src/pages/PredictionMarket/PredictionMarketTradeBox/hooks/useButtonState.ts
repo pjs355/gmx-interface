@@ -918,7 +918,28 @@ export function useButtonState({
           liqPosition,
           state.side,
         );
-        if (!liquidityInfo.hasAnyLiquidity) {
+        if (state.side === "sell") {
+          if (!liquidityInfo.hasAnyLiquidity) {
+            return {
+              text: "No bids available",
+              disabled: true,
+              onClick: () => {},
+            };
+          }
+          const requested = parseFloat(state.amount);
+          if (
+            Number.isFinite(requested) &&
+            requested > 0 &&
+            requested >
+              liquidityInfo.maxSharesAvailable + SHARE_SELL_COMPARE_EPS
+          ) {
+            return {
+              text: "Not enough bids to sell",
+              disabled: true,
+              onClick: () => {},
+            };
+          }
+        } else if (!liquidityInfo.hasAnyLiquidity) {
           return {
             text: "No shares available",
             disabled: true,
@@ -1260,7 +1281,40 @@ export function useButtonState({
         availableShares = liquidityInfo.maxSharesAvailable;
 
         if (!liquidityInfo.hasAnyLiquidity) {
-          return { text: "0 shares available. Place a limit order", disabled: true, onClick: () => {}, isSweepingBook: false, availableShares: 0 };
+          if (state.side === "sell") {
+            return {
+              text: "No bids available",
+              disabled: true,
+              onClick: () => {},
+              isSweepingBook: false,
+              availableShares: 0,
+            };
+          }
+          return {
+            text: "0 shares available. Place a limit order",
+            disabled: true,
+            onClick: () => {},
+            isSweepingBook: false,
+            availableShares: 0,
+          };
+        }
+
+        if (state.side === "sell") {
+          const requested = parseFloat(state.amount);
+          if (
+            Number.isFinite(requested) &&
+            requested > 0 &&
+            requested >
+              liquidityInfo.maxSharesAvailable + SHARE_SELL_COMPARE_EPS
+          ) {
+            return {
+              text: "Not enough bids to sell",
+              disabled: true,
+              onClick: () => {},
+              isSweepingBook: false,
+              availableShares: 0,
+            };
+          }
         }
 
         if (state.side === "buy") {

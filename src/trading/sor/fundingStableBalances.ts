@@ -173,3 +173,20 @@ export async function readFundingStableBalancesHuman(
 		limitlessMakerBase: limitlessHuman,
 	};
 }
+
+/** On-chain BNB Chain USDT (BEP-20) balance in wei for LI.FI prefund caps (18 decimals). */
+export async function readBnbUsdtBalanceWei(
+	embeddedEoa: string | null | undefined,
+): Promise<bigint> {
+	const bnbAddr =
+		embeddedEoa && /^0x[a-fA-F0-9]{40}$/i.test(embeddedEoa)
+			? (embeddedEoa as Address)
+			: undefined;
+	if (!bnbAddr) return 0n;
+	return bscPublic.readContract({
+		address: BSC_MAINNET_USDT_ADDRESS,
+		abi: erc20Abi,
+		functionName: "balanceOf",
+		args: [bnbAddr],
+	}) as Promise<bigint>;
+}

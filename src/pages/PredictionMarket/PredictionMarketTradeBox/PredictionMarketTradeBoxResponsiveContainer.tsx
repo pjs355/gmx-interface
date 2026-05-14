@@ -31,6 +31,10 @@ import {
 	getContrastingTextColor,
 } from "@/helpers/predictionUtils";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import {
+	dflowKalshiOutcomeDisplayPrices,
+	hasDflowKalshiMonitorLink,
+} from "@/trading/dflow/monitorDflowBooks";
 
 export interface StableButtonPrices {
 	yesBestAsk: number | null; yesBestBid: number | null;
@@ -182,12 +186,15 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		return Math.max(...orderbook.bids.map((b: any) => b.price));
 	}, [orderbook]);
 
-	// For polymarket/dflow, the effective orderbook is the selected outcome's native
-	// book.  When "no" is selected, swap the display formulas so the NO button shows
-	// the book directly while YES shows the 1−p complement.
+	const { yesTeamLabel, noTeamLabel } = useMemo(
+		() => getYesNoTeamLabels(market, umbrellaDisplayName),
+		[market, umbrellaDisplayName],
+	);
+
+	// Polymarket/Limitless: selected outcome book is NO when NO selected — complement
+	// swap for peek buttons. Kalshi/DFlow uses separate YES books per outcome (`dflowKalshiOutcomeDisplayPrices`).
 	const bookRepresentsNo =
 		(state.tradingVenue === "polymarket" ||
-			state.tradingVenue === "dflow" ||
 			state.tradingVenue === "limitless") &&
 		state.selectedPosition === "no";
 
@@ -218,6 +225,19 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
 		}
+		if (
+			state.tradingVenue === "dflow" &&
+			matchedMonitor &&
+			hasDflowKalshiMonitorLink(matchedMonitor)
+		) {
+			const out = dflowKalshiOutcomeDisplayPrices(
+				matchedMonitor,
+				yesTeamLabel,
+				noTeamLabel,
+				state.side,
+			);
+			return finiteOrNull(out.yes);
+		}
 		if (bookRepresentsNo) {
 			return state.side === "buy"
 				? finiteOrNull(bestBid === null ? null : 1 - (bestBid as number))
@@ -231,6 +251,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		state.side,
 		state.selectedPosition,
 		predictVenueBookHints,
+		matchedMonitor,
+		yesTeamLabel,
+		noTeamLabel,
 		bestAsk,
 		bestBid,
 		bookRepresentsNo,
@@ -265,6 +288,19 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
 		}
+		if (
+			state.tradingVenue === "dflow" &&
+			matchedMonitor &&
+			hasDflowKalshiMonitorLink(matchedMonitor)
+		) {
+			const out = dflowKalshiOutcomeDisplayPrices(
+				matchedMonitor,
+				yesTeamLabel,
+				noTeamLabel,
+				state.side,
+			);
+			return finiteOrNull(out.no);
+		}
 		if (bookRepresentsNo) {
 			return state.side === "buy"
 				? finiteOrNull(bestAsk as number | null)
@@ -278,6 +314,9 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		state.side,
 		state.selectedPosition,
 		predictVenueBookHints,
+		matchedMonitor,
+		yesTeamLabel,
+		noTeamLabel,
 		bestBid,
 		bestAsk,
 		bookRepresentsNo,
@@ -315,12 +354,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		() => getContrastingTextColor(noTeamColor),
 		[noTeamColor],
 	);
-
-	const { yesTeamLabel: mobileYesLabel, noTeamLabel: mobileNoLabel } =
-		useMemo(
-			() => getYesNoTeamLabels(market, umbrellaDisplayName),
-			[market, umbrellaDisplayName],
-		);
 
 	const openWithPosition = useCallback(
 		(position: "yes" | "no") => {
@@ -448,7 +481,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 								}}
 							>
 								<strong className="position-btn__label-row">
-									<span className="position-btn__name">{mobileYesLabel}</span>
+									<span className="position-btn__name">{yesTeamLabel}</span>
 									<span className="position-btn__price">
 										{yesPriceCurtain === ""
 											? ""
@@ -510,7 +543,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 								}}
 							>
 								<strong className="position-btn__label-row">
-									<span className="position-btn__name">{mobileNoLabel}</span>
+									<span className="position-btn__name">{noTeamLabel}</span>
 									<span className="position-btn__price">
 										{noPriceCurtain === ""
 											? ""

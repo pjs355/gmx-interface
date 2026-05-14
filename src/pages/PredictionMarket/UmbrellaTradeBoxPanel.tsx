@@ -58,6 +58,7 @@ export function UmbrellaTradeBoxPanel({
 			: "";
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
+	const umbrellaPredictFun = umbrella?.exchangeMatching?.predictFun;
 
 	if (settledInfo) {
 		return desktopTradeDockShell(
@@ -98,6 +99,7 @@ export function UmbrellaTradeBoxPanel({
 			pandascoreMatchId={pandascoreMatchId || undefined}
 			umbrellaId={umbrella._id}
 			limitlessMappingFromUmbrella={umbrellaLimitless}
+			predictFunMappingFromUmbrella={umbrellaPredictFun}
 			umbrellaDisplayName={umbrella.displayName}
 			initialPosition={activePosition}
 			onPositionChange={onPositionChange}

@@ -1,13 +1,7 @@
 import { readFundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
-import { PREFUND_SHORTFALL_COVERED_EPS_USD } from "@/trading/sor/prefundPlan";
+import { waitForScwUsdcAfterLimitlessPortfolioWithdraw } from "@/trading/sor/limitlessMakerToScwWithdrawWait";
 
 const MIN_CONSOLIDATE_USD = 0.02;
-const POLL_MS = 2500;
-const TIMEOUT_MS = 120_000;
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
-}
 
 /**
  * Before a Transfers withdraw plan (Li.FI from Base SCW), move USDC from the Limitless
@@ -43,23 +37,24 @@ export async function prefundLimitlessMakerToScwForTransfersWithdraw(input: {
 		limitlessMakerBase: mk,
 	});
 	const scwBefore = Math.max(0, before.base ?? 0);
-	await input.privateApi.postLimitlessPortfolioWithdraw({
+	const withdrawOut = await input.privateApi.postLimitlessPortfolioWithdraw({
 		amountHuman: need,
 		destination: sw,
 	});
-	const deadline = Date.now() + TIMEOUT_MS;
-	while (Date.now() < deadline) {
-		await sleep(POLL_MS);
-		const b = await readFundingStableBalancesHuman({
-			baseSmartWallet: sw,
-			limitlessMakerBase: mk,
-		});
-		const scw = Math.max(0, b.base ?? 0);
-		if (scw + 1e-9 >= scwBefore + need - PREFUND_SHORTFALL_COVERED_EPS_USD) {
-			return;
-		}
-	}
-	throw new Error(
-		"Timed out waiting for Limitless withdrawal to credit your Base smart wallet. Check activity or try again.",
-	);
+	const mkBefore = Math.max(0, before.limitlessMakerBase ?? 0);
+	await waitForScwUsdcAfterLimitlessPortfolioWithdraw({
+		fundingAddresses: { baseSmartWallet: sw, limitlessMakerBase: mk },
+		withdrawResponse: withdrawOut,
+		targetScwMinUsd: scwBefore + need,
+		balancesHuman: {
+			base: scwBefore,
+			polygon: 0,
+			bnb: 0,
+			solana: 0,
+			limitlessMakerBase: mkBefore,
+		},
+		scwUsdcBeforeWithdraw: scwBefore,
+		withdrawCreditsScwUsdApprox: need,
+		limitlessMakerUsdcBeforeWithdraw: mkBefore,
+	});
 }

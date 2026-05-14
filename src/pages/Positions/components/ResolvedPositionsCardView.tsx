@@ -11,6 +11,7 @@ import {
 	titlesMatchVenue,
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
+import { allWinningsMarketsAreLimitlessSettlementBlocked, LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP } from "@/trading/limitless/limitlessClaimAck";
 
 type MarketEntry = {
 	market: PredictionMarket;
@@ -244,8 +245,13 @@ function MultiClaimButton({
 	const [isClaiming, setIsClaiming] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	const allLimitlessWinningsClaimBlocked = useMemo(
+		() => allWinningsMarketsAreLimitlessSettlementBlocked(markets),
+		[markets],
+	);
+
 	const handleClick = useCallback(async () => {
-		if (isClaiming) return;
+		if (isClaiming || allLimitlessWinningsClaimBlocked) return;
 		setIsClaiming(true);
 		setError(null);
 
@@ -273,9 +279,13 @@ function MultiClaimButton({
 			}
 			setIsClaiming(false);
 		}
-	}, [isClaiming, markets, onClaimSuccess, umbrellaId]);
+	}, [isClaiming, markets, onClaimSuccess, umbrellaId, allLimitlessWinningsClaimBlocked]);
 
-	const label = isClaiming ? "Claiming..." : "Claim";
+	const label = isClaiming
+		? "Claiming..."
+		: allLimitlessWinningsClaimBlocked
+			? "Can't claim yet"
+			: "Claim";
 
 	return (
 		<>
@@ -290,27 +300,46 @@ function MultiClaimButton({
 			<button
 				ref={btnRef}
 				className="side-btn"
-				disabled={isClaiming}
+				disabled={isClaiming || allLimitlessWinningsClaimBlocked}
 				style={{
 					width: "100%",
-					background: isClaiming ? "#6d28d9" : "#7c3aed",
+					background:
+						isClaiming || allLimitlessWinningsClaimBlocked ? "#6d28d9" : "#7c3aed",
 					color: "#fff",
 					border: "none",
 					padding: "12px 16px",
 					borderRadius: 6,
 					fontWeight: 600,
 					fontSize: 15,
-					cursor: isClaiming ? "not-allowed" : "pointer",
-					opacity: isClaiming ? 0.7 : 1,
+					cursor:
+						isClaiming || allLimitlessWinningsClaimBlocked
+							? "not-allowed"
+							: "pointer",
+					opacity: isClaiming || allLimitlessWinningsClaimBlocked ? 0.7 : 1,
 					transition: "background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
 					boxShadow: isClaiming ? "0 0 0 0 rgba(0,0,0,0)" : "0 4px 10px rgba(124, 58, 237, 0.35)",
 				}}
-				onMouseEnter={(e) => { if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.background = "#8b5cf6"; }}
-				onMouseLeave={(e) => { if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.background = "#7c3aed"; }}
-				onMouseDown={(e) => { if (!isClaiming) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(1px)"; }}
+				onMouseEnter={(e) => {
+					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
+						(e.currentTarget as HTMLButtonElement).style.background = "#8b5cf6";
+				}}
+				onMouseLeave={(e) => {
+					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
+						(e.currentTarget as HTMLButtonElement).style.background = "#7c3aed";
+				}}
+				onMouseDown={(e) => {
+					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
+						(e.currentTarget as HTMLButtonElement).style.transform = "translateY(1px)";
+				}}
 				onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
 				onClick={handleClick}
-				title={error ? `Error: ${error}` : undefined}
+				title={
+					error
+						? `Error: ${error}`
+						: allLimitlessWinningsClaimBlocked
+							? LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP
+							: undefined
+				}
 			>
 				{label}
 			</button>

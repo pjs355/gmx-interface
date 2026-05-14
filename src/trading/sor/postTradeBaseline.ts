@@ -112,7 +112,8 @@ export function shareIdentityForRouteLeg(
 			if (!raw) return null;
 			const n = Number(raw);
 			if (!Number.isFinite(n)) return null;
-			return `predictfun:${n}|yes`;
+			const yn = leg.outcome === "A" ? "yes" : "no";
+			return `predictfun:${n}|${yn}`;
 		}
 		case "dflow": {
 			const mint = dflowOutcomeMintForRouteLeg(leg);
@@ -169,12 +170,25 @@ function lookupCachedShares(
 			const wallet =
 				(addresses.predictWallet ?? "").trim().toLowerCase() || null;
 			if (!wallet) return 0;
-			return findShares(
-				queryClient.getQueryData<VenuePosition[]>([
-					"predict-positions",
-					wallet,
-				]),
-			);
+			const rows = queryClient.getQueryData<VenuePosition[]>([
+				"predict-positions",
+				wallet,
+			]);
+			let n = findShares(rows);
+			if (n > 0) return n;
+			const body = identity.startsWith("predictfun:")
+				? identity.slice("predictfun:".length)
+				: "";
+			if (body !== "" && !body.includes("|")) {
+				const want = normalizePredictTokenId(body);
+				if (want && rows?.length) {
+					for (const r of rows) {
+						if (r.venue !== "predictfun") continue;
+						if (normalizePredictTokenId(r.tokenId) === want) return r.shares;
+					}
+				}
+			}
+			return n;
 		}
 		case "dflow": {
 			const owner = addresses.solanaAddress?.trim() ?? null;

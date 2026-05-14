@@ -78,6 +78,44 @@ function bestBidProb(book: OrderbookData | null | undefined): number | null {
 	return null;
 }
 
+/** LevelUp venue strip: best ask from positive-size resting asks only (no bare BBO). */
+function bestAskProbRestingLevelsOnly(
+	book: OrderbookData | null | undefined,
+): number | null {
+	if (!book?.asks?.length) return null;
+	let min = Infinity;
+	for (const a of book.asks) {
+		if (
+			(a.size ?? 0) > 0 &&
+			a.price >= MIN_VALID_PRICE &&
+			a.price <= MAX_VALID_PRICE &&
+			a.price < min
+		) {
+			min = a.price;
+		}
+	}
+	return min === Infinity ? null : min;
+}
+
+/** LevelUp venue strip: best bid from positive-size resting bids only (no bare BBO). */
+function bestBidProbRestingLevelsOnly(
+	book: OrderbookData | null | undefined,
+): number | null {
+	if (!book?.bids?.length) return null;
+	let max = -Infinity;
+	for (const b of book.bids) {
+		if (
+			(b.size ?? 0) > 0 &&
+			b.price >= MIN_VALID_PRICE &&
+			b.price <= MAX_VALID_PRICE &&
+			b.price > max
+		) {
+			max = b.price;
+		}
+	}
+	return max === -Infinity ? null : max;
+}
+
 function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | undefined {
 	return book?.snapshotStatus;
 }
@@ -160,14 +198,18 @@ function buildVenueRowsFromWs(m: MatchedMarket): VenueRowModel[] {
 		},
 	].filter((r) => r.linked);
 
-	const askA = bestAskProb(m.levelUpPriceA);
-	const askB = bestAskProb(m.levelUpPriceB);
-	const bidA = bestBidProb(m.levelUpPriceA);
-	const bidB = bestBidProb(m.levelUpPriceB);
+	const askA = bestAskProbRestingLevelsOnly(m.levelUpPriceA);
+	const askB = bestAskProbRestingLevelsOnly(m.levelUpPriceB);
+	const bidA = bestBidProbRestingLevelsOnly(m.levelUpPriceA);
+	const bidB = bestBidProbRestingLevelsOnly(m.levelUpPriceB);
 	const luRow: VenueRowModel = {
 		id: "levelup",
 		label: "LevelUp",
-		linked: askA !== null || askB !== null,
+		linked:
+			askA !== null ||
+			askB !== null ||
+			bidA !== null ||
+			bidB !== null,
 		askA,
 		askB,
 		bidA,

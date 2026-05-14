@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { AccountPositionsSlice } from "@/context/AccountDataContext";
 import {
@@ -6,6 +6,7 @@ import {
 	useLimitlessTradeHistory,
 } from "@/trading/limitless/useLimitlessPortfolioVenue";
 import { splitLimitlessVenuePositions } from "@/trading/limitless/splitLimitlessVenuePositions";
+import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
 import type { VenueOrder, VenuePosition } from "@/types/trading/venuePosition";
 import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 
@@ -53,6 +54,31 @@ export function useLimitlessBundle({
 			history: split.history,
 		};
 	}, [all]);
+
+	useEffect(() => {
+		debugLimitlessPortfolio("useLimitlessBundle snapshot", {
+			limitlessPortfolioEnabled,
+			limitlessMakerBasePresent: Boolean(limitlessMakerBase?.trim()),
+			limitlessMakerBasePrefix: limitlessMakerBase?.trim()
+				? `${limitlessMakerBase.trim().slice(0, 6)}…${limitlessMakerBase.trim().slice(-4)}`
+				: null,
+			rowsTotal: all.length,
+			activeCount: active.length,
+			winningsCount: winnings.length,
+			historySplitCount: history.length,
+			accountSliceStatus: limitless.status,
+			accountSliceIsFetched: limitless.isFetched,
+		});
+	}, [
+		limitlessPortfolioEnabled,
+		limitlessMakerBase,
+		all.length,
+		active.length,
+		winnings.length,
+		history.length,
+		limitless.status,
+		limitless.isFetched,
+	]);
 
 	return {
 		all,

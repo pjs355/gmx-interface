@@ -110,13 +110,17 @@ function dflowEventGroupKey(market: DflowBatchMarket): string {
 }
 
 /**
- * Kalshi exposes four outcome mints (YES/NO × each leg). Economically, **NO on team A** pays when
- * **team B wins** — same as **YES on team B**. Portfolio columns are “who you’re rooting for”
- * (first vs second team in the title): map contract YES to that team’s column and contract NO to
- * the opposite column.
+ * Kalshi / DFlow exposes **four** outcome SPLs per head‑to‑head event (YES/NO × each team leg).
+ * Economically they collapse to **two** portfolio buckets (same payoff as holding the paired mint):
  *
- * Group `markets/batch` rows by event; when exactly **two** rows share an event, sort by ticker and
- * treat the first row as the first team’s leg and the second as the second team’s leg.
+ * - **YES team A + NO team B** → one bucket (“A wins” — LevelUp portfolio **Yes** for the first ticker leg)
+ * - **NO team A + YES team B** → the other bucket (“B wins” — portfolio **No** for the second ticker leg)
+ *
+ * `assignTeamLegMintsToPortfolioColumns` maps each leg’s YES mint to that leg’s column and each leg’s
+ * NO mint to the **opposite** column so the pairs above always land together.
+ *
+ * Group `markets/batch` by `eventTicker`; when exactly **two** rows share an event, sort by `ticker`
+ * and treat the first row as the first leg and the second as the second leg.
  */
 function buildDflowMintToPortfolioColumnMap(
 	markets: DflowBatchMarket[],
@@ -145,7 +149,10 @@ function buildDflowMintToPortfolioColumnMap(
 	return out;
 }
 
-/** `teamPortfolioColumn` = Yes (first team) or No (second team) for this batch row’s leg. */
+/**
+ * Map one Kalshi leg’s YES/NO mints into portfolio columns so **YES leg A + NO leg B** share a column
+ * and **NO leg A + YES leg B** share the other (see {@link buildDflowMintToPortfolioColumnMap}).
+ */
 function assignTeamLegMintsToPortfolioColumns(
 	out: Map<string, "Yes" | "No">,
 	accounts: Record<string, DflowMarketAccountInfo>,
@@ -179,8 +186,10 @@ function dflowPortfolioColumnForPosition(
 }
 
 /**
- * After {@link toVenuePositions}, align `outcome` with catalog mint→column when possible and set
- * {@link VenuePosition.dflowTradeSideLabel} from {@link portfolioColumnTeamLabels} for trade-history Side text.
+ * After {@link toVenuePositions}, align `outcome` with the umbrella’s
+ * {@link buildDflowPortfolioColumnMapFromCatalog} (`exchangeMatching.dflow` mint → portfolio Yes/No)
+ * and set {@link VenuePosition.dflowTradeSideLabel} from {@link portfolioColumnTeamLabels} only.
+ * No second remap from Metadata `markets/batch` ticker order — the umbrella is the source of truth.
  */
 export function patchDflowVenuePositionOutcomes(
 	rows: VenuePosition[],
@@ -591,6 +600,35 @@ export function buildGhostDflowMarketPositions(
  * Converts matched positions + cost basis into the normalised `VenuePosition[]`
  * used by the Positions page and PortfolioContext.
  */
+/**
+ * DFlow Metadata lifecycle: outcome is known in `determined` and `finalized` (see pond.dflow.net
+ * prediction-market-lifecycle). Treat both as settled for win/loss — strict `finalized` only
+ * missed redeemable `determined` rows; case-sensitive compare missed `FINALIZED` payloads.
+ */
+function dflowMarketSettlementKnown(status: string | undefined): boolean {
+	const s = (status ?? "").trim().toLowerCase();
+	return s === "finalized" || s === "determined";
+}
+
+/**
+ * Which **contract** leg (yes/no mint family) pays $1. Metadata `result` is usually `yes`/`no`
+ * but may match `yesSubTitle` / `noSubTitle` text instead (Kalshi proposition markets).
+ */
+function dflowWinningContractSide(m: DflowBatchMarket): "yes" | "no" | null {
+	const raw = m.result;
+	if (raw == null) return null;
+	const r = String(raw).trim().toLowerCase();
+	if (r === "yes" || r === "y") return "yes";
+	if (r === "no" || r === "n") return "no";
+
+	const yesLab = (m.yesSubTitle ?? "").trim().toLowerCase();
+	const noLab = (m.noSubTitle ?? "").trim().toLowerCase();
+	if (yesLab && r === yesLab) return "yes";
+	if (noLab && r === noLab) return "no";
+
+	return null;
+}
+
 export function toVenuePositions(
 	positions: DflowMarketPosition[],
 	costMap: Map<string, CostEntry>,
@@ -599,9 +637,10 @@ export function toVenuePositions(
 ): VenuePosition[] {
 	const columnMap = buildDflowMintToPortfolioColumnMap(markets ?? []);
 	return positions.map((pos) => {
-		const isFinalized = pos.market.status === "finalized";
-		const isWon = isFinalized && pos.market.result?.toLowerCase() === pos.side;
-		const isLost = isFinalized && !isWon;
+		const settlementKnown = dflowMarketSettlementKnown(pos.market.status);
+		const winnerContract = dflowWinningContractSide(pos.market);
+		const isWon =
+			settlementKnown && winnerContract !== null && winnerContract === pos.side;
 
 		const cost = costMap.get(pos.mint);
 		const avgPrice = cost?.avgPrice ?? null;
@@ -609,7 +648,7 @@ export function toVenuePositions(
 		let currentPrice: number | null;
 		let currentValue: number;
 
-		if (isFinalized) {
+		if (settlementKnown && winnerContract !== null) {
 			currentPrice = isWon ? 1 : 0;
 			currentValue = isWon ? pos.balance : 0;
 		} else {
@@ -650,7 +689,18 @@ export function toVenuePositions(
 			tokenId: pos.mint,
 			...(dflowEventTicker ? { dflowEventTicker } : {}),
 			marketStatus: pos.market.status?.toUpperCase(),
-			outcomeResult: isFinalized ? (isWon ? "WON" : "LOST") : null,
+			outcomeResult:
+				settlementKnown && winnerContract !== null
+					? isWon
+						? "WON"
+						: "LOST"
+					: null,
+			...(pos.market.yesSubTitle?.trim()
+				? { dflowYesSubTitle: pos.market.yesSubTitle.trim() }
+				: {}),
+			...(pos.market.noSubTitle?.trim()
+				? { dflowNoSubTitle: pos.market.noSubTitle.trim() }
+				: {}),
 			...(latestMs != null
 				? { historyTradeAt: new Date(latestMs).toISOString() }
 				: {}),

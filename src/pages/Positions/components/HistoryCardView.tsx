@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import {
-	getFinalAmount,
+	normalizeOrderQuestionIdKey,
 	type ProcessedOrder,
 } from "@/services/api/simplifiedOrderService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -11,23 +11,25 @@ import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";
 import Tooltip from "components/Tooltip/Tooltip";
 import {
-	stripUmbrellaDisplayPrefix,
-	titlesMatchVenue,
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
 import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
 import { buildUmbrellaLookupByDflowEventTicker, buildUmbrellaLookupByDflowOutcomeMint } from "@/trading/dflow/dflowUmbrellaLookup";
 import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/levelUpQuestionIdsForVenueHistory";
-import { getVenueHistoryMarketColumnLabel } from "@/trading/predict/predictPositionLabel";
+import {
+	getVenueHistoryMarketColumnLabel,
+	isGenericBinaryOutcomeLabel,
+} from "@/trading/predict/predictPositionLabel";
 import {
 	getTradeCount,
 	formatHistoryReturnPctAbs,
+	historyVenueRowPortfolioYesNoSide,
 	venueHistoryPositionToSyntheticOrders,
 	venueHistoryRowToSyntheticOrder,
-	venueHistorySyntheticUmbrellaId,
 } from "../utils/positionHelpers";
 import {
-	inferVenueHistoryYesNoSide,
+	parseVsTeamsFromTitle,
+	pickResolvedWinnerFromMarkets,
 	resolveCanonicalMatchWinner,
 	shortTeamDisplayName,
 	winnerLabelFromLevelUpTitle,
@@ -36,14 +38,13 @@ import {
 import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
 import {
 	buildPredictUmbrellaLookup,
-	matchVenuePositionToUmbrellaForHistory,
 } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
 import {
 	logFullHistoryDebug,
 	type FullHistoryUnifiedBlock,
 	type LogFullHistoryDebugParams,
 } from "../utils/fullHistoryDebugLog";
-import { sortUnifiedHistoryBlocksByLatest } from "../utils/historyActivitySort";
+import { buildHistoryUnifiedBlocks } from "../utils/buildHistoryUnifiedBlocks";
 import {
 	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
 	polymarketSplitSettlementBadgeVisible,
@@ -53,13 +54,6 @@ import {
 	buildHistoryHoldingsBlockedKeys,
 	filterUnifiedHistoryBlocksByOpenPositions,
 } from "../utils/filterHistoryBlocksByOpenPositions";
-
-type UnifiedBlock = {
-	id: string;
-	umbrella: any;
-	luMarkets: Array<{ market: any; yes: string; no: string }>;
-	venuePositions: VenuePosition[];
-};
 
 type MergedHistoryRow = {
 	side: "Yes" | "No";
@@ -97,7 +91,7 @@ export default function HistoryCardView({
 	resolvedUmbrellaPositions: UmbrellaPositions[];
 	openUmbrellaPositions: UmbrellaPositions[];
 }) {
-	const { umbrellas: contextUmbrellas } = usePredictionData();
+	const { umbrellas: contextUmbrellas, getAllQuestionsForUmbrella } = usePredictionData();
 	const umbrellas = catalogUmbrellas ?? contextUmbrellas;
 	const { appState } = useOddsMonitor();
 	const matchedMarkets = appState?.markets ?? null;
@@ -140,146 +134,31 @@ export default function HistoryCardView({
 
 	const allOrders = useMemo(() => [...orders, ...venueHistorySyntheticOrders], [orders, venueHistorySyntheticOrders]);
 
-	const unifiedBlocks: UnifiedBlock[] = useMemo(() => {
-		const blocks = new Map<string, UnifiedBlock>();
-
-		Object.entries(resolvedMarketsByUmbrella).forEach(([umbrellaId, resolvedMarkets]) => {
-			const marketsWithHistory: Array<{ market: any; yes: string; no: string }> = [];
-			resolvedMarkets.forEach((market: any) => {
-				const mid = market._id || market.questionId || market.marketId;
-				if (!mid) return;
-				if (orders.some((o: any) => o.questionId === mid)) {
-					const fa = getFinalAmount(orders, mid);
-					marketsWithHistory.push({ market, yes: fa.yesShares.toString(), no: fa.noShares.toString() });
-				}
-			});
-			if (marketsWithHistory.length === 0) return;
-
-			let umb = umbrellas.find((u) => u._id === umbrellaId);
-			if (!umb) {
-				umb = {
-					_id: umbrellaId,
-					displayName: resolvedMarkets[0]?.umbrellaName || `Umbrella ${umbrellaId.slice(0, 8)}...`,
-					children: [], originalChildren: [],
-					createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), __v: 0,
-				} as any;
-			}
-			blocks.set(umbrellaId, { id: umbrellaId, umbrella: umb, luMarkets: marketsWithHistory, venuePositions: [] });
-		});
-
-		const placed = new WeakSet<VenuePosition>();
-
-		for (const pos of venueHistory) {
-			const uid = pos.levelUpUmbrellaId?.trim();
-			if (!uid) continue;
-			const fromCatalog = umbrellas.find((u) => u._id === uid);
-			const dn =
-				stripUmbrellaDisplayPrefix(
-					pos.levelUpUmbrellaDisplayName ?? pos.marketTitle,
-				).trim() || pos.marketTitle;
-			const rowUmbrella: Umbrella =
-				fromCatalog ??
-				({
-					_id: uid,
-					displayName: dn || `Umbrella ${uid.slice(0, 8)}...`,
-					children: [],
-					originalChildren: [],
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-					__v: 0,
-					_polyIcon: pos.iconUrl,
-				} as Umbrella);
-			const existing = blocks.get(uid);
-			if (!existing) {
-				blocks.set(uid, {
-					id: uid,
-					umbrella: rowUmbrella,
-					luMarkets: [],
-					venuePositions: [pos],
-				});
-			} else {
-				const cur = existing.umbrella as Umbrella;
-				const prefer =
-					(Array.isArray(rowUmbrella.children) && rowUmbrella.children.length > 0) ||
-					(rowUmbrella as { exchangeMatching?: unknown }).exchangeMatching != null
-						? rowUmbrella
-						: cur;
-				if (prefer !== cur) {
-					existing.umbrella = prefer;
-				}
-				existing.venuePositions.push(pos);
-			}
-			placed.add(pos);
-		}
-
-		for (const pos of venueHistory) {
-			if (placed.has(pos)) continue;
-			const predictHint =
-				pos.venue === "predictfun"
-					? stripUmbrellaDisplayPrefix(pos.marketTitle) || undefined
-					: undefined;
-			const matchedUmb = matchVenuePositionToUmbrellaForHistory(
-				pos,
-				pos.venue,
-				umbrellaLookupByConditionId,
+	const unifiedBlocks = useMemo(
+		() =>
+			buildHistoryUnifiedBlocks({
 				umbrellas,
+				getAllQuestionsForUmbrella,
+				resolvedMarketsByUmbrella,
+				orders,
+				venueHistory,
+				umbrellaLookupByConditionId,
 				predictUmbrellaLookup,
-				predictHint,
 				umbrellaLookupByDflowOutcomeMint,
 				umbrellaLookupByDflowEventTicker,
-			);
-			if (matchedUmb) {
-				const id = matchedUmb._id;
-				if (!blocks.has(id)) {
-					blocks.set(id, {
-						id,
-						umbrella: matchedUmb,
-						luMarkets: [],
-						venuePositions: [],
-					});
-				}
-				blocks.get(id)!.venuePositions.push(pos);
-				placed.add(pos);
-			}
-		}
-
-		const unmatchedByTitle = new Map<string, VenuePosition[]>();
-		for (const pos of venueHistory) {
-			if (placed.has(pos)) continue;
-			const key = stripUmbrellaDisplayPrefix(pos.marketTitle) || pos.marketTitle;
-			const arr = unmatchedByTitle.get(key) ?? [];
-			arr.push(pos);
-			unmatchedByTitle.set(key, arr);
-		}
-		for (const [title, positions] of unmatchedByTitle) {
-			const matched = umbrellas.find((u) => u.displayName && titlesMatchVenue(u.displayName, title));
-			const p0 = positions[0];
-			const synth =
-				matched ??
-				({
-					_id: venueHistorySyntheticUmbrellaId(title, positions),
-					displayName: title,
-					children: [],
-					originalChildren: [],
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-					__v: 0,
-					_polyIcon: p0?.iconUrl,
-				} as Umbrella);
-			blocks.set(synth._id, { id: synth._id, umbrella: synth, luMarkets: [], venuePositions: positions });
-		}
-
-		return sortUnifiedHistoryBlocksByLatest(Array.from(blocks.values()), orders);
-	}, [
-		resolvedMarketsByUmbrella,
-		orders,
-		umbrellas,
-		venueHistory,
-		umbrellaLookupByConditionId,
-		predictUmbrellaLookup,
-		umbrellaLookupByDflowOutcomeMint,
-		umbrellaLookupByDflowEventTicker,
-	]);
+			}),
+		[
+			umbrellas,
+			getAllQuestionsForUmbrella,
+			resolvedMarketsByUmbrella,
+			orders,
+			venueHistory,
+			umbrellaLookupByConditionId,
+			predictUmbrellaLookup,
+			umbrellaLookupByDflowOutcomeMint,
+			umbrellaLookupByDflowEventTicker,
+		],
+	);
 
 	const historyHoldingsBlocked = useMemo(
 		() =>
@@ -331,15 +210,34 @@ export default function HistoryCardView({
 		return unifiedBlocksForDisplay.map((block) => {
 			const resolvedList = resolvedMarketsByUmbrella[block.id] ?? [];
 			const luSample = block.luMarkets[0]?.market ?? null;
+			const umbrellaTitle = umbrellaHeaderLabel(block.umbrella);
 			const blockCanonical = resolveCanonicalMatchWinner({
 				umbrella: block.umbrella,
 				matchedMarkets,
 				resolvedMarketsForUmbrella: resolvedList,
 				luSampleMarket: luSample,
 			});
-			const blockOutcomeShort = blockCanonical
+			const luWinner = pickResolvedWinnerFromMarkets(
+				block.luMarkets.map((r) => r.market),
+				umbrellaTitle,
+			);
+			let blockOutcomeShort = blockCanonical
 				? shortTeamDisplayName(blockCanonical)
 				: null;
+			if (!blockOutcomeShort && luWinner) {
+				blockOutcomeShort = shortTeamDisplayName(luWinner);
+			}
+			if (!blockOutcomeShort) {
+				for (const pos of block.venuePositions) {
+					const w = winnerLabelFromVenuePosition(pos, {
+						vsTitleHint: umbrellaTitle,
+					});
+					if (w && w !== "—") {
+						blockOutcomeShort = shortTeamDisplayName(w);
+						break;
+					}
+				}
+			}
 
 			type Bucket = {
 				hasData: boolean;
@@ -358,8 +256,10 @@ export default function HistoryCardView({
 				if (!qid) continue;
 				const resolved = String((market as any).resolvedOutcome || "").toLowerCase();
 				const title = (market?.displayName || (market as any)?.question || "").trim();
-				const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-				const isVs = parts.length === 2;
+				const vsPair =
+					parseVsTeamsFromTitle(title) ??
+					parseVsTeamsFromTitle(umbrellaTitle);
+				const isVs = vsPair != null;
 
 				for (const side of ["Yes", "No"] as const) {
 					const tc = getTradeCount(allOrders, qid, side);
@@ -373,18 +273,22 @@ export default function HistoryCardView({
 					bucket.wonByQid[qid] = won;
 
 					if (!bucket.label) {
-						bucket.label = isVs
-							? shortTeamDisplayName(side === "Yes" ? parts[0] : parts[1])
+						bucket.label = isVs && vsPair
+							? shortTeamDisplayName(side === "Yes" ? vsPair[0] : vsPair[1])
 							: side;
 					}
 					if (!bucket.outcomeText) {
-						bucket.outcomeText = winnerLabelFromLevelUpTitle(title, resolved);
+						bucket.outcomeText = winnerLabelFromLevelUpTitle(
+							title,
+							resolved,
+							umbrellaTitle,
+						);
 					}
 				}
 			}
 
 			for (const pos of block.venuePositions) {
-				const side = inferVenueHistoryYesNoSide(pos.marketTitle, pos.outcome);
+				const side = historyVenueRowPortfolioYesNoSide(pos);
 				if (
 					import.meta.env.DEV &&
 					pos.venue === "limitless" &&
@@ -393,13 +297,15 @@ export default function HistoryCardView({
 					limitlessHistUiLog++;
 					const synth = venueHistoryRowToSyntheticOrder(pos);
 					debugLimitlessPortfolio("History tab UI (card): limitless row → bucket + labels", {
-						umbrella: umbrellaHeaderLabel(block.umbrella),
+						umbrella: umbrellaTitle,
 						rawApiOutcome: pos.outcome,
 						inferredYesNoBucket: side,
 						rowMarketTitle: pos.marketTitle,
 						marketStatusOnRow: pos.marketStatus,
 						outcomeResultOnRow: pos.outcomeResult,
-						winnerColumnLabel: winnerLabelFromVenuePosition(pos),
+						winnerColumnLabel: winnerLabelFromVenuePosition(pos, {
+							vsTitleHint: umbrellaTitle,
+						}),
 						marketColumnLabel: getVenueHistoryMarketColumnLabel(
 							pos.marketTitle,
 							pos,
@@ -420,12 +326,23 @@ export default function HistoryCardView({
 					if (bucket.wonByQid[qid] === undefined) bucket.wonByQid[qid] = venueWon;
 				}
 
-				if (!bucket.label) {
-					const singleInGroup = block.venuePositions.length === 1 && block.luMarkets.length === 0;
-					bucket.label = getVenueHistoryMarketColumnLabel(pos.marketTitle, pos, singleInGroup);
+				const singleInGroup = block.venuePositions.length === 1 && block.luMarkets.length === 0;
+				const columnLabel = getVenueHistoryMarketColumnLabel(
+					pos.marketTitle,
+					pos,
+					singleInGroup,
+				);
+				if (
+					!bucket.label ||
+					(isGenericBinaryOutcomeLabel(bucket.label) &&
+						!isGenericBinaryOutcomeLabel(columnLabel))
+				) {
+					bucket.label = columnLabel;
 				}
 				if (!bucket.outcomeText) {
-					bucket.outcomeText = winnerLabelFromVenuePosition(pos);
+					bucket.outcomeText = winnerLabelFromVenuePosition(pos, {
+						vsTitleHint: umbrellaTitle,
+					});
 				}
 			}
 
@@ -452,9 +369,14 @@ export default function HistoryCardView({
 				let tradeCount = 0;
 
 				for (const qid of b.marketIds) {
+					const qNorm = normalizeOrderQuestionIdKey(String(qid));
 					let qidShares = 0;
 					for (const o of allOrders) {
-						if (o.questionId !== qid) continue;
+						if (
+							normalizeOrderQuestionIdKey(String(o.questionId ?? "")) !== qNorm
+						) {
+							continue;
+						}
 						if (!o.filled) continue;
 						if (o.position?.toLowerCase() !== sideLower) continue;
 						const shares =
@@ -535,6 +457,10 @@ export default function HistoryCardView({
 							const isDetailOpen = expandedCards.has(cardId);
 							const thKey = `${block.id}-${row.side}-th`;
 							const isThExpanded = expandedTradeHistory.has(thKey);
+							const tradeListMarketTitle =
+								(block.venuePositions.find((p) => p.marketTitle?.trim())
+									?.marketTitle ?? "")
+									.trim() || umbrellaHeaderLabel(block.umbrella) || undefined;
 
 							const retC = row.totalReturn >= 0 ? "#16a34a" : "#ef4444";
 							const retT = (() => {
@@ -620,11 +546,7 @@ export default function HistoryCardView({
 													isExpanded={true}
 													position={row.side}
 													positionDisplayLabel={row.label}
-													marketTitle={
-														(block.venuePositions.find((p) => p.marketTitle?.trim())
-															?.marketTitle ?? "")
-															.trim() || undefined
-													}
+													marketTitle={tradeListMarketTitle}
 												/>
 											)}
 										</div>

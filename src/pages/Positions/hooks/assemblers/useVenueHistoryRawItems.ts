@@ -24,6 +24,7 @@ import {
 	buildUmbrellaLookupByDflowOutcomeMint,
 } from "@/trading/dflow/dflowUmbrellaLookup";
 import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
+import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
 
 function umbrellaMatchedForVenueTradeHistoryRaw(
 	row: VenuePosition,
@@ -300,6 +301,19 @@ export function useVenueHistoryRawItems({
 			seen.add(p.tokenId);
 			items.push(p);
 		}
+
+		let limitlessRowsInMerged = 0;
+		for (const it of items) {
+			if (it.venue === "limitless") limitlessRowsInMerged++;
+		}
+		debugLimitlessPortfolio("useVenueHistoryRawItems merged snapshot", {
+			limitlessTradesInputCount: limitlessTradesArr.length,
+			limitlessOpenPositionsCount: limitlessPositions.length,
+			limitlessWinningsCount: limitlessWinnings.length,
+			limitlessHistoryCount: limitlessHistory.length,
+			limitlessRowsInMergedItems: limitlessRowsInMerged,
+			totalMergedItems: items.length,
+		});
 
 		return items;
 	}, [

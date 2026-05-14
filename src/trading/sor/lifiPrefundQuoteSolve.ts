@@ -1,5 +1,7 @@
 import { formatUnits } from "viem";
 import type { LifiQuoteRequestBody, LifiQuoteResponse } from "@/types/trading";
+import { lifiSourceStableDecimals, prefundQuoteAmountHuman } from "@/trading/lifi/prefundFromAmountHuman";
+import { SOR_PREFUND_QUOTE_MAX_ITERS } from "@/trading/sor/sorBridgeWallTimeBudget";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
 	if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -37,7 +39,6 @@ export type PrefundLifiQuoteClient = {
 };
 
 const PREFUND_QUOTE_SLIPPAGE = 0.005;
-const PREFUND_QUOTE_MAX_ITERS = 6;
 const PREFUND_QUOTE_COVER_RATIO = 1.02;
 
 /**
@@ -170,6 +171,11 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 	 * micros; the default slack (`prefundDestNeedFloorAtSendCap`) can otherwise accept cents short.
 	 */
 	strictDestMinAtSendCap?: boolean;
+	/**
+	 * On-chain source stable balance (wei). **Required** for 18-decimal sources (BNB USDT);
+	 * optional for 6-decimal chains — when set, `amountHuman` is clamped so parsed atomic ≤ this.
+	 */
+	maxFromWei?: bigint | null;
 }): Promise<{ quote: LifiQuoteResponse; amountHuman: string }> {
 	const destNeed = Math.max(0, args.destPortionUsd);
 	let sendHuman = Math.max(0, Number(args.seedAmountHuman));
@@ -182,17 +188,33 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 		throw new Error("ensurePrefundQuoteMeetsDestMin: budgetUsd must be > 0");
 	}
 	const cap = Math.min(wallet, budget);
+	const fromDec = lifiSourceStableDecimals(args.fromChainLifi);
+	if (fromDec === 18 && args.maxFromWei == null) {
+		throw new Error(
+			"ensurePrefundQuoteMeetsDestMin: maxFromWei is required when fromChain uses 18-decimal stable (BNB USDT)",
+		);
+	}
 
-	for (let iter = 0; iter < PREFUND_QUOTE_MAX_ITERS; iter++) {
+	for (let iter = 0; iter < SOR_PREFUND_QUOTE_MAX_ITERS; iter++) {
 		sendHuman = Math.min(sendHuman, cap);
 		if (sendHuman <= 1e-12) {
 			throw new Error("Prefund LI.FI quote: send amount clamped to zero on source chain");
 		}
 
+		const amountHuman = prefundQuoteAmountHuman({
+			sendHuman,
+			capHuman: cap,
+			fromChainLifi: args.fromChainLifi,
+			maxFromWei: args.maxFromWei,
+		});
+		if (amountHuman === "0") {
+			throw new Error("Prefund LI.FI quote: floored send amountHuman is zero on source chain");
+		}
+
 		const q = await args.api.postFundingLifiQuote({
 			fromChain: args.fromChainLifi,
 			toChain: args.toChainLifi,
-			amountHuman: sendHuman.toFixed(6),
+			amountHuman,
 			fromAddress: args.fromAddress,
 			toAddress: args.toAddress,
 			slippage: PREFUND_QUOTE_SLIPPAGE,
@@ -203,7 +225,7 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 
 		const minTo = prefundQuotedMinDestHuman(q.quote, args.toChainLifi);
 		if (minTo == null || !Number.isFinite(minTo)) {
-			if (iter === PREFUND_QUOTE_MAX_ITERS - 1) {
+			if (iter === SOR_PREFUND_QUOTE_MAX_ITERS - 1) {
 				throw new Error(
 					"LI.FI quote did not include parsable destination amount fields (toAmountMin / toAmount)",
 				);
@@ -213,7 +235,7 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 		}
 
 		if (minTo + 1e-6 >= destNeed) {
-			return { quote: q, amountHuman: sendHuman.toFixed(6) };
+			return { quote: q, amountHuman };
 		}
 
 		// Already sending the cap but quoted min destination is still short:
@@ -223,7 +245,7 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 				? destNeed
 				: prefundDestNeedFloorAtSendCap(destNeed);
 			if (minTo + 1e-6 >= floor) {
-				return { quote: q, amountHuman: sendHuman.toFixed(6) };
+				return { quote: q, amountHuman };
 			}
 			const capLabel =
 				wallet <= budget
@@ -234,7 +256,7 @@ export async function ensurePrefundQuoteMeetsDestMin(args: {
 			);
 		}
 
-		if (iter === PREFUND_QUOTE_MAX_ITERS - 1) {
+		if (iter === SOR_PREFUND_QUOTE_MAX_ITERS - 1) {
 			throw new Error(
 				`LI.FI quoted min destination ~$${minTo.toFixed(4)} is below required ~$${destNeed.toFixed(4)} after scaling send amount`,
 			);
