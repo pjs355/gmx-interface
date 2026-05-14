@@ -6,6 +6,7 @@ import { useClaimForVenue } from "@/helpers/claimEarnings";
 import ScrollableTable from "@/components/ScrollableTable/ScrollableTable";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
+import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import {
@@ -200,7 +201,7 @@ export default function ResolvedPositionsTable({
 										{row.label}
 									</div>
 									<div style={{ textAlign: "center", color: "#fff" }}>
-										{parseFloat(row.totalShares.toFixed(2))}
+										{formatShareCountDisplay(row.totalShares)}
 									</div>
 									<div style={{ textAlign: "center", color: "#fff" }}>$1</div>
 									<div style={{ textAlign: "center", color: "#16a34a", fontWeight: 700, fontSize: 20 }}>

@@ -62,6 +62,12 @@ import {
 } from "@/trading/polymarket/polygonCollateralWrap";
 import { clampMarketBuyAmountToWallet } from "@/trading/sor/postBridgeOrderResize";
 import { clampMarketSellSharesToCtfBalance } from "@/trading/polymarket/polymarketSellShareClamp";
+import { clampPredictSellSharesToOutcomeBalance } from "@/trading/predict/predictSellShareClamp";
+import { readPredictOutcomeShareWei } from "@/trading/predict/usePredictBnbBalances";
+import {
+	floorSharesAtDecimals,
+	floorSharesAtDecimalsAsString,
+} from "@/trading/utils/floorShares";
 import { wireAmountUsdForVenue } from "@/trading/sor/wireAmount";
 import {
 	levelUpBuySignedPremiumUsdHuman,
@@ -78,9 +84,16 @@ import {
 } from "@/trading/base/waitPrivyBaseTxReceipt";
 import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
 
-/** Limitless SDK `calculateFOKAmounts` rejects `makerAmount` when `.toString()` has more than 6 fractional digits. */
-function roundLimitlessFokMakerAmountHuman(n: number): number {
-	return Number(n.toFixed(6));
+/**
+ * Limitless SDK `calculateFOKAmounts` rejects `makerAmount` when `.toString()`
+ * has more than 6 fractional digits. We floor (never round half-up) to keep
+ * sells from drifting above the wallet's actual balance — same rule the
+ * trade box display uses (`formatShareCountDisplay`) and that Polymarket
+ * enforces via its CTF clamp. `Number(toFixed(6))` was previously used and
+ * could promote `3.3799999` to `3.38`, causing venues to reject the order.
+ */
+function floorLimitlessFokMakerAmountHuman(n: number): number {
+	return floorSharesAtDecimals(n, 6);
 }
 
 /**
@@ -1202,7 +1215,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								orderType: "FOK",
 								tokenId,
 								side: "BUY",
-								makerAmount: roundLimitlessFokMakerAmountHuman(limitlessBuyMakerUsd),
+								makerAmount: floorLimitlessFokMakerAmountHuman(limitlessBuyMakerUsd),
 								feeRateBps,
 							});
 						} else {
@@ -1211,7 +1224,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								orderType: "FOK",
 								tokenId,
 								side: "SELL",
-								makerAmount: roundLimitlessFokMakerAmountHuman(leg.shares),
+								makerAmount: floorLimitlessFokMakerAmountHuman(leg.shares),
 								feeRateBps,
 							});
 						}
@@ -1319,6 +1332,63 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						return { filled: false, filledShares: 0, error: preflight.error };
 					}
 
+					/**
+					 * SELL: pre-flight clamp planned shares against the EOA's
+					 * actual on-chain ERC-1155 outcome balance. Predict's REST
+					 * positions feed (which seeds `sorVenuePositions`) lags the
+					 * chain and counts CTF locked in resting limit sells, so a
+					 * "max" sell often plans 1–3% more shares than the wallet
+					 * can transfer. Predict's CTF Exchange pre-trade hook is
+					 * `balanceOf(maker, tokenId) >= makerAmount`, so the order
+					 * would be rejected with `create_order_insufficient_shares_balance`.
+					 * Reading the chain here and shrinking `leg.shares` to fit —
+					 * mirroring Polymarket's `clampMarketSellSharesToCtfBalance`
+					 * pattern — prevents the rejection on the first attempt.
+					 */
+					const predictEoa = fundingAddresses.embeddedEoa?.trim() ?? "";
+					const predictEoaValid = /^0x[a-fA-F0-9]{40}$/.test(predictEoa);
+					let predictSellShares = leg.shares;
+					let predictSellScale = 1;
+					if (side === "sell" && predictEoaValid) {
+						let outcomeBalWei: bigint;
+						try {
+							outcomeBalWei = await readPredictOutcomeShareWei({
+								account: predictEoa,
+								tokenId,
+								isNegRisk: predictMarketDetail.isNegRisk,
+								isYieldBearing: predictMarketDetail.isYieldBearing,
+							});
+						} catch (e: unknown) {
+							console.error("error", e);
+							const msg =
+								e instanceof Error
+									? e.message
+									: "Could not read Predict outcome ERC-1155 balance before sell";
+							return { filled: false, filledShares: 0, error: msg };
+						}
+						const clamp = clampPredictSellSharesToOutcomeBalance({
+							plannedShares: leg.shares,
+							erc1155BalanceWei: outcomeBalWei,
+						});
+						if (!clamp.ok) {
+							return { filled: false, filledShares: 0, error: clamp.error };
+						}
+						if (clamp.resized) {
+							console.warn("[SOR][sell-clamp] predictfun", {
+								venue: "predictfun",
+								tokenIdTail: tokenId.slice(-8),
+								plannedShares: Number(leg.shares.toFixed(6)),
+								outcomeBalanceShares: Number(
+									Number(formatUnits(outcomeBalWei, 18)).toFixed(6),
+								),
+								clampedShares: Number(clamp.amountShares.toFixed(6)),
+								scale: Number(clamp.scale.toFixed(6)),
+							});
+						}
+						predictSellShares = clamp.amountShares;
+						predictSellScale = clamp.scale;
+					}
+
 					if (isLimit) {
 						try {
 							const resp = await predictSession.placeLimitOrder({
@@ -1326,11 +1396,15 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								tokenId,
 								side,
 								priceCents: leg.limitPriceCents as number,
-								sizeShares: leg.shares.toFixed(6),
+								sizeShares:
+									side === "sell"
+										? floorSharesAtDecimalsAsString(predictSellShares, 6)
+										: floorSharesAtDecimalsAsString(leg.shares, 6),
 							});
 							return {
 								filled: true,
-								filledShares: leg.shares,
+								filledShares:
+									side === "sell" ? leg.shares * predictSellScale : leg.shares,
 								txHash: (resp as { orderHash?: string } | undefined)?.orderHash,
 							};
 						} catch (e: unknown) {
@@ -1357,7 +1431,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					 */
 					let predictBuyAmountUsd = wireAmountUsdForVenue(leg);
 					let predictPostBridgeScale = 1;
-					if (side === "buy" && fundingAddresses.embeddedEoa?.trim()) {
+					if (side === "buy" && predictEoaValid) {
 						let bnbUsdtHuman: number;
 						try {
 							const balances = await readFundingStableBalancesHuman({
@@ -1393,9 +1467,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						predictBuyAmountUsd = clamp.amountUsd;
 						predictPostBridgeScale = clamp.scale;
 					}
-					const amountStr = side === "buy"
-						? predictBuyAmountUsd.toFixed(6)
-						: leg.shares.toFixed(6);
+					const amountStr =
+						side === "buy"
+							? predictBuyAmountUsd.toFixed(6)
+							: floorSharesAtDecimalsAsString(predictSellShares, 6);
 
 					try {
 						const resp = await predictSession.placeMarketOrder({
@@ -1408,7 +1483,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						return {
 							filled: true,
 							filledShares:
-								side === "buy" ? leg.shares * predictPostBridgeScale : leg.shares,
+								side === "buy"
+									? leg.shares * predictPostBridgeScale
+									: leg.shares * predictSellScale,
 							txHash: (resp as { orderHash?: string })?.orderHash,
 						};
 					} catch (e: unknown) {

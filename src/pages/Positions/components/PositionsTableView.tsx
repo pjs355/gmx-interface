@@ -13,6 +13,7 @@ import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryList from "./TradeHistoryList";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
+import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
 import {
 	getTradeCount,
 	fifoAlignedBasisForPositionsRow,
@@ -340,7 +341,7 @@ export default function PositionsTableView({
 												)}
 											</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{formatPrice(row.currentPrice, portfolioPriceLayout)}</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{parseFloat(row.totalShares.toFixed(2))}</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>{formatShareCountDisplay(row.totalShares)}</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{row.avgPrice === null ? "—" : formatPrice(row.avgPrice, portfolioPriceLayout)}</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{row.totalCost === null ? "—" : formatCurrency(row.totalCost)}</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{formatCurrency(row.payout)}</div>
