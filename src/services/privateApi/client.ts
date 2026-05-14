@@ -541,8 +541,17 @@ function privateApiHttpErrorMessage(body: unknown, status: number): string {
 	const o = body as Record<string, unknown>;
 	const tryStr = (v: unknown) =>
 		typeof v === "string" && v.trim() ? v.trim() : null;
-	if (tryStr(o.error))
-		return appendDflowOrderSubmitDetailMessage(tryStr(o.error)!, o);
+	const errCode = tryStr(o.error);
+	const errDetail = tryStr(o.detail);
+	if (errCode) {
+		if (errDetail && !errCode.includes(errDetail)) {
+			return appendDflowOrderSubmitDetailMessage(
+				`${errCode}: ${errDetail}`,
+				o,
+			);
+		}
+		return appendDflowOrderSubmitDetailMessage(errCode, o);
+	}
 	if (tryStr(o.message))
 		return appendDflowOrderSubmitDetailMessage(tryStr(o.message)!, o);
 	if (tryStr(o.detail))
@@ -735,7 +744,24 @@ export function createPrivateApiClient(
 				method: "POST",
 				body: JSON.stringify(body),
 			});
-			return readJson<LifiQuoteResponse>(res);
+			const out = await readJson<LifiQuoteResponse>(res);
+			if (
+				typeof import.meta.env !== "undefined" &&
+				(import.meta.env.DEV === true ||
+					import.meta.env.VITE_DEBUG_TRADING === "true")
+			) {
+				try {
+					console.warn(
+						"[PrivateApi][LifiQuote] data.quote_raw_json",
+						out?.quote != null
+							? JSON.stringify(out.quote)
+							: "(no quote)",
+					);
+				} catch (e) {
+					console.error("error", e);
+				}
+			}
+			return out;
 		},
 
 		async postFundingLifiWithdrawPlan(

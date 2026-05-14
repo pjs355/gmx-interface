@@ -4,6 +4,10 @@ import type { VenueHistoryFill, VenuePosition } from "@/types/trading/venuePosit
 /** Public activity feed — not Polymarket CLOB V2 order/trade HTTP (`clob.polymarket.com`). */
 const POLYMARKET_DATA_API = "https://data-api.polymarket.com";
 
+/** Orphan-condition REDEEM (empty outcome) attributed per net outcome share (~UMA Unknown/50-50 economics). */
+const SPLIT_PER_SHARE_LO = 0.42;
+const SPLIT_PER_SHARE_HI = 0.58;
+
 /**
  * Polymarket Data API `/activity` rows are not uniformly typed across TRADE vs REDEEM.
  * As of 2025–2026, TRADE events commonly use `size` (shares) and `usdcSize` (USDC notional),
@@ -35,6 +39,7 @@ interface PolymarketActivityRow {
 	price?: number;
 	timestamp?: number | string;
 	transactionHash?: string;
+	outcomeIndex?: number;
 }
 
 function numFromApi(v: unknown): number {
@@ -89,6 +94,8 @@ interface AggregatedTrade {
 	/** Latest activity timestamp (ms) among TRADE + matching REDEEM rows for this leg */
 	lastActivityMs: number | null;
 	fills: VenueHistoryFill[];
+	/** Set when orphan-condition REDEEM dollars / netShares ≈ $0.50 (History badge). */
+	polymarketSplitSettlementLikely?: boolean;
 }
 
 /** Normalize Polymarket activity `timestamp` (seconds, ms, or ISO string). */
@@ -178,6 +185,135 @@ async function fetchActivityPage(
 	return all;
 }
 
+type OrphanTotals = Map<string, { usdcSum: number; lastActivityMs: number | null }>;
+
+function accumulateOrphanRedeemTotals(redeems: PolymarketActivityRow[]): OrphanTotals {
+	const totals: OrphanTotals = new Map();
+	for (const r of redeems) {
+		const cid = r.conditionId?.trim();
+		if (!cid) continue;
+		if (outcomeNorm(r.outcome) !== "") continue;
+		const usd = activityUsdc(r);
+		if (usd <= 0) continue;
+		const ms = activityTimestampMs(r);
+		const cur =
+			totals.get(cid) ?? { usdcSum: 0, lastActivityMs: null };
+		cur.usdcSum += usd;
+		if (ms != null && (cur.lastActivityMs == null || ms > cur.lastActivityMs)) {
+			cur.lastActivityMs = ms;
+		}
+		totals.set(cid, cur);
+	}
+	return totals;
+}
+
+/**
+ * Attach condition-level orphan REDEEM cash to outcome legs (+ synthetic redeem fills aligned
+ * with `netShares` so History cash-flow totals match redeemed USDC).
+ */
+function distributeOrphanPolymarketRedeems(
+	byKey: Map<string, AggregatedTrade>,
+	redeems: PolymarketActivityRow[],
+	orphanTotals: OrphanTotals,
+): void {
+	for (const [cid, { usdcSum, lastActivityMs }] of orphanTotals) {
+		if (usdcSum <= 1e-9) continue;
+
+		const cands = [...byKey.entries()].filter(
+			([, agg]) =>
+				agg.conditionId.trim() === cid.trim() &&
+				agg.netShares > 1e-9 &&
+				outcomeNorm(agg.outcome) !== "",
+		);
+
+		if (cands.length === 0) {
+			const r0 =
+				redeems.find((r) => {
+					const c = r.conditionId?.trim();
+					return !!(c && c === cid.trim() && outcomeNorm(r.outcome) === "");
+				}) ?? null;
+			if (!r0) continue;
+			const key = aggOutcomeKey(cid, r0.outcome);
+			let agg = byKey.get(key);
+			if (!agg) {
+				agg = {
+					conditionId: cid,
+					asset: r0.asset ?? "",
+					title: r0.title ?? "",
+					outcome: r0.outcome,
+					eventSlug: r0.eventSlug ?? "",
+					icon: r0.icon ?? "",
+					totalBought: 0,
+					totalSold: 0,
+					totalSpent: 0,
+					totalReceived: 0,
+					netShares: 0,
+					redeemed: true,
+					redeemCash: usdcSum,
+					lastActivityMs: null,
+					fills: [],
+				};
+				bumpLastActivity(agg, r0);
+				byKey.set(key, agg);
+			} else {
+				agg.redeemCash += usdcSum;
+				agg.redeemed = true;
+			}
+			const rf = redeemRowToFill({
+				...r0,
+				usdcSize: usdcSum,
+				size: activityShares(r0) || undefined,
+			});
+			if (rf) {
+				agg.fills.push(rf);
+				if (rf.shares > 1e-9) {
+					const ps = rf.usdc / rf.shares;
+					if (ps >= SPLIT_PER_SHARE_LO && ps <= SPLIT_PER_SHARE_HI) {
+						agg.polymarketSplitSettlementLikely = true;
+					}
+				}
+			}
+			continue;
+		}
+
+		let shareDenom = 0;
+		for (const [, a] of cands) {
+			shareDenom += a.netShares;
+		}
+		if (!(shareDenom > 1e-9)) continue;
+
+		const tradedAtIso =
+			lastActivityMs != null
+				? new Date(lastActivityMs).toISOString()
+				: "";
+
+		for (const [mapKey, agg] of cands) {
+			const attrib = usdcSum * (agg.netShares / shareDenom);
+			if (!(attrib > 1e-9)) continue;
+			agg.redeemCash += attrib;
+			agg.redeemed = true;
+			const perShare = attrib / agg.netShares;
+			if (perShare >= SPLIT_PER_SHARE_LO && perShare <= SPLIT_PER_SHARE_HI) {
+				agg.polymarketSplitSettlementLikely = true;
+			}
+			const price = perShare > 0 ? perShare : null;
+			agg.fills.push({
+				side: "sell",
+				shares: agg.netShares,
+				usdc: attrib,
+				tradedAt: tradedAtIso,
+				sourceId: `polymarket-orphan-redeem:${cid}:${mapKey}`,
+				price,
+			});
+			if (lastActivityMs != null) {
+				if (agg.lastActivityMs == null || lastActivityMs > agg.lastActivityMs) {
+					agg.lastActivityMs = lastActivityMs;
+				}
+			}
+		}
+	}
+}
+
 /**
  * Fetches TRADE + REDEEM activity for a Polymarket Safe wallet and aggregates
  * into per-market history entries. REDEEM presence determines win status.
@@ -192,11 +328,13 @@ async function fetchPolymarketTradeHistory(
 
 	if (trades.length === 0 && redeems.length === 0) return [];
 
-	// Track which conditionId+outcome had a REDEEM (user won and redeemed)
+	const orphanTotals = accumulateOrphanRedeemTotals(redeems);
+
 	const redeemedKeys = new Map<string, number>();
 	for (const r of redeems) {
 		const rk = r.conditionId?.trim();
 		if (!rk) continue;
+		if (outcomeNorm(r.outcome) === "") continue;
 		const key = aggOutcomeKey(rk, r.outcome);
 		redeemedKeys.set(key, (redeemedKeys.get(key) ?? 0) + activityUsdc(r));
 	}
@@ -244,6 +382,7 @@ async function fetchPolymarketTradeHistory(
 	}
 
 	for (const r of redeems) {
+		if (outcomeNorm(r.outcome) === "") continue;
 		const rcid = r.conditionId?.trim();
 		if (!rcid) continue;
 		const key = aggOutcomeKey(rcid, r.outcome);
@@ -272,6 +411,8 @@ async function fetchPolymarketTradeHistory(
 		const rf = redeemRowToFill(r);
 		if (rf) agg.fills.push(rf);
 	}
+
+	distributeOrphanPolymarketRedeems(byKey, redeems, orphanTotals);
 
 	for (const agg of byKey.values()) {
 		agg.fills.sort(
@@ -305,6 +446,9 @@ async function fetchPolymarketTradeHistory(
 			iconUrl: agg.icon,
 			outcomeResult: agg.redeemed ? "WON" : null,
 			marketStatus: "RESOLVED",
+			...(agg.polymarketSplitSettlementLikely === true
+				? { polymarketSplitSettlementLikely: true }
+				: {}),
 			...(agg.lastActivityMs != null
 				? { historyTradeAt: new Date(agg.lastActivityMs).toISOString() }
 				: {}),

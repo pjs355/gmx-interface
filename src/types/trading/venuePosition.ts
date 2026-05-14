@@ -152,6 +152,11 @@ export interface VenuePosition {
 	 */
 	isNegRisk?: boolean;
 	/**
+	 * Polymarket trade history: orphan `REDEEM` (empty outcome) attributed to this
+	 * leg with ~$0.50 USDC per net outcome share — used for History tab badge only.
+	 */
+	polymarketSplitSettlementLikely?: boolean;
+	/**
 	 * Limitless `market.group.negRiskMarketId` — parent condition id for NegRisk
 	 * group legs. On-chain redeem uses `venue.adapter` when present.
 	 */

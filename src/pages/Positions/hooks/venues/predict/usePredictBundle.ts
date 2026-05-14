@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useAccountData } from "@/context/AccountDataContext";
+import type { AccountPositionsSlice } from "@/context/AccountDataContext";
 import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import { usePredictOrders } from "@/trading/predict/usePredictOrders";
 import { usePredictOrderMatches } from "@/trading/predict/usePredictOrderMatches";
@@ -42,6 +42,8 @@ export type UsePredictBundleArgs = {
 	signerAddress: string | null | undefined;
 	effectiveAccount: string | null;
 	activeTab: "positions" | "orders" | "history";
+	/** Predict.fun venue slice from `useAccountData()` — passed in so this module never calls `useAccountData` (avoids duplicate `AccountDataContext` module under Vite chunking). */
+	predictSlice: AccountPositionsSlice;
 };
 
 export type UsePredictBundleResult = {
@@ -68,9 +70,9 @@ export function usePredictBundle({
 	signerAddress,
 	effectiveAccount,
 	activeTab,
+	predictSlice,
 }: UsePredictBundleArgs): UsePredictBundleResult {
 	// Rows + fetch state come from `AccountDataProvider` (same TanStack cache as `usePredictPositions`).
-	const predictSlice = useAccountData().positions.predict;
 	const all = predictSlice.rows;
 	const predictQueryAddress = resolvePredictAccountAddress(
 		signerAddress,

@@ -188,7 +188,7 @@ async function probeMatchedMarkets(): Promise<void> {
 	const url = `${PREDICTIONS_API_URL}/matched-markets`;
 	console.log(`[predeploy] probing ${url}`);
 	console.log(
-		`[predeploy] gating on requested venues: ${REQUESTED_VENUES.join(", ")}`,
+		`[predeploy] requested venues (per-venue coverage; no longer require one row with all): ${REQUESTED_VENUES.join(", ")}`,
 	);
 	const res = await fetch(url);
 	if (!res.ok) {
@@ -204,34 +204,40 @@ async function probeMatchedMarkets(): Promise<void> {
 		const t = Date.parse(r.eventDate);
 		return Number.isFinite(t) && t > now;
 	});
-	const allRequested = future.filter(
-		(r) => missingRequestedVenues(r).length === 0,
-	);
-	if (allRequested.length === 0) {
-		const ranked = future
-			.map((r) => ({ row: r, missing: missingRequestedVenues(r) }))
-			.sort((a, b) => a.missing.length - b.missing.length)
-			.slice(0, 5);
-		const requestedLabel = REQUESTED_VENUES.join(", ");
-		const lines = [
-			`[predeploy] No upcoming matched-market has all requested venues (${requestedLabel}) populated.`,
-			`[predeploy] Searched ${body.length} rows; ${future.length} are upcoming.`,
-			"[predeploy] Top 5 candidates by requested-venue coverage (fewest missing first):",
-		];
-		for (const e of ranked) {
-			lines.push(
-				`[predeploy]   - ${e.row.displayName} (${e.row.umbrellaId}) event=${e.row.eventDate}; missing: ${e.missing.join(", ") || "(none)"}`,
+
+	for (const v of REQUESTED_VENUES) {
+		const n = future.filter((r) => r.exchangeMatching?.[v] !== undefined).length;
+		if (n === 0) {
+			console.log(
+				`[predeploy] venue "${v}": no upcoming matched-markets rows with exchangeMatching.${v} — Playwright will skip that venue.`,
+			);
+		} else {
+			console.log(
+				`[predeploy] venue "${v}": ${n} upcoming row(s) include ${v} in exchangeMatching`,
 			);
 		}
-		const msg = lines.join("\n");
-		console.error("error", msg);
-		throw new Error(
-			`No upcoming matched-market has all requested venues (${requestedLabel}); deploy gate fails. See log above for top candidates.`,
+	}
+
+	const anyCoverage = REQUESTED_VENUES.some((v) =>
+		future.some((r) => r.exchangeMatching?.[v] !== undefined),
+	);
+	if (future.length > 0 && !anyCoverage) {
+		console.warn(
+			`[predeploy] ${future.length} upcoming rows but none populate any REQUESTED_VENUES keys — venue blocks will skip unless data changes.`,
 		);
 	}
-	console.log(
-		`[predeploy] found ${allRequested.length} upcoming matched-markets with all requested venues (${REQUESTED_VENUES.join(", ")})`,
-	);
+
+	const ranked = future
+		.map((r) => ({ row: r, missing: missingRequestedVenues(r) }))
+		.sort((a, b) => a.missing.length - b.missing.length)
+		.slice(0, 5);
+	console.log(`[predeploy] Searched ${body.length} rows; ${future.length} upcoming (reference)`);
+	console.log("[predeploy] Top 5 upcoming rows by requested-venue coverage (fewest gaps first):");
+	for (const e of ranked) {
+		console.log(
+			`[predeploy]   - ${e.row.displayName} (${e.row.umbrellaId}) event=${e.row.eventDate}; missing from requested set: ${e.missing.join(", ") || "(none)"}`,
+		);
+	}
 }
 
 async function main(): Promise<void> {

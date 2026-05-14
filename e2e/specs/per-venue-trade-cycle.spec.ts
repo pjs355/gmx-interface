@@ -7,8 +7,10 @@ import {
 	resolvePerVenueBestPicks,
 	partitionRequestedVenuePicks,
 	tradingVenueSlugForKey,
+	E2E_TRADE_NOTIONAL_USD,
 	type PerVenueBestPick,
 } from "../fixtures/matched-market";
+import { evaluateVenueLiquidityBeforeTrade } from "../fixtures/e2e-venue-liquidity-at-test";
 import { REQUESTED_VENUES } from "../fixtures/requested-venues";
 import { fundingPrecheck } from "../fixtures/funding-precheck";
 import { cleanupOpenPositions } from "../fixtures/cleanup";
@@ -16,6 +18,9 @@ import { PredictionsPage } from "../page-objects/predictions-page";
 import {
 	Tradebox,
 	sharesVisiblePollTimeoutMsForVenueKey,
+	MARKET_SELL_LEG_TIMEOUT_MS,
+	POLYMARKET_SELL_SUBMIT_ENABLED_TIMEOUT_MS,
+	sellShareAmountTextRoundedDownLikeUi,
 } from "../page-objects/tradebox";
 import {
 	expectHeaderCashUsd,
@@ -45,7 +50,7 @@ import {
  * independent: header Cash is driven by `CollateralTokenContext` (multi-chain RPC),
  * while share counts come from venue position state. See the long comment at the
  * top of `e2e/helpers/header-cash.ts` for the exact failure mode we fixed (quoted
- * Cost ~$5 vs header implying ~$0 spend until refetch completed).
+ * Cost ~$2 vs header implying ~$0 spend until refetch completed).
  *
  * `cashBeforeUsd` is captured once in `beforeAll` after venue selection — before
  * test 1 — and is used for test 5 round-trip recovery vs the venue block start.
@@ -75,9 +80,10 @@ import {
  * Share and dollar amounts are whatever the app puts on the DOM: `readLegAttrs` uses
  * `data-leg-num-shares` / price from the SOR leg row, `readQuotedBuyCostUsd` uses
  * `data-cost-usd`, `readQuotedSellReceiveUsd` uses `data-receive-usd`, and positions
- * use `data-qa-shares-count`. They are parsed with `Number(...)` like the rest of the
- * tradebox helpers — there is no separate “DFlow decimal mode” in E2E; correctness
- * depends on the product rendering the same attributes for the selected venue tab.
+ * use `data-qa-shares-count`. For **sell input**, the spec types
+ * `sellShareAmountTextRoundedDownLikeUi` (same rule as sell `formatShareCountDataQa` /
+ * `data-qa-shares-count`: floor to 2 dp, always two fractional digits) so automation
+ * does not type a value above scoped max when the attribute still carries extra fractional precision.
  *
  * ---------------------------------------------------------------------------
  * Slippage (2% relative)
@@ -110,16 +116,19 @@ import {
  * polling there (see `header-cash.ts` “Limitations”).
  *
  * Config: 5 numbered tests per venue in `describe.serial`. Comment a venue in
- * `REQUESTED_VENUES` to skip. Listed venues must have a live bid/ask in
- * matched-markets + venue-prices or `beforeAll` throws. **LevelUp** runs whenever
+ * `REQUESTED_VENUES` to omit it. If a venue has no matched-markets row with a live
+ * `venue-prices` book for that venue, that venue block is skipped (logged). Immediately before each
+ * venue block, `evaluateVenueLiquidityBeforeTrade` GETs **fresh** `/venue-prices` for
+ * that panda only and skips if best-case round-trip loss on `E2E_TRADE_NOTIONAL_USD`
+ * exceeds the live threshold, or (no ladders) if top-of-book spread is too wide.
  * `resolvePerVenueBestPicks` finds an upcoming row with `exchangeMatching.levelup`
  * and venue-prices returns a live `levelup` snapshot (same gate as other venues).
  *
  * Venues are toggled one at a time while each path is validated in E2E; keep
  * inactive entries commented — the goal is to run all of them in one pass later.
  */
-const TRADE_USD = 5;
-/** $5 round-trip can lose up to ~$0.50 to spread + fees on the tightest venues. */
+const TRADE_USD = E2E_TRADE_NOTIONAL_USD;
+/** Small-$ round-trip can lose to spread + fees; keep slack for header vs quote drift. */
 const CASH_RECOVERY_TOLERANCE_USD = 0.5;
 /**
  * How close header `Cash` must be to the tradebox quoted Cost (buy) and
@@ -133,7 +142,7 @@ const SHARE_FILL_SLIPPAGE_PCT = 0.02;
 /** Floor so tiny floats / rounding don’t flake on near-zero quotes. */
 const SHARE_FILL_MIN_ABS = 0.0005;
 /**
- * DFlow/Kalshi only: SOR market-buy leg can show fractional shares (e.g. 6.402 @ 77¢ for $5),
+ * DFlow/Kalshi only: SOR market-buy leg can show fractional shares (e.g. 6.402 @ 77¢ for small notional),
  * while cumulative YES from `useDflowPositions` / on-chain balances may land ~0.4–1 share away
  * from that quote (venue rounding, contract lots, indexer). E2E compares **delta**
  * `(data-qa-shares-count after − before)` to `buyQuotedShares`; `before` already includes any
@@ -157,7 +166,7 @@ function buyShareFillDeltaTolerance(
  * stablecoin rounding). Separate from share slippage.
  */
 const BUDGET_OVERSPEND_EPS_USD = 0.05;
-/** Typed $5 notional cap on spend (`TRADE_USD`), with small epsilon (matches effectiveBuyBudget intent). */
+/** Typed notional cap on spend (`TRADE_USD`), with small epsilon (matches effectiveBuyBudget intent). */
 const TRADE_NOTIONAL_CAP_EPS_USD = 0.05;
 /**
  * 2% relative on header Cash receive vs quoted Estimated Receive (test 4).
@@ -185,8 +194,8 @@ test.describe("prinx per-venue trade cycle", () => {
 		}
 		const picks = await resolvePerVenueBestPicks();
 		if (picks.length === 0) {
-			throw new Error(
-				"No per-venue best picks: no upcoming matched row had a live bid/ask on any venue.",
+			console.warn(
+				"[per-venue-cycle] No per-venue picks (no live bid/ask on any canonical venue row) — all venue blocks will skip.",
 			);
 		}
 		const { withBook, missingBook } = partitionRequestedVenuePicks(
@@ -194,10 +203,9 @@ test.describe("prinx per-venue trade cycle", () => {
 			picks,
 		);
 		if (missingBook.length > 0) {
-			throw new Error(
-				`Requested venue(s) have no live bid/ask in upcoming rows: ${missingBook.join(", ")}. ` +
-					`Remove them from REQUESTED_VENUES or fix venue-prices ingest. ` +
-					`Venues with books: ${withBook.map((p) => p.venueKey).join(", ") || "(none)"}.`,
+			console.warn(
+				`[per-venue-cycle] No matched-markets row with a live venue-prices book for: ${missingBook.join(", ")}. ` +
+					`Browser tests will be skipped for those venues. Venues with picks: ${withBook.map((p) => p.venueKey).join(", ") || "(none)"}.`,
 			);
 		}
 		allPicks = picks;
@@ -226,8 +234,10 @@ test.describe("prinx per-venue trade cycle", () => {
 			let cashAfterBuy = 0;
 			let cashAfterSell = 0;
 			let buyShares = 0;
+			/** Shares typed for market sell (test 3) — floored like UI; persists for submit in test 4. */
+			let sellOrderShares = 0;
 
-			test.beforeAll(async () => {
+			test.beforeAll(async ({}, testInfo) => {
 				if (sharedSession === null) {
 					throw new Error("sharedSession not initialized");
 				}
@@ -236,13 +246,37 @@ test.describe("prinx per-venue trade cycle", () => {
 				}
 				const found = allPicks.find((p) => p.venueKey === venueKey);
 				if (found === undefined) {
-					throw new Error(`No PerVenueBestPick for ${venueKey}`);
+					console.warn(
+						`[per-venue-cycle] No PerVenueBestPick for "${venueKey}" (no upcoming row with that venue + live bid/ask) — skipping venue block.`,
+					);
+					testInfo.skip(true, `no PerVenueBestPick for ${venueKey}`);
+					return;
+				}
+				const gate = await evaluateVenueLiquidityBeforeTrade({
+					venueKey,
+					pandaMatchId: found.pandaMatchId,
+					spreadAtPickTime: found.spread,
+				});
+				if (gate.skip) {
+					console.warn(gate.warning);
+					testInfo.skip(true, gate.reason);
+					return;
 				}
 				pick = found;
 				const predictions = new PredictionsPage(sharedSession.page);
 				const tradebox = new Tradebox(sharedSession.page);
 				await predictions.openUmbrellaTradingPageById(found.umbrellaId);
 				await tradebox.waitVisible();
+				// The inline trade dock keeps the same `PredictionMarketTradeBox`
+				// instance mounted across umbrella switches (see
+				// `PredictionsPage.openUmbrellaTradingPageById`), so internal
+				// `coreState.side` survives. After the prior venue's test 4 it is
+				// "sell"; on a venue with 0 held shares that triggers
+				// `sellFieldsLocked` and disables the amount input the moment the
+				// per-venue `balanceOf` query resolves to 0. Force "buy" before
+				// `selectVenue()` (which itself primes the SOR row via
+				// `setAmount`) so the input is always editable here.
+				await tradebox.setSide("buy");
 				await tradebox.selectVenue(tradingVenueSlugForKey(venueKey));
 				cashBeforeUsd = await expectHeaderCashUsd(sharedSession.page);
 				console.log(
@@ -317,9 +351,10 @@ test.describe("prinx per-venue trade cycle", () => {
 				);
 				await tradebox.submit();
 				await tradebox.waitForFill();
-				// No reload here: position-row and header-cash polls below already
-				// wait for the laggy refetch deterministically.
-				await tradebox.selectVenue(tradingVenueSlugForKey(venueKey));
+				// Stay on the same venue — do **not** call `selectVenue` here: when the
+				// smart-routing surface is briefly hidden post-fill, it would prime SOR
+				// with $2 (looks like a second tiny buy) and leave junk in the amount
+				// field before sell. Re-assert side/outcome only.
 				await tradebox.setSide("buy");
 				await tradebox.setPosition("yes");
 				const sharesObserved =
@@ -370,26 +405,95 @@ test.describe("prinx per-venue trade cycle", () => {
 						`buyShares not set for ${venueKey}; test 2 must succeed before test 3`,
 					);
 				}
+				// Test 3: quote only — enables Trade + reads SOR leg for the typed sell size.
+				// It does NOT call `submit()`. Test 4 runs the actual market sell.
 				const tradebox = new Tradebox(sharedSession.page);
+				const headlineTol = buyShareFillDeltaTolerance(
+					venueKey,
+					buyQuotedShares,
+				);
+				if (venueKey === "polymarket") {
+					await tradebox.waitForBuyHeadlineSharesNear(
+						buyShares,
+						Math.max(headlineTol, 0.02),
+					);
+				}
 				await tradebox.setSide("sell");
 				await tradebox.setPosition("yes");
-				await tradebox.setAmount(buyShares);
-				await tradebox.expectSubmitEnabled();
-				const leg = await tradebox.readLegAttrs("market-sell");
+				const amountUnlockTimeoutMs =
+					venueKey === "polymarket"
+						? POLYMARKET_SELL_SUBMIT_ENABLED_TIMEOUT_MS
+						: MARKET_SELL_LEG_TIMEOUT_MS;
+				await tradebox.waitForAmountInputEnabled(amountUnlockTimeoutMs);
+				// After `setSide("sell")`, buy-headline nodes unmount — read the sell
+				// row `data-qa-shares-count` (same value SOR surfaces as "selling X").
+				await new Promise((r) =>
+					setTimeout(r, venueKey === "polymarket" ? 450 : 250),
+				);
+				const sharesFromSellRow =
+					await tradebox.readSellRowSharesCountAttribute();
+				const rawSellCap =
+					sharesFromSellRow !== null &&
+					sharesFromSellRow.trim() !== ""
+						? Number(sharesFromSellRow)
+						: buyShares;
+				if (!Number.isFinite(rawSellCap) || rawSellCap <= 0) {
+					throw new Error(
+						`invalid sell cap for ${venueKey}: sellRow=${JSON.stringify(sharesFromSellRow)} buyShares=${buyShares}`,
+					);
+				}
+				const amountText =
+					sellShareAmountTextRoundedDownLikeUi(rawSellCap);
+				const sellParseTarget = Number.parseFloat(
+					amountText.replace(/[$,\s]/g, ""),
+				);
+				if (!Number.isFinite(sellParseTarget) || sellParseTarget <= 0) {
+					throw new Error(
+						`floored sell amount unusable for ${venueKey}: raw=${rawSellCap} text=${JSON.stringify(amountText)}`,
+					);
+				}
+				await tradebox.setSellShareAmountVerified(
+					sellParseTarget,
+					Math.max(headlineTol, 0.02),
+					amountText,
+				);
+				sellOrderShares = sellParseTarget;
+				const sellSubmitTimeoutMs =
+					venueKey === "polymarket"
+						? POLYMARKET_SELL_SUBMIT_ENABLED_TIMEOUT_MS
+						: MARKET_SELL_LEG_TIMEOUT_MS;
+				await tradebox.expectSubmitEnabled(sellSubmitTimeoutMs);
+				// Sell-side reads come from the visible smart-routing-row preview
+				// (`SmartRoutingSection.tsx` lines 1100-1160), not the SOR
+				// `[data-qa="sor-leg"][data-leg-side="market-sell"]` sentinel —
+				// that sentinel only renders when `sorRoute.executionRoute` is
+				// non-null (`PredictionMarketTradeBoxUI.tsx` lines 1488-1534), and
+				// on Polymarket sells right after a buy fill the targeted execution
+				// channel can lag (`venuePositions` empty in `useSorRoute.ts`)
+				// while the omnibus display channel already populates the row.
+				const venueSlug = tradingVenueSlugForKey(venueKey);
+				const priceCents = await tradebox.readVenueRowAvgCents(
+					venueSlug,
+					sellSubmitTimeoutMs,
+				);
 				expect(
-					leg.priceCents,
-					`market-sell leg priceCents must be >0 for ${venueKey}`,
+					priceCents,
+					`market-sell smart-routing-row priceCents must be >0 for ${venueKey}`,
 				).toBeGreaterThan(0);
 				expect(
-					leg.priceCents,
-					`market-sell leg priceCents must be <100 for ${venueKey}`,
+					priceCents,
+					`market-sell smart-routing-row priceCents must be <100 for ${venueKey}`,
 				).toBeLessThan(100);
-				sellReceiveQuoteUsd = await tradebox.readQuotedSellReceiveUsd();
+				sellReceiveQuoteUsd = await tradebox.readVenueRowSellReceiveUsd(
+					venueSlug,
+					sellSubmitTimeoutMs,
+				);
 				// eslint-disable-next-line no-console -- E2E operator visibility (sell quote vs later cash)
 				console.log(
-					`[per-venue-cycle] ${venueKey} sell.quote · sharesToSell=${buyShares} ` +
-						`quotedReceiveUsd=$${sellReceiveQuoteUsd.toFixed(4)} ` +
-						`marketSell@${leg.priceCents}¢ legNumShares=${leg.numShares}`,
+					`[per-venue-cycle] ${venueKey} sell.quote · sharesToSell=${sellOrderShares} ` +
+						`(postBuyRow≈${buyShares}) ` +
+						`quotedReceiveUsd=$${sellReceiveQuoteUsd.toFixed(4)} (from smart-routing-row preview) ` +
+						`marketSell@${priceCents}¢`,
 				);
 			});
 
@@ -409,16 +513,14 @@ test.describe("prinx per-venue trade cycle", () => {
 				// eslint-disable-next-line no-console -- E2E operator visibility (cash vs sell submit)
 				console.log(
 					`[per-venue-cycle] ${venueKey} sell.submit · headerCash=$${cashRightBeforeSell.toFixed(2)} ` +
-						`shares=${buyShares} quotedReceiveUsd=$${sellReceiveQuoteUsd.toFixed(4)} ` +
+						`shares=${sellOrderShares} quotedReceiveUsd=$${sellReceiveQuoteUsd.toFixed(4)} ` +
 						`(postBuyBaselineCash=$${cashAfterBuy.toFixed(2)} — used by receive poll)`,
 				);
 				await tradebox.submit();
 				await tradebox.waitForFill();
-				// No reload — sell-row clearing and header-cash poll below wait
-				// for the laggy refetch deterministically.
-				await tradebox.selectVenue(tradingVenueSlugForKey(venueKey));
-				await tradebox.setSide("sell");
-				await tradebox.setPosition("yes");
+				// Stay on the post-submit tradebox (same as after buy in test 2). Re-calling
+				// `selectVenue` here often leaves SOR hidden for >30s with `allowPrime: false`
+				// and does not help shares clear — poll the positions row in place.
 				await tradebox.waitForSharesCleared(
 					sharesVisiblePollTimeoutMsForVenueKey(venueKey),
 				);

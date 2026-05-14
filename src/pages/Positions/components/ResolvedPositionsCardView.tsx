@@ -5,6 +5,7 @@ import { triggerFireworksForElement } from "../utils/Fireworks";
 import { useClaimForVenue } from "@/helpers/claimEarnings";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
+import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
 import {
@@ -190,7 +191,7 @@ export default function ResolvedPositionsCardView({
 													Shares
 												</div>
 												<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
-													{parseFloat(row.totalShares.toFixed(2))}
+													{formatShareCountDisplay(row.totalShares)}
 												</div>
 											</div>
 											<div style={{ flex: 1, textAlign: "right" }}>

@@ -1,5 +1,8 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
+import type {
+	UmbrellaExchangeMatching,
+	UmbrellaExchangeMatchingLimitless,
+} from "@/services/api/umbrellaDataService";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
 import type { MatchedMarket } from "@/types/odds-monitor";
@@ -37,6 +40,11 @@ export interface TradeBoxProps {
 	umbrellaId?: string;
 	/** When GET /matched-markets omits limitless but umbrella has it (e.g. Railway vs local). */
 	limitlessMappingFromUmbrella?: UmbrellaExchangeMatchingLimitless | null;
+	/**
+	 * Umbrella `exchangeMatching.predictFun` — used for post-trade share sync identity
+	 * (`tokenIdA` / `tokenIdB`); not merged with odds-monitor rows.
+	 */
+	predictFunMappingFromUmbrella?: UmbrellaExchangeMatching["predictFun"] | null;
 	/** Umbrella list title — used to derive "Team A vs Team B" when question is only "Match Winner". */
 	umbrellaDisplayName?: string;
 	initialPosition?: "yes" | "no";

@@ -78,11 +78,9 @@ flowchart TB
 
   subgraph userLayer [LevelUp on-chain reads]
     UDP[UserDataProvider]
-    SG[The Graph LevelUp subgraph]
     RPC_BAL[Base RPC balanceOf CTF positions]
     RPC_APP[Base RPC allowance checks]
 
-    SG --> UDP
     RPC_BAL --> UDP
     RPC_APP --> UDP
   end
@@ -127,8 +125,8 @@ flowchart TB
 
 | Pulled from | Owner | Primary API / mechanism | Used by (examples) |
 |-------------|-------|-------------------------|-------------------|
-| LevelUp subgraph account entity | **`UserDataContext`** `tokenBalances: Map<marketId, {yes,no}>` | `subgraphService` → mapped to markets from `PredictionDataContext` | `getTokenBalance(marketId)`, **`useTradeBoxShareBalances`** (LevelUp leg), **`PortfolioProvider`** (marks), Positions assemblers that read `useUserData()` |
-| Refresh / subgraph lag | **`UserDataContext`** `refreshTokenPositions()` | Base **RPC** `balanceOf` per outcome token (when subgraph path insufficient) | Trade box after fills; manual refresh flows |
+| LevelUp outcome token balances | **`UserDataContext`** `tokenBalances: Map<marketId, {yes,no}>` | Base **RPC** `balanceOf` on the CTF contract for yes/no IDs from `PredictionDataContext`; mapped by market `_id` | `getTokenBalance(marketId)`, **`useTradeBoxShareBalances`** (LevelUp leg), **`PortfolioProvider`** (marks), Positions assemblers that read `useUserData()` |
+| Manual refresh | **`UserDataContext`** `refreshTokenPositions()` | Same **RPC** `balanceOf` pass over known outcome tokens | Trade box after fills; manual refresh flows |
 
 ---
 

@@ -1,20 +1,32 @@
 import type { RequiredVenueKey } from "./matched-market";
 
 /**
- * Single source of truth for which venues every E2E spec should gate on.
+ * Single source of truth for which venues the E2E suite *attempts*.
  *
- * Comment a venue out here to skip it across the suite — both
- * `00-spread-cap.spec.ts` (spread cap) and `per-venue-trade-cycle.spec.ts`
- * (full buy/sell round-trip) read from this list. Specs MUST NOT enforce
- * spreads or run trades for venues that are not in this array.
+ * Comment a venue out to omit it entirely.
  *
- * Listed venues must have a live bid/ask in matched-markets + venue-prices,
- * or the spec setup throws naming the missing venue.
+ * Deployment is **not** blocked when no single upcoming matched row lists every
+ * venue: `scripts/predeploy.ts` only logs per-venue coverage. Each venue is
+ * evaluated separately: if there is no upcoming `exchangeMatching.{venue}` plus
+ * live bid/ask in `venue-prices`, that venue’s tests are **skipped** with a log
+ * line (`00-spread-cap.spec.ts`, `per-venue-trade-cycle.spec.ts`).
+ *
+ * Before each venue’s browser block, `evaluateVenueLiquidityBeforeTrade` GETs
+ * fresh `/venue-prices/:panda` and may skip if best-case round-trip loss on
+ * `E2E_TRADE_NOTIONAL_USD` exceeds `MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD`, or
+ * (without ladders) top-of-book spread is too wide — see
+ * `e2e/fixtures/e2e-venue-liquidity-at-test.ts`.
+ *
+ * Local dev: if every row is skipped because matched-markets `eventDate` is missing
+ * or venue-prices uses `status: "no_liquidity"` while TOB still exists, see
+ * `venueSnapshotStatusAllowsBookProbe` in `e2e-venue-book-depth.ts`. To run a
+ * specific umbrella, set `E2E_PIN_UMBRELLA_ID=<mongo _id>` when invoking Playwright
+ * (row must still appear in GET `{PREDICTIONS_API_URL}/matched-markets`).
  */
 export const REQUESTED_VENUES: RequiredVenueKey[] = [
-	//"polymarket",
+	"polymarket",
 	"predictFun",
-	// "limitless",
 	// "dflow",
 	// "levelup",
+	// "limitless",
 ];

@@ -309,6 +309,8 @@ export default function Positions() {
 				venueHistoryRawItemsForDebug={venueHistoryRawItemsForDebug}
 				catalogUmbrellas={historyCatalogUmbrellas}
 				historyResolveStage={historyResolveStage}
+				resolvedUmbrellaPositions={resolvedUmbrellaPositions}
+				openUmbrellaPositions={umbrellaPositions}
 			/>
 		) : (
 			<HistoryCardView
@@ -319,6 +321,8 @@ export default function Positions() {
 				venueHistoryRawItemsForDebug={venueHistoryRawItemsForDebug}
 				catalogUmbrellas={historyCatalogUmbrellas}
 				historyResolveStage={historyResolveStage}
+				resolvedUmbrellaPositions={resolvedUmbrellaPositions}
+				openUmbrellaPositions={umbrellaPositions}
 			/>
 		);
 

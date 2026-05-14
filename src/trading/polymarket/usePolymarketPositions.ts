@@ -5,8 +5,16 @@ import type {
 } from "@/types/trading/venuePosition";
 
 const POLYMARKET_DATA_API = "https://data-api.polymarket.com";
-/** Avoid an indefinite React Query pending state when Polymarket's API hangs. */
-const POLY_POSITIONS_FETCH_MS = 25_000;
+/**
+ * Avoid an indefinite React Query pending state when Polymarket's API hangs.
+ * 60 s gives the in-page fetch room to complete in a single attempt under the
+ * connection-pool pressure that follows a LiFi prefund — a hard reload (fresh
+ * connection pool) is usually back in ~10 s, but the same fetch from a
+ * long-lived tab can stretch to 30–45 s. The previous 25 s cap was tripping
+ * the global `retry: 1`, leaving the query in error state and the post-trade
+ * spinner up for ~2 minutes.
+ */
+const POLY_POSITIONS_FETCH_MS = 60_000;
 
 function toVenuePosition(raw: PolymarketDataApiPosition): VenuePosition {
 	return {

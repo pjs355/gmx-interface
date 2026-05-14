@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { Address, createPublicClient, erc20Abi, formatUnits, http } from "viem";
+import {
+	Address,
+	createPublicClient,
+	erc20Abi,
+	formatUnits,
+	getAddress,
+	http,
+} from "viem";
 import { bsc } from "viem/chains";
 import { AddressesByChainId, ChainId } from "@predictdotfun/sdk";
 import { BSC_RPC_URL } from "@/config/rpc";
@@ -20,6 +27,40 @@ const erc1155BalanceAbi = [
 
 function client() {
 	return createPublicClient({ chain: bsc, transport: http(BSC_RPC_URL) });
+}
+
+/**
+ * Non-hook ERC-1155 outcome balance read. Mirrors
+ * `usePredictOutcomeShareOnChain` but callable from outside React (the SOR
+ * leg executor uses this on the sell path to clamp `leg.shares` to what the
+ * chain says is actually transferable, the same way Polymarket's
+ * `readPolymarketSafeCtfBalanceWei` is used for the CTF clamp). Returns the
+ * raw 18-decimal ERC-1155 balance.
+ */
+export async function readPredictOutcomeShareWei(args: {
+	account: string;
+	tokenId: string;
+	isNegRisk: boolean;
+	isYieldBearing: boolean;
+}): Promise<bigint> {
+	const account = getAddress(args.account.trim()) as Address;
+	const trimmedId = args.tokenId.trim();
+	if (!/^\d+$/.test(trimmedId)) {
+		throw new Error(
+			`readPredictOutcomeShareWei: invalid tokenId "${args.tokenId}"`,
+		);
+	}
+	const id = BigInt(trimmedId);
+	const chainId = ChainId.BnbMainnet;
+	const ctf = AddressesByChainId[chainId][
+		predictCtfKey(args.isNegRisk, args.isYieldBearing)
+	] as Address;
+	return client().readContract({
+		address: ctf,
+		abi: erc1155BalanceAbi,
+		functionName: "balanceOf",
+		args: [account, id],
+	});
 }
 
 export function usePredictUsdtBalance(address: string | undefined | null, enabled: boolean) {

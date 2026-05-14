@@ -9,6 +9,7 @@ import {
 	getPredictPositionRowLabel,
 	isGenericBinaryOutcomeLabel,
 } from "@/trading/predict/predictPositionLabel";
+import { floorSharesAtDecimals } from "@/trading/utils/floorShares";
 
 interface TradeHistoryListProps {
 	orders: ProcessedOrder[];
@@ -78,7 +79,12 @@ export default function TradeHistoryList({
 	const formatQuantity = (qty: number, showSign: boolean = false): string => {
 		if (!isFinite(qty)) return "—";
 		const absQty = Math.abs(qty);
-		const formatted = absQty.toLocaleString("en-US", {
+		// Floor (never round half-up) at 2 dp so a fractional position whose
+		// raw value is e.g. 3.3799999 always renders "3.37", never "3.38".
+		// `absQty % 1 === 0` keeps whole-number rows showing as "3" rather
+		// than "3.00" — pre-existing display behavior.
+		const flooredAbs = floorSharesAtDecimals(absQty, 2);
+		const formatted = flooredAbs.toLocaleString("en-US", {
 			minimumFractionDigits: absQty % 1 === 0 ? 0 : 2,
 			maximumFractionDigits: 2,
 		});

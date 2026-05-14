@@ -151,6 +151,31 @@ export function formatShareCountDisplay(n: number): string {
 	}).format(floored);
 }
 
+/**
+ * Two-decimal string floored to centi-shares for sell `data-qa-shares-count` and E2E caps.
+ * Always includes fractional digits (`20` → `"20.00"`) so the attribute matches typed sell amounts.
+ */
+export function formatShareCountDataQa(n: number): string {
+	if (!Number.isFinite(n) || n < 0) return String(n);
+	const hundredths = Math.floor(n * 100 + 1e-9);
+	const whole = Math.trunc(hundredths / 100);
+	const frac = hundredths % 100;
+	return `${whole}.${frac.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Integer-only sell typing (no `.` in the amount field) should apply only when
+ * **every** venue line in the sell breakdown is LevelUp or DFlow. Umbrellas that
+ * merely *match* Kalshi on the board must not strip decimals while the user
+ * only holds Polymarket / Predict / Limitless fractional shares.
+ */
+export function sellBreakdownIsOnlyWholeContractVenues(
+	rows: readonly { key: string }[],
+): boolean {
+	if (rows.length === 0) return false;
+	return rows.every((r) => r.key === "levelup" || r.key === "dflow");
+}
+
 /** Clamp sell share quantity to scoped max; optionally floor for whole-share venues. */
 export function clampSellSharesNumeric(
 	n: number,
@@ -169,18 +194,24 @@ export function clampSellSharesNumeric(
 	return v;
 }
 
-/** String to pass to amount state after sell share clamp (stable decimals when fractional). */
+/** String to pass to amount state after sell share clamp — max 2 fractional digits, truncated down (matches `formatShareCountDisplay` / position headline). */
 export function clampedSellSharesAmountString(
 	clamped: number,
 	requiresWholeShares: boolean,
 ): string {
 	if (!Number.isFinite(clamped)) return "";
 	if (requiresWholeShares) return String(Math.round(clamped));
-	if (Number.isInteger(clamped) || Math.abs(clamped - Math.round(clamped)) < 1e-9) {
+	if (
+		Number.isInteger(clamped) ||
+		Math.abs(clamped - Math.round(clamped)) < 1e-9
+	) {
 		return String(Math.round(clamped));
 	}
-	const t = Math.floor(clamped * 1e8) / 1e8;
-	return String(t);
+	const hundredths = Math.floor(clamped * 100 + 1e-9);
+	const whole = Math.trunc(hundredths / 100);
+	const frac = hundredths % 100;
+	if (frac === 0) return String(whole);
+	return `${whole}.${frac.toString().padStart(2, "0")}`;
 }
 
 // Function to check if user has sufficient YES/NO token shares for sell orders

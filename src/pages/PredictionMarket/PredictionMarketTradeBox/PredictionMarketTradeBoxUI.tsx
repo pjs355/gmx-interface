@@ -42,6 +42,7 @@ import {
   formatShareCountDisplay,
   clampSellSharesNumeric,
   clampedSellSharesAmountString,
+  sellBreakdownIsOnlyWholeContractVenues,
 } from "./checkBalances";
 import {
 	hexToRgba,
@@ -260,9 +261,18 @@ export default function PredictionMarketTradeBoxUI({
   const tradeInteractionLocked =
     sorExecution.isExecuting || state.isLoading;
   const venueConfig = getVenueConfig(tradingVenue);
-  /** Integer-only share field: venues with `requiresWholeShares` in `venueConfig` (LevelUp, Kalshi/DFlow). */
+  /**
+   * Integer share amounts: LevelUp / DFlow **single-venue** tabs, or All Markets
+   * when the **held** breakdown is only those venues (not "Poly + DFlow exists on
+   * the fixture" while the wallet is 6.03 Poly only).
+   */
+  const matchedVenuesNeedWholeShareContracts =
+    tradingVenue === "all" &&
+    matchedVenues != null &&
+    (matchedVenues.has("levelup") || matchedVenues.has("dflow")) &&
+    sellBreakdownIsOnlyWholeContractVenues(shareBalances.sellVenueBreakdown);
   const shareAmountRequiresWholeContracts =
-    venueConfig.requiresWholeShares &&
+    (venueConfig.requiresWholeShares || matchedVenuesNeedWholeShareContracts) &&
     (orderType === "limit" || (orderType === "market" && side === "sell"));
 
   const userSellSharesByVenue = useMemo((): Partial<Record<SorVenue, number>> => {
@@ -991,12 +1001,19 @@ export default function PredictionMarketTradeBoxUI({
                   return;
                 }
               } else {
-                // USD (market buy only in UI): 2 dp. Shares (sell, limit, All buy amount): up to 8 dp.
+                // USD (market buy only in UI): 2 dp. Sell shares: 2 dp (truncate-only UX
+                // matches position headline; never show 6–8 dp from chain). Other share
+                // modes (e.g. limit buy sizing): up to 8 dp.
                 const decimalCount = (cleanValue.match(/\./g) || []).length;
                 if (decimalCount > 1) {
                   return;
                 }
-                const maxFractionDigits = amountInputShowsDollarPrefix ? 2 : 8;
+                const maxFractionDigits =
+                  amountInputShowsDollarPrefix
+                    ? 2
+                    : side === "sell"
+                      ? 2
+                      : 8;
                 const frac = cleanValue.includes(".") ? cleanValue.split(".")[1] : "";
                 if (frac && frac.length > maxFractionDigits) {
                   return;

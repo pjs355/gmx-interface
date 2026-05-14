@@ -1,14 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { Contract, JsonRpcProvider, formatUnits } from "ethers";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import {
-	getUserAccount,
-	getUserTransfers,
-	fromMicroUnits,
-	normalizeWalletAddress,
-	type SubgraphAccount,
-	type UserTransfers,
-} from "@/services/subgraph/subgraphService";
+import { getUSDCAddress } from "@/config/addresses";
+import { DEFAULT_RPC_URL } from "@/config/rpc";
+import { usePredictionData } from "@/context/PredictionDataContext";
+import { fetchNonZeroCtfBalancesRpc } from "@/helpers/fetchNonZeroCtfBalancesRpc";
+import { fromMicroUnits } from "@/helpers/ctfMicroUnits";
 import AccountHealthChecker, {
 	HealthStatusIndicator,
 	type AccountHealthResult,
@@ -39,29 +37,14 @@ interface ProfilesApiResponse {
 	error?: string;
 }
 
-interface LeaderboardEntry {
-	wallet: string;
-	username?: string | null;
-	totalReturnUSD: number;
-	effectiveCostUSD: number;
-	totalReturnText: string;
-	numTrades: number;
-	numMarkets: number;
-	updatedAt: string;
-}
-
 interface EnrichedProfile extends Profile {
 	smartWalletAddress: string | null;
 	portfolioValue: number;
 	usdcBalance: number;
-	tradingVolumeFromLeaderboard: number;
-	pnl: number;
-	pnlText: string;
-	numTrades: number;
-	lastTradeDate: Date | null;
+	profileActivityDate: Date | null;
 }
 
-type SortField = "lastTrade" | "portfolio" | "usdc" | "volume" | "pnl" | "trades";
+type SortField = "profileActivity" | "portfolio" | "usdc";
 type SortDirection = "asc" | "desc";
 
 /**
@@ -94,13 +77,19 @@ function getSmartWalletAddress(profile: Profile): string | null {
 
 export default function ListProfiles({ onView }: ListProfilesProps) {
 	const { getAccessToken } = usePrivy();
+	const {
+		umbrellas,
+		getAllQuestionsForUmbrella,
+		resolvedMarketsByUmbrella,
+	} = usePredictionData();
 	const [profiles, setProfiles] = useState<Profile[]>([]);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
-	const [leaderboardData, setLeaderboardData] = useState<Map<string, LeaderboardEntry>>(new Map());
-	const [subgraphData, setSubgraphData] = useState<Map<string, { account: SubgraphAccount | null; transfers: UserTransfers | null }>>(new Map());
-	const [subgraphLoading, setSubgraphLoading] = useState<boolean>(false);
-	const [sortField, setSortField] = useState<SortField>("lastTrade");
+	const [onChainEnrichment, setOnChainEnrichment] = useState<
+		Map<string, { usdcBalance: number; portfolioEstimate: number }>
+	>(new Map());
+	const [onChainLoading, setOnChainLoading] = useState<boolean>(false);
+	const [sortField, setSortField] = useState<SortField>("portfolio");
 	const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 	const [healthResults, setHealthResults] = useState<Map<string, AccountHealthResult>>(new Map());
 	const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -126,6 +115,24 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 	const handleHealthResults = useCallback((results: Map<string, AccountHealthResult>) => {
 		setHealthResults(results);
 	}, []);
+
+	const knownCtfTokenIds = useMemo(() => {
+		const ids: string[] = [];
+		umbrellas.forEach(u => {
+			const qs = getAllQuestionsForUmbrella(u._id) || [];
+			qs.forEach((market: any) => {
+				if (market?.yesTokenId) ids.push(String(market.yesTokenId));
+				if (market?.noTokenId) ids.push(String(market.noTokenId));
+			});
+		});
+		Object.values(resolvedMarketsByUmbrella).forEach((markets: any[]) => {
+			markets.forEach((market: any) => {
+				if (market?.yesTokenId) ids.push(String(market.yesTokenId));
+				if (market?.noTokenId) ids.push(String(market.noTokenId));
+			});
+		});
+		return ids;
+	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella]);
 
 	// Fetch profiles from admin API
 	useEffect(() => {
@@ -191,210 +198,130 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 		};
 	}, [getAccessToken]);
 
-	// Fetch leaderboard data
-	useEffect(() => {
-		let mounted = true;
-		async function fetchLeaderboard() {
-			try {
-				const base = getPredictionApiBaseUrl();
-				const resp = await fetch(`${base}/leaderboard?limit=1000`);
-				const json = await resp.json().catch(() => ({} as any));
-				
-				if (!resp.ok || json?.success === false) {
-					console.warn("Failed to fetch leaderboard data");
-					return;
-				}
-
-				let entries: any[] = [];
-				if (json && json.data && Array.isArray(json.data.entries)) {
-					entries = json.data.entries;
-				} else if (json && Array.isArray(json.data)) {
-					entries = json.data;
-				} else if (Array.isArray(json)) {
-					entries = json;
-				}
-
-				if (mounted) {
-					const leaderboardMap = new Map<string, LeaderboardEntry>();
-					entries.forEach((e: any) => {
-						const wallet = normalizeWalletAddress(String(e.wallet || ""));
-						leaderboardMap.set(wallet, {
-							wallet,
-							username: e.username ?? null,
-							totalReturnUSD: Number(e.totalReturnUSD || 0),
-							effectiveCostUSD: Number(e.effectiveCostUSD || 0),
-							totalReturnText: String(e.totalReturnText || ""),
-							numTrades: Number(e.numTrades || 0),
-							numMarkets: Number(e.numMarkets || 0),
-							updatedAt: String(e.updatedAt || ""),
-						});
-					});
-					setLeaderboardData(leaderboardMap);
-				}
-			} catch (err) {
-				console.error("Error fetching leaderboard:", err);
-			}
-		}
-		fetchLeaderboard();
-		return () => {
-			mounted = false;
-		};
-	}, []);
-
-	// Fetch subgraph data for each profile's smart wallet
 	useEffect(() => {
 		if (profiles.length === 0) return;
 
 		let mounted = true;
-		async function fetchSubgraphData() {
-			setSubgraphLoading(true);
-			const newSubgraphData = new Map<string, { account: SubgraphAccount | null; transfers: UserTransfers | null }>();
 
-			// Get all smart wallet addresses using helper function
+		async function loadRpcEnrichment(): Promise<void> {
 			const smartWallets: { profileId: string; address: string }[] = [];
 			profiles.forEach((profile) => {
 				const address = getSmartWalletAddress(profile);
 				if (address) {
-					smartWallets.push({
-						profileId: profile._id,
-						address,
-					});
+					smartWallets.push({ profileId: profile._id, address });
 				}
 			});
-			
+
 			console.log("[ListProfiles] Found smart wallets:", smartWallets.length, "out of", profiles.length, "profiles");
 
-			// Fetch subgraph data in batches to avoid rate limiting
-			const BATCH_SIZE = 5;
-			for (let i = 0; i < smartWallets.length; i += BATCH_SIZE) {
-				const batch = smartWallets.slice(i, i + BATCH_SIZE);
-				
-				await Promise.all(
-					batch.map(async ({ profileId, address }) => {
-						try {
-							const [account, transfers] = await Promise.all([
-								getUserAccount(address),
-								getUserTransfers(address, 10), // Only need recent transfers for last trade date
-							]);
-							
-							if (mounted) {
-								newSubgraphData.set(profileId, { account, transfers });
-							}
-						} catch (err) {
-							console.error(`Error fetching subgraph data for ${address}:`, err);
-							if (mounted) {
-								newSubgraphData.set(profileId, { account: null, transfers: null });
-							}
-						}
-					})
-				);
-
-				// Small delay between batches to avoid rate limiting
-				if (i + BATCH_SIZE < smartWallets.length) {
-					await new Promise((resolve) => setTimeout(resolve, 300));
+			if (smartWallets.length === 0) {
+				if (mounted) {
+					setOnChainEnrichment(new Map());
+					setOnChainLoading(false);
 				}
+				return;
 			}
 
-			if (mounted) {
-				setSubgraphData(newSubgraphData);
-				setSubgraphLoading(false);
+			setOnChainLoading(true);
+
+			try {
+				const provider = new JsonRpcProvider(DEFAULT_RPC_URL);
+				const usdcContract = new Contract(
+					getUSDCAddress(),
+					[
+						"function balanceOf(address account) view returns (uint256)",
+						"function decimals() view returns (uint8)",
+					],
+					provider,
+				);
+				let usdcDecimals: number;
+				try {
+					usdcDecimals = Number(await usdcContract.decimals());
+				} catch (err) {
+					console.error("error", err);
+					throw err;
+				}
+
+				const merged = new Map<string, { usdcBalance: number; portfolioEstimate: number }>();
+				const BATCH_SIZE = 5;
+
+				for (let i = 0; i < smartWallets.length; i += BATCH_SIZE) {
+					const batch = smartWallets.slice(i, i + BATCH_SIZE);
+
+					await Promise.all(
+						batch.map(async ({ profileId, address }) => {
+							try {
+								const rawUsdc = await usdcContract.balanceOf(address);
+								const usdcBalanceNum = Number.parseFloat(formatUnits(rawUsdc, usdcDecimals));
+								let portfolioEstimate = 0;
+								if (knownCtfTokenIds.length > 0) {
+									const nonzero = await fetchNonZeroCtfBalancesRpc(provider, address, knownCtfTokenIds);
+									portfolioEstimate = nonzero.reduce((acc, row) => {
+										return acc + Number(fromMicroUnits(row.balance)) * 0.5;
+									}, 0);
+								}
+								if (mounted) {
+									merged.set(profileId, { usdcBalance: usdcBalanceNum, portfolioEstimate });
+								}
+							} catch (err) {
+								console.error("error", err);
+								if (mounted) {
+									merged.set(profileId, { usdcBalance: 0, portfolioEstimate: 0 });
+								}
+							}
+						}),
+					);
+
+					if (i + BATCH_SIZE < smartWallets.length) {
+						await new Promise((resolve) => setTimeout(resolve, 300));
+					}
+				}
+
+				if (mounted) {
+					setOnChainEnrichment(merged);
+				}
+			} catch (err) {
+				console.error("error", err);
+				if (mounted) {
+					setOnChainEnrichment(new Map());
+				}
+			} finally {
+				if (mounted) {
+					setOnChainLoading(false);
+				}
 			}
 		}
 
-		fetchSubgraphData();
+		void loadRpcEnrichment();
+
 		return () => {
 			mounted = false;
 		};
-	}, [profiles]);
+	}, [profiles, knownCtfTokenIds]);
 
 	// Calculate enriched profiles with all data
 	const enrichedProfiles = useMemo((): EnrichedProfile[] => {
 		return profiles.map((profile) => {
-			// Get smart wallet address using helper function
 			const smartWalletAddress = getSmartWalletAddress(profile);
-			const normalizedWallet = smartWalletAddress ? normalizeWalletAddress(smartWalletAddress) : null;
+			const row = onChainEnrichment.get(profile._id);
+			const portfolioValue = row?.portfolioEstimate ?? 0;
+			const usdcBalance = row?.usdcBalance ?? 0;
 
-			// Get leaderboard data for this wallet
-			const leaderboardEntry = normalizedWallet ? leaderboardData.get(normalizedWallet) : null;
-
-			// Get subgraph data
-			const sgData = subgraphData.get(profile._id);
-			const account = sgData?.account;
-			const transfers = sgData?.transfers;
-
-			// Calculate USDC balance from subgraph (micro-units to dollars)
-			const usdcBalance = account?.usdcBalance
-				? Number(fromMicroUnits(account.usdcBalance))
-				: 0;
-
-			// Calculate portfolio value from token balances
-			// Sum all token balances (assuming ~$0.50 per share for estimation, since we don't have price data here)
-			let portfolioValue = 0;
-			if (account?.tokenBalances) {
-				account.tokenBalances.forEach((tb) => {
-					const balance = Number(fromMicroUnits(tb.balance));
-					// Estimate at $0.50 per share (reasonable market average)
-					portfolioValue += balance * 0.5;
-				});
-			}
-
-			// Get trading volume and PnL from leaderboard
-			const tradingVolumeFromLeaderboard = leaderboardEntry?.effectiveCostUSD || 0;
-			const pnl = leaderboardEntry?.totalReturnUSD || 0;
-			const pnlText = leaderboardEntry?.totalReturnText || (pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`);
-			const numTrades = leaderboardEntry?.numTrades || 0;
-
-			// Calculate last trade date from transfers
-			let lastTradeDate: Date | null = null;
-			if (transfers) {
-				const allTransferTimestamps: number[] = [];
-				
-				// Get timestamps from all transfer types
-				transfers.transfersIn?.forEach((t) => {
-					if (t.blockTimestamp) {
-						allTransferTimestamps.push(Number(t.blockTimestamp) * 1000);
-					}
-				});
-				transfers.transfersOut?.forEach((t) => {
-					if (t.blockTimestamp) {
-						allTransferTimestamps.push(Number(t.blockTimestamp) * 1000);
-					}
-				});
-				transfers.cashIn?.forEach((t) => {
-					if (t.blockTimestamp) {
-						allTransferTimestamps.push(Number(t.blockTimestamp) * 1000);
-					}
-				});
-				transfers.cashOut?.forEach((t) => {
-					if (t.blockTimestamp) {
-						allTransferTimestamps.push(Number(t.blockTimestamp) * 1000);
-					}
-				});
-
-				if (allTransferTimestamps.length > 0) {
-					const latestTimestamp = Math.max(...allTransferTimestamps);
-					lastTradeDate = new Date(latestTimestamp);
-				}
-			}
-
-			// Fallback to createdAt if no trades
-			if (!lastTradeDate && profile.createdAt) {
-				lastTradeDate = new Date(profile.createdAt);
-			}
+			const profileActivityDate = profile.updatedAt
+				? new Date(profile.updatedAt)
+				: profile.createdAt
+					? new Date(profile.createdAt)
+					: null;
 
 			return {
 				...profile,
 				smartWalletAddress,
 				portfolioValue,
 				usdcBalance,
-				tradingVolumeFromLeaderboard,
-				pnl,
-				pnlText,
-				numTrades,
-				lastTradeDate,
+				profileActivityDate,
 			};
 		});
-	}, [profiles, leaderboardData, subgraphData]);
+	}, [profiles, onChainEnrichment]);
 
 	// Sort profiles
 	const sortedProfiles = useMemo(() => {
@@ -402,9 +329,9 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 			let comparison = 0;
 			
 			switch (sortField) {
-				case "lastTrade":
-					const aTime = a.lastTradeDate?.getTime() || 0;
-					const bTime = b.lastTradeDate?.getTime() || 0;
+				case "profileActivity":
+					const aTime = a.profileActivityDate?.getTime() || 0;
+					const bTime = b.profileActivityDate?.getTime() || 0;
 					comparison = aTime - bTime;
 					break;
 				case "portfolio":
@@ -412,15 +339,6 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 					break;
 				case "usdc":
 					comparison = a.usdcBalance - b.usdcBalance;
-					break;
-				case "volume":
-					comparison = a.tradingVolumeFromLeaderboard - b.tradingVolumeFromLeaderboard;
-					break;
-				case "pnl":
-					comparison = a.pnl - b.pnl;
-					break;
-				case "trades":
-					comparison = a.numTrades - b.numTrades;
 					break;
 			}
 			
@@ -473,9 +391,9 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 				/>
 			)}
 
-			{subgraphLoading && (
+			{onChainLoading && (
 				<div style={{ marginBottom: 16, color: "#888" }}>
-					Loading blockchain data...
+					Loading on-chain balances...
 				</div>
 			)}
 			{profiles.length === 0 ? (
@@ -487,7 +405,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 							width: "100%",
 							borderCollapse: "collapse",
 							backgroundColor: "#1a1a1a",
-							minWidth: "1200px",
+							minWidth: "760px",
 						}}
 					>
 						<thead>
@@ -539,42 +457,9 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 										borderBottom: "1px solid #333",
 										cursor: "pointer",
 									}}
-									onClick={() => handleSort("volume")}
+									onClick={() => handleSort("profileActivity")}
 								>
-									Trading Volume{getSortIndicator("volume")}
-								</th>
-								<th
-									style={{
-										padding: "12px",
-										textAlign: "left",
-										borderBottom: "1px solid #333",
-										cursor: "pointer",
-									}}
-									onClick={() => handleSort("pnl")}
-								>
-									P&L{getSortIndicator("pnl")}
-								</th>
-								<th
-									style={{
-										padding: "12px",
-										textAlign: "left",
-										borderBottom: "1px solid #333",
-										cursor: "pointer",
-									}}
-									onClick={() => handleSort("trades")}
-								>
-									Trades{getSortIndicator("trades")}
-								</th>
-								<th
-									style={{
-										padding: "12px",
-										textAlign: "left",
-										borderBottom: "1px solid #333",
-										cursor: "pointer",
-									}}
-									onClick={() => handleSort("lastTrade")}
-								>
-									Last Trade{getSortIndicator("lastTrade")}
+									Profile updated{getSortIndicator("profileActivity")}
 								</th>
 								<th
 									style={{
@@ -589,8 +474,6 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 						</thead>
 						<tbody>
 							{sortedProfiles.map((profile) => {
-								const pnlColor = profile.pnl >= 0 ? "#22c55e" : "#ef4444";
-								
 								return (
 									<tr
 										key={profile._id}
@@ -623,21 +506,8 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 												: "--"}
 										</td>
 										<td style={{ padding: "12px" }}>
-											{profile.tradingVolumeFromLeaderboard > 0
-												? `$${profile.tradingVolumeFromLeaderboard.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-												: "--"}
-										</td>
-										<td style={{ padding: "12px", color: profile.pnl !== 0 ? pnlColor : "inherit" }}>
-											{profile.numTrades > 0
-												? profile.pnlText
-												: "--"}
-										</td>
-										<td style={{ padding: "12px" }}>
-											{profile.numTrades > 0 ? profile.numTrades : "--"}
-										</td>
-										<td style={{ padding: "12px" }}>
-											{profile.lastTradeDate
-												? profile.lastTradeDate.toLocaleDateString()
+											{profile.profileActivityDate
+												? profile.profileActivityDate.toLocaleDateString()
 												: "--"}
 										</td>
 										<td style={{ padding: "12px", display: "flex", gap: "8px", alignItems: "center" }}>

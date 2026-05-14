@@ -7,7 +7,8 @@ import { DEFAULT_RPC_URL } from "@/config/rpc";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { getListingYesNoPricesForUmbrella } from "@/helpers/predictionUtils";
-import { subgraphService, fromMicroUnits } from "@/services/subgraph/subgraphService";
+import { fetchNonZeroCtfBalancesRpc } from "@/helpers/fetchNonZeroCtfBalancesRpc";
+import { fromMicroUnits } from "@/helpers/ctfMicroUnits";
 import { fetchUserOrders, type ProcessedOrder, getFinalAmount } from "@/services/api/simplifiedOrderService";
 import ScrollableTable from "@/components/ScrollableTable/ScrollableTable";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
@@ -189,17 +190,10 @@ export default function AdminWallet() {
 		}
 	}, [getProvider]);
 
-	// Fetch token balances from subgraph
 	const fetchTokenBalances = useCallback(async (address: string) => {
 		try {
-			const subgraphAccount = await subgraphService.getUserAccount(address.toLowerCase());
+			const provider = getProvider();
 
-			if (!subgraphAccount) {
-				console.log("No subgraph account found for seeder wallet");
-				return;
-			}
-
-			// Build market data map for mapping
 			const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
 			umbrellas.forEach((u) => {
 				const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
@@ -234,10 +228,8 @@ export default function AdminWallet() {
 				tokenToMarket.set(noTokenId, { marketId, isYes: false });
 			}
 
-			// Build result map
 			const result = new Map<string, TokenBalance>();
 
-			// Initialize markets with zero balances
 			for (const [marketId, { yesTokenId, noTokenId }] of marketDataMap.entries()) {
 				result.set(marketId, {
 					yesTokenId,
@@ -247,15 +239,14 @@ export default function AdminWallet() {
 				});
 			}
 
-			// Fill in actual balances
-			for (const tb of subgraphAccount.tokenBalances) {
-				const mapping = tokenToMarket.get(tb.tokenId);
-				if (!mapping) continue;
-
-				const existing = result.get(mapping.marketId);
-				if (!existing) continue;
-
-				const balanceFormatted = fromMicroUnits(tb.balance);
+			const ids: string[] = [];
+			tokenToMarket.forEach((_, id) => ids.push(id));
+			const nonzero = await fetchNonZeroCtfBalancesRpc(provider, address, ids);
+			for (const row of nonzero) {
+				const mapping = tokenToMarket.get(row.tokenId);
+				const existing = mapping ? result.get(mapping.marketId) : undefined;
+				if (!mapping || !existing) continue;
+				const balanceFormatted = fromMicroUnits(row.balance);
 				if (mapping.isYes) {
 					existing.yesBalance = balanceFormatted;
 				} else {
@@ -264,10 +255,10 @@ export default function AdminWallet() {
 			}
 
 			setTokenBalances(result);
-		} catch (error) {
-			console.error("Error fetching token balances:", error);
+		} catch (err) {
+			console.error("error", err);
 		}
-	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella]);
+	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, getProvider]);
 
 	// Fetch user orders
 	const fetchOrders = useCallback(async (address: string) => {

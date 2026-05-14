@@ -9,6 +9,7 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";
+import Tooltip from "components/Tooltip/Tooltip";
 import {
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
@@ -44,6 +45,15 @@ import {
 	type LogFullHistoryDebugParams,
 } from "../utils/fullHistoryDebugLog";
 import { buildHistoryUnifiedBlocks } from "../utils/buildHistoryUnifiedBlocks";
+import {
+	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
+	polymarketSplitSettlementBadgeVisible,
+} from "../utils/polymarketHistorySplitSettlementBadge";
+import type { UmbrellaPositions } from "../utils/positionHelpers";
+import {
+	buildHistoryHoldingsBlockedKeys,
+	filterUnifiedHistoryBlocksByOpenPositions,
+} from "../utils/filterHistoryBlocksByOpenPositions";
 
 type MergedHistoryRow = {
 	side: "Yes" | "No";
@@ -57,6 +67,7 @@ type MergedHistoryRow = {
 	totalReturnPct: number | null;
 	tradeCount: number;
 	marketIds: string[];
+	polymarketSplitBadge?: boolean;
 };
 
 export default function HistoryCardView({
@@ -67,6 +78,8 @@ export default function HistoryCardView({
 	catalogUmbrellas,
 	venueHistoryRawItemsForDebug,
 	historyResolveStage,
+	resolvedUmbrellaPositions,
+	openUmbrellaPositions,
 }: {
 	umbrellaBalances?: Array<{ umbrella: Umbrella; markets: any[] }>;
 	orders: any[];
@@ -75,6 +88,8 @@ export default function HistoryCardView({
 	catalogUmbrellas?: Umbrella[];
 	venueHistoryRawItemsForDebug?: VenuePosition[];
 	historyResolveStage?: LogFullHistoryDebugParams["resolveStage"];
+	resolvedUmbrellaPositions: UmbrellaPositions[];
+	openUmbrellaPositions: UmbrellaPositions[];
 }) {
 	const { umbrellas: contextUmbrellas, getAllQuestionsForUmbrella } = usePredictionData();
 	const umbrellas = catalogUmbrellas ?? contextUmbrellas;
@@ -145,11 +160,25 @@ export default function HistoryCardView({
 		],
 	);
 
+	const historyHoldingsBlocked = useMemo(
+		() =>
+			buildHistoryHoldingsBlockedKeys(
+				openUmbrellaPositions,
+				resolvedUmbrellaPositions,
+			),
+		[openUmbrellaPositions, resolvedUmbrellaPositions],
+	);
+	const unifiedBlocksForDisplay = useMemo(
+		() =>
+			filterUnifiedHistoryBlocksByOpenPositions(unifiedBlocks, historyHoldingsBlocked),
+		[unifiedBlocks, historyHoldingsBlocked],
+	);
+
 	useEffect(() => {
 		logFullHistoryDebug({
 			layout: "card",
 			venueHistory,
-			unifiedBlocks: unifiedBlocks as FullHistoryUnifiedBlock[],
+			unifiedBlocks: unifiedBlocksForDisplay as FullHistoryUnifiedBlock[],
 			umbrellas,
 			umbrellaLookupByConditionId,
 			predictLookup: predictUmbrellaLookup,
@@ -163,7 +192,7 @@ export default function HistoryCardView({
 		});
 	}, [
 		venueHistory,
-		unifiedBlocks,
+		unifiedBlocksForDisplay,
 		umbrellas,
 		umbrellaLookupByConditionId,
 		predictUmbrellaLookup,
@@ -178,7 +207,7 @@ export default function HistoryCardView({
 
 	const mergedRowsByBlock = useMemo(() => {
 		let limitlessHistUiLog = 0;
-		return unifiedBlocks.map((block) => {
+		return unifiedBlocksForDisplay.map((block) => {
 			const resolvedList = resolvedMarketsByUmbrella[block.id] ?? [];
 			const luSample = block.luMarkets[0]?.market ?? null;
 			const umbrellaTitle = umbrellaHeaderLabel(block.umbrella);
@@ -385,6 +414,10 @@ export default function HistoryCardView({
 				const fallbackOutcome = b.outcomeText
 					? shortTeamDisplayName(b.outcomeText)
 					: "—";
+				const polymarketSplitBadge = polymarketSplitSettlementBadgeVisible(
+					block.venuePositions,
+					side,
+				);
 				rows.push({
 					side,
 					label: b.label || side,
@@ -397,13 +430,14 @@ export default function HistoryCardView({
 					totalReturnPct: retPct,
 					tradeCount,
 					marketIds: b.marketIds,
+					...(polymarketSplitBadge ? { polymarketSplitBadge: true } : {}),
 				});
 			}
 			return { block, rows };
 		});
-	}, [unifiedBlocks, allOrders, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
+	}, [unifiedBlocksForDisplay, allOrders, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
 
-	if (unifiedBlocks.length === 0) {
+	if (unifiedBlocksForDisplay.length === 0) {
 		return (
 			<div style={{ textAlign: "center", padding: "40px", color: "#888" }}>
 				<p>No resolved markets with trading history found.</p>
@@ -446,7 +480,20 @@ export default function HistoryCardView({
 											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
 												{blockUmbrellaTitle}
 											</div>
-											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>{row.label}</div>
+											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+												{row.polymarketSplitBadge === true ? (
+													<Tooltip content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY} position="top">
+														<span
+															aria-label={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
+															role="img"
+															style={{ cursor: "help", color: "#f59e0b", flexShrink: 0, fontSize: 16, lineHeight: 1 }}
+														>
+															⚠
+														</span>
+													</Tooltip>
+												) : null}
+												<span>{row.label}</span>
+											</div>
 										</div>
 									</div>
 

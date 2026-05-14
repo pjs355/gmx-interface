@@ -10,6 +10,7 @@ import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
+import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
 import {
 	getTradeCount,
 	fifoAlignedBasisForPositionsRow,
@@ -294,7 +295,7 @@ export default function PositionsCardView({
 									>
 										<div style={{ flex: 1 }}>
 											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Shares</div>
-											<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{parseFloat(row.totalShares.toFixed(2))}</div>
+											<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{formatShareCountDisplay(row.totalShares)}</div>
 										</div>
 										<div style={{ flex: 1, textAlign: "right" }}>
 											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Market Value</div>

@@ -1,10 +1,4 @@
-import React, {
-	useState,
-	useEffect,
-	useRef,
-	useCallback,
-} from "react";
-import { useMedia } from "react-use";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
@@ -135,38 +129,25 @@ interface FilteredPredictionsProps {
 	filterType: "esports" | "games" | "all";
 }
 
-const INITIAL_VISIBLE = 20;
-const LOAD_MORE_COUNT = 20;
-
 type CalendarDataForVisibility = {
 	upcomingDays: { events: CalendarEvent[] }[];
 	unscheduled: Umbrella[];
 };
 
-/** Same umbrella ordering as rendered cards (calendar vs flat grid), capped by `visibleCount`. */
+/** Same umbrella ordering as rendered cards (calendar vs flat grid); full list, no slicing. */
 function collectVisibleUmbrellas(
 	shouldUseCalendar: boolean,
 	calendarData: CalendarDataForVisibility | null,
 	filteredUmbrellas: Umbrella[],
-	visibleCount: number,
 ): Umbrella[] {
 	if (!shouldUseCalendar || !calendarData) {
-		return filteredUmbrellas.slice(0, visibleCount);
+		return filteredUmbrellas;
 	}
 	const out: Umbrella[] = [];
-	let rendered = 0;
 	for (const day of calendarData.upcomingDays) {
-		if (rendered >= visibleCount) break;
-		const remaining = visibleCount - rendered;
-		const slice = day.events.slice(0, remaining);
-		for (const e of slice) out.push(e.umbrella);
-		rendered += slice.length;
+		for (const e of day.events) out.push(e.umbrella);
 	}
-	if (rendered < visibleCount && calendarData.unscheduled.length) {
-		const remaining = visibleCount - rendered;
-		out.push(...calendarData.unscheduled.slice(0, remaining));
-		rendered += Math.min(remaining, calendarData.unscheduled.length);
-	}
+	out.push(...calendarData.unscheduled);
 	return out;
 }
 
@@ -183,58 +164,6 @@ export default function FilteredPredictions({
 	const navigate = useNavigate();
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
-	const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
-	const isCompactLayout = useMedia("(max-width: 1099px)");
-
-	// Reset visible count when filters change
-	useEffect(() => {
-		setVisibleCount(INITIAL_VISIBLE);
-	}, [selectedGame, filterType]);
-
-	const loadMore = useCallback(() => {
-		setVisibleCount((prev) => prev + LOAD_MORE_COUNT);
-	}, []);
-
-	/*
-	 * Callback ref instead of `useRef` + `useEffect`. The sentinel element
-	 * only mounts AFTER `loading`/`tagsLoading` flip to false (the early
-	 * `<HomeSkeleton/>` return means it does not exist on initial mount).
-	 * A traditional `useEffect(..., [loadMore])` runs once on mount, finds
-	 * `sentinelRef.current === null`, and never re-runs — leaving the
-	 * IntersectionObserver permanently unattached so infinite scroll never
-	 * fires (only the first 20 cards are reachable). A callback ref runs
-	 * exactly when the node attaches/detaches, so the observer is wired up
-	 * the moment the sentinel appears in the DOM.
-	 */
-	const observerRef = useRef<IntersectionObserver | null>(null);
-	const sentinelCallbackRef = useCallback(
-		(node: HTMLDivElement | null) => {
-			if (observerRef.current) {
-				observerRef.current.disconnect();
-				observerRef.current = null;
-			}
-			if (!node) return;
-			const observer = new IntersectionObserver(
-				([entry]) => {
-					if (entry.isIntersecting) loadMore();
-				},
-				{ rootMargin: "400px" },
-			);
-			observer.observe(node);
-			observerRef.current = observer;
-		},
-		[loadMore],
-	);
-
-	useEffect(
-		() => () => {
-			if (observerRef.current) {
-				observerRef.current.disconnect();
-				observerRef.current = null;
-			}
-		},
-		[],
-	);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -355,7 +284,7 @@ export default function FilteredPredictions({
 		 * Past events (those whose local-day starts before today) are
 		 * intentionally dropped: the home page should never surface markets
 		 * older than today. Skipping them here means every downstream
-		 * consumer (`collectVisibleUmbrellas`, `calendarTotalCount`, the
+		 * consumer (`collectVisibleUmbrellas`, the
 		 * calendar JSX, the venue-WS subscription list) automatically
 		 * excludes past umbrellas without each having to filter again.
 		 */
@@ -440,9 +369,9 @@ export default function FilteredPredictions({
 	// Navigation functions
 	const navigateToUmbrella = (umbrella: Umbrella) => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		// Don't overwrite the active market — when only the umbrella is known
-		// (generic card click), pin only the umbrella and let the dock pick
-		// its own active market when the user comes back.
+		// Generic card click: always open full umbrella/trading route (same as other
+		// list modes). Inline home dock is updated via odds-button clicks (`onHomeOddsSelect`)
+		// — not via the card chrome.
 		pinHomeDockForUmbrella(umbrella._id, null);
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
@@ -493,24 +422,7 @@ export default function FilteredPredictions({
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
-	// Compute total event count for calendar (must be before early return to satisfy Rules of Hooks)
-	const calendarTotalCount = React.useMemo(() => {
-		if (!calendarData) return 0;
-		let count = 0;
-		for (const day of calendarData.upcomingDays) count += day.events.length;
-		count += calendarData.unscheduled.length;
-		// Past days are dropped at the `calendarData` stage — never counted.
-		return count;
-	}, [calendarData]);
-
 	const shouldUseCalendar = filterType === "esports" || filterType === "all";
-	const listTotalForVisibility =
-		shouldUseCalendar && calendarData
-			? calendarTotalCount
-			: filteredUmbrellas.length;
-	const effectiveVisibleCount = isCompactLayout
-		? listTotalForVisibility
-		: visibleCount;
 
 	const { subscribePandaMatchId, unsubscribePandaMatchId } =
 		useVenuePandaSubscription();
@@ -521,14 +433,8 @@ export default function FilteredPredictions({
 				shouldUseCalendar,
 				shouldUseCalendar ? calendarData : null,
 				filteredUmbrellas,
-				effectiveVisibleCount,
 			),
-		[
-			shouldUseCalendar,
-			calendarData,
-			filteredUmbrellas,
-			effectiveVisibleCount,
-		],
+		[shouldUseCalendar, calendarData, filteredUmbrellas],
 	);
 
 	const visiblePandaIdsForVenueWs = React.useMemo(() => {
@@ -599,12 +505,6 @@ export default function FilteredPredictions({
 
 	let content: React.ReactNode = null;
 
-	const hasMoreItems =
-		!isCompactLayout &&
-		(shouldUseCalendar
-			? visibleCount < calendarTotalCount
-			: visibleCount < filteredUmbrellas.length);
-
 	if (shouldUseCalendar && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
 		const hasUnscheduled = calendarData.unscheduled.length > 0;
@@ -627,16 +527,11 @@ export default function FilteredPredictions({
 				</div>
 			);
 		} else {
-			// Progressive rendering on desktop; compact shows full list (no sentinel).
-			let rendered = 0;
 			let calendarOddsPickerShown = false;
 			const calendarSections: React.ReactNode[] = [];
 
 			for (const day of calendarData.upcomingDays) {
-				if (rendered >= effectiveVisibleCount) break;
-				const remaining = effectiveVisibleCount - rendered;
-				const eventsToShow = day.events.slice(0, remaining);
-				rendered += eventsToShow.length;
+				const eventsToShow = day.events;
 
 				const label = formatDayLabel(day.date, calendarData.todayStartMs);
 				const showOddsPicker = !calendarOddsPickerShown;
@@ -666,10 +561,8 @@ export default function FilteredPredictions({
 				);
 			}
 
-			if (rendered < effectiveVisibleCount && hasUnscheduled) {
-				const remaining = effectiveVisibleCount - rendered;
-				const unscheduledToShow = calendarData.unscheduled.slice(0, remaining);
-				rendered += unscheduledToShow.length;
+			if (hasUnscheduled) {
+				const unscheduledToShow = calendarData.unscheduled;
 
 				const showOddsPicker = !calendarOddsPickerShown;
 				if (showOddsPicker) calendarOddsPickerShown = true;
@@ -725,19 +618,14 @@ export default function FilteredPredictions({
 				? "predictions-grid predictions-grid--carousel"
 				: "predictions-grid";
 
-		const visibleUmbrellas = filteredUmbrellas.slice(
-			0,
-			effectiveVisibleCount,
-		);
-
 		content = (
 			<div className={gridClassName}>
-				{visibleUmbrellas.length > 0 ? (
+				{filteredUmbrellas.length > 0 ? (
 					<>
-						{visibleUmbrellas.map((umbrella) =>
+						{filteredUmbrellas.map((umbrella) =>
 							renderPredictionCard(umbrella)
 						)}
-						{filterType === "esports" && !hasMoreItems && (
+						{filterType === "esports" && (
 							<div
 								className="view-all-card-filtered"
 								onClick={() => {
@@ -810,16 +698,7 @@ export default function FilteredPredictions({
 					visibleUmbrellas={visibleUmbrellasForVenueWs}
 					selectedGame={selectedGame}
 				>
-					<div className="predictions-page__main">
-						{content}
-						{hasMoreItems && (
-							<div
-								ref={sentinelCallbackRef}
-								style={{ height: 1, width: "100%" }}
-								aria-hidden
-							/>
-						)}
-					</div>
+					<div className="predictions-page__main">{content}</div>
 				</HomeInlineTradeLayout>
 			</div>
 		</div>

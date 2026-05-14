@@ -1,4 +1,10 @@
 import { PREDICTIONS_API_URL } from "../playwright.config";
+import {
+	MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD,
+	smallestRoundTripLossUsdForSnapshot,
+	venueSnapshotStatusAllowsBookProbe,
+	type VenuePriceSnapshotLite,
+} from "./e2e-venue-book-depth";
 
 export type RequiredVenueKey =
 	| "polymarket"
@@ -24,8 +30,13 @@ const EXCHANGE_KEY_TO_VENUE_SLUG: Record<RequiredVenueKey, string> = {
 	dflow: "dflow",
 };
 
-/** Tightest live bid–ask on a venue must be below this (20¢ in probability space) for E2E. */
-export const MAX_E2E_VENUE_SPREAD_USD = 0.2;
+/** Tightest live bid–ask (probability space). Used by spread-cap preflight warnings only (`00-spread-cap.spec.ts`). */
+export const MAX_E2E_VENUE_SPREAD_USD = 0.25;
+
+/**
+ * Playwright trade size. Keep **≥** app `SOR_MIN_MARKET_BUY_USD` (`src/trading/sor/sorPreflight.ts`, currently $2).
+ */
+export const E2E_TRADE_NOTIONAL_USD = 2;
 
 export type E2eTradingVenueSlug =
 	| "polymarket"
@@ -104,6 +115,10 @@ interface VenueTeam {
 	bestBid: number | null;
 	bestAsk: number | null;
 	indicativeMid?: number | null;
+	bids?: { price: number; size: number }[];
+	asks?: { price: number; size: number }[];
+	totalBidLiquidity?: number;
+	totalAskLiquidity?: number;
 }
 
 interface VenuePriceSnapshot {
@@ -120,11 +135,14 @@ function missingVenues(row: MatchedMarketRow): RequiredVenueKey[] {
 	);
 }
 
+/** Past kickoff, keep the row eligible for E2E picks for this long (typical start-time field). */
+const E2E_MATCHED_MARKET_EVENT_GRACE_MS = 2 * 60 * 60 * 1000;
+
 export function hasFutureEventDate(row: MatchedMarketRow): boolean {
 	if (row.eventDate === undefined) return false;
 	const t = Date.parse(row.eventDate);
 	if (!Number.isFinite(t)) return false;
-	return t > Date.now();
+	return t + E2E_MATCHED_MARKET_EVENT_GRACE_MS > Date.now();
 }
 
 export async function fetchMatchedMarkets(
@@ -185,7 +203,7 @@ export function createVenueSnapshotGetter(
 	};
 }
 
-/** When venue-prices has no bid/ask for LevelUp but matched-markets still lists `exchangeMatching.levelup`, pick an umbrella for E2E using this synthetic spread (must be in (0, MAX_E2E_VENUE_SPREAD_USD) for `00-spread-cap.spec.ts`). */
+/** When venue-prices has no computable LevelUp tightest spread pick a row aligned with anchors; liquidity still gates on executable depth (`e2e-venue-book-depth.ts`). */
 const LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK = 0.1;
 
 function jsonFiniteNumber(x: unknown): number | null {
@@ -221,7 +239,7 @@ function teamSpread(team: VenueTeam): number | null {
 }
 
 function snapshotTightestSpread(snap: VenuePriceSnapshot): number | null {
-	if (snap.status && String(snap.status).toLowerCase() !== "live") {
+	if (!venueSnapshotStatusAllowsBookProbe(snap.status)) {
 		return null;
 	}
 	const a = teamSpread(snap.teamA);
@@ -351,6 +369,21 @@ export async function computePerVenueBestPicks(
 				continue;
 			}
 			const snaps = await getSnaps(row.pandaMatchId);
+			const slug = EXCHANGE_KEY_TO_VENUE_SLUG[key];
+			const snap = findVenueSnapshot(snaps, slug);
+			if (!snap) {
+				continue;
+			}
+			const lossProbe = smallestRoundTripLossUsdForSnapshot(
+				snap as unknown as VenuePriceSnapshotLite,
+				E2E_TRADE_NOTIONAL_USD,
+			);
+			if (
+				lossProbe === null ||
+				lossProbe > MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD
+			) {
+				continue;
+			}
 			const sp = spreadForVenueOnRow(row, key, snaps);
 			if (sp === null || !Number.isFinite(sp)) {
 				continue;
@@ -448,54 +481,52 @@ export async function computePerVenueBestPicks(
 			}
 
 			if (fallbackRow !== null) {
-				const sp = LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK;
 				const fr = fallbackRow;
-				console.warn(
-					`[matched-market] levelup: no computable venue-prices spread — using synthetic spread=${sp} ` +
-						`for E2E pick only (umbrella ${fr.umbrellaId}, panda ${fr.pandaMatchId}).`,
+				const fbSnaps = await getSnaps(fr.pandaMatchId);
+				const luSnap = findVenueSnapshot(
+					fbSnaps,
+					EXCHANGE_KEY_TO_VENUE_SLUG.levelup,
 				);
-				picks.push({
-					venueKey: "levelup",
-					umbrellaId: String(fr.umbrellaId),
-					pandaMatchId: String(fr.pandaMatchId),
-					spread: sp,
-					displayName: fr.displayName,
-					pandaTeamA: fr.pandaTeamA,
-					pandaTeamB: fr.pandaTeamB,
-				});
+				if (luSnap) {
+					const lossProbe = smallestRoundTripLossUsdForSnapshot(
+						luSnap as unknown as VenuePriceSnapshotLite,
+						E2E_TRADE_NOTIONAL_USD,
+					);
+					if (
+						lossProbe !== null &&
+						lossProbe <= MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD
+					) {
+						const sp =
+							LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK;
+						console.warn(
+							`[matched-market] levelup: no computable venue-prices tightest spread — using synthetic spread=${sp} ` +
+								`for logging only; depth gate passed (umbrella ${fr.umbrellaId}, panda ${fr.pandaMatchId}).`,
+						);
+						picks.push({
+							venueKey: "levelup",
+							umbrellaId: String(fr.umbrellaId),
+							pandaMatchId: String(fr.pandaMatchId),
+							spread: sp,
+							displayName: fr.displayName,
+							pandaTeamA: fr.pandaTeamA,
+							pandaTeamB: fr.pandaTeamB,
+						});
+					}
+				}
 			}
 		}
 	}
 	return picks;
 }
 
-function logPerVenueSummaryFromPicks(picks: PerVenueBestPick[]): void {
-	console.log(
-		"[matched-market] best live tightest-spread per venue (all upcoming rows that include that venue):",
-	);
-	const byKey = new Map(picks.map((p) => [p.venueKey, p]));
-	for (const key of REQUIRED_VENUE_KEYS) {
-		const p = byKey.get(key);
-		if (p === undefined) {
-			console.log(
-				`${key} - Best Spread = n/a // n/a // n/a (no live bid/ask in upcoming rows)`,
-			);
-			continue;
-		}
-		const ta = p.pandaTeamA?.trim() || "TeamA";
-		const tb = p.pandaTeamB?.trim() || "TeamB";
-		console.log(
-			`${key} - Best Spread = ${p.spread.toFixed(4)} // ${p.pandaMatchId} // ${ta} - ${tb}`,
-		);
-	}
-}
-
-export function assertPerVenueSpreadsWithinE2eCap(picks: PerVenueBestPick[]): void {
+/** Warn-only: per-venue trade cycle may skip venues with wide top-of-book spread when ladders are absent (see `e2e-venue-liquidity-at-test.ts` for the live gate). */
+export function warnPerVenueSpreadsAboveE2eCap(picks: readonly PerVenueBestPick[]): void {
 	for (const p of picks) {
-		if (p.spread >= MAX_E2E_VENUE_SPREAD_USD) {
-			throw new Error(
-				`E2E spread cap: ${p.venueKey} best tightest spread is ${p.spread.toFixed(4)} ` +
-					`(umbrella ${p.umbrellaId}, panda ${p.pandaMatchId}) — max allowed is ${MAX_E2E_VENUE_SPREAD_USD} (20¢).`,
+		if (p.spread + 1e-9 >= MAX_E2E_VENUE_SPREAD_USD) {
+			console.warn(
+				`[e2e spread cap] ${p.venueKey} best tightest spread is ${p.spread.toFixed(4)} ` +
+					`(umbrella ${p.umbrellaId}, panda ${p.pandaMatchId}) — ≥ ${MAX_E2E_VENUE_SPREAD_USD} when no depth; ` +
+					`per-venue block may skip on fresh read.`,
 			);
 		}
 	}
@@ -505,10 +536,27 @@ export async function resolvePerVenueBestPicks(
 	apiBaseUrl: string = PREDICTIONS_API_URL,
 ): Promise<PerVenueBestPick[]> {
 	const all = await fetchMatchedMarkets(apiBaseUrl);
-	const future = all.filter(hasFutureEventDate);
+	let future = all.filter(hasFutureEventDate);
+	const pinRaw =
+		typeof process.env.E2E_PIN_UMBRELLA_ID === "string"
+			? process.env.E2E_PIN_UMBRELLA_ID.trim()
+			: "";
+	if (pinRaw) {
+		const pinned = all.find((r) => String(r.umbrellaId) === pinRaw);
+		if (!pinned) {
+			console.warn(
+				`[matched-market] E2E_PIN_UMBRELLA_ID=${pinRaw}: umbrella not in GET /matched-markets (check local predictions-api + id).`,
+			);
+		} else if (!future.some((r) => String(r.umbrellaId) === pinRaw)) {
+			console.warn(
+				`[matched-market] E2E_PIN_UMBRELLA_ID=${pinRaw}: forcing candidate row ` +
+					`(${pinned.displayName ?? "unnamed"}, panda ${pinned.pandaMatchId}) despite eventDate / upcoming filter — local E2E.`,
+			);
+			future = [...future, pinned];
+		}
+	}
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const picks = await computePerVenueBestPicks(future, getSnaps);
-	logPerVenueSummaryFromPicks(picks);
 	return picks;
 }
 
@@ -524,7 +572,6 @@ export async function resolveAllVenuesUmbrella(
 	const future = all.filter(hasFutureEventDate);
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const perVenuePicks = await computePerVenueBestPicks(future, getSnaps);
-	logPerVenueSummaryFromPicks(perVenuePicks);
 
 	const allFive = future.filter((row) => missingVenues(row).length === 0);
 

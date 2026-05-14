@@ -60,6 +60,7 @@ import {
 	predictOutcomeTokenId,
 } from "@/trading/predict/predictMarketApi";
 import { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
+import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import {
 	bboFromSnapshot,
 	logPolymarketTradePreflight,
@@ -159,7 +160,7 @@ const SOR_VENUE_POSITION_KEYS: readonly SorVenue[] = [
 ];
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
-  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip, mobilePeekBar = "default", tradeRouteIsolationKey }, ref) => {
+  ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, predictFunMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip, mobilePeekBar = "default", tradeRouteIsolationKey }, ref) => {
 
   const pandaId = pandascoreMatchId?.trim() ?? "";
   const multiVenueEnabled = Boolean(pandaId);
@@ -319,6 +320,26 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     );
     return mergeMonitorLimitlessFromUmbrella(base, limitlessMappingFromUmbrella);
   }, [oddsAppState?.markets, pandaId, propUmbrellaId, limitlessMappingFromUmbrella]);
+
+  /** Same wallet + token hints as `usePredictPositions` / post-trade cache reads (`predict-positions`). */
+  const predictPostTradeWallet = resolvePredictAccountAddress(
+    signerAddress,
+    account,
+  );
+  /** Post-trade share identity: umbrella `exchangeMatching.predictFun` only (single source). */
+  const predictShareIdentityCtx = useMemo(() => {
+    const umb = predictFunMappingFromUmbrella;
+    if (!umb) return null;
+    const tokenIdA = String(umb.tokenIdA ?? "").trim();
+    const tokenIdB = String(umb.tokenIdB ?? "").trim();
+    if (!tokenIdA && !tokenIdB) return null;
+    return {
+      predictFun: {
+        ...(tokenIdA ? { tokenIdA } : {}),
+        ...(tokenIdB ? { tokenIdB } : {}),
+      },
+    };
+  }, [predictFunMappingFromUmbrella]);
 
   const matchedVenues = useMemo(() => {
     const set = new Set<string>();
@@ -2423,7 +2444,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         route: executableRoute,
         addresses: {
           polymarketSafe: funding.polymarketSafe,
-          predictWallet: account,
+          predictWallet: predictPostTradeWallet,
           solanaAddress: funding.solanaAddress,
         },
         levelUp: marketId
@@ -2433,6 +2454,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
               noBalance,
             }
           : null,
+        shareIdentityCtx: predictShareIdentityCtx,
       });
       latestBaselineRef.current = {
         routeId: executableRoute.routeId,
@@ -2519,7 +2541,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     queryClient,
     funding.polymarketSafe,
     funding.solanaAddress,
-    account,
+    predictPostTradeWallet,
+    predictShareIdentityCtx,
     market,
     yesBalance,
     noBalance,
@@ -2601,7 +2624,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           baseline: cached.baseline,
           addresses: {
             polymarketSafe: funding.polymarketSafe,
-            predictWallet: account,
+            predictWallet: predictPostTradeWallet,
             solanaAddress: funding.solanaAddress,
           },
           refreshLevelUpPositions: refreshTokenPositions,
@@ -2614,6 +2637,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             return Number.isFinite(n) ? n : 0;
           },
           syncUiKey,
+          shareIdentityCtx: predictShareIdentityCtx,
         });
       } else if (import.meta.env.DEV) {
         console.warn(
@@ -2658,7 +2682,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     collateralTokens,
     funding.polymarketSafe,
     funding.solanaAddress,
-    account,
+    predictPostTradeWallet,
+    predictShareIdentityCtx,
     market,
     postTradeSync,
     getTokenBalance,

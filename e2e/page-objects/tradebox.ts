@@ -39,11 +39,11 @@ const BETWEEN_TRADEBOX_ACTIONS_MS = 200;
 const QUOTE_READY_TIMEOUT_MS = 30_000;
 /**
  * Default buy-side USD typed by `selectVenue` when neither the smart routing
- * rows nor the legacy venue dropdown are mounted yet. Uses $5 to match
- * `TRADE_USD` in per-venue specs (must stay ≥ `SOR_MIN_MARKET_BUY_USD`) so
+ * rows nor the legacy venue dropdown are mounted yet. Uses $2 to match
+ * `E2E_TRADE_NOTIONAL_USD` in per-venue specs (must stay ≥ `SOR_MIN_MARKET_BUY_USD`) so
  * subsequent `setAmount(TRADE_USD)` calls don't trigger an extra SOR refetch / auto-select.
  */
-const SELECT_VENUE_PRIME_AMOUNT_USD = 5;
+const SELECT_VENUE_PRIME_AMOUNT_USD = 2;
 /** How long to wait for a venue surface to mount after priming SOR. */
 const SELECT_VENUE_SURFACE_TIMEOUT_MS = 30_000;
 /**
@@ -53,12 +53,20 @@ const SELECT_VENUE_SURFACE_TIMEOUT_MS = 30_000;
  * the same 30s cap as buy legs. This is independent of header Cash polling
  * (`e2e/helpers/header-cash.ts`).
  */
-const MARKET_SELL_LEG_TIMEOUT_MS = 90_000;
+/** Sell-side SOR quote + leg row can lag Polymarket/Polygon after a fill — use for `expectSubmitEnabled` on sells. */
+export const MARKET_SELL_LEG_TIMEOUT_MS = 90_000;
+/** Polymarket-only: submit often stays disabled until ~90s even after headline shares settle. */
+export const POLYMARKET_SELL_SUBMIT_ENABLED_TIMEOUT_MS = 120_000;
 /** Poll until amount field has a value and Trade is enabled, then click. */
 const SUBMIT_READY_TIMEOUT_MS = 60_000;
 const SUBMIT_POLL_MS = 150;
 /** Buy fill → /predict (or other) positions API → React Query refetch can take seconds. */
 const SHARES_VISIBLE_TIMEOUT_MS = 60_000;
+/**
+ * Polymarket/Polygon + CLOB inventory: cumulative shares in `MyPositionsRow` and the
+ * per-line headline often land 20–30s after fill; 60s was too tight for predeploy.
+ */
+const SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS = 120_000;
 /**
  * DFlow positions come from on-chain trade history (`/api/dflow/onchain-trades`), not a
  * fast REST inventory — indexing / RPC lag after a fill routinely exceeds other venues.
@@ -67,8 +75,12 @@ const SHARES_VISIBLE_TIMEOUT_MS = 60_000;
 export const SHARES_VISIBLE_TIMEOUT_DFLOW_MS = 180_000;
 
 /** Longer share-row polling for Kalshi/DFlow on-chain lag; other venues use 60s (`SHARES_VISIBLE_TIMEOUT_MS`). */
-export function sharesVisiblePollTimeoutMsForVenueKey(venueKey: string): number {
-	return venueKey === "dflow" ? SHARES_VISIBLE_TIMEOUT_DFLOW_MS : SHARES_VISIBLE_TIMEOUT_MS;
+export function sharesVisiblePollTimeoutMsForVenueKey(
+	venueKey: string,
+): number {
+	if (venueKey === "dflow") return SHARES_VISIBLE_TIMEOUT_DFLOW_MS;
+	if (venueKey === "polymarket") return SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS;
+	return SHARES_VISIBLE_TIMEOUT_MS;
 }
 const SHARES_POLL_MS = 500;
 
@@ -86,6 +98,21 @@ function sleepBetweenTradeboxActions(): Promise<void> {
 function parseTradeboxAmountInput(raw: string): number {
 	const n = Number.parseFloat(String(raw).replace(/[$,\s]/g, ""));
 	return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Truncate toward zero at 2 decimal places (never round up). Matches
+ * `formatShareCountDataQa` / sell `data-qa-shares-count` — always two fractional
+ * digits (`20` → `"20.00"`) so the typed amount matches the DOM cap.
+ */
+export function sellShareAmountTextRoundedDownLikeUi(n: number): string {
+	if (!Number.isFinite(n) || n < 0) {
+		return String(n);
+	}
+	const hundredths = Math.floor(n * 100 + 1e-9);
+	const whole = Math.trunc(hundredths / 100);
+	const frac = hundredths % 100;
+	return `${whole}.${frac.toString().padStart(2, "0")}`;
 }
 
 /** Logs real DOM from the resolved node (Playwright `Locator` is not loggable as HTML). */
@@ -120,7 +147,11 @@ export class Tradebox {
 		await this.root.waitFor({ state: "visible", timeout: 60_000 });
 	}
 
-	async selectVenue(venue: TradingVenue): Promise<void> {
+	async selectVenue(
+		venue: TradingVenue,
+		opts?: { allowPrime?: boolean },
+	): Promise<void> {
+		const allowPrime = opts?.allowPrime ?? true;
 		await sleepBetweenTradeboxActions();
 		const venueTab = this.root.locator('[data-qa="trade-venue-tab-Venue"]');
 		const smartRow =
@@ -139,32 +170,49 @@ export class Tradebox {
 		let tabVisible = await venueTab.isVisible().catch(() => false);
 		let rowVisible = await smartRow.isVisible().catch(() => false);
 		if (!tabVisible && !rowVisible) {
-			console.warn(
-				`[e2e tradebox] selectVenue(${venue}): neither smart routing row nor venue tab is visible; ` +
-					`priming SOR by typing $${SELECT_VENUE_PRIME_AMOUNT_USD}`,
-			);
-			await this.setAmount(SELECT_VENUE_PRIME_AMOUNT_USD);
-			await Promise.race([
-				venueTab
-					.waitFor({
-						state: "visible",
-						timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
-					})
-					.catch(() => {}),
-				smartRow
-					.waitFor({
-						state: "visible",
-						timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
-					})
-					.catch(() => {}),
-			]);
-			tabVisible = await venueTab.isVisible().catch(() => false);
-			rowVisible = await smartRow.isVisible().catch(() => false);
+			if (!allowPrime) {
+				const start = Date.now();
+				while (Date.now() - start < SELECT_VENUE_SURFACE_TIMEOUT_MS) {
+					tabVisible = await venueTab.isVisible().catch(() => false);
+					rowVisible = await smartRow.isVisible().catch(() => false);
+					if (tabVisible || rowVisible) break;
+					await new Promise((r) => setTimeout(r, 200));
+				}
+				if (!tabVisible && !rowVisible) {
+					throw new Error(
+						`selectVenue(${venue}, { allowPrime: false }): smart routing row and venue tab did not appear within ${SELECT_VENUE_SURFACE_TIMEOUT_MS}ms`,
+					);
+				}
+			} else {
+				console.warn(
+					`[e2e tradebox] selectVenue(${venue}): neither smart routing row nor venue tab is visible; ` +
+						`priming SOR by typing $${SELECT_VENUE_PRIME_AMOUNT_USD}`,
+				);
+				await this.setAmount(SELECT_VENUE_PRIME_AMOUNT_USD);
+				await Promise.race([
+					venueTab
+						.waitFor({
+							state: "visible",
+							timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
+						})
+						.catch(() => {}),
+					smartRow
+						.waitFor({
+							state: "visible",
+							timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
+						})
+						.catch(() => {}),
+				]);
+				tabVisible = await venueTab.isVisible().catch(() => false);
+				rowVisible = await smartRow.isVisible().catch(() => false);
+			}
 		}
 
 		if (rowVisible) {
 			if (venue === "all") {
-				await smartRow.locator("button.smart-routing-row__main").click();
+				await smartRow
+					.locator("button.smart-routing-row__main")
+					.click();
 			} else {
 				await smartRow.click();
 			}
@@ -223,6 +271,141 @@ export class Tradebox {
 		await sleepBetweenTradeboxActions();
 	}
 
+	/** Wait until sell (or buy) amount field is enabled — sell stays disabled until `maxScopedSellShares` catches up to positions. */
+	async waitForAmountInputEnabled(
+		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
+	): Promise<void> {
+		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
+		await expect(
+			input,
+			"tradebox-amount-input stayed disabled (e.g. sell locked until scoped sell shares load)",
+		).toBeEnabled({ timeout: timeoutMs });
+	}
+
+	/**
+	 * Raw `data-qa-line-shares` on `[data-qa="my-positions-buy-headline"]` — only
+	 * present while the trade box is on the **buy** tab (`MyPositionsRow` switches
+	 * to a sell-only layout after `setSide("sell")`). Do not call this after sell.
+	 */
+	async readBuyHeadlineLineSharesAttribute(): Promise<string | null> {
+		const headline = this.root
+			.locator('[data-qa="my-positions-buy-headline"]')
+			.first();
+		const visible = await headline.isVisible().catch(() => false);
+		if (!visible) return null;
+		const raw = await headline.getAttribute("data-qa-line-shares");
+		return raw == null || raw.trim() === "" ? null : raw.trim();
+	}
+
+	/**
+	 * Cumulative scoped sell shares from `[data-qa="my-positions-row"][data-qa-side="sell"]`
+	 * — use **after** `setSide("sell")` so the sell row is mounted. This is the
+	 * authoritative string to type into the amount field for SOR quote (matches
+	 * `data-qa-shares-count`, same source as max-sell).
+	 */
+	async readSellRowSharesCountAttribute(): Promise<string | null> {
+		const row = this.root.locator(
+			'[data-qa="my-positions-row"][data-qa-side="sell"]',
+		);
+		const visible = await row.isVisible().catch(() => false);
+		if (!visible) return null;
+		const raw = await row.getAttribute("data-qa-shares-count");
+		return raw == null || raw.trim() === "" ? null : raw.trim();
+	}
+
+	/**
+	 * Sell share amount on the controlled React input. Prefer `fill()` (same as
+	 * `setAmount`) so a formatted value is replaced atomically; fall back to
+	 * select-all + `pressSequentially` if verification fails.
+	 *
+	 * @param expectedForParse — numeric target for `inputValue` verification (e.g. `buyShares`).
+	 * @param textToType — optional exact string to type (e.g. sell row `data-qa-shares-count`);
+	 *   defaults to `String(expectedForParse)`.
+	 */
+	async setSellShareAmountVerified(
+		expectedForParse: number,
+		absTolerance: number,
+		textToType?: string,
+	): Promise<void> {
+		const text = (textToType ?? String(expectedForParse)).trim();
+		if (text.length === 0) {
+			throw new Error("setSellShareAmountVerified: empty amount text");
+		}
+		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
+		for (let attempt = 0; attempt < 12; attempt++) {
+			await input.click();
+			await input.fill(text);
+			await sleepBetweenTradeboxActions();
+			await sleepBetweenTradeboxActions();
+
+			const raw = await input.inputValue().catch(() => "");
+			const parsed = parseTradeboxAmountInput(raw);
+			if (
+				Math.abs(parsed - expectedForParse) <= absTolerance ||
+				Math.abs(parsed - Number(text)) <= absTolerance
+			) {
+				return;
+			}
+
+			await input.click();
+			await this.page.keyboard.press(
+				process.platform === "darwin" ? "Meta+a" : "Control+a",
+			);
+			await input.pressSequentially(text, { delay: 25 });
+			await sleepBetweenTradeboxActions();
+			const raw2 = await input.inputValue().catch(() => "");
+			const parsed2 = parseTradeboxAmountInput(raw2);
+			if (
+				Math.abs(parsed2 - expectedForParse) <= absTolerance ||
+				Math.abs(parsed2 - Number(text)) <= absTolerance
+			) {
+				return;
+			}
+			await new Promise((r) => setTimeout(r, 450));
+		}
+		const last = await input.inputValue().catch(() => "(unreadable)");
+		throw new Error(
+			`setSellShareAmountVerified: could not settle amount to ~${expectedForParse} (typed "${text}", tol ${absTolerance}); last input=${JSON.stringify(last)}`,
+		);
+	}
+
+	/**
+	 * `[data-qa="my-positions-buy-headline"]` carries `data-qa-line-shares` per
+	 * venue line — waits until it matches filled size (Polymarket lag vs row aggregate).
+	 */
+	async waitForBuyHeadlineSharesNear(
+		expectedShares: number,
+		absTolerance: number,
+		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS,
+	): Promise<void> {
+		const headline = this.root.locator(
+			'[data-qa="my-positions-buy-headline"]',
+		);
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			const n = await headline.count().catch(() => 0);
+			if (n > 0) {
+				const raw = await headline
+					.first()
+					.getAttribute("data-qa-line-shares")
+					.catch(() => null);
+				if (raw !== null && raw.trim() !== "") {
+					const v = Number(raw);
+					if (
+						Number.isFinite(v) &&
+						Math.abs(v - expectedShares) <= absTolerance
+					) {
+						return;
+					}
+				}
+			}
+			await new Promise((r) => setTimeout(r, SHARES_POLL_MS));
+		}
+		throw new Error(
+			`waitForBuyHeadlineSharesNear: headline data-qa-line-shares never matched ~${expectedShares} (±${absTolerance}) within ${timeoutMs}ms`,
+		);
+	}
+
 	async submit(): Promise<void> {
 		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
 		const button = this.root.locator('[data-qa="tradebox-submit"]');
@@ -278,6 +461,107 @@ export class Tradebox {
 			timeout: 10_000,
 		});
 		await sleepBetweenTradeboxActions();
+	}
+
+	/**
+	 * Visible smart-routing-row sub-text price reader.
+	 *
+	 * Used as the sell-side fallback for tests 3/4 because the SOR
+	 * `[data-qa="sor-leg"][data-leg-side="market-sell"]` sentinel only renders
+	 * when `sorRoute.executionRoute` is non-null (see `PredictionMarketTradeBoxUI.tsx`
+	 * lines 1488-1534). On Polymarket sells right after a buy fill, the targeted
+	 * execution channel can lag (`venuePositions` empty) while the omnibus display
+	 * channel already populates `[data-qa="smart-routing-venue-row-${venue}"]`'s
+	 * `.smart-routing-row__sub` with `formatLegAvg(displayAvgPrice) avg.` (see
+	 * `SmartRoutingSection.tsx` line 1127). This helper polls past the
+	 * `QuoteMetricSkeleton` state and parses the cents number.
+	 *
+	 * Assumes the seeded profile uses the **default** odds display style (cents,
+	 * e.g. "71¢"). If a non-default style is in effect (american / decimal / etc.)
+	 * the regex will not match and this throws with the raw text so the operator
+	 * can flip the profile back to default.
+	 */
+	async readVenueRowAvgCents(
+		venue: TradingVenue,
+		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
+	): Promise<number> {
+		const row = this.root.locator(
+			`[data-qa="smart-routing-venue-row-${venue}"]`,
+		);
+		const sub = row.locator(".smart-routing-row__sub").first();
+		const start = Date.now();
+		let lastText = "";
+		while (Date.now() - start < timeoutMs) {
+			await row
+				.waitFor({ state: "attached", timeout: 1_000 })
+				.catch(() => {});
+			const visible = await sub.isVisible().catch(() => false);
+			if (visible) {
+				const text = (await sub.innerText().catch(() => "")).trim();
+				lastText = text;
+				const match = text.match(/(\d+(?:\.\d+)?)¢/);
+				if (match !== null) {
+					const parsed = Number(match[1]);
+					if (Number.isFinite(parsed)) {
+						return parsed;
+					}
+				}
+			}
+			await new Promise((r) => setTimeout(r, BETWEEN_TRADEBOX_ACTIONS_MS));
+		}
+		throw new Error(
+			`readVenueRowAvgCents: smart-routing-venue-row-${venue} sub never produced a "X¢" value within ${timeoutMs}ms ` +
+				`(lastText=${JSON.stringify(lastText)}). Likely a non-default oddsDisplayStyle in the seeded profile, ` +
+				`or the row is still showing a QuoteMetricSkeleton.`,
+		);
+	}
+
+	/**
+	 * Visible smart-routing-row USD value reader.
+	 *
+	 * Sell-side companion to `readVenueRowAvgCents`. Reads the row's
+	 * `.smart-routing-row__value-btn` text (`$ ${formatSorSellProceedsUsdDisplay(displayProceeds)}`
+	 * — see `SmartRoutingSection.tsx` line 1155) and parses USD. Independent of
+	 * `oddsDisplayStyle` (always rendered with `$` and 2 fractional digits).
+	 */
+	async readVenueRowSellReceiveUsd(
+		venue: TradingVenue,
+		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
+	): Promise<number> {
+		const row = this.root.locator(
+			`[data-qa="smart-routing-venue-row-${venue}"]`,
+		);
+		// `data-qa="smart-routing-venue-row-${venue}"` is on the inner main button
+		// (`SmartRoutingSection.tsx` line 1109), so the value-btn is a sibling under
+		// the parent `.smart-routing-block`. Walk up to that block, then locate the
+		// value-btn so we read the same row's USD figure.
+		const block = row.locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' smart-routing-block ')][1]");
+		const valueBtn = block.locator(".smart-routing-row__value-btn").first();
+		const start = Date.now();
+		let lastText = "";
+		while (Date.now() - start < timeoutMs) {
+			await row
+				.waitFor({ state: "attached", timeout: 1_000 })
+				.catch(() => {});
+			const visible = await valueBtn.isVisible().catch(() => false);
+			if (visible) {
+				const text = (await valueBtn.innerText().catch(() => "")).trim();
+				lastText = text;
+				const match = text.match(/\$\s*([\d,]+\.\d{2})/);
+				if (match !== null) {
+					const cleaned = match[1].replace(/[,\s]/g, "");
+					const parsed = Number.parseFloat(cleaned);
+					if (Number.isFinite(parsed) && parsed > 0) {
+						return parsed;
+					}
+				}
+			}
+			await new Promise((r) => setTimeout(r, BETWEEN_TRADEBOX_ACTIONS_MS));
+		}
+		throw new Error(
+			`readVenueRowSellReceiveUsd: smart-routing-venue-row-${venue} value-btn never produced a "$X.XX" value within ${timeoutMs}ms ` +
+				`(lastText=${JSON.stringify(lastText)}). Likely a QuoteMetricSkeleton that never resolved.`,
+		);
 	}
 
 	/** Read `data-leg-*` attributes from the currently rendered SOR leg row for the given side. */
@@ -387,7 +671,9 @@ export class Tradebox {
 	}
 
 	/**
-	 * Poll the buy-side `MyPositionsRow` until it reports > 0 shares.
+	 * Poll the buy-side `MyPositionsRow` until it reports > 0 shares **and**
+	 * `data-qa-position-refreshing` is not `"true"` (shares can bump while sync
+	 * is still in flight — Polymarket/Polygon sell quote needs settled state).
 	 * Replaces the old fixed `await sleep(5000)` with a deterministic signal.
 	 *
 	 * If the account already holds shares on this outcome, use
@@ -410,7 +696,12 @@ export class Tradebox {
 				if (sharesAttr !== null) {
 					const parsed = Number(sharesAttr);
 					if (Number.isFinite(parsed) && parsed > 0) {
-						return parsed;
+						const refreshing = await row.getAttribute(
+							"data-qa-position-refreshing",
+						);
+						if (refreshing !== "true") {
+							return parsed;
+						}
 					}
 				}
 			}
@@ -425,6 +716,8 @@ export class Tradebox {
 	/**
 	 * Like {@link waitForBuyShares}, but when `sharesBefore > 0` waits until the
 	 * cumulative buy row **strictly exceeds** that baseline (new fill reflected).
+	 * Does not return while `data-qa-position-refreshing` is still `"true"` after
+	 * the bump, so the trade box sell path and SOR can see final scoped shares.
 	 */
 	async waitForBuySharesIncreaseSince(
 		sharesBefore: number,
@@ -434,6 +727,7 @@ export class Tradebox {
 			'[data-qa="my-positions-row"][data-qa-side="buy"]',
 		);
 		const start = Date.now();
+		let sawIncreasedButStillRefreshing: number | null = null;
 		while (Date.now() - start < timeoutMs) {
 			const visible = await row.isVisible().catch(() => false);
 			if (visible) {
@@ -447,11 +741,26 @@ export class Tradebox {
 							? Number.isFinite(parsed) && parsed > 0
 							: Number.isFinite(parsed) && parsed > sharesBefore;
 					if (ok) {
-						return parsed;
+						const refreshing = await row.getAttribute(
+							"data-qa-position-refreshing",
+						);
+						if (refreshing !== "true") {
+							return parsed;
+						}
+						sawIncreasedButStillRefreshing = parsed;
+						// Shares count moved but row still loading — keep polling so
+						// trade-box max sell shares / SOR can settle (Polymarket).
 					}
 				}
 			}
 			await new Promise((r) => setTimeout(r, SHARES_POLL_MS));
+		}
+		if (sawIncreasedButStillRefreshing !== null) {
+			throw new Error(
+				`waitForBuySharesIncreaseSince: buy row shares exceeded baseline but ` +
+					`data-qa-position-refreshing stayed "true" for the rest of the ${timeoutMs}ms window ` +
+					`(lastShares=${sawIncreasedButStillRefreshing}).`,
+			);
 		}
 		throw new Error(
 			`waitForBuySharesIncreaseSince: buy row never ${sharesBefore <= 0 ? "reported > 0" : `exceeded baseline ${sharesBefore}`} within ${timeoutMs}ms ` +

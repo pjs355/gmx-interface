@@ -429,6 +429,8 @@ export function useResolvedUmbrellaPositions({
 							displayName: blockMarketTitle,
 							questionId: pv.conditionId ?? pv.tokenId,
 							conditionId: pv.conditionId,
+							/** Same identity as `VenuePosition.tokenId` for History vs Positions dedup. */
+							_venueHeldTokenId: String(pv.tokenId),
 							resolvedOutcome: isYes ? "yes" : "no",
 							_venue: venue,
 							_isNegRisk:

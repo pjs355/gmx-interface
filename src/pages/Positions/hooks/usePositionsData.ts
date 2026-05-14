@@ -71,14 +71,17 @@ export default function usePositionsData() {
 		fundingHydrated,
 	} = useFundingAddresses();
 	const { authenticated } = usePrivy();
-	const { dflowProof } = useAccountData();
+	const { positions: accountPositions, dflowProof } = useAccountData();
 	const {
 		active: polyPositions,
 		winnings: polyWinnings,
 		history: polyHistory,
 		positionsQuery: polyPositionsQuery,
 		tradeHistoryQuery: polyTradeHistoryQuery,
-	} = usePolymarketBundle({ polymarketSafe });
+	} = usePolymarketBundle({
+		polymarketSafe,
+		poly: accountPositions.polymarket,
+	});
 
 	const {
 		active: limitlessPositions,
@@ -88,7 +91,11 @@ export default function usePositionsData() {
 		openOrdersQuery: limitlessOpenOrdersQuery,
 		tradeHistoryQuery: limitlessTradeHistoryQuery,
 		limitlessPortfolioEnabled,
-	} = useLimitlessBundle({ authenticated, limitlessMakerBase });
+	} = useLimitlessBundle({
+		authenticated,
+		limitlessMakerBase,
+		limitless: accountPositions.limitless,
+	});
 
 	const limitlessWinningsForResolvedTab = useMemo(
 		() => limitlessVenueRowsForWinningsTab(limitlessWinnings, limitlessHistory),
@@ -114,7 +121,12 @@ export default function usePositionsData() {
 		marketDetails: predictMarketDetails,
 		positionsQuery: predictPositionsQuery,
 		marketsQuery: predictMarketsQuery,
-	} = usePredictBundle({ signerAddress, effectiveAccount, activeTab });
+	} = usePredictBundle({
+		signerAddress,
+		effectiveAccount,
+		activeTab,
+		predictSlice: accountPositions.predict,
+	});
 
 	const privateApi = usePrivateApiClient();
 
@@ -124,7 +136,12 @@ export default function usePositionsData() {
 		history: dflowHistory,
 		positionsQuery: dflowPositionsQuery,
 		dflowRpcEnabled,
-	} = useDflowBundle({ solanaAddress, authenticated });
+	} = useDflowBundle({
+		solanaAddress,
+		authenticated,
+		dflow: accountPositions.dflow,
+		dflowProof,
+	});
 
 	const handleClaimSuccess = useHandleClaimSuccess({
 		acknowledgeClearedPayouts,

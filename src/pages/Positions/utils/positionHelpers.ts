@@ -125,14 +125,18 @@ export function buildSyntheticOrder(
 	cost: number | null,
 	tradeAt?: string | null,
 	positionDisplayLabel?: string,
+	/** Full venue asset id (e.g. Polymarket token) when `questionId` is only a shortened portfolio key */
+	chainTokenId?: string | null,
 ): ProcessedOrder {
 	const price = avgPrice ?? 0;
 	const usdcValue = cost ?? shares * price;
 	const at = tradeAt?.trim();
+	const ct = chainTokenId?.trim();
+	const tokenForHistoryMatch = ct && ct.length > 0 ? ct : questionId;
 	return {
 		orderId: `synthetic-${venue.toLowerCase()}-${questionId}-${position}`,
 		questionId,
-		tokenId: questionId,
+		tokenId: tokenForHistoryMatch,
 		side: "buy",
 		position,
 		price,
@@ -171,11 +175,41 @@ function shareWeightedMarkPrice(
 	return sumPxSh / sumSh;
 }
 
+function nonemptyTrimmedUnknown(v: unknown): string | null {
+	if (v == null) return null;
+	const s = String(v).trim();
+	return s.length > 0 ? s : null;
+}
+
+/**
+ * Merged umbrella rows keep LevelUp `market` as the primary shape; Poly / other venue ids
+ * on sibling legs must be copied so Positions-vs-History dedup can match venue keys.
+ */
+function mergeVenueLegDedupHintsOntoPrimaryMarket(
+	primary: PredictionMarket,
+	legs: MarketPosition[],
+): PredictionMarket {
+	const out = { ...(primary as Record<string, unknown>) };
+	for (const leg of legs) {
+		const src = leg.market as Record<string, unknown>;
+		for (const k of ["conditionId", "_venueHeldTokenId", "_polyAssetTokenId", "marketId"] as const) {
+			if (nonemptyTrimmedUnknown(out[k])) continue;
+			const v = src[k];
+			if (nonemptyTrimmedUnknown(v)) out[k] = v;
+		}
+		if (!nonemptyTrimmedUnknown(out.questionId)) {
+			const sq = nonemptyTrimmedUnknown(src.questionId);
+			if (sq) out.questionId = sq;
+		}
+	}
+	return out as PredictionMarket;
+}
+
 export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[] {
 	if (markets.length <= 1) return markets;
 
 	const luMarket = markets.find((m) => m.venue === "levelup") ?? markets[0];
-	const primaryMarket = luMarket.market;
+	const primaryMarket = mergeVenueLegDedupHintsOntoPrimaryMarket(luMarket.market, markets);
 
 	let totalYesShares = 0;
 	let totalYesCost = 0;

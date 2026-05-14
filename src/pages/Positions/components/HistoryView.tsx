@@ -46,6 +46,15 @@ import {
 	type LogFullHistoryDebugParams,
 } from "../utils/fullHistoryDebugLog";
 import { buildHistoryUnifiedBlocks } from "../utils/buildHistoryUnifiedBlocks";
+import {
+	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
+	polymarketSplitSettlementBadgeVisible,
+} from "../utils/polymarketHistorySplitSettlementBadge";
+import type { UmbrellaPositions } from "../utils/positionHelpers";
+import {
+	buildHistoryHoldingsBlockedKeys,
+	filterUnifiedHistoryBlocksByOpenPositions,
+} from "../utils/filterHistoryBlocksByOpenPositions";
 
 type MergedHistoryRow = {
 	side: "Yes" | "No";
@@ -59,6 +68,8 @@ type MergedHistoryRow = {
 	totalReturnPct: number | null;
 	tradeCount: number;
 	marketIds: string[];
+	/** Polymarket 50/50-style settlement notice (orphan REDEEM heuristic — post-claim). */
+	polymarketSplitBadge?: boolean;
 };
 
 export default function HistoryView({
@@ -69,6 +80,9 @@ export default function HistoryView({
 	catalogUmbrellas,
 	venueHistoryRawItemsForDebug,
 	historyResolveStage,
+	resolvedUmbrellaPositions,
+	/** Open Positions strip (MTM merged LevelUp / venue legs) — same match hidden from History. */
+	openUmbrellaPositions,
 }: {
 	umbrellaBalances: any[];
 	orders: any[];
@@ -80,6 +94,9 @@ export default function HistoryView({
 	catalogUmbrellas?: Umbrella[];
 	/** `POST /api/umbrellas/resolve-venue-history` status + row id counts for `FULL HISTORY`. */
 	historyResolveStage?: LogFullHistoryDebugParams["resolveStage"];
+	/** Resolved / claim winnings on Positions — same markets hidden here until claimed / zeroed out. */
+	resolvedUmbrellaPositions: UmbrellaPositions[];
+	openUmbrellaPositions: UmbrellaPositions[];
 }) {
 	const { umbrellas: contextUmbrellas, getAllQuestionsForUmbrella } = usePredictionData();
 	const umbrellas = catalogUmbrellas ?? contextUmbrellas;
@@ -141,11 +158,25 @@ export default function HistoryView({
 		],
 	);
 
+	const historyHoldingsBlocked = useMemo(
+		() =>
+			buildHistoryHoldingsBlockedKeys(
+				openUmbrellaPositions,
+				resolvedUmbrellaPositions,
+			),
+		[openUmbrellaPositions, resolvedUmbrellaPositions],
+	);
+	const unifiedBlocksForDisplay = useMemo(
+		() =>
+			filterUnifiedHistoryBlocksByOpenPositions(unifiedBlocks, historyHoldingsBlocked),
+		[unifiedBlocks, historyHoldingsBlocked],
+	);
+
 	useEffect(() => {
 		logFullHistoryDebug({
 			layout: "table",
 			venueHistory,
-			unifiedBlocks: unifiedBlocks as FullHistoryUnifiedBlock[],
+			unifiedBlocks: unifiedBlocksForDisplay as FullHistoryUnifiedBlock[],
 			umbrellas,
 			umbrellaLookupByConditionId,
 			predictLookup: predictUmbrellaLookup,
@@ -159,7 +190,7 @@ export default function HistoryView({
 		});
 	}, [
 		venueHistory,
-		unifiedBlocks,
+		unifiedBlocksForDisplay,
 		umbrellas,
 		umbrellaLookupByConditionId,
 		predictUmbrellaLookup,
@@ -184,7 +215,7 @@ export default function HistoryView({
 
 	const mergedRowsByBlock = useMemo(() => {
 		let limitlessHistUiLog = 0;
-		return unifiedBlocks.map((block) => {
+		return unifiedBlocksForDisplay.map((block) => {
 			const resolvedList = resolvedMarketsByUmbrella[block.id] ?? [];
 			const luSample = block.luMarkets[0]?.market ?? null;
 			const umbrellaTitle = umbrellaHeaderLabel(block.umbrella);
@@ -397,6 +428,10 @@ export default function HistoryView({
 				const fallbackOutcome = b.outcomeText
 					? shortTeamDisplayName(b.outcomeText)
 					: "—";
+				const polymarketSplitBadge = polymarketSplitSettlementBadgeVisible(
+					block.venuePositions,
+					side,
+				);
 				rows.push({
 					side,
 					label: b.label || side,
@@ -409,13 +444,14 @@ export default function HistoryView({
 					totalReturnPct: retPct,
 					tradeCount,
 					marketIds: b.marketIds,
+					...(polymarketSplitBadge ? { polymarketSplitBadge: true } : {}),
 				});
 			}
 			return { block, rows };
 		});
-	}, [unifiedBlocks, allOrders, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
+	}, [unifiedBlocksForDisplay, allOrders, resolvedMarketsByUmbrella, matchedMarkets, umbrellas]);
 
-	if (unifiedBlocks.length === 0) {
+	if (unifiedBlocksForDisplay.length === 0) {
 		return (
 			<div style={{ textAlign: "center", padding: "40px", color: "#888" }}>
 				<p>No resolved markets with trading history found.</p>
@@ -496,7 +532,20 @@ export default function HistoryView({
 											onMouseEnter={(e) => { if (row.tradeCount > 0) e.currentTarget.style.background = "#1a1a1a"; }}
 											onMouseLeave={(e) => { if (row.tradeCount > 0) e.currentTarget.style.background = "transparent"; }}
 										>
-											<div style={{ color: "#fff", fontWeight: 600 }}>{row.label}</div>
+											<div style={{ color: "#fff", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+												{row.polymarketSplitBadge === true ? (
+													<Tooltip content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY} position="top">
+														<span
+															aria-label={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
+															role="img"
+															style={{ cursor: "help", color: "#f59e0b", flexShrink: 0, fontSize: 16, lineHeight: 1 }}
+														>
+															⚠
+														</span>
+													</Tooltip>
+												) : null}
+												<span>{row.label}</span>
+											</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{posText}</div>
 											<div style={{ textAlign: "center", color: row.outcomeColor, fontWeight: 600 }}>{row.outcomeText}</div>
 											<div style={{ textAlign: "center", color: "#fff", fontWeight: 500 }}>{costText}</div>

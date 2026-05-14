@@ -48,7 +48,7 @@ interface ImportMetaEnv {
 	/** Legacy: browser REST seed for DFlow orderbooks uses `GET /api/public/dflow-orderbook` on the prediction API (see `dflow-book-client.ts`). */
 	readonly VITE_DFLOW_REST_BASE?: string;
 	/** DFlow orderbook WebSocket URL */
-	readonly VITE_DFLOW_WS_URL?: string; 
+	readonly VITE_DFLOW_WS_URL?: string;
 	/**
 	 * Optional override for LevelUp subgraph GraphQL HTTP endpoint (user token balances).
 	 * When unset, defaults to The Graph Studio `levelup-subgraph`. Use this if your
