@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useSignerContext } from "context/SignerContext";
@@ -11,7 +11,6 @@ import "./Predictions.scss";
 import GameLinks from "./components/GameLinks";
 import { Search } from "./components/Search/Search";
 import {
-	GAME_FILTER_COMPACT_MEDIA,
 	gameFilterResetSelection,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
@@ -44,12 +43,6 @@ export default function Predictions() {
 	const [searchActive, setSearchActive] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<Umbrella[]>([]);
-
-	useLayoutEffect(() => {
-		const mq = window.matchMedia(GAME_FILTER_COMPACT_MEDIA);
-		if (!mq.matches) return;
-		setSelectedGame((prev) => (prev === null ? LIVE_PILL_ID : prev));
-	}, []);
 
 	// Listen for reset filter event from header
 	useEffect(() => {

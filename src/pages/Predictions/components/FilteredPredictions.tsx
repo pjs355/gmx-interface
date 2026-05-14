@@ -40,6 +40,7 @@ import {
 	useNowTick,
 } from "../utils/gameLinkFilters";
 import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
+import { CS2_GAME_LOGO_URL } from "@/helpers/gameLogoResolver";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
@@ -700,9 +701,19 @@ export default function FilteredPredictions({
 			content = (
 				<div className="prediction-calendar">
 					<header className="prediction-calendar-page-heading">
-						<h2 className="prediction-calendar-page-heading__title">
-							Counter-Strike
-						</h2>
+						<div className="prediction-calendar-page-heading__title-row">
+							<img
+								className="prediction-calendar-page-heading__game-logo"
+								src={CS2_GAME_LOGO_URL}
+								alt=""
+								width={40}
+								height={40}
+								decoding="async"
+							/>
+							<h2 className="prediction-calendar-page-heading__title">
+								Counter-Strike
+							</h2>
+						</div>
 					</header>
 					{calendarSections}
 				</div>

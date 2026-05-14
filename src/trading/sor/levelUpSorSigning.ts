@@ -1,6 +1,7 @@
 import type { RouteLeg } from "./sor-types";
 import { formatUnits } from "viem";
 import { predictionBuyMakerMicroUsdc } from "./predictionBuyCollateralMicro";
+import { levelUpBuyTotalMicroScwBalanceRequired } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLevelUp";
 
 /**
  * Single signing price (2dp) for LevelUp prediction `POST /orders`, aligned with SOR route legs.
@@ -39,7 +40,7 @@ export function resolveLevelUpSigningPrice(args: {
 	);
 }
 
-/** Human USDC (6dp) the signed **buy** order locks as `makerAmount` — prefund must cover this on Base. */
+/** Human USDC the LevelUp **buy** needs on the Base SCW: signed `makerAmount` + buy fee (FeeWrapper), matching API `ensureUsdcApprovalAndBalance`. */
 export function levelUpBuySignedPremiumUsdHuman(leg: RouteLeg): number {
 	const shares = Math.max(0, Math.round(leg.shares));
 	const isLimit = leg.orderType === "limit";
@@ -53,6 +54,7 @@ export function levelUpBuySignedPremiumUsdHuman(leg: RouteLeg): number {
 		isLimit,
 		limitPrice,
 	});
-	const micro = predictionBuyMakerMicroUsdc(shares, price);
-	return Number(formatUnits(micro, 6));
+	const makerMicro = predictionBuyMakerMicroUsdc(shares, price);
+	const totalMicro = levelUpBuyTotalMicroScwBalanceRequired(makerMicro);
+	return Number(formatUnits(totalMicro, 6));
 }

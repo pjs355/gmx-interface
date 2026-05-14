@@ -956,8 +956,17 @@ $predictions-compact-card-inline: 60px;
 	 */
 	padding-bottom: 52px;
 
-	&__title {
+	&__title-row {
+		display: block;
 		margin-top: 30px;
+	}
+
+	&__game-logo {
+		display: none;
+	}
+
+	&__title {
+		margin-top: 0;
 		margin-bottom: 0;
 		font-size: clamp(1.5rem, 2.2vw + 1rem, 2rem);
 		font-weight: 300;
@@ -1363,6 +1372,37 @@ $predictions-compact-card-inline: 60px;
 		--prediction-calendar-heading-inline: 14px;
 	}
 
+	/*
+	 * Compact has no market hero (`height: 0` on `.predictions-page__market-background`);
+	 * pull the page title and first day header (Today / date) closer so they read as one stack.
+	 */
+	.prediction-calendar-page-heading {
+		margin-bottom: 16px;
+		padding-bottom: 4px;
+
+		&__title-row {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			margin-top: 12px;
+		}
+
+		&__game-logo {
+			display: block;
+			width: 40px;
+			height: 40px;
+			object-fit: contain;
+			object-position: center;
+			flex-shrink: 0;
+			border-radius: 8px;
+			background: #000000;
+		}
+
+		&__title {
+			margin-top: 0;
+		}
+	}
+
 	.prediction-card--compact {
 		--prediction-card-inline: 14px;
 	}
@@ -1372,6 +1412,66 @@ $predictions-compact-card-inline: 60px;
 		margin-right: -8px;
 		padding-left: 8px;
 		padding-right: 8px;
+	}
+
+	/*
+	 * Horizontal filter strip (≤1099): inactive pills transparent; hover + active share
+	 * trade input fill `#101114` (see `.prediction-market-tradebox .input-container`).
+	 */
+	.game-links-wrapper .game-links-bar .game-link {
+		width: auto;
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 8px 12px;
+		border: none;
+		background: transparent;
+		color: #ffffff;
+		line-height: 1;
+		transition:
+			color 0.15s ease-in-out,
+			background-color 0.15s ease-in-out;
+
+		&:hover {
+			background: #101114;
+			color: #ffffff;
+		}
+
+		&.active {
+			background: #101114;
+			color: #ffffff;
+			font-weight: 700;
+		}
+
+		.game-link__count {
+			color: #9ca3af;
+			line-height: 1;
+		}
+
+		&:hover .game-link__count,
+		&.active .game-link__count {
+			color: #9ca3af;
+		}
+	}
+
+	.game-links-wrapper .game-links-bar .game-link__inner {
+		align-items: center;
+		justify-content: flex-start;
+		width: auto;
+		gap: 6px;
+		line-height: 1;
+	}
+
+	.game-links-wrapper .game-links-bar .game-link__leading {
+		flex: 0 1 auto;
+		min-width: 0;
+		align-items: center;
+		line-height: 1;
+	}
+
+	.game-links-wrapper .game-links-bar .game-link__label {
+		line-height: 1;
 	}
 
 	.predictions-grid {

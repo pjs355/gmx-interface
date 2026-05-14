@@ -1,8 +1,10 @@
 import React from "react";
+import { useMedia } from "react-use";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import type { Tag } from "@/services/api/tagService";
 import {
+	GAME_FILTER_COMPACT_MEDIA,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
 	LIVE_PILL_ID,
@@ -28,6 +30,7 @@ export default function GameLinks({
 }: GameLinksProps) {
 	const { tags, tagsLoading } = usePredictionData();
 	const now = useNowTick(60_000);
+	const isCompactGameFilter = useMedia(GAME_FILTER_COMPACT_MEDIA);
 
 	// Filter tags to only show tags that have active markets for the current page type
 	// All hooks must be called before any early returns
@@ -250,6 +253,28 @@ export default function GameLinks({
 					aria-label="Game links"
 					ref={scrollRef}
 				>
+				{isCompactGameFilter ? (
+					<button
+						type="button"
+						className={`game-link ${
+							selectedGame === null ? "active" : ""
+						}`}
+						key="__ALL__"
+						onClick={() => onGameSelect(null)}
+					>
+						<span className="game-link__inner">
+							<span className="game-link__leading">
+								<span className="game-link__label">All</span>
+							</span>
+							<span
+								className="game-link__count"
+								aria-label={`${linkFilterState.typeFilteredUmbrellas.length} markets`}
+							>
+								{linkFilterState.typeFilteredUmbrellas.length}
+							</span>
+						</span>
+					</button>
+				) : null}
 				<button
 					type="button"
 					className={`game-link game-link--live ${

@@ -22,9 +22,9 @@
 		max-width: 100%;
 		box-sizing: border-box;
 
-		.market-header h1 {
-			font-size: 1rem;
-			line-height: 1.3;
+		.market-header .market-title-container h1.text-34 {
+			font-size: 1.0625rem;
+			line-height: 1.35;
 			font-weight: 700;
 			margin-bottom: 0.375rem;
 			max-width: 100%;
@@ -295,7 +295,8 @@
 	.prediction-market-page.mobile .market-header {
 		margin-left: -8px;
 		margin-right: -8px;
-		padding-left: 8px;
+		/* Match chart `.chart-titles` (12px) on top of 8px page inset */
+		padding-left: 20px;
 		padding-right: 8px;
 	}
 }
@@ -363,7 +364,8 @@
 	.prediction-market-page.mobile .market-header {
 		margin-left: -8px;
 		margin-right: -8px;
-		padding-left: 8px;
+		/* Match chart `.chart-titles` (12px) on top of 8px page inset */
+		padding-left: 20px;
 		padding-right: 8px;
 	}
 }
@@ -637,9 +639,37 @@
 }
 
 .orderbook-section__cross-venue {
-	margin-top: 8px;
-	padding-top: 4px;
-	border-top: 1px solid rgba(255, 255, 255, 0.06);
+	margin-top: 0;
+	padding-top: 0;
+}
+
+/*
+ * Basic tab: `EsportsVenueBooksPanel` sits inside padded `.venue-books-container`
+ * (desktop) / `.orderbook-section-mobile` (mobile). Comments is a sibling of
+ * that container with no matching inset — pull only the cross-venue table flush
+ * so it lines up with Comments (do not touch `PredictionMarketChart`).
+ */
+@media (min-width: 1101px) {
+	.prediction-market-page.desktop
+		.venue-books-container
+		.orderbook-section
+		.orderbook-section__cross-venue {
+		margin-left: -12px;
+		margin-right: -12px;
+		width: calc(100% + 24px);
+		max-width: calc(100% + 24px);
+		box-sizing: border-box;
+	}
+}
+
+.prediction-market-page.mobile
+	.orderbook-section-mobile
+	.orderbook-section__cross-venue {
+	margin-left: -12px;
+	margin-right: -12px;
+	width: calc(100% + 24px);
+	max-width: calc(100% + 24px);
+	box-sizing: border-box;
 }
 
 // Live dot pulse for the Chart / Livestream tab switcher.

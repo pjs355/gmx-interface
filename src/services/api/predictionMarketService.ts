@@ -146,37 +146,9 @@ export class PredictionMarketService {
 				);
 			}
 
-			const orderData = await this.createOrder(
-				order.marketId,
-				order.position,
-				order.amount,
-				order.price,
-				"0x0000000000000000000000000000000000000000" // Placeholder - will be set by frontend
+			throw new Error(
+				"PredictionMarketService.executeOrder is not implemented. Use useTradeExecutionService().executeTrade.",
 			);
-
-			console.log("📝 Created order structure:", orderData);
-
-			// Submit to your local server
-			console.log("🌐 Submitting order to local server...");
-			const apiResult = await this.submitOrderToAPI(orderData, undefined, undefined, undefined);
-
-			console.log(
-				"✅ Order submitted to server successfully:",
-				apiResult
-			);
-
-			// For now, return success (in real implementation, you'd wait for blockchain confirmation)
-			return {
-				success: true,
-				orderId: `order_${Date.now()}_${Math.random()
-					.toString(36)
-					.substr(2, 9)}`,
-				transactionHash:
-					"0x" +
-					Array.from({ length: 64 }, () =>
-						Math.floor(Math.random() * 16).toString(16)
-					).join(""),
-			};
 		} catch (error: any) {
 			console.error("❌ Order execution failed:", error);
 			return {
@@ -307,8 +279,8 @@ export class PredictionMarketService {
 
 		const order: MarketOrder = {
 			salt: ethers.id(`order-${Date.now()}-${Math.random()}`),
-			maker: userAddress, // Smart wallet address
-			signer: signerAddress || userAddress, // Embedded wallet address (fallback to smart wallet)
+			maker: userAddress,
+			signer: signerAddress ?? userAddress,
 			taker: ethers.ZeroAddress, // Public order
 			tokenId: tokenId,
 			// CRITICAL: Swap makerAmount/takerAmount based on side

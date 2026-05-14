@@ -224,6 +224,28 @@ export async function readBaseScwUsdcBalanceRaw(
 	}) as Promise<bigint>;
 }
 
+/**
+ * Native Base USDC (6 decimals) on the **Privy embedded EOA**.
+ * {@link readFundingStableBalancesHuman} intentionally maps `base` to the SCW only;
+ * this helper is for same-chain top-up when LevelUp runs with `bridge: null` (no
+ * `executeBridge` / Li.FI prefund) but USDC sits on the embedded address on Base.
+ */
+export async function readBaseEmbeddedUsdcBalanceRaw(
+	embeddedEoa: string | null | undefined,
+): Promise<bigint> {
+	const addr =
+		embeddedEoa && /^0x[a-fA-F0-9]{40}$/i.test(embeddedEoa)
+			? (embeddedEoa as Address)
+			: undefined;
+	if (!addr) return 0n;
+	return basePublic.readContract({
+		address: getUSDCAddress() as Address,
+		abi: erc20Abi,
+		functionName: "balanceOf",
+		args: [addr],
+	}) as Promise<bigint>;
+}
+
 /** On-chain BNB Chain USDT (BEP-20) balance in wei for LI.FI prefund caps (18 decimals). */
 export async function readBnbUsdtBalanceWei(
 	embeddedEoa: string | null | undefined,

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, type MutableRefObject } from "react";
+import { useSendTransaction } from "@privy-io/react-auth";
 import { encodeFunctionData, erc20Abi, formatUnits } from "viem";
 import { base } from "viem/chains";
 import { Side } from "@polymarket/clob-client-v2";
@@ -29,6 +30,7 @@ import type {
 import type { SorExecutionPhase } from "./useSorExecution";
 import {
 	readFundingStableBalancesHuman,
+	readBaseEmbeddedUsdcBalanceRaw,
 	readBaseScwUsdcBalanceRaw,
 	readBnbUsdtBalanceWei,
 	type FundingStableBalancesHuman,
@@ -75,10 +77,13 @@ import {
 	levelUpBuySignedPremiumUsdHuman,
 	resolveLevelUpSigningPrice,
 } from "@/trading/sor/levelUpSorSigning";
+import { predictionBuyMakerMicroUsdc } from "@/trading/sor/predictionBuyCollateralMicro";
+import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
+import { levelUpBuyTotalMicroScwBalanceRequired } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLevelUp";
 import {
 	parsePrivyEvmTxHash,
 	waitForBaseTransactionSuccess,
@@ -473,6 +478,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		buildExecuteLifiStepsOptions,
 	} = useFundingLifiExecution();
 
+	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
+
 	const reportSorExecutionPhase = (phase: SorExecutionPhase) => {
 		reportExecutionPhaseRef?.current?.(phase);
 	};
@@ -517,6 +524,15 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					if (!account) {
 						return { filled: false, filledShares: 0, error: "No wallet connected" };
 					}
+					const scw = fundingAddresses.baseSmartWallet?.trim();
+					if (!scw) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error:
+								"LevelUp trades require a Base Coinbase Smart Wallet. Link a smart wallet in Privy.",
+						};
+					}
 					if (ensureLevelUpApprovals) {
 						reportSorExecutionPhase("approving_trades");
 						try {
@@ -543,6 +559,97 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						limitPrice,
 					});
 
+					/**
+					 * LevelUp `POST /orders` uses the **Base SCW as maker** — API balance checks
+					 * are on SCW USDC only. SOR buy legs with `bridge: null` never run
+					 * `executeBridge`, so no Li.FI prefund runs to move USDC onto the SCW.
+					 * If the SCW is short but the user also holds USDC on the **embedded EOA on
+					 * Base** (same chain), we `transfer` that USDC to the SCW before signing.
+					 * This is a funding convenience only; venue trading identity stays the SCW.
+					 */
+					if (side === "buy") {
+						const embeddedTrim = fundingAddresses.embeddedEoa?.trim() ?? "";
+						const scwLc = scw.toLowerCase();
+						if (
+							embeddedTrim.length === 42 &&
+							embeddedTrim.startsWith("0x") &&
+							embeddedTrim.toLowerCase() !== scwLc
+						) {
+							const makerMicro = predictionBuyMakerMicroUsdc(
+								shares,
+								signingPrice,
+							);
+							/** SCW must cover signed `makerAmount` + LevelUp buy fee (FeeWrapper); see API `ensureUsdcApprovalAndBalance`. */
+							const requiredMicro =
+								levelUpBuyTotalMicroScwBalanceRequired(makerMicro);
+							let scwBal = await readBaseScwUsdcBalanceRaw(scw);
+							let embBal = 0n;
+							if (scwBal < requiredMicro) {
+								embBal = await readBaseEmbeddedUsdcBalanceRaw(embeddedTrim);
+								const shortfall = requiredMicro - scwBal;
+								const sendMicro =
+									shortfall <= embBal ? shortfall : embBal;
+								if (sendMicro > 0n) {
+									reportSorExecutionPhase("moving_funds");
+									try {
+										console.warn("[SOR][prefund] same-chain Base USDC (embedded → SCW for LevelUp)", {
+											venue: "levelup",
+											usdcApprox: Number(sendMicro) / 1e6,
+										});
+										const embeddedTx =
+											createPrivyEmbeddedSendTransactionCapable(
+												embeddedTrim as `0x${string}`,
+												base,
+												privyEvmSendTransaction,
+											);
+										const usdcAddr = getUSDCAddress() as `0x${string}`;
+										const data = encodeFunctionData({
+											abi: erc20Abi,
+											functionName: "transfer",
+											args: [scw as `0x${string}`, sendMicro],
+										});
+										const sent = await withTimeout(
+											embeddedTx.sendTransaction({
+												to: usdcAddr,
+												data,
+												value: 0n,
+												chainId: base.id,
+											}),
+											SOR_BASE_USDC_TRANSFER_TIMEOUT_MS,
+											"Base USDC transfer (embedded EOA → smart wallet for LevelUp)",
+										);
+										const hash = parsePrivyEvmTxHash(sent);
+										await withTimeout(
+											waitForBaseTransactionSuccess(
+												hash,
+												"USDC transfer embedded → smart wallet",
+											),
+											SOR_BASE_SWEEP_RECEIPT_TIMEOUT_MS,
+											"USDC transfer receipt embedded → smart wallet",
+										);
+									} finally {
+										reportSorExecutionPhase("executing_trade");
+									}
+									scwBal = await readBaseScwUsdcBalanceRaw(scw);
+								}
+							}
+							if (scwBal < requiredMicro) {
+								const needHuman = Number(formatUnits(requiredMicro, 6));
+								const haveHuman = Number(formatUnits(scwBal, 6));
+								const embHuman = Number(formatUnits(embBal, 6));
+								return {
+									filled: false,
+									filledShares: 0,
+									error:
+										`Insufficient USDC on your Base smart wallet for this LevelUp buy (~$${needHuman.toFixed(2)} required). ` +
+										`After moving funds from your embedded wallet on Base, the smart wallet has ~$${haveHuman.toFixed(2)} ` +
+										`(embedded Base USDC available to move was ~$${embHuman.toFixed(2)}). ` +
+										"Add USDC on Base to your smart wallet or embedded wallet, refresh, and try again.",
+								};
+							}
+						}
+					}
+
 					const params: TradeExecutionParams = {
 						marketId: questionId,
 						position,
@@ -550,7 +657,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						price: signingPrice,
 						orderType: isLimit ? "limit" : "market",
 						side,
-						userAddress: account,
+						userAddress: scw,
 						market,
 					};
 
@@ -1468,6 +1575,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			getLimitlessMakerAddress,
 			getRelayClient,
 			fundingAddresses,
+			privyEvmSendTransaction,
 		],
 	);
 

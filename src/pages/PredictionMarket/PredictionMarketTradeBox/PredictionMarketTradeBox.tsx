@@ -2061,7 +2061,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     () =>
       buildChainBalances({
         baseUsdcBalance: collateralTokens.baseUsdc,
-        baseWalletAddress: account ?? "",
+        baseWalletAddress:
+          funding.baseSmartWallet?.trim() || account?.trim() || "",
         limitlessMakerUsdcBalance: Math.max(0, limitlessMakerCashForSor ?? 0),
         limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
         polygonUsdcBalance: collateralTokens.polygonStable,

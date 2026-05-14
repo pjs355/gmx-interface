@@ -301,7 +301,12 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 							>
 								<span className="esports-venue-books__label-row">
 									{resolveMarketLogo(row.id) ? (
-										<MarketLogo venue={row.id} size={16} />
+										<MarketLogo
+											venue={row.id}
+											size={16}
+											className="esports-venue-books__market-logo"
+											style={{ display: "block", verticalAlign: "unset" }}
+										/>
 									) : (
 										<span
 											className="esports-venue-books__logo-placeholder"
@@ -320,7 +325,15 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 									row.id,
 								)}
 							>
-								{formatAskCell(row.linked, row.askA, row.statusA, row.id, formatProbDisplay)}
+								<span className="esports-venue-books__num-cell">
+									{formatAskCell(
+										row.linked,
+										row.askA,
+										row.statusA,
+										row.id,
+										formatProbDisplay,
+									)}
+								</span>
 							</td>
 							<td
 								className={askCellClass(
@@ -331,7 +344,15 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 									row.id,
 								)}
 							>
-								{formatAskCell(row.linked, row.askB, row.statusB, row.id, formatProbDisplay)}
+								<span className="esports-venue-books__num-cell">
+									{formatAskCell(
+										row.linked,
+										row.askB,
+										row.statusB,
+										row.id,
+										formatProbDisplay,
+									)}
+								</span>
 							</td>
 						</tr>
 					))}

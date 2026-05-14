@@ -22,16 +22,18 @@
 .esports-venue-books__th,
 .esports-venue-books__td {
 	border: 1px solid #4b5563;
-	padding: 10px 12px;
+	padding: 8px 12px;
 	text-align: center;
 	vertical-align: middle;
+	line-height: 1;
 }
 
-.esports-venue-books__th {
+.esports-venue-books thead .esports-venue-books__th {
 	background: rgba(255, 255, 255, 0.06);
 	font-size: 1.05rem;
 	font-weight: 700;
 	color: #fff;
+	line-height: 1;
 }
 
 .esports-venue-books__th--venue {
@@ -45,6 +47,7 @@
 	font-weight: 700;
 	letter-spacing: 0.02em;
 	color: rgba(255, 255, 255, 0.92);
+	line-height: 1;
 }
 
 .esports-venue-books__th--team {
@@ -53,18 +56,51 @@
 }
 
 .esports-venue-books__th-text {
-	display: block;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	max-width: 100%;
 }
 
-.esports-venue-books__td--label {
+.esports-venue-books__td--label,
+.esports-venue-books tbody th.esports-venue-books__td--label {
 	font-weight: 500;
 	color: rgba(255, 255, 255, 0.75);
 	background: rgba(255, 255, 255, 0.03);
 	text-align: left;
+	line-height: 1;
+	font-size: inherit;
+	vertical-align: middle;
+}
+
+.esports-venue-books tbody .esports-venue-books__label-row {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	min-height: 1.375rem;
+	line-height: 1;
+}
+
+.esports-venue-books tbody .esports-venue-books__num-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	min-height: 1.375rem;
+	line-height: 1;
+}
+
+/* Line-box vertical center sits on the baseline; caps read high — nudge to optical center */
+.esports-venue-books tbody .esports-venue-books__label-row,
+.esports-venue-books tbody .esports-venue-books__num-cell {
+	transform: translateY(0.08em);
 }
 
 .esports-venue-books__label-row {
@@ -72,15 +108,26 @@
 	align-items: center;
 	gap: 8px;
 	min-width: 0;
+	line-height: 1;
+}
+
+.esports-venue-books__label-row > span:last-child {
+	line-height: 1;
+	min-width: 0;
+}
+
+.esports-venue-books__market-logo {
+	align-self: center;
 }
 
 .esports-venue-books__label-row > img,
 .esports-venue-books__logo-placeholder {
 	flex-shrink: 0;
+	align-self: center;
 }
 
 .esports-venue-books__logo-placeholder {
-	display: inline-block;
+	display: block;
 	width: 16px;
 	height: 16px;
 }
@@ -88,6 +135,7 @@
 .esports-venue-books__td--num {
 	text-align: center;
 	font-weight: 500;
+	line-height: 1;
 }
 
 .esports-venue-books__td--avgcell {
@@ -109,6 +157,7 @@
 	font-size: 0.82rem;
 	font-weight: 400;
 	font-style: italic;
+	line-height: 1.25;
 }
 
 .esports-venue-books__muted {
@@ -164,10 +213,38 @@
 .prediction-market-page.mobile .esports-venue-books__td {
 	padding: 6px 4px;
 	font-size: 0.875rem;
+	line-height: 1;
 }
 
-.prediction-market-page.mobile .esports-venue-books__th {
+.prediction-market-page.mobile .esports-venue-books thead .esports-venue-books__th {
 	font-size: 0.9rem;
+}
+
+.prediction-market-page.mobile .esports-venue-books__td--label,
+.prediction-market-page.mobile .esports-venue-books tbody th.esports-venue-books__td--label {
+	font-size: 0.875rem;
+	line-height: 1;
+
+	.esports-venue-books__label-row {
+		max-width: 100%;
+		flex-wrap: nowrap;
+		align-items: center;
+		min-height: auto;
+	}
+
+	.esports-venue-books__label-row > span:last-child {
+		overflow: visible;
+		text-overflow: clip;
+		white-space: normal;
+		word-break: normal;
+		overflow-wrap: anywhere;
+		min-width: 0;
+		line-height: 1.15;
+	}
+}
+
+.prediction-market-page.mobile .esports-venue-books tbody .esports-venue-books__num-cell {
+	min-height: auto;
 }
 
 // Give the venue (prediction market) column the lion's share of the row so
@@ -182,24 +259,4 @@
 	min-width: 0;
 	max-width: none;
 	width: 25%;
-}
-
-// Allow the venue name to wrap onto a second line if needed so it never
-// truncates with an ellipsis on narrow viewports.
-.prediction-market-page.mobile .esports-venue-books__td--label {
-	.esports-venue-books__label-row {
-		max-width: 100%;
-		flex-wrap: nowrap;
-		align-items: center;
-	}
-
-	.esports-venue-books__label-row > span:last-child {
-		overflow: visible;
-		text-overflow: clip;
-		white-space: normal;
-		word-break: normal;
-		overflow-wrap: anywhere;
-		min-width: 0;
-		line-height: 1.2;
-	}
 }

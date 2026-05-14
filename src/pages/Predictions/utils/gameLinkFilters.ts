@@ -9,12 +9,9 @@ export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
 export const GAME_FILTER_COMPACT_MEDIA = "(max-width: 1099px)";
 
 /**
- * Value to use when clearing the game filter. We intentionally default both
- * desktop AND mobile to "no pill selected" (null) so the user lands on the
- * full set of markets we offer (Counter-Strike, esports calendar, etc.) on
- * first load and on every reset. Previously mobile defaulted to `LIVE_PILL_ID`
- * which made it look like only a handful of markets existed when a tournament
- * wasn't actively in-progress.
+ * Value to use when clearing the game filter. `null` means "All" (no tag /
+ * Live / Starting Soon slice). On compact widths, `GameLinks` renders an
+ * explicit **All** pill that is active when this is `null`.
  */
 export function gameFilterResetSelection(): string | null {
 	return null;
