@@ -31,6 +31,7 @@ import {
 	type ShareIdentityRouteLegContext,
 } from "./postTradeBaseline";
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
+import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
 import { withTimeout } from "@/utils/withTimeout";
 
 /** Same total as `PortfolioContext` cashBalance — sum of stable slices from cached collateral queries. */

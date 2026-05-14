@@ -1331,7 +1331,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									maker,
 									feeRateBps,
 									tokenId: String(tokenId),
-									makerAmount: roundLimitlessFokMakerAmountHuman(limitlessBuyMakerUsd),
+									makerAmount: floorLimitlessFokMakerAmountHuman(limitlessBuyMakerUsd),
 								}),
 							);
 						} else {
@@ -1343,7 +1343,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									maker,
 									feeRateBps,
 									tokenId: String(tokenId),
-									makerAmount: roundLimitlessFokMakerAmountHuman(leg.shares),
+									makerAmount: floorLimitlessFokMakerAmountHuman(leg.shares),
 								}),
 							);
 						}
