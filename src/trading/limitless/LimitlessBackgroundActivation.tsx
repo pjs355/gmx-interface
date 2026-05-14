@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
 import { useSignerContext } from "context/SignerContext";
+import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { buildLimitlessEoaEnsureBodyFromSigner } from "./limitlessEnsureEoaBody";
 import { useLimitlessEnsureExecutionReady } from "./useLimitlessEnsureExecutionReady";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
@@ -13,8 +15,9 @@ const LOG_TAG = "[LimitlessActivation]";
  *
  * Activation chain: **Predict -> Limitless -> Polymarket**.
  *
- * Limitless sits in the middle. Its `ensure-account` call is pure
- * server work — zero Privy RPC from the client — so running it after
+ * Limitless sits in the middle. Its `ensure-account` call chains server-side
+ * provisioning; first-time partner create requires a short **personal_sign**
+ * on the plain signing message (wired via `buildEnsureAccountBody`).
  * Predict's BSC signing burst gives the Privy embedded-wallet rate
  * bucket (shared across all chains, not per-chain) a productive
  * recovery window before Polymarket's visible activation fires its
@@ -25,11 +28,9 @@ const LOG_TAG = "[LimitlessActivation]";
  * `limitlessReady` skips its slow "deploying-safe" phase entirely.
  *
  * Behavior:
- *  - Waits for Privy + signer context + Predict ready.
- *  - Mounts `useLimitlessEnsureExecutionReady` immediately on those
- *    prereqs (no `requestIdleCallback` deferral), which fires the
- *    idempotent `POST /api/limitless/ensure-account` and invalidates
- *    `accountOverview` so the SOR sees `limitless.canExecute: true`.
+ *  - Gate Limitless on Predict completing (see below).
+ *  - Mounts `useLimitlessEnsureExecutionReady` with EOA proof when the embedded
+ *    signer is available so first-time `ownerId` provisioning succeeds.
  *  - Reports its `setupInProgress` / `ready` to the shared
  *    `SetupActivationContext` so both the modal and the trade box can render
  *    coherent state without duplicate ensure calls, AND so the visible
@@ -38,14 +39,19 @@ const LOG_TAG = "[LimitlessActivation]";
 export function LimitlessBackgroundActivation(): null {
 	const { authenticated, ready: privyReady } = usePrivy();
 	const signerCtx = useSignerContext();
+	const api = usePrivateApiClient();
 	const setupActivation = useSetupActivationOptional();
 
-	// Gate Limitless on Predict completing. Limitless does no Privy work
-	// from the client, so it can start the moment Predict reports ready —
-	// its server-side provisioning then naturally provides cooldown time
-	// for the shared per-wallet Privy quota before the visible Polymarket
-	// activator fires its `executeDepositWalletBatch` signature. See the
-	// file header for the full rationale.
+	const buildEnsureAccountBody = useCallback(async () => {
+		if (!signerCtx.signer) return undefined;
+		return buildLimitlessEoaEnsureBodyFromSigner({
+			getPlainSigningMessage: () => api.getLimitlessAuthSigningMessage(),
+			signer: signerCtx.signer,
+		});
+	}, [api, signerCtx.signer]);
+
+	// Gate Limitless on Predict completing. Running after Predict still gives the
+	// shared Privy rate bucket a breather before Polymarket's visible activation.
 	const predictReady =
 		setupActivation?.venues.predict.ready ?? false;
 
@@ -72,6 +78,8 @@ export function LimitlessBackgroundActivation(): null {
 
 	const ensureState = useLimitlessEnsureExecutionReady({
 		enabled: prerequisitesReady,
+		buildEnsureAccountBody,
+		runSignupTimeBaseApprovals: true,
 	});
 
 	const reportVenueSnapshot = setupActivation?.reportVenueSnapshot;

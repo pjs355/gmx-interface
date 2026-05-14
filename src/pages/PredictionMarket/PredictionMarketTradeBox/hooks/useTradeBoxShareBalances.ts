@@ -5,12 +5,21 @@ import { useSignerContext } from "@/context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
-import { limitlessVenuePositionMatchesPageMarket } from "@/trading/limitless/limitlessTradeBoxMatch";
-import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
-import { inferLimitlessCatalogYesColumn } from "@/trading/limitless/limitlessCatalogTokenPair";
+import {
+	limitlessVenuePositionMatchesPageMarket,
+	limitlessVenuePositionMatchesUmbrellaCatalog,
+} from "@/trading/limitless/limitlessTradeBoxMatch";
+import {
+	inferLimitlessCatalogYesColumn,
+	inferLimitlessYesColumnFromOutcomeTitle,
+} from "@/trading/limitless/limitlessCatalogTokenPair";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
+import {
+	buildPredictUmbrellaLookup,
+	matchVenuePositionToUmbrella,
+} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
@@ -19,7 +28,11 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { LimitlessInferenceWire } from "@/trading/limitless/limitlessCatalogTokenPair";
-import type { VenuePosition, VenueId } from "@/types/trading/venuePosition";
+import {
+	type VenuePosition,
+	type VenueId,
+	venuePositionPortfolioDedupeKey,
+} from "@/types/trading/venuePosition";
 import {
 	findMatchedMarketByPolyConditionId,
 	inferPolymarketYesNoFromToken,
@@ -34,7 +47,9 @@ import {
 	lookupUmbrellaByDflowEventTicker,
 	mintMatchesDflowExchange,
 } from "@/trading/dflow/dflowUmbrellaLookup";
-import { coerceLimitlessWireForInference } from "@/utils/mergeMonitorLimitlessFromUmbrella";
+import {
+	resolveLimitlessInferenceWireForUmbrella,
+} from "@/utils/mergeMonitorLimitlessFromUmbrella";
 import type { TradingVenue } from "../types";
 
 const VENUE_SUFFIX: Record<VenueId | "levelup", string> = {
@@ -304,6 +319,9 @@ function venuePositionToYesNo(
 			resolvedLimitlessWire ?? undefined,
 		);
 		if (slot !== null) return slot ? "yes" : "no";
+		return inferLimitlessYesColumnFromOutcomeTitle(p.outcome, p.marketTitle)
+			? "yes"
+			: "no";
 	}
 	return outcomeToSide(p.outcome, isVsSingle, yesTeamLabel, noTeamLabel);
 }
@@ -392,6 +410,10 @@ export function useTradeBoxShareBalances(opts: {
 	const { umbrellas, allMarketsByUmbrella } = usePredictionData();
 	const { appState } = useOddsMonitor();
 	const matchedOddsMarkets = appState?.markets;
+	const predictUmbrellaLookup = useMemo(
+		() => buildPredictUmbrellaLookup(matchedOddsMarkets ?? undefined, umbrellas),
+		[matchedOddsMarkets, umbrellas],
+	);
 	const { polymarketSafe, solanaAddress, limitlessMakerBase } = useFundingAddresses();
 	const privateApi = usePrivateApiClient();
 	const { authenticated } = usePrivy();
@@ -472,18 +494,26 @@ export function useTradeBoxShareBalances(opts: {
 
 	const resolvedLimitlessMapping = useMemo(
 		() =>
-			coerceLimitlessWireForInference(
-				pageMatchedMonitor?.limitless,
-				umbrellaForPage?.exchangeMatching?.limitless,
-			),
-		[pageMatchedMonitor?.limitless, umbrellaForPage?.exchangeMatching?.limitless],
+			resolveLimitlessInferenceWireForUmbrella({
+				matchedMarkets: matchedOddsMarkets ?? undefined,
+				umbrellaId,
+				umbrellaExchangeLimitless: umbrellaForPage?.exchangeMatching?.limitless,
+				pageMatchedMonitor,
+			}),
+		[
+			matchedOddsMarkets,
+			umbrellaId,
+			umbrellaForPage?.exchangeMatching?.limitless,
+			pageMatchedMonitor,
+		],
 	);
 
 	const relevantVenuePositions = useMemo(() => {
 		if (!umbrellaId || !market) return [];
 		const out: VenuePosition[] = [];
 		const seen = new Set<string>();
-		const dedupeKey = (p: VenuePosition) => `${p.venue}:${p.tokenId}`;
+		/** Limitless neg-risk legs may share the same outcome {@link VenuePosition.tokenId}; use {@link venuePositionPortfolioDedupeKey}. */
+		const dedupeKey = (p: VenuePosition) => `${p.venue}:${venuePositionPortfolioDedupeKey(p)}`;
 
 		/** Same CLOB as the page’s {@link MatchedMarket} — matches SOR sell (polyOutcomeTokenId), not umbrella child index. */
 		const polyMonitorCid = pageMatchedMonitor
@@ -509,13 +539,30 @@ export function useTradeBoxShareBalances(opts: {
 			}
 			if (!keep && p.venue === "limitless" && umbrellaId) {
 				const uTarget = umbrellas.find((u) => u._id === umbrellaId);
+				const levelUpIdMatch =
+					String(p.levelUpUmbrellaId ?? "").trim() === String(umbrellaId).trim();
+				const portfolioUmbrella = matchVenuePositionToUmbrella(
+					p,
+					"limitless",
+					condLookup,
+					umbrellas,
+					predictUmbrellaLookup,
+					null,
+					dflowMintLookup,
+					dflowEventTickerLookup,
+				);
+				const portfolioMatch = portfolioUmbrella?._id === umbrellaId;
 				if (
 					uTarget &&
-					limitlessVenuePositionMatchesPageMarket(
+					(limitlessVenuePositionMatchesPageMarket(
 						p,
 						uTarget,
 						pageMatchedMonitor ?? null,
-					)
+						matchedOddsMarkets,
+					) ||
+						limitlessVenuePositionMatchesUmbrellaCatalog(p, uTarget) ||
+						levelUpIdMatch ||
+						portfolioMatch)
 				) {
 					keep = true;
 				}
@@ -546,67 +593,14 @@ export function useTradeBoxShareBalances(opts: {
 		condLookup,
 		dflowMintLookup,
 		dflowEventTickerLookup,
+		predictUmbrellaLookup,
 		siblingConditionIds,
 		pageMatchedMonitor,
+		matchedOddsMarkets,
 		polyQ.data,
 		predictQ.data,
 		dflowQ.data,
 		limitlessVenueQ.data,
-	]);
-
-	useEffect(() => {
-		if (!import.meta.env.DEV) return;
-		if (!umbrellaId) return;
-		const lx = relevantVenuePositions.filter((p) => p.venue === "limitless");
-		if (lx.length === 0) return;
-		const uTarget = umbrellas.find((u) => u._id === umbrellaId);
-		debugLimitlessPortfolio("Trade box: limitless rows included in share aggregate", {
-			umbrellaId,
-			monitorLimitless: pageMatchedMonitor?.limitless
-				? {
-						tokenIdA: String(pageMatchedMonitor.limitless.tokenIdA ?? "").slice(-16),
-						tokenIdB: String(pageMatchedMonitor.limitless.tokenIdB ?? "").slice(-16),
-					}
-				: null,
-			rows: lx.map((p) => {
-				const bySlugToken =
-					uTarget &&
-					limitlessVenuePositionMatchesPageMarket(
-						p,
-						uTarget,
-						pageMatchedMonitor ?? null,
-					);
-				const yn = venuePositionToYesNo(
-					p,
-					matchedOddsMarkets,
-					pageMatchedMonitor,
-					resolvedLimitlessMapping,
-					isVsSingle,
-					yesTeamLabel,
-					noTeamLabel,
-				);
-				return {
-					title: (p.marketTitle ?? "").slice(0, 56),
-					outcomeString: p.outcome,
-					marketStatus: p.marketStatus,
-					shares: p.shares,
-					tokenTail: (p.tokenId ?? "").slice(-16),
-					matchedBySlugTokenMonitor: Boolean(bySlugToken),
-					tradeBoxYesNo: yn,
-					note: "Yes/No from inferLimitlessCatalogYesColumn (mint + orderbookSlug vs eventSlug); monitor/umbrella wire via coerceLimitlessWireForInference",
-				};
-			}),
-		});
-	}, [
-		umbrellaId,
-		relevantVenuePositions,
-		umbrellas,
-		pageMatchedMonitor,
-		matchedOddsMarkets,
-		isVsSingle,
-		yesTeamLabel,
-		noTeamLabel,
-		resolvedLimitlessMapping,
 	]);
 
 	const levelBalances = useMemo(() => {

@@ -412,8 +412,8 @@ export function useResolvedUmbrellaPositions({
 					const polyIsNegRisk =
 						venue === "polymarket" ? pv.isNegRisk === true : undefined;
 					/**
-					 * Limitless redeem: primary **leg** `conditionId`; predictions proxy may
-					 * retry with `group.negRiskMarketId` when the leg returns “no position balance”.
+					 * Limitless redeem: primary **leg** `conditionId` on Base CTF (or NegRisk
+					 * adapter when `venue.adapter` is present). Partner HTTP redeem is not used for EOA.
 					 */
 					return {
 						market: {
@@ -457,6 +457,28 @@ export function useResolvedUmbrellaPositions({
 										...(typeof pv.marketStatus === "string" &&
 										pv.marketStatus.trim()
 											? { _limitlessMarketStatusApi: pv.marketStatus.trim() }
+											: {}),
+										...(typeof pv.eventSlug === "string" &&
+										pv.eventSlug.trim()
+											? { _limitlessMarketSlug: pv.eventSlug.trim() }
+											: {}),
+										...(pv.limitlessVenueExchange
+											? {
+													_limitlessVenueExchange:
+														pv.limitlessVenueExchange,
+												}
+											: {}),
+										...(pv.limitlessVenueAdapter
+											? {
+													_limitlessVenueAdapter:
+														pv.limitlessVenueAdapter,
+												}
+											: {}),
+										...(pv.limitlessCollateralAddress
+											? {
+													_limitlessCollateralAddress:
+														pv.limitlessCollateralAddress,
+												}
 											: {}),
 									}
 								: {}),

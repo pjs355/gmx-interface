@@ -1,9 +1,5 @@
 /// <reference types="vite/client" />
 
-declare module "*.po" {
-	export const messages: Record<string, string>;
-}
-
 interface ImportMetaEnv {
 	/** Optional Polygon mainnet JSON-RPC URL (Infura, Alchemy, etc.); falls back to a public node */
 	readonly VITE_POLYGON_RPC_URL?: string;
@@ -49,9 +45,10 @@ interface ImportMetaEnv {
 	readonly VITE_SOLANA_RPC_URL?: string;
 	/** Extra Solana HTTP RPC URLs after transient failures on the primary */
 	readonly VITE_SOLANA_RPC_FALLBACK_URLS?: string;
-	/** Optional DFlow tooling / server URLs (not used by removed browser book clients). */
+	/** Legacy: browser REST seed for DFlow orderbooks uses `GET /api/public/dflow-orderbook` on the prediction API (see `dflow-book-client.ts`). */
 	readonly VITE_DFLOW_REST_BASE?: string;
-	readonly VITE_DFLOW_WS_URL?: string;
+	/** DFlow orderbook WebSocket URL */
+	readonly VITE_DFLOW_WS_URL?: string; 
 	/**
 	 * Optional override for LevelUp subgraph GraphQL HTTP endpoint (user token balances).
 	 * When unset, defaults to The Graph Studio `levelup-subgraph`. Use this if your

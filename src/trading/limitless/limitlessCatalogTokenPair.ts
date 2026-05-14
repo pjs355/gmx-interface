@@ -99,6 +99,22 @@ export function inferLimitlessCatalogYesColumn(
 }
 
 /**
+ * When {@link inferLimitlessCatalogYesColumn} is `null`, portfolio and trade-box
+ * both map the leg to the catalog **Yes** column using outcome text + market title
+ * (same rule as {@link buildVenueMarketPosition} for Limitless).
+ */
+export function inferLimitlessYesColumnFromOutcomeTitle(
+	outcome: string | undefined,
+	marketTitle: string | undefined,
+): boolean {
+	const o = String(outcome ?? "").toLowerCase();
+	const titleLo = String(marketTitle ?? "").toLowerCase();
+	return (
+		o === "yes" || (o !== "no" && titleLo.includes(o))
+	);
+}
+
+/**
  * Find the catalog `exchangeMatching.limitless` token pair for a venue position
  * whose `tokenId` is one of the two outcome mints (dual-team CLOB: each team has its own market).
  * When `eventSlug` is set, also matches `orderbookSlugA` / `orderbookSlugB` so stale mint B

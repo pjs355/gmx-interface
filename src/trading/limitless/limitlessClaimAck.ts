@@ -4,7 +4,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
  * All keys we register in `claimedMarkets` after a successful claim so Winnings
  * can hide the row even if `_id` vs `questionId` / `conditionId` diverge in the UI pipeline.
  *
- * For Limitless delegated rows we store both `lx-win-…` and `limitless:0x…` so acks
+ * For Limitless rows we store both `lx-win-…` and `limitless:0x…` so acks
  * match regardless of which id `handleClaimSuccess` received first.
  */
 export function claimAckKeysFromMarket(market: PredictionMarket): string[] {
@@ -32,17 +32,12 @@ export function isMarketClaimAcked(
 }
 
 /**
- * In-app Limitless Claim disabled only when the partner explicitly sent `redeemable: false`
- * (`_limitlessPartnerRedeemableSignal === "false"`). `omit` means the flag was missing upstream
- * — we allow Claim so users are not stuck when Limitless resolves the market but omits the field.
+ * Partner `redeemable: false` referred to **HTTP** portfolio redeem (server-wallet flow).
+ * EOA winnings are redeemed **on-chain** from the maker wallet, so we no longer disable
+ * the Winnings Claim control from this flag alone.
  */
-export function isLimitlessWinningsTabClaimBlocked(market: PredictionMarket): boolean {
-	const m = market as {
-		_venue?: string;
-		_limitlessPartnerRedeemableSignal?: string;
-	};
-	if (m._venue !== "limitless") return false;
-	return m._limitlessPartnerRedeemableSignal === "false";
+export function isLimitlessWinningsTabClaimBlocked(_market: PredictionMarket): boolean {
+	return false;
 }
 
 /** Every row in this merged Winnings group is Limitless with partner `redeemable: false`. */
@@ -53,6 +48,6 @@ export function allWinningsMarketsAreLimitlessSettlementBlocked(
 	return rows.every(({ market }) => isLimitlessWinningsTabClaimBlocked(market));
 }
 
-/** Hover copy when partner explicitly says this delegated position is not redeemable. */
+/** Hover copy when legacy partner rows still carry `redeemable: false` (HTTP redeem hint only). */
 export const LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP =
-	"Limitless marked this server-wallet position as not redeemable (`redeemable: false`). If that looks wrong, try redeem on https://limitless.exchange or contact support — the outcome can still be resolved while redeem stays off in the API.";
+	"Limitless sent `redeemable: false` on this row (legacy server-wallet HTTP redeem hint). EOA accounts redeem on Base from your Limitless maker wallet; if Claim fails, try https://limitless.exchange or wait for on-chain CTF settlement.";

@@ -4,6 +4,7 @@ import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import { inferPredictSideFromMarketDetail } from "@/trading/predict/predictPositionSide";
 import {
 	inferLimitlessCatalogYesColumn,
+	inferLimitlessYesColumnFromOutcomeTitle,
 	type LimitlessInferenceWire,
 } from "@/trading/limitless/limitlessCatalogTokenPair";
 import { inferPolymarketYesNoFromToken } from "@/trading/polymarket/polyPositionSide";
@@ -78,9 +79,7 @@ export function buildVenueMarketPosition(
 			? predictInferred.side === "Yes"
 			: limitlessCatalogSide !== null
 				? limitlessCatalogSide
-				: pv.outcome.toLowerCase() === "yes" ||
-					(pv.outcome.toLowerCase() !== "no" &&
-						(pv.marketTitle?.toLowerCase() ?? "").includes(pv.outcome.toLowerCase()));
+				: inferLimitlessYesColumnFromOutcomeTitle(pv.outcome, pv.marketTitle);
 	const legKey =
 		typeof pv.conditionId === "string" && pv.conditionId.trim().length > 0
 			? pv.conditionId.trim().toLowerCase().replace(/^0x/i, "").slice(0, 16)

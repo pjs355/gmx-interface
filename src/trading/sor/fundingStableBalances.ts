@@ -44,6 +44,29 @@ const bscPublic = createPublicClient({
 const solanaConnection = createSolanaConnectionForJsonRpcReads();
 const SOLANA_USDC_MINT_PK = new PublicKey(SOLANA_USDC_MINT);
 
+function isLikelySolanaRpcOrTransportFailure(e: unknown): boolean {
+	const text =
+		e instanceof Error ? `${e.name} ${e.message} ${String((e as Error).cause ?? "")}` : String(e);
+	const m = text.toLowerCase();
+	return (
+		m.includes("403") ||
+		m.includes("-32052") ||
+		m.includes("forbidden") ||
+		m.includes("api key") ||
+		m.includes("connection") ||
+		m.includes("econn") ||
+		m.includes("fetch") ||
+		m.includes("network") ||
+		m.includes("timeout") ||
+		m.includes("aborted") ||
+		m.includes("socket") ||
+		m.includes("bad gateway") ||
+		m.includes("502") ||
+		m.includes("503") ||
+		m.includes("504")
+	);
+}
+
 async function readSolanaUsdcHuman(walletAddress: string): Promise<number> {
 	try {
 		const owner = new PublicKey(walletAddress);
@@ -60,6 +83,13 @@ async function readSolanaUsdcHuman(walletAddress: string): Promise<number> {
 			msg.includes("could not find account") ||
 			msg.includes("TokenAccountNotFoundError")
 		) {
+			return 0;
+		}
+		// Public Solana RPCs often 403 or drop connections; do not fail the whole
+		// multi-chain `readFundingStableBalancesHuman` Promise.all (SOR prefund, Transfers).
+		if (isLikelySolanaRpcOrTransportFailure(e)) {
+			const detail = e instanceof Error ? e.message.slice(0, 240) : String(e).slice(0, 240);
+			console.warn("[readSolanaUsdcHuman] RPC/transport failure; treating SPL USDC as 0", detail);
 			return 0;
 		}
 		throw e;
@@ -172,6 +202,26 @@ export async function readFundingStableBalancesHuman(
 		solana: solanaHuman,
 		limitlessMakerBase: limitlessHuman,
 	};
+}
+
+/**
+ * Native Base USDC (6 decimals) raw balance for the smart wallet — same contract as
+ * {@link readFundingStableBalancesHuman} `base`, for bigint-safe Limitless SCW→maker sweeps.
+ */
+export async function readBaseScwUsdcBalanceRaw(
+	baseSmartWallet: string | null | undefined,
+): Promise<bigint> {
+	const baseAddr =
+		baseSmartWallet && /^0x[a-fA-F0-9]{40}$/i.test(baseSmartWallet)
+			? (baseSmartWallet as Address)
+			: undefined;
+	if (!baseAddr) return 0n;
+	return basePublic.readContract({
+		address: getUSDCAddress() as Address,
+		abi: erc20Abi,
+		functionName: "balanceOf",
+		args: [baseAddr],
+	}) as Promise<bigint>;
 }
 
 /** On-chain BNB Chain USDT (BEP-20) balance in wei for LI.FI prefund caps (18 decimals). */

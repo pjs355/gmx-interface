@@ -44,6 +44,25 @@ export interface UserProfile {
 	[key: string]: unknown;
 }
 
+/**
+ * Some API gateways serialize Mongo `_id` as `id`. Prefer `_id` when present.
+ */
+export function profileMongoIdFromUserProfile(
+	data: UserProfile | undefined,
+): string | undefined {
+	if (!data) return undefined;
+	if (typeof data._id === "string") {
+		const t = data._id.trim();
+		if (t) return t;
+	}
+	const alt = (data as { id?: unknown }).id;
+	if (typeof alt === "string") {
+		const t = alt.trim();
+		if (t) return t;
+	}
+	return undefined;
+}
+
 interface ApiResponse {
 	success: boolean;
 	data?: UserProfile;

@@ -1,4 +1,49 @@
 /**
+ * Coerces Limitless partner `ownerId` values from JSON (often number, sometimes string).
+ */
+export function coercePositivePartnerOwnerId(raw: unknown): number | null {
+	if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+		return Math.trunc(raw);
+	}
+	if (typeof raw === "string") {
+		const n = Number(raw.trim());
+		if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+	}
+	return null;
+}
+
+function unwrapLimitlessEnsureInner(o: Record<string, unknown>): Record<string, unknown> {
+	return o.data != null && typeof o.data === "object"
+		? (o.data as Record<string, unknown>)
+		: o;
+}
+
+/**
+ * Reads `limitlessAccount.ownerId` from an ensure-account payload (supports nested `data`).
+ */
+export function readLimitlessOwnerIdFromEnsurePayload(raw: unknown): number | null {
+	if (raw == null || typeof raw !== "object") return null;
+	const inner = unwrapLimitlessEnsureInner(raw as Record<string, unknown>);
+	const la = inner.limitlessAccount;
+	if (!la || typeof la !== "object") return null;
+	return coercePositivePartnerOwnerId((la as Record<string, unknown>).ownerId);
+}
+
+/**
+ * Partner-reported approvals complete on ensure-account (Predict-style server flag).
+ * When true, skip client-driven Base warmup; first trade JIT still repairs gaps.
+ */
+export function readLimitlessApprovalCompleteFromEnsurePayload(
+	raw: unknown,
+): boolean {
+	if (raw == null || typeof raw !== "object") return false;
+	const inner = unwrapLimitlessEnsureInner(raw as Record<string, unknown>);
+	const la = inner.limitlessAccount;
+	if (!la || typeof la !== "object") return false;
+	return Boolean((la as Record<string, unknown>).approvalComplete);
+}
+
+/**
  * Interprets `POST /api/limitless/ensure-account` payload (after client `{ data }` unwrap).
  * Legacy deployments may still return `profileId` / `account` at the top level.
  */
@@ -53,9 +98,8 @@ export function getLimitlessEnsureTradeGate(data: unknown): LimitlessEnsureTrade
 		};
 	}
 	const acc = la as Record<string, unknown>;
-	const oid = acc.ownerId;
-	const provisioned =
-		typeof oid === "number" && Number.isFinite(oid) && oid > 0;
+	const oid = coercePositivePartnerOwnerId(acc.ownerId);
+	const provisioned = oid != null;
 	if (!provisioned) {
 		return {
 			ready: false,

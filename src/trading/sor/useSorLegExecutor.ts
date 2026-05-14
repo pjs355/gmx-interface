@@ -29,9 +29,15 @@ import type {
 import type { SorExecutionPhase } from "./useSorExecution";
 import {
 	readFundingStableBalancesHuman,
+	readBaseScwUsdcBalanceRaw,
 	readBnbUsdtBalanceWei,
 	type FundingStableBalancesHuman,
 } from "@/trading/sor/fundingStableBalances";
+import {
+	isLimitlessSweepInsufficientBalanceError,
+	planLimitlessScwSweepMicros,
+	recappedSweepForSend,
+} from "@/trading/sor/limitlessPrefundSweep";
 import {
 	buildPrefundSteps,
 	computePrefundBridgeShortfallUsdHuman,
@@ -53,7 +59,9 @@ import {
 	SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS,
 	SOR_LIFI_PREFUND_POLL_CONFIG,
 } from "@/trading/sor/sorBridgeWallTimeBudget";
-import { waitForScwUsdcAfterLimitlessPortfolioWithdraw } from "@/trading/sor/limitlessMakerToScwWithdrawWait";
+import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
+import type { BuildLimitlessSorOrderInput } from "@/trading/limitless/limitlessSignedClobOrder";
+import type { LimitlessSignedOrderSubmit } from "@/trading/limitless/limitlessPrivateApiTypes";
 import {
 	buildPolygonSafeUsdceWrapTransactions,
 	readPolymarketSafeCtfBalanceWei,
@@ -70,13 +78,11 @@ import {
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
-import type { LimitlessOrderRequest } from "@/trading/limitless/limitlessPrivateApiTypes";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
 import {
 	parsePrivyEvmTxHash,
 	waitForBaseTransactionSuccess,
 } from "@/trading/base/waitPrivyBaseTxReceipt";
-import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
 
 /** Limitless SDK `calculateFOKAmounts` rejects `makerAmount` when `.toString()` has more than 6 fractional digits. */
 function roundLimitlessFokMakerAmountHuman(n: number): number {
@@ -114,63 +120,6 @@ function isPolymarketAllowanceRecoverableError(message: string): boolean {
 	);
 }
 
-/**
- * Limitless maker USDC is custodied by the partner; we cannot sign LI.FI from that address in
- * the browser. Before a Base-sourced LI.FI prefund leg, move just enough USDC to the user’s
- * Base smart wallet via `POST …/portfolio/withdraw`, then poll RPC until `balancesHuman.base`
- * can cover `destPortionUsd`.
- */
-async function consolidateLimitlessMakerUsdcOntoScwForBaseLifiStep(input: {
-	destPortionUsd: number;
-	balancesHuman: FundingStableBalancesHuman;
-	fundingAddresses: {
-		baseSmartWallet?: string;
-		limitlessMakerBase?: string;
-	};
-	privateApi: {
-		postLimitlessPortfolioWithdraw: (body: {
-			amountHuman: number;
-			destination: string;
-		}) => Promise<unknown>;
-	};
-}): Promise<void> {
-	const need = Math.max(0, input.destPortionUsd);
-	if (need + 1e-9 < MIN_PREFUND_CHUNK_USD) {
-		return;
-	}
-	const swAddr = input.fundingAddresses.baseSmartWallet?.trim();
-	const mkAddr = input.fundingAddresses.limitlessMakerBase?.trim();
-	if (!swAddr || !/^0x[a-fA-F0-9]{40}$/i.test(swAddr) || !mkAddr) {
-		return;
-	}
-	const sw = Math.max(0, input.balancesHuman.base ?? 0);
-	const mk = Math.max(0, input.balancesHuman.limitlessMakerBase ?? 0);
-	const shortfall = Math.max(0, need - sw);
-	if (shortfall + 1e-9 < MIN_PREFUND_CHUNK_USD) {
-		return;
-	}
-	const withdrawHuman = Math.min(shortfall, mk);
-	if (withdrawHuman + 1e-9 < MIN_PREFUND_CHUNK_USD) {
-		return;
-	}
-	console.warn("[SOR][prefund] Limitless maker → Base SCW (partner withdraw) before LI.FI", {
-		usdcApprox: withdrawHuman,
-	});
-	const withdrawOut = await input.privateApi.postLimitlessPortfolioWithdraw({
-		amountHuman: withdrawHuman,
-		destination: swAddr,
-	});
-	await waitForScwUsdcAfterLimitlessPortfolioWithdraw({
-		fundingAddresses: input.fundingAddresses,
-		withdrawResponse: withdrawOut,
-		targetScwMinUsd: need,
-		balancesHuman: input.balancesHuman,
-		scwUsdcBeforeWithdraw: sw,
-		withdrawCreditsScwUsdApprox: withdrawHuman,
-		limitlessMakerUsdcBeforeWithdraw: mk,
-	});
-}
-
 type LegResult = {
 	filled: boolean;
 	filledShares: number;
@@ -179,7 +128,7 @@ type LegResult = {
 };
 
 /**
- * Limitless delegated POST /orders returns 200 with either a real order/execution
+ * Limitless `POST /orders` returns 200 with either a real order/execution
  * payload or a partner error shape such as `{ message: "Insufficient collateral…" }`.
  */
 function interpretLimitlessDelegatedOrderResponse(
@@ -326,7 +275,7 @@ export interface UseSorLegExecutorDeps {
 			fromChain?: number;
 			toChain?: number;
 		}) => Promise<unknown>;
-		postLimitlessOrder: (body: LimitlessOrderRequest) => Promise<unknown>;
+		postLimitlessOrder: (body: LimitlessSignedOrderSubmit) => Promise<unknown>;
 		postLimitlessPortfolioWithdraw: (input: {
 			amountHuman: number;
 			destination: string;
@@ -394,6 +343,14 @@ export interface UseSorLegExecutorDeps {
 		side: "buy" | "sell";
 		getClientForChain: UseSorLegExecutorDeps["getClientForChain"];
 	}) => Promise<void>;
+	/** EIP-712 signed CLOB body for Limitless SOR legs (fetches market + signs). */
+	buildLimitlessSignedOrderFromMarket?: (
+		input: BuildLimitlessSorOrderInput,
+	) => Promise<LimitlessSignedOrderSubmit>;
+	/** Partner `ownerId` from ensure-account. */
+	getLimitlessOwnerId?: () => number | null | undefined;
+	/** Venue maker address (must match the browser EIP-712 signer). */
+	getLimitlessMakerAddress?: () => string | null | undefined;
 	/**
 	 * Re-fetches the DFlow/Proof KYC status on click so a user who verified
 	 * mid-session isn't falsely rejected from a stale cache. Returns the
@@ -433,6 +390,20 @@ function addressForChain(
 		case "solana":
 			return addrs.solanaAddress;
 	}
+}
+
+function prefundSourceAddressForStep(
+	step: PrefundStep,
+	addrs: UseSorLegExecutorDeps["fundingAddresses"],
+): string | undefined {
+	if (step.fromChain !== "base") {
+		return addressForChain(step.fromChain, addrs);
+	}
+	const w = step.baseSpendWallet;
+	if (w === "limitlessMaker") {
+		return addrs.limitlessMakerBase?.trim();
+	}
+	return addrs.baseSmartWallet?.trim();
 }
 
 const SOLANA_LIFI_CHAIN_ID = CHAIN_LIFI_IDS.solana;
@@ -489,6 +460,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		ensurePredictApprovals,
 		ensurePolymarketApprovals,
 		ensureLimitlessApprovals,
+		buildLimitlessSignedOrderFromMarket,
+		getLimitlessOwnerId,
+		getLimitlessMakerAddress,
 		ensureDflowProofVerified,
 		reportExecutionPhaseRef,
 	} = deps;
@@ -1015,12 +989,17 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				case "limitless": {
 					const sorLx = "[SOR][limitless]";
 					const ids = leg.venueMarketIds;
-					const slug = ids.limitlessSlug?.trim();
+					const routeSlug = ids.limitlessSlug?.trim();
+					/** CLOB child slug when SOR attached `limitlessOrderbookSlugA|B`; else umbrella `limitlessSlug`. */
+					const orderMarketSlug =
+						leg.outcome === "A"
+							? (ids.limitlessOrderbookSlugA?.trim() || routeSlug)
+							: (ids.limitlessOrderbookSlugB?.trim() || routeSlug);
 					const tokenId =
 						leg.outcome === "A"
 							? ids.limitlessTokenIdA
 							: ids.limitlessTokenIdB;
-					if (!slug || !tokenId) {
+					if (!orderMarketSlug || !tokenId) {
 						return {
 							filled: false,
 							filledShares: 0,
@@ -1032,7 +1011,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						| "ensureLimitlessApprovals"
 						| "postLimitlessOrder" = "init";
 					console.info(sorLx, "leg start", {
-						slug,
+						routeSlug: routeSlug ?? orderMarketSlug,
+						orderMarketSlug,
 						side,
 						orderType: isLimit ? "limit" : "market",
 						outcome: leg.outcome,
@@ -1051,7 +1031,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							reportSorExecutionPhase("approving_trades");
 							try {
 								await ensureLimitlessApprovals({
-									marketSlug: slug,
+									marketSlug: orderMarketSlug,
 									limitlessOrderTokenId: String(tokenId),
 									side,
 									getClientForChain,
@@ -1062,7 +1042,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									e instanceof Error ? e.message : "Limitless account not ready";
 								console.error(sorLx, "phase failed", {
 									phase,
-									slug,
+									orderMarketSlug,
+									routeSlug,
 									message: msg,
 									stack: e instanceof Error ? e.stack?.slice(0, 500) : undefined,
 								});
@@ -1074,9 +1055,30 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							console.warn(sorLx, "ensureLimitlessApprovals hook missing — skipping JIT");
 						}
 						phase = "postLimitlessOrder";
-						console.info(sorLx, "phase", { phase, routeSlug: slug });
+						console.info(sorLx, "phase", {
+							phase,
+							routeSlug: routeSlug ?? orderMarketSlug,
+							orderMarketSlug,
+						});
 						const feeRateBps = LIMITLESS_DEFAULT_FEE_RATE_BPS;
-						const submitLimitlessOrder = async (body: Parameters<typeof privateApi.postLimitlessOrder>[0]) => {
+						const buildSigned = buildLimitlessSignedOrderFromMarket;
+						const ownerIdRaw = getLimitlessOwnerId?.();
+						const ownerId =
+							typeof ownerIdRaw === "number" &&
+							Number.isFinite(ownerIdRaw) &&
+							ownerIdRaw > 0
+								? ownerIdRaw
+								: null;
+						const maker = getLimitlessMakerAddress?.()?.trim() ?? "";
+						if (!buildSigned || ownerId == null || !maker) {
+							return {
+								filled: false,
+								filledShares: 0,
+								error:
+									"Limitless signed orders are not configured (missing ownerId, maker, or buildLimitlessSignedOrderFromMarket).",
+							};
+						}
+						const submitLimitlessOrder = async (body: LimitlessSignedOrderSubmit) => {
 							const r = (await privateApi.postLimitlessOrder(body)) as Record<
 								string,
 								unknown
@@ -1187,40 +1189,51 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						}
 						let limitlessOrderResponse: unknown;
 						if (isLimit) {
-							limitlessOrderResponse = await submitLimitlessOrder({
-								marketSlug: slug,
-								orderType: "GTC",
-								tokenId,
-								side: side === "buy" ? "BUY" : "SELL",
-								price: limitPrice as number,
-								size: leg.shares,
-								feeRateBps,
-							});
+							limitlessOrderResponse = await submitLimitlessOrder(
+								await buildSigned({
+									kind: "gtc",
+									slug: orderMarketSlug,
+									ownerId,
+									maker,
+									feeRateBps,
+									tokenId: String(tokenId),
+									side,
+									price: limitPrice as number,
+									size: leg.shares,
+								}),
+							);
 						} else if (side === "buy") {
-							limitlessOrderResponse = await submitLimitlessOrder({
-								marketSlug: slug,
-								orderType: "FOK",
-								tokenId,
-								side: "BUY",
-								makerAmount: roundLimitlessFokMakerAmountHuman(limitlessBuyMakerUsd),
-								feeRateBps,
-							});
+							limitlessOrderResponse = await submitLimitlessOrder(
+								await buildSigned({
+									kind: "fok_buy",
+									slug: orderMarketSlug,
+									ownerId,
+									maker,
+									feeRateBps,
+									tokenId: String(tokenId),
+									makerAmount: roundLimitlessFokMakerAmountHuman(limitlessBuyMakerUsd),
+								}),
+							);
 						} else {
-							limitlessOrderResponse = await submitLimitlessOrder({
-								marketSlug: slug,
-								orderType: "FOK",
-								tokenId,
-								side: "SELL",
-								makerAmount: roundLimitlessFokMakerAmountHuman(leg.shares),
-								feeRateBps,
-							});
+							limitlessOrderResponse = await submitLimitlessOrder(
+								await buildSigned({
+									kind: "fok_sell",
+									slug: orderMarketSlug,
+									ownerId,
+									maker,
+									feeRateBps,
+									tokenId: String(tokenId),
+									makerAmount: roundLimitlessFokMakerAmountHuman(leg.shares),
+								}),
+							);
 						}
 						const submitOutcome = interpretLimitlessDelegatedOrderResponse(
 							limitlessOrderResponse,
 						);
 						if (!submitOutcome.ok) {
 							console.error(sorLx, "order submit rejected", {
-								routeSlug: slug,
+								routeSlug: routeSlug ?? orderMarketSlug,
+								orderMarketSlug,
 								error: submitOutcome.error,
 							});
 							return {
@@ -1243,12 +1256,16 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									: undefined;
 							if (orderId) {
 								console.info(sorLx, "GTC: resting limit accepted (not a book fill yet)", {
-									routeSlug: slug,
+									routeSlug: routeSlug ?? orderMarketSlug,
+									orderMarketSlug,
 									orderId,
 								});
 							}
 						}
-						console.info(sorLx, "leg complete", { routeSlug: slug });
+						console.info(sorLx, "leg complete", {
+							routeSlug: routeSlug ?? orderMarketSlug,
+							orderMarketSlug,
+						});
 						// SOR `filled` means the venue accepted the order / execution payload.
 						// `limitlessPostBridgeScale` is 1 for SELL / GTC; for FOK BUY it tracks
 						// any post-bridge resize so cost-basis math stays in sync until the
@@ -1264,7 +1281,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						const msg = e instanceof Error ? e.message : String(e);
 						console.error(sorLx, "phase failed", {
 							phase,
-							slug,
+							orderMarketSlug,
+							routeSlug,
 							message: msg,
 							stack: e instanceof Error ? e.stack?.slice(0, 600) : undefined,
 							hint:
@@ -1442,6 +1460,12 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			ensureLevelUpApprovals,
 			ensurePredictApprovals,
 			ensurePolymarketApprovals,
+			ensureLimitlessApprovals,
+			ensureDflowProofVerified,
+			getClientForChain,
+			buildLimitlessSignedOrderFromMarket,
+			getLimitlessOwnerId,
+			getLimitlessMakerAddress,
 			getRelayClient,
 			fundingAddresses,
 		],
@@ -1555,37 +1579,47 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				 * Limitless maker is **not** the Base SCW. Li.FI prefund must not pull from SCW as a
 				 * "source chain" for cross-chain routes, but USDC on the SCW can cover the same-chain
 				 * shortfall via a direct ERC-20 `transfer` to the maker before any Li.FI steps.
-				 * (Maker → SCW remains `postLimitlessPortfolioWithdraw` — Transfers modal prefund + SOR.)
+				 * Cross-chain Base legs use either the SCW or the Limitless maker as `fromAddress`
+				 * (`buildPrefundSteps` splits amounts; no partner withdraw).
 				 *
-				 * The post-sweep Li.FI need is **ledger-derived** (shortfall minus exact USDC micros
-				 * sent) — no RPC re-read required for planning. USDC `transfer` does not deduct trade
-				 * notional from the moved amount (gas is separate). When both sweep and Li.FI run,
-				 * they execute in **parallel**; we `Promise.all` so the trade only proceeds after the
-				 * Base receipt is success **and** Li.FI status is terminal (bridge usually dominates).
+				 * The post-sweep Li.FI need uses exact sweep micros vs `bridgeShortfallUsd`. SCW balance
+				 * is re-read on-chain (bigint) before planning, again before sweep-only send, and again
+				 * before building LI.FI steps so `lifiNeedUsd` cannot drift from stale float snapshots.
+				 * When both sweep and Li.FI run, they execute in **parallel**; we `Promise.all` so the
+				 * trade only proceeds after the Base receipt is success **and** Li.FI status is terminal
+				 * (bridge usually dominates).
 				 */
 				let scwToMakerSweepTxHash: string | undefined;
 				let plannedSweepMicros = 0n;
+				let sweepAmountHuman = 0;
+				let lifiNeedUsd = bridgeShortfallUsd;
+				let scwUsdcLiveBalanceMicrosLog: string | null = null;
+				const baseSwTrim = fundingAddresses.baseSmartWallet?.trim();
+				const makerSwTrim = fundingAddresses.limitlessMakerBase?.trim();
 				if (
 					limitlessBaseDest &&
 					bridgeShortfallUsd > PREFUND_SHORTFALL_COVERED_EPS_USD &&
-					fundingAddresses.baseSmartWallet?.trim() &&
-					fundingAddresses.limitlessMakerBase?.trim()
+					baseSwTrim &&
+					makerSwTrim
 				) {
-					const scwUsd = Math.max(0, balancesHuman.base);
-					const sweepUsd = Math.min(bridgeShortfallUsd, scwUsd);
-					if (sweepUsd + 1e-9 >= MIN_PREFUND_CHUNK_USD) {
-						const micros = BigInt(Math.floor(sweepUsd * 1_000_000));
-						if (micros > 0n) {
-							plannedSweepMicros = micros;
-						}
-					}
+					const b1 = await readBaseScwUsdcBalanceRaw(baseSwTrim);
+					let sweepPlan = planLimitlessScwSweepMicros(
+						bridgeShortfallUsd,
+						b1,
+						MIN_PREFUND_CHUNK_USD,
+					);
+					const b2 = await readBaseScwUsdcBalanceRaw(baseSwTrim);
+					sweepPlan = recappedSweepForSend(
+						sweepPlan.plannedSweepMicros,
+						b2,
+						bridgeShortfallUsd,
+						MIN_PREFUND_CHUNK_USD,
+					);
+					plannedSweepMicros = sweepPlan.plannedSweepMicros;
+					sweepAmountHuman = sweepPlan.sweepAmountHuman;
+					lifiNeedUsd = sweepPlan.lifiNeedUsd;
+					scwUsdcLiveBalanceMicrosLog = b2.toString();
 				}
-				const sweepAmountHuman =
-					plannedSweepMicros > 0n ? Number(plannedSweepMicros) / 1e6 : 0;
-				const lifiNeedUsd =
-					plannedSweepMicros > 0n
-						? Math.max(0, bridgeShortfallUsd - sweepAmountHuman)
-						: bridgeShortfallUsd;
 
 				const prefundLogBase = {
 					venue: leg.venue,
@@ -1627,6 +1661,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						bnb: maskFundingAddress(fundingAddresses.embeddedEoa),
 						solana: maskFundingAddress(fundingAddresses.solanaAddress),
 					},
+					scwUsdcLiveBalanceMicrosFromRpc: scwUsdcLiveBalanceMicrosLog,
 				};
 				console.warn("[SOR][prefund] on-chain stable snapshot (RPC)", prefundLogBase);
 
@@ -1683,17 +1718,63 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 				if (
 					plannedSweepMicros > 0n &&
-					lifiNeedUsd <= PREFUND_SHORTFALL_COVERED_EPS_USD
+					lifiNeedUsd <= PREFUND_SHORTFALL_COVERED_EPS_USD &&
+					baseSwTrim &&
+					makerSwTrim
 				) {
-					scwToMakerSweepTxHash = await sendScwToLimitlessMakerSweep();
-					console.warn(
-						"[SOR][prefund] no LI.FI pull after deterministic SCW sweep — prefund target covered",
-						{
-							...prefundLogBase,
-							scwToMakerSweepTxHash,
-						},
+					const b3 = await readBaseScwUsdcBalanceRaw(baseSwTrim);
+					const fin3 = recappedSweepForSend(
+						plannedSweepMicros,
+						b3,
+						bridgeShortfallUsd,
+						MIN_PREFUND_CHUNK_USD,
 					);
-					return { success: true, bridgeTxHash: scwToMakerSweepTxHash };
+					plannedSweepMicros = fin3.plannedSweepMicros;
+					sweepAmountHuman = fin3.sweepAmountHuman;
+					lifiNeedUsd = fin3.lifiNeedUsd;
+					if (
+						plannedSweepMicros > 0n &&
+						lifiNeedUsd <= PREFUND_SHORTFALL_COVERED_EPS_USD
+					) {
+						try {
+							scwToMakerSweepTxHash = await sendScwToLimitlessMakerSweep();
+						} catch (sweepErr: unknown) {
+							if (isLimitlessSweepInsufficientBalanceError(sweepErr)) {
+								return {
+									success: false,
+									error:
+										"Your Base smart wallet does not have enough native USDC to move to your Limitless trading wallet. Refresh the quote and try again, or add USDC to your Base smart wallet before trading.",
+								};
+							}
+							throw sweepErr;
+						}
+						console.warn(
+							"[SOR][prefund] no LI.FI pull after deterministic SCW sweep — prefund target covered",
+							{
+								...prefundLogBase,
+								scwToMakerSweepTxHash,
+							},
+						);
+						return { success: true, bridgeTxHash: scwToMakerSweepTxHash };
+					}
+				}
+
+				if (
+					limitlessBaseDest &&
+					bridgeShortfallUsd > PREFUND_SHORTFALL_COVERED_EPS_USD &&
+					baseSwTrim &&
+					makerSwTrim
+				) {
+					const bPre = await readBaseScwUsdcBalanceRaw(baseSwTrim);
+					const finPre = recappedSweepForSend(
+						plannedSweepMicros,
+						bPre,
+						bridgeShortfallUsd,
+						MIN_PREFUND_CHUNK_USD,
+					);
+					plannedSweepMicros = finPre.plannedSweepMicros;
+					sweepAmountHuman = finPre.sweepAmountHuman;
+					lifiNeedUsd = finPre.lifiNeedUsd;
 				}
 
 				let steps: PrefundStep[];
@@ -1750,26 +1831,16 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							total: steps.length,
 						});
 						const fromChainLifi = CHAIN_LIFI_IDS[step.fromChain];
-						if (
-							step.fromChain === "base" &&
-							!limitlessBaseDest &&
-							fundingAddresses.limitlessMakerBase?.trim()
-						) {
-							await consolidateLimitlessMakerUsdcOntoScwForBaseLifiStep({
-								destPortionUsd: Math.max(0, Number(step.amountHuman)),
-								balancesHuman,
-								fundingAddresses,
-								privateApi,
-							});
-						}
-						const fromAddress = addressForChain(step.fromChain, fundingAddresses);
+						const fromAddress = prefundSourceAddressForStep(step, fundingAddresses);
 						if (!fromAddress) {
 							throw new Error(`No wallet address for source chain ${step.fromChain}`);
 						}
 
 						const maxFromHuman =
 							step.fromChain === "base"
-								? Math.max(0, balancesHuman.base ?? 0)
+								? step.baseSpendWallet === "limitlessMaker"
+									? Math.max(0, balancesHuman.limitlessMakerBase ?? 0)
+									: Math.max(0, balancesHuman.base ?? 0)
 								: Math.max(0, balancesHuman[step.fromChain] ?? 0);
 						const destPortionUsd = Math.max(0, Number(step.amountHuman));
 						const perStepShare = Math.max(0, stepBudgetShares[stepIdx] ?? 0);
@@ -1914,8 +1985,16 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						);
 
 						if (Number.isFinite(spentHumanForLedger) && spentHumanForLedger > 0) {
-							const cur = balancesHuman[step.fromChain] ?? 0;
-							balancesHuman[step.fromChain] = Math.max(0, cur - spentHumanForLedger);
+							if (step.fromChain === "base" && step.baseSpendWallet === "limitlessMaker") {
+								const cur = balancesHuman.limitlessMakerBase ?? 0;
+								balancesHuman.limitlessMakerBase = Math.max(
+									0,
+									cur - spentHumanForLedger,
+								);
+							} else {
+								const cur = balancesHuman[step.fromChain] ?? 0;
+								balancesHuman[step.fromChain] = Math.max(0, cur - spentHumanForLedger);
+							}
 						}
 
 						lastSourceTxHash = sourceTxHash;
@@ -1931,10 +2010,22 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							lifiSteps: steps.length,
 						},
 					);
-					const [sweepHash] = await Promise.all([
-						sendScwToLimitlessMakerSweep(),
-						runPrefundLifiSteps(),
-					]);
+					let sweepHash: string;
+					try {
+						[sweepHash] = await Promise.all([
+							sendScwToLimitlessMakerSweep(),
+							runPrefundLifiSteps(),
+						]);
+					} catch (parallelErr: unknown) {
+						if (isLimitlessSweepInsufficientBalanceError(parallelErr)) {
+							return {
+								success: false,
+								error:
+									"Your Base smart wallet does not have enough native USDC to move to your Limitless trading wallet while the cross-chain prefund ran. Refresh the quote and try again, or add USDC to your Base smart wallet before trading.",
+							};
+						}
+						throw parallelErr;
+					}
 					scwToMakerSweepTxHash = sweepHash;
 				} else {
 					await runPrefundLifiSteps();

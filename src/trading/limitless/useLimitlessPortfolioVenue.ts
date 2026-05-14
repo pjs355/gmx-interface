@@ -10,6 +10,7 @@ import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { PrivateApiError } from "@/services/privateApi/errors";
 import { limitlessQueryKeys } from "./limitlessQueryKeys";
 import { canonicalLimitlessTokenId } from "./limitlessTokenId";
+import { isLimitlessVenueSharesMeaningful } from "./limitlessVenueSharesFilter";
 import {
 	debugLimitlessPortfolio,
 	debugLimitlessPortfolioTable,
@@ -56,8 +57,8 @@ function normalizeBytes32HexLoose(raw: string): string {
 }
 
 /**
- * NegRisk groups expose `group.negRiskMarketId` (parent). Partner redeem may try the
- * leg `conditionId` first, then this parent when Limitless returns “no position balance”.
+ * NegRisk groups expose `group.negRiskMarketId` (parent). On-chain redeem uses the
+ * leg `conditionId` plus `venue.adapter` when the partner marks NegRisk.
  */
 function negRiskParentConditionIdFromPositionsRow(
 	o: Record<string, unknown>,
@@ -118,9 +119,8 @@ function isLimitlessRouteUnavailable(err: unknown): boolean {
  * [AMM positions](https://docs.limitless.exchange/developers/sdk/typescript/portfolio#amm-positions)).
  * Limitless also notes that `RESOLVED` on a market does not guarantee on-chain payout yet —
  * [Get Positions](https://docs.limitless.exchange/api-reference/portfolio/positions).
- * The proxy adds `limitlessPartnerRedeemableSignal` (`omit` | `true` | `false`) so the client
- * does not conflate “flag omitted” with “not redeemable”. In-app Claim is disabled only when
- * the partner explicitly sends `false`.
+ * The proxy adds `limitlessPartnerRedeemableSignal` (`omit` | `true` | `false`) for
+ * diagnostics; EOA Claim uses on-chain redeem and does not gate on this flag alone.
  */
 function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 	if (!raw || typeof raw !== "object") return null;
@@ -128,7 +128,7 @@ function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 	const tokenId = canonicalLimitlessTokenId(str(o.tokenId));
 	if (!tokenId) return null;
 	const shares = num(o.shares);
-	if (shares <= 0) return null;
+	if (!isLimitlessVenueSharesMeaningful(shares)) return null;
 	const slug = str(o.marketSlug);
 	const limitlessGroupSlug = readLimitlessGroupSlugFromRaw(o);
 	const status = str(o.marketStatus);
@@ -178,6 +178,12 @@ function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 	} else if (o.isNegRisk === true) {
 		posOut.isNegRisk = true;
 	}
+	const vex = str(o.limitlessVenueExchange);
+	const vad = str(o.limitlessVenueAdapter);
+	const coll = str(o.limitlessCollateralAddress);
+	if (vex) posOut.limitlessVenueExchange = vex;
+	if (vad) posOut.limitlessVenueAdapter = vad;
+	if (coll) posOut.limitlessCollateralAddress = coll;
 	if (typeof o.marketClosed === "boolean") {
 		posOut.marketClosed = o.marketClosed;
 	}

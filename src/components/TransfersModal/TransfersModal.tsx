@@ -2,13 +2,11 @@
  * TransfersModal — multi-chain withdrawals via POST /funding/lifi/withdraw/plan
  * (LI.FI routes + same-chain EVM direct transfer when applicable).
  *
- * When the withdrawal amount exceeds Base smart wallet USDC but Limitless maker on Base
- * can cover the gap, we consolidate maker → SCW (partner withdraw) before planning so
- * Li.FI always sources from the SCW.
+ * Withdraw planning sends **both** Base rows when applicable: the smart wallet and
+ * the Limitless maker address, so LI.FI can quote legs from the correct `fromAddress`.
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import Tooltip from "@/components/Tooltip/Tooltip";
 import Modal from "@/components/Modal/Modal";
 import { useTransfersModal } from "@/context/TransfersModalContext";
@@ -23,8 +21,6 @@ import {
 	useWithdrawPlanExecution,
 	getWithdrawExecutionErrorMessage,
 } from "@/pages/Transfers/useWithdrawPlanExecution";
-import { prefundLimitlessMakerToScwForTransfersWithdraw } from "@/pages/Transfers/prefundLimitlessMakerToScwForTransfersWithdraw";
-import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import { readFundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
 import type { LifiWithdrawPlanData, LifiWithdrawPlanLeg } from "@/types/trading";
 import "./TransfersModal.scss";
@@ -129,7 +125,6 @@ export function TransfersModal() {
 	const { cash: accountCash, refresh: refreshAccount } = useAccountData();
 	const funding = useFundingAddresses();
 	const api = usePrivateApiClient();
-	const queryClient = useQueryClient();
 	const { executePlan } = useWithdrawPlanExecution();
 
 	// Display balances come from the server's `/portfolio/cash-summary`
@@ -142,6 +137,8 @@ export function TransfersModal() {
 			buildChainBalances({
 				baseUsdcBalance: accountCash.base,
 				baseWalletAddress: funding.baseSmartWallet ?? "",
+				limitlessMakerUsdcBalance: Math.max(0, accountCash.limitlessMaker ?? 0),
+				limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
 				polygonUsdcBalance: accountCash.polygon,
 				polygonWalletAddress: funding.polymarketSafe,
 				solanaUsdcBalance: accountCash.solana,
@@ -151,17 +148,17 @@ export function TransfersModal() {
 			}),
 		[
 			accountCash.base,
+			accountCash.limitlessMaker,
 			accountCash.polygon,
 			accountCash.solana,
 			accountCash.bnb,
 			funding.baseSmartWallet,
+			funding.limitlessMakerBase,
 			funding.polymarketSafe,
 			funding.embeddedEoa,
 			funding.solanaAddress,
 		]
 	);
-
-	const limitlessOnMaker = Math.max(0, accountCash.limitlessMaker || 0);
 
 	const totalFundingOnRails = useMemo(
 		() =>
@@ -171,8 +168,8 @@ export function TransfersModal() {
 						? b.balance
 						: 0;
 				return sum + n;
-			}, 0) + limitlessOnMaker,
-		[chainBalances, limitlessOnMaker]
+			}, 0),
+		[chainBalances]
 	);
 
 	/** Withdrawable total: portfolio cash capped by balances reported on funding chains. */
@@ -349,57 +346,18 @@ export function TransfersModal() {
 				solanaAddress: funding.solanaAddress?.trim() || null,
 			};
 			let balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
-			const scwBase = Math.max(0, balancesSnap.base ?? 0);
-			const makerSnap = Math.max(0, balancesSnap.limitlessMakerBase ?? 0);
-			/* Only sweep maker → SCW when no other chain can plug the gap.
-			 * The naive `min(gross - scwBase, maker)` triggers a partner
-			 * withdraw + 120s poll on every transfer that the SCW alone
-			 * doesn't cover — even when Solana / Polygon / BNB already hold
-			 * plenty of stable for Li.Fi to source from. The user perceives
-			 * that wait as "Getting route…" being stuck.
-			 *
-			 * Treat USDC + USDT 1:1 here — exact swap math happens inside
-			 * `postFundingLifiWithdrawPlan`; this gate is only deciding
-			 * whether the maker sweep is necessary.
-			 */
-			const otherChainsTotal =
-				Math.max(0, balancesSnap.polygon ?? 0) +
-				Math.max(0, balancesSnap.solana ?? 0) +
-				Math.max(0, balancesSnap.bnb ?? 0);
-			const shortfallExcludingMaker = Math.max(
-				0,
-				gross - scwBase - otherChainsTotal,
-			);
-			const pullFromMaker = Math.min(shortfallExcludingMaker, makerSnap);
-			if (pullFromMaker >= 0.02) {
-				await prefundLimitlessMakerToScwForTransfersWithdraw({
-					amountFromMakerHuman: pullFromMaker,
-					funding: {
-						baseSmartWallet: funding.baseSmartWallet,
-						limitlessMakerBase: funding.limitlessMakerBase,
-					},
-					privateApi: api,
-				});
-				// `BRIDGE_FUNDING_BALANCES_QUERY_KEY` is still consumed by the
-				// SOR / useBridgeFlow transaction-time path; invalidate it so
-				// those callers re-read the post-prefund balances. Refresh the
-				// canonical cash snapshot so this modal's display updates too.
-				await queryClient.invalidateQueries({
-					queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
-				});
-				await refreshAccount.cash();
-				await refreshUserData();
-				balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
-			}
 			const planBalances = buildChainBalances({
 				baseUsdcBalance: Math.max(0, balancesSnap.base ?? 0),
 				baseWalletAddress: funding.baseSmartWallet ?? "",
+				limitlessMakerUsdcBalance: Math.max(0, balancesSnap.limitlessMakerBase ?? 0),
+				limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
 				polygonUsdcBalance: Math.max(0, balancesSnap.polygon ?? 0),
 				polygonWalletAddress: funding.polymarketSafe,
 				solanaUsdcBalance: Math.max(0, balancesSnap.solana ?? 0),
 				solanaWalletAddress: funding.solanaAddress,
 				bnbUsdtBalance: Math.max(0, balancesSnap.bnb ?? 0),
 				bnbWalletAddress: funding.embeddedEoa,
+				includeZeroBalanceChainsWithAddress: true,
 			});
 
 			const planPayload = await api.postFundingLifiWithdrawPlan({
@@ -437,7 +395,6 @@ export function TransfersModal() {
 		funding.limitlessMakerBase,
 		funding.polymarketSafe,
 		funding.solanaAddress,
-		queryClient,
 		recipientAddress,
 		refreshUserData,
 		toAsset,

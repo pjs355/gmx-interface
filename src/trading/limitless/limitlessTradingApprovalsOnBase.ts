@@ -28,6 +28,17 @@ const getCtfAbi = [
 	},
 ] as const;
 
+/** NegRisk: `getCtf()` on the exchange returns the adapter; outcome ERC1155 is `wrapper.ctf()`. */
+const ctfOnWrapperAbi = [
+	{
+		type: "function",
+		name: "ctf",
+		stateMutability: "view",
+		inputs: [],
+		outputs: [{ type: "address", name: "" }],
+	},
+] as const;
+
 const erc1155Abi = [
 	{
 		type: "function",
@@ -80,6 +91,35 @@ const minUsdcAllowance = maxUint256 / 2n;
 
 const JIT = "[Limitless/JIT]";
 
+const isApprovedForAllReadRetryDelayMs = 180;
+
+/** Two attempts with a short pause so transient RPC issues do not force a CTF tx. */
+async function readIsApprovedForAllWithRetry(
+	ctfAddr: `0x${string}`,
+	maker: `0x${string}`,
+	operator: `0x${string}`,
+): Promise<boolean> {
+	let lastErr: unknown;
+	for (let attempt = 0; attempt < 2; attempt++) {
+		try {
+			return await basePublicClient.readContract({
+				address: ctfAddr,
+				abi: erc1155Abi,
+				functionName: "isApprovedForAll",
+				args: [maker, operator],
+			});
+		} catch (e) {
+			lastErr = e;
+			if (attempt === 0) {
+				await new Promise((r) =>
+					setTimeout(r, isApprovedForAllReadRetryDelayMs),
+				);
+			}
+		}
+	}
+	throw lastErr;
+}
+
 function classifyApprovalCall(
 	callTo: `0x${string}`,
 	usdc: `0x${string}`,
@@ -116,13 +156,147 @@ function uniqueChecksummedAddresses(raw: readonly string[]): `0x${string}`[] {
 	return out;
 }
 
+/**
+ * Read-only: true if every Limitless USDC spender for buys already has
+ * `allowance(maker, spender) >= min` on Base. Use when partner
+ * `verify-allowance` still says false but on-chain state is sufficient (API lag).
+ */
+export async function readLimitlessBuyUsdcAllowancesSufficientOnBase(opts: {
+	maker: string;
+	verify: LimitlessVerifyAllowanceResult;
+}): Promise<boolean> {
+	const makerRaw = opts.maker?.trim();
+	if (!makerRaw || !ethers.isAddress(makerRaw)) return false;
+	const maker = ethers.getAddress(makerRaw) as `0x${string}`;
+
+	const spenderTrim = opts.verify.spender?.trim();
+	if (!spenderTrim || !ethers.isAddress(spenderTrim)) return false;
+
+	const spendersRaw =
+		Array.isArray(opts.verify.usdcSpenders) && opts.verify.usdcSpenders.length > 0
+			? opts.verify.usdcSpenders
+			: [opts.verify.spender];
+	const usdcSpenders = uniqueChecksummedAddresses(spendersRaw);
+	if (usdcSpenders.length === 0) return false;
+
+	const usdc = getUSDCAddress() as `0x${string}`;
+	for (const spender of usdcSpenders) {
+		try {
+			const allowance = await basePublicClient.readContract({
+				address: usdc,
+				abi: erc20Abi,
+				functionName: "allowance",
+				args: [maker, spender],
+			});
+			if (allowance < minUsdcAllowance) return false;
+		} catch {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * Tri-state sell CTF approval reads for Limitless on Base.
+ * Use for signup warmup: do **not** treat read failures as "insufficient" (that spams txs).
+ */
+export type LimitlessSellCtfApprovalsReadState =
+	| "sufficient"
+	| "insufficient"
+	| "unknown";
+
+export async function readLimitlessSellCtfApprovalsState(opts: {
+	maker: string;
+	verify: LimitlessVerifyAllowanceResult;
+}): Promise<LimitlessSellCtfApprovalsReadState> {
+	const makerRaw = opts.maker?.trim();
+	if (!makerRaw || !ethers.isAddress(makerRaw)) return "unknown";
+	const maker = ethers.getAddress(makerRaw) as `0x${string}`;
+
+	const spenderTrim = opts.verify.spender?.trim();
+	if (!spenderTrim || !ethers.isAddress(spenderTrim)) return "unknown";
+	const venueExchange = ethers.getAddress(spenderTrim) as `0x${string}`;
+
+	let ctfAddr: `0x${string}`;
+	try {
+		ctfAddr = await resolveCtfAddress(opts.verify, venueExchange);
+	} catch {
+		return "unknown";
+	}
+
+	const adapterRaw = opts.verify.venueAdapter?.trim();
+	const erc1155Operators = uniqueChecksummedAddresses([
+		venueExchange,
+		...(adapterRaw && ethers.isAddress(adapterRaw) ? [adapterRaw] : []),
+	]).filter((op) => {
+		if (op.toLowerCase() === ctfAddr.toLowerCase()) return false;
+		if (op.toLowerCase() === maker.toLowerCase()) return false;
+		return true;
+	});
+
+	for (const operator of erc1155Operators) {
+		try {
+			const ok = await readIsApprovedForAllWithRetry(ctfAddr, maker, operator);
+			if (!ok) return "insufficient";
+		} catch {
+			return "unknown";
+		}
+	}
+	return "sufficient";
+}
+
+/**
+ * Read-only: true if every Limitless CTF operator for sells already has
+ * `isApprovedForAll(maker, operator)` on Base. Mirrors the sell branch of
+ * {@link ensureLimitlessTradingApprovalsOnBase} without sending txs.
+ * Read reverts or missing data → false (caller may still run full ensure).
+ */
+export async function readLimitlessSellCtfApprovalsSufficientOnBase(opts: {
+	maker: string;
+	verify: LimitlessVerifyAllowanceResult;
+}): Promise<boolean> {
+	return (await readLimitlessSellCtfApprovalsState(opts)) === "sufficient";
+}
+
+async function unwrapToUnderlyingConditionalTokens(
+	wrapperOrCtf: `0x${string}`,
+): Promise<`0x${string}`> {
+	try {
+		const inner = await basePublicClient.readContract({
+			address: wrapperOrCtf,
+			abi: ctfOnWrapperAbi,
+			functionName: "ctf",
+		});
+		const innerAddr = ethers.getAddress(inner) as `0x${string}`;
+		if (innerAddr.toLowerCase() !== wrapperOrCtf.toLowerCase()) {
+			return innerAddr;
+		}
+	} catch {
+		/* plain CTF — no nested ctf() */
+	}
+	return wrapperOrCtf;
+}
+
 async function resolveCtfAddress(
 	verify: LimitlessVerifyAllowanceResult,
 	venueExchange: `0x${string}`,
 ): Promise<`0x${string}`> {
 	const fromApi = verify.ctfAddress?.trim();
-	if (fromApi && /^0x[0-9a-fA-F]{40}$/.test(fromApi)) {
-		return ethers.getAddress(fromApi) as `0x${string}`;
+	const adapterTrim = verify.venueAdapter?.trim();
+	let apiMatchesAdapter = false;
+	if (
+		fromApi &&
+		/^0x[0-9a-fA-F]{40}$/.test(fromApi) &&
+		adapterTrim &&
+		ethers.isAddress(adapterTrim)
+	) {
+		apiMatchesAdapter =
+			ethers.getAddress(fromApi).toLowerCase() ===
+			ethers.getAddress(adapterTrim).toLowerCase();
+	}
+	if (fromApi && /^0x[0-9a-fA-F]{40}$/.test(fromApi) && !apiMatchesAdapter) {
+		const apiAddr = ethers.getAddress(fromApi) as `0x${string}`;
+		return unwrapToUnderlyingConditionalTokens(apiAddr);
 	}
 	try {
 		const ctf = await basePublicClient.readContract({
@@ -130,7 +304,8 @@ async function resolveCtfAddress(
 			abi: getCtfAbi,
 			functionName: "getCtf",
 		});
-		return ethers.getAddress(ctf) as `0x${string}`;
+		const bridge = ethers.getAddress(ctf) as `0x${string}`;
+		return unwrapToUnderlyingConditionalTokens(bridge);
 	} catch (e) {
 		const m = e instanceof Error ? e.message : String(e);
 		throw new Error(
@@ -143,26 +318,42 @@ async function resolveCtfAddress(
  * Limitless JIT on-chain approvals on Base, **by trade side** (keeps flows small):
  *
  * - **Buy:** USDC `approve` only for `usdcSpenders` / `spender` when allowance is low.
- * - **Sell:** CTF `setApprovalForAll` only for `venue.exchange` and optional `venue.adapter`
- *   (never the CTF address as operator).
+ * - **Sell:** `setApprovalForAll` on the **underlying** Gnosis CTF (unwrap `getCtf()` via
+ *   `ctf()` when the exchange points at a NegRisk adapter). Operators: `venue.exchange`
+ *   and optional `venue.adapter` (never use the CTF `to` as operator).
  *
  * Each missing approval is its own `sendTransaction({ to, data, value, chainId })` then
  * receipt wait — no mixed USDC+CTF batches.
  *
  * **Reads** use viem over a **fallback** of public Base RPCs (see `baseReadRpcUrls`).
  *
- * **`allowanceOwner`** (optional): address whose USDC allowance / CTF operator status is read
- * and who must match `msg.sender` for the approval txs (typically the Base **smart wallet**).
- * Limitless `maker` from ensure-account can differ; if omitted, `maker` is used for reads.
+ * On-chain reads and `approve` / `setApprovalForAll` **must** use the Limitless **`maker`**
+ * (the EIP-712 identity). When the maker is the embedded EOA and the fund target is the
+ * smart wallet, {@link opts.getTxClientForAddress} must return Privy embedded sponsored
+ * sends for that address — approving from the SCW does not satisfy Limitless partner checks.
+ *
+ * {@link opts.sellOnReadRevert} (sell only): when `isApprovedForAll` **reverts**, either queue
+ * `setApprovalForAll` (JIT default) or skip that operator (signup warmup) so RPC/Privy
+ * flukes do not spam transactions.
  */
+export type LimitlessSellReadRevertHandling = "queueApproval" | "skipOperator";
+
 export async function ensureLimitlessTradingApprovalsOnBase(opts: {
-	getClientForChain: GetClientForChainForLimitless;
 	maker: string;
-	/** Prefer smart wallet / fund target when it differs from Limitless `maker`. */
-	allowanceOwner?: string;
+	/** Resolves the wallet client that can sign Base txs as `address` (embedded or SCW). */
+	getTxClientForAddress: (
+		address: string,
+	) => Promise<SendTransactionCapable | null | undefined>;
 	verify: LimitlessVerifyAllowanceResult;
 	side: "buy" | "sell";
+	/**
+	 * Sell branch only: if `isApprovedForAll` reverts, `queueApproval` schedules
+	 * `setApprovalForAll` (first-trade JIT). `skipOperator` skips that operator (warmup).
+	 * @default "queueApproval"
+	 */
+	sellOnReadRevert?: LimitlessSellReadRevertHandling;
 }): Promise<{ didSendTransactions: boolean }> {
+	const sellOnReadRevert = opts.sellOnReadRevert ?? "queueApproval";
 	if (opts.verify == null || typeof opts.verify !== "object") {
 		throw new Error(
 			"Limitless verify-allowance payload was empty. Refresh the page and retry, or check the private API.",
@@ -173,14 +364,6 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 		throw new Error("Limitless maker address missing — cannot verify on-chain approvals.");
 	}
 	const maker = ethers.getAddress(makerRaw) as `0x${string}`;
-
-	const ownerRaw = opts.allowanceOwner?.trim() || makerRaw;
-	if (!ownerRaw || !ethers.isAddress(ownerRaw)) {
-		throw new Error(
-			"On-chain approval owner address missing or invalid — connect your Base wallet.",
-		);
-	}
-	const owner = ethers.getAddress(ownerRaw) as `0x${string}`;
 
 	const spenderTrim = opts.verify.spender?.trim();
 	if (!spenderTrim || !ethers.isAddress(spenderTrim)) {
@@ -207,33 +390,6 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 				"Limitless returned no USDC spender addresses. Retry ensure-account or contact support.",
 			);
 		}
-		if (maker.toLowerCase() !== owner.toLowerCase()) {
-			const s0 = usdcSpenders[0]!;
-			try {
-				const [aMaker, aOwner] = await Promise.all([
-					basePublicClient.readContract({
-						address: usdc,
-						abi: erc20Abi,
-						functionName: "allowance",
-						args: [maker, s0],
-					}),
-					basePublicClient.readContract({
-						address: usdc,
-						abi: erc20Abi,
-						functionName: "allowance",
-						args: [owner, s0],
-					}),
-				]);
-				console.warn(JIT, "USDC allowance: Limitless maker vs app allowanceOwner (first spender)", {
-					spender: `${s0.slice(0, 12)}…`,
-					makerAllowance: aMaker.toString(),
-					ownerAllowance: aOwner.toString(),
-				});
-			} catch (e) {
-				const m = e instanceof Error ? e.message : String(e);
-				console.warn(JIT, "USDC allowance comparison read failed", { message: m.slice(0, 200) });
-			}
-		}
 		for (const spender of usdcSpenders) {
 			let allowance: bigint;
 			try {
@@ -241,12 +397,12 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 					address: usdc,
 					abi: erc20Abi,
 					functionName: "allowance",
-					args: [owner, spender],
+					args: [maker, spender],
 				});
 			} catch (e) {
 				const m = e instanceof Error ? e.message : String(e);
 				throw new Error(
-					`Limitless: USDC allowance read failed (owner=${owner}, spender=${spender}): ${m}`,
+					`Limitless: USDC allowance read failed (maker=${maker}, spender=${spender}): ${m}`,
 				);
 			}
 			if (allowance < minUsdcAllowance) {
@@ -270,28 +426,40 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 			...(adapterRaw && ethers.isAddress(adapterRaw) ? [adapterRaw] : []),
 		]).filter((op) => {
 			if (op.toLowerCase() === ctfAddr.toLowerCase()) return false;
-			if (op.toLowerCase() === owner.toLowerCase()) return false;
+			if (op.toLowerCase() === maker.toLowerCase()) return false;
 			return true;
 		});
 
 		for (const operator of erc1155Operators) {
 			let needApproval: boolean;
 			try {
-				const ok = await basePublicClient.readContract({
-					address: ctfAddr,
-					abi: erc1155Abi,
-					functionName: "isApprovedForAll",
-					args: [owner, operator],
-				});
+				const ok = await readIsApprovedForAllWithRetry(
+					ctfAddr,
+					maker,
+					operator,
+				);
 				needApproval = !ok;
 			} catch (e) {
 				const m = e instanceof Error ? e.message : String(e);
-				console.warn(JIT, "CTF isApprovedForAll view reverted; scheduling setApprovalForAll", {
-					ctf: ctfAddr,
-					operator,
-					message: m.slice(0, 220),
-				});
-				needApproval = true;
+				if (opts.side === "sell" && sellOnReadRevert === "skipOperator") {
+					console.warn(
+						JIT,
+						"CTF isApprovedForAll view reverted; skip operator (sellOnReadRevert: skipOperator)",
+						{
+							ctf: ctfAddr,
+							operator,
+							message: m.slice(0, 220),
+						},
+					);
+					needApproval = false;
+				} else {
+					console.warn(JIT, "CTF isApprovedForAll view reverted; scheduling setApprovalForAll", {
+						ctf: ctfAddr,
+						operator,
+						message: m.slice(0, 220),
+					});
+					needApproval = true;
+				}
 			}
 			if (needApproval) {
 				calls.push({
@@ -312,8 +480,6 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 			chainId: BASE,
 			side: opts.side,
 			maker: `${maker.slice(0, 10)}…`,
-			allowanceOwner: `${owner.slice(0, 10)}…`,
-			ownerDiffersFromMaker: owner.toLowerCase() !== maker.toLowerCase(),
 			partnerHasMinUsdcAllowance: opts.verify.hasMinimumAllowance,
 		});
 		return { didSendTransactions: false };
@@ -324,7 +490,6 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 		callCount: calls.length,
 		side: opts.side,
 		maker: `${maker.slice(0, 10)}…`,
-		allowanceOwner: `${owner.slice(0, 10)}…`,
 		partnerHasMinUsdcAllowance: opts.verify.hasMinimumAllowance,
 		plan: calls.map((c, idx) => ({
 			idx,
@@ -335,10 +500,10 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 		})),
 	});
 
-	const client = await opts.getClientForChain({ id: BASE });
+	const client = await opts.getTxClientForAddress(maker);
 	if (!client?.sendTransaction) {
 		throw new Error(
-			"Base smart wallet unavailable. Connect your wallet to approve for Limitless.",
+			"No wallet client can sign Base approvals as your Limitless maker. If you use a smart wallet with an embedded signer, reconnect and retry, or run Limitless setup again.",
 		);
 	}
 

@@ -8,7 +8,7 @@ import {
 import type { CreateOrderPayload } from "@/trading/predict/predictOrderSubmit";
 import type {
 	LimitlessEnsureAccountResponse,
-	LimitlessOrderRequest,
+	LimitlessSignedOrderSubmit,
 	LimitlessVerifyAllowanceResult,
 } from "@/trading/limitless/limitlessPrivateApiTypes";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
@@ -1304,10 +1304,34 @@ export function createPrivateApiClient(
 
 		// ── Limitless (Base) ───────────────────────────────────────────
 
-		async postLimitlessEnsureAccount(): Promise<LimitlessEnsureAccountResponse> {
+		async getLimitlessAuthSigningMessage(): Promise<string> {
+			const res = await authorizedFetch("/api/limitless/auth/signing-message");
+			if (!res.ok) {
+				const errBody = await res.text().catch(() => "");
+				throw new PrivateApiError(
+					`Limitless signing-message request failed (${res.status}).`,
+					res.status,
+					errBody,
+				);
+			}
+			return (await res.text()).trimEnd();
+		},
+
+		async getLimitlessMarketBySlug(slug: string): Promise<unknown> {
+			const s = encodeURIComponent(slug.trim());
+			if (!s) {
+				throw new PrivateApiError("Limitless market slug is empty.", 400, null);
+			}
+			const res = await authorizedFetch(`/api/limitless/markets/${s}`);
+			return readJson<unknown>(res);
+		},
+
+		async postLimitlessEnsureAccount(
+			body?: Record<string, unknown>,
+		): Promise<LimitlessEnsureAccountResponse> {
 			const res = await authorizedFetch("/api/limitless/ensure-account", {
 				method: "POST",
-				body: JSON.stringify({}),
+				body: JSON.stringify(body ?? {}),
 			});
 			const data = await readJson<LimitlessEnsureAccountResponse>(res);
 			if (
@@ -1393,13 +1417,15 @@ export function createPrivateApiClient(
 			return out;
 		},
 
-		async postLimitlessOrder(body: LimitlessOrderRequest): Promise<unknown> {
+		async postLimitlessOrder(body: LimitlessSignedOrderSubmit): Promise<unknown> {
 			if (import.meta.env.DEV && isTradingDebugLoggingEnabled()) {
+				const ord = body.order;
+				const sideLabel = ord.side === 0 ? "BUY" : ord.side === 1 ? "SELL" : "?";
 				console.info("[Limitless/API]", "POST orders (submit)", {
 					marketSlug: body.marketSlug,
 					orderType: body.orderType,
-					side: body.side,
-					tokenId: `${body.tokenId?.toString?.().slice(0, 14) ?? "?"}…`,
+					side: sideLabel,
+					tokenId: `${ord.tokenId?.toString?.().slice(0, 14) ?? "?"}…`,
 				});
 			}
 			const res = await authorizedFetch("/api/limitless/orders", {
@@ -1428,15 +1454,60 @@ export function createPrivateApiClient(
 				return parsed;
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
-				console.error("[Limitless/API]", "POST orders failed", {
-					marketSlug: body.marketSlug,
-					orderType: body.orderType,
-					message: msg,
-					hint:
-						msg.includes("null or missing `data`") || msg.includes("reading 'data')")
-							? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
-							: undefined,
-				});
+				if (import.meta.env.DEV && err instanceof PrivateApiError) {
+					const b = err.body;
+					if (b && typeof b === "object") {
+						const o = b as Record<string, unknown>;
+						const diag = o._diagnostic;
+						const details = o.details;
+						let detailsForLog: unknown = details;
+						if (details !== undefined) {
+							try {
+								const s = JSON.stringify(details);
+								detailsForLog =
+									s.length > 4000 ? `${s.slice(0, 4000)}…` : details;
+							} catch {
+								detailsForLog = "(unserializable details)";
+							}
+						}
+						console.error("[Limitless/API]", "POST orders failed", {
+							marketSlug: body.marketSlug,
+							orderType: body.orderType,
+							message: msg,
+							httpStatus: err.status,
+							diagnostic: diag,
+							details: detailsForLog,
+							hint:
+								msg.includes("null or missing `data`") ||
+								msg.includes("reading 'data')")
+									? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
+									: undefined,
+						});
+					} else {
+						console.error("[Limitless/API]", "POST orders failed", {
+							marketSlug: body.marketSlug,
+							orderType: body.orderType,
+							message: msg,
+							httpStatus: err.status,
+							hint:
+								msg.includes("null or missing `data`") ||
+								msg.includes("reading 'data')")
+									? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
+									: undefined,
+						});
+					}
+				} else {
+					console.error("[Limitless/API]", "POST orders failed", {
+						marketSlug: body.marketSlug,
+						orderType: body.orderType,
+						message: msg,
+						hint:
+							msg.includes("null or missing `data`") ||
+							msg.includes("reading 'data')")
+								? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
+								: undefined,
+					});
+				}
 				throw err;
 			}
 		},
@@ -1494,107 +1565,6 @@ export function createPrivateApiClient(
 				}),
 			});
 			return readJson<unknown>(res);
-		},
-
-		/**
-		 * Limitless official redeem: POST https://api.limitless.exchange/portfolio/redeem
-		 * (proxied). Redeems from the **server-wallet** sub-account — this is the path
-		 * delegated LevelUp trades use; raw Base SCW → CTF calls often pay out $0.
-		 */
-		async postLimitlessPortfolioRedeem(body: {
-			conditionId: string;
-			onBehalfOf?: number;
-			/** NegRisk parent id — predictions may retry redeem after leg “no balance”. */
-			negRiskParentConditionId?: string;
-		}): Promise<unknown> {
-			const path = "/api/limitless/portfolio/redeem";
-			const payload: Record<string, unknown> = {
-				conditionId: body.conditionId.trim(),
-			};
-			if (
-				typeof body.onBehalfOf === "number" &&
-				Number.isFinite(body.onBehalfOf)
-			) {
-				payload.onBehalfOf = body.onBehalfOf;
-			}
-			const nrp = body.negRiskParentConditionId?.trim();
-			if (nrp) payload.negRiskParentConditionId = nrp;
-			const res = await authorizedFetch(path, {
-				method: "POST",
-				body: JSON.stringify(payload),
-			});
-			const raw = await parseJsonSafe(res);
-
-			let unwrappedForTrace: unknown = raw;
-			if (raw && typeof raw === "object" && "data" in raw) {
-				const env = raw as Record<string, unknown>;
-				if (env.data !== undefined && env.data !== null) {
-					unwrappedForTrace = env.data;
-				} else {
-					unwrappedForTrace = raw;
-				}
-			}
-
-			if (import.meta.env.DEV) {
-				const idTok = getIdentityToken?.();
-				let rawBodyJson = "";
-				try {
-					rawBodyJson = JSON.stringify(raw);
-				} catch {
-					rawBodyJson = "<stringify failed>";
-				}
-				let unwrappedJson = "";
-				try {
-					unwrappedJson = JSON.stringify(unwrappedForTrace);
-				} catch {
-					unwrappedJson = "<stringify failed>";
-				}
-				console.debug("[privateApi][limitless/redeem] request", {
-					resolvedUrl: getPrivateApiAbsoluteUrl(path),
-					method: "POST",
-					requestJson: payload,
-					onBehalfOf: payload.onBehalfOf != null ? "set" : "absent",
-					auth: {
-						bearerAccessToken: "set (redacted)",
-						privyIdToken:
-							typeof idTok === "string" && idTok.trim()
-								? "set (redacted)"
-								: "absent",
-					},
-					note: "No client-side signing of redeem JSON. Your API verifies Bearer (+ optional privy-id-token); Limitless partner HMAC is server-only.",
-				});
-				console.debug("[privateApi][limitless/redeem] response", {
-					httpStatus: res.status,
-					ok: res.ok,
-					contentType: res.headers.get("content-type"),
-					parsedBody: raw,
-					parsedBodyJson: rawBodyJson.slice(0, 8000),
-					parsedBodyType: raw === null ? "null" : typeof raw,
-					unwrappedForRedeemLimitless: unwrappedForTrace,
-					unwrappedJson: unwrappedJson.slice(0, 8000),
-				});
-				console.debug("[LimitlessRedeemTrace] privateApi redeem envelope unwrap", {
-					returnsInnerDataOnly:
-						raw &&
-						typeof raw === "object" &&
-						"data" in raw &&
-						(raw as Record<string, unknown>).data != null,
-				});
-			}
-
-			if (!res.ok) {
-				throw new PrivateApiError(
-					privateApiHttpErrorMessage(raw, res.status),
-					res.status,
-					raw,
-				);
-			}
-			if (raw && typeof raw === "object" && "data" in raw) {
-				const env = raw as Record<string, unknown>;
-				if (env.data !== undefined && env.data !== null) return env.data;
-				return raw;
-			}
-			return raw;
 		},
 
 		/**

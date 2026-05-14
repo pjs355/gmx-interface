@@ -4,13 +4,13 @@ import { toast } from "react-toastify";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // Link import removed — executionGateBanner no longer rendered
 import { useSignerContext } from "context/SignerContext";
-import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
+import { usePrivy, useWallets as usePrivyWallets, useSendTransaction } from "@privy-io/react-auth";
 import {
 	RegisterPrivyOpenFundAction,
 	resolvePrivyEvmFundTarget,
 } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-// import { ethers } from "ethers";
+import { ethers } from "ethers";
 import type { TradeBoxProps, TradeExecutionParams, TradingVenue } from "./types";
 import { useMarketOrderHandler } from "./MarketOrderHandler";
 // import { useLimitOrderHandler } from "./LimitOrderHandler";
@@ -26,7 +26,11 @@ import { predictionMarketDataService } from "@/services/api/predictionMarketData
 import { getPrivateApiErrorMessage } from "@/services/privateApi";
 import { calculateFeeMatchingBackend } from "./feeLevelUp";
 import { getVenueConfig } from "@/config/venueConfig";
-import { ensureLimitlessTradingApprovalsOnBase } from "@/trading/limitless/limitlessTradingApprovalsOnBase";
+import {
+	ensureLimitlessTradingApprovalsOnBase,
+	readLimitlessSellCtfApprovalsSufficientOnBase,
+} from "@/trading/limitless/limitlessTradingApprovalsOnBase";
+import { getLimitlessBaseTxClientForAddress } from "@/trading/limitless/limitlessBaseTxClientForAddress";
 import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { usePolymarketExecutionGate } from "@/trading/hooks/usePolymarketExecutionGate";
@@ -85,6 +89,8 @@ import {
 	useSorExecution,
 	parseLimitPriceCents,
 	probabilityToLimitPriceCentsString,
+	shareAmountMatchesRoute,
+	usdAmountMatchesRoute,
 	SOR_MIN_MARKET_BUY_USD,
 	SOR_MIN_LIMIT_ORDER_USD,
 	SOR_MIN_MARKET_SELL_SHARES,
@@ -120,6 +126,12 @@ import {
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
+import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
+import {
+	buildLimitlessSignedOrderFromMarket,
+	type BuildLimitlessSorOrderInput,
+} from "@/trading/limitless/limitlessSignedClobOrder";
+import { classifyLimitlessClientMaker } from "@/trading/limitless/limitlessClientMakerIdentity";
 import { hasLevelUpCrossVenueOrderbook } from "@/trading/levelUp/levelUpCrossVenueBookPresence";
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
@@ -162,7 +174,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
   }, [pandaId, state.orderType, handleOrderTypeChange]);
   const { getClientForChain } = useSmartWallets();
-  const { account, ready: signerReady } = useSignerContext();
+  const { account, ready: signerReady, signer, signerAddress } = useSignerContext();
   const { login, authenticated } = usePrivy();
 
   // Use global approval state from UserDataContext
@@ -184,6 +196,23 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const { wallets: privyWallets } = usePrivyWallets();
   const funding = useFundingAddresses();
+  const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
+  const getLimitlessTxClientForAddress = useCallback(
+    (addr: string) =>
+      getLimitlessBaseTxClientForAddress({
+        address: addr,
+        getClientForChain,
+        baseSmartWallet: funding.baseSmartWallet,
+        embeddedEoa: funding.embeddedEoa,
+        privyEvmSendTransaction,
+      }),
+    [
+      getClientForChain,
+      funding.baseSmartWallet,
+      funding.embeddedEoa,
+      privyEvmSendTransaction,
+    ],
+  );
   const addFundsFromPrivyRef = useRef<(() => void | Promise<void>) | null>(null);
   const fundEvmForPrivy = useMemo(
   	() => resolvePrivyEvmFundTarget(funding.baseSmartWallet, account),
@@ -216,8 +245,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     queryKey: profileId
       ? tradingQueryKeys.limitlessEnsureAccount(profileId)
       : ["trading", "limitlessEnsure", "__disabled__"],
-    enabled: Boolean(authenticated && profileId),
-    queryFn: () => privateApi.postLimitlessEnsureAccount(),
+    enabled: Boolean(authenticated && profileId && signerReady),
+    queryFn: async () => {
+      let body: Record<string, unknown> | undefined;
+      if (signer) {
+        try {
+          body = await buildLimitlessEoaEnsureBodyFromSigner({
+            getPlainSigningMessage: () => privateApi.getLimitlessAuthSigningMessage(),
+            signer,
+          });
+        } catch (e) {
+          console.warn("[Limitless/Warmup] ensure-account EOA body failed", e);
+        }
+      }
+      return privateApi.postLimitlessEnsureAccount(body);
+    },
     staleTime: 1000 * 60 * 30,
     retry: 1,
   });
@@ -391,7 +433,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   const tradeBoxIsVsSingle = useMemo(() => {
-    if (!market || (market as any)?.umbrellaChildrenCount !== 1) return false;
+    if (!market) return false;
     const mt = (market?.displayName || (market as any)?.question || "").trim();
     if (mt.match(/^Over\s+/i)) return false;
     const raw =
@@ -661,6 +703,39 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictVenueBookHints,
     oddsMonitorEnabled,
     oddsMonitorConnected,
+  ]);
+
+  /** Dual WS snapshots so YES/NO buttons do not reuse the selected outcome's ladder for both teams. */
+  const levelUpVenueBookHints = useMemo(() => {
+    if (state.tradingVenue !== "levelup") return null;
+    if (!oddsMonitorEnabled || !oddsMonitorConnected || !matchedMonitor) return null;
+    const snapYes = monitorBookToOrderbookSnapshot(
+      levelUpMonitorBookForPosition(
+        matchedMonitor,
+        "yes",
+        yesTeamLabel,
+        noTeamLabel,
+      ),
+    );
+    const snapNo = monitorBookToOrderbookSnapshot(
+      levelUpMonitorBookForPosition(
+        matchedMonitor,
+        "no",
+        yesTeamLabel,
+        noTeamLabel,
+      ),
+    );
+    if (!snapYes || !snapNo) return null;
+    return { yes: snapYes, no: snapNo };
+  }, [
+    state.tradingVenue,
+    oddsMonitorEnabled,
+    oddsMonitorConnected,
+    matchedMonitor,
+    pandaId,
+    propUmbrellaId,
+    yesTeamLabel,
+    noTeamLabel,
   ]);
 
   const venueConfig = getVenueConfig(state.tradingVenue);
@@ -1338,22 +1413,41 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         (ensureData as { limitlessAccount?: { makerAddress?: string } }).limitlessAccount
           ?.makerAddress?.trim();
       const makerFromOverview = funding.limitlessMakerBase?.trim();
-      const maker =
+      const venueMaker =
         (makerFromEnsure && makerFromEnsure.length > 0
           ? makerFromEnsure
           : makerFromOverview && makerFromOverview.length > 0
             ? makerFromOverview
             : "") ?? "";
-      if (!maker) {
+      if (!venueMaker) {
         throw new Error(
           "Limitless maker address missing — refresh ensure-account or wait for account overview.",
         );
       }
-
-      /** User’s Privy Base funding identity (SCW or EOA) — for delegation checks only, not Limitless collateral. */
-      const userBaseFunding =
+      const fundTarget =
         resolvePrivyEvmFundTarget(funding.baseSmartWallet, account)?.trim() ?? "";
-      const allowanceOwner = userBaseFunding.length > 0 ? userBaseFunding : maker;
+      const {
+        effectiveMaker: maker,
+        isDelegatedServerWalletSubAccount,
+      } = classifyLimitlessClientMaker({
+        venueMakerFromApi: venueMaker,
+        fundTarget,
+        signerAddress,
+        account,
+        embeddedEoa: funding.embeddedEoa,
+      });
+      if (
+        import.meta.env.DEV &&
+        venueMaker.trim().toLowerCase() !== maker.trim().toLowerCase()
+      ) {
+        console.warn(lxJit, "effective maker differs from venue API (stale row — align POST ensure-account)", {
+          venueMaker: `${venueMaker.slice(0, 10)}…`,
+          effectiveMaker: `${maker.slice(0, 10)}…`,
+        });
+      }
+
+      /** User’s Privy Base funding identity (SCW or EOA) — for logs / sweeps; on-chain Limitless approvals use `maker`. */
+      const userBaseFunding = fundTarget;
       const clipAddr = (addr: string) => {
         const t = addr.trim();
         if (t.length <= 22) return t;
@@ -1363,11 +1457,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         step: "verify_allowance",
         routeSlug: slug,
         effectiveVenueSlug,
-        maker: `${maker.slice(0, 10)}…`,
+        venueMaker: `${venueMaker.slice(0, 10)}…`,
+        effectiveMaker: `${maker.slice(0, 10)}…`,
         userBaseFunding: userBaseFunding
           ? `${userBaseFunding.slice(0, 10)}…`
           : "(none)",
-        allowanceOwnerForNonDelegatedPath: `${allowanceOwner.slice(0, 10)}…`,
+        note: "USDC/CTF approvals are sent as Limitless maker (embedded when SCW is fund target)",
       });
       let allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
       effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
@@ -1381,6 +1476,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         spender: `${allowance.spender.slice(0, 12)}…`,
         partnerAllowanceOwnerId: allowance.partnerAllowanceOwnerId,
         limitlessPartnerAllowanceType: allowance.limitlessPartnerAllowanceType,
+        venueAdapterPresent:
+          typeof allowance.venueAdapter === "string" &&
+          allowance.venueAdapter.trim() !== "",
+        ctfAddressFromApi:
+          typeof allowance.ctfAddress === "string" && allowance.ctfAddress.trim() !== "",
         limitlessCheckedAddress:
           typeof allowance.limitlessCheckedAddress === "string"
             ? clipAddr(allowance.limitlessCheckedAddress)
@@ -1388,25 +1488,29 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       });
 
       /**
-       * Partner delegated + `createServerWallet: true` — Limitless managed wallet (`maker`)
-       * differs from the user's Privy Base fund target. Approvals are provisioned by
-       * Limitless on the sub-account; browser USDC/CTF txs from the user's wallet are
-       * the wrong identity (see programmatic API server-wallet section).
+       * Buys: private `verify-allowance` sets `hasMinimumAllowance: true` optimistically (no
+       * on-chain USDC probe). When true, we skip `ensureLimitlessTradingApprovalsOnBase`, so a
+       * successful buy does not prove the embedded wallet ran a sponsored USDC `approve`.
+       * Sells still run CTF `setApprovalForAll` when `sellCtfReadsOk` is false.
+       *
+       * Partner delegated + `createServerWallet: true`: `isDelegatedServerWalletSubAccount`
+       * skips Privy Base JIT (Limitless provisions the managed maker).
        */
-      const makerLower = maker.trim().toLowerCase();
-      const userBaseLower = userBaseFunding.trim().toLowerCase();
-      /** Partner server-wallet: maker is never the user’s Base smart wallet / EOA fund target. */
-      const isDelegatedServerWalletSubAccount =
-        makerLower.length > 0 &&
-        (userBaseLower.length === 0 || makerLower !== userBaseLower);
-
       const buyPartnerUsdcOk = ctx.side === "buy" && allowance.hasMinimumAllowance;
+      const sellCtfReadsOk =
+        ctx.side === "sell" && !isDelegatedServerWalletSubAccount
+          ? await readLimitlessSellCtfApprovalsSufficientOnBase({
+              maker,
+              verify: allowance,
+            })
+          : false;
       console.info(lxJit, "phase", {
         step: "sub_account_mode",
         routeSlug: slug,
         effectiveVenueSlug,
         isDelegatedServerWalletSubAccount,
         hasMinimumAllowance: allowance.hasMinimumAllowance,
+        sellCtfReadsOk: ctx.side === "sell" ? sellCtfReadsOk : undefined,
       });
 
       console.info(lxJit, "phase", {
@@ -1424,22 +1528,28 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             reason: "delegated_server_wallet_sub_account",
             note: "Limitless provisions approvals on managed wallet; skip Privy Base JIT",
           });
-        } else if (!buyPartnerUsdcOk || ctx.side === "sell") {
-          const r = await ensureLimitlessTradingApprovalsOnBase({
-            getClientForChain: ctx.getClientForChain,
-            maker,
-            allowanceOwner,
-            verify: allowance,
-            side: ctx.side,
-          });
-          didSendTransactions = r.didSendTransactions;
-        } else {
+        } else if (ctx.side === "buy" && buyPartnerUsdcOk) {
           console.info(lxJit, "phase", {
             step: "on_chain_approvals_skipped",
             routeSlug: slug,
             effectiveVenueSlug,
             reason: "buy_partner_usdc_ok",
           });
+        } else if (ctx.side === "sell" && sellCtfReadsOk) {
+          console.info(lxJit, "phase", {
+            step: "on_chain_approvals_skipped",
+            routeSlug: slug,
+            effectiveVenueSlug,
+            reason: "sell_ctf_on_chain_ok",
+          });
+        } else {
+          const r = await ensureLimitlessTradingApprovalsOnBase({
+            maker,
+            getTxClientForAddress: getLimitlessTxClientForAddress,
+            verify: allowance,
+            side: ctx.side,
+          });
+          didSendTransactions = r.didSendTransactions;
         }
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
@@ -1514,14 +1624,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         step: "ensure_account_refetch",
         routeSlug: slug,
         effectiveVenueSlug,
+        willRefetch: didSendTransactions,
       });
-      const refetchResult = await limitlessEnsureQuery.refetch();
-      const gatePayload =
-        (refetchResult != null && typeof refetchResult === "object"
-          ? (refetchResult as { data?: unknown }).data
-          : undefined) ??
-        limitlessEnsureQuery.data ??
-        null;
+      let gatePayload: unknown =
+        limitlessEnsureQuery.data ?? null;
+      if (didSendTransactions) {
+        const refetchResult = await limitlessEnsureQuery.refetch();
+        gatePayload =
+          (refetchResult != null && typeof refetchResult === "object"
+            ? (refetchResult as { data?: unknown }).data
+            : undefined) ??
+          limitlessEnsureQuery.data ??
+          null;
+      }
       const gate = getLimitlessEnsureTradeGate(gatePayload);
       console.info(lxJit, "phase", {
         step: "trade_gate",
@@ -1552,8 +1667,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     },
     [
       account,
+      signerAddress,
+      getLimitlessTxClientForAddress,
       funding.baseSmartWallet,
       funding.limitlessMakerBase,
+      funding.embeddedEoa,
       collateralTokens,
       limitlessEnsureQuery,
       privateApi,
@@ -1811,10 +1929,87 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     checkSufficientShares,
   ]);
 
+  const limitlessMakerCashForSor = collateralTokens.limitlessMakerUsdc;
+
   // SOR execution wiring: executor callbacks + multi-chain wallet balances
   const sorReportExecutionPhaseRef = useRef<
     ((phase: SorExecutionPhase) => void) | undefined
   >(undefined);
+
+  const getLimitlessOwnerId = useCallback(() => {
+    const raw = limitlessEnsureQuery.data;
+    if (!raw || typeof raw !== "object") return undefined;
+    const o = raw as Record<string, unknown>;
+    const inner =
+      o.data != null && typeof o.data === "object"
+        ? (o.data as Record<string, unknown>)
+        : o;
+    const la = inner.limitlessAccount;
+    if (!la || typeof la !== "object") return undefined;
+    const oid = (la as Record<string, unknown>).ownerId;
+    if (typeof oid === "number" && Number.isFinite(oid) && oid > 0) return oid;
+    return undefined;
+  }, [limitlessEnsureQuery.data]);
+
+  const getLimitlessMakerAddress = useCallback(() => {
+    let venueMaker: string | undefined;
+    const raw = limitlessEnsureQuery.data;
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      const inner =
+        o.data != null && typeof o.data === "object"
+          ? (o.data as Record<string, unknown>)
+          : o;
+      const la = inner.limitlessAccount;
+      if (la && typeof la === "object") {
+        const m = (la as Record<string, unknown>).makerAddress;
+        if (typeof m === "string" && m.trim()) venueMaker = m.trim();
+      }
+    }
+    if (!venueMaker?.trim()) {
+      venueMaker = funding.limitlessMakerBase?.trim() || undefined;
+    }
+    if (!venueMaker?.trim()) return undefined;
+    try {
+      const fundTarget = resolvePrivyEvmFundTarget(
+        funding.baseSmartWallet,
+        account,
+      )?.trim();
+      const { effectiveMaker } = classifyLimitlessClientMaker({
+        venueMakerFromApi: venueMaker,
+        fundTarget,
+        signerAddress,
+        account,
+        embeddedEoa: funding.embeddedEoa,
+      });
+      return effectiveMaker;
+    } catch {
+      return venueMaker.trim();
+    }
+  }, [
+    limitlessEnsureQuery.data,
+    funding.limitlessMakerBase,
+    funding.baseSmartWallet,
+    funding.embeddedEoa,
+    account,
+    signerAddress,
+  ]);
+
+  const buildLimitlessSignedOrderFromMarketCb = useCallback(
+    (input: BuildLimitlessSorOrderInput) => {
+      if (!signer) {
+        return Promise.reject(
+          new Error("Wallet signer unavailable for Limitless orders."),
+        );
+      }
+      return buildLimitlessSignedOrderFromMarket(
+        privateApi,
+        signer as ethers.Signer,
+        input,
+      );
+    },
+    [privateApi, signer],
+  );
 
   const sorExecutor = useSorLegExecutor({
     tradeExecutionService,
@@ -1846,6 +2041,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     ensureLimitlessApprovals: ensureLimitlessApprovalsForTrade,
     ensureDflowProofVerified: ensureDflowProofVerifiedForTrade,
     reportExecutionPhaseRef: sorReportExecutionPhaseRef,
+    getLimitlessOwnerId,
+    getLimitlessMakerAddress,
+    buildLimitlessSignedOrderFromMarket: buildLimitlessSignedOrderFromMarketCb,
   });
 
   const sorExecution = useSorExecution({
@@ -1859,13 +2057,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
    * gated on `multiVenueEnabled` here. Predict (and other single-tab) flows still need
    * Polygon / BNB / Solana rows for SOR + Li.FI prefund when Base USDC is low.
    */
-  const limitlessMakerCashForSor = collateralTokens.limitlessMakerUsdc;
-
   const sorWalletBalances: ChainBalance[] = useMemo(
     () =>
       buildChainBalances({
         baseUsdcBalance: collateralTokens.baseUsdc,
         baseWalletAddress: account ?? "",
+        limitlessMakerUsdcBalance: Math.max(0, limitlessMakerCashForSor ?? 0),
+        limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
         polygonUsdcBalance: collateralTokens.polygonStable,
         polygonWalletAddress: funding.polymarketSafe,
         solanaUsdcBalance: collateralTokens.solanaUsdc,
@@ -1884,6 +2082,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       funding.polymarketSafe,
       funding.solanaAddress,
       funding.embeddedEoa,
+      funding.limitlessMakerBase,
+      limitlessMakerCashForSor,
     ],
   );
 
@@ -1925,18 +2125,15 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   );
 
   /**
-   * Pooled stable for SOR buy gates + deposit CTA — same basis everywhere (LevelUp, Limitless, etc.):
-   * Base SCW + Polygon + Solana + BNB rows from `sorWalletBalances`, plus Limitless maker Base USDC.
+   * Pooled stable for SOR buy gates + deposit CTA — `sorWalletBalances` includes Base SCW
+   * and Limitless maker rows plus other funding chains.
    * Prefund / Li.FI moves funds before signing; the gate must not pretend off-Base stables do not exist.
    */
-  const totalAvailableCash = useMemo(() => {
-    const makerUsd = Number.isFinite(limitlessMakerCashForSor)
-      ? Math.max(0, limitlessMakerCashForSor)
-      : 0;
-    return (
-      sorWalletBalances.reduce((sum, b) => sum + b.balance, 0) + makerUsd
-    );
-  }, [sorWalletBalances, limitlessMakerCashForSor]);
+  const totalAvailableCash = useMemo(
+    () =>
+      sorWalletBalances.reduce((sum, b) => sum + b.balance, 0),
+    [sorWalletBalances],
+  );
 
   // --- SOR route computation + execution (active for ALL venues, not just "all") ---
   const sorLimitPriceCents: number | undefined =
@@ -1946,20 +2143,25 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   // field is shares and the price field is cents — SOR always expects USD, so
   // convert limit amounts to USD notional (shares * price).
   //
-  // Market sell sell-all clamp: when the user types a value within
-  // SHARE_SELL_COMPARE_EPS (0.01 share) of their actual held total for the
-  // active tab, we substitute the exact held amount. This makes "type the
-  // displayed balance ⇒ sell entire position (incl. fractional remainder)"
-  // work consistently across every venue (Predict, DFlow, Polymarket,
-  // Limitless, LevelUp). MyPositionsRow displays held shares floored to 2 dp
-  // so the user's typed value is always at most ~0.01 below actual; the
-  // clamp closes that gap so SOR liquidates the whole position.
+  // Sell-all clamp (market and limit): when the user types within
+  // SHARE_SELL_COMPARE_EPS (0.01 share) of scoped holdings for the active tab,
+  // substitute the exact held total before SOR. MyPositions / hints show
+  // shares floored to 2 dp, so the typed cap is often slightly below on-chain
+  // precision; this closes the gap for Limitless, Predict, Polymarket, etc.
   const sorAmountUsd = (() => {
     const raw = parseFloat(state.amount);
     if (!Number.isFinite(raw) || raw <= 0) return 0;
     if (state.orderType === "limit") {
       if (sorLimitPriceCents == null) return 0;
-      return raw * (sorLimitPriceCents / 100);
+      let sharesForNotional = raw;
+      if (
+        state.side === "sell" &&
+        maxScopedSellShares > 0 &&
+        Math.abs(raw - maxScopedSellShares) <= SHARE_SELL_COMPARE_EPS
+      ) {
+        sharesForNotional = maxScopedSellShares;
+      }
+      return sharesForNotional * (sorLimitPriceCents / 100);
     }
     if (
       state.side === "sell" &&
@@ -2579,13 +2781,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         // typed amount, it's the freshest authoritative plan and is what Submit signs.
         const sr = sorRoute.executionRoute;
         const inputAmount = parseFloat(state.amount) || 0;
-        // Cent-rounded match: float drift on requestedAmount vs typed amount must not
-        // disable the overlay — otherwise we fall back to local book walk (wrong $ / shares).
+        // Buys: cent-rounded USD match. Sells: share tolerance (same as
+        // `shareAmountMatchesRoute` / sell-all clamp) so 2dp-typed size still
+        // overlays when `requestedAmount` carries full precision.
         const sorMatchesInput =
           sr &&
           sr.legs.length > 0 &&
           inputAmount > 0 &&
-          Math.round(sr.requestedAmount * 100) === Math.round(inputAmount * 100);
+          (state.side === "buy"
+            ? usdAmountMatchesRoute(sr.requestedAmount, inputAmount)
+            : shareAmountMatchesRoute(sr.requestedAmount, inputAmount));
         const hasSorData = sorMatchesInput && state.tradingVenue !== "all";
         const bookData = calculatedMarketOrderData;
 
@@ -2697,6 +2902,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       polymarketVenueHint={polymarketVenueHint}
       predictVenueHint={predictVenueHint}
       predictVenueBookHints={predictVenueBookHints}
+      levelUpVenueBookHints={levelUpVenueBookHints}
       dflowVenueHint={dflowVenueHint}
       matchedVenues={matchedVenues}
       onTrade={handleTrade}

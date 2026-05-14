@@ -41,11 +41,12 @@ import { predictCtfKey } from "@/trading/predict/predictContractKeys";
 import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
-import { PrivateApiError } from "@/services/privateApi/errors";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { tradingQueryKeys } from "@/trading/queryKeys";
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
+import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
+import { redeemLimitlessWinningPositionOnBase } from "@/trading/limitless/limitlessRedeemOnBase";
 const BASE_CHAIN_ID = 8453;
 
 /** `POST /api/limitless/ensure-account` payload (unwrapped) or rare `{ data }` cache shape. */
@@ -60,6 +61,31 @@ function parseLimitlessOwnerIdFromEnsureData(data: unknown): number | undefined 
 	if (!la || typeof la !== "object") return undefined;
 	const oid = (la as Record<string, unknown>).ownerId;
 	if (typeof oid === "number" && Number.isFinite(oid) && oid > 0) return oid;
+	return undefined;
+}
+
+function parseLimitlessMakerAddressFromEnsureData(data: unknown): string | undefined {
+	if (data == null || typeof data !== "object") return undefined;
+	const d = data as Record<string, unknown>;
+	const inner =
+		d.data != null && typeof d.data === "object"
+			? (d.data as Record<string, unknown>)
+			: d;
+	const la = inner.limitlessAccount;
+	if (!la || typeof la !== "object") return undefined;
+	const rec = la as Record<string, unknown>;
+	const maker = rec.makerAddress;
+	if (typeof maker === "string" && maker.trim() && ethers.isAddress(maker.trim())) {
+		return ethers.getAddress(maker.trim());
+	}
+	const signerAddr = rec.signerAddress;
+	if (
+		typeof signerAddr === "string" &&
+		signerAddr.trim() &&
+		ethers.isAddress(signerAddr.trim())
+	) {
+		return ethers.getAddress(signerAddr.trim());
+	}
 	return undefined;
 }
 
@@ -105,84 +131,6 @@ const CTF_READ_ABI = [
 	"function balanceOf(address account, uint256 id) view returns (uint256)",
 ] as const;
 
-function isLimitlessPartnerRedeemRouteMissing(err: unknown): boolean {
-	return err instanceof PrivateApiError && [404, 405, 501].includes(err.status);
-}
-
-function isLikelyEvmTxHash(s: string): boolean {
-	const t = s.trim();
-	return /^0x[a-fA-F0-9]{64}$/i.test(t);
-}
-
-/** Partner / Limitless HTTP redeem bodies vary; pick a Base tx hash when present. */
-function extractLimitlessPartnerRedeemTxHash(data: unknown): string | null {
-	const pickHash = (o: unknown): string | null => {
-		if (!o || typeof o !== "object") return null;
-		const r = o as Record<string, unknown>;
-		for (const k of [
-			"transactionHash",
-			"txHash",
-			"hash",
-			/** Limitless server-wallet envelope often exposes the user-op first. */
-			"userOperationHash",
-			"userOpHash",
-			"transaction_hash",
-		]) {
-			const v = r[k];
-			if (typeof v === "string" && isLikelyEvmTxHash(v)) {
-				return v.trim();
-			}
-		}
-		const nested = r.transaction ?? r.tx ?? r.result;
-		if (nested && typeof nested === "object") {
-			const h = (nested as Record<string, unknown>).hash;
-			if (typeof h === "string" && isLikelyEvmTxHash(h)) {
-				return h.trim();
-			}
-		}
-		return null;
-	};
-	return (
-		pickHash(data) ??
-		(data &&
-		typeof data === "object" &&
-		"data" in data
-			? pickHash((data as Record<string, unknown>).data)
-			: null)
-	);
-}
-
-/** Partner message on unwrapped `data` or rare full `{ success, data }` envelopes. */
-function getLimitlessRedeemPartnerMessageDeep(raw: unknown): string | undefined {
-	if (!raw || typeof raw !== "object") return undefined;
-	const r = raw as Record<string, unknown>;
-	const top = r.message;
-	if (typeof top === "string" && top.trim()) return top.trim();
-	const d = r.data;
-	if (d && typeof d === "object") {
-		const m = (d as Record<string, unknown>).message;
-		if (typeof m === "string" && m.trim()) return m.trim();
-	}
-	return undefined;
-}
-
-function summarizeForRedeemDebug(raw: unknown): string {
-	if (raw === null) return "null";
-	if (raw === undefined) return "undefined";
-	if (typeof raw === "string")
-		return `string(len=${raw.length}): ${raw.slice(0, 600)}`;
-	if (typeof raw !== "object") return String(raw);
-	const o = raw as Record<string, unknown>;
-	const keys = Object.keys(o);
-	let json = "";
-	try {
-		json = JSON.stringify(raw);
-	} catch {
-		json = "<stringify failed>";
-	}
-	return `type=object keys=[${keys.join(",")}] json=${json.slice(0, 1800)}`;
-}
-
 function normalizeBytes32ConditionId(raw: string): `0x${string}` {
 	const t = raw.trim().toLowerCase();
 	const h = (t.startsWith("0x") ? t : `0x${t}`) as `0x${string}`;
@@ -190,20 +138,6 @@ function normalizeBytes32ConditionId(raw: string): `0x${string}` {
 		throw new Error("Invalid condition id (expected 32-byte hex)");
 	}
 	return h;
-}
-
-function normalizeBytes32ConditionIdOptional(
-	raw: unknown,
-): `0x${string}` | undefined {
-	if (raw == null) return undefined;
-	if (typeof raw !== "string") return undefined;
-	const t = raw.trim();
-	if (!t) return undefined;
-	try {
-		return normalizeBytes32ConditionId(t);
-	} catch {
-		return undefined;
-	}
 }
 
 /**
@@ -421,7 +355,8 @@ export function useClaimForVenue(
 	market: PredictionMarket,
 	resolvedOutcome: "yes" | "no"
 ) {
-	const { account, hasSmartWallet, signer } = useSignerContext() as any;
+	const { account, hasSmartWallet, signer, signerAddress } =
+		useSignerContext() as any;
 	const { getClientForChain } = useSmartWallets();
 
 	const { getRelayClient: getPolyRelayClient } = usePolymarketRelay();
@@ -479,20 +414,6 @@ export function useClaimForVenue(
 				isNegRisk,
 				isYieldBearing,
 			});
-
-			if (venue === "limitless") {
-				const sig = String(
-					(market as { _limitlessPartnerRedeemableSignal?: string })
-						._limitlessPartnerRedeemableSignal ?? "omit",
-				);
-				if (sig === "false") {
-					claimDev(
-						"limitless skip: partner sent redeemable false for this position",
-						{ marketId: market._id, conditionId: market.conditionId },
-					);
-					return false;
-				}
-			}
 
 			let hash: string | undefined;
 
@@ -947,116 +868,112 @@ export function useClaimForVenue(
 		}
 
 		/**
-		 * Limitless delegated positions live on the **server-wallet** sub-account.
-		 * Official flow: POST https://api.limitless.exchange/portfolio/redeem with
-		 * `conditionId` — proxied here as POST /api/limitless/portfolio/redeem (same
-		 * pattern as portfolio/withdraw). There is no supported on-chain path from the
-		 * user’s Base smart wallet for these positions.
+		 * Limitless EOA partner flow: redeem winning outcome ERC1155s on **Base** via the
+		 * Gnosis CTF (`getCtf()` on `venue.exchange`) or the NegRisk adapter when
+		 * `isNegRisk` and `venue.adapter` are set. Partner HTTP `POST /portfolio/redeem`
+		 * is server-wallet–only per Limitless docs — not used here.
 		 */
 		async function redeemLimitless(): Promise<string> {
 			const cidHex = normalizeBytes32ConditionId(market.conditionId!);
-			const negRiskParentHex = normalizeBytes32ConditionIdOptional(
-				(market as { _limitlessNegRiskParentConditionId?: string })
-					._limitlessNegRiskParentConditionId,
-			);
-			let onBehalfOf: number | undefined;
+			const lx = market as PredictionMarket & {
+				_limitlessOutcomeTokenId?: string;
+				_limitlessMarketSlug?: string;
+				_limitlessVenueExchange?: string;
+				_limitlessVenueAdapter?: string;
+				_limitlessCollateralAddress?: string;
+			};
+			const outcomeTokenId = String(lx._limitlessOutcomeTokenId ?? "").trim();
+			if (!outcomeTokenId) {
+				throw new Error(
+					"Limitless claim is missing outcome token id — refresh Winnings and try again.",
+				);
+			}
 			if (!profileId) {
 				throw new Error(
 					"Profile not loaded yet — wait a moment and try Claim again.",
 				);
 			}
+			if (!signer) {
+				throw new Error(
+					"Connect your Limitless trading wallet to redeem on Base.",
+				);
+			}
+
 			const ensureKey = tradingQueryKeys.limitlessEnsureAccount(profileId);
 			let ensureData = queryClient.getQueryData(ensureKey);
-			onBehalfOf = parseLimitlessOwnerIdFromEnsureData(ensureData);
-			if (onBehalfOf == null) {
+			let ownerId = parseLimitlessOwnerIdFromEnsureData(ensureData);
+			if (ownerId == null) {
 				ensureData = await queryClient.fetchQuery({
 					queryKey: ensureKey,
-					queryFn: () => privateApi.postLimitlessEnsureAccount(),
+					queryFn: async () => {
+						let body: Record<string, unknown> | undefined;
+						try {
+							body = await buildLimitlessEoaEnsureBodyFromSigner({
+								getPlainSigningMessage: () =>
+									privateApi.getLimitlessAuthSigningMessage(),
+								signer,
+							});
+						} catch (e) {
+							console.warn("[claim] limitless ensure EOA body failed", e);
+						}
+						return privateApi.postLimitlessEnsureAccount(body);
+					},
 				});
-				onBehalfOf = parseLimitlessOwnerIdFromEnsureData(ensureData);
+				ownerId = parseLimitlessOwnerIdFromEnsureData(ensureData);
 			}
-			if (onBehalfOf == null) {
+			if (ownerId == null) {
 				throw new Error(
 					"Limitless partner account is not ready (missing ownerId). Finish Limitless setup from a market trade box, then try Claim again.",
 				);
 			}
-			claimDev(
-				"limitless redeem: partner POST /portfolio/redeem (server sub-account, not SCW)",
-				{
-					conditionId: cidHex,
-					onBehalfOf: "set",
-					isNegRisk,
-					negRiskParentSent: negRiskParentHex ? "yes" : "no",
-					note: "Same ownerId as GET /portfolio/positions partner flow (`onBehalfOf` in redeem body). Base smart wallet is not sent to Limitless for redeem.",
-				},
-			);
-			try {
-				const raw = await privateApi.postLimitlessPortfolioRedeem({
-					conditionId: cidHex,
-					onBehalfOf,
-					...(negRiskParentHex
-						? { negRiskParentConditionId: negRiskParentHex }
-						: {}),
-				});
-				const partnerMsg = getLimitlessRedeemPartnerMessageDeep(raw);
-				if (
-					partnerMsg &&
-					/no\s+position\s+balance\s+to\s+redeem/i.test(partnerMsg)
-				) {
-					claimDev(
-						"limitless redeem: Limitless reports nothing to redeem on server-wallet for this conditionId",
-						{
-							conditionId: cidHex,
-							message: partnerMsg,
-							hint: "Limitless can mark a market resolved in the API before on-chain CTF settlement finishes; POST /portfolio/redeem is authoritative. Retry later, refresh Positions, or redeem the same condition on https://limitless.exchange if it persists.",
-						},
-					);
-					throw new Error(
-						`${partnerMsg} Limitless has not posted a redeemable on-chain balance for this condition on your server-wallet yet (API resolution often leads settlement). Retry after a few minutes, refresh Winnings, or complete redemption on https://limitless.exchange.`,
-					);
-				}
-				const hash = extractLimitlessPartnerRedeemTxHash(raw);
-				if (hash) {
-					claimDev("limitless redeem API ok", { txHash: hash });
-					return hash;
-				}
-				if (
-					raw &&
-					typeof raw === "object" &&
-					(raw as Record<string, unknown>).success === true
-				) {
-					claimDev("limitless redeem API ok (no tx hash in body)", {});
-					return `limitless-api:${cidHex.slice(2, 18)}`;
-				}
-				/** Limitless sometimes returns `{ message }` (no hash) with HTTP 200. */
-				if (partnerMsg) {
-					claimDev("limitless redeem partner message", { message: partnerMsg });
-					throw new Error(partnerMsg);
-				}
-				claimDev("limitless redeem unexpected response detail", {
-					summary: summarizeForRedeemDebug(raw),
-				});
-				throw new Error(
-					"Limitless redeem returned an unexpected response. " +
-						summarizeForRedeemDebug(raw) +
-						" Refresh Positions or claim on limitless.exchange.",
-				);
-			} catch (e) {
-				if (isLimitlessPartnerRedeemRouteMissing(e)) {
-					const st = e instanceof PrivateApiError ? e.status : "?";
-					throw new Error(
-						`Your private API must implement POST /api/limitless/portfolio/redeem — it returned HTTP ${st}. ` +
-							`Proxy the request to https://api.limitless.exchange/portfolio/redeem with the same credentials you use for /api/limitless/portfolio/withdraw (body: { "conditionId": "<bytes32>", "onBehalfOf": <ownerId> } for partner sub-accounts). ` +
-							`Winnings sit on the Limitless server-wallet, not your Base smart wallet, so in-app claim cannot work until that route exists. You can redeem on https://limitless.exchange meanwhile.`,
-					);
-				}
-				throw e;
+
+			const limitlessMaker =
+				parseLimitlessMakerAddressFromEnsureData(ensureData);
+			let signerAddr = "";
+			if (typeof signerAddress === "string" && signerAddress.trim()) {
+				signerAddr = signerAddress.trim();
+			} else {
+				signerAddr = await signer.getAddress();
 			}
+			const makerNorm = limitlessMaker?.toLowerCase() ?? "";
+			const signerNorm = signerAddr.toLowerCase();
+			if (makerNorm && signerNorm && makerNorm !== signerNorm) {
+				throw new Error(
+					`Your connected signer (${signerAddr}) does not match your Limitless maker address (${limitlessMaker}). Switch to the wallet you used for Limitless trading.`,
+				);
+			}
+
+			const slug = String(lx._limitlessMarketSlug ?? "").trim();
+
+			claimDev("limitless redeem: Base on-chain (EOA maker)", {
+				conditionId: cidHex,
+				ownerId,
+				outcomeTokenIdTail: `${outcomeTokenId.slice(0, 14)}…`,
+				marketSlug: slug || "(absent — will fetch market JSON if needed)",
+				isNegRisk,
+				venueExchange: lx._limitlessVenueExchange ? "present" : "absent",
+			});
+
+			const txHash = await redeemLimitlessWinningPositionOnBase({
+				signer,
+				conditionId: cidHex,
+				resolvedOutcome,
+				isNegRisk,
+				outcomeTokenId,
+				marketSlug: slug || undefined,
+				limitlessVenueExchange: lx._limitlessVenueExchange,
+				limitlessVenueAdapter: lx._limitlessVenueAdapter,
+				limitlessCollateralAddress: lx._limitlessCollateralAddress,
+				fetchMarketBySlug: (s) => privateApi.getLimitlessMarketBySlug(s),
+			});
+			claimDev("limitless redeem tx", { txHash });
+			return txHash;
 		}
 	}, [
 		account,
 		hasSmartWallet,
 		signer,
+		signerAddress,
 		getClientForChain,
 		iface,
 		market,

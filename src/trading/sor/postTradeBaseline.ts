@@ -4,6 +4,7 @@
  */
 import type { QueryClient } from "@tanstack/react-query";
 import type { VenuePosition } from "@/types/trading/venuePosition";
+import { venuePositionPortfolioDedupeKey } from "@/types/trading/venuePosition";
 import type {
 	RouteExecution,
 	RouteLeg,
@@ -63,8 +64,15 @@ export function shareIdentityForVenuePosition(p: VenuePosition): string | null {
 			return t ? `dflow:${t}` : null;
 		}
 		case "limitless": {
-			const t = canonicalLimitlessTokenId(p.tokenId);
-			return t ? `limitless:${t}` : null;
+			/**
+			 * Neg-risk / dual CLOB legs may repeat the same outcome `tokenId` on both sides
+			 * while `eventSlug` (per-leg orderbook slug) stays unique — same as trade-box
+			 * {@link venuePositionPortfolioDedupeKey} dedupe.
+			 */
+			const slug = String(p.eventSlug ?? "").trim().toLowerCase();
+			if (slug) return `limitless:leg:${slug}`;
+			const deduped = venuePositionPortfolioDedupeKey(p);
+			return deduped ? `limitless:${deduped}` : null;
 		}
 		default:
 			return null;
@@ -97,6 +105,11 @@ export function shareIdentityForRouteLeg(leg: RouteLeg): string | null {
 			return mint ? `dflow:${mint}` : null;
 		}
 		case "limitless": {
+			const slug =
+				leg.outcome === "A"
+					? String(leg.venueMarketIds.limitlessOrderbookSlugA ?? "").trim().toLowerCase()
+					: String(leg.venueMarketIds.limitlessOrderbookSlugB ?? "").trim().toLowerCase();
+			if (slug) return `limitless:leg:${slug}`;
 			const raw =
 				leg.outcome === "A"
 					? leg.venueMarketIds.limitlessTokenIdA

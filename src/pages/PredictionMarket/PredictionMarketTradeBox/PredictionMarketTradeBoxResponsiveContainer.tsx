@@ -56,6 +56,10 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		yes: OrderbookSnapshot | null;
 		no: OrderbookSnapshot | null;
 	} | null;
+	levelUpVenueBookHints?: {
+		yes: OrderbookSnapshot | null;
+		no: OrderbookSnapshot | null;
+	} | null;
 	dflowVenueHint?: string | null;
 	matchedVenues?: Set<string>;
 	onSideChange: (side: "buy" | "sell") => void;
@@ -139,6 +143,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	polymarketVenueHint,
 	predictVenueHint,
 	predictVenueBookHints,
+	levelUpVenueBookHints,
 	dflowVenueHint,
 	matchedVenues,
 	onSideChange,
@@ -225,6 +230,18 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
 		}
+		if (state.tradingVenue === "levelup" && levelUpVenueBookHints?.yes) {
+			const h = levelUpVenueBookHints.yes;
+			const ba =
+				h.asks && h.asks.length > 0
+					? Math.min(...h.asks.map((a: { price: number }) => a.price))
+					: null;
+			const bb =
+				h.bids && h.bids.length > 0
+					? Math.max(...h.bids.map((b: { price: number }) => b.price))
+					: null;
+			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
+		}
 		if (
 			state.tradingVenue === "dflow" &&
 			matchedMonitor &&
@@ -251,6 +268,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		state.side,
 		state.selectedPosition,
 		predictVenueBookHints,
+		levelUpVenueBookHints,
 		matchedMonitor,
 		yesTeamLabel,
 		noTeamLabel,
@@ -288,6 +306,18 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 					: null;
 			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
 		}
+		if (state.tradingVenue === "levelup" && levelUpVenueBookHints?.no) {
+			const h = levelUpVenueBookHints.no;
+			const ba =
+				h.asks && h.asks.length > 0
+					? Math.min(...h.asks.map((a: { price: number }) => a.price))
+					: null;
+			const bb =
+				h.bids && h.bids.length > 0
+					? Math.max(...h.bids.map((b: { price: number }) => b.price))
+					: null;
+			return state.side === "buy" ? finiteOrNull(ba) : finiteOrNull(bb);
+		}
 		if (
 			state.tradingVenue === "dflow" &&
 			matchedMonitor &&
@@ -314,6 +344,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		state.side,
 		state.selectedPosition,
 		predictVenueBookHints,
+		levelUpVenueBookHints,
 		matchedMonitor,
 		yesTeamLabel,
 		noTeamLabel,
@@ -390,6 +421,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 						polymarketVenueHint={polymarketVenueHint}
 						predictVenueHint={predictVenueHint}
 						predictVenueBookHints={predictVenueBookHints}
+						levelUpVenueBookHints={levelUpVenueBookHints}
 						dflowVenueHint={dflowVenueHint}
 						matchedVenues={matchedVenues}
 						onTrade={onTrade}
@@ -577,6 +609,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				polymarketVenueHint={polymarketVenueHint}
 				predictVenueHint={predictVenueHint}
 				predictVenueBookHints={predictVenueBookHints}
+				levelUpVenueBookHints={levelUpVenueBookHints}
 				dflowVenueHint={dflowVenueHint}
 				matchedVenues={matchedVenues}
 				onTrade={onTrade}

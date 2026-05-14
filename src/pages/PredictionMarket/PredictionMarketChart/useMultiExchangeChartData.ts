@@ -63,9 +63,21 @@ function limitlessMetaForLog(
 }
 
 function bestAskDisplay100(book: OrderbookData | null | undefined): number | undefined {
-	if (!book || book.bestAsk == null) return undefined;
-	const x = Number(book.bestAsk);
-	if (!Number.isFinite(x) || x < 0.005 || x > 0.995) return undefined;
+	if (!book) return undefined;
+	let x: number | undefined;
+	const asks =
+		book.asks?.filter((l) => Number(l.size) > 0) ?? [];
+	if (asks.length > 0) {
+		const prices = asks
+			.map((l) => Number(l.price))
+			.filter((p) => Number.isFinite(p));
+		if (prices.length > 0) x = Math.min(...prices);
+	}
+	if (x == null && book.bestAsk != null) {
+		const b = Number(book.bestAsk);
+		if (Number.isFinite(b)) x = b;
+	}
+	if (x == null || !Number.isFinite(x) || x < 0.005 || x > 0.995) return undefined;
 	return x * 100;
 }
 

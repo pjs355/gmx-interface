@@ -1,15 +1,24 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
+import { useSendTransaction } from "@privy-io/react-auth";
+import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
+import { useSignerContext } from "context/SignerContext";
+import { classifyLimitlessClientMaker } from "@/trading/limitless/limitlessClientMakerIdentity";
+import { resolvePrivyEvmFundTarget } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
+import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { tradingQueryKeys } from "@/trading/queryKeys";
 import {
 	getLimitlessEnsureTradeGate,
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
+	readLimitlessApprovalCompleteFromEnsurePayload,
 } from "./limitlessEnsureTradeGate";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
+import { runLimitlessSignupWarmupBaseApprovals } from "./limitlessSignupWarmupBaseApprovals";
+import { getLimitlessBaseTxClientForAddress } from "./limitlessBaseTxClientForAddress";
 
 const LOG_TAG = "[LimitlessActivation]";
 
@@ -27,6 +36,38 @@ export type LimitlessEnsureExecutionReadyState = {
  * only drop it once the schedule is exhausted.
  */
 const MAX_ENSURE_FAILURES = 4;
+
+const WARMUP_FAILURE_BACKOFF_MS = [3_000, 10_000, 30_000, 60_000] as const;
+const MAX_WARMUP_ATTEMPTS = WARMUP_FAILURE_BACKOFF_MS.length;
+
+function isLikelyRateLimitErr(e: unknown): boolean {
+	if (e == null) return false;
+	const msg =
+		e instanceof Error
+			? `${e.message} ${String((e as Error & { cause?: unknown }).cause ?? "")}`
+			: String(e);
+	const m = msg.toLowerCase();
+	return (
+		m.includes("429") ||
+		m.includes("too many requests") ||
+		m.includes("rate limit") ||
+		m.includes("privyapierror")
+	);
+}
+
+function pickWarmupMarketSlugFromEnsureData(data: unknown): string | null {
+	if (data == null || typeof data !== "object") return null;
+	const w = (data as Record<string, unknown>).warmupMarketSlug;
+	return typeof w === "string" && w.trim().length > 0 ? w.trim() : null;
+}
+
+function pickLimitlessMakerFromEnsureData(data: unknown): string | null {
+	if (data == null || typeof data !== "object") return null;
+	const la = (data as Record<string, unknown>).limitlessAccount;
+	if (la == null || typeof la !== "object") return null;
+	const m = (la as Record<string, unknown>).makerAddress;
+	return typeof m === "string" && m.trim().length > 0 ? m.trim() : null;
+}
 
 /**
  * Watchdog window: if the query has been enabled for this long without
@@ -49,17 +90,18 @@ const ENSURE_KICK_WATCHDOG_MS = 2_500;
  * Behavior:
  *  - When `enabled` + Privy authenticated, fires `POST /api/limitless/ensure-account`
  *    via React Query. The endpoint is idempotent and chains all the server-side
- *    setup (server wallet provisioning, owner-id sync, allowance verification,
+ *    setup (partner sub-account with optional EOA proof, owner-id sync, allowance verification,
  *    flipping `tradingEnabled: true`) so a single call makes the venue
  *    `executionReady` for the SOR.
  *  - On success, invalidates `tradingQueryKeys.accountOverview(profileId)` once
  *    so the next SOR `getRoute` sees `routingEligibility.limitless.canExecute: true`.
- *  - On-chain Base approvals (USDC `approve`, CTF `setApprovalForAll`) are
- *    deliberately NOT run here. They depend on a per-market `verify-allowance`
- *    response (spender varies by market) and are already executed JIT inside
- *    `useSorLegExecutor` on the buy click. Trying to run them upfront with a
- *    "warmup" market slug is brittle and a wasted signing session for users
- *    who never trade Limitless.
+ *  - When `runSignupTimeBaseApprovals` is true (post-signup activator), after the
+ *    ensure gate is ready the hook runs `verify-allowance` + Base USDC / CTF
+ *    approvals using `warmupMarketSlug` from the ensure payload (any umbrella
+ *    Limitless slug — CLOB spender is market-agnostic), mirroring Predict’s
+ *    session + on-chain approval pass before the checklist marks the venue done.
+ *    If the server omits `warmupMarketSlug` (no mapped umbrellas), this step is
+ *    skipped and JIT approvals on first trade still apply.
  *  - If React Query stalls between `enabled` flipping true and queryFn firing
  *    (the classic post-Polymarket re-render burst symptom), the watchdog
  *    above kicks the query manually after `ENSURE_KICK_WATCHDOG_MS`.
@@ -71,13 +113,35 @@ const ENSURE_KICK_WATCHDOG_MS = 2_500;
 
 export function useLimitlessEnsureExecutionReady(args: {
 	enabled: boolean;
+	/**
+	 * When the server must create a partner sub-account, include EOA ownership proof
+	 * (`limitlessEoa` on `POST /api/limitless/ensure-account`).
+	 */
+	buildEnsureAccountBody?: () => Promise<Record<string, unknown> | undefined>;
+	/**
+	 * After ensure-account succeeds, run Limitless Base approvals before reporting
+	 * `ready: true` (post-signup modal parity with Predict). Default false.
+	 */
+	runSignupTimeBaseApprovals?: boolean;
 }): LimitlessEnsureExecutionReadyState {
-	const { enabled } = args;
+	const { enabled, buildEnsureAccountBody, runSignupTimeBaseApprovals = false } =
+		args;
 	const { authenticated } = usePrivy();
 	const api = usePrivateApiClient();
 	const qc = useQueryClient();
+	const { getClientForChain } = useSmartWallets();
+	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
+	const funding = useFundingAddresses();
+	const { account, signerAddress } = useSignerContext();
 	const profileQuery = useCurrentProfile({ enabled: enabled && authenticated });
 	const profileId = profileQuery.data?._id;
+
+	const [warmupPhase, setWarmupPhase] = useState<
+		"idle" | "running" | "complete" | "failed"
+	>("idle");
+	const [warmupError, setWarmupError] = useState<string | null>(null);
+	const warmupInFlightRef = useRef(false);
+	const completedWarmupKeyRef = useRef<string | null>(null);
 
 	const queryEnabled = Boolean(enabled && authenticated && profileId);
 
@@ -106,7 +170,8 @@ export function useLimitlessEnsureExecutionReady(args: {
 				});
 			}
 			try {
-				const data = await api.postLimitlessEnsureAccount();
+				const body = buildEnsureAccountBody ? await buildEnsureAccountBody() : undefined;
+				const data = await api.postLimitlessEnsureAccount(body);
 				const elapsedMs = Math.round(performance.now() - startedAt);
 				const gate = getLimitlessEnsureTradeGate(data ?? null);
 				if (isTradingDebugLoggingEnabled()) {
@@ -139,6 +204,20 @@ export function useLimitlessEnsureExecutionReady(args: {
 	// false`), naively reading the cache would trap us forever. The
 	// stale-refetch effect below uses this to detect that case.
 	const gate = getLimitlessEnsureTradeGate(ensureQuery.data ?? null);
+
+	/**
+	 * Stable slug|maker for signup warmup scheduling only. Using raw
+	 * `ensureQuery.dataUpdatedAt` in the warmup effect re-ran on every ensure refetch
+	 * (e.g. account-overview invalidation), cancelled in-flight warmup, and cleared the
+	 * completed key — causing repeated `runLimitlessSignupWarmupBaseApprovals` + logs.
+	 */
+	const limitlessWarmupSignal = useMemo(() => {
+		if (!ensureQuery.isSuccess || ensureQuery.data == null) return "";
+		const slug = pickWarmupMarketSlugFromEnsureData(ensureQuery.data);
+		const maker = pickLimitlessMakerFromEnsureData(ensureQuery.data);
+		if (!slug || !maker) return "__no_slug__";
+		return `${slug}|${maker.toLowerCase()}`;
+	}, [ensureQuery.isSuccess, ensureQuery.data]);
 
 	// React Query state logging (gated by `VITE_DEBUG_TRADING` / `isTradingDebugLoggingEnabled`) —
 	// fires on every transition so we can see whether the queryFn was actually invoked
@@ -254,6 +333,164 @@ export function useLimitlessEnsureExecutionReady(args: {
 		ensureQueryKey,
 	]);
 
+	useEffect(() => {
+		completedWarmupKeyRef.current = null;
+		warmupInFlightRef.current = false;
+		if (!runSignupTimeBaseApprovals) {
+			setWarmupPhase("complete");
+		} else {
+			setWarmupPhase("idle");
+		}
+		setWarmupError(null);
+	}, [profileId, runSignupTimeBaseApprovals]);
+
+	useEffect(() => {
+		if (!runSignupTimeBaseApprovals || !queryEnabled || !profileId) return;
+		if (!ensureQuery.isSuccess || ensureQuery.data == null || !gate.ready) return;
+
+		const slug = pickWarmupMarketSlugFromEnsureData(ensureQuery.data);
+		const maker = pickLimitlessMakerFromEnsureData(ensureQuery.data);
+
+		if (!slug || !maker) {
+			const skipKey = `${String(profileId)}|__no_slug__`;
+			if (completedWarmupKeyRef.current === skipKey) return;
+			completedWarmupKeyRef.current = skipKey;
+			setWarmupPhase("complete");
+			return;
+		}
+
+		const fundTarget = resolvePrivyEvmFundTarget(
+			funding.baseSmartWallet,
+			account,
+		)?.trim();
+		const { effectiveMaker, isDelegatedServerWalletSubAccount } =
+			classifyLimitlessClientMaker({
+				venueMakerFromApi: maker,
+				fundTarget,
+				signerAddress,
+				account,
+				embeddedEoa: funding.embeddedEoa,
+			});
+		const doneKey = `${String(profileId)}|${slug}|${effectiveMaker.toLowerCase()}`;
+		if (completedWarmupKeyRef.current === doneKey) return;
+		if (warmupInFlightRef.current) return;
+
+		if (isDelegatedServerWalletSubAccount) {
+			if (isTradingDebugLoggingEnabled()) {
+				console.info(LOG_TAG, "warmup:skipDelegatedMaker", {
+					at: new Date().toISOString(),
+					slug,
+					reason: "limitless_maker_is_managed_sub_account",
+				});
+			}
+			completedWarmupKeyRef.current = doneKey;
+			setWarmupPhase("complete");
+			return;
+		}
+
+		if (readLimitlessApprovalCompleteFromEnsurePayload(ensureQuery.data)) {
+			if (isTradingDebugLoggingEnabled()) {
+				console.info(LOG_TAG, "warmup:skipPartnerApprovalComplete", {
+					at: new Date().toISOString(),
+					slug,
+					reason: "limitlessAccount.approvalComplete_true",
+				});
+			}
+			completedWarmupKeyRef.current = doneKey;
+			setWarmupPhase("complete");
+			return;
+		}
+
+		let cancelled = false;
+		warmupInFlightRef.current = true;
+		setWarmupPhase("running");
+		setWarmupError(null);
+
+		void (async () => {
+			try {
+				for (let attempt = 0; attempt < MAX_WARMUP_ATTEMPTS; attempt++) {
+					if (cancelled) return;
+					try {
+						await runLimitlessSignupWarmupBaseApprovals({
+							marketSlug: slug,
+							venueMakerFromApi: maker,
+							fundTarget,
+							signerAddress,
+							account,
+							embeddedEoa: funding.embeddedEoa,
+							getTxClientForAddress: (addr) =>
+								getLimitlessBaseTxClientForAddress({
+									address: addr,
+									getClientForChain,
+									baseSmartWallet: funding.baseSmartWallet,
+									embeddedEoa: funding.embeddedEoa,
+									privyEvmSendTransaction,
+								}),
+							postLimitlessVerifyAllowance: (s, o) =>
+								api.postLimitlessVerifyAllowance(s, o),
+						});
+						break;
+					} catch (e) {
+						if (isLikelyRateLimitErr(e)) {
+							if (isTradingDebugLoggingEnabled()) {
+								console.info(LOG_TAG, "warmup:rateLimitedDefer", {
+									at: new Date().toISOString(),
+									slug,
+									msg:
+										e instanceof Error
+											? e.message.slice(0, 200)
+											: String(e).slice(0, 200),
+								});
+							}
+							break;
+						}
+						if (attempt >= MAX_WARMUP_ATTEMPTS - 1) throw e;
+						await new Promise((r) =>
+							setTimeout(r, WARMUP_FAILURE_BACKOFF_MS[attempt] ?? 60_000),
+						);
+					}
+				}
+				if (cancelled) return;
+				completedWarmupKeyRef.current = doneKey;
+				await qc.refetchQueries({ queryKey: ensureQueryKey });
+				await qc.invalidateQueries({
+					queryKey: tradingQueryKeys.accountOverview(profileId),
+				});
+				if (cancelled) return;
+				setWarmupPhase("complete");
+			} catch (e) {
+				if (cancelled) return;
+				const msg = e instanceof Error ? e.message : String(e);
+				setWarmupError(msg.slice(0, 500));
+				setWarmupPhase("failed");
+				console.warn(LOG_TAG, "warmup:failed", { msg: msg.slice(0, 200) });
+			} finally {
+				warmupInFlightRef.current = false;
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+			warmupInFlightRef.current = false;
+		};
+	}, [
+		runSignupTimeBaseApprovals,
+		queryEnabled,
+		profileId,
+		ensureQuery.isSuccess,
+		limitlessWarmupSignal,
+		gate.ready,
+		ensureQueryKey,
+		qc,
+		api,
+		getClientForChain,
+		privyEvmSendTransaction,
+		funding.baseSmartWallet,
+		funding.embeddedEoa,
+		account,
+		signerAddress,
+	]);
+
 	const lastInvalidatedRef = useRef<number>(0);
 	useEffect(() => {
 		if (!profileId) return;
@@ -272,9 +509,12 @@ export function useLimitlessEnsureExecutionReady(args: {
 		qc,
 	]);
 
-	const ready = Boolean(
+	const ensureGateReady = Boolean(
 		ensureQuery.isSuccess && ensureQuery.data != null && gate.ready,
 	);
+	const signupWarmupComplete =
+		!runSignupTimeBaseApprovals || warmupPhase === "complete";
+	const ready = Boolean(ensureGateReady && signupWarmupComplete);
 
 	// Match Predict / Polymarket: stay "in progress" until ready, OR until
 	// the failure schedule is exhausted. Without this, the checklist
@@ -284,7 +524,10 @@ export function useLimitlessEnsureExecutionReady(args: {
 	const exhausted =
 		ensureQuery.isError &&
 		(ensureQuery.failureCount ?? 0) >= MAX_ENSURE_FAILURES;
-	const setupInProgress = queryEnabled && !ready && !exhausted;
+	const warmupExhausted =
+		runSignupTimeBaseApprovals && warmupPhase === "failed";
+	const setupInProgress =
+		queryEnabled && !ready && !exhausted && !warmupExhausted;
 
 	let error: string | null = null;
 	if (ensureQuery.isError) {
@@ -292,6 +535,8 @@ export function useLimitlessEnsureExecutionReady(args: {
 			ensureQuery.error instanceof Error
 				? ensureQuery.error.message
 				: String(ensureQuery.error);
+	} else if (warmupPhase === "failed" && warmupError) {
+		error = warmupError;
 	}
 
 	return { setupInProgress, ready, error };

@@ -9,6 +9,7 @@
  * - Deposits: Uses Privy's native fundWallet() - opens Privy's deposit modal
  *   (supports card payments, crypto transfers, Coinbase integration)
  * - Withdrawals: Opens TransfersModal for USDC transfers to external addresses
+ *   (Base shows your Coinbase smart wallet and a combined USDC total.)
  * 
  * DEPOSIT FLOW:
  * 1. User clicks "Deposit Funds"
@@ -35,7 +36,7 @@
  * CREATED: Jan 2026 - Simplified from old Payments page
  */
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useCollateralTokens } from "@/context/CollateralTokenContext";
@@ -72,6 +73,13 @@ export default function Transfers() {
 		account
 	);
 	const [copiedAddressKey, setCopiedAddressKey] = useState<string | null>(null);
+
+	const scwRaw = funding.baseSmartWallet?.trim();
+
+	const baseUsdcCombined = useMemo(
+		() => collateral.baseUsdc + collateral.limitlessMakerUsdc,
+		[collateral.baseUsdc, collateral.limitlessMakerUsdc],
+	);
 
 	const handleCopyAddress = useCallback(
 		async (key: string, raw: string | undefined) => {
@@ -228,77 +236,38 @@ export default function Transfers() {
 							</div>
 						</div>
 
-						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">
-								<span>Base (USDC)</span>
-								<span className="transfers-addresses__balance">
-									{collateral.isFetched ? (
-										`$${formatCurrency(collateral.baseUsdc)}`
-									) : (
-										<span className="transfers-skeleton transfers-skeleton--balance" />
-									)}
-								</span>
-							</div>
-							<div className="transfers-addresses__value-row">
-								{funding.isLoading && !funding.baseSmartWallet ? (
-									<span className="transfers-skeleton transfers-skeleton--address" />
-								) : (
-									<code className="transfers-addresses__value">
-										{formatAddress(funding.baseSmartWallet)}
-									</code>
-								)}
-								<button
-									type="button"
-									className="Details-copy-button Details-copy-button--compact"
-									title="Copy address"
-									aria-label="Copy Base USDC address"
-									disabled={
-										!String(funding.baseSmartWallet ?? "").trim() ||
-										(funding.isLoading && !funding.baseSmartWallet)
-									}
-									onClick={() =>
-										void handleCopyAddress("base", funding.baseSmartWallet)
-									}
-								>
-									{copiedAddressKey === "base" ? "✓" : "Copy"}
-								</button>
-							</div>
-						</div>
-
-						{funding.limitlessMakerBase ? (
+						{scwRaw ? (
 							<div className="transfers-addresses__item">
 								<div className="transfers-addresses__chain">
-									<span>Limitless maker (Base USDC)</span>
+									<span>Base (USDC)</span>
 									<span className="transfers-addresses__balance">
 										{collateral.isFetched ? (
-											`$${formatCurrency(collateral.limitlessMakerUsdc)}`
+											`$${formatCurrency(baseUsdcCombined)}`
 										) : (
 											<span className="transfers-skeleton transfers-skeleton--balance" />
 										)}
 									</span>
 								</div>
 								<div className="transfers-addresses__value-row">
-									{funding.isLoading && !funding.limitlessMakerBase ? (
+									{funding.isLoading && !String(scwRaw ?? "").trim() ? (
 										<span className="transfers-skeleton transfers-skeleton--address" />
 									) : (
 										<code className="transfers-addresses__value">
-											{formatAddress(funding.limitlessMakerBase)}
+											{formatAddress(scwRaw)}
 										</code>
 									)}
 									<button
 										type="button"
 										className="Details-copy-button Details-copy-button--compact"
 										title="Copy address"
-										aria-label="Copy Limitless maker Base address"
+										aria-label="Copy Base USDC address"
 										disabled={
-											!String(funding.limitlessMakerBase ?? "").trim() ||
-											(funding.isLoading && !funding.limitlessMakerBase)
+											!String(scwRaw ?? "").trim() ||
+											(funding.isLoading && !String(scwRaw ?? "").trim())
 										}
-										onClick={() =>
-											void handleCopyAddress("limitless", funding.limitlessMakerBase)
-										}
+										onClick={() => void handleCopyAddress("base", scwRaw)}
 									>
-										{copiedAddressKey === "limitless" ? "✓" : "Copy"}
+										{copiedAddressKey === "base" ? "✓" : "Copy"}
 									</button>
 								</div>
 							</div>

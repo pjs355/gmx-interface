@@ -29,6 +29,7 @@
 	"dependencies": {
 		"@floating-ui/react": "^0.27.16",
 		"@headlessui/react": "^2.2.9",
+		"@limitless-exchange/sdk": "^1.0.6",
 		"@lingui/core": "4.10.0",
 		"@lingui/macro": "4.11.3",
 		"@lingui/react": "4.10.0",

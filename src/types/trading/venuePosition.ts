@@ -90,8 +90,8 @@ export interface VenuePosition {
 	limitlessGroupSlug?: string;
 	iconUrl?: string;
 	/**
-	 * Limitless partner `GET /portfolio/positions`: only true when the venue sends an explicit
-	 * redeemable flag — drives Winnings + Claim (never inferred from MTM alone).
+	 * Limitless partner `GET /portfolio/positions`: explicit `redeemable: true` when the
+	 * venue sends it — used for Winnings UX; on-chain Claim does not rely on this alone.
 	 */
 	redeemable?: boolean;
 	/**
@@ -153,10 +153,15 @@ export interface VenuePosition {
 	isNegRisk?: boolean;
 	/**
 	 * Limitless `market.group.negRiskMarketId` — parent condition id for NegRisk
-	 * group legs. Claim uses Limitless Base NegRisk adapter + this parent while
-	 * balances are read for the leg outcome `tokenId`.
+	 * group legs. On-chain redeem uses `venue.adapter` when present.
 	 */
 	negRiskParentConditionId?: string;
+	/** From predictions `GET /api/limitless/portfolio/positions-venue` — `venue.exchange`. */
+	limitlessVenueExchange?: string;
+	/** NegRisk adapter (`venue.adapter`) when present. */
+	limitlessVenueAdapter?: string;
+	/** Collateral token address for CTF redeem when the API provides it. */
+	limitlessCollateralAddress?: string;
 }
 
 /**

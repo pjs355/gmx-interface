@@ -880,7 +880,9 @@ export function useButtonState({
       }
       if (lt.loading && !lt.ready) {
         return {
-          text: "Unavailable",
+          text: globalSetupInProgress
+            ? "Setting up your account…"
+            : "Preparing Limitless…",
           disabled: true,
           onClick: () => {},
         };

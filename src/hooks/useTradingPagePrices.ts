@@ -116,6 +116,29 @@ function bestBidProbRestingLevelsOnly(
 	return max === -Infinity ? null : max;
 }
 
+/** Kalshi/DFlow strip: ladder touch first, then scalar (venue-prices can ship stale bestAsk with fresh asks). */
+function bestAskProbLadderFirst(book: OrderbookData | null | undefined): number | null {
+	const fromLadder = bestAskProbRestingLevelsOnly(book);
+	if (fromLadder !== null) return fromLadder;
+	if (!book) return null;
+	if (book.bestAsk !== null && book.bestAsk !== undefined) {
+		const p = typeof book.bestAsk === "number" ? book.bestAsk : Number(book.bestAsk);
+		if (Number.isFinite(p) && p >= MIN_VALID_PRICE && p <= MAX_VALID_PRICE) return p;
+	}
+	return null;
+}
+
+function bestBidProbLadderFirst(book: OrderbookData | null | undefined): number | null {
+	const fromLadder = bestBidProbRestingLevelsOnly(book);
+	if (fromLadder !== null) return fromLadder;
+	if (!book) return null;
+	if (book.bestBid !== null && book.bestBid !== undefined) {
+		const p = typeof book.bestBid === "number" ? book.bestBid : Number(book.bestBid);
+		if (Number.isFinite(p) && p >= MIN_VALID_PRICE && p <= MAX_VALID_PRICE) return p;
+	}
+	return null;
+}
+
 function bookStatus(book: OrderbookData | null | undefined): SnapshotStatus | undefined {
 	return book?.snapshotStatus;
 }
@@ -129,16 +152,16 @@ function buildVenueRowsFromWs(m: MatchedMarket): VenueRowModel[] {
 	const dflowWire = getDflowKalshiMonitorLink(m);
 	const dflowBaseLinked = Boolean(dflowWire);
 	const dflowAskA = dflowBaseLinked
-		? bestAskProb(m.dflowPriceA ?? m.kalshiPriceA)
+		? bestAskProbLadderFirst(m.dflowPriceA ?? m.kalshiPriceA)
 		: null;
 	const dflowAskB = dflowBaseLinked
-		? bestAskProb(m.dflowPriceB ?? m.kalshiPriceB)
+		? bestAskProbLadderFirst(m.dflowPriceB ?? m.kalshiPriceB)
 		: null;
 	const dflowBidA = dflowBaseLinked
-		? bestBidProb(m.dflowPriceA ?? m.kalshiPriceA)
+		? bestBidProbLadderFirst(m.dflowPriceA ?? m.kalshiPriceA)
 		: null;
 	const dflowBidB = dflowBaseLinked
-		? bestBidProb(m.dflowPriceB ?? m.kalshiPriceB)
+		? bestBidProbLadderFirst(m.dflowPriceB ?? m.kalshiPriceB)
 		: null;
 
 	const dflowKalshiRowHidden =

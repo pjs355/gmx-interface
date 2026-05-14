@@ -53,6 +53,14 @@ export interface TradeBoxProps {
 	 * tab position-button pricing (best bid among venues where the user holds shares).
 	 */
 	venueRowsForSellStrip?: VenueRowModel[] | null;
+	/**
+	 * LevelUp: per-outcome monitor books for YES/NO button BBO when venue-prices WS
+	 * is active (avoids reusing the selected-outcome book for both labels).
+	 */
+	levelUpVenueBookHints?: {
+		yes: OrderbookSnapshot | null;
+		no: OrderbookSnapshot | null;
+	} | null;
 	/** Odds-monitor row for this match (Polymarket token mapping for balances). */
 	matchedMonitor?: MatchedMarket | null;
 	/** Home: hide fixed Yes/No peek until `openCurtain()` (e.g. from card price tap). */

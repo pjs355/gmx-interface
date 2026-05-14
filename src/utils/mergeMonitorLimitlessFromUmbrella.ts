@@ -72,6 +72,49 @@ export function coerceLimitlessWireForInference(
 	};
 }
 
+function orderbookSlugRichness(w: LimitlessInferenceWire | null | undefined): number {
+	if (!w) return -1;
+	let n = 0;
+	if (trimStr(w.orderbookSlugA)) n += 1;
+	if (trimStr(w.orderbookSlugB)) n += 1;
+	return n;
+}
+
+/**
+ * Prefer the odds-monitor row whose `umbrellaId` matches the page umbrella (portfolio parity),
+ * merged with `exchangeMatching.limitless`. When `pageMatchedMonitor` yields a richer wire
+ * (e.g. both per-leg orderbook slugs), prefer that so trade-box YES/NO bucketing matches
+ * the route-specific monitor when it carries more detail.
+ */
+export function resolveLimitlessInferenceWireForUmbrella(args: {
+	matchedMarkets: MatchedMarket[] | null | undefined;
+	umbrellaId: string | undefined;
+	umbrellaExchangeLimitless: UmbrellaExchangeMatchingLimitless | null | undefined;
+	pageMatchedMonitor?: MatchedMarket | null;
+}): LimitlessInferenceWire | null {
+	const { matchedMarkets, umbrellaId, umbrellaExchangeLimitless, pageMatchedMonitor } =
+		args;
+	const monitorForUmbrella =
+		matchedMarkets?.find(
+			(mm) => String(mm.umbrellaId ?? "").trim() === String(umbrellaId ?? "").trim(),
+		) ?? null;
+	const wireUmbrella = coerceLimitlessWireForInference(
+		monitorForUmbrella?.limitless,
+		umbrellaExchangeLimitless,
+	);
+	const wirePage = coerceLimitlessWireForInference(
+		pageMatchedMonitor?.limitless,
+		umbrellaExchangeLimitless,
+	);
+	if (wireUmbrella && wirePage) {
+		const ru = orderbookSlugRichness(wireUmbrella);
+		const rp = orderbookSlugRichness(wirePage);
+		if (rp > ru) return wirePage;
+		if (ru > rp) return wireUmbrella;
+	}
+	return wireUmbrella ?? wirePage ?? null;
+}
+
 function limitlessMappingUnchanged(
 	prev: MatchedMarket["limitless"] | undefined,
 	next: LimitlessShape,

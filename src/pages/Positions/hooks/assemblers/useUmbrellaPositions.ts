@@ -36,7 +36,10 @@ import {
 } from "../../utils/positionHelpers";
 import { buildVenueMarketPosition } from "../venues/shared/buildVenueMarketPosition";
 import { buildUnmatchedVenueUmbrellas } from "../venues/shared/buildUnmatchedVenueUmbrellas";
-import { coerceLimitlessWireForInference } from "@/utils/mergeMonitorLimitlessFromUmbrella";
+import {
+	coerceLimitlessWireForInference,
+	resolveLimitlessInferenceWireForUmbrella,
+} from "@/utils/mergeMonitorLimitlessFromUmbrella";
 
 type TokenBalanceLike = { yesBalance: string | number; noBalance: string | number };
 type BookPreview = { lowestAsk: number | null; highestBid: number | null };
@@ -204,10 +207,12 @@ export function useUmbrellaPositions({
 							);
 							const limitlessCatalogWire =
 								venue === "limitless"
-									? coerceLimitlessWireForInference(
-											monitorForUmbrella?.limitless,
-											matched.exchangeMatching?.limitless,
-										)
+									? resolveLimitlessInferenceWireForUmbrella({
+											matchedMarkets: oddsMarkets,
+											umbrellaId: matched._id,
+											umbrellaExchangeLimitless: matched.exchangeMatching?.limitless,
+											pageMatchedMonitor: monitorForUmbrella,
+										})
 									: null;
 							if (venue === "predictfun") {
 								let liveYesPrice: number | null = null;

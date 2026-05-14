@@ -25,6 +25,9 @@ const CHAIN_LABEL: Record<SorChain, string> = {
 	bnb: "BNB Chain",
 };
 
+/** Which Base wallet funds a prefund LI.FI leg (`fromAddress`). */
+export type BaseSpendWallet = "smartWallet" | "limitlessMaker";
+
 /**
  * Returns the prefund target (USD on destination wallet) for a bridge step.
  * With `LIFI_BRIDGE_AMOUNT_MARGIN = 0` this is identity — the per-leg budget
@@ -93,7 +96,78 @@ export type PrefundStep = {
 	fromChain: SorChain;
 	/** Human stable amount for `postFundingLifiQuote.amountHuman` (floored; up to 18 dp on BNB USDT). */
 	amountHuman: string;
+	/**
+	 * Base only: which wallet must be the LI.FI `fromAddress` for this leg.
+	 * Omitted for non-Base chains; on Base without a maker balance behaves like `smartWallet`.
+	 */
+	baseSpendWallet?: BaseSpendWallet;
 };
+
+type MutableBasePool = { scw: number; maker: number };
+
+function splitBasePrefundAmount(
+	need: number,
+	pool: MutableBasePool,
+): PrefundStep[] {
+	let n = Math.max(0, Math.min(need, pool.scw + pool.maker));
+	const out: PrefundStep[] = [];
+
+	while (n > PREFUND_SHORTFALL_COVERED_EPS_USD) {
+		const chunkSw = Math.min(n, pool.scw);
+		if (chunkSw >= MIN_PREFUND_CHUNK_USD) {
+			out.push({
+				fromChain: "base",
+				amountHuman: chunkSw.toFixed(6),
+				baseSpendWallet: "smartWallet",
+			});
+			pool.scw -= chunkSw;
+			n -= chunkSw;
+			continue;
+		}
+		const chunkMk = Math.min(n, pool.maker);
+		if (chunkMk >= MIN_PREFUND_CHUNK_USD) {
+			out.push({
+				fromChain: "base",
+				amountHuman: chunkMk.toFixed(6),
+				baseSpendWallet: "limitlessMaker",
+			});
+			pool.maker -= chunkMk;
+			n -= chunkMk;
+			continue;
+		}
+		if (n >= MIN_PREFUND_CHUNK_USD - 1e-9 && pool.scw + pool.maker + 1e-9 >= n) {
+			if (pool.scw + 1e-9 >= n) {
+				out.push({
+					fromChain: "base",
+					amountHuman: n.toFixed(6),
+					baseSpendWallet: "smartWallet",
+				});
+				pool.scw -= n;
+				n = 0;
+				break;
+			}
+			if (pool.maker + 1e-9 >= n) {
+				out.push({
+					fromChain: "base",
+					amountHuman: n.toFixed(6),
+					baseSpendWallet: "limitlessMaker",
+				});
+				pool.maker -= n;
+				n = 0;
+				break;
+			}
+		}
+		break;
+	}
+
+	if (n > PREFUND_SHORTFALL_COVERED_EPS_USD) {
+		throw new Error(
+			`Cannot prefund ~$${n.toFixed(4)} from Base: each LI.FI leg needs at least ~$${MIN_PREFUND_CHUNK_USD} from a single wallet (SCW vs Limitless maker). Consolidate on one Base address or increase amount.`,
+		);
+	}
+
+	return out;
+}
 
 /** Human-readable per-chain balances for logs and error copy. */
 export function formatPrefundBalanceBreakdown(
@@ -105,14 +179,14 @@ export function formatPrefundBalanceBreakdown(
 	const lxVenueOnBase = opts?.limitlessBaseDest === true && toChain === "base";
 	const parts = ALL_SOURCE_CHAINS.map((c) => {
 		if (lxVenueOnBase && c === "base") {
-			return `${CHAIN_LABEL[c]} $${b(c).toFixed(2)} (smart wallet — for Limitless prefund, venue USDC is the maker row below; SCW can same-chain sweep to maker; not a LI.FI source to maker)`;
+			return `${CHAIN_LABEL[c]} $${b(c).toFixed(2)} (smart wallet — for Limitless prefund, venue USDC is the Limitless maker row; SCW can same-chain sweep to maker; not a LI.FI source to maker)`;
 		}
 		const tag =
 			c === toChain ? " (venue — counts first toward prefund; reduces LI.FI pull)" : "";
 		if (c === "base" && !lxVenueOnBase) {
 			const mk = Math.max(0, balances.limitlessMakerBase ?? 0);
 			const pooled = b(c) + mk;
-			return `${CHAIN_LABEL[c]} $${pooled.toFixed(2)} (SCW $${b(c).toFixed(2)} + Limitless maker $${mk.toFixed(2)} — maker consolidates to SCW via partner withdraw before Base LI.FI)${tag}`;
+			return `${CHAIN_LABEL[c]} $${pooled.toFixed(2)} (SCW $${b(c).toFixed(2)} + Limitless maker $${mk.toFixed(2)} — each funds its own Base LI.FI leg)${tag}`;
 		}
 		return `${CHAIN_LABEL[c]} $${b(c).toFixed(2)}${tag}`;
 	});
@@ -142,49 +216,54 @@ export function buildPrefundSteps(
 ): PrefundStep[] {
 	const need = Math.max(0, needUsdHuman);
 	const lxDest = opts?.limitlessBaseDest === true && toChain === "base";
-	/**
-	 * Spendable stable for LI.FI **sources** by SOR chain.
-	 * - Limitless-on-Base **destination**: Base SCW is not a LI.FI source to the maker; venue is
-	 *   `limitlessMakerBase` only (SCW→maker same-chain sweep is handled in the executor).
-	 * - Any other destination: Base capacity is **SCW + Limitless maker**; executor consolidates
-	 *   maker→SCW via partner withdraw before quoting Base LI.FI from the smart wallet.
-	 */
-	const bal = (c: SorChain) => {
+
+	const initialScw = lxDest ? 0 : Math.max(0, balances.base ?? 0);
+	const initialMaker = lxDest ? 0 : Math.max(0, balances.limitlessMakerBase ?? 0);
+	const pool: MutableBasePool = { scw: initialScw, maker: initialMaker };
+
+	const chainBal = (c: SorChain) => {
 		if (c === "base") {
 			if (lxDest) return 0;
-			return (
-				Math.max(0, balances.base ?? 0) +
-				Math.max(0, balances.limitlessMakerBase ?? 0)
-			);
+			return pool.scw + pool.maker;
 		}
 		return Math.max(0, balances[c] ?? 0);
 	};
 
+	const sortKey = (c: SorChain) =>
+		c === "base" && !lxDest ? initialScw + initialMaker : Math.max(0, balances[c] ?? 0);
+
 	const totalExcludingDest = ALL_SOURCE_CHAINS.filter((c) => c !== toChain).reduce(
-		(s, c) => s + bal(c),
+		(s, c) => s + chainBal(c),
 		0,
 	);
 
 	let remaining = need;
 	const steps: PrefundStep[] = [];
 
-	const primaryTake = Math.min(remaining, bal(primaryFrom));
-	if (primaryTake >= MIN_PREFUND_CHUNK_USD) {
-		steps.push({ fromChain: primaryFrom, amountHuman: primaryTake.toFixed(6) });
-		remaining -= primaryTake;
-	}
+	const pushFromChain = (c: SorChain, take: number) => {
+		if (take <= 1e-9) return;
+		if (c === "base" && !lxDest) {
+			steps.push(...splitBasePrefundAmount(take, pool));
+			return;
+		}
+		if (take >= MIN_PREFUND_CHUNK_USD) {
+			steps.push({ fromChain: c, amountHuman: take.toFixed(6) });
+		}
+	};
+
+	const primaryTake = Math.min(remaining, chainBal(primaryFrom));
+	pushFromChain(primaryFrom, primaryTake);
+	remaining -= primaryTake;
 
 	const others = ALL_SOURCE_CHAINS.filter((c) => c !== toChain && c !== primaryFrom).sort(
-		(a, b) => bal(b) - bal(a),
+		(a, b) => sortKey(b) - sortKey(a),
 	);
 
 	for (const c of others) {
 		if (remaining <= 1e-6) break;
-		const take = Math.min(remaining, bal(c));
-		if (take >= MIN_PREFUND_CHUNK_USD) {
-			steps.push({ fromChain: c, amountHuman: take.toFixed(6) });
-			remaining -= take;
-		}
+		const take = Math.min(remaining, chainBal(c));
+		pushFromChain(c, take);
+		remaining -= take;
 	}
 
 	if (remaining > PREFUND_SHORTFALL_COVERED_EPS_USD) {

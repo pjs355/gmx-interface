@@ -7,6 +7,9 @@ import { CHAIN_LIFI_IDS } from "./sor-types";
 export function buildChainBalances(params: {
 	baseUsdcBalance: number;
 	baseWalletAddress: string;
+	/** Second Base row: Limitless-linked trading wallet USDC (same `lifiChainId` as Base). */
+	limitlessMakerUsdcBalance?: number;
+	limitlessMakerWalletAddress?: string;
 	polygonUsdcBalance?: number;
 	polygonWalletAddress?: string;
 	solanaUsdcBalance?: number;
@@ -30,6 +33,19 @@ export function buildChainBalances(params: {
 				lifiChainId: CHAIN_LIFI_IDS.base,
 				balance: bal,
 				walletAddress: params.baseWalletAddress,
+			});
+		}
+	}
+
+	const lxAddr = params.limitlessMakerWalletAddress?.trim();
+	if (lxAddr) {
+		const lxBal = Math.max(0, params.limitlessMakerUsdcBalance ?? 0);
+		if (lxBal > 0 || inc) {
+			balances.push({
+				chain: "base",
+				lifiChainId: CHAIN_LIFI_IDS.base,
+				balance: lxBal,
+				walletAddress: lxAddr,
 			});
 		}
 	}

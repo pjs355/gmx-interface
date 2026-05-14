@@ -35,6 +35,10 @@ function isPrivyWalletHttp400(err: unknown): boolean {
  * is *not* in this category: those users have no BNB and the only correct response
  * is to retry sponsorship (handled inside `sendWithBackoffForBscPrivy`).
  *
+ * **Other EVM chains (e.g. Base):** same HTTP-400 → one `sponsor: false` retry as BSC,
+ * so Limitless CTF `setApprovalForAll` and similar calls can clear when sponsorship
+ * simulation rejects but the wallet holds native gas.
+ *
  * Privy wraps **UserOperation simulation reverts** as HTTP 400 too (e.g.
  * `0x7939f424` / `TransferFromFailed`). Retrying without sponsorship does not fix
  * those; we **rethrow** so the LI.FI layer can surface allowance/balance guidance.
@@ -55,11 +59,38 @@ export function createPrivyEmbeddedSendTransactionCapable(
 			};
 
 			if (chain.id !== bsc.id) {
-				const { hash } = await sendTransaction(input, {
-					sponsor: true,
-					address,
-				});
-				return hash;
+				try {
+					const { hash } = await sendTransaction(input, {
+						sponsor: true,
+						address,
+					});
+					return hash;
+				} catch (err) {
+					if (errorChainMentionsTransferFromFailed(err)) {
+						throw err;
+					}
+					if (
+						typeof err === "object" &&
+						err &&
+						String((err as Error).message ?? "")
+							.toLowerCase()
+							.includes("useroperation reverted")
+					) {
+						throw err;
+					}
+					if (!isPrivyWalletHttp400(err)) throw err;
+					if (import.meta.env.DEV) {
+						console.warn(
+							"[embeddedPrivyViemSend] Sponsored EVM tx returned HTTP 400 — retrying without gas sponsorship (user needs native gas on this chain).",
+							err,
+						);
+					}
+					const { hash } = await sendTransaction(input, {
+						sponsor: false,
+						address,
+					});
+					return hash;
+				}
 			}
 
 			return runQueuedBnbPrivyTask(address, async () => {

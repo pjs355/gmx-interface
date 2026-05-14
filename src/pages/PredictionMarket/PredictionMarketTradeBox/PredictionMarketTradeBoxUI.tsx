@@ -185,6 +185,7 @@ export default function PredictionMarketTradeBoxUI({
   polymarketVenueHint,
   predictVenueHint,
   predictVenueBookHints,
+  levelUpVenueBookHints = null,
   dflowVenueHint,
   matchedVenues,
   onTrade,
@@ -259,13 +260,9 @@ export default function PredictionMarketTradeBoxUI({
   const tradeInteractionLocked =
     sorExecution.isExecuting || state.isLoading;
   const venueConfig = getVenueConfig(tradingVenue);
-  /** Integer share amounts: LevelUp / Kalshi tabs, or All Markets when those venues are in the match. */
-  const matchedVenuesNeedWholeShareContracts =
-    tradingVenue === "all" &&
-    matchedVenues != null &&
-    (matchedVenues.has("levelup") || matchedVenues.has("dflow"));
+  /** Integer-only share field: venues with `requiresWholeShares` in `venueConfig` (LevelUp, Kalshi/DFlow). */
   const shareAmountRequiresWholeContracts =
-    (venueConfig.requiresWholeShares || matchedVenuesNeedWholeShareContracts) &&
+    venueConfig.requiresWholeShares &&
     (orderType === "limit" || (orderType === "market" && side === "sell"));
 
   const userSellSharesByVenue = useMemo((): Partial<Record<SorVenue, number>> => {
@@ -348,6 +345,13 @@ export default function PredictionMarketTradeBoxUI({
     ? calculateOrderbookPrices(predictHints.no)
     : null;
 
+  const luYesHintPrices = levelUpVenueBookHints?.yes
+    ? calculateOrderbookPrices(levelUpVenueBookHints.yes)
+    : null;
+  const luNoHintPrices = levelUpVenueBookHints?.no
+    ? calculateOrderbookPrices(levelUpVenueBookHints.no)
+    : null;
+
   // Helper function to format numbers with commas
   const formatNumberWithCommas = (value: string): string => {
     if (!value) return '';
@@ -386,6 +390,10 @@ export default function PredictionMarketTradeBoxUI({
         ? side === "buy"
           ? yesHintPrices.bestAsk
           : yesHintPrices.bestBid
+        : tradingVenue === "levelup" && luYesHintPrices
+          ? side === "buy"
+            ? luYesHintPrices.bestAsk
+            : luYesHintPrices.bestBid
         : tradingVenue === "dflow" && dflowOutcomeDisplayPrices
           ? dflowOutcomeDisplayPrices.yes
           : bookRepresentsNo
@@ -405,6 +413,10 @@ export default function PredictionMarketTradeBoxUI({
         ? side === "buy"
           ? noHintPrices.bestAsk
           : noHintPrices.bestBid
+        : tradingVenue === "levelup" && luNoHintPrices
+          ? side === "buy"
+            ? luNoHintPrices.bestAsk
+            : luNoHintPrices.bestBid
         : tradingVenue === "dflow" && dflowOutcomeDisplayPrices
           ? dflowOutcomeDisplayPrices.no
           : bookRepresentsNo
