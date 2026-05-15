@@ -106,3 +106,8 @@ export {
 	executionRouteTrustedForSingleVenueMarketSell,
 } from "./sorQuoteTrust";
 export type { SorTradeTrustContext } from "./sorQuoteTrust";
+
+export {
+	sorBuyPredictLegNetHeldShares,
+	sorBuyNetHeldTotalSharesFromLegs,
+} from "./sorPredictNetHeldDisplay";

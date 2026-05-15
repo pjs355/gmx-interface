@@ -41,6 +41,36 @@ function readLimitlessGroupSlugFromRaw(o: Record<string, unknown>): string {
 	return "";
 }
 
+/** Same as predictions verify-allowance / positions-venue: `negRiskRequestId` or `negRiskMarketId` on row or nested `market`. */
+function limitlessNegRiskWireFromPositionsRow(o: Record<string, unknown>): boolean {
+	const market =
+		o.market && typeof o.market === "object"
+			? (o.market as Record<string, unknown>)
+			: undefined;
+	const nonEmptyReq = (rec: Record<string, unknown> | undefined) => {
+		const v = rec?.negRiskRequestId;
+		return typeof v === "string" && v.trim() !== "";
+	};
+	const nonEmptyMkt = (rec: Record<string, unknown> | undefined) => {
+		if (!rec) return false;
+		for (const k of [
+			"negRiskMarketId",
+			"neg_risk_market_id",
+			"negRiskMarketID",
+		] as const) {
+			const v = rec[k];
+			if (typeof v === "string" && v.trim() !== "") return true;
+		}
+		return false;
+	};
+	return (
+		nonEmptyReq(market) ||
+		nonEmptyReq(o) ||
+		nonEmptyMkt(market) ||
+		nonEmptyMkt(o)
+	);
+}
+
 const BYTES32_HEX = /^0x[a-fA-F0-9]{64}$/i;
 
 /** Accepts `0x` + 64 hex or bare 64 hex; returns lowercased `0x…` or `""`. */
@@ -176,6 +206,8 @@ function mapPositionsVenueRow(raw: unknown): VenuePosition | null {
 		posOut.negRiskParentConditionId = negParent;
 		posOut.isNegRisk = true;
 	} else if (o.isNegRisk === true) {
+		posOut.isNegRisk = true;
+	} else if (limitlessNegRiskWireFromPositionsRow(o)) {
 		posOut.isNegRisk = true;
 	}
 	const vex = str(o.limitlessVenueExchange);

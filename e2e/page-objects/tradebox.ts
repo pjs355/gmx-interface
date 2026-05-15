@@ -73,6 +73,11 @@ const SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS = 120_000;
  * E2E: use this for `waitForBuyShares*` / `waitForSharesCleared` when `venueKey === "dflow"`.
  */
 export const SHARES_VISIBLE_TIMEOUT_DFLOW_MS = 180_000;
+/**
+ * Limitless: positions row can lag after fill while `LIMITLESS_QUERY_ROOT` refetches;
+ * same class of flake as Polymarket (hard refresh shows shares before SPA catches up).
+ */
+const SHARES_VISIBLE_TIMEOUT_LIMITLESS_MS = 120_000;
 
 /** Longer share-row polling for Kalshi/DFlow on-chain lag; other venues use 60s (`SHARES_VISIBLE_TIMEOUT_MS`). */
 export function sharesVisiblePollTimeoutMsForVenueKey(
@@ -80,7 +85,25 @@ export function sharesVisiblePollTimeoutMsForVenueKey(
 ): number {
 	if (venueKey === "dflow") return SHARES_VISIBLE_TIMEOUT_DFLOW_MS;
 	if (venueKey === "polymarket") return SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS;
+	if (venueKey === "limitless") return SHARES_VISIBLE_TIMEOUT_LIMITLESS_MS;
 	return SHARES_VISIBLE_TIMEOUT_MS;
+}
+
+/**
+ * Before reading `sharesBefore` for a market buy, wait for `MyPositionsRow` to leave
+ * `data-qa-position-refreshing="true"` when the buy row is visible. Limitless (and
+ * other REST-backed venues) can mount the row with `buyLines=[]` while refreshing,
+ * so `data-qa-shares-count` is 0 even when the wallet already holds YES — a bogus
+ * baseline makes `waitForBuySharesIncreaseSince` / delta-vs-quote assertions lie.
+ */
+export function buyRowBaselineSettleTimeoutMsForVenueKey(
+	venueKey: string,
+): number {
+	if (venueKey === "limitless") return 90_000;
+	if (venueKey === "dflow") return 60_000;
+	if (venueKey === "polymarket") return 45_000;
+	if (venueKey === "predictFun") return 45_000;
+	return 25_000;
 }
 const SHARES_POLL_MS = 500;
 
@@ -448,10 +471,20 @@ export class Tradebox {
 	 * sentinel ships with `aria-expanded="true"` so this helper short-circuits
 	 * once the toggle is attached — there is no real Details collapsible in
 	 * the rendered UI to interact with.
+	 *
+	 * The sentinel only mounts after `sorRoute.executionRoute` has legs; on a
+	 * single-venue tab (e.g. LevelUp) that channel can lag the Trade button by
+	 * many seconds on a slow localhost book. Use the same timeout budget as
+	 * {@link readLegAttrs} / quote readiness (defaults to {@link QUOTE_READY_TIMEOUT_MS}).
 	 */
-	async expandSorDetailsIfCollapsed(): Promise<void> {
+	async expandSorDetailsIfCollapsed(
+		toggleAttachTimeoutMs: number = QUOTE_READY_TIMEOUT_MS,
+	): Promise<void> {
 		const toggle = this.root.locator("button.sor-details-toggle").first();
-		await toggle.waitFor({ state: "attached", timeout: 15_000 });
+		await toggle.waitFor({
+			state: "attached",
+			timeout: toggleAttachTimeoutMs,
+		});
 		const expanded = await toggle.getAttribute("aria-expanded");
 		if (expanded === "true") {
 			return;
@@ -573,7 +606,7 @@ export class Tradebox {
 			legSide === "market-sell" && timeoutMs === QUOTE_READY_TIMEOUT_MS
 				? MARKET_SELL_LEG_TIMEOUT_MS
 				: timeoutMs;
-		await this.expandSorDetailsIfCollapsed();
+		await this.expandSorDetailsIfCollapsed(effectiveTimeout);
 		const leg = this.root.locator(
 			`[data-qa="sor-leg"][data-leg-side="${legSide}"]`,
 		);
@@ -608,7 +641,7 @@ export class Tradebox {
 	async readQuotedBuyCostUsd(
 		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
 	): Promise<number> {
-		await this.expandSorDetailsIfCollapsed();
+		await this.expandSorDetailsIfCollapsed(timeoutMs);
 		const loc = this.root
 			.locator(
 				'.sor-details-panel [data-qa="sor-leg-cost"][data-cost-usd]',
@@ -668,6 +701,35 @@ export class Tradebox {
 		if (sharesAttr === null || sharesAttr.trim() === "") return 0;
 		const parsed = Number(sharesAttr);
 		return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+	}
+
+	/**
+	 * When the buy row exists, wait until `data-qa-position-refreshing` is not `"true"`
+	 * so `readBuyRowTotalSharesOrZero()` reflects hydrated venue positions (not the
+	 * loading shell that keeps `data-qa-shares-count` at 0). No-op if the row is absent.
+	 */
+	async waitForBuyRowBaselineSettled(timeoutMs: number): Promise<void> {
+		const row = this.root.locator(
+			'[data-qa="my-positions-row"][data-qa-side="buy"]',
+		);
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			const visible = await row.isVisible().catch(() => false);
+			if (!visible) {
+				return;
+			}
+			const refreshing = await row.getAttribute(
+				"data-qa-position-refreshing",
+			);
+			if (refreshing !== "true") {
+				return;
+			}
+			await new Promise((r) => setTimeout(r, SHARES_POLL_MS));
+		}
+		throw new Error(
+			`waitForBuyRowBaselineSettled: buy row stayed data-qa-position-refreshing="true" within ${timeoutMs}ms ` +
+				`(positions may not have hydrated — see MyPositionsRow + venue queries).`,
+		);
 	}
 
 	/**

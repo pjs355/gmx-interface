@@ -120,14 +120,23 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	allMarketsSellNoBid?: number | null;
 	shareBalances: TradeBoxShareBalancesSnapshot;
 	/**
-	 * True when the user just submitted an order that will route through DFlow
-	 * **and** the underlying Kalshi market was not yet on-chain tokenized. The
-	 * UI surfaces a "Kalshi via DFlow is creating this market" notice under
-	 * the trade box for the lifetime of the current `orderResult`.
+	 * True when the completed DFlow leg's POST submit indicated `initializedMarket`
+	 * (init-payer co-sign). Surfaces the "Kalshi via DFlow is creating this market"
+	 * notice for the lifetime of the current success `orderResult`.
 	 */
 	dflowUninitAtSubmit?: boolean;
 	routePreviewAllowed: boolean;
 	smartRoutingMarketKey: string;
+	/** Predict.fun market fee (bps) for net-held share display; omit when unknown. */
+	predictFunFeeRateBps?: number;
+	/**
+	 * Kalshi/DFlow market buy: Pond `/order/quote` contracts for E2E `data-leg-num-shares`
+	 * when debounced quote matches typed USD (avoids SOR vs executable drift).
+	 */
+	dflowOrderQuoteForSentinel?: {
+		contracts: number | null;
+		amountAlignedWithQuote: boolean;
+	};
 }
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -173,6 +182,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	dflowUninitAtSubmit = false,
 	routePreviewAllowed,
 	smartRoutingMarketKey,
+	predictFunFeeRateBps,
+	dflowOrderQuoteForSentinel,
 }: PredictionMarketTradeBoxResponsiveContainerProps) {
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
@@ -447,6 +458,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 						dflowUninitAtSubmit={dflowUninitAtSubmit}
 						routePreviewAllowed={routePreviewAllowed}
 						smartRoutingMarketKey={smartRoutingMarketKey}
+						predictFunFeeRateBps={predictFunFeeRateBps}
+						dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}
 					/>
 				</div>
 			</div>
@@ -633,6 +646,8 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				dflowUninitAtSubmit={dflowUninitAtSubmit}
 				routePreviewAllowed={routePreviewAllowed}
 				smartRoutingMarketKey={smartRoutingMarketKey}
+				predictFunFeeRateBps={predictFunFeeRateBps}
+				dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}
 			/>
 			</div>
 	</PredictionCurtain>

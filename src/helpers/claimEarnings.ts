@@ -47,6 +47,7 @@ import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmit
 import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
 import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
 import { redeemLimitlessWinningPositionOnBase } from "@/trading/limitless/limitlessRedeemOnBase";
+import { getLimitlessBaseTxClientForAddress } from "@/trading/limitless/limitlessBaseTxClientForAddress";
 const BASE_CHAIN_ID = 8453;
 
 /** `POST /api/limitless/ensure-account` payload (unwrapped) or rare `{ data }` cache shape. */
@@ -378,6 +379,8 @@ export function useClaimForVenue(
 	const {
 		solanaAddress,
 		polymarketSafe: polymarketDepositWallet,
+		embeddedEoa,
+		baseSmartWallet,
 	} = useFundingAddresses();
 	const { signTransaction: privySolanaSignTransaction } =
 		useSolanaSignTransaction();
@@ -954,6 +957,19 @@ export function useClaimForVenue(
 				venueExchange: lx._limitlessVenueExchange ? "present" : "absent",
 			});
 
+			const baseTxClient = await getLimitlessBaseTxClientForAddress({
+				address: signerAddr,
+				getClientForChain,
+				baseSmartWallet,
+				embeddedEoa,
+				privyEvmSendTransaction,
+			});
+			if (!baseTxClient) {
+				throw new Error(
+					"Limitless Claim could not open Privy sponsored gas for your maker address. Your Limitless maker must be your embedded wallet (or your Base smart wallet if that is the registered maker). If you use an external wallet as maker, fund Base ETH on that address for gas, or redeem on limitless.exchange.",
+				);
+			}
+
 			const txHash = await redeemLimitlessWinningPositionOnBase({
 				signer,
 				conditionId: cidHex,
@@ -965,6 +981,7 @@ export function useClaimForVenue(
 				limitlessVenueAdapter: lx._limitlessVenueAdapter,
 				limitlessCollateralAddress: lx._limitlessCollateralAddress,
 				fetchMarketBySlug: (s) => privateApi.getLimitlessMarketBySlug(s),
+				baseTxClient,
 			});
 			claimDev("limitless redeem tx", { txHash });
 			return txHash;
@@ -989,6 +1006,8 @@ export function useClaimForVenue(
 		privySolanaSignTransaction,
 		queryClient,
 		profileId,
+		embeddedEoa,
+		baseSmartWallet,
 	]);
 
 	return { claim, isClaiming, error, txHash, isExternalClaim: false };

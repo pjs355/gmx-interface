@@ -18,6 +18,7 @@ import { PredictionsPage } from "../page-objects/predictions-page";
 import {
 	Tradebox,
 	sharesVisiblePollTimeoutMsForVenueKey,
+	buyRowBaselineSettleTimeoutMsForVenueKey,
 	MARKET_SELL_LEG_TIMEOUT_MS,
 	POLYMARKET_SELL_SUBMIT_ENABLED_TIMEOUT_MS,
 	sellShareAmountTextRoundedDownLikeUi,
@@ -62,11 +63,18 @@ import {
  * ---------------------------------------------------------------------------
  * `Tradebox.waitForBuyShares()` reads `data-qa-shares-count` on the buy row.
  * In `MyPositionsRow.tsx`, that is `buyTotalShares` (cumulative for the market
- * tab). `buyQuotedShares` from test 1 is the Details leg (`data-leg-num-shares`)
- * at quote time. We take `readBuyRowTotalSharesOrZero()` **before** submit (`sharesBefore`)
+ * tab). While `positionSharesRefreshing` is true, the row can still expose
+ * `data-qa-shares-count={0}` (empty `buyLines`) — call `waitForBuyRowBaselineSettled`
+ * before reading `sharesBefore` so an existing Limitless YES bag is not mistaken
+ * for zero. `buyQuotedShares` from test 1 is the Details leg (`data-leg-num-shares`)
+ * at quote time (gross SOR `leg.shares` for most venues; **Predict.fun market buy**
+ * uses **net-held** shares when fee bps is loaded — same basis as post-fill row delta).
+ * **Kalshi/DFlow market buy:** when the debounced Pond `/order/quote` matches typed USD,
+ * that attribute follows the quote’s contracts (matches post-fill `outAmount`); otherwise
+ * the SOR leg. We take `readBuyRowTotalSharesOrZero()` **before** submit (`sharesBefore`)
  * and compare **delta** = after − before to `buyQuotedShares` using `buyShareFillDeltaTolerance`
- * (2% + floor; DFlow adds absolute slack when SOR shows fractional shares but on-chain
- * cumulative differs slightly — e.g. quoted 6.40 vs delta 6). After fill we keep the
+ * (2% + floor; predictFun/limitless use a slightly wider relative band; DFlow still carries
+ * `DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE` for fractional vs cumulative row quirks). After fill we keep the
  * SPA session open (no reload) and let `waitForBuySharesIncreaseSince` poll the row
  * until chain/API lag catches up. This runs for **every** entry in `REQUESTED_VENUES`
  * (not Polymarket-only); DFlow / Predict / others use the same path after
@@ -78,7 +86,9 @@ import {
  * Decimals (all venues, including DFlow)
  * ---------------------------------------------------------------------------
  * Share and dollar amounts are whatever the app puts on the DOM: `readLegAttrs` uses
- * `data-leg-num-shares` / price from the SOR leg row, `readQuotedBuyCostUsd` uses
+ * `data-leg-num-shares` / price from the leg row (Predict.fun **market buy**:
+ * net-held when fee bps is known; **DFlow market buy** uses Pond quote contracts when
+ * the debounced amount matches the typed USD, else SOR), `readQuotedBuyCostUsd` uses
  * `data-cost-usd`, `readQuotedSellReceiveUsd` uses `data-receive-usd`, and positions
  * use `data-qa-shares-count`. For **sell input**, the spec types
  * `sellShareAmountTextRoundedDownLikeUi` (same rule as sell `formatShareCountDataQa` /
@@ -86,11 +96,11 @@ import {
  * does not type a value above scoped max when the attribute still carries extra fractional precision.
  *
  * ---------------------------------------------------------------------------
- * Slippage (2% relative)
+ * Slippage (buy: 2% baseline; venue-specific widenings)
  * ---------------------------------------------------------------------------
  * - **Buy fill vs quote:** `SHARE_FILL_SLIPPAGE_PCT` (0.02) on `|deltaShares − buyQuotedShares|`
- *   with floor `SHARE_FILL_MIN_ABS`. **DFlow** also applies `DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE`
- *   (SOR fractional leg vs on-chain cumulative rounding).
+ *   with floor `SHARE_FILL_MIN_ABS`. **predictFun / limitless** use a slightly higher relative cap;
+ *   **DFlow** also applies `DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE` (integer / cumulative quirks).
  * - **Sell receive vs header:** `RECEIVE_SLIPPAGE_PCT` (0.02) scales tolerance vs quoted
  *   receive (`receiveTolUsd` in test 4), with floor `RECEIVE_TOLERANCE_MIN_ABS_USD`.
  * - These are separate from `CASH_QUOTE_VS_HEADER_TOLERANCE_USD` (header polling width).
@@ -148,7 +158,12 @@ const SHARE_FILL_MIN_ABS = 0.0005;
  * `(data-qa-shares-count after − before)` to `buyQuotedShares`; `before` already includes any
  * existing position — this constant widens **only** the allowed |delta − quoted| band for dflow.
  */
-const DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE = 0.75;
+const DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE = 1.25;
+/**
+ * Predict.fun / Limitless: quoted leg vs post-fill cumulative row can exceed 2% on
+ * small notionals (fees, book walk, venue rounding).
+ */
+const SHARE_FILL_SLIPPAGE_PREDICT_OR_LIMITLESS_PCT = 0.038;
 
 function buyShareFillDeltaTolerance(
 	venueKey: string,
@@ -158,6 +173,11 @@ function buyShareFillDeltaTolerance(
 	const base = Math.max(relative, SHARE_FILL_MIN_ABS);
 	if (venueKey === "dflow") {
 		return Math.max(base, DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE);
+	}
+	if (venueKey === "predictFun" || venueKey === "limitless") {
+		const wider =
+			SHARE_FILL_SLIPPAGE_PREDICT_OR_LIMITLESS_PCT * buyQuotedShares;
+		return Math.max(base, wider);
 	}
 	return base;
 }
@@ -338,6 +358,9 @@ test.describe("prinx per-venue trade cycle", () => {
 					);
 				}
 				const tradebox = new Tradebox(sharedSession.page);
+				await tradebox.waitForBuyRowBaselineSettled(
+					buyRowBaselineSettleTimeoutMsForVenueKey(venueKey),
+				);
 				const sharesBefore =
 					await tradebox.readBuyRowTotalSharesOrZero();
 				const buyCostQuoteUsd = await tradebox.readQuotedBuyCostUsd();

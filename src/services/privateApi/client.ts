@@ -47,6 +47,7 @@ import type {
 	PolymarketSyncBody,
 	PolymarketVerifyOnChainBody,
 	CashSummary,
+	BaseSmartWalletPendingUsdc,
 } from "@/types/trading";
 import { PrivateApiError } from "./errors";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
@@ -672,6 +673,13 @@ export function createPrivateApiClient(
 		async getCashSummary(): Promise<CashSummary> {
 			const res = await authorizedFetch("/portfolio/cash-summary");
 			return readJson<CashSummary>(res);
+		},
+
+		async getBaseSmartWalletPendingUsdc(): Promise<BaseSmartWalletPendingUsdc> {
+			const res = await authorizedFetch(
+				"/portfolio/base-smart-wallet-pending-usdc",
+			);
+			return readJson<BaseSmartWalletPendingUsdc>(res);
 		},
 
 		async getPolymarketAccount(): Promise<PolymarketAccountResponse> {

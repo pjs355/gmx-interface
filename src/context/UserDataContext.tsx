@@ -85,6 +85,13 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	const [tokenBalances, setTokenBalances] = useState<
 		Map<string, TokenBalance>
 	>(new Map());
+	/**
+	 * Mirrors `tokenBalances` but updates synchronously when RPC refresh maps
+	 * raw balances → markets. `getTokenBalance` reads this ref so
+	 * `usePostTradeBalanceSync` can observe new LevelUp shares immediately after
+	 * `await refreshTokenPositions()` (before the next React commit).
+	 */
+	const tokenBalancesRef = useRef<Map<string, TokenBalance>>(new Map());
 	const [approvalState, setApprovalState] = useState<ApprovalState>({
 		isApproved: false,
 		isChecking: false,
@@ -376,7 +383,9 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	const load = useCallback(async () => {
 		if (!account) {
 			setOrders([]);
-			setTokenBalances(new Map());
+			const empty = new Map<string, TokenBalance>();
+			tokenBalancesRef.current = empty;
+			setTokenBalances(empty);
 			loadedForAccountRef.current = null;
 			return;
 		}
@@ -392,9 +401,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			// Map any already-available raw token balances to market IDs
 			const currentRawBalances = rawTokenBalancesRef.current;
 			if (currentRawBalances.length > 0) {
-				setTokenBalances(
-					mapTokenBalancesToMarkets(currentRawBalances, marketDataMap),
+				const mapped = mapTokenBalancesToMarkets(
+					currentRawBalances,
+					marketDataMap,
 				);
+				tokenBalancesRef.current = mapped;
+				setTokenBalances(mapped);
 			}
 		} finally {
 			setLoading(false);
@@ -435,15 +447,13 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		}
 
 		const mappedBalances = mapTokenBalancesToMarkets(rawTokenBalances, marketDataMap);
+		tokenBalancesRef.current = mappedBalances;
 		setTokenBalances(mappedBalances);
 	}, [rawTokenBalances, mapTokenBalancesToMarkets]);
 
-	const getTokenBalance = useCallback(
-		(marketId: string) => {
-			return tokenBalances.get(marketId) || null;
-		},
-		[tokenBalances]
-	);
+	const getTokenBalance = useCallback((marketId: string) => {
+		return tokenBalancesRef.current.get(marketId) || null;
+	}, []);
 
 	const approveToken = useCallback(async () => {
 		if (!account) return;
@@ -639,7 +649,10 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
 		try {
 			const rpcBalances = await fetchTokenBalancesFromRpc(account, marketDataMap);
+			const mapped = mapTokenBalancesToMarkets(rpcBalances, marketDataMap);
+			tokenBalancesRef.current = mapped;
 			setRawTokenBalances(rpcBalances);
+			setTokenBalances(mapped);
 			setUsingRpcFallback(false);
 			setLevelUpPositionsSource("rpc");
 			setLevelUpPositionsError(null);
@@ -648,7 +661,14 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			const msg = err instanceof Error ? err.message : String(err);
 			setLevelUpPositionsError(msg);
 		}
-	}, [account, umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, fetchTokenBalancesFromRpc]);
+	}, [
+		account,
+		umbrellas,
+		getAllQuestionsForUmbrella,
+		resolvedMarketsByUmbrella,
+		fetchTokenBalancesFromRpc,
+		mapTokenBalancesToMarkets,
+	]);
 
 	const value = useMemo<UserDataContextValue>(
 		() => ({

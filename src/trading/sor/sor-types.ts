@@ -258,6 +258,8 @@ export interface ExecutionLeg {
 	bridgeTxHash?: string;
 	error?: string;
 	updatedAt: number;
+	/** DFlow only: `true` when POST submit returned `initializedMarket` (init-payer co-sign path). */
+	initializedMarket?: boolean;
 }
 
 export interface RouteExecution {

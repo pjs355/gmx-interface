@@ -92,6 +92,7 @@ import {
 	probabilityToLimitPriceCentsString,
 	shareAmountMatchesRoute,
 	usdAmountMatchesRoute,
+	sorBuyNetHeldTotalSharesFromLegs,
 	SOR_MIN_MARKET_BUY_USD,
 	SOR_MIN_LIMIT_ORDER_USD,
 	SOR_MIN_MARKET_SELL_SHARES,
@@ -106,6 +107,11 @@ import type {
 	RoutePlan,
 } from "@/trading/sor";
 import { usePostTradeBalanceSync } from "@/trading/sor/usePostTradeBalanceSync";
+import {
+	accountVenueKeysFromFilledExecutionLegs,
+	filledExecutionHasLevelUp,
+	routePlanLegsFingerprintMatch,
+} from "@/trading/sor/postTradeRouteAlign";
 import { capturePostTradeBaseline, type PostTradeBaseline } from "@/trading/sor/postTradeBaseline";
 import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
 import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
@@ -158,6 +164,21 @@ const SOR_VENUE_POSITION_KEYS: readonly SorVenue[] = [
 	"dflow",
 	"limitless",
 ];
+
+/** DFlow `/order/quote` debounce uses USDC 1e6 rounding; align typed vs debounced USD for E2E sentinel. */
+function dflowTypedUsdMatchesDebouncedQuote(
+	typedAmount: string,
+	debouncedAmount: string,
+): boolean {
+	const norm = (s: string) =>
+		Number.parseFloat(String(s).trim().replace(/,/g, ""));
+	const a = norm(typedAmount);
+	const b = norm(debouncedAmount);
+	if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) {
+		return false;
+	}
+	return Math.round(a * 1_000_000) === Math.round(b * 1_000_000);
+}
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
   ({ market, orderbook: propOrderbook, pandascoreMatchId, umbrellaId: propUmbrellaId, limitlessMappingFromUmbrella, predictFunMappingFromUmbrella, umbrellaDisplayName, initialPosition, onPositionChange, onSideChange: onSideChangeCallback, venueOverride, crossBuyYes: propCrossBuyYes, crossBuyNo: propCrossBuyNo, venueRowsForSellStrip: propVenueRowsForSellStrip, mobilePeekBar = "default", tradeRouteIsolationKey }, ref) => {
@@ -396,10 +417,40 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     side: state.side,
     amount: state.amount,
     enabled:
-      state.tradingVenue === "dflow" &&
       state.orderType === "market" &&
-      Boolean(dflowLink),
+      Boolean(dflowLink) &&
+      (state.tradingVenue === "dflow" || state.tradingVenue === "all"),
   });
+
+  const dflowOrderQuoteForSentinel = useMemo(() => {
+    if (
+      state.tradingVenue !== "dflow" ||
+      state.orderType !== "market" ||
+      state.side !== "buy"
+    ) {
+      return undefined;
+    }
+    const contracts =
+      dflowQuote.data &&
+      Number.isFinite(dflowQuote.data.contracts) &&
+      dflowQuote.data.contracts > 0
+        ? dflowQuote.data.contracts
+        : null;
+    return {
+      contracts,
+      amountAlignedWithQuote: dflowTypedUsdMatchesDebouncedQuote(
+        state.amount,
+        dflowQuote.debouncedAmount,
+      ),
+    };
+  }, [
+    state.tradingVenue,
+    state.orderType,
+    state.side,
+    state.amount,
+    dflowQuote.data,
+    dflowQuote.debouncedAmount,
+  ]);
 
   const queryClient = useQueryClient();
   const { signMessage: privySolanaSignMessage } = useSolanaSignMessage();
@@ -1736,11 +1787,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   }, [state.tradingVenue]);
 
-  // Whether the DFlow market was uninitialized at the moment Submit was
-  // pressed. The DFlow `/order` endpoint silently injects market tokenization
-  // when needed, so first-mint trades take longer than a normal swap. Snapshot
-  // the flag at submit so a fast post-trade umbrella refresh that flips
-  // `accountsInitialized*` to `true` doesn't hide the notice immediately.
+  // Whether this completed trade actually ran DFlow's prediction-market init
+  // (init-payer co-sign). Populated from POST /api/dflow/orders `initializedMarket`
+  // on the filled leg — not from umbrella `accountsInitialized*` snapshots (those
+  // can lag and falsely implied "creating market" on every trade).
   const [dflowUninitAtSubmit, setDflowUninitAtSubmit] = useState(false);
 
   /**
@@ -2418,21 +2468,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         return;
       }
       console.debug("[SOR] Trade button → execute", executableRoute.routeId);
-      // Kalshi/DFlow: each outcome has its own `accountsInitialized*` flag. Only show
-      // the "creating this market" notice when the leg(s) we execute still report
-      // `false` for that outcome — not when the other team's leg is uninitialized.
-      const dflowLink = matchedMonitor?.dflow;
-      const dflowExecutedLegNeedsMarketInit =
-        Boolean(dflowLink) &&
-        executableRoute.legs.some((leg) => {
-          if (leg.venue !== "dflow" || !dflowLink) return false;
-          const initialized =
-            leg.outcome === "A"
-              ? dflowLink.accountsInitializedA
-              : dflowLink.accountsInitializedB;
-          return initialized === false;
-        });
-      setDflowUninitAtSubmit(dflowExecutedLegNeedsMarketInit);
+      setDflowUninitAtSubmit(false);
       const marketId = sorQuestionId as string | undefined;
       const baseline = capturePostTradeBaseline({
         queryClient,
@@ -2541,7 +2577,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     market,
     yesBalance,
     noBalance,
-    matchedMonitor,
     state.tradingVenue,
   ]);
 
@@ -2586,20 +2621,25 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           l.filledShares > 0,
       );
       if (hasDflowFilledLeg) {
-        void queryClient.invalidateQueries({ queryKey: ["dflow-positions"] });
-        void queryClient.invalidateQueries({
+        void queryClient.refetchQueries({
+          queryKey: ["dflow-positions"],
+          type: "all",
+        });
+        void queryClient.refetchQueries({
           queryKey: ["dflow-outcome-balance"],
+          type: "all",
         });
       }
 
+      const syncUiKey =
+        String(
+          (market as { _id?: string })?._id ??
+            (market as { questionId?: string })?.questionId ??
+            "",
+        ).trim() || null;
+
       const cached = latestBaselineRef.current;
-      if (cached && cached.routeId === routeId) {
-        const syncUiKey =
-          String(
-            (market as { _id?: string })?._id ??
-              (market as { questionId?: string })?.questionId ??
-              "",
-          ).trim() || null;
+      if (cached) {
         for (let i = 0; i < legs.length; i++) {
           const rl = cached.route.legs[i];
           const el = legs[i];
@@ -2612,40 +2652,68 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             if (m) registerPendingDflowOutcomeMints([m]);
           }
         }
+      }
+
+      const postTradeCommon = {
+        queryClient,
+        addresses: {
+          polymarketSafe: funding.polymarketSafe,
+          predictWallet: predictPostTradeWallet,
+          solanaAddress: funding.solanaAddress,
+        },
+        refreshLevelUpPositions: refreshTokenPositions,
+        refetchCollateral: collateralTokens.refetch,
+        readLevelUpSide: (mid: string, side: "yes" | "no") => {
+          const tb = getTokenBalance(mid);
+          if (!tb) return 0;
+          const raw = side === "yes" ? tb.yesBalance : tb.noBalance;
+          const n = parseFloat(raw);
+          return Number.isFinite(n) ? n : 0;
+        },
+        syncUiKey,
+        shareIdentityCtx: predictShareIdentityCtx,
+      } as const;
+
+      const canUseCachedBaseline =
+        cached &&
+        (cached.routeId === routeId ||
+          routePlanLegsFingerprintMatch(cached.route, sorExecution.execution));
+
+      if (canUseCachedBaseline && cached) {
         postTradeSync.start({
-          queryClient,
+          ...postTradeCommon,
           route: cached.route,
           execution: sorExecution.execution,
           baseline: cached.baseline,
-          addresses: {
-            polymarketSafe: funding.polymarketSafe,
-            predictWallet: predictPostTradeWallet,
-            solanaAddress: funding.solanaAddress,
-          },
-          refreshLevelUpPositions: refreshTokenPositions,
-          refetchCollateral: collateralTokens.refetch,
-          readLevelUpSide: (mid, side) => {
-            const tb = getTokenBalance(mid);
-            if (!tb) return 0;
-            const raw = side === "yes" ? tb.yesBalance : tb.noBalance;
-            const n = parseFloat(raw);
-            return Number.isFinite(n) ? n : 0;
-          },
-          syncUiKey,
-          shareIdentityCtx: predictShareIdentityCtx,
         });
-      } else if (import.meta.env.DEV) {
-        console.warn(
-          "[PostTradeSync] missing baseline for routeId — skipping optimistic + sync",
-          { routeId, cachedRouteId: cached?.routeId },
-        );
+      } else {
+        const accountVenues = accountVenueKeysFromFilledExecutionLegs(legs);
+        const includeLevelUpRpc = filledExecutionHasLevelUp(legs);
+        if (accountVenues.length > 0 || includeLevelUpRpc) {
+          postTradeSync.startBlindBalanceRefresh({
+            queryClient,
+            syncUiKey,
+            accountVenues,
+            includeLevelUpRpc,
+            refreshLevelUpPositions: refreshTokenPositions,
+          });
+        } else if (import.meta.env.DEV) {
+          console.warn(
+            "[PostTradeSync] no baseline match and nothing to blind-refresh — skipping",
+            { routeId, cachedRouteId: cached?.routeId },
+          );
+        }
       }
 
       // First-mint DFlow trades only: nudge the matched-markets refresh so the
       // umbrella picks up the freshly-tokenized YES/NO mints + `accountsInitialized*`
       // flags as soon as the predictions-API cron has them, instead of waiting up to
       // 5 minutes for the next cron tick. Reuses `sendGetState` (== `fetchMappings`).
-      if (dflowUninitAtSubmit) {
+      const dflowInitCoSigned = legs.some(
+        (l) => l.venue === "dflow" && l.initializedMarket === true,
+      );
+      setDflowUninitAtSubmit(dflowInitCoSigned);
+      if (dflowInitCoSigned) {
         scheduleDflowFirstMintRefresh();
       }
 
@@ -2654,6 +2722,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       sorExecution.resetExecution();
     } else if (status === "failed" || status === "partial" || !everyLegFilled) {
       latestBaselineRef.current = null;
+      setDflowUninitAtSubmit(false);
       const failedLeg = legs.find((l) => l.status === "failed");
       setState((s) => ({
         ...s,
@@ -2682,7 +2751,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     market,
     postTradeSync,
     getTokenBalance,
-    dflowUninitAtSubmit,
     scheduleDflowFirstMintRefresh,
   ]);
 
@@ -2796,6 +2864,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         // numbers when it matches the typed amount. "all" tab falls through to the
         // local book walk (calculatedMarketOrderData) — same behavior as before.
         //
+        // **Kalshi/DFlow market buy:** when Pond `/order/quote` matches the typed USD
+        // (debounced), overlay contracts + spend from that quote even if SOR already
+        // matched — SOR can oversize by one whole contract vs `getDflowOrder` / chain.
+        //
         // We deliberately do NOT gate on `executionStale` — staleness flipping on a
         // background poll would otherwise flip the To Win between SOR and bookData
         // numbers (the "requote" feel). As long as the executionRoute matches the
@@ -2812,15 +2884,41 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           (state.side === "buy"
             ? usdAmountMatchesRoute(sr.requestedAmount, inputAmount)
             : shareAmountMatchesRoute(sr.requestedAmount, inputAmount));
-        const hasSorData = sorMatchesInput && state.tradingVenue !== "all";
+        const dflowSorSingleLegMarketBuy =
+          Boolean(
+            sr &&
+              sr.legs.length === 1 &&
+              sr.legs[0].venue === "dflow" &&
+              state.side === "buy",
+          );
+        const hasSorData =
+          sorMatchesInput &&
+          (state.tradingVenue !== "all" ||
+            (state.tradingVenue === "all" && dflowSorSingleLegMarketBuy));
         const bookData = calculatedMarketOrderData;
+
+        const dflowPondQuoteSurface =
+          state.tradingVenue === "dflow" ||
+          (state.tradingVenue === "all" && dflowSorSingleLegMarketBuy);
 
         if (hasSorData && state.orderType === "market") {
           const leg = sr.legs[0];
           const shareVenueCfg = getVenueConfig(state.tradingVenue);
-          const sorContractsRaw = shareVenueCfg.requiresWholeShares
-            ? Math.floor(sr.totalShares)
-            : sr.totalShares;
+          const netBuyShares =
+            state.side === "buy"
+              ? sorBuyNetHeldTotalSharesFromLegs(
+                  sr.legs,
+                  predictMarketDetail?.feeRateBps,
+                )
+              : null;
+          const sorContractsRaw =
+            state.side === "buy" && netBuyShares != null
+              ? shareVenueCfg.requiresWholeShares
+                ? Math.floor(netBuyShares)
+                : netBuyShares
+              : shareVenueCfg.requiresWholeShares
+                ? Math.floor(sr.totalShares)
+                : sr.totalShares;
           const sorContracts = Number.isFinite(sorContractsRaw)
             ? sorContractsRaw
             : undefined;
@@ -2828,16 +2926,58 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           const sorFee = Number.isFinite(sr.totalFees) ? sr.totalFees : undefined;
 
           if (state.side === "buy") {
+            const rawQ = dflowQuote.data;
+            const sorNumForCmp =
+              typeof sorContracts === "number" && Number.isFinite(sorContracts)
+                ? sorContracts
+                : typeof bookData.calculatedContracts === "number" &&
+                    Number.isFinite(bookData.calculatedContracts)
+                  ? bookData.calculatedContracts
+                  : NaN;
+            let pondPick: NonNullable<typeof rawQ> | null = null;
+            if (
+              dflowPondQuoteSurface &&
+              rawQ != null &&
+              Number.isFinite(rawQ.contracts) &&
+              rawQ.contracts > 0 &&
+              Number.isFinite(rawQ.usd) &&
+              rawQ.usd > 0
+            ) {
+              const debounceAligned = dflowTypedUsdMatchesDebouncedQuote(
+                state.amount,
+                dflowQuote.debouncedAmount,
+              );
+              const budgetUsd = Number.isFinite(sr.requestedAmount)
+                ? sr.requestedAmount
+                : inputAmount;
+              const spendSlopUsd = Math.max(0.05, 0.02 * Math.abs(budgetUsd));
+              const quoteSpendMatchesBudget =
+                usdAmountMatchesRoute(rawQ.usd, inputAmount) ||
+                usdAmountMatchesRoute(rawQ.usd, budgetUsd) ||
+                Math.abs(rawQ.usd - budgetUsd) <= spendSlopUsd;
+              const pondTighterThanSor =
+                Number.isFinite(sorNumForCmp) &&
+                sorNumForCmp > 0 &&
+                rawQ.contracts + 1e-9 < sorNumForCmp;
+              if (debounceAligned || (quoteSpendMatchesBudget && pondTighterThanSor)) {
+                pondPick = rawQ;
+              }
+            }
+            const q = pondPick;
+            const usePondBuyQuote = q != null;
             return {
               ...state,
-              calculatedContracts: sorContracts ?? bookData.calculatedContracts,
+              calculatedContracts: usePondBuyQuote
+                ? q.contracts
+                : sorContracts ?? bookData.calculatedContracts,
               remainingUsd: bookData.remainingUsd,
-              spent:
-                sorCost !== undefined && sorFee !== undefined
+              spent: usePondBuyQuote
+                ? q.usd
+                : sorCost !== undefined && sorFee !== undefined
                   ? sorCost - sorFee
                   : bookData.spent,
-              tradingFee: sorFee ?? bookData.tradingFee,
-              estimatedCost: sorCost ?? bookData.estimatedCost,
+              tradingFee: usePondBuyQuote ? 0 : sorFee ?? bookData.tradingFee,
+              estimatedCost: usePondBuyQuote ? q.usd : sorCost ?? bookData.estimatedCost,
               grossReceive: null,
               sellTradingFee: null,
               netReceive: null,
@@ -2870,7 +3010,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         // any market-tokenization cost.
         const dflowQuoteData = dflowQuote.data;
         if (
-          state.tradingVenue === "dflow" &&
+          dflowPondQuoteSurface &&
           state.orderType === "market" &&
           dflowQuoteData &&
           Number.isFinite(dflowQuoteData.contracts) &&
@@ -2948,6 +3088,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       dflowUninitAtSubmit={dflowUninitAtSubmit}
       routePreviewAllowed={debouncedSorRoutePreviewAllowed}
       smartRoutingMarketKey={smartRoutingMarketKey}
+      predictFunFeeRateBps={predictMarketDetail?.feeRateBps}
+      dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}
     />
 		</>
   );

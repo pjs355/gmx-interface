@@ -33,6 +33,7 @@ import {
   executionRouteTrustedForSingleVenueMarketBuy,
   executionRoutePendingForToWinOverlay,
   executionRouteTrustedForSingleVenueMarketSell,
+  sorBuyPredictLegNetHeldShares,
 } from "@/trading/sor";
 import { getYesNoTeamLabels } from "./teamLabels";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
@@ -159,15 +160,24 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   /** Share balance snapshot from parent (single `useTradeBoxShareBalances` instance). */
   shareBalances: TradeBoxShareBalancesSnapshot;
   /**
-   * Snapshot of `accountsInitialized*` from the umbrella's `exchangeMatching.dflow`
-   * captured at the moment the user pressed Submit. The DFlow `/order` endpoint
-   * silently injects market tokenization when needed, so first-mint trades take
-   * longer than a normal swap — surface that explicitly under the trade box so
-   * users understand why a successful submit isn't yet reflected on-chain.
+   * True when the just-filled DFlow leg returned `initializedMarket` from POST
+   * submit (init-payer co-sign / first on-chain tokenization for that market).
+   * Drives the "creating this market" notice and matched-markets refresh nudges —
+   * not umbrella `accountsInitialized*` at click time (those can lag).
    */
   dflowUninitAtSubmit?: boolean;
   routePreviewAllowed: boolean;
   smartRoutingMarketKey: string;
+  /** Predict.fun market fee (bps) for net-held share display; omit when unknown. */
+  predictFunFeeRateBps?: number;
+  /**
+   * Kalshi/DFlow market buy: when the debounced `/order/quote` matches typed USD,
+   * E2E `data-leg-num-shares` uses these contracts instead of the SOR leg (Pond ground truth).
+   */
+  dflowOrderQuoteForSentinel?: {
+    contracts: number | null;
+    amountAlignedWithQuote: boolean;
+  };
 }
 
 export default function PredictionMarketTradeBoxUI({
@@ -211,6 +221,8 @@ export default function PredictionMarketTradeBoxUI({
   dflowUninitAtSubmit = false,
   routePreviewAllowed,
   smartRoutingMarketKey,
+  predictFunFeeRateBps,
+  dflowOrderQuoteForSentinel,
 }: PredictionMarketTradeBoxUIProps) {
   const { formatPrice } = useOddsDisplay();
   const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
@@ -1135,6 +1147,7 @@ export default function PredictionMarketTradeBoxUI({
           routePreviewAllowed={routePreviewAllowed}
           smartRoutingMarketKey={smartRoutingMarketKey}
           selectedOutcome={positionToSorOutcome(outcomeSelection)}
+          predictFunFeeRateBps={predictFunFeeRateBps}
           executionLoading={sorRoute.executionLoading}
           userSellSharesByVenue={userSellSharesByVenue}
           venueSelectionLocked={tradeInteractionLocked}
@@ -1495,11 +1508,12 @@ export default function PredictionMarketTradeBoxUI({
       {/*
         E2E / automation: single-venue market quote hook (visually hidden — `e2e/page-objects/tradebox.ts`
         `readLegAttrs`, `readQuotedBuyCostUsd`, `readQuotedSellReceiveUsd`, `expandSorDetailsIfCollapsed`).
-        Populated directly from `sorRoute.executionRoute` (the targeted plan that Submit will sign);
-        when the route is null the sentinel is absent and tests time out cleanly with their existing
-        "no SOR quote" error path. The `aria-expanded="true"` toggle keeps the page object's expand
-        helper a no-op without re-introducing the visible Details collapsible that was intentionally
-        removed from the UI.
+        Populated from `sorRoute.executionRoute` (the plan Submit signs). Kalshi/DFlow **market buy**:
+        when the debounced Pond `/order/quote` matches the typed USD amount, `data-leg-num-shares`
+        follows that quote’s contracts so QA matches post-fill `outAmount` / MyPositionsRow; otherwise
+        the SOR leg (Predict uses net-held when bps known). When the route is null the sentinel is absent.
+        The `aria-expanded="true"` toggle keeps the page object's expand helper a no-op without re-introducing
+        the visible Details collapsible that was intentionally removed from the UI.
       */}
       {tradingVenue !== "all" &&
         orderType === "market" &&
@@ -1508,6 +1522,20 @@ export default function PredictionMarketTradeBoxUI({
           const route = sorRoute.executionRoute;
           const leg = route.legs[0];
           const legSide = route.side === "buy" ? "market-buy" : "market-sell";
+          const dflowBuyQuoteShares =
+            leg.venue === "dflow" &&
+            legSide === "market-buy" &&
+            dflowOrderQuoteForSentinel?.amountAlignedWithQuote &&
+            dflowOrderQuoteForSentinel.contracts != null &&
+            Number.isFinite(dflowOrderQuoteForSentinel.contracts) &&
+            dflowOrderQuoteForSentinel.contracts > 0
+              ? dflowOrderQuoteForSentinel.contracts
+              : null;
+          /** E2E `data-leg-num-shares`: DFlow market-buy prefers Pond quote when in sync; else gross SOR / Predict net-held. */
+          const legNumSharesForDataQa =
+            legSide === "market-buy"
+              ? dflowBuyQuoteShares ?? sorBuyPredictLegNetHeldShares(leg, predictFunFeeRateBps)
+              : leg.shares;
           const priceCents = Math.round(leg.avgPrice * 100);
           const sellReceiveUsd =
             typeof leg.executionAmountUsd === "number" &&
@@ -1530,7 +1558,7 @@ export default function PredictionMarketTradeBoxUI({
                 data-qa="sor-leg"
                 data-leg-side={legSide}
                 data-leg-venue={leg.venue}
-                data-leg-num-shares={leg.shares}
+                data-leg-num-shares={legNumSharesForDataQa}
                 data-leg-price-cents={priceCents}
               />
               {route.side === "buy" && Number.isFinite(route.totalCost) && (

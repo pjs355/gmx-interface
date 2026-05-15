@@ -47,12 +47,16 @@ const RETRY_DELAY_MS = 2000;
  * ≥ Limitless withdraw + quote iterations + LI.FI on-chain + status poll (and parallel sweep).
  */
 
-export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<{
+export type LegExecutorResult = {
 	filled: boolean;
 	filledShares: number;
 	txHash?: string;
 	error?: string;
-}>;
+	/** DFlow: from successful POST submit (`initializedMarket`). */
+	initializedMarket?: boolean;
+};
+
+export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<LegExecutorResult>;
 
 /** LI.FI prefund hop index for UI (`current` is 1-based). */
 export type SorPrefundLegProgress = { current: number; total: number };
@@ -124,7 +128,16 @@ export interface UseSorExecutionResult {
 
 function buildLocalExecution(
 	route: RoutePlan,
-	legResults: Map<string, { filled: boolean; filledShares: number; txHash?: string; error?: string }>,
+	legResults: Map<
+		string,
+		{
+			filled: boolean;
+			filledShares: number;
+			txHash?: string;
+			error?: string;
+			initializedMarket?: boolean;
+		}
+	>,
 ): RouteExecution {
 	let totalFilledShares = 0;
 	let totalSpent = 0;
@@ -158,6 +171,9 @@ function buildLocalExecution(
 			shares: leg.shares,
 			filledShares,
 			txHash: result?.txHash,
+			...(result?.initializedMarket === true
+				? { initializedMarket: true as const }
+				: {}),
 			error: errorForLeg,
 			updatedAt: Date.now(),
 		};
@@ -230,12 +246,7 @@ export function useSorExecution(
 	}, [reportExecutionPhaseRef]);
 
 	const executeLegWithRetry = useCallback(
-		async (leg: RouteLeg, retriesLeft: number, side: "buy" | "sell" = "buy"): Promise<{
-			filled: boolean;
-			filledShares: number;
-			txHash?: string;
-			error?: string;
-		}> => {
+		async (leg: RouteLeg, retriesLeft: number, side: "buy" | "sell" = "buy"): Promise<LegExecutorResult> => {
 			try {
 				const result = await executeLeg(leg, side);
 				if (!result.filled && !(result.error?.trim())) {

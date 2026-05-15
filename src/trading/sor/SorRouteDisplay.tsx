@@ -18,6 +18,10 @@ import {
 	formatSorUsdRounded2,
 	formatToWinUsdDisplay,
 } from "./sorUiUtils";
+import {
+	sorBuyNetHeldTotalSharesFromLegs,
+	sorBuyPredictLegNetHeldShares,
+} from "./sorPredictNetHeldDisplay";
 
 interface SorRouteDisplayProps {
 	route: RoutePlan | null;
@@ -33,6 +37,8 @@ interface SorRouteDisplayProps {
 	executionPhase?: SorExecutionPhase;
 	/** During multi-hop LI.FI prefund, `(current/total)` for the moving-funds label. */
 	prefundLegProgress?: SorPrefundLegProgress | null;
+	/** Predict.fun fee bps — buy totals / bars use net-held shares when set. */
+	predictFunFeeRateBps?: number;
 }
 
 function formatPercent(n: number): string {
@@ -74,6 +80,7 @@ export function SorRouteDisplay({
 	executing,
 	executionPhase = "executing_trade",
 	prefundLegProgress = null,
+	predictFunFeeRateBps,
 }: SorRouteDisplayProps) {
 	const [routeExpired, setRouteExpired] = useState(false);
 	const executingDots = useAnimatedDots(400);
@@ -141,12 +148,28 @@ export function SorRouteDisplay({
 
 	const hasSavings = route.savingsVsSingleVenue.percentImprovement > 5;
 
+	const buyNetHeldTotal =
+		route.side === "buy"
+			? sorBuyNetHeldTotalSharesFromLegs(route.legs, predictFunFeeRateBps)
+			: route.totalShares;
+	const buyShareDenominator =
+		route.side === "buy" && buyNetHeldTotal > 0 ? buyNetHeldTotal : route.totalShares;
+
 	return (
 		<div style={{ ...styles.container, opacity: isStale && !isLoading ? 0.7 : 1 }}>
 			{/* Venue allocation bars */}
 			<div style={styles.barContainer}>
 			{route.legs.map((leg, index) => {
-				const widthPct = Math.max(8, (leg.shares / route.totalShares) * 100);
+				const legShareWeight =
+					route.side === "buy"
+						? sorBuyPredictLegNetHeldShares(leg, predictFunFeeRateBps)
+						: leg.shares;
+				const widthPct = Math.max(
+					8,
+					buyShareDenominator > 0
+						? (legShareWeight / buyShareDenominator) * 100
+						: 0,
+				);
 				return (
 					<div
 						key={`${leg.venue}-${index}`}
@@ -155,7 +178,7 @@ export function SorRouteDisplay({
 							width: `${widthPct}%`,
 							backgroundColor: VENUE_COLORS[leg.venue],
 						}}
-						title={`${VENUE_DISPLAY_NAMES[leg.venue]}: ${formatSorDetailsSharesDisplay(leg.shares)} shares`}
+						title={`${VENUE_DISPLAY_NAMES[leg.venue]}: ${formatSorDetailsSharesDisplay(legShareWeight)} shares`}
 					/>
 				);
 			})}
@@ -164,9 +187,18 @@ export function SorRouteDisplay({
 			{/* Summary */}
 			<div style={styles.summary}>
 				<div style={styles.summaryMain}>
-					<span style={styles.totalShares}>{formatSorDetailsSharesDisplay(route.totalShares)} shares</span>
+					<span style={styles.totalShares}>
+						{formatSorDetailsSharesDisplay(
+							route.side === "buy" ? buyNetHeldTotal : route.totalShares,
+						)}{" "}
+						shares
+					</span>
 					<span style={styles.totalPrice}>
-						at {route.totalShares > 0 ? `$${formatSorUsdRounded2(route.totalCost / route.totalShares)}` : "--"}/share all-in
+						at{" "}
+						{buyShareDenominator > 0
+							? `$${formatSorUsdRounded2(route.totalCost / buyShareDenominator)}`
+							: "--"}
+						/share all-in
 					</span>
 				</div>
 				{hasSavings && (
@@ -197,7 +229,14 @@ export function SorRouteDisplay({
 						{VENUE_DISPLAY_NAMES[leg.venue]}
 						</div>
 						<div style={styles.legDetails}>
-							<span>{formatSorDetailsSharesDisplay(leg.shares)} @ {(leg.avgPrice * 100).toFixed(0)}¢</span>
+							<span>
+								{formatSorDetailsSharesDisplay(
+									route.side === "buy"
+										? sorBuyPredictLegNetHeldShares(leg, predictFunFeeRateBps)
+										: leg.shares,
+								)}{" "}
+								@ {(leg.avgPrice * 100).toFixed(0)}¢
+							</span>
 							<span style={styles.legFee}>fee ${formatSorFeeUsdDisplay(leg.fee)}</span>
 							{leg.bridge && (
 								<span style={styles.legBridge}>
@@ -240,7 +279,11 @@ export function SorRouteDisplay({
 			{/* Warnings */}
 			{route.insufficientLiquidity && (
 				<div style={styles.warning}>
-					Insufficient liquidity — only {formatSorDetailsSharesDisplay(route.totalShares)} shares available
+					Insufficient liquidity — only{" "}
+					{formatSorDetailsSharesDisplay(
+						route.side === "buy" ? buyNetHeldTotal : route.totalShares,
+					)}{" "}
+					shares available
 				</div>
 			)}
 

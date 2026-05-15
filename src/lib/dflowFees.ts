@@ -6,6 +6,7 @@
  * ## Spec reference (do not guess coefficients from conflicting summaries)
  *
  * - Primary formula (pond): https://pond.dflow.net/build/prediction-markets/prediction-market-fees
+ * - Tier taker scale (Frost default **0.09**) vs printed **0.07** in the same doc — sizing follows the tier row; rebate caps only limit rebate eligibility.
  * - Tier/cookbook tensions: see `DFLOW_FEES_SETTLEMENT_RECIPE_PAGE`; settlement parity uses quote checks.
  *
  * ## Buy vs sell
@@ -24,6 +25,12 @@ export const DFLOW_FEES_SETTLEMENT_RECIPE_PAGE =
 export const DFLOW_QUOTE_API_OPENAPI =
 	"https://pond.dflow.net/openapi/build/trading-api/openapi.json";
 
+/** Default taker coefficient (Frost tier) for the primary rounded term. */
+export const DFLOW_DEFAULT_TAKER_FEE_SCALE = 0.09;
+
+/** Second term before USDC conversion; keep 0.01 until maker-tier parity is confirmed. */
+const DFLOW_FEE_SECOND_SCALE = 0.01;
+
 /** Upper bound on share count for binary searches (prevents runaway). */
 const DFLOW_SHARE_SEARCH_CEIL = 1e18;
 
@@ -31,17 +38,27 @@ function fin(n: number): boolean {
 	return Number.isFinite(n) && n > 0;
 }
 
+export type CalculateDflowFeeOptions = {
+	takerFeeScale?: number;
+};
+
 /**
- * Estimated taker fee in **USDC** for Frost-tier decomposition on the pond formula page.
- *
- * @param contracts — C (shares / outcome tokens).
- * @param price — fill probability p ∈ (0, 1).
+ * Estimated taker fee in **USDC** using Pond’s decomposition; primary scale defaults to Frost **0.09**.
  */
-export function calculateDflowFee(contracts: number, price: number): number {
+export function calculateDflowFee(
+	contracts: number,
+	price: number,
+	opts?: CalculateDflowFeeOptions,
+): number {
 	if (!fin(contracts) || !fin(price) || price >= 1) return 0;
+	const rawScale = opts?.takerFeeScale;
+	const takerScale =
+		rawScale != null && Number.isFinite(rawScale) && rawScale > 0
+			? rawScale
+			: DFLOW_DEFAULT_TAKER_FEE_SCALE;
 	const pq = price * (1 - price);
-	const basePart = Math.ceil(0.07 * contracts * pq * 100) / 100;
-	const addPart = 0.01 * contracts * pq;
+	const basePart = Math.ceil(takerScale * contracts * pq * 100) / 100;
+	const addPart = DFLOW_FEE_SECOND_SCALE * contracts * pq;
 	const feeInContracts = basePart + addPart;
 	return Math.round(feeInContracts * price * 100) / 100;
 }

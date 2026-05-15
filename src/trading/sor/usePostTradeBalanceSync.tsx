@@ -8,6 +8,8 @@ import {
 	type ReactNode,
 } from "react";
 import { type QueryClient } from "@tanstack/react-query";
+import type { AccountVenueKey } from "@/context/AccountDataContext";
+import { useAccountData } from "@/context/AccountDataContext";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import {
 	COLLATERAL_TOKENS_QUERY_KEY,
@@ -71,6 +73,9 @@ const DFLOW_POST_TRADE_MAX_ATTEMPTS = 15;
  */
 const POLYMARKET_POST_TRADE_POLL_MS = 2_000;
 const POLYMARKET_POST_TRADE_MAX_ATTEMPTS = 30;
+/** LevelUp: RPC-backed `tokenBalances` — fast cadence like Polymarket so the row clears quickly. */
+const LEVELUP_POST_TRADE_POLL_MS = 2_000;
+const LEVELUP_POST_TRADE_MAX_ATTEMPTS = 30;
 /**
  * Per-task cap inside `Promise.allSettled` so a single slow refetch (notably
  * `req.refetchCollateral()` after a LiFi prefund — `/portfolio/cash-summary`
@@ -107,6 +112,25 @@ export type PostTradeSyncRequest = {
 	shareIdentityCtx?: ShareIdentityRouteLegContext | null;
 };
 
+/** Canonical collateral + venue position refetch (same as `AccountData.refresh`). */
+export type PostTradeAccountRefetch = {
+	refreshVenuePositions: (venue?: AccountVenueKey) => Promise<void>;
+	refreshCash: () => Promise<void>;
+};
+
+export type BlindPostTradeBalanceRefreshRequest = {
+	queryClient: QueryClient;
+	syncUiKey: string | null;
+	accountVenues: AccountVenueKey[];
+	includeLevelUpRpc: boolean;
+	refreshLevelUpPositions: () => Promise<void>;
+	iterations?: number;
+	intervalMs?: number;
+};
+
+const BLIND_REFRESH_ITERATIONS = 8;
+const BLIND_REFRESH_INTERVAL_MS = 2_000;
+
 type PendingTarget =
 	| {
 			kind: "shares";
@@ -132,6 +156,10 @@ function pendingHasPolymarketShares(pending: PendingTarget[]): boolean {
 	return pending.some(
 		(t) => t.kind === "shares" && t.venue === "polymarket",
 	);
+}
+
+function pendingHasLevelUp(pending: PendingTarget[]): boolean {
+	return pending.some((t) => t.kind === "levelup");
 }
 
 function readVenueShares(
@@ -266,18 +294,27 @@ function buildWatchTargets(
 		if (baselineCash == null) continue;
 		out.push({ kind: "cash", chain: chainKey, baselineCash });
 	}
-	if (
-		deltas.levelUp &&
-		baseline.levelUp &&
-		baseline.levelUp.marketId === deltas.levelUp.marketId
-	) {
+	if (deltas.levelUp && baseline.levelUp) {
+		const routeId = deltas.levelUp.marketId.trim();
+		const baselineId = baseline.levelUp.marketId.trim();
+		if (
+			routeId &&
+			baselineId &&
+			routeId !== baselineId &&
+			import.meta.env.DEV
+		) {
+			console.warn(
+				"[postTradeSync] levelUp leg id differs from baseline page id — using baseline id for reads",
+				{ routeMarketId: routeId, baselineMarketId: baselineId },
+			);
+		}
 		const baselineLevelUp =
 			deltas.levelUp.side === "yes"
 				? baseline.levelUp.yes
 				: baseline.levelUp.no;
 		out.push({
 			kind: "levelup",
-			marketId: deltas.levelUp.marketId,
+			marketId: baselineId,
 			side: deltas.levelUp.side,
 			baselineLevelUp,
 		});
@@ -294,55 +331,117 @@ function valueDiverged(
 	return Math.abs(observed - baseline) > tol;
 }
 
-async function refetchForPending(
-	queryClient: QueryClient,
-	pending: PendingTarget[],
-	req: PostTradeSyncRequest,
-): Promise<boolean> {
-	const venueSharePending = new Set<VenuePosition["venue"]>();
-	let cashPending = false;
-	let levelUpPending = false;
-
-	for (const t of pending) {
-		if (t.kind === "shares") venueSharePending.add(t.venue);
-		else if (t.kind === "cash") cashPending = true;
-		else if (t.kind === "levelup") levelUpPending = true;
+function venueToAccountVenue(
+	venue: VenuePosition["venue"],
+): AccountVenueKey | null {
+	switch (venue) {
+		case "polymarket":
+			return "polymarket";
+		case "predictfun":
+			return "predict";
+		case "dflow":
+			return "dflow";
+		case "limitless":
+			return "limitless";
+		default:
+			return null;
 	}
+}
 
+function exitBurstSpecFromPending(pending: readonly PendingTarget[]): {
+	accountVenues: AccountVenueKey[];
+	includeLevelUp: boolean;
+	includeCash: boolean;
+} {
+	const accountVenues: AccountVenueKey[] = [];
+	const seen = new Set<AccountVenueKey>();
+	let includeLevelUp = false;
+	let includeCash = false;
+	for (const t of pending) {
+		if (t.kind === "shares") {
+			const k = venueToAccountVenue(t.venue);
+			if (k && !seen.has(k)) {
+				seen.add(k);
+				accountVenues.push(k);
+			}
+		} else if (t.kind === "levelup") {
+			includeLevelUp = true;
+		} else if (t.kind === "cash") {
+			includeCash = true;
+		}
+	}
+	return { accountVenues, includeLevelUp, includeCash };
+}
+
+/** Minimal `PendingTarget[]` so exit-burst logic matches blind-refresh intent. */
+function buildSyntheticBlindPending(
+	accountVenues: readonly AccountVenueKey[],
+	includeLevelUpRpc: boolean,
+): PendingTarget[] {
+	const out: PendingTarget[] = [];
+	const map: Record<AccountVenueKey, VenuePosition["venue"]> = {
+		polymarket: "polymarket",
+		predict: "predictfun",
+		dflow: "dflow",
+		limitless: "limitless",
+	};
+	for (const av of accountVenues) {
+		out.push({
+			kind: "shares",
+			venue: map[av],
+			identity: `__blind__:${av}`,
+			baselineShares: 0,
+		});
+	}
+	if (includeLevelUpRpc) {
+		out.push({
+			kind: "levelup",
+			marketId: "",
+			side: "yes",
+			baselineLevelUp: 0,
+		});
+	}
+	out.push({
+		kind: "cash",
+		chain: "base",
+		baselineCash: 0,
+	});
+	return out;
+}
+
+type RefetchPassOpts = {
+	venueShareKeys: AccountVenueKey[];
+	predictMarketSupplement: boolean;
+	dflowOutcomeBalance: boolean;
+	limitlessPortfolioAndCollateral: boolean;
+	levelUpRpc: boolean;
+	cash: boolean;
+};
+
+/**
+ * One hydration pass: canonical venue refetches via AccountData, narrow
+ * `queryClient` refetches only where AccountData does not cover (Predict market
+ * detail rows, DFlow outcome balance mint rows, Limitless portfolio subtree).
+ */
+async function runPostTradeRefetchPass(
+	queryClient: QueryClient,
+	req: Pick<PostTradeSyncRequest, "refreshLevelUpPositions">,
+	account: PostTradeAccountRefetch,
+	opts: RefetchPassOpts,
+): Promise<void> {
 	const tasks: Promise<unknown>[] = [];
 	const pushTask = (label: string, p: Promise<unknown>): void => {
-		// Per-task cap: a single slow refetch (notably `req.refetchCollateral()`
-		// after a LiFi prefund — `/portfolio/cash-summary` has no client-side
-		// timeout) must not stall the polymarket-positions polling cadence. The
-		// outer `Promise.allSettled` already swallows rejections, so a timeout
-		// here only frees the loop to start its next iteration.
 		tasks.push(withTimeout(p, REFETCH_TASK_TIMEOUT_MS, label));
 	};
-	if (venueSharePending.has("polymarket")) {
-		// `refetchQueries({ type: "all" })` instead of `invalidateQueries` so the
-		// fetch fires even if the trade-box observer momentarily detached during
-		// LiFi-induced re-renders. Same rationale as the predictfun branch below.
+	for (const v of opts.venueShareKeys) {
 		pushTask(
-			"postTradeSync polymarket-positions",
-			queryClient.refetchQueries({
-				queryKey: ["polymarket-positions"],
-				type: "all",
-			}),
+			`postTradeSync AccountData positions(${v})`,
+			account.refreshVenuePositions(v),
 		);
 	}
-	if (venueSharePending.has("predictfun")) {
-		// Same source as page load / trade box: GET /api/predict/positions. Await refetch
-		// so `getQueryData` after this sees fresh REST, not just a scheduled invalidation.
-		pushTask(
-			"postTradeSync predict-positions",
-			queryClient.refetchQueries({
-				queryKey: ["predict-positions"],
-				type: "all",
-			}),
-		);
-		// Trade box `useTradeBoxShareBalances` maps held tokens → YES/NO via `inferPredictSideFromMarketDetail`
-		// (`usePredictMarketDetail` / `["predict-market", id]`). Refetch so acronym outcomes and
-		// order stay in sync with positions without a full page reload.
+	if (opts.predictMarketSupplement) {
+		// `AccountData.refresh.positions("predict")` does not refetch `["predict-market", …]`
+		// — trade box YES/NO mapping uses that query (`useTradeBoxShareBalances`).
 		pushTask(
 			"postTradeSync predict-market",
 			queryClient.refetchQueries({
@@ -351,26 +450,41 @@ async function refetchForPending(
 			}),
 		);
 	}
-	if (venueSharePending.has("dflow")) {
-		pushTask(
-			"postTradeSync dflow-positions",
-			queryClient.invalidateQueries({ queryKey: ["dflow-positions"] }),
-		);
+	if (opts.dflowOutcomeBalance) {
 		pushTask(
 			"postTradeSync dflow-outcome-balance",
-			queryClient.invalidateQueries({ queryKey: ["dflow-outcome-balance"] }),
+			queryClient.refetchQueries({
+				queryKey: ["dflow-outcome-balance"],
+				type: "all",
+			}),
 		);
 	}
-	if (venueSharePending.has("limitless")) {
+	if (opts.limitlessPortfolioAndCollateral) {
 		pushTask(
 			"postTradeSync limitless",
-			queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] }),
+			queryClient.refetchQueries({
+				queryKey: [...LIMITLESS_QUERY_ROOT],
+				type: "all",
+			}),
 		);
-		debugLimitlessPortfolio("postTradeSync: invalidated LIMITLESS_QUERY_ROOT", {
+		pushTask(
+			"postTradeSync limitless-collateral",
+			queryClient.refetchQueries({
+				queryKey: [COLLATERAL_TOKENS_QUERY_KEY],
+				type: "all",
+			}),
+		);
+		debugLimitlessPortfolio("postTradeSync: refetched LIMITLESS_QUERY_ROOT", {
 			queryKey: [...LIMITLESS_QUERY_ROOT],
 		});
 	}
-	if (cashPending) {
+	if (opts.levelUpRpc) {
+		pushTask(
+			"postTradeSync refreshLevelUpPositions",
+			req.refreshLevelUpPositions(),
+		);
+	}
+	if (opts.cash) {
 		pushTask(
 			"postTradeSync bridge-funding-balances",
 			queryClient.invalidateQueries({
@@ -378,19 +492,77 @@ async function refetchForPending(
 			}),
 		);
 		pushTask(
-			"postTradeSync collateral-tokens",
+			"postTradeSync collateral-query-keys",
 			queryClient.invalidateQueries({ queryKey: [COLLATERAL_TOKENS_QUERY_KEY] }),
 		);
-		pushTask("postTradeSync refetchCollateral", req.refetchCollateral());
-	}
-	if (levelUpPending) {
-		pushTask(
-			"postTradeSync refreshLevelUpPositions",
-			req.refreshLevelUpPositions(),
-		);
+		pushTask("postTradeSync AccountData.refresh.cash", account.refreshCash());
 	}
 	await Promise.allSettled(tasks);
-	return levelUpPending;
+}
+
+function refetchPassOptsFromPending(pending: readonly PendingTarget[]): RefetchPassOpts {
+	const venueShareKeys: AccountVenueKey[] = [];
+	const seen = new Set<AccountVenueKey>();
+	let predictMarketSupplement = false;
+	let dflowOutcomeBalance = false;
+	let limitlessPortfolioAndCollateral = false;
+	let levelUpRpc = false;
+	let cash = false;
+	for (const t of pending) {
+		if (t.kind === "shares") {
+			const k = venueToAccountVenue(t.venue);
+			if (k && !seen.has(k)) {
+				seen.add(k);
+				venueShareKeys.push(k);
+			}
+			if (t.venue === "predictfun") predictMarketSupplement = true;
+			if (t.venue === "dflow") dflowOutcomeBalance = true;
+			if (t.venue === "limitless") limitlessPortfolioAndCollateral = true;
+		} else if (t.kind === "levelup") {
+			levelUpRpc = true;
+		} else if (t.kind === "cash") {
+			cash = true;
+		}
+	}
+	return {
+		venueShareKeys,
+		predictMarketSupplement,
+		dflowOutcomeBalance,
+		limitlessPortfolioAndCollateral,
+		levelUpRpc,
+		cash,
+	};
+}
+
+async function refetchForPending(
+	queryClient: QueryClient,
+	pending: PendingTarget[],
+	req: PostTradeSyncRequest,
+	account: PostTradeAccountRefetch,
+): Promise<boolean> {
+	const opts = refetchPassOptsFromPending(pending);
+	await runPostTradeRefetchPass(queryClient, req, account, opts);
+	return opts.levelUpRpc;
+}
+
+async function runPostTradeExitBurst(
+	queryClient: QueryClient,
+	req: Pick<PostTradeSyncRequest, "refreshLevelUpPositions">,
+	account: PostTradeAccountRefetch,
+	pendingSnapshot: readonly PendingTarget[],
+): Promise<void> {
+	const spec = exitBurstSpecFromPending(pendingSnapshot);
+	await runPostTradeRefetchPass(queryClient, req, account, {
+		venueShareKeys: spec.accountVenues,
+		predictMarketSupplement: spec.accountVenues.includes("predict"),
+		dflowOutcomeBalance: spec.accountVenues.includes("dflow"),
+		limitlessPortfolioAndCollateral: spec.accountVenues.includes("limitless"),
+		levelUpRpc: spec.includeLevelUp,
+		cash: spec.includeCash,
+	});
+	if (spec.includeLevelUp) {
+		await sleep(LEVELUP_READ_DELAY_MS);
+	}
 }
 
 async function refetchCollateralCachesForClaim(
@@ -412,6 +584,11 @@ function sleep(ms: number): Promise<void> {
 
 export type PostTradeBalanceSyncApi = {
 	start: (req: PostTradeSyncRequest) => void;
+	/**
+	 * When baseline correlation fails (e.g. `routeId` drift), still hammer venue
+	 * queries + LevelUp RPC + cash for a bounded window so the UI converges.
+	 */
+	startBlindBalanceRefresh: (req: BlindPostTradeBalanceRefreshRequest) => void;
 	/**
 	 * After a winnings claim, keep the header cash skeleton up until the
 	 * collateral query shows a total that diverges from `baselineTotalCash`
@@ -442,6 +619,90 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 	const [pendingSyncUiKey, setPendingSyncUiKey] = useState<string | null>(null);
 	const [claimCashSyncPending, setClaimCashSyncPending] = useState(false);
 
+	const { refresh } = useAccountData();
+	const accountPostTradeRef = useRef<PostTradeAccountRefetch>({
+		refreshVenuePositions: async () => {},
+		refreshCash: async () => {},
+	});
+	accountPostTradeRef.current = {
+		refreshVenuePositions: (venue) => refresh.positions(venue),
+		refreshCash: () => refresh.cash(),
+	};
+
+	const startBlindBalanceRefresh = useCallback(
+		(breq: BlindPostTradeBalanceRefreshRequest) => {
+			const session = ++sessionRef.current;
+			setPendingSyncUiKey(breq.syncUiKey ?? null);
+
+			const wallClockTimer = setTimeout(() => {
+				if (sessionRef.current !== session) return;
+				if (import.meta.env.DEV) {
+					console.warn(
+						"[postTradeSync] blind refresh wall-clock fail-safe; clearing spinner",
+						{ wallClockMs: POST_TRADE_SYNC_WALL_CLOCK_MS },
+					);
+				}
+				sessionRef.current += 1;
+				setPendingSyncUiKey(null);
+			}, POST_TRADE_SYNC_WALL_CLOCK_MS);
+
+			const iterations = breq.iterations ?? BLIND_REFRESH_ITERATIONS;
+			const intervalMs = breq.intervalMs ?? BLIND_REFRESH_INTERVAL_MS;
+
+			void (async () => {
+				try {
+					const account = accountPostTradeRef.current;
+					const reqSlice = {
+						refreshLevelUpPositions: breq.refreshLevelUpPositions,
+					};
+					for (let i = 0; i < iterations; i++) {
+						if (sessionRef.current !== session) return;
+						await runPostTradeRefetchPass(
+							breq.queryClient,
+							reqSlice,
+							account,
+							{
+								venueShareKeys: [...breq.accountVenues],
+								predictMarketSupplement:
+									breq.accountVenues.includes("predict"),
+								dflowOutcomeBalance: breq.accountVenues.includes("dflow"),
+								limitlessPortfolioAndCollateral:
+									breq.accountVenues.includes("limitless"),
+								levelUpRpc: breq.includeLevelUpRpc,
+								cash: true,
+							},
+						);
+						if (breq.includeLevelUpRpc) {
+							await sleep(LEVELUP_READ_DELAY_MS);
+							if (sessionRef.current !== session) return;
+						}
+						if (i < iterations - 1) {
+							await sleep(intervalMs);
+							if (sessionRef.current !== session) return;
+						}
+					}
+					if (sessionRef.current === session) {
+						await runPostTradeExitBurst(
+							breq.queryClient,
+							reqSlice,
+							account,
+							buildSyntheticBlindPending(
+								breq.accountVenues,
+								breq.includeLevelUpRpc,
+							),
+						);
+					}
+				} finally {
+					clearTimeout(wallClockTimer);
+					if (sessionRef.current === session) {
+						setPendingSyncUiKey(null);
+					}
+				}
+			})();
+		},
+		[],
+	);
+
 	const start = useCallback(
 		(req: PostTradeSyncRequest) => {
 			const session = ++sessionRef.current;
@@ -468,18 +729,21 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 
 			void (async () => {
 				try {
-					let pending = buildWatchTargets(
+					const account = accountPostTradeRef.current;
+					const initialPending = buildWatchTargets(
 						req.route,
 						req.execution,
 						req.baseline,
 						req.shareIdentityCtx,
 					);
-					if (pending.length === 0) {
+					if (initialPending.length === 0) {
 						if (sessionRef.current === session) {
 							setPendingSyncUiKey(null);
 						}
 						return;
 					}
+
+					let pending = initialPending;
 
 					for (let attempt = 0; ; attempt++) {
 						if (sessionRef.current !== session) return;
@@ -491,16 +755,22 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 						 */
 						const dflowPoll = pendingHasDflowShares(pending);
 						const polyPoll = !dflowPoll && pendingHasPolymarketShares(pending);
+						const levelUpPoll =
+							!dflowPoll && !polyPoll && pendingHasLevelUp(pending);
 						const maxAttempts = dflowPoll
 							? DFLOW_POST_TRADE_MAX_ATTEMPTS
 							: polyPoll
 								? POLYMARKET_POST_TRADE_MAX_ATTEMPTS
-								: MAX_REFETCH_ATTEMPTS;
+								: levelUpPoll
+									? LEVELUP_POST_TRADE_MAX_ATTEMPTS
+									: MAX_REFETCH_ATTEMPTS;
 						const pollMs = dflowPoll
 							? DFLOW_POST_TRADE_POLL_MS
 							: polyPoll
 								? POLYMARKET_POST_TRADE_POLL_MS
-								: POLL_INTERVAL_MS;
+								: levelUpPoll
+									? LEVELUP_POST_TRADE_POLL_MS
+									: POLL_INTERVAL_MS;
 
 						if (attempt >= maxAttempts) break;
 
@@ -508,6 +778,7 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 							req.queryClient,
 							pending,
 							req,
+							account,
 						);
 						if (sessionRef.current !== session) return;
 
@@ -554,6 +825,12 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 					}
 
 					if (sessionRef.current === session) {
+						await runPostTradeExitBurst(
+							req.queryClient,
+							req,
+							account,
+							initialPending,
+						);
 						setPendingSyncUiKey(null);
 					}
 				} finally {
@@ -609,8 +886,8 @@ export function PostTradeBalanceSyncProvider({ children }: { children: ReactNode
 	);
 
 	const api = useMemo<PostTradeBalanceSyncApi>(
-		() => ({ start, startCashAfterClaim }),
-		[start, startCashAfterClaim],
+		() => ({ start, startBlindBalanceRefresh, startCashAfterClaim }),
+		[start, startBlindBalanceRefresh, startCashAfterClaim],
 	);
 
 	return (
@@ -632,7 +909,7 @@ export function usePostTradeBalanceSync(): PostTradeBalanceSyncApi {
 				"[usePostTradeBalanceSync] No PostTradeBalanceSyncProvider in tree — sync disabled",
 			);
 		}
-		return { start: () => {}, startCashAfterClaim: () => {} };
+		return { start: () => {}, startBlindBalanceRefresh: () => {}, startCashAfterClaim: () => {} };
 	}
 	return ctx;
 }

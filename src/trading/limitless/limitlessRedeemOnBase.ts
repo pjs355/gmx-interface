@@ -1,5 +1,7 @@
 import { ethers } from "ethers";
 import { getUSDCAddress } from "@/config/addresses";
+import { BASE } from "@/config/chains";
+import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 
 const GET_CTF_ABI = ["function getCtf() view returns (address)"] as const;
 
@@ -64,6 +66,47 @@ export function readLimitlessMarketVenueWire(raw: unknown): LimitlessMarketVenue
 	return out;
 }
 
+async function broadcastLimitlessRedeemTx(opts: {
+	baseTxClient: SendTransactionCapable | null | undefined;
+	signer: ethers.Signer;
+	to: string;
+	data: string;
+}): Promise<string> {
+	const to = ethers.getAddress(opts.to) as `0x${string}`;
+	const data = opts.data as `0x${string}`;
+	if (opts.baseTxClient?.sendTransaction) {
+		const sent = await opts.baseTxClient.sendTransaction({
+			to,
+			data,
+			value: 0n,
+			chainId: BASE,
+		});
+		const h =
+			typeof sent === "string"
+				? sent
+				: sent &&
+					  typeof sent === "object" &&
+					  typeof (sent as { hash?: unknown }).hash === "string"
+					? (sent as { hash: string }).hash
+					: "";
+		if (!h || !/^0x[0-9a-fA-F]{64}$/i.test(h)) {
+			throw new Error(
+				"Limitless redeem did not return a valid transaction hash from the sponsored sender.",
+			);
+		}
+		const p = opts.signer.provider;
+		if (p) await p.waitForTransaction(h);
+		return h;
+	}
+	const tx = await opts.signer.sendTransaction({
+		to,
+		data,
+		value: 0,
+	});
+	const waited = await tx.wait();
+	return waited?.hash ?? tx.hash;
+}
+
 /**
  * Single Base transaction: redeem Limitless winning outcome tokens held by the
  * maker EOA — CTF `redeemPositions` for standard legs, or Polymarket-style
@@ -84,6 +127,11 @@ export async function redeemLimitlessWinningPositionOnBase(args: {
 	/** When venue hints are incomplete, load public market JSON by slug. */
 	marketSlug?: string;
 	fetchMarketBySlug: (slug: string) => Promise<unknown>;
+	/**
+	 * Same Privy-sponsored Base path as Limitless JIT approvals (`getLimitlessBaseTxClientForAddress`).
+	 * When set, redeem does not spend native gas on the embedded EOA.
+	 */
+	baseTxClient?: SendTransactionCapable | null;
 }): Promise<string> {
 	const slug = args.marketSlug?.trim();
 	let exchange = args.limitlessVenueExchange?.trim();
@@ -146,13 +194,12 @@ export async function redeemLimitlessWinningPositionOnBase(args: {
 			args.conditionId,
 			amounts,
 		]);
-		const tx = await args.signer.sendTransaction({
+		return await broadcastLimitlessRedeemTx({
+			baseTxClient: args.baseTxClient,
+			signer: args.signer,
 			to: adapterAddr,
 			data,
-			value: 0,
 		});
-		const waited = await tx.wait();
-		return waited?.hash ?? tx.hash;
 	}
 
 	const indexSet = args.resolvedOutcome === "yes" ? 1 : 2;
@@ -163,11 +210,10 @@ export async function redeemLimitlessWinningPositionOnBase(args: {
 		args.conditionId,
 		[indexSet],
 	]);
-	const tx = await args.signer.sendTransaction({
+	return await broadcastLimitlessRedeemTx({
+		baseTxClient: args.baseTxClient,
+		signer: args.signer,
 		to: ctf,
 		data,
-		value: 0,
 	});
-	const waited = await tx.wait();
-	return waited?.hash ?? tx.hash;
 }

@@ -18,11 +18,16 @@ import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
 import { useFundingLifiExecution } from "@/trading/lifi/useFundingLifiExecution";
 import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
-import type { LifiStatusResponse, LifiQuoteResponse } from "@/types/trading";
+import type {
+	BaseSmartWalletPendingUsdc,
+	LifiQuoteResponse,
+	LifiStatusResponse,
+} from "@/types/trading";
 import { withTimeout } from "@/utils/withTimeout";
 import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
 import type {
 	DflowOrderParams,
+	DflowOrderResponse,
 	DflowOrderStatusResponse,
 	DflowOrderSubmitBody,
 	DflowOrderSubmitResponse,
@@ -78,6 +83,7 @@ import { clampMarketBuyAmountToWallet } from "@/trading/sor/postBridgeOrderResiz
 import { clampMarketSellSharesToCtfBalance } from "@/trading/polymarket/polymarketSellShareClamp";
 import { clampPredictSellSharesToOutcomeBalance } from "@/trading/predict/predictSellShareClamp";
 import { readPredictOutcomeShareWei } from "@/trading/predict/usePredictBnbBalances";
+import { predictFunNetOutcomeSharesHeldAfterBuy } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePredict";
 import {
 	floorSharesAtDecimals,
 	floorSharesAtDecimalsAsString,
@@ -90,6 +96,7 @@ import {
 import { predictionBuyMakerMicroUsdc } from "@/trading/sor/predictionBuyCollateralMicro";
 import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
+import { humanFromDflowBaseUnits } from "@/trading/dflow/dflowOutcomeAmount";
 import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
 import { getUSDCAddress, SOLANA_USDC_MINT } from "@/config/addresses";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
@@ -109,6 +116,18 @@ import {
  */
 function floorLimitlessFokMakerAmountHuman(n: number): number {
 	return floorSharesAtDecimals(n, 6);
+}
+
+/** `pendingUsdcMicro` from `GET /portfolio/base-smart-wallet-pending-usdc`. */
+function scwPendingMicrosToHumanUsd(micro: string | undefined): number {
+	if (typeof micro !== "string") return 0;
+	const t = micro.trim();
+	if (!t || !/^\d+$/.test(t)) return 0;
+	try {
+		return Number(BigInt(t)) / 1e6;
+	} catch {
+		return 0;
+	}
 }
 
 /**
@@ -147,6 +166,8 @@ type LegResult = {
 	filledShares: number;
 	txHash?: string;
 	error?: string;
+	/** DFlow: from POST submit `initializedMarket` when the init-payer co-signed. */
+	initializedMarket?: boolean;
 };
 
 /**
@@ -302,6 +323,7 @@ export interface UseSorLegExecutorDeps {
 			amountHuman: number;
 			destination: string;
 		}) => Promise<unknown>;
+		getBaseSmartWalletPendingUsdc: () => Promise<BaseSmartWalletPendingUsdc>;
 	};
 
 	market: PredictionMarket;
@@ -568,7 +590,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					}
 
 					const position: "yes" | "no" = leg.outcome === "A" ? "yes" : "no";
-					const shares = Math.round(leg.shares);
+					const shares = Math.floor(leg.shares);
 					const signingPrice = resolveLevelUpSigningPrice({
 						leg,
 						side,
@@ -1077,6 +1099,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					}
 
 					let signature: string;
+					let orderQuote: DflowOrderResponse | undefined;
+					let dflowInitializedMarket = false;
 					try {
 						const r = await quoteSignAndSubmitDflowOrder({
 							privateApi,
@@ -1092,6 +1116,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							submitExtras,
 						});
 						signature = r.signature;
+						orderQuote = r.orderQuote;
+						dflowInitializedMarket = r.initializedMarket;
 					} catch (e: unknown) {
 						const msg =
 							e instanceof Error ? e.message : "Kalshi order failed";
@@ -1102,10 +1128,19 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						registerPendingDflowOutcomeMints([outputMint.trim()]);
 					}
 
+					let filledShares = leg.shares;
+					if (side === "buy" && orderQuote) {
+						const fromOut = humanFromDflowBaseUnits(orderQuote.outAmount);
+						if (fromOut != null && fromOut > 0) {
+							filledShares = fromOut;
+						}
+					}
+
 					return {
 						filled: true,
-						filledShares: leg.shares,
+						filledShares,
 						txHash: signature,
+						initializedMarket: dflowInitializedMarket,
 					};
 				}
 
@@ -1533,7 +1568,13 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							return {
 								filled: true,
 								filledShares:
-									side === "sell" ? leg.shares * predictSellScale : leg.shares,
+									side === "sell"
+										? leg.shares * predictSellScale
+										: predictFunNetOutcomeSharesHeldAfterBuy(
+												leg.shares,
+												leg.avgPrice,
+												predictMarketDetail.feeRateBps,
+											),
 								txHash: (resp as { orderHash?: string } | undefined)?.orderHash,
 							};
 						} catch (e: unknown) {
@@ -1609,11 +1650,16 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							side,
 							amount: amountStr,
 						});
+						const grossPredictBuyFilled = leg.shares * predictPostBridgeScale;
 						return {
 							filled: true,
 							filledShares:
 								side === "buy"
-									? leg.shares * predictPostBridgeScale
+									? predictFunNetOutcomeSharesHeldAfterBuy(
+											grossPredictBuyFilled,
+											leg.avgPrice,
+											predictMarketDetail.feeRateBps,
+										)
 									: leg.shares * predictSellScale,
 							txHash: (resp as { orderHash?: string })?.orderHash,
 						};
@@ -1752,15 +1798,43 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					opts.budgetUsdOverride > 0
 						? opts.budgetUsdOverride
 						: leg.executionAmountUsd + Math.max(0, bridge.estimatedCost ?? 0);
-				let balancesHuman = await readFundingStableBalancesHuman(fundingAddresses);
+				const balancesHuman =
+					await readFundingStableBalancesHuman(fundingAddresses);
+				const levelUpBaseBridgedPrefund =
+					leg.venue === "levelup" && bridge.toChain === "base";
+				let scwPendingUsdcHuman = 0;
+				if (levelUpBaseBridgedPrefund) {
+					try {
+						const pendingRow =
+							await privateApi.getBaseSmartWalletPendingUsdc();
+						scwPendingUsdcHuman = scwPendingMicrosToHumanUsd(
+							pendingRow.pendingUsdcMicro,
+						);
+					} catch (pendingErr: unknown) {
+						console.warn(
+							"[SOR][prefund] getBaseSmartWalletPendingUsdc failed — shortfall uses raw Base balance (may skip LI.FI incorrectly)",
+							pendingErr,
+						);
+					}
+				}
+				const balancesForShortfall: FundingStableBalancesHuman =
+					levelUpBaseBridgedPrefund
+						? {
+								...balancesHuman,
+								base: Math.max(
+									0,
+									(balancesHuman.base ?? 0) - scwPendingUsdcHuman,
+								),
+							}
+						: balancesHuman;
 				const onDestUsd = limitlessBaseDest
-					? Math.max(0, balancesHuman.limitlessMakerBase ?? 0)
-					: Math.max(0, balancesHuman[bridge.toChain] ?? 0);
+					? Math.max(0, balancesForShortfall.limitlessMakerBase ?? 0)
+					: Math.max(0, balancesForShortfall[bridge.toChain] ?? 0);
 				const venueAppliedUsd = Math.min(needHuman, onDestUsd);
 				const bridgeShortfallUsd = computePrefundBridgeShortfallUsdHuman(
 					needHuman,
 					bridge.toChain,
-					balancesHuman,
+					balancesForShortfall,
 					{ limitlessBaseDest },
 				);
 
@@ -1837,9 +1911,15 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					sumSourcesExclDest: Number(
 						(["base", "polygon", "solana", "bnb"] as const)
 							.filter((c) => c !== bridge.toChain)
-							.reduce((s, c) => s + Math.max(0, balancesHuman[c] ?? 0), 0)
+							.reduce((s, c) => s + Math.max(0, balancesForShortfall[c] ?? 0), 0)
 							.toFixed(4),
 					),
+					scwPendingUsdcApprox: levelUpBaseBridgedPrefund
+						? Number(scwPendingUsdcHuman.toFixed(6))
+						: null,
+					baseSpendableForShortfallUsdApprox: levelUpBaseBridgedPrefund
+						? Number((balancesForShortfall.base ?? 0).toFixed(6))
+						: null,
 					breakdownLine: formatPrefundBalanceBreakdown(balancesHuman, bridge.toChain, {
 						limitlessBaseDest,
 					}),
@@ -1972,7 +2052,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						lifiNeedUsd,
 						bridge.fromChain,
 						bridge.toChain,
-						balancesHuman,
+						balancesForShortfall,
 						{
 							fullPrefundNeedUsdHuman: needHuman,
 							limitlessBaseDest,
@@ -2028,9 +2108,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						const maxFromHuman =
 							step.fromChain === "base"
 								? step.baseSpendWallet === "limitlessMaker"
-									? Math.max(0, balancesHuman.limitlessMakerBase ?? 0)
-									: Math.max(0, balancesHuman.base ?? 0)
-								: Math.max(0, balancesHuman[step.fromChain] ?? 0);
+									? Math.max(0, balancesForShortfall.limitlessMakerBase ?? 0)
+									: Math.max(0, balancesForShortfall.base ?? 0)
+								: Math.max(0, balancesForShortfall[step.fromChain] ?? 0);
 						const destPortionUsd = Math.max(0, Number(step.amountHuman));
 						const perStepShare = Math.max(0, stepBudgetShares[stepIdx] ?? 0);
 						const stepBudgetUsd = perStepShare + corridorBudgetCarryUsd;
@@ -2197,14 +2277,17 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 						if (Number.isFinite(spentHumanForLedger) && spentHumanForLedger > 0) {
 							if (step.fromChain === "base" && step.baseSpendWallet === "limitlessMaker") {
-								const cur = balancesHuman.limitlessMakerBase ?? 0;
-								balancesHuman.limitlessMakerBase = Math.max(
+								const cur = balancesForShortfall.limitlessMakerBase ?? 0;
+								balancesForShortfall.limitlessMakerBase = Math.max(
 									0,
 									cur - spentHumanForLedger,
 								);
 							} else {
-								const cur = balancesHuman[step.fromChain] ?? 0;
-								balancesHuman[step.fromChain] = Math.max(0, cur - spentHumanForLedger);
+								const cur = balancesForShortfall[step.fromChain] ?? 0;
+								balancesForShortfall[step.fromChain] = Math.max(
+									0,
+									cur - spentHumanForLedger,
+								);
 							}
 						}
 

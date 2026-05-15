@@ -21,12 +21,14 @@ import type { RequiredVenueKey } from "./matched-market";
  * or venue-prices uses `status: "no_liquidity"` while TOB still exists, see
  * `venueSnapshotStatusAllowsBookProbe` in `e2e-venue-book-depth.ts`. To run a
  * specific umbrella, set `E2E_PIN_UMBRELLA_ID=<mongo _id>` when invoking Playwright
- * (row must still appear in GET `{PREDICTIONS_API_URL}/matched-markets`).
+ * (row must still appear in GET `{PREDICTIONS_API_URL}/matched-markets`). When set,
+ * only **levelup** per-venue row selection is restricted to that umbrella; other
+ * venues still search the full upcoming candidate set for the tightest book.
  */
 export const REQUESTED_VENUES: RequiredVenueKey[] = [
 	"polymarket",
 	"predictFun",
-	// "dflow",
-	// "levelup",
-	// "limitless",
+	"dflow",
+	"limitless",
+	"levelup",
 ];

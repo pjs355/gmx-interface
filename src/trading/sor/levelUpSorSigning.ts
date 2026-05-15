@@ -42,7 +42,7 @@ export function resolveLevelUpSigningPrice(args: {
 
 /** Human USDC the LevelUp **buy** needs on the Base SCW: signed `makerAmount` + buy fee (FeeWrapper), matching API `ensureUsdcApprovalAndBalance`. */
 export function levelUpBuySignedPremiumUsdHuman(leg: RouteLeg): number {
-	const shares = Math.max(0, Math.round(leg.shares));
+	const shares = Math.max(0, Math.floor(leg.shares));
 	const isLimit = leg.orderType === "limit";
 	const limitPrice =
 		isLimit && typeof leg.limitPriceCents === "number"

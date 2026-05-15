@@ -387,14 +387,33 @@ export function partitionRequestedVenuePicks(
 	return { withBook, missingBook };
 }
 
+export type ComputePerVenueBestPicksOpts = {
+	/** When set, only the `levelup` venue scans rows under this umbrella id. */
+	levelUpPinUmbrellaId?: string | null;
+};
+
 export async function computePerVenueBestPicks(
 	future: MatchedMarketRow[],
 	getSnaps: (panda: string) => Promise<VenuePriceSnapshot[]>,
+	opts?: ComputePerVenueBestPicksOpts,
 ): Promise<PerVenueBestPick[]> {
+	const pinLu = (opts?.levelUpPinUmbrellaId ?? "").trim();
+	const rowsForVenue = (key: RequiredVenueKey): MatchedMarketRow[] => {
+		if (key !== "levelup" || !pinLu) return future;
+		const pinned = future.filter((r) => String(r.umbrellaId) === pinLu);
+		if (pinned.length === 0) {
+			console.warn(
+				`[matched-market] levelup pin ${pinLu}: umbrella not in candidate pool — using full pool for levelup.`,
+			);
+			return future;
+		}
+		return pinned;
+	};
+
 	const picks: PerVenueBestPick[] = [];
 	for (const key of REQUIRED_VENUE_KEYS) {
 		let best: { sp: number; row: MatchedMarketRow } | null = null;
-		for (const row of future) {
+		for (const row of rowsForVenue(key)) {
 			if (row.exchangeMatching[key] === undefined) {
 				continue;
 			}
@@ -452,7 +471,8 @@ export async function computePerVenueBestPicks(
 		// (even when bid/ask are missing so spread is null) over rows where the feed omits
 		// LevelUp entirely — better odds the trade box still gets a quote.
 		if (key === "levelup") {
-			const candidates = future.filter(
+			const luRows = rowsForVenue("levelup");
+			const candidates = luRows.filter(
 				(r) => r.exchangeMatching.levelup !== undefined,
 			);
 
@@ -463,25 +483,29 @@ export async function computePerVenueBestPicks(
 
 			let fallbackRow: MatchedMarketRow | null = null;
 
-			// Prefer the same sports match as another venue that already had a live book in
-			// venue-prices — LevelUp liquidity is much more likely there than on an arbitrary
-			// LevelUp-only umbrella when the feed omits bid/ask for LevelUp.
-			const anchorOrder: RequiredVenueKey[] = [
-				"polymarket",
-				"predictFun",
-				"dflow",
-			];
-			for (const anchorKey of anchorOrder) {
-				const anchor = picks.find((p) => p.venueKey === anchorKey);
-				if (!anchor) continue;
-				const hit = rowForPanda(anchor.pandaMatchId);
-				if (hit) {
-					fallbackRow = hit;
-					console.warn(
-						`[matched-market] levelup: aligning synthetic pick with ${anchorKey} ` +
-							`umbrella (panda ${anchor.pandaMatchId}) — shared match row.`,
-					);
-					break;
+			// When `levelUpPinUmbrellaId` is set, do not borrow another venue's panda —
+			// that row may be a different umbrella than the pin.
+			if (!pinLu) {
+				// Prefer the same sports match as another venue that already had a live book in
+				// venue-prices — LevelUp liquidity is much more likely there than on an arbitrary
+				// LevelUp-only umbrella when the feed omits bid/ask for LevelUp.
+				const anchorOrder: RequiredVenueKey[] = [
+					"polymarket",
+					"predictFun",
+					"dflow",
+				];
+				for (const anchorKey of anchorOrder) {
+					const anchor = picks.find((p) => p.venueKey === anchorKey);
+					if (!anchor) continue;
+					const hit = rowForPanda(anchor.pandaMatchId);
+					if (hit) {
+						fallbackRow = hit;
+						console.warn(
+							`[matched-market] levelup: aligning synthetic pick with ${anchorKey} ` +
+								`umbrella (panda ${anchor.pandaMatchId}) — shared match row.`,
+						);
+						break;
+					}
 				}
 			}
 
@@ -586,8 +610,30 @@ export async function resolvePerVenueBestPicks(
 		}
 	}
 	future = applyE2eMatchedMarketDisplayBlocklist(future);
+
+	let levelUpPinUmbrellaId: string | null = null;
+	if (pinRaw) {
+		const pinFiltered = future.filter((r) => String(r.umbrellaId) === pinRaw);
+		if (pinFiltered.length > 0) {
+			const [only] = pinFiltered;
+			levelUpPinUmbrellaId = pinRaw;
+			console.warn(
+				`[matched-market] E2E_PIN_UMBRELLA_ID=${pinRaw}: restricting **levelup** picks ` +
+					`to this umbrella only (${only.displayName ?? "unnamed"}, panda ${only.pandaMatchId}); ` +
+					`other venues use the full candidate set.`,
+			);
+		} else {
+			console.warn(
+				`[matched-market] E2E_PIN_UMBRELLA_ID=${pinRaw}: pinned row not in upcoming ` +
+					`candidate set after eventDate + E2E blocklist — levelup pin has no effect; ` +
+					`check id and blocklist.`,
+			);
+		}
+	}
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
-	const picks = await computePerVenueBestPicks(future, getSnaps);
+	const picks = await computePerVenueBestPicks(future, getSnaps, {
+		levelUpPinUmbrellaId,
+	});
 	return picks;
 }
 

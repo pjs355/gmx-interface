@@ -1,15 +1,12 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import {
+	useQuery,
+	type UseQueryResult,
+} from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
-
-/**
- * DFlow trading params + outcome tokens are denominated in 6 decimals
- * (matching USDC base units). Mirrors `dflowPositionsApi.ts` math.
- */
-const DFLOW_BASE_UNIT_DECIMALS = 6;
-const DFLOW_BASE_UNIT_FACTOR = 10 ** DFLOW_BASE_UNIT_DECIMALS;
+import { DFLOW_OUTCOME_BASE_UNIT_FACTOR } from "@/trading/dflow/dflowOutcomeAmount";
 
 const DEFAULT_DEBOUNCE_MS = 250;
 const QUOTE_STALE_MS = 5_000;
@@ -81,7 +78,7 @@ export function useDflowOrderQuote(args: UseDflowOrderQuoteArgs) {
 	const amountIsValid =
 		Number.isFinite(numericAmount) && numericAmount > 0;
 	const amountBaseUnits = amountIsValid
-		? Math.round(numericAmount * DFLOW_BASE_UNIT_FACTOR).toString()
+		? Math.round(numericAmount * DFLOW_OUTCOME_BASE_UNIT_FACTOR).toString()
 		: "";
 
 	const queryEnabled =
@@ -93,7 +90,7 @@ export function useDflowOrderQuote(args: UseDflowOrderQuoteArgs) {
 		amountIsValid &&
 		amountBaseUnits.length > 0;
 
-	return useQuery<DflowOrderQuoteResult | null>({
+	const query = useQuery<DflowOrderQuoteResult | null>({
 		queryKey: [
 			"dflow",
 			"order-quote",
@@ -139,8 +136,8 @@ export function useDflowOrderQuote(args: UseDflowOrderQuoteArgs) {
 			// sells that's the outcome contract. The other side comes back as
 			// `outAmount`. Convert each base-unit value to its human form using
 			// the shared 6-decimal scale.
-			const inputHuman = inAmountRaw / DFLOW_BASE_UNIT_FACTOR;
-			const outputHuman = outAmountRaw / DFLOW_BASE_UNIT_FACTOR;
+			const inputHuman = inAmountRaw / DFLOW_OUTCOME_BASE_UNIT_FACTOR;
+			const outputHuman = outAmountRaw / DFLOW_OUTCOME_BASE_UNIT_FACTOR;
 
 			let contracts: number;
 			let usd: number;
@@ -164,4 +161,19 @@ export function useDflowOrderQuote(args: UseDflowOrderQuoteArgs) {
 			};
 		},
 	});
+
+	return useMemo(
+		() => ({
+			...query,
+			/** Amount string driving the debounced quote (compare to `state.amount` for QA sync). */
+			debouncedAmount,
+		}),
+		[query, debouncedAmount],
+	) as UseDflowOrderQuoteResult;
 }
+
+export type UseDflowOrderQuoteResult = UseQueryResult<
+	DflowOrderQuoteResult | null
+> & {
+	debouncedAmount: string;
+};

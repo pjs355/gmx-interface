@@ -17,6 +17,8 @@ import {
 	formatSorBuyCostUsdDisplay,
 	formatSorSellProceedsUsdDisplay,
 	formatSorLegAvgForDisplay,
+	sorBuyNetHeldTotalSharesFromLegs,
+	sorBuyPredictLegNetHeldShares,
 } from "@/trading/sor";
 import type { TradingVenue } from "@/config/venueConfig";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
@@ -81,14 +83,35 @@ function isSellPreviewFail(
 	return p.side === "sell" && "ok" in p && p.ok === false;
 }
 
+function buyPreviewNetDisplayShares(
+	p: Extract<VenueRoutePreview, { side: "buy" }>,
+	predictFunFeeRateBps: number | undefined,
+): number {
+	return sorBuyNetHeldTotalSharesFromLegs(p.legs, predictFunFeeRateBps);
+}
+
+function buyRouteNetDisplayShares(
+	route: RoutePlan,
+	predictFunFeeRateBps: number | undefined,
+): number {
+	if (route.side !== "buy") return route.totalShares;
+	return sorBuyNetHeldTotalSharesFromLegs(route.legs, predictFunFeeRateBps);
+}
+
 /** Buy: executable first, then by most shares (best “to win”) descending. */
-function sortVenuePreviewsBuy(previews: VenueRoutePreview[]): VenueRoutePreview[] {
+function sortVenuePreviewsBuy(
+	previews: VenueRoutePreview[],
+	predictFunFeeRateBps: number | undefined,
+): VenueRoutePreview[] {
 	return [...previews].sort((a, b) => {
 		if (a.side !== "buy" || b.side !== "buy") return 0;
 		const aEx = a.quoteKind === "executable" ? 1 : 0;
 		const bEx = b.quoteKind === "executable" ? 1 : 0;
 		if (aEx !== bEx) return bEx - aEx;
-		return b.totalShares - a.totalShares;
+		return (
+			buyPreviewNetDisplayShares(b, predictFunFeeRateBps) -
+			buyPreviewNetDisplayShares(a, predictFunFeeRateBps)
+		);
 	});
 }
 
@@ -105,9 +128,13 @@ function sortVenuePreviewsSell(previews: VenueRoutePreview[]): VenueRoutePreview
 	});
 }
 
-function sortVenuePreviews(previews: VenueRoutePreview[]): VenueRoutePreview[] {
+function sortVenuePreviews(
+	previews: VenueRoutePreview[],
+	predictFunFeeRateBps: number | undefined,
+): VenueRoutePreview[] {
 	if (!previews.length) return previews;
-	if (previews[0]!.side === "buy") return sortVenuePreviewsBuy(previews);
+	if (previews[0]!.side === "buy")
+		return sortVenuePreviewsBuy(previews, predictFunFeeRateBps);
 	if (previews[0]!.side === "sell") return sortVenuePreviewsSell(previews);
 	return [...previews];
 }
@@ -116,6 +143,7 @@ function sortVenuePreviews(previews: VenueRoutePreview[]): VenueRoutePreview[] {
 function splitBuyIsBestOrTied(
 	route: RoutePlan,
 	previews: VenueRoutePreview[] | null | undefined,
+	predictFunFeeRateBps: number | undefined,
 ): boolean {
 	if (route.side !== "buy") return false;
 	let maxSingle = 0;
@@ -123,10 +151,13 @@ function splitBuyIsBestOrTied(
 	for (const p of previews ?? []) {
 		if (p.side !== "buy" || p.quoteKind !== "executable") continue;
 		anyExecutable = true;
-		maxSingle = Math.max(maxSingle, p.totalShares);
+		maxSingle = Math.max(
+			maxSingle,
+			buyPreviewNetDisplayShares(p, predictFunFeeRateBps),
+		);
 	}
 	if (!anyExecutable) return true;
-	return route.totalShares + 1e-9 >= maxSingle;
+	return buyRouteNetDisplayShares(route, predictFunFeeRateBps) + 1e-9 >= maxSingle;
 }
 
 /** Split sell row only when proceeds match or beat every single-venue sell. */
@@ -333,6 +364,7 @@ function SmartRoutingLegRows({
 	showVenueLogo = false,
 	atMaxByVenue,
 	sellLegAtUserBalanceVenues,
+	predictFunFeeRateBps,
 }: {
 	legs: RouteLeg[];
 	side: "buy" | "sell";
@@ -348,11 +380,17 @@ function SmartRoutingLegRows({
 	atMaxByVenue?: Set<SorVenue>;
 	/** Sell only: leg fills user's entire venue outcome balance (within EPS). */
 	sellLegAtUserBalanceVenues?: Set<SorVenue>;
+	/** Predict.fun fee bps — buy legs show net-held shares when set. */
+	predictFunFeeRateBps?: number;
 }) {
 	return (
 		<div className="smart-routing-drawer__legs">
 			{legs.map((leg, idx) => {
-				const shareStr = formatSorDetailsSharesDisplay(leg.shares);
+				const displayShares =
+					side === "buy"
+						? sorBuyPredictLegNetHeldShares(leg, predictFunFeeRateBps)
+						: leg.shares;
+				const shareStr = formatSorDetailsSharesDisplay(displayShares);
 				const priceStr = formatLegAvg(leg.avgPrice);
 				// Gross USD on this leg (shares × per-share price). Per-leg fees are
 				// rolled up into the consolidated "Fees" row below the legs.
@@ -450,6 +488,8 @@ export interface SmartRoutingSectionProps {
 	smartRoutingMarketKey?: string;
 	/** Selected outcome for omnibus + venue quotes — gates stale digits on Yes/No flips. */
 	selectedOutcome: SorOutcome;
+	/** Predict.fun fee bps from market detail — net-held share display when set. */
+	predictFunFeeRateBps?: number;
 	/** Execution channel loading — gates overlay rows when the targeted plan is in flight. */
 	executionLoading: boolean;
 	/** Parent locks venue rows while a trade executes or the box is loading — no auto-select or clicks. */
@@ -470,6 +510,7 @@ export default function SmartRoutingSection({
 	routePreviewAllowed = true,
 	smartRoutingMarketKey,
 	selectedOutcome,
+	predictFunFeeRateBps,
 	executionLoading,
 	venueSelectionLocked = false,
 	userSellSharesByVenue,
@@ -621,8 +662,11 @@ export default function SmartRoutingSection({
 	}, [displayRoute]);
 
 	const sortedVenuePreviews = useMemo(
-		() => (venuePreviews && venuePreviews.length > 0 ? sortVenuePreviews(venuePreviews) : null),
-		[venuePreviews],
+		() =>
+			venuePreviews && venuePreviews.length > 0
+				? sortVenuePreviews(venuePreviews, predictFunFeeRateBps)
+				: null,
+		[venuePreviews, predictFunFeeRateBps],
 	);
 
 	const showSplitBuyRow = useMemo(
@@ -630,8 +674,8 @@ export default function SmartRoutingSection({
 			multiVenueSplit &&
 			displayRoute != null &&
 			displayRoute.side === "buy" &&
-			splitBuyIsBestOrTied(displayRoute, venuePreviews),
-		[multiVenueSplit, displayRoute, venuePreviews],
+			splitBuyIsBestOrTied(displayRoute, venuePreviews, predictFunFeeRateBps),
+		[multiVenueSplit, displayRoute, venuePreviews, predictFunFeeRateBps],
 	);
 
 	const showSplitSellRow = useMemo(
@@ -819,12 +863,17 @@ export default function SmartRoutingSection({
 			: null;
 
 	/* Right-column header label mirrors what the row's value cell shows:
-	 *  - buy → totalShares (each share pays $1) → "To Win"
+	 *  - buy → net-held share total (each share pays $1) → "To Win"
 	 *  - sell → totalCost / proceeds USD → "Receive"
 	 * Falls back to displayRoute.side if the parent didn't pass `side`. */
 	const effectiveSide: SorSide =
 		side ?? displayRoute?.side ?? executionRoute?.side ?? "buy";
 	const rightHeaderLabel = effectiveSide === "buy" ? "To Win" : "Receive";
+
+	const splitBuyNetDisplay =
+		displayRoute && displayRoute.side === "buy"
+			? buyRouteNetDisplayShares(displayRoute, predictFunFeeRateBps)
+			: 0;
 
 	/* Only show the column headers when there are actually rows to label.
 	 * Avoids a "Venue / To Win" pair hovering above empty space during the
@@ -868,14 +917,14 @@ export default function SmartRoutingSection({
 								</span>
 								<div className="smart-routing-row__meta">
 									<span className="smart-routing-row__name">Split order</span>
-									{displayRoute.totalShares > 0 && (
+									{splitBuyNetDisplay > 0 && (
 										<span className="smart-routing-row__sub">
 											{splitMetricsPending ? (
 												<QuoteMetricSkeleton variant="smart-sub" />
 											) : (
 												<>
 													{formatLegAvg(
-														displayRoute.totalCost / displayRoute.totalShares,
+														displayRoute.totalCost / splitBuyNetDisplay,
 													)}{" "}
 													avg.
 												</>
@@ -906,7 +955,7 @@ export default function SmartRoutingSection({
 								<QuoteMetricSkeleton variant="smart-value" />
 							) : (
 								<FlashingValue
-									value={`$${formatToWinUsdDisplay(displayRoute.totalShares)}`}
+									value={`$${formatToWinUsdDisplay(splitBuyNetDisplay)}`}
 									className={SR_VALUE_CLASS}
 									flashClassName={SR_VALUE_FLASH_CLASS}
 								/>
@@ -921,6 +970,7 @@ export default function SmartRoutingSection({
 								formatLegAvg={formatLegAvg}
 								showVenueLogo
 								atMaxByVenue={splitBuyAtMaxByVenue}
+								predictFunFeeRateBps={predictFunFeeRateBps}
 							/>
 							<div className="smart-routing-drawer__footer">
 								<div className="smart-routing-drawer__fees">
@@ -1192,13 +1242,18 @@ export default function SmartRoutingSection({
 				const rowPending = rowMetricsPending(overlayRoute);
 				const open = expandedKey === key;
 				const feeR = overlayRoute ?? feeRouteFromBuyPreview(p);
-				const displayShares = overlayRoute ? overlayRoute.totalShares : p.totalShares;
+				const previewNetShares = buyPreviewNetDisplayShares(p, predictFunFeeRateBps);
+				const displayShares = overlayRoute
+					? buyRouteNetDisplayShares(overlayRoute, predictFunFeeRateBps)
+					: previewNetShares;
+				const costForAvg = overlayRoute ? overlayRoute.totalCost : p.totalCost;
+				const netSharesForAvg = overlayRoute
+					? buyRouteNetDisplayShares(overlayRoute, predictFunFeeRateBps)
+					: previewNetShares;
 				const displayAvgPrice =
-					overlayRoute && overlayRoute.totalShares > 0
-						? overlayRoute.totalCost / overlayRoute.totalShares
-						: p.totalShares > 0
-							? p.totalCost / p.totalShares
-							: null;
+					netSharesForAvg > 0 && Number.isFinite(costForAvg)
+						? costForAvg / netSharesForAvg
+						: null;
 				const theoretical = p.quoteKind === "theoreticalOnly";
 				/* Kalshi (DFlow) is `theoreticalOnly` until the user completes KYC. We
 				 * still let them click the row so the trade-box flips to the Kalshi tab,
@@ -1293,6 +1348,7 @@ export default function SmartRoutingSection({
 									atMaxByVenue={
 										p.insufficientLiquidity ? new Set([p.venue]) : undefined
 									}
+									predictFunFeeRateBps={predictFunFeeRateBps}
 								/>
 								<div className="smart-routing-drawer__footer">
 									<div className="smart-routing-drawer__fees">

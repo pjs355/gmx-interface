@@ -145,6 +145,7 @@ export function SmartRouteToggle({
 						executing={sorExecution.isExecuting}
 						executionPhase={sorExecution.executionPhase}
 						prefundLegProgress={sorExecution.prefundLegProgress}
+						predictFunFeeRateBps={predictFunFeeRateBps}
 					/>
 				</div>
 			)}

@@ -23,7 +23,11 @@ export async function quoteSignAndSubmitDflowOrder(args: {
 	solanaSigner: Pick<SolanaSignerCapable, "signTransactionOnly">;
 	orderParams: DflowOrderParams;
 	submitExtras: Omit<DflowOrderSubmitBody, "signedTx" | "lastValidBlockHeight">;
-}): Promise<{ signature: string }> {
+}): Promise<{
+	signature: string;
+	orderQuote: DflowOrderResponse;
+	initializedMarket: boolean;
+}> {
 	const { privateApi, submitFn, solanaSigner, orderParams, submitExtras } =
 		args;
 
@@ -70,5 +74,9 @@ export async function quoteSignAndSubmitDflowOrder(args: {
 	};
 
 	const submitResult = await submitFn(submitBody);
-	return { signature: submitResult.signature };
+	return {
+		signature: submitResult.signature,
+		orderQuote: orderResult,
+		initializedMarket: submitResult.initializedMarket === true,
+	};
 }

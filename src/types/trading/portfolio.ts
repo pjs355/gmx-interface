@@ -15,3 +15,9 @@ export interface CashSummary {
 	limitlessMakerBase: number;
 	fetchedAt: string;
 }
+
+/** Inner `data` from `GET /portfolio/base-smart-wallet-pending-usdc`. */
+export type BaseSmartWalletPendingUsdc = {
+	makerAddress: string | null;
+	pendingUsdcMicro: string;
+};

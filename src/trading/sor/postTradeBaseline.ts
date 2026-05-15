@@ -356,10 +356,18 @@ export function computeExpectedDeltas(
 
 		// Share delta.
 		if (rl.venue === "levelup") {
-			const marketId = rl.venueMarketIds.levelUpQuestionId?.trim();
-			if (marketId && baseline.levelUp?.marketId === marketId) {
+			const routeMarketId = (rl.venueMarketIds.levelUpQuestionId ?? "").trim();
+			const baselineId = baseline.levelUp?.marketId?.trim() ?? "";
+			// Baseline uses client `getMarketId` (often Mongo `_id`); the route leg
+			// often carries on-chain `questionId`. Do not require string equality or
+			// post-trade sync never schedules LevelUp RPC refresh / share reads.
+			if (baseline.levelUp && (routeMarketId || baselineId)) {
 				const side: "yes" | "no" = rl.outcome === "A" ? "yes" : "no";
-				levelUp = { marketId, side, deltaShares: filled };
+				levelUp = {
+					marketId: routeMarketId || baselineId,
+					side,
+					deltaShares: filled,
+				};
 			}
 			continue;
 		}

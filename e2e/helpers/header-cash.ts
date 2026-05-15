@@ -60,11 +60,17 @@ const POST_TRADE_CASH_POLL_MS = 400;
 const POST_TRADE_CASH_MATCH_TIMEOUT_MS = 45_000;
 /** DFlow / Kalshi: same SOR fill still hits Solana + multi-chain collateral refetch — often slower than EVM-only venues. */
 const POST_TRADE_CASH_MATCH_TIMEOUT_DFLOW_MS = 180_000;
+/**
+ * Limitless: header Cash includes `limitlessMakerUsdc` from cash-summary; after a
+ * maker fill that slice (and positions) can lag Base RPC + server refresh longer
+ * than a single-chain venue — same failure mode as shares polling, but on spend.
+ */
+const POST_TRADE_CASH_MATCH_TIMEOUT_LIMITLESS_MS = 120_000;
 
 export function postTradeCashMatchTimeoutMsForVenueKey(venueKey: string): number {
-	return venueKey === "dflow"
-		? POST_TRADE_CASH_MATCH_TIMEOUT_DFLOW_MS
-		: POST_TRADE_CASH_MATCH_TIMEOUT_MS;
+	if (venueKey === "dflow") return POST_TRADE_CASH_MATCH_TIMEOUT_DFLOW_MS;
+	if (venueKey === "limitless") return POST_TRADE_CASH_MATCH_TIMEOUT_LIMITLESS_MS;
+	return POST_TRADE_CASH_MATCH_TIMEOUT_MS;
 }
 
 /**
