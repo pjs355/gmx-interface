@@ -66,8 +66,9 @@ export function readLimitlessMarketVenueWire(raw: unknown): LimitlessMarketVenue
 
 /**
  * Single Base transaction: redeem Limitless winning outcome tokens held by the
- * maker EOA — CTF `redeemPositions` for standard legs, or NegRisk adapter when an
- * adapter address is present alongside `isNegRisk`.
+ * maker EOA — CTF `redeemPositions` for standard legs, or Polymarket-style
+ * `redeemPositions(bytes32,uint256[])` on `venue.adapter` when NegRisk is flagged
+ * or when `getCtf()` returns the same contract as `venue.adapter` (Limitless v3).
  */
 export async function redeemLimitlessWinningPositionOnBase(args: {
 	signer: ethers.Signer;
@@ -89,7 +90,7 @@ export async function redeemLimitlessWinningPositionOnBase(args: {
 	let adapter = args.limitlessVenueAdapter?.trim();
 	let collateral = args.limitlessCollateralAddress?.trim();
 
-	if ((!exchange || !collateral) && slug) {
+	if (slug && (!exchange || !collateral || !adapter)) {
 		const raw = await args.fetchMarketBySlug(slug);
 		const w = readLimitlessMarketVenueWire(raw);
 		exchange = exchange || w.exchange;
@@ -129,8 +130,15 @@ export async function redeemLimitlessWinningPositionOnBase(args: {
 		);
 	}
 
-	if (args.isNegRisk && adapter && ethers.isAddress(adapter)) {
-		const adapterRO = ethers.getAddress(adapter);
+	const adapterAddr =
+		adapter && ethers.isAddress(adapter) ? ethers.getAddress(adapter) : null;
+	const ctfIsNegRiskAdapterLayer =
+		adapterAddr != null &&
+		adapterAddr.toLowerCase() === ctf.toLowerCase();
+	const useNegRiskAdapterRedeem =
+		(args.isNegRisk && adapterAddr != null) || ctfIsNegRiskAdapterLayer;
+
+	if (useNegRiskAdapterRedeem && adapterAddr != null) {
 		const amounts: bigint[] =
 			args.resolvedOutcome === "yes" ? [bal, 0n] : [0n, bal];
 		const nrIface = new ethers.Interface(NEG_RISK_ADAPTER_REDEEM_ABI);
@@ -139,7 +147,7 @@ export async function redeemLimitlessWinningPositionOnBase(args: {
 			amounts,
 		]);
 		const tx = await args.signer.sendTransaction({
-			to: adapterRO,
+			to: adapterAddr,
 			data,
 			value: 0,
 		});

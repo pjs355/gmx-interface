@@ -16,6 +16,7 @@ import { useUserData } from "@/context/UserDataContext";
 import { useAccountData } from "@/context/AccountDataContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { buildChainBalances } from "@/trading/sor/buildChainBalances";
+import { resolvePrivyEvmFundTarget } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import {
 	useWithdrawPlanExecution,
@@ -136,7 +137,9 @@ export function TransfersModal() {
 		() =>
 			buildChainBalances({
 				baseUsdcBalance: accountCash.base,
-				baseWalletAddress: funding.baseSmartWallet ?? "",
+				baseWalletAddress:
+					resolvePrivyEvmFundTarget(funding.baseSmartWallet, account)?.trim() ??
+					"",
 				limitlessMakerUsdcBalance: Math.max(0, accountCash.limitlessMaker ?? 0),
 				limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
 				polygonUsdcBalance: accountCash.polygon,
@@ -152,6 +155,7 @@ export function TransfersModal() {
 			accountCash.polygon,
 			accountCash.solana,
 			accountCash.bnb,
+			account,
 			funding.baseSmartWallet,
 			funding.limitlessMakerBase,
 			funding.polymarketSafe,
@@ -338,8 +342,10 @@ export function TransfersModal() {
 		setPlan(null);
 		try {
 			const gross = effectiveWithdrawAmount;
+			const baseEvmFund =
+				resolvePrivyEvmFundTarget(funding.baseSmartWallet, account)?.trim() || null;
 			const fundingSnap = {
-				baseSmartWallet: funding.baseSmartWallet?.trim() || null,
+				baseSmartWallet: baseEvmFund,
 				limitlessMakerBase: funding.limitlessMakerBase?.trim() || null,
 				polymarketSafe: funding.polymarketSafe?.trim() || null,
 				embeddedEoa: funding.embeddedEoa?.trim() || null,
@@ -348,7 +354,7 @@ export function TransfersModal() {
 			let balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
 			const planBalances = buildChainBalances({
 				baseUsdcBalance: Math.max(0, balancesSnap.base ?? 0),
-				baseWalletAddress: funding.baseSmartWallet ?? "",
+				baseWalletAddress: baseEvmFund ?? "",
 				limitlessMakerUsdcBalance: Math.max(0, balancesSnap.limitlessMakerBase ?? 0),
 				limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
 				polygonUsdcBalance: Math.max(0, balancesSnap.polygon ?? 0),
@@ -387,6 +393,7 @@ export function TransfersModal() {
 	}, [
 		api,
 		refreshAccount,
+		account,
 		canRequestReview,
 		effectiveWithdrawAmount,
 		effectiveWithdrawAmountStr,

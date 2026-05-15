@@ -5,6 +5,7 @@ import {
 	resolveBuyPrefundAnchorUsd,
 } from "./prefundPlan";
 import { groupBridgeLegsByCorridor } from "./sorBridgeGroups";
+import { levelUpBuySignedPremiumUsdHuman } from "./levelUpSorSigning";
 import type { RouteLeg } from "./sor-types";
 
 describe("LIFI_BRIDGE_AMOUNT_MARGIN", () => {
@@ -162,6 +163,13 @@ describe("groupBridgeLegsByCorridor", () => {
 		];
 		const groups = groupBridgeLegsByCorridor(legs, "buy");
 		expect(groups).toHaveLength(1);
-		expect(groups[0]!.totalAmountUsd).toBeCloseTo(3.1, 8);
+		const leg = legs[0]!;
+		const b = leg.bridge!;
+		const expected = resolveBuyPrefundAnchorUsd(
+			b.amount,
+			leg.executionAmountUsd,
+			levelUpBuySignedPremiumUsdHuman(leg),
+		);
+		expect(groups[0]!.totalAmountUsd).toBeCloseTo(expected, 8);
 	});
 });

@@ -751,7 +751,7 @@ export function createPrivateApiClient(
 					import.meta.env.VITE_DEBUG_TRADING === "true")
 			) {
 				try {
-					console.warn(
+					console.debug(
 						"[PrivateApi][LifiQuote] data.quote_raw_json",
 						out?.quote != null
 							? JSON.stringify(out.quote)
@@ -926,7 +926,7 @@ export function createPrivateApiClient(
 			const res = await authorizedFetch(`/api/predict/orders?${qs}`);
 			const body = await readJson<unknown>(res);
 			const rows = normalizePredictOrdersList(body);
-			// Only warn in dev when the wire shape looks wrong — not when API legitimately returns [].
+			// Dev-only: unexpected wire shape (not a user-facing warning).
 			if (
 				import.meta.env.DEV &&
 				rows.length === 0 &&
@@ -935,12 +935,12 @@ export function createPrivateApiClient(
 			) {
 				try {
 					const s = JSON.stringify(body);
-					console.warn(
+					console.debug(
 						"[PrivateApi] getPredictOrders: 0 parsed rows; unexpected shape:",
 						s.length > 800 ? `${s.slice(0, 800)}…` : s
 					);
 				} catch {
-					console.warn(
+					console.debug(
 						"[PrivateApi] getPredictOrders: parse yielded 0 rows (unserializable body)"
 					);
 				}
@@ -978,7 +978,7 @@ export function createPrivateApiClient(
 				`${matchesPath}${qs ? `?${qs}` : ""}`
 			);
 			if (import.meta.env.DEV && res.status === 404) {
-				console.warn(
+				console.debug(
 					"[PrivateApi] getPredictOrderMatches:",
 					res.status,
 					"— nothing is listening at",
@@ -1011,7 +1011,7 @@ export function createPrivateApiClient(
 				`/api/predict/account/activity?${q.toString()}`
 			);
 			if (import.meta.env.DEV && res.status === 404) {
-				console.warn(
+				console.debug(
 					"[PrivateApi] getPredictAccountActivity:",
 					res.status,
 					"— nothing is listening at /api/predict/account/activity on your private API.",

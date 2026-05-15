@@ -340,6 +340,16 @@ async function refetchForPending(
 				type: "all",
 			}),
 		);
+		// Trade box `useTradeBoxShareBalances` maps held tokens → YES/NO via `inferPredictSideFromMarketDetail`
+		// (`usePredictMarketDetail` / `["predict-market", id]`). Refetch so acronym outcomes and
+		// order stay in sync with positions without a full page reload.
+		pushTask(
+			"postTradeSync predict-market",
+			queryClient.refetchQueries({
+				queryKey: ["predict-market"],
+				type: "all",
+			}),
+		);
 	}
 	if (venueSharePending.has("dflow")) {
 		pushTask(

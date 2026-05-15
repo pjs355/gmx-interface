@@ -1445,8 +1445,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           "Limitless maker address missing — refresh ensure-account or wait for account overview.",
         );
       }
-      const fundTarget =
-        resolvePrivyEvmFundTarget(funding.baseSmartWallet, account)?.trim() ?? "";
+      const fundTarget = fundEvmForPrivy?.trim() ?? "";
       const {
         effectiveMaker: maker,
         isDelegatedServerWalletSubAccount,
@@ -1690,7 +1689,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       account,
       signerAddress,
       getLimitlessTxClientForAddress,
-      funding.baseSmartWallet,
+      fundEvmForPrivy,
       funding.limitlessMakerBase,
       funding.embeddedEoa,
       collateralTokens,
@@ -1992,10 +1991,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }
     if (!venueMaker?.trim()) return undefined;
     try {
-      const fundTarget = resolvePrivyEvmFundTarget(
-        funding.baseSmartWallet,
-        account,
-      )?.trim();
+      const fundTarget = fundEvmForPrivy?.trim() ?? "";
       const { effectiveMaker } = classifyLimitlessClientMaker({
         venueMakerFromApi: venueMaker,
         fundTarget,
@@ -2010,7 +2006,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }, [
     limitlessEnsureQuery.data,
     funding.limitlessMakerBase,
-    funding.baseSmartWallet,
+    fundEvmForPrivy,
     funding.embeddedEoa,
     account,
     signerAddress,
@@ -2045,7 +2041,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     account,
     getClientForChain,
     fundingAddresses: {
-      baseSmartWallet: funding.baseSmartWallet,
+      baseSmartWallet: fundEvmForPrivy,
       limitlessMakerBase: funding.limitlessMakerBase,
       polymarketSafe: funding.polymarketSafe,
       embeddedEoa: funding.embeddedEoa,
@@ -2082,8 +2078,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     () =>
       buildChainBalances({
         baseUsdcBalance: collateralTokens.baseUsdc,
-        baseWalletAddress:
-          funding.baseSmartWallet?.trim() || account?.trim() || "",
+        baseWalletAddress: fundEvmForPrivy?.trim() ?? "",
         limitlessMakerUsdcBalance: Math.max(0, limitlessMakerCashForSor ?? 0),
         limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
         polygonUsdcBalance: collateralTokens.polygonStable,
@@ -2100,7 +2095,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       collateralTokens.polygonStable,
       collateralTokens.solanaUsdc,
       collateralTokens.bscUsdt,
-      account,
+      fundEvmForPrivy,
       funding.polymarketSafe,
       funding.solanaAddress,
       funding.embeddedEoa,
@@ -2422,7 +2417,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         }));
         return;
       }
-      console.log("[SOR] Trade button → execute", executableRoute.routeId);
+      console.debug("[SOR] Trade button → execute", executableRoute.routeId);
       // Kalshi/DFlow: each outcome has its own `accountsInitialized*` flag. Only show
       // the "creating this market" notice when the leg(s) we execute still report
       // `false` for that outcome — not when the other team's leg is uninitialized.
@@ -2484,8 +2479,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
               bridgeTxHash: l.bridgeTxHash ?? null,
             })),
           };
-          // Always use console.log for the object — some console filters hide console.warn.
-          console.log("[SOR] execute settled", summary);
+          // Routine trace: use debug so default DevTools stays quiet (enable "Verbose").
+          console.debug("[SOR] execute settled", summary);
           if (res.status !== "complete") {
             const legLine = res.legs
               .map(

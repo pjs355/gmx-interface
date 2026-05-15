@@ -130,10 +130,10 @@ export function derivedBridgeUsdForDisplay(route: RoutePlan): { displayUsd: numb
 
 	if (import.meta.env.DEV) {
 		if (legSumUsd > 0 && apiUsd === 0) {
-			console.warn("[SOR] totalBridgeCost is 0 but leg bridge estimates sum to", legSumUsd);
+			console.debug("[SOR] totalBridgeCost is 0 but leg bridge estimates sum to", legSumUsd);
 		}
 		if (apiUsd > 0 && legSumUsd > 0 && Math.abs(apiUsd - legSumUsd) > 0.02) {
-			console.warn("[SOR] totalBridgeCost vs leg bridge sum mismatch", { apiUsd, legSumUsd });
+			console.debug("[SOR] totalBridgeCost vs leg bridge sum mismatch", { apiUsd, legSumUsd });
 		}
 	}
 

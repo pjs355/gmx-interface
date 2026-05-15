@@ -379,8 +379,9 @@ export function useSorExecution(
 
 			trySyncBackend(() => apiClient.startExecution(route).then(() => {}));
 
-			// Use console.log — many devtools default filter hides console.info.
-			console.log("[SOR] Execution started", {
+			// Routine SOR trace: `console.debug` stays out of the default console level in Chromium
+			// ("Verbose" shows it). Keep `console.warn` / `console.error` for real problems only.
+			console.debug("[SOR] Execution started", {
 				routeId: route.routeId,
 				legs: route.legs.map((l) => l.venue),
 				side: route.side,
@@ -396,14 +397,14 @@ export function useSorExecution(
 						: null,
 				executionAmountUsd: l.executionAmountUsd,
 			}));
-			console.log("[SOR] leg plan (LiFi prefund vs immediate venue)", legPlanSummary);
+			console.debug("[SOR] leg plan (LiFi prefund vs immediate venue)", legPlanSummary);
 
 			if (route.side === "buy") {
 				const dflowNoBridge = route.legs.filter(
 					(l) => l.venue === "dflow" && !l.bridge,
 				);
 				if (dflowNoBridge.length > 0) {
-					console.warn(
+					console.debug(
 						"[SOR_PREFUND] DFlow legs with bridge=null are immediate legs: executeBridge (LiFi) does not run before them. SPL USDC must already be on the Solana embedded wallet for these amounts.",
 						{
 							routeId: route.routeId,
@@ -438,7 +439,7 @@ export function useSorExecution(
 					isSell ? "sell" : "buy",
 				);
 				for (const group of bridgeGroups) {
-					console.log("[SOR] Bridge start", {
+					console.debug("[SOR] Bridge start", {
 						routeId: route.routeId,
 						corridor: group.key,
 						venues: group.legs.map((l) => l.venue),
@@ -519,7 +520,7 @@ export function useSorExecution(
 						setPrefundLegProgress(null);
 					}
 					for (const leg of group.legs) {
-						console.log("[SOR] Bridge+trade leg start", leg.venue);
+						console.debug("[SOR] Bridge+trade leg start", leg.venue);
 						logDflowClientOrderSigning(route, leg, "postBridge");
 						let tradeResult: Awaited<ReturnType<typeof executeLegWithRetry>>;
 						try {
@@ -539,7 +540,7 @@ export function useSorExecution(
 							});
 							tradeResult = { filled: false, filledShares: 0, error: msg };
 						}
-						console.log("[SOR] Bridge+trade leg end", leg.venue, {
+						console.debug("[SOR] Bridge+trade leg end", leg.venue, {
 							filled: tradeResult.filled,
 							error: tradeResult.error,
 						});
@@ -568,7 +569,7 @@ export function useSorExecution(
 
 				if (mountedRef.current) setExecutionPhase("executing_trade");
 				const immediatePromises = immediateLegs.map(async (leg) => {
-					console.log("[SOR] Leg start", leg.venue, { routeId: route.routeId });
+					console.debug("[SOR] Leg start", leg.venue, { routeId: route.routeId });
 					logDflowClientOrderSigning(route, leg, "immediate");
 					let result: Awaited<ReturnType<typeof executeLegWithRetry>>;
 					try {
@@ -588,7 +589,7 @@ export function useSorExecution(
 						});
 						result = { filled: false, filledShares: 0, error: msg };
 					}
-					console.log("[SOR] Leg end", leg.venue, {
+					console.debug("[SOR] Leg end", leg.venue, {
 						filled: result.filled,
 						error: result.error,
 					});
@@ -616,7 +617,7 @@ export function useSorExecution(
 
 				await Promise.allSettled(immediatePromises);
 
-				console.log("[SOR] Execution finished", {
+				console.debug("[SOR] Execution finished", {
 					routeId: route.routeId,
 					venues: route.legs.map((l) => l.venue),
 				});

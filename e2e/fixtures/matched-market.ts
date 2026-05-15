@@ -138,6 +138,36 @@ function missingVenues(row: MatchedMarketRow): RequiredVenueKey[] {
 /** Past kickoff, keep the row eligible for E2E picks for this long (typical start-time field). */
 const E2E_MATCHED_MARKET_EVENT_GRACE_MS = 2 * 60 * 60 * 1000;
 
+/**
+ * Rows whose `displayName` contains any of these substrings (case-insensitive) are
+ * omitted from automatic E2E / all-venues resolution so Playwright never trades that fixture.
+ */
+const E2E_AUTOMATIC_PICK_DISPLAY_NAME_BLOCKLIST: readonly string[] = [
+	"mouz vs aurora",
+];
+
+function isBlockedDisplayNameForE2eAutomaticPicks(row: MatchedMarketRow): boolean {
+	const name = String(row.displayName ?? "").toLowerCase();
+	return E2E_AUTOMATIC_PICK_DISPLAY_NAME_BLOCKLIST.some((frag) =>
+		name.includes(frag.toLowerCase()),
+	);
+}
+
+/** Drops blocklisted fixtures before `computePerVenueBestPicks` / all-venues resolution. */
+export function applyE2eMatchedMarketDisplayBlocklist(
+	rows: MatchedMarketRow[],
+): MatchedMarketRow[] {
+	const out = rows.filter((r) => !isBlockedDisplayNameForE2eAutomaticPicks(r));
+	if (out.length < rows.length) {
+		const dropped = rows.filter((r) => isBlockedDisplayNameForE2eAutomaticPicks(r));
+		console.warn(
+			`[matched-market] E2E displayName blocklist removed ${dropped.length} row(s): ` +
+				dropped.map((r) => `"${r.displayName}" (${r.umbrellaId})`).join("; "),
+		);
+	}
+	return out;
+}
+
 export function hasFutureEventDate(row: MatchedMarketRow): boolean {
 	if (row.eventDate === undefined) return false;
 	const t = Date.parse(row.eventDate);
@@ -555,6 +585,7 @@ export async function resolvePerVenueBestPicks(
 			future = [...future, pinned];
 		}
 	}
+	future = applyE2eMatchedMarketDisplayBlocklist(future);
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const picks = await computePerVenueBestPicks(future, getSnaps);
 	return picks;
@@ -569,7 +600,9 @@ export async function resolveAllVenuesUmbrella(
 	apiBaseUrl: string = PREDICTIONS_API_URL,
 ): Promise<AllVenuesResolution> {
 	const all = await fetchMatchedMarkets(apiBaseUrl);
-	const future = all.filter(hasFutureEventDate);
+	const future = applyE2eMatchedMarketDisplayBlocklist(
+		all.filter(hasFutureEventDate),
+	);
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const perVenuePicks = await computePerVenueBestPicks(future, getSnaps);
 

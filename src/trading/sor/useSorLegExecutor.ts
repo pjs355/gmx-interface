@@ -56,6 +56,10 @@ import {
 	type PrefundLifiQuoteClient,
 } from "@/trading/sor/lifiPrefundQuoteSolve";
 import {
+	mergeExecuteLifiStepsAllowanceOwnerForSorBasePrefund,
+	sorBasePrefundLifiShouldUseEmbeddedSigner,
+} from "@/trading/sor/sorPrefundLifiExecutionAlignment";
+import {
 	SOR_BASE_SWEEP_RECEIPT_TIMEOUT_MS,
 	SOR_BASE_USDC_TRANSFER_TIMEOUT_MS,
 	SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS,
@@ -605,7 +609,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								if (sendMicro > 0n) {
 									reportSorExecutionPhase("moving_funds");
 									try {
-										console.warn("[SOR][prefund] same-chain Base USDC (embedded → SCW for LevelUp)", {
+										console.debug("[SOR][prefund] same-chain Base USDC (embedded → SCW for LevelUp)", {
 											venue: "levelup",
 											usdcApprox: Number(sendMicro) / 1e6,
 										});
@@ -840,7 +844,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							if (!clamp.ok) {
 								return { filled: false, filledShares: 0, error: clamp.error };
 							}
-							console.warn("[SOR][wire] polymarket", {
+							console.debug("[SOR][wire] polymarket", {
 								venue: "polymarket",
 								executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
 								feeUsd: Number(leg.fee.toFixed(6)),
@@ -891,7 +895,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								return { filled: false, filledShares: 0, error: clamp.error };
 							}
 							if (clamp.resized) {
-								console.warn("[SOR][sell-clamp] polymarket", {
+								console.debug("[SOR][sell-clamp] polymarket", {
 									venue: "polymarket",
 									tokenIdTail: tokenId.slice(-8),
 									plannedShares: Number(leg.shares.toFixed(6)),
@@ -936,7 +940,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							isPolymarketAllowanceRecoverableError(msg) &&
 							ensurePolymarketApprovals
 						) {
-							console.warn(
+							console.debug(
 								"[SOR][polymarket] allowance error, attempting one-shot recovery",
 								{ error: msg.slice(0, 240) },
 							);
@@ -1130,7 +1134,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						| "init"
 						| "ensureLimitlessApprovals"
 						| "postLimitlessOrder" = "init";
-					console.info(sorLx, "leg start", {
+					console.debug(sorLx, "leg start", {
 						routeSlug: routeSlug ?? orderMarketSlug,
 						orderMarketSlug,
 						side,
@@ -1144,7 +1148,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						// Re-run ensure-account so venue state is fresh; BUY allowance
 						// is re-checked on the API inside POST /limitless/orders.
 						if (ensureLimitlessApprovals) {
-							console.info(sorLx, "phase", {
+							console.debug(sorLx, "phase", {
 								phase,
 								note: "verify-allowance + Base USDC/CTF txs if needed + partner recheck + gate",
 							});
@@ -1156,7 +1160,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									side,
 									getClientForChain,
 								});
-								console.info(sorLx, "phase ok", { phase });
+								console.debug(sorLx, "phase ok", { phase });
 							} catch (e: unknown) {
 								const msg =
 									e instanceof Error ? e.message : "Limitless account not ready";
@@ -1175,7 +1179,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							console.warn(sorLx, "ensureLimitlessApprovals hook missing — skipping JIT");
 						}
 						phase = "postLimitlessOrder";
-						console.info(sorLx, "phase", {
+						console.debug(sorLx, "phase", {
 							phase,
 							routeSlug: routeSlug ?? orderMarketSlug,
 							orderMarketSlug,
@@ -1228,7 +1232,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									keys.length === 1 && keys[0] === "message";
 								if (onlyMessage) {
 									const msg = rest.message;
-									console.warn(sorLx, "POST /orders minimal body (no order object)", {
+									console.debug(sorLx, "POST /orders minimal body (no order object)", {
 										message:
 											typeof msg === "string"
 												? msg.length > 400
@@ -1238,13 +1242,13 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									});
 								}
 								if (meta?.effectiveMarketSlug) {
-									console.info(sorLx, "POST /orders venue slug (from API meta)", {
+									console.debug(sorLx, "POST /orders venue slug (from API meta)", {
 										routeSlug: body.marketSlug,
 										effectiveMarketSlug: meta.effectiveMarketSlug,
 										declaredMarketSlug: meta.declaredMarketSlug,
 									});
 								}
-								console.info(sorLx, "POST /orders response (dev)", {
+								console.debug(sorLx, "POST /orders response (dev)", {
 									keys: keys.slice(0, 25),
 									orderId,
 									executionMatched: matched,
@@ -1294,7 +1298,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							if (!clamp.ok) {
 								return { filled: false, filledShares: 0, error: clamp.error };
 							}
-							console.warn("[SOR][wire] limitless", {
+							console.debug("[SOR][wire] limitless", {
 								venue: "limitless",
 								executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
 								feeUsd: Number(leg.fee.toFixed(6)),
@@ -1375,14 +1379,14 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									? String((ord as { id?: unknown }).id)
 									: undefined;
 							if (orderId) {
-								console.info(sorLx, "GTC: resting limit accepted (not a book fill yet)", {
+								console.debug(sorLx, "GTC: resting limit accepted (not a book fill yet)", {
 									routeSlug: routeSlug ?? orderMarketSlug,
 									orderMarketSlug,
 									orderId,
 								});
 							}
 						}
-						console.info(sorLx, "leg complete", {
+						console.debug(sorLx, "leg complete", {
 							routeSlug: routeSlug ?? orderMarketSlug,
 							orderMarketSlug,
 						});
@@ -1499,7 +1503,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							return { filled: false, filledShares: 0, error: clamp.error };
 						}
 						if (clamp.resized) {
-							console.warn("[SOR][sell-clamp] predictfun", {
+							console.debug("[SOR][sell-clamp] predictfun", {
 								venue: "predictfun",
 								tokenIdTail: tokenId.slice(-8),
 								plannedShares: Number(leg.shares.toFixed(6)),
@@ -1579,7 +1583,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						if (!clamp.ok) {
 							return { filled: false, filledShares: 0, error: clamp.error };
 						}
-						console.warn("[SOR][wire] predictfun", {
+						console.debug("[SOR][wire] predictfun", {
 							venue: "predictfun",
 							executionAmountUsd: Number(leg.executionAmountUsd.toFixed(6)),
 							feeUsd: Number(leg.fee.toFixed(6)),
@@ -1848,10 +1852,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					},
 					scwUsdcLiveBalanceMicrosFromRpc: scwUsdcLiveBalanceMicrosLog,
 				};
-				console.warn("[SOR][prefund] on-chain stable snapshot (RPC)", prefundLogBase);
+				console.debug("[SOR][prefund] on-chain stable snapshot (RPC)", prefundLogBase);
 
 				if (bridgeShortfallUsd <= PREFUND_SHORTFALL_COVERED_EPS_USD) {
-					console.warn("[SOR][prefund] no LI.FI pull — venue balance covers prefund target", {
+					console.debug("[SOR][prefund] no LI.FI pull — venue balance covers prefund target", {
 						...prefundLogBase,
 						scwToMakerSweepTxHash: scwToMakerSweepTxHash ?? null,
 					});
@@ -1875,7 +1879,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							"No Base smart wallet client — cannot move USDC from your Base smart wallet to the Limitless maker for this trade.",
 						);
 					}
-					console.warn("[SOR][prefund] same-chain Base USDC (SCW → Limitless maker)", {
+					console.debug("[SOR][prefund] same-chain Base USDC (SCW → Limitless maker)", {
 						venue: leg.venue,
 						usdcApprox: Number(plannedSweepMicros) / 1e6,
 					});
@@ -1933,7 +1937,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							}
 							throw sweepErr;
 						}
-						console.warn(
+						console.debug(
 							"[SOR][prefund] no LI.FI pull after deterministic SCW sweep — prefund target covered",
 							{
 								...prefundLogBase,
@@ -1975,7 +1979,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						},
 					);
 				} catch (planErr) {
-					console.warn("[SOR][prefund] plan rejected — compare to UI pooled cash", {
+					console.debug("[SOR][prefund] plan rejected — compare to UI pooled cash", {
 						...prefundLogBase,
 						reason: planErr instanceof Error ? planErr.message : String(planErr),
 					});
@@ -2063,7 +2067,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								0,
 								stepBudgetUsd - spentHumanForLedger,
 							);
-							console.warn("[SOR][prefund] LI.FI quote solved", {
+							console.debug("[SOR][prefund] LI.FI quote solved", {
 								venue: leg.venue,
 								corridor: `${step.fromChain}->${bridge.toChain}`,
 								step: `${stepIdx + 1}/${steps.length}`,
@@ -2089,7 +2093,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 						if (import.meta.env.DEV) {
 							const st0 = quote.steps[0] as Record<string, unknown> | undefined;
-							console.info("[SOR] Bridge LIFI quote", {
+							console.debug("[SOR] Bridge LIFI quote", {
 								venue: leg.venue,
 								prefundStep: `${stepIdx + 1}/${steps.length}`,
 								fromChainLifi,
@@ -2107,15 +2111,37 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							fromChainLifi === SOLANA_LIFI_CHAIN_ID ||
 							toChainLifi === SOLANA_LIFI_CHAIN_ID;
 
+						const builtLifiOpts = buildExecuteLifiStepsOptions(quote, {
+							routeIncludesSolana,
+							polygonRelay,
+						});
 						const lifiStepOptions = {
-							...buildExecuteLifiStepsOptions(quote, {
-								routeIncludesSolana,
-								polygonRelay,
-							}),
+							...mergeExecuteLifiStepsAllowanceOwnerForSorBasePrefund(
+								builtLifiOpts,
+								fromChainLifi,
+								quote.fromAddress,
+							),
 							...(solanaSigner != null ? { solanaSigner } : {}),
 						};
 
-						console.warn("[SOR][prefund] executing LI.FI on-chain steps (wallet may prompt)…", {
+						const getSignerForChainPrefund = async (chainId: number) => {
+							if (
+								sorBasePrefundLifiShouldUseEmbeddedSigner({
+									chainId,
+									quoteFromAddressRaw: quote.fromAddress,
+									embeddedEoaRaw: fundingAddresses.embeddedEoa,
+								})
+							) {
+								return createPrivyEmbeddedSendTransactionCapable(
+									fundingAddresses.embeddedEoa as `0x${string}`,
+									base,
+									privyEvmSendTransaction,
+								);
+							}
+							return getSignerForChain(chainId);
+						};
+
+						console.debug("[SOR][prefund] executing LI.FI on-chain steps (wallet may prompt)…", {
 							venue: leg.venue,
 							prefundStep: `${stepIdx + 1}/${steps.length}`,
 							fromChainLifi,
@@ -2128,7 +2154,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							const lifiOnchain = await withTimeout(
 								executeLifiSteps(
 									quote.steps as Parameters<typeof executeLifiSteps>[0],
-									getSignerForChain,
+									getSignerForChainPrefund,
 									lifiStepOptions,
 								),
 								SOR_LIFI_PREFUND_ONCHAIN_TIMEOUT_MS,
@@ -2139,7 +2165,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							reportSorExecutionPhase("moving_funds");
 						}
 
-						console.warn("[SOR][prefund] on-chain steps submitted; polling bridge status…", {
+						console.debug("[SOR][prefund] on-chain steps submitted; polling bridge status…", {
 							venue: leg.venue,
 							txCount: txHashes.length,
 						});
@@ -2187,7 +2213,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				};
 
 				if (plannedSweepMicros > 0n) {
-					console.warn(
+					console.debug(
 						"[SOR][prefund] parallel settle: Base SCW → maker receipt + LI.FI terminal",
 						{
 							venue: leg.venue,
@@ -2241,6 +2267,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			getSignerForChain,
 			preparePolygonRelay,
 			buildExecuteLifiStepsOptions,
+			privyEvmSendTransaction,
 		],
 	);
 

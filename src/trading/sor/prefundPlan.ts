@@ -1,5 +1,6 @@
 import type { SorChain } from "./sor-types";
 import type { FundingStableBalancesHuman } from "./fundingStableBalances";
+import { floorFloatToDecimalString } from "@/trading/lifi/prefundFromAmountHuman";
 
 /**
  * Extra headroom on LI.FI `amountHuman`. Set to 0 because the optimizer's
@@ -117,7 +118,7 @@ function splitBasePrefundAmount(
 		if (chunkSw >= MIN_PREFUND_CHUNK_USD) {
 			out.push({
 				fromChain: "base",
-				amountHuman: chunkSw.toFixed(6),
+				amountHuman: floorFloatToDecimalString(chunkSw, 6),
 				baseSpendWallet: "smartWallet",
 			});
 			pool.scw -= chunkSw;
@@ -128,7 +129,7 @@ function splitBasePrefundAmount(
 		if (chunkMk >= MIN_PREFUND_CHUNK_USD) {
 			out.push({
 				fromChain: "base",
-				amountHuman: chunkMk.toFixed(6),
+				amountHuman: floorFloatToDecimalString(chunkMk, 6),
 				baseSpendWallet: "limitlessMaker",
 			});
 			pool.maker -= chunkMk;
@@ -139,7 +140,7 @@ function splitBasePrefundAmount(
 			if (pool.scw + 1e-9 >= n) {
 				out.push({
 					fromChain: "base",
-					amountHuman: n.toFixed(6),
+					amountHuman: floorFloatToDecimalString(n, 6),
 					baseSpendWallet: "smartWallet",
 				});
 				pool.scw -= n;
@@ -149,7 +150,7 @@ function splitBasePrefundAmount(
 			if (pool.maker + 1e-9 >= n) {
 				out.push({
 					fromChain: "base",
-					amountHuman: n.toFixed(6),
+					amountHuman: floorFloatToDecimalString(n, 6),
 					baseSpendWallet: "limitlessMaker",
 				});
 				pool.maker -= n;
@@ -247,7 +248,10 @@ export function buildPrefundSteps(
 			return;
 		}
 		if (take >= MIN_PREFUND_CHUNK_USD) {
-			steps.push({ fromChain: c, amountHuman: take.toFixed(6) });
+			steps.push({
+				fromChain: c,
+				amountHuman: floorFloatToDecimalString(take, 6),
+			});
 		}
 	};
 

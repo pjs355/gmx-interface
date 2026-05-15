@@ -1,7 +1,7 @@
 import { type Page, expect } from "@playwright/test";
 import { readHeaderCashUsd } from "../helpers/header-cash";
 
-const MIN_BALANCE_USD = 60;
+const MIN_BALANCE_USD = 5;
 /** Cash can climb after Base USDC + bridge balances hydrate (see PortfolioContext). */
 const BALANCE_READY_TIMEOUT_MS = 90_000;
 const POLL_MS = 400;

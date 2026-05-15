@@ -1,7 +1,34 @@
 import { useMemo } from "react";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
-import type { AccountOverview, PolymarketAccountResponse } from "@/types/trading";
+import type {
+	AccountOverview,
+	PolymarketAccountResponse,
+	WalletDescriptor,
+} from "@/types/trading";
 import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/polymarket/privyEmbeddedWallet";
+
+/**
+ * Account overview `wallets[]` rows from the API use `walletType: "smart"` (see server `WalletRecord`).
+ * Legacy clients used `kind: "smart_wallet"`. Exported for unit tests.
+ */
+export function overviewWalletIsEvmSmartWallet(w: WalletDescriptor): boolean {
+	const kind = String(w.kind ?? "").toLowerCase();
+	if (kind === "smart_wallet" || kind === "coinbase_smart_wallet") return true;
+
+	const ext = w as WalletDescriptor & {
+		walletType?: string;
+		walletRoleTags?: readonly string[];
+	};
+	const chainFamily = String(w.chainFamily ?? "").toLowerCase();
+	if (chainFamily === "solana") return false;
+
+	const wt = String(ext.walletType ?? "").toLowerCase();
+	if (wt === "smart") return true;
+
+	const tags = ext.walletRoleTags;
+	if (!Array.isArray(tags)) return false;
+	return tags.some((t) => String(t) === "evmSmartWallet");
+}
 
 export type NormalizedTradingWallets = {
 	/** Coinbase Smart Wallet on Base — primary LevelUp balance / LI.FI `from` on Base */
@@ -55,14 +82,12 @@ export function useTradingWallets(
 
 	return useMemo(() => {
 		const smartFromUser = readSmartWalletFromUser(user as unknown);
-		const overviewWallet = accountOverview?.wallets?.find(
-			(w) =>
-				String(w.kind ?? "").toLowerCase() === "smart_wallet" ||
-				String(w.kind ?? "").toLowerCase() === "coinbase_smart_wallet"
-		);
-		const baseSmartWallet =
-			(typeof overviewWallet?.address === "string" && overviewWallet.address) ||
-			smartFromUser;
+		const overviewWallet = accountOverview?.wallets?.find(overviewWalletIsEvmSmartWallet);
+		const overviewAddr =
+			typeof overviewWallet?.address === "string" ? overviewWallet.address.trim() : "";
+		const privyScw =
+			typeof smartFromUser === "string" && smartFromUser.trim() ? smartFromUser.trim() : undefined;
+		const baseSmartWallet = overviewAddr || privyScw || undefined;
 
 		const embedded = findEvmPrivyEmbeddedWallet(
 			(wallets || []) as readonly PrivyWalletListEntry[]
