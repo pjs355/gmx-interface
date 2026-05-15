@@ -224,10 +224,41 @@ export function usePredictionChartData({
 
 	// Derive live-adjusted data from historicalData + orderbooks (no state needed)
 	const data = useMemo((): ChartDataPoint[] => {
-		if (historicalData.length === 0 || !questionOrderbooks) return historicalData;
+		if (!questionOrderbooks) return historicalData;
 
 		const livePrice = getLivePrice(questionId, questionOrderbooks);
 		const liveSecondPrice = secondId ? getLivePrice(secondId, questionOrderbooks) : null;
+
+		/** Orderbook-only: no cached/API history yet, but we still need a LevelUp series for Recharts merge. */
+		if (historicalData.length === 0) {
+			if (livePrice === null && liveSecondPrice === null) return [];
+			const now = Math.floor(Date.now() / 1000);
+			const windowStart =
+				timeRange === "all"
+					? now - 30 * 86400
+					: now - (timeRange === "1h" ? 3600 : 86400);
+			const mk = (ts: number, liveFlags: { isLive: boolean; secondIsLive: boolean }): ChartDataPoint => {
+				const date = new Date(ts * 1000);
+				return {
+					timestamp: ts,
+					price: livePrice,
+					secondPrice: liveSecondPrice,
+					date: date.toISOString(),
+					displayTime: formatDisplayTime(date, timeRange),
+					percentage: livePrice !== null ? livePrice * 100 : null,
+					secondPercentage: liveSecondPrice !== null ? liveSecondPrice * 100 : null,
+					isLive: liveFlags.isLive,
+					secondIsLive: liveFlags.secondIsLive,
+				};
+			};
+			if (windowStart >= now) {
+				return [mk(now, { isLive: livePrice !== null, secondIsLive: liveSecondPrice !== null })];
+			}
+			return [
+				mk(windowStart, { isLive: false, secondIsLive: false }),
+				mk(now, { isLive: livePrice !== null, secondIsLive: liveSecondPrice !== null }),
+			];
+		}
 
 		if (livePrice === null && liveSecondPrice === null) return historicalData;
 
@@ -243,7 +274,7 @@ export function usePredictionChartData({
 		};
 
 		return [...historicalData.slice(0, -1), updatedLast];
-	}, [historicalData, questionOrderbooks, questionId, secondId, secondMarket]);
+	}, [historicalData, questionOrderbooks, questionId, secondId, secondMarket, timeRange]);
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;

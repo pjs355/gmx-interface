@@ -28,7 +28,7 @@ export interface PredictionMarketChartProps {
 	secondMarket?: any;
 	questionOrderbooks?: { [questionId: string]: any };
 	className?: string;
-	/** Canonical REST LevelUp book has resting size; chart WS/toggles use this (Orderbooks tab may still show venue WS depth). */
+	/** Primary chart market orderbook has resting size; drives LevelUp series + toggles on Recharts. */
 	levelUpOrderbookHasRestingShares: boolean;
 }
 
@@ -165,6 +165,16 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 			if (!prev.has("levelUp")) return prev;
 			const next = new Set(prev);
 			next.delete("levelUp");
+			return next;
+		});
+	}, [levelUpOrderbookHasRestingShares]);
+
+	useEffect(() => {
+		if (!levelUpOrderbookHasRestingShares) return;
+		setEnabledVenues((prev) => {
+			if (prev.has("levelUp")) return prev;
+			const next = new Set(prev);
+			next.add("levelUp");
 			return next;
 		});
 	}, [levelUpOrderbookHasRestingShares]);

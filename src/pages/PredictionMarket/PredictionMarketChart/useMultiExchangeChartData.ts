@@ -409,7 +409,7 @@ export function useMultiExchangeChartData({
 		if (includeLevelUp && levelUpDataB.length > 0)
 			seriesB.push({ venue: "levelUp", points: levelUpDataB });
 
-		if (series.length === 0) return [];
+		if (series.length === 0 && (!seriesB || seriesB.length === 0)) return [];
 		return mergeExchangeTimeSeries(series, timeRange, seriesB.length > 0 ? seriesB : undefined);
 	}, [levelUpData, levelUpDataB, state.venueData, timeRange, includeLevelUp]);
 

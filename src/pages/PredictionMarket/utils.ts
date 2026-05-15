@@ -72,13 +72,29 @@ export function hasUsableOrderbookSnapshot(ob: unknown): boolean {
   return Array.isArray(o.asks) || Array.isArray(o.bids);
 }
 
+function restingSizeFromOrderbookRow(row: unknown): number {
+  if (row == null) return 0;
+  if (Array.isArray(row)) {
+    if (row.length >= 2) {
+      const n = Number(row[1]);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }
+    return 0;
+  }
+  if (typeof row !== "object") return 0;
+  const o = row as Record<string, unknown>;
+  for (const key of ["size", "amount", "quantity", "shares", "qty"] as const) {
+    const n = Number(o[key]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
 function sumPositiveRestingSizes(levels: unknown): number {
   if (!Array.isArray(levels)) return 0;
   let sum = 0;
   for (const row of levels) {
-    if (!row || typeof row !== "object") continue;
-    const n = Number((row as { size?: unknown }).size);
-    if (Number.isFinite(n) && n > 0) sum += n;
+    sum += restingSizeFromOrderbookRow(row);
   }
   return sum;
 }

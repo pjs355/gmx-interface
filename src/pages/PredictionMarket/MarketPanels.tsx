@@ -92,6 +92,16 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const firstQuestion = sortedQuestions[0] ?? null;
 	/** `PredictionMarket` `activeMarket` can lag one frame; trade box skeletons forever on null. */
 	const tradeBoxActiveMarket = activeMarket ?? firstQuestion;
+	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
+	const settledView = Boolean(settledInfo);
+	/** Same key as chart + `primaryChartOrderbook` (multiplex map); not always `resolveLevelUpOrderbookKey`. */
+	const chartQuestionId =
+		chartState.primaryQuestionId ||
+		getMarketId(chartState.primaryMarket) ||
+		(hasQuestions ? getMarketId(sortedQuestions[0]) : "");
+	const primaryChartOrderbook = chartQuestionId
+		? questionOrderbooks[chartQuestionId]
+		: undefined;
 	const levelUpOrderbookKey = resolveLevelUpOrderbookKey(
 		sortedQuestions,
 		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)
@@ -100,16 +110,13 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const levelUpOrderbook = levelUpOrderbookKey
 		? questionOrderbooks[levelUpOrderbookKey] ?? null
 		: null;
-	/** Chart LevelUp series: multiplex + context orderbook (venue-prices for cross-venue). */
+	/** LevelUp line on the chart when the primary chart market's book has displayed depth. */
 	const chartLevelUpBookHasRestingShares =
-		levelUpOrderbookHasRestingShares(levelUpOrderbook);
+		levelUpOrderbookHasRestingShares(primaryChartOrderbook);
 	const levelUpContextMarket =
 		(levelUpOrderbookKey
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
 			: null) ?? firstQuestion;
-
-	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
-	const settledView = Boolean(settledInfo);
 	const showCrossVenueBooks = Boolean(pandascoreMatchId);
 	const streamUrl =
 		typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
@@ -288,13 +295,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			</>
 		);
 
-	const chartQuestionId =
-		chartState.primaryQuestionId ||
-		getMarketId(chartState.primaryMarket) ||
-		(hasQuestions ? getMarketId(sortedQuestions[0]) : "");
-	const primaryChartOrderbook = chartQuestionId
-		? questionOrderbooks[chartQuestionId]
-		: undefined;
 	// Chart only needs a usable snapshot for the primary chart market; settledView does not change this condition
 	const showChartBlock =
 		hasQuestions && hasUsableOrderbookSnapshot(primaryChartOrderbook);
@@ -316,13 +316,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				style={{ minHeight: 300 }}
 			>
 				<PredictionMarketChart
-					questionId={
-						chartState.primaryQuestionId ||
-						chartState.primaryMarket?._id ||
-						chartState.primaryMarket?.questionId ||
-						chartState.primaryMarket?.marketId ||
-						""
-					}
+					questionId={chartQuestionId}
 					umbrellaId={umbrella?._id}
 					pandaMatchId={pandascoreMatchId || undefined}
 					limitlessFromUmbrella={umbrellaLimitless}
