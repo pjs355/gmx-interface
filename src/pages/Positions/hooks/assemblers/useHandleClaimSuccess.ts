@@ -5,8 +5,8 @@ import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
 import type { FundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
 import {
 	readTotalCashHumanFromQueryClient,
-	usePostTradeBalanceSync,
-} from "@/trading/sor/usePostTradeBalanceSync";
+	usePostTradeAccountSync,
+} from "@/trading/sor/usePostTradeAccountSync";
 
 export type UseHandleClaimSuccessArgs = {
 	acknowledgeClearedPayouts: (keys: string[]) => void;
@@ -33,7 +33,7 @@ export function useHandleClaimSuccess({
 	collateralTokens,
 }: UseHandleClaimSuccessArgs): HandleClaimSuccess {
 	const queryClient = useQueryClient();
-	const { startCashAfterClaim } = usePostTradeBalanceSync();
+	const { startCashAfterClaim } = usePostTradeAccountSync();
 
 	return useCallback<HandleClaimSuccess>(
 		async (marketId, _umbrellaId) => {

@@ -35,8 +35,13 @@ function logDflowClientOrderSigning(
 ): void {
 	if (leg.venue !== "dflow" || route.side !== "buy") return;
 	const micro = Math.round(leg.executionAmountUsd * 1_000_000);
+	const exp =
+		typeof route.expiresAt === "number" && Number.isFinite(route.expiresAt)
+			? route.expiresAt
+			: null;
+	const ttlMs = exp != null ? Math.max(0, exp - Date.now()) : null;
 	console.log(
-		`[SOR][DFlow] client-order-signing phase=${phase} routeId=${route.routeId} requestedAmount=${route.requestedAmount} execUsd=${leg.executionAmountUsd.toFixed(6)} shares=${leg.shares.toFixed(6)} amount_micro=${micro}`,
+		`[SOR][DFlow] client-order-signing phase=${phase} routeId=${route.routeId} requestedAmount=${route.requestedAmount} execUsd=${leg.executionAmountUsd.toFixed(6)} shares=${leg.shares.toFixed(6)} amount_micro=${micro} routeTtlMs=${ttlMs ?? "n/a"}`,
 	);
 }
 
@@ -54,9 +59,21 @@ export type LegExecutorResult = {
 	error?: string;
 	/** DFlow: from successful POST submit (`initializedMarket`). */
 	initializedMarket?: boolean;
+	/** DFlow: HTTP 200 with `orderStatus.partialFill` (reverts + delivered output). */
+	dflowPartialFill?: boolean;
 };
 
-export type LegExecutor = (leg: RouteLeg, side?: "buy" | "sell") => Promise<LegExecutorResult>;
+export type SorLegRouteContext = {
+	routeId: string;
+	/** Server `RoutePlan.expiresAt` (epoch ms). Used to refuse stale DFlow quotes before GET /order. */
+	expiresAtMs: number;
+};
+
+export type LegExecutor = (
+	leg: RouteLeg,
+	side?: "buy" | "sell",
+	routeCtx?: SorLegRouteContext,
+) => Promise<LegExecutorResult>;
 
 /** LI.FI prefund hop index for UI (`current` is 1-based). */
 export type SorPrefundLegProgress = { current: number; total: number };
@@ -136,6 +153,7 @@ function buildLocalExecution(
 			txHash?: string;
 			error?: string;
 			initializedMarket?: boolean;
+			dflowPartialFill?: boolean;
 		}
 	>,
 ): RouteExecution {
@@ -173,6 +191,9 @@ function buildLocalExecution(
 			txHash: result?.txHash,
 			...(result?.initializedMarket === true
 				? { initializedMarket: true as const }
+				: {}),
+			...(result?.dflowPartialFill === true
+				? { dflowPartialFill: true as const }
 				: {}),
 			error: errorForLeg,
 			updatedAt: Date.now(),
@@ -246,9 +267,14 @@ export function useSorExecution(
 	}, [reportExecutionPhaseRef]);
 
 	const executeLegWithRetry = useCallback(
-		async (leg: RouteLeg, retriesLeft: number, side: "buy" | "sell" = "buy"): Promise<LegExecutorResult> => {
+		async (
+			leg: RouteLeg,
+			retriesLeft: number,
+			side: "buy" | "sell" = "buy",
+			routeCtx?: SorLegRouteContext,
+		): Promise<LegExecutorResult> => {
 			try {
-				const result = await executeLeg(leg, side);
+				const result = await executeLeg(leg, side, routeCtx);
 				if (!result.filled && !(result.error?.trim())) {
 					return {
 						...result,
@@ -266,7 +292,7 @@ export function useSorExecution(
 							err instanceof Error ? err.message : String(err),
 					});
 					await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-					return executeLegWithRetry(leg, retriesLeft - 1, side);
+					return executeLegWithRetry(leg, retriesLeft - 1, side, routeCtx);
 				}
 				console.error("error", err);
 				return {
@@ -303,7 +329,7 @@ export function useSorExecution(
 			setRemainingBudget(null);
 
 			const isSell = route.side === "sell";
-			const legResults = new Map<string, { filled: boolean; filledShares: number; txHash?: string; error?: string }>();
+			const legResults = new Map<string, { filled: boolean; filledShares: number; txHash?: string; error?: string; initializedMarket?: boolean; dflowPartialFill?: boolean }>();
 
 			// Pre-flight: reject routes whose legs violate venue protocol minimums
 			// BEFORE bridging so users don't end up with dust stuck on the destination
@@ -536,7 +562,10 @@ export function useSorExecution(
 						let tradeResult: Awaited<ReturnType<typeof executeLegWithRetry>>;
 						try {
 							tradeResult = await withTimeout(
-								executeLegWithRetry(leg, RETRY_COUNT, route.side),
+								executeLegWithRetry(leg, RETRY_COUNT, route.side, {
+									routeId: route.routeId,
+									expiresAtMs: route.expiresAt,
+								}),
 								LEG_OR_BRIDGE_TIMEOUT_MS,
 								`SOR post-bridge leg ${leg.venue}`,
 							);
@@ -585,7 +614,10 @@ export function useSorExecution(
 					let result: Awaited<ReturnType<typeof executeLegWithRetry>>;
 					try {
 						result = await withTimeout(
-							executeLegWithRetry(leg, RETRY_COUNT, route.side),
+							executeLegWithRetry(leg, RETRY_COUNT, route.side, {
+								routeId: route.routeId,
+								expiresAtMs: route.expiresAt,
+							}),
 							LEG_OR_BRIDGE_TIMEOUT_MS,
 							`SOR leg ${leg.venue}`,
 						);

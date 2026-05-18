@@ -116,19 +116,10 @@
 		align-items: center;
 		gap: 12px;
 		margin-bottom: 12px;
+		width: 100%;
 
-		&__left {
-			flex-shrink: 0;
-		}
-
-		&__center {
-			flex: 1;
-			display: flex;
-			justify-content: center;
-			min-width: 0;
-		}
-
-		&__right {
+		> .odds-format-menu {
+			margin-left: auto;
 			flex-shrink: 0;
 		}
 

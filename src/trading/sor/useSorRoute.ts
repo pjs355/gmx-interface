@@ -79,6 +79,8 @@ type CachedRouteEntry = {
 	route: RoutePlan;
 	venuePreviews: VenueRoutePreview[] | null;
 	timestamp: number;
+	/** SOR `questionId` for this snapshot (cache keys always embed it; stored for trust UI). */
+	questionId?: string;
 };
 
 const SOR_ROUTE_CACHE_CAP = 32;
@@ -226,6 +228,10 @@ export interface UseSorRouteResult {
 	displayRoute: RoutePlan | null;
 	executionRoute: RoutePlan | null;
 	venuePreviews: VenueRoutePreview[] | null;
+	/** SOR `questionId` that produced the current `displayRoute` (null when no route). */
+	displayRouteSourceQuestionId: string | null;
+	/** SOR `questionId` that produced the current `executionRoute` (null when no route). */
+	executionRouteSourceQuestionId: string | null;
 	displayLoading: boolean;
 	displayStale: boolean;
 	executionLoading: boolean;
@@ -308,9 +314,19 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	const [displayRoute, setDisplayRoute] = useState<RoutePlan | null>(
 		initialDisplayCacheEntry?.route ?? null,
 	);
+	const [displayRouteSourceQuestionId, setDisplayRouteSourceQuestionId] =
+		useState<string | null>(
+			initialDisplayCacheEntry?.questionId ??
+				(questionId && initialDisplayCacheEntry?.route ? questionId : null),
+		);
 	const [executionRoute, setExecutionRoute] = useState<RoutePlan | null>(
 		initialExecutionCacheEntry?.route ?? null,
 	);
+	const [executionRouteSourceQuestionId, setExecutionRouteSourceQuestionId] =
+		useState<string | null>(
+			initialExecutionCacheEntry?.questionId ??
+				(questionId && initialExecutionCacheEntry?.route ? questionId : null),
+		);
 	const [venuePreviews, setVenuePreviews] = useState<
 		VenueRoutePreview[] | null
 	>(initialDisplayCacheEntry?.venuePreviews ?? null);
@@ -479,10 +495,15 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				channelLastGoodRouteRef.current = r.route;
 				setRoute(r.route);
 				if (channel === "display") {
+					setDisplayRouteSourceQuestionId(questionId ?? null);
 					setVenuePreviews(r.venuePreviews ?? null);
+				}
+				if (channel === "execution") {
+					setExecutionRouteSourceQuestionId(questionId ?? null);
 				}
 				if (aliasToDisplay) {
 					setDisplayRoute(r.route);
+					setDisplayRouteSourceQuestionId(questionId ?? null);
 					setVenuePreviews(null);
 					setDisplayError(null);
 					setDisplayErrorCode(null);
@@ -519,6 +540,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 							route: r.route,
 							venuePreviews: cacheVenuePreviews,
 							timestamp: Date.now(),
+							questionId: questionId!,
 						},
 					);
 				}
@@ -537,6 +559,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 							route: r.route,
 							venuePreviews: null,
 							timestamp: Date.now(),
+							questionId: questionId!,
 						},
 					);
 				}
@@ -569,10 +592,15 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				setRoute(null);
 				channelLastGoodRouteRef.current = null;
 				if (channel === "display") {
+					setDisplayRouteSourceQuestionId(null);
 					setVenuePreviews(null);
+				}
+				if (channel === "execution") {
+					setExecutionRouteSourceQuestionId(null);
 				}
 				if (aliasToDisplay) {
 					setDisplayRoute(null);
+					setDisplayRouteSourceQuestionId(null);
 					setVenuePreviews(null);
 					setDisplayError(silentAuthFailure ? null : opts.message);
 					setDisplayErrorCode(silentAuthFailure ? null : opts.code);
@@ -738,6 +766,8 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		executionAbortRef.current?.abort();
 		setDisplayRoute(null);
 		setExecutionRoute(null);
+		setDisplayRouteSourceQuestionId(null);
+		setExecutionRouteSourceQuestionId(null);
 		setVenuePreviews(null);
 		setDisplayLoading(false);
 		setExecutionLoading(false);
@@ -758,6 +788,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	const blankExecutionOnly = useCallback(() => {
 		executionAbortRef.current?.abort();
 		setExecutionRoute(null);
+		setExecutionRouteSourceQuestionId(null);
 		setExecutionLoading(false);
 		setExecutionError(null);
 		setExecutionErrorCode(null);
@@ -830,6 +861,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			const cached = readSorRouteCache(newDisplayCacheKey);
 			if (cached) {
 				setDisplayRoute(cached.route);
+				setDisplayRouteSourceQuestionId(cached.questionId ?? questionId ?? null);
 				setVenuePreviews(cached.venuePreviews ?? null);
 				displayLastGoodRouteRef.current = cached.route;
 				displayFailureStreakStartRef.current = null;
@@ -983,6 +1015,8 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		displayRoute,
 		executionRoute,
 		venuePreviews,
+		displayRouteSourceQuestionId,
+		executionRouteSourceQuestionId,
 		displayLoading,
 		displayStale,
 		executionLoading,

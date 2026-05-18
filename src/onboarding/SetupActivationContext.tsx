@@ -20,7 +20,7 @@ import {
  *      reachable.
  *   2. The trade box: when `anyInProgress` is true, it suppresses the
  *      `EXECUTION_NOT_READY` error block and the "Trading setup required" /
- *      "Preparing Predict…" copy so users never see jarring midstream
+ *      venue-specific loading copy so users never see jarring midstream
  *      messages while the gate is still doing its job.
  *
  * `onboardingActive` is a separate signal owned by the modal/gate. When it

@@ -486,6 +486,10 @@ export interface SmartRoutingSectionProps {
 	routePreviewAllowed?: boolean;
 	/** Stable market id — when it changes, clear sticky omnibus state (match switch without remount). */
 	smartRoutingMarketKey?: string;
+	/** Which market the omnibus `displayRoute` was computed for — gates stale prices on market switch. */
+	sorDisplayRouteSourceQuestionId?: string | null;
+	/** Which market `executionRoute` was computed for — gates per-venue overlay rows on market switch. */
+	sorExecutionRouteSourceQuestionId?: string | null;
 	/** Selected outcome for omnibus + venue quotes — gates stale digits on Yes/No flips. */
 	selectedOutcome: SorOutcome;
 	/** Predict.fun fee bps from market detail — net-held share display when set. */
@@ -509,6 +513,8 @@ export default function SmartRoutingSection({
 	side,
 	routePreviewAllowed = true,
 	smartRoutingMarketKey,
+	sorDisplayRouteSourceQuestionId = null,
+	sorExecutionRouteSourceQuestionId = null,
 	selectedOutcome,
 	predictFunFeeRateBps,
 	executionLoading,
@@ -614,8 +620,9 @@ export default function SmartRoutingSection({
 			side: expectedSide,
 			outcome: selectedOutcome,
 			amountNumber: n,
+			...(marketKeyForSticky ? { questionId: marketKeyForSticky } : {}),
 		};
-	}, [userAmount, expectedSide, selectedOutcome]);
+	}, [userAmount, expectedSide, selectedOutcome, marketKeyForSticky]);
 
 	const omnibusMetricsTrusted = useMemo(() => {
 		if (!trustCtx || !routePreviewAllowed) return true;
@@ -624,8 +631,16 @@ export default function SmartRoutingSection({
 			displayRoute,
 			trustCtx,
 			isLoading,
+			sorDisplayRouteSourceQuestionId ?? null,
 		);
-	}, [trustCtx, routePreviewAllowed, liveDisplayRoute, displayRoute]);
+	}, [
+		trustCtx,
+		routePreviewAllowed,
+		liveDisplayRoute,
+		displayRoute,
+		isLoading,
+		sorDisplayRouteSourceQuestionId,
+	]);
 
 	const splitMetricsPending =
 		Boolean(trustCtx && routePreviewAllowed && !omnibusMetricsTrusted);
@@ -639,6 +654,7 @@ export default function SmartRoutingSection({
 					overlayRoute,
 					trustCtx,
 					executionLoading,
+					sorExecutionRouteSourceQuestionId ?? null,
 				);
 			}
 			return !omnibusMetricsTrusted;
@@ -648,6 +664,8 @@ export default function SmartRoutingSection({
 			routePreviewAllowed,
 			executionRoute,
 			omnibusMetricsTrusted,
+			executionLoading,
+			sorExecutionRouteSourceQuestionId,
 		],
 	);
 

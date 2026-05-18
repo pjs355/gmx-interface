@@ -20,8 +20,8 @@ import { useStickyTradeAmount } from "@/context/StickyTradeAmountContext";
  * dock just had — so the quote the user saw doesn't appear to "reload".
  *
  * Flipping Buy ↔ Sell clears only the sticky amount (USD vs shares are not
- * interchangeable). Venue / orderType are tab choices that still apply, so
- * they are preserved across side flips.
+ * interchangeable). `orderType` and `tradingVenue` are preserved across side
+ * flips — they are tab / smart-routing row choices that still apply.
  *
  * `selectedPosition`, `price`, `side`, `isLoading`, and `orderResult` stay in
  * local state because they are tied to the active market or to one trade
@@ -52,7 +52,7 @@ type StateUpdater = FullTradeState | ((prev: FullTradeState) => FullTradeState);
 
 export function useTradeState(
 	initialPosition?: "yes" | "no",
-	initialVenue?: TradingVenue,
+	_initialVenue?: TradingVenue,
 	tradeRouteIsolationKey?: string,
 ) {
 	const sticky = useStickyTradeAmount();
@@ -77,13 +77,9 @@ export function useTradeState(
 	}, [tradeRouteIsolationKey, sticky]);
 
 	/**
-	 * Resolve the starting venue + orderType once on mount:
-	 *  - If sticky has a value (user picked one earlier in this session), use it.
-	 *  - Otherwise fall back to the per-umbrella defaults the parent computed
-	 *    (`initialVenue`, "market").
-	 *
-	 * Subsequent changes flow through `handleTradingVenueChange` /
-	 * `handleOrderTypeChange`, which write back into sticky.
+	 * Resolve `orderType` / `tradingVenue` from sticky when present; otherwise
+	 * fall back to `"market"` and the parent-supplied initial venue (e.g. `"all"`
+	 * on multi-venue umbrellas, `"levelup"` on single-venue pages).
 	 */
 	const [coreState, setCoreState] = useState<CoreTradeState>({
 		selectedPosition: initialPosition || "yes",
@@ -95,14 +91,12 @@ export function useTradeState(
 		remainingUsd: null,
 	});
 
-	const stickyVenue = shouldBypassSticky ? null : sticky.tradingVenue;
 	const stickyOrderType = shouldBypassSticky ? null : sticky.orderType;
 	const stickyAmount = shouldBypassSticky ? "" : sticky.amount;
+	const stickyTradingVenue = shouldBypassSticky ? null : sticky.tradingVenue;
 
-	/** Effective values that downstream consumers see. Reads sticky every
-	 *  render so live updates by sibling components propagate. */
 	const tradingVenue: TradingVenue =
-		stickyVenue ?? ((initialVenue || "levelup") as TradingVenue);
+		stickyTradingVenue ?? _initialVenue ?? "levelup";
 	const orderType: "market" | "limit" = stickyOrderType ?? "market";
 
 	/** Always matches latest `coreState` so `handleSideChange` can read `side` synchronously
@@ -165,7 +159,7 @@ export function useTradeState(
 			} = next;
 			setCoreState(nextCore);
 		},
-		[sticky, stickyAmount, tradingVenue, orderType],
+		[sticky, stickyAmount, orderType, tradingVenue],
 	);
 
 	const handlePositionChange = useCallback((position: "yes" | "no") => {
@@ -211,12 +205,6 @@ export function useTradeState(
 	const handleTradingVenueChange = useCallback(
 		(nextVenue: TradingVenue) => {
 			sticky.setTradingVenue(nextVenue);
-			// Switching to "all" forces market orderType (limit isn't valid on all-venues
-			// omnibus). Mirror the pre-sticky behaviour by writing the implied order type
-			// into sticky so other observers stay consistent.
-			if (nextVenue === "all") {
-				sticky.setOrderType("market");
-			}
 		},
 		[sticky],
 	);

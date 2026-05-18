@@ -264,7 +264,7 @@ export function usePredictEnsureExecutionReady(args: {
 	const ready = phase === "ready";
 	// While enabled+authenticated, setup is "in progress" from the UI's perspective
 	// until we reach `ready`. During `error` we still report in-progress so the
-	// button shows "Preparing Predict…" while we wait for the backoff retry, unless
+	// button shows a neutral loading label while we wait for the backoff retry, unless
 	// we've exhausted the backoff schedule.
 	const failState = runKey ? failuresByKeyRef.current.get(runKey) : undefined;
 	const exhausted =

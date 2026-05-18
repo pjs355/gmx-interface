@@ -32,7 +32,7 @@ import type {
 	DflowOrderSubmitBody,
 	DflowOrderSubmitResponse,
 } from "@/services/privateApi/client";
-import type { SorExecutionPhase } from "./useSorExecution";
+import type { SorExecutionPhase, SorLegRouteContext } from "./useSorExecution";
 import {
 	readFundingStableBalancesHuman,
 	readBaseEmbeddedUsdcBalanceRaw,
@@ -135,8 +135,28 @@ function scwPendingMicrosToHumanUsd(micro: string | undefined): number {
  * does not return until the server observes DFlow `/order-status` === `closed`
  * (or returns a non-2xx with DFlow `msg`/`code`/`reverts` on failure). The SOR leg
  * is marked filled only on HTTP 200 from that route. Post-trade balance refetch
- * (`usePostTradeBalanceSync`) still converges positions after settlement.
+ * (`usePostTradeAccountSync`) still converges positions after settlement.
  */
+function sumDflowFillOutBaseUnitsForOutputMint(
+	fills: DflowOrderStatusResponse["fills"],
+	outputMint: string,
+): bigint {
+	const t = outputMint.trim();
+	if (!t || !fills?.length) return 0n;
+	let s = 0n;
+	for (const f of fills) {
+		const om = typeof f.outputMint === "string" ? f.outputMint.trim() : "";
+		if (om !== t) continue;
+		const raw = typeof f.outAmount === "string" ? f.outAmount.trim() : "";
+		if (!raw) continue;
+		try {
+			s += BigInt(raw);
+		} catch {
+			continue;
+		}
+	}
+	return s;
+}
 
 /**
  * Detect Polymarket order errors that imply a missing/revoked allowance on the
@@ -168,6 +188,8 @@ type LegResult = {
 	error?: string;
 	/** DFlow: from POST submit `initializedMarket` when the init-payer co-signed. */
 	initializedMarket?: boolean;
+	/** DFlow: closed with refund `reverts` while fills still delivered the route output mint. */
+	dflowPartialFill?: boolean;
 };
 
 /**
@@ -528,7 +550,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 	// ──────────────────────────────────────────────
 
 	const executeLeg = useCallback(
-		async (leg: RouteLeg, side: "buy" | "sell" = "buy"): Promise<LegResult> => {
+		async (
+			leg: RouteLeg,
+			side: "buy" | "sell" = "buy",
+			routeCtx?: SorLegRouteContext,
+		): Promise<LegResult> => {
 			const venue: SorVenue = leg.venue;
 
 			// Defense-in-depth: shares are non-transferable between venues, so
@@ -1101,6 +1127,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					let signature: string;
 					let orderQuote: DflowOrderResponse | undefined;
 					let dflowInitializedMarket = false;
+					let submitOrderStatus: DflowOrderSubmitResponse["orderStatus"] | undefined;
 					try {
 						const r = await quoteSignAndSubmitDflowOrder({
 							privateApi,
@@ -1114,10 +1141,19 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								predictionMarketSlippageBps: "auto",
 							},
 							submitExtras,
+							...(routeCtx != null
+								? {
+										routeTiming: {
+											routeId: routeCtx.routeId,
+											expiresAtMs: routeCtx.expiresAtMs,
+										},
+									}
+								: {}),
 						});
 						signature = r.signature;
 						orderQuote = r.orderQuote;
 						dflowInitializedMarket = r.initializedMarket;
+						submitOrderStatus = r.orderStatus;
 					} catch (e: unknown) {
 						const msg =
 							e instanceof Error ? e.message : "Kalshi order failed";
@@ -1129,18 +1165,42 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					}
 
 					let filledShares = leg.shares;
-					if (side === "buy" && orderQuote) {
+					const fills = submitOrderStatus?.fills;
+					const outMint = outputMint.trim();
+					if (fills?.length && outMint) {
+						const sumBase = sumDflowFillOutBaseUnitsForOutputMint(
+							fills,
+							outMint,
+						);
+						if (sumBase > 0n) {
+							const fromFills = humanFromDflowBaseUnits(
+								sumBase.toString(),
+							);
+							if (fromFills != null && fromFills > 0) {
+								filledShares = fromFills;
+							}
+						}
+					}
+					if (
+						filledShares === leg.shares &&
+						side === "buy" &&
+						orderQuote
+					) {
 						const fromOut = humanFromDflowBaseUnits(orderQuote.outAmount);
 						if (fromOut != null && fromOut > 0) {
 							filledShares = fromOut;
 						}
 					}
 
+					const dflowPartialFill =
+						submitOrderStatus?.partialFill === true;
+
 					return {
 						filled: true,
 						filledShares,
 						txHash: signature,
 						initializedMarket: dflowInitializedMarket,
+						...(dflowPartialFill ? { dflowPartialFill: true as const } : {}),
 					};
 				}
 

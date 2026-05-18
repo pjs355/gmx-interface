@@ -82,6 +82,8 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 		displayRoute: RoutePlan | null;
 		executionRoute: RoutePlan | null;
 		venuePreviews: VenueRoutePreview[] | null;
+		displayRouteSourceQuestionId: string | null;
+		executionRouteSourceQuestionId: string | null;
 		displayLoading: boolean;
 		displayStale: boolean;
 		executionLoading: boolean;
@@ -120,9 +122,9 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	allMarketsSellNoBid?: number | null;
 	shareBalances: TradeBoxShareBalancesSnapshot;
 	/**
-	 * True when the completed DFlow leg's POST submit indicated `initializedMarket`
-	 * (init-payer co-sign). Surfaces the "Kalshi via DFlow is creating this market"
-	 * notice for the lifetime of the current success `orderResult`.
+	 * Snapshot of `accountsInitialized*` from `exchangeMatching.dflow` at Submit.
+	 * Surfaces the "Kalshi via DFlow is creating this market" notice when that leg
+	 * was still uninitialized — first-mint settlement can lag on-chain reflection.
 	 */
 	dflowUninitAtSubmit?: boolean;
 	routePreviewAllowed: boolean;

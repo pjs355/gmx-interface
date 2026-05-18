@@ -23,13 +23,31 @@ export async function quoteSignAndSubmitDflowOrder(args: {
 	solanaSigner: Pick<SolanaSignerCapable, "signTransactionOnly">;
 	orderParams: DflowOrderParams;
 	submitExtras: Omit<DflowOrderSubmitBody, "signedTx" | "lastValidBlockHeight">;
+	/**
+	 * When set (SOR execution path), refuse to call GET /order if the bound route
+	 * has already expired — avoids signing a quote that no longer matches the HMAC route.
+	 */
+	routeTiming?: { routeId: string; expiresAtMs: number };
 }): Promise<{
 	signature: string;
 	orderQuote: DflowOrderResponse;
 	initializedMarket: boolean;
+	orderStatus: DflowOrderSubmitResponse["orderStatus"];
 }> {
 	const { privateApi, submitFn, solanaSigner, orderParams, submitExtras } =
 		args;
+
+	if (args.routeTiming != null) {
+		const { expiresAtMs, routeId } = args.routeTiming;
+		if (typeof expiresAtMs === "number" && Number.isFinite(expiresAtMs)) {
+			const skewMs = 500;
+			if (Date.now() > expiresAtMs - skewMs) {
+				throw new Error(
+					`Trade route quote expired (route ${routeId}) — refresh the route and try again.`,
+				);
+			}
+		}
+	}
 
 	const orderResult = await privateApi.getDflowOrder(orderParams);
 	if (orderResult.code || orderResult.msg) {
@@ -78,5 +96,6 @@ export async function quoteSignAndSubmitDflowOrder(args: {
 		signature: submitResult.signature,
 		orderQuote: orderResult,
 		initializedMarket: submitResult.initializedMarket === true,
+		orderStatus: submitResult.orderStatus,
 	};
 }

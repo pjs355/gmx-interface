@@ -76,7 +76,7 @@ import { PortfolioProvider } from "@/context/PortfolioContext";
 import { AccountDataProvider } from "@/context/AccountDataContext";
 import { PositionsDataProvider } from "@/context/PositionsDataContext";
 import { PositionsRouteChunkPreloader } from "@/context/PositionsRouteChunkPreloader";
-import { PostTradeBalanceSyncProvider } from "@/trading/sor/usePostTradeBalanceSync";
+import { PostTradeAccountSyncProvider } from "@/trading/sor/usePostTradeAccountSync";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
 import { TransfersModalProvider } from "context/TransfersModalContext";
@@ -180,7 +180,7 @@ createRoot(document.getElementById("root")!).render(
 										 * script) never see it. */}
 										<FirstSignupSetupGate />
 										<RecentSettlementClaimProvider>
-											<PostTradeBalanceSyncProvider>
+											<PostTradeAccountSyncProvider>
 												<PortfolioProvider>
 													<PositionsDataProvider>
 													<PositionsPageMetricsGateProvider>
@@ -196,7 +196,7 @@ createRoot(document.getElementById("root")!).render(
 													</PositionsPageMetricsGateProvider>
 													</PositionsDataProvider>
 												</PortfolioProvider>
-											</PostTradeBalanceSyncProvider>
+											</PostTradeAccountSyncProvider>
 										</RecentSettlementClaimProvider>
 										</SetupActivationProvider>
 									</UserDataProvider>

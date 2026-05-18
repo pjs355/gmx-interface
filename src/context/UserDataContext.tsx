@@ -88,7 +88,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 	/**
 	 * Mirrors `tokenBalances` but updates synchronously when RPC refresh maps
 	 * raw balances → markets. `getTokenBalance` reads this ref so
-	 * `usePostTradeBalanceSync` can observe new LevelUp shares immediately after
+	 * `usePostTradeAccountSync` can observe new LevelUp shares immediately after
 	 * `await refreshTokenPositions()` (before the next React commit).
 	 */
 	const tokenBalancesRef = useRef<Map<string, TokenBalance>>(new Map());

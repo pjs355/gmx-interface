@@ -30,7 +30,7 @@ WalletProvider (QueryClient)
               → AccountDataContextInner   ← maps useCollateralTokens → useAccountData().cash
                   → UserDataProvider      ← LevelUp tokenBalances, approvals, orders
                     → … activators …
-                      → PostTradeBalanceSyncProvider
+                      → PostTradeAccountSyncProvider
                         → PortfolioProvider
                           → App / routes
 ```

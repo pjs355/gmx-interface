@@ -9,6 +9,7 @@ export type {
 	BridgeExecutor,
 	SorExecutionPhase,
 	SorPrefundLegProgress,
+	SorLegRouteContext,
 } from "./useSorExecution";
 
 export { useSorLegExecutor } from "./useSorLegExecutor";

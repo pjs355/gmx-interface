@@ -21,6 +21,13 @@ export interface SorTradeTrustContext {
 	outcome: SorOutcome;
 	/** Parsed numeric amount: USD for buy, shares for sell (market orders). */
 	amountNumber: number;
+	/**
+	 * SOR `questionId` / trade-box `smartRoutingMarketKey` for the market the user
+	 * is viewing. When set, omnibus + execution overlays must match this id on the
+	 * route snapshot (same pattern as outcome flips — avoids one stale frame of
+	 * market A prices after switching to market B).
+	 */
+	questionId?: string;
 }
 
 /**
@@ -57,8 +64,13 @@ export function isOmnibusDisplayMetricsTrusted(
 	effectiveDisplayRoute: RoutePlan | null,
 	ctx: SorTradeTrustContext,
 	_displayLoading: boolean,
+	/** Which market produced the effective omnibus route; must align with `ctx.questionId` when set. */
+	displayRouteSourceQuestionId: string | null,
 ): boolean {
 	if (!effectiveDisplayRoute) return false;
+	if (ctx.questionId) {
+		if (displayRouteSourceQuestionId !== ctx.questionId) return false;
+	}
 	return routeMatchesTradeContext(effectiveDisplayRoute, ctx);
 }
 
@@ -68,8 +80,13 @@ export function isExecutionOverlayRowTrusted(
 	overlayRoute: RoutePlan | null,
 	ctx: SorTradeTrustContext,
 	_executionLoading: boolean,
+	/** Which market produced `executionRoute`; must align with `ctx.questionId` when set. */
+	executionRouteSourceQuestionId: string | null,
 ): boolean {
 	if (!overlayRoute || !executionRoute) return false;
+	if (ctx.questionId) {
+		if (executionRouteSourceQuestionId !== ctx.questionId) return false;
+	}
 	return routeMatchesTradeContext(executionRoute, ctx);
 }
 
