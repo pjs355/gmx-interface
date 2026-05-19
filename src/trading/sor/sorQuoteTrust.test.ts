@@ -96,10 +96,26 @@ describe("sorQuoteTrust", () => {
 			outcome: "A",
 			requestedAmount: 25,
 		});
-		expect(isOmnibusDisplayMetricsTrusted(null, stale, ctx, true)).toBe(false);
-		expect(isOmnibusDisplayMetricsTrusted(live, live, ctx, true)).toBe(true);
-		expect(isOmnibusDisplayMetricsTrusted(null, stale, ctx, false)).toBe(false);
+		expect(isOmnibusDisplayMetricsTrusted(null, stale, ctx, true, null)).toBe(false);
+		expect(isOmnibusDisplayMetricsTrusted(live, live, ctx, true, null)).toBe(true);
+		expect(isOmnibusDisplayMetricsTrusted(null, stale, ctx, false, null)).toBe(false);
 		// Poll in flight, live cleared, sticky still holds matching quote — trust (no skeleton flash).
-		expect(isOmnibusDisplayMetricsTrusted(null, live, ctx, true)).toBe(true);
+		expect(isOmnibusDisplayMetricsTrusted(null, live, ctx, true, null)).toBe(true);
+	});
+
+	it("isOmnibusDisplayMetricsTrusted rejects when questionId mismatches route source", () => {
+		const ctx = {
+			side: "buy" as const,
+			outcome: "A" as const,
+			amountNumber: 25,
+			questionId: "market-b",
+		};
+		const live = minimalRoute({
+			side: "buy",
+			outcome: "A",
+			requestedAmount: 25,
+		});
+		expect(isOmnibusDisplayMetricsTrusted(live, live, ctx, false, "market-a")).toBe(false);
+		expect(isOmnibusDisplayMetricsTrusted(live, live, ctx, false, "market-b")).toBe(true);
 	});
 });

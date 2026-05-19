@@ -29,7 +29,7 @@ import ConnectWalletButton from "../Common/ConnectWalletButton";
 import "./Header.scss";
 import { usePortfolio as usePortfolioContext } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
-import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
+import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/usePostTradeAccountSync";
 
 type Props = {
 	openSettings: () => void;
@@ -64,7 +64,11 @@ export function AppHeaderUser({
 		usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const claimCashSyncPending = useClaimCashSyncPending();
-	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
+	const postTradePositionSyncPending = usePostTradePositionSyncPendingGlobal();
+	const showPortfolioMetricSkeleton =
+		portfolioLoading ||
+		blockHeaderMetrics ||
+		postTradePositionSyncPending;
 	// Cash: do not block on positions page shell — show when balance fetches complete
 	const showCashMetricSkeleton = cashLoading || claimCashSyncPending;
 

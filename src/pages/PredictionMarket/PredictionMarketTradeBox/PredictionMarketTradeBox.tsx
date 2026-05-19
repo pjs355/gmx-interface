@@ -106,7 +106,9 @@ import type {
 	SorVenue,
 	RoutePlan,
 } from "@/trading/sor";
-import { usePostTradeBalanceSync } from "@/trading/sor/usePostTradeBalanceSync";
+import { usePostTradeAccountSync } from "@/trading/sor/usePostTradeAccountSync";
+import { captureAccountReconcileSnapshot, type AccountReconcileSnapshot } from "@/trading/sor/postTradeReconcile";
+import { useAccountData } from "@/context/AccountDataContext";
 import {
 	accountVenueKeysFromFilledExecutionLegs,
 	filledExecutionHasLevelUp,
@@ -139,7 +141,10 @@ import {
 	type BuildLimitlessSorOrderInput,
 } from "@/trading/limitless/limitlessSignedClobOrder";
 import { classifyLimitlessClientMaker } from "@/trading/limitless/limitlessClientMakerIdentity";
-import { hasLevelUpCrossVenueOrderbook } from "@/trading/levelUp/levelUpCrossVenueBookPresence";
+import {
+	levelUpCrossVenueBooksHaveTradeableWholeShareLiquidity,
+	orderbookSnapshotHasWholeShareRestingLiquidity,
+} from "@/trading/levelUp/levelUpCrossVenueBookPresence";
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
@@ -190,11 +195,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { state, setState, handlePositionChange, handleAmountChange, handlePriceChange, handleOrderTypeChange, handleSideChange, handleTradingVenueChange } = useTradeState(initialPosition, initialVenue, tradeRouteIsolationKey);
 
   useEffect(() => {
-    if (!pandaId) return;
     if (state.orderType !== "market") {
       handleOrderTypeChange("market");
     }
-  }, [pandaId, state.orderType, handleOrderTypeChange]);
+  }, [state.orderType, handleOrderTypeChange]);
   const { getClientForChain } = useSmartWallets();
   const { account, ready: signerReady, signer, signerAddress } = useSignerContext();
   const { login, authenticated } = usePrivy();
@@ -209,7 +213,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     getTokenBalance,
   } = useUserData();
   const collateralTokens = useCollateralTokens();
-  const postTradeSync = usePostTradeBalanceSync();
+  const accountData = useAccountData();
+  const postTradeAccountSync = usePostTradeAccountSync();
 
   // Lazy approval check: deferred from startup, runs when trade box mounts
   useEffect(() => {
@@ -365,8 +370,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const matchedVenues = useMemo(() => {
     const set = new Set<string>();
     if (
-      !multiVenueEnabled ||
-      hasLevelUpCrossVenueOrderbook(matchedMonitor ?? null, levelUpOrderbook)
+      (!multiVenueEnabled &&
+        (levelUpOrderbook == null ||
+          orderbookSnapshotHasWholeShareRestingLiquidity(levelUpOrderbook))) ||
+      (multiVenueEnabled &&
+        levelUpCrossVenueBooksHaveTradeableWholeShareLiquidity(
+          matchedMonitor ?? null,
+          levelUpOrderbook,
+        ))
     ) {
       set.add("levelup");
     }
@@ -387,12 +398,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   useEffect(() => {
     if (!isPredictionPricingDebugEnabled()) return;
     const list = [...matchedVenues];
-    priceDebugLog("PredictionMarketTradeBox tradeable venues (dropdown)", {
+    priceDebugLog("PredictionMarketTradeBox tradeable venues", {
       pandaId: pandaId || null,
       hasMatchedMonitor: Boolean(matchedMonitor),
       matchedVenues: list,
       note:
-        "Venue list: OddsMonitor MatchedMarket + REST orderbook prop. On pandascore pages LevelUp is included only when cross-venue book presence matches VenueOrderbooksPanel (resting depth / REST ladder rule).",
+        "Venue list: OddsMonitor MatchedMarket + REST orderbook prop. LevelUp is included only when the chosen LevelUp ladder (cross-venue selection or REST while loading) has at least one whole-share resting bid or ask.",
     });
   }, [pandaId, matchedMonitor, matchedVenues, levelUpOrderbook]);
 
@@ -857,7 +868,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return "No monitor row for this match — Poly books may not be linked yet.";
     }
     if (polyClob.loading || polyClob.polyAccountLoading) {
-      return "Preparing Polymarket CLOB…";
+      return "Loading…";
     }
     if (!polyClob.ready) {
       return (
@@ -918,7 +929,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       return "Failed to load Predict market from API.";
     }
     if (predictSession.loading) {
-      return "Preparing Predict wallet on BNB…";
+      return "Loading…";
     }
     if (!predictSession.ready) {
       return (
@@ -1107,7 +1118,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         (predictMarketQuery.isError ? "Predict market API error" : null),
       /**
        * On-chain CTF + USDT approvals snapshot. When `true`, the trade-box
-       * "Preparing Predict…" gate is bypassed for buys — `useButtonState`
+       * Predict bootstrap gate is bypassed for buys — `useButtonState`
        * trusts the lazy `ensurePredictApprovalsForTrade` path at execute time
        * instead of blocking the UI on the redundant ensure roundtrip.
        */
@@ -1787,10 +1798,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   }, [state.tradingVenue]);
 
-  // Whether this completed trade actually ran DFlow's prediction-market init
-  // (init-payer co-sign). Populated from POST /api/dflow/orders `initializedMarket`
-  // on the filled leg — not from umbrella `accountsInitialized*` snapshots (those
-  // can lag and falsely implied "creating market" on every trade).
+  // Whether the DFlow market was uninitialized at the moment Submit was
+  // pressed. The DFlow `/order` endpoint silently injects market tokenization
+  // when needed, so first-mint trades take longer than a normal swap. Snapshot
+  // the flag at submit so a fast post-trade umbrella refresh that flips
+  // `accountsInitialized*` to `true` doesn't hide the notice immediately.
   const [dflowUninitAtSubmit, setDflowUninitAtSubmit] = useState(false);
 
   /**
@@ -2444,6 +2456,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     baseline: PostTradeBaseline;
     route: RoutePlan;
   } | null>(null);
+  const preTradeSnapshotRef = useRef<AccountReconcileSnapshot | null>(null);
 
   const handleSorExecute = useCallback(() => {
     if (executableRoute && !sorRouteExpired) {
@@ -2468,7 +2481,21 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         return;
       }
       console.debug("[SOR] Trade button → execute", executableRoute.routeId);
-      setDflowUninitAtSubmit(false);
+      // Kalshi/DFlow: each outcome has its own `accountsInitialized*` flag. Only show
+      // the "creating this market" notice when the leg(s) we execute still report
+      // `false` for that outcome — not when the other team's leg is uninitialized.
+      const dflowLink = matchedMonitor?.dflow;
+      const dflowExecutedLegNeedsMarketInit =
+        Boolean(dflowLink) &&
+        executableRoute.legs.some((leg) => {
+          if (leg.venue !== "dflow" || !dflowLink) return false;
+          const initialized =
+            leg.outcome === "A"
+              ? dflowLink.accountsInitializedA
+              : dflowLink.accountsInitializedB;
+          return initialized === false;
+        });
+      setDflowUninitAtSubmit(dflowExecutedLegNeedsMarketInit);
       const marketId = sorQuestionId as string | undefined;
       const baseline = capturePostTradeBaseline({
         queryClient,
@@ -2492,6 +2519,20 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         baseline,
         route: executableRoute,
       };
+      const midCap = sorQuestionId as string | undefined;
+      preTradeSnapshotRef.current = captureAccountReconcileSnapshot({
+        positions: accountData.positions,
+        cashTotal: accountData.cash.total,
+        accountVersion: accountData.accountVersion,
+        readLevelUpSide: (mid, side) => {
+          const tb = getTokenBalance(mid);
+          if (!tb) return 0;
+          const raw = side === "yes" ? tb.yesBalance : tb.noBalance;
+          const n = parseFloat(raw);
+          return Number.isFinite(n) ? n : 0;
+        },
+        levelUpMarketId: midCap?.trim() ?? null,
+      });
       void sorExecution
         .execute(executableRoute)
         .then((res) => {
@@ -2570,6 +2611,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     sorExecution.execute,
     setState,
     queryClient,
+    accountData,
     funding.polymarketSafe,
     funding.solanaAddress,
     predictPostTradeWallet,
@@ -2577,6 +2619,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     market,
     yesBalance,
     noBalance,
+    matchedMonitor,
     state.tradingVenue,
   ]);
 
@@ -2621,13 +2664,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           l.filledShares > 0,
       );
       if (hasDflowFilledLeg) {
-        void queryClient.refetchQueries({
-          queryKey: ["dflow-positions"],
-          type: "all",
-        });
-        void queryClient.refetchQueries({
+        void queryClient.invalidateQueries({ queryKey: ["dflow-positions"] });
+        void queryClient.invalidateQueries({
           queryKey: ["dflow-outcome-balance"],
-          type: "all",
         });
       }
 
@@ -2680,17 +2719,19 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           routePlanLegsFingerprintMatch(cached.route, sorExecution.execution));
 
       if (canUseCachedBaseline && cached) {
-        postTradeSync.start({
+        postTradeAccountSync.runAfterSorFilled({
           ...postTradeCommon,
           route: cached.route,
           execution: sorExecution.execution,
           baseline: cached.baseline,
+          operationId: crypto.randomUUID(),
+          preTradeSnapshot: preTradeSnapshotRef.current,
         });
       } else {
         const accountVenues = accountVenueKeysFromFilledExecutionLegs(legs);
         const includeLevelUpRpc = filledExecutionHasLevelUp(legs);
         if (accountVenues.length > 0 || includeLevelUpRpc) {
-          postTradeSync.startBlindBalanceRefresh({
+          postTradeAccountSync.startBlindBalanceRefresh({
             queryClient,
             syncUiKey,
             accountVenues,
@@ -2699,21 +2740,18 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           });
         } else if (import.meta.env.DEV) {
           console.warn(
-            "[PostTradeSync] no baseline match and nothing to blind-refresh — skipping",
+            "[PostTradeAccountSync] no baseline match and nothing to blind-refresh — skipping",
             { routeId, cachedRouteId: cached?.routeId },
           );
         }
       }
 
+      preTradeSnapshotRef.current = null;
       // First-mint DFlow trades only: nudge the matched-markets refresh so the
       // umbrella picks up the freshly-tokenized YES/NO mints + `accountsInitialized*`
       // flags as soon as the predictions-API cron has them, instead of waiting up to
       // 5 minutes for the next cron tick. Reuses `sendGetState` (== `fetchMappings`).
-      const dflowInitCoSigned = legs.some(
-        (l) => l.venue === "dflow" && l.initializedMarket === true,
-      );
-      setDflowUninitAtSubmit(dflowInitCoSigned);
-      if (dflowInitCoSigned) {
+      if (dflowUninitAtSubmit) {
         scheduleDflowFirstMintRefresh();
       }
 
@@ -2749,8 +2787,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictPostTradeWallet,
     predictShareIdentityCtx,
     market,
-    postTradeSync,
+    postTradeAccountSync,
     getTokenBalance,
+    dflowUninitAtSubmit,
     scheduleDflowFirstMintRefresh,
   ]);
 

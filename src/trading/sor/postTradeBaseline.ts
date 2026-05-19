@@ -1,6 +1,6 @@
 /**
  * Pre-trade balance snapshots and post-trade delta computation. Pure helpers
- * shared by `usePostTradeBalanceSync` and the trade box submit flow.
+ * shared by post-trade account refresh and the trade box submit flow.
  */
 import type { QueryClient } from "@tanstack/react-query";
 import type { VenuePosition } from "@/types/trading/venuePosition";

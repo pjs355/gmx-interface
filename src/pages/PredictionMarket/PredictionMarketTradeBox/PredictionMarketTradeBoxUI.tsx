@@ -2,8 +2,6 @@ import { useMemo, useCallback, useEffect } from 'react';
 
 import Button from "components/Button/Button";
 import SpinningLoader from "@/components/Common/SpinningLoader";
-import Tabs from "components/Tabs/Tabs";
-import Tooltip from "components/Tooltip/Tooltip";
 import type { TradeBoxProps, TradeBoxState, ApprovalState, TradingVenue, MarketOrderCalculation } from './types';
 import type { OrderbookSnapshot } from '@/services/api/orderbookService';
 import './PredictionMarketTradeBox.scss';
@@ -24,14 +22,11 @@ import type {
 import {
   VENUE_COLORS,
   SorKalshiKycShortfallBanner,
-  formatToWinUsdDisplay,
   formatSorDetailsSharesDisplay,
   rawInputBelowVenueMinimum,
-  parseLimitPriceCents,
   positionToSorOutcome,
   routeMatchesTradeContext,
   executionRouteTrustedForSingleVenueMarketBuy,
-  executionRoutePendingForToWinOverlay,
   executionRouteTrustedForSingleVenueMarketSell,
   sorBuyPredictLegNetHeldShares,
 } from "@/trading/sor";
@@ -51,19 +46,15 @@ import {
 	mixHexOnBlack,
 } from "@/helpers/predictionUtils";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
-import { usePostTradeBalanceSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
+import { usePostTradeAccountSyncPending } from "@/trading/sor/usePostTradeAccountSync";
 import SmartRoutingSection from "./SmartRoutingSection";
-import QuoteMetricSkeleton from "./QuoteMetricSkeleton";
 import OddsFormatMenu from "@/components/OddsFormatMenu/OddsFormatMenu";
-import { FlashingValue } from "@/utils/FlashingValue";
 import { usePortfolio } from "@/context/PortfolioContext";
 import {
 	dflowKalshiOutcomeDisplayPrices,
 	hasDflowKalshiMonitorLink,
 } from "@/trading/dflow/monitorDflowBooks";
 
-const BET_VALUE_CLASS = "bet-size-value";
-const BET_VALUE_FLASH_CLASS = "bet-size-value--flash";
 
 const calculateOrderbookPrices = (orderbook: any) => {
   if (!orderbook) return { bestAsk: null, bestBid: null };
@@ -120,6 +111,8 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
     displayRoute: RoutePlan | null;
     executionRoute: RoutePlan | null;
     venuePreviews: VenueRoutePreview[] | null;
+    displayRouteSourceQuestionId: string | null;
+    executionRouteSourceQuestionId: string | null;
     displayLoading: boolean;
     displayStale: boolean;
     executionLoading: boolean;
@@ -160,10 +153,11 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   /** Share balance snapshot from parent (single `useTradeBoxShareBalances` instance). */
   shareBalances: TradeBoxShareBalancesSnapshot;
   /**
-   * True when the just-filled DFlow leg returned `initializedMarket` from POST
-   * submit (init-payer co-sign / first on-chain tokenization for that market).
-   * Drives the "creating this market" notice and matched-markets refresh nudges —
-   * not umbrella `accountsInitialized*` at click time (those can lag).
+   * Snapshot of `accountsInitialized*` from the umbrella's `exchangeMatching.dflow`
+   * captured at the moment the user pressed Submit. The DFlow `/order` endpoint
+   * silently injects market tokenization when needed, so first-mint trades take
+   * longer than a normal swap — surface that explicitly under the trade box so
+   * users understand why a successful submit isn't yet reflected on-chain.
    */
   dflowUninitAtSubmit?: boolean;
   routePreviewAllowed: boolean;
@@ -262,7 +256,7 @@ export default function PredictionMarketTradeBoxUI({
         (market as { questionId?: string })?.questionId ??
         "",
     ).trim() || null;
-  const positionSharesChainSyncUi = usePostTradeBalanceSyncPending(syncUiKey);
+  const positionSharesChainSyncUi = usePostTradeAccountSyncPending(syncUiKey);
   // While the active venue's share-balance query is still resolving (e.g.
   // Predict's BSC `balanceOf`), `maxScopedSellShares` reads as 0 even when
   // the user holds shares. Don't lock the input for that ~1-2s window —
@@ -285,7 +279,7 @@ export default function PredictionMarketTradeBoxUI({
     sellBreakdownIsOnlyWholeContractVenues(shareBalances.sellVenueBreakdown);
   const shareAmountRequiresWholeContracts =
     (venueConfig.requiresWholeShares || matchedVenuesNeedWholeShareContracts) &&
-    (orderType === "limit" || (orderType === "market" && side === "sell"));
+    side === "sell";
 
   const userSellSharesByVenue = useMemo((): Partial<Record<SorVenue, number>> => {
     const o: Partial<Record<SorVenue, number>> = {};
@@ -336,15 +330,8 @@ export default function PredictionMarketTradeBoxUI({
     return [{ label: "Venue", options: venues }];
   }, [pandascoreMatchId, matchedVenues]);
 
-  /** Pandascore odds match with 2+ venues: "All Markets" prepended — smart rows replace the venue dropdown. */
-  const smartRoutingSurfaceActive = useMemo(() => {
-    const opts = venueDropdownOptions[0]?.options;
-    return Boolean(opts?.length && opts[0]?.value === "all");
-  }, [venueDropdownOptions]);
-
   useEffect(() => {
     if (tradeInteractionLocked) return;
-    if (smartRoutingSurfaceActive) return;
     const opts = venueDropdownOptions[0]?.options;
     if (!opts?.length) return;
     const allowed = opts.map((o) => o.value);
@@ -353,7 +340,6 @@ export default function PredictionMarketTradeBoxUI({
     }
   }, [
     tradeInteractionLocked,
-    smartRoutingSurfaceActive,
     venueDropdownOptions,
     state.tradingVenue,
     onTradingVenueChange,
@@ -532,87 +518,18 @@ export default function PredictionMarketTradeBoxUI({
     return market.displayName || market.question;
   }, [overUnderMatch, market.displayName, market.question]);
 
-  const orderTypeDropdownOptions = useMemo(() => {
-    if (tradingVenue === "all") {
-      return [
-        {
-          label: "Market",
-          options: [{ value: "market" as const, label: "Market" }],
-        },
-      ];
-    }
-    const options: { value: "market" | "limit"; label: string }[] = [
-      { value: "market", label: "Market" },
-      { value: "limit", label: "Limit" },
-    ];
-    return [{ label: "Market", options }];
-  }, [tradingVenue]);
+  /** Market buy = USD prefix; sells = share count (no $). */
+  const amountInputShowsDollarPrefix = useMemo(() => side === "buy", [side]);
 
-  /** All Markets buy = USD; other venues use $ only for market buy. Sell (incl. All Markets) = share count, no $. */
-  const amountInputShowsDollarPrefix = useMemo(() => {
-    if (tradingVenue === "all") return side === "buy";
-    return side === "buy" && orderType === "market";
-  }, [tradingVenue, side, orderType]);
-
-  /** Match Smart Routing: no To Win / Details breakdown under the SOR trade floor. */
   const belowTradeFloor = useMemo(() => {
     if (tradingVenue === "all") return false;
     return rawInputBelowVenueMinimum({
       tradingVenue,
       side,
-      orderType,
+      orderType: "market",
       amountStr: amount ?? "",
-      limitPriceCents:
-        orderType === "limit" ? parseLimitPriceCents(price) : undefined,
     });
-  }, [tradingVenue, side, orderType, amount, price]);
-
-  // Compute values for limit orders
-  const limitOrderAmount = (() => {
-    if (orderType !== 'limit' || !amount || !price) return null;
-    const shares = Number(amount);
-    const cents = Number(price);
-    if (!Number.isFinite(shares) || !Number.isFinite(cents) || shares <= 0 || cents <= 0) return null;
-    return shares * cents / 100; // Convert cents to dollars
-  })();
-
-  const limitOrderToWin = (() => {
-    if (orderType !== 'limit' || !amount || side !== 'buy') return null;
-    const shares = Number(amount);
-    return Number.isFinite(shares) && shares > 0 ? shares : null;
-  })();
-
-  const limitOrderFee = (() => {
-    if (orderType !== 'limit' || !amount || !price) return 0;
-    const shares = Number(amount);
-    const cents = Number(price);
-    if (!Number.isFinite(shares) || !Number.isFinite(cents) || shares <= 0 || cents <= 0) return 0;
-    return venueConfig.estimateFee({ contracts: shares, price: cents / 100, side });
-  })();
-
-  // "To Win" = total payout if the position wins. Each contract pays $1.
-  const toWinNumeric = (() => {
-    if (tradingVenue === "all") return null;
-    if (!amount || !selectedPosition) return null;
-
-    if (orderType === 'limit') {
-      if (side === 'sell') {
-        return limitOrderAmount;
-      }
-      if (limitOrderToWin == null) return null;
-      return Number.isFinite(limitOrderToWin) && limitOrderToWin > 0 ? limitOrderToWin : null;
-    }
-
-    if (calculatedContracts === null) return null;
-    if (side === 'sell') {
-      const v = remainingUsd;
-      const num = v !== undefined && v !== null ? Number(v) : NaN;
-      return Number.isFinite(num) && num > 0 ? num : null;
-    }
-    // Market buy: payout = $1 × contracts
-    const profit = calculatedContracts;
-    return Number.isFinite(profit) && profit > 0 ? profit : null;
-  })();
+  }, [tradingVenue, side, amount]);
 
   const sorTrustCtxMarket = useMemo((): SorTradeTrustContext | null => {
     if (!amount || !selectedPosition) return null;
@@ -624,18 +541,6 @@ export default function PredictionMarketTradeBoxUI({
       amountNumber: n,
     };
   }, [amount, selectedPosition, side]);
-
-  const toWinQuotePending =
-    orderType === "market" &&
-    side === "buy" &&
-    tradingVenue !== "all" &&
-    routePreviewAllowed &&
-    !belowTradeFloor &&
-    executionRoutePendingForToWinOverlay(
-      sorRoute.executionRoute,
-      sorTrustCtxMarket,
-      sorRoute.executionLoading,
-    );
 
   // Compute Odds % for market BUY orders using weighted average fill price.
   // Prefers SOR route data (server-side book walk) when available; falls back to local book walk.
@@ -776,79 +681,34 @@ export default function PredictionMarketTradeBoxUI({
 
   return (
     <div className="prediction-market-tradebox">
-      {/* Title + venue dropdown (same control pattern as Market / Limit) */}
+      {/* Title — venue selection is only via SmartRoutingSection rows (no header dropdown). */}
       <div className="market-name-header">
         <h3 className="market-name-header__title">{displayMarketTitle}</h3>
-        {!smartRoutingSurfaceActive ? (
-          <div
-            className={`market-name-header__venue trade-mode-selector${tradeInteractionLocked ? " trade-control--locked" : ""}`}
-            title={
-              tradeInteractionLocked ? "Trade in progress — venue locked" : undefined
-            }
-          >
-            <Tabs
-              options={venueDropdownOptions}
-              regularOptionClassname="py-10"
-              type="inline"
-              selectedValue={state.tradingVenue}
-              onChange={(value) =>
-                onTradingVenueChange(value as TradingVenue)
-              }
-              qa="trade-venue"
-            />
-          </div>
-        ) : null}
       </div>
 
       <div className="tradebox-header">
-        <div className="tradebox-header__left">
-          <div className="side-selector">
-            <Button
-              qa="tradebox-side-buy"
-              variant={side === 'buy' ? 'primary' : 'secondary'}
-              disabled={tradeInteractionLocked}
-              onClick={() => onSideChange('buy')}
-              className={`side-btn ${side === 'buy' ? 'selected primary' : ''}`}
-            >
-              Buy
-            </Button>
+        <div className="side-selector">
+          <Button
+            qa="tradebox-side-buy"
+            variant={side === 'buy' ? 'primary' : 'secondary'}
+            disabled={tradeInteractionLocked}
+            onClick={() => onSideChange('buy')}
+            className={`side-btn ${side === 'buy' ? 'selected primary' : ''}`}
+          >
+            Buy
+          </Button>
 
-            <Button
-              qa="tradebox-side-sell"
-              variant={side === 'sell' ? 'primary' : 'secondary'}
-              disabled={tradeInteractionLocked}
-              onClick={() => onSideChange('sell')}
-              className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
-            >
-              Sell
-            </Button>
-          </div>
+          <Button
+            qa="tradebox-side-sell"
+            variant={side === 'sell' ? 'primary' : 'secondary'}
+            disabled={tradeInteractionLocked}
+            onClick={() => onSideChange('sell')}
+            className={`side-btn ${side === 'sell' ? 'selected secondary' : ''}`}
+          >
+            Sell
+          </Button>
         </div>
-        {/* Market/Limit hidden on pandascore multi-venue pages (market-only smart routing). */}
-        <div className="tradebox-header__center">
-          {tradingVenue !== "all" && !smartRoutingSurfaceActive && (
-            <div
-              className={`trade-mode-selector${tradeInteractionLocked ? " trade-control--locked" : ""}`}
-              title={
-                tradeInteractionLocked
-                  ? "Trade in progress — order type locked"
-                  : undefined
-              }
-            >
-              <Tabs
-                options={orderTypeDropdownOptions}
-                regularOptionClassname="py-10"
-                type="inline"
-                selectedValue={orderType}
-                onChange={(value) => onOrderTypeChange(value as 'market' | 'limit')}
-                qa="trade-mode"
-              />
-            </div>
-          )}
-        </div>
-        <div className="tradebox-header__right">
-          <OddsFormatMenu iconSize={20} />
-        </div>
+        <OddsFormatMenu iconSize={20} />
       </div>
       
       <div className="tradebox-separator" />
@@ -937,45 +797,11 @@ export default function PredictionMarketTradeBoxUI({
         />
       </div>
 
-      {/* Kalshi / DFlow: limit tab visible but trading area is disabled */}
-      {state.tradingVenue === "dflow" && orderType === "limit" ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "200px",
-            padding: "32px 24px",
-            textAlign: "center",
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          <p
-            style={{
-              fontSize: "18px",
-              fontWeight: 600,
-              color: "#94a3b8",
-              lineHeight: 1.4,
-              margin: 0,
-            }}
-          >
-            Limit orders on Kalshi through DFlow are not supported
-          </p>
-        </div>
-      ) : (
       <>
       {/* Amount Input */}
       <div className="input-section">
         <div className="input-label">
-          {tradingVenue === "all"
-            ? side === "sell"
-              ? "Shares"
-              : "Amount"
-            : orderType === 'market'
-              ? (side === 'sell' ? 'Shares' : 'Amount')
-              : 'Shares'
-          }
+          {side === "sell" ? "Shares" : "Amount"}
         </div>
         <div className={`input-container prediction-input-container ${(!amount || amount === '') ? 'empty-input' : ''}`}>
           {/* Show $ symbol when there's a value, use placeholder when empty */}
@@ -1093,66 +919,25 @@ export default function PredictionMarketTradeBoxUI({
         </div>
       )}
 
-      {/* Price Input (for Limit Orders) */}
-      {orderType === 'limit' && (
-        <div className="input-section">
-          <div className="input-label">Limit Price</div>
-          <div className={`input-container prediction-input-container ${(!price || price === '') ? 'empty-input' : ''}`}>
-            <input
-              type="number"
-              disabled={tradeInteractionLocked}
-              value={price}
-              onChange={(e) => {
-                const value = e.target.value;
-                const num = parseInt(value);
-                
-                // Only allow whole numbers between 1-99
-                if (value && (isNaN(num) || num < 1 || num > 99 || !Number.isInteger(parseFloat(value)))) {
-                  return;
-                }
-                onPriceChange(value);
-              }}
-              onKeyDown={(e) => {
-                // Only allow numbers and control keys
-                const char = e.key;
-                const isNumber = /[0-9]/.test(char);
-                const isControlKey = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(char);
-                
-                // Block everything except numbers and control keys
-                if (!isNumber && !isControlKey) {
-                  e.preventDefault();
-                }
-              }}
-              placeholder="0"
-              min="1"
-              max="99"
-              step="1"
-              className="trade-input prediction-trade-input"
-            />
-            <span className="currency-symbol">¢</span>
-          </div>
-        </div>
-      )}
-
-      {smartRoutingSurfaceActive && (
-        <SmartRoutingSection
-          displayRoute={sorRoute.displayRoute}
-          executionRoute={sorRoute.executionRoute}
-          venuePreviews={sorRoute.venuePreviews ?? null}
-          tradingVenue={tradingVenue}
-          isLoading={sorRoute.displayLoading}
-          onSelectVenue={onTradingVenueChange}
-          userAmount={amount}
-          side={side}
-          routePreviewAllowed={routePreviewAllowed}
-          smartRoutingMarketKey={smartRoutingMarketKey}
-          selectedOutcome={positionToSorOutcome(outcomeSelection)}
-          predictFunFeeRateBps={predictFunFeeRateBps}
-          executionLoading={sorRoute.executionLoading}
-          userSellSharesByVenue={userSellSharesByVenue}
-          venueSelectionLocked={tradeInteractionLocked}
-        />
-      )}
+      <SmartRoutingSection
+        displayRoute={sorRoute.displayRoute}
+        executionRoute={sorRoute.executionRoute}
+        venuePreviews={sorRoute.venuePreviews ?? null}
+        tradingVenue={tradingVenue}
+        isLoading={sorRoute.displayLoading}
+        onSelectVenue={onTradingVenueChange}
+        userAmount={amount}
+        side={side}
+        routePreviewAllowed={routePreviewAllowed}
+        smartRoutingMarketKey={smartRoutingMarketKey}
+        sorDisplayRouteSourceQuestionId={sorRoute.displayRouteSourceQuestionId}
+        sorExecutionRouteSourceQuestionId={sorRoute.executionRouteSourceQuestionId}
+        selectedOutcome={positionToSorOutcome(outcomeSelection)}
+        predictFunFeeRateBps={predictFunFeeRateBps}
+        executionLoading={sorRoute.executionLoading}
+        userSellSharesByVenue={userSellSharesByVenue}
+        venueSelectionLocked={tradeInteractionLocked}
+      />
 
       {/* SOR route breakdown when venue is "all" — sourced from the omnibus
           (display) channel. We only render the wrapper if there's something
@@ -1234,69 +1019,6 @@ export default function PredictionMarketTradeBoxUI({
         </div>
         );
       })()}
-
-      {/* Bet Size / To Win for single-venue orders.
-          The buy "To Win" row is hidden when smart routing is active (the
-          selected smart-routing row already shows it), so we exclude it from
-          the existence check too — otherwise we'd render an empty styled
-          wrapper for buy-on-a-venue-tab in pandascore markets. */}
-      {tradingVenue !== "all" &&
-        !belowTradeFloor &&
-        (
-          (toWinNumeric !== null && side === 'buy' && !smartRoutingSurfaceActive) ||
-          limitOrderAmount !== null ||
-          oddsData !== null
-        ) && (
-        <div className="bet-size-section">
-          {/* Market-sell Avg Price + Estimated Receive intentionally removed —
-              the per-venue smart-routing rows already show this info, and the
-              duplicate stack cluttered the box. Limit-sell still surfaces its
-              own "Estimated Receive" / "Est. notional" line below because that
-              is the only place a user sees what their limit price will yield. */}
-          {orderType === 'limit' && side === 'sell' && limitOrderAmount !== null && (
-            <div className="bet-size-info">
-              <div className="bet-size-main-row">
-                <Tooltip
-                  content={venueConfig.feeTooltip}
-                  position="top"
-                  withPortal={true}
-                >
-                  <span className="bet-size-label">
-                    {limitOrderFee > 0 ? "Estimated Receive" : `Est. notional${venueConfig.collateral !== "USDC" ? ` (${venueConfig.collateral})` : ""}`}
-                  </span>
-                </Tooltip>
-                <FlashingValue
-                  value={`$ ${(Math.floor((limitOrderAmount - limitOrderFee) * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  className={`${BET_VALUE_CLASS} amount-value`}
-                  flashClassName={BET_VALUE_FLASH_CLASS}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Show To Win line for BUY orders only (SELL orders show Estimated
-              Receive above). Suppressed when the smart-routing surface is
-              active because the selected smart-routing row already shows the
-              same payout in large green text. Single-venue markets without
-              smart routing still rely on this line as the only payout display. */}
-          {toWinNumeric !== null && side === 'buy' && !smartRoutingSurfaceActive && (
-            <div className="bet-size-info">
-              <div className="bet-size-main-row" aria-busy={toWinQuotePending || undefined}>
-                <span className={`bet-size-label to-win-label`}>To Win</span>
-                {toWinQuotePending ? (
-                  <QuoteMetricSkeleton variant="tradebox-value" />
-                ) : (
-                  <FlashingValue
-                    value={`$ ${formatToWinUsdDisplay(toWinNumeric)}`}
-                    className={BET_VALUE_CLASS}
-                    flashClassName={BET_VALUE_FLASH_CLASS}
-                  />
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {(() => {
         const route =
@@ -1383,7 +1105,6 @@ export default function PredictionMarketTradeBoxUI({
         <SorKalshiKycShortfallBanner route={sorRoute.displayRoute} variant="tradebox" />
       )}
       </>
-      )}
 
       {/* SOR execution result (partial / failed only — success has no fill summary banner) */}
       {tradingVenue === "all" &&

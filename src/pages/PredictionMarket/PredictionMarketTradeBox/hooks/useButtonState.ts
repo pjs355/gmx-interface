@@ -19,12 +19,15 @@ import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext"
 /**
  * Friendly placeholder shown while any of the three background activators
  * (Polymarket / Predict / Limitless) is mid-setup. We swap this in for the
- * "Trading setup required" / "Complete venue setup" / "Preparing Predict…"
- * copy so a brand-new user never sees jargon while we're working in the
+ * "Trading setup required" / "Complete venue setup" / generic loading copy
+ * so a brand-new user never sees jargon while we're working in the
  * background. The button stays disabled — they can't trade yet — but the
  * label promises the system is doing something on their behalf.
  */
 const SETUP_IN_PROGRESS_LABEL = "Setting up your account…";
+
+/** Non-onboarding venue/session warm-up (CLOB, relay, etc.). */
+const VENUE_LOADING_LABEL = "Loading…";
 
 /** Caps console noise when `useMemo` recomputes often with the same bad input. */
 let missingPooledCashWarnCount = 0;
@@ -215,7 +218,7 @@ type SorUnifiedPrimaryOptions = {
 	/**
 	 * True while any global background activator (Polymarket / Predict /
 	 * Limitless) is still bootstrapping. Used to swap "Complete venue setup" /
-	 * "Preparing X" copy for a friendly "Setting up your account…" label so
+	 * generic loading copy for a friendly "Setting up your account…" label so
 	 * brand-new users never see venue jargon mid-onboarding.
 	 */
 	globalSetupInProgress?: boolean;
@@ -318,7 +321,7 @@ function sorUnifiedPrimary(
 		return {
 			text: execNotReady
 				? venueAutoSetupInFlight
-					? "Preparing Predict…"
+					? VENUE_LOADING_LABEL
 					: "Complete venue setup"
 				: "Route unavailable",
 			disabled: true,
@@ -482,7 +485,7 @@ export function useButtonState({
         blockedReason: string | null;
         /**
          * On-chain CTF + USDT approvals snapshot for the active market scope.
-         * `true`  → bypass the "Preparing Predict…" bootstrap gate (returning user).
+         * `true`  → bypass the Predict bootstrap gate (returning user).
          * `false` → keep the gate (brand-new buyer who genuinely needs approvals run).
          * `undefined` → BSC RPC still loading; behave like `false` for buys.
          */
@@ -529,7 +532,7 @@ export function useButtonState({
   const setupActivation = useSetupActivationOptional();
   // True while ANY of the three background activators (Polymarket / Predict /
   // Limitless) reports `setupInProgress`. We use this to suppress
-  // "Trading setup required" / "Complete venue setup" / "Preparing X" copy in
+  // "Trading setup required" / "Complete venue setup" / venue loading copy in
   // favor of a single friendly "Setting up your account…" label — the
   // post-signup flow is hands-off, so we shouldn't expose the venue-specific
   // jargon to the user mid-bootstrap.
@@ -689,7 +692,7 @@ export function useButtonState({
         return {
           text: execNotReady
             ? venueAutoSetupInFlight
-              ? "Preparing Predict…"
+              ? VENUE_LOADING_LABEL
               : "Complete venue setup"
             : "Route unavailable",
           disabled: true,
@@ -780,7 +783,7 @@ export function useButtonState({
         return {
           text: globalSetupInProgress
             ? SETUP_IN_PROGRESS_LABEL
-            : "Preparing Polymarket…",
+            : VENUE_LOADING_LABEL,
           disabled: true,
           onClick: () => {},
         };
@@ -881,8 +884,8 @@ export function useButtonState({
       if (lt.loading && !lt.ready) {
         return {
           text: globalSetupInProgress
-            ? "Setting up your account…"
-            : "Preparing Limitless…",
+            ? SETUP_IN_PROGRESS_LABEL
+            : VENUE_LOADING_LABEL,
           disabled: true,
           onClick: () => {},
         };
@@ -1122,7 +1125,7 @@ export function useButtonState({
       //   • `placeMarketOrder` / `placeLimitOrder` call `ensureSession()` for JWT.
       //   • `ensurePredictApprovalsForTrade` runs CTF approval if missing.
       // Buys with `approvalsOk === true` are also fully lazy.
-      // The "Preparing Predict…" gate is only meaningful for first-time BUYERS
+      // The Predict bootstrap gate is only meaningful for first-time BUYERS
       // whose on-chain approvals are confirmed missing — gating sells (or
       // returning buyers) on it just freezes the UI behind a redundant
       // server roundtrip + BSC RPC every time the user navigates markets.
@@ -1133,7 +1136,7 @@ export function useButtonState({
           return {
             text: globalSetupInProgress
               ? SETUP_IN_PROGRESS_LABEL
-              : "Preparing Predict…",
+              : VENUE_LOADING_LABEL,
             disabled: true,
             onClick: () => {},
           };
@@ -1190,9 +1193,9 @@ export function useButtonState({
         }
       }
       // `venueAutoSetupInFlight` only governs SOR's EXECUTION_NOT_READY copy
-      // ("Preparing Predict…" vs "Complete venue setup"). When approvals are
+      // (loading vs "Complete venue setup"). When approvals are
       // already on-chain, EXECUTION_NOT_READY is genuinely a server-side
-      // tradingEnabled drift — surfacing "Preparing Predict…" implies we're
+      // tradingEnabled drift — surfacing a warm-up label implies we're
       // doing something we're not. Suppress it for sells / approved buyers.
       const venueAutoSetupInFlight =
         Boolean(predictTrading?.loading) && !skipPredictBootstrapGate;
@@ -1293,7 +1296,7 @@ export function useButtonState({
             };
           }
           return {
-            text: "0 shares available. Place a limit order",
+            text: "No shares available",
             disabled: true,
             onClick: () => {},
             isSweepingBook: false,

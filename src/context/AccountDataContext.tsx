@@ -3,6 +3,8 @@ import React, {
 	useCallback,
 	useContext,
 	useMemo,
+	useRef,
+	useState,
 } from "react";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
@@ -166,6 +168,10 @@ export type AccountData = {
 		predict: string | null;
 	};
 	readiness: AccountReadiness;
+	/** Bumped after each successful `refresh.account` (weak signal for post-trade reconcile). */
+	accountVersion: number;
+	lastAccountRefreshAt: number | null;
+	isRefreshingAccount: boolean;
 	refresh: {
 		profile: () => Promise<void>;
 		overview: () => Promise<void>;
@@ -175,6 +181,8 @@ export type AccountData = {
 		predictAccount: () => Promise<void>;
 		positions: (venue?: AccountVenueKey) => Promise<void>;
 		all: () => Promise<void>;
+		/** Broad refetch for post-trade / manual sync (positions + cash + venue accounts + overview). */
+		account: (reason: string) => Promise<void>;
 	};
 };
 
@@ -306,6 +314,50 @@ function AccountDataContextInner({
 		refreshPositions,
 	]);
 
+	const [accountVersion, setAccountVersion] = useState(0);
+	const [lastAccountRefreshAt, setLastAccountRefreshAt] = useState<number | null>(
+		null,
+	);
+	const [isRefreshingAccount, setIsRefreshingAccount] = useState(false);
+	const accountRefreshDepthRef = useRef(0);
+
+	const refreshAccount = useCallback(
+		async (reason: string) => {
+			if (import.meta.env.DEV) {
+				console.debug("[AccountData] refresh.account", { reason });
+			}
+			accountRefreshDepthRef.current += 1;
+			if (accountRefreshDepthRef.current === 1) {
+				setIsRefreshingAccount(true);
+			}
+			try {
+				await Promise.all([
+					refreshPositions(),
+					refreshCash(),
+					refreshOverview(),
+					refreshPolyAccount(),
+					refreshPredictAccount(),
+					refreshDflowProof(),
+				]);
+				setAccountVersion((v) => v + 1);
+				setLastAccountRefreshAt(Date.now());
+			} finally {
+				accountRefreshDepthRef.current -= 1;
+				if (accountRefreshDepthRef.current === 0) {
+					setIsRefreshingAccount(false);
+				}
+			}
+		},
+		[
+			refreshPositions,
+			refreshCash,
+			refreshOverview,
+			refreshPolyAccount,
+			refreshPredictAccount,
+			refreshDflowProof,
+		],
+	);
+
 	const value = useMemo<AccountData>(() => {
 		const cash: AccountCashSlice = {
 			base: collateral.baseUsdc,
@@ -426,6 +478,9 @@ function AccountDataContextInner({
 				predict: predictAddress,
 			},
 			readiness,
+			accountVersion,
+			lastAccountRefreshAt,
+			isRefreshingAccount,
 			refresh: {
 				profile: refreshProfile,
 				overview: refreshOverview,
@@ -435,6 +490,7 @@ function AccountDataContextInner({
 				predictAccount: refreshPredictAccount,
 				positions: refreshPositions,
 				all: refreshAll,
+				account: refreshAccount,
 			},
 		};
 	}, [
@@ -466,6 +522,10 @@ function AccountDataContextInner({
 		refreshPredictAccount,
 		refreshPositions,
 		refreshAll,
+		refreshAccount,
+		accountVersion,
+		lastAccountRefreshAt,
+		isRefreshingAccount,
 	]);
 
 	return (

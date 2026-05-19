@@ -254,7 +254,7 @@ export function TransfersBridgePanel() {
 					{flow.isConfirming
 						? flow.phase === "polling"
 							? "Transferring…"
-							: "Preparing & signing…"
+							: "Signing…"
 						: insufficientFundsButton
 							? "Insufficient funds"
 							: "Confirm transfer"}

@@ -13,7 +13,7 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import { usePositionsPageData } from "@/context/PositionsDataContext";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
+import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeAccountSync";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useEffect } from "react";
 import { toCentsString } from "./utils/formatCurrency";

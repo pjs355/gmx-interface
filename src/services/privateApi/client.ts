@@ -259,6 +259,8 @@ export type DflowOrderStatusResponse = {
 	}>;
 	code?: string;
 	msg?: string;
+	/** Present when DFlow closed with refund `reverts` but outcome (or USDC on SELL) still delivered. */
+	partialFill?: boolean;
 };
 
 /** Structured DFlow terminal fields echoed on submit failures (predictions API). */
@@ -1157,7 +1159,9 @@ export function createPrivateApiClient(
 
 		/**
 		 * Server submits the signed tx, polls DFlow `/order-status` until `closed`,
-		 * then returns 200 with `orderStatus`. Non-2xx carries DFlow failure (`error`, optional `dflow`).
+		 * then returns 200 with `orderStatus`. `orderStatus.partialFill` is set when
+		 * DFlow reported refund `reverts` while fills still delivered the route `outputMint`.
+		 * Non-2xx carries DFlow failure (`error`, optional `dflow`).
 		 */
 		async postDflowOrder(
 			body: DflowOrderSubmitBody

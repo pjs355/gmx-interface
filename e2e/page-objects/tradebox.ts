@@ -38,8 +38,8 @@ const BETWEEN_TRADEBOX_ACTIONS_MS = 200;
 /** SOR route + price quote should arrive after a valid trade amount is typed. */
 const QUOTE_READY_TIMEOUT_MS = 30_000;
 /**
- * Default buy-side USD typed by `selectVenue` when neither the smart routing
- * rows nor the legacy venue dropdown are mounted yet. Uses $2 to match
+ * Default buy-side USD typed by `selectVenue` when smart routing rows are not
+ * mounted yet (`SmartRoutingSection` gates on previews / loading). Uses $2 to match
  * `E2E_TRADE_NOTIONAL_USD` in per-venue specs (must stay ≥ `SOR_MIN_MARKET_BUY_USD`) so
  * subsequent `setAmount(TRADE_USD)` calls don't trigger an extra SOR refetch / auto-select.
  */
@@ -176,7 +176,6 @@ export class Tradebox {
 	): Promise<void> {
 		const allowPrime = opts?.allowPrime ?? true;
 		await sleepBetweenTradeboxActions();
-		const venueTab = this.root.locator('[data-qa="trade-venue-tab-Venue"]');
 		const smartRow =
 			venue === "all"
 				? this.root.locator('[data-qa="smart-routing-split-row"]')
@@ -184,49 +183,36 @@ export class Tradebox {
 						`[data-qa="smart-routing-venue-row-${venue}"]`,
 					);
 
-		// Initial page load (and post-trade reload) lands the trade box with no
-		// amount typed. `SmartRoutingSection` returns null until SOR has previews
-		// (it gates on `sortedVenuePreviews || multiVenueSplit || isLoading`),
-		// and on Pandascore multi-venue umbrellas the legacy dropdown is hidden
-		// by `smartRoutingSurfaceActive`. Prime SOR with the floor amount so one
-		// of the two surfaces becomes interactable before we click.
-		let tabVisible = await venueTab.isVisible().catch(() => false);
+		// Initial page load (and post-trade reload) often has no amount typed.
+		// `SmartRoutingSection` returns null until SOR has previews
+		// (`sortedVenuePreviews || multiVenueSplit || isLoading`). Prime SOR with
+		// the floor amount so venue rows become interactable before we click.
 		let rowVisible = await smartRow.isVisible().catch(() => false);
-		if (!tabVisible && !rowVisible) {
+		if (!rowVisible) {
 			if (!allowPrime) {
 				const start = Date.now();
 				while (Date.now() - start < SELECT_VENUE_SURFACE_TIMEOUT_MS) {
-					tabVisible = await venueTab.isVisible().catch(() => false);
 					rowVisible = await smartRow.isVisible().catch(() => false);
-					if (tabVisible || rowVisible) break;
+					if (rowVisible) break;
 					await new Promise((r) => setTimeout(r, 200));
 				}
-				if (!tabVisible && !rowVisible) {
+				if (!rowVisible) {
 					throw new Error(
-						`selectVenue(${venue}, { allowPrime: false }): smart routing row and venue tab did not appear within ${SELECT_VENUE_SURFACE_TIMEOUT_MS}ms`,
+						`selectVenue(${venue}, { allowPrime: false }): smart routing row did not appear within ${SELECT_VENUE_SURFACE_TIMEOUT_MS}ms`,
 					);
 				}
 			} else {
 				console.warn(
-					`[e2e tradebox] selectVenue(${venue}): neither smart routing row nor venue tab is visible; ` +
+					`[e2e tradebox] selectVenue(${venue}): smart routing row not visible; ` +
 						`priming SOR by typing $${SELECT_VENUE_PRIME_AMOUNT_USD}`,
 				);
 				await this.setAmount(SELECT_VENUE_PRIME_AMOUNT_USD);
-				await Promise.race([
-					venueTab
-						.waitFor({
-							state: "visible",
-							timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
-						})
-						.catch(() => {}),
-					smartRow
-						.waitFor({
-							state: "visible",
-							timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
-						})
-						.catch(() => {}),
-				]);
-				tabVisible = await venueTab.isVisible().catch(() => false);
+				await smartRow
+					.waitFor({
+						state: "visible",
+						timeout: SELECT_VENUE_SURFACE_TIMEOUT_MS,
+					})
+					.catch(() => {});
 				rowVisible = await smartRow.isVisible().catch(() => false);
 			}
 		}
@@ -243,23 +229,9 @@ export class Tradebox {
 			return;
 		}
 
-		if (tabVisible) {
-			await venueTab.click();
-			// Venue list may render in a portal attached to `document.body`.
-			const option = this.page.locator(`[data-qa-venue="${venue}"]`);
-			await expect(
-				option,
-				`venue option [data-qa-venue="${venue}"] not found in dropdown`,
-			).toBeVisible({ timeout: 10_000 });
-			await sleepBetweenTradeboxActions();
-			await option.click();
-			await sleepBetweenTradeboxActions();
-			return;
-		}
-
 		throw new Error(
-			`selectVenue(${venue}): neither smart routing row [data-qa="smart-routing-venue-row-${venue}"] ` +
-				`nor legacy venue tab [data-qa="trade-venue-tab-Venue"] became visible after priming SOR ` +
+			`selectVenue(${venue}): smart routing row [data-qa="smart-routing-venue-row-${venue}"] ` +
+				`(or split row for "all") did not become visible after priming SOR ` +
 				`with $${SELECT_VENUE_PRIME_AMOUNT_USD}. Check that the umbrella has a live book for the venue ` +
 				`and that the dev server is on :3010.`,
 		);

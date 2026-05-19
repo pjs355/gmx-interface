@@ -12,7 +12,7 @@ import { usePortfolio } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
 import { isHomeSite } from "config/ui";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
-import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeBalanceSync";
+import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/usePostTradeAccountSync";
 
 import "./Header.scss";
 
@@ -43,7 +43,11 @@ export function AppHeaderLinks({
 		usePortfolio();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const claimCashSyncPending = useClaimCashSyncPending();
-	const showPortfolioMetricSkeleton = portfolioLoading || blockHeaderMetrics;
+	const postTradePositionSyncPending = usePostTradePositionSyncPendingGlobal();
+	const showPortfolioMetricSkeleton =
+		portfolioLoading ||
+		blockHeaderMetrics ||
+		postTradePositionSyncPending;
 	// Cash: show as soon as balance fetches complete, not when positions page is still loading
 	const showCashMetricSkeleton = cashLoading || claimCashSyncPending;
 

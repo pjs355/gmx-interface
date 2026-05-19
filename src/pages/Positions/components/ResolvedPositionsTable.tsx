@@ -14,6 +14,7 @@ import {
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
 import { claimAckKeysFromMarket, allWinningsMarketsAreLimitlessSettlementBlocked, LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP } from "@/trading/limitless/limitlessClaimAck";
+import { useAnimatedDots } from "@/hooks/useAnimatedDots";
 
 type MarketEntry = {
 	market: PredictionMarket;
@@ -248,6 +249,7 @@ function MultiClaimButton({
 	const slotRefs = useRef<Map<number, ClaimSlotHandle>>(new Map());
 	const [isClaiming, setIsClaiming] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const claimingDots = useAnimatedDots(400, isClaiming);
 
 	const allLimitlessWinningsClaimBlocked = useMemo(
 		() => allWinningsMarketsAreLimitlessSettlementBlocked(markets),
@@ -320,7 +322,7 @@ function MultiClaimButton({
 	}, [isClaiming, markets, onClaimSuccess, umbrellaId, allLimitlessWinningsClaimBlocked]);
 
 	const label = isClaiming
-		? "Claiming..."
+		? `Claiming${claimingDots}`
 		: allLimitlessWinningsClaimBlocked
 			? "Can't claim yet"
 			: "Claim";

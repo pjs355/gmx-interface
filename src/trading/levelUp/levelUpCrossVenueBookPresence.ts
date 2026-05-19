@@ -1,4 +1,7 @@
-import type { OrderbookSnapshot } from "@/services/api/orderbookService";
+import type {
+	OrderbookEntry,
+	OrderbookSnapshot,
+} from "@/services/api/orderbookService";
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 
 /** Only real resting depth (positive size). No BBO-only or zero-size synthetic rows. */
@@ -61,4 +64,52 @@ export function hasLevelUpCrossVenueOrderbook(
 	levelUpOrderbook: OrderbookSnapshot | null,
 ): boolean {
 	return computeLevelUpCrossVenueBooks(matched, levelUpOrderbook).hasLevelUp;
+}
+
+function sumOrderbookEntrySize(entry: OrderbookEntry): number {
+	const nested = entry.orders;
+	if (nested && nested.length > 0) {
+		return nested.reduce(
+			(sum, o) => sum + (o.size ?? o.makerQty ?? o.origSize ?? 0),
+			0,
+		);
+	}
+	return entry.size ?? 0;
+}
+
+/**
+ * True when the YES-native LevelUp ladder has at least one whole-share resting
+ * contract on asks or bids (matches `useMarketOrderHandler` whole-share rounding).
+ */
+export function orderbookSnapshotHasWholeShareRestingLiquidity(
+	book: OrderbookSnapshot | null | undefined,
+): boolean {
+	if (!book) return false;
+	const anyWhole = (levels: OrderbookEntry[] | undefined): boolean => {
+		if (!levels?.length) return false;
+		for (const e of levels) {
+			if (Math.floor(sumOrderbookEntrySize(e)) > 0) return true;
+		}
+		return false;
+	};
+	return anyWhole(book.asks) || anyWhole(book.bids);
+}
+
+/**
+ * Same book selection as {@link computeLevelUpCrossVenueBooks}, but requires
+ * tradeable whole-share depth so the LevelUp tab is not offered on an empty book.
+ */
+export function levelUpCrossVenueBooksHaveTradeableWholeShareLiquidity(
+	matched: MatchedMarket | null | undefined,
+	levelUpOrderbook: OrderbookSnapshot | null,
+): boolean {
+	const { luBookA, luBookB, hasLevelUp } = computeLevelUpCrossVenueBooks(
+		matched,
+		levelUpOrderbook,
+	);
+	if (!hasLevelUp) return false;
+	return (
+		orderbookSnapshotHasWholeShareRestingLiquidity(luBookA) ||
+		orderbookSnapshotHasWholeShareRestingLiquidity(luBookB)
+	);
 }

@@ -581,9 +581,6 @@ export function useBridgeFlow() {
 		abortRef.current = ac;
 
 		try {
-			if (needsPolymarketRelay) {
-				setStatusNote("Preparing Polymarket wallet…");
-			}
 			const polygonRelay = await preparePolygonRelay(needsPolymarketRelay);
 
 			if (routeIncludesSolana && !solanaSigner) {

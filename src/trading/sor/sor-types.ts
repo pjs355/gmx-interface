@@ -260,6 +260,8 @@ export interface ExecutionLeg {
 	updatedAt: number;
 	/** DFlow only: `true` when POST submit returned `initializedMarket` (init-payer co-sign path). */
 	initializedMarket?: boolean;
+	/** DFlow: settlement had refund `reverts` while outcome (or USDC on SELL) still delivered. */
+	dflowPartialFill?: boolean;
 }
 
 export interface RouteExecution {

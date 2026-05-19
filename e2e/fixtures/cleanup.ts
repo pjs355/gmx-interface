@@ -6,7 +6,7 @@ import {
 } from "../page-objects/tradebox";
 import { type Page } from "@playwright/test";
 
-/** Default when callers omit `venues`: sweep every venue tab the tradebox exposes. */
+/** Default when callers omit `venues`: sweep every venue the smart-routing rows expose. */
 const DEFAULT_VENUES_TO_SWEEP: TradingVenue[] = [
 	"levelup",
 	"polymarket",
@@ -16,7 +16,7 @@ const DEFAULT_VENUES_TO_SWEEP: TradingVenue[] = [
 ];
 
 /**
- * Optionally restrict which venue tabs to open (e.g. match `REQUESTED_VENUES` in
+ * Optionally restrict which venues to open (e.g. match `REQUESTED_VENUES` in
  * `per-venue-trade-cycle.spec.ts`). Pass a non-empty list; otherwise all defaults run.
  */
 export async function cleanupOpenPositions(
