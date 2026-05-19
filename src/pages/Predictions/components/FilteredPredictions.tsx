@@ -25,16 +25,24 @@ import {
 	isDeemphasizedSettledLeanOdds,
 } from "@/helpers/predictionUtils";
 import {
+	defaultEsportsTagLabel,
+	findEsportsTag,
 	gameFilterResetSelection,
+	homeDefaultSelectedTagLabel,
+	isEsportsMetaTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
 	LIVE_PILL_ID,
-	normalizeTagLabel,
 	STARTING_SOON_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
+import { isRestrictedProductionMode } from "@/config/restrictedMode";
+import { isCounterStrikeUmbrella } from "@/helpers/umbrellaGame";
 import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
-import { CS2_GAME_LOGO_URL } from "@/helpers/gameLogoResolver";
+import {
+	bundledCounterStrikeLogoFromTagLabels,
+	resolveLogoByTags,
+} from "@/helpers/gameLogoResolver";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
@@ -155,6 +163,7 @@ function gameFilterDisplayLabel(selectedGame: string | null): string | null {
 	if (!selectedGame) return null;
 	if (selectedGame === LIVE_PILL_ID) return "Live";
 	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
+	if (isEsportsMetaTagLabel(selectedGame)) return "All";
 	return selectedGame;
 }
 
@@ -164,18 +173,7 @@ export default function FilteredPredictions({
 	const navigate = useNavigate();
 	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
-
-	// Listen for reset filter event from header
-	useEffect(() => {
-		const handleResetFilter = () => {
-			setSelectedGame(gameFilterResetSelection());
-		};
-
-		window.addEventListener("resetGameFilter", handleResetFilter);
-		return () => {
-			window.removeEventListener("resetGameFilter", handleResetFilter);
-		};
-	}, []);
+	const [defaultTagApplied, setDefaultTagApplied] = useState(false);
 
 	const {
 		umbrellas,
@@ -188,17 +186,50 @@ export default function FilteredPredictions({
 		tagsLoading,
 	} = usePredictionData();
 
+	// Default sidebar filter on first load: Counter-Strike in restricted
+	// production mode (the only pill kept besides Live / Starting Soon),
+	// ESPORTS otherwise. `homeDefaultSelectedTagLabel` keeps that decision
+	// in one place so the header reset and the first-load default cannot
+	// drift.
+	useEffect(() => {
+		if (defaultTagApplied || tagsLoading) return;
+		const label = homeDefaultSelectedTagLabel(tags);
+		if (label) {
+			setSelectedGame(label);
+			setDefaultTagApplied(true);
+		}
+	}, [tags, tagsLoading, defaultTagApplied]);
+
+	// Listen for reset filter event from header
+	useEffect(() => {
+		const handleResetFilter = () => {
+			setSelectedGame(gameFilterResetSelection(tags));
+		};
+
+		window.addEventListener("resetGameFilter", handleResetFilter);
+		return () => {
+			window.removeEventListener("resetGameFilter", handleResetFilter);
+		};
+	}, [tags]);
+
 	const { appState } = useOddsMonitor();
 	const now = useNowTick(60_000);
 
+	const restrictedMode = isRestrictedProductionMode();
+
 	const filteredUmbrellas = React.useMemo(() => {
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
+			// Restricted production mode: hide every non-Counter-Strike
+			// umbrella from the public home list. Applied BEFORE the
+			// active-flag check so the count of esports-with-active-bets
+			// also reflects only CS2.
+			if (restrictedMode && !isCounterStrikeUmbrella(umbrella as any)) {
+				return false;
+			}
 			return (umbrella as any).active === true;
 		});
 
-		const esportsTag = tags.find(
-			(t) => normalizeTagLabel(t.label) === "ESPORTS",
-		);
+		const esportsTag = findEsportsTag(tags);
 		const esportsTagId = esportsTag?._id;
 
 		let filtered = activeUmbrellas.filter((umbrella) => {
@@ -216,13 +247,11 @@ export default function FilteredPredictions({
 				return esportsTag && tagIds.includes(esportsTag._id);
 			});
 
-			if (filterType === "all") {
-				return true;
-			}
-			if (filterType === "esports") {
+			if (filterType === "games") return !hasEsportsTag;
+			if (filterType === "esports" || filterType === "all") {
 				return hasEsportsTag;
 			}
-			return !hasEsportsTag;
+			return true;
 		});
 
 		if (
@@ -231,7 +260,7 @@ export default function FilteredPredictions({
 			selectedGame !== STARTING_SOON_PILL_ID
 		) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
-			if (selectedTag) {
+			if (selectedTag && !isEsportsMetaTagLabel(selectedTag.label)) {
 				filtered = filtered.filter((umbrella) => {
 					const children = (umbrella as any).children as
 						| Array<any>
@@ -265,7 +294,7 @@ export default function FilteredPredictions({
 		}
 
 		return filtered;
-	}, [umbrellas, filterType, selectedGame, tags, now]);
+	}, [umbrellas, filterType, selectedGame, tags, now, restrictedMode]);
 
 	const calendarData = React.useMemo(() => {
 		if (filterType === "games") {
@@ -595,17 +624,36 @@ export default function FilteredPredictions({
 				<div className="prediction-calendar">
 					<header className="prediction-calendar-page-heading">
 						<div className="prediction-calendar-page-heading__title-row">
-							<img
-								className="prediction-calendar-page-heading__game-logo"
-								src={CS2_GAME_LOGO_URL}
-								alt=""
-								width={40}
-								height={40}
-								decoding="async"
-							/>
-							<h2 className="prediction-calendar-page-heading__title">
-								Counter-Strike
-							</h2>
+							{(() => {
+								const calendarTitle =
+									selectedGame &&
+									selectedGame !== LIVE_PILL_ID &&
+									selectedGame !== STARTING_SOON_PILL_ID
+										? (gameFilterDisplayLabel(selectedGame) ??
+											selectedGame)
+										: "All";
+								const calendarLogo =
+									bundledCounterStrikeLogoFromTagLabels([
+										calendarTitle,
+									]) ?? resolveLogoByTags([calendarTitle]);
+								return (
+									<>
+										{calendarLogo ? (
+											<img
+												className="prediction-calendar-page-heading__game-logo"
+												src={calendarLogo}
+												alt=""
+												width={40}
+												height={40}
+												decoding="async"
+											/>
+										) : null}
+										<h2 className="prediction-calendar-page-heading__title">
+											{calendarTitle}
+										</h2>
+									</>
+								);
+							})()}
 						</div>
 					</header>
 					{calendarSections}

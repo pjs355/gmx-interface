@@ -4,7 +4,9 @@ import { RiSearchLine, RiCloseLine } from "react-icons/ri";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import { isRestrictedProductionMode } from "@/config/restrictedMode";
 import { resolveUmbrellaBannerById } from "@/helpers/umbrellaBanners";
+import { isCounterStrikeUmbrella } from "@/helpers/umbrellaGame";
 import "./Search.scss";
 
 type SearchResponse = {
@@ -71,7 +73,15 @@ export function Search({
 
 				const data: SearchResponse = await response.json();
 				console.log("Search results:", data);
-				setResults(data.data || []);
+				// Restricted production mode hides non-Counter-Strike umbrellas
+				// from public discovery surfaces. The /umbrellas/search endpoint
+				// returns every game; we filter client-side here so a Dota
+				// search like "mongolz" cannot surface a non-CS2 result.
+				const raw = data.data ?? [];
+				const filtered = isRestrictedProductionMode()
+					? raw.filter((u) => isCounterStrikeUmbrella(u as any))
+					: raw;
+				setResults(filtered);
 				setShowDropdown(true);
 			} catch (error) {
 				console.error("error", error);

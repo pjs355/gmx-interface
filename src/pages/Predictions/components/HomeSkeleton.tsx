@@ -10,15 +10,19 @@ interface HomeSkeletonProps {
 
 const SIDEBAR_PILLS = 8;
 
-const SkeletonPill: React.FC<{ withDot?: boolean; labelWidth?: number }> = ({
-	withDot,
-	labelWidth = 90,
-}) => (
+const SkeletonPill: React.FC<{
+	withDot?: boolean;
+	withLogo?: boolean;
+	labelWidth?: number;
+}> = ({ withDot, withLogo, labelWidth = 90 }) => (
 	<div className="game-link home-skeleton__pill" aria-hidden>
 		<span className="game-link__inner">
 			<span className="game-link__leading">
 				{withDot ? (
 					<span className="home-skeleton__pill-dot skeleton-shimmer" />
+				) : null}
+				{withLogo ? (
+					<span className="home-skeleton__pill-logo skeleton-shimmer" />
 				) : null}
 				<span
 					className="home-skeleton__pill-label skeleton-shimmer"
@@ -139,6 +143,7 @@ export const HomeSkeleton: React.FC<HomeSkeletonProps> = ({ filterType }) => {
 						{Array.from({ length: SIDEBAR_PILLS - 2 }).map((_, i) => (
 							<SkeletonPill
 								key={i}
+								withLogo
 								labelWidth={70 + ((i * 17) % 60)}
 							/>
 						))}

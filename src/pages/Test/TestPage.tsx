@@ -89,17 +89,6 @@ export default function TestPage() {
 		};
 	}, [getAccessToken, navigate]);
 
-	// Listen for reset filter event from header
-	useEffect(() => {
-		const handleResetFilter = () => {
-			setSelectedGame(gameFilterResetSelection());
-		};
-
-		window.addEventListener("resetGameFilter", handleResetFilter);
-		return () => {
-			window.removeEventListener("resetGameFilter", handleResetFilter);
-		};
-	}, []);
 	const {
 		umbrellas,
 		loading,
@@ -109,6 +98,17 @@ export default function TestPage() {
 		multiMarketData,
 		tags,
 	} = usePredictionData();
+
+	useEffect(() => {
+		const handleResetFilter = () => {
+			setSelectedGame(gameFilterResetSelection(tags));
+		};
+
+		window.addEventListener("resetGameFilter", handleResetFilter);
+		return () => {
+			window.removeEventListener("resetGameFilter", handleResetFilter);
+		};
+	}, [tags]);
 
 	const now = useNowTick(60_000);
 
