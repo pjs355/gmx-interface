@@ -1,4 +1,5 @@
 import { getPrivateApiRequestUrl } from "@/config/privateApiBase";
+import { mapSorApiHttpError, userMessage, SOR_API_INVALID_RESPONSE } from "@/errors";
 import type {
 	RouteRequest,
 	RoutePlan,
@@ -23,7 +24,9 @@ async function sorFetch(
 ): Promise<Response> {
 	const { requireAuth = true, ...fetchInit } = init;
 	const token = await getToken();
-	if (!token && requireAuth) throw new Error("Not authenticated");
+	if (!token && requireAuth) {
+		throw new Error(mapSorApiHttpError(401, "Not authenticated"));
+	}
 	const headers = new Headers(fetchInit.headers);
 	if (token) {
 		headers.set("Authorization", `Bearer ${token}`);
@@ -64,13 +67,14 @@ export function createSorApiClient(
 	async function readJson<T>(res: Response): Promise<T> {
 		if (!res.ok) {
 			const text = await res.text().catch(() => "");
-			throw new Error(`SOR API error ${res.status}: ${text.slice(0, 200)}`);
+			throw new Error(mapSorApiHttpError(res.status, text));
 		}
 		const text = await res.text();
 		try {
 			return JSON.parse(text) as T;
 		} catch {
-			throw new Error(`Invalid JSON response: ${text.slice(0, 200)}`);
+			console.error("[SOR API] invalid JSON", { preview: text.slice(0, 500) });
+			throw new Error(userMessage(SOR_API_INVALID_RESPONSE));
 		}
 	}
 
@@ -101,7 +105,7 @@ export function createSorApiClient(
 			try {
 				body = JSON.parse(text) as unknown;
 			} catch {
-				throw new Error(`SOR API error ${res.status}: ${text.slice(0, 200)}`);
+				throw new Error(mapSorApiHttpError(res.status, text));
 			}
 			if (
 				body &&
@@ -111,7 +115,7 @@ export function createSorApiClient(
 			) {
 				return body as SorRouteResult;
 			}
-			throw new Error(`SOR API error ${res.status}: ${text.slice(0, 200)}`);
+			throw new Error(mapSorApiHttpError(res.status, text));
 		},
 
 		async startExecution(route, signal) {

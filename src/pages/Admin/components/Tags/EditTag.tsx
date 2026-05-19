@@ -7,6 +7,12 @@ import {
 } from "@/services/firebase/firebaseStorage";
 import type { AdminTag } from "./ListTag";
 import "./Tags.scss";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	ADMIN_MISSING_ACCESS_TOKEN,
+	ADMIN_TAG_LABEL_REQUIRED,
+} from "@/errors";
 
 export default function EditTag({
 	tag,
@@ -105,11 +111,11 @@ export default function EditTag({
 		try {
 			const trimmedLabel = label.trim();
 			if (trimmedLabel.length === 0) {
-				throw new Error("label is required");
+				throw new Error(adminErrorMessage(ADMIN_TAG_LABEL_REQUIRED));
 			}
 			const token = await getAccessToken?.();
 			if (typeof token === "undefined" || !token) {
-				throw new Error("Missing admin access token");
+				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
 			const trimmedSlug = slug.trim();
 			const payload: TagPayload = {
@@ -191,9 +197,9 @@ export default function EditTag({
 					: null;
 			setBannerImagePreview(bannerPreviewValue);
 			onSaved?.(nextTag);
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("error", err);
-			setError(err?.message || String(err));
+			setError(formatAdminErrorForUser(err));
 		} finally {
 			setSaving(false);
 		}

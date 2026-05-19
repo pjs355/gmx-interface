@@ -11,6 +11,13 @@ import AccountHealthChecker, {
 	HealthStatusIndicator,
 	type AccountHealthResult,
 } from "./AccountHealthChecker";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	ADMIN_MISSING_ACCESS_TOKEN,
+	ADMIN_PROFILES_LIST_INVALID,
+} from "@/errors";
 
 interface ListProfilesProps {
 	onView?: (profileId: string) => void;
@@ -146,7 +153,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 						? await getAccessToken()
 						: undefined;
 				if (!token) {
-					throw new Error("Missing admin access token");
+					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				const base = getPredictionApiBaseUrl();
 				const resp = await fetch(`${base}/admin/profiles`, {
@@ -156,12 +163,10 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 					.json()
 					.catch(() => ({} as any))) as ProfilesApiResponse;
 				if (!resp.ok) {
-					throw new Error(
-						json?.error || `HTTP ${resp.status}`
-					);
+					throw new Error(formatAdminHttpError(resp.status, json?.error));
 				}
 				if (typeof json.success === "undefined") {
-					throw new Error("Invalid response for profiles list");
+					throw new Error(adminErrorMessage(ADMIN_PROFILES_LIST_INVALID));
 				}
 				if (mounted) {
 					let profilesData: Profile[] = [];
@@ -185,9 +190,9 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 					
 					setProfiles(profilesData);
 				}
-			} catch (err: any) {
+			} catch (err: unknown) {
 				console.error("error", err);
-				if (mounted) setError(err?.message || String(err));
+				if (mounted) setError(formatAdminErrorForUser(err));
 			} finally {
 				if (mounted) setLoading(false);
 			}

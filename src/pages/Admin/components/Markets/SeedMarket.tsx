@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	ADMIN_SEED_MARKET_FAILED,
+	ADMIN_OPERATION_FAILED,
+} from "@/errors";
 
 interface SeedMarketProps {
 	questionId: string;
@@ -103,15 +110,18 @@ export default function SeedMarket({
 			const json = await response.json().catch(() => ({} as any));
 
 			if (!response.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${response.status}`);
+				throw new Error(formatAdminHttpError(response.status, json?.error));
 			}
 
 			console.log("SeedMarket.handleSeed response", json);
 			setResult(json.data as SeedResult);
 		} catch (err) {
 			console.error("error", err);
+			const msg = formatAdminErrorForUser(err);
 			setError(
-				err instanceof Error ? err.message : "Unknown error occurred"
+				msg === adminErrorMessage(ADMIN_OPERATION_FAILED)
+					? adminErrorMessage(ADMIN_SEED_MARKET_FAILED)
+					: msg,
 			);
 		} finally {
 			setSeeding(false);
@@ -144,15 +154,18 @@ export default function SeedMarket({
 			const json = await response.json().catch(() => ({} as any));
 
 			if (!response.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${response.status}`);
+				throw new Error(formatAdminHttpError(response.status, json?.error));
 			}
 
 			console.log("SeedMarket.handleClear response", json);
 			setClearResult("Order book cleared successfully");
 		} catch (err) {
 			console.error("error", err);
+			const msg = formatAdminErrorForUser(err);
 			setError(
-				err instanceof Error ? err.message : "Unknown error occurred"
+				msg === adminErrorMessage(ADMIN_OPERATION_FAILED)
+					? adminErrorMessage(ADMIN_SEED_MARKET_FAILED)
+					: msg,
 			);
 		} finally {
 			setClearing(false);
@@ -185,15 +198,18 @@ export default function SeedMarket({
 			const json = await response.json().catch(() => ({} as any));
 
 			if (!response.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${response.status}`);
+				throw new Error(formatAdminHttpError(response.status, json?.error));
 			}
 
 			console.log("SeedMarket.handleWipe response", json);
 			setWipeResult("Market wiped successfully");
 		} catch (err) {
 			console.error("error", err);
+			const msg = formatAdminErrorForUser(err);
 			setError(
-				err instanceof Error ? err.message : "Unknown error occurred"
+				msg === adminErrorMessage(ADMIN_OPERATION_FAILED)
+					? adminErrorMessage(ADMIN_SEED_MARKET_FAILED)
+					: msg,
 			);
 		} finally {
 			setWiping(false);

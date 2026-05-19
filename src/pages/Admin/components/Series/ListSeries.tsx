@@ -6,6 +6,13 @@ import {
 	umbrellaDataService,
 	type Umbrella,
 } from "@/services/api/umbrellaDataService";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	ADMIN_MISSING_ACCESS_TOKEN,
+	ADMIN_SERIES_LIST_INVALID,
+} from "@/errors";
 
 interface ProcessedMatch {
 	id: number;
@@ -76,7 +83,7 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 			try {
 				const token = await getAccessToken?.();
 				if (typeof token === "undefined" || !token) {
-					throw new Error("Missing admin access token");
+					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				const base = getPredictionApiBaseUrl();
 				const resp = await fetch(`${base}/admin/series`, {
@@ -87,11 +94,11 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 					.catch(() => ({} as any))) as SeriesApiResponse;
 				if (!resp.ok) {
 					throw new Error(
-						(json as any)?.error || `HTTP ${resp.status}`
+						formatAdminHttpError(resp.status, (json as SeriesApiResponse).message),
 					);
 				}
 				if (typeof json.success === "undefined") {
-					throw new Error("Invalid response for series list");
+					throw new Error(adminErrorMessage(ADMIN_SERIES_LIST_INVALID));
 				}
 				if (mounted) {
 					if (Array.isArray(json.data)) {
@@ -102,9 +109,9 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 						setSeries([]);
 					}
 				}
-			} catch (err: any) {
+			} catch (err: unknown) {
 				console.error("error", err);
-				if (mounted) setError(err?.message || String(err));
+				if (mounted) setError(formatAdminErrorForUser(err));
 			} finally {
 				if (mounted) setLoading(false);
 			}

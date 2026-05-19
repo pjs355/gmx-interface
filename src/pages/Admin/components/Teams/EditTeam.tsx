@@ -6,6 +6,18 @@ import {
 	type UpdateTeamPayload,
 } from "@/services/api/teamService";
 import "./TeamsAdmin.scss";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	ADMIN_MISSING_ACCESS_TOKEN,
+	ADMIN_TEAM_DISPLAY_NAME_REQUIRED,
+	ADMIN_TEAM_PANDASCORE_ID_NUMBER,
+	ADMIN_TEAM_PANDASCORE_ID_REQUIRED,
+	ADMIN_TEAM_SHORT_CODE_REQUIRED,
+	ADMIN_TEAM_SLUG_REQUIRED,
+	ADMIN_TEAM_UPDATE_FAILED,
+	ADMIN_OPERATION_FAILED,
+} from "@/errors";
 
 interface EditTeamProps {
 	team: TeamRecord;
@@ -83,25 +95,25 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 					? await getAccessToken()
 					: null;
 			if (typeof token !== "string" || token.length === 0) {
-				throw new Error("Missing admin access token for updating team");
+				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
 
 			if (form.displayName.trim().length === 0) {
-				throw new Error("Display name is required");
+				throw new Error(adminErrorMessage(ADMIN_TEAM_DISPLAY_NAME_REQUIRED));
 			}
 			if (form.slug.trim().length === 0) {
-				throw new Error("Slug is required");
+				throw new Error(adminErrorMessage(ADMIN_TEAM_SLUG_REQUIRED));
 			}
 			if (form.shortCode.trim().length === 0) {
-				throw new Error("Short code is required");
+				throw new Error(adminErrorMessage(ADMIN_TEAM_SHORT_CODE_REQUIRED));
 			}
 			const trimmedPandaId = form.pandaId.trim();
 			if (trimmedPandaId.length === 0) {
-				throw new Error("PandaScore ID is required");
+				throw new Error(adminErrorMessage(ADMIN_TEAM_PANDASCORE_ID_REQUIRED));
 			}
 			const parsedPanda = Number.parseInt(trimmedPandaId, 10);
 			if (Number.isNaN(parsedPanda)) {
-				throw new Error("PandaScore ID must be a number");
+				throw new Error(adminErrorMessage(ADMIN_TEAM_PANDASCORE_ID_NUMBER));
 			}
 
 			const payload: UpdateTeamPayload = {};
@@ -145,9 +157,14 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 			const updated = await teamService.updateTeam(team._id, payload, token);
 			onSaved(updated);
 			setSuccess("Team updated");
-		} catch (err) {
+		} catch (err: unknown) {
 			console.error("error", err);
-			setError(err instanceof Error ? err.message : "Failed to update team");
+			const msg = formatAdminErrorForUser(err);
+			setError(
+				msg === adminErrorMessage(ADMIN_OPERATION_FAILED)
+					? adminErrorMessage(ADMIN_TEAM_UPDATE_FAILED)
+					: msg,
+			);
 		} finally {
 			setSaving(false);
 		}

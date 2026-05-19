@@ -2,6 +2,20 @@ import { useState, useEffect, useRef } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { tagService, type Tag } from "@/services/api/tagService";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	ADMIN_DAILY_GAME_ID_REQUIRED,
+	ADMIN_DAILY_GAME_NAME_REQUIRED,
+	ADMIN_DAILY_GAME_SLUG_REQUIRED,
+	ADMIN_DAILY_GAME_UNKNOWN_RESPONSE,
+	ADMIN_DAILY_START_REQUIRED,
+	ADMIN_INITIAL_OVER_POSITIVE,
+	ADMIN_INITIAL_OVER_REQUIRED,
+	ADMIN_MISSING_ACCESS_TOKEN,
+	ADMIN_MISSING_IDENTITY_TOKEN,
+} from "@/errors";
 
 interface AddDailyGameProps {
 	onCreated?: () => void;
@@ -84,38 +98,38 @@ export default function AddDailyGame({
 					? await getAccessToken()
 					: undefined;
 			if (!token) {
-				throw new Error("Missing admin access token");
+				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
 
 			if (!identityToken) {
-				throw new Error("Missing identity token");
+				throw new Error(adminErrorMessage(ADMIN_MISSING_IDENTITY_TOKEN));
 			}
 
 			// Validate all fields
 			if (!gameId.trim()) {
-				throw new Error("Game ID is required");
+				throw new Error(adminErrorMessage(ADMIN_DAILY_GAME_ID_REQUIRED));
 			}
 			if (!gameName.trim()) {
-				throw new Error("Game Name is required");
+				throw new Error(adminErrorMessage(ADMIN_DAILY_GAME_NAME_REQUIRED));
 			}
 			if (!gameSlug.trim()) {
-				throw new Error("Game Slug is required");
+				throw new Error(adminErrorMessage(ADMIN_DAILY_GAME_SLUG_REQUIRED));
 			}
 			if (!dailyStart.trim()) {
-				throw new Error("Daily Start time is required");
+				throw new Error(adminErrorMessage(ADMIN_DAILY_START_REQUIRED));
 			}
 			if (!initialOverNumber.trim()) {
-				throw new Error("Initial Over Number is required");
+				throw new Error(adminErrorMessage(ADMIN_INITIAL_OVER_REQUIRED));
 			}
 			// Validate initialOverNumber is a valid number
 			const overNumber = parseFloat(initialOverNumber.trim());
 			if (isNaN(overNumber) || overNumber <= 0) {
-				throw new Error("Initial Over Number must be a positive number");
+				throw new Error(adminErrorMessage(ADMIN_INITIAL_OVER_POSITIVE));
 			}
 
 			// Validate dailyStart format
 			if (!validateDailyStart(dailyStart)) {
-				throw new Error("Daily Start time is required");
+				throw new Error(adminErrorMessage(ADMIN_DAILY_START_REQUIRED));
 			}
 
 			// Warn if gameId is not purely numeric (but don't block)
@@ -155,13 +169,12 @@ export default function AddDailyGame({
 			if (!resp.ok) {
 				const errorText = await resp.text().catch(() => "");
 				throw new Error(
-					json?.error ||
-						`Failed to save daily game (${resp.status}): ${errorText || "Unknown error"}`
+					formatAdminHttpError(resp.status, json?.error ?? errorText),
 				);
 			}
 
 			if (json?.success !== true) {
-				throw new Error(json?.error || "Unknown server response");
+				throw new Error(adminErrorMessage(ADMIN_DAILY_GAME_UNKNOWN_RESPONSE));
 			}
 
 			setSuccess(true);
@@ -182,9 +195,9 @@ export default function AddDailyGame({
 					onCreated();
 				}
 			}, 1500);
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("error", err);
-			setError(err?.message || String(err));
+			setError(formatAdminErrorForUser(err));
 		} finally {
 			setLoading(false);
 		}

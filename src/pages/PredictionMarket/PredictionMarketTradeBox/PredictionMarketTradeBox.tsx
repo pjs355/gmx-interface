@@ -23,7 +23,28 @@ import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useButtonState } from "./hooks/useButtonState";
 import { useTradeState } from "./hooks/useTradeState";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
-import { getPrivateApiErrorMessage } from "@/services/privateApi";
+import {
+	formatErrorForUser,
+	formatLimitlessDelegatedOrderError,
+	userMessage,
+	SOR_SMART_ROUTE_FAILED,
+	TRADE_ALREADY_PROCESSING,
+	TRADE_INSUFFICIENT_SHARES,
+	TRADE_LEVELUP_APPROVALS_INCOMPLETE,
+	TRADE_LIMITLESS_MAKER_MISSING,
+	TRADE_LIMITLESS_NOT_READY,
+	TRADE_LIMITLESS_SLUG_MISSING,
+	TRADE_LIMITLESS_USDC_ALLOWANCE,
+	TRADE_LIMITLESS_USDC_FUNDS,
+	TRADE_MISSING_FIELDS,
+	TRADE_NOT_AUTHENTICATED,
+	TRADE_NO_WALLET,
+	TRADE_POLY_APPROVALS_INCOMPLETE,
+	TRADE_POLY_RELAYER_UNAVAILABLE,
+	TRADE_POLY_SAFE_NOT_PROVISIONED,
+	TRADE_PREDICT_APPROVALS_INCOMPLETE,
+	TRADE_SOR_NOT_READY,
+} from "@/errors";
 import { calculateFeeMatchingBackend } from "./feeLevelUp";
 import { getVenueConfig } from "@/config/venueConfig";
 import {
@@ -985,7 +1006,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         limitlessEnsureQuery.isLoading ||
         (authenticated && Boolean(profileId) && !limitlessEnsureQuery.isFetched),
       blockedReason: limitlessEnsureQuery.isError
-        ? getPrivateApiErrorMessage(limitlessEnsureQuery.error)
+        ? formatErrorForUser(limitlessEnsureQuery.error)
         : limitlessEnsureGate.ready
           ? null
           : limitlessEnsureGate.blockedReason,
@@ -1025,7 +1046,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       whyNotTradeable = "no_profile";
     } else if (limitlessEnsureQuery.isError) {
       whyNotTradeable = "ensure_account_error";
-      httpError = getPrivateApiErrorMessage(limitlessEnsureQuery.error);
+      httpError = formatErrorForUser(limitlessEnsureQuery.error);
     } else if (stillLoading && !limitlessReady) {
       whyNotTradeable = "still_loading";
     } else if (limitlessReady) {
@@ -1346,9 +1367,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     await queryClient.invalidateQueries({ queryKey: ["predict-approvals"] });
     const refreshed = await predictApprovalsQuery.refetch();
     if (!refreshed.data) {
-      throw new Error(
-        "Predict trading approvals did not complete. Check your wallet and try again.",
-      );
+      throw new Error(userMessage(TRADE_PREDICT_APPROVALS_INCOMPLETE));
     }
   }, [predictApprovalsQuery, predictSession, predictMarketDetail, queryClient]);
 
@@ -1358,9 +1377,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     await approveToken();
     ok = await checkApproval();
     if (!ok) {
-      throw new Error(
-        "Trading approvals did not complete. Check your wallet and try again.",
-      );
+      throw new Error(userMessage(TRADE_LEVELUP_APPROVALS_INCOMPLETE));
     }
   }, [checkApproval, approveToken]);
 
@@ -1389,9 +1406,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     }) => {
       const safe = funding.polymarketSafe;
       if (!safe) {
-        throw new Error(
-          "Polymarket Safe not provisioned. Open the Polymarket tab to initialize it.",
-        );
+        throw new Error(userMessage(TRADE_POLY_SAFE_NOT_PROVISIONED));
       }
 
       const force = opts?.force === true;
@@ -1415,9 +1430,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
       const client = await relay.getRelayClient();
       if (!client) {
-        throw new Error(
-          "Polymarket relayer unavailable. Retry in a moment or refresh the page.",
-        );
+        throw new Error(userMessage(TRADE_POLY_RELAYER_UNAVAILABLE));
       }
       const { executePolymarketApprovalBatch } = await import(
         "@/trading/polymarket/safeActions"
@@ -1427,9 +1440,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
       const recheck = await checkPolymarketApprovals(safe);
       if (!recheck.allApproved) {
-        throw new Error(
-          "Polymarket approvals batch did not complete. Retry the trade.",
-        );
+        throw new Error(userMessage(TRADE_POLY_APPROVALS_INCOMPLETE));
       }
 
       // Refresh the polymarket-account query so the next trade's fast path
@@ -1481,7 +1492,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       /** Venue slug used for partner allowance + market fetch (may differ from route slug for NegRisk). */
       let effectiveVenueSlug = slug;
       if (!slug) {
-        throw new Error("Limitless market slug missing — cannot verify allowance.");
+        throw new Error(userMessage(TRADE_LIMITLESS_SLUG_MISSING));
       }
       console.info(lxJit, "start", {
         routeSlug: slug,
@@ -1503,9 +1514,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             ? makerFromOverview
             : "") ?? "";
       if (!venueMaker) {
-        throw new Error(
-          "Limitless maker address missing — refresh ensure-account or wait for account overview.",
-        );
+        throw new Error(userMessage(TRADE_LIMITLESS_MAKER_MISSING));
       }
       const fundTarget = fundEvmForPrivy?.trim() ?? "";
       const {
@@ -1656,9 +1665,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             ? Math.max(0, fresh.limitlessMakerBase)
             : 0;
         if (!Number.isFinite(makerUsd) || makerUsd < 0.01) {
-          throw new Error(
-            "Add USDC to your Limitless balance before buying. Open Transfers and move funds from your Base wallet.",
-          );
+          throw new Error(userMessage(TRADE_LIMITLESS_USDC_FUNDS));
         }
       }
 
@@ -1695,10 +1702,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             hasMinimumAllowance: allowance.hasMinimumAllowance,
             detail,
           });
-          throw new Error(
-            `Limitless still reports insufficient USDC allowance after Base setup (${detail.join(", ")}). ` +
-              `If you just approved on-chain, wait a minute and retry, or finish setup in the Limitless app.`,
-          );
+          console.error(lxJit, "USDC allowance detail", { detail });
+          throw new Error(userMessage(TRADE_LIMITLESS_USDC_ALLOWANCE));
         }
         console.info(lxJit, "partner USDC OK", { routeSlug: slug, effectiveVenueSlug });
       }
@@ -1739,7 +1744,14 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           effectiveVenueSlug,
           msg,
         });
-        throw new Error(msg);
+        {
+          const gateMsg = formatLimitlessDelegatedOrderError(msg);
+          throw new Error(
+            gateMsg.length > 0
+              ? gateMsg
+              : userMessage(TRADE_LIMITLESS_NOT_READY),
+          );
+        }
       }
       console.info(lxJit, "complete", {
         routeSlug: slug,
@@ -1953,16 +1965,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     },
     executeTrade: async () => {
       if (!authenticated) {
-        throw new Error("Not authenticated - please log in with Privy");
+        throw new Error(userMessage(TRADE_NOT_AUTHENTICATED));
       }
       if (!account) {
-        throw new Error("No wallet connected - account not available");
+        throw new Error(userMessage(TRADE_NO_WALLET));
       }
       if (state.isLoading) {
-        throw new Error("Already processing a trade");
+        throw new Error(userMessage(TRADE_ALREADY_PROCESSING));
       }
       if (!state.selectedPosition || !state.amount || (state.orderType === "limit" && !state.price)) {
-        throw new Error("Missing required fields: position, amount, or price");
+        throw new Error(userMessage(TRADE_MISSING_FIELDS));
       }
 
       // Sell-side sanity: SOR will also enforce this server-side, but failing
@@ -1978,9 +1990,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
           null,
         );
         if (!sharesCheck.hasSufficientShares) {
-          throw new Error(
-            `Insufficient ${state.selectedPosition.toUpperCase()} shares. Required: ${sharesCheck.requiredShares}, Available: ${state.selectedPosition === "yes" ? yesBalance : noBalance}`,
-          );
+          throw new Error(userMessage(TRADE_INSUFFICIENT_SHARES));
         }
       }
 
@@ -1990,7 +2000,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       // whose progress is reported on `state.isLoading` / `state.orderResult`).
       const runSor = handleSorExecuteRef.current;
       if (!runSor) {
-        throw new Error("SOR executor not ready - route has not been generated yet.");
+        throw new Error(userMessage(TRADE_SOR_NOT_READY));
       }
       runSor();
     },
@@ -2576,12 +2586,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             ...prev,
             orderResult: {
               success: false,
-              error:
-                err instanceof Error
-                  ? err.message
-                  : typeof err === "string"
-                    ? err
-                    : "Smart route failed to run.",
+              error: (() => {
+                const formatted = formatErrorForUser(err);
+                return formatted === "Request failed"
+                  ? userMessage(SOR_SMART_ROUTE_FAILED)
+                  : formatted;
+              })(),
             },
           }));
         });

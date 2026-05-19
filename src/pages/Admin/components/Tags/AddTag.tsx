@@ -3,6 +3,12 @@ import { usePrivy } from "@privy-io/react-auth";
 import { tagService, type TagPayload } from "@/services/api/tagService";
 import { uploadTagImage } from "@/services/firebase/firebaseStorage";
 import "./Tags.scss";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	ADMIN_MISSING_ACCESS_TOKEN,
+	ADMIN_TAG_LABEL_REQUIRED,
+} from "@/errors";
 
 export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 	const { getAccessToken } = usePrivy();
@@ -45,11 +51,11 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 		try {
 			const trimmedLabel = label.trim();
 			if (trimmedLabel.length === 0) {
-				throw new Error("label is required");
+				throw new Error(adminErrorMessage(ADMIN_TAG_LABEL_REQUIRED));
 			}
 			const token = await getAccessToken?.();
 			if (typeof token === "undefined" || !token) {
-				throw new Error("Missing admin access token");
+				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
 			const trimmedSlug = slug.trim();
 			const payload: TagPayload = {
@@ -81,9 +87,9 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 			setImage(null);
 			setImagePreview(null);
 			onCreated?.();
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("error", err);
-			setError(err?.message || String(err));
+			setError(formatAdminErrorForUser(err));
 		} finally {
 			setSubmitting(false);
 		}

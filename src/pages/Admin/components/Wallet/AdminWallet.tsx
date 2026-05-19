@@ -21,6 +21,12 @@ import {
 } from "@/helpers/gameLogoResolver";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import {
+	adminErrorMessage,
+	formatAdminHttpError,
+	formatErrorForUser,
+	ADMIN_WALLET_INFO_FAILED,
+} from "@/errors";
 
 interface TokenBalance {
 	yesTokenId: string;
@@ -148,18 +154,25 @@ export default function AdminWallet() {
 
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => ({}));
-				throw new Error(errorData?.error || `HTTP ${response.status}`);
+				const detail =
+					typeof errorData?.error === "string" ? errorData.error : undefined;
+				throw new Error(formatAdminHttpError(response.status, detail));
 			}
 
 			const data = await response.json();
 			if (data.success && data.wallet) {
 				setWalletInfo(data.wallet);
 			} else {
-				throw new Error(data.error || "Failed to get wallet info");
+				const detail =
+					typeof data?.error === "string" ? data.error : undefined;
+				if (detail) {
+					console.error("[admin] wallet info", detail);
+				}
+				throw new Error(adminErrorMessage(ADMIN_WALLET_INFO_FAILED));
 			}
 		} catch (err) {
-			console.error("Error fetching wallet info:", err);
-			setWalletError(err instanceof Error ? err.message : "Unknown error");
+			console.error("error", err);
+			setWalletError(formatErrorForUser(err));
 		} finally {
 			setLoadingWallet(false);
 		}
@@ -348,7 +361,11 @@ export default function AdminWallet() {
 			const data = await response.json().catch(() => ({}));
 
 			if (!response.ok || !data?.success) {
-				throw new Error(data?.error || `HTTP ${response.status}`);
+				const detail =
+					typeof data?.error === "string" ? data.error : undefined;
+				throw new Error(
+					formatAdminHttpError(response.status, detail),
+				);
 			}
 
 			// Mark as claimed
@@ -362,10 +379,10 @@ export default function AdminWallet() {
 				]);
 			}
 		} catch (err) {
-			console.error("Claim error:", err);
+			console.error("error", err);
 			setClaimErrors((prev) => {
 				const next = new Map(prev);
-				next.set(marketId, err instanceof Error ? err.message : "Unknown error");
+				next.set(marketId, formatErrorForUser(err));
 				return next;
 			});
 		} finally {
@@ -394,14 +411,18 @@ export default function AdminWallet() {
 			const data = await response.json().catch(() => ({}));
 
 			if (!response.ok || !data?.success) {
-				throw new Error(data?.error || `HTTP ${response.status}`);
+				const detail =
+					typeof data?.error === "string" ? data.error : undefined;
+				throw new Error(
+					formatAdminHttpError(response.status, detail),
+				);
 			}
 
 			// Refresh all data
 			await loadAllData();
 		} catch (err) {
-			console.error("Claim all error:", err);
-			alert(`Failed to claim all: ${err instanceof Error ? err.message : "Unknown error"}`);
+			console.error("error", err);
+			alert(formatErrorForUser(err));
 		}
 	}, [getAccessToken, loadAllData]);
 

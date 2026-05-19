@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import {
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	ADMIN_SETTLE_MARKET_FAILED,
+	ADMIN_OPERATION_FAILED,
+	adminErrorMessage,
+} from "@/errors";
 
 interface SettleMarketProps {
 	questionId: string;
@@ -54,12 +61,17 @@ export default function SettleMarket({
 			);
 			const json = await resp.json().catch(() => ({} as any));
 			if (!resp.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
+				throw new Error(formatAdminHttpError(resp.status, json?.error));
 			}
 			setSettleMsg("Settlement submitted");
-		} catch (e: any) {
+		} catch (e: unknown) {
 			console.error("error", e);
-			setSettleErr(e?.message || String(e));
+			const msg = formatAdminErrorForUser(e);
+			setSettleErr(
+				msg === adminErrorMessage(ADMIN_OPERATION_FAILED)
+					? adminErrorMessage(ADMIN_SETTLE_MARKET_FAILED)
+					: msg,
+			);
 		} finally {
 			setSettling(false);
 		}

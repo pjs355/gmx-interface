@@ -3,7 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress } from "viem";
 import { bsc } from "viem/chains";
 import { useUserData } from "@/context/UserDataContext";
-import { getPrivateApiErrorMessage } from "@/services/privateApi";
+import {
+	formatLifiErrorForUser,
+	userMessage,
+	LIFI_INSUFFICIENT_BALANCE,
+	LIFI_NO_TX_HASH_WALLET,
+	LIFI_POLY_EMBEDDED_WALLET_LOADING,
+	LIFI_SOLANA_WALLET_UNAVAILABLE,
+} from "@/errors";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
 import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
@@ -437,7 +444,8 @@ export function useBridgeFlow() {
 					if (options?.silent) {
 						return;
 					}
-					setError(getPrivateApiErrorMessage(e));
+					console.error("error", e);
+					setError(formatLifiErrorForUser(e));
 					setPhase("error");
 				}
 			}
@@ -554,9 +562,7 @@ export function useBridgeFlow() {
 		if (!routeHasRequiredAddresses(fromEndpoint, toEndpoint, funding)) return;
 
 		if (needsPolymarketRelay && !polymarketRelay.walletReady) {
-			setError(
-				"Transfers from Polymarket need your embedded wallet. Wait for it to finish loading or reconnect."
-			);
+			setError(userMessage(LIFI_POLY_EMBEDDED_WALLET_LOADING));
 			setPhase("error");
 			return;
 		}
@@ -569,7 +575,7 @@ export function useBridgeFlow() {
 			parsedAmount > 0 &&
 			(!Number.isFinite(balNow) || balNow + 1e-9 < parsedAmount)
 		) {
-			setError("Insufficient balance in the source wallet for this amount.");
+			setError(userMessage(LIFI_INSUFFICIENT_BALANCE));
 			setPhase("error");
 			return;
 		}
@@ -584,7 +590,7 @@ export function useBridgeFlow() {
 			const polygonRelay = await preparePolygonRelay(needsPolymarketRelay);
 
 			if (routeIncludesSolana && !solanaSigner) {
-				throw new Error("Solana embedded wallet is unavailable — reload and try again.");
+				throw new Error(userMessage(LIFI_SOLANA_WALLET_UNAVAILABLE));
 			}
 
 			setStatusNote("Signing transfer transactions…");
@@ -597,7 +603,9 @@ export function useBridgeFlow() {
 				}),
 			);
 			const statusTxHash = pickTxHashForLifiStatusPoll(txHashes, quote, fromChain);
-			if (!statusTxHash) throw new Error("No transaction hash returned from wallet");
+			if (!statusTxHash) {
+				throw new Error(userMessage(LIFI_NO_TX_HASH_WALLET));
+			}
 
 			const statusTool = pickLifiStatusTool(quote);
 			setPhase("polling");
@@ -626,7 +634,8 @@ export function useBridgeFlow() {
 			setPhase("done");
 		} catch (e) {
 			if (e instanceof DOMException && e.name === "AbortError") return;
-			setError(getPrivateApiErrorMessage(e));
+			console.error("error", e);
+			setError(formatLifiErrorForUser(e));
 			setPhase("error");
 			setStatusNote(null);
 		}

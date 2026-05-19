@@ -28,6 +28,7 @@ import ListDailyGames from "./components/DailyGames/ListDailyGames";
 import AddDailyGame from "./components/DailyGames/AddDailyGame";
 import TradeTesting from "./components/TradeTesting/TradeTesting";
 import AdminWallet from "./components/Wallet/AdminWallet";
+import { adminErrorMessage, ADMIN_MISSING_ACCESS_TOKEN } from "@/errors";
 import {
 	umbrellaDataService,
 	type Umbrella,
@@ -219,9 +220,7 @@ export default function Admin() {
 				const token =
 					typeof getTok === "function" ? await getTok() : null;
 				if (typeof token !== "string" || token.length === 0) {
-					throw new Error(
-						"Missing admin access token for loading team"
-					);
+					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				const fetched = await teamService.fetchTeamById(teamId, token);
 				if (!cancelled) {

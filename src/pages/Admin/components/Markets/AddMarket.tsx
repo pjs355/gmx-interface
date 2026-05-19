@@ -23,6 +23,12 @@ import {
 	TeamCandidate,
 } from "@/types/market-types";
 import {
+	adminErrorMessage,
+	formatAdminHttpError,
+	formatAdminImageUploadFailed,
+	ADMIN_MARKET_CREATE_FAILED,
+} from "@/errors";
+import {
 	slugify,
 	formatDateTimeLocal,
 	addHoursAndFormat,
@@ -248,7 +254,8 @@ export default function AddMarket({
 			return result.url;
 		} catch (error) {
 			setUploadingImage(null);
-			throw new Error(`Failed to upload ${imageType}: ${error}`);
+			console.error("error", error);
+			throw new Error(formatAdminImageUploadFailed(imageType));
 		}
 	};
 
@@ -286,9 +293,12 @@ export default function AddMarket({
 			);
 			const data = await resp.json().catch(() => ({} as any));
 			if (!resp.ok || !data?.success) {
-				throw new Error(
-					data?.error || `Request failed: ${resp.status}`
-				);
+				const detail =
+					typeof data?.error === "string" ? data.error : undefined;
+				if (!resp.ok) {
+					throw new Error(formatAdminHttpError(resp.status, detail));
+				}
+				throw new Error(adminErrorMessage(ADMIN_MARKET_CREATE_FAILED));
 			}
 			console.log("✅ Market created:", data?.data);
 

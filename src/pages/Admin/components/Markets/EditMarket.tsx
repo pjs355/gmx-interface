@@ -23,6 +23,16 @@ import {
 	TeamCandidate,
 	type UmbrellaUpdatePayload,
 } from "@/types/market-types";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	formatAdminImageUploadFailed,
+	ADMIN_MARKET_QUESTION_NOT_ON_UMBRELLA,
+	ADMIN_MARKET_SAVE_UMBRELLA_FAILED,
+	ADMIN_MARKET_TEAM_MAPPING_DISPLAY_NAME,
+	ADMIN_MARKET_TEAM_MAPPING_SLUG,
+} from "@/errors";
 import { slugify, formatDateTimeLocal } from "./helpers/market-helpers";
 import "./Markets.scss";
 
@@ -202,11 +212,11 @@ export default function EditMarket({
 					typeof displayNameValue !== "string" ||
 					displayNameValue.length === 0
 				) {
-					throw new Error("Team mapping is missing displayName");
+					throw new Error(adminErrorMessage(ADMIN_MARKET_TEAM_MAPPING_DISPLAY_NAME));
 				}
 				const slugValue = mapping.slug;
 				if (typeof slugValue !== "string" || slugValue.length === 0) {
-					throw new Error("Team mapping is missing slug");
+					throw new Error(adminErrorMessage(ADMIN_MARKET_TEAM_MAPPING_SLUG));
 				}
 				const shortCodeValue = mapping.shortCode;
 				const shortCode =
@@ -505,7 +515,7 @@ export default function EditMarket({
 
 		const child = children.find((c) => c.questionId === qid);
 		if (!child) {
-			setError("Unable to locate question on umbrella");
+			setError(adminErrorMessage(ADMIN_MARKET_QUESTION_NOT_ON_UMBRELLA));
 			setDetails(null);
 			return;
 		}
@@ -551,7 +561,7 @@ export default function EditMarket({
 				: payload?.question ?? payload;
 
 			if (!resp.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
+				throw new Error(formatAdminHttpError(resp.status, json?.error));
 			}
 
 			if (!normalized || typeof normalized !== "object") {
@@ -589,7 +599,7 @@ export default function EditMarket({
 			setDetails(merged);
 		} catch (e: any) {
 			console.error("EditMarket.loadQuestion error", e);
-			setError(e?.message || String(e));
+			setError(formatAdminErrorForUser(e));
 		} finally {
 			setLoading(false);
 		}
@@ -650,7 +660,7 @@ export default function EditMarket({
 			const json = await resp.json().catch(() => ({} as any));
 			console.log("EditMarket.saveQuestion response", json);
 			if (!resp.ok || !json?.success) {
-				throw new Error(json?.error || `HTTP ${resp.status}`);
+				throw new Error(formatAdminHttpError(resp.status, json?.error));
 			}
 			setQSaveMsg("Saved");
 		} catch (e: any) {
@@ -710,7 +720,8 @@ export default function EditMarket({
 			return result.url;
 		} catch (error) {
 			setUploadingImage(null);
-			throw new Error(`Failed to upload ${imageType}: ${error}`);
+			console.error("error", error);
+			throw new Error(formatAdminImageUploadFailed(imageType));
 		}
 	};
 
@@ -771,7 +782,7 @@ export default function EditMarket({
 			);
 
 			if (!response?.success) {
-				throw new Error(response?.error || "Failed to save umbrella");
+				throw new Error(adminErrorMessage(ADMIN_MARKET_SAVE_UMBRELLA_FAILED));
 			}
 			setUmbSaveMsg("Saved");
 

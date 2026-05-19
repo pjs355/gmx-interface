@@ -15,6 +15,11 @@ import { TradeExecutor, type TradeTestConfig, type TradeResult, type SettlementV
 import { TradeResultsLog } from "./TradeResultsLog";
 import OrderbookDisplay from "@/components/OrderbookDisplay/OrderbookDisplay";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
+import {
+	adminErrorMessage,
+	formatAdminHttpError,
+	ADMIN_TRADE_TEST_NO_TOKEN_ID,
+} from "@/errors";
 import "./TradeTesting.scss";
 
 // Error classification types
@@ -426,7 +431,7 @@ export default function TradeTesting() {
 				const marketId = selectedMarket._id || selectedMarket.questionId;
 				
 				if (!tokenId) {
-					throw new Error(`No ${position} token ID for this market`);
+					throw new Error(adminErrorMessage(ADMIN_TRADE_TEST_NO_TOKEN_ID));
 				}
 
 				// Calculate amounts - MUST use whole number of shares (no fractional shares)
@@ -536,7 +541,16 @@ export default function TradeTesting() {
 				const responseData = await response.json();
 				console.log(`[StressTest] Response ${tradeNum}:`, response.ok ? "✅ SUCCESS" : `❌ ${response.status}`, responseData);
 
-				const errorMsg = response.ok ? null : `HTTP ${response.status}: ${responseData?.error || responseData?.message || JSON.stringify(responseData)}`;
+				const errorMsg = response.ok
+					? null
+					: formatAdminHttpError(
+							response.status,
+							typeof responseData?.error === "string"
+								? responseData.error
+								: typeof responseData?.message === "string"
+									? responseData.message
+									: undefined,
+						);
 				const classifiedError = errorMsg ? classifyError(errorMsg, tradeNum) : null;
 
 				setTestState((prev) => ({

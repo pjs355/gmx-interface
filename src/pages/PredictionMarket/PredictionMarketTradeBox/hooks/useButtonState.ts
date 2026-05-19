@@ -15,6 +15,29 @@ import {
 } from "@/trading/sor";
 import { SHARE_SELL_COMPARE_EPS } from "../checkBalances";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
+import {
+	userMessage,
+	BTN_ENTER_AMOUNT,
+	BTN_FETCHING_PRICE,
+	BTN_KALSHI_ENABLE_TRADING,
+	BTN_KALSHI_LIMIT_NOT_SUPPORTED,
+	BTN_LIMITLESS_ESPORTS_NOT_LINKED,
+	BTN_LIMITLESS_MARKET_NOT_LINKED,
+	BTN_LIMITLESS_NO_MATCHED_MARKET,
+	BTN_NO_BIDS_AVAILABLE,
+	BTN_NO_SHARES_AVAILABLE,
+	BTN_NO_SHARES_TO_SELL,
+	BTN_NOT_ENOUGH_BIDS_TO_SELL,
+	BTN_NOT_ENOUGH_SHARES,
+	BTN_POLY_ESPORTS_NOT_LINKED,
+	BTN_POLY_NO_MATCHED_MARKET,
+	BTN_POLY_SETUP_REQUIRED,
+	BTN_POLY_UNAVAILABLE,
+	BTN_PREDICT_ESPORTS_NOT_LINKED,
+	BTN_PREDICT_MARKET_IDS_NOT_LINKED,
+	BTN_PREDICT_NO_MATCHED_MARKET,
+	BTN_REFRESHING_VENUE_PRICES,
+} from "@/errors";
 
 /**
  * Friendly placeholder shown while any of the three background activators
@@ -278,7 +301,7 @@ function sorUnifiedPrimary(
 		};
 	}
 	if (sorState.isLoading && !sorState.route) {
-		return { text: "Fetching price...", disabled: true, onClick: () => {} };
+		return { text: userMessage(BTN_FETCHING_PRICE), disabled: true, onClick: () => {} };
 	}
 	if (sorState.error && !sorState.route && !sorState.isLoading) {
 		if (sorState.routeErrorCode === "AMOUNT_TOO_SMALL") {
@@ -302,13 +325,20 @@ function sorUnifiedPrimary(
 		const code = sorState.routeErrorCode;
 		if (code === "NO_BOOKS_AVAILABLE" || code === "NO_MARKET_FOUND") {
 			return {
-				text: side === "buy" ? "No shares available" : "No bids available",
+				text:
+					side === "buy"
+						? userMessage(BTN_NO_SHARES_AVAILABLE)
+						: userMessage(BTN_NO_BIDS_AVAILABLE),
 				disabled: true,
 				onClick: () => {},
 			};
 		}
 		if (code === "ALL_BOOKS_STALE") {
-			return { text: "Refreshing venue prices…", disabled: true, onClick: () => {} };
+			return {
+				text: userMessage(BTN_REFRESHING_VENUE_PRICES),
+				disabled: true,
+				onClick: () => {},
+			};
 		}
 		const execNotReady = code === "EXECUTION_NOT_READY";
 		if (execNotReady && globalSetupInProgress) {
@@ -332,7 +362,7 @@ function sorUnifiedPrimary(
 		return { text: "Refreshing Odds…", disabled: true, onClick: () => {} };
 	}
 	if (!sorState.route) {
-		return { text: "Fetching price...", disabled: true, onClick: () => {} };
+		return { text: userMessage(BTN_FETCHING_PRICE), disabled: true, onClick: () => {} };
 	}
 	if (routeFailsVenueMinimums(sorState.route, side)) {
 		const isLimit = sorState.route?.legs?.some((l) => l.orderType === "limit");
@@ -351,7 +381,7 @@ function sorUnifiedPrimary(
 	) {
 		const req = parseFloat(sellAmountStr);
 		if (Number.isFinite(req) && req > 0 && req > maxSellShares + 1e-9) {
-			return { text: "Not enough shares", disabled: true, onClick: () => {} };
+			return { text: userMessage(BTN_NOT_ENOUGH_SHARES), disabled: true, onClick: () => {} };
 		}
 	}
 	return {
@@ -397,7 +427,7 @@ export interface ButtonStateResult {
 const BUTTON_LOADING_HOLD_MS = 450;
 
 const FETCHING_PRICE_TEXTS = new Set<string>([
-  "Fetching price...",
+  userMessage(BTN_FETCHING_PRICE),
   "Fetching price",
   "Finding best price...",
   "Finding best price",
@@ -602,14 +632,14 @@ export function useButtonState({
     };
 
     const noSharesToSellButton = (): ButtonStateResult => ({
-      text: "No shares to sell",
+      text: userMessage(BTN_NO_SHARES_TO_SELL),
       disabled: true,
       onClick: () => {},
     });
 
     if (state.tradingVenue === "all") {
       if (!state.selectedPosition) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
         return noSharesToSellButton();
@@ -618,7 +648,7 @@ export function useButtonState({
         !state.amount ||
         (state.orderType === "limit" && (!state.price || limitPriceCentsForMin == null))
       ) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       if (sorState?.isLoading && !sorState?.route) {
         return {
@@ -633,7 +663,7 @@ export function useButtonState({
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
-        return { text: "Not enough shares", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_NOT_ENOUGH_SHARES), disabled: true, onClick: () => {} };
       }
       if (sorState?.isExecuting) {
         return {
@@ -665,13 +695,19 @@ export function useButtonState({
         if (code === "NO_BOOKS_AVAILABLE" || code === "NO_MARKET_FOUND") {
           return {
             text:
-              state.side === "buy" ? "No shares available" : "No bids available",
+              state.side === "buy"
+                ? userMessage(BTN_NO_SHARES_AVAILABLE)
+                : userMessage(BTN_NO_BIDS_AVAILABLE),
             disabled: true,
             onClick: () => {},
           };
         }
         if (code === "ALL_BOOKS_STALE") {
-          return { text: "Refreshing venue prices…", disabled: true, onClick: () => {} };
+          return {
+            text: userMessage(BTN_REFRESHING_VENUE_PRICES),
+            disabled: true,
+            onClick: () => {},
+          };
         }
         const execNotReady = code === "EXECUTION_NOT_READY";
         // First-signup gate: if any global activator is still running, an
@@ -767,14 +803,14 @@ export function useButtonState({
         | undefined;
       if (!pt?.hasPandascoreLink) {
         return {
-          text: "Polymarket: esports match not linked",
+          text: userMessage(BTN_POLY_ESPORTS_NOT_LINKED),
           disabled: true,
           onClick: () => {},
         };
       }
       if (!pt.hasMonitorMatch) {
         return {
-          text: "Polymarket: no matched market",
+          text: userMessage(BTN_POLY_NO_MATCHED_MARKET),
           disabled: true,
           onClick: () => {},
         };
@@ -793,14 +829,14 @@ export function useButtonState({
           text: globalSetupInProgress
             ? SETUP_IN_PROGRESS_LABEL
             : pt.blockedReason
-              ? "Polymarket setup required"
-              : "Polymarket unavailable",
+              ? userMessage(BTN_POLY_SETUP_REQUIRED)
+              : userMessage(BTN_POLY_UNAVAILABLE),
           disabled: true,
           onClick: () => {},
         };
       }
       if (!state.selectedPosition) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
         return noSharesToSellButton();
@@ -809,14 +845,14 @@ export function useButtonState({
         !state.amount ||
         (state.orderType === "limit" && (!state.price || limitPriceCentsForMin == null))
       ) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       {
         const chk = checkInputMinForButtonLabel("polymarket");
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
-        return { text: "Not enough shares", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_NOT_ENOUGH_SHARES), disabled: true, onClick: () => {} };
       }
       const actionText = state.side === "buy" ? "Buy" : "Sell";
       let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
@@ -852,7 +888,7 @@ export function useButtonState({
       );
       if (sorBuy) return sorBuy;
       return {
-        text: "Fetching price...",
+        text: userMessage(BTN_FETCHING_PRICE),
         disabled: true,
         onClick: () => {},
       };
@@ -862,21 +898,21 @@ export function useButtonState({
       const lt = limitlessTrading;
       if (!lt?.hasPandascoreLink) {
         return {
-          text: "Limitless: esports match not linked",
+          text: userMessage(BTN_LIMITLESS_ESPORTS_NOT_LINKED),
           disabled: true,
           onClick: () => {},
         };
       }
       if (!lt.hasMonitorMatch) {
         return {
-          text: "Limitless: no matched market",
+          text: userMessage(BTN_LIMITLESS_NO_MATCHED_MARKET),
           disabled: true,
           onClick: () => {},
         };
       }
       if (!lt.hasLimitlessMapping) {
         return {
-          text: "Limitless: market not linked",
+          text: userMessage(BTN_LIMITLESS_MARKET_NOT_LINKED),
           disabled: true,
           onClick: () => {},
         };
@@ -898,7 +934,7 @@ export function useButtonState({
         };
       }
       if (!state.selectedPosition) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
         return noSharesToSellButton();
@@ -907,14 +943,14 @@ export function useButtonState({
         !state.amount ||
         (state.orderType === "limit" && (!state.price || limitPriceCentsForMin == null))
       ) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       {
         const chk = checkInputMinForButtonLabel("limitless");
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
-        return { text: "Not enough shares", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_NOT_ENOUGH_SHARES), disabled: true, onClick: () => {} };
       }
       if (state.orderType === "market" && state.selectedPosition) {
         const liqPosition =
@@ -926,7 +962,7 @@ export function useButtonState({
         if (state.side === "sell") {
           if (!liquidityInfo.hasAnyLiquidity) {
             return {
-              text: "No bids available",
+              text: userMessage(BTN_NO_BIDS_AVAILABLE),
               disabled: true,
               onClick: () => {},
             };
@@ -939,14 +975,14 @@ export function useButtonState({
               liquidityInfo.maxSharesAvailable + SHARE_SELL_COMPARE_EPS
           ) {
             return {
-              text: "Not enough bids to sell",
+              text: userMessage(BTN_NOT_ENOUGH_BIDS_TO_SELL),
               disabled: true,
               onClick: () => {},
             };
           }
         } else if (!liquidityInfo.hasAnyLiquidity) {
           return {
-            text: "No shares available",
+            text: userMessage(BTN_NO_SHARES_AVAILABLE),
             disabled: true,
             onClick: () => {},
           };
@@ -1010,7 +1046,7 @@ export function useButtonState({
       );
       if (sorLx) return sorLx;
       return {
-        text: "Fetching price...",
+        text: userMessage(BTN_FETCHING_PRICE),
         disabled: true,
         onClick: () => {},
       };
@@ -1022,7 +1058,7 @@ export function useButtonState({
       }
       if (dflowProofVerified === false) {
         return {
-          text: "Enable Kalshi trading",
+          text: userMessage(BTN_KALSHI_ENABLE_TRADING),
           disabled: false,
           onClick: () => {
             if (dflowStartProofFlow) {
@@ -1035,13 +1071,13 @@ export function useButtonState({
       }
       if (state.orderType === "limit") {
         return {
-          text: "Limit orders on Kalshi through DFlow are not supported",
+          text: userMessage(BTN_KALSHI_LIMIT_NOT_SUPPORTED),
           disabled: true,
           onClick: () => {},
         };
       }
       if (!state.selectedPosition) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
         return noSharesToSellButton();
@@ -1050,14 +1086,14 @@ export function useButtonState({
         !state.amount ||
         (state.orderType === "limit" && (!state.price || limitPriceCentsForMin == null))
       ) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       {
         const chk = checkInputMinForButtonLabel("dflow");
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
-        return { text: "Not enough shares", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_NOT_ENOUGH_SHARES), disabled: true, onClick: () => {} };
       }
       const actionText = state.side === "buy" ? "Buy" : "Sell";
       let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
@@ -1092,7 +1128,7 @@ export function useButtonState({
       );
       if (sorDf) return sorDf;
       return {
-        text: "Fetching price...",
+        text: userMessage(BTN_FETCHING_PRICE),
         disabled: true,
         onClick: () => {},
       };
@@ -1102,21 +1138,21 @@ export function useButtonState({
       const pt = predictTrading;
       if (!pt?.hasPandascoreLink) {
         return {
-          text: "Predict: esports match not linked",
+          text: userMessage(BTN_PREDICT_ESPORTS_NOT_LINKED),
           disabled: true,
           onClick: () => {},
         };
       }
       if (!pt.hasMonitorMatch) {
         return {
-          text: "Predict: no matched market",
+          text: userMessage(BTN_PREDICT_NO_MATCHED_MARKET),
           disabled: true,
           onClick: () => {},
         };
       }
       if (!pt.hasPredictMarketIds) {
         return {
-          text: "Predict: market ids not linked",
+          text: userMessage(BTN_PREDICT_MARKET_IDS_NOT_LINKED),
           disabled: true,
           onClick: () => {},
         };
@@ -1154,7 +1190,7 @@ export function useButtonState({
         }
       }
       if (!state.selectedPosition) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
         return noSharesToSellButton();
@@ -1163,14 +1199,14 @@ export function useButtonState({
         !state.amount ||
         (state.orderType === "limit" && (!state.price || limitPriceCentsForMin == null))
       ) {
-        return { text: "Enter amount", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
       }
       {
         const chk = checkInputMinForButtonLabel("predictfun");
         if (chk.below) return belowMinButton(chk);
       }
       if (sellExceedsScopedHoldings()) {
-        return { text: "Not enough shares", disabled: true, onClick: () => {} };
+        return { text: userMessage(BTN_NOT_ENOUGH_SHARES), disabled: true, onClick: () => {} };
       }
       const actionText = state.side === "buy" ? "Buy" : "Sell";
       let buttonText = `${actionText} ${state.selectedPosition.toUpperCase()}`;
@@ -1213,7 +1249,7 @@ export function useButtonState({
       );
       if (sorPf) return sorPf;
       return {
-        text: "Fetching price...",
+        text: userMessage(BTN_FETCHING_PRICE),
         disabled: true,
         onClick: () => {},
       };
@@ -1234,7 +1270,7 @@ export function useButtonState({
     if (addFundsEarly) return addFundsEarly;
 
     if (!state.selectedPosition) {
-      return { text: "Enter amount", disabled: true, onClick: () => {} };
+      return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
     }
 
     if (state.side === "sell" && scopedSellSharesTotal() <= 0) {
@@ -1245,7 +1281,7 @@ export function useButtonState({
       !state.amount ||
       (state.orderType === "limit" && (!state.price || limitPriceCentsForMin == null))
     ) {
-      return { text: "Enter amount", disabled: true, onClick: () => {} };
+      return { text: userMessage(BTN_ENTER_AMOUNT), disabled: true, onClick: () => {} };
     }
 
     if (state.tradingVenue === "levelup") {
@@ -1255,7 +1291,7 @@ export function useButtonState({
 
     if (sellExceedsScopedHoldings()) {
       return {
-        text: "Not enough shares",
+        text: userMessage(BTN_NOT_ENOUGH_SHARES),
         disabled: true,
         onClick: () => {},
         isSweepingBook: false,
@@ -1288,7 +1324,7 @@ export function useButtonState({
         if (!liquidityInfo.hasAnyLiquidity) {
           if (state.side === "sell") {
             return {
-              text: "No bids available",
+              text: userMessage(BTN_NO_BIDS_AVAILABLE),
               disabled: true,
               onClick: () => {},
               isSweepingBook: false,
@@ -1296,7 +1332,7 @@ export function useButtonState({
             };
           }
           return {
-            text: "No shares available",
+            text: userMessage(BTN_NO_SHARES_AVAILABLE),
             disabled: true,
             onClick: () => {},
             isSweepingBook: false,
@@ -1313,7 +1349,7 @@ export function useButtonState({
               liquidityInfo.maxSharesAvailable + SHARE_SELL_COMPARE_EPS
           ) {
             return {
-              text: "Not enough bids to sell",
+              text: userMessage(BTN_NOT_ENOUGH_BIDS_TO_SELL),
               disabled: true,
               onClick: () => {},
               isSweepingBook: false,
@@ -1366,7 +1402,15 @@ export function useButtonState({
       noBalance,
       scopedSellForShareCheck != null ? scopedSellForShareCheck : null,
     );
-    if (!sharesCheck.hasSufficientShares) return { text: "Not enough shares", disabled: true, onClick: () => {}, isSweepingBook, availableShares };
+    if (!sharesCheck.hasSufficientShares) {
+      return {
+        text: userMessage(BTN_NOT_ENOUGH_SHARES),
+        disabled: true,
+        onClick: () => {},
+        isSweepingBook,
+        availableShares,
+      };
+    }
     
     // Determine button text based on side (buy/sell) and market type
     const actionText = state.side === 'buy' ? 'Buy' : 'Sell';
@@ -1407,7 +1451,7 @@ export function useButtonState({
     // fall back to the deprecated `handleTrade`, because that would bypass
     // the unified LI.FI prefund pipeline.
     return {
-      text: "Fetching price...",
+      text: userMessage(BTN_FETCHING_PRICE),
       disabled: true,
       onClick: () => {},
       isSweepingBook,

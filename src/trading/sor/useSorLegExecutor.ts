@@ -24,7 +24,40 @@ import type {
 	LifiStatusResponse,
 } from "@/types/trading";
 import { withTimeout } from "@/utils/withTimeout";
-import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
+import {
+	formatErrorForUser,
+	formatLimitlessDelegatedOrderError,
+	formatPolymarketApprovalRepairFailed,
+	formatUnknownSorVenue,
+	userMessage,
+	POLYMARKET_CTF_BALANCE_READ_FAILED,
+	LIFI_BRIDGE_FAILED,
+	LIFI_NO_BRIDGE_STEPS,
+	LIFI_NO_TX_HASH,
+	LIFI_NO_WALLET_CLIENT,
+	LIFI_NO_WALLET_FOR_CHAIN,
+	LIFI_SCW_LIMITLESS_SWEEP_NOT_PLANNED,
+	LIFI_STEP_FAILED,
+	SOR_EXECUTION_NOT_READY,
+	SOR_KALSHI_MISSING_MINT,
+	SOR_KALSHI_NO_LIMIT,
+	SOR_LIMITLESS_MISSING_SLUG,
+	SOR_LIMITLESS_ORDER_NOT_FILLED,
+	SOR_MISSING_LEVELUP_QUESTION,
+	SOR_MISSING_LIMIT_PRICE,
+	LIFI_NO_BRIDGE_DATA,
+	SOR_NO_VALID_ORDER_RESPONSE,
+	SOR_NO_WALLET,
+	SOR_ORDER_NOT_CONFIRMED,
+	SOR_POLY_CLOB_NOT_READY,
+	SOR_POLY_MISSING_TOKEN,
+	SOR_PREDICT_MARKET_NOT_LOADED,
+	SOR_PREDICT_MISSING_TOKEN,
+	SOR_PREDICT_NOT_APPROVED,
+	SOR_PREDICT_SESSION_NOT_READY,
+	SOR_REFUSE_BRIDGE_ON_SELL,
+	SOR_SOLANA_SIGNER_UNAVAILABLE,
+} from "@/errors";
 import type {
 	DflowOrderParams,
 	DflowOrderResponse,
@@ -200,12 +233,15 @@ function interpretLimitlessDelegatedOrderResponse(
 	response: unknown,
 ): { ok: true } | { ok: false; error: string } {
 	if (response == null || typeof response !== "object" || Array.isArray(response)) {
-		return { ok: false, error: "No valid response from order submit" };
+		return { ok: false, error: userMessage(SOR_NO_VALID_ORDER_RESPONSE) };
 	}
 	const o = response as Record<string, unknown>;
 
 	if (typeof o.error === "string" && o.error.trim() !== "") {
-		return { ok: false, error: o.error.trim() };
+		return {
+			ok: false,
+			error: formatLimitlessDelegatedOrderError(o.error),
+		};
 	}
 
 	const ord = o.order;
@@ -236,8 +272,8 @@ function interpretLimitlessDelegatedOrderResponse(
 		if (matched === false) {
 			const m =
 				typeof o.message === "string" && o.message.trim() !== ""
-					? o.message.trim()
-					: "Order was not filled";
+					? formatLimitlessDelegatedOrderError(o.message)
+					: userMessage(SOR_LIMITLESS_ORDER_NOT_FILLED);
 			return { ok: false, error: m };
 		}
 		// `matched` omitted — still a structured execution payload; treat as success.
@@ -245,12 +281,15 @@ function interpretLimitlessDelegatedOrderResponse(
 	}
 
 	if (typeof o.message === "string" && o.message.trim() !== "") {
-		return { ok: false, error: o.message.trim() };
+		return {
+			ok: false,
+			error: formatLimitlessDelegatedOrderError(o.message),
+		};
 	}
 
 	return {
 		ok: false,
-		error: "Order could not be confirmed. Please try again.",
+		error: userMessage(SOR_ORDER_NOT_CONFIRMED),
 	};
 }
 
@@ -565,7 +604,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				return {
 					filled: false,
 					filledShares: 0,
-					error: "Refusing to bridge on a sell leg — shares are non-transferable",
+					error: userMessage(SOR_REFUSE_BRIDGE_ON_SELL),
 				};
 			}
 
@@ -579,7 +618,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				return {
 					filled: false,
 					filledShares: 0,
-					error: "Missing or invalid limit price on leg",
+					error: userMessage(SOR_MISSING_LIMIT_PRICE),
 				};
 			}
 
@@ -587,7 +626,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				// ─── LevelUp (Base, USDC) ─────────────────
 				case "levelup": {
 					if (!account) {
-						return { filled: false, filledShares: 0, error: "No wallet connected" };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_NO_WALLET),
+						};
 					}
 					const scw = fundingAddresses.baseSmartWallet?.trim();
 					if (!scw) {
@@ -603,16 +646,22 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						try {
 							await ensureLevelUpApprovals();
 						} catch (e: unknown) {
-							const msg =
-								e instanceof Error ? e.message : "LevelUp approvals failed";
-							return { filled: false, filledShares: 0, error: msg };
+							return {
+								filled: false,
+								filledShares: 0,
+								error: formatErrorForUser(e),
+							};
 						} finally {
 							reportSorExecutionPhase("executing_trade");
 						}
 					}
 					const questionId = leg.venueMarketIds.levelUpQuestionId;
 					if (!questionId) {
-						return { filled: false, filledShares: 0, error: "Missing LevelUp question ID" };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_MISSING_LEVELUP_QUESTION),
+						};
 					}
 
 					const position: "yes" | "no" = leg.outcome === "A" ? "yes" : "no";
@@ -739,7 +788,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				// before buys; see `src/trading/polymarket/POLYMARKET_TRADING.md`.
 				case "polymarket": {
 					if (!polyClob.ready) {
-						return { filled: false, filledShares: 0, error: "Polymarket CLOB session not ready. Open Polymarket tab first to initialize." };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_POLY_CLOB_NOT_READY),
+						};
 					}
 					// Approvals are ungated from SOR eligibility — the user
 					// sees Polymarket in the plan regardless — but we must
@@ -767,9 +820,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								},
 							});
 						} catch (e: unknown) {
-							const msg =
-								e instanceof Error ? e.message : "Polymarket approvals failed";
-							return { filled: false, filledShares: 0, error: msg };
+							return {
+								filled: false,
+								filledShares: 0,
+								error: formatErrorForUser(e),
+							};
 						} finally {
 							if (didApprovalWork) {
 								reportSorExecutionPhase("executing_trade");
@@ -786,7 +841,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							? leg.venueMarketIds.polyTokenIdA
 							: leg.venueMarketIds.polyTokenIdB;
 					if (!tokenId) {
-						return { filled: false, filledShares: 0, error: "Missing Polymarket outcome token ID" };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_POLY_MISSING_TOKEN),
+						};
 					}
 
 					const tickStyle = matchedMonitor?.polyTickSize != null
@@ -813,11 +872,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							try {
 								usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe!);
 							} catch (e: unknown) {
-								const msg =
-									e instanceof Error
-										? e.message
-										: "Could not read Polygon USDC.e balance before trade";
-								return { filled: false, filledShares: 0, error: msg };
+								return {
+									filled: false,
+									filledShares: 0,
+									error: formatErrorForUser(e),
+								};
 							}
 							if (usdceWei > 0n) {
 								const relayClient = await getRelayClient();
@@ -876,11 +935,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							try {
 								pusdWei = await readPolymarketSafePusdBalanceWei(rawSafe!);
 							} catch (e: unknown) {
-								const msg =
-									e instanceof Error
-										? e.message
-										: "Could not read Polygon pUSD balance before trade";
-								return { filled: false, filledShares: 0, error: msg };
+								return {
+									filled: false,
+									filledShares: 0,
+									error: formatErrorForUser(e),
+								};
 							}
 							const walletPusdHuman = Number(formatUnits(pusdWei, 6));
 							const clamp = clampMarketBuyAmountToWallet({
@@ -923,11 +982,15 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							try {
 								ctfBalWei = await readPolymarketSafeCtfBalanceWei(rawSafe!, tokenId);
 							} catch (e: unknown) {
-								const msg =
-									e instanceof Error
-										? e.message
-										: "Could not read Polymarket CTF balance before sell";
-								return { filled: false, filledShares: 0, error: msg };
+								return {
+									filled: false,
+									filledShares: 0,
+									error: formatErrorForUser(
+										e instanceof Error
+											? e
+											: new Error(userMessage(POLYMARKET_CTF_BALANCE_READ_FAILED)),
+									),
+								};
 							}
 							const tickNumeric =
 								typeof tickStyle === "string" ? Number(tickStyle) : undefined;
@@ -1002,14 +1065,12 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									},
 								});
 							} catch (recovErr: unknown) {
-								const recovMsg =
-									recovErr instanceof Error
-										? recovErr.message
-										: String(recovErr);
 								return {
 									filled: false,
 									filledShares: 0,
-									error: `Polymarket order failed; approval repair also failed: ${recovMsg}`,
+									error: formatPolymarketApprovalRepairFailed(
+										formatErrorForUser(recovErr),
+									),
 								};
 							} finally {
 								if (didRecoveryWork) {
@@ -1019,18 +1080,18 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							try {
 								return await attemptWrapAndPlace();
 							} catch (retryErr: unknown) {
-								const retryMsg =
-									retryErr instanceof Error
-										? retryErr.message
-										: String(retryErr);
 								return {
 									filled: false,
 									filledShares: 0,
-									error: retryMsg,
+									error: formatErrorForUser(retryErr),
 								};
 							}
 						}
-						return { filled: false, filledShares: 0, error: msg };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: formatErrorForUser(e),
+						};
 					}
 				}
 
@@ -1040,7 +1101,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						return {
 							filled: false,
 							filledShares: 0,
-							error: "Kalshi does not support limit orders",
+							error: userMessage(SOR_KALSHI_NO_LIMIT),
 						};
 					}
 					// KYC is the one SOR gate we keep on DFlow (regulatory). A
@@ -1055,11 +1116,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						try {
 							proofOk = await ensureDflowProofVerified();
 						} catch (e: unknown) {
-							const msg =
-								e instanceof Error
-									? e.message
-									: "Failed to refresh Kalshi KYC status";
-							return { filled: false, filledShares: 0, error: msg };
+							return {
+								filled: false,
+								filledShares: 0,
+								error: formatErrorForUser(e),
+							};
 						}
 					}
 					if (!proofOk) {
@@ -1075,7 +1136,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							? leg.venueMarketIds.dflowYesMintA
 							: leg.venueMarketIds.dflowYesMintB;
 					if (!outcomeMint) {
-						return { filled: false, filledShares: 0, error: "Missing Kalshi outcome mint" };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_KALSHI_MISSING_MINT),
+						};
 					}
 
 					const inputMint = side === "buy" ? SOLANA_USDC_MINT : outcomeMint;
@@ -1088,7 +1153,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						return {
 							filled: false,
 							filledShares: 0,
-							error: "Solana signer unavailable — connect your Solana embedded wallet",
+							error: userMessage(SOR_SOLANA_SIGNER_UNAVAILABLE),
 						};
 					}
 
@@ -1155,9 +1220,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						dflowInitializedMarket = r.initializedMarket;
 						submitOrderStatus = r.orderStatus;
 					} catch (e: unknown) {
-						const msg =
-							e instanceof Error ? e.message : "Kalshi order failed";
-						return { filled: false, filledShares: 0, error: msg };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: formatErrorForUser(e),
+						};
 					}
 
 					if (side === "buy" && outputMint.trim()) {
@@ -1222,7 +1289,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						return {
 							filled: false,
 							filledShares: 0,
-							error: "Missing Limitless slug or outcome token on route leg",
+							error: userMessage(SOR_LIMITLESS_MISSING_SLUG),
 						};
 					}
 					let phase:
@@ -1266,7 +1333,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									message: msg,
 									stack: e instanceof Error ? e.stack?.slice(0, 500) : undefined,
 								});
-								return { filled: false, filledShares: 0, error: msg };
+								return {
+									filled: false,
+									filledShares: 0,
+									error: formatErrorForUser(e),
+								};
 							} finally {
 								reportSorExecutionPhase("executing_trade");
 							}
@@ -1378,11 +1449,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								});
 								makerUsdcHuman = balances.limitlessMakerBase ?? 0;
 							} catch (e: unknown) {
-								const msg =
-									e instanceof Error
-										? e.message
-										: "Could not read Limitless maker USDC balance before order";
-								return { filled: false, filledShares: 0, error: msg };
+								return {
+									filled: false,
+									filledShares: 0,
+									error: formatErrorForUser(e),
+								};
 							}
 							const clamp = clampMarketBuyAmountToWallet({
 								plannedExecutionUsd: limitlessBuyMakerUsd,
@@ -1509,14 +1580,22 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									? "Usually Privy Embedded1193Provider (walletProxy.rpc null response), not Limitless REST. If logs never reached [Limitless/API] POST orders, failure is before HTTP submit."
 									: undefined,
 						});
-						return { filled: false, filledShares: 0, error: msg };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: formatErrorForUser(e),
+						};
 					}
 				}
 
 				// ─── Predict (BNB, USDT) ─────────────
 				case "predictfun": {
 					if (!predictSession.ready) {
-						return { filled: false, filledShares: 0, error: "Predict session not ready. Authenticate on the Predict tab first." };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_PREDICT_SESSION_NOT_READY),
+						};
 					}
 					if (ensurePredictApprovals) {
 						reportSorExecutionPhase("approving_trades");
@@ -1524,12 +1603,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							await ensurePredictApprovals();
 						} catch (e: unknown) {
 							console.error("error", e);
-							const msg = getPrivateApiErrorMessage(e).trim();
 							return {
 								filled: false,
 								filledShares: 0,
-								error:
-									msg.length > 0 ? msg : "Predict approvals failed (no error message).",
+								error: formatErrorForUser(e),
 							};
 						} finally {
 							reportSorExecutionPhase("executing_trade");
@@ -1538,17 +1615,25 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						return {
 							filled: false,
 							filledShares: 0,
-							error: "Predict contracts not approved.",
+							error: userMessage(SOR_PREDICT_NOT_APPROVED),
 						};
 					}
 
 					if (!predictTokenId) {
-						return { filled: false, filledShares: 0, error: "Missing Predict outcome token ID" };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_PREDICT_MISSING_TOKEN),
+						};
 					}
 					const tokenId = predictTokenId;
 
 					if (predictNumericId == null || !predictMarketDetail) {
-						return { filled: false, filledShares: 0, error: "Predict market data not loaded" };
+						return {
+							filled: false,
+							filledShares: 0,
+							error: userMessage(SOR_PREDICT_MARKET_NOT_LOADED),
+						};
 					}
 
 					const preflight = validateLegMinimum(leg, side);
@@ -1584,11 +1669,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							});
 						} catch (e: unknown) {
 							console.error("error", e);
-							const msg =
-								e instanceof Error
-									? e.message
-									: "Could not read Predict outcome ERC-1155 balance before sell";
-							return { filled: false, filledShares: 0, error: msg };
+							return {
+								filled: false,
+								filledShares: 0,
+								error: formatErrorForUser(e),
+							};
 						}
 						const clamp = clampPredictSellSharesToOutcomeBalance({
 							plannedShares: leg.shares,
@@ -1639,10 +1724,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							};
 						} catch (e: unknown) {
 							console.error("error", e);
-							const msg = getPrivateApiErrorMessage(e).trim();
-							throw new Error(
-								msg.length > 0 ? msg : "Predict limit order failed (no error message).",
-							);
+							throw new Error(formatErrorForUser(e));
 						}
 					}
 
@@ -1669,11 +1751,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							});
 							bnbUsdtHuman = balances.bnb ?? 0;
 						} catch (e: unknown) {
-							const msg =
-								e instanceof Error
-									? e.message
-									: "Could not read BNB USDT balance before Predict order";
-							return { filled: false, filledShares: 0, error: msg };
+							return {
+								filled: false,
+								filledShares: 0,
+								error: formatErrorForUser(e),
+							};
 						}
 						const clamp = clampMarketBuyAmountToWallet({
 							plannedExecutionUsd: predictBuyAmountUsd,
@@ -1725,15 +1807,16 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						};
 					} catch (e: unknown) {
 						console.error("error", e);
-						const msg = getPrivateApiErrorMessage(e).trim();
-						throw new Error(
-							msg.length > 0 ? msg : "Predict market order failed (no error message).",
-						);
+						throw new Error(formatErrorForUser(e));
 					}
 				}
 
 				default:
-					return { filled: false, filledShares: 0, error: `Unknown venue: ${venue}` };
+					return {
+						filled: false,
+						filledShares: 0,
+						error: formatUnknownSorVenue(String(venue)),
+					};
 			}
 		},
 		[
@@ -1791,7 +1874,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		): Promise<BridgeResult> => {
 			const bridge = leg.bridge;
 			if (!bridge) {
-				return { success: false, error: "No bridge data on leg" };
+				return { success: false, error: userMessage(LIFI_NO_BRIDGE_DATA) };
 			}
 
 			const toChainLifi = CHAIN_LIFI_IDS[bridge.toChain];
@@ -1828,9 +1911,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						leg.executionAmountUsd > 0
 					)
 				) {
-					throw new Error(
-						"Buy route is missing executionAmountUsd on a bridged leg — refresh the quote and try again.",
-					);
+					throw new Error(userMessage(SOR_EXECUTION_NOT_READY));
 				}
 				const prefundAnchorUsd = resolveBuyPrefundAnchorUsd(
 					routeBridgeUsd,
@@ -2004,7 +2085,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 				const sendScwToLimitlessMakerSweep = async (): Promise<string> => {
 					if (plannedSweepMicros === 0n) {
-						throw new Error("SCW → Limitless maker sweep was not planned.");
+						throw new Error(userMessage(LIFI_SCW_LIMITLESS_SWEEP_NOT_PLANNED));
 					}
 					const makerAddr = fundingAddresses.limitlessMakerBase!.trim() as `0x${string}`;
 					const usdcAddr = getUSDCAddress() as `0x${string}`;
@@ -2015,9 +2096,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					});
 					const baseClient = await getClientForChain({ id: base.id });
 					if (!baseClient?.sendTransaction) {
-						throw new Error(
-							"No Base smart wallet client — cannot move USDC from your Base smart wallet to the Limitless maker for this trade.",
-						);
+						throw new Error(userMessage(LIFI_NO_WALLET_CLIENT));
 					}
 					console.debug("[SOR][prefund] same-chain Base USDC (SCW → Limitless maker)", {
 						venue: leg.venue,
@@ -2162,7 +2241,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						const fromChainLifi = CHAIN_LIFI_IDS[step.fromChain];
 						const fromAddress = prefundSourceAddressForStep(step, fundingAddresses);
 						if (!fromAddress) {
-							throw new Error(`No wallet address for source chain ${step.fromChain}`);
+							throw new Error(userMessage(LIFI_NO_WALLET_FOR_CHAIN));
 						}
 
 						const maxFromHuman =
@@ -2175,9 +2254,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						const perStepShare = Math.max(0, stepBudgetShares[stepIdx] ?? 0);
 						const stepBudgetUsd = perStepShare + corridorBudgetCarryUsd;
 						if (stepBudgetUsd <= 1e-9) {
-							throw new Error(
-								`Prefund step budget is zero (step ${stepIdx + 1}/${steps.length}, corridorBudgetUsd=${corridorBudgetUsd.toFixed(4)}). Optimizer corridor allocation cannot cover this hop — refresh the route.`,
-							);
+							throw new Error(userMessage(LIFI_STEP_FAILED));
 						}
 						const maxFromWei =
 							fromChainLifi === 56
@@ -2228,7 +2305,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						}
 
 						if (!quote.steps?.length) {
-							throw new Error("LI.FI returned no bridge steps");
+							throw new Error(userMessage(LIFI_NO_BRIDGE_STEPS));
 						}
 
 						if (import.meta.env.DEV) {
@@ -2316,7 +2393,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							fromChainLifi,
 						);
 						if (!sourceTxHash) {
-							throw new Error("Bridge produced no transaction hash");
+							throw new Error(userMessage(LIFI_NO_TX_HASH));
 						}
 
 						const statusTool =
@@ -2391,13 +2468,13 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				};
 			} catch (err) {
 				console.error("error", err);
-				const msg = getPrivateApiErrorMessage(err).trim();
+				const formatted = formatErrorForUser(err).trim();
 				return {
 					success: false,
 					error:
-						msg.length > 0
-							? msg
-							: "Bridge execution failed (no error message).",
+						formatted.length > 0 && formatted !== "Request failed"
+							? formatted
+							: userMessage(LIFI_BRIDGE_FAILED),
 				};
 			}
 		},

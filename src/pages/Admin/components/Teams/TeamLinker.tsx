@@ -9,6 +9,7 @@ import {
 } from "@/services/api/teamService";
 import { uploadTeamLogo } from "@/services/firebase/firebaseStorage";
 import type { TeamCandidate } from "@/types/market-types";
+import { adminErrorMessage, ADMIN_MISSING_ACCESS_TOKEN } from "@/errors";
 
 interface TeamLinkerProps {
 	candidates: TeamCandidate[];
@@ -120,7 +121,7 @@ export default function TeamLinker({
 						typeof accessToken !== "string" ||
 						accessToken.length === 0
 					) {
-						throw new Error("Missing admin access token");
+						throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 					}
 					let team: TeamRecord | null =
 						await teamService.lookupByPandaId(pandaId, accessToken);
@@ -347,9 +348,7 @@ export default function TeamLinker({
 					typeof retrievedToken !== "string" ||
 					retrievedToken.length === 0
 				) {
-					throw new Error(
-						"Missing admin access token for team creation"
-					);
+					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				accessToken = retrievedToken;
 			} catch (error) {

@@ -14,8 +14,14 @@ import type {
 	SorErrorCode,
 	VenueRoutePreview,
 } from "./sor-types";
-import { VENUE_DISPLAY_NAMES } from "./sor-types";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
+import {
+	formatErrorForUser,
+	formatSorRouteFailureMessage,
+	userMessage,
+	SOR_ROUTE_FETCH_FAILED,
+	SOR_ROUTE_TIMEOUT,
+} from "@/errors";
 
 const DEBOUNCE_MS = 300;
 const AUTO_REFRESH_MS = 3_000;
@@ -143,53 +149,6 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 		};
 		signal.addEventListener("abort", onAbort, { once: true });
 	});
-}
-
-function formatSorRouteFailureMessage(
-	result: Extract<SorRouteResult, { success: false }>,
-	targetVenue: SorVenue | undefined,
-	side: SorSide,
-): string {
-	const code = result.code;
-	const server = (result.error ?? "").trim();
-
-	if (code === "NO_MARKET_FOUND" && targetVenue) {
-		return `No order book for ${VENUE_DISPLAY_NAMES[targetVenue]} on this market yet. Try another tab or All Markets.`;
-	}
-	// `NO_MARKET_FOUND` (omnibus) and `NO_BOOKS_AVAILABLE` both mean: by the time the
-	// client surfaces this, the route has been retried and no venue can fill the order.
-	// Phrase it as the user-facing reality (no liquidity) instead of a misleading
-	// "Fetching price…" that implies progress.
-	if (code === "NO_MARKET_FOUND" || code === "NO_BOOKS_AVAILABLE") {
-		return side === "buy" ? "No shares available" : "No bids available";
-	}
-	if (code === "ALL_BOOKS_STALE") {
-		return "Refreshing venue prices…";
-	}
-	if (code === "NO_VENUES_ELIGIBLE") {
-		return "No venue is ready for this size yet. Try a smaller amount or another tab.";
-	}
-	if (code === "EXECUTION_NOT_READY") {
-		return server || "Complete trading setup for this venue before using smart routing.";
-	}
-	if (code === "AMOUNT_TOO_SMALL") {
-		if (server) return server;
-		return "Below trade minimum. Increase trade size";
-	}
-	if (code === "WHOLE_SHARES_ONLY") {
-		return (
-			server ||
-			"Fractional shares aren't supported on LevelUp or Kalshi. Enter a whole number"
-		);
-	}
-	if (code === "RATE_LIMITED") {
-		return "Too many requests. Wait a moment and try again.";
-	}
-	if (code === "ROUTE_EXPIRED") {
-		return server || "That route expired. Wait for refresh and try again.";
-	}
-	if (server) return server;
-	return "Could not compute a route. Try again or pick a different venue.";
 }
 
 export interface UseSorRouteInput {
@@ -684,13 +643,16 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 					if (timedOut) {
 						surfaceFailure({
 							code: null,
-							message: "Route request timed out",
+							message: userMessage(SOR_ROUTE_TIMEOUT),
 							transient: true,
 						});
 					}
 					return;
 				}
-				let message = err instanceof Error ? err.message : "Failed to compute route";
+				let message = formatErrorForUser(err);
+				if (message === "Request failed") {
+					message = userMessage(SOR_ROUTE_FETCH_FAILED);
+				}
 				try {
 					if (channelFetchIdRef.current !== fetchId) return;
 					await sleep(320 + Math.floor(Math.random() * 80), controller.signal);
@@ -710,7 +672,10 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				} catch (e2) {
 					if (channelFetchIdRef.current !== fetchId) return;
 					if (e2 instanceof DOMException && e2.name === "AbortError") return;
-					message = e2 instanceof Error ? e2.message : "Failed to compute route after retry";
+					message = formatErrorForUser(e2);
+					if (message === "Request failed") {
+						message = userMessage(SOR_ROUTE_FETCH_FAILED);
+					}
 				}
 				surfaceFailure({ code: null, message, transient: true });
 			} finally {

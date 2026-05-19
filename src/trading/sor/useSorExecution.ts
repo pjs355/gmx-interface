@@ -19,13 +19,18 @@ import type {
 import { groupBridgeLegsByCorridor } from "./sorBridgeGroups";
 import { LEG_OR_BRIDGE_TIMEOUT_MS } from "@/trading/sor/sorBridgeWallTimeBudget";
 import { withTimeout } from "@/utils/withTimeout";
-import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
+import {
+	formatErrorForUser,
+	userMessage,
+	SOR_EXECUTION_FAILED_NO_MESSAGE,
+	SOR_LEG_FAILED_NO_MESSAGE,
+} from "@/errors";
 
 /** Never return a blank leg error — empty messages hide the real failure in one-line SOR logs. */
 function sorExecutionFailureMessage(err: unknown): string {
-	const m = getPrivateApiErrorMessage(err).trim();
-	if (m.length > 0) return m;
-	return "Execution failed with no message (throw had no usable text — inspect DevTools Network for the failing request).";
+	const m = formatErrorForUser(err).trim();
+	if (m.length > 0 && m !== "Request failed") return m;
+	return userMessage(SOR_EXECUTION_FAILED_NO_MESSAGE);
 }
 
 function logDflowClientOrderSigning(
@@ -181,7 +186,7 @@ function buildLocalExecution(
 				? undefined
 				: rawErr && rawErr.length > 0
 					? rawErr
-					: "Venue leg failed with no error message — check Network for this venue and earlier [SOR] Bridge+trade leg end / Leg end logs.";
+					: userMessage(SOR_LEG_FAILED_NO_MESSAGE);
 
 		return {
 			venue: leg.venue as SorVenue,

@@ -6,6 +6,13 @@ import type {
 	DflowOrderResponse,
 } from "@/services/privateApi/client";
 import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
+import {
+	mapDflowOrderError,
+	userMessage,
+	DFLOW_MISSING_BLOCK_HEIGHT,
+	DFLOW_NO_TRANSACTION,
+	DFLOW_ROUTE_EXPIRED,
+} from "@/errors";
 
 export type DflowOrderSubmitFn = (
 	body: DflowOrderSubmitBody,
@@ -42,9 +49,8 @@ export async function quoteSignAndSubmitDflowOrder(args: {
 		if (typeof expiresAtMs === "number" && Number.isFinite(expiresAtMs)) {
 			const skewMs = 500;
 			if (Date.now() > expiresAtMs - skewMs) {
-				throw new Error(
-					`Trade route quote expired (route ${routeId}) — refresh the route and try again.`,
-				);
+				console.error("[DFlow] route expired", { routeId, expiresAtMs });
+				throw new Error(userMessage(DFLOW_ROUTE_EXPIRED));
 			}
 		}
 	}
@@ -52,11 +58,11 @@ export async function quoteSignAndSubmitDflowOrder(args: {
 	const orderResult = await privateApi.getDflowOrder(orderParams);
 	if (orderResult.code || orderResult.msg) {
 		throw new Error(
-			orderResult.msg ?? orderResult.code ?? "Kalshi order failed",
+			mapDflowOrderError(orderResult.code, orderResult.msg),
 		);
 	}
 	if (!orderResult.transaction) {
-		throw new Error("Kalshi returned no transaction to sign");
+		throw new Error(userMessage(DFLOW_NO_TRANSACTION));
 	}
 
 	const lvbh = orderResult.lastValidBlockHeight;
@@ -66,9 +72,7 @@ export async function quoteSignAndSubmitDflowOrder(args: {
 		lvbh <= 0 ||
 		!Number.isInteger(lvbh)
 	) {
-		throw new Error(
-			"Kalshi quote missing lastValidBlockHeight — refresh the route and try again.",
-		);
+		throw new Error(userMessage(DFLOW_MISSING_BLOCK_HEIGHT));
 	}
 
 	const txBytes = Buffer.from(orderResult.transaction, "base64");

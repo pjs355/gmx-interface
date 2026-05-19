@@ -6,6 +6,20 @@ import type { OrderExecutionResult } from "@/services/api/predictionMarketServic
 import { useSignerContext } from "context/SignerContext";
 import { getExchangeAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
+import {
+	formatErrorForUser,
+	userMessage,
+	TRADE_LEVELUP_INVALID_MAKER,
+	TRADE_LEVELUP_INVALID_ORDER_SIDE,
+	TRADE_LEVELUP_INVALID_POSITION,
+	TRADE_LEVELUP_MISSING_TOKENS,
+	TRADE_LEVELUP_NO_MARKET,
+	TRADE_LEVELUP_NO_SIGNER,
+	TRADE_LEVELUP_ORDER_FAILED,
+	TRADE_LEVELUP_SIGNER_NO_GET_ADDRESS,
+	TRADE_LEVELUP_SIGNER_NO_TYPED_DATA,
+	TRADE_LEVELUP_TOKEN_MISMATCH,
+} from "@/errors";
 
 function isValidEthAddress(a: string | undefined): a is string {
 	return Boolean(a && /^0x[a-fA-F0-9]{40}$/i.test(a.trim()));
@@ -45,21 +59,15 @@ export function useTradeExecutionService() {
 				});
 
 				if (!params.market) {
-					throw new Error(
-						"CRITICAL ERROR: No market data provided. Trade cannot proceed.",
-					);
+					throw new Error(userMessage(TRADE_LEVELUP_NO_MARKET));
 				}
 
 				if (!params.market.yesTokenId || !params.market.noTokenId) {
-					throw new Error(
-						`CRITICAL ERROR: Missing token IDs in market data. yesTokenId=${params.market.yesTokenId}, noTokenId=${params.market.noTokenId}. Trade cannot proceed.`,
-					);
+					throw new Error(userMessage(TRADE_LEVELUP_MISSING_TOKENS));
 				}
 
 				if (params.position !== "yes" && params.position !== "no") {
-					throw new Error(
-						`CRITICAL ERROR: Invalid position: ${params.position}. Must be 'yes' or 'no'.`,
-					);
+					throw new Error(userMessage(TRADE_LEVELUP_INVALID_POSITION));
 				}
 
 				const expectedTokenId =
@@ -108,22 +116,18 @@ export function useTradeExecutionService() {
 					}
 				}
 				if (!activeSigner || !signerAddress) {
-					throw new Error("No signer available from wallet");
+					throw new Error(userMessage(TRADE_LEVELUP_NO_SIGNER));
 				}
 
 				const embeddedWalletAddress = signerAddress.trim();
 				const makerParam = params.userAddress?.trim();
 				if (!isValidEthAddress(makerParam)) {
-					throw new Error(
-						"LevelUp trade requires params.userAddress (valid 0x maker on Base).",
-					);
+					throw new Error(userMessage(TRADE_LEVELUP_INVALID_MAKER));
 				}
 
-				/** SCW-funded maker path: SOR passes SCW; embedded signs (poly-V2). Also if Privy omits smart_wallet but addresses differ. */
 				const isSplitScwMaker =
 					isValidEthAddress(embeddedWalletAddress) &&
 					makerParam.toLowerCase() !== embeddedWalletAddress.toLowerCase();
-				/** Legacy poly-V2 gate; union with address-diff so maker stays SCW when linkedAccounts is stale. */
 				const isSmart = Boolean(hasSmartWallet) || isSplitScwMaker;
 
 				console.log("🚨 Address mode before order creation:", {
@@ -148,16 +152,14 @@ export function useTradeExecutionService() {
 				console.log("📝 Order structure created:", orderData);
 
 				if (orderData.tokenId !== expectedTokenId) {
-					throw new Error(
-						`TOKEN ID MISMATCH! Position: ${params.position}, Expected: ${expectedTokenId}, Actual: ${orderData.tokenId}`,
-					);
+					throw new Error(userMessage(TRADE_LEVELUP_TOKEN_MISMATCH));
 				}
 
 				if (typeof activeSigner.signTypedData !== "function") {
-					throw new Error("Signer does not support signTypedData");
+					throw new Error(userMessage(TRADE_LEVELUP_SIGNER_NO_TYPED_DATA));
 				}
 				if (typeof activeSigner.getAddress !== "function") {
-					throw new Error("Signer does not support getAddress");
+					throw new Error(userMessage(TRADE_LEVELUP_SIGNER_NO_GET_ADDRESS));
 				}
 				const signerAddr = await activeSigner.getAddress();
 
@@ -224,9 +226,7 @@ export function useTradeExecutionService() {
 					orderDataForSigning.side !== 0 &&
 					orderDataForSigning.side !== 1
 				) {
-					throw new Error(
-						`Invalid numericSide for EIP-712: ${orderDataForSigning.side}`,
-					);
+					throw new Error(userMessage(TRADE_LEVELUP_INVALID_ORDER_SIDE));
 				}
 
 				const signature = await activeSigner.signTypedData(
@@ -293,17 +293,14 @@ export function useTradeExecutionService() {
 
 				return result;
 			} catch (error: unknown) {
-				const err = error as Error;
-				console.error("❌ Order execution failed:", err);
-				console.error("❌ Error details:", {
-					message: err.message,
-					stack: err.stack,
-					name: err.name,
-				});
-
+				console.error("error", error);
+				const formatted = formatErrorForUser(error);
 				return {
 					success: false,
-					error: err.message || "Order execution failed",
+					error:
+						formatted === "Request failed"
+							? userMessage(TRADE_LEVELUP_ORDER_FAILED)
+							: formatted,
 				};
 			}
 		},
@@ -318,39 +315,7 @@ export function useTradeExecutionService() {
 		],
 	);
 
-	const validateTradeParams = useCallback(
-		(
-			params: Partial<TradeExecutionParams>,
-		): {
-			isValid: boolean;
-			errors: string[];
-		} => {
-			const errors: string[] = [];
-
-			if (!params.marketId) errors.push("Market ID is required");
-			if (!params.position) errors.push("Position (Yes/No) is required");
-			if (!params.amount || params.amount <= 0) {
-				errors.push("Valid amount is required");
-			}
-			if (
-				params.orderType === "limit" &&
-				(!params.price || params.price <= 0)
-			) {
-				errors.push("Valid price is required for limit orders");
-			}
-			if (!params.userAddress) errors.push("User address is required");
-			if (!params.market) errors.push("Market data is required");
-
-			return {
-				isValid: errors.length === 0,
-				errors,
-			};
-		},
-		[],
-	);
-
 	return {
 		executeTrade,
-		validateTradeParams,
 	};
 }

@@ -2,6 +2,13 @@ import { useEffect, useState, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	ADMIN_MISSING_ACCESS_TOKEN,
+	ADMIN_PROFILE_INVALID,
+} from "@/errors";
 
 interface Order {
 	_id: string;
@@ -101,7 +108,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 						? await getAccessToken()
 						: undefined;
 				if (!token) {
-					throw new Error("Missing admin access token");
+					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				const base = getPredictionApiBaseUrl();
 				const resp = await fetch(
@@ -114,10 +121,10 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 					.json()
 					.catch(() => ({} as any))) as ProfileApiResponse;
 				if (!resp.ok) {
-					throw new Error(json?.error || `HTTP ${resp.status}`);
+					throw new Error(formatAdminHttpError(resp.status, json?.error));
 				}
 				if (typeof json.success === "undefined") {
-					throw new Error("Invalid response for profile");
+					throw new Error(adminErrorMessage(ADMIN_PROFILE_INVALID));
 				}
 				if (mounted) {
 					console.log(
@@ -161,7 +168,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 				}
 			} catch (err: any) {
 				console.error("error", err);
-				if (mounted) setError(err?.message || String(err));
+				if (mounted) setError(formatAdminErrorForUser(err));
 			} finally {
 				if (mounted) setLoading(false);
 			}

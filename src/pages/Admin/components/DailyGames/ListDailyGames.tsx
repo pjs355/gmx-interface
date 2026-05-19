@@ -2,6 +2,15 @@ import { useEffect, useState, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { tagService, type Tag } from "@/services/api/tagService";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	formatAdminHttpError,
+	ADMIN_DAILY_GAMES_LIST_INVALID,
+	ADMIN_DAILY_GAMES_LIST_NOT_AVAILABLE,
+	ADMIN_DAILY_GAME_UPDATE_FAILED,
+	ADMIN_MISSING_ACCESS_TOKEN,
+} from "@/errors";
 
 interface DailyGame {
 	_id: string;
@@ -77,7 +86,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 						? await getAccessToken()
 						: undefined;
 				if (!token) {
-					throw new Error("Missing admin access token");
+					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				const base = getPredictionApiBaseUrl();
 				const resp = await fetch(`${base}/admin/daily-games`, {
@@ -88,7 +97,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 				if (resp.status === 404) {
 					if (mounted) {
 						setGames([]);
-						setError("GET endpoint not available yet. Use Add to create daily games.");
+						setError(adminErrorMessage(ADMIN_DAILY_GAMES_LIST_NOT_AVAILABLE));
 					}
 					return;
 				}
@@ -97,10 +106,10 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 					.json()
 					.catch(() => ({} as any))) as DailyGamesApiResponse;
 				if (!resp.ok) {
-					throw new Error(json?.error || `HTTP ${resp.status}`);
+					throw new Error(formatAdminHttpError(resp.status, json?.error));
 				}
 				if (typeof json.success === "undefined") {
-					throw new Error("Invalid response for daily games list");
+					throw new Error(adminErrorMessage(ADMIN_DAILY_GAMES_LIST_INVALID));
 				}
 				if (mounted) {
 					if (Array.isArray(json.data)) {
@@ -111,9 +120,9 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 						setGames([]);
 					}
 				}
-			} catch (err: any) {
+			} catch (err: unknown) {
 				console.error("error", err);
-				if (mounted) setError(err?.message || String(err));
+				if (mounted) setError(formatAdminErrorForUser(err));
 			} finally {
 				if (mounted) setLoading(false);
 			}
@@ -142,7 +151,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 					? await getAccessToken()
 					: undefined;
 			if (!token) {
-				throw new Error("Missing admin access token");
+				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
 			const base = getPredictionApiBaseUrl();
 			const resp = await fetch(`${base}/admin/daily-games/${gameId}`, {
@@ -159,9 +168,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 			const json = await resp.json().catch(() => ({} as any));
 
 			if (!resp.ok) {
-				throw new Error(
-					json?.error || `Failed to update daily game (${resp.status})`
-				);
+				throw new Error(formatAdminHttpError(resp.status, json?.error));
 			}
 
 			// Update the local state
@@ -172,9 +179,9 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 						: game
 				)
 			);
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("error", err);
-			setError(err?.message || String(err));
+			setError(formatAdminErrorForUser(err));
 		} finally {
 			setUpdatingIds((prev) => {
 				const next = new Set(prev);

@@ -10,6 +10,12 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
+import {
+	adminErrorMessage,
+	formatAdminHttpError,
+	ADMIN_TRADE_TEST_FETCH_ORDERS_FAILED,
+	ADMIN_TRADE_TEST_MISSING_TOKEN,
+} from "@/errors";
 
 // ABIs for balance checking
 const USDC_ABI = ["function balanceOf(address) view returns (uint256)"];
@@ -249,7 +255,9 @@ export class TradeExecutor {
 			});
 
 			if (!response.ok) {
-				throw new Error(`Failed to fetch orders: ${response.status}`);
+				throw new Error(
+					adminErrorMessage(ADMIN_TRADE_TEST_FETCH_ORDERS_FAILED),
+				);
 			}
 
 			const responseData = await response.json();
@@ -1092,7 +1100,7 @@ export class TradeExecutor {
 			: this.market.noTokenId;
 
 		if (!tokenId) {
-			throw new Error(`Missing token ID for ${trade.position} position`);
+			throw new Error(adminErrorMessage(ADMIN_TRADE_TEST_MISSING_TOKEN));
 		}
 
 		const expiration = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60 * 100; // ~100 years
@@ -1258,7 +1266,11 @@ export class TradeExecutor {
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			throw new Error(`API error ${response.status}: ${errorText}`);
+			console.error("[admin trade test] API error", {
+				status: response.status,
+				body: errorText.slice(0, 500),
+			});
+			throw new Error(formatAdminHttpError(response.status, errorText));
 		}
 
 		return await response.json();

@@ -2,7 +2,6 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getAddress, isAddress } from "viem";
 import { useUserData } from "@/context/UserDataContext";
-import { getPrivateApiErrorMessage } from "@/services/privateApi";
 import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
 import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
 import { executeDirectErc20Withdraw } from "@/trading/lifi/executeDirectEvmWithdraw";
@@ -15,6 +14,15 @@ import {
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { createSolanaConnectionForWalletSend } from "@/config/rpc";
+import {
+	formatLifiErrorForUser,
+	formatLifiWithdrawStepFailed,
+	userMessage,
+	LIFI_INVALID_RECIPIENT,
+	LIFI_NO_TX_HASH_WALLET,
+	LIFI_POLY_EMBEDDED_WALLET_LOADING,
+	LIFI_SOLANA_WALLET_UNAVAILABLE,
+} from "@/errors";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import type {
 	LifiQuoteResponse,
@@ -99,7 +107,7 @@ export function useWithdrawPlanExecution() {
 					const chainId = leg.toChain;
 					if (chainId === SOLANA_LIFI_CHAIN_ID) {
 						if (!solanaSigner) {
-							throw new Error("Solana embedded wallet unavailable — reload and try again.");
+							throw new Error(userMessage(LIFI_SOLANA_WALLET_UNAVAILABLE));
 						}
 						const conn = createSolanaConnectionForWalletSend();
 						const txHash = await executeDirectSolanaSplWithdraw({
@@ -121,7 +129,7 @@ export function useWithdrawPlanExecution() {
 						return { txHash, explorerChainId: SOLANA_LIFI_CHAIN_ID };
 					}
 					if (!isAddress(leg.toAddress)) {
-						throw new Error("Invalid recipient address");
+						throw new Error(userMessage(LIFI_INVALID_RECIPIENT));
 					}
 					const recipient = getAddress(leg.toAddress) as `0x${string}`;
 					let polygonRelayClient: RelayClient | undefined;
@@ -162,15 +170,13 @@ export function useWithdrawPlanExecution() {
 					leg.selectedSource.lifiChainId === POLYGON;
 
 				if (needsPolymarketRelay && !polymarketRelay.walletReady) {
-					throw new Error(
-						"This route sends from your Polymarket wallet. Wait for your embedded wallet to load, then try again."
-					);
+					throw new Error(userMessage(LIFI_POLY_EMBEDDED_WALLET_LOADING));
 				}
 
 				const polygonRelay = await preparePolygonRelay(needsPolymarketRelay);
 
 				if (routeIncludesSolana && !solanaSigner) {
-					throw new Error("Solana embedded wallet unavailable — reload and try again.");
+					throw new Error(userMessage(LIFI_SOLANA_WALLET_UNAVAILABLE));
 				}
 				const { txHashes } = await executeLifiSteps(
 					quote.steps,
@@ -187,7 +193,7 @@ export function useWithdrawPlanExecution() {
 					fromChain
 				);
 				if (!statusTxHash) {
-					throw new Error("No transaction hash returned from wallet");
+					throw new Error(userMessage(LIFI_NO_TX_HASH_WALLET));
 				}
 
 				const statusTool = pickLifiStatusTool(quote);
@@ -226,8 +232,8 @@ export function useWithdrawPlanExecution() {
 					try {
 						entries.push(await runSingleLeg(plan.legs[i]));
 					} catch (err) {
-						const base = getWithdrawExecutionErrorMessage(err);
-						throw new Error(`Step ${i + 1} of ${n} failed: ${base}`);
+						console.error("error", err);
+						throw new Error(formatLifiWithdrawStepFailed(i + 1, n));
 					}
 				}
 				return { entries };
@@ -252,5 +258,5 @@ export function useWithdrawPlanExecution() {
 }
 
 export function getWithdrawExecutionErrorMessage(err: unknown): string {
-	return getPrivateApiErrorMessage(err);
+	return formatLifiErrorForUser(err);
 }

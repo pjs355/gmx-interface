@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { tagService } from "@/services/api/tagService";
+import {
+	adminErrorMessage,
+	formatAdminErrorForUser,
+	ADMIN_MISSING_ACCESS_TOKEN,
+} from "@/errors";
 
 export interface AdminTag {
 	_id: string;
@@ -32,7 +37,7 @@ export default function ListTag({
 				if (mounted) setTags(allTags as AdminTag[]);
 			} catch (err: any) {
 				console.error("error", err);
-				if (mounted) setError(err?.message || String(err));
+				if (mounted) setError(formatAdminErrorForUser(err));
 			} finally {
 				if (mounted) setLoading(false);
 			}
@@ -61,14 +66,14 @@ export default function ListTag({
 			if (!confirmDelete) return;
 			const token = await getAccessToken?.();
 			if (typeof token === "undefined" || !token) {
-				throw new Error("Missing admin access token");
+				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
 			await tagService.deleteTag(tag._id, token);
 			// Refresh list
 			setTags((prev) => prev.filter((t) => t._id !== tag._id));
 		} catch (err: any) {
 			console.error("error", err);
-			alert(err?.message || String(err));
+			alert(formatAdminErrorForUser(err));
 		}
 	}
 
