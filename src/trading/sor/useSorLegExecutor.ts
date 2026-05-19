@@ -73,6 +73,7 @@ import {
 import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
 import type { BuildLimitlessSorOrderInput } from "@/trading/limitless/limitlessSignedClobOrder";
 import type { LimitlessSignedOrderSubmit } from "@/trading/limitless/limitlessPrivateApiTypes";
+import { readLimitlessMakerUsdcPreflightForFokBuy } from "@/trading/limitless/limitlessTradingApprovalsOnBase";
 import {
 	buildPolygonSafeUsdceWrapTransactions,
 	readPolymarketSafeCtfBalanceWei,
@@ -1225,6 +1226,25 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							error: "Missing Limitless slug or outcome token on route leg",
 						};
 					}
+					const childSlugA = ids.limitlessOrderbookSlugA?.trim() ?? "";
+					const childSlugB = ids.limitlessOrderbookSlugB?.trim() ?? "";
+					if (
+						routeSlug &&
+						orderMarketSlug === routeSlug &&
+						(leg.outcome === "A" ? !childSlugA : !childSlugB)
+					) {
+						return {
+							filled: false,
+							filledShares: 0,
+							error:
+								"Limitless group market is missing per-team orderbook slugs (orderbookSlugA/B). Re-run matching or refresh market data.",
+						};
+					}
+					const limitlessDeclaredSlug = routeSlug ?? orderMarketSlug;
+					const limitlessLegSlug =
+						routeSlug && orderMarketSlug !== routeSlug
+							? orderMarketSlug
+							: undefined;
 					let phase:
 						| "init"
 						| "ensureLimitlessApprovals"
@@ -1406,12 +1426,46 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							limitlessBuyMakerUsd = clamp.amountUsd;
 							limitlessPostBridgeScale = clamp.scale;
 						}
+						if (!isLimit && side === "buy") {
+							let verifyForPreflight;
+							try {
+								verifyForPreflight = await privateApi.postLimitlessVerifyAllowance(
+									orderMarketSlug,
+									{ tokenId: String(tokenId) },
+								);
+							} catch (e: unknown) {
+								const msg =
+									e instanceof Error
+										? e.message
+										: "Limitless verify-allowance failed before order";
+								return { filled: false, filledShares: 0, error: msg };
+							}
+							const preflight = await readLimitlessMakerUsdcPreflightForFokBuy({
+								maker,
+								verify: verifyForPreflight,
+								wireUsd: limitlessBuyMakerUsd,
+								feeUsd: leg.fee,
+							});
+							if (!preflight.ok) {
+								return {
+									filled: false,
+									filledShares: 0,
+									error:
+										preflight.reason ??
+										"Limitless maker wallet is not funded or approved for this buy.",
+								};
+							}
+						}
 						let limitlessOrderResponse: unknown;
+						const limitlessSlugBase = {
+							slug: limitlessDeclaredSlug,
+							...(limitlessLegSlug ? { marketSlugLeg: limitlessLegSlug } : {}),
+						};
 						if (isLimit) {
 							limitlessOrderResponse = await submitLimitlessOrder(
 								await buildSigned({
 									kind: "gtc",
-									slug: orderMarketSlug,
+									...limitlessSlugBase,
 									ownerId,
 									maker,
 									feeRateBps,
@@ -1425,7 +1479,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							limitlessOrderResponse = await submitLimitlessOrder(
 								await buildSigned({
 									kind: "fok_buy",
-									slug: orderMarketSlug,
+									...limitlessSlugBase,
 									ownerId,
 									maker,
 									feeRateBps,
@@ -1437,7 +1491,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							limitlessOrderResponse = await submitLimitlessOrder(
 								await buildSigned({
 									kind: "fok_sell",
-									slug: orderMarketSlug,
+									...limitlessSlugBase,
 									ownerId,
 									maker,
 									feeRateBps,

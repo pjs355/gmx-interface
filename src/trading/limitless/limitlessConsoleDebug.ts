@@ -1,16 +1,14 @@
 /**
- * Limitless diagnostics in the browser console.
+ * Limitless diagnostics in the browser console (opt-in only).
  *
- * - Default: **on in `import.meta.env.DEV`** only.
- * - Staging/production: set `VITE_DEBUG_LIMITLESS=1` or `true` and rebuild.
- * - Deeper order book samples: `VITE_DEBUG_LIMITLESS_VERBOSE=1`.
+ * Set `VITE_DEBUG_LIMITLESS=1` or `true` and rebuild.
+ * Deeper order book samples: `VITE_DEBUG_LIMITLESS_VERBOSE=1`.
  */
 export function isLimitlessConsoleDebugEnabled(): boolean {
-	return Boolean(
-		import.meta.env.DEV ||
-			import.meta.env.VITE_DEBUG_LIMITLESS === "true" ||
-			import.meta.env.VITE_DEBUG_LIMITLESS === "1",
-	);
+	const v = import.meta.env.VITE_DEBUG_LIMITLESS;
+	if (typeof v !== "string") return false;
+	const t = v.trim().toLowerCase();
+	return t === "1" || t === "true" || t === "yes";
 }
 
 export function isLimitlessOrderbookVerboseDebug(): boolean {

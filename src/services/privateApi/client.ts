@@ -1387,21 +1387,24 @@ export function createPrivateApiClient(
 
 		async postLimitlessVerifyAllowance(
 			marketSlug: string,
-			opts?: { tokenId?: string },
+			opts?: { tokenId?: string; marketSlugLeg?: string },
 		): Promise<LimitlessVerifyAllowanceResult> {
 			const slug = marketSlug.trim();
 			const tokenId = opts?.tokenId?.trim();
+			const marketSlugLeg = opts?.marketSlugLeg?.trim();
 			if (import.meta.env.DEV && isTradingDebugLoggingEnabled()) {
 				console.info("[Limitless/API]", "POST verify-allowance", {
 					marketSlug: slug,
+					marketSlugLeg: marketSlugLeg || undefined,
 					tokenId: tokenId ? `${tokenId.slice(0, 14)}…` : undefined,
 				});
 			}
+			const body: Record<string, string> = { marketSlug: slug };
+			if (tokenId) body.tokenId = tokenId;
+			if (marketSlugLeg) body.marketSlugLeg = marketSlugLeg;
 			const res = await authorizedFetch("/api/limitless/account/verify-allowance", {
 				method: "POST",
-				body: JSON.stringify(
-					tokenId ? { marketSlug: slug, tokenId } : { marketSlug: slug },
-				),
+				body: JSON.stringify(body),
 			});
 			const out = await readJson<LimitlessVerifyAllowanceResult>(res);
 			if (

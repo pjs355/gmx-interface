@@ -23,6 +23,7 @@ export type BuildLimitlessSorOrderInput =
 	| {
 			kind: "gtc";
 			slug: string;
+			marketSlugLeg?: string;
 			ownerId: number;
 			maker: string;
 			feeRateBps: number;
@@ -35,6 +36,7 @@ export type BuildLimitlessSorOrderInput =
 	| {
 			kind: "fok_buy";
 			slug: string;
+			marketSlugLeg?: string;
 			ownerId: number;
 			maker: string;
 			feeRateBps: number;
@@ -44,6 +46,7 @@ export type BuildLimitlessSorOrderInput =
 	| {
 			kind: "fok_sell";
 			slug: string;
+			marketSlugLeg?: string;
 			ownerId: number;
 			maker: string;
 			feeRateBps: number;
@@ -56,13 +59,16 @@ export async function buildLimitlessSignedOrderFromMarket(
 	signer: ethers.Signer,
 	input: BuildLimitlessSorOrderInput,
 ): Promise<LimitlessSignedOrderSubmit> {
-	const raw = await privateApi.getLimitlessMarketBySlug(input.slug);
+	const marketFetchSlug = input.marketSlugLeg?.trim() || input.slug.trim();
+	const raw = await privateApi.getLimitlessMarketBySlug(marketFetchSlug);
 	const exchange = readLimitlessVenueExchangeFromMarketJson(raw);
+	const marketSlugLeg = input.marketSlugLeg?.trim();
 	if (input.kind === "gtc") {
 		return buildSignedLimitlessOrderSubmit({
 			maker: input.maker,
 			ownerId: input.ownerId,
 			marketSlug: input.slug,
+			...(marketSlugLeg ? { marketSlugLeg } : {}),
 			exchange,
 			feeRateBps: input.feeRateBps,
 			signer,
@@ -81,6 +87,7 @@ export async function buildLimitlessSignedOrderFromMarket(
 			maker: input.maker,
 			ownerId: input.ownerId,
 			marketSlug: input.slug,
+			...(marketSlugLeg ? { marketSlugLeg } : {}),
 			exchange,
 			feeRateBps: input.feeRateBps,
 			signer,
@@ -96,6 +103,7 @@ export async function buildLimitlessSignedOrderFromMarket(
 		maker: input.maker,
 		ownerId: input.ownerId,
 		marketSlug: input.slug,
+		...(marketSlugLeg ? { marketSlugLeg } : {}),
 		exchange,
 		feeRateBps: input.feeRateBps,
 		signer,
@@ -132,6 +140,7 @@ export async function buildSignedLimitlessOrderSubmit(input: {
 	maker: string;
 	ownerId: number;
 	marketSlug: string;
+	marketSlugLeg?: string;
 	exchange: string;
 	feeRateBps: number;
 	signer: ethers.Signer;
@@ -172,6 +181,9 @@ export async function buildSignedLimitlessOrderSubmit(input: {
 		order: signedOrder as LimitlessSignedOrderSubmit["order"],
 		orderType: input.spec.orderType,
 		marketSlug: input.marketSlug.trim(),
+		...(input.marketSlugLeg?.trim()
+			? { marketSlugLeg: input.marketSlugLeg.trim() }
+			: {}),
 		ownerId: input.ownerId,
 		...(input.spec.orderType === "GTC" && input.spec.postOnly !== undefined
 			? { postOnly: input.spec.postOnly }

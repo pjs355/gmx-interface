@@ -1,5 +1,6 @@
 // React import not required with automatic JSX runtime
 import type { CSSProperties } from "react";
+import { formatUsdAmount } from "../utils/formatCurrency";
 
 /** Same as AppHeaderUser / AppHeaderLinks `header-metric` cash skeleton. */
 const cashBalanceSkeletonBoxStyle: CSSProperties = {
@@ -80,13 +81,7 @@ export default function PositionsHeader({
 									}}
 								/>
 							) : (
-								<>
-									$
-									{portfolioTotal.toLocaleString("en-US", {
-										minimumFractionDigits: 0,
-										maximumFractionDigits: 2,
-									})}
-								</>
+								<>${formatUsdAmount(portfolioTotal)}</>
 							)}
 						</div>
 					</div>
@@ -122,16 +117,7 @@ export default function PositionsHeader({
 									}}
 								/>
 							) : (
-								<>
-									$
-									{positionsTotalValue.toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 0,
-											maximumFractionDigits: 2,
-										}
-									)}
-								</>
+								<>${formatUsdAmount(positionsTotalValue)}</>
 							)}
 						</div>
 					</div>
@@ -163,14 +149,7 @@ export default function PositionsHeader({
 								/>
 							) : (
 								<>
-									$
-									{Number(usdcBalance || 0).toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 0,
-											maximumFractionDigits: 2,
-										}
-									)}
+									${formatUsdAmount(Number(usdcBalance || 0))}
 								</>
 							)}
 						</div>
@@ -215,13 +194,7 @@ export default function PositionsHeader({
 								}}
 							/>
 						) : (
-							<>
-								$
-								{portfolioTotal.toLocaleString("en-US", {
-									minimumFractionDigits: 0,
-									maximumFractionDigits: 2,
-								})}
-							</>
+							<>${formatUsdAmount(portfolioTotal)}</>
 						)}
 					</div>
 				</div>
@@ -258,16 +231,7 @@ export default function PositionsHeader({
 									}}
 								/>
 							) : (
-								<>
-									$
-									{positionsTotalValue.toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 0,
-											maximumFractionDigits: 2,
-										}
-									)}
-								</>
+								<>${formatUsdAmount(positionsTotalValue)}</>
 							)}
 						</div>
 					</div>
@@ -299,14 +263,7 @@ export default function PositionsHeader({
 								/>
 							) : (
 								<>
-									$
-									{Number(usdcBalance || 0).toLocaleString(
-										"en-US",
-										{
-											minimumFractionDigits: 0,
-											maximumFractionDigits: 2,
-										}
-									)}
+									${formatUsdAmount(Number(usdcBalance || 0))}
 								</>
 							)}
 						</div>

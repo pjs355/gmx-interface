@@ -84,9 +84,10 @@ export function AppHeaderUser({
 	): string => {
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || num === undefined || !isFinite(num)) return "--";
+		const isInt = Math.abs(num % 1) < 1e-9;
 		return new Intl.NumberFormat("en-US", {
-			minimumFractionDigits: 0,
-			maximumFractionDigits: 2,
+			minimumFractionDigits: isInt ? 0 : 2,
+			maximumFractionDigits: isInt ? 0 : 2,
 		}).format(num);
 	};
 	// Removed GMX-specific variables and tracking functions

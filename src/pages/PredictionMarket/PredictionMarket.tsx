@@ -182,31 +182,6 @@ function PredictionMarketContent() {
 		navigate,
 	]);
 
-	useEffect(() => {
-		if (!umbrella) return;
-		const label = `[PredictionMarket] full umbrella — ${umbrella.displayName ?? umbrella._id} (${umbrella._id})`;
-		try {
-			const umbrellaDump = JSON.parse(JSON.stringify(umbrella)) as Umbrella;
-			const questionsDump =
-				questions.length > 0
-					? JSON.parse(JSON.stringify(questions))
-					: questions;
-			console.groupCollapsed(label);
-			console.log("umbrella:", umbrellaDump);
-			console.log(
-				`child markets (questions under this umbrella, ${questions.length}):`,
-				questionsDump,
-			);
-			console.groupEnd();
-		} catch (err) {
-			console.groupCollapsed(label);
-			console.log("umbrella (live object; JSON dump failed):", umbrella);
-			console.log("questions (live):", questions);
-			console.warn("[PredictionMarket] umbrella/questions serialize error:", err);
-			console.groupEnd();
-		}
-	}, [umbrella, questions]);
-
 	const {
 		questionOrderbooks,
 		orderbooksReady,

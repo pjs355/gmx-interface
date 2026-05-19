@@ -68,6 +68,8 @@ export type LimitlessSignedOrderSubmit = {
 	};
 	orderType: LimitlessOrderType;
 	marketSlug: string;
+	/** Child leg slug when already resolved (optional; server can derive from tokenId). */
+	marketSlugLeg?: string;
 	ownerId: number;
 	postOnly?: boolean;
 };

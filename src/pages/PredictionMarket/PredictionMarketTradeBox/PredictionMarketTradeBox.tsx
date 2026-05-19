@@ -132,7 +132,6 @@ import {
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "./feeLimitless";
 import {
 	getLimitlessEnsureTradeGate,
-	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
 import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
@@ -1004,97 +1003,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     limitlessEnsureQuery.data,
     authenticated,
     profileId,
-  ]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    if (state.tradingVenue !== "limitless") return;
-
-    const stillLoading =
-      limitlessEnsureQuery.isLoading ||
-      (authenticated &&
-        Boolean(profileId) &&
-        !limitlessEnsureQuery.isFetched);
-
-    let whyNotTradeable: string;
-    let httpError: string | null = null;
-
-    if (!authenticated) {
-      whyNotTradeable = "not_authenticated";
-    } else if (authenticated && !profileId) {
-      whyNotTradeable = "no_profile";
-    } else if (limitlessEnsureQuery.isError) {
-      whyNotTradeable = "ensure_account_error";
-      httpError = getPrivateApiErrorMessage(limitlessEnsureQuery.error);
-    } else if (stillLoading && !limitlessReady) {
-      whyNotTradeable = "still_loading";
-    } else if (limitlessReady) {
-      whyNotTradeable = "tradeable";
-    } else {
-      whyNotTradeable =
-        limitlessEnsureNotReadyCodeToWhy(limitlessEnsureGate.notReadyCode) ??
-        "not_tradeable";
-    }
-
-    let venueRegistered: boolean | undefined;
-    let venueStatus: string | undefined;
-    let ownerId: unknown;
-    let approvalComplete: unknown;
-    let tradingEnabled: unknown;
-    let lastErrorSnippet: string | null = null;
-    const raw = limitlessEnsureQuery.data;
-    if (raw && typeof raw === "object") {
-      const o = raw as Record<string, unknown>;
-      if (typeof o.venueRegistered === "boolean") {
-        venueRegistered = o.venueRegistered;
-      }
-      if (typeof o.venueStatus === "string") venueStatus = o.venueStatus;
-      const la = o.limitlessAccount;
-      if (la && typeof la === "object") {
-        const a = la as Record<string, unknown>;
-        ownerId = a.ownerId;
-        approvalComplete = a.approvalComplete;
-        tradingEnabled = a.tradingEnabled;
-        const le = a.lastError;
-        if (typeof le === "string" && le.trim()) {
-          const t = le.trim();
-          lastErrorSnippet = t.length > 200 ? `${t.slice(0, 200)}…` : t;
-        }
-      }
-    }
-
-    console.info("[limitless/trade-ready]", {
-      whyNotTradeable,
-      ensureStatus: limitlessEnsureQuery.status,
-      isFetching: limitlessEnsureQuery.isFetching,
-      isLoading: limitlessEnsureQuery.isLoading,
-      isFetched: limitlessEnsureQuery.isFetched,
-      httpError,
-      gateReady: limitlessEnsureGate.ready,
-      notReadyCode: limitlessEnsureGate.notReadyCode,
-      venueRegistered,
-      venueStatus,
-      ownerId,
-      approvalComplete,
-      tradingEnabled,
-      lastErrorSnippet,
-      limitlessReady,
-    });
-  }, [
-    state.tradingVenue,
-    authenticated,
-    profileId,
-    limitlessEnsureQuery.status,
-    limitlessEnsureQuery.isFetching,
-    limitlessEnsureQuery.isLoading,
-    limitlessEnsureQuery.isFetched,
-    limitlessEnsureQuery.isError,
-    limitlessEnsureQuery.error,
-    limitlessEnsureQuery.data,
-    limitlessEnsureQuery.dataUpdatedAt,
-    limitlessReady,
-    limitlessEnsureGate.ready,
-    limitlessEnsureGate.notReadyCode,
   ]);
 
   const predictTrading = useMemo(

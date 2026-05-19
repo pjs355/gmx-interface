@@ -26,6 +26,7 @@ import {
 	acknowledgeDflowOutcomeMintBalanceSeen,
 	getPendingDflowOutcomeMintsForMerge,
 } from "./pendingDflowOutcomeMints";
+import { isDflowCatalogDriftIgnoredMint } from "./dflowCatalogDriftIgnoredMints";
 
 /*
  * DFlow positions React Query — maintainers
@@ -181,7 +182,10 @@ export function useDflowPositions(
 				const positive = tokens.filter((t) => t.balance > 0);
 				for (const t of positive) {
 					const mint = t.mint.trim();
-					if (!catalogWire.has(mint)) {
+					if (
+						!catalogWire.has(mint) &&
+						!isDflowCatalogDriftIgnoredMint(mint)
+					) {
 						console.warn(
 							"[DFlow positions] Catalog drift: wallet has balance but mint is not on any umbrella exchangeMatching.dflow (yes/no A/B). Update matched-markets / Mongo wire.",
 							mint,
