@@ -1,17 +1,34 @@
 import React from "react";
-import { useMedia } from "react-use";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import { usePredictionData } from "@/context/PredictionDataContext";
+import { usePredictionData } from "context/PredictionDataContext";
 import type { Tag } from "@/services/api/tagService";
 import {
-	GAME_FILTER_COMPACT_MEDIA,
+	bundledCounterStrikeLogoFromTagLabels,
+	resolveLogoByTags,
+} from "@/helpers/gameLogoResolver";
+import { isCounterStrikeUmbrella } from "@/helpers/umbrellaGame";
+import {
+	isCounterStrikeTagLabel,
+	isRestrictedProductionMode,
+} from "@/config/restrictedMode";
+import {
+	defaultEsportsTagLabel,
+	findEsportsTag,
+	homeDefaultSelectedTagLabel,
+	isEsportsMetaTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
 	LIVE_PILL_ID,
-	normalizeTagLabel,
 	STARTING_SOON_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
+
+function resolveTagLinkLogo(tag: Tag): string | null {
+	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels([tag.label]);
+	if (cs2Bundled) return cs2Bundled;
+	if (tag.imageUrl) return tag.imageUrl;
+	return resolveLogoByTags([tag.label]);
+}
 
 interface GameLinksProps {
 	selectedGame: string | null;
@@ -19,6 +36,14 @@ interface GameLinksProps {
 	umbrellas?: Umbrella[];
 	loading?: boolean;
 	filterType?: "esports" | "games" | "all";
+}
+
+function sortTagsForSidebar(tags: Tag[]): Tag[] {
+	const esports = tags.filter((t) => isEsportsMetaTagLabel(t.label));
+	const rest = tags
+		.filter((t) => !isEsportsMetaTagLabel(t.label))
+		.sort((a, b) => a.label.localeCompare(b.label));
+	return [...esports, ...rest];
 }
 
 export default function GameLinks({
@@ -30,10 +55,7 @@ export default function GameLinks({
 }: GameLinksProps) {
 	const { tags, tagsLoading } = usePredictionData();
 	const now = useNowTick(60_000);
-	const isCompactGameFilter = useMedia(GAME_FILTER_COMPACT_MEDIA);
 
-	// Filter tags to only show tags that have active markets for the current page type
-	// All hooks must be called before any early returns
 	const scrollRef = React.useRef<HTMLDivElement | null>(null);
 	const [canScrollLeft, setCanScrollLeft] = React.useState(false);
 	const [canScrollRight, setCanScrollRight] = React.useState(false);
@@ -52,6 +74,8 @@ export default function GameLinks({
 		el.scrollBy({ left: delta, behavior: "smooth" });
 	};
 
+	const restrictedMode = isRestrictedProductionMode();
+
 	const linkFilterState = React.useMemo(() => {
 		if (loading || tagsLoading || !umbrellas || umbrellas.length === 0) {
 			return {
@@ -62,12 +86,13 @@ export default function GameLinks({
 		}
 
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
+			if (restrictedMode && !isCounterStrikeUmbrella(umbrella as any)) {
+				return false;
+			}
 			return (umbrella as any).active === true;
 		});
 
-		const esportsTag = tags.find(
-			(t) => normalizeTagLabel(t.label) === "ESPORTS",
-		);
+		const esportsTag = findEsportsTag(tags);
 		const esportsTagId = esportsTag?._id;
 
 		const typeFilteredUmbrellas = filterType
@@ -92,13 +117,11 @@ export default function GameLinks({
 						return false;
 					});
 
-					if (filterType === "all") {
-						return true;
-					}
-					if (filterType === "esports") {
+					if (filterType === "games") return !hasEsportsTag;
+					if (filterType === "esports" || filterType === "all") {
 						return hasEsportsTag;
 					}
-					return !hasEsportsTag;
+					return true;
 			  })
 			: activeUmbrellas;
 
@@ -122,18 +145,30 @@ export default function GameLinks({
 			});
 		});
 
-		const finalTags = tagsWithActiveMarkets.filter((tag) => {
-			return normalizeTagLabel(tag.label) !== "ESPORTS";
-		});
-
-		const tagsSorted = [...finalTags].sort((a, b) =>
-			a.label.localeCompare(b.label),
-		);
+		const tagsSorted = sortTagsForSidebar(tagsWithActiveMarkets);
 
 		return { typeFilteredUmbrellas, tagsSorted, esportsTagId };
-	}, [umbrellas, loading, tagsLoading, filterType, tags]);
+	}, [umbrellas, loading, tagsLoading, filterType, tags, restrictedMode]);
 
-	const filteredTags = linkFilterState.tagsSorted;
+	const esportsTagLabel = defaultEsportsTagLabel(tags);
+	const esportsMetaTag = linkFilterState.tagsSorted.find((t) =>
+		isEsportsMetaTagLabel(t.label),
+	);
+	const allGameTags = linkFilterState.tagsSorted.filter(
+		(t) => !isEsportsMetaTagLabel(t.label),
+	);
+	const gameTagsOnly = restrictedMode
+		? allGameTags.filter((t) => isCounterStrikeTagLabel(t.label))
+		: allGameTags;
+	// Label the home-reset target uses (Counter-Strike in restricted mode,
+	// ESPORTS otherwise). Live / Starting Soon toggle-off paths route here
+	// when restricted so users do not land on a hidden ESPORTS view.
+	const restrictedDefaultLabel = restrictedMode
+		? homeDefaultSelectedTagLabel(tags)
+		: null;
+	const toggleOffTarget = restrictedMode
+		? restrictedDefaultLabel
+		: esportsTagLabel;
 
 	const liveMarketCount = React.useMemo(() => {
 		let n = 0;
@@ -161,10 +196,18 @@ export default function GameLinks({
 		return n;
 	}, [linkFilterState, now]);
 
+	const esportsMarketCount = React.useMemo(() => {
+		return linkFilterState.typeFilteredUmbrellas.length;
+	}, [linkFilterState.typeFilteredUmbrellas]);
+
 	const tagMarketCounts = React.useMemo(() => {
 		const map = new Map<string, number>();
 		const pool = linkFilterState.typeFilteredUmbrellas;
 		for (const tag of linkFilterState.tagsSorted) {
+			if (isEsportsMetaTagLabel(tag.label)) {
+				map.set(tag._id, pool.length);
+				continue;
+			}
 			let c = 0;
 			for (const umbrella of pool) {
 				const children = (umbrella as any).children as
@@ -200,33 +243,61 @@ export default function GameLinks({
 			el.removeEventListener("scroll", onScroll as any);
 			window.removeEventListener("resize", updateScrollState);
 		};
-	}, [updateScrollState, filteredTags]);
+	}, [updateScrollState, gameTagsOnly, esportsMetaTag]);
 
 	if (loading || tagsLoading) return null;
 
 	const renderTagButton = (tag: Tag) => {
 		const count = tagMarketCounts.get(tag._id) ?? 0;
+		const logoUrl = resolveTagLinkLogo(tag);
 		return (
 			<button
 				type="button"
-				className={`game-link ${
-					selectedGame === tag.label ? "active" : ""
-				}`}
+				className={`game-link ${selectedGame === tag.label ? "active" : ""}`}
 				key={tag._id}
-				onClick={() => {
-					if (selectedGame === tag.label) {
-						onGameSelect(null);
-					} else {
-						onGameSelect(tag.label);
-					}
-				}}
+				onClick={() => onGameSelect(tag.label)}
 			>
 				<span className="game-link__inner">
 					<span className="game-link__leading">
+						{logoUrl ? (
+							<img
+								className="game-link__logo"
+								src={logoUrl}
+								alt=""
+								aria-hidden
+							/>
+						) : null}
 						<span className="game-link__label">{tag.label}</span>
 					</span>
 					<span className="game-link__count" aria-label={`${count} markets`}>
 						{count}
+					</span>
+				</span>
+			</button>
+		);
+	};
+
+	const allFilterActive =
+		esportsTagLabel !== null && selectedGame === esportsTagLabel;
+
+	const renderAllFilterButton = (key: string) => {
+		if (!esportsTagLabel) return null;
+		return (
+			<button
+				type="button"
+				className={`game-link ${allFilterActive ? "active" : ""}`}
+				key={key}
+				onClick={() => onGameSelect(esportsTagLabel)}
+			>
+				<span className="game-link__inner">
+					<span className="game-link__leading">
+						<span className="game-link__label">All</span>
+					</span>
+					<span
+						className="game-link__count"
+						aria-label={`${esportsMarketCount} markets`}
+					>
+						{esportsMarketCount}
 					</span>
 				</span>
 			</button>
@@ -253,94 +324,77 @@ export default function GameLinks({
 					aria-label="Game links"
 					ref={scrollRef}
 				>
-				{isCompactGameFilter ? (
+					{!restrictedMode && renderAllFilterButton("__ALL__")}
 					<button
 						type="button"
-						className={`game-link ${
-							selectedGame === null ? "active" : ""
+						className={`game-link game-link--live ${
+							selectedGame === LIVE_PILL_ID ? "active" : ""
 						}`}
-						key="__ALL__"
-						onClick={() => onGameSelect(null)}
+						key={LIVE_PILL_ID}
+						onClick={() => {
+							if (selectedGame === LIVE_PILL_ID) {
+								if (toggleOffTarget) {
+									onGameSelect(toggleOffTarget);
+								}
+							} else {
+								onGameSelect(LIVE_PILL_ID);
+							}
+						}}
 					>
 						<span className="game-link__inner">
 							<span className="game-link__leading">
-								<span className="game-link__label">All</span>
+								<span className="game-link__live-dot" aria-hidden />
+								<span className="game-link__label">Live</span>
 							</span>
 							<span
 								className="game-link__count"
-								aria-label={`${linkFilterState.typeFilteredUmbrellas.length} markets`}
+								aria-label={`${liveMarketCount} markets`}
 							>
-								{linkFilterState.typeFilteredUmbrellas.length}
+								{liveMarketCount}
 							</span>
 						</span>
 					</button>
-				) : null}
-				<button
-					type="button"
-					className={`game-link game-link--live ${
-						selectedGame === LIVE_PILL_ID ? "active" : ""
-					}`}
-					key={LIVE_PILL_ID}
-					onClick={() => {
-						if (selectedGame === LIVE_PILL_ID) {
-							onGameSelect(null);
-						} else {
-							onGameSelect(LIVE_PILL_ID);
-						}
-					}}
-				>
-					<span className="game-link__inner">
-						<span className="game-link__leading">
-							<span className="game-link__live-dot" aria-hidden />
-							<span className="game-link__label">Live</span>
+					<button
+						type="button"
+						className={`game-link ${
+							selectedGame === STARTING_SOON_PILL_ID ? "active" : ""
+						}`}
+						key={STARTING_SOON_PILL_ID}
+						onClick={() => {
+							if (selectedGame === STARTING_SOON_PILL_ID) {
+								if (toggleOffTarget) {
+									onGameSelect(toggleOffTarget);
+								}
+							} else {
+								onGameSelect(STARTING_SOON_PILL_ID);
+							}
+						}}
+					>
+						<span className="game-link__inner">
+							<span className="game-link__leading">
+								<span className="game-link__label">Starting Soon</span>
+							</span>
+							<span
+								className="game-link__count"
+								aria-label={`${startingSoonMarketCount} markets`}
+							>
+								{startingSoonMarketCount}
+							</span>
 						</span>
-						<span
-							className="game-link__count"
-							aria-label={`${liveMarketCount} markets`}
-						>
-							{liveMarketCount}
-						</span>
-					</span>
-				</button>
-				<button
-					type="button"
-					className={`game-link ${
-						selectedGame === STARTING_SOON_PILL_ID ? "active" : ""
-					}`}
-					key={STARTING_SOON_PILL_ID}
-					onClick={() => {
-						if (selectedGame === STARTING_SOON_PILL_ID) {
-							onGameSelect(null);
-						} else {
-							onGameSelect(STARTING_SOON_PILL_ID);
-						}
-					}}
-				>
-					<span className="game-link__inner">
-						<span className="game-link__leading">
-							<span className="game-link__label">Starting Soon</span>
-						</span>
-						<span
-							className="game-link__count"
-							aria-label={`${startingSoonMarketCount} markets`}
-						>
-							{startingSoonMarketCount}
-						</span>
-					</span>
-				</button>
-				{filteredTags.map((tag) => renderTagButton(tag))}
-			</nav>
-			{canScrollRight && <div className="fade-right" aria-hidden />}
-			{canScrollRight && (
-				<button
-					type="button"
-					className="scroll-arrow right"
-					aria-label="Scroll right"
-					onClick={() => scrollByAmount(240)}
-				>
-					›
-				</button>
-			)}
+					</button>
+					{gameTagsOnly.map((tag) => renderTagButton(tag))}
+				</nav>
+				{canScrollRight && <div className="fade-right" aria-hidden />}
+				{canScrollRight && (
+					<button
+						type="button"
+						className="scroll-arrow right"
+						aria-label="Scroll right"
+						onClick={() => scrollByAmount(240)}
+					>
+						›
+					</button>
+				)}
 			</div>
 		</div>
 	);

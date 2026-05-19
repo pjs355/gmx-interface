@@ -1,31 +1,41 @@
 import cs2Background from "@/assets/market-backgrounds/cs2.jpg";
+import dota2Background from "@/assets/market-backgrounds/dota2.jpg";
+import esportsBackground from "@/assets/market-backgrounds/esports.jpg";
+import leagueBackground from "@/assets/market-backgrounds/league.jpg";
+import valorantBackground from "@/assets/market-backgrounds/valorant.jpg";
 import {
 	LIVE_PILL_ID,
 	normalizeTagLabel,
 	STARTING_SOON_PILL_ID,
 } from "./gameLinkFilters";
 
-/**
- * Default hero backdrop when no tag-specific art exists yet, or for filters
- * without a dedicated image (Live, Starting Soon, “all”, unmapped tags).
- * Replace or extend {@link MARKET_BACKGROUND_BY_NORMALIZED_TAG} as you add games.
- */
-const DEFAULT_MARKET_BACKGROUND: string = cs2Background;
+/** Fallback when no tag-specific art matches (Live / Starting Soon pills). */
+const DEFAULT_MARKET_BACKGROUND: string = esportsBackground;
 
 /**
- * Resolved URLs keyed by {@link normalizeTagLabel} output for the tag pill label.
- * Add an entry whenever a game should show a dedicated backdrop image.
+ * Hero backdrop per tag label or slug ({@link normalizeTagLabel}).
+ * Keys must match normalized tag labels from the API (e.g. ESPORTS, CS2)
+ * and normalized tag slugs (e.g. CS_GO, LEAGUE_OF_LEGENDS).
  */
 const MARKET_BACKGROUND_BY_NORMALIZED_TAG: Record<string, string> = {
+	ESPORTS: esportsBackground,
 	CS2: cs2Background,
 	CS_2: cs2Background,
+	CS_GO: cs2Background,
+	COUNTER_STRIKE: cs2Background,
 	COUNTER_STRIKE_2: cs2Background,
+	COUNTERSTRIKE: cs2Background,
+	COUNTERSTRIKE2: cs2Background,
+	LEAGUE_OF_LEGENDS: leagueBackground,
+	LOL: leagueBackground,
+	LEAGUE: leagueBackground,
+	DOTA_2: dota2Background,
+	DOTA2: dota2Background,
+	DOTA: dota2Background,
+	VALORANT: valorantBackground,
+	VAL: valorantBackground,
 };
 
-/**
- * Returns a backdrop URL for every filter. Unknown tags reuse
- * {@link DEFAULT_MARKET_BACKGROUND}; map entries override per game later.
- */
 export function resolveMarketBackgroundUrl(
 	selectedGame: string | null | undefined,
 ): string {
@@ -33,7 +43,7 @@ export function resolveMarketBackgroundUrl(
 		return DEFAULT_MARKET_BACKGROUND;
 	}
 	if (selectedGame === null || selectedGame === undefined) {
-		return DEFAULT_MARKET_BACKGROUND;
+		return esportsBackground;
 	}
 	const key = normalizeTagLabel(selectedGame);
 	const url = MARKET_BACKGROUND_BY_NORMALIZED_TAG[key];

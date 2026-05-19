@@ -38,6 +38,19 @@
 	flex-shrink: 0;
 }
 
+.home-skeleton__pill-logo {
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	flex-shrink: 0;
+
+	@media (max-width: 1099px) {
+		width: 20px;
+		height: 20px;
+		border-radius: 6px;
+	}
+}
+
 .home-skeleton__pill-label {
 	height: 14px;
 	display: inline-block;

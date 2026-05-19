@@ -1474,6 +1474,12 @@ $predictions-compact-card-inline: 60px;
 		line-height: 1;
 	}
 
+	.game-links-wrapper .game-links-bar .game-link__logo {
+		width: 20px;
+		height: 20px;
+		border-radius: 6px;
+	}
+
 	.predictions-grid {
 		grid-template-columns: 1fr;
 		gap: 0;

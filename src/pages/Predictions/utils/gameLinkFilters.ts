@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
+import type { Tag } from "@/services/api/tagService";
+import {
+	isRestrictedProductionMode,
+	restrictedDefaultTagLabel,
+} from "@/config/restrictedMode";
 import { resolveUmbrellaEventDate } from "./eventDates";
 
 export const LIVE_PILL_ID = "__LIVE__";
@@ -8,13 +13,41 @@ export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
 /** Horizontal pill bar; vertical sidebar uses `min-width: 1100px` in Predictions.scss. */
 export const GAME_FILTER_COMPACT_MEDIA = "(max-width: 1099px)";
 
+export function findEsportsTag(tags: Tag[]): Tag | undefined {
+	return tags.find((t) => normalizeTagLabel(t.label) === "ESPORTS");
+}
+
 /**
- * Value to use when clearing the game filter. `null` means "All" (no tag /
- * Live / Starting Soon slice). On compact widths, `GameLinks` renders an
- * explicit **All** pill that is active when this is `null`.
+ * Default sidebar selection on `/` — the ESPORTS tag label, or `null` if
+ * not loaded yet. In restricted production mode this is overridden to the
+ * Counter-Strike tag label by {@link homeDefaultSelectedTagLabel}.
  */
-export function gameFilterResetSelection(): string | null {
-	return null;
+export function defaultEsportsTagLabel(tags: Tag[]): string | null {
+	return findEsportsTag(tags)?.label ?? null;
+}
+
+/**
+ * Tag label to use as the home page's default-selected pill on first load.
+ * Counter-Strike in restricted production mode (the "All" pill is hidden
+ * there), ESPORTS otherwise.
+ */
+export function homeDefaultSelectedTagLabel(tags: Tag[]): string | null {
+	if (isRestrictedProductionMode()) {
+		return restrictedDefaultTagLabel(tags);
+	}
+	return defaultEsportsTagLabel(tags);
+}
+
+/**
+ * Value to use when resetting the game filter (e.g. header home click).
+ * Returns Counter-Strike in restricted production mode, ESPORTS otherwise.
+ */
+export function gameFilterResetSelection(tags: Tag[]): string | null {
+	return homeDefaultSelectedTagLabel(tags);
+}
+
+export function isEsportsMetaTagLabel(tagLabel: string): boolean {
+	return normalizeTagLabel(tagLabel) === "ESPORTS";
 }
 
 /** Same 4h post-start window as PredictionCard / FilteredPredictions calendar / Home. */

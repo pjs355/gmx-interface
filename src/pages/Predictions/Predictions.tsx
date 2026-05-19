@@ -44,17 +44,6 @@ export default function Predictions() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<Umbrella[]>([]);
 
-	// Listen for reset filter event from header
-	useEffect(() => {
-		const handleResetFilter = () => {
-			setSelectedGame(gameFilterResetSelection());
-		};
-
-		window.addEventListener("resetGameFilter", handleResetFilter);
-		return () => {
-			window.removeEventListener("resetGameFilter", handleResetFilter);
-		};
-	}, []);
 	const {
 		umbrellas,
 		loading,
@@ -64,6 +53,18 @@ export default function Predictions() {
 		multiMarketData,
 		tags,
 	} = usePredictionData();
+
+	// Listen for reset filter event from header
+	useEffect(() => {
+		const handleResetFilter = () => {
+			setSelectedGame(gameFilterResetSelection(tags));
+		};
+
+		window.addEventListener("resetGameFilter", handleResetFilter);
+		return () => {
+			window.removeEventListener("resetGameFilter", handleResetFilter);
+		};
+	}, [tags]);
 
 	const handleSearchActive = useCallback(
 		async (active: boolean, query: string) => {
