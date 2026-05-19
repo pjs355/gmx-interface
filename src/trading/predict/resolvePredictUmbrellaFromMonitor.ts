@@ -153,6 +153,30 @@ export function buildPredictUmbrellaLookup(
 	return { byToken, byMarketId };
 }
 
+/**
+ * True when monitor/catalog lookup maps this position's token or market id to `umbrellaId`.
+ * Used to reject a mismatched server `levelUpUmbrellaId` before trusting it.
+ */
+export function predictPositionMatchesUmbrellaInLookup(
+	pos: Pick<VenuePosition, "tokenId" | "numericMarketId">,
+	umbrellaId: string,
+	lookup: PredictUmbrellaLookup | null,
+): boolean {
+	if (!lookup) return false;
+	const resolvedId = umbrellaId.trim();
+	if (!resolvedId) return false;
+	const tid = normalizePredictTokenId(pos.tokenId ?? "");
+	if (tid) {
+		const mapped = lookup.byToken.get(tid);
+		if (mapped && String(mapped._id).trim() === resolvedId) return true;
+	}
+	if (pos.numericMarketId != null && Number.isFinite(pos.numericMarketId)) {
+		const mapped = lookup.byMarketId.get(String(Math.trunc(pos.numericMarketId)));
+		if (mapped && String(mapped._id).trim() === resolvedId) return true;
+	}
+	return false;
+}
+
 export function resolveUmbrellaForPredictPosition(
 	pos: Pick<VenuePosition, "tokenId" | "numericMarketId">,
 	lookup: PredictUmbrellaLookup,
@@ -315,7 +339,26 @@ export function matchVenuePositionToUmbrella(
 	const resolvedCatalogId = pos.levelUpUmbrellaId?.trim();
 	if (resolvedCatalogId) {
 		const byId = umbrellas.find((u) => String(u._id).trim() === resolvedCatalogId);
-		if (byId) return byId;
+		if (byId) {
+			if (venue === "predictfun") {
+				if (predictPositionMatchesUmbrellaInLookup(pos, resolvedCatalogId, predictLookup)) {
+					return byId;
+				}
+				logPredictUmbrellaOnce(
+					"reject-server-umbrella-id",
+					`${resolvedCatalogId}:${normalizePredictTokenId(pos.tokenId ?? "")}:${pos.numericMarketId ?? "na"}`,
+					{
+						levelUpUmbrellaId: resolvedCatalogId,
+						tokenId: normalizePredictTokenId(pos.tokenId ?? ""),
+						numericMarketId: pos.numericMarketId,
+						note:
+							"Server levelUpUmbrellaId ignored: position token/market id not in predictFun lookup for that umbrella.",
+					},
+				);
+			} else {
+				return byId;
+			}
+		}
 		/**
 		 * Batch resolve can return inactive umbrellas omitted from GET /umbrellas (active-only).
 		 * For Predict, still allow monitor/catalog `resolvePredictUmbrellaForDisplay` to run.

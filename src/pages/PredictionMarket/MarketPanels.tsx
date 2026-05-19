@@ -110,9 +110,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const levelUpOrderbook = levelUpOrderbookKey
 		? questionOrderbooks[levelUpOrderbookKey] ?? null
 		: null;
-	/** LevelUp line on the chart when the primary chart market's book has displayed depth. */
+	/** LevelUp line on the chart when the LevelUp book has resting shares. */
 	const chartLevelUpBookHasRestingShares =
-		levelUpOrderbookHasRestingShares(primaryChartOrderbook);
+		levelUpOrderbookHasRestingShares(levelUpOrderbook);
 	const levelUpContextMarket =
 		(levelUpOrderbookKey
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
