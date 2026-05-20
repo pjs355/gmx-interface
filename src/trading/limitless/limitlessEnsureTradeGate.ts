@@ -140,3 +140,15 @@ export function limitlessEnsureWarrantsAccountOverviewRefresh(data: unknown): bo
 	if (typeof pid === "string" && pid.trim() !== "" && Number.isFinite(Number(pid))) return true;
 	return typeof d.account === "string" && d.account.trim().length > 0;
 }
+
+/** Terminal ensure-account failure — do not React Query retry (would re-hammer createAccount). */
+export function isLimitlessProfileExistsNotLinkedApiError(err: unknown): boolean {
+	if (err == null || typeof err !== "object") return false;
+	const status = (err as { status?: unknown }).status;
+	if (status !== 409) return false;
+	const body = (err as { body?: unknown }).body;
+	if (body == null || typeof body !== "object") return false;
+	return (
+		(body as Record<string, unknown>).code === "LIMITLESS_PROFILE_EXISTS_NOT_LINKED"
+	);
+}

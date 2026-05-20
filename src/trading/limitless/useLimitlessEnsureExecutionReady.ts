@@ -12,13 +12,15 @@ import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { tradingQueryKeys } from "@/trading/queryKeys";
 import {
 	getLimitlessEnsureTradeGate,
+	isLimitlessProfileExistsNotLinkedApiError,
 	limitlessEnsureNotReadyCodeToWhy,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
-	readLimitlessApprovalCompleteFromEnsurePayload,
 } from "./limitlessEnsureTradeGate";
+import { postLimitlessEnsureAccountWhenNeeded } from "./limitlessEnsureAccountRequest";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 import { runLimitlessSignupWarmupBaseApprovals } from "./limitlessSignupWarmupBaseApprovals";
 import { getLimitlessBaseTxClientForAddress } from "./limitlessBaseTxClientForAddress";
+import { readLimitlessBuyUsdcAllowancesSufficientOnBase } from "./limitlessTradingApprovalsOnBase";
 
 const LOG_TAG = "[LimitlessActivation]";
 
@@ -96,12 +98,9 @@ const ENSURE_KICK_WATCHDOG_MS = 2_500;
  *  - On success, invalidates `tradingQueryKeys.accountOverview(profileId)` once
  *    so the next SOR `getRoute` sees `routingEligibility.limitless.canExecute: true`.
  *  - When `runSignupTimeBaseApprovals` is true (post-signup activator), after the
- *    ensure gate is ready the hook runs `verify-allowance` + Base USDC / CTF
- *    approvals using `warmupMarketSlug` from the ensure payload (any umbrella
- *    Limitless slug — CLOB spender is market-agnostic), mirroring Predict’s
- *    session + on-chain approval pass before the checklist marks the venue done.
- *    If the server omits `warmupMarketSlug` (no mapped umbrellas), this step is
- *    skipped and JIT approvals on first trade still apply.
+ *    ensure gate is ready the hook runs one USDC `approve` on Base if chain reads
+ *    show allowance is low (sell CTF deferred to first sell). Uses
+ *    `warmupMarketSlug` from the ensure payload.
  *  - If React Query stalls between `enabled` flipping true and queryFn firing
  *    (the classic post-Polymarket re-render burst symptom), the watchdog
  *    above kicks the query manually after `ENSURE_KICK_WATCHDOG_MS`.
@@ -170,8 +169,14 @@ export function useLimitlessEnsureExecutionReady(args: {
 				});
 			}
 			try {
-				const body = buildEnsureAccountBody ? await buildEnsureAccountBody() : undefined;
-				const data = await api.postLimitlessEnsureAccount(body);
+				const data = await postLimitlessEnsureAccountWhenNeeded(
+					qc,
+					ensureQueryKey,
+					qc.getQueryData(ensureQueryKey),
+					async () =>
+						buildEnsureAccountBody ? await buildEnsureAccountBody() : undefined,
+					(body) => api.postLimitlessEnsureAccount(body),
+				);
 				const elapsedMs = Math.round(performance.now() - startedAt);
 				const gate = getLimitlessEnsureTradeGate(data ?? null);
 				if (isTradingDebugLoggingEnabled()) {
@@ -193,7 +198,10 @@ export function useLimitlessEnsureExecutionReady(args: {
 		},
 		enabled: queryEnabled,
 		staleTime: 1000 * 60 * 30,
-		retry: MAX_ENSURE_FAILURES - 1,
+		retry: (failureCount, err) => {
+			if (isLimitlessProfileExistsNotLinkedApiError(err)) return false;
+			return failureCount < MAX_ENSURE_FAILURES - 1;
+		},
 	});
 
 	// Compute gate up-front so multiple effects can read it without
@@ -388,19 +396,6 @@ export function useLimitlessEnsureExecutionReady(args: {
 			return;
 		}
 
-		if (readLimitlessApprovalCompleteFromEnsurePayload(ensureQuery.data)) {
-			if (isTradingDebugLoggingEnabled()) {
-				console.info(LOG_TAG, "warmup:skipPartnerApprovalComplete", {
-					at: new Date().toISOString(),
-					slug,
-					reason: "limitlessAccount.approvalComplete_true",
-				});
-			}
-			completedWarmupKeyRef.current = doneKey;
-			setWarmupPhase("complete");
-			return;
-		}
-
 		let cancelled = false;
 		warmupInFlightRef.current = true;
 		setWarmupPhase("running");
@@ -408,6 +403,24 @@ export function useLimitlessEnsureExecutionReady(args: {
 
 		void (async () => {
 			try {
+				const initialAllowance = await api.postLimitlessVerifyAllowance(slug);
+				const buyAlreadyOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+					maker: effectiveMaker,
+					verify: initialAllowance,
+				});
+				if (buyAlreadyOk) {
+					if (isTradingDebugLoggingEnabled()) {
+						console.info(LOG_TAG, "warmup:skipBuyUsdcOnChainOk", {
+							at: new Date().toISOString(),
+							slug,
+							maker: `${effectiveMaker.slice(0, 10)}…`,
+						});
+					}
+					completedWarmupKeyRef.current = doneKey;
+					setWarmupPhase("complete");
+					return;
+				}
+
 				for (let attempt = 0; attempt < MAX_WARMUP_ATTEMPTS; attempt++) {
 					if (cancelled) return;
 					try {
@@ -452,7 +465,6 @@ export function useLimitlessEnsureExecutionReady(args: {
 				}
 				if (cancelled) return;
 				completedWarmupKeyRef.current = doneKey;
-				await qc.refetchQueries({ queryKey: ensureQueryKey });
 				await qc.invalidateQueries({
 					queryKey: tradingQueryKeys.accountOverview(profileId),
 				});

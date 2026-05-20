@@ -35,16 +35,20 @@ export function parsePrivyEvmTxHash(res: unknown): `0x${string}` {
 	return hash as `0x${string}`;
 }
 
+const DEFAULT_BASE_RECEIPT_TIMEOUT_MS = 120_000;
+
 /**
  * Waits until the tx is included with one confirmation and `status === success`.
  */
 export async function waitForBaseTransactionSuccess(
 	hash: `0x${string}`,
 	errorDetail?: string,
+	timeoutMs: number = DEFAULT_BASE_RECEIPT_TIMEOUT_MS,
 ): Promise<void> {
 	const receipt = await basePublicClient.waitForTransactionReceipt({
 		hash,
 		confirmations: 1,
+		timeout: timeoutMs,
 	});
 	if (receipt.status !== "success") {
 		const suffix = errorDetail?.trim() ? ` ${errorDetail.trim()}` : "";

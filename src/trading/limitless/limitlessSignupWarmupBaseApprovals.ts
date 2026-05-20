@@ -4,7 +4,6 @@ import type { LimitlessVerifyAllowanceResult } from "@/trading/limitless/limitle
 import {
 	ensureLimitlessTradingApprovalsOnBase,
 	readLimitlessBuyUsdcAllowancesSufficientOnBase,
-	readLimitlessSellCtfApprovalsState,
 } from "@/trading/limitless/limitlessTradingApprovalsOnBase";
 import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 
@@ -16,12 +15,11 @@ type PostVerify = (
 ) => Promise<LimitlessVerifyAllowanceResult>;
 
 /**
- * Post-signup Base approvals for Limitless: one canonical market slug from
- * `ensure-account` drives `verify-allowance`, then **buy** USDC approvals, then
- * **one** **sell** CTF `setApprovalForAll` pass (idempotent when already approved).
- * Per-trade JIT skips work when chain already satisfies the side
- * (`readLimitlessSellCtfApprovalsSufficientOnBase` / partner USDC OK); signup sell
- * warmup uses {@link readLimitlessSellCtfApprovalsState} so failed reads defer to JIT.
+ * Post-signup Base approvals for Limitless — **buy only** (USDC `approve`).
+ *
+ * Sell CTF `setApprovalForAll` is deferred to the first sell trade (JIT). That
+ * keeps signup to at most one on-chain signature and avoids duplicating the
+ * 1–2 CTF operator approvals you saw when warmup and JIT raced each other.
  */
 export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 	marketSlug: string;
@@ -84,72 +82,15 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 		return;
 	}
 
-	const buyPartnerUsdcOk = allowance.hasMinimumAllowance;
-	let didSendTransactions = false;
-	if (!buyPartnerUsdcOk) {
-		const r = await ensureLimitlessTradingApprovalsOnBase({
-			maker,
-			getTxClientForAddress: opts.getTxClientForAddress,
-			verify: allowance,
-			side: "buy",
-		});
-		didSendTransactions = r.didSendTransactions;
-	}
-
-	if (!allowance.hasMinimumAllowance) {
-		allowance = await opts.postLimitlessVerifyAllowance(slug);
-		if (!allowance.hasMinimumAllowance && didSendTransactions) {
-			await new Promise((res) => setTimeout(res, 2000));
-			allowance = await opts.postLimitlessVerifyAllowance(slug);
-		}
-		if (!allowance.hasMinimumAllowance) {
-			const onChainBuyOk =
-				await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-					maker,
-					verify: allowance,
-				});
-			if (onChainBuyOk) {
-				if (isTradingDebugLoggingEnabled()) {
-					console.info(LOG, "partner_allowance_lag_on_chain_ok", {
-						slug,
-						maker: clipAddr(maker),
-					});
-				}
-				// Continue to one-shot sell CTF warmup — do not return early.
-			} else {
-				const detail = [
-					`maker=${clipAddr(maker)}`,
-					`fundTarget=${fundTargetLog ? clipAddr(fundTargetLog) : "(none)"}`,
-					`spender=${clipAddr(allowance.spender)}`,
-				];
-				if (allowance.limitlessCheckedAddress?.trim()) {
-					detail.push(`partnerChecked=${clipAddr(allowance.limitlessCheckedAddress)}`);
-				}
-				throw new Error(
-					`Limitless still reports insufficient USDC allowance after Base setup (${detail.join(", ")}).`,
-				);
-			}
-		}
-	}
-
-	allowance = await opts.postLimitlessVerifyAllowance(slug);
-	const sellRead = await readLimitlessSellCtfApprovalsState({
+	const buyOnChainOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
 		maker,
 		verify: allowance,
 	});
-	if (sellRead === "sufficient") {
+	if (buyOnChainOk) {
 		if (isTradingDebugLoggingEnabled()) {
-			console.info(LOG, "sell_ctf_warmup_skip", {
+			console.info(LOG, "buy_usdc_warmup_skip", {
 				slug,
 				reason: "already_sufficient_on_chain",
-				maker: clipAddr(maker),
-			});
-		}
-	} else if (sellRead === "unknown") {
-		if (isTradingDebugLoggingEnabled()) {
-			console.info(LOG, "sell_ctf_warmup_skip", {
-				slug,
-				reason: "read_unreliable_defer_jit",
 				maker: clipAddr(maker),
 			});
 		}
@@ -158,12 +99,29 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 			maker,
 			getTxClientForAddress: opts.getTxClientForAddress,
 			verify: allowance,
-			side: "sell",
-			sellOnReadRevert: "skipOperator",
+			side: "buy",
 		});
+		allowance = await opts.postLimitlessVerifyAllowance(slug);
+		const afterBuy = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+			maker,
+			verify: allowance,
+		});
+		if (!afterBuy) {
+			const detail = [
+				`maker=${clipAddr(maker)}`,
+				`fundTarget=${fundTargetLog ? clipAddr(fundTargetLog) : "(none)"}`,
+				`spender=${clipAddr(allowance.spender)}`,
+			];
+			throw new Error(
+				`Limitless USDC allowance still insufficient on Base after signup warmup (${detail.join(", ")}).`,
+			);
+		}
 	}
 
 	if (isTradingDebugLoggingEnabled()) {
-		console.info(LOG, "complete", { slug });
+		console.info(LOG, "complete", {
+			slug,
+			note: "sell CTF deferred to first sell trade",
+		});
 	}
 }

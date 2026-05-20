@@ -10,6 +10,30 @@ import {
 import { errorChainMentionsTransferFromFailed } from "@/trading/lifi/lifiTransferFromFailed";
 
 /** Walk Privy / fetch error shapes for HTTP 400 from `…/wallets/…/rpc`. */
+/** Coinbase / viem when the sender has no Base ETH and gas is not sponsored. */
+function isZeroBaseGasAllowanceEstimateError(err: unknown): boolean {
+	const parts: string[] = [];
+	let e: unknown = err;
+	for (let d = 0; d < 6 && e; d++) {
+		if (typeof e === "string") parts.push(e);
+		else if (e instanceof Error) parts.push(e.message);
+		else if (typeof e === "object") {
+			const o = e as Record<string, unknown>;
+			if (typeof o.message === "string") parts.push(o.message);
+			if (typeof o.details === "string") parts.push(o.details);
+		}
+		e =
+			typeof e === "object" && e
+				? (e as Record<string, unknown>).cause
+				: undefined;
+	}
+	const blob = parts.join(" ").toLowerCase();
+	return (
+		blob.includes("gas required exceeds allowance") ||
+		blob.includes("insufficient funds for gas")
+	);
+}
+
 function isPrivyWalletHttp400(err: unknown): boolean {
 	let e: unknown = err;
 	for (let d = 0; d < 8 && e && typeof e === "object"; d++) {
@@ -77,6 +101,11 @@ export function createPrivyEmbeddedSendTransactionCapable(
 							.includes("useroperation reverted")
 					) {
 						throw err;
+					}
+					if (isZeroBaseGasAllowanceEstimateError(err)) {
+						throw new Error(
+							"Privy gas sponsorship failed on Base and this wallet has no ETH for self-funded gas. Wait a few seconds and retry, or contact support if it persists.",
+						);
 					}
 					if (!isPrivyWalletHttp400(err)) throw err;
 					if (import.meta.env.DEV) {

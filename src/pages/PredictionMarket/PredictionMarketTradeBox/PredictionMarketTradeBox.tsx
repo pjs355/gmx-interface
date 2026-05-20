@@ -49,6 +49,7 @@ import { calculateFeeMatchingBackend } from "./feeLevelUp";
 import { getVenueConfig } from "@/config/venueConfig";
 import {
 	ensureLimitlessTradingApprovalsOnBase,
+	readLimitlessBuyUsdcAllowancesSufficientOnBase,
 	readLimitlessSellCtfApprovalsSufficientOnBase,
 } from "@/trading/limitless/limitlessTradingApprovalsOnBase";
 import { getLimitlessBaseTxClientForAddress } from "@/trading/limitless/limitlessBaseTxClientForAddress";
@@ -153,9 +154,12 @@ import {
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "./feeLimitless";
 import {
 	getLimitlessEnsureTradeGate,
+	isLimitlessProfileExistsNotLinkedApiError,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
 } from "@/trading/limitless/limitlessEnsureTradeGate";
 import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
+import { postLimitlessEnsureAccountWhenNeeded } from "@/trading/limitless/limitlessEnsureAccountRequest";
+import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
 import {
 	buildLimitlessSignedOrderFromMarket,
 	type BuildLimitlessSorOrderInput,
@@ -288,27 +292,35 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const privateApi = usePrivateApiClient();
   const profileQuery = useCurrentProfile({ enabled: authenticated });
   const profileId = profileQuery.data?._id;
+  const queryClient = useQueryClient();
+  const setupActivation = useSetupActivationOptional();
+  const limitlessEnsureQueryKey = profileId
+    ? tradingQueryKeys.limitlessEnsureAccount(profileId)
+    : ["trading", "limitlessEnsure", "__disabled__"];
+  /** LimitlessBackgroundActivation owns the initial ensure-account; trade box reads cache and refetches only after JIT approvals. */
   const limitlessEnsureQuery = useQuery({
-    queryKey: profileId
-      ? tradingQueryKeys.limitlessEnsureAccount(profileId)
-      : ["trading", "limitlessEnsure", "__disabled__"],
-    enabled: Boolean(authenticated && profileId && signerReady),
+    queryKey: limitlessEnsureQueryKey,
+    enabled: false,
     queryFn: async () => {
-      let body: Record<string, unknown> | undefined;
-      if (signer) {
-        try {
-          body = await buildLimitlessEoaEnsureBodyFromSigner({
+      return postLimitlessEnsureAccountWhenNeeded(
+        queryClient,
+        limitlessEnsureQueryKey,
+        queryClient.getQueryData(limitlessEnsureQueryKey),
+        async () => {
+          if (!signer) return undefined;
+          return buildLimitlessEoaEnsureBodyFromSigner({
             getPlainSigningMessage: () => privateApi.getLimitlessAuthSigningMessage(),
             signer,
           });
-        } catch (e) {
-          console.warn("[Limitless/Warmup] ensure-account EOA body failed", e);
-        }
-      }
-      return privateApi.postLimitlessEnsureAccount(body);
+        },
+        (body) => privateApi.postLimitlessEnsureAccount(body),
+      );
     },
     staleTime: 1000 * 60 * 30,
-    retry: 1,
+    retry: (failureCount, err) => {
+      if (isLimitlessProfileExistsNotLinkedApiError(err)) return false;
+      return failureCount < 1;
+    },
   });
   const limitlessEnsureGate = useMemo(
     () => getLimitlessEnsureTradeGate(limitlessEnsureQuery.data ?? null),
@@ -483,7 +495,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowQuote.debouncedAmount,
   ]);
 
-  const queryClient = useQueryClient();
   const { signMessage: privySolanaSignMessage } = useSolanaSignMessage();
 
   const handleStartDflowProofForTrade = useCallback(async () => {
@@ -1002,8 +1013,11 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       hasLimitlessMapping: Boolean(matchedMonitor?.limitless),
       ready: limitlessReady,
       loading:
-        limitlessEnsureQuery.isLoading ||
-        (authenticated && Boolean(profileId) && !limitlessEnsureQuery.isFetched),
+        Boolean(setupActivation?.venues.limitless.setupInProgress) ||
+        (authenticated &&
+          Boolean(profileId) &&
+          limitlessEnsureQuery.data == null &&
+          !limitlessEnsureQuery.isError),
       blockedReason: limitlessEnsureQuery.isError
         ? formatErrorForUser(limitlessEnsureQuery.error)
         : limitlessEnsureGate.ready
@@ -1017,13 +1031,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     limitlessReady,
     limitlessEnsureGate.ready,
     limitlessEnsureGate.blockedReason,
-    limitlessEnsureQuery.isLoading,
-    limitlessEnsureQuery.isFetched,
-    limitlessEnsureQuery.isError,
-    limitlessEnsureQuery.error,
-    limitlessEnsureQuery.data,
+    setupActivation?.venues.limitless.setupInProgress,
     authenticated,
     profileId,
+    limitlessEnsureQuery.data,
+    limitlessEnsureQuery.isError,
+    limitlessEnsureQuery.error,
   ]);
 
   const predictTrading = useMemo(
@@ -1487,15 +1500,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       });
 
       /**
-       * Buys: private `verify-allowance` sets `hasMinimumAllowance: true` optimistically (no
-       * on-chain USDC probe). When true, we skip `ensureLimitlessTradingApprovalsOnBase`, so a
-       * successful buy does not prove the embedded wallet ran a sponsored USDC `approve`.
-       * Sells still run CTF `setApprovalForAll` when `sellCtfReadsOk` is false.
-       *
-       * Partner delegated + `createServerWallet: true`: `isDelegatedServerWalletSubAccount`
-       * skips Privy Base JIT (Limitless provisions the managed maker).
+       * Buys: trust on-chain USDC allowance reads, not partner `hasMinimumAllowance`
+       * (server sets that flag optimistically). Sells use CTF reads when needed.
        */
-      const buyPartnerUsdcOk = ctx.side === "buy" && allowance.hasMinimumAllowance;
+      const buyOnChainOk =
+        ctx.side === "buy" && !isDelegatedServerWalletSubAccount
+          ? await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+              maker,
+              verify: allowance,
+            })
+          : false;
       const sellCtfReadsOk =
         ctx.side === "sell" && !isDelegatedServerWalletSubAccount
           ? await readLimitlessSellCtfApprovalsSufficientOnBase({
@@ -1508,7 +1522,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         routeSlug: slug,
         effectiveVenueSlug,
         isDelegatedServerWalletSubAccount,
-        hasMinimumAllowance: allowance.hasMinimumAllowance,
+        buyOnChainOk: ctx.side === "buy" ? buyOnChainOk : undefined,
         sellCtfReadsOk: ctx.side === "sell" ? sellCtfReadsOk : undefined,
       });
 
@@ -1527,12 +1541,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
             reason: "delegated_server_wallet_sub_account",
             note: "Limitless provisions approvals on managed wallet; skip Privy Base JIT",
           });
-        } else if (ctx.side === "buy" && buyPartnerUsdcOk) {
+        } else if (ctx.side === "buy" && buyOnChainOk) {
           console.info(lxJit, "phase", {
             step: "on_chain_approvals_skipped",
             routeSlug: slug,
             effectiveVenueSlug,
-            reason: "buy_partner_usdc_ok",
+            reason: "buy_usdc_on_chain_ok",
           });
         } else if (ctx.side === "sell" && sellCtfReadsOk) {
           console.info(lxJit, "phase", {
@@ -1577,43 +1591,40 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
         }
       }
 
-      if (
-        ctx.side === "buy" &&
-        !allowance.hasMinimumAllowance &&
-        !isDelegatedServerWalletSubAccount
-      ) {
+      if (ctx.side === "buy" && didSendTransactions && !isDelegatedServerWalletSubAccount) {
         console.info(lxJit, "phase", {
-          step: "partner_usdc_recheck",
+          step: "buy_usdc_on_chain_recheck",
           routeSlug: slug,
           effectiveVenueSlug,
           didSendTransactions,
         });
         allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
         effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
-        if (!allowance.hasMinimumAllowance && didSendTransactions) {
+        let buyOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+          maker,
+          verify: allowance,
+        });
+        if (!buyOk) {
           await new Promise((r) => setTimeout(r, 2000));
-          allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
-          effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
+          buyOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+            maker,
+            verify: allowance,
+          });
         }
-        if (!allowance.hasMinimumAllowance) {
+        if (!buyOk) {
           const detail = [
             `maker=${clipAddr(maker)}`,
             `userBaseFunding=${clipAddr(userBaseFunding || "(none)")}`,
             `spender=${clipAddr(allowance.spender)}`,
           ];
-          if (allowance.limitlessCheckedAddress?.trim()) {
-            detail.push(`partnerChecked=${clipAddr(allowance.limitlessCheckedAddress)}`);
-          }
-          console.error(lxJit, "blocked after partner USDC recheck", {
+          console.error(lxJit, "blocked after buy USDC on-chain recheck", {
             routeSlug: slug,
             effectiveVenueSlug,
-            hasMinimumAllowance: allowance.hasMinimumAllowance,
             detail,
           });
-          console.error(lxJit, "USDC allowance detail", { detail });
           throw new Error(userMessage(TRADE_LIMITLESS_USDC_ALLOWANCE));
         }
-        console.info(lxJit, "partner USDC OK", { routeSlug: slug, effectiveVenueSlug });
+        console.info(lxJit, "buy USDC on-chain OK", { routeSlug: slug, effectiveVenueSlug });
       }
       console.info(lxJit, "phase", {
         step: "ensure_account_refetch",

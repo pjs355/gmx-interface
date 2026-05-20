@@ -49,6 +49,7 @@ import { tradingQueryKeys } from "@/trading/queryKeys";
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
 import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
+import { postLimitlessEnsureAccountWhenNeeded } from "@/trading/limitless/limitlessEnsureAccountRequest";
 import { redeemLimitlessWinningPositionOnBase } from "@/trading/limitless/limitlessRedeemOnBase";
 import { getLimitlessBaseTxClientForAddress } from "@/trading/limitless/limitlessBaseTxClientForAddress";
 const BASE_CHAIN_ID = 8453;
@@ -926,19 +927,19 @@ export function useClaimForVenue(
 			if (ownerId == null) {
 				ensureData = await queryClient.fetchQuery({
 					queryKey: ensureKey,
-					queryFn: async () => {
-						let body: Record<string, unknown> | undefined;
-						try {
-							body = await buildLimitlessEoaEnsureBodyFromSigner({
-								getPlainSigningMessage: () =>
-									privateApi.getLimitlessAuthSigningMessage(),
-								signer,
-							});
-						} catch (e) {
-							console.warn("[claim] limitless ensure EOA body failed", e);
-						}
-						return privateApi.postLimitlessEnsureAccount(body);
-					},
+					queryFn: async () =>
+						postLimitlessEnsureAccountWhenNeeded(
+							queryClient,
+							ensureKey,
+							queryClient.getQueryData(ensureKey),
+							async () =>
+								buildLimitlessEoaEnsureBodyFromSigner({
+									getPlainSigningMessage: () =>
+										privateApi.getLimitlessAuthSigningMessage(),
+									signer,
+								}),
+							(body) => privateApi.postLimitlessEnsureAccount(body),
+						),
 				});
 				ownerId = parseLimitlessOwnerIdFromEnsureData(ensureData);
 			}

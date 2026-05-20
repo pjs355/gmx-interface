@@ -91,6 +91,37 @@ const minUsdcAllowance = maxUint256 / 2n;
 
 const JIT = "[Limitless/JIT]";
 
+/** One Base approval batch per maker — signup warmup and trade JIT must not double-send. */
+const limitlessApprovalLocks = new Map<string, Promise<void>>();
+
+async function withLimitlessApprovalLock<T>(
+	maker: string,
+	fn: () => Promise<T>,
+): Promise<T> {
+	const key = maker.trim().toLowerCase();
+	const prior = limitlessApprovalLocks.get(key) ?? Promise.resolve();
+	let release!: () => void;
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	limitlessApprovalLocks.set(
+		key,
+		prior.then(() => gate),
+	);
+	await prior;
+	try {
+		return await fn();
+	} finally {
+		release();
+		if (limitlessApprovalLocks.get(key) === gate) {
+			limitlessApprovalLocks.delete(key);
+		}
+	}
+}
+
+/** Brief pause between sequential Privy Base sends — reduces wallet RPC bursts. */
+const PRIVY_BASE_APPROVAL_PACE_MS = 350;
+
 const isApprovedForAllReadRetryDelayMs = 180;
 
 /** Two attempts with a short pause so transient RPC issues do not force a CTF tx. */
@@ -490,6 +521,20 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 	 */
 	sellOnReadRevert?: LimitlessSellReadRevertHandling;
 }): Promise<{ didSendTransactions: boolean }> {
+	return withLimitlessApprovalLock(opts.maker, () =>
+		ensureLimitlessTradingApprovalsOnBaseInner(opts),
+	);
+}
+
+async function ensureLimitlessTradingApprovalsOnBaseInner(opts: {
+	maker: string;
+	getTxClientForAddress: (
+		address: string,
+	) => Promise<SendTransactionCapable | null | undefined>;
+	verify: LimitlessVerifyAllowanceResult;
+	side: "buy" | "sell";
+	sellOnReadRevert?: LimitlessSellReadRevertHandling;
+}): Promise<{ didSendTransactions: boolean }> {
 	const sellOnReadRevert = opts.sellOnReadRevert ?? "queueApproval";
 	if (opts.verify == null || typeof opts.verify !== "object") {
 		throw new Error(
@@ -645,6 +690,9 @@ export async function ensureLimitlessTradingApprovalsOnBase(opts: {
 	}
 
 	for (let i = 0; i < calls.length; i += 1) {
+		if (i > 0) {
+			await new Promise((r) => setTimeout(r, PRIVY_BASE_APPROVAL_PACE_MS));
+		}
 		const call = calls[i]!;
 		const step = `${i + 1}/${calls.length}`;
 		const kind = classifyApprovalCall(call.to, usdc, resolvedCtf);
