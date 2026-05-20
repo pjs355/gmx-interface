@@ -17,6 +17,7 @@ import {
 	formatSorBuyCostUsdDisplay,
 	formatSorSellProceedsUsdDisplay,
 	formatSorLegAvgForDisplay,
+	sorBuyDrawerAllInCostUsd,
 	sorBuyNetHeldTotalSharesFromLegs,
 	sorBuyPredictLegNetHeldShares,
 } from "@/trading/sor";
@@ -995,12 +996,15 @@ export default function SmartRoutingSection({
 								<div className="smart-routing-drawer__fees">
 									<SorRouteConsolidatedFeesSummary route={displayRoute} variant="smart-drawer" />
 								</div>
-								{Number.isFinite(displayRoute.totalCost) && (
-									<div className="smart-routing-drawer__total">
-										<span>Total Cost</span>
-										<span>$ {formatSorBuyCostUsdDisplay(displayRoute.totalCost)}</span>
-									</div>
-								)}
+								{(() => {
+									const drawerTotal = sorBuyDrawerAllInCostUsd(displayRoute);
+									return drawerTotal != null ? (
+										<div className="smart-routing-drawer__total">
+											<span>Total Cost</span>
+											<span>$ {formatSorBuyCostUsdDisplay(drawerTotal)}</span>
+										</div>
+									) : null;
+								})()}
 							</div>
 						</div>
 					)}
@@ -1379,12 +1383,15 @@ export default function SmartRoutingSection({
 									<div className="smart-routing-drawer__fees">
 										<SorRouteConsolidatedFeesSummary route={feeR} variant="smart-drawer" />
 									</div>
-									{Number.isFinite(p.totalCost) && (
-										<div className="smart-routing-drawer__total">
-											<span>Total Cost</span>
-											<span>$ {formatSorBuyCostUsdDisplay(p.totalCost)}</span>
-										</div>
-									)}
+									{(() => {
+										const drawerTotal = sorBuyDrawerAllInCostUsd(feeR);
+										return drawerTotal != null ? (
+											<div className="smart-routing-drawer__total">
+												<span>Total Cost</span>
+												<span>$ {formatSorBuyCostUsdDisplay(drawerTotal)}</span>
+											</div>
+										) : null;
+									})()}
 								</div>
 							</div>
 						)}

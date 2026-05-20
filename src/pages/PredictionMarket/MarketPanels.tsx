@@ -22,7 +22,7 @@ import {
 } from "./utils";
 import { useUmbrellaTradePricing } from "./useUmbrellaTradePricing";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
-import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
+import { OrderbookSkeleton, VenueBooksChartSkeleton } from "./Skeletons";
 
 type PanelsProps = {
 	umbrella: Umbrella;
@@ -329,21 +329,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			</div>
 		</div>
 	) : showChartPlaceholder ? (
-		<div
-			className="ExchangeChart venue-books-chart venue-books-chart-skeleton"
-			style={{
-				display: "flex",
-				flexDirection: "column",
-				minHeight: 300,
-			}}
-		>
-			<div
-				className="prediction-market-chart-shell flex grow flex-col overflow-visible rounded-4 bg-black"
-				style={{ minHeight: 300 }}
-			>
-				<ChartSkeleton />
-			</div>
-		</div>
+		<VenueBooksChartSkeleton />
 	) : null;
 
 	const venueBooksSectionTitle =

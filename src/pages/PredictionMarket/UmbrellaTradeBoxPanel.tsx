@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useMedia } from "react-use";
+import { PREDICTIONS_TRADE_PANEL_DESKTOP_MEDIA } from "@/pages/Predictions/utils/gameLinkFilters";
 import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarketTradeBox";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -7,7 +8,7 @@ import type { TradingVenue } from "./PredictionMarketTradeBox/types";
 import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
 import type { TradingPagePrices } from "@/hooks/useTradingPagePrices";
-import { TradeBoxSkeleton } from "./Skeletons";
+import { PredictionTradeColumnShell, TradeBoxSkeleton } from "./Skeletons";
 
 export type UmbrellaTradeBoxPanelProps = {
 	umbrella: Umbrella;
@@ -33,24 +34,8 @@ export function UmbrellaTradeBoxPanel({
 	mobilePeekBar = "default",
 }: UmbrellaTradeBoxPanelProps) {
 	const [, setTradeSide] = useState<"buy" | "sell">("buy");
-	/* Match desktop market grid (`predictions-page__home-trade-grid` @ 1101px). */
-	const wideTradeDock = useMedia("(min-width: 1101px)");
+	const wideTradeDock = useMedia(PREDICTIONS_TRADE_PANEL_DESKTOP_MEDIA);
 	const compactTradeDock = !wideTradeDock;
-
-	/* Shell is only for states that do not mount `PredictionMarketTradeBox`
-	 * (that component’s responsive container already wraps desktop with the shell). */
-	const desktopTradeDockShell = (child: React.ReactNode) =>
-		wideTradeDock ? (
-			<div
-				className="prediction-trade-column-shell"
-				data-qa="prediction-tradebox"
-			>
-				<div className="prediction-trade-column-underlay" aria-hidden />
-				<div className="prediction-trade-column-body">{child}</div>
-			</div>
-		) : (
-			child
-		);
 
 	const pandascoreMatchId =
 		typeof umbrella?.pandascore_matchId === "string"
@@ -61,14 +46,16 @@ export function UmbrellaTradeBoxPanel({
 	const umbrellaPredictFun = umbrella?.exchangeMatching?.predictFun;
 
 	if (settledInfo) {
-		return desktopTradeDockShell(
-			<div className="prediction-market-tradebox match-settled-banner">
-				<div className="match-settled-banner__content">
-					<div className="match-settled-banner__winner">
-						{settledInfo.winnerName} has won!
+		return (
+			<PredictionTradeColumnShell>
+				<div className="prediction-market-tradebox match-settled-banner">
+					<div className="match-settled-banner__content">
+						<div className="match-settled-banner__winner">
+							{settledInfo.winnerName} has won!
+						</div>
 					</div>
 				</div>
-			</div>
+			</PredictionTradeColumnShell>
 		);
 	}
 
@@ -79,7 +66,11 @@ export function UmbrellaTradeBoxPanel({
 	// Desktop (≥1101px): amount/venue can persist across market switches (sticky context).
 	// Mobile/tablet: we remount the trade box per market + clear sticky so venue rows reset.
 	if (!activeMarket) {
-		return desktopTradeDockShell(<TradeBoxSkeleton />);
+		return (
+			<PredictionTradeColumnShell>
+				<TradeBoxSkeleton />
+			</PredictionTradeColumnShell>
+		);
 	}
 
 	const orderbook = questionOrderbooks[getMarketId(activeMarket)] as any;

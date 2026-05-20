@@ -13,6 +13,11 @@ import {
 	isRestrictedProductionMode,
 } from "@/config/restrictedMode";
 import {
+	getListingYesNoPricesForUmbrella,
+	isListingUntradeableEmptyBook,
+} from "@/helpers/predictionUtils";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import {
 	defaultEsportsTagLabel,
 	findEsportsTag,
 	homeDefaultSelectedTagLabel,
@@ -55,6 +60,7 @@ export default function GameLinks({
 	filterType,
 }: GameLinksProps) {
 	const { tags, tagsLoading } = usePredictionData();
+	const { appState } = useOddsMonitor();
 	const now = useNowTick(60_000);
 
 	const scrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -174,12 +180,18 @@ export default function GameLinks({
 	const liveMarketCount = React.useMemo(() => {
 		let n = 0;
 		for (const u of linkFilterState.typeFilteredUmbrellas) {
-			if (isUmbrellaLiveByEventDate(u, now, linkFilterState.esportsTagId)) {
-				n += 1;
+			if (!isUmbrellaLiveByEventDate(u, now, linkFilterState.esportsTagId)) {
+				continue;
 			}
+			const { yes, no } = getListingYesNoPricesForUmbrella(
+				u,
+				appState?.markets,
+			);
+			if (isListingUntradeableEmptyBook(yes, no)) continue;
+			n += 1;
 		}
 		return n;
-	}, [linkFilterState, now]);
+	}, [linkFilterState, now, appState?.markets]);
 
 	const startingSoonMarketCount = React.useMemo(() => {
 		let n = 0;

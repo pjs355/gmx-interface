@@ -44,7 +44,9 @@ import {
 	TRADE_POLY_SAFE_NOT_PROVISIONED,
 	TRADE_PREDICT_APPROVALS_INCOMPLETE,
 	TRADE_SOR_NOT_READY,
+	BTN_NO_SHARES_AVAILABLE,
 } from "@/errors";
+import { shouldSuppressBuyVenueQuotes } from "@/helpers/predictionUtils";
 import { calculateFeeMatchingBackend } from "./feeLevelUp";
 import { getVenueConfig } from "@/config/venueConfig";
 import {
@@ -540,6 +542,16 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     crossBuyYes: propCrossBuyYes ?? null,
     crossBuyNo: propCrossBuyNo ?? null,
   }), [propCrossBuyYes, propCrossBuyNo]);
+
+  const suppressBuyVenueQuotes = useMemo(
+    () =>
+      shouldSuppressBuyVenueQuotes(
+        state.side,
+        crossBuyPrices.crossBuyYes,
+        crossBuyPrices.crossBuyNo,
+      ),
+    [state.side, crossBuyPrices.crossBuyYes, crossBuyPrices.crossBuyNo],
+  );
 
   const { yesTeamLabel, noTeamLabel } = useMemo(
     () => getYesNoTeamLabels(market, umbrellaDisplayName),
@@ -2215,6 +2227,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const sorRouteEnabled = !!state.selectedPosition
     && sorAmountMeetsFloor
+    && !suppressBuyVenueQuotes
     && (state.orderType !== "limit" ||
       (state.tradingVenue !== "all" &&
         state.tradingVenue !== "dflow" &&
@@ -2781,6 +2794,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   });
 
   const buttonStateForUi = useMemo(() => {
+    if (suppressBuyVenueQuotes) {
+      return {
+        text: userMessage(BTN_NO_SHARES_AVAILABLE),
+        disabled: true,
+        onClick: () => {},
+      };
+    }
     if (state.tradingVenue === "levelup" && executionGate.blocked) {
       return {
         ...buttonState,
@@ -2791,7 +2811,12 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       };
     }
     return buttonState;
-  }, [executionGate.blocked, buttonState, state.tradingVenue]);
+  }, [
+    suppressBuyVenueQuotes,
+    executionGate.blocked,
+    buttonState,
+    state.tradingVenue,
+  ]);
 
   /**
    * Unlock sell UX whenever aggregate holdings are already known (`sellTotalShares`),
@@ -3054,7 +3079,10 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       shareBalances={tradeBoxShareBalances}
       mobilePeekBar={mobilePeekBar}
       dflowUninitAtSubmit={dflowUninitAtSubmit}
-      routePreviewAllowed={debouncedSorRoutePreviewAllowed}
+      routePreviewAllowed={
+        suppressBuyVenueQuotes ? false : debouncedSorRoutePreviewAllowed
+      }
+      suppressBuyVenueQuotes={suppressBuyVenueQuotes}
       smartRoutingMarketKey={smartRoutingMarketKey}
       predictFunFeeRateBps={predictMarketDetail?.feeRateBps}
       dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}

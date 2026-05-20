@@ -1,7 +1,8 @@
 import type { OddsDisplayStyle } from "@/utils/oddsDisplayFormat";
 import { formatOddsPrice } from "@/utils/oddsDisplayFormat";
-import type { RoutePlan, SorChain, SorVenue } from "./sor-types";
+import type { RouteLeg, RoutePlan, SorChain, SorVenue } from "./sor-types";
 import { VENUE_DISPLAY_NAMES } from "./sor-types";
+import { isTokenSideFeeVenue, wireAmountUsdForVenue } from "./wireAmount";
 
 const CHAIN_LABEL: Record<SorChain, string> = {
 	base: "Base",
@@ -138,6 +139,73 @@ export function derivedBridgeUsdForDisplay(route: RoutePlan): { displayUsd: numb
 	}
 
 	return { displayUsd, legSumUsd };
+}
+
+function sorBuyLegGrossUsd(leg: RouteLeg): number {
+	if (
+		!(leg.shares > 0) ||
+		!(leg.avgPrice > 0 && leg.avgPrice < 1) ||
+		!Number.isFinite(leg.shares) ||
+		!Number.isFinite(leg.avgPrice)
+	) {
+		return 0;
+	}
+	return leg.shares * leg.avgPrice;
+}
+
+/**
+ * USDC the user spends on one buy leg (excludes bridge — that is rolled into the drawer total separately).
+ * Token-side venues (Polymarket, Predict, Limitless) pay fees from delivered shares, so collateral = notional.
+ * Collateral-side venues (LevelUp, Kalshi) debit notional + fee from USDC.
+ */
+export function sorBuyLegUsdcSpendUsd(leg: RouteLeg): number {
+	const gross = sorBuyLegGrossUsd(leg);
+	const fee = Number.isFinite(leg.fee) ? Math.max(0, leg.fee) : 0;
+
+	if (isTokenSideFeeVenue(leg.venue)) {
+		const wire = wireAmountUsdForVenue(leg);
+		return wire > 0 ? wire : gross;
+	}
+
+	const exec =
+		typeof leg.executionAmountUsd === "number" &&
+		Number.isFinite(leg.executionAmountUsd)
+			? Math.max(0, leg.executionAmountUsd)
+			: 0;
+	const allIn = gross + fee;
+	if (exec + 1e-9 >= allIn) return exec;
+	if (allIn > 0) return allIn;
+	return exec;
+}
+
+/**
+ * Smart-routing buy drawer “Total Cost”: leg notionals + collateral-side fees + bridge.
+ * Matches the leg rows (gross USD) + consolidated Fees row. Guest / theoretical LevelUp
+ * previews sometimes ship `totalCost` as notional-only; this derives the all-in spend.
+ */
+export function sorBuyDrawerAllInCostUsd(
+	route: Pick<RoutePlan, "side" | "legs" | "totalCost" | "totalBridgeCost">,
+): number | null {
+	if (route.side !== "buy" || route.legs.length === 0) return null;
+
+	let usdcSpend = 0;
+	for (const leg of route.legs) {
+		usdcSpend += sorBuyLegUsdcSpendUsd(leg);
+	}
+
+	const bridge = derivedBridgeUsdForDisplay(route as RoutePlan);
+	usdcSpend += bridge.displayUsd > 0 ? bridge.displayUsd : bridge.legSumUsd;
+
+	if (usdcSpend > 1e-9) return usdcSpend;
+
+	if (
+		typeof route.totalCost === "number" &&
+		Number.isFinite(route.totalCost) &&
+		route.totalCost > 0
+	) {
+		return route.totalCost;
+	}
+	return null;
 }
 
 /**

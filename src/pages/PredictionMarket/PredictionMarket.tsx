@@ -23,7 +23,7 @@ import "../Predictions/Predictions.scss";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
 import { hasUsableOrderbookSnapshot } from "./utils";
-import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
+import { TradingPageSkeleton } from "./Skeletons";
 
 function sanitizeUmbrellaQuestions(raw: unknown[]): PredictionMarket[] {
 	return raw.filter(
@@ -489,7 +489,7 @@ function PredictionMarketContent() {
 	);
 
 	if (!umbrella && (loading || contextLoading)) {
-		return <PageSkeleton />;
+		return <TradingPageSkeleton isMobile={isMobile} />;
 	}
 
 	// Show error page if umbrella is explicitly null after loading

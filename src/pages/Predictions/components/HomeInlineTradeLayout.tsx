@@ -6,6 +6,7 @@ import React, {
 	useState,
 } from "react";
 import { useMedia } from "react-use";
+import { PREDICTIONS_TRADE_PANEL_DESKTOP_MEDIA } from "@/pages/Predictions/utils/gameLinkFilters";
 import { usePredictionData } from "context/PredictionDataContext";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -81,7 +82,7 @@ export function HomeInlineTradeLayout({
 	visibleUmbrellas,
 	selectedGame,
 }: HomeInlineTradeLayoutProps) {
-	const isDesktop = useMedia("(min-width: 1101px)");
+	const isDesktop = useMedia(PREDICTIONS_TRADE_PANEL_DESKTOP_MEDIA);
 	const isMobile = useMedia("(max-width: 1100px)");
 
 	const {

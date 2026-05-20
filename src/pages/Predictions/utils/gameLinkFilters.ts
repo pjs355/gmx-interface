@@ -13,6 +13,9 @@ export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
 /** Horizontal pill bar; vertical sidebar uses `min-width: 1100px` in Predictions.scss. */
 export const GAME_FILTER_COMPACT_MEDIA = "(max-width: 1099px)";
 
+/** Home dock + umbrella trade rail grid (`Predictions.scss` / `PredictionMarket.scss` @ 1101px). */
+export const PREDICTIONS_TRADE_PANEL_DESKTOP_MEDIA = "(min-width: 1101px)";
+
 export function findEsportsTag(tags: Tag[]): Tag | undefined {
 	return tags.find((t) => normalizeTagLabel(t.label) === "ESPORTS");
 }

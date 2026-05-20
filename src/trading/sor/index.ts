@@ -90,6 +90,8 @@ export {
 	buildFundsTransferTooltip,
 	getSorLifiTransferFeeRowState,
 	getSorBuyCashShortfall,
+	sorBuyLegUsdcSpendUsd,
+	sorBuyDrawerAllInCostUsd,
 } from "./sorUiUtils";
 export type { SorBuyCashShortfall, SorCashGateInput } from "./sorUiUtils";
 

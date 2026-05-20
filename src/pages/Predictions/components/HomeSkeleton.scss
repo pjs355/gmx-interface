@@ -7,69 +7,10 @@
 	}
 }
 
-.home-skeleton__sidebar {
-	position: relative;
-
-	.game-links-bar {
-		flex-wrap: nowrap;
-	}
-
-	@media (max-width: 1099px) {
-		.game-links-bar {
-			overflow: hidden;
-		}
-	}
-}
-
-.home-skeleton__pill {
-	cursor: default;
-	background: rgba(255, 255, 255, 0.04);
-
-	&:hover {
-		background: rgba(255, 255, 255, 0.04);
-		color: inherit;
-	}
-}
-
-.home-skeleton__pill-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 9999px;
-	flex-shrink: 0;
-}
-
-.home-skeleton__pill-logo {
-	width: 28px;
-	height: 28px;
-	border-radius: 8px;
-	flex-shrink: 0;
-
-	@media (max-width: 1099px) {
-		width: 20px;
-		height: 20px;
-		border-radius: 6px;
-	}
-}
-
-.home-skeleton__pill-label {
-	height: 14px;
-	display: inline-block;
-}
-
-.home-skeleton__pill-count {
-	width: 26px;
-	height: 14px;
-	flex: 0 0 auto;
-}
-
 .home-skeleton__grid--no-dock {
 	@media (min-width: 1101px) {
 		display: block;
 	}
-}
-
-.home-skeleton__trade-panel {
-	min-width: 0;
 }
 
 .home-skeleton__section .prediction-calendar-header {

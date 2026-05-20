@@ -1,38 +1,17 @@
 import React from "react";
 import { useMedia } from "react-use";
-import { TradeBoxSkeleton } from "@/pages/PredictionMarket/Skeletons/TradeBoxSkeleton";
+import { PREDICTIONS_TRADE_PANEL_DESKTOP_MEDIA } from "@/pages/Predictions/utils/gameLinkFilters";
+import {
+	PredictionTradeColumnShell,
+	TradeBoxSkeleton,
+} from "@/pages/PredictionMarket/Skeletons";
+import { GameLinksSkeleton } from "./GameLinksSkeleton";
 import "@/pages/PredictionMarket/Skeletons/Skeletons.scss";
 import "./HomeSkeleton.scss";
 
 interface HomeSkeletonProps {
 	filterType: "all" | "esports" | "games";
 }
-
-const SIDEBAR_PILLS = 8;
-
-const SkeletonPill: React.FC<{
-	withDot?: boolean;
-	withLogo?: boolean;
-	labelWidth?: number;
-}> = ({ withDot, withLogo, labelWidth = 90 }) => (
-	<div className="game-link home-skeleton__pill" aria-hidden>
-		<span className="game-link__inner">
-			<span className="game-link__leading">
-				{withDot ? (
-					<span className="home-skeleton__pill-dot skeleton-shimmer" />
-				) : null}
-				{withLogo ? (
-					<span className="home-skeleton__pill-logo skeleton-shimmer" />
-				) : null}
-				<span
-					className="home-skeleton__pill-label skeleton-shimmer"
-					style={{ width: `${labelWidth}px` }}
-				/>
-			</span>
-			<span className="home-skeleton__pill-count skeleton-shimmer" />
-		</span>
-	</div>
-);
 
 const SkeletonCard: React.FC<{ rows?: number }> = ({ rows = 2 }) => (
 	<div
@@ -102,7 +81,7 @@ const SkeletonCalendarSection: React.FC<{
 export const HomeSkeleton: React.FC<HomeSkeletonProps> = ({ filterType }) => {
 	const useCalendar = filterType !== "games";
 	const showTradeDock = filterType === "all";
-	const isDesktop = useMedia("(min-width: 1101px)");
+	const isDesktop = useMedia(PREDICTIONS_TRADE_PANEL_DESKTOP_MEDIA);
 
 	let middle: React.ReactNode;
 	if (useCalendar) {
@@ -132,30 +111,13 @@ export const HomeSkeleton: React.FC<HomeSkeletonProps> = ({ filterType }) => {
 
 	return (
 		<div
-			className="predictions-page page-layout home-skeleton"
+			className="predictions-page predictions-page--market-bg page-layout home-skeleton"
 			aria-busy="true"
 			aria-label="Loading markets"
 		>
-			<div className="predictions-page__body">
-				<aside className="game-links-wrapper home-skeleton__sidebar">
-					<div className="game-links-underlay" aria-hidden />
-					<div className="game-links-sticky">
-						<nav
-							className="game-links-bar game-links-scroll"
-							aria-hidden
-						>
-						<SkeletonPill withDot labelWidth={42} />
-						<SkeletonPill labelWidth={120} />
-						{Array.from({ length: SIDEBAR_PILLS - 2 }).map((_, i) => (
-							<SkeletonPill
-								key={i}
-								withLogo
-								labelWidth={70 + ((i * 17) % 60)}
-							/>
-						))}
-						</nav>
-					</div>
-				</aside>
+			<div className="predictions-page__market-background" aria-hidden />
+			<div className="predictions-page__body predictions-markets-body">
+				<GameLinksSkeleton />
 				<div
 					className={
 						showTradeDock
@@ -167,8 +129,10 @@ export const HomeSkeleton: React.FC<HomeSkeletonProps> = ({ filterType }) => {
 						<div className="predictions-page__main">{middle}</div>
 					</div>
 					{showTradeDock && isDesktop ? (
-						<div className="right-panel predictions-page__home-trade-panel home-skeleton__trade-panel">
-							<TradeBoxSkeleton />
+						<div className="right-panel predictions-page__home-trade-panel">
+							<PredictionTradeColumnShell>
+								<TradeBoxSkeleton />
+							</PredictionTradeColumnShell>
 						</div>
 					) : null}
 				</div>

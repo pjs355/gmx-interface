@@ -161,6 +161,8 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
    */
   dflowUninitAtSubmit?: boolean;
   routePreviewAllowed: boolean;
+  /** Buy with no cross-venue asks — hide Venue / To Win (no skeleton). */
+  suppressBuyVenueQuotes?: boolean;
   smartRoutingMarketKey: string;
   /** Predict.fun market fee (bps) for net-held share display; omit when unknown. */
   predictFunFeeRateBps?: number;
@@ -214,6 +216,7 @@ export default function PredictionMarketTradeBoxUI({
   shareBalances,
   dflowUninitAtSubmit = false,
   routePreviewAllowed,
+  suppressBuyVenueQuotes = false,
   smartRoutingMarketKey,
   predictFunFeeRateBps,
   dflowOrderQuoteForSentinel,
@@ -919,25 +922,27 @@ export default function PredictionMarketTradeBoxUI({
         </div>
       )}
 
-      <SmartRoutingSection
-        displayRoute={sorRoute.displayRoute}
-        executionRoute={sorRoute.executionRoute}
-        venuePreviews={sorRoute.venuePreviews ?? null}
-        tradingVenue={tradingVenue}
-        isLoading={sorRoute.displayLoading}
-        onSelectVenue={onTradingVenueChange}
-        userAmount={amount}
-        side={side}
-        routePreviewAllowed={routePreviewAllowed}
-        smartRoutingMarketKey={smartRoutingMarketKey}
-        sorDisplayRouteSourceQuestionId={sorRoute.displayRouteSourceQuestionId}
-        sorExecutionRouteSourceQuestionId={sorRoute.executionRouteSourceQuestionId}
-        selectedOutcome={positionToSorOutcome(outcomeSelection)}
-        predictFunFeeRateBps={predictFunFeeRateBps}
-        executionLoading={sorRoute.executionLoading}
-        userSellSharesByVenue={userSellSharesByVenue}
-        venueSelectionLocked={tradeInteractionLocked}
-      />
+      {!suppressBuyVenueQuotes ? (
+        <SmartRoutingSection
+          displayRoute={sorRoute.displayRoute}
+          executionRoute={sorRoute.executionRoute}
+          venuePreviews={sorRoute.venuePreviews ?? null}
+          tradingVenue={tradingVenue}
+          isLoading={sorRoute.displayLoading}
+          onSelectVenue={onTradingVenueChange}
+          userAmount={amount}
+          side={side}
+          routePreviewAllowed={routePreviewAllowed}
+          smartRoutingMarketKey={smartRoutingMarketKey}
+          sorDisplayRouteSourceQuestionId={sorRoute.displayRouteSourceQuestionId}
+          sorExecutionRouteSourceQuestionId={sorRoute.executionRouteSourceQuestionId}
+          selectedOutcome={positionToSorOutcome(outcomeSelection)}
+          predictFunFeeRateBps={predictFunFeeRateBps}
+          executionLoading={sorRoute.executionLoading}
+          userSellSharesByVenue={userSellSharesByVenue}
+          venueSelectionLocked={tradeInteractionLocked}
+        />
+      ) : null}
 
       {/* SOR route breakdown when venue is "all" — sourced from the omnibus
           (display) channel. We only render the wrapper if there's something

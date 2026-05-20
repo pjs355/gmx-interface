@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { useMedia } from "react-use";
+import { PredictionTradeColumnShell } from "@/pages/PredictionMarket/Skeletons/PredictionTradeColumnShell";
 import PredictionMarketTradeBoxUI from "./PredictionMarketTradeBoxUI";
 import {
 	PredictionCurtain,
@@ -128,6 +129,8 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	 */
 	dflowUninitAtSubmit?: boolean;
 	routePreviewAllowed: boolean;
+	/** Buy with no cross-venue asks — hide Venue / To Win (no skeleton). */
+	suppressBuyVenueQuotes?: boolean;
 	smartRoutingMarketKey: string;
 	/** Predict.fun market fee (bps) for net-held share display; omit when unknown. */
 	predictFunFeeRateBps?: number;
@@ -183,6 +186,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	mobilePeekBar = "default",
 	dflowUninitAtSubmit = false,
 	routePreviewAllowed,
+	suppressBuyVenueQuotes = false,
 	smartRoutingMarketKey,
 	predictFunFeeRateBps,
 	dflowOrderQuoteForSentinel,
@@ -409,15 +413,12 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 
 	if (!isMobile) {
 		return (
-			<div
-				className="prediction-trade-column-shell text-body-medium flex flex-col"
-				data-qa="prediction-tradebox"
-				data-qa-umbrella-id={umbrellaId ?? undefined}
+			<PredictionTradeColumnShell
+				className="text-body-medium flex flex-col"
+				dataQaUmbrellaId={umbrellaId ?? undefined}
 			>
-				<div className="prediction-trade-column-underlay" aria-hidden />
-				<div className="prediction-trade-column-body">
-					{executionGateBanner}
-					<PredictionMarketTradeBoxUI
+				{executionGateBanner}
+				<PredictionMarketTradeBoxUI
 						market={market}
 						orderbook={orderbook}
 						pandascoreMatchId={pandascoreMatchId}
@@ -459,12 +460,12 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 						shareBalances={shareBalances}
 						dflowUninitAtSubmit={dflowUninitAtSubmit}
 						routePreviewAllowed={routePreviewAllowed}
+						suppressBuyVenueQuotes={suppressBuyVenueQuotes}
 						smartRoutingMarketKey={smartRoutingMarketKey}
 						predictFunFeeRateBps={predictFunFeeRateBps}
 						dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}
 					/>
-				</div>
-			</div>
+			</PredictionTradeColumnShell>
 		);
 	}
 
@@ -647,6 +648,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				shareBalances={shareBalances}
 				dflowUninitAtSubmit={dflowUninitAtSubmit}
 				routePreviewAllowed={routePreviewAllowed}
+				suppressBuyVenueQuotes={suppressBuyVenueQuotes}
 				smartRoutingMarketKey={smartRoutingMarketKey}
 				predictFunFeeRateBps={predictFunFeeRateBps}
 				dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}

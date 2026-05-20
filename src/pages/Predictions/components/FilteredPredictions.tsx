@@ -23,6 +23,7 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import {
 	getListingYesNoPricesForUmbrella,
 	isDeemphasizedSettledLeanOdds,
+	isListingUntradeableEmptyBook,
 } from "@/helpers/predictionUtils";
 import {
 	defaultEsportsTagLabel,
@@ -382,6 +383,21 @@ export default function FilteredPredictions({
 			);
 		}
 
+		// Started matches with no cross-venue quotes are finished — hide from home / Live.
+		filtered = filtered.filter((umbrella) => {
+			const eventDate = resolveUmbrellaEventDate(umbrella);
+			const eventMs = eventDate?.getTime();
+			const hasStarted =
+				eventMs !== undefined && eventMs !== null && now >= eventMs;
+			if (selectedGame !== LIVE_PILL_ID && !hasStarted) return true;
+
+			const { yes, no } = getListingYesNoPricesForUmbrella(
+				umbrella,
+				appState?.markets,
+			);
+			return !isListingUntradeableEmptyBook(yes, no);
+		});
+
 		const deduped = dedupeUmbrellasByPandascoreMatch(filtered);
 
 		if (filterType === "games") {
@@ -389,7 +405,15 @@ export default function FilteredPredictions({
 		}
 
 		return deduped;
-	}, [umbrellas, filterType, selectedGame, tags, now, restrictedMode]);
+	}, [
+		umbrellas,
+		filterType,
+		selectedGame,
+		tags,
+		now,
+		restrictedMode,
+		appState?.markets,
+	]);
 
 	const calendarData = React.useMemo(() => {
 		if (filterType === "games") {

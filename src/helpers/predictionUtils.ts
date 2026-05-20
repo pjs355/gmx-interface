@@ -69,6 +69,44 @@ export function getListingYesNoPricesForUmbrella(
  *  - Both sides present but at extremes (100-0, 99-1, 0-0, 99-99…), which
  *    means the book has converged on a winner.
  */
+function isMissingOrZeroListingCents(
+	price: number | null | undefined,
+): boolean {
+	if (price === undefined || price === null || !Number.isFinite(price)) {
+		return true;
+	}
+	return Math.round(Math.max(0, Math.min(1, Number(price))) * 100) <= 1;
+}
+
+/**
+ * True when neither side has a tradeable listing quote (both missing or ~0¢).
+ * Used to drop finished live matches from home / Live — empty cross-venue books.
+ */
+export function isOutcomeListingUntradeable(
+	price: number | null | undefined,
+): boolean {
+	return isMissingOrZeroListingCents(price);
+}
+
+export function isListingUntradeableEmptyBook(
+	yes: number | null | undefined,
+	no: number | null | undefined,
+): boolean {
+	return (
+		isMissingOrZeroListingCents(yes) && isMissingOrZeroListingCents(no)
+	);
+}
+
+/** Hide smart-routing Venue / To Win and block buy only when both sides lack tradeable asks. */
+export function shouldSuppressBuyVenueQuotes(
+	side: "buy" | "sell",
+	crossBuyYes: number | null | undefined,
+	crossBuyNo: number | null | undefined,
+): boolean {
+	if (side !== "buy") return false;
+	return isListingUntradeableEmptyBook(crossBuyYes, crossBuyNo);
+}
+
 export function isDeemphasizedSettledLeanOdds(
 	yes: number | null | undefined,
 	no: number | null | undefined,
