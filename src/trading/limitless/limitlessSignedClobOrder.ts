@@ -177,12 +177,16 @@ export async function buildSignedLimitlessOrderSubmit(input: {
 		contractAddress: ethers.getAddress(input.exchange.trim()),
 	});
 	const signedOrder = { ...unsigned, signature: sig };
+	const declaredSlug = input.marketSlug.trim();
+	const legSlug = input.marketSlugLeg?.trim();
+	/** Partner `POST /orders` must use the child leg slug for NegRisk groups. */
+	const tradeSlug = legSlug || declaredSlug;
 	return {
 		order: signedOrder as LimitlessSignedOrderSubmit["order"],
 		orderType: input.spec.orderType,
-		marketSlug: input.marketSlug.trim(),
-		...(input.marketSlugLeg?.trim()
-			? { marketSlugLeg: input.marketSlugLeg.trim() }
+		marketSlug: tradeSlug,
+		...(legSlug && legSlug !== declaredSlug
+			? { marketSlugLeg: declaredSlug }
 			: {}),
 		ownerId: input.ownerId,
 		...(input.spec.orderType === "GTC" && input.spec.postOnly !== undefined

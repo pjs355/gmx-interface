@@ -1464,6 +1464,7 @@ export function createPrivateApiClient(
 				const sideLabel = ord.side === 0 ? "BUY" : ord.side === 1 ? "SELL" : "?";
 				console.info("[Limitless/API]", "POST orders (submit)", {
 					marketSlug: body.marketSlug,
+					marketSlugLeg: body.marketSlugLeg,
 					orderType: body.orderType,
 					side: sideLabel,
 					tokenId: `${ord.tokenId?.toString?.().slice(0, 14) ?? "?"}…`,

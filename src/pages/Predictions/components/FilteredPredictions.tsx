@@ -36,6 +36,10 @@ import {
 	STARTING_SOON_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
+import {
+	consumeHomePendingGameFilter,
+	setHomeGameFilter,
+} from "../utils/gameFilterNavigation";
 import { isRestrictedProductionMode } from "@/config/restrictedMode";
 import { isCounterStrikeUmbrella } from "@/helpers/umbrellaGame";
 import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
@@ -43,6 +47,7 @@ import {
 	bundledCounterStrikeLogoFromTagLabels,
 	resolveLogoByTags,
 } from "@/helpers/gameLogoResolver";
+import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
@@ -79,6 +84,64 @@ function sortCalendarEventsByPlayOrder(
 }
 
 // Sort umbrellas by trading activity (number of trades across all children markets)
+function umbrellaPandascoreMatchId(umbrella: Umbrella): string {
+	const raw = (umbrella as { pandascore_matchId?: unknown }).pandascore_matchId;
+	return typeof raw === "string" ? raw.trim() : "";
+}
+
+/** Prefer the listing with more cross-venue volume when two umbrellas share a Panda match. */
+function umbrellaHomeListingScore(umbrella: Umbrella): number {
+	const totalUsd = (umbrella as { volume?: { totalUsd?: unknown } }).volume
+		?.totalUsd;
+	if (typeof totalUsd === "number" && Number.isFinite(totalUsd)) {
+		return totalUsd;
+	}
+	const children = (umbrella as { children?: Array<{ tradeCount?: number }> })
+		.children;
+	if (!children?.length) return 0;
+	return children.reduce(
+		(sum, child) => sum + (child?.tradeCount ?? 0),
+		0,
+	);
+}
+
+/**
+ * One home card per Panda match — duplicate umbrellas (same `pandascore_matchId`)
+ * keep the higher-volume listing.
+ */
+function dedupeUmbrellasByPandascoreMatch(umbrellas: Umbrella[]): Umbrella[] {
+	const winnerByPanda = new Map<string, Umbrella>();
+
+	for (const umbrella of umbrellas) {
+		const pandaId = umbrellaPandascoreMatchId(umbrella);
+		if (!pandaId) continue;
+		const existing = winnerByPanda.get(pandaId);
+		if (
+			!existing ||
+			umbrellaHomeListingScore(umbrella) > umbrellaHomeListingScore(existing)
+		) {
+			winnerByPanda.set(pandaId, umbrella);
+		}
+	}
+
+	const emittedPanda = new Set<string>();
+	const out: Umbrella[] = [];
+
+	for (const umbrella of umbrellas) {
+		const pandaId = umbrellaPandascoreMatchId(umbrella);
+		if (!pandaId) {
+			out.push(umbrella);
+			continue;
+		}
+		if (emittedPanda.has(pandaId)) continue;
+		const winner = winnerByPanda.get(pandaId);
+		if (winner) out.push(winner);
+		emittedPanda.add(pandaId);
+	}
+
+	return out;
+}
+
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
 		const aChildren = (a as any).children || [];
@@ -159,12 +222,23 @@ function collectVisibleUmbrellas(
 	return out;
 }
 
+const DEFAULT_CALENDAR_PAGE_TITLE = "Trade Esport Matches";
+
 function gameFilterDisplayLabel(selectedGame: string | null): string | null {
 	if (!selectedGame) return null;
 	if (selectedGame === LIVE_PILL_ID) return "Live";
 	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
 	if (isEsportsMetaTagLabel(selectedGame)) return "All";
 	return selectedGame;
+}
+
+function calendarPageHeadingTitle(selectedGame: string | null): string {
+	if (selectedGame === LIVE_PILL_ID) return "Live";
+	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
+	if (!selectedGame || isEsportsMetaTagLabel(selectedGame)) {
+		return DEFAULT_CALENDAR_PAGE_TITLE;
+	}
+	return gameFilterDisplayLabel(selectedGame) ?? selectedGame;
 }
 
 export default function FilteredPredictions({
@@ -186,6 +260,20 @@ export default function FilteredPredictions({
 		tagsLoading,
 	} = usePredictionData();
 
+	// Trading sidebar → home: apply the filter the user clicked before bootstrap.
+	useEffect(() => {
+		if (tagsLoading) return;
+		const pending = consumeHomePendingGameFilter();
+		if (pending) {
+			setSelectedGame(pending);
+			setDefaultTagApplied(true);
+		}
+	}, [tagsLoading]);
+
+	useEffect(() => {
+		setHomeGameFilter(selectedGame);
+	}, [selectedGame]);
+
 	// Default sidebar filter on first load: Counter-Strike in restricted
 	// production mode (the only pill kept besides Live / Starting Soon),
 	// ESPORTS otherwise. `homeDefaultSelectedTagLabel` keeps that decision
@@ -199,6 +287,11 @@ export default function FilteredPredictions({
 			setDefaultTagApplied(true);
 		}
 	}, [tags, tagsLoading, defaultTagApplied]);
+
+	// Prefetch umbrella trading route chunk so card clicks are not blocked on Suspense.
+	useEffect(() => {
+		preloadPredictionMarketRoute();
+	}, []);
 
 	// Listen for reset filter event from header
 	useEffect(() => {
@@ -289,11 +382,13 @@ export default function FilteredPredictions({
 			);
 		}
 
+		const deduped = dedupeUmbrellasByPandascoreMatch(filtered);
+
 		if (filterType === "games") {
-			return sortByTradingActivity(filtered);
+			return sortByTradingActivity(deduped);
 		}
 
-		return filtered;
+		return deduped;
 	}, [umbrellas, filterType, selectedGame, tags, now, restrictedMode]);
 
 	const calendarData = React.useMemo(() => {
@@ -626,16 +721,17 @@ export default function FilteredPredictions({
 						<div className="prediction-calendar-page-heading__title-row">
 							{(() => {
 								const calendarTitle =
+									calendarPageHeadingTitle(selectedGame);
+								const showGameLogo =
 									selectedGame &&
+									!isEsportsMetaTagLabel(selectedGame) &&
 									selectedGame !== LIVE_PILL_ID &&
-									selectedGame !== STARTING_SOON_PILL_ID
-										? (gameFilterDisplayLabel(selectedGame) ??
-											selectedGame)
-										: "All";
-								const calendarLogo =
-									bundledCounterStrikeLogoFromTagLabels([
-										calendarTitle,
-									]) ?? resolveLogoByTags([calendarTitle]);
+									selectedGame !== STARTING_SOON_PILL_ID;
+								const calendarLogo = showGameLogo
+									? (bundledCounterStrikeLogoFromTagLabels([
+											selectedGame,
+										]) ?? resolveLogoByTags([selectedGame]))
+									: null;
 								return (
 									<>
 										{calendarLogo ? (
@@ -733,7 +829,7 @@ export default function FilteredPredictions({
 					style={{ backgroundImage: `url(${marketBgUrl})` }}
 				/>
 			</div>
-			<div className="predictions-page__body">
+			<div className="predictions-page__body predictions-markets-body">
 				<GameLinks
 					selectedGame={selectedGame}
 					onGameSelect={setSelectedGame}

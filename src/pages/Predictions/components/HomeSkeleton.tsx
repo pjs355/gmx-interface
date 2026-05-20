@@ -64,6 +64,12 @@ const SkeletonCard: React.FC<{ rows?: number }> = ({ rows = 2 }) => (
 				))}
 			</div>
 		</div>
+		<div className="prediction-card__meta prediction-card__top--split">
+			<div className="prediction-card__top-status">
+				<span className="home-skeleton__chip skeleton-shimmer" />
+			</div>
+			<div className="prediction-card__top-headline" aria-hidden="true" />
+		</div>
 	</div>
 );
 
