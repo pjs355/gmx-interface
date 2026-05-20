@@ -1606,9 +1606,18 @@ html.curtain-open {
 	}
 
 	&__name {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 		font-weight: 600;
 		font-size: 14px;
 		color: #f3f4f6;
+	}
+
+	&__name-lock {
+		flex-shrink: 0;
+		font-size: 12px;
+		color: #9ca3af;
 	}
 
 	&__sub {

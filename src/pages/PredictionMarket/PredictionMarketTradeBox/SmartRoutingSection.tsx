@@ -28,6 +28,7 @@ import { SorRouteConsolidatedFeesSummary } from "./SorRouteConsolidatedFeesSumma
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
 import { SHARE_SELL_COMPARE_EPS } from "./checkBalances";
+import { FiLock } from "react-icons/fi";
 
 const SR_VALUE_CLASS = "smart-routing-row__value";
 const SR_VALUE_FLASH_CLASS = "smart-routing-row__value--flash";
@@ -1280,7 +1281,6 @@ export default function SmartRoutingSection({
 				 * venue has an in-app onboarding hook to land on. */
 				const kalshiNeedsKyc = theoretical && p.venue === "dflow";
 				const blockClick = theoretical && !kalshiNeedsKyc;
-				const theoreticalLabel = kalshiNeedsKyc ? " (Enable Kalshi)" : " (book only)";
 
 				return (
 					<div
@@ -1308,7 +1308,14 @@ export default function SmartRoutingSection({
 									<div className="smart-routing-row__meta">
 										<span className="smart-routing-row__name">
 											{VENUE_DISPLAY_NAMES[p.venue]}
-											{theoretical ? theoreticalLabel : ""}
+											{kalshiNeedsKyc ? (
+												<FiLock
+													className="smart-routing-row__name-lock"
+													aria-hidden
+												/>
+											) : theoretical ? (
+												" (book only)"
+											) : null}
 										</span>
 										{(displayAvgPrice != null || rowPending) && (
 											<span className="smart-routing-row__sub">
