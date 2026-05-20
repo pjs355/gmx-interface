@@ -14,7 +14,10 @@ import {
 	useWallets as useSolanaWallets,
 } from "@privy-io/react-auth/solana";
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "react-toastify";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatErrorForUser } from "@/errors";
+import { TOAST_AUTO_CLOSE_TIME } from "config/ui";
 import { AddressesByChainId, ChainId, OrderBuilder } from "@predictdotfun/sdk";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import {
@@ -88,6 +91,24 @@ function parseLimitlessMakerAddressFromEnsureData(data: unknown): string | undef
 		return ethers.getAddress(signerAddr.trim());
 	}
 	return undefined;
+}
+
+const CLAIM_ERROR_TOAST_ID = "claim-error";
+
+/** User-facing claim failure: catalog copy + bottom-right toast (same container as trade). */
+export function reportClaimError(err: unknown): string {
+	const message = formatErrorForUser(err);
+	toast.dismiss(CLAIM_ERROR_TOAST_ID);
+	toast.error(message, {
+		toastId: CLAIM_ERROR_TOAST_ID,
+		// Dev: stay open until click so you can inspect `.Toastify__toast` in Elements.
+		autoClose: import.meta.env.DEV ? false : TOAST_AUTO_CLOSE_TIME,
+		hideProgressBar: true,
+		pauseOnHover: false,
+		pauseOnFocusLoss: false,
+		closeOnClick: true,
+	});
+	return message;
 }
 
 /** Dev-only — keeps production consoles clean (errors still surface via UI `setError`). */
@@ -333,8 +354,9 @@ export function useClaimEarnings() {
 
 			setTxHash(txHash);
 			return true;
-		} catch (e: any) {
-			setError(e?.message || String(e));
+		} catch (e: unknown) {
+			console.error("error", e);
+			setError(reportClaimError(e));
 			return false;
 		} finally {
 			setIsClaiming(false);
@@ -436,19 +458,15 @@ export function useClaimForVenue(
 			claimDev("success", { txHash: hash ?? null });
 			return true;
 		} catch (e: unknown) {
+			console.error("error", e);
+			const msg = reportClaimError(e);
 			const rec =
 				e !== null && typeof e === "object"
 					? (e as {
-							message?: unknown;
-							reason?: unknown;
 							name?: unknown;
 							code?: unknown;
 						})
 					: {};
-			const msg =
-				(typeof rec.message === "string" && rec.message.trim()) ||
-				(typeof rec.reason === "string" && rec.reason.trim()) ||
-				String(e ?? "unknown error");
 			claimDev("error", {
 				message: msg,
 				name: typeof rec.name === "string" ? rec.name : undefined,

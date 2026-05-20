@@ -8,6 +8,7 @@ import {
 	POLYMARKET_INSUFFICIENT_LIQUIDITY,
 	POLYMARKET_NO_MARKET_LIQUIDITY,
 	POLYMARKET_RATE_LIMITED,
+	POLYMARKET_RELAYER_WALLET_BUSY,
 	POLYMARKET_SESSION_EXPIRED,
 } from "./catalog/venues";
 import {
@@ -260,9 +261,24 @@ function mapLifiAndTransferMessage(message: string): string | null {
 	return null;
 }
 
+function mapPolymarketRelayerMessage(message: string): string | null {
+	const t = message.trim();
+	if (!t) return null;
+	if (
+		/wallet busy/i.test(t) ||
+		/active action exists/i.test(t) ||
+		/active action/i.test(t)
+	) {
+		return userMessage(POLYMARKET_RELAYER_WALLET_BUSY);
+	}
+	return null;
+}
+
 function mapKnownErrorMessage(message: string): string | null {
 	const trimmed = message.trim();
 	if (!trimmed) return null;
+	const polyRelay = mapPolymarketRelayerMessage(trimmed);
+	if (polyRelay) return polyRelay;
 	if (POLYMARKET_NO_MATCH_RE.test(trimmed)) {
 		return userMessage(POLYMARKET_NO_MARKET_LIQUIDITY);
 	}

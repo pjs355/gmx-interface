@@ -67,6 +67,8 @@ type UserDataContextValue = {
 	 */
 	refreshTokenPositions: () => Promise<void>;
 	loadOrders: () => Promise<void>; // Lazy: call when orders are needed (e.g. Positions page)
+	/** Refetch filled orders from GET /orders/:wallet (use `force` after a LevelUp fill). */
+	refreshOrders: (options?: { force?: boolean }) => Promise<void>;
 	getTokenBalance: (marketId: string) => TokenBalance | null;
 	/** Refreshes on-chain approval flags; returns whether LevelUp trading is fully approved. */
 	checkApproval: () => Promise<boolean>;
@@ -420,19 +422,26 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 
 	// Lazy order loading -- called by Positions page or other consumers that need orders
 	const ordersLoadedRef = useRef<string | null>(null);
-	const loadOrders = useCallback(async () => {
-		if (!account) return;
-		if (ordersLoadedRef.current === account) return;
-		ordersLoadedRef.current = account;
+	const refreshOrders = useCallback(
+		async (options?: { force?: boolean }) => {
+			if (!account) return;
+			if (!options?.force && ordersLoadedRef.current === account) return;
+			ordersLoadedRef.current = account;
 
-		const marketDataMap = buildMarketDataMap();
-		try {
-			const userOrders = await fetchUserOrders(account, marketDataMap);
-			setOrders(userOrders);
-		} catch (err) {
-			console.error("Failed to load orders:", err);
-		}
-	}, [account, buildMarketDataMap]);
+			const marketDataMap = buildMarketDataMap();
+			try {
+				const userOrders = await fetchUserOrders(account, marketDataMap);
+				setOrders(userOrders);
+			} catch (err) {
+				console.error("error", err);
+				console.error("Failed to load orders:", err);
+			}
+		},
+		[account, buildMarketDataMap],
+	);
+	const loadOrders = useCallback(async () => {
+		await refreshOrders();
+	}, [refreshOrders]);
 
 	// When raw balances update, remap into `tokenBalances` if market data is ready
 	useEffect(() => {
@@ -608,8 +617,12 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 		loadedForAccountRef.current = null;
 		ordersLoadedRef.current = null;
 		positionsFetchedRef.current = null;
-		await Promise.all([fetchLevelUpPositions(account, true), load()]);
-	}, [account, fetchLevelUpPositions, load]);
+		await Promise.all([
+			fetchLevelUpPositions(account, true),
+			load(),
+			refreshOrders({ force: true }),
+		]);
+	}, [account, fetchLevelUpPositions, load, refreshOrders]);
 
 	/**
 	 * Force refresh of CTF outcome balances from RPC.
@@ -682,6 +695,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			refresh,
 			refreshTokenPositions,
 			loadOrders,
+			refreshOrders,
 			getTokenBalance,
 			checkApproval,
 			approveToken,
@@ -697,6 +711,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
 			refresh,
 			refreshTokenPositions,
 			loadOrders,
+			refreshOrders,
 			getTokenBalance,
 			checkApproval,
 			approveToken,

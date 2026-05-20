@@ -84,3 +84,8 @@ export const POLYMARKET_CTF_BALANCE_READ_FAILED = defineError(
 	"POLYMARKET_CTF_BALANCE_READ_FAILED",
 	"Could not read Polymarket CTF balance before sell",
 );
+/** Polymarket builder relayer POST /submit — deposit wallet has an in-flight action. */
+export const POLYMARKET_RELAYER_WALLET_BUSY = defineError(
+	"POLYMARKET_RELAYER_WALLET_BUSY",
+	"Polymarket is still processing another transaction for this wallet. Wait a minute without retrying, then try again.",
+);

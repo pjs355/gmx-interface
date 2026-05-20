@@ -487,7 +487,7 @@ export function useTradeBoxShareBalances(opts: {
 		matchedMonitor: pageMatchedMonitor,
 	} = opts;
 	const { account, signerAddress } = useSignerContext();
-	const { getTokenBalance } = useUserData();
+	const { getTokenBalance, tokenBalances } = useUserData();
 	const { umbrellas, allMarketsByUmbrella } = usePredictionData();
 	const { appState } = useOddsMonitor();
 	const matchedOddsMarkets = appState?.markets;
@@ -712,7 +712,7 @@ export function useTradeBoxShareBalances(opts: {
 			yes: Number.isFinite(yesNum) ? yesNum : 0,
 			no: Number.isFinite(noNum) ? noNum : 0,
 		};
-	}, [market?._id, market?.questionId, getTokenBalance]);
+	}, [market?._id, market?.questionId, getTokenBalance, tokenBalances]);
 
 	const waitPoly = shareBalanceLoadingWaitsForVenue(pageMatchedMonitor, "polymarket");
 	const waitPredict = shareBalanceLoadingWaitsForVenue(

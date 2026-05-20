@@ -28,6 +28,7 @@ import ListDailyGames from "./components/DailyGames/ListDailyGames";
 import AddDailyGame from "./components/DailyGames/AddDailyGame";
 import TradeTesting from "./components/TradeTesting/TradeTesting";
 import AdminWallet from "./components/Wallet/AdminWallet";
+import AdminVenues from "./components/Venues/AdminVenues";
 import { adminErrorMessage, ADMIN_MISSING_ACCESS_TOKEN } from "@/errors";
 import {
 	umbrellaDataService,
@@ -62,7 +63,8 @@ type AdminView =
 	| "daily-games-add"
 	| "trade-testing"
 	| "wallet"
-	| "keys";
+	| "keys"
+	| "venues";
 
 const DEFAULT_ADMIN_VIEW: AdminView = "markets-list";
 
@@ -86,6 +88,7 @@ const VALID_ADMIN_VIEWS: AdminView[] = [
 	"trade-testing",
 	"wallet",
 	"keys",
+	"venues",
 ] as const;
 
 function isValidAdminView(value: string | null): value is AdminView {
@@ -727,6 +730,38 @@ export default function Admin() {
 						</button>
 					</div>
 				</div>
+				<div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>
+						Venues
+					</div>
+					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => {
+								setSelected(null);
+								setSelectedTag(null);
+								setSelectedTeam(null);
+								updateView("venues", {
+									umbrellaId: null,
+									teamId: null,
+									profileId: null,
+								});
+							}}
+							style={{
+								padding: "6px 10px",
+								border: "1px solid #38bdf8",
+								borderRadius: 6,
+								background:
+									view === "venues"
+										? "rgba(56,189,248,0.2)"
+										: "transparent",
+								color: "#7dd3fc",
+							}}
+						>
+							Toggle
+						</button>
+					</div>
+				</div>
 			</div>
 
 			{view === "markets-list" && (
@@ -888,6 +923,8 @@ export default function Admin() {
 					<AdminExportKeys />
 				</Suspense>
 			)}
+
+			{view === "venues" && <AdminVenues />}
 		</div>
 	);
 }

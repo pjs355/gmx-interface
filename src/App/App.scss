@@ -464,15 +464,43 @@ button.App-button {
 	max-width: 46.5rem;
 }
 
+/* Error toasts (claim, failed orders): wrap long catalog copy; keep success pill compact. */
+.Toastify__toast-container:has(.Toastify__toast--error) {
+	width: min(92vw, 420px);
+	max-width: min(92vw, 420px);
+}
+
 .Toastify__toast--error {
 	background: #d32f2f;
 	color: #ffffff;
 	border-radius: 8px;
 	box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.18);
 	border: 1px solid rgba(255, 255, 255, 0.08);
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	text-align: left;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: break-word;
 
 	.link-underline {
 		color: #ffffff !important;
+	}
+
+	.Toastify__toast-body {
+		width: 100%;
+		flex: 1 1 auto;
+		text-align: left;
+		white-space: normal;
+
+		> div {
+			text-align: left;
+			white-space: normal;
+		}
 	}
 
 	/* Make error headers and key error messages white */

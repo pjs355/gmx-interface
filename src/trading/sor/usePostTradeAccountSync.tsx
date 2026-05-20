@@ -297,6 +297,7 @@ export function PostTradeAccountSyncProvider({ children }: { children: ReactNode
 					const account = accountPostTradeRef.current;
 					const reqSlice = {
 						refreshLevelUpPositions: breq.refreshLevelUpPositions,
+						refreshLevelUpOrders: breq.refreshLevelUpOrders,
 					};
 					const synthetic = buildSyntheticBlindPending(
 						breq.accountVenues,

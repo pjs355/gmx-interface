@@ -2,7 +2,7 @@ import React, { useMemo, useState, useCallback, useRef, useImperativeHandle, for
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { triggerFireworksForElement } from "../utils/Fireworks";
-import { useClaimForVenue } from "@/helpers/claimEarnings";
+import { reportClaimError, useClaimForVenue } from "@/helpers/claimEarnings";
 import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
 import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
@@ -272,9 +272,9 @@ function MultiClaimButton({
 					}
 				}
 			}
-		} catch (e: any) {
-			console.error("MULTI-CLAIM ERROR:", e);
-			setError(e?.message || String(e));
+		} catch (e: unknown) {
+			console.error("error", e);
+			setError(reportClaimError(e));
 		} finally {
 			if (onClaimSuccess && claimed.length > 0) {
 				await new Promise((r) => setTimeout(r, 2000));

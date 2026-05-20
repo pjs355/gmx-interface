@@ -23,6 +23,16 @@ import {
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
 import { getCachedDflowPositions } from "@/trading/dflow/dflowPositionsQueryCache";
 import { withTimeout } from "@/utils/withTimeout";
+import {
+	accountVenueKeyToRefreshKey,
+	createPostTradeVenueRefreshRegistry,
+	runPostTradeCashRefresh,
+	runPostTradeVenueRefresh,
+	type PostTradeAccountRefetch,
+	type PostTradeVenueRefreshContext,
+} from "@/trading/sor/postTradeVenueRefresh";
+
+export type { PostTradeAccountRefetch };
 
 /** Same total as `PortfolioContext` cashBalance — sum of stable slices from cached collateral queries. */
 export function readTotalCashHumanFromQueryClient(
@@ -67,16 +77,14 @@ export type PostTradeSyncRequest = {
 	execution: RouteExecution;
 	baseline: PostTradeBaseline;
 	addresses: PostTradeBaselineAddresses;
+	/** LevelUp CTF shares (RPC → `UserDataContext.tokenBalances`). */
 	refreshLevelUpPositions: () => Promise<void>;
+	/** LevelUp fills (GET /orders/:wallet → `UserDataContext.orders`). */
+	refreshLevelUpOrders: () => Promise<void>;
 	refetchCollateral: () => Promise<FundingStableBalancesHuman | undefined>;
 	readLevelUpSide: (marketId: string, side: "yes" | "no") => number;
 	syncUiKey: string | null;
 	shareIdentityCtx?: ShareIdentityRouteLegContext | null;
-};
-
-export type PostTradeAccountRefetch = {
-	refreshVenuePositions: (venue?: AccountVenueKey) => Promise<void>;
-	refreshCash: () => Promise<void>;
 };
 
 export type BlindPostTradeBalanceRefreshRequest = {
@@ -85,6 +93,7 @@ export type BlindPostTradeBalanceRefreshRequest = {
 	accountVenues: AccountVenueKey[];
 	includeLevelUpRpc: boolean;
 	refreshLevelUpPositions: () => Promise<void>;
+	refreshLevelUpOrders: () => Promise<void>;
 	iterations?: number;
 	intervalMs?: number;
 };
@@ -432,7 +441,10 @@ export type PostTradeRefetchPassOpts = {
  */
 export async function performPostTradeDataRefreshPass(
 	queryClient: QueryClient,
-	req: Pick<PostTradeSyncRequest, "refreshLevelUpPositions">,
+	req: Pick<
+		PostTradeSyncRequest,
+		"refreshLevelUpPositions" | "refreshLevelUpOrders"
+	>,
 	account: PostTradeAccountRefetch,
 	opts: PostTradeRefetchPassOpts,
 ): Promise<void> {
@@ -440,85 +452,31 @@ export async function performPostTradeDataRefreshPass(
 	const pushTask = (label: string, p: Promise<unknown>): void => {
 		tasks.push(withTimeout(p, REFETCH_TASK_TIMEOUT_MS, label));
 	};
-	if (opts.venueShareKeys.length > 0) {
-		pushTask(
-			"postTradeDataRefresh invalidate venue position queries",
-			(async () => {
-				for (const v of opts.venueShareKeys) {
-					if (v === "polymarket") {
-						await queryClient.invalidateQueries({ queryKey: ["polymarket-positions"] });
-					} else if (v === "predict") {
-						await queryClient.invalidateQueries({ queryKey: ["predict-positions"] });
-					} else if (v === "dflow") {
-						await queryClient.invalidateQueries({ queryKey: ["dflow-positions"] });
-					} else if (v === "limitless") {
-						await queryClient.invalidateQueries({ queryKey: [...LIMITLESS_QUERY_ROOT] });
-					}
-				}
-			})(),
-		);
-	}
-	for (const v of opts.venueShareKeys) {
-		pushTask(
-			`postTradeDataRefresh AccountData positions(${v})`,
-			account.refreshVenuePositions(v),
-		);
-	}
-	if (opts.predictMarketSupplement) {
-		pushTask(
-			"postTradeDataRefresh predict-market",
-			queryClient.refetchQueries({
-				queryKey: ["predict-market"],
-				type: "all",
-			}),
-		);
-	}
-	if (opts.dflowOutcomeBalance) {
-		pushTask(
-			"postTradeDataRefresh dflow-outcome-balance",
-			queryClient.refetchQueries({
-				queryKey: ["dflow-outcome-balance"],
-				type: "all",
-			}),
-		);
-	}
-	if (opts.limitlessPortfolioAndCollateral) {
-		pushTask(
-			"postTradeDataRefresh limitless",
-			queryClient.refetchQueries({
-				queryKey: [...LIMITLESS_QUERY_ROOT],
-				type: "all",
-			}),
-		);
-		pushTask(
-			"postTradeDataRefresh limitless-collateral",
-			queryClient.refetchQueries({
-				queryKey: [COLLATERAL_TOKENS_QUERY_KEY],
-				type: "all",
-			}),
-		);
-		debugLimitlessPortfolio("postTradeDataRefresh: refetched LIMITLESS_QUERY_ROOT", {
-			queryKey: [...LIMITLESS_QUERY_ROOT],
-		});
-	}
+
+	const registryCtx: PostTradeVenueRefreshContext = {
+		queryClient,
+		account,
+		refreshLevelUpTokenPositions: req.refreshLevelUpPositions,
+		refreshLevelUpOrders: req.refreshLevelUpOrders,
+	};
+	const registry = createPostTradeVenueRefreshRegistry(registryCtx);
+
+	const venuesToRefresh = new Set(
+		opts.venueShareKeys.map((k) => accountVenueKeyToRefreshKey(k)),
+	);
 	if (opts.levelUpRpc) {
-		pushTask(
-			"postTradeDataRefresh refreshLevelUpPositions",
-			req.refreshLevelUpPositions(),
-		);
+		venuesToRefresh.add("levelup");
 	}
+
+	for (const venue of venuesToRefresh) {
+		pushTask(`postTradeVenueRefresh.${venue}`, runPostTradeVenueRefresh(registry, venue));
+	}
+
 	if (opts.cash) {
 		pushTask(
-			"postTradeDataRefresh bridge-funding-balances",
-			queryClient.invalidateQueries({
-				queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
-			}),
+			"postTradeVenueRefresh.cash",
+			runPostTradeCashRefresh(queryClient, account),
 		);
-		pushTask(
-			"postTradeDataRefresh collateral-query-keys",
-			queryClient.invalidateQueries({ queryKey: [COLLATERAL_TOKENS_QUERY_KEY] }),
-		);
-		pushTask("postTradeDataRefresh AccountData.refresh.cash", account.refreshCash());
 	}
 	await Promise.allSettled(tasks);
 }
@@ -572,7 +530,10 @@ export async function refetchForPending(
 
 export async function runPostTradeExitBurst(
 	queryClient: QueryClient,
-	req: Pick<PostTradeSyncRequest, "refreshLevelUpPositions">,
+	req: Pick<
+		PostTradeSyncRequest,
+		"refreshLevelUpPositions" | "refreshLevelUpOrders"
+	>,
 	account: PostTradeAccountRefetch,
 	pendingSnapshot: readonly PostTradePendingTarget[],
 ): Promise<void> {

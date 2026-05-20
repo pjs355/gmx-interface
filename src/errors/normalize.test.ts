@@ -10,7 +10,10 @@ import {
 import { DFLOW_ROUTE_EXPIRED } from "./catalog/trade-execution";
 import { LIFI_NO_BRIDGE_STEPS } from "./catalog/lifi";
 import { SOR_API_HTTP_ERROR } from "./catalog/sor";
-import { POLYMARKET_NO_MARKET_LIQUIDITY } from "./catalog/venues";
+import {
+	POLYMARKET_NO_MARKET_LIQUIDITY,
+	POLYMARKET_RELAYER_WALLET_BUSY,
+} from "./catalog/venues";
 import { SOR_NO_SHARES_AVAILABLE } from "./catalog/sor";
 import { userMessage } from "./messages";
 
@@ -33,6 +36,19 @@ describe("mapPolymarketClobError", () => {
 });
 
 describe("formatErrorForUser", () => {
+	it("maps Polymarket relayer wallet busy JSON", () => {
+		const err = new Error(
+			JSON.stringify({
+				error: "request error",
+				status: 400,
+				data: { error: "wallet busy: active action exists" },
+			}),
+		);
+		expect(formatErrorForUser(err)).toBe(
+			userMessage(POLYMARKET_RELAYER_WALLET_BUSY),
+		);
+	});
+
 	it("maps Error(no match) for leg / toast display", () => {
 		expect(formatErrorForUser(new Error("no match"))).toBe(
 			userMessage(POLYMARKET_NO_MARKET_LIQUIDITY),

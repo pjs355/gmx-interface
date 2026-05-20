@@ -70,6 +70,7 @@ import WalletProvider from "@/services/wallets/WalletProvider";
 import { SignerProvider } from "context/SignerContext";
 import { PredictionDataProvider } from "context/PredictionDataContext";
 import { OddsMonitorProvider } from "context/OddsMonitorContext";
+import { EnabledVenuesProvider } from "context/EnabledVenuesContext";
 import { UserDataProvider } from "context/UserDataContext";
 import { RecentSettlementClaimProvider } from "context/RecentSettlementClaimContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
@@ -139,6 +140,7 @@ createRoot(document.getElementById("root")!).render(
 			>
 				<SmartWalletsProvider>
 					<WalletProvider>
+					<EnabledVenuesProvider>
 					<PredictionDataProvider>
 						<OddsMonitorProvider>
 							<SignerProvider>
@@ -204,6 +206,7 @@ createRoot(document.getElementById("root")!).render(
 							</SignerProvider>
 						</OddsMonitorProvider>
 					</PredictionDataProvider>
+					</EnabledVenuesProvider>
 					</WalletProvider>
 				</SmartWalletsProvider>
 			</PrivyProvider>

@@ -228,7 +228,10 @@ describe("performPostTradeDataRefreshPass", () => {
 
 		await performPostTradeDataRefreshPass(
 			qc,
-			{ refreshLevelUpPositions: refreshLevelUp },
+			{
+				refreshLevelUpPositions: refreshLevelUp,
+				refreshLevelUpOrders: vi.fn().mockResolvedValue(undefined),
+			},
 			{ refreshVenuePositions, refreshCash },
 			{
 				venueShareKeys: ["polymarket"],
@@ -263,14 +266,17 @@ describe("performPostTradeDataRefreshPass", () => {
 
 		await performPostTradeDataRefreshPass(
 			qc,
-			{ refreshLevelUpPositions: vi.fn() },
+			{
+				refreshLevelUpPositions: vi.fn(),
+				refreshLevelUpOrders: vi.fn().mockResolvedValue(undefined),
+			},
 			{
 				refreshVenuePositions: vi.fn().mockResolvedValue(undefined),
 				refreshCash: vi.fn().mockResolvedValue(undefined),
 			},
 			{
 				venueShareKeys: ["predict"],
-				predictMarketSupplement: true,
+				predictMarketSupplement: false,
 				dflowOutcomeBalance: false,
 				limitlessPortfolioAndCollateral: false,
 				levelUpRpc: false,
