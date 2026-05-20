@@ -13,6 +13,7 @@ import {
 	isLimitlessOrderbookVerboseDebug,
 } from "@/trading/limitless/limitlessConsoleDebug";
 import { isPredictionPricingDebugEnabled } from "@/utils/debugPredictionPricing";
+import { disposeWebSocket } from "@/utils/disposeWebSocket";
 
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -44,7 +45,7 @@ function logDflowKalshiMicroscopicRestingSizesIfDebug(
 	const key = `${pid}\0${venueWire}`;
 	if (dflowKalshiMicroSizeLogged.has(key)) return;
 	dflowKalshiMicroSizeLogged.add(key);
-	console.info(
+	console.debug(
 		"[venue-monitor] Microscopic resting sizes on venue_prices (debug verify)",
 		{
 			pandaMatchId: pid,
@@ -376,8 +377,8 @@ function applyPriceUpdates(
 		for (const [fieldA, fieldB] of fieldPairs) {
 			const a = venue === "limitless" ? assignA : dataA;
 			const b = venue === "limitless" ? assignB : dataB;
-			(market as any)[fieldA] = a;
-			(market as any)[fieldB] = b;
+			(market as Record<string, unknown>)[fieldA] = a;
+			(market as Record<string, unknown>)[fieldB] = b;
 		}
 		changed = true;
 	}
@@ -855,7 +856,7 @@ export function useOddsMonitorWebSocket(
 			}
 			const w = wsRef.current;
 			wsRef.current = null;
-			if (w) w.close();
+			if (w) disposeWebSocket(w);
 		};
 	}, [wsUrl, fetchMappings, publishState]);
 

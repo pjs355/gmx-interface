@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { normalizeOrderbookPayload } from "../utils";
 import type { ChartDataPoint, TimeRange } from "./types";
 
 type UsePredictionChartDataArgs = {
@@ -65,18 +66,54 @@ function normalizePrices(prices: any[]): Array<{ ts: number; price: number }> {
 		.sort((a: { ts: number }, b: { ts: number }) => a.ts - b.ts);
 }
 
+function restingSizeFromRow(row: unknown): number {
+	if (row == null) return 0;
+	if (Array.isArray(row)) {
+		if (row.length >= 2) {
+			const n = Number(row[1]);
+			return Number.isFinite(n) && n > 0 ? n : 0;
+		}
+		return 0;
+	}
+	if (typeof row !== "object") return 0;
+	const o = row as Record<string, unknown>;
+	for (const key of ["size", "amount", "quantity", "shares", "qty"] as const) {
+		const n = Number(o[key]);
+		if (Number.isFinite(n) && n > 0) return n;
+	}
+	return 0;
+}
+
 function getLivePrice(qId: string, orderbooks: { [questionId: string]: any } | undefined): number | null {
 	try {
-		const orderbook = orderbooks?.[qId];
-		if (!orderbook?.asks || !Array.isArray(orderbook.asks) || orderbook.asks.length === 0) {
-			return null;
-		}
-		const bestAsk = orderbook.asks.reduce((best: any, current: any) => {
-			const currentPrice = parseFloat(current.price || current[0] || "0");
-			const bestPrice = parseFloat(best.price || best[0] || "0");
+		const orderbook = normalizeOrderbookPayload(orderbooks?.[qId]);
+		if (!orderbook || typeof orderbook !== "object" || Array.isArray(orderbook)) return null;
+		const asks = (orderbook as { asks?: unknown }).asks;
+		if (!Array.isArray(asks) || asks.length === 0) return null;
+
+		const tradeableAsks = asks.filter((row) => restingSizeFromRow(row) > 0);
+		if (tradeableAsks.length === 0) return null;
+
+		const bestAsk = tradeableAsks.reduce((best: unknown, current: unknown) => {
+			const currentPrice = parseFloat(
+				String(
+					(Array.isArray(current) ? current[0] : (current as { price?: unknown })?.price) ??
+						"0",
+				),
+			);
+			const bestPrice = parseFloat(
+				String(
+					(Array.isArray(best) ? best[0] : (best as { price?: unknown })?.price) ?? "0",
+				),
+			);
 			return currentPrice < bestPrice ? current : best;
 		});
-		const price = parseFloat(bestAsk.price || bestAsk[0] || "0");
+		const price = parseFloat(
+			String(
+				(Array.isArray(bestAsk) ? bestAsk[0] : (bestAsk as { price?: unknown })?.price) ??
+					"0",
+			),
+		);
 		return isNaN(price) || price <= 0 ? null : price;
 	} catch {
 		return null;

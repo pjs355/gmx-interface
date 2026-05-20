@@ -12,7 +12,6 @@ import {
 	normalizeOrderbookPayload,
 	hasUsableOrderbookSnapshot,
 } from "./utils";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 
 type GetOrderbookForQuestion = (
 	umbrellaId: string,
@@ -73,6 +72,7 @@ export function useUmbrellaLiveOrderbooks(
 		const wsBase = getPredictionWebSocketUrl().replace(/\/$/, "");
 		const wsUrl = `${wsBase}/ws`;
 		const receivedOrderbooks = new Set<string>();
+		let wsErrorLogged = false;
 
 		setOrderbooksReady(false);
 
@@ -184,8 +184,15 @@ export function useUmbrellaLiveOrderbooks(
 			}
 		};
 
-		ws.onerror = (error) => {
-			console.error("error", "Multiplex orderbook WebSocket error:", error);
+		ws.onerror = () => {
+			if (wsErrorLogged) return;
+			wsErrorLogged = true;
+			if (import.meta.env.DEV) {
+				console.debug(
+					"[PredictionMarket] multiplex orderbook WebSocket unavailable (using REST/context books)",
+					wsUrl,
+				);
+			}
 		};
 
 		const timeout = setTimeout(() => {

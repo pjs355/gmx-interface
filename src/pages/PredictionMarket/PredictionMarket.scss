@@ -76,9 +76,8 @@
 // CSS variable (defined in `globals.css`), the same value the home dock uses.
 // This way the trade module is the EXACT same size on the home page and the
 // umbrella detail page — clicking between them no longer changes the trade
-// module's width. The umbrella has no left game-filter sidebar, so its left
-// content column ends up wider than the home's left grid column; the right
-// column lines up identically.
+// module's width. Desktop umbrella pages use the same `.predictions-markets-body`
+// + `GameLinks` column as home so the left filter rail matches too.
 .desktop-layout {
 	display: grid;
 	grid-template-columns:

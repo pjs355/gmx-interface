@@ -196,6 +196,143 @@ export async function readLimitlessBuyUsdcAllowancesSufficientOnBase(opts: {
 	return true;
 }
 
+/** USDC micro-units (6 decimals) needed for a FOK buy: wire notional + fee headroom for API. */
+export function limitlessFokBuyUsdcNeedMicro(wireUsd: number, feeUsd: number): bigint {
+	const wire = Number.isFinite(wireUsd) ? Math.max(0, wireUsd) : 0;
+	const fee = Number.isFinite(feeUsd) ? Math.max(0, feeUsd) : 0;
+	return BigInt(Math.ceil((wire + fee) * 1e6));
+}
+
+/**
+ * Read-only preflight before `POST /limitless/orders` FOK buy — catches missing
+ * USDC balance/allowance on the Limitless maker before an opaque relay revert.
+ */
+export async function readLimitlessMakerUsdcPreflightForFokBuy(opts: {
+	maker: string;
+	verify: LimitlessVerifyAllowanceResult;
+	wireUsd: number;
+	feeUsd: number;
+}): Promise<{
+	ok: boolean;
+	reason?: string;
+	balanceMicro: bigint;
+	needMicro: bigint;
+	minAllowanceMicro: bigint;
+	spenders: string[];
+}> {
+	const makerRaw = opts.maker?.trim();
+	const needMicro = limitlessFokBuyUsdcNeedMicro(opts.wireUsd, opts.feeUsd);
+	const emptySpenders: string[] = [];
+	if (!makerRaw || !ethers.isAddress(makerRaw)) {
+		return {
+			ok: false,
+			reason: "Limitless maker address invalid.",
+			balanceMicro: 0n,
+			needMicro,
+			minAllowanceMicro: 0n,
+			spenders: emptySpenders,
+		};
+	}
+	const maker = ethers.getAddress(makerRaw) as `0x${string}`;
+	const spenderTrim = opts.verify.spender?.trim();
+	if (!spenderTrim || !ethers.isAddress(spenderTrim)) {
+		return {
+			ok: false,
+			reason: "Limitless verify-allowance missing venue exchange (spender).",
+			balanceMicro: 0n,
+			needMicro,
+			minAllowanceMicro: 0n,
+			spenders: emptySpenders,
+		};
+	}
+	const spendersRaw =
+		Array.isArray(opts.verify.usdcSpenders) && opts.verify.usdcSpenders.length > 0
+			? opts.verify.usdcSpenders
+			: [opts.verify.spender];
+	const spenders = uniqueChecksummedAddresses(spendersRaw);
+	if (spenders.length === 0) {
+		return {
+			ok: false,
+			reason: "Limitless returned no USDC spender addresses.",
+			balanceMicro: 0n,
+			needMicro,
+			minAllowanceMicro: 0n,
+			spenders: emptySpenders,
+		};
+	}
+	const usdc = getUSDCAddress() as `0x${string}`;
+	let balanceMicro = 0n;
+	try {
+		balanceMicro = await basePublicClient.readContract({
+			address: usdc,
+			abi: erc20Abi,
+			functionName: "balanceOf",
+			args: [maker],
+		});
+	} catch (e) {
+		const m = e instanceof Error ? e.message : String(e);
+		return {
+			ok: false,
+			reason: `Could not read USDC balance on Limitless maker: ${m}`,
+			balanceMicro: 0n,
+			needMicro,
+			minAllowanceMicro: 0n,
+			spenders,
+		};
+	}
+	if (balanceMicro < needMicro) {
+		const have = Number(balanceMicro) / 1e6;
+		const need = Number(needMicro) / 1e6;
+		return {
+			ok: false,
+			reason: `Limitless maker wallet has ~$${have.toFixed(2)} USDC but this order needs ~$${need.toFixed(2)} (wire + fee). Fund the Limitless trading wallet and retry.`,
+			balanceMicro,
+			needMicro,
+			minAllowanceMicro: 0n,
+			spenders,
+		};
+	}
+	let minAllowanceMicro = needMicro;
+	for (const spender of spenders) {
+		try {
+			const allowance = await basePublicClient.readContract({
+				address: usdc,
+				abi: erc20Abi,
+				functionName: "allowance",
+				args: [maker, spender],
+			});
+			if (allowance < minAllowanceMicro) minAllowanceMicro = allowance;
+			if (allowance < needMicro) {
+				return {
+					ok: false,
+					reason: `Limitless maker USDC allowance to ${spender.slice(0, 10)}… is too low for this order (~$${(Number(needMicro) / 1e6).toFixed(2)} needed). Complete Limitless setup or retry ensure-account.`,
+					balanceMicro,
+					needMicro,
+					minAllowanceMicro: allowance,
+					spenders,
+				};
+			}
+		} catch (e) {
+			const m = e instanceof Error ? e.message : String(e);
+			return {
+				ok: false,
+				reason: `Could not read USDC allowance for Limitless maker: ${m}`,
+				balanceMicro,
+				needMicro,
+				minAllowanceMicro: 0n,
+				spenders,
+			};
+		}
+	}
+	return {
+		ok: true,
+		balanceMicro,
+		needMicro,
+		minAllowanceMicro,
+		spenders,
+	};
+}
+
 /**
  * Tri-state sell CTF approval reads for Limitless on Base.
  * Use for signup warmup: do **not** treat read failures as "insufficient" (that spams txs).

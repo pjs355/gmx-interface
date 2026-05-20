@@ -62,6 +62,21 @@ export interface UmbrellaExchangeMatching {
 	levelup?: unknown;
 }
 
+export interface UmbrellaCrossVenueVolumeByVenue {
+	polymarket?: number;
+	dflow?: number;
+	kalshi?: number;
+	predictFun?: number;
+	limitless?: number;
+}
+
+/** All-time cumulative external venue volume (USD); refreshed server-side. */
+export interface UmbrellaCrossVenueVolume {
+	totalUsd: number;
+	updatedAt: string;
+	byVenue?: UmbrellaCrossVenueVolumeByVenue;
+}
+
 export interface Umbrella {
 	_id: string;
 	displayName: string;
@@ -80,6 +95,8 @@ export interface Umbrella {
 	eventDate?: string | null;
 	/** When API returns it — not used for Limitless venue row; see odds monitor + matched-markets. */
 	exchangeMatching?: UmbrellaExchangeMatching;
+	/** Cross-venue all-time volume (Polymarket, DFlow/Kalshi, Predict, Limitless). */
+	volume?: UmbrellaCrossVenueVolume;
 }
 
 interface UmbrellaApiResponse {

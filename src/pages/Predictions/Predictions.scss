@@ -195,6 +195,15 @@ $predictions-compact-card-inline: 60px;
 	min-width: 0;
 }
 
+/* Shared home + umbrella desktop row: game filter | main (+ trade rail inside main). */
+.predictions-markets-body {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	width: 100%;
+	min-width: 0;
+}
+
 .predictions-page__main {
 	flex: 1;
 	min-width: 0;
@@ -468,6 +477,14 @@ $predictions-compact-card-inline: 60px;
 	flex-shrink: 0;
 }
 
+.game-link__clock-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: currentColor;
+	opacity: 0.85;
+}
+
 .game-link--live .game-link__label {
 	text-transform: none;
 	letter-spacing: normal;
@@ -498,10 +515,9 @@ $predictions-compact-card-inline: 60px;
 	gap: 0;
 	margin-bottom: 32px;
 
-	/* Spacing inside the card box so frosted layers can cover it (grid gap is empty). */
 	> .prediction-card:not(:last-child),
 	> .view-all-card-filtered:not(:last-child) {
-		padding-bottom: 24px;
+		padding-bottom: 2px;
 		box-sizing: border-box;
 	}
 
@@ -652,17 +668,29 @@ $predictions-compact-card-inline: 60px;
 }
 
 .prediction-card--compact .prediction-card__top.prediction-card__top--split {
-	padding-left: var(--prediction-card-inline);
-	padding-right: var(--prediction-card-inline);
+	padding: 10px var(--prediction-card-inline) 8px;
+	min-height: 0;
+}
+
+.prediction-card--compact .prediction-card__meta.prediction-card__top--split {
+	padding: 8px var(--prediction-card-inline) 10px;
+	min-height: 0;
+	border-top: none;
+}
+
+.prediction-card--compact .prediction-card__volume {
+	font-size: 14px;
+	line-height: 1;
 }
 
 .prediction-card--compact .prediction-card-outcome-rows {
 	padding-left: var(--prediction-card-inline);
 	padding-right: var(--prediction-card-inline);
+	padding-bottom: 0;
 }
 
 .prediction-card--compact .prediction-actions {
-	padding: 8px 0 16px;
+	padding: 6px 0 4px;
 }
 
 .prediction-card--compact .prediction-card-outcome-row {
@@ -1488,11 +1516,6 @@ $predictions-compact-card-inline: 60px;
 			padding-left: 0;
 			padding-right: 0;
 		}
-
-		> .prediction-card:not(:last-child),
-		> .view-all-card-filtered:not(:last-child) {
-			padding-bottom: 16px;
-		}
 	}
 
 	.prediction-actions {
@@ -1613,7 +1636,8 @@ $predictions-compact-card-inline: 60px;
 
 /* Laptop: vertical game filter sidebar (~20%) + main; horizontal pill bar unchanged below 1100px */
 @media (min-width: 1100px) {
-	.predictions-page__body {
+	.predictions-page__body,
+	.predictions-markets-body {
 		flex-direction: row;
 		align-items: stretch;
 	}
@@ -1622,7 +1646,7 @@ $predictions-compact-card-inline: 60px;
 	 * Cards column insets — match gutter next to sidebar (left) and trade rail (right).
 	 * Home trade grid uses `gap: 0`; right inset is padding on `.predictions-page__home-trade-main`.
 	 */
-	.predictions-page__body > .predictions-page__main {
+	.predictions-markets-body > .predictions-page__main {
 		padding-left: var(--predictions-split-gutter, 24px);
 	}
 
@@ -1646,13 +1670,20 @@ $predictions-compact-card-inline: 60px;
 		}
 	}
 
-	.predictions-page__body > .predictions-page__main,
-	.predictions-page__body > .predictions-page__home-trade-grid {
+	.predictions-markets-body > .predictions-page__main,
+	.predictions-markets-body > .predictions-page__home-trade-grid,
+	.predictions-markets-body > .prediction-market-content {
 		flex: 1;
 		min-width: 0;
 	}
 
-	.predictions-page__body > .game-links-wrapper {
+	.predictions-markets-body > .prediction-market-content {
+		padding-left: var(--predictions-split-gutter, 24px);
+		padding-right: var(--predictions-split-gutter, 24px);
+		box-sizing: border-box;
+	}
+
+	.predictions-markets-body > .game-links-wrapper {
 		flex: 0 0 20%;
 		max-width: 20%;
 		align-self: stretch;
@@ -1702,17 +1733,18 @@ $predictions-compact-card-inline: 60px;
 		}
 	}
 
-	.predictions-page--market-bg .predictions-page__body > .game-links-wrapper > .game-links-underlay {
+	.predictions-page--market-bg .predictions-markets-body > .game-links-wrapper > .game-links-underlay,
+	.prediction-market-page:not(.mobile) .predictions-markets-body > .game-links-wrapper > .game-links-underlay {
 		@include predictions-glass-backdrop;
 	}
 
-	.predictions-page__body > .game-links-wrapper .scroll-arrow,
-	.predictions-page__body > .game-links-wrapper .fade-left,
-	.predictions-page__body > .game-links-wrapper .fade-right {
+	.predictions-markets-body > .game-links-wrapper .scroll-arrow,
+	.predictions-markets-body > .game-links-wrapper .fade-left,
+	.predictions-markets-body > .game-links-wrapper .fade-right {
 		display: none !important;
 	}
 
-	.predictions-page__body > .game-links-wrapper .game-links-bar {
+	.predictions-markets-body > .game-links-wrapper .game-links-bar {
 		flex-direction: column;
 		align-items: stretch;
 		flex-wrap: nowrap;
@@ -1722,7 +1754,7 @@ $predictions-compact-card-inline: 60px;
 		gap: 6px;
 	}
 
-	.predictions-page__body > .game-links-wrapper .game-link {
+	.predictions-markets-body > .game-links-wrapper .game-link {
 		position: relative;
 		isolation: isolate;
 		width: 100%;
@@ -1750,17 +1782,17 @@ $predictions-compact-card-inline: 60px;
 		}
 	}
 
-	.predictions-page__body > .game-links-wrapper .game-link:hover .game-link__count,
-	.predictions-page__body > .game-links-wrapper .game-link.active .game-link__count {
+	.predictions-markets-body > .game-links-wrapper .game-link:hover .game-link__count,
+	.predictions-markets-body > .game-links-wrapper .game-link.active .game-link__count {
 		color: #9285f3;
 	}
 
-	.predictions-page__body > .game-links-wrapper .game-link__inner {
+	.predictions-markets-body > .game-links-wrapper .game-link__inner {
 		position: relative;
 		z-index: 1;
 	}
 
-	.predictions-page__body > .game-links-wrapper .game-link__count {
+	.predictions-markets-body > .game-links-wrapper .game-link__count {
 		font-size: 17px;
 	}
 }

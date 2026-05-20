@@ -26,6 +26,8 @@ import {
 	getTagLabelsFromUmbrella,
 	resolveLogoByTags,
 } from "@/helpers/gameLogoResolver";
+import { formatUmbrellaCrossVenueVolumeLabel } from "@/helpers/umbrellaVolume";
+import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
 
@@ -776,6 +778,10 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		);
 	};
 
+	const umbrellaVolumeLabel = formatUmbrellaCrossVenueVolumeLabel(
+		umbrella.volume?.totalUsd,
+	);
+
 	const renderActions = () => {
 		if (umbrella.children && umbrella.children.length === 1) {
 			const orderbook = singleMarketOrderbooks[umbrella._id];
@@ -904,6 +910,10 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		navigateToUmbrella();
 	};
 
+	const handleCardPointerIntent = () => {
+		preloadPredictionMarketRoute();
+	};
+
 	return (
 		<div
 			key={umbrella._id}
@@ -912,6 +922,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			data-qa-panda-match-id={umbrella.pandascore_matchId}
 			className="prediction-card prediction-card--compact"
 			onClick={handleCardClick}
+			onMouseEnter={handleCardPointerIntent}
+			onFocus={handleCardPointerIntent}
 			style={{ cursor: "pointer" }}
 		>
 			<div className="prediction-card__top prediction-card__top--split">
@@ -929,6 +941,22 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			</div>
 
 			<div className="prediction-actions">{renderActions()}</div>
+
+			{umbrellaVolumeLabel &&
+			umbrella.children &&
+			umbrella.children.length === 1 ? (
+				<div className="prediction-card__meta prediction-card__top--split">
+					<div className="prediction-card__top-status">
+						<span className="prediction-card__volume prediction-card__headline-match-winner">
+							{umbrellaVolumeLabel}
+						</span>
+					</div>
+					<div
+						className="prediction-card__top-headline"
+						aria-hidden="true"
+					/>
+				</div>
+			) : null}
 		</div>
 	);
 };

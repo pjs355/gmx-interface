@@ -34,6 +34,13 @@ const BLOCKED_URLS = [
   'pulse.walletconnect.com',
 ];
 
+/** Opt-in verbose dev console (`console.debug`, e.g. Privy Embedded1193Provider). */
+function isDevConsoleDebugEnabled(): boolean {
+  const trading = import.meta.env.VITE_DEBUG_TRADING;
+  const consoleFlag = import.meta.env.VITE_DEBUG_CONSOLE;
+  return trading === "true" || consoleFlag === "true" || consoleFlag === "1";
+}
+
 /**
  * Initialize console suppression based on environment
  * Call this once at app startup
@@ -41,6 +48,7 @@ const BLOCKED_URLS = [
 export function initConsoleSuppress() {
   // Check if we're in production (Vite sets import.meta.env.PROD)
   const isProduction = import.meta.env.PROD;
+  const quietDev = !isProduction && !isDevConsoleDebugEnabled();
   
   // Block unused web3modal/walletconnect API calls (in both dev and prod)
   // These are from transitive dependencies we don't use
@@ -60,12 +68,15 @@ export function initConsoleSuppress() {
     console.log = noop;
     console.debug = noop;
     console.info = noop;
-    
+
     // Keep console.warn and console.error for critical issues
     // These are important for debugging production problems
-    
+
     // Log once that we've suppressed console (this will be the only log)
     originalConsole.log('[Production] Console logging suppressed');
+  } else if (quietDev) {
+    // Default dev builds: hide SDK console.debug noise (Privy Embedded1193Provider, etc.)
+    console.debug = noop;
   }
 }
 

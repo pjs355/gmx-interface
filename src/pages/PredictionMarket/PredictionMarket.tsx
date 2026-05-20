@@ -9,14 +9,46 @@ import {
 	umbrellaDataService,
 } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "context/PredictionDataContext";
+import GameLinks from "@/pages/Predictions/components/GameLinks";
+import {
+	getHomeGameFilter,
+	setHomePendingGameFilter,
+} from "@/pages/Predictions/utils/gameFilterNavigation";
 import { MarketPanels } from "./MarketPanels";
 import { useUmbrellaLiveOrderbooks } from "./useUmbrellaLiveOrderbooks";
 import { useVolumeSortedQuestions } from "./useVolumeSortedQuestions";
 import { useChartState } from "./useChartState";
 import { useMatchSettled } from "./useMatchSettled";
+import "../Predictions/Predictions.scss";
 import "./PredictionMarket.scss";
 import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
 import { hasUsableOrderbookSnapshot } from "./utils";
+import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
+
+function sanitizeUmbrellaQuestions(raw: unknown[]): PredictionMarket[] {
+	return raw.filter(
+		(q) =>
+			q &&
+			((q as any)._id ||
+				(q as any).questionId ||
+				(q as any).marketId),
+	) as PredictionMarket[];
+}
+
+function resolveQuestionsForUmbrella(
+	umbrella: Umbrella,
+	getQuestionsForUmbrella: (umbrellaId: string) => any[],
+): PredictionMarket[] {
+	const fromContext = getQuestionsForUmbrella(umbrella._id);
+	if (Array.isArray(fromContext) && fromContext.length > 0) {
+		return sanitizeUmbrellaQuestions(fromContext);
+	}
+	const children = (umbrella as { children?: unknown[] }).children;
+	if (Array.isArray(children) && children.length > 0) {
+		return sanitizeUmbrellaQuestions(children);
+	}
+	return [];
+}
 
 export default function PredictionMarket() {
 	return <PredictionMarketContent />;
@@ -61,14 +93,7 @@ function PredictionMarketContent() {
 	});
 	const [questions, setQuestions] = useState<PredictionMarket[]>(() => {
 		if (!umbrella?._id) return [];
-		const qs = (getQuestionsForUmbrella(umbrella._id) as any[]) || [];
-		return qs.filter(
-			(q) =>
-				q &&
-				((q as any)._id ||
-					(q as any).questionId ||
-					(q as any).marketId)
-		) as PredictionMarket[];
+		return resolveQuestionsForUmbrella(umbrella, getQuestionsForUmbrella);
 	});
 	/*
 	 * `selectedMarketId` is set by Yes/No clicks on multi-market home cards.
@@ -119,8 +144,18 @@ function PredictionMarketContent() {
 	 */
 	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] =
 		useState(() => Boolean(initialStoredMatch));
-	const [loading, setLoading] = useState(() => !umbrella);
+	const [loading, setLoading] = useState(
+		() => !umbrella && contextLoading,
+	);
 	const isMobile = useMedia("(max-width: 1100px)");
+	const sidebarSelectedGame = getHomeGameFilter();
+	const handleTradingSidebarSelect = useCallback(
+		(game: string | null) => {
+			setHomePendingGameFilter(game);
+			navigate("/");
+		},
+		[navigate],
+	);
 	const titleRef = useRef<HTMLHeadingElement | null>(null);
 	const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({
 		umbrella: false,
@@ -146,32 +181,33 @@ function PredictionMarketContent() {
 		}
 
 		setUmbrella(umbrellaFromContext);
-		const qs = getQuestionsForUmbrella(umbrellaFromContext._id);
-		if (!qs || qs.length === 0) {
-			if (!contextLoading) {
-				// Check if markets are resolved before redirecting
-				const resolvedQs = getResolvedQuestionsForUmbrella(umbrellaFromContext._id);
-				if (resolvedQs.length > 0) {
-					setQuestions([]);
-					setLoading(false);
-					return;
-				}
-				setQuestions([]);
-				setLoading(false);
-				navigate("/", { replace: true });
+		const sanitized = resolveQuestionsForUmbrella(
+			umbrellaFromContext,
+			getQuestionsForUmbrella,
+		);
+		if (sanitized.length === 0) {
+			if (contextLoading) {
+				setLoading(true);
 				return;
 			}
+			// Check if markets are resolved before redirecting
+			const resolvedQs = getResolvedQuestionsForUmbrella(
+				umbrellaFromContext._id,
+			);
+			if (resolvedQs.length > 0) {
+				setQuestions([]);
+				setLoading(false);
+				return;
+			}
+			setQuestions([]);
+			setLoading(false);
+			navigate("/", { replace: true });
 			return;
 		}
-		const sanitized = (qs as any[]).filter(
-			(q) =>
-				q &&
-				((q as any)._id || (q as any).questionId || (q as any).marketId)
-		);
 		if (!hasLogged.current.markets) {
 			hasLogged.current.markets = true;
 		}
-		setQuestions(sanitized as any);
+		setQuestions(sanitized);
 		setLoading(false);
 	}, [
 		umbrellaId,
@@ -181,31 +217,6 @@ function PredictionMarketContent() {
 		// getUmbrellaById, getQuestionsForUmbrella, getOrderbookForQuestion are stable
 		navigate,
 	]);
-
-	useEffect(() => {
-		if (!umbrella) return;
-		const label = `[PredictionMarket] full umbrella — ${umbrella.displayName ?? umbrella._id} (${umbrella._id})`;
-		try {
-			const umbrellaDump = JSON.parse(JSON.stringify(umbrella)) as Umbrella;
-			const questionsDump =
-				questions.length > 0
-					? JSON.parse(JSON.stringify(questions))
-					: questions;
-			console.groupCollapsed(label);
-			console.log("umbrella:", umbrellaDump);
-			console.log(
-				`child markets (questions under this umbrella, ${questions.length}):`,
-				questionsDump,
-			);
-			console.groupEnd();
-		} catch (err) {
-			console.groupCollapsed(label);
-			console.log("umbrella (live object; JSON dump failed):", umbrella);
-			console.log("questions (live):", questions);
-			console.warn("[PredictionMarket] umbrella/questions serialize error:", err);
-			console.groupEnd();
-		}
-	}, [umbrella, questions]);
 
 	const {
 		questionOrderbooks,
@@ -477,31 +488,8 @@ function PredictionMarketContent() {
 			: null
 	);
 
-	// Only show error page if umbrella fails to load
-	if (loading && !umbrella) {
-		return (
-			<div className="default-container page-layout">
-				<div className="mb-2">
-					<h1 className="mb-16 text-34 font-bold">
-						<Trans>Umbrella Not Found</Trans>
-					</h1>
-					<p className="error-message">
-						Please navigate to this page from the Predictions list.
-					</p>
-					<Button
-						variant="primary"
-						onClick={() => navigate("/")}
-						style={{
-							padding: "12px 24px",
-							fontSize: "16px",
-							marginTop: "16px",
-						}}
-					>
-						← Back to Predictions
-					</Button>
-				</div>
-			</div>
-		);
+	if (!umbrella && (loading || contextLoading)) {
+		return <PageSkeleton />;
 	}
 
 	// Show error page if umbrella is explicitly null after loading
@@ -538,27 +526,50 @@ function PredictionMarketContent() {
 					isMobile ? "mobile" : "desktop"
 				}`}
 			>
-				{/* MarketHeader is rendered inside MarketPanels so it sits
-				    inside the left column on desktop and the top of the
-				    single-column stack on mobile. Keeps the trade box flush
-				    with the umbrella header instead of being pushed below a
-				    full-width black bar. */}
-				<MarketPanels
-					umbrella={umbrella!}
-					titleRef={titleRef}
-					sortedQuestions={sortedQuestions as any}
-					questionOrderbooks={questionOrderbooks}
-					activeMarket={activeMarket as any}
-					activePosition={activePosition}
-					onMarketSwitch={handleMarketSwitch}
-					onMarketSwitchWithOrderbook={
-						handleMarketSwitchWithOrderbook
-					}
-					onPositionChange={handlePositionChange}
-					fetchAllOrderbooks={fetchAllOrderbooks}
-					chartState={chartOnlyState}
-					settledInfo={settledInfo}
-				/>
+				{isMobile ? (
+					<MarketPanels
+						umbrella={umbrella!}
+						titleRef={titleRef}
+						sortedQuestions={sortedQuestions as any}
+						questionOrderbooks={questionOrderbooks}
+						activeMarket={activeMarket as any}
+						activePosition={activePosition}
+						onMarketSwitch={handleMarketSwitch}
+						onMarketSwitchWithOrderbook={
+							handleMarketSwitchWithOrderbook
+						}
+						onPositionChange={handlePositionChange}
+						fetchAllOrderbooks={fetchAllOrderbooks}
+						chartState={chartOnlyState}
+						settledInfo={settledInfo}
+					/>
+				) : (
+					<div className="predictions-markets-body">
+						<GameLinks
+							selectedGame={sidebarSelectedGame}
+							onGameSelect={handleTradingSidebarSelect}
+							umbrellas={umbrellas}
+							loading={contextLoading}
+							filterType="all"
+						/>
+						<MarketPanels
+							umbrella={umbrella!}
+							titleRef={titleRef}
+							sortedQuestions={sortedQuestions as any}
+							questionOrderbooks={questionOrderbooks}
+							activeMarket={activeMarket as any}
+							activePosition={activePosition}
+							onMarketSwitch={handleMarketSwitch}
+							onMarketSwitchWithOrderbook={
+								handleMarketSwitchWithOrderbook
+							}
+							onPositionChange={handlePositionChange}
+							fetchAllOrderbooks={fetchAllOrderbooks}
+							chartState={chartOnlyState}
+							settledInfo={settledInfo}
+						/>
+					</div>
+				)}
 			</div>
 		</PredictionCurtainProvider>
 	);

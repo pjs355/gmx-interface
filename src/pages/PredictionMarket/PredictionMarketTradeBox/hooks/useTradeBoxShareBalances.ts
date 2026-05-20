@@ -15,8 +15,12 @@ import {
 } from "@/trading/limitless/limitlessCatalogTokenPair";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
-import { usePredictMarketDetail } from "@/trading/predict/usePredictMarketDetail";
+import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
 import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
+import {
+	isPredictPositionResolvedLost,
+	predictVenuePositionMatchesPagePredictWiring,
+} from "@/trading/predict/predictTradeBoxMatch";
 import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import { predictOutcomeSide } from "@/trading/predict/predictOutcome";
 import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
@@ -247,14 +251,31 @@ function positionMatchesMarket(pos: VenuePosition, market: MarketRef): boolean {
 	return pl.includes(ml) || ml.includes(pl);
 }
 
-/** Match Polymarket/Predict positions to the open market via any umbrella sibling `conditionId`. */
+type PositionMarketMatchContext = {
+	umbrellaId: string | undefined;
+	matchedMarkets: MatchedMarket[] | null | undefined;
+	pageMatchedMonitor: MatchedMarket | null | undefined;
+	catalogPredictFun: MatchedMarket["predictFun"] | undefined;
+};
+
+/** Match Polymarket/Predict positions to the open market via sibling `conditionId` or Predict wiring. */
 function positionMatchesMarketOrSiblings(
 	pos: VenuePosition,
 	market: MarketRef,
 	siblingConditionIds: Set<string>,
+	predictCtx: PositionMarketMatchContext | null,
 ): boolean {
 	const pidKey = polymarketConditionLookupKey((pos.conditionId || "").trim());
 	if (pidKey && siblingConditionIds.size > 0 && siblingConditionIds.has(pidKey)) return true;
+	if (pos.venue === "predictfun" && predictCtx) {
+		return predictVenuePositionMatchesPagePredictWiring(
+			pos,
+			predictCtx.matchedMarkets,
+			predictCtx.umbrellaId,
+			predictCtx.pageMatchedMonitor,
+			predictCtx.catalogPredictFun,
+		);
+	}
 	return positionMatchesMarket(pos, market);
 }
 
@@ -364,7 +385,7 @@ function venuePositionToYesNo(
 	isVsSingle: boolean,
 	yesTeamLabel: string,
 	noTeamLabel: string,
-	predictMarketDetail: PredictMarketDetail | null | undefined,
+	predictMarketDetails: Map<number, PredictMarketDetail> | undefined,
 ): "yes" | "no" | null {
 	if (p.venue === "polymarket") {
 		return polymarketPositionToYesNo(
@@ -388,8 +409,12 @@ function venuePositionToYesNo(
 			: "no";
 	}
 	if (p.venue === "predictfun") {
+		const positionDetail =
+			p.numericMarketId != null && Number.isFinite(p.numericMarketId)
+				? predictMarketDetails?.get(Math.trunc(p.numericMarketId))
+				: undefined;
 		const fromDetail = inferPredictSideFromMarketDetail(
-			predictMarketDetail ?? null,
+			positionDetail ?? null,
 			p.tokenId,
 		);
 		if (fromDetail) return fromDetail.side === "Yes" ? "yes" : "no";
@@ -415,7 +440,7 @@ function buildOutcomeVenueBreakdownRows(
 	isVsSingle: boolean,
 	yesTeamLabel: string,
 	noTeamLabel: string,
-	predictMarketDetail: PredictMarketDetail | null | undefined,
+	predictMarketDetails: Map<number, PredictMarketDetail> | undefined,
 ): SellVenueBreakdownRow[] {
 	const byVenue = new Map<string, number>();
 	const add = (venueKey: string, shares: number) => {
@@ -433,7 +458,7 @@ function buildOutcomeVenueBreakdownRows(
 			isVsSingle,
 			yesTeamLabel,
 			noTeamLabel,
-			predictMarketDetail,
+			predictMarketDetails,
 		);
 		if (side !== outcome) continue;
 		add(p.venue, p.shares);
@@ -589,18 +614,37 @@ export function useTradeBoxShareBalances(opts: {
 		],
 	);
 
-	const predictShareBalancesMarketId = useMemo((): number | null => {
-		const raw = pageMatchedMonitor?.predictFun?.marketIdA;
-		if (raw === undefined || raw === null || String(raw).trim() === "") return null;
-		const n = Number(String(raw).trim());
-		return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
-	}, [pageMatchedMonitor?.predictFun?.marketIdA]);
+	const predictMarketIdsForDetails = useMemo(() => {
+		const ids = new Set<number>();
+		for (const p of predictQ.data ?? []) {
+			if (p.numericMarketId != null && Number.isFinite(p.numericMarketId)) {
+				ids.add(Math.trunc(p.numericMarketId));
+			}
+		}
+		return Array.from(ids);
+	}, [predictQ.data]);
 
-	const predictMarketDetailForSharesQ = usePredictMarketDetail(
-		predictShareBalancesMarketId,
-		Boolean(predictShareBalancesMarketId),
+	const predictMarketDetailsMapQ = usePredictMarketDetailsMap(
+		predictMarketIdsForDetails,
+		venueEnabled && predictMarketIdsForDetails.length > 0,
 	);
-	const predictMarketDetailForShares = predictMarketDetailForSharesQ.data;
+	const predictMarketDetailsMap =
+		predictMarketDetailsMapQ.data ?? new Map<number, PredictMarketDetail>();
+
+	const predictPositionMatchCtx = useMemo((): PositionMarketMatchContext | null => {
+		if (!umbrellaId) return null;
+		return {
+			umbrellaId,
+			matchedMarkets: matchedOddsMarkets ?? null,
+			pageMatchedMonitor: pageMatchedMonitor ?? null,
+			catalogPredictFun: umbrellaForPage?.exchangeMatching?.predictFun,
+		};
+	}, [
+		umbrellaId,
+		matchedOddsMarkets,
+		pageMatchedMonitor,
+		umbrellaForPage?.exchangeMatching?.predictFun,
+	]);
 
 	const relevantVenuePositions = useMemo(() => {
 		if (!umbrellaId || !market) return [];
@@ -623,6 +667,15 @@ export function useTradeBoxShareBalances(opts: {
 		]) {
 			const k = dedupeKey(p);
 			if (seen.has(k)) continue;
+
+			if (p.venue === "predictfun") {
+				const mid =
+					p.numericMarketId != null && Number.isFinite(p.numericMarketId)
+						? Math.trunc(p.numericMarketId)
+						: null;
+				const detail = mid != null ? predictMarketDetailsMap.get(mid) : undefined;
+				if (isPredictPositionResolvedLost(p, detail)) continue;
+			}
 
 			let keep = false;
 			if (p.venue === "polymarket" && polyMonitorKey) {
@@ -697,6 +750,8 @@ export function useTradeBoxShareBalances(opts: {
 		siblingConditionIds,
 		pageMatchedMonitor,
 		matchedOddsMarkets,
+		predictPositionMatchCtx,
+		predictMarketDetailsMap,
 		polyQ.data,
 		predictQ.data,
 		dflowQ.data,
@@ -776,7 +831,7 @@ export function useTradeBoxShareBalances(opts: {
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
-				predictMarketDetailForShares,
+				predictMarketDetailsMap,
 			);
 			if (side === "yes") yes += p.shares;
 			else if (side === "no") no += p.shares;
@@ -812,7 +867,7 @@ export function useTradeBoxShareBalances(opts: {
 		appState?.timestamp,
 		pageMatchedMonitor,
 		resolvedLimitlessMapping,
-		predictMarketDetailForShares,
+		predictMarketDetailsMap,
 	]);
 
 	const buyLines = useMemo(
@@ -832,7 +887,7 @@ export function useTradeBoxShareBalances(opts: {
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
-				predictMarketDetailForShares,
+				predictMarketDetailsMap,
 			),
 			no: buildOutcomeVenueBreakdownRows(
 				"no",
@@ -844,7 +899,7 @@ export function useTradeBoxShareBalances(opts: {
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
-				predictMarketDetailForShares,
+				predictMarketDetailsMap,
 			),
 		}),
 		[
@@ -856,7 +911,7 @@ export function useTradeBoxShareBalances(opts: {
 			isVsSingle,
 			yesTeamLabel,
 			noTeamLabel,
-			predictMarketDetailForShares,
+			predictMarketDetailsMap,
 		],
 	);
 
@@ -885,7 +940,7 @@ export function useTradeBoxShareBalances(opts: {
 			isVsSingle,
 			yesTeamLabel,
 			noTeamLabel,
-			predictMarketDetailForShares,
+			predictMarketDetailsMap,
 		);
 		const total = rows.reduce((s, r) => s + r.shares, 0);
 		return { sellTotalShares: total, sellVenueBreakdown: rows };
@@ -899,7 +954,7 @@ export function useTradeBoxShareBalances(opts: {
 		matchedOddsMarkets,
 		pageMatchedMonitor,
 		resolvedLimitlessMapping,
-		predictMarketDetailForShares,
+		predictMarketDetailsMap,
 	]);
 
 	/**
@@ -925,7 +980,7 @@ export function useTradeBoxShareBalances(opts: {
 				isVsSingle,
 				yesTeamLabel,
 				noTeamLabel,
-				predictMarketDetailForShares,
+				predictMarketDetailsMap,
 			);
 			if (side === "yes") add(yes, p.venue, p.shares);
 			else if (side === "no") add(no, p.venue, p.shares);
@@ -941,7 +996,7 @@ export function useTradeBoxShareBalances(opts: {
 		appState?.timestamp,
 		pageMatchedMonitor,
 		resolvedLimitlessMapping,
-		predictMarketDetailForShares,
+		predictMarketDetailsMap,
 	]);
 
 	return {

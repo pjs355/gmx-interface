@@ -1,4 +1,5 @@
 import React from "react";
+import { FiClock } from "react-icons/fi";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "context/PredictionDataContext";
 import type { Tag } from "@/services/api/tagService";
@@ -372,6 +373,10 @@ export default function GameLinks({
 					>
 						<span className="game-link__inner">
 							<span className="game-link__leading">
+								<FiClock
+									className="game-link__clock-icon"
+									aria-hidden
+								/>
 								<span className="game-link__label">Starting Soon</span>
 							</span>
 							<span
