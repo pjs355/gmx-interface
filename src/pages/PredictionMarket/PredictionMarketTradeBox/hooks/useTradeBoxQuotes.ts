@@ -5,7 +5,7 @@ import {
 	SOR_ROUTE_DEBOUNCE_MS,
 	type UseSorRouteInput,
 	type UseSorRouteResult,
-} from "@/trading/sor/useSorRoute";
+} from "@/trading/sor/core/useSorRoute";
 import { deriveSorRouteAmountFromInput } from "./deriveSorRouteAmount";
 
 export { SOR_ROUTE_DEBOUNCE_MS as TRADE_BOX_QUOTE_DEBOUNCE_MS };
@@ -23,12 +23,12 @@ export type UseTradeBoxQuotesArgs = {
 	limitPriceCents: number | null | undefined;
 	maxScopedSellShares: number;
 	sorRoute: SorRouteInput;
-	/** Bundled Pond preview on POST /api/sor/route (replaces separate `/order/quote`). */
+	/** Ask server to fetch Pond for DFlow overlay (all tab + dflow tab). */
 	includeDflowPondQuote: boolean;
 };
 
 export type UseTradeBoxQuotesResult = {
-	/** Amount string after {@link TRADE_BOX_QUOTE_DEBOUNCE_MS} — drives SOR (and Pond when bundled). */
+	/** Amount string after {@link TRADE_BOX_QUOTE_DEBOUNCE_MS} — drives SOR. */
 	debouncedAmount: string;
 	/** SOR numeric amount derived from `debouncedAmount`. */
 	sorAmountUsd: number;
@@ -36,8 +36,11 @@ export type UseTradeBoxQuotesResult = {
 };
 
 /**
- * Single debounce for trade-box pricing: SOR route (+ optional bundled DFlow Pond
- * quote on the same POST). Fires after the same quiet period (300ms).
+ * Single debounce for trade-box pricing: SOR route (Pond economics are folded
+ * into the DFlow leg on the server when applicable).
+ *
+ * When `sorRoute.walletBalances` is omitted (logged-out / not hydrated), the API
+ * still returns book-based routes; smart-routing rows may use `quoteKind: "theoreticalOnly"`.
  */
 export function useTradeBoxQuotes(args: UseTradeBoxQuotesArgs): UseTradeBoxQuotesResult {
 	const debouncedAmount = useDebouncedValue(

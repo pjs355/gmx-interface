@@ -17,13 +17,13 @@ import {
 	useAccountData,
 	useVenueAddressChainMap,
 } from "@/context/AccountDataContext";
-import { buildChainBalances } from "@/trading/sor/buildChainBalances";
+import { buildChainBalances } from "@/trading/sor/core/buildChainBalances";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import {
 	useWithdrawPlanExecution,
 	getWithdrawExecutionErrorMessage,
 } from "@/pages/Transfers/useWithdrawPlanExecution";
-import { readFundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
+import { readFundingStableBalancesHuman } from "@/trading/sor/prefund/fundingStableBalances";
 import type { LifiWithdrawPlanData, LifiWithdrawPlanLeg } from "@/types/trading";
 import "./TransfersModal.scss";
 

@@ -19,11 +19,11 @@ import {
 import { getCTFAddress, getUSDCAddress, getExchangeAddress, getFeeWrapperAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { usePredictionData } from "context/PredictionDataContext";
-import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/polymarket/privyEmbeddedWallet";
+import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/venues/polymarket/wallet/privyEmbeddedWallet";
 import {
 	parsePrivyEvmTxHash,
 	waitForBaseTransactionSuccess,
-} from "@/trading/base/waitPrivyBaseTxReceipt";
+} from "@/trading/chains/waitPrivyBaseTxReceipt";
 import { fromMicroUnits } from "@/helpers/ctfMicroUnits";
 import { fetchNonZeroCtfBalancesRpc } from "@/helpers/fetchNonZeroCtfBalancesRpc";
 

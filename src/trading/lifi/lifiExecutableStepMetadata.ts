@@ -8,7 +8,7 @@ import type {
 	LifiQuoteStep,
 	LifiSolanaDelegateHint,
 } from "@/types/trading";
-import { CHAIN_LIFI_IDS } from "@/trading/sor/sor-types";
+import { CHAIN_LIFI_IDS } from "@/trading/sor/core/sor-types";
 
 const LIFI_SOLANA_CHAIN_ID = CHAIN_LIFI_IDS.solana;
 

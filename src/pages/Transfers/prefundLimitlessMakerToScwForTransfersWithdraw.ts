@@ -1,5 +1,5 @@
-import { readFundingStableBalancesForChains } from "@/trading/sor/fundingStableBalances";
-import { waitForScwUsdcAfterLimitlessPortfolioWithdraw } from "@/trading/sor/limitlessMakerToScwWithdrawWait";
+import { readFundingStableBalancesForChains } from "@/trading/sor/prefund/fundingStableBalances";
+import { waitForScwUsdcAfterLimitlessPortfolioWithdraw } from "@/trading/sor/prefund/limitlessMakerToScwWithdrawWait";
 
 const MIN_CONSOLIDATE_USD = 0.02;
 

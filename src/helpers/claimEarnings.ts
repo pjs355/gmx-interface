@@ -30,28 +30,28 @@ import {
 	POLYGON_NEG_RISK_ADAPTER,
 	POLYGON_PUSD,
 	POLYGON_USDC_E,
-} from "@/trading/polymarket/constants";
-import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
-import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
-import { readPolymarketSafeCtfBalanceWei } from "@/trading/polymarket/polygonCollateralWrap";
+} from "@/trading/venues/polymarket/trade/constants";
+import { usePolymarketRelay } from "@/trading/venues/polymarket/session/usePolymarketRelay";
+import { executePolygonRelayAndWait } from "@/trading/venues/polymarket/session/safeActions";
+import { readPolymarketSafeCtfBalanceWei } from "@/trading/venues/polymarket/trade/polygonCollateralWrap";
 import {
 	encodePacked,
 	keccak256,
 	type Address,
 	type Hex,
 } from "viem";
-import { predictCtfKey } from "@/trading/predict/predictContractKeys";
-import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
+import { predictCtfKey } from "@/trading/venues/predict/trade/predictContractKeys";
+import { ensurePredictChain, getBscBrowserSigner } from "@/trading/venues/predict/wallet/bnbWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { tradingQueryKeys } from "@/trading/queryKeys";
-import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
+import { quoteSignAndSubmitDflowOrder } from "@/trading/venues/dflow/quote/quoteSignAndSubmitDflowOrder";
 import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
-import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
-import { postLimitlessEnsureAccountWhenNeeded } from "@/trading/limitless/limitlessEnsureAccountRequest";
-import { redeemLimitlessWinningPositionOnBase } from "@/trading/limitless/limitlessRedeemOnBase";
-import { getLimitlessBaseTxClientForAddress } from "@/trading/limitless/limitlessBaseTxClientForAddress";
+import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/venues/limitless/session/limitlessEnsureEoaBody";
+import { postLimitlessEnsureAccountWhenNeeded } from "@/trading/venues/limitless/session/limitlessEnsureAccountRequest";
+import { redeemLimitlessWinningPositionOnBase } from "@/trading/venues/limitless/portfolio/limitlessRedeemOnBase";
+import { getLimitlessBaseTxClientForAddress } from "@/trading/venues/limitless/trade/limitlessBaseTxClientForAddress";
 const BASE_CHAIN_ID = 8453;
 
 /** `POST /api/limitless/ensure-account` payload (unwrapped) or rare `{ data }` cache shape. */

@@ -2,7 +2,7 @@ import type { RelayClient, Transaction } from "@polymarket/builder-relayer-clien
 import { encodeFunctionData, erc20Abi } from "viem";
 import { polygon } from "viem/chains";
 import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
-import { executePolygonRelayAndWait } from "@/trading/polymarket/safeActions";
+import { executePolygonRelayAndWait } from "@/trading/venues/polymarket/session/safeActions";
 
 /**
  * Single ERC-20 transfer for same-chain withdrawals (Base / BNB smart wallet or

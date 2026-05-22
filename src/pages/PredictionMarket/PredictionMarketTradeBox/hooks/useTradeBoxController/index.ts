@@ -1,7 +1,7 @@
 import type { MutableRefObject } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
-import type { UseSorLegExecutorDeps } from "@/trading/sor/useSorLegExecutor";
+import type { UseSorLegExecutorDeps } from "@/trading/sor/core/useSorLegExecutor";
 import type { AccountWalletGate } from "@/context/accountWallets";
 import type { AccountDataVacmSlice } from "@/context/accountWallets";
 import type { useAccountData } from "@/context/AccountDataContext";
@@ -17,7 +17,6 @@ import type { useTradeBoxShareBalances } from "../useTradeBoxShareBalances";
 import { useTradeBoxSorFunding, type UseTradeBoxSorFundingArgs } from "./useTradeBoxSorFunding";
 import {
 	useTradeBoxQuotesLayer,
-	type DflowOrderQuoteForSentinel,
 	type UseTradeBoxQuotesLayerArgs,
 } from "./useTradeBoxQuotesLayer";
 import {
@@ -29,8 +28,6 @@ import {
 	useTradeBoxTradeButton,
 	type UseTradeBoxTradeButtonArgs,
 } from "./useTradeBoxTradeButton";
-
-export type { DflowOrderQuoteForSentinel };
 
 export type UseTradeBoxControllerArgs = UseTradeBoxSorFundingArgs &
 	Omit<

@@ -1,5 +1,5 @@
-import type { SorErrorCode, SorRouteResult, SorSide, SorVenue } from "@/trading/sor/sor-types";
-import { VENUE_DISPLAY_NAMES } from "@/trading/sor/sor-types";
+import type { SorErrorCode, SorRouteResult, SorSide, SorVenue } from "@/trading/sor/core/sor-types";
+import { VENUE_DISPLAY_NAMES } from "@/trading/sor/core/sor-types";
 import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
 import { AppError, isAppError } from "./AppError";
 import {
@@ -139,6 +139,8 @@ export function formatSorRouteFailureMessage(
 		return userMessage(SOR_NO_VENUES_ELIGIBLE);
 	}
 	if (code === "EXECUTION_NOT_READY") {
+		const server = result.error?.trim();
+		if (server) return server;
 		return userMessage(SOR_EXECUTION_NOT_READY);
 	}
 	if (code === "AMOUNT_TOO_SMALL") {

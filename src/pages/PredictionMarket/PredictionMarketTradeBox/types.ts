@@ -7,6 +7,16 @@ import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { VenueRowModel } from "@/hooks/useTradingPagePrices";
+import type { TradeQuote } from "./tradeQuote/types";
+import type {
+	RoutePlan,
+	RouteExecution,
+	SorErrorCode,
+	SorExecutionPhase,
+	SorPrefundLegProgress,
+	VenueRoutePreview,
+} from "@/trading/sor";
+import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 
 export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
@@ -114,4 +124,70 @@ export interface ApprovalState {
 	isApproved: boolean;
 	isChecking: boolean;
 	isApproving: boolean;
+}
+
+export interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
+	calculateContractsForMarketOrder: (
+		usdAmount: number,
+		position: "yes" | "no",
+		side: "buy" | "sell",
+	) => MarketOrderCalculation;
+	getEffectivePrice: (
+		usdAmount: number,
+		contracts: number,
+		remainingUsd: number,
+	) => number;
+	state: TradeBoxCoreState;
+	tradeQuote: TradeQuote;
+	onPositionChange: (position: "yes" | "no") => void;
+	onAmountChange: (amount: string) => void;
+	onTradingVenueChange: (venue: TradingVenue) => void;
+	onSideChange: (side: "buy" | "sell") => void;
+	predictVenueBookHints?: {
+		yes: OrderbookSnapshot | null;
+		no: OrderbookSnapshot | null;
+	} | null;
+	matchedVenues?: Set<string>;
+	buttonState: {
+		text: string;
+		disabled: boolean;
+		onClick: () => void;
+		depositShortfallUsd?: number;
+		isSweepingBook?: boolean;
+		availableShares?: number;
+	};
+	sorRoute: {
+		displayRoute: RoutePlan | null;
+		executionRoute: RoutePlan | null;
+		venuePreviews: VenueRoutePreview[] | null;
+		displayRouteSourceQuestionId: string | null;
+		executionRouteSourceQuestionId: string | null;
+		displayLoading: boolean;
+		displayStale: boolean;
+		executionLoading: boolean;
+		executionStale: boolean;
+		displayError: string | null;
+		displayErrorCode: SorErrorCode | null;
+		executionError: string | null;
+		executionErrorCode: SorErrorCode | null;
+	};
+	sorExecution: {
+		execution: RouteExecution | null;
+		isExecuting: boolean;
+		executionPhase?: SorExecutionPhase;
+		prefundLegProgress?: SorPrefundLegProgress | null;
+		remainingBudget: number | null;
+		requestReroute: () => Promise<number | null>;
+		acceptResult: () => Promise<void>;
+		resetExecution: () => void;
+	};
+	maxScopedSellShares: number;
+	sharesLoadingForActiveTab?: boolean;
+	allMarketsSellYesBid?: number | null;
+	allMarketsSellNoBid?: number | null;
+	shareBalances: TradeBoxShareBalancesSnapshot;
+	dflowUninitAtSubmit?: boolean;
+	routePreviewAllowed: boolean;
+	smartRoutingMarketKey: string;
+	predictFunFeeRateBps?: number;
 }

@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import type { DflowOrderQuoteResult } from "@/trading/dflow/dflowOrderQuoteTypes";
 import type { RoutePlan } from "@/trading/sor";
 import type { TradingVenue } from "../types";
 import { buildTradePreview } from "./buildTradePreview";
@@ -12,12 +11,10 @@ export type UseTradeQuoteArgs = {
 	amount: string;
 	executionRoute: RoutePlan | null;
 	bookPreview: MarketOrderBookPreview;
-	dflowQuote: DflowOrderQuoteResult | null | undefined;
-	debouncedQuoteAmount: string;
 	predictFunFeeRateBps: number | undefined;
 };
 
-/** Layer 2 — single preview model from book + SOR + optional Pond. */
+/** Layer 2 — single preview model from book + SOR execution route. */
 export function useTradeQuote(args: UseTradeQuoteArgs): TradeQuote {
 	return useMemo(
 		() =>
@@ -28,8 +25,6 @@ export function useTradeQuote(args: UseTradeQuoteArgs): TradeQuote {
 				amount: args.amount,
 				executionRoute: args.executionRoute,
 				bookPreview: args.bookPreview,
-				dflowQuote: args.dflowQuote,
-				debouncedQuoteAmount: args.debouncedQuoteAmount,
 				predictFunFeeRateBps: args.predictFunFeeRateBps,
 			}),
 		[
@@ -39,8 +34,6 @@ export function useTradeQuote(args: UseTradeQuoteArgs): TradeQuote {
 			args.amount,
 			args.executionRoute,
 			args.bookPreview,
-			args.dflowQuote,
-			args.debouncedQuoteAmount,
 			args.predictFunFeeRateBps,
 		],
 	);

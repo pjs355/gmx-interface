@@ -29,7 +29,7 @@ import {
 	submitDepositWalletBatchWithRetries,
 	waitRelay,
 	withPolygonRelayMutex,
-} from "@/trading/polymarket/safeActions";
+} from "@/trading/venues/polymarket/session/safeActions";
 
 async function executeWalletBatch(
 	relay: RelayClient,
@@ -46,7 +46,7 @@ import {
 } from "@/trading/lifi/lifiTransferFromFailed";
 import { mergeLifiStepsWithRawAllowanceMetadata } from "@/trading/lifi/lifiExecutableStepMetadata";
 import { ensureSolanaSplDelegateAllowanceIfNeeded } from "@/trading/lifi/ensureSolanaLifiSplDelegate";
-import { CHAIN_LIFI_IDS } from "@/trading/sor/sor-types";
+import { CHAIN_LIFI_IDS } from "@/trading/sor/core/sor-types";
 
 export type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 

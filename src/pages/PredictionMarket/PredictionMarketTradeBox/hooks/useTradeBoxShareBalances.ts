@@ -3,39 +3,39 @@ import { useUserData } from "@/context/UserDataContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useVenueAddressChainMap } from "@/context/AccountDataContext";
-import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
+import { useLimitlessVenuePositions } from "@/trading/venues/limitless/portfolio/useLimitlessPortfolioVenue";
 import {
 	limitlessVenuePositionMatchesPageMarket,
 	limitlessVenuePositionMatchesUmbrellaCatalog,
-} from "@/trading/limitless/limitlessTradeBoxMatch";
+} from "@/trading/venues/limitless/trade/limitlessTradeBoxMatch";
 import {
 	inferLimitlessCatalogYesColumn,
 	inferLimitlessYesColumnFromOutcomeTitle,
-} from "@/trading/limitless/limitlessCatalogTokenPair";
-import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
-import { usePredictPositions } from "@/trading/predict/usePredictPositions";
-import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
+} from "@/trading/venues/limitless/trade/limitlessCatalogTokenPair";
+import { usePolymarketPositions } from "@/trading/venues/polymarket/portfolio/usePolymarketPositions";
+import { usePredictPositions } from "@/trading/venues/predict/portfolio/usePredictPositions";
+import { usePredictMarketDetailsMap } from "@/trading/venues/predict/portfolio/usePredictMarketDetailsMap";
 import {
 	isPredictPositionResolvedLost,
 	predictVenuePositionMatchesPagePredictWiring,
-} from "@/trading/predict/predictTradeBoxMatch";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
-import { predictOutcomeSide } from "@/trading/predict/predictOutcome";
-import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
-import { inferPredictSideFromMarketDetail } from "@/trading/predict/predictPositionSide";
+} from "@/trading/venues/predict/trade/predictTradeBoxMatch";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
+import { predictOutcomeSide } from "@/trading/venues/predict/trade/predictOutcome";
+import { normalizePredictTokenId } from "@/trading/venues/predict/portfolio/predictOrdersApi";
+import { inferPredictSideFromMarketDetail } from "@/trading/venues/predict/trade/predictPositionSide";
 import {
 	buildPredictUmbrellaLookup,
 	matchVenuePositionToUmbrella,
 	type PredictUmbrellaLookup,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
-import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
+import { useDflowPositions } from "@/trading/venues/dflow/portfolio/useDflowPositions";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { titlesMatchVenue } from "@/helpers/umbrellaDisplayName";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
-import type { LimitlessInferenceWire } from "@/trading/limitless/limitlessCatalogTokenPair";
+import type { LimitlessInferenceWire } from "@/trading/venues/limitless/trade/limitlessCatalogTokenPair";
 import {
 	type VenuePosition,
 	type VenueId,
@@ -44,17 +44,17 @@ import {
 import {
 	findMatchedMarketByPolyConditionId,
 	inferPolymarketYesNoFromToken,
-} from "@/trading/polymarket/polyPositionSide";
+} from "@/trading/venues/polymarket/trade/polyPositionSide";
 import {
 	buildUmbrellaLookupByPolymarketConditionId,
 	polymarketConditionLookupKey,
-} from "@/trading/polymarket/polymarketConditionLookup";
+} from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
 import {
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
 	lookupUmbrellaByDflowEventTicker,
 	mintMatchesDflowExchange,
-} from "@/trading/dflow/dflowUmbrellaLookup";
+} from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
 import {
 	resolveLimitlessInferenceWireForUmbrella,
 } from "@/utils/mergeMonitorLimitlessFromUmbrella";

@@ -43,6 +43,7 @@ import {
 	BTN_PREDICT_MARKET_IDS_NOT_LINKED,
 	BTN_PREDICT_NO_MATCHED_MARKET,
 	BTN_REFRESHING_VENUE_PRICES,
+	executionNotReadyButtonLabel,
 } from "@/errors";
 
 /**
@@ -71,41 +72,8 @@ type SorStateForDeposit = {
 	handleAddFunds?: () => void;
 };
 
-const PREVIEW_ROUTE_NO_BALANCES_MSG =
-	"Legacy route — refresh to load balance-backed execution";
-
-/** Buy: legacy preview route only (disabled). Per-chain shortfall uses `trySorDepositToTrade`. */
-export function buttonIfBuyInsufficientFunds(
-	side: "buy" | "sell",
-	route: { sufficientFunds?: boolean; theoreticalLiquidity?: boolean } | null | undefined,
-): ButtonStateResult | null {
-	if (side !== "buy" || !route || route.theoreticalLiquidity !== true) return null;
-	return { text: PREVIEW_ROUTE_NO_BALANCES_MSG, disabled: true, onClick: () => {} };
-}
-
 export function trySorDepositToTrade(side: "buy" | "sell", sorState: SorStateForDeposit | undefined): ButtonStateResult | null {
 	if (!sorState?.handleAddFunds || side !== "buy" || !sorState.route) return null;
-
-	if (sorState.route.sufficientFunds === false) {
-		const needed = sorState.route.totalCost;
-		const avail = sorState.totalAvailableCash;
-		let shortfall = 0;
-		if (typeof needed === "number" && Number.isFinite(needed) && needed > 0) {
-			if (typeof avail === "number" && Number.isFinite(avail)) {
-				shortfall = Math.max(0, needed - avail);
-			} else {
-				shortfall = needed;
-			}
-		}
-		if (shortfall > 0) {
-			return {
-				text: "Deposit to Trade",
-				disabled: false,
-				onClick: sorState.handleAddFunds,
-				depositShortfallUsd: shortfall,
-			};
-		}
-	}
 
 	const gap = getSorBuyCashShortfall(sorState.route, sorState.totalAvailableCash, {
 		routeExpired: sorState.routeExpired,
@@ -333,9 +301,6 @@ export function sorUnifiedPrimary(
 		smartRoutingTab = options.smartRoutingTab ?? false;
 	}
 
-	const theoretical = buttonIfBuyInsufficientFunds(side, sorState.route);
-	if (theoretical) return theoretical;
-
 	const dep = trySorDepositToTrade(side, sorState);
 	if (dep) return dep;
 	if (sorState.isExecuting) {
@@ -405,7 +370,9 @@ export function sorUnifiedPrimary(
 			text: execNotReady
 				? venueAutoSetupInFlight
 					? VENUE_LOADING_LABEL
-					: "Complete venue setup"
+					: executionNotReadyButtonLabel({
+							serverError: sorState.error,
+						})
 				: "Route unavailable",
 			disabled: true,
 			onClick: () => {},

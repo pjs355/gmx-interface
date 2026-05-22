@@ -26,7 +26,7 @@ import ConnectWalletButton from "../Common/ConnectWalletButton";
 import "./Header.scss";
 import { usePortfolio as usePortfolioContext } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
-import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/usePostTradeAccountSync";
+import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/post-trade/usePostTradeAccountSync";
 
 type Props = {
 	openSettings: () => void;

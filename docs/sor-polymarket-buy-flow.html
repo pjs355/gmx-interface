@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SOR order flow — Polymarket $2 buy</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    @page { size: landscape; margin: 12mm; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px;
+      color: #111;
+      line-height: 1.45;
+    }
+    h1 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #444; margin-bottom: 1.5rem; font-size: 0.95rem; }
+    .legend { display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.85rem; }
+    .legend span { padding: 2px 8px; border-radius: 4px; }
+    .client { background: #e8f4fc; border: 1px solid #1565c0; }
+    .server { background: #fff3e0; border: 1px solid #e65100; }
+    .outside { background: #f3f4f6; border: 1px solid #616161; }
+    .mermaid { margin: 1rem 0 2rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; }
+    code { font-size: 0.78rem; }
+    .print-hint { font-size: 0.85rem; color: #666; margin-top: 2rem; }
+    @media print {
+      .print-hint { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <h1>SOR order flow — logged-in Polymarket market buy ($2)</h1>
+  <p class="subtitle">
+    Assumes Polymarket tab, USDC on Polygon (no LI.FI bridge). Blue = client
+    <code>prinx-interface/src/trading/sor</code>. Orange = server
+    <code>predictions-api/src/sor</code> (+ <code>register-sor.ts</code>).
+  </p>
+
+  <div class="legend">
+    <span class="client">Client /sor</span>
+    <span class="server">Server /sor</span>
+    <span class="outside">Trade box / venue (not in /sor)</span>
+  </div>
+
+  <pre class="mermaid">
+flowchart TB
+  subgraph S0["Stage 0 — Amount input"]
+    A0["User types $2"]
+    A1["useTradeState"]
+    A2["Local book walk → book preview"]
+  end
+
+  subgraph S1["Stage 1 — Quote (client /sor)"]
+    B1["deriveSorRouteAmount"]
+    B2["useTradeBoxQuotes · 300ms debounce"]
+    B3["buildChainBalances"]
+    B4["useSorRoute · targetVenue=polymarket"]
+    B5["sor-api · POST /api/sor/route"]
+  end
+
+  subgraph S2["Stage 2 — Route (server /sor)"]
+    C1["register-sor.ts"]
+    C2["computeRoute"]
+    C3["market-matcher + orderbook-cache"]
+    C4["book-walker + fee-calculator"]
+    C5["optimizer · 1 Poly leg"]
+    C6["market-buy-clamp + HMAC"]
+    C7["RoutePlan → client"]
+  end
+
+  subgraph S3["Stage 3 — Preview"]
+    D1["buildTradePreview · sor"]
+    D2["sorQuoteTrust + sorPreflight"]
+    D3["Button: Trade"]
+  end
+
+  subgraph S4["Stage 4 — Execute"]
+    E1["requireVenueAddressChainMapForExecute"]
+    E2["useSorExecution.execute"]
+    E3["useSorLegExecutor · polymarket"]
+    E4["wireAmountUsdForVenue"]
+    E5["polyClob.placeMarketOrder"]
+    E6["sor-api · execution tracker"]
+  end
+
+  subgraph S5["Stage 5 — Post-trade"]
+    F1["postTradeBaseline"]
+    F2["usePostTradeAccountSync"]
+  end
+
+  A0 --> A1 --> A2
+  A1 --> B1 --> B2 --> B3 --> B4 --> B5
+  B5 --> C1 --> C2 --> C3 --> C4 --> C5 --> C6 --> C7
+  C7 --> D1 --> D2 --> D3
+  D3 --> E1 --> E2 --> E3 --> E4 --> E5 --> E6
+  E6 --> F1 --> F2
+  </pre>
+
+  <h2>Which <code>/sor</code> files run at each stage</h2>
+
+  <h3>Client — <code>prinx-interface/src/trading/sor/</code></h3>
+  <table>
+    <thead>
+      <tr><th>Stage</th><th>Files used</th><th>Not used (this path)</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1 Quote</strong></td>
+        <td>
+          <code>useSorRoute.ts</code>,
+          <code>sor-api.ts</code>,
+          <code>buildChainBalances.ts</code>,
+          <code>sor-types.ts</code>
+        </td>
+        <td>All prefund/*, execute hooks</td>
+      </tr>
+      <tr>
+        <td><strong>3 Preview / gate</strong></td>
+        <td>
+          <code>sorQuoteTrust.ts</code>,
+          <code>sorPreflight.ts</code>,
+          <code>sorUiUtils.ts</code>
+        </td>
+        <td><code>sorPredictNetHeldDisplay.ts</code> (Predict only)</td>
+      </tr>
+      <tr>
+        <td><strong>4 Execute</strong></td>
+        <td>
+          <code>useSorExecution.ts</code>,
+          <code>useSorLegExecutor.ts</code> (poly branch),
+          <code>sorBridgeGroups.ts</code>,
+          <code>wireAmount.ts</code>,
+          <code>sorPreflight.ts</code>,
+          <code>sor-api.ts</code>,
+          <code>sorBridgeWallTimeBudget.ts</code> (timeouts)
+        </td>
+        <td>
+          <code>prefundPlan.ts</code>,
+          <code>fundingStableBalances.ts</code>,
+          <code>lifiPrefundQuoteSolve.ts</code>,
+          <code>limitlessPrefundSweep.ts</code> — no bridge
+        </td>
+      </tr>
+      <tr>
+        <td><strong>5 Post-trade</strong></td>
+        <td>
+          <code>postTradeBaseline.ts</code>,
+          <code>postTradeRouteAlign.ts</code>,
+          <code>postTradeReconcile.ts</code>,
+          <code>usePostTradeAccountSync.tsx</code>,
+          <code>performPostTradeDataRefresh.ts</code>,
+          <code>pollAccountRefresh.ts</code>,
+          <code>postTradeVenueRefresh.ts</code>
+        </td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><strong>UI only</strong></td>
+        <td colspan="2"><code>SorTransientRouteErrorText.tsx</code>, <code>SorKalshiKycShortfallBanner.tsx</code> — not on happy path</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Server — <code>predictions-api/src/sor/</code></h3>
+  <table>
+    <thead>
+      <tr><th>Stage</th><th>Files used</th><th>Not used (Poly $2, no bridge)</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Route POST</strong></td>
+        <td>
+          <code>index.ts</code> (<code>computeRoute</code>, <code>computeBuyRoute</code>, <code>finalizePlan</code>, HMAC),
+          <code>types.ts</code>,
+          <code>market-matcher.ts</code>,
+          <code>orderbook-cache.ts</code>,
+          <code>book-walker.ts</code>,
+          <code>fee-calculator.ts</code>,
+          <code>resolve-polymarket-fee-rate.ts</code>,
+          <code>optimizer.ts</code>,
+          <code>market-buy-clamp.ts</code>,
+          <code>buy-route-invariants.ts</code>,
+          <code>venue-minimums.ts</code>,
+          <code>sor-floors.ts</code>,
+          <code>locked-execution-venue.ts</code>
+        </td>
+        <td>
+          <code>sell-optimizer.ts</code>,
+          <code>dflow-*</code>,
+          <code>apply-dflow-order-quote-to-route.ts</code>,
+          <code>limitless-fee-curve.ts</code>,
+          <code>prediction-buy-maker-micro.ts</code>,
+          <code>bridge-estimator.ts</code> (minimal / empty bridges)
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Execute POST</strong></td>
+        <td><code>execution-tracker.ts</code> (via <code>register-sor.ts</code> outside folder)</td>
+        <td>Re-route / DFlow overlay</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Suggested directory buckets (for reorganizing)</h2>
+  <table>
+    <thead><tr><th>Bucket</th><th>Client files</th><th>Server files</th></tr></thead>
+    <tbody>
+      <tr><td><strong>types + API</strong></td><td><code>sor-types.ts</code>, <code>sor-api.ts</code>, <code>index.ts</code></td><td><code>types.ts</code>, <code>index.ts</code></td></tr>
+      <tr><td><strong>route / quote</strong></td><td><code>useSorRoute.ts</code>, <code>buildChainBalances.ts</code>, <code>sorQuoteTrust.ts</code>, <code>sorPreflight.ts</code></td><td><code>computeRoute*</code>, <code>market-matcher</code>, books, optimizer, clamp</td></tr>
+      <tr><td><strong>execute</strong></td><td><code>useSorExecution.ts</code>, <code>useSorLegExecutor.ts</code>, <code>sorBridgeGroups.ts</code>, <code>wireAmount.ts</code></td><td><code>execution-tracker.ts</code>, <code>locked-execution-venue.ts</code></td></tr>
+      <tr><td><strong>prefund / bridge</strong></td><td><code>prefundPlan.ts</code>, <code>fundingStable*</code>, <code>lifi*</code>, <code>limitlessPrefund*</code></td><td><code>bridge-estimator.ts</code></td></tr>
+      <tr><td><strong>fees / venue math</strong></td><td><code>predictionBuyCollateralMicro.ts</code>, <code>levelUpSorSigning.ts</code></td><td><code>fee-calculator</code>, <code>dflow-fees</code>, <code>resolve-polymarket-fee-rate</code>, <code>limitless-fee-curve</code></td></tr>
+      <tr><td><strong>post-trade</strong></td><td><code>postTrade*</code>, <code>performPostTrade*</code>, <code>pollAccountRefresh</code>, <code>usePostTradeAccountSync</code></td><td>—</td></tr>
+      <tr><td><strong>UI</strong></td><td><code>sorUiUtils.ts</code>, banners</td><td>—</td></tr>
+      <tr><td><strong>dflow-specific</strong></td><td>(client DFlow in <code>useSorLegExecutor</code> + <code>trading/dflow/</code>)</td><td><code>dflow-pond-quote.ts</code>, <code>apply-dflow-order-quote-to-route.ts</code></td></tr>
+    </tbody>
+  </table>
+
+  <p class="print-hint">
+    Save as PDF: open this file in a browser → Print → Save as PDF (landscape recommended).
+    Source: <code>docs/sor-polymarket-buy-flow.mmd</code> for editable Mermaid.
+  </p>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: "neutral", flowchart: { curve: "basis" } });
+  </script>
+</body>
+</html>

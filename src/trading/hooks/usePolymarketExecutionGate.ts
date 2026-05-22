@@ -14,8 +14,8 @@ const DISABLED_GATE: PolymarketExecutionGate = {
 
 /**
  * Prediction market execution is not gated on `GET …/account-overview` routing flags.
- * Readiness for Polymarket CLOB follows the same wallet resolution as Transfers / LI.FI
- * (`useFundingAddresses`); LevelUp venue uses on-chain wallet + approvals only.
+ * Readiness for Polymarket CLOB follows VACM wallet roles (`AccountDataContext`);
+ * LevelUp venue uses on-chain wallet + approvals only.
  */
 export function usePolymarketExecutionGate(): PolymarketExecutionGate {
 	return DISABLED_GATE;

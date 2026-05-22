@@ -15,10 +15,10 @@ import { useAccountData } from "@/context/AccountDataContext";
 import {
 	limitlessPositionPortfolioUsdValue,
 	limitlessPositionsForPortfolioMtm,
-} from "@/trading/limitless/splitLimitlessVenuePositions";
-import { sumPredictPositionMarkValue } from "@/trading/predict/sumPredictPositionMarkValue";
-import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
-import { debugLimitlessPortfolioTable } from "@/trading/limitless/limitlessPortfolioDebug";
+} from "@/trading/venues/limitless/portfolio/splitLimitlessVenuePositions";
+import { sumPredictPositionMarkValue } from "@/trading/venues/predict/portfolio/sumPredictPositionMarkValue";
+import { usePredictMarketDetailsMap } from "@/trading/venues/predict/portfolio/usePredictMarketDetailsMap";
+import { debugLimitlessPortfolioTable } from "@/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
 import { isVenueMarketResolvedLike } from "@/types/trading/venuePosition";
 import { useOddsMonitor } from "context/OddsMonitorContext";
 import { getListingYesNoPricesForUmbrella } from "@/helpers/predictionUtils";
@@ -231,24 +231,11 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 			(userDataLoading && tokenBalances.size === 0) ||
 			dflowBlockingPortfolio);
 
-	// Single sum from CollateralTokenContext — `null` until that query has settled at least once.
+	// Single total from CollateralTokenContext — `null` until that query has settled at least once.
 	const cashBalance: number | null = useMemo(() => {
 		if (!collateral.isFetched) return null;
-		return (
-			collateral.baseUsdc +
-			collateral.polygonStable +
-			collateral.bscUsdt +
-			collateral.solanaUsdc +
-			collateral.limitlessMakerUsdc
-		);
-	}, [
-		collateral.isFetched,
-		collateral.baseUsdc,
-		collateral.polygonStable,
-		collateral.bscUsdt,
-		collateral.solanaUsdc,
-		collateral.limitlessMakerUsdc,
-	]);
+		return collateral.total;
+	}, [collateral.isFetched, collateral.total]);
 
 	const compute = useCallback(() => {
 		if (!account) {

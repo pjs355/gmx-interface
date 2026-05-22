@@ -13,13 +13,13 @@ import Tooltip from "components/Tooltip/Tooltip";
 import {
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
-import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
-import { buildUmbrellaLookupByDflowEventTicker, buildUmbrellaLookupByDflowOutcomeMint } from "@/trading/dflow/dflowUmbrellaLookup";
-import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/levelUpQuestionIdsForVenueHistory";
+import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
+import { buildUmbrellaLookupByDflowEventTicker, buildUmbrellaLookupByDflowOutcomeMint } from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
+import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/venues/levelup/levelUpQuestionIdsForVenueHistory";
 import {
 	getVenueHistoryMarketColumnLabel,
 	isGenericBinaryOutcomeLabel,
-} from "@/trading/predict/predictPositionLabel";
+} from "@/trading/venues/predict/portfolio/predictPositionLabel";
 import {
 	getTradeCount,
 	formatHistoryReturnPctAbs,
@@ -35,10 +35,10 @@ import {
 	winnerLabelFromLevelUpTitle,
 	winnerLabelFromVenuePosition,
 } from "../utils/historyOutcomeWinner";
-import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
+import { debugLimitlessPortfolio } from "@/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
 import {
 	buildPredictUmbrellaLookup,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import {
 	logFullHistoryDebug,
 	type FullHistoryUnifiedBlock,

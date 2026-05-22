@@ -11,9 +11,8 @@ import {
 	useAccountData,
 	useVenueAddressChainMap,
 } from "@/context/AccountDataContext";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { buildPredictUmbrellaLookup } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+import { buildPredictUmbrellaLookup } from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import { useHandleClaimSuccess } from "./assemblers/useHandleClaimSuccess";
 import { useHistoryResolve } from "./assemblers/useHistoryResolve";
 import { usePortfolioDerivations } from "./assemblers/usePortfolioDerivations";
@@ -24,7 +23,7 @@ import { useVenueHistoryRawItems } from "./assemblers/useVenueHistoryRawItems";
 import { useVenueOrders } from "./assemblers/useVenueOrders";
 import { useDflowBundle } from "./venues/dflow/useDflowBundle";
 import { useLimitlessBundle } from "./venues/limitless/useLimitlessBundle";
-import { limitlessVenueRowsForWinningsTab } from "@/trading/limitless/splitLimitlessVenuePositions";
+import { limitlessVenueRowsForWinningsTab } from "@/trading/venues/limitless/portfolio/splitLimitlessVenuePositions";
 import { usePolymarketBundle } from "./venues/polymarket/usePolymarketBundle";
 import { usePredictBundle } from "./venues/predict/usePredictBundle";
 
@@ -74,12 +73,11 @@ export default function usePositionsData() {
 		venueAddressChainMap?.predictfun.walletAddress ?? null;
 	/** LevelUp SCW — sole wallet for umbrella positions / history resolve gates. */
 	const levelupWalletAddress = venueAddressChainMap?.levelup.walletAddress ?? null;
-	const {
-		isLoading: fundingAddressesLoading,
-		fundingHydrated,
-	} = useFundingAddresses();
+	const accountData = useAccountData();
+	const fundingAddressesLoading = accountData.walletIsLoading;
+	const fundingHydrated = accountData.readiness.hydrated;
 	const { authenticated } = usePrivy();
-	const { positions: accountPositions, dflowProof } = useAccountData();
+	const { positions: accountPositions, dflowProof } = accountData;
 	const {
 		active: polyPositions,
 		winnings: polyWinnings,

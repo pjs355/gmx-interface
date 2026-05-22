@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { AccountPositionsSlice } from "@/context/AccountDataContext";
-import { usePolymarketTradeHistory } from "@/trading/polymarket/usePolymarketTradeHistory";
+import { usePolymarketTradeHistory } from "@/trading/venues/polymarket/portfolio/usePolymarketTradeHistory";
 import type { VenuePosition } from "@/types/trading/venuePosition";
 import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 

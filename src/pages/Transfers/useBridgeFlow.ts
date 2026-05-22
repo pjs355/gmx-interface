@@ -16,7 +16,7 @@ import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHa
 import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
 import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
 import { useAccountData } from "@/context/AccountDataContext";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { walletRolesFromVenueAddressChainMap } from "@/context/accountWallets";
 import { useLifiQuoteMutation } from "@/trading/hooks/useLifiBridge";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { getBridgeQuoteFingerprint } from "@/trading/lifi/quoteDisplay";
@@ -201,13 +201,58 @@ export function pickAutoFromForBridgeTransfer(
 
 export function useBridgeFlow() {
 	const queryClient = useQueryClient();
-	const funding = useFundingAddresses();
+	const accountData = useAccountData();
+	const walletRoles = useMemo(
+		() =>
+			accountData.venueAddressChainMap != null
+				? walletRolesFromVenueAddressChainMap(accountData.venueAddressChainMap)
+				: null,
+		[accountData.venueAddressChainMap],
+	);
+	const funding = useMemo(
+		() => ({
+			profileId: accountData.readiness.profileId ?? undefined,
+			baseSmartWallet: walletRoles?.baseSmartWallet,
+			limitlessMakerBase: walletRoles?.limitlessMakerBase,
+			embeddedEoa: walletRoles?.embeddedEoa,
+			polymarketSafe: walletRoles?.polymarketSafe,
+			polygonSigner: walletRoles?.polygonSigner,
+			predictMaker: walletRoles?.predictMaker,
+			solanaAddress: walletRoles?.solanaAddress,
+			fundingGate: accountData.walletGate,
+			fundingHydrated: accountData.readiness.hydrated,
+			isLoading: accountData.walletIsLoading,
+			integrationMode: accountData.polyAccount.integrationMode,
+			polymarketAccountNotFound: accountData.polyAccount.notFound,
+			accountOverviewNotFound: Boolean(
+				accountData.overview.data?._clientAccountOverviewNotFound,
+			),
+			polymarketAccount: accountData.polyAccount.data ?? undefined,
+			accountOverview: accountData.overview.data ?? undefined,
+			refetchPolymarket: accountData.refresh.polyAccount,
+			refetchOverview: accountData.refresh.overview,
+			verifyOnChain: accountData.polyAccount.verifyOnChain,
+			polymarketAccountQuery: {
+				status: accountData.polyAccount.status,
+				isFetched: accountData.polyAccount.isFetched,
+				isError: accountData.polyAccount.status === "error",
+				errorMessage: accountData.polyAccount.error,
+			},
+			accountOverviewQuery: {
+				status: accountData.overview.status,
+				isFetched: accountData.overview.isFetched,
+				isError: accountData.overview.status === "error",
+				errorMessage: accountData.overview.error,
+			},
+		}),
+		[accountData, walletRoles],
+	);
 	// Display + auto-from-pick read the server's `/portfolio/cash-summary`
 	// snapshot via `AccountDataContext` instead of fanning out to per-chain
 	// RPCs. The transactional `executeLifiSteps` path below still calls
 	// `readFundingStableBalancesHuman` directly when it needs a verified
 	// fresh on-chain read at submit time.
-	const { cash: accountCash, refresh: refreshAccount } = useAccountData();
+	const { cash: accountCash, refresh: refreshAccount } = accountData;
 	const fundingBalances = useMemo(
 		() => ({
 			data: accountCash.isFetched

@@ -10,7 +10,7 @@ export type UseReadinessGatesArgs = {
 	effectiveAccount: string | null;
 
 	authenticated: boolean;
-	/** Trimmed Solana funding address from `useFundingAddresses`; when set, DFlow proof must resolve before positions paint. */
+	/** Trimmed Solana address from VACM (`AccountDataContext`); when set, DFlow proof must resolve before positions paint. */
 	solanaLinked: boolean;
 	dflowProofIsFetched: boolean;
 	fundingHydrated: boolean;

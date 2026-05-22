@@ -2,17 +2,17 @@ import { type Umbrella } from "@/services/api/umbrellaDataService";
 import {
 	type PredictOrderRow,
 	normalizePredictTokenId,
-} from "@/trading/predict/predictOrdersApi";
+} from "@/trading/venues/predict/portfolio/predictOrdersApi";
 import {
 	type PredictMatchEventRow,
 	predictMarketIdForTokenFromDetailsMap,
 	predictMarketIdForTokenFromMatches,
-} from "@/trading/predict/predictMatchesApi";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+} from "@/trading/venues/predict/trade/predictMatchesApi";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
 import {
 	type PredictUmbrellaLookup,
 	resolvePredictUmbrellaForDisplay,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import {
 	type VenueHistoryFill,
 	type VenuePosition,

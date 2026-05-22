@@ -438,31 +438,30 @@ export class Tradebox {
 	}
 
 	/**
-	 * `data-qa="sor-leg"` rows live inside the visually-clipped E2E sentinel
-	 * block in `PredictionMarketTradeBoxUI` (`.tradebox-e2e-sentinel`). The
-	 * sentinel ships with `aria-expanded="true"` so this helper short-circuits
-	 * once the toggle is attached — there is no real Details collapsible in
-	 * the rendered UI to interact with.
-	 *
-	 * The sentinel only mounts after `sorRoute.executionRoute` has legs; on a
-	 * single-venue tab (e.g. LevelUp) that channel can lag the Trade button by
-	 * many seconds on a slow localhost book. Use the same timeout budget as
-	 * {@link readLegAttrs} / quote readiness (defaults to {@link QUOTE_READY_TIMEOUT_MS}).
+	 * Opens the selected venue's smart-routing drawer when collapsed. E2E leg
+	 * attrs live inside `.smart-routing-drawer` and only mount when expanded.
 	 */
 	async expandSorDetailsIfCollapsed(
 		toggleAttachTimeoutMs: number = QUOTE_READY_TIMEOUT_MS,
 	): Promise<void> {
-		const toggle = this.root.locator("button.sor-details-toggle").first();
-		await toggle.waitFor({
+		const block = this.root.locator(".smart-routing-block--selected").first();
+		await block.waitFor({
 			state: "attached",
 			timeout: toggleAttachTimeoutMs,
 		});
-		const expanded = await toggle.getAttribute("aria-expanded");
+		const expandBtn = block
+			.locator("button.smart-routing-row__expand")
+			.first();
+		await expandBtn.waitFor({
+			state: "attached",
+			timeout: toggleAttachTimeoutMs,
+		});
+		const expanded = await expandBtn.getAttribute("aria-expanded");
 		if (expanded === "true") {
 			return;
 		}
-		await toggle.click();
-		await expect(toggle).toHaveAttribute("aria-expanded", "true", {
+		await expandBtn.click();
+		await expect(expandBtn).toHaveAttribute("aria-expanded", "true", {
 			timeout: 10_000,
 		});
 		await sleepBetweenTradeboxActions();
@@ -472,9 +471,9 @@ export class Tradebox {
 	 * Visible smart-routing-row sub-text price reader.
 	 *
 	 * Used as the sell-side fallback for tests 3/4 because the SOR
-	 * `[data-qa="sor-leg"][data-leg-side="market-sell"]` sentinel only renders
-	 * when `sorRoute.executionRoute` is non-null (see `PredictionMarketTradeBoxUI.tsx`
-	 * lines 1488-1534). On Polymarket sells right after a buy fill, the targeted
+	 * `[data-qa="sor-leg"][data-leg-side="market-sell"]` row only renders
+	 * when the selected venue drawer is open and `executionRoute` overlay
+	 * is present. On Polymarket sells right after a buy fill, the targeted
 	 * execution channel can lag (`venuePositions` empty) while the omnibus display
 	 * channel already populates `[data-qa="smart-routing-venue-row-${venue}"]`'s
 	 * `.smart-routing-row__sub` with `formatLegAvg(displayAvgPrice) avg.` (see
@@ -580,7 +579,7 @@ export class Tradebox {
 				: timeoutMs;
 		await this.expandSorDetailsIfCollapsed(effectiveTimeout);
 		const leg = this.root.locator(
-			`[data-qa="sor-leg"][data-leg-side="${legSide}"]`,
+			`.smart-routing-block--selected .smart-routing-drawer [data-qa="sor-leg"][data-leg-side="${legSide}"]`,
 		);
 		await leg.waitFor({ state: "attached", timeout: effectiveTimeout });
 		const venue = await leg.getAttribute("data-leg-venue");
@@ -616,43 +615,20 @@ export class Tradebox {
 		await this.expandSorDetailsIfCollapsed(timeoutMs);
 		const loc = this.root
 			.locator(
-				'.sor-details-panel [data-qa="sor-leg-cost"][data-cost-usd]',
+				'.smart-routing-block--selected .smart-routing-drawer [data-qa="sor-leg-cost"][data-cost-usd]',
 			)
 			.first();
 		await loc.waitFor({ state: "attached", timeout: timeoutMs });
 		const raw = await loc.getAttribute("data-cost-usd");
 		if (raw === null || raw.trim() === "") {
 			throw new Error(
-				"readQuotedBuyCostUsd: missing data-cost-usd on sor-leg-cost in Details",
+				"readQuotedBuyCostUsd: missing data-cost-usd on sor-leg-cost in smart-routing drawer",
 			);
 		}
 		const n = Number(raw);
 		if (!Number.isFinite(n) || n < 0) {
 			throw new Error(
 				`readQuotedBuyCostUsd: invalid data-cost-usd=${JSON.stringify(raw)}`,
-			);
-		}
-		return n;
-	}
-
-	/** Single-venue market sell: Estimated Receive exposes `data-receive-usd`. */
-	async readQuotedSellReceiveUsd(
-		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
-	): Promise<number> {
-		const loc = this.root.locator(
-			'[data-qa="tradebox-estimated-receive-usd"][data-receive-usd]',
-		);
-		await loc.waitFor({ state: "attached", timeout: timeoutMs });
-		const raw = await loc.getAttribute("data-receive-usd");
-		if (raw === null || raw.trim() === "") {
-			throw new Error(
-				"readQuotedSellReceiveUsd: missing data-receive-usd on tradebox-estimated-receive-usd",
-			);
-		}
-		const n = Number(raw);
-		if (!Number.isFinite(n) || n < 0) {
-			throw new Error(
-				`readQuotedSellReceiveUsd: invalid data-receive-usd=${JSON.stringify(raw)}`,
 			);
 		}
 		return n;

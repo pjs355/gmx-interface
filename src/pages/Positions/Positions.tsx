@@ -13,13 +13,13 @@ import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import { usePositionsPageData } from "@/context/PositionsDataContext";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useClaimCashSyncPending } from "@/trading/sor/usePostTradeAccountSync";
+import { useClaimCashSyncPending } from "@/trading/sor/post-trade/usePostTradeAccountSync";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useEffect } from "react";
 import { toCentsString } from "./utils/formatCurrency";
 import type { MarketPosition } from "./utils/positionHelpers";
 import { shortTeamDisplayName } from "./utils/historyOutcomeWinner";
-import { isLimitlessWinningsTabClaimBlocked } from "@/trading/limitless/limitlessClaimAck";
+import { isLimitlessWinningsTabClaimBlocked } from "@/trading/venues/limitless/portfolio/limitlessClaimAck";
 
 /** Human-readable match / market winner for Winnings debug logs (mirrors ResolvedPositionsTable label routing). */
 function winningsDebugWhoWon(

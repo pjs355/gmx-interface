@@ -4,12 +4,12 @@ import {
 	mapPredictOrdersToVenueOrders,
 	normalizePredictTokenId,
 	type PredictOrderRow,
-} from "@/trading/predict/predictOrdersApi";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+} from "@/trading/venues/predict/portfolio/predictOrdersApi";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
 import {
 	resolvePredictUmbrellaForDisplay,
 	type PredictUmbrellaLookup,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import { shortPredictFunMarketTitleForPortfolio } from "@/helpers/umbrellaDisplayName";
 import type {
 	VenueOrder,

@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import type { FundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
+import type { FundingStableBalancesHuman } from "@/trading/sor/prefund/fundingStableBalances";
 
 /**
  * Live collateral-token balances (USDC and bridge stables) keyed off the
@@ -33,12 +33,30 @@ export type CollateralCashSliceStatus =
 	| "success"
 	| "error";
 
+export function sumCollateralCashSlices(slices: {
+	baseUsdc: number;
+	polygonStable: number;
+	bscUsdt: number;
+	solanaUsdc: number;
+	limitlessMakerUsdc: number;
+}): number {
+	return (
+		slices.baseUsdc +
+		slices.polygonStable +
+		slices.bscUsdt +
+		slices.solanaUsdc +
+		slices.limitlessMakerUsdc
+	);
+}
+
 export interface CollateralTokens {
 	baseUsdc: number;
 	polygonStable: number;
 	bscUsdt: number;
 	solanaUsdc: number;
 	limitlessMakerUsdc: number;
+	/** Sum of all five stable slices — single source for header cash and `AccountData.cash.total`. */
+	total: number;
 	/** TanStack state for `GET /portfolio/cash-summary` (exposed for `AccountDataContext.cash`). */
 	cashStatus: CollateralCashSliceStatus;
 	cashError: string | null;
@@ -86,6 +104,7 @@ const COLLATERAL_TOKENS_FALLBACK: CollateralTokens = {
 	bscUsdt: 0,
 	solanaUsdc: 0,
 	limitlessMakerUsdc: 0,
+	total: 0,
 	cashStatus: "idle",
 	cashError: null,
 	isFetched: false,
@@ -140,12 +159,16 @@ export function CollateralTokenProvider({
 
 	const value = useMemo<CollateralTokens>(() => {
 		const data = query.data;
-		return {
+		const slices = {
 			baseUsdc: data ? data.base : 0,
 			polygonStable: data ? data.polygon : 0,
 			bscUsdt: data ? data.bnb : 0,
 			solanaUsdc: data ? data.solana : 0,
 			limitlessMakerUsdc: data ? (data.limitlessMakerBase ?? 0) : 0,
+		};
+		return {
+			...slices,
+			total: sumCollateralCashSlices(slices),
 			cashStatus: cashStatusOf(query),
 			cashError: cashErrorMessageOf(query.error),
 			isFetched: query.isFetched,

@@ -11,7 +11,7 @@ import type { MatchedMarketsDflowWire } from "@/types/matchedMarketsDflowWire";
 import {
 	isLimitlessConsoleDebugEnabled,
 	isLimitlessOrderbookVerboseDebug,
-} from "@/trading/limitless/limitlessConsoleDebug";
+} from "@/trading/venues/limitless/trade/limitlessConsoleDebug";
 import { isPredictionPricingDebugEnabled } from "@/utils/debugPredictionPricing";
 import { disposeWebSocket } from "@/utils/disposeWebSocket";
 

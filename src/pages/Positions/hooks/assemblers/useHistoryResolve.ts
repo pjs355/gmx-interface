@@ -7,19 +7,19 @@ import {
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
 	lookupUmbrellaByDflowEventTicker,
-} from "@/trading/dflow/dflowUmbrellaLookup";
-import { patchDflowVenuePositionOutcomes } from "@/trading/dflow/dflowPositionsApi";
+} from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
+import { patchDflowVenuePositionOutcomes } from "@/trading/venues/dflow/portfolio/dflowPositionsApi";
 import {
 	buildUmbrellaLookupByPolymarketConditionId,
 	polymarketConditionIdForResolveWire,
 	polymarketConditionLookupKey,
-} from "@/trading/polymarket/polymarketConditionLookup";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
-import type { PredictMatchEventRow } from "@/trading/predict/predictMatchesApi";
+} from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
+import type { PredictMatchEventRow } from "@/trading/venues/predict/trade/predictMatchesApi";
 import {
 	buildPredictUmbrellaLookup,
 	resolvePredictUmbrellaForDisplay,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import {
 	type UmbrellaExchangeResolveQuery,
 	shouldRequestVenueHistoryUmbrellaResolve,

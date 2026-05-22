@@ -1,4 +1,4 @@
-import type { SorChain, SorVenue } from "@/trading/sor/sor-types";
+import type { SorChain, SorVenue } from "@/trading/sor/core/sor-types";
 import type { PredictAccountResponse } from "@/services/privateApi/client";
 import type {
 	AccountOverview,
@@ -8,7 +8,7 @@ import type {
 import {
 	findEvmPrivyEmbeddedWallet,
 	type PrivyWalletListEntry,
-} from "@/trading/polymarket/privyEmbeddedWallet";
+} from "@/trading/venues/polymarket/wallet/privyEmbeddedWallet";
 
 /** Optional wallet roles before the account wallet gate is ready. */
 export type AccountWalletRolesPartial = {
@@ -56,26 +56,6 @@ export type VenueAddressChainEntry = {
 
 /** Venue → chain + wallet + signer. Single canonical address map on {@link AccountData}. */
 export type VenueAddressChainMap = Record<SorVenue, VenueAddressChainEntry>;
-
-/** @deprecated Use {@link VenueAddressChainMap} */
-export type AccountVenueWallets = VenueAddressChainMap;
-
-/** @deprecated Use {@link VenueAddressChainEntry} */
-export type VenueWallet = VenueAddressChainEntry;
-
-/** @deprecated Use {@link AccountWalletRoles} */
-export type RequiredFundingAddresses = AccountWalletRoles;
-
-/** @deprecated Use {@link AccountWalletGate} */
-export type RequiredFundingGate = AccountWalletGate;
-
-/** @deprecated Use {@link AccountWalletRolesPartial} */
-export type NormalizedTradingWallets = AccountWalletRolesPartial;
-
-export type TradeFundingReady = {
-	walletGate: Extract<AccountWalletGate, { status: "ready" }>;
-	venueAddressChainMap: VenueAddressChainMap;
-};
 
 const EVM_RE = /^0x[a-fA-F0-9]{40}$/;
 
@@ -417,9 +397,6 @@ export function predictKernelAddressFromVacm(
 	return entry.walletAddress.trim();
 }
 
-/** @deprecated Use {@link walletRolesFromVenueAddressChainMap} */
-export const walletRolesFromVenues = walletRolesFromVenueAddressChainMap;
-
 export function isVacmReady(
 	account: Pick<AccountDataVacmSlice, "walletGate" | "venueAddressChainMap">,
 ): account is AccountDataVacmSlice & {
@@ -431,14 +408,27 @@ export function isVacmReady(
 	);
 }
 
-/** @deprecated Use {@link isVacmReady} */
-export function isAccountWalletsReady(
-	account: Pick<AccountDataVacmSlice, "walletGate" | "venueAddressChainMap">,
-): account is AccountDataVacmSlice & {
-	walletGate: Extract<AccountWalletGate, { status: "ready" }>;
-	venueAddressChainMap: VenueAddressChainMap;
-} {
-	return isVacmReady(account);
+/** User-facing copy when execute runs before VACM is hydrated. */
+export const ACCOUNT_WALLETS_NOT_READY_MESSAGE =
+	"Finishing wallet setup. Try again in a moment.";
+
+/**
+ * Fail-fast boundary for SOR execute / prefund — after hydration, VACM must exist.
+ */
+export function requireVenueAddressChainMapForExecute(
+	map: VenueAddressChainMap | null,
+	gate: AccountWalletGate,
+): VenueAddressChainMap {
+	if (gate.status === "loading") {
+		throw new Error(gate.message ?? ACCOUNT_WALLETS_NOT_READY_MESSAGE);
+	}
+	if (gate.status === "blocked") {
+		throw new Error(gate.message);
+	}
+	if (map == null) {
+		throw new Error(ACCOUNT_WALLETS_NOT_READY_MESSAGE);
+	}
+	return map;
 }
 
 export type AccountDataVacmSlice = {
@@ -446,45 +436,6 @@ export type AccountDataVacmSlice = {
 	walletGate: AccountWalletGate;
 	walletIsLoading: boolean;
 };
-
-/** @deprecated Use {@link isVacmReady} */
-export function isTradeFundingReady(
-	account: Pick<AccountDataVacmSlice, "walletGate" | "venueAddressChainMap">,
-): account is TradeFundingReady {
-	return isVacmReady(account);
-}
-
-export const SOR_WALLET_ROLES_STUB: AccountWalletRoles = {
-	baseSmartWallet: "0x0000000000000000000000000000000000000001",
-	limitlessMakerBase: "0x0000000000000000000000000000000000000002",
-	embeddedEoa: "0x0000000000000000000000000000000000000003",
-	polymarketSafe: "0x0000000000000000000000000000000000000004",
-	polygonSigner: "0x0000000000000000000000000000000000000003",
-	predictMaker: "0x0000000000000000000000000000000000000003",
-	solanaAddress: "So11111111111111111111111111111111111111112",
-};
-
-/** @deprecated Use {@link SOR_WALLET_ROLES_STUB} */
-export const SOR_FUNDING_ADDRESSES_STUB = SOR_WALLET_ROLES_STUB;
-
-export function sorExecutorWalletRoles(
-	account: Pick<AccountDataVacmSlice, "walletGate" | "venueAddressChainMap">,
-): AccountWalletRoles {
-	if (!isVacmReady(account)) {
-		return SOR_WALLET_ROLES_STUB;
-	}
-	return walletRolesFromVenueAddressChainMap(account.venueAddressChainMap);
-}
-
-/** @deprecated Use {@link sorExecutorWalletRoles} */
-export function sorExecutorFundingAddresses(
-	funding: { fundingGate: AccountWalletGate } & AccountWalletRolesPartial,
-): AccountWalletRoles {
-	if (funding.fundingGate.status !== "ready") {
-		return SOR_WALLET_ROLES_STUB;
-	}
-	return assertAccountWalletRoles(funding);
-}
 
 export function resolveVenueAddressChainMap(
 	roles: AccountWalletRolesPartial,
@@ -495,15 +446,3 @@ export function resolveVenueAddressChainMap(
 	}
 	return buildVenueAddressChainMap(resolveAccountWalletRoles(roles));
 }
-
-/** @deprecated Use {@link buildVenueAddressChainMap} */
-export const buildAccountVenueWallets = buildVenueAddressChainMap;
-
-/** @deprecated */
-export const resolveRequiredFundingAddresses = resolveAccountWalletRoles;
-/** @deprecated */
-export const isRequiredFundingReady = isAccountWalletRolesComplete;
-/** @deprecated */
-export const assertRequiredFundingAddresses = assertAccountWalletRoles;
-/** @deprecated */
-export const getRequiredFundingGate = getAccountWalletGate;

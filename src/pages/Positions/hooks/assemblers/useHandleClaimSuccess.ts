@@ -1,12 +1,12 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
-import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
-import type { FundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
+import { limitlessQueryKeys } from "@/trading/venues/limitless/trade/limitlessQueryKeys";
+import type { FundingStableBalancesHuman } from "@/trading/sor/prefund/fundingStableBalances";
 import {
 	readTotalCashHumanFromQueryClient,
 	usePostTradeAccountSync,
-} from "@/trading/sor/usePostTradeAccountSync";
+} from "@/trading/sor/post-trade/usePostTradeAccountSync";
 
 export type UseHandleClaimSuccessArgs = {
 	acknowledgeClearedPayouts: (keys: string[]) => void;

@@ -4,7 +4,6 @@ import { getVenueConfig, type TradingVenue } from "@/config/venueConfig";
 import {
 	SorKalshiKycShortfallBanner,
 	formatSorDetailsSharesDisplay,
-	sorBuyPredictLegNetHeldShares,
 	type RoutePlan,
 	type RouteExecution,
 	type SorExecutionPhase,
@@ -60,11 +59,6 @@ export interface TradeBoxExecutionFooterProps {
 	};
 	dflowUninitAtSubmit?: boolean;
 	orderResult: TradeBoxCoreState["orderResult"];
-	predictFunFeeRateBps?: number;
-	dflowOrderQuoteForSentinel?: {
-		contracts: number | null;
-		amountAlignedWithQuote: boolean;
-	};
 }
 
 export default function TradeBoxExecutionFooter(props: TradeBoxExecutionFooterProps) {
@@ -90,8 +84,6 @@ export default function TradeBoxExecutionFooter(props: TradeBoxExecutionFooterPr
 		sorExecution,
 		dflowUninitAtSubmit = false,
 		orderResult,
-		predictFunFeeRateBps,
-		dflowOrderQuoteForSentinel,
 	} = props;
 	const venueConfig = getVenueConfig(tradingVenue);
 
@@ -302,78 +294,6 @@ export default function TradeBoxExecutionFooter(props: TradeBoxExecutionFooterPr
           Order may take longer as Kalshi via DFlow is creating this market
         </div>
       )}
-
-      {/*
-        E2E / automation: single-venue market quote hook (visually hidden — `e2e/page-objects/tradebox.ts`
-        `readLegAttrs`, `readQuotedBuyCostUsd`, `readQuotedSellReceiveUsd`, `expandSorDetailsIfCollapsed`).
-        Populated from `sorRoute.executionRoute` (the plan Submit signs). Kalshi/DFlow **market buy**:
-        when the debounced Pond `/order/quote` matches the typed USD amount, `data-leg-num-shares`
-        follows that quote’s contracts so QA matches post-fill `outAmount` / MyPositionsRow; otherwise
-        the SOR leg (Predict uses net-held when bps known). When the route is null the sentinel is absent.
-        The `aria-expanded="true"` toggle keeps the page object's expand helper a no-op without re-introducing
-        the visible Details collapsible that was intentionally removed from the UI.
-      */}
-      {tradingVenue !== "all" &&
-        orderType === "market" &&
-        sorRoute.executionRoute &&
-        sorRoute.executionRoute.legs.length > 0 && (() => {
-          const route = sorRoute.executionRoute;
-          const leg = route.legs[0];
-          const legSide = route.side === "buy" ? "market-buy" : "market-sell";
-          const dflowBuyQuoteShares =
-            leg.venue === "dflow" &&
-            legSide === "market-buy" &&
-            dflowOrderQuoteForSentinel?.amountAlignedWithQuote &&
-            dflowOrderQuoteForSentinel.contracts != null &&
-            Number.isFinite(dflowOrderQuoteForSentinel.contracts) &&
-            dflowOrderQuoteForSentinel.contracts > 0
-              ? dflowOrderQuoteForSentinel.contracts
-              : null;
-          /** E2E `data-leg-num-shares`: DFlow market-buy prefers Pond quote when in sync; else gross SOR / Predict net-held. */
-          const legNumSharesForDataQa =
-            legSide === "market-buy"
-              ? dflowBuyQuoteShares ?? sorBuyPredictLegNetHeldShares(leg, predictFunFeeRateBps)
-              : leg.shares;
-          const priceCents = Math.round(leg.avgPrice * 100);
-          const sellReceiveUsd =
-            typeof leg.executionAmountUsd === "number" &&
-            Number.isFinite(leg.executionAmountUsd) &&
-            leg.executionAmountUsd > 0
-              ? leg.executionAmountUsd
-              : route.totalCost;
-          return (
-            <div
-              className="sor-details-panel tradebox-e2e-sentinel"
-              aria-hidden="true"
-            >
-              <button
-                type="button"
-                tabIndex={-1}
-                className="sor-details-toggle tradebox-e2e-sentinel__toggle"
-                aria-expanded="true"
-              />
-              <div
-                data-qa="sor-leg"
-                data-leg-side={legSide}
-                data-leg-venue={leg.venue}
-                data-leg-num-shares={legNumSharesForDataQa}
-                data-leg-price-cents={priceCents}
-              />
-              {route.side === "buy" && Number.isFinite(route.totalCost) && (
-                <div
-                  data-qa="sor-leg-cost"
-                  data-cost-usd={route.totalCost}
-                />
-              )}
-              {route.side === "sell" && Number.isFinite(sellReceiveUsd) && (
-                <div
-                  data-qa="tradebox-estimated-receive-usd"
-                  data-receive-usd={sellReceiveUsd}
-                />
-              )}
-            </div>
-          );
-        })()}
 
 		</>
 	);

@@ -95,6 +95,20 @@ describe("formatSorRouteFailureMessage", () => {
 		).toBe(userMessage(SOR_NO_SHARES_AVAILABLE));
 	});
 
+	it("passes through EXECUTION_NOT_READY server error when present", () => {
+		expect(
+			formatSorRouteFailureMessage(
+				{
+					success: false,
+					code: "EXECUTION_NOT_READY",
+					error: "Complete setup for: Polymarket",
+				},
+				undefined,
+				"buy",
+			),
+		).toBe("Complete setup for: Polymarket");
+	});
+
 	it("does not pass through server error prose as UI copy", () => {
 		const msg = formatSorRouteFailureMessage(
 			{

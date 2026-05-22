@@ -13,7 +13,7 @@ import {
 import {
 	matchVenuePositionToUmbrellaForHistory,
 	type PredictUmbrellaLookup,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import { venueHistorySyntheticUmbrellaId } from "./positionHelpers";
 import { sortUnifiedHistoryBlocksByLatest } from "./historyActivitySort";
 

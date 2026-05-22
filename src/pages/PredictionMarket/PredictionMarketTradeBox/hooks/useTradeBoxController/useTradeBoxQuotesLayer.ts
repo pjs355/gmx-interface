@@ -8,7 +8,7 @@ import type {
 	VenuePositionEntry,
 } from "@/trading/sor";
 import { parseLimitPriceCents } from "@/trading/sor";
-import type { UseSorRouteResult } from "@/trading/sor/useSorRoute";
+import type { UseSorRouteResult } from "@/trading/sor/core/useSorRoute";
 import {
 	SOR_MIN_LIMIT_ORDER_USD,
 	SOR_MIN_MARKET_BUY_USD,
@@ -16,18 +16,12 @@ import {
 } from "@/trading/sor";
 import { getMarketId } from "@/pages/PredictionMarket/utils";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { dflowTypedUsdMatchesDebouncedQuote } from "../../tradeQuote/dflowQuoteAlignment";
 import type { MarketOrderBookPreview, TradeQuote } from "../../tradeQuote/types";
 import { useTradeQuote } from "../../tradeQuote/useTradeQuote";
 import type { TradeBoxHookState } from "../useTradeState";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "../../feeLimitless";
 import { deriveSorRouteAmountFromInput } from "../deriveSorRouteAmount";
 import { useTradeBoxQuotes } from "../useTradeBoxQuotes";
-
-export type DflowOrderQuoteForSentinel = {
-	contracts: number | null;
-	amountAlignedWithQuote: boolean;
-};
 
 export type UseTradeBoxQuotesLayerArgs = {
 	state: TradeBoxHookState;
@@ -56,11 +50,10 @@ export type UseTradeBoxQuotesLayerResult = {
 	executableErrorCode: UseSorRouteResult["displayErrorCode"];
 	debouncedSorRoutePreviewAllowed: boolean;
 	smartRoutingMarketKey: string;
-	dflowOrderQuoteForSentinel: DflowOrderQuoteForSentinel | undefined;
 	debouncedQuoteAmount: string;
 };
 
-/** Debounced SOR + Pond quotes and merged `TradeQuote` for display. */
+/** Debounced SOR quotes and merged `TradeQuote` for display. */
 export function useTradeBoxQuotesLayer(
 	args: UseTradeBoxQuotesLayerArgs,
 ): UseTradeBoxQuotesLayerResult {
@@ -213,48 +206,17 @@ export function useTradeBoxQuotesLayer(
 			? sorRoute.displayErrorCode
 			: sorRoute.executionErrorCode;
 
-	const tradeQuote = useTradeQuote({
+	const tradeQuoteBase = useTradeQuote({
 		tradingVenue: state.tradingVenue,
 		side: state.side,
 		orderType: state.orderType,
 		amount: state.amount,
 		executionRoute: executableRoute,
 		bookPreview,
-		dflowQuote: sorRoute.dflowPondQuote,
-		debouncedQuoteAmount,
 		predictFunFeeRateBps,
 	});
 
-	const dflowOrderQuoteForSentinel = useMemo((): DflowOrderQuoteForSentinel | undefined => {
-		if (
-			state.tradingVenue !== "dflow" ||
-			state.orderType !== "market" ||
-			state.side !== "buy"
-		) {
-			return undefined;
-		}
-		const pond = sorRoute.dflowPondQuote;
-		const contracts =
-			pond &&
-			Number.isFinite(pond.contracts) &&
-			pond.contracts > 0
-				? pond.contracts
-				: null;
-		return {
-			contracts,
-			amountAlignedWithQuote: dflowTypedUsdMatchesDebouncedQuote(
-				state.amount,
-				debouncedQuoteAmount,
-			),
-		};
-	}, [
-		state.tradingVenue,
-		state.orderType,
-		state.side,
-		state.amount,
-		sorRoute.dflowPondQuote,
-		debouncedQuoteAmount,
-	]);
+	const tradeQuote = tradeQuoteBase;
 
 	return {
 		tradeQuote,
@@ -268,7 +230,6 @@ export function useTradeBoxQuotesLayer(
 		executableErrorCode,
 		debouncedSorRoutePreviewAllowed,
 		smartRoutingMarketKey,
-		dflowOrderQuoteForSentinel,
 		debouncedQuoteAmount,
 	};
 }

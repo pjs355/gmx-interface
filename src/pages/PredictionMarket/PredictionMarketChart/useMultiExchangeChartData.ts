@@ -13,7 +13,7 @@ import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPre
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { OrderbookData } from "@/types/odds-monitor";
-import { isLimitlessConsoleDebugEnabled } from "@/trading/limitless/limitlessConsoleDebug";
+import { isLimitlessConsoleDebugEnabled } from "@/trading/venues/limitless/trade/limitlessConsoleDebug";
 
 export interface MultiExchangeChartResult {
 	data: MergedExchangePoint[];

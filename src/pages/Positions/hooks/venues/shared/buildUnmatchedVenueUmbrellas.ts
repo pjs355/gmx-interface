@@ -3,17 +3,17 @@ import {
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
 	lookupUmbrellaByDflowEventTicker,
-} from "@/trading/dflow/dflowUmbrellaLookup";
+} from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
 import {
 	findMatchedMarketByPolyConditionId,
 	parseVsTeamLabelsFromDisplayTitle,
-} from "@/trading/polymarket/polyPositionSide";
-import { lookupLimitlessCatalogTokenPairForVenueToken } from "@/trading/limitless/limitlessCatalogTokenPair";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+} from "@/trading/venues/polymarket/trade/polyPositionSide";
+import { lookupLimitlessCatalogTokenPairForVenueToken } from "@/trading/venues/limitless/trade/limitlessCatalogTokenPair";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
 import {
 	type PredictUmbrellaLookup,
 	resolvePredictUmbrellaForDisplay,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import {
 	type VenueId,

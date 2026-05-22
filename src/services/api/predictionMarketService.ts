@@ -11,7 +11,7 @@ import {
 	getPredictionApiBaseUrl,
 	getPredictionOrderApiBaseUrl,
 } from "@/config/predictionApiBase";
-import { predictionBuyMakerMicroUsdc } from "@/trading/sor/predictionBuyCollateralMicro";
+import { predictionBuyMakerMicroUsdc } from "@/trading/sor/prefund/predictionBuyCollateralMicro";
 
 // Utility function to round dollar amounts based on buy/sell direction
 function roundDollarAmount(amount: number, side: "buy" | "sell"): number {

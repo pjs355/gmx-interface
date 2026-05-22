@@ -1,7 +1,7 @@
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { MatchedMarketExchange } from "@/services/api/matchDataService";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
-import type { LimitlessInferenceWire } from "@/trading/limitless/limitlessCatalogTokenPair";
+import type { LimitlessInferenceWire } from "@/trading/venues/limitless/trade/limitlessCatalogTokenPair";
 
 type LimitlessShape = {
 	slug: string;

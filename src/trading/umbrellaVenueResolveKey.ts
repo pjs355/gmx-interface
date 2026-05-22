@@ -1,7 +1,7 @@
 import type { VenuePosition } from "@/types/trading/venuePosition";
-import { canonicalLimitlessTokenId } from "@/trading/limitless/limitlessTokenId";
-import { normalizePredictTokenId } from "@/trading/predict/predictOrdersApi";
-import { polymarketConditionIdForResolveWire } from "@/trading/polymarket/polymarketConditionLookup";
+import { canonicalLimitlessTokenId } from "@/trading/venues/limitless/trade/limitlessTokenId";
+import { normalizePredictTokenId } from "@/trading/venues/predict/portfolio/predictOrdersApi";
+import { polymarketConditionIdForResolveWire } from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
 
 export type UmbrellaExchangeResolveQuery = {
 	clientKey: string;

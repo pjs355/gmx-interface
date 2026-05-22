@@ -20,18 +20,18 @@ import {
 	ensureLimitlessTradingApprovalsOnBase,
 	readLimitlessBuyUsdcAllowancesSufficientOnBase,
 	readLimitlessSellCtfApprovalsSufficientOnBase,
-} from "@/trading/limitless/limitlessTradingApprovalsOnBase";
-import { getLimitlessEnsureTradeGate } from "@/trading/limitless/limitlessEnsureTradeGate";
+} from "@/trading/venues/limitless/approvals/limitlessTradingApprovalsOnBase";
+import { getLimitlessEnsureTradeGate } from "@/trading/venues/limitless/session/limitlessEnsureTradeGate";
 import { isVacmReady, type AccountDataVacmSlice } from "@/context/accountWallets";
 import type { AccountPolyAccountSlice } from "@/context/AccountDataContext";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { tradingQueryKeys } from "@/trading/queryKeys";
 import type { useCollateralTokens } from "context/CollateralTokenContext";
 import type { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import type { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
-import type { usePredictTradingSession } from "@/trading/predict/usePredictTradingSession";
-import type { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
-import type { usePredictMarketDetail } from "@/trading/predict/usePredictMarketDetail";
+import type { usePolymarketRelay } from "@/trading/venues/polymarket/session/usePolymarketRelay";
+import type { usePredictTradingSession } from "@/trading/venues/predict/session/usePredictTradingSession";
+import type { usePredictApprovalsStatus } from "@/trading/venues/predict/wallet/usePredictApprovalsStatus";
+import type { usePredictMarketDetail } from "@/trading/venues/predict/portfolio/usePredictMarketDetail";
 
 export interface UseTradeBoxVenueApprovalsParams {
 	checkApproval: () => Promise<boolean>;
@@ -141,7 +141,7 @@ export function useTradeBoxVenueApprovals({
       }
 
       const { checkPolymarketApprovals } = await import(
-        "@/trading/polymarket/approvalTxs"
+        "@/trading/venues/polymarket/trade/approvalTxs"
       );
       const status = await checkPolymarketApprovals(safe);
       if (status.allApproved) return;
@@ -151,7 +151,7 @@ export function useTradeBoxVenueApprovals({
         throw new Error(userMessage(TRADE_POLY_RELAYER_UNAVAILABLE));
       }
       const { executePolymarketApprovalBatch } = await import(
-        "@/trading/polymarket/safeActions"
+        "@/trading/venues/polymarket/session/safeActions"
       );
       opts?.onApprovalWorkStart?.();
       await executePolymarketApprovalBatch(client, safe);

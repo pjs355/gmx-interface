@@ -7,7 +7,7 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { type VenueOrder, venueDisplayLabel } from "@/types/trading/venuePosition";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { limitlessQueryKeys } from "@/trading/limitless/limitlessQueryKeys";
+import { limitlessQueryKeys } from "@/trading/venues/limitless/trade/limitlessQueryKeys";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	bundledCounterStrikeLogoFromTagLabels,

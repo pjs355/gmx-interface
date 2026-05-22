@@ -7,21 +7,21 @@ import { getOrderAggregates } from "@/services/api/simplifiedOrderService";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import {
 	buildUmbrellaLookupByPolymarketConditionId,
-} from "@/trading/polymarket/polymarketConditionLookup";
+} from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
 import {
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
-} from "@/trading/dflow/dflowUmbrellaLookup";
+} from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
 import {
 	findMatchedMarketByPolyConditionId,
 	parseVsTeamLabelsFromDisplayTitle,
-} from "@/trading/polymarket/polyPositionSide";
-import { inferPredictSideFromMarketDetail } from "@/trading/predict/predictPositionSide";
+} from "@/trading/venues/polymarket/trade/polyPositionSide";
+import { inferPredictSideFromMarketDetail } from "@/trading/venues/predict/trade/predictPositionSide";
 import {
 	matchVenuePositionToUmbrella,
 	type PredictUmbrellaLookup,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import {
 	type VenueId,

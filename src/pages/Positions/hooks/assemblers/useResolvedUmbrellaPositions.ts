@@ -5,21 +5,21 @@ import {
 	findMatchedMarketByPolyConditionId,
 	inferPolymarketYesNoFromToken,
 	parseVsTeamLabelsFromDisplayTitle,
-} from "@/trading/polymarket/polyPositionSide";
-import { inferPredictSideFromMarketDetail } from "@/trading/predict/predictPositionSide";
-import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
+} from "@/trading/venues/polymarket/trade/polyPositionSide";
+import { inferPredictSideFromMarketDetail } from "@/trading/venues/predict/trade/predictPositionSide";
+import { getPredictPositionRowLabel } from "@/trading/venues/predict/portfolio/predictPositionLabel";
 import {
 	buildPredictUmbrellaLookup,
 	logPredictUmbrellaOnce,
 	matchVenuePositionToUmbrellaForHistory,
 	type PredictUmbrellaLookup,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
-import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
+import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
 import {
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
-} from "@/trading/dflow/dflowUmbrellaLookup";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+} from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import {
 	type VenueId,
@@ -34,7 +34,7 @@ import {
 	shortPredictFunMarketTitleForPortfolio,
 	stripUmbrellaDisplayPrefix,
 } from "@/helpers/umbrellaDisplayName";
-import { isMarketClaimAcked, claimAckKeysFromMarket } from "@/trading/limitless/limitlessClaimAck";
+import { isMarketClaimAcked, claimAckKeysFromMarket } from "@/trading/venues/limitless/portfolio/limitlessClaimAck";
 
 /** Dev: at most one console line per limitless row per full page load (useMemo re-runs constantly). */
 const limitlessWinningsPreFilterDevLoggedOnce = new Set<string>();

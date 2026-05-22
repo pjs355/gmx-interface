@@ -27,6 +27,10 @@ export type UseTradeBoxSorFundingResult = {
 /**
  * SOR wallet rows + per-venue sell positions from share balances.
  * Single source for `useTradeBoxQuotesLayer` and execution/button gates.
+ *
+ * When VACM is not ready (logged out, hydrating), `sorWalletBalances` is empty and
+ * POST /api/sor/route omits `walletBalances` — the server prices from orderbooks only
+ * (hypothetical preview). Execution remains gated by auth + `isVacmReady` + prefund.
  */
 export function useTradeBoxSorFunding(
 	args: UseTradeBoxSorFundingArgs,

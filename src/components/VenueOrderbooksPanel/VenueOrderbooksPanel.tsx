@@ -8,13 +8,13 @@ import type { TradingVenue } from "@/pages/PredictionMarket/PredictionMarketTrad
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import { getDflowKalshiMonitorLink } from "@/trading/venues/dflow/catalog/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import {
 	computeLevelUpCrossVenueBooks,
 	monitorOrderbookDataToRestingSnapshot,
-} from "@/trading/levelUp/levelUpCrossVenueBookPresence";
+} from "@/trading/venues/levelup/levelUpCrossVenueBookPresence";
 
 type VenueEntry = {
 	id: string;

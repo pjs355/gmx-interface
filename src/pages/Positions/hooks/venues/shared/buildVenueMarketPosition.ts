@@ -1,13 +1,13 @@
 import { type PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { type ProcessedOrder } from "@/services/api/simplifiedOrderService";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
-import { inferPredictSideFromMarketDetail } from "@/trading/predict/predictPositionSide";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
+import { inferPredictSideFromMarketDetail } from "@/trading/venues/predict/trade/predictPositionSide";
 import {
 	inferLimitlessCatalogYesColumn,
 	inferLimitlessYesColumnFromOutcomeTitle,
 	type LimitlessInferenceWire,
-} from "@/trading/limitless/limitlessCatalogTokenPair";
-import { inferPolymarketYesNoFromToken } from "@/trading/polymarket/polyPositionSide";
+} from "@/trading/venues/limitless/trade/limitlessCatalogTokenPair";
+import { inferPolymarketYesNoFromToken } from "@/trading/venues/polymarket/trade/polyPositionSide";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import {
 	type VenueId,

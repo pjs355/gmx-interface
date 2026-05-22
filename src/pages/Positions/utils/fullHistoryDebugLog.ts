@@ -3,7 +3,7 @@ import { umbrellaHeaderLabel, stripUmbrellaDisplayPrefix } from "@/helpers/umbre
 import {
 	matchVenuePositionToUmbrellaForHistory,
 	type PredictUmbrellaLookup,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { VenueHistoryFill, VenuePosition } from "@/types/trading/venuePosition";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";

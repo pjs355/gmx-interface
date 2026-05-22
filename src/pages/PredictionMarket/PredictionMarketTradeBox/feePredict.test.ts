@@ -7,8 +7,8 @@ import {
 import {
 	sorBuyNetHeldTotalSharesFromLegs,
 	sorBuyPredictLegNetHeldShares,
-} from "@/trading/sor/sorPredictNetHeldDisplay";
-import type { RouteLeg } from "@/trading/sor/sor-types";
+} from "@/trading/sor/core/sorPredictNetHeldDisplay";
+import type { RouteLeg } from "@/trading/sor/core/sor-types";
 
 describe("calculatePredictFee (SOR server parity)", () => {
 	it("uses min(price, 1-price) and 5dp rounding", () => {

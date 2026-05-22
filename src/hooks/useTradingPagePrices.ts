@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { MatchedMarket, OrderbookData, SnapshotStatus } from "@/types/odds-monitor";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import { getDflowKalshiMonitorLink } from "@/trading/venues/dflow/catalog/monitorDflowBooks";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
 import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
-import { isLimitlessConsoleDebugEnabled } from "@/trading/limitless/limitlessConsoleDebug";
+import { isLimitlessConsoleDebugEnabled } from "@/trading/venues/limitless/trade/limitlessConsoleDebug";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 
 const MIN_VALID_PRICE = 0.005;

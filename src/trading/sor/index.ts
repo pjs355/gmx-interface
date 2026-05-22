@@ -1,7 +1,7 @@
-export { useSorRoute } from "./useSorRoute";
-export type { UseSorRouteInput, UseSorRouteResult } from "./useSorRoute";
+export { useSorRoute } from "./core/useSorRoute";
+export type { UseSorRouteInput, UseSorRouteResult } from "./core/useSorRoute";
 
-export { useSorExecution } from "./useSorExecution";
+export { useSorExecution } from "./core/useSorExecution";
 export type {
 	UseSorExecutionInput,
 	UseSorExecutionResult,
@@ -10,21 +10,18 @@ export type {
 	SorExecutionPhase,
 	SorPrefundLegProgress,
 	SorLegRouteContext,
-} from "./useSorExecution";
+} from "./core/useSorExecution";
 
-export { useSorLegExecutor } from "./useSorLegExecutor";
-export type { UseSorLegExecutorDeps } from "./useSorLegExecutor";
+export { useSorLegExecutor } from "./core/useSorLegExecutor";
+export type { UseSorLegExecutorDeps } from "./core/useSorLegExecutor";
 
-export { SorRouteDisplay } from "./SorRouteDisplay";
-export { SorKalshiKycShortfallBanner } from "./SorKalshiKycShortfallBanner";
-export { SorTransientRouteErrorText } from "./SorTransientRouteErrorText";
+export { SorKalshiKycShortfallBanner } from "./core/SorKalshiKycShortfallBanner";
+export { SorTransientRouteErrorText } from "./core/SorTransientRouteErrorText";
 
-export { SmartRouteToggle } from "./SmartRouteToggle";
-export type { SmartRouteToggleProps } from "./SmartRouteToggle";
-export { buildChainBalances } from "./buildChainBalances";
+export { buildChainBalances } from "./core/buildChainBalances";
 
-export { createSorApiClient } from "./sor-api";
-export type { SorApiClient } from "./sor-api";
+export { createSorApiClient } from "./core/sor-api";
+export type { SorApiClient } from "./core/sor-api";
 
 export type {
 	SorVenue,
@@ -48,7 +45,7 @@ export type {
 	VenueRoutePreviewSellOk,
 	VenueRoutePreviewSellFail,
 	VenueRoutePreviewQuoteKind,
-} from "./sor-types";
+} from "./core/sor-types";
 
 export {
 	CHAIN_LIFI_IDS,
@@ -56,8 +53,8 @@ export {
 	VENUE_COLORS,
 	getKalshiKycShortfallBannerParts,
 	PROFILE_DFLOW_KYC_HASH,
-} from "./sor-types";
-export type { KalshiKycShortfallBannerParts } from "./sor-types";
+} from "./core/sor-types";
+export type { KalshiKycShortfallBannerParts } from "./core/sor-types";
 
 export {
 	validateLegMinimum,
@@ -74,8 +71,8 @@ export {
 	SOR_MIN_LIMIT_ORDER_USD,
 	SOR_MIN_MARKET_SELL_SHARES,
 	SOR_FLOOR_MESSAGES,
-} from "./sorPreflight";
-export type { BelowMinReason } from "./sorPreflight";
+} from "./route/sorPreflight";
+export type { BelowMinReason } from "./route/sorPreflight";
 
 export {
 	sorChainDisplayName,
@@ -91,8 +88,8 @@ export {
 	buildFundsTransferTooltip,
 	getSorLifiTransferFeeRowState,
 	getSorBuyCashShortfall,
-} from "./sorUiUtils";
-export type { SorBuyCashShortfall, SorCashGateInput } from "./sorUiUtils";
+} from "./route/sorUiUtils";
+export type { SorBuyCashShortfall, SorCashGateInput } from "./route/sorUiUtils";
 
 export {
 	usdAmountMatchesRoute,
@@ -106,10 +103,10 @@ export {
 	executionRouteTrustedForSingleVenueMarketBuy,
 	executionRoutePendingForToWinOverlay,
 	executionRouteTrustedForSingleVenueMarketSell,
-} from "./sorQuoteTrust";
-export type { SorTradeTrustContext } from "./sorQuoteTrust";
+} from "./route/sorQuoteTrust";
+export type { SorTradeTrustContext } from "./route/sorQuoteTrust";
 
 export {
 	sorBuyPredictLegNetHeldShares,
 	sorBuyNetHeldTotalSharesFromLegs,
-} from "./sorPredictNetHeldDisplay";
+} from "./core/sorPredictNetHeldDisplay";

@@ -5,27 +5,27 @@ import {
 	getPrivateApiAbsoluteUrl,
 	getPrivateApiRequestUrl,
 } from "@/config/privateApiBase";
-import type { CreateOrderPayload } from "@/trading/predict/predictOrderSubmit";
+import type { CreateOrderPayload } from "@/trading/venues/predict/trade/predictOrderSubmit";
 import type {
 	LimitlessEnsureAccountResponse,
 	LimitlessSignedOrderSubmit,
 	LimitlessVerifyAllowanceResult,
-} from "@/trading/limitless/limitlessPrivateApiTypes";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+} from "@/trading/venues/limitless/trade/limitlessPrivateApiTypes";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
 import {
 	mapPredictPositionRows,
 	type PredictPositionRow,
-} from "@/trading/predict/predictPositionsApi";
-import type { PredictOrderRow } from "@/trading/predict/predictOrdersApi";
+} from "@/trading/venues/predict/portfolio/predictPositionsApi";
+import type { PredictOrderRow } from "@/trading/venues/predict/portfolio/predictOrdersApi";
 import {
 	normalizePredictMatchesList,
 	type PredictMatchEventRow,
-} from "@/trading/predict/predictMatchesApi";
+} from "@/trading/venues/predict/trade/predictMatchesApi";
 import {
 	normalizePredictActivityList,
 	type PredictActivityEvent,
 	type PredictActivityEventName,
-} from "@/trading/predict/predictActivityApi";
+} from "@/trading/venues/predict/portfolio/predictActivityApi";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { UmbrellaExchangeResolveQuery } from "@/trading/umbrellaVenueResolveKey";
 import type { VenuePosition } from "@/types/trading/venuePosition";

@@ -358,6 +358,58 @@ function sellLegVenuesAtUserBalance(
 	return out.size > 0 ? out : undefined;
 }
 
+type DrawerE2eLegAttrs = {
+	legSide: "market-buy" | "market-sell";
+	venue: string;
+	numShares: number;
+	priceCents: number;
+	costUsd?: number;
+	receiveUsd?: number;
+};
+
+/** E2E attrs mirror the visible drawer row/footer — same numbers the user sees. */
+function visibleDrawerE2eLegAttrs(args: {
+	selected: boolean;
+	tradingVenue: TradingVenue;
+	orderType: "market" | "limit";
+	side: "buy" | "sell";
+	leg: RouteLeg | null | undefined;
+	predictFunFeeRateBps?: number;
+	displayAvgPrice: number | null;
+	costUsd?: number | null;
+	receiveUsd?: number | null;
+}): DrawerE2eLegAttrs | null {
+	if (
+		!args.selected ||
+		args.tradingVenue === "all" ||
+		args.orderType !== "market" ||
+		!args.leg
+	) {
+		return null;
+	}
+	const numShares =
+		args.side === "buy"
+			? sorBuyPredictLegNetHeldShares(args.leg, args.predictFunFeeRateBps)
+			: args.leg.shares;
+	const avgForCents =
+		args.displayAvgPrice != null && Number.isFinite(args.displayAvgPrice)
+			? args.displayAvgPrice
+			: args.leg.avgPrice;
+	const attrs: DrawerE2eLegAttrs = {
+		legSide: args.side === "buy" ? "market-buy" : "market-sell",
+		venue: args.leg.venue,
+		numShares,
+		priceCents: Math.round(avgForCents * 100),
+	};
+	if (args.costUsd != null && Number.isFinite(args.costUsd)) {
+		attrs.costUsd = args.costUsd;
+	}
+	if (args.receiveUsd != null && Number.isFinite(args.receiveUsd)) {
+		attrs.receiveUsd = args.receiveUsd;
+	}
+	return attrs;
+}
+
 function SmartRoutingLegRows({
 	legs,
 	side,
@@ -366,6 +418,7 @@ function SmartRoutingLegRows({
 	atMaxByVenue,
 	sellLegAtUserBalanceVenues,
 	predictFunFeeRateBps,
+	e2eLegAttrs,
 }: {
 	legs: RouteLeg[];
 	side: "buy" | "sell";
@@ -383,6 +436,8 @@ function SmartRoutingLegRows({
 	sellLegAtUserBalanceVenues?: Set<SorVenue>;
 	/** Predict.fun fee bps — buy legs show net-held shares when set. */
 	predictFunFeeRateBps?: number;
+	/** Single-venue drawer — E2E `data-leg-*` on the first leg row (matches visible shares). */
+	e2eLegAttrs?: DrawerE2eLegAttrs | null;
 }) {
 	return (
 		<div className="smart-routing-drawer__legs">
@@ -410,6 +465,15 @@ function SmartRoutingLegRows({
 					<div
 						key={`${leg.venue}-${idx}`}
 						className="smart-routing-drawer__leg"
+						{...(idx === 0 && e2eLegAttrs
+							? {
+									"data-qa": "sor-leg",
+									"data-leg-side": e2eLegAttrs.legSide,
+									"data-leg-venue": e2eLegAttrs.venue,
+									"data-leg-num-shares": e2eLegAttrs.numShares,
+									"data-leg-price-cents": e2eLegAttrs.priceCents,
+								}
+							: {})}
 					>
 						{/* Left column: the shares/avg line, plus the optional
 						 *  block-below "Max shares available" badge for the
@@ -501,6 +565,8 @@ export interface SmartRoutingSectionProps {
 	venueSelectionLocked?: boolean;
 	/** User outcome shares per venue (sell breakdown) — marks legs that fully consume venue balance. */
 	userSellSharesByVenue?: Partial<Record<SorVenue, number>>;
+	/** Market vs limit — E2E leg attrs only on market orders. */
+	orderType?: "market" | "limit";
 }
 
 export default function SmartRoutingSection({
@@ -521,6 +587,7 @@ export default function SmartRoutingSection({
 	executionLoading,
 	venueSelectionLocked = false,
 	userSellSharesByVenue,
+	orderType = "market",
 }: SmartRoutingSectionProps) {
 	const { oddsDisplayStyle } = useOddsDisplay();
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -1166,6 +1233,15 @@ export default function SmartRoutingSection({
 						overlayRoute && overlayRoute.side === "sell"
 							? (sellRouteAvgPrice(overlayRoute) ?? preview.avgPrice)
 							: preview.avgPrice;
+					const e2eLegAttrs = visibleDrawerE2eLegAttrs({
+						selected,
+						tradingVenue,
+						orderType,
+						side: "sell",
+						leg: preview.legs[0],
+						displayAvgPrice: displayAvgPrice,
+						receiveUsd: displayProceeds,
+					});
 					return (
 						<div
 							key={key}
@@ -1204,6 +1280,7 @@ export default function SmartRoutingSection({
 									type="button"
 									className="smart-routing-row__expand"
 									aria-label="Venue details"
+									aria-expanded={open}
 									onClick={() => toggle(key)}
 								>
 									<span
@@ -1238,12 +1315,21 @@ export default function SmartRoutingSection({
 											preview.legs,
 											userSellSharesByVenue,
 										)}
+										e2eLegAttrs={e2eLegAttrs}
 									/>
 									<div className="smart-routing-drawer__footer">
 										<div className="smart-routing-drawer__fees">
 											<SorRouteConsolidatedFeesSummary route={feeR} variant="smart-drawer" />
 										</div>
-										<div className="smart-routing-drawer__total">
+										<div
+											className="smart-routing-drawer__total"
+											{...(e2eLegAttrs?.receiveUsd != null
+												? {
+														"data-qa": "tradebox-estimated-receive-usd",
+														"data-receive-usd": e2eLegAttrs.receiveUsd,
+													}
+												: {})}
+										>
 											<span>Est. receive</span>
 											<span>
 												$ {formatSorSellProceedsUsdDisplay(displayProceeds)}
@@ -1281,6 +1367,16 @@ export default function SmartRoutingSection({
 				 * venue has an in-app onboarding hook to land on. */
 				const kalshiNeedsKyc = theoretical && p.venue === "dflow";
 				const blockClick = theoretical && !kalshiNeedsKyc;
+				const e2eLegAttrs = visibleDrawerE2eLegAttrs({
+					selected,
+					tradingVenue,
+					orderType,
+					side: "buy",
+					leg: p.legs[0],
+					predictFunFeeRateBps,
+					displayAvgPrice,
+					costUsd: p.totalCost,
+				});
 
 				return (
 					<div
@@ -1335,6 +1431,7 @@ export default function SmartRoutingSection({
 								type="button"
 								className="smart-routing-row__expand"
 								aria-label="Venue details"
+								aria-expanded={open}
 								onClick={() => toggle(key)}
 							>
 								<span
@@ -1374,13 +1471,22 @@ export default function SmartRoutingSection({
 										p.insufficientLiquidity ? new Set([p.venue]) : undefined
 									}
 									predictFunFeeRateBps={predictFunFeeRateBps}
+									e2eLegAttrs={e2eLegAttrs}
 								/>
 								<div className="smart-routing-drawer__footer">
 									<div className="smart-routing-drawer__fees">
 										<SorRouteConsolidatedFeesSummary route={feeR} variant="smart-drawer" />
 									</div>
 									{Number.isFinite(p.totalCost) && (
-										<div className="smart-routing-drawer__total">
+										<div
+											className="smart-routing-drawer__total"
+											{...(e2eLegAttrs?.costUsd != null
+												? {
+														"data-qa": "sor-leg-cost",
+														"data-cost-usd": e2eLegAttrs.costUsd,
+													}
+												: {})}
+										>
 											<span>Total Cost</span>
 											<span>$ {formatSorBuyCostUsdDisplay(p.totalCost)}</span>
 										</div>

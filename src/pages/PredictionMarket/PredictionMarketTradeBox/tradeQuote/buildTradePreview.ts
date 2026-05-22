@@ -1,5 +1,4 @@
 import { getVenueConfig } from "@/config/venueConfig";
-import type { DflowOrderQuoteResult } from "@/trading/dflow/dflowOrderQuoteTypes";
 import {
 	sorBuyNetHeldTotalSharesFromLegs,
 	shareAmountMatchesRoute,
@@ -7,7 +6,6 @@ import {
 	type RoutePlan,
 } from "@/trading/sor";
 import type { TradingVenue } from "../types";
-import { dflowTypedUsdMatchesDebouncedQuote } from "./dflowQuoteAlignment";
 import {
 	EMPTY_TRADE_PREVIEW,
 	type MarketOrderBookPreview,
@@ -23,25 +21,17 @@ export type BuildTradePreviewInput = {
 	amount: string;
 	executionRoute: RoutePlan | null;
 	bookPreview: MarketOrderBookPreview;
-	dflowQuote: DflowOrderQuoteResult | null | undefined;
-	debouncedQuoteAmount: string;
 	predictFunFeeRateBps: number | undefined;
 };
 
-function resolveSource(
-	usePondBuy: boolean,
-	hasSorOverlay: boolean,
-	pondOnly: boolean,
-): TradeQuoteSource {
-	if (usePondBuy && hasSorOverlay) return "sor+pond";
-	if (usePondBuy || pondOnly) return "pond";
+function resolveSource(hasSorOverlay: boolean, bookHasData: boolean): TradeQuoteSource {
 	if (hasSorOverlay) return "sor";
-	return "book";
+	return bookHasData ? "book" : "idle";
 }
 
 /**
- * Merges local book walk, SOR execution route, and optional DFlow Pond quote into
- * one preview — same rules as the former TradeBox `state` IIFE.
+ * Merges local book walk and SOR execution route into one preview.
+ * DFlow Pond economics are folded into `executionRoute` on the server.
  */
 export function buildTradePreview(input: BuildTradePreviewInput): TradeQuote {
 	const {
@@ -51,8 +41,6 @@ export function buildTradePreview(input: BuildTradePreviewInput): TradeQuote {
 		amount,
 		executionRoute: sr,
 		bookPreview: bookData,
-		dflowQuote: rawQ,
-		debouncedQuoteAmount,
 		predictFunFeeRateBps,
 	} = input;
 
@@ -74,9 +62,6 @@ export function buildTradePreview(input: BuildTradePreviewInput): TradeQuote {
 		Boolean(sorMatchesInput) &&
 		(tradingVenue !== "all" ||
 			(tradingVenue === "all" && dflowSorSingleLegMarketBuy));
-	const dflowPondQuoteSurface =
-		tradingVenue === "dflow" ||
-		(tradingVenue === "all" && dflowSorSingleLegMarketBuy);
 
 	if (hasSorData && orderType === "market" && sr) {
 		const leg = sr.legs[0];
@@ -100,65 +85,22 @@ export function buildTradePreview(input: BuildTradePreviewInput): TradeQuote {
 		const sorFee = Number.isFinite(sr.totalFees) ? sr.totalFees : undefined;
 
 		if (side === "buy") {
-			const sorNumForCmp =
-				typeof sorContracts === "number" && Number.isFinite(sorContracts)
-					? sorContracts
-					: typeof bookData.calculatedContracts === "number" &&
-							Number.isFinite(bookData.calculatedContracts)
-						? bookData.calculatedContracts
-						: Number.NaN;
-			let pondPick: DflowOrderQuoteResult | null = null;
-			if (
-				dflowPondQuoteSurface &&
-				rawQ != null &&
-				Number.isFinite(rawQ.contracts) &&
-				rawQ.contracts > 0 &&
-				Number.isFinite(rawQ.usd) &&
-				rawQ.usd > 0
-			) {
-				const debounceAligned = dflowTypedUsdMatchesDebouncedQuote(
-					amount,
-					debouncedQuoteAmount,
-				);
-				const budgetUsd = Number.isFinite(sr.requestedAmount)
-					? sr.requestedAmount
-					: inputAmount;
-				const spendSlopUsd = Math.max(0.05, 0.02 * Math.abs(budgetUsd));
-				const quoteSpendMatchesBudget =
-					usdAmountMatchesRoute(rawQ.usd, inputAmount) ||
-					usdAmountMatchesRoute(rawQ.usd, budgetUsd) ||
-					Math.abs(rawQ.usd - budgetUsd) <= spendSlopUsd;
-				const pondTighterThanSor =
-					Number.isFinite(sorNumForCmp) &&
-					sorNumForCmp > 0 &&
-					rawQ.contracts + 1e-9 < sorNumForCmp;
-				if (debounceAligned || (quoteSpendMatchesBudget && pondTighterThanSor)) {
-					pondPick = rawQ;
-				}
-			}
-			const q = pondPick;
-			const usePondBuyQuote = q != null;
 			const preview: TradePreviewFields = {
-				calculatedContracts: usePondBuyQuote
-					? q.contracts
-					: (sorContracts ?? bookData.calculatedContracts),
+				calculatedContracts: sorContracts ?? bookData.calculatedContracts,
 				remainingUsd: bookData.remainingUsd,
-				spent: usePondBuyQuote
-					? q.usd
-					: sorCost !== undefined && sorFee !== undefined
+				spent:
+					sorCost !== undefined && sorFee !== undefined
 						? sorCost - sorFee
 						: bookData.spent,
-				tradingFee: usePondBuyQuote ? 0 : (sorFee ?? bookData.tradingFee),
-				estimatedCost: usePondBuyQuote
-					? q.usd
-					: (sorCost ?? bookData.estimatedCost),
+				tradingFee: sorFee ?? bookData.tradingFee,
+				estimatedCost: sorCost ?? bookData.estimatedCost,
 				grossReceive: null,
 				sellTradingFee: null,
 				netReceive: null,
 			};
 			return {
 				preview,
-				source: resolveSource(usePondBuyQuote, true, false),
+				source: resolveSource(true, false),
 				route: sr,
 			};
 		}
@@ -182,43 +124,9 @@ export function buildTradePreview(input: BuildTradePreviewInput): TradeQuote {
 		return { preview, source: "sor", route: sr };
 	}
 
-	const dflowQuoteData = rawQ;
-	if (
-		dflowPondQuoteSurface &&
-		orderType === "market" &&
-		dflowQuoteData &&
-		Number.isFinite(dflowQuoteData.contracts) &&
-		dflowQuoteData.contracts > 0
-	) {
-		if (side === "buy") {
-			const preview: TradePreviewFields = {
-				calculatedContracts: dflowQuoteData.contracts,
-				remainingUsd: bookData.remainingUsd,
-				spent: dflowQuoteData.usd,
-				tradingFee: 0,
-				estimatedCost: dflowQuoteData.usd,
-				grossReceive: null,
-				sellTradingFee: null,
-				netReceive: null,
-			};
-			return { preview, source: "pond", route: null };
-		}
-		const preview: TradePreviewFields = {
-			calculatedContracts: dflowQuoteData.contracts,
-			remainingUsd: bookData.remainingUsd,
-			spent: null,
-			tradingFee: null,
-			estimatedCost: null,
-			grossReceive: dflowQuoteData.usd,
-			sellTradingFee: 0,
-			netReceive: dflowQuoteData.usd,
-		};
-		return { preview, source: "pond", route: null };
-	}
-
 	return {
 		preview: { ...bookData },
-		source: bookData.calculatedContracts != null ? "book" : "idle",
+		source: resolveSource(false, bookData.calculatedContracts != null),
 		route: null,
 	};
 }

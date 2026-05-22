@@ -69,7 +69,7 @@ import {
  * for zero. `buyQuotedShares` from test 1 is the Details leg (`data-leg-num-shares`)
  * at quote time (gross SOR `leg.shares` for most venues; **Predict.fun market buy**
  * uses **net-held** shares when fee bps is loaded — same basis as post-fill row delta).
- * **Kalshi/DFlow market buy:** when the debounced Pond `/order/quote` matches typed USD,
+ * **Kalshi/DFlow market buy:** when the debounced SOR route Pond overlay matches typed USD,
  * that attribute follows the quote’s contracts (matches post-fill `outAmount`); otherwise
  * the SOR leg. We take `readBuyRowTotalSharesOrZero()` **before** submit (`sharesBefore`)
  * and compare **delta** = after − before to `buyQuotedShares` using `buyShareFillDeltaTolerance`
@@ -86,11 +86,12 @@ import {
  * Decimals (all venues, including DFlow)
  * ---------------------------------------------------------------------------
  * Share and dollar amounts are whatever the app puts on the DOM: `readLegAttrs` uses
- * `data-leg-num-shares` / price from the leg row (Predict.fun **market buy**:
- * net-held when fee bps is known; **DFlow market buy** uses Pond quote contracts when
- * the debounced amount matches the typed USD, else SOR), `readQuotedBuyCostUsd` uses
- * `data-cost-usd`, `readQuotedSellReceiveUsd` uses `data-receive-usd`, and positions
- * use `data-qa-shares-count`. For **sell input**, the spec types
+ * `data-leg-num-shares` / price from the open smart-routing drawer leg row (same
+ * numbers as the visible “X shares @ avg …” line; Predict.fun market buy uses
+ * net-held when fee bps is known), `readQuotedBuyCostUsd` uses `data-cost-usd`
+ * on the drawer Total Cost row, and positions use `data-qa-shares-count`. Sell
+ * receive assertions use the visible venue row value-btn (`readVenueRowSellReceiveUsd`).
+ * For **sell input**, the spec types
  * `sellShareAmountTextRoundedDownLikeUi` (same rule as sell `formatShareCountDataQa` /
  * `data-qa-shares-count`: floor to 2 dp, always two fractional digits) so automation
  * does not type a value above scoped max when the attribute still carries extra fractional precision.
@@ -487,13 +488,12 @@ test.describe("prinx per-venue trade cycle", () => {
 						: MARKET_SELL_LEG_TIMEOUT_MS;
 				await tradebox.expectSubmitEnabled(sellSubmitTimeoutMs);
 				// Sell-side reads come from the visible smart-routing-row preview
-				// (`SmartRoutingSection.tsx` lines 1100-1160), not the SOR
-				// `[data-qa="sor-leg"][data-leg-side="market-sell"]` sentinel —
-				// that sentinel only renders when `sorRoute.executionRoute` is
-				// non-null (`PredictionMarketTradeBoxUI.tsx` lines 1488-1534), and
-				// on Polymarket sells right after a buy fill the targeted execution
-				// channel can lag (`venuePositions` empty in `useSorRoute.ts`)
-				// while the omnibus display channel already populates the row.
+				// (`SmartRoutingSection.tsx`), not the drawer `[data-qa="sor-leg"]`
+				// row — that only mounts when the chevron is open and
+				// `executionRoute` overlay is present; on Polymarket sells right
+				// after a buy fill the targeted execution channel can lag
+				// (`venuePositions` empty in `useSorRoute.ts`) while the omnibus
+				// display channel already populates the row.
 				const venueSlug = tradingVenueSlugForKey(venueKey);
 				const priceCents = await tradebox.readVenueRowAvgCents(
 					venueSlug,

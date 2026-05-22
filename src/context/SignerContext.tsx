@@ -5,7 +5,7 @@ import { DEBUG_ACCOUNT_OVERRIDE_KEY } from "config/localStorage";
 import { getCTFAddress, getUSDCAddress } from "config/addresses";
 import { DEFAULT_RPC_URL } from "config/rpc";
 import { fetchNonZeroCtfBalancesRpc } from "@/helpers/fetchNonZeroCtfBalancesRpc";
-import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/polymarket/privyEmbeddedWallet";
+import { findEvmPrivyEmbeddedWallet, type PrivyWalletListEntry } from "@/trading/venues/polymarket/wallet/privyEmbeddedWallet";
 
 type SignerContextValue = {
   authenticated: boolean;

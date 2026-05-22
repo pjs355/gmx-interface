@@ -7,12 +7,12 @@ import UmbrellaImage from "./UmbrellaImage";
 import { formatCurrency } from "../utils/formatCurrency";
 import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
-import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
+import { getPredictPositionRowLabel } from "@/trading/venues/predict/portfolio/predictPositionLabel";
 import {
 	titlesMatchVenue,
 	umbrellaHeaderLabel,
 } from "@/helpers/umbrellaDisplayName";
-import { allWinningsMarketsAreLimitlessSettlementBlocked, LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP } from "@/trading/limitless/limitlessClaimAck";
+import { allWinningsMarketsAreLimitlessSettlementBlocked, LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP } from "@/trading/venues/limitless/portfolio/limitlessClaimAck";
 import { useAnimatedDots } from "@/hooks/useAnimatedDots";
 
 type MarketEntry = {

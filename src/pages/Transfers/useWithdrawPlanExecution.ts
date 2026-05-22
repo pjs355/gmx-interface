@@ -11,8 +11,7 @@ import { useFundingLifiExecution } from "@/trading/lifi/useFundingLifiExecution"
 import {
 	BRIDGE_FUNDING_BALANCES_QUERY_KEY,
 } from "@/trading/hooks/useBridgeFundingBalances";
-import { useVenueAddressChainMap } from "@/context/AccountDataContext";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useAccountData, useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { createSolanaConnectionForWalletSend } from "@/config/rpc";
 import {
@@ -86,7 +85,7 @@ function lifiWithdrawToQuoteResponse(d: LifiWithdrawLifiData): LifiQuoteResponse
 
 export function useWithdrawPlanExecution() {
 	const queryClient = useQueryClient();
-	const funding = useFundingAddresses();
+	const accountData = useAccountData();
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const polymarketWallet = venueAddressChainMap?.polymarket.walletAddress;
 	const { refresh: refreshUserData } = useUserData();
@@ -123,8 +122,8 @@ export function useWithdrawPlanExecution() {
 						});
 						await refreshUserData();
 						await Promise.all([
-							funding.refetchPolymarket(),
-							funding.refetchOverview(),
+							accountData.refresh.polyAccount(),
+							accountData.refresh.overview(),
 						]);
 						await queryClient.invalidateQueries({
 							queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
@@ -153,8 +152,8 @@ export function useWithdrawPlanExecution() {
 
 					await refreshUserData();
 					await Promise.all([
-						funding.refetchPolymarket(),
-						funding.refetchOverview(),
+						accountData.refresh.polyAccount(),
+						accountData.refresh.overview(),
 					]);
 					await queryClient.invalidateQueries({
 						queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
@@ -212,14 +211,14 @@ export function useWithdrawPlanExecution() {
 				);
 
 				try {
-					await funding.verifyOnChain.mutateAsync({});
+					await accountData.polyAccount.verifyOnChain.mutateAsync({});
 				} catch {
 					/* ignore */
 				}
 				await refreshUserData();
 				await Promise.all([
-					funding.refetchPolymarket(),
-					funding.refetchOverview(),
+					accountData.refresh.polyAccount(),
+					accountData.refresh.overview(),
 				]);
 				await queryClient.invalidateQueries({
 					queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
@@ -247,7 +246,9 @@ export function useWithdrawPlanExecution() {
 		[
 			api,
 			buildExecuteLifiStepsOptions,
-			funding,
+			accountData.refresh.polyAccount,
+			accountData.refresh.overview,
+			accountData.polyAccount.verifyOnChain,
 			getSignerForChain,
 			polymarketRelay.walletReady,
 			preparePolygonRelay,
@@ -257,7 +258,7 @@ export function useWithdrawPlanExecution() {
 		]
 	);
 
-	return { executePlan, funding };
+	return { executePlan };
 }
 
 export function getWithdrawExecutionErrorMessage(err: unknown): string {

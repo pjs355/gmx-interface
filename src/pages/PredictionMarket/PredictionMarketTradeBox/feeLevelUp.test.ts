@@ -4,7 +4,7 @@ import {
 	levelUpBuyFeeMicroFromMakerMicro,
 	levelUpBuyTotalMicroScwBalanceRequired,
 } from "./feeLevelUp";
-import { predictionBuyMakerMicroUsdc } from "@/trading/sor/predictionBuyCollateralMicro";
+import { predictionBuyMakerMicroUsdc } from "@/trading/sor/prefund/predictionBuyCollateralMicro";
 
 describe("feeLevelUp parity with predictions ensureUsdcApprovalAndBalance buy fee", () => {
 	it("3 shares @ 0.52 → maker 1.56 + fee 0.04 = 1.60 USDC on SCW", () => {

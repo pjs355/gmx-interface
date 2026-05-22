@@ -8,7 +8,7 @@ import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import {
 	getPredictPositionRowLabel,
 	isGenericBinaryOutcomeLabel,
-} from "@/trading/predict/predictPositionLabel";
+} from "@/trading/venues/predict/portfolio/predictPositionLabel";
 
 interface TradeHistoryListMobileProps {
 	orders: ProcessedOrder[];

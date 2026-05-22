@@ -4,7 +4,7 @@
  */
 
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
-import { getDflowKalshiMonitorLink } from "@/trading/dflow/monitorDflowBooks";
+import { getDflowKalshiMonitorLink } from "@/trading/venues/dflow/catalog/monitorDflowBooks";
 
 const MIN_VALID = 0.005;
 const MAX_VALID = 0.995;

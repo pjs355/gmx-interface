@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { readFundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
+import { readFundingStableBalancesHuman } from "@/trading/sor/prefund/fundingStableBalances";
 
 export const BRIDGE_FUNDING_BALANCES_QUERY_KEY = "bridge-funding-balances" as const;
 

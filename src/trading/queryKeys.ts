@@ -1,4 +1,4 @@
-import { LIMITLESS_QUERY_ROOT } from "@/trading/limitless/limitlessQueryKeys";
+import { LIMITLESS_QUERY_ROOT } from "@/trading/venues/limitless/trade/limitlessQueryKeys";
 
 export const tradingQueryKeys = {
 	all: ["trading"] as const,

@@ -44,69 +44,68 @@ import {
 	ensureLimitlessTradingApprovalsOnBase,
 	readLimitlessBuyUsdcAllowancesSufficientOnBase,
 	readLimitlessSellCtfApprovalsSufficientOnBase,
-} from "@/trading/limitless/limitlessTradingApprovalsOnBase";
-import { getLimitlessBaseTxClientForAddress } from "@/trading/limitless/limitlessBaseTxClientForAddress";
+} from "@/trading/venues/limitless/approvals/limitlessTradingApprovalsOnBase";
+import { getLimitlessBaseTxClientForAddress } from "@/trading/venues/limitless/trade/limitlessBaseTxClientForAddress";
 import type { SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import { usePolymarketExecutionGate } from "@/trading/hooks/usePolymarketExecutionGate";
-import { usePolymarketClobTradingSession } from "@/trading/polymarket/usePolymarketClobTradingSession";
+import { usePolymarketClobTradingSession } from "@/trading/venues/polymarket/session/usePolymarketClobTradingSession";
 import {
 	levelUpMonitorBookForPosition,
 	polyOrderbookForPosition,
-} from "@/trading/polymarket/polyOutcomeTokenId";
+} from "@/trading/venues/polymarket/trade/polyOutcomeTokenId";
 import {
 	dflowKalshiOrderbookForPosition,
 	hasDflowKalshiMonitorLink,
 	getDflowKalshiMonitorLink,
-} from "@/trading/dflow/monitorDflowBooks";
-import { startDflowProofRedirect } from "@/trading/dflow/startDflowProofRedirect";
-import { monitorBookToOrderbookSnapshot } from "@/trading/polymarket/monitorOrderbookAdapter";
-import { usePredictTradingSession } from "@/trading/predict/usePredictTradingSession";
-import { usePredictEnsureExecutionReady } from "@/trading/predict/usePredictEnsureExecutionReady";
-import { usePredictMarketDetail } from "@/trading/predict/usePredictMarketDetail";
-import { usePredictOrderbook } from "@/trading/predict/usePredictOrderbook";
-import { predictBookToOrderbookSnapshot } from "@/trading/predict/predictBookToOrderbookSnapshot";
+} from "@/trading/venues/dflow/catalog/monitorDflowBooks";
+import { startDflowProofRedirect } from "@/trading/venues/dflow/onboarding/startDflowProofRedirect";
+import { monitorBookToOrderbookSnapshot } from "@/trading/venues/polymarket/trade/monitorOrderbookAdapter";
+import { usePredictTradingSession } from "@/trading/venues/predict/session/usePredictTradingSession";
+import { usePredictEnsureExecutionReady } from "@/trading/venues/predict/session/usePredictEnsureExecutionReady";
+import { usePredictMarketDetail } from "@/trading/venues/predict/portfolio/usePredictMarketDetail";
+import { usePredictOrderbook } from "@/trading/venues/predict/book/usePredictOrderbook";
+import { predictBookToOrderbookSnapshot } from "@/trading/venues/predict/book/predictBookToOrderbookSnapshot";
 import {
 	predictMarketNumericId,
 	predictOrderbookForPosition,
 	predictOutcomeSide,
-} from "@/trading/predict/predictOutcome";
+} from "@/trading/venues/predict/trade/predictOutcome";
 import {
 	predictOutcomeTokenId,
-} from "@/trading/predict/predictMarketApi";
-import { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
+} from "@/trading/venues/predict/portfolio/predictMarketApi";
+import { usePredictApprovalsStatus } from "@/trading/venues/predict/wallet/usePredictApprovalsStatus";
 import {
 	bboFromSnapshot,
 	logPolymarketTradePreflight,
-} from "@/trading/polymarket/polymarketOrderDebug";
+} from "@/trading/venues/polymarket/trade/polymarketOrderDebug";
 import { getPrivateApiAbsoluteUrl } from "@/config/privateApiBase";
 import { TOAST_AUTO_CLOSE_TIME } from "config/ui";
 import { Side, type TickSize } from "@polymarket/clob-client-v2";
 import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
+import { useDflowMintResolver } from "@/trading/venues/dflow/catalog/useDflowMintResolver";
 import { useTradeBoxController } from "./hooks/useTradeBoxController";
 import { useTradeBoxVenueWiring } from "./hooks/useTradeBoxVenueWiring";
 import { useTradeBoxVenueApprovals } from "./hooks/useTradeBoxVenueApprovals";
 import { useTradeBoxOrderResultToasts } from "./hooks/useTradeBoxOrderResultToasts";
 import { useCalculatedMarketOrderData } from "./tradeQuote/useCalculatedMarketOrderData";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
-import { sorExecutorWalletRoles } from "@/context/accountWallets";
 import {
 	useSignAndSendTransaction as useSolanaSignAndSendTransaction,
 	useSignTransaction as useSolanaSignTransaction,
 	useSignMessage as useSolanaSignMessage,
 	useWallets as useSolanaWallets,
 } from "@privy-io/react-auth/solana";
-import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
-import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
+import { sendPrivySponsoredSolanaTransaction } from "@/trading/chains/privySponsoredSolana";
+import { usePolymarketRelay } from "@/trading/venues/polymarket/session/usePolymarketRelay";
 import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import {
 	parseLimitPriceCents,
 	probabilityToLimitPriceCentsString,
 } from "@/trading/sor";
-import type { UseSorLegExecutorDeps } from "@/trading/sor/useSorLegExecutor";
+import type { UseSorLegExecutorDeps } from "@/trading/sor/core/useSorLegExecutor";
 import { useAccountData } from "@/context/AccountDataContext";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
@@ -118,24 +117,24 @@ import { tradingQueryKeys } from "@/trading/queryKeys";
 import {
 	limitlessOrderbookForPosition,
 	limitlessOutcomeTokenId,
-} from "@/trading/limitless/limitlessOrderbook";
+} from "@/trading/venues/limitless/trade/limitlessOrderbook";
 import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "./feeLimitless";
 import {
 	getLimitlessEnsureTradeGate,
 	isLimitlessProfileExistsNotLinkedApiError,
 	limitlessEnsureWarrantsAccountOverviewRefresh,
-} from "@/trading/limitless/limitlessEnsureTradeGate";
-import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/limitless/limitlessEnsureEoaBody";
-import { postLimitlessEnsureAccountWhenNeeded } from "@/trading/limitless/limitlessEnsureAccountRequest";
+} from "@/trading/venues/limitless/session/limitlessEnsureTradeGate";
+import { buildLimitlessEoaEnsureBodyFromSigner } from "@/trading/venues/limitless/session/limitlessEnsureEoaBody";
+import { postLimitlessEnsureAccountWhenNeeded } from "@/trading/venues/limitless/session/limitlessEnsureAccountRequest";
 import { useSetupActivationOptional } from "@/onboarding/SetupActivationContext";
 import {
 	buildLimitlessSignedOrderFromMarket,
 	type BuildLimitlessSorOrderInput,
-} from "@/trading/limitless/limitlessSignedClobOrder";
+} from "@/trading/venues/limitless/trade/limitlessSignedClobOrder";
 import {
 	levelUpCrossVenueBooksHaveTradeableWholeShareLiquidity,
 	orderbookSnapshotHasWholeShareRestingLiquidity,
-} from "@/trading/levelUp/levelUpCrossVenueBookPresence";
+} from "@/trading/venues/levelup/levelUpCrossVenueBookPresence";
 
 export interface PredictionMarketTradeBoxProps extends TradeBoxProps {
 	umbrellaDisplayName?: string;
@@ -742,8 +741,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictMarketDetail,
     account,
     getClientForChain,
-    fundingAddresses: sorExecutorWalletRoles(accountData),
     venueAddressChainMap,
+    walletGate: accountData.walletGate,
     solanaSigner,
     getRelayClient: relay.getRelayClient,
     dflowProofVerified: dflowProof.isVerified,
@@ -828,7 +827,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     handleSorExecute,
     debouncedSorRoutePreviewAllowed,
     smartRoutingMarketKey,
-    dflowOrderQuoteForSentinel,
     maxScopedSellShares,
     handleTradingVenueChangeGuarded,
     venueSelectionLockedRef,
@@ -895,27 +893,17 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       tradeQuote={tradeQuote}
       onPositionChange={onPositionChangeWrapper}
       onAmountChange={handleAmountChange}
-      onPriceChange={handlePriceChange}
       onTradingVenueChange={handleTradingVenueChangeGuarded}
-      onOrderTypeChange={handleOrderTypeChange}
       onSideChange={onSideChangeWrapper}
-      polymarketVenueHint={polymarketVenueHint}
-      predictVenueHint={predictVenueHint}
       predictVenueBookHints={predictVenueBookHints}
       levelUpVenueBookHints={levelUpVenueBookHints}
-      dflowVenueHint={dflowVenueHint}
       matchedVenues={matchedVenues}
       buttonState={buttonStateForUi}
-      approvalState={approvalState}
       executionGateBanner={executionGateBanner}
-      walletAddress={account ?? undefined}
-      usdcBalance={usdcBalance}
       calculateContractsForMarketOrder={calculateContractsForMarketOrderUi}
       getEffectivePrice={marketOrderHandler.getEffectivePrice}
       sorRoute={sorRoute}
       sorExecution={sorExecution}
-      sorRouteExpired={sorRouteExpired}
-      handleSorExecute={handleSorExecute}
       maxScopedSellShares={maxScopedSellShares}
       sharesLoadingForActiveTab={sharesLoadingForActiveTab}
       matchedMonitor={matchedMonitor}
@@ -927,7 +915,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       routePreviewAllowed={debouncedSorRoutePreviewAllowed}
       smartRoutingMarketKey={smartRoutingMarketKey}
       predictFunFeeRateBps={predictMarketDetail?.feeRateBps}
-      dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}
     />
 		</>
   );

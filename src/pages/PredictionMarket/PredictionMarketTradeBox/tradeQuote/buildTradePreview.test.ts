@@ -25,13 +25,13 @@ function minimalRoute(
 	partial: Partial<RoutePlan> & Pick<RoutePlan, "side" | "requestedAmount">,
 ): RoutePlan {
 	const leg = stubLeg({ venue: "polymarket", ...(partial.legs?.[0] ?? {}) });
+	const { side, requestedAmount, ...rest } = partial;
 	return {
-		...partial,
 		routeId: "test-route",
 		pandaMatchId: "p1",
 		outcome: "A",
-		side: partial.side,
-		requestedAmount: partial.requestedAmount,
+		side,
+		requestedAmount,
 		totalShares: 10,
 		totalCost: 5,
 		totalFees: 0.5,
@@ -54,11 +54,12 @@ function minimalRoute(
 		expiresAt: Date.now() + 60_000,
 		computedInMs: 0,
 		legs: partial.legs ?? [leg],
+		...rest,
 	};
 }
 
 describe("buildTradePreview", () => {
-	it("uses book preview when no route or pond data", () => {
+	it("uses book preview when no route", () => {
 		const book = {
 			...EMPTY_TRADE_PREVIEW,
 			calculatedContracts: 10,
@@ -71,8 +72,6 @@ describe("buildTradePreview", () => {
 			amount: "5",
 			executionRoute: null,
 			bookPreview: book,
-			dflowQuote: null,
-			debouncedQuoteAmount: "5",
 			predictFunFeeRateBps: undefined,
 		});
 		expect(q.source).toBe("book");
@@ -90,8 +89,6 @@ describe("buildTradePreview", () => {
 			amount: "5",
 			executionRoute: route,
 			bookPreview: book,
-			dflowQuote: null,
-			debouncedQuoteAmount: "5",
 			predictFunFeeRateBps: undefined,
 		});
 		expect(q.source).toBe("sor");
@@ -100,13 +97,15 @@ describe("buildTradePreview", () => {
 		expect(q.preview.estimatedCost).toBe(5);
 	});
 
-	it("prefers Pond when debounced USD matches and pond is tighter than SOR (dflow tab)", () => {
+	it("uses Pond-sized DFlow leg from executionRoute (server overlay)", () => {
 		const book = { ...EMPTY_TRADE_PREVIEW };
 		const route = minimalRoute({
 			side: "buy",
 			requestedAmount: 5,
-			legs: [stubLeg({ venue: "dflow", shares: 8, fee: 0 })],
-			totalShares: 8,
+			legs: [stubLeg({ venue: "dflow", shares: 12, fee: 0.1 })],
+			totalShares: 12,
+			totalCost: 5,
+			totalFees: 0.1,
 		});
 		const q = buildTradePreview({
 			tradingVenue: "dflow",
@@ -115,14 +114,12 @@ describe("buildTradePreview", () => {
 			amount: "5",
 			executionRoute: route,
 			bookPreview: book,
-			dflowQuote: { contracts: 12, usd: 5, pricePerContract: 5 / 12 },
-			debouncedQuoteAmount: "5",
 			predictFunFeeRateBps: undefined,
 		});
-		expect(q.source).toBe("sor+pond");
+		expect(q.source).toBe("sor");
 		expect(q.preview.calculatedContracts).toBe(12);
 		expect(q.preview.estimatedCost).toBe(5);
-		expect(q.preview.tradingFee).toBe(0);
+		expect(q.preview.tradingFee).toBe(0.1);
 	});
 
 	it("uses SOR sell proceeds from execution leg", () => {
@@ -147,8 +144,6 @@ describe("buildTradePreview", () => {
 			amount: "10",
 			executionRoute: route,
 			bookPreview: book,
-			dflowQuote: null,
-			debouncedQuoteAmount: "10",
 			predictFunFeeRateBps: undefined,
 		});
 		expect(q.source).toBe("sor");

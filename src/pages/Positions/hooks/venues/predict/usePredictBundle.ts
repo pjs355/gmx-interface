@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { AccountPositionsSlice } from "@/context/AccountDataContext";
-import { usePredictOrders } from "@/trading/predict/usePredictOrders";
-import { usePredictOrderMatches } from "@/trading/predict/usePredictOrderMatches";
-import { usePredictAccountActivity } from "@/trading/predict/usePredictAccountActivity";
-import { usePredictEnsureAuth } from "@/trading/predict/usePredictEnsureAuth";
-import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
+import { usePredictOrders } from "@/trading/venues/predict/portfolio/usePredictOrders";
+import { usePredictOrderMatches } from "@/trading/venues/predict/portfolio/usePredictOrderMatches";
+import { usePredictAccountActivity } from "@/trading/venues/predict/portfolio/usePredictAccountActivity";
+import { usePredictEnsureAuth } from "@/trading/venues/predict/session/usePredictEnsureAuth";
+import { usePredictMarketDetailsMap } from "@/trading/venues/predict/portfolio/usePredictMarketDetailsMap";
 import {
 	buildPredictHistoryFillsFromFilledOrders,
 	computePredictCostByToken,
@@ -13,13 +13,13 @@ import {
 	mergePredictCostMaps,
 	normalizePredictTokenId,
 	type PredictOrderRow,
-} from "@/trading/predict/predictOrdersApi";
+} from "@/trading/venues/predict/portfolio/predictOrdersApi";
 import {
 	buildPredictHistoryFillsFromMatches,
 	computePredictCostByTokenFromMatches,
 	predictMarketIdForTokenFromMatches,
 	type PredictMatchEventRow,
-} from "@/trading/predict/predictMatchesApi";
+} from "@/trading/venues/predict/trade/predictMatchesApi";
 import {
 	buildPredictHistoryFillsFromActivity,
 	computePredictCostByTokenFromActivity,
@@ -27,8 +27,8 @@ import {
 	predictRedeemEventsByToken,
 	sumPredictRedeemPayout,
 	type PredictActivityEvent,
-} from "@/trading/predict/predictActivityApi";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
+} from "@/trading/venues/predict/portfolio/predictActivityApi";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
 import {
 	type VenueHistoryFill,
 	type VenuePosition,

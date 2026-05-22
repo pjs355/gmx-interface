@@ -6,25 +6,25 @@ import {
 	type VenueHistoryFill,
 	isVenueMarketResolvedLike,
 } from "@/types/trading/venuePosition";
-import { polymarketConditionLookupKey } from "@/trading/polymarket/polymarketConditionLookup";
+import { polymarketConditionLookupKey } from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
 import {
 	type PredictUmbrellaLookup,
 	matchVenuePositionToUmbrellaForHistory,
-} from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
-import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
-import type { PredictOrderRow } from "@/trading/predict/predictOrdersApi";
-import type { PredictMatchEventRow } from "@/trading/predict/predictMatchesApi";
+} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
+import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
+import type { PredictOrderRow } from "@/trading/venues/predict/portfolio/predictOrdersApi";
+import type { PredictMatchEventRow } from "@/trading/venues/predict/trade/predictMatchesApi";
 
 
-import type { computePredictCostByToken } from "@/trading/predict/predictOrdersApi";
+import type { computePredictCostByToken } from "@/trading/venues/predict/portfolio/predictOrdersApi";
 import { predictFilledOrdersToVenueHistoryRows } from "../venues/predict/predictHistoryRows";
-import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/polymarket/polymarketConditionLookup";
+import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
 import {
 	buildUmbrellaLookupByDflowEventTicker,
 	buildUmbrellaLookupByDflowOutcomeMint,
-} from "@/trading/dflow/dflowUmbrellaLookup";
+} from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
 import { stripUmbrellaDisplayPrefix } from "@/helpers/umbrellaDisplayName";
-import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
+import { debugLimitlessPortfolio } from "@/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
 
 function umbrellaMatchedForVenueTradeHistoryRaw(
 	row: VenuePosition,

@@ -24,7 +24,7 @@ export const EMPTY_TRADE_PREVIEW: TradePreviewFields = {
 };
 
 /** Where the visible preview numbers came from (debug / future UI). */
-export type TradeQuoteSource = "idle" | "book" | "sor" | "pond" | "sor+pond";
+export type TradeQuoteSource = "idle" | "book" | "sor";
 
 /**
  * Single quote model for the trade box UI: preview numbers + optional route used
@@ -33,7 +33,7 @@ export type TradeQuoteSource = "idle" | "book" | "sor" | "pond" | "sor+pond";
 export type TradeQuote = {
 	preview: TradePreviewFields;
 	source: TradeQuoteSource;
-	/** Execution-channel route when preview used SOR (null for book-only / pond-only). */
+	/** Execution-channel route when preview used SOR (null for book-only). */
 	route: RoutePlan | null;
 };
 

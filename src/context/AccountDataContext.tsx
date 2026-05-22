@@ -26,10 +26,10 @@ import {
 } from "@/context/accountWallets";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { tradingQueryKeys } from "@/trading/queryKeys";
-import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
-import { usePredictPositions } from "@/trading/predict/usePredictPositions";
-import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
-import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
+import { usePolymarketPositions } from "@/trading/venues/polymarket/portfolio/usePolymarketPositions";
+import { usePredictPositions } from "@/trading/venues/predict/portfolio/usePredictPositions";
+import { useDflowPositions } from "@/trading/venues/dflow/portfolio/useDflowPositions";
+import { useLimitlessVenuePositions } from "@/trading/venues/limitless/portfolio/useLimitlessPortfolioVenue";
 import {
 	CollateralTokenProvider,
 	useCollateralTokens,
@@ -388,12 +388,7 @@ function AccountDataContextInner({
 			bnb: collateral.bscUsdt,
 			solana: collateral.solanaUsdc,
 			limitlessMaker: collateral.limitlessMakerUsdc,
-			total:
-				collateral.baseUsdc +
-				collateral.polygonStable +
-				collateral.bscUsdt +
-				collateral.solanaUsdc +
-				collateral.limitlessMakerUsdc,
+			total: collateral.total,
 			isFetched: collateral.isFetched,
 			status: collateral.cashStatus,
 			error: collateral.cashError,
@@ -520,11 +515,7 @@ function AccountDataContextInner({
 		overviewQuery,
 		polyBuilder,
 		predictAccountQuery,
-		collateral.baseUsdc,
-		collateral.polygonStable,
-		collateral.bscUsdt,
-		collateral.solanaUsdc,
-		collateral.limitlessMakerUsdc,
+		collateral.total,
 		collateral.isFetched,
 		collateral.cashStatus,
 		collateral.cashError,

@@ -4,8 +4,8 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
-import { portfolioColumnTeamLabels } from "@/trading/dflow/dflowUmbrellaLookup";
-import { getPredictPositionRowLabel } from "@/trading/predict/predictPositionLabel";
+import { portfolioColumnTeamLabels } from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
+import { getPredictPositionRowLabel } from "@/trading/venues/predict/portfolio/predictPositionLabel";
 import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";

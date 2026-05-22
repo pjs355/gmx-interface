@@ -9,18 +9,18 @@ import {
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import { bsc } from "viem/chains";
 import { useVenueAddressChainMap } from "@/context/AccountDataContext";
-import { checkPolymarketApprovals } from "@/trading/polymarket/approvalTxs";
+import { checkPolymarketApprovals } from "@/trading/venues/polymarket/trade/approvalTxs";
 import {
 	deployPolymarketDepositWalletIfNeeded,
 	executePolymarketApprovalBatch,
-} from "@/trading/polymarket/safeActions";
-import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/polymarket/embeddedPrivyViemSend";
-import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
-import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySponsoredSolana";
+} from "@/trading/venues/polymarket/session/safeActions";
+import { createPrivyEmbeddedSendTransactionCapable } from "@/trading/venues/polymarket/wallet/embeddedPrivyViemSend";
+import { usePolymarketRelay } from "@/trading/venues/polymarket/session/usePolymarketRelay";
+import { sendPrivySponsoredSolanaTransaction } from "@/trading/chains/privySponsoredSolana";
 import type { SendTransactionCapable, SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import type { ExecuteLifiStepsOptions } from "@/trading/lifi/executeLifiSteps";
 import type { LifiQuoteResponse } from "@/types/trading";
-import { CHAIN_LIFI_IDS } from "@/trading/sor/sor-types";
+import { CHAIN_LIFI_IDS } from "@/trading/sor/core/sor-types";
 
 const BASE = CHAIN_LIFI_IDS.base;
 const POLYGON = CHAIN_LIFI_IDS.polygon;

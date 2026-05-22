@@ -4,7 +4,7 @@ import { useSignMessage, useWallets as useSolanaWallets } from "@privy-io/react-
 import { useQuery } from "@tanstack/react-query";
 import Tooltip from "@/components/Tooltip/Tooltip";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { startDflowProofRedirect } from "@/trading/dflow/startDflowProofRedirect";
+import { startDflowProofRedirect } from "@/trading/venues/dflow/onboarding/startDflowProofRedirect";
 import { useAccountData } from "@/context/AccountDataContext";
 
 const KALSHI_NOT_VERIFIED_TOOLTIP =

@@ -12,7 +12,7 @@ import { usePortfolio } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
 import { isHomeSite } from "config/ui";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
-import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/usePostTradeAccountSync";
+import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/post-trade/usePostTradeAccountSync";
 
 import "./Header.scss";
 

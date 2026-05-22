@@ -43,7 +43,6 @@ import {
 	buildTradeActionButtonText,
 	buyAddFundsIfZeroPooledCash,
 	buyInsufficientBalanceIfPositivePooledCash,
-	buttonIfBuyInsufficientFunds,
 	SETUP_IN_PROGRESS_LABEL,
 	sorUnifiedPrimary,
 	trySorDepositToTrade,
@@ -488,10 +487,6 @@ export function resolveButtonState(ctx: ButtonStateResolveContext): ButtonStateR
           };
         }
       }
-      {
-        const tb = buttonIfBuyInsufficientFunds(state.side, sorState?.route);
-        if (tb) return tb;
-      }
       if (state.side === "buy") {
         const aggregateCash = aggregateCashFromSor(usdcBalance, sorState);
         const addFunds = buyAddFundsIfZeroPooledCash({
@@ -750,11 +745,6 @@ export function resolveButtonState(ctx: ButtonStateResolveContext): ButtonStateR
         disabled: true,
         onClick: () => {},
       };
-    }
-
-    {
-      const tb = buttonIfBuyInsufficientFunds(state.side, sorState?.route);
-      if (tb) return tb;
     }
 
     // One pooled cash figure (Base USDC + Polygon + Solana + BNB USDT, etc.) — same basis as SOR.

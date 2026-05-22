@@ -3,35 +3,35 @@ import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { getVenueConfig } from "@/config/venueConfig";
 import { formatErrorForUser } from "@/errors";
 import { useMarketOrderHandler } from "../MarketOrderHandler";
-import { usePolymarketClobTradingSession } from "@/trading/polymarket/usePolymarketClobTradingSession";
+import { usePolymarketClobTradingSession } from "@/trading/venues/polymarket/session/usePolymarketClobTradingSession";
 import {
 	levelUpMonitorBookForPosition,
 	polyOrderbookForPosition,
-} from "@/trading/polymarket/polyOutcomeTokenId";
+} from "@/trading/venues/polymarket/trade/polyOutcomeTokenId";
 import {
 	dflowKalshiOrderbookForPosition,
 	hasDflowKalshiMonitorLink,
-} from "@/trading/dflow/monitorDflowBooks";
-import { monitorBookToOrderbookSnapshot } from "@/trading/polymarket/monitorOrderbookAdapter";
-import { usePredictTradingSession } from "@/trading/predict/usePredictTradingSession";
-import { usePredictEnsureExecutionReady } from "@/trading/predict/usePredictEnsureExecutionReady";
-import { usePredictMarketDetail } from "@/trading/predict/usePredictMarketDetail";
-import { usePredictOrderbook } from "@/trading/predict/usePredictOrderbook";
-import { predictBookToOrderbookSnapshot } from "@/trading/predict/predictBookToOrderbookSnapshot";
+} from "@/trading/venues/dflow/catalog/monitorDflowBooks";
+import { monitorBookToOrderbookSnapshot } from "@/trading/venues/polymarket/trade/monitorOrderbookAdapter";
+import { usePredictTradingSession } from "@/trading/venues/predict/session/usePredictTradingSession";
+import { usePredictEnsureExecutionReady } from "@/trading/venues/predict/session/usePredictEnsureExecutionReady";
+import { usePredictMarketDetail } from "@/trading/venues/predict/portfolio/usePredictMarketDetail";
+import { usePredictOrderbook } from "@/trading/venues/predict/book/usePredictOrderbook";
+import { predictBookToOrderbookSnapshot } from "@/trading/venues/predict/book/predictBookToOrderbookSnapshot";
 import {
 	complementPredictOrderbook,
 	predictBookNeedsComplementForPosition,
-} from "@/trading/predict/predictSingleMarketBook";
+} from "@/trading/venues/predict/book/predictSingleMarketBook";
 import {
 	predictMarketNumericId,
 	predictOrderbookForPosition,
 	predictOutcomeSide,
-} from "@/trading/predict/predictOutcome";
-import { predictOutcomeTokenId } from "@/trading/predict/predictMarketApi";
-import { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
+} from "@/trading/venues/predict/trade/predictOutcome";
+import { predictOutcomeTokenId } from "@/trading/venues/predict/portfolio/predictMarketApi";
+import { usePredictApprovalsStatus } from "@/trading/venues/predict/wallet/usePredictApprovalsStatus";
 import {
 	limitlessOrderbookForPosition,
-} from "@/trading/limitless/limitlessOrderbook";
+} from "@/trading/venues/limitless/trade/limitlessOrderbook";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { TradingVenue } from "../types";

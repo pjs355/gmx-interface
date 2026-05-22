@@ -4,9 +4,9 @@ import type { AccountPositionsSlice } from "@/context/AccountDataContext";
 import {
 	useLimitlessOpenOrders,
 	useLimitlessTradeHistory,
-} from "@/trading/limitless/useLimitlessPortfolioVenue";
-import { splitLimitlessVenuePositions } from "@/trading/limitless/splitLimitlessVenuePositions";
-import { debugLimitlessPortfolio } from "@/trading/limitless/limitlessPortfolioDebug";
+} from "@/trading/venues/limitless/portfolio/useLimitlessPortfolioVenue";
+import { splitLimitlessVenuePositions } from "@/trading/venues/limitless/portfolio/splitLimitlessVenuePositions";
+import { debugLimitlessPortfolio } from "@/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
 import type { VenueOrder, VenuePosition } from "@/types/trading/venuePosition";
 import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 

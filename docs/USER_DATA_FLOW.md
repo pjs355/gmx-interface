@@ -157,7 +157,7 @@ Venue-specific approvals (Predict BSC, Polymarket, etc.) live in **separate hook
 | Pulled from | Owner | API | Used by (examples) |
 |-------------|-------|-----|---------------------|
 | Profile | `AccountDataProvider` → `useCurrentProfile` | `GET /profiles/me` | `useAccountData().profile`, Profile / Comments, cache keys |
-| Overview wallets | `useAccountOverview(profileId)` | `GET …/account-overview` | Funding address derivation (`useFundingAddresses` / `useFundingAddressesFromQueries`), SOR readiness |
+| Overview wallets | `useAccountOverview(profileId)` | `GET …/account-overview` | VACM / wallet roles (`accountWallets.ts`, `AccountDataContext`), SOR readiness |
 | Polymarket account row | `usePolymarketBuilder` | `GET /polymarket/account` | Builder / deposit flows, wallet display |
 | Predict account row | inline query in `AccountDataProvider` | `GET /api/predict/account` | Execution readiness, trade box ensure |
 | DFlow Proof / account | `useDflowProofStatus` | `GET /api/dflow/account` | DFlow gating, Solana link |

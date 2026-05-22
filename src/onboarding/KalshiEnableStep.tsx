@@ -7,7 +7,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import { startDflowProofRedirect } from "@/trading/dflow/startDflowProofRedirect";
+import { startDflowProofRedirect } from "@/trading/venues/dflow/onboarding/startDflowProofRedirect";
 
 /**
  * Kalshi onboarding step inside the post-signup setup modal.

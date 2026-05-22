@@ -15,30 +15,31 @@ import {
 	formatErrorForUser,
 	userMessage,
 	SOR_SMART_ROUTE_FAILED,
+	formatExecutionNotReadyUserMessage,
 } from "@/errors";
 import { useSorExecution, type SorExecutionPhase } from "@/trading/sor";
 import type { RoutePlan } from "@/trading/sor";
 import {
 	useSorLegExecutor,
 	type UseSorLegExecutorDeps,
-} from "@/trading/sor/useSorLegExecutor";
-import { usePostTradeAccountSync } from "@/trading/sor/usePostTradeAccountSync";
+} from "@/trading/sor/core/useSorLegExecutor";
+import { usePostTradeAccountSync } from "@/trading/sor/post-trade/usePostTradeAccountSync";
 import {
 	captureAccountReconcileSnapshot,
 	type AccountReconcileSnapshot,
-} from "@/trading/sor/postTradeReconcile";
+} from "@/trading/sor/post-trade/postTradeReconcile";
 import {
 	accountVenueKeysFromFilledExecutionLegs,
 	filledExecutionHasLevelUp,
 	routePlanLegsFingerprintMatch,
-} from "@/trading/sor/postTradeRouteAlign";
+} from "@/trading/sor/post-trade/postTradeRouteAlign";
 import {
 	capturePostTradeBaseline,
 	type PostTradeBaseline,
-} from "@/trading/sor/postTradeBaseline";
-import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
-import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
-import { isVacmReady } from "@/context/accountWallets";
+} from "@/trading/sor/post-trade/postTradeBaseline";
+import { registerPendingDflowOutcomeMints } from "@/trading/venues/dflow/portfolio/pendingDflowOutcomeMints";
+import { dflowOutcomeMintForRouteLeg } from "@/trading/venues/dflow/catalog/dflowRouteOutcomeMint";
+import { requireVenueAddressChainMapForExecute } from "@/context/accountWallets";
 import type { AccountDataVacmSlice } from "@/context/accountWallets";
 import type { useAccountData } from "@/context/AccountDataContext";
 import type { useCollateralTokens } from "context/CollateralTokenContext";
@@ -191,14 +192,22 @@ export function useTradeBoxSorExecuteActions(
 	const preTradeSnapshotRef = useRef<AccountReconcileSnapshot | null>(null);
 
 	const handleSorExecute = useCallback(() => {
-		if (!isVacmReady({ venueAddressChainMap, walletGate })) {
+		let vacm;
+		try {
+			vacm = requireVenueAddressChainMapForExecute(
+				venueAddressChainMap,
+				walletGate,
+			);
+		} catch (err: unknown) {
+			console.error("error", err);
 			setState((prev) => ({
 				...prev,
 				orderResult: {
 					success: false,
 					error:
-						walletGate.message ??
-						"Finishing wallet setup. Try again in a moment.",
+						err instanceof Error
+							? err.message
+							: "Finishing wallet setup. Try again in a moment.",
 				},
 			}));
 			return;
@@ -241,7 +250,7 @@ export function useTradeBoxSorExecuteActions(
 				});
 			setDflowUninitAtSubmit(dflowExecutedLegNeedsMarketInit);
 			const marketId = sorQuestionId;
-			const v = venueAddressChainMap!;
+			const v = vacm;
 			const baseline = capturePostTradeBaseline({
 				queryClient,
 				route: executableRoute,
@@ -340,7 +349,10 @@ export function useTradeBoxSorExecuteActions(
 				error: sorRouteExpired
 					? "Odds expired. Wait for refresh, then try again."
 					: executableErrorCode === "EXECUTION_NOT_READY"
-						? "Complete setup for this venue before trading."
+						? formatExecutionNotReadyUserMessage({
+								serverError: executableError,
+								venueRequirements: executableRoute?.venueRequirements,
+							})
 						: executableError?.trim()
 							? executableError
 							: executableLoading

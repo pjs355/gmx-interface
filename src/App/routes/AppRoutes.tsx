@@ -17,7 +17,7 @@ import Footer from "components/Footer/Footer";
 import { RPGPanel } from "components/RPGPanel";
 import { TransfersModal } from "components/TransfersModal";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import { DflowProofReturnSync } from "@/trading/dflow/DflowProofReturnSync";
+import { DflowProofReturnSync } from "@/trading/venues/dflow/onboarding/DflowProofReturnSync";
 
 import { MainRoutes } from "./MainRoutes";
 
