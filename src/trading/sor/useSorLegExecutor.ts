@@ -11,6 +11,10 @@ import type { PredictMarketDetail } from "@/trading/predict/predictMarketApi";
 import type { Book } from "@predictdotfun/sdk";
 import type { TradeExecutionParams } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
 import type { RouteLeg, SorVenue } from "./sor-types";
+import {
+	type VenueAddressChainMap,
+	walletRolesFromVenueAddressChainMap,
+} from "@/context/accountWallets";
 import { validateLegMinimum } from "./sorPreflight";
 import { CHAIN_LIFI_IDS } from "./sor-types";
 import type { SolanaSignerCapable, SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
@@ -67,12 +71,15 @@ import type {
 } from "@/services/privateApi/client";
 import type { SorExecutionPhase, SorLegRouteContext } from "./useSorExecution";
 import {
+	readFundingStableBalancesForChains,
 	readFundingStableBalancesHuman,
 	readBaseEmbeddedUsdcBalanceRaw,
 	readBaseScwUsdcBalanceRaw,
 	readBnbUsdtBalanceWei,
 	type FundingStableBalancesHuman,
 } from "@/trading/sor/fundingStableBalances";
+import { chainsForBridgeCorridor } from "@/trading/sor/fundingStableBalanceChains";
+import type { RequiredFundingAddresses } from "@/trading/funding/requiredFundingAddresses";
 import {
 	isLimitlessSweepInsufficientBalanceError,
 	planLimitlessScwSweepMicros,
@@ -117,6 +124,7 @@ import { clampMarketBuyAmountToWallet } from "@/trading/sor/postBridgeOrderResiz
 import { clampMarketSellSharesToCtfBalance } from "@/trading/polymarket/polymarketSellShareClamp";
 import { clampPredictSellSharesToOutcomeBalance } from "@/trading/predict/predictSellShareClamp";
 import { readPredictOutcomeShareWei } from "@/trading/predict/usePredictBnbBalances";
+import { predictBookNeedsComplementForSorOutcome } from "@/trading/predict/predictSingleMarketBook";
 import { predictFunNetOutcomeSharesHeldAfterBuy } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePredict";
 import {
 	floorSharesAtDecimals,
@@ -334,6 +342,7 @@ export interface UseSorLegExecutorDeps {
 			side: "buy" | "sell";
 			amount: string;
 			book?: Book | null;
+			complementOrderbook?: boolean;
 		}) => Promise<{ orderHash?: string }>;
 		placeLimitOrder: (args: {
 			market: PredictMarketDetail;
@@ -381,6 +390,10 @@ export interface UseSorLegExecutorDeps {
 			toChain?: number;
 		}) => Promise<unknown>;
 		postLimitlessOrder: (body: LimitlessSignedOrderSubmit) => Promise<unknown>;
+		postLimitlessVerifyAllowance: (
+			slug: string,
+			opts?: { tokenId?: string },
+		) => Promise<unknown>;
 		postLimitlessPortfolioWithdraw: (input: {
 			amountHuman: number;
 			destination: string;
@@ -399,13 +412,9 @@ export interface UseSorLegExecutorDeps {
 	getClientForChain: (opts: { id: number }) => Promise<{
 		sendTransaction: SendTransactionCapable["sendTransaction"];
 	} | null | undefined>;
-	fundingAddresses: {
-		baseSmartWallet?: string;
-		limitlessMakerBase?: string;
-		polymarketSafe?: string;
-		embeddedEoa?: string;
-		solanaAddress?: string;
-	};
+	fundingAddresses: RequiredFundingAddresses;
+	/** When set, overrides flat role fields for venue-specific collateral (e.g. Limitless EOA). */
+	venueAddressChainMap?: VenueAddressChainMap | null;
 	solanaSigner: SolanaSignerCapable | null;
 	getRelayClient: () => Promise<RelayClient | null>;
 
@@ -484,8 +493,8 @@ type SorChainKey = "base" | "polygon" | "solana" | "bnb";
  */
 function addressForChain(
 	chain: SorChainKey,
-	addrs: UseSorLegExecutorDeps["fundingAddresses"],
-): string | undefined {
+	addrs: RequiredFundingAddresses,
+): string {
 	switch (chain) {
 		case "base":
 			return addrs.baseSmartWallet;
@@ -500,16 +509,16 @@ function addressForChain(
 
 function prefundSourceAddressForStep(
 	step: PrefundStep,
-	addrs: UseSorLegExecutorDeps["fundingAddresses"],
-): string | undefined {
+	addrs: RequiredFundingAddresses,
+): string {
 	if (step.fromChain !== "base") {
 		return addressForChain(step.fromChain, addrs);
 	}
 	const w = step.baseSpendWallet;
 	if (w === "limitlessMaker") {
-		return addrs.limitlessMakerBase?.trim();
+		return addrs.limitlessMakerBase;
 	}
-	return addrs.baseSmartWallet?.trim();
+	return addrs.baseSmartWallet;
 }
 
 const SOLANA_LIFI_CHAIN_ID = CHAIN_LIFI_IDS.solana;
@@ -556,7 +565,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		predictMarketDetail,
 		account,
 		getClientForChain,
-		fundingAddresses,
+		fundingAddresses: fundingAddressesInput,
+		venueAddressChainMap,
 		solanaSigner,
 		getRelayClient,
 		dflowProofVerified,
@@ -572,6 +582,14 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 		ensureDflowProofVerified,
 		reportExecutionPhaseRef,
 	} = deps;
+
+	const fundingAddresses = useMemo(
+		() =>
+			venueAddressChainMap != null
+				? walletRolesFromVenueAddressChainMap(venueAddressChainMap)
+				: fundingAddressesInput,
+		[venueAddressChainMap, fundingAddressesInput],
+	);
 
 	const {
 		getSignerForChain,
@@ -633,15 +651,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							error: userMessage(SOR_NO_WALLET),
 						};
 					}
-					const scw = fundingAddresses.baseSmartWallet?.trim();
-					if (!scw) {
-						return {
-							filled: false,
-							filledShares: 0,
-							error:
-								"LevelUp trades require a Base Coinbase Smart Wallet. Link a smart wallet in Privy.",
-						};
-					}
+					const scw = fundingAddresses.baseSmartWallet;
 					if (ensureLevelUpApprovals) {
 						reportSorExecutionPhase("approving_trades");
 						try {
@@ -683,13 +693,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					 * This is a funding convenience only; venue trading identity stays the SCW.
 					 */
 					if (side === "buy") {
-						const embeddedTrim = fundingAddresses.embeddedEoa?.trim() ?? "";
+						const embeddedTrim = fundingAddresses.embeddedEoa;
 						const scwLc = scw.toLowerCase();
-						if (
-							embeddedTrim.length === 42 &&
-							embeddedTrim.startsWith("0x") &&
-							embeddedTrim.toLowerCase() !== scwLc
-						) {
+						if (embeddedTrim.toLowerCase() !== scwLc) {
 							const makerMicro = predictionBuyMakerMicroUsdc(
 								shares,
 								signingPrice,
@@ -833,9 +839,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						}
 					}
 					// CLOB spends pUSD — wrap Safe USDC.e via Collateral Onramp before buys.
-					const rawSafe = fundingAddresses.polymarketSafe?.trim();
-					const safeAddrValid =
-						!!rawSafe && /^0x[a-fA-F0-9]{40}$/i.test(rawSafe);
+					const rawSafe = fundingAddresses.polymarketSafe;
 
 					const tokenId =
 						leg.outcome === "A"
@@ -868,10 +872,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						filledShares: number;
 						error?: string;
 					}> => {
-						if (side === "buy" && safeAddrValid) {
+						if (side === "buy") {
 							let usdceWei: bigint;
 							try {
-								usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe!);
+								usdceWei = await readPolymarketSafeUsdceBalanceWei(rawSafe);
 							} catch (e: unknown) {
 								return {
 									filled: false,
@@ -890,7 +894,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 									};
 								}
 								const txs = buildPolygonSafeUsdceWrapTransactions({
-									safeAddress: rawSafe!,
+									safeAddress: rawSafe,
 									wrapAmountWei: usdceWei,
 								});
 								// Throws — caught by outer recovery block when
@@ -898,7 +902,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 								await executePolygonRelayAndWait(
 									relayClient,
 									txs,
-									rawSafe!,
+									rawSafe,
 									"Wrap USDC.e to pUSD for Polymarket",
 								);
 							}
@@ -931,10 +935,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						 */
 						let buyAmountUsd = wireAmountUsdForVenue(leg);
 						let postBridgeScale = 1;
-						if (side === "buy" && safeAddrValid) {
+						if (side === "buy") {
 							let pusdWei: bigint;
 							try {
-								pusdWei = await readPolymarketSafePusdBalanceWei(rawSafe!);
+								pusdWei = await readPolymarketSafePusdBalanceWei(rawSafe);
 							} catch (e: unknown) {
 								return {
 									filled: false,
@@ -978,10 +982,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						// first attempt instead of forcing the user into a manual retry.
 						let sellShares = leg.shares;
 						let sellScale = 1;
-						if (side === "sell" && safeAddrValid) {
+						if (side === "sell") {
 							let ctfBalWei: bigint;
 							try {
-								ctfBalWei = await readPolymarketSafeCtfBalanceWei(rawSafe!, tokenId);
+								ctfBalWei = await readPolymarketSafeCtfBalanceWei(rawSafe, tokenId);
 							} catch (e: unknown) {
 								return {
 									filled: false,
@@ -1457,11 +1461,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						 */
 						let limitlessBuyMakerUsd = wireAmountUsdForVenue(leg);
 						let limitlessPostBridgeScale = 1;
-						if (
-							!isLimit &&
-							side === "buy" &&
-							fundingAddresses.limitlessMakerBase?.trim()
-						) {
+						if (!isLimit && side === "buy") {
 							let makerUsdcHuman: number;
 							try {
 								const balances = await readFundingStableBalancesHuman({
@@ -1513,7 +1513,8 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							}
 							const preflight = await readLimitlessMakerUsdcPreflightForFokBuy({
 								maker,
-								verify: verifyForPreflight,
+								verify:
+									verifyForPreflight as import("@/trading/limitless/limitlessPrivateApiTypes").LimitlessVerifyAllowanceResult,
 								wireUsd: limitlessBuyMakerUsd,
 								feeUsd: leg.fee,
 							});
@@ -1708,11 +1709,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					 * mirroring Polymarket's `clampMarketSellSharesToCtfBalance`
 					 * pattern — prevents the rejection on the first attempt.
 					 */
-					const predictEoa = fundingAddresses.embeddedEoa?.trim() ?? "";
-					const predictEoaValid = /^0x[a-fA-F0-9]{40}$/.test(predictEoa);
+					const predictEoa = fundingAddresses.embeddedEoa;
 					let predictSellShares = leg.shares;
 					let predictSellScale = 1;
-					if (side === "sell" && predictEoaValid) {
+					if (side === "sell") {
 						let outcomeBalWei: bigint;
 						try {
 							outcomeBalWei = await readPredictOutcomeShareWei({
@@ -1797,7 +1797,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					 */
 					let predictBuyAmountUsd = wireAmountUsdForVenue(leg);
 					let predictPostBridgeScale = 1;
-					if (side === "buy" && predictEoaValid) {
+					if (side === "buy") {
 						let bnbUsdtHuman: number;
 						try {
 							const balances = await readFundingStableBalancesHuman({
@@ -1838,6 +1838,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							? predictBuyAmountUsd.toFixed(6)
 							: floorSharesAtDecimalsAsString(predictSellShares, 6);
 
+					const complementOrderbook = predictBookNeedsComplementForSorOutcome(
+						matchedMonitor,
+						leg.outcome,
+					);
+
 					try {
 						const resp = await predictSession.placeMarketOrder({
 							marketId: predictNumericId,
@@ -1845,6 +1850,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							tokenId,
 							side,
 							amount: amountStr,
+							complementOrderbook,
 						});
 						const grossPredictBuyFilled = leg.shares * predictPostBridgeScale;
 						return {
@@ -1934,24 +1940,9 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 			const toChainLifi = CHAIN_LIFI_IDS[bridge.toChain];
 			const limitlessBaseDest =
 				leg.venue === "limitless" && bridge.toChain === "base";
-			const toAddress = (() => {
-				if (limitlessBaseDest) {
-					const m = fundingAddresses.limitlessMakerBase?.trim();
-					if (!m) {
-						return "";
-					}
-					return m;
-				}
-				return addressForChain(bridge.toChain, fundingAddresses);
-			})();
-			if (!toAddress?.trim()) {
-				return {
-					success: false,
-					error: limitlessBaseDest
-						? "Limitless maker address missing — finish Limitless setup or refresh account overview. USDC cannot be prefunded to your Base smart wallet for Limitless orders."
-						: `No wallet address for destination chain ${bridge.toChain}`,
-				};
-			}
+			const toAddress = limitlessBaseDest
+				? fundingAddresses.limitlessMakerBase
+				: addressForChain(bridge.toChain, fundingAddresses);
 
 			const POLYGON_CHAIN_ID = 137;
 
@@ -1993,8 +1984,14 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					opts.budgetUsdOverride > 0
 						? opts.budgetUsdOverride
 						: leg.executionAmountUsd + Math.max(0, bridge.estimatedCost ?? 0);
-				const balancesHuman =
-					await readFundingStableBalancesHuman(fundingAddresses);
+				const prefundChains = chainsForBridgeCorridor({
+					bridge,
+					limitlessBaseDest,
+				});
+				const balancesHuman = await readFundingStableBalancesForChains(
+					fundingAddresses,
+					prefundChains,
+				);
 				const levelUpBaseBridgedPrefund =
 					leg.venue === "levelup" && bridge.toChain === "base";
 				let scwPendingUsdcHuman = 0;
@@ -2052,13 +2049,11 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 				let sweepAmountHuman = 0;
 				let lifiNeedUsd = bridgeShortfallUsd;
 				let scwUsdcLiveBalanceMicrosLog: string | null = null;
-				const baseSwTrim = fundingAddresses.baseSmartWallet?.trim();
-				const makerSwTrim = fundingAddresses.limitlessMakerBase?.trim();
+				const baseSwTrim = fundingAddresses.baseSmartWallet;
+				const makerSwTrim = fundingAddresses.limitlessMakerBase;
 				if (
 					limitlessBaseDest &&
-					bridgeShortfallUsd > PREFUND_SHORTFALL_COVERED_EPS_USD &&
-					baseSwTrim &&
-					makerSwTrim
+					bridgeShortfallUsd > PREFUND_SHORTFALL_COVERED_EPS_USD
 				) {
 					const b1 = await readBaseScwUsdcBalanceRaw(baseSwTrim);
 					let sweepPlan = planLimitlessScwSweepMicros(
@@ -2141,7 +2136,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 					if (plannedSweepMicros === 0n) {
 						throw new Error(userMessage(LIFI_SCW_LIMITLESS_SWEEP_NOT_PLANNED));
 					}
-					const makerAddr = fundingAddresses.limitlessMakerBase!.trim() as `0x${string}`;
+					const makerAddr = fundingAddresses.limitlessMakerBase as `0x${string}`;
 					const usdcAddr = getUSDCAddress() as `0x${string}`;
 					const data = encodeFunctionData({
 						abi: erc20Abi,
@@ -2180,9 +2175,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 
 				if (
 					plannedSweepMicros > 0n &&
-					lifiNeedUsd <= PREFUND_SHORTFALL_COVERED_EPS_USD &&
-					baseSwTrim &&
-					makerSwTrim
+					lifiNeedUsd <= PREFUND_SHORTFALL_COVERED_EPS_USD
 				) {
 					const b3 = await readBaseScwUsdcBalanceRaw(baseSwTrim);
 					const fin3 = recappedSweepForSend(
@@ -2249,6 +2242,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						{
 							fullPrefundNeedUsdHuman: needHuman,
 							limitlessBaseDest,
+							allowedSourceChains: [bridge.fromChain],
 						},
 					);
 				} catch (planErr) {
@@ -2294,9 +2288,6 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 						});
 						const fromChainLifi = CHAIN_LIFI_IDS[step.fromChain];
 						const fromAddress = prefundSourceAddressForStep(step, fundingAddresses);
-						if (!fromAddress) {
-							throw new Error(userMessage(LIFI_NO_WALLET_FOR_CHAIN));
-						}
 
 						const maxFromHuman =
 							step.fromChain === "base"
@@ -2387,10 +2378,10 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							polygonRelay,
 						});
 						const lifiStepOptions = {
-							...mergeExecuteLifiStepsAllowanceOwnerForSorBasePrefund(
+							...							mergeExecuteLifiStepsAllowanceOwnerForSorBasePrefund(
 								builtLifiOpts,
 								fromChainLifi,
-								quote.fromAddress,
+								String(quote.fromAddress ?? ""),
 							),
 							...(solanaSigner != null ? { solanaSigner } : {}),
 						};
@@ -2399,7 +2390,7 @@ export function useSorLegExecutor(deps: UseSorLegExecutorDeps) {
 							if (
 								sorBasePrefundLifiShouldUseEmbeddedSigner({
 									chainId,
-									quoteFromAddressRaw: quote.fromAddress,
+									quoteFromAddressRaw: String(quote.fromAddress ?? ""),
 									embeddedEoaRaw: fundingAddresses.embeddedEoa,
 								})
 							) {

@@ -377,8 +377,8 @@ function applyPriceUpdates(
 		for (const [fieldA, fieldB] of fieldPairs) {
 			const a = venue === "limitless" ? assignA : dataA;
 			const b = venue === "limitless" ? assignB : dataB;
-			(market as Record<string, unknown>)[fieldA] = a;
-			(market as Record<string, unknown>)[fieldB] = b;
+			(market as unknown as Record<string, unknown>)[fieldA] = a;
+			(market as unknown as Record<string, unknown>)[fieldB] = b;
 		}
 		changed = true;
 	}

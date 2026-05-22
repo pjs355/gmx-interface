@@ -8,7 +8,7 @@ import {
 } from "@privy-io/react-auth/solana";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import { bsc } from "viem/chains";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { checkPolymarketApprovals } from "@/trading/polymarket/approvalTxs";
 import {
 	deployPolymarketDepositWalletIfNeeded,
@@ -32,17 +32,23 @@ const BNB = CHAIN_LIFI_IDS.bnb;
  * option bags stay in one place.
  */
 export function useFundingLifiExecution() {
-	const funding = useFundingAddresses();
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const baseSmartWallet = venueAddressChainMap?.levelup.walletAddress;
+	const polymarketSafe = venueAddressChainMap?.polymarket.walletAddress;
+	const predictMaker = venueAddressChainMap?.predictfun.walletAddress;
+	const bnbSignerAddress = venueAddressChainMap?.predictfun.signerAddress;
+	const solanaAddress = venueAddressChainMap?.dflow.walletAddress;
 	const { getClientForChain } = useSmartWallets();
 	const polymarketRelay = usePolymarketRelay();
 	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
 	const { signAndSendTransaction: privySolanaSignAndSend } = useSignAndSendTransaction();
 	const { signTransaction: privySolanaSignTransaction } = useSolanaSignTransaction();
 	const { wallets: solanaWallets } = useSolanaWallets();
-	const embeddedSolanaWallet = useMemo(
-		() => solanaWallets.find((w) => w.address === funding.solanaAddress) ?? solanaWallets[0] ?? null,
-		[solanaWallets, funding.solanaAddress],
-	);
+	const embeddedSolanaWallet = useMemo(() => {
+		const dflowAddr = solanaAddress?.trim();
+		if (!dflowAddr) return null;
+		return solanaWallets.find((w) => w.address === dflowAddr) ?? null;
+	}, [solanaWallets, solanaAddress]);
 
 	const solanaSigner = useMemo<SolanaSignerCapable | null>(
 		() =>
@@ -68,16 +74,16 @@ export function useFundingLifiExecution() {
 
 	const allowanceOwnerByChainId = useMemo(() => {
 		const m: Partial<Record<number, string>> = {};
-		if (funding.baseSmartWallet) m[BASE] = funding.baseSmartWallet;
-		if (funding.polymarketSafe) m[POLYGON] = funding.polymarketSafe;
-		if (funding.embeddedEoa) m[BNB] = funding.embeddedEoa;
+		if (baseSmartWallet) m[BASE] = baseSmartWallet;
+		if (polymarketSafe) m[POLYGON] = polymarketSafe;
+		if (predictMaker) m[BNB] = predictMaker;
 		return m;
-	}, [funding.baseSmartWallet, funding.polymarketSafe, funding.embeddedEoa]);
+	}, [baseSmartWallet, polymarketSafe, predictMaker]);
 
 	const getSignerForChain = useCallback(
 		async (chainId: number) => {
 			if (chainId === BNB) {
-				const addr = funding.embeddedEoa as `0x${string}` | undefined;
+				const addr = bnbSignerAddress as `0x${string}` | undefined;
 				if (!addr || !/^0x[a-fA-F0-9]{40}$/i.test(addr)) {
 					return null;
 				}
@@ -99,7 +105,7 @@ export function useFundingLifiExecution() {
 				}) => client.sendTransaction(args),
 			} satisfies SendTransactionCapable;
 		},
-		[getClientForChain, funding.embeddedEoa, privyEvmSendTransaction],
+		[getClientForChain, bnbSignerAddress, privyEvmSendTransaction],
 	);
 
 	const preparePolygonRelay = useCallback(
@@ -107,7 +113,7 @@ export function useFundingLifiExecution() {
 			needsRelay: boolean,
 		): Promise<{ client: RelayClient; walletAddress: string } | undefined> => {
 			if (!needsRelay) return undefined;
-			const safe = funding.polymarketSafe?.trim();
+			const safe = polymarketSafe?.trim();
 			if (!safe) {
 				throw new Error(
 					"Polymarket funding address missing — cannot use relay on Polygon."
@@ -128,7 +134,7 @@ export function useFundingLifiExecution() {
 			}
 			return { client, walletAddress: safe };
 		},
-		[funding.polymarketSafe, polymarketRelay],
+		[polymarketSafe, polymarketRelay],
 	);
 
 	const buildExecuteLifiStepsOptions = useCallback(
@@ -142,13 +148,13 @@ export function useFundingLifiExecution() {
 			allowanceOwnerByChainId,
 			rawLifiRoute: quote.quote,
 			polygonSafeUnwrapPrerequisite: quote.polygonSafeUnwrapPrerequisite ?? undefined,
-			...(funding.solanaAddress?.trim()
-				? { solanaTokenOwnerAddress: funding.solanaAddress.trim() }
+			...(solanaAddress?.trim()
+				? { solanaTokenOwnerAddress: solanaAddress.trim() }
 				: {}),
 			...(args.polygonRelay ? { polygonRelay: args.polygonRelay } : {}),
 			...(args.routeIncludesSolana && solanaSigner ? { solanaSigner } : {}),
 		}),
-		[allowanceOwnerByChainId, funding.solanaAddress, solanaSigner],
+		[allowanceOwnerByChainId, solanaAddress, solanaSigner],
 	);
 
 	return {

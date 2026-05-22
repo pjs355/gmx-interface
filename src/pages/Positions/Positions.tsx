@@ -242,13 +242,11 @@ export default function Positions() {
 						{!isMobile ? (
 							<ResolvedPositionsTable
 								umbrellaBalances={transformedWinnings}
-								toCentsString={toCentsString}
 								onClaimSuccess={handleClaimSuccess}
 							/>
 						) : (
 							<ResolvedPositionsCardView
 								umbrellaBalances={transformedWinnings}
-								toCentsString={toCentsString}
 								onClaimSuccess={handleClaimSuccess}
 							/>
 						)}
@@ -267,7 +265,6 @@ export default function Positions() {
 							spentByQid={spentByQid}
 							returnsByQid={returnsByQid}
 							getCurrentPriceForSide={getCurrentPriceForSide}
-							toCentsString={toCentsString}
 							orders={combinedOrders}
 						/>
 					) : (
@@ -277,7 +274,6 @@ export default function Positions() {
 							spentByQid={spentByQid}
 							returnsByQid={returnsByQid}
 							getCurrentPriceForSide={getCurrentPriceForSide}
-							toCentsString={toCentsString}
 							orders={combinedOrders}
 						/>
 					)

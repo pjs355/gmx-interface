@@ -2,7 +2,8 @@ import { useMemo, useCallback, useEffect } from 'react';
 
 import Button from "components/Button/Button";
 import SpinningLoader from "@/components/Common/SpinningLoader";
-import type { TradeBoxProps, TradeBoxState, ApprovalState, TradingVenue, MarketOrderCalculation } from './types';
+import type { TradeBoxProps, TradeBoxCoreState, TradeBoxState, ApprovalState, TradingVenue, MarketOrderCalculation } from './types';
+import type { TradeQuote } from "./tradeQuote/types";
 import type { OrderbookSnapshot } from '@/services/api/orderbookService';
 import './PredictionMarketTradeBox.scss';
 import { MyPositionsRow } from './MyPositionsRow';
@@ -47,7 +48,9 @@ import {
 } from "@/helpers/predictionUtils";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { usePostTradeAccountSyncPending } from "@/trading/sor/usePostTradeAccountSync";
+import { useTradeBoxMarketAvgCents } from "./hooks/useTradeBoxMarketAvgCents";
 import SmartRoutingSection from "./SmartRoutingSection";
+import TradeBoxExecutionFooter from "./components/TradeBoxExecutionFooter";
 import OddsFormatMenu from "@/components/OddsFormatMenu/OddsFormatMenu";
 import { usePortfolio } from "@/context/PortfolioContext";
 import {
@@ -79,7 +82,9 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   /** Book-walk functions from the parent's single useMarketOrderHandler instance. */
   calculateContractsForMarketOrder: (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => MarketOrderCalculation;
   getEffectivePrice: (usdAmount: number, contracts: number, remainingUsd: number) => number;
-  state: TradeBoxState;
+  state: TradeBoxCoreState;
+  /** Pricing preview (book / SOR / Pond) — `state` already includes `preview` fields. */
+  tradeQuote: TradeQuote;
   walletAddress?: string;
   usdcBalance?: number;
   onPositionChange: (position: 'yes' | 'no') => void;
@@ -97,7 +102,6 @@ interface PredictionMarketTradeBoxUIProps extends TradeBoxProps {
   } | null;
   dflowVenueHint?: string | null;
   matchedVenues?: Set<string>;
-  onTrade: () => void;
   buttonState: {
     text: string;
     disabled: boolean;
@@ -181,6 +185,7 @@ export default function PredictionMarketTradeBoxUI({
   umbrellaId,
   umbrellaDisplayName,
   state,
+  tradeQuote,
   onPositionChange,
   onAmountChange,
   onPriceChange,
@@ -193,7 +198,6 @@ export default function PredictionMarketTradeBoxUI({
   levelUpVenueBookHints = null,
   dflowVenueHint,
   matchedVenues,
-  onTrade,
   buttonState,
   approvalState,
   walletAddress,
@@ -219,7 +223,17 @@ export default function PredictionMarketTradeBoxUI({
   dflowOrderQuoteForSentinel,
 }: PredictionMarketTradeBoxUIProps) {
   const { formatPrice } = useOddsDisplay();
-  const { selectedPosition, amount, price, orderType, side, orderResult, calculatedContracts, remainingUsd, spent, tradingFee, estimatedCost, grossReceive, sellTradingFee, netReceive, tradingVenue } = state;
+  const { selectedPosition, amount, price, orderType, side, orderResult, tradingVenue } = state;
+  const {
+    calculatedContracts,
+    remainingUsd,
+    spent,
+    tradingFee,
+    estimatedCost,
+    grossReceive,
+    sellTradingFee,
+    netReceive,
+  } = tradeQuote.preview;
   /** Ensure outcome buttons never appear both unselected — core state should always be yes/no; this covers stale typings / edge transitions. */
   const outcomeSelection = selectedPosition ?? "yes";
 
@@ -531,153 +545,21 @@ export default function PredictionMarketTradeBoxUI({
     });
   }, [tradingVenue, side, amount]);
 
-  const sorTrustCtxMarket = useMemo((): SorTradeTrustContext | null => {
-    if (!amount || !selectedPosition) return null;
-    const n = Number(amount);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    return {
-      side: side as SorSide,
-      outcome: positionToSorOutcome(selectedPosition),
-      amountNumber: n,
-    };
-  }, [amount, selectedPosition, side]);
-
-  // Compute Odds % for market BUY orders using weighted average fill price.
-  // Prefers SOR route data (server-side book walk) when available; falls back to local book walk.
-  const oddsData = useMemo(() => {
-    if (tradingVenue === "all") return null;
-    if (orderType !== 'market' || side !== 'buy') return null;
-    if (!amount || !selectedPosition) return null;
-    const usdAmount = Number(amount);
-    if (!Number.isFinite(usdAmount) || usdAmount <= 0) return null;
-
-    if (!sorTrustCtxMarket) return null;
-
-    const sorTrustedBuy = executionRouteTrustedForSingleVenueMarketBuy(
-      sorRoute.executionRoute,
-      sorTrustCtxMarket,
-      sorRoute.executionLoading,
-      sorRoute.executionStale,
-    );
-
-    if (sorTrustedBuy) {
-      const leg = sorRoute.executionRoute!.legs[0];
-      const avgPrice = leg.avgPrice;
-      if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
-      const referencePrice = bestAsk ?? null;
-      const pct = Math.round(avgPrice * 100);
-      if (!Number.isFinite(pct) || pct < 0) return null;
-      const isUpdated = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
-        ? avgPrice > referencePrice * 1.1
-        : false;
-      const fromPct = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
-        ? Math.round(referencePrice * 100)
-        : null;
-      return { pct, avgPrice, isUpdated, fromPct };
-    }
-
-    // Avoid local book walk while SOR is in flight or returned a non-matching plan for this tab/outcome.
-    if (sorRoute.executionLoading) return null;
-    if (
-      sorRoute.executionRoute &&
-      !routeMatchesTradeContext(sorRoute.executionRoute, sorTrustCtxMarket)
-    ) {
-      return null;
-    }
-
-    // Local book walk when SOR has no executable targeted quote for this context.
-    const walkUsd = venueConfig.effectiveBuyBudget(usdAmount, {
-      approxPrice: bestAsk ?? undefined,
-    });
-    const { contracts, remainingUsd } = calculateContractsForMarketOrder(walkUsd, selectedPosition, 'buy');
-    if (!contracts || contracts <= 0) return null;
-    const avgPrice = getEffectivePrice(walkUsd, contracts, remainingUsd);
-    if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
-    const referencePrice = (() => {
-      if (tradingVenue === "predictfun" && predictHints) {
-        const hp =
-          selectedPosition === "yes" ? yesHintPrices : noHintPrices;
-        if (!hp) return null;
-        return hp.bestAsk ?? null;
-      }
-      if (
-        tradingVenue === "polymarket" ||
-        tradingVenue === "dflow" ||
-        tradingVenue === "limitless"
-      ) {
-        return bestAsk ?? null;
-      }
-      return selectedPosition === 'yes'
-        ? (bestAsk ?? null)
-        : (bestBid === null || bestBid === undefined ? null : (1 - bestBid));
-    })();
-    const pct = Math.round(avgPrice * 100);
-    if (!Number.isFinite(pct) || pct < 0) return null;
-    const isUpdated = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
-      ? avgPrice > referencePrice * 1.1
-      : false;
-    const fromPct = referencePrice !== null && referencePrice !== undefined && isFinite(referencePrice)
-      ? Math.round(referencePrice * 100)
-      : null;
-    return { pct, avgPrice, isUpdated, fromPct };
-  }, [
+  const { sorTrustCtxMarket, oddsData, sellAvgCents } = useTradeBoxMarketAvgCents({
+    tradingVenue,
     orderType,
     side,
     amount,
     selectedPosition,
-    tradingVenue,
-    calculateContractsForMarketOrder,
-    getEffectivePrice,
     bestAsk,
     bestBid,
     predictHints,
     yesHintPrices,
     noHintPrices,
-    sorRoute.executionRoute,
-    sorRoute.executionStale,
-    sorRoute.executionLoading,
-    sorTrustCtxMarket,
-  ]);
-
-  // Compute Avg Price (¢) for market SELL orders using weighted average sale price.
-  // Prefers the SOR execution channel (single-venue) when fresh.
-  const sellAvgCents = useMemo(() => {
-    if (orderType !== 'market' || side !== 'sell') return null;
-    if (!amount || !selectedPosition) return null;
-    const shares = Number(amount);
-    if (!Number.isFinite(shares) || shares <= 0) return null;
-
-    if (!sorTrustCtxMarket) return null;
-
-    const sorTrustedSell = executionRouteTrustedForSingleVenueMarketSell(
-      sorRoute.executionRoute,
-      sorTrustCtxMarket,
-      sorRoute.executionLoading,
-      sorRoute.executionStale,
-    );
-
-    if (sorTrustedSell) {
-      const leg = sorRoute.executionRoute!.legs[0];
-      const avgPrice = leg.avgPrice;
-      if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
-      return Math.round(avgPrice * 100);
-    }
-
-    if (sorRoute.executionLoading) return null;
-    if (
-      sorRoute.executionRoute &&
-      !routeMatchesTradeContext(sorRoute.executionRoute, sorTrustCtxMarket)
-    ) {
-      return null;
-    }
-
-    const { contracts, remainingUsd } = calculateContractsForMarketOrder(shares, selectedPosition, 'sell');
-    if (!contracts || contracts <= 0) return null;
-    const avgPrice = remainingUsd / contracts;
-    if (!Number.isFinite(avgPrice) || avgPrice <= 0) return null;
-    const cents = Math.round(avgPrice * 100);
-    return cents;
-  }, [orderType, side, amount, selectedPosition, calculateContractsForMarketOrder, sorRoute.executionRoute, sorRoute.executionStale, sorRoute.executionLoading, sorTrustCtxMarket]);
+    sorRoute,
+    calculateContractsForMarketOrder,
+    getEffectivePrice,
+  });
 
   return (
     <div className="prediction-market-tradebox">
@@ -1020,283 +902,33 @@ export default function PredictionMarketTradeBoxUI({
         );
       })()}
 
-      {(() => {
-        const route =
-          tradingVenue === "all"
-            ? sorRoute.displayRoute
-            : sorRoute.executionRoute;
-        if (!route?.insufficientLiquidity) return null;
-        const isSellRoute = route.side === "sell";
-        return (
-          <div className="trade-partial-fill-hint trade-button-above-hint">
-            {isSellRoute
-              ? "Not enough bids to sell all shares"
-              : "Not enough shares to fill your order. Will fill partial order"}
-          </div>
-        );
-      })()}
-      {side === "sell" &&
-        buttonState.text === "Not enough shares" &&
-        maxScopedSellShares > 0 &&
-        amount &&
-        (() => {
-          const n = parseFloat(amount);
-          return (
-            Number.isFinite(n) &&
-            n > maxScopedSellShares + SHARE_SELL_COMPARE_EPS
-          );
-        })() && (
-          <div className="trade-share-cap-hint trade-button-above-hint">
-            {`${formatShareCountDisplay(maxScopedSellShares)} Shares ${
-              outcomeSelection === "no" ? noTeamLabel : yesTeamLabel
-            } on ${venueConfig.displayName}`}
-          </div>
-        )}
-
-      {/* Trade Button */}
-      <Button
-        qa="tradebox-submit"
-        variant="primary"
-        onClick={() => {
-          try {
-            mixpanelTrack("TradeButtonClicked", {
-              marketId: market?._id || market?.questionId,
-              marketName: market?.displayName || market?.question,
-              orderType: orderType,
-              side: side,
-              selectedPosition: selectedPosition,
-              tradingVenue: state.tradingVenue,
-              amount: amount,
-              price: price,
-              limitPriceProb:
-                orderType === "limit" && price
-                  ? Number(price) / 100
-                  : null,
-              derivedAvgFillPriceFromBook:
-                orderType === "market" && oddsData
-                  ? oddsData.avgPrice
-                  : null,
-              derivedAvgFillCents:
-                orderType === "market" && oddsData
-                  ? Math.round(oddsData.avgPrice * 100)
-                  : null,
-              marketSellAvgCents:
-                orderType === "market" && side === "sell"
-                  ? sellAvgCents
-                  : null,
-              estContracts: state.calculatedContracts,
-              buttonText: buttonState.text,
-            });
-          } catch (error) {
-            console.error("error", error);
-          }
-          buttonState.onClick();
-        }}
-        disabled={buttonState.disabled}
-        className="trade-button"
-      >
-        {buttonState.text}
-      </Button>
-      {/* The deposit-shortfall amount is already conveyed by the Buy button
-          text via `useButtonState`'s `trySorDepositToTrade` path, so the
-          standalone "Deposit needed $X" banner under the button was redundant
-          and noisy — removed. */}
-      {tradingVenue === "all" && sorRoute.displayRoute && (
-        <SorKalshiKycShortfallBanner route={sorRoute.displayRoute} variant="tradebox" />
-      )}
       </>
-
-      {/* SOR execution result (partial / failed only — success has no fill summary banner) */}
-      {tradingVenue === "all" &&
-        sorExecution.execution &&
-        !sorExecution.isExecuting &&
-        sorExecution.execution.status !== "complete" && (
-        <div
-          style={{
-            marginTop: 8,
-            padding: "8px 12px",
-            borderRadius: 6,
-            fontSize: 12,
-            backgroundColor:
-              sorExecution.execution.status === "partial"
-                  ? "rgba(245, 158, 11, 0.08)"
-                  : "rgba(239, 68, 68, 0.08)",
-            color:
-              sorExecution.execution.status === "partial"
-                  ? "#f59e0b"
-                  : "#ef4444",
-          }}
-        >
-          {sorExecution.execution.status === "partial" && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>{side === "sell" ? "Partially sold" : "Partially filled"}: {formatSorDetailsSharesDisplay(sorExecution.execution.totalFilledShares)} shares</span>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => sorExecution.requestReroute()}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 4,
-                    border: "1px solid #f59e0b",
-                    backgroundColor: "transparent",
-                    color: "#f59e0b",
-                    fontSize: 11,
-                    cursor: "pointer",
-                  }}
-                >
-                  Re-route {sorExecution.remainingBudget != null ? `$${sorExecution.remainingBudget.toFixed(2)}` : "remaining"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => sorExecution.acceptResult()}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 4,
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    backgroundColor: "transparent",
-                    color: "#9ca3af",
-                    fontSize: 11,
-                    cursor: "pointer",
-                  }}
-                >
-                  Keep as-is
-                </button>
-              </div>
-            </div>
-          )}
-          {sorExecution.execution.status === "failed" && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>{side === "sell" ? "Execution failed. Shares remain in your accounts." : "Execution failed. Funds remain in your wallets."}</span>
-              <button
-                type="button"
-                onClick={() => sorExecution.resetExecution()}
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 4,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  backgroundColor: "transparent",
-                  color: "#9ca3af",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/*
-        E2E / automation: outcome hook only (visually hidden — `e2e/page-objects/tradebox.ts` `waitForFill`).
-        The error reason is exposed via `data-qa-fill-error` so the verbose payload never lands in
-        the rendered DOM/toast — Playwright reads the attribute, the user sees the toast text only.
-      */}
-      {orderResult && (
-        <div
-          data-qa="tradebox-fill-confirmation"
-          data-qa-fill-status={orderResult.success ? "success" : "error"}
-          data-qa-fill-error={
-            orderResult.success ? undefined : orderResult.error || ""
-          }
-          className="trade-notification-e2e-sentinel"
-          aria-hidden="true"
-        >
-          <span className="trade-notification-e2e-sentinel__label">
-            {orderResult.success ? "Order Submitted!" : "Order Failed"}
-          </span>
-        </div>
-      )}
-
-      {orderResult?.success && dflowUninitAtSubmit && (
-        <div
-          data-qa="tradebox-dflow-uninit-notice"
-          style={{
-            marginTop: 8,
-            padding: "8px 12px",
-            borderRadius: 8,
-            backgroundColor: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "#9ca3af",
-            fontSize: 12,
-            lineHeight: 1.4,
-          }}
-        >
-          Order may take longer as Kalshi via DFlow is creating this market
-        </div>
-      )}
-
-      {/*
-        E2E / automation: single-venue market quote hook (visually hidden — `e2e/page-objects/tradebox.ts`
-        `readLegAttrs`, `readQuotedBuyCostUsd`, `readQuotedSellReceiveUsd`, `expandSorDetailsIfCollapsed`).
-        Populated from `sorRoute.executionRoute` (the plan Submit signs). Kalshi/DFlow **market buy**:
-        when the debounced Pond `/order/quote` matches the typed USD amount, `data-leg-num-shares`
-        follows that quote’s contracts so QA matches post-fill `outAmount` / MyPositionsRow; otherwise
-        the SOR leg (Predict uses net-held when bps known). When the route is null the sentinel is absent.
-        The `aria-expanded="true"` toggle keeps the page object's expand helper a no-op without re-introducing
-        the visible Details collapsible that was intentionally removed from the UI.
-      */}
-      {tradingVenue !== "all" &&
-        orderType === "market" &&
-        sorRoute.executionRoute &&
-        sorRoute.executionRoute.legs.length > 0 && (() => {
-          const route = sorRoute.executionRoute;
-          const leg = route.legs[0];
-          const legSide = route.side === "buy" ? "market-buy" : "market-sell";
-          const dflowBuyQuoteShares =
-            leg.venue === "dflow" &&
-            legSide === "market-buy" &&
-            dflowOrderQuoteForSentinel?.amountAlignedWithQuote &&
-            dflowOrderQuoteForSentinel.contracts != null &&
-            Number.isFinite(dflowOrderQuoteForSentinel.contracts) &&
-            dflowOrderQuoteForSentinel.contracts > 0
-              ? dflowOrderQuoteForSentinel.contracts
-              : null;
-          /** E2E `data-leg-num-shares`: DFlow market-buy prefers Pond quote when in sync; else gross SOR / Predict net-held. */
-          const legNumSharesForDataQa =
-            legSide === "market-buy"
-              ? dflowBuyQuoteShares ?? sorBuyPredictLegNetHeldShares(leg, predictFunFeeRateBps)
-              : leg.shares;
-          const priceCents = Math.round(leg.avgPrice * 100);
-          const sellReceiveUsd =
-            typeof leg.executionAmountUsd === "number" &&
-            Number.isFinite(leg.executionAmountUsd) &&
-            leg.executionAmountUsd > 0
-              ? leg.executionAmountUsd
-              : route.totalCost;
-          return (
-            <div
-              className="sor-details-panel tradebox-e2e-sentinel"
-              aria-hidden="true"
-            >
-              <button
-                type="button"
-                tabIndex={-1}
-                className="sor-details-toggle tradebox-e2e-sentinel__toggle"
-                aria-expanded="true"
-              />
-              <div
-                data-qa="sor-leg"
-                data-leg-side={legSide}
-                data-leg-venue={leg.venue}
-                data-leg-num-shares={legNumSharesForDataQa}
-                data-leg-price-cents={priceCents}
-              />
-              {route.side === "buy" && Number.isFinite(route.totalCost) && (
-                <div
-                  data-qa="sor-leg-cost"
-                  data-cost-usd={route.totalCost}
-                />
-              )}
-              {route.side === "sell" && Number.isFinite(sellReceiveUsd) && (
-                <div
-                  data-qa="tradebox-estimated-receive-usd"
-                  data-receive-usd={sellReceiveUsd}
-                />
-              )}
-            </div>
-          );
-        })()}
+      <TradeBoxExecutionFooter
+        tradingVenue={tradingVenue}
+        sorRoute={sorRoute}
+        side={side}
+        buttonState={buttonState}
+        maxScopedSellShares={maxScopedSellShares}
+        amount={amount}
+        outcomeSelection={outcomeSelection}
+        yesTeamLabel={yesTeamLabel}
+        noTeamLabel={noTeamLabel}
+        market={market}
+        state={state}
+        orderType={orderType}
+        selectedPosition={selectedPosition}
+        price={price}
+        oddsData={oddsData}
+        sellAvgCents={sellAvgCents}
+        calculatedContracts={calculatedContracts}
+        tradeQuote={tradeQuote}
+        sorExecution={sorExecution}
+        dflowUninitAtSubmit={dflowUninitAtSubmit}
+        orderResult={orderResult}
+        predictFunFeeRateBps={predictFunFeeRateBps}
+        dflowOrderQuoteForSentinel={dflowOrderQuoteForSentinel}
+      />
     </div>
   );
 }
+

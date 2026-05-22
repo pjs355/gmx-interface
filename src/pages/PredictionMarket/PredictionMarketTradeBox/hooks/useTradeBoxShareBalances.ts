@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useUserData } from "@/context/UserDataContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
-import { useSignerContext } from "@/context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
 import {
 	limitlessVenuePositionMatchesPageMarket,
@@ -16,7 +15,6 @@ import {
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { usePredictMarketDetailsMap } from "@/trading/predict/usePredictMarketDetailsMap";
-import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import {
 	isPredictPositionResolvedLost,
 	predictVenuePositionMatchesPagePredictWiring,
@@ -511,7 +509,6 @@ export function useTradeBoxShareBalances(opts: {
 		selectedPosition,
 		matchedMonitor: pageMatchedMonitor,
 	} = opts;
-	const { account, signerAddress } = useSignerContext();
 	const { getTokenBalance, tokenBalances } = useUserData();
 	const { umbrellas, allMarketsByUmbrella } = usePredictionData();
 	const { appState } = useOddsMonitor();
@@ -520,7 +517,11 @@ export function useTradeBoxShareBalances(opts: {
 		() => buildPredictUmbrellaLookup(matchedOddsMarkets ?? undefined, umbrellas),
 		[matchedOddsMarkets, umbrellas],
 	);
-	const { polymarketSafe, solanaAddress, limitlessMakerBase } = useFundingAddresses();
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const polymarketSafe = venueAddressChainMap?.polymarket.walletAddress ?? null;
+	const solanaAddress = venueAddressChainMap?.dflow.walletAddress ?? null;
+	const limitlessMakerBase =
+		venueAddressChainMap?.limitless.walletAddress ?? null;
 	const privateApi = usePrivateApiClient();
 	const { authenticated } = usePrivy();
 
@@ -543,23 +544,14 @@ export function useTradeBoxShareBalances(opts: {
 	);
 	const dflowProof = useDflowProofStatus();
 
-	const venueEnabled =
-		venueReady && Boolean(account && (polymarketSafe || (account as string)?.length));
+	const predictWallet = venueAddressChainMap?.predictfun.walletAddress ?? null;
+	const venueEnabled = venueReady && venueAddressChainMap != null;
 
-	const polyQ = usePolymarketPositions(venueEnabled ? polymarketSafe : null);
-	/**
-	 * Same wallet as {@link usePositionsData} / {@link PortfolioProvider}: Predict.fun
-	 * is keyed off the embedded signer (BNB), not the Base SCW `account` when they
-	 * differ. `resolvePredictAccountAddress` is the canonical normalizer so all
-	 * three call sites (here, PortfolioContext, usePredictBundle) hit the same
-	 * TanStack key.
-	 */
-	const predictQueryWallet = resolvePredictAccountAddress(
-		signerAddress,
-		account,
+	const polyQ = usePolymarketPositions(
+		venueEnabled && polymarketSafe ? polymarketSafe : null,
 	);
 	const predictQ = usePredictPositions(
-		venueEnabled && predictQueryWallet ? predictQueryWallet : null,
+		venueEnabled && predictWallet ? predictWallet : null,
 	);
 
 	const solanaLinked = Boolean(solanaAddress?.trim());
@@ -633,11 +625,19 @@ export function useTradeBoxShareBalances(opts: {
 
 	const predictPositionMatchCtx = useMemo((): PositionMarketMatchContext | null => {
 		if (!umbrellaId) return null;
+		const rawPf = umbrellaForPage?.exchangeMatching?.predictFun;
+		const catalogPredictFun =
+			rawPf != null
+				? {
+						...rawPf,
+						decimalPrecision: (rawPf.decimalPrecision === 3 ? 3 : 2) as 2 | 3,
+					}
+				: undefined;
 		return {
 			umbrellaId,
 			matchedMarkets: matchedOddsMarkets ?? null,
 			pageMatchedMonitor: pageMatchedMonitor ?? null,
-			catalogPredictFun: umbrellaForPage?.exchangeMatching?.predictFun,
+			catalogPredictFun,
 		};
 	}, [
 		umbrellaId,
@@ -716,8 +716,11 @@ export function useTradeBoxShareBalances(opts: {
 			}
 			if (!keep) {
 				const predictTitleHint =
-					pageMatchedMonitor?.displayName?.trim() ||
-					(market?.displayName || market?.question || "").trim() ||
+					(pageMatchedMonitor
+						? `${pageMatchedMonitor.pandaTeamA} vs ${pageMatchedMonitor.pandaTeamB}`
+						: ""
+					).trim() ||
+					(market?.question || "").trim() ||
 					undefined;
 				const u = umbrellaForPosition(
 					p,
@@ -729,7 +732,15 @@ export function useTradeBoxShareBalances(opts: {
 					predictTitleHint,
 				);
 				if (!u || u._id !== umbrellaId) continue;
-				if (!positionMatchesMarketOrSiblings(p, market, siblingConditionIds)) continue;
+				if (
+					!positionMatchesMarketOrSiblings(
+						p,
+						market,
+						siblingConditionIds,
+						predictPositionMatchCtx,
+					)
+				)
+					continue;
 				keep = true;
 			}
 
@@ -781,7 +792,7 @@ export function useTradeBoxShareBalances(opts: {
 	);
 
 	const loading =
-		Boolean(umbrellaId && account) &&
+		Boolean(umbrellaId && venueAddressChainMap) &&
 		((waitPoly && polyQ.isLoading) ||
 			(waitPredict && predictQ.isLoading) ||
 			(waitDflow && dflowRpcEnabled && dflowQ.isLoading) ||

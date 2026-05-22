@@ -1,6 +1,6 @@
 /**
  * Outcome tokens + USDC on DFlow prediction routes use **6** base decimals
- * (same as USDC). Used by `useDflowOrderQuote`, `useSorLegExecutor`, and
+ * (same as USDC). Used by `useSorLegExecutor`, SOR `dflowPondQuote`, and
  * `GET /api/dflow/order` `outAmount` parsing.
  */
 export const DFLOW_OUTCOME_TOKEN_DECIMALS = 6;

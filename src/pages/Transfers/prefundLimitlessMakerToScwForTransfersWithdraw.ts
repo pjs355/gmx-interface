@@ -1,4 +1,4 @@
-import { readFundingStableBalancesHuman } from "@/trading/sor/fundingStableBalances";
+import { readFundingStableBalancesForChains } from "@/trading/sor/fundingStableBalances";
 import { waitForScwUsdcAfterLimitlessPortfolioWithdraw } from "@/trading/sor/limitlessMakerToScwWithdrawWait";
 
 const MIN_CONSOLIDATE_USD = 0.02;
@@ -32,10 +32,13 @@ export async function prefundLimitlessMakerToScwForTransfersWithdraw(input: {
 			"Limitless maker or Base smart wallet is missing — connect your account and ensure Limitless is set up before withdrawing venue USDC.",
 		);
 	}
-	const before = await readFundingStableBalancesHuman({
-		baseSmartWallet: sw,
-		limitlessMakerBase: mk,
-	});
+	const before = await readFundingStableBalancesForChains(
+		{
+			baseSmartWallet: sw,
+			limitlessMakerBase: mk,
+		},
+		["base", "limitlessMakerBase"],
+	);
 	const scwBefore = Math.max(0, before.base ?? 0);
 	const withdrawOut = await input.privateApi.postLimitlessPortfolioWithdraw({
 		amountHuman: need,

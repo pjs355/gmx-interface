@@ -66,7 +66,7 @@ export function usePolymarketEoaWalletClient(): PolymarketEoaClientState {
 				const client = createWalletClient({
 					account: address,
 					chain: polygon,
-					transport: custom(provider),
+					transport: custom(provider as import("viem").EIP1193Provider),
 				});
 				setWalletClient(client);
 				setEip1193Provider(provider as Eip1193Like);

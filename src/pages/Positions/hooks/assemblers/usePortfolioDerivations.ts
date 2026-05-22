@@ -175,6 +175,7 @@ export function usePortfolioDerivations({
 					mp.market.questionId ||
 					(mp.market as { marketId?: string }).marketId;
 				for (const order of mp.orders) {
+					if (!qid) continue;
 					if (order.venue && order.venue !== "LevelUp") {
 						synth.push({ ...order, questionId: qid });
 					}

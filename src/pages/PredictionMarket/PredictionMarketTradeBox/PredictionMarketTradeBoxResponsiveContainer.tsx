@@ -9,11 +9,12 @@ import {
 import type { ReactNode } from "react";
 import type {
 	TradeBoxProps,
-	TradeBoxState,
+	TradeBoxCoreState,
 	ApprovalState,
 	TradingVenue,
 	MarketOrderCalculation,
 } from "./types";
+import type { TradeQuote } from "./tradeQuote/types";
 import type { TradeBoxShareBalancesSnapshot } from "./hooks/useTradeBoxShareBalances";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type {
@@ -43,7 +44,8 @@ export interface StableButtonPrices {
 
 interface PredictionMarketTradeBoxResponsiveContainerProps
 	extends TradeBoxProps {
-	state: TradeBoxState;
+	state: TradeBoxCoreState;
+	tradeQuote: TradeQuote;
 	stableButtonPrices?: StableButtonPrices | null;
 	onPositionChange: (position: "yes" | "no") => void;
 	onAmountChange: (amount: string) => void;
@@ -63,7 +65,6 @@ interface PredictionMarketTradeBoxResponsiveContainerProps
 	dflowVenueHint?: string | null;
 	matchedVenues?: Set<string>;
 	onSideChange: (side: "buy" | "sell") => void;
-	onTrade: () => void;
 	buttonState: {
 		text: string;
 		disabled: boolean;
@@ -146,6 +147,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	orderbook,
 	pandascoreMatchId,
 	state,
+	tradeQuote,
 	onPositionChange,
 	onAmountChange,
 	onPriceChange,
@@ -158,7 +160,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	dflowVenueHint,
 	matchedVenues,
 	onSideChange,
-	onTrade,
 	buttonState,
 	approvalState,
 	executionGateBanner,
@@ -426,6 +427,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 						crossBuyYes={crossBuyYes}
 						crossBuyNo={crossBuyNo}
 						state={state}
+						tradeQuote={tradeQuote}
 						onPositionChange={onPositionChange}
 						onAmountChange={onAmountChange}
 						onPriceChange={onPriceChange}
@@ -438,7 +440,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 						levelUpVenueBookHints={levelUpVenueBookHints}
 						dflowVenueHint={dflowVenueHint}
 						matchedVenues={matchedVenues}
-						onTrade={onTrade}
 						buttonState={buttonState}
 						approvalState={approvalState}
 						walletAddress={walletAddress}
@@ -616,6 +617,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				crossBuyYes={crossBuyYes}
 				crossBuyNo={crossBuyNo}
 				state={state}
+				tradeQuote={tradeQuote}
 				onPositionChange={onPositionChange}
 				onAmountChange={onAmountChange}
 				onPriceChange={onPriceChange}
@@ -628,7 +630,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 				levelUpVenueBookHints={levelUpVenueBookHints}
 				dflowVenueHint={dflowVenueHint}
 				matchedVenues={matchedVenues}
-				onTrade={onTrade}
 				buttonState={buttonState}
 				approvalState={approvalState}
 				walletAddress={walletAddress}

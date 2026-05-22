@@ -1,4 +1,4 @@
-import { MessageDescriptor, i18n } from "@lingui/core";
+import { MessageDescriptor, i18n, type Messages } from "@lingui/core";
 import { useLingui } from "@lingui/react";
 import mapValues from "lodash/mapValues";
 import { useMemo } from "react";
@@ -32,11 +32,11 @@ export async function dynamicActivate(locale: string) {
 	if (!isTestLanguage(locale)) {
 		localStorage.setItem(LANGUAGE_LOCALSTORAGE_KEY, locale);
 	}
-	i18n.load(locale, messages);
+	i18n.load(locale, messages as unknown as Messages);
 	i18n.activate(locale);
 }
 
-i18n.load(defaultLocale, enMessages);
+i18n.load(defaultLocale, enMessages as unknown as Messages);
 i18n.activate(defaultLocale);
 
 export function useLocalizedMap<T extends Record<string, MessageDescriptor>>(

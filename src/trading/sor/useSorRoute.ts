@@ -12,6 +12,7 @@ import type {
 	VenuePositionEntry,
 	SorRouteResult,
 	SorErrorCode,
+	SorDflowPondQuote,
 	VenueRoutePreview,
 } from "./sor-types";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
@@ -23,7 +24,9 @@ import {
 	SOR_ROUTE_TIMEOUT,
 } from "@/errors";
 
-const DEBOUNCE_MS = 300;
+/** Shared with trade-box Pond quote — one debounce for SOR + DFlow preview. */
+export const SOR_ROUTE_DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = SOR_ROUTE_DEBOUNCE_MS;
 const AUTO_REFRESH_MS = 3_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -173,6 +176,16 @@ export interface UseSorRouteInput {
 	 * poll so omnibus / venue previews cannot change (e.g. during SOR execution).
 	 */
 	suspendBackgroundRefetch?: boolean;
+	/**
+	 * Debounce before firing route fetches on amount/balance changes.
+	 * Pass `0` when the parent already debounced `amount` (e.g. `useTradeBoxQuotes`).
+	 */
+	amountDebounceMs?: number;
+	/**
+	 * Bundled DFlow Pond preview on POST /api/sor/route. Sent on the display
+	 * channel when `targetVenue` is unset, or on the execution channel when set.
+	 */
+	includeDflowPondQuote?: boolean;
 }
 
 /**
@@ -199,6 +212,8 @@ export interface UseSorRouteResult {
 	displayErrorCode: SorErrorCode | null;
 	executionError: string | null;
 	executionErrorCode: SorErrorCode | null;
+	/** Latest Pond quote from the route response (same request as SOR). */
+	dflowPondQuote: SorDflowPondQuote | null;
 	refresh: () => void;
 }
 
@@ -236,6 +251,8 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		limitlessMakerBaseUsdc,
 		limitlessFeeRateBps,
 		suspendBackgroundRefetch = false,
+		amountDebounceMs = DEBOUNCE_MS,
+		includeDflowPondQuote = false,
 	} = input;
 
 	/**
@@ -299,6 +316,9 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	const [executionStale, setExecutionStale] = useState(false);
 	const [executionError, setExecutionError] = useState<string | null>(null);
 	const [executionErrorCode, setExecutionErrorCode] = useState<SorErrorCode | null>(null);
+	const [dflowPondQuote, setDflowPondQuote] = useState<SorDflowPondQuote | null>(
+		null,
+	);
 
 	// Per-channel runtime refs.
 	const displayAbortRef = useRef<AbortController | null>(null);
@@ -363,6 +383,10 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 	const buildRequest = useCallback(
 		(channel: ChannelKind): RouteRequest => {
 			const includeTarget = channel === "execution" && !!targetVenue;
+			const pondOnThisChannel =
+				includeDflowPondQuote &&
+				((channel === "display" && !targetVenue) ||
+					(channel === "execution" && !!targetVenue));
 			return {
 				questionId: questionId!,
 				outcome: outcome!,
@@ -384,6 +408,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 				Number.isFinite(limitlessFeeRateBps)
 					? { limitlessFeeRateBps: Math.max(0, Math.floor(limitlessFeeRateBps)) }
 					: {}),
+				...(pondOnThisChannel ? { includeDflowPondQuote: true } : {}),
 			};
 		},
 		[
@@ -400,6 +425,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 			limitPriceCents,
 			limitlessMakerBaseUsdc,
 			limitlessFeeRateBps,
+			includeDflowPondQuote,
 		],
 	);
 
@@ -449,10 +475,17 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 
 			const request = buildRequest(channel);
 
+			const applyPondFromResult = (r: SorRouteResult) => {
+				if (r.dflowPondQuote !== undefined) {
+					setDflowPondQuote(r.dflowPondQuote);
+				}
+			};
+
 			const applySuccess = (r: Extract<SorRouteResult, { success: true }>) => {
 				channelFailureStreakStartRef.current = null;
 				channelLastGoodRouteRef.current = r.route;
 				setRoute(r.route);
+				applyPondFromResult(r);
 				if (channel === "display") {
 					setDisplayRouteSourceQuestionId(questionId ?? null);
 					setVenuePreviews(r.venuePreviews ?? null);
@@ -620,6 +653,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 					}
 
 					const transient = TRANSIENT_SOR_ROUTE_CODES.includes(result.code);
+					applyPondFromResult(result);
 					if (!transient || attempt === maxAttempts - 1) {
 						surfaceFailure({
 							code: result.code,
@@ -663,6 +697,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 						applySuccess(retryResult);
 						return;
 					}
+					applyPondFromResult(retryResult);
 					surfaceFailure({
 						code: retryResult.code,
 						message: formatSorRouteFailureMessage(retryResult, failureTargetForCopy, side),
@@ -742,6 +777,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		setExecutionError(null);
 		setDisplayErrorCode(null);
 		setExecutionErrorCode(null);
+		setDflowPondQuote(null);
 		displayLoadingRef.current = false;
 		executionLoadingRef.current = false;
 		displayLastGoodRouteRef.current = null;
@@ -854,7 +890,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		} else {
 			debounceRef.current = setTimeout(() => {
 				fireChannelsRef.current();
-			}, DEBOUNCE_MS);
+			}, amountDebounceMs);
 		}
 
 		return () => {
@@ -876,6 +912,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		predictFunFeeRateBps,
 		limitlessMakerBaseUsdc,
 		limitlessFeeRateBps,
+		amountDebounceMs,
 		blankAll,
 		blankExecutionOnly,
 	]);
@@ -990,6 +1027,7 @@ export function useSorRoute(input: UseSorRouteInput): UseSorRouteResult {
 		displayErrorCode,
 		executionError,
 		executionErrorCode,
+		dflowPondQuote,
 		refresh,
 	};
 }

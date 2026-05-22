@@ -15,6 +15,8 @@ type UsePolymarketBuilderOptions = {
 	profileId?: string;
 };
 
+export type PolymarketBuilderBundle = ReturnType<typeof usePolymarketBuilder>;
+
 export function usePolymarketBuilder(options: UsePolymarketBuilderOptions = {}) {
 	const { enabled = true, profileId } = options;
 	const api = usePrivateApiClient();

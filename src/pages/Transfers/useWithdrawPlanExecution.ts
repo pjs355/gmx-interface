@@ -11,6 +11,7 @@ import { useFundingLifiExecution } from "@/trading/lifi/useFundingLifiExecution"
 import {
 	BRIDGE_FUNDING_BALANCES_QUERY_KEY,
 } from "@/trading/hooks/useBridgeFundingBalances";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { createSolanaConnectionForWalletSend } from "@/config/rpc";
@@ -86,6 +87,8 @@ function lifiWithdrawToQuoteResponse(d: LifiWithdrawLifiData): LifiQuoteResponse
 export function useWithdrawPlanExecution() {
 	const queryClient = useQueryClient();
 	const funding = useFundingAddresses();
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const polymarketWallet = venueAddressChainMap?.polymarket.walletAddress;
 	const { refresh: refreshUserData } = useUserData();
 	const api = usePrivateApiClient();
 	const {
@@ -145,7 +148,7 @@ export function useWithdrawPlanExecution() {
 						amount: BigInt(leg.amountAtomic),
 						getSignerForChain,
 						polygonRelayClient,
-						polygonRelayWalletAddress: funding.polymarketSafe || undefined,
+						polygonRelayWalletAddress: polymarketWallet,
 					});
 
 					await refreshUserData();

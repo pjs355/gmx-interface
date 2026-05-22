@@ -1,5 +1,5 @@
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
-import { classifyLimitlessClientMaker } from "@/trading/limitless/limitlessClientMakerIdentity";
+import { normalizeLimitlessEvmAddress } from "@/trading/limitless/limitlessClientMakerIdentity";
 import type { LimitlessVerifyAllowanceResult } from "@/trading/limitless/limitlessPrivateApiTypes";
 import {
 	ensureLimitlessTradingApprovalsOnBase,
@@ -20,14 +20,14 @@ type PostVerify = (
  * Sell CTF `setApprovalForAll` is deferred to the first sell trade (JIT). That
  * keeps signup to at most one on-chain signature and avoids duplicating the
  * 1–2 CTF operator approvals you saw when warmup and JIT raced each other.
+ *
+ * `maker` must be `venueAddressChainMap.limitless.walletAddress` (embedded EOA).
  */
 export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 	marketSlug: string;
+	/** Limitless maker from VACM — sole on-chain identity for approvals. */
+	maker: string;
 	venueMakerFromApi: string;
-	fundTarget?: string;
-	signerAddress?: string;
-	account?: string;
-	embeddedEoa?: string;
 	getTxClientForAddress: (
 		address: string,
 	) => Promise<SendTransactionCapable | null | undefined>;
@@ -37,6 +37,10 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 	if (!slug) {
 		throw new Error("Limitless warmup market slug missing.");
 	}
+	const maker = opts.maker.trim();
+	if (!maker) {
+		throw new Error("Limitless maker wallet missing (VACM limitless.walletAddress).");
+	}
 	const venueMaker = opts.venueMakerFromApi.trim();
 	if (!venueMaker) {
 		throw new Error(
@@ -44,16 +48,14 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 		);
 	}
 
-	const { effectiveMaker: maker, isDelegatedServerWalletSubAccount } =
-		classifyLimitlessClientMaker({
-			venueMakerFromApi: venueMaker,
-			fundTarget: opts.fundTarget,
-			signerAddress: opts.signerAddress,
-			account: opts.account,
-			embeddedEoa: opts.embeddedEoa,
-		});
-
-	const fundTargetLog = opts.fundTarget?.trim() ?? "";
+	const apiMaker = normalizeLimitlessEvmAddress(venueMaker);
+	const vacmMaker = normalizeLimitlessEvmAddress(maker);
+	if (!vacmMaker) {
+		throw new Error("Limitless VACM maker address invalid.");
+	}
+	const isDelegatedServerWalletSubAccount = Boolean(
+		apiMaker && apiMaker.toLowerCase() !== vacmMaker.toLowerCase(),
+	);
 
 	const clipAddr = (addr: string) => {
 		const t = addr.trim();
@@ -67,8 +69,8 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 			slug,
 			hasMinimumAllowance: allowance.hasMinimumAllowance,
 			isDelegatedServerWalletSubAccount,
-			maker: clipAddr(maker),
-			fundTarget: fundTargetLog ? clipAddr(fundTargetLog) : "(none)",
+			maker: clipAddr(vacmMaker),
+			apiMaker: apiMaker ? clipAddr(apiMaker) : "(none)",
 		});
 	}
 
@@ -83,7 +85,7 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 	}
 
 	const buyOnChainOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-		maker,
+		maker: vacmMaker,
 		verify: allowance,
 	});
 	if (buyOnChainOk) {
@@ -91,25 +93,25 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 			console.info(LOG, "buy_usdc_warmup_skip", {
 				slug,
 				reason: "already_sufficient_on_chain",
-				maker: clipAddr(maker),
+				maker: clipAddr(vacmMaker),
 			});
 		}
 	} else {
 		await ensureLimitlessTradingApprovalsOnBase({
-			maker,
+			maker: vacmMaker,
 			getTxClientForAddress: opts.getTxClientForAddress,
 			verify: allowance,
 			side: "buy",
 		});
 		allowance = await opts.postLimitlessVerifyAllowance(slug);
 		const afterBuy = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-			maker,
+			maker: vacmMaker,
 			verify: allowance,
 		});
 		if (!afterBuy) {
 			const detail = [
-				`maker=${clipAddr(maker)}`,
-				`fundTarget=${fundTargetLog ? clipAddr(fundTargetLog) : "(none)"}`,
+				`maker=${clipAddr(vacmMaker)}`,
+				`apiMaker=${apiMaker ? clipAddr(apiMaker) : "(none)"}`,
 				`spender=${clipAddr(allowance.spender)}`,
 			];
 			throw new Error(

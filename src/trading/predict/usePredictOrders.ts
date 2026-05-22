@@ -9,6 +9,8 @@ const predictOrdersConsole =
 		? import.meta.env.VITE_DEBUG_PREDICT_ORDERS === "1"
 		: false;
 
+let loggedEmptyOrdersHintRef = false;
+
 /**
  * Fetches Predict.fun orders for the authenticated user.
  * Returns both FILLED (for cost basis) and OPEN (for the Orders tab).
@@ -54,8 +56,8 @@ export function usePredictOrders(enabled = true) {
 						"— statuses:",
 						[...new Set(all.map((r) => r.status))].join(", ") || "(none)"
 					);
-				} else if (predictOrdersConsole && all.length === 0 && !loggedEmptyOrdersHint) {
-					loggedEmptyOrdersHint = true;
+				} else if (predictOrdersConsole && all.length === 0 && !loggedEmptyOrdersHintRef) {
+					loggedEmptyOrdersHintRef = true;
 					console.info(
 						"[PredictOrders] Zero FILLED orders — cost/avg falls back to GET /api/predict/orders/matches?signerAddress=… when you have Predict positions.",
 						"If cost stays blank, set VITE_PREDICT_ACCOUNT_ADDRESS to the maker address Predict shows for your trades."

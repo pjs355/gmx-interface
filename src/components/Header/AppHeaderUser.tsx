@@ -12,11 +12,8 @@ import { usePrivy } from "@privy-io/react-auth";
 // Removed all userAnalytics and GMX-specific imports
 import { useSignerContext } from "context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import {
-	PrivyGatedFundTrigger,
-	resolvePrivyEvmFundTarget,
-} from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
+import { PrivyGatedFundTrigger } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 
 import { OneClickButton } from "components/OneClickButton/OneClickButton";
 import AddressDropdown from "components/AddressDropdown/AddressDropdown";
@@ -55,11 +52,8 @@ export function AppHeaderUser({
 		useSignerContext();
 	const { login, user } = usePrivy();
 	const { refresh: refreshUserData } = useUserData();
-	const funding = useFundingAddresses();
-	const fundEvmTarget = resolvePrivyEvmFundTarget(
-		funding.baseSmartWallet,
-		account,
-	);
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
 		usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();

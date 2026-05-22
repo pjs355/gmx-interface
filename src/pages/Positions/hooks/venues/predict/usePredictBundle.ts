@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { AccountPositionsSlice } from "@/context/AccountDataContext";
-import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import { usePredictOrders } from "@/trading/predict/usePredictOrders";
 import { usePredictOrderMatches } from "@/trading/predict/usePredictOrderMatches";
 import { usePredictAccountActivity } from "@/trading/predict/usePredictAccountActivity";
@@ -39,8 +38,8 @@ import { shortPredictFunMarketTitleForPortfolio } from "@/helpers/umbrellaDispla
 import { accountPositionsQueryShim } from "../accountPositionsQueryShim";
 
 export type UsePredictBundleArgs = {
-	signerAddress: string | null | undefined;
-	effectiveAccount: string | null;
+	/** `venueAddressChainMap.predictfun.walletAddress` — sole Predict positions cache key. */
+	predictWalletAddress: string | null;
 	activeTab: "positions" | "orders" | "history";
 	/** Predict.fun venue slice from `useAccountData()` — passed in so this module never calls `useAccountData` (avoids duplicate `AccountDataContext` module under Vite chunking). */
 	predictSlice: AccountPositionsSlice;
@@ -67,20 +66,16 @@ export type UsePredictBundleResult = {
 };
 
 export function usePredictBundle({
-	signerAddress,
-	effectiveAccount,
+	predictWalletAddress,
 	activeTab,
 	predictSlice,
 }: UsePredictBundleArgs): UsePredictBundleResult {
 	// Rows + fetch state come from `AccountDataProvider` (same TanStack cache as `usePredictPositions`).
 	const all = predictSlice.rows;
-	const predictQueryAddress = resolvePredictAccountAddress(
-		signerAddress,
-		effectiveAccount,
-	);
-	const predictPositionsQueryEnabled = Boolean(
-		predictQueryAddress?.trim().toLowerCase().startsWith("0x"),
-	);
+	const predictQueryAddress = predictWalletAddress?.trim() ?? "";
+	const predictPositionsQueryEnabled = predictQueryAddress
+		.toLowerCase()
+		.startsWith("0x");
 
 	const positionsQuery = useMemo(
 		() =>
@@ -100,14 +95,7 @@ export function usePredictBundle({
 		filledFetched,
 	} = usePredictOrders(ordersEnabled);
 
-	const signerRawForMatches = useMemo(
-		() =>
-			import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS?.trim() ||
-			signerAddress ||
-			effectiveAccount ||
-			null,
-		[signerAddress, effectiveAccount],
-	);
+	const signerRawForMatches = predictQueryAddress || null;
 
 	const matchesQuery = usePredictOrderMatches({
 		signerAddress: signerRawForMatches,

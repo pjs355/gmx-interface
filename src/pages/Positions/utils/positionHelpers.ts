@@ -189,9 +189,9 @@ function mergeVenueLegDedupHintsOntoPrimaryMarket(
 	primary: PredictionMarket,
 	legs: MarketPosition[],
 ): PredictionMarket {
-	const out = { ...(primary as Record<string, unknown>) };
+	const out = { ...(primary as unknown as Record<string, unknown>) };
 	for (const leg of legs) {
-		const src = leg.market as Record<string, unknown>;
+		const src = leg.market as unknown as Record<string, unknown>;
 		for (const k of ["conditionId", "_venueHeldTokenId", "_polyAssetTokenId", "marketId"] as const) {
 			if (nonemptyTrimmedUnknown(out[k])) continue;
 			const v = src[k];
@@ -202,7 +202,7 @@ function mergeVenueLegDedupHintsOntoPrimaryMarket(
 			if (sq) out.questionId = sq;
 		}
 	}
-	return out as PredictionMarket;
+	return out as unknown as PredictionMarket;
 }
 
 export function mergeMarketPositions(markets: MarketPosition[]): MarketPosition[] {

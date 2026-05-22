@@ -43,11 +43,11 @@ import { useCollateralTokens } from "@/context/CollateralTokenContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { useTransfersModal } from "@/context/TransfersModalContext";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import {
-	PrivyGatedDepositButton,
-	resolvePrivyEvmFundTarget,
-} from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+	useAccountData,
+	useVenueAddressChainMap,
+} from "@/context/AccountDataContext";
+import { PrivyGatedDepositButton } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { TransfersBridgePanel } from "./TransfersBridgePanel";
 import "@/pages/Profile/Details/Details.scss";
 import "./Transfers.scss";
@@ -67,14 +67,15 @@ export default function Transfers() {
 	const collateral = useCollateralTokens();
 	const { refresh: refreshUserData } = useUserData();
 	const { openModal: openWithdrawModal } = useTransfersModal();
-	const funding = useFundingAddresses();
-	const fundEvmTarget = resolvePrivyEvmFundTarget(
-		funding.baseSmartWallet,
-		account
-	);
+	const { walletIsLoading } = useAccountData();
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
 	const [copiedAddressKey, setCopiedAddressKey] = useState<string | null>(null);
 
-	const scwRaw = funding.baseSmartWallet?.trim();
+	const scwRaw = venueAddressChainMap?.levelup.walletAddress?.trim();
+	const polymarketWallet = venueAddressChainMap?.polymarket.walletAddress;
+	const predictWallet = venueAddressChainMap?.predictfun.walletAddress;
+	const solanaWallet = venueAddressChainMap?.dflow.walletAddress;
 
 	const baseUsdcCombined = useMemo(
 		() => collateral.baseUsdc + collateral.limitlessMakerUsdc,
@@ -202,14 +203,11 @@ export default function Transfers() {
 								</span>
 							</div>
 							<div className="transfers-addresses__value-row">
-								{funding.isLoading &&
-								!(funding.polymarketSafe ?? funding.polygonSigner) ? (
+								{walletIsLoading && !polymarketWallet ? (
 									<span className="transfers-skeleton transfers-skeleton--address" />
 								) : (
 									<code className="transfers-addresses__value">
-										{formatAddress(
-											funding.polymarketSafe ?? funding.polygonSigner,
-										)}
+										{formatAddress(polymarketWallet)}
 									</code>
 								)}
 								<button
@@ -218,17 +216,11 @@ export default function Transfers() {
 									title="Copy address"
 									aria-label="Copy Polygon pUSD address"
 									disabled={
-										!String(
-											funding.polymarketSafe ?? funding.polygonSigner,
-										).trim() ||
-										(funding.isLoading &&
-											!(funding.polymarketSafe ?? funding.polygonSigner))
+										!String(polymarketWallet ?? "").trim() ||
+										(walletIsLoading && !polymarketWallet)
 									}
 									onClick={() =>
-										void handleCopyAddress(
-											"polygon",
-											funding.polymarketSafe ?? funding.polygonSigner,
-										)
+										void handleCopyAddress("polygon", polymarketWallet)
 									}
 								>
 									{copiedAddressKey === "polygon" ? "✓" : "Copy"}
@@ -249,7 +241,7 @@ export default function Transfers() {
 									</span>
 								</div>
 								<div className="transfers-addresses__value-row">
-									{funding.isLoading && !String(scwRaw ?? "").trim() ? (
+									{walletIsLoading && !String(scwRaw ?? "").trim() ? (
 										<span className="transfers-skeleton transfers-skeleton--address" />
 									) : (
 										<code className="transfers-addresses__value">
@@ -263,7 +255,7 @@ export default function Transfers() {
 										aria-label="Copy Base USDC address"
 										disabled={
 											!String(scwRaw ?? "").trim() ||
-											(funding.isLoading && !String(scwRaw ?? "").trim())
+											(walletIsLoading && !String(scwRaw ?? "").trim())
 										}
 										onClick={() => void handleCopyAddress("base", scwRaw)}
 									>
@@ -285,11 +277,11 @@ export default function Transfers() {
 								</span>
 							</div>
 							<div className="transfers-addresses__value-row">
-								{funding.isLoading && !funding.embeddedEoa ? (
+								{walletIsLoading && !predictWallet ? (
 									<span className="transfers-skeleton transfers-skeleton--address" />
 								) : (
 									<code className="transfers-addresses__value">
-										{formatAddress(funding.embeddedEoa)}
+										{formatAddress(predictWallet)}
 									</code>
 								)}
 								<button
@@ -298,11 +290,11 @@ export default function Transfers() {
 									title="Copy address"
 									aria-label="Copy BNB Chain USDT address"
 									disabled={
-										!String(funding.embeddedEoa ?? "").trim() ||
-										(funding.isLoading && !funding.embeddedEoa)
+										!String(predictWallet ?? "").trim() ||
+										(walletIsLoading && !predictWallet)
 									}
 									onClick={() =>
-										void handleCopyAddress("bnb", funding.embeddedEoa)
+										void handleCopyAddress("bnb", predictWallet)
 									}
 								>
 									{copiedAddressKey === "bnb" ? "✓" : "Copy"}
@@ -322,11 +314,11 @@ export default function Transfers() {
 								</span>
 							</div>
 							<div className="transfers-addresses__value-row">
-								{funding.isLoading && !funding.solanaAddress ? (
+								{walletIsLoading && !solanaWallet ? (
 									<span className="transfers-skeleton transfers-skeleton--address" />
 								) : (
 									<code className="transfers-addresses__value">
-										{formatAddress(funding.solanaAddress)}
+										{formatAddress(solanaWallet)}
 									</code>
 								)}
 								<button
@@ -335,11 +327,11 @@ export default function Transfers() {
 									title="Copy address"
 									aria-label="Copy Solana USDC address"
 									disabled={
-										!String(funding.solanaAddress ?? "").trim() ||
-										(funding.isLoading && !funding.solanaAddress)
+										!String(solanaWallet ?? "").trim() ||
+										(walletIsLoading && !solanaWallet)
 									}
 									onClick={() =>
-										void handleCopyAddress("solana", funding.solanaAddress)
+										void handleCopyAddress("solana", solanaWallet)
 									}
 								>
 									{copiedAddressKey === "solana" ? "✓" : "Copy"}

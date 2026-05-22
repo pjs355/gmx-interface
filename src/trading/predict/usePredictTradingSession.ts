@@ -5,6 +5,9 @@ import type { Book, TransactionResult } from "@predictdotfun/sdk";
 import { ChainId, OrderBuilder, Side } from "@predictdotfun/sdk";
 import type { PrivateApiClient } from "@/services/privateApi";
 import { ensurePredictChain, getBscBrowserSigner } from "./bnbWallet";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
+import { predictKernelAddressFromVacm } from "@/context/accountWallets";
+import { findEvmPrivyEmbeddedWallet } from "@/trading/polymarket/privyEmbeddedWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import {
 	buildPredictCreateOrderPayload,
@@ -12,6 +15,7 @@ import {
 } from "./predictOrderSubmit";
 import type { PredictMarketDetail } from "./predictMarketApi";
 import { enrichPredictGasOrFundsErrorMessage } from "./predictGasGuidance";
+import { complementPredictOrderbook } from "./predictSingleMarketBook";
 
 type SessionRefs = {
 	builder: OrderBuilder;
@@ -77,10 +81,12 @@ export function usePredictTradingSession(enabled: boolean) {
 	const sessionRef = useRef<SessionRefs | null>(null);
 	const sessionInFlightRef = useRef<Promise<SessionRefs> | null>(null);
 
-	const predictAccount = useMemo(
-		() => import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS?.trim() || undefined,
-		[]
-	);
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const predictEntry = venueAddressChainMap?.predictfun;
+	/** Predict maker / deposit (VACM walletAddress). */
+	const predictMaker = predictEntry?.walletAddress;
+	/** Kernel address for OrderBuilder when maker ≠ Privy signer. */
+	const predictKernel = predictKernelAddressFromVacm(predictEntry);
 
 	const chainId = ChainId.BnbMainnet;
 
@@ -95,15 +101,20 @@ export function usePredictTradingSession(enabled: boolean) {
 
 		const run = async (): Promise<SessionRefs> => {
 			if (!authenticated) throw new Error("Log in to trade on Predict");
-			const embedded = (wallets || []).find(
-				(w) =>
-					(w as { walletClientType?: string }).walletClientType === "privy" ||
-					(w as { connectorType?: string }).connectorType === "privy"
-			) as
+			const embedded = findEvmPrivyEmbeddedWallet(wallets) as
 				| { getEthereumProvider?: () => Promise<unknown>; address?: string }
 				| undefined;
 			if (!embedded?.getEthereumProvider || !embedded.address) {
 				throw new Error("Embedded wallet required for Predict on BNB");
+			}
+			const vacmSigner = predictEntry?.signerAddress?.trim();
+			if (
+				vacmSigner &&
+				embedded.address.trim().toLowerCase() !== vacmSigner.toLowerCase()
+			) {
+				throw new Error(
+					"Privy embedded wallet does not match venueAddressChainMap.predictfun.signerAddress",
+				);
 			}
 			const address = embedded.address as `0x${string}`;
 			const ethereum = (await embedded.getEthereumProvider()) as never;
@@ -122,10 +133,10 @@ export function usePredictTradingSession(enabled: boolean) {
 
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const builder = await OrderBuilder.make(chainId, ethSigner as any, {
-				...(predictAccount ? { predictAccount } : {}),
+				...(predictKernel ? { predictAccount: predictKernel } : {}),
 			});
 
-			await authenticatePredict(privateApi, builder, ethSigner, predictAccount);
+			await authenticatePredict(privateApi, builder, ethSigner, predictKernel);
 			const refs: SessionRefs = { builder, signer: ethSigner };
 			sessionRef.current = refs;
 			return refs;
@@ -138,7 +149,15 @@ export function usePredictTradingSession(enabled: boolean) {
 		});
 		sessionInFlightRef.current = p;
 		return p;
-	}, [authenticated, wallets, chainId, predictAccount, privateApi, privyEvmSendTransaction]);
+	}, [
+		authenticated,
+		wallets,
+		chainId,
+		predictKernel,
+		predictEntry?.signerAddress,
+		privateApi,
+		privyEvmSendTransaction,
+	]);
 
 	/**
 	 * Approve **only** the contracts needed for the user's current market type.
@@ -239,10 +258,7 @@ export function usePredictTradingSession(enabled: boolean) {
 				const base = e instanceof Error ? e.message : String(e);
 				const msg = enrichPredictGasOrFundsErrorMessage(base);
 				setError(msg);
-				if (e instanceof Error) {
-					throw new Error(msg, { cause: e });
-				}
-				throw new Error(msg);
+				throw e instanceof Error ? e : new Error(msg);
 			} finally {
 				setLoading(false);
 			}
@@ -264,7 +280,12 @@ export function usePredictTradingSession(enabled: boolean) {
 				if (market.tradingStatus !== "OPEN") {
 					throw new Error("Market is not open for trading");
 				}
-				const maker = predictAccount ?? (await signer.getAddress());
+				if (!predictMaker?.trim()) {
+					throw new Error(
+						"Predict maker missing — venueAddressChainMap.predictfun.walletAddress is required",
+					);
+				}
+				const maker = predictMaker.trim();
 				const sideE = side === "buy" ? Side.BUY : Side.SELL;
 				const quantityWei = parseUnits(sizeShares.trim(), 18);
 				const pricePerShareWei = priceCentsToShareWei(priceCents);
@@ -299,7 +320,7 @@ export function usePredictTradingSession(enabled: boolean) {
 			};
 			return withSessionRetry(resetSession, attempt);
 		},
-		[ensureSession, predictAccount, privateApi, resetSession]
+		[ensureSession, predictMaker, privateApi, resetSession]
 	);
 
 	const placeMarketOrder = useCallback(
@@ -311,18 +332,36 @@ export function usePredictTradingSession(enabled: boolean) {
 			amount: string;
 			/** When set, skips a duplicate orderbook GET (e.g. reuse React Query cache). */
 			book?: Book | null;
+			/** Single-market NO (or non-native A/B): mirror YES-native REST book before sizing. */
+			complementOrderbook?: boolean;
 		}) => {
 			const attempt = async () => {
 				const { builder, signer } = await ensureSession();
-				const { marketId, market, tokenId, side, amount, book: bookArg } = args;
+				const {
+					marketId,
+					market,
+					tokenId,
+					side,
+					amount,
+					book: bookArg,
+					complementOrderbook,
+				} = args;
 				if (market.tradingStatus !== "OPEN") {
 					throw new Error("Market is not open for trading");
 				}
-				const maker = predictAccount ?? (await signer.getAddress());
-				const book =
+				if (!predictMaker?.trim()) {
+					throw new Error(
+						"Predict maker missing — venueAddressChainMap.predictfun.walletAddress is required",
+					);
+				}
+				const maker = predictMaker.trim();
+				let book =
 					bookArg && (bookArg.asks?.length || bookArg.bids?.length)
 						? bookArg
 						: await privateApi.getPredictOrderbook(marketId);
+				if (complementOrderbook) {
+					book = complementPredictOrderbook(book);
+				}
 				const sideE = side === "buy" ? Side.BUY : Side.SELL;
 				const amounts =
 					side === "buy"
@@ -364,7 +403,7 @@ export function usePredictTradingSession(enabled: boolean) {
 			};
 			return withSessionRetry(resetSession, attempt);
 		},
-		[ensureSession, predictAccount, privateApi, resetSession]
+		[ensureSession, predictMaker, privateApi, resetSession]
 	);
 
 	const canInit = Boolean(privyReady && authenticated && enabled);
@@ -374,7 +413,8 @@ export function usePredictTradingSession(enabled: boolean) {
 		loading,
 		error,
 		blockedReason: null,
-		predictAccount,
+		/** Predict maker / deposit from VACM (`predictfun.walletAddress`). */
+		predictAccount: predictMaker,
 		resetSession,
 		ensureSession,
 		setApprovals,

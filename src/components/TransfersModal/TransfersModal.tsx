@@ -13,10 +13,11 @@ import { useTransfersModal } from "@/context/TransfersModalContext";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
-import { useAccountData } from "@/context/AccountDataContext";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import {
+	useAccountData,
+	useVenueAddressChainMap,
+} from "@/context/AccountDataContext";
 import { buildChainBalances } from "@/trading/sor/buildChainBalances";
-import { resolvePrivyEvmFundTarget } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import {
 	useWithdrawPlanExecution,
@@ -124,7 +125,12 @@ export function TransfersModal() {
 	const { account } = useSignerContext();
 	const { refresh: refreshUserData } = useUserData();
 	const { cash: accountCash, refresh: refreshAccount } = useAccountData();
-	const funding = useFundingAddresses();
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const levelupWallet = venueAddressChainMap?.levelup.walletAddress?.trim() ?? "";
+	const limitlessWallet = venueAddressChainMap?.limitless.walletAddress?.trim() ?? "";
+	const polymarketWallet = venueAddressChainMap?.polymarket.walletAddress?.trim() ?? "";
+	const predictWallet = venueAddressChainMap?.predictfun.walletAddress?.trim() ?? "";
+	const solanaWallet = venueAddressChainMap?.dflow.walletAddress?.trim() ?? "";
 	const api = usePrivateApiClient();
 	const { executePlan } = useWithdrawPlanExecution();
 
@@ -137,17 +143,15 @@ export function TransfersModal() {
 		() =>
 			buildChainBalances({
 				baseUsdcBalance: accountCash.base,
-				baseWalletAddress:
-					resolvePrivyEvmFundTarget(funding.baseSmartWallet, account)?.trim() ??
-					"",
+				baseWalletAddress: levelupWallet,
 				limitlessMakerUsdcBalance: Math.max(0, accountCash.limitlessMaker ?? 0),
-				limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
+				limitlessMakerWalletAddress: limitlessWallet,
 				polygonUsdcBalance: accountCash.polygon,
-				polygonWalletAddress: funding.polymarketSafe,
+				polygonWalletAddress: polymarketWallet,
 				solanaUsdcBalance: accountCash.solana,
-				solanaWalletAddress: funding.solanaAddress,
+				solanaWalletAddress: solanaWallet,
 				bnbUsdtBalance: accountCash.bnb,
-				bnbWalletAddress: funding.embeddedEoa,
+				bnbWalletAddress: predictWallet,
 			}),
 		[
 			accountCash.base,
@@ -155,12 +159,11 @@ export function TransfersModal() {
 			accountCash.polygon,
 			accountCash.solana,
 			accountCash.bnb,
-			account,
-			funding.baseSmartWallet,
-			funding.limitlessMakerBase,
-			funding.polymarketSafe,
-			funding.embeddedEoa,
-			funding.solanaAddress,
+			levelupWallet,
+			limitlessWallet,
+			polymarketWallet,
+			predictWallet,
+			solanaWallet,
 		]
 	);
 
@@ -342,27 +345,25 @@ export function TransfersModal() {
 		setPlan(null);
 		try {
 			const gross = effectiveWithdrawAmount;
-			const baseEvmFund =
-				resolvePrivyEvmFundTarget(funding.baseSmartWallet, account)?.trim() || null;
 			const fundingSnap = {
-				baseSmartWallet: baseEvmFund,
-				limitlessMakerBase: funding.limitlessMakerBase?.trim() || null,
-				polymarketSafe: funding.polymarketSafe?.trim() || null,
-				embeddedEoa: funding.embeddedEoa?.trim() || null,
-				solanaAddress: funding.solanaAddress?.trim() || null,
+				baseSmartWallet: levelupWallet || null,
+				limitlessMakerBase: limitlessWallet || null,
+				polymarketSafe: polymarketWallet || null,
+				embeddedEoa: predictWallet || null,
+				solanaAddress: solanaWallet || null,
 			};
 			let balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
 			const planBalances = buildChainBalances({
 				baseUsdcBalance: Math.max(0, balancesSnap.base ?? 0),
-				baseWalletAddress: baseEvmFund ?? "",
+				baseWalletAddress: levelupWallet,
 				limitlessMakerUsdcBalance: Math.max(0, balancesSnap.limitlessMakerBase ?? 0),
-				limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
+				limitlessMakerWalletAddress: limitlessWallet,
 				polygonUsdcBalance: Math.max(0, balancesSnap.polygon ?? 0),
-				polygonWalletAddress: funding.polymarketSafe,
+				polygonWalletAddress: polymarketWallet,
 				solanaUsdcBalance: Math.max(0, balancesSnap.solana ?? 0),
-				solanaWalletAddress: funding.solanaAddress,
+				solanaWalletAddress: solanaWallet,
 				bnbUsdtBalance: Math.max(0, balancesSnap.bnb ?? 0),
-				bnbWalletAddress: funding.embeddedEoa,
+				bnbWalletAddress: predictWallet,
 				includeZeroBalanceChainsWithAddress: true,
 			});
 
@@ -393,15 +394,14 @@ export function TransfersModal() {
 	}, [
 		api,
 		refreshAccount,
-		account,
 		canRequestReview,
 		effectiveWithdrawAmount,
 		effectiveWithdrawAmountStr,
-		funding.baseSmartWallet,
-		funding.embeddedEoa,
-		funding.limitlessMakerBase,
-		funding.polymarketSafe,
-		funding.solanaAddress,
+		levelupWallet,
+		limitlessWallet,
+		polymarketWallet,
+		predictWallet,
+		solanaWallet,
 		recipientAddress,
 		refreshUserData,
 		toAsset,

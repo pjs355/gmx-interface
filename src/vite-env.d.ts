@@ -110,3 +110,7 @@ declare module "components/Common/Portal" {
 declare module "react-helmet" {
   export const Helmet: React.ComponentType<any>;
 }
+
+declare module "*.po" {
+	export const messages: Record<string, import("@lingui/core").MessageDescriptor>;
+}

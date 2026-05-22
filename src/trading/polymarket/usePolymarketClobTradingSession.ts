@@ -14,11 +14,10 @@ import { usePrivy } from "@privy-io/react-auth";
 import { POLYMARKET_BUILDER_CODE } from "./polymarketBuilderCode";
 import { ethers5JsonRpcSignerFromEip1193 } from "./ethers5FromEip1193";
 import { usePolymarketEoaWalletClient } from "./usePolymarketEoaWalletClient";
-import { useAccountOverview } from "@/trading/hooks/useAccountOverview";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { usePolymarketBuilder } from "@/trading/hooks/usePolymarketBuilder";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { useTradingWallets } from "@/trading/useWallets";
+import { useAccountData } from "@/context/AccountDataContext";
 import {
 	ensurePolymarketClobOrderSuccess,
 	summarizeClobResultForLog,
@@ -178,13 +177,11 @@ export function usePolymarketClobTradingSession(
 		enabled: enabled && authenticated,
 	});
 	const profileId = profileIdOpt ?? profileQuery.data?._id;
-	const overviewQuery = useAccountOverview(profileId);
 	const poly = usePolymarketBuilder({
 		enabled: enabled && authenticated,
 		profileId,
 	});
-	/** Same resolution as Transfers (`useFundingAddresses`): overview venue + polymarket account. */
-	const wallets = useTradingWallets(overviewQuery.data, poly.data);
+	const { venueAddressChainMap, walletIsLoading } = useAccountData();
 	const eoa = usePolymarketEoaWalletClient();
 	const privateApi = usePrivateApiClient();
 
@@ -202,7 +199,7 @@ export function usePolymarketClobTradingSession(
 	// `wallets.polymarketSafe` is the historical name; after the deposit-wallet
 	// migration this value is the deposit wallet address (used as the CLOB
 	// funder under `SignatureTypeV2.POLY_1271`).
-	const safe = wallets.polymarketSafe;
+	const safe = venueAddressChainMap?.polymarket.walletAddress ?? undefined;
 
 	/**
 	 * The deposit wallet record exists in the server DB the moment the on-login
@@ -226,7 +223,7 @@ export function usePolymarketClobTradingSession(
 		if (authenticated && poly.isFetching && !poly.isFetched) {
 			return "Loading Polymarket account…";
 		}
-		if (profileId && overviewQuery.isLoading && !safe) {
+		if (profileId && walletIsLoading && !safe) {
 			return "Loading Polymarket account…";
 		}
 		/* Activation hook is still deploying the deposit wallet — don't bring up CLOB yet. */
@@ -248,7 +245,7 @@ export function usePolymarketClobTradingSession(
 		safe,
 		eoa.ready,
 		profileId,
-		overviewQuery.isLoading,
+		walletIsLoading,
 		depositWalletReadyOnChain,
 	]);
 

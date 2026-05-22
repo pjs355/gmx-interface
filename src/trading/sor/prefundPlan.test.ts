@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildPrefundSteps,
 	computePrefundNeedUsdHuman,
 	LIFI_BRIDGE_AMOUNT_MARGIN,
 	resolveBuyPrefundAnchorUsd,
@@ -70,6 +71,33 @@ describe("resolveBuyPrefundAnchorUsd", () => {
 	it("includes LevelUp signed premium USDC when higher than optimizer executionAmountUsd", () => {
 		expect(resolveBuyPrefundAnchorUsd(3, 3, 3.1)).toBeCloseTo(3.1, 8);
 		expect(resolveBuyPrefundAnchorUsd(5, 4, 3)).toBeCloseTo(5, 8);
+	});
+});
+
+describe("buildPrefundSteps allowedSourceChains", () => {
+	it("does not pull from polygon when only base is allowed", () => {
+		const balances = {
+			base: 1,
+			polygon: 100,
+			solana: 0,
+			bnb: 0,
+		};
+		expect(() =>
+			buildPrefundSteps(5, "base", "bnb", balances, {
+				allowedSourceChains: ["base"],
+			}),
+		).toThrow(/Insufficient stablecoin/);
+	});
+
+	it("uses polygon when it is the primary source and allowed", () => {
+		const steps = buildPrefundSteps(5, "polygon", "bnb", {
+			base: 0,
+			polygon: 10,
+			solana: 0,
+			bnb: 0,
+		});
+		expect(steps).toHaveLength(1);
+		expect(steps[0]!.fromChain).toBe("polygon");
 	});
 });
 

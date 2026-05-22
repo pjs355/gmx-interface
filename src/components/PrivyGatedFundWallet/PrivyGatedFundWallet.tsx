@@ -4,18 +4,6 @@ import { isAddress } from "viem";
 
 const BASE_MAINNET = 8453 as const;
 
-/** Base deposit: prefer on-chain smart wallet, then EVM `account` from `SignerContext`. */
-export function resolvePrivyEvmFundTarget(
-	baseSmartWallet: string | undefined,
-	evmAccount: string | undefined
-): string | undefined {
-	const s = baseSmartWallet?.trim();
-	if (s) return s;
-	const a = evmAccount?.trim();
-	if (a) return a;
-	return undefined;
-}
-
 type OpenFundFn = () => void | Promise<void>;
 
 type WithFundWalletProps = {

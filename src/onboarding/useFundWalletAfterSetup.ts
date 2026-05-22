@@ -1,13 +1,11 @@
 import { useCallback, useRef } from "react";
-import { resolvePrivyEvmFundTarget } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import { useSignerContext } from "context/SignerContext";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 
 /**
  * Bundles two concerns the Kalshi/Deposit step both need:
  *
- *   1. A stable Privy fund target (Base smart wallet, falling back to the
- *      EVM `account` from `SignerContext`). We rely on the existing
+ *   1. Privy fund target: `venueAddressChainMap.levelup.walletAddress` (Base SCW).
+ *      We rely on the existing
  *      `RegisterPrivyOpenFundAction` component (mounted by the modal) to
  *      sync the actual `openFund()` callback into a ref — that pattern lets
  *      Privy's `useFundWallet` hook stay scoped to a small subtree without
@@ -21,10 +19,8 @@ import { useSignerContext } from "context/SignerContext";
  *      next session.
  */
 export function useFundWalletAfterSetup() {
-	const funding = useFundingAddresses();
-	const { account } = useSignerContext();
-
-	const fundTarget = resolvePrivyEvmFundTarget(funding.baseSmartWallet, account);
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const fundTarget = venueAddressChainMap?.levelup.walletAddress;
 
 	const fundActionRef = useRef<(() => void | Promise<void>) | null>(null);
 

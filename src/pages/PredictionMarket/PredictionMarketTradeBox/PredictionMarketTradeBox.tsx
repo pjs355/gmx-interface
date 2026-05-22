@@ -1,14 +1,9 @@
-import { useCallback, useMemo, useEffect, useState, useRef, forwardRef, useImperativeHandle } from "react";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { toast } from "react-toastify";
+import { useCallback, useMemo, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // Link import removed — executionGateBanner no longer rendered
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy, useWallets as usePrivyWallets, useSendTransaction } from "@privy-io/react-auth";
-import {
-	RegisterPrivyOpenFundAction,
-	resolvePrivyEvmFundTarget,
-} from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { RegisterPrivyOpenFundAction } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { ethers } from "ethers";
 import type { TradeBoxProps, TradeExecutionParams, TradingVenue } from "./types";
@@ -20,14 +15,12 @@ import PredictionMarketTradeBoxResponsiveContainer from "./PredictionMarketTrade
 import { checkSufficientBalance, useYesNoBalances, checkSufficientShares, SHARE_SELL_COMPARE_EPS } from "./checkBalances";
 import { useUserData } from "context/UserDataContext";
 import { useCollateralTokens } from "context/CollateralTokenContext";
-import { useButtonState } from "./hooks/useButtonState";
 import { useTradeState } from "./hooks/useTradeState";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
 import {
 	formatErrorForUser,
 	formatLimitlessDelegatedOrderError,
 	userMessage,
-	SOR_SMART_ROUTE_FAILED,
 	TRADE_ALREADY_PROCESSING,
 	TRADE_INSUFFICIENT_SHARES,
 	TRADE_LEVELUP_APPROVALS_INCOMPLETE,
@@ -82,7 +75,6 @@ import {
 	predictOutcomeTokenId,
 } from "@/trading/predict/predictMarketApi";
 import { usePredictApprovalsStatus } from "@/trading/predict/usePredictApprovalsStatus";
-import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import {
 	bboFromSnapshot,
 	logPolymarketTradePreflight,
@@ -94,9 +86,13 @@ import { getYesNoTeamLabels } from "./teamLabels";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useDflowMintResolver } from "@/trading/dflow/useDflowMintResolver";
-import { useDflowOrderQuote } from "@/trading/dflow/useDflowOrderQuote";
+import { useTradeBoxController } from "./hooks/useTradeBoxController";
+import { useTradeBoxVenueWiring } from "./hooks/useTradeBoxVenueWiring";
+import { useTradeBoxVenueApprovals } from "./hooks/useTradeBoxVenueApprovals";
+import { useTradeBoxOrderResultToasts } from "./hooks/useTradeBoxOrderResultToasts";
+import { useCalculatedMarketOrderData } from "./tradeQuote/useCalculatedMarketOrderData";
 import { SOLANA_USDC_MINT } from "@/config/addresses";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { sorExecutorWalletRoles } from "@/context/accountWallets";
 import {
 	useSignAndSendTransaction as useSolanaSignAndSendTransaction,
 	useSignTransaction as useSolanaSignTransaction,
@@ -107,41 +103,13 @@ import { sendPrivySponsoredSolanaTransaction } from "@/trading/solana/privySpons
 import { usePolymarketRelay } from "@/trading/polymarket/usePolymarketRelay";
 import type { SolanaSignerCapable } from "@/trading/lifi/sendTransactionTypes";
 import {
-	buildChainBalances,
-	useSorRoute,
-	useSorExecution,
 	parseLimitPriceCents,
 	probabilityToLimitPriceCentsString,
-	shareAmountMatchesRoute,
-	usdAmountMatchesRoute,
-	sorBuyNetHeldTotalSharesFromLegs,
-	SOR_MIN_MARKET_BUY_USD,
-	SOR_MIN_LIMIT_ORDER_USD,
-	SOR_MIN_MARKET_SELL_SHARES,
-	type SorExecutionPhase,
 } from "@/trading/sor";
-import { useSorLegExecutor } from "@/trading/sor/useSorLegExecutor";
-import type {
-	ChainBalance,
-	VenuePositionEntry,
-	SorOutcome,
-	SorVenue,
-	RoutePlan,
-} from "@/trading/sor";
-import { usePostTradeAccountSync } from "@/trading/sor/usePostTradeAccountSync";
-import { captureAccountReconcileSnapshot, type AccountReconcileSnapshot } from "@/trading/sor/postTradeReconcile";
+import type { UseSorLegExecutorDeps } from "@/trading/sor/useSorLegExecutor";
 import { useAccountData } from "@/context/AccountDataContext";
-import {
-	accountVenueKeysFromFilledExecutionLegs,
-	filledExecutionHasLevelUp,
-	routePlanLegsFingerprintMatch,
-} from "@/trading/sor/postTradeRouteAlign";
-import { capturePostTradeBaseline, type PostTradeBaseline } from "@/trading/sor/postTradeBaseline";
-import { registerPendingDflowOutcomeMints } from "@/trading/dflow/pendingDflowOutcomeMints";
-import { dflowOutcomeMintForRouteLeg } from "@/trading/dflow/dflowRouteOutcomeMint";
 import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
 import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
-import { getMarketId } from "@/pages/PredictionMarket/utils";
 import { maxAllMarketsSellBidForOutcome } from "@/hooks/useTradingPagePrices";
 import { useTradeBoxShareBalances } from "./hooks/useTradeBoxShareBalances";
 import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
@@ -164,7 +132,6 @@ import {
 	buildLimitlessSignedOrderFromMarket,
 	type BuildLimitlessSorOrderInput,
 } from "@/trading/limitless/limitlessSignedClobOrder";
-import { classifyLimitlessClientMaker } from "@/trading/limitless/limitlessClientMakerIdentity";
 import {
 	levelUpCrossVenueBooksHaveTradeableWholeShareLiquidity,
 	orderbookSnapshotHasWholeShareRestingLiquidity,
@@ -183,30 +150,6 @@ export interface PredictionMarketTradeBoxHandle {
   setSide: (side: 'buy' | 'sell') => void;
   executeTrade: () => Promise<void>;
   getState: () => any;
-}
-
-/** Venue keys when reading `allMarketsOutcomeVenueShares` into SOR sell legs. */
-const SOR_VENUE_POSITION_KEYS: readonly SorVenue[] = [
-	"levelup",
-	"polymarket",
-	"predictfun",
-	"dflow",
-	"limitless",
-];
-
-/** DFlow `/order/quote` debounce uses USDC 1e6 rounding; align typed vs debounced USD for E2E sentinel. */
-function dflowTypedUsdMatchesDebouncedQuote(
-	typedAmount: string,
-	debouncedAmount: string,
-): boolean {
-	const norm = (s: string) =>
-		Number.parseFloat(String(s).trim().replace(/,/g, ""));
-	const a = norm(typedAmount);
-	const b = norm(debouncedAmount);
-	if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) {
-		return false;
-	}
-	return Math.round(a * 1_000_000) === Math.round(b * 1_000_000);
 }
 
 const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, PredictionMarketTradeBoxProps>(
@@ -234,11 +177,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     approveToken,
     refresh,
     refreshTokenPositions,
+    refreshOrders,
     getTokenBalance,
   } = useUserData();
   const collateralTokens = useCollateralTokens();
   const accountData = useAccountData();
-  const postTradeAccountSync = usePostTradeAccountSync();
+  const venueAddressChainMap = accountData.venueAddressChainMap;
+  const fundingGate = accountData.walletGate;
 
   // Lazy approval check: deferred from startup, runs when trade box mounts
   useEffect(() => {
@@ -246,40 +191,34 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }, [account, checkApproval]);
 
   const { wallets: privyWallets } = usePrivyWallets();
-  const funding = useFundingAddresses();
   const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
   const getLimitlessTxClientForAddress = useCallback(
     (addr: string) =>
       getLimitlessBaseTxClientForAddress({
         address: addr,
         getClientForChain,
-        baseSmartWallet: funding.baseSmartWallet,
-        embeddedEoa: funding.embeddedEoa,
+        baseSmartWallet:
+          venueAddressChainMap?.levelup.walletAddress ?? undefined,
+        embeddedEoa:
+          venueAddressChainMap?.predictfun.walletAddress ?? undefined,
         privyEvmSendTransaction,
       }),
     [
       getClientForChain,
-      funding.baseSmartWallet,
-      funding.embeddedEoa,
+      venueAddressChainMap?.levelup.walletAddress,
+      venueAddressChainMap?.predictfun.walletAddress,
       privyEvmSendTransaction,
     ],
   );
   const addFundsFromPrivyRef = useRef<(() => void | Promise<void>) | null>(null);
-  const fundEvmForPrivy = useMemo(
-  	() => resolvePrivyEvmFundTarget(funding.baseSmartWallet, account),
-  	[funding.baseSmartWallet, account]
-  );
+  const fundEvmForPrivy = venueAddressChainMap?.levelup.walletAddress;
   /** LevelUp REST orderbook (signing + execution always uses this for LevelUp venue). */
   const levelUpOrderbook = propOrderbook ?? null;
 
-  // Ref to hold the latest SOR route for use in handleTrade (defined before useSorRoute)
-  const sorRouteRef = useRef<any>(null);
-  const sorRouteExpiredRef = useRef(false);
   // Late-bound SOR executor — `handleSorExecute` is defined later in the
   // render, but the imperative test handle (useImperativeHandle below) needs
   // a stable reference it can forward into. Updated via an effect right after
   // handleSorExecute is created so the imperative `executeTrade` always kicks
-  // the unified SOR/LI.FI pipeline instead of the deprecated `handleTrade`.
   const handleSorExecuteRef = useRef<(() => void) | null>(null);
 
   // Handle deposit - opens Privy's fund wallet modal (actual `useFundWallet` is gated; see `RegisterPrivyOpenFundAction`)
@@ -335,10 +274,13 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   const { signAndSendTransaction: privySolanaSignAndSend } = useSolanaSignAndSendTransaction();
   const { signTransaction: privySolanaSignTransaction } = useSolanaSignTransaction();
   const { wallets: solanaWallets } = useSolanaWallets();
-  const embeddedSolanaWallet = useMemo(
-    () => solanaWallets.find((w) => w.address === funding.solanaAddress) ?? solanaWallets[0] ?? null,
-    [solanaWallets, funding.solanaAddress]
-  );
+  const embeddedSolanaWallet = useMemo(() => {
+    const dflowAddr = venueAddressChainMap?.dflow.walletAddress?.trim();
+    if (!dflowAddr) return null;
+    return (
+      solanaWallets.find((w) => w.address === dflowAddr) ?? null
+    );
+  }, [solanaWallets, venueAddressChainMap?.dflow.walletAddress]);
 
   const solanaSigner = useMemo<SolanaSignerCapable | null>(
     () =>
@@ -379,11 +321,9 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     return mergeMonitorLimitlessFromUmbrella(base, limitlessMappingFromUmbrella);
   }, [oddsAppState?.markets, pandaId, propUmbrellaId, limitlessMappingFromUmbrella]);
 
-  /** Same wallet + token hints as `usePredictPositions` / post-trade cache reads (`predict-positions`). */
-  const predictPostTradeWallet = resolvePredictAccountAddress(
-    signerAddress,
-    account,
-  );
+  /** Same wallet as `usePredictPositions` / VACM (`predict-positions` cache key). */
+  const predictPostTradeWallet =
+    venueAddressChainMap?.predictfun.walletAddress ?? null;
   /** Post-trade share identity: umbrella `exchangeMatching.predictFun` only (single source). */
   const predictShareIdentityCtx = useMemo(() => {
     const umb = predictFunMappingFromUmbrella;
@@ -447,53 +387,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     dflowLink?.eventTicker,
     (multiVenueEnabled || state.tradingVenue === "dflow") ? dflowLink?.tickerA : null
   );
-
-  // SOR routes a "yes" leg as outcome A → buy YES on tickerA (`yesMintA`), and
-  // a "no" leg as outcome B → buy YES on tickerB (`yesMintB`). Mirror that
-  // here so `/order/quote` uses the same mint the executor will sign with.
-  // PDAs from `MatchedMarketsDflowWire` are deterministic and exist before
-  // the on-chain market is tokenized — so the quote works for uninit markets.
-  const dflowQuote = useDflowOrderQuote({
-    yesMint: dflowLink?.yesMintA ?? undefined,
-    noMint: dflowLink?.yesMintB ?? undefined,
-    position: state.selectedPosition ?? null,
-    side: state.side,
-    amount: state.amount,
-    enabled:
-      state.orderType === "market" &&
-      Boolean(dflowLink) &&
-      (state.tradingVenue === "dflow" || state.tradingVenue === "all"),
-  });
-
-  const dflowOrderQuoteForSentinel = useMemo(() => {
-    if (
-      state.tradingVenue !== "dflow" ||
-      state.orderType !== "market" ||
-      state.side !== "buy"
-    ) {
-      return undefined;
-    }
-    const contracts =
-      dflowQuote.data &&
-      Number.isFinite(dflowQuote.data.contracts) &&
-      dflowQuote.data.contracts > 0
-        ? dflowQuote.data.contracts
-        : null;
-    return {
-      contracts,
-      amountAlignedWithQuote: dflowTypedUsdMatchesDebouncedQuote(
-        state.amount,
-        dflowQuote.debouncedAmount,
-      ),
-    };
-  }, [
-    state.tradingVenue,
-    state.orderType,
-    state.side,
-    state.amount,
-    dflowQuote.data,
-    dflowQuote.debouncedAmount,
-  ]);
 
   const { signMessage: privySolanaSignMessage } = useSolanaSignMessage();
 
@@ -593,515 +486,47 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     tradeBoxShareBalances.allMarketsOutcomeVenueShares,
   ]);
 
-  const predictVenueActive = state.tradingVenue === "predictfun";
-  const limitlessVenueActive = state.tradingVenue === "limitless";
-  const isPredictSingleMarket =
-    predictVenueActive && matchedMonitor?.predictFun?.singleMarket === true;
-
-  const predictNumericId = useMemo(() => {
-    if ((!multiVenueEnabled && !predictVenueActive) || !matchedMonitor || !state.selectedPosition) {
-      return null;
-    }
-    return predictMarketNumericId(
-      matchedMonitor,
-      state.selectedPosition,
-      yesTeamLabel,
-      noTeamLabel
-    );
-  }, [
+  const venueWiring = useTradeBoxVenueWiring({
+    state,
     multiVenueEnabled,
-    predictVenueActive,
-    matchedMonitor,
-    state.selectedPosition,
-    yesTeamLabel,
-    noTeamLabel,
-  ]);
-
-  const predictMarketQuery = usePredictMarketDetail(
-    predictNumericId,
-    multiVenueEnabled || predictVenueActive
-  );
-  const predictOrderbookQuery = usePredictOrderbook(
-    predictNumericId,
-    multiVenueEnabled || predictVenueActive
-  );
-  const predictMarketDetail = predictMarketQuery.data ?? null;
-
-  const predictSession = usePredictTradingSession(
-    (multiVenueEnabled || predictVenueActive) && authenticated && Boolean(pandaId) && Boolean(predictNumericId)
-  );
-
-  /**
-   * On-chain USDT / CTF approvals for Predict are signed from the **Privy embedded EOA**
-   * on BSC (`setApprovals`). `account` from SignerContext is often the Base **smart wallet**,
-   * so using it here makes approval checks look failed even after txs succeeded.
-   * If `VITE_PREDICT_ACCOUNT_ADDRESS` is set, use that as the token/allowance owner (Predict deposit).
-   */
-  const predictApprovalSubject = useMemo(() => {
-    const fromEnv = import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS?.trim();
-    if (fromEnv) return fromEnv;
-    const embedded = (privyWallets || []).find(
-      (w) =>
-        (w as { walletClientType?: string }).walletClientType === "privy" ||
-        (w as { connectorType?: string }).connectorType === "privy"
-    ) as { address?: string } | undefined;
-    if (embedded?.address) return embedded.address;
-    return account ?? null;
-  }, [privyWallets, account]);
-
-  const predictApprovalsQuery = usePredictApprovalsStatus(
-    predictApprovalSubject,
-    predictMarketDetail?.isNegRisk ?? false,
-    predictMarketDetail?.isYieldBearing ?? false,
-    (multiVenueEnabled || predictVenueActive) && Boolean(predictApprovalSubject) && Boolean(predictMarketDetail)
-  );
-
-  /**
-   * Auto-setup: JWT + on-chain approvals + server sync so Predict flips `executionReady: true`
-   * on the backend. Users never see "Complete venue setup" because we run this headlessly the
-   * moment the user is authenticated on a Predict-eligible market.
-   */
-  const predictEnsureReady = usePredictEnsureExecutionReady({
-    enabled:
-      (multiVenueEnabled || predictVenueActive) &&
-      authenticated &&
-      Boolean(pandaId) &&
-      Boolean(predictNumericId) &&
-      Boolean(predictMarketDetail) &&
-      Boolean(predictApprovalSubject),
-    predictSession,
-    approvalSubject: predictApprovalSubject,
-    isNegRisk: predictMarketDetail?.isNegRisk ?? false,
-    isYieldBearing: predictMarketDetail?.isYieldBearing ?? false,
-  });
-
-  const predictTokenIdForPosition = useMemo(() => {
-    if (!state.selectedPosition) return null;
-    if (matchedMonitor?.predictFun) {
-      const ab = predictOutcomeSide(
-        matchedMonitor,
-        state.selectedPosition,
-        yesTeamLabel,
-        noTeamLabel
-      );
-      const pf = matchedMonitor.predictFun;
-      const fromMonitor =
-        ab === "A" ? pf.tokenIdA : pf.tokenIdB ?? pf.tokenIdA;
-      if (fromMonitor) return fromMonitor;
-    }
-    if (!predictMarketDetail) return null;
-    try {
-      return predictOutcomeTokenId(
-        predictMarketDetail,
-        state.selectedPosition,
-        yesTeamLabel,
-        noTeamLabel
-      );
-    } catch {
-      return null;
-    }
-  }, [
-    matchedMonitor,
-    predictMarketDetail,
-    state.selectedPosition,
-    yesTeamLabel,
-    noTeamLabel,
-  ]);
-
-  const predictVenueBookHints = useMemo(() => {
-    if (!predictVenueActive || !matchedMonitor) return null;
-    return {
-      yes: monitorBookToOrderbookSnapshot(
-        predictOrderbookForPosition(
-          matchedMonitor,
-          "yes",
-          yesTeamLabel,
-          noTeamLabel
-        )
-      ),
-      no: monitorBookToOrderbookSnapshot(
-        predictOrderbookForPosition(
-          matchedMonitor,
-          "no",
-          yesTeamLabel,
-          noTeamLabel
-        )
-      ),
-    };
-  }, [
-    predictVenueActive,
-    matchedMonitor,
-    yesTeamLabel,
-    noTeamLabel,
-  ]);
-
-  /** LevelUp: OddsMonitor WS book when connected (matches strip); REST otherwise. Other venues: monitor / REST as before. */
-  const effectiveOrderbook = useMemo(() => {
-    if (state.tradingVenue === "all") {
-      return levelUpOrderbook;
-    }
-    if (state.tradingVenue === "levelup") {
-      if (
-        oddsMonitorEnabled &&
-        oddsMonitorConnected &&
-        matchedMonitor
-      ) {
-        const raw = levelUpMonitorBookForPosition(
-          matchedMonitor,
-          state.selectedPosition ?? "yes",
-          yesTeamLabel,
-          noTeamLabel,
-        );
-        const wsSnap = monitorBookToOrderbookSnapshot(raw);
-        if (wsSnap) return wsSnap;
-      }
-      return levelUpOrderbook;
-    }
-    if (state.tradingVenue === "predictfun") {
-      // Prefer REST data when available (exact depth). Fall back to the
-      // already-loaded monitor WebSocket data so the UI renders instantly
-      // while the REST round-trip completes — same pattern as Poly/DFlow.
-      const restSnap = predictBookToOrderbookSnapshot(
-        predictOrderbookQuery.data ?? undefined
-      );
-      if (restSnap) return restSnap;
-      if (isPredictSingleMarket && matchedMonitor) {
-        // Single-market: the raw YES-native book lives under whichever
-        // price field corresponds to the set market id (A or B).
-        const pf = matchedMonitor.predictFun;
-        const rawMonitorBook = pf?.marketIdA
-          ? matchedMonitor.predictFunPriceA
-          : matchedMonitor.predictFunPriceB;
-        return monitorBookToOrderbookSnapshot(rawMonitorBook ?? null);
-      }
-      // Dual-market fallback: use the hint for the selected outcome.
-      const pos = state.selectedPosition ?? "yes";
-      return predictVenueBookHints?.[pos] ?? null;
-    }
-    if (!matchedMonitor) return null;
-    if (state.tradingVenue === "limitless") {
-      const lxRaw = limitlessOrderbookForPosition(
-        matchedMonitor,
-        state.selectedPosition ?? "yes",
-        yesTeamLabel,
-        noTeamLabel,
-      );
-      return monitorBookToOrderbookSnapshot(lxRaw);
-    }
-    if (state.tradingVenue === "dflow") {
-      /** Monitor `dflowPrice*` from venue-prices MatchedMarket only. */
-      const dflowRaw = dflowKalshiOrderbookForPosition(
-        matchedMonitor,
-        state.selectedPosition ?? "yes",
-        yesTeamLabel,
-        noTeamLabel
-      );
-      return monitorBookToOrderbookSnapshot(dflowRaw);
-    }
-    const polyRaw = polyOrderbookForPosition(
-      matchedMonitor,
-      state.selectedPosition ?? "yes",
-      yesTeamLabel,
-      noTeamLabel
-    );
-    return monitorBookToOrderbookSnapshot(polyRaw);
-  }, [
-    state.tradingVenue,
-    state.selectedPosition,
-    levelUpOrderbook,
-    matchedMonitor,
-    yesTeamLabel,
-    noTeamLabel,
-    predictOrderbookQuery.data,
-    isPredictSingleMarket,
-    predictVenueBookHints,
-    oddsMonitorEnabled,
-    oddsMonitorConnected,
-  ]);
-
-  /** Dual WS snapshots so YES/NO buttons do not reuse the selected outcome's ladder for both teams. */
-  const levelUpVenueBookHints = useMemo(() => {
-    if (state.tradingVenue !== "levelup") return null;
-    if (!oddsMonitorEnabled || !oddsMonitorConnected || !matchedMonitor) return null;
-    const snapYes = monitorBookToOrderbookSnapshot(
-      levelUpMonitorBookForPosition(
-        matchedMonitor,
-        "yes",
-        yesTeamLabel,
-        noTeamLabel,
-      ),
-    );
-    const snapNo = monitorBookToOrderbookSnapshot(
-      levelUpMonitorBookForPosition(
-        matchedMonitor,
-        "no",
-        yesTeamLabel,
-        noTeamLabel,
-      ),
-    );
-    if (!snapYes || !snapNo) return null;
-    return { yes: snapYes, no: snapNo };
-  }, [
-    state.tradingVenue,
-    oddsMonitorEnabled,
-    oddsMonitorConnected,
-    matchedMonitor,
-    pandaId,
-    propUmbrellaId,
-    yesTeamLabel,
-    noTeamLabel,
-  ]);
-
-  const venueConfig = getVenueConfig(state.tradingVenue);
-  const marketOrderHandler = useMarketOrderHandler(effectiveOrderbook, venueConfig.requiresWholeShares);
-
-  // LevelUp and single-market Predict use a unified YES-native book where the
-  // walker must invert for NO (walk bids, cost = 1 − bid_price).  Multi-market
-  // Predict, Polymarket, and DFlow each fetch an outcome-native book, so always
-  // walk as "yes".
-  const orderbookWalkPosition =
-    (state.tradingVenue === "levelup" || isPredictSingleMarket)
-      ? state.selectedPosition ?? "yes"
-      : "yes";
-
-  const calculateContractsForMarketOrderUi = useCallback(
-    (usdAmount: number, position: "yes" | "no", side: "buy" | "sell") => {
-      const passPosition =
-        state.tradingVenue === "levelup" || isPredictSingleMarket;
-      return marketOrderHandler.calculateContractsForMarketOrder(
-        usdAmount,
-        passPosition ? position : "yes",
-        side
-      );
-    },
-    [marketOrderHandler, state.tradingVenue, isPredictSingleMarket]
-  );
-
-  const polyClob = usePolymarketClobTradingSession({
-    enabled:
-      authenticated &&
-      Boolean(pandaId) &&
-      (multiVenueEnabled || state.tradingVenue === "polymarket"),
-  });
-
-  const polymarketVenueHint = useMemo(() => {
-    if (state.tradingVenue !== "polymarket") return null;
-    if (!pandaId) {
-      return "Polymarket CLOB needs a PandaScore match on this umbrella.";
-    }
-    if (!oddsMonitorEnabled) {
-      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
-    }
-    if (!oddsMonitorConnected) {
-      return "Connecting to odds monitor…";
-    }
-    if (!matchedMonitor) {
-      return "No monitor row for this match — Poly books may not be linked yet.";
-    }
-    if (polyClob.loading || polyClob.polyAccountLoading) {
-      return "Loading…";
-    }
-    if (!polyClob.ready) {
-      return (
-        polyClob.blockedReason ||
-        polyClob.error ||
-        "Complete Polymarket setup to trade (Safe, approvals, builder sign)."
-      );
-    }
-    return null;
-  }, [
-    state.tradingVenue,
-    pandaId,
-    oddsMonitorEnabled,
-    oddsMonitorConnected,
-    matchedMonitor,
-    polyClob.loading,
-    polyClob.polyAccountLoading,
-    polyClob.ready,
-    polyClob.blockedReason,
-    polyClob.error,
-  ]);
-
-  const predictHasMarketIds = useMemo(() => {
-    if (!matchedMonitor?.predictFun) return false;
-    const a = matchedMonitor.predictFun.marketIdA;
-    const b = matchedMonitor.predictFun.marketIdB ?? a;
-    return (a != null && a !== "") || (b != null && b !== "");
-  }, [matchedMonitor]);
-
-  const predictVenueHint = useMemo(() => {
-    if (state.tradingVenue !== "predictfun") return null;
-    if (!pandaId) {
-      return "Predict needs a PandaScore match on this umbrella.";
-    }
-    if (!oddsMonitorEnabled) {
-      return "Odds monitor is not configured (set VITE_ODDS_WS_BASE / token).";
-    }
-    if (!oddsMonitorConnected) {
-      return "Connecting to odds monitor…";
-    }
-    if (!matchedMonitor) {
-      return "No monitor row — Predict ids may not be linked yet.";
-    }
-    if (!predictHasMarketIds) {
-      return "This monitor row has no Predict market ids.";
-    }
-    if (
-      (predictMarketQuery.isLoading || predictOrderbookQuery.isLoading) &&
-      !matchedMonitor?.predictFunPriceA &&
-      !matchedMonitor?.predictFunPriceB
-    ) {
-      return "Loading Predict market…";
-    }
-    if (!predictNumericId) {
-      return "Could not resolve Predict market id for this side.";
-    }
-    if (predictMarketQuery.isError) {
-      return "Failed to load Predict market from API.";
-    }
-    if (predictSession.loading) {
-      return "Loading…";
-    }
-    if (!predictSession.ready) {
-      return (
-        predictSession.blockedReason ||
-        predictSession.error ||
-        "Complete Predict setup (BNB, USDT, API key if mainnet)."
-      );
-    }
-    return null;
-  }, [
-    state.tradingVenue,
-    pandaId,
-    oddsMonitorEnabled,
-    oddsMonitorConnected,
-    matchedMonitor,
-    predictHasMarketIds,
-    predictNumericId,
-    predictMarketQuery.isLoading,
-    predictMarketQuery.isError,
-    predictOrderbookQuery.isLoading,
-    predictSession.loading,
-    predictSession.ready,
-    predictSession.blockedReason,
-    predictSession.error,
-  ]);
-
-  const dflowVenueHint = useMemo(() => {
-    if (state.tradingVenue !== "dflow") return null;
-    if (!hasDflowKalshiMonitorLink(matchedMonitor)) {
-      return "No Kalshi market linked for this match on the odds monitor.";
-    }
-    return null;
-  }, [state.tradingVenue, matchedMonitor]);
-
-  const limitlessTrading = useMemo(() => {
-    const raw = limitlessEnsureQuery.data;
-    let approvalComplete: boolean | undefined;
-    if (raw && typeof raw === "object") {
-      const la = (raw as { limitlessAccount?: unknown }).limitlessAccount;
-      if (la && typeof la === "object") {
-        const ac = (la as { approvalComplete?: unknown }).approvalComplete;
-        if (typeof ac === "boolean") {
-          approvalComplete = ac;
-        }
-      }
-    }
-    return {
-      hasPandascoreLink: Boolean(pandaId),
-      hasMonitorMatch: Boolean(matchedMonitor),
-      hasLimitlessMapping: Boolean(matchedMonitor?.limitless),
-      ready: limitlessReady,
-      loading:
-        Boolean(setupActivation?.venues.limitless.setupInProgress) ||
-        (authenticated &&
-          Boolean(profileId) &&
-          limitlessEnsureQuery.data == null &&
-          !limitlessEnsureQuery.isError),
-      blockedReason: limitlessEnsureQuery.isError
-        ? formatErrorForUser(limitlessEnsureQuery.error)
-        : limitlessEnsureGate.ready
-          ? null
-          : limitlessEnsureGate.blockedReason,
-      approvalComplete,
-    };
-  }, [
-    pandaId,
-    matchedMonitor,
-    limitlessReady,
-    limitlessEnsureGate.ready,
-    limitlessEnsureGate.blockedReason,
-    setupActivation?.venues.limitless.setupInProgress,
     authenticated,
+    pandaId,
+    matchedMonitor,
+    yesTeamLabel,
+    noTeamLabel,
+    levelUpOrderbook,
+    oddsMonitorEnabled,
+    oddsMonitorConnected,
+    account,
+    setupActivation,
     profileId,
-    limitlessEnsureQuery.data,
-    limitlessEnsureQuery.isError,
-    limitlessEnsureQuery.error,
-  ]);
-
-  const predictTrading = useMemo(
-    () => ({
-      hasPandascoreLink: Boolean(pandaId),
-      hasMonitorMatch: Boolean(matchedMonitor),
-      hasPredictMarketIds: predictHasMarketIds,
-      ready:
-        predictSession.ready &&
-        Boolean(predictMarketDetail) &&
-        !predictEnsureReady.setupInProgress,
-      loading:
-        predictSession.loading ||
-        predictMarketQuery.isLoading ||
-        predictOrderbookQuery.isLoading ||
-        predictEnsureReady.setupInProgress,
-      blockedReason:
-        predictSession.blockedReason ||
-        predictSession.error ||
-        predictEnsureReady.error ||
-        (predictMarketQuery.isError ? "Predict market API error" : null),
-      /**
-       * On-chain CTF + USDT approvals snapshot. When `true`, the trade-box
-       * Predict bootstrap gate is bypassed for buys — `useButtonState`
-       * trusts the lazy `ensurePredictApprovalsForTrade` path at execute time
-       * instead of blocking the UI on the redundant ensure roundtrip.
-       */
-      approvalsOk: predictApprovalsQuery.data === true,
-    }),
-    [
-      pandaId,
-      matchedMonitor,
-      predictHasMarketIds,
-      predictSession.ready,
-      predictSession.loading,
-      predictSession.blockedReason,
-      predictSession.error,
-      predictEnsureReady.setupInProgress,
-      predictEnsureReady.error,
-      predictMarketDetail,
-      predictMarketQuery.isLoading,
-      predictMarketQuery.isError,
-      predictOrderbookQuery.isLoading,
-      predictApprovalsQuery.data,
-    ]
-  );
-
-  const polymarketTrading = useMemo(
-    () => ({
-      hasPandascoreLink: Boolean(pandaId),
-      hasMonitorMatch: Boolean(matchedMonitor),
-      ready: polyClob.ready,
-      loading: polyClob.loading || polyClob.polyAccountLoading,
-      blockedReason: polyClob.blockedReason || polyClob.error,
-    }),
-    [
-      pandaId,
-      matchedMonitor,
-      polyClob.ready,
-      polyClob.loading,
-      polyClob.polyAccountLoading,
-      polyClob.blockedReason,
-      polyClob.error,
-    ]
-  );
+    limitlessEnsureQuery,
+    limitlessReady,
+    limitlessEnsureGate,
+  });
+  const {
+    predictNumericId,
+    predictMarketQuery,
+    predictOrderbookQuery,
+    predictMarketDetail,
+    predictSession,
+    predictApprovalsQuery,
+    predictEnsureReady,
+    predictTokenIdForPosition,
+    predictVenueBookHints,
+    effectiveOrderbook,
+    levelUpVenueBookHints,
+    marketOrderHandler,
+    orderbookWalkPosition,
+    calculateContractsForMarketOrderUi,
+    polyClob,
+    polymarketVenueHint,
+    predictVenueHint,
+    dflowVenueHint,
+    limitlessTrading,
+    predictTrading,
+    polymarketTrading,
+  } = venueWiring;
 
   const usdcBalance = collateralTokens.baseUsdc;
   const { yesBalance, noBalance } = useYesNoBalances(market);
@@ -1149,718 +574,46 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     handlePriceChange,
   ]);
 
-  /** Latest venue/tab lock — `onSideChangeWrapper` is declared before `useSorExecution`
-   *  so it reads this ref, which we sync right after computing `venueSelectionLocked`. */
-  const venueSelectionLockedRef = useRef(false);
-
-  // Notify parent when side changes (buy/sell)
-  const onSideChangeWrapper = useCallback(
-    (side: "buy" | "sell") => {
-      handleSideChange(side);
-      if (
-        side === "sell" &&
-        smartRoutingSurfaceActive &&
-        !venueSelectionLockedRef.current
-      ) {
-        handleTradingVenueChange("all");
-      }
-      onSideChangeCallback?.(side);
-    },
-    [
-      handleSideChange,
-      smartRoutingSurfaceActive,
-      handleTradingVenueChange,
-      onSideChangeCallback,
-    ],
-  );
-
-  // Market-order sizing: walks effectiveOrderbook, applies venue-specific fees.
-  const calculatedMarketOrderData = useMemo(() => {
-    if (
-      state.orderType === "market" &&
-      state.amount &&
-      state.selectedPosition &&
-      effectiveOrderbook
-    ) {
-      const usdAmount = parseFloat(state.amount);
-      if (!isNaN(usdAmount) && usdAmount > 0) {
-        const sizingFeeBps =
-          state.tradingVenue === "limitless"
-            ? LIMITLESS_DEFAULT_FEE_RATE_BPS
-            : predictMarketDetail?.feeRateBps;
-        // Every venue reserves fees from the user's input so they never pay
-        // more than they entered. effectiveBuyBudget returns the share-buying
-        // portion; the remainder covers fees.
-        const bestAskPrice = effectiveOrderbook.asks?.[0]?.price;
-        const effectiveBudget =
-          state.side === "buy"
-            ? venueConfig.effectiveBuyBudget(usdAmount, {
-                feeRateBps: sizingFeeBps,
-                approxPrice: bestAskPrice,
-              })
-            : usdAmount;
-
-        const result = marketOrderHandler.calculateContractsForMarketOrder(
-          effectiveBudget,
-          orderbookWalkPosition,
-          state.side
-        );
-        const contracts = venueConfig.requiresWholeShares
-          ? Math.floor(result.contracts)
-          : result.contracts;
-
-        if (state.side === "buy") {
-          const spent = effectiveBudget - result.remainingUsd;
-          const avgPrice = contracts > 0 ? spent / contracts : 0;
-          const tradingFee = venueConfig.estimateFee({
-            contracts,
-            price: avgPrice,
-            side: "buy",
-            feeRateBps: sizingFeeBps,
-          });
-          const estimatedCost = spent + tradingFee;
-
-          return {
-            calculatedContracts: contracts,
-            remainingUsd: result.remainingUsd,
-            spent,
-            tradingFee,
-            estimatedCost,
-            grossReceive: null,
-            sellTradingFee: null,
-            netReceive: null,
-          };
-        }
-
-        const grossReceive = result.remainingUsd;
-        const avgSellPrice = contracts > 0 ? grossReceive / contracts : 0;
-        const sellTradingFee = venueConfig.estimateFee({
-          contracts,
-          price: avgSellPrice,
-          side: "sell",
-          feeRateBps: sizingFeeBps,
-        });
-        const netReceive = grossReceive - sellTradingFee;
-
-        return {
-          calculatedContracts: contracts,
-          remainingUsd: result.remainingUsd,
-          spent: null,
-          tradingFee: null,
-          estimatedCost: null,
-          grossReceive,
-          sellTradingFee,
-          netReceive,
-        };
-      }
-    }
-    return {
-      calculatedContracts: null,
-      remainingUsd: null,
-      spent: null,
-      tradingFee: null,
-      estimatedCost: null,
-      grossReceive: null,
-      sellTradingFee: null,
-      netReceive: null,
-    };
-  }, [
-    state.tradingVenue,
-    state.amount,
-    state.selectedPosition,
-    state.orderType,
-    state.side,
+  const bookPreview = useCalculatedMarketOrderData({
+    orderType: state.orderType,
+    amount: state.amount,
+    selectedPosition: state.selectedPosition,
+    side: state.side,
+    tradingVenue: state.tradingVenue,
     effectiveOrderbook,
     marketOrderHandler,
     orderbookWalkPosition,
-    venueConfig,
-    predictMarketDetail?.feeRateBps,
-  ]);
+    predictFunFeeRateBps: predictMarketDetail?.feeRateBps,
+  });
 
-  // Note: calculatedMarketOrderData is passed directly to UI component, no need for useEffect
+  const {
+    ensurePredictApprovalsForTrade,
+    ensureLevelUpApprovalsForTrade,
+    ensurePolymarketApprovalsForTrade,
+    ensureLimitlessApprovalsForTrade,
+    ensureDflowProofVerifiedForTrade,
+  } = useTradeBoxVenueApprovals({
+    checkApproval,
+    approveToken,
+    predictApprovalsQuery,
+    predictSession,
+    predictMarketDetail: predictMarketDetail ?? undefined,
+    queryClient,
+    venueAddressChainMap: accountData.venueAddressChainMap,
+    walletGate: accountData.walletGate,
+    polyAccount: accountData.polyAccount,
+    relay,
+    account,
+    signerAddress,
+    fundEvmForPrivy,
+    getLimitlessTxClientForAddress,
+    collateralTokens,
+    limitlessEnsureQuery,
+    dflowProof,
+    handleStartDflowProofForTrade,
+  });
 
-  const ensurePredictApprovalsForTrade = useCallback(async () => {
-    if (predictApprovalsQuery.data === true) return;
-    await predictSession.setApprovals({
-      isNegRisk: predictMarketDetail?.isNegRisk ?? false,
-      isYieldBearing: predictMarketDetail?.isYieldBearing ?? false,
-    });
-    await queryClient.invalidateQueries({ queryKey: ["predict-approvals"] });
-    const refreshed = await predictApprovalsQuery.refetch();
-    if (!refreshed.data) {
-      throw new Error(userMessage(TRADE_PREDICT_APPROVALS_INCOMPLETE));
-    }
-  }, [predictApprovalsQuery, predictSession, predictMarketDetail, queryClient]);
-
-  const ensureLevelUpApprovalsForTrade = useCallback(async () => {
-    let ok = await checkApproval();
-    if (ok) return;
-    await approveToken();
-    ok = await checkApproval();
-    if (!ok) {
-      throw new Error(userMessage(TRADE_LEVELUP_APPROVALS_INCOMPLETE));
-    }
-  }, [checkApproval, approveToken]);
-
-  /**
-   * Polymarket approval gate for the trade hot path.
-   *
-   * Fast path (default): trust the persisted venue-state flags from the
-   * polymarket-account query. Onboarding's relay batch sets all approvals at
-   * once and `verify-on-chain` flips the booleans, so once a user is fully
-   * onboarded every subsequent trade can skip the on-chain
-   * `checkPolymarketApprovals` multicall entirely (~150-300ms saved per
-   * trade). Pass `{ force: true }` to bypass the fast path — the SOR leg
-   * executor's order-error recovery branch uses this to repair an
-   * externally-revoked allowance.
-   *
-   * `onApprovalWorkStart` is fired by the callback **only** right before
-   * `executePolymarketApprovalBatch` actually submits the relay batch. The
-   * SOR executor uses it to flip the trade-button label to "Approving
-   * trades..." just for that window — so the common fast-path case never
-   * shows an "Approving" flash when no approvals are running.
-   */
-  const ensurePolymarketApprovalsForTrade = useCallback(
-    async (opts?: {
-      force?: boolean;
-      onApprovalWorkStart?: () => void;
-    }) => {
-      const safe = funding.polymarketSafe;
-      if (!safe) {
-        throw new Error(userMessage(TRADE_POLY_SAFE_NOT_PROVISIONED));
-      }
-
-      const force = opts?.force === true;
-      if (!force) {
-        const state = funding.polymarketAccount?.polymarketAccount;
-        const flagsAllSet =
-          !!state &&
-          state.safeDeployed === true &&
-          state.usdcApprovalComplete === true &&
-          state.ctfApprovalComplete === true &&
-          state.collateralOnrampUsdceApprovalComplete === true &&
-          state.collateralOfframpPusdApprovalComplete === true;
-        if (flagsAllSet) return;
-      }
-
-      const { checkPolymarketApprovals } = await import(
-        "@/trading/polymarket/approvalTxs"
-      );
-      const status = await checkPolymarketApprovals(safe);
-      if (status.allApproved) return;
-
-      const client = await relay.getRelayClient();
-      if (!client) {
-        throw new Error(userMessage(TRADE_POLY_RELAYER_UNAVAILABLE));
-      }
-      const { executePolymarketApprovalBatch } = await import(
-        "@/trading/polymarket/safeActions"
-      );
-      opts?.onApprovalWorkStart?.();
-      await executePolymarketApprovalBatch(client, safe);
-
-      const recheck = await checkPolymarketApprovals(safe);
-      if (!recheck.allApproved) {
-        throw new Error(userMessage(TRADE_POLY_APPROVALS_INCOMPLETE));
-      }
-
-      // Refresh the polymarket-account query so the next trade's fast path
-      // sees the freshly-set on-chain allowances reflected in the persisted
-      // flags. Best-effort — the recovery path is rare (external revoke) and
-      // we already re-approved on-chain, so failure here doesn't block.
-      // `verifyOnChain.onSuccess` already invalidates the polymarket-account
-      // query, so a separate invalidate is only needed if the mutation
-      // itself fails.
-      try {
-        await funding.verifyOnChain.mutateAsync({});
-      } catch (e) {
-        console.warn(
-          "[Polymarket] verify-on-chain after approval recovery failed",
-          e,
-        );
-        await queryClient.invalidateQueries({
-          queryKey: tradingQueryKeys.polymarketAccount,
-        });
-      }
-    },
-    [
-      funding.polymarketSafe,
-      funding.polymarketAccount,
-      funding.verifyOnChain,
-      queryClient,
-      relay,
-    ],
-  );
-
-  /**
-   * Just-in-time Limitless: `verify-allowance`, then on-chain approvals by side
-   * (buy: USDC only; sell: CTF only), one `sendTransaction` + receipt per call,
-   * partner USDC re-check for buys, then refetch `ensure-account` for gate state.
-   */
-  const ensureLimitlessApprovalsForTrade = useCallback(
-    async (ctx: {
-      marketSlug: string;
-      limitlessOrderTokenId?: string;
-      side: "buy" | "sell";
-      getClientForChain: (opts: {
-        id: number;
-      }) => Promise<SendTransactionCapable | null | undefined>;
-    }) => {
-      const lxJit = "[Limitless/JIT]";
-      const slug = ctx.marketSlug.trim();
-      const orderTokenId = ctx.limitlessOrderTokenId?.trim();
-      const verifyOpts = orderTokenId ? { tokenId: orderTokenId } : undefined;
-      /** Venue slug used for partner allowance + market fetch (may differ from route slug for NegRisk). */
-      let effectiveVenueSlug = slug;
-      if (!slug) {
-        throw new Error(userMessage(TRADE_LIMITLESS_SLUG_MISSING));
-      }
-      console.info(lxJit, "start", {
-        routeSlug: slug,
-        effectiveVenueSlug,
-        side: ctx.side,
-        tokenIdSent: Boolean(orderTokenId),
-      });
-      const ensureData = limitlessEnsureQuery.data;
-      const makerFromEnsure =
-        ensureData &&
-        typeof ensureData === "object" &&
-        (ensureData as { limitlessAccount?: { makerAddress?: string } }).limitlessAccount
-          ?.makerAddress?.trim();
-      const makerFromOverview = funding.limitlessMakerBase?.trim();
-      const venueMaker =
-        (makerFromEnsure && makerFromEnsure.length > 0
-          ? makerFromEnsure
-          : makerFromOverview && makerFromOverview.length > 0
-            ? makerFromOverview
-            : "") ?? "";
-      if (!venueMaker) {
-        throw new Error(userMessage(TRADE_LIMITLESS_MAKER_MISSING));
-      }
-      const fundTarget = fundEvmForPrivy?.trim() ?? "";
-      const {
-        effectiveMaker: maker,
-        isDelegatedServerWalletSubAccount,
-      } = classifyLimitlessClientMaker({
-        venueMakerFromApi: venueMaker,
-        fundTarget,
-        signerAddress,
-        account,
-        embeddedEoa: funding.embeddedEoa,
-      });
-      if (
-        import.meta.env.DEV &&
-        venueMaker.trim().toLowerCase() !== maker.trim().toLowerCase()
-      ) {
-        console.warn(lxJit, "effective maker differs from venue API (stale row — align POST ensure-account)", {
-          venueMaker: `${venueMaker.slice(0, 10)}…`,
-          effectiveMaker: `${maker.slice(0, 10)}…`,
-        });
-      }
-
-      /** User’s Privy Base funding identity (SCW or EOA) — for logs / sweeps; on-chain Limitless approvals use `maker`. */
-      const userBaseFunding = fundTarget;
-      const clipAddr = (addr: string) => {
-        const t = addr.trim();
-        if (t.length <= 22) return t;
-        return `${t.slice(0, 10)}…${t.slice(-6)}`;
-      };
-      console.info(lxJit, "phase", {
-        step: "verify_allowance",
-        routeSlug: slug,
-        effectiveVenueSlug,
-        venueMaker: `${venueMaker.slice(0, 10)}…`,
-        effectiveMaker: `${maker.slice(0, 10)}…`,
-        userBaseFunding: userBaseFunding
-          ? `${userBaseFunding.slice(0, 10)}…`
-          : "(none)",
-        note: "USDC/CTF approvals are sent as Limitless maker (embedded when SCW is fund target)",
-      });
-      let allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
-      effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
-      console.info(lxJit, "phase", {
-        step: "verify_allowance_done",
-        routeSlug: slug,
-        effectiveVenueSlug,
-        effectiveMarketSlug: allowance.effectiveMarketSlug,
-        declaredMarketSlug: allowance.declaredMarketSlug,
-        hasMinimumAllowance: allowance.hasMinimumAllowance,
-        spender: `${allowance.spender.slice(0, 12)}…`,
-        partnerAllowanceOwnerId: allowance.partnerAllowanceOwnerId,
-        limitlessPartnerAllowanceType: allowance.limitlessPartnerAllowanceType,
-        venueAdapterPresent:
-          typeof allowance.venueAdapter === "string" &&
-          allowance.venueAdapter.trim() !== "",
-        ctfAddressFromApi:
-          typeof allowance.ctfAddress === "string" && allowance.ctfAddress.trim() !== "",
-        limitlessCheckedAddress:
-          typeof allowance.limitlessCheckedAddress === "string"
-            ? clipAddr(allowance.limitlessCheckedAddress)
-            : undefined,
-      });
-
-      /**
-       * Buys: trust on-chain USDC allowance reads, not partner `hasMinimumAllowance`
-       * (server sets that flag optimistically). Sells use CTF reads when needed.
-       */
-      const buyOnChainOk =
-        ctx.side === "buy" && !isDelegatedServerWalletSubAccount
-          ? await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-              maker,
-              verify: allowance,
-            })
-          : false;
-      const sellCtfReadsOk =
-        ctx.side === "sell" && !isDelegatedServerWalletSubAccount
-          ? await readLimitlessSellCtfApprovalsSufficientOnBase({
-              maker,
-              verify: allowance,
-            })
-          : false;
-      console.info(lxJit, "phase", {
-        step: "sub_account_mode",
-        routeSlug: slug,
-        effectiveVenueSlug,
-        isDelegatedServerWalletSubAccount,
-        buyOnChainOk: ctx.side === "buy" ? buyOnChainOk : undefined,
-        sellCtfReadsOk: ctx.side === "sell" ? sellCtfReadsOk : undefined,
-      });
-
-      console.info(lxJit, "phase", {
-        step: "on_chain_approvals_if_needed",
-        routeSlug: slug,
-        effectiveVenueSlug,
-      });
-      let didSendTransactions = false;
-      try {
-        if (isDelegatedServerWalletSubAccount) {
-          console.info(lxJit, "phase", {
-            step: "on_chain_approvals_skipped",
-            routeSlug: slug,
-            effectiveVenueSlug,
-            reason: "delegated_server_wallet_sub_account",
-            note: "Limitless provisions approvals on managed wallet; skip Privy Base JIT",
-          });
-        } else if (ctx.side === "buy" && buyOnChainOk) {
-          console.info(lxJit, "phase", {
-            step: "on_chain_approvals_skipped",
-            routeSlug: slug,
-            effectiveVenueSlug,
-            reason: "buy_usdc_on_chain_ok",
-          });
-        } else if (ctx.side === "sell" && sellCtfReadsOk) {
-          console.info(lxJit, "phase", {
-            step: "on_chain_approvals_skipped",
-            routeSlug: slug,
-            effectiveVenueSlug,
-            reason: "sell_ctf_on_chain_ok",
-          });
-        } else {
-          const r = await ensureLimitlessTradingApprovalsOnBase({
-            maker,
-            getTxClientForAddress: getLimitlessTxClientForAddress,
-            verify: allowance,
-            side: ctx.side,
-          });
-          didSendTransactions = r.didSendTransactions;
-        }
-      } catch (e) {
-        const m = e instanceof Error ? e.message : String(e);
-        console.error(lxJit, "blocked at on_chain_approvals", {
-          routeSlug: slug,
-          effectiveVenueSlug,
-          message: m,
-        });
-        throw e;
-      }
-      console.info(lxJit, "phase", {
-        step: "on_chain_approvals_done",
-        routeSlug: slug,
-        effectiveVenueSlug,
-      });
-
-      if (isDelegatedServerWalletSubAccount && ctx.side === "buy") {
-        const fresh = await collateralTokens.refetch();
-        const makerUsd =
-          typeof fresh?.limitlessMakerBase === "number" &&
-          Number.isFinite(fresh.limitlessMakerBase)
-            ? Math.max(0, fresh.limitlessMakerBase)
-            : 0;
-        if (!Number.isFinite(makerUsd) || makerUsd < 0.01) {
-          throw new Error(userMessage(TRADE_LIMITLESS_USDC_FUNDS));
-        }
-      }
-
-      if (ctx.side === "buy" && didSendTransactions && !isDelegatedServerWalletSubAccount) {
-        console.info(lxJit, "phase", {
-          step: "buy_usdc_on_chain_recheck",
-          routeSlug: slug,
-          effectiveVenueSlug,
-          didSendTransactions,
-        });
-        allowance = await privateApi.postLimitlessVerifyAllowance(slug, verifyOpts);
-        effectiveVenueSlug = allowance.marketSlug?.trim() || effectiveVenueSlug;
-        let buyOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-          maker,
-          verify: allowance,
-        });
-        if (!buyOk) {
-          await new Promise((r) => setTimeout(r, 2000));
-          buyOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-            maker,
-            verify: allowance,
-          });
-        }
-        if (!buyOk) {
-          const detail = [
-            `maker=${clipAddr(maker)}`,
-            `userBaseFunding=${clipAddr(userBaseFunding || "(none)")}`,
-            `spender=${clipAddr(allowance.spender)}`,
-          ];
-          console.error(lxJit, "blocked after buy USDC on-chain recheck", {
-            routeSlug: slug,
-            effectiveVenueSlug,
-            detail,
-          });
-          throw new Error(userMessage(TRADE_LIMITLESS_USDC_ALLOWANCE));
-        }
-        console.info(lxJit, "buy USDC on-chain OK", { routeSlug: slug, effectiveVenueSlug });
-      }
-      console.info(lxJit, "phase", {
-        step: "ensure_account_refetch",
-        routeSlug: slug,
-        effectiveVenueSlug,
-        willRefetch: didSendTransactions,
-      });
-      let gatePayload: unknown =
-        limitlessEnsureQuery.data ?? null;
-      if (didSendTransactions) {
-        const refetchResult = await limitlessEnsureQuery.refetch();
-        gatePayload =
-          (refetchResult != null && typeof refetchResult === "object"
-            ? (refetchResult as { data?: unknown }).data
-            : undefined) ??
-          limitlessEnsureQuery.data ??
-          null;
-      }
-      const gate = getLimitlessEnsureTradeGate(gatePayload);
-      console.info(lxJit, "phase", {
-        step: "trade_gate",
-        routeSlug: slug,
-        effectiveVenueSlug,
-        ready: gate.ready,
-        notReadyCode: gate.notReadyCode,
-        blockedReason: gate.blockedReason,
-      });
-      if (!gate.ready) {
-        const msg =
-          gate.blockedReason?.trim() ||
-          (gate.notReadyCode != null
-            ? `Limitless not ready (${gate.notReadyCode})`
-            : "Limitless not ready.");
-        console.error(lxJit, "blocked at trade_gate", {
-          routeSlug: slug,
-          effectiveVenueSlug,
-          msg,
-        });
-        {
-          const gateMsg = formatLimitlessDelegatedOrderError(msg);
-          throw new Error(
-            gateMsg.length > 0
-              ? gateMsg
-              : userMessage(TRADE_LIMITLESS_NOT_READY),
-          );
-        }
-      }
-      console.info(lxJit, "complete", {
-        routeSlug: slug,
-        effectiveVenueSlug,
-        side: ctx.side,
-      });
-    },
-    [
-      account,
-      signerAddress,
-      getLimitlessTxClientForAddress,
-      fundEvmForPrivy,
-      funding.limitlessMakerBase,
-      funding.embeddedEoa,
-      collateralTokens,
-      limitlessEnsureQuery,
-      privateApi,
-    ],
-  );
-
-  /**
-   * Just-in-time DFlow/Proof KYC refresh. KYC remains the one SOR-level
-   * blocker for DFlow, but we re-fetch on the click so a user who verified
-   * mid-session isn't falsely rejected from a stale cache. If the refresh
-   * confirms unverified, we launch the Proof redirect to route the user
-   * into verification instead of silently rejecting them.
-   */
-  const ensureDflowProofVerifiedForTrade = useCallback(async (): Promise<boolean> => {
-    const verified = await dflowProof.refetchIsVerified();
-    if (!verified) {
-      try {
-        await handleStartDflowProofForTrade();
-      } catch {
-        /* best-effort: do not mask the original "unverified" error */
-      }
-    }
-    return verified;
-  }, [dflowProof, handleStartDflowProofForTrade]);
-
-  // DEPRECATED: All single-market and multi-market trades now flow through
-  // `handleSorExecute`, which first runs LI.FI prefunding via the SOR execution
-  // pipeline and then signs the venue order. This stub only exists so the
-  // `onTrade` prop wiring on the UI components keeps its non-optional signature
-  // while the last legacy callers are removed. It MUST stay a no-op — kicking
-  // off a venue order directly here would bypass the unified LI.FI prefund and
-  // land us back in "Insufficient collateral" territory.
-  const handleTrade = useCallback(async () => {
-    if (import.meta.env.DEV) {
-      console.warn(
-        "[handleTrade] deprecated entrypoint invoked — single-market trades must dispatch via handleSorExecute",
-      );
-    }
-    if (state.tradingVenue === "all") {
-      return;
-    }
-
-  }, [state.tradingVenue]);
-
-  // Whether the DFlow market was uninitialized at the moment Submit was
-  // pressed. The DFlow `/order` endpoint silently injects market tokenization
-  // when needed, so first-mint trades take longer than a normal swap. Snapshot
-  // the flag at submit so a fast post-trade umbrella refresh that flips
-  // `accountsInitialized*` to `true` doesn't hide the notice immediately.
-  const [dflowUninitAtSubmit, setDflowUninitAtSubmit] = useState(false);
-
-  /**
-   * First-mint DFlow nudge: when a trade tokenizes a Kalshi market for the
-   * first time, the freshly-minted YES/NO mints + `accountsInitialized*` flags
-   * only land in `exchangeMatching.dflow` after the predictions-API cron
-   * re-scrapes DFlow (~5 min). Until then the umbrella has no token ids and
-   * the user's balance can't be located. We re-call the same `fetchMappings`
-   * that the cron uses (exposed as `sendGetState`) on a short backoff so the
-   * umbrella picks up the new mints as soon as the server has them — without
-   * introducing any new endpoint or replacing the existing refresh path.
-   *
-   * Schedule deliberately overlaps the typical first-mint settlement window
-   * (~30-90s). Extra calls past convergence are harmless: each one is the
-   * exact same GET the cron fires every 5 minutes anyway.
-   */
-  const DFLOW_FIRST_MINT_REFRESH_DELAYS_MS = useMemo(
-    () => [0, 5_000, 15_000, 30_000, 60_000, 120_000],
-    [],
-  );
-  const dflowFirstMintRefreshTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-  const cancelDflowFirstMintRefresh = useCallback(() => {
-    for (const t of dflowFirstMintRefreshTimersRef.current) {
-      clearTimeout(t);
-    }
-    dflowFirstMintRefreshTimersRef.current = [];
-  }, []);
-  const scheduleDflowFirstMintRefresh = useCallback(() => {
-    cancelDflowFirstMintRefresh();
-    for (const delay of DFLOW_FIRST_MINT_REFRESH_DELAYS_MS) {
-      const handle = setTimeout(() => {
-        refetchMatchedMarkets();
-      }, delay);
-      dflowFirstMintRefreshTimersRef.current.push(handle);
-    }
-  }, [
-    DFLOW_FIRST_MINT_REFRESH_DELAYS_MS,
-    cancelDflowFirstMintRefresh,
-    refetchMatchedMarkets,
-  ]);
-  useEffect(() => () => cancelDflowFirstMintRefresh(), [cancelDflowFirstMintRefresh]);
-
-  /**
-   * Auto-dismiss the order result. Default 4s; extended to 12s when the Kalshi
-   * market-init notice is shown so the user can read it.
-   */
-  useEffect(() => {
-    if (!state.orderResult) return;
-    const dismissAfterMs = dflowUninitAtSubmit ? 12_000 : 4_000;
-    const timer = setTimeout(() => {
-      setState((prev) => ({ ...prev, orderResult: null }));
-      setDflowUninitAtSubmit(false);
-    }, dismissAfterMs);
-    return () => clearTimeout(timer);
-  }, [state.orderResult, dflowUninitAtSubmit]);
-
-  /**
-   * Same toast on umbrella page and home inline dock (`ToastContainer` in AppRoutes).
-   *
-   * Dismissal is enforced two ways: (1) `autoClose: TOAST_AUTO_CLOSE_TIME` on the
-   * toast, and (2) a hard `toast.dismiss(toastId)` scheduled `TOAST_AUTO_CLOSE_TIME`
-   * later. The hard dismiss is a belt-and-suspenders guarantee — if anything (a
-   * re-render, a duplicate `setState` from the SOR effect, a frozen animation
-   * timer) keeps the toast around past its autoClose, this still yanks it.
-   */
-  const orderResultToastSigRef = useRef<string | null>(null);
-  const orderResultToastDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!state.orderResult) {
-      orderResultToastSigRef.current = null;
-      return;
-    }
-    const r = state.orderResult;
-    const sig = [
-      r.success ? "ok" : "fail",
-      r.error ?? "",
-      r.transactionHash ?? "",
-      r.orderId ?? "",
-    ].join("|");
-    if (orderResultToastSigRef.current === sig) {
-      return;
-    }
-    orderResultToastSigRef.current = sig;
-
-    const toastId = r.success
-      ? "prediction-trade-result-ok"
-      : "prediction-trade-result-fail";
-
-    toast.dismiss();
-
-    const toastOpts = {
-      toastId,
-      autoClose: TOAST_AUTO_CLOSE_TIME,
-      pauseOnHover: false,
-      pauseOnFocusLoss: false,
-      closeOnClick: true,
-    } as const;
-
-    if (r.success) {
-      toast.success("Order confirmed!", toastOpts);
-    } else {
-      toast.error(
-        r.error?.trim() ||
-          "Order could not be completed. Check your wallet and try again.",
-        toastOpts,
-      );
-    }
-
-    if (orderResultToastDismissTimerRef.current) {
-      clearTimeout(orderResultToastDismissTimerRef.current);
-    }
-    orderResultToastDismissTimerRef.current = setTimeout(() => {
-      toast.dismiss(toastId);
-      orderResultToastDismissTimerRef.current = null;
-    }, TOAST_AUTO_CLOSE_TIME);
-  }, [state.orderResult]);
-
-  useEffect(() => {
-    return () => {
-      if (orderResultToastDismissTimerRef.current) {
-        clearTimeout(orderResultToastDismissTimerRef.current);
-        orderResultToastDismissTimerRef.current = null;
-      }
-      toast.dismiss("prediction-trade-result-ok");
-      toast.dismiss("prediction-trade-result-fail");
-    };
-  }, []);
+  useTradeBoxOrderResultToasts(state.orderResult);
 
   // Expose methods for testing via ref
   useImperativeHandle(ref, () => ({
@@ -1942,11 +695,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
 
   const limitlessMakerCashForSor = collateralTokens.limitlessMakerUsdc;
 
-  // SOR execution wiring: executor callbacks + multi-chain wallet balances
-  const sorReportExecutionPhaseRef = useRef<
-    ((phase: SorExecutionPhase) => void) | undefined
-  >(undefined);
-
   const getLimitlessOwnerId = useCallback(() => {
     const raw = limitlessEnsureQuery.data;
     if (!raw || typeof raw !== "object") return undefined;
@@ -1963,45 +711,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
   }, [limitlessEnsureQuery.data]);
 
   const getLimitlessMakerAddress = useCallback(() => {
-    let venueMaker: string | undefined;
-    const raw = limitlessEnsureQuery.data;
-    if (raw && typeof raw === "object") {
-      const o = raw as Record<string, unknown>;
-      const inner =
-        o.data != null && typeof o.data === "object"
-          ? (o.data as Record<string, unknown>)
-          : o;
-      const la = inner.limitlessAccount;
-      if (la && typeof la === "object") {
-        const m = (la as Record<string, unknown>).makerAddress;
-        if (typeof m === "string" && m.trim()) venueMaker = m.trim();
-      }
-    }
-    if (!venueMaker?.trim()) {
-      venueMaker = funding.limitlessMakerBase?.trim() || undefined;
-    }
-    if (!venueMaker?.trim()) return undefined;
-    try {
-      const fundTarget = fundEvmForPrivy?.trim() ?? "";
-      const { effectiveMaker } = classifyLimitlessClientMaker({
-        venueMakerFromApi: venueMaker,
-        fundTarget,
-        signerAddress,
-        account,
-        embeddedEoa: funding.embeddedEoa,
-      });
-      return effectiveMaker;
-    } catch {
-      return venueMaker.trim();
-    }
-  }, [
-    limitlessEnsureQuery.data,
-    funding.limitlessMakerBase,
-    fundEvmForPrivy,
-    funding.embeddedEoa,
-    account,
-    signerAddress,
-  ]);
+    return venueAddressChainMap?.limitless.walletAddress ?? undefined;
+  }, [venueAddressChainMap]);
 
   const buildLimitlessSignedOrderFromMarketCb = useCallback(
     (input: BuildLimitlessSorOrderInput) => {
@@ -2019,7 +730,7 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     [privateApi, signer],
   );
 
-  const sorExecutor = useSorLegExecutor({
+  const sorLegExecutorDeps: UseSorLegExecutorDeps = {
     tradeExecutionService,
     polyClob,
     predictSession,
@@ -2031,13 +742,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     predictMarketDetail,
     account,
     getClientForChain,
-    fundingAddresses: {
-      baseSmartWallet: fundEvmForPrivy,
-      limitlessMakerBase: funding.limitlessMakerBase,
-      polymarketSafe: funding.polymarketSafe,
-      embeddedEoa: funding.embeddedEoa,
-      solanaAddress: funding.solanaAddress,
-    },
+    fundingAddresses: sorExecutorWalletRoles(accountData),
+    venueAddressChainMap,
     solanaSigner,
     getRelayClient: relay.getRelayClient,
     dflowProofVerified: dflowProof.isVerified,
@@ -2048,765 +754,123 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
     ensurePolymarketApprovals: ensurePolymarketApprovalsForTrade,
     ensureLimitlessApprovals: ensureLimitlessApprovalsForTrade,
     ensureDflowProofVerified: ensureDflowProofVerifiedForTrade,
-    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
     getLimitlessOwnerId,
     getLimitlessMakerAddress,
     buildLimitlessSignedOrderFromMarket: buildLimitlessSignedOrderFromMarketCb,
+  };
+
+  const ctrl = useTradeBoxController({
+    state,
+    setState,
+    market,
+    bookPreview,
+    dflowLink,
+    venueAddressChainMap: accountData.venueAddressChainMap,
+    walletGate: accountData.walletGate,
+    collateralTokens,
+    limitlessMakerCashForSor,
+    predictFunFeeRateBps: predictMarketDetail?.feeRateBps,
+    tradeBoxShareBalances,
+    sorLegExecutorDeps,
+    fundingGate,
+    matchedMonitor,
+    handleTradingVenueChange,
+    matchedVenues,
+    pandaId,
+    venueOverride,
+    multiVenueEnabled,
+    propUmbrellaId,
+    account,
+    refetchMatchedMarkets: refetchMatchedMarkets,
+    handleSorExecuteRef,
+    accountData,
+    predictPostTradeWallet,
+    predictShareIdentityCtx,
+    yesBalance,
+    noBalance,
+    getTokenBalance,
+    refreshTokenPositions,
+    refreshOrders,
+    tradeButton: {
+      authenticated,
+      account,
+      fundingGate,
+      state,
+      login,
+      marketOrderHandler,
+      usdcBalance,
+      yesBalance,
+      noBalance,
+      checkSufficientBalance,
+      checkSufficientShares,
+      market,
+      handleAddFunds,
+      polymarketTrading,
+      orderbookWalkPosition,
+      predictTrading,
+      limitlessTrading,
+      dflowProofVerified: dflowProof.isVerified,
+      dflowProofLoading: dflowProof.isLoading,
+      dflowStartProofFlow: handleStartDflowProofForTrade,
+      sorMatchedVenues: matchedVenues,
+      executionGateBlocked: executionGate.blocked,
+      propUmbrellaId,
+      tradeBoxShareBalancesSellTotal: tradeBoxShareBalances.sellTotalShares,
+      tradeBoxShareBalancesLoading: tradeBoxShareBalances.loading,
+    },
   });
 
-  const sorExecution = useSorExecution({
-    executeLeg: sorExecutor.executeLeg,
-    executeBridge: sorExecutor.executeBridge,
-    reportExecutionPhaseRef: sorReportExecutionPhaseRef,
-  });
+  const {
+    tradeQuote,
+    sorRoute,
+    sorExecution,
+    sorRouteExpired,
+    handleSorExecute,
+    debouncedSorRoutePreviewAllowed,
+    smartRoutingMarketKey,
+    dflowOrderQuoteForSentinel,
+    maxScopedSellShares,
+    handleTradingVenueChangeGuarded,
+    venueSelectionLockedRef,
+    buttonStateForUi,
+    sharesLoadingForActiveTab,
+    dflowUninitAtSubmit,
+  } = ctrl;
 
-  /**
-   * Single source with `CollateralTokenContext` — do not use `useBridgeFundingBalances`
-   * gated on `multiVenueEnabled` here. Predict (and other single-tab) flows still need
-   * Polygon / BNB / Solana rows for SOR + Li.FI prefund when Base USDC is low.
-   */
-  const sorWalletBalances: ChainBalance[] = useMemo(
-    () =>
-      buildChainBalances({
-        baseUsdcBalance: collateralTokens.baseUsdc,
-        baseWalletAddress: fundEvmForPrivy?.trim() ?? "",
-        limitlessMakerUsdcBalance: Math.max(0, limitlessMakerCashForSor ?? 0),
-        limitlessMakerWalletAddress: funding.limitlessMakerBase ?? "",
-        polygonUsdcBalance: collateralTokens.polygonStable,
-        polygonWalletAddress: funding.polymarketSafe,
-        solanaUsdcBalance: collateralTokens.solanaUsdc,
-        solanaWalletAddress: funding.solanaAddress,
-        bnbUsdtBalance: collateralTokens.bscUsdt,
-        bnbWalletAddress: funding.embeddedEoa,
-        /** SOR API expects per-chain rows when addresses exist, not only chains with positive balance. */
-        includeZeroBalanceChainsWithAddress: true,
-      }),
+  const onSideChangeWrapper = useCallback(
+    (side: "buy" | "sell") => {
+      handleSideChange(side);
+      if (
+        side === "sell" &&
+        smartRoutingSurfaceActive &&
+        !venueSelectionLockedRef.current
+      ) {
+        handleTradingVenueChange("all");
+      }
+      onSideChangeCallback?.(side);
+    },
     [
-      collateralTokens.baseUsdc,
-      collateralTokens.polygonStable,
-      collateralTokens.solanaUsdc,
-      collateralTokens.bscUsdt,
-      fundEvmForPrivy,
-      funding.polymarketSafe,
-      funding.solanaAddress,
-      funding.embeddedEoa,
-      funding.limitlessMakerBase,
-      limitlessMakerCashForSor,
+      handleSideChange,
+      smartRoutingSurfaceActive,
+      handleTradingVenueChange,
+      onSideChangeCallback,
+      venueSelectionLockedRef,
     ],
   );
 
-  // --- SOR sell: per-venue share positions ---
-  // Single source of truth = `tradeBoxShareBalances.allMarketsOutcomeVenueShares`
-  // (same as MyPositionsRow / smart-routing sell breakdown).
-  //
-  // Do not mix in `useYesNoBalances` here: it keys off `market._id` only, while
-  // UserData token balances may live under `questionId`. That drift dropped LevelUp
-  // from `sorVenuePositions` (0 YES/NO from the hook) while Kalshi still showed from
-  // venue portfolios — `maxScopedSellShares` looked like "Kalshi only" (e.g. 5) and
-  // the sell input clamped there even though LevelUp + Kalshi = 9.
-  const sorVenuePositions: VenuePositionEntry[] = useMemo(() => {
-    if (!state.selectedPosition) return [];
-    const byOutcome = tradeBoxShareBalances.allMarketsOutcomeVenueShares;
-    const sideMap =
-      state.selectedPosition === "yes" ? byOutcome.yes : byOutcome.no;
-
-    const entries: VenuePositionEntry[] = [];
-    for (const venue of SOR_VENUE_POSITION_KEYS) {
-      const sh = sideMap[venue];
-      if (typeof sh === "number" && Number.isFinite(sh) && sh > 0) {
-        entries.push({ venue, shares: sh });
-      }
-    }
-    return entries;
-  }, [state.selectedPosition, tradeBoxShareBalances.allMarketsOutcomeVenueShares]);
-
-  /** Sell routing + button state: single-venue tabs only include that venue’s shares. */
-  const sorVenuePositionsForActiveTab = useMemo(() => {
-    if (state.tradingVenue === "all") return sorVenuePositions;
-    return sorVenuePositions.filter((e) => e.venue === state.tradingVenue);
-  }, [sorVenuePositions, state.tradingVenue]);
-
-  const maxScopedSellShares = useMemo(
-    () =>
-      sorVenuePositionsForActiveTab.reduce((sum, p) => sum + (p.shares > 0 ? p.shares : 0), 0),
-    [sorVenuePositionsForActiveTab],
-  );
-
   /**
-   * Pooled stable for SOR buy gates + deposit CTA — `sorWalletBalances` includes Base SCW
-   * and Limitless maker rows plus other funding chains.
-   * Prefund / Li.FI moves funds before signing; the gate must not pretend off-Base stables do not exist.
+   * Auto-dismiss the order result. Default 4s; extended to 12s when the Kalshi
+   * market-init notice is shown so the user can read it.
    */
-  const totalAvailableCash = useMemo(
-    () =>
-      sorWalletBalances.reduce((sum, b) => sum + b.balance, 0),
-    [sorWalletBalances],
-  );
-
-  // --- SOR route computation + execution (active for ALL venues, not just "all") ---
-  const sorLimitPriceCents: number | undefined =
-    state.orderType === "limit" ? parseLimitPriceCents(state.price) : undefined;
-
-  // For market orders the amount field is USD. For limit orders the amount
-  // field is shares and the price field is cents — SOR always expects USD, so
-  // convert limit amounts to USD notional (shares * price).
-  //
-  // Sell-all clamp (market and limit): when the user types within
-  // SHARE_SELL_COMPARE_EPS (0.01 share) of scoped holdings for the active tab,
-  // substitute the exact held total before SOR. MyPositions / hints show
-  // shares floored to 2 dp, so the typed cap is often slightly below on-chain
-  // precision; this closes the gap for Limitless, Predict, Polymarket, etc.
-  const sorAmountUsd = (() => {
-    const raw = parseFloat(state.amount);
-    if (!Number.isFinite(raw) || raw <= 0) return 0;
-    if (state.orderType === "limit") {
-      if (sorLimitPriceCents == null) return 0;
-      let sharesForNotional = raw;
-      if (
-        state.side === "sell" &&
-        maxScopedSellShares > 0 &&
-        Math.abs(raw - maxScopedSellShares) <= SHARE_SELL_COMPARE_EPS
-      ) {
-        sharesForNotional = maxScopedSellShares;
-      }
-      return sharesForNotional * (sorLimitPriceCents / 100);
-    }
-    if (
-      state.side === "sell" &&
-      maxScopedSellShares > 0 &&
-      Math.abs(raw - maxScopedSellShares) <= SHARE_SELL_COMPARE_EPS
-    ) {
-      return maxScopedSellShares;
-    }
-    return raw;
-  })();
-
-  // Respect the product-wide SOR floors so we never call the route API below
-  // a minimum — avoids stale/broken previews and keeps the button on the
-  // "Trade minimum is $2." / "$2 minimum limit order value." / "Minimum sell is
-  // 1 share." disabled state until the user types a valid amount.
-  const sorAmountMeetsFloor = (() => {
-    if (sorAmountUsd <= 0) return false;
-    if (state.orderType === "limit") {
-      return sorAmountUsd + 1e-9 >= SOR_MIN_LIMIT_ORDER_USD;
-    }
-    if (state.side === "buy") {
-      return sorAmountUsd + 1e-9 >= SOR_MIN_MARKET_BUY_USD;
-    }
-    // Market sell: `state.amount` is in shares.
-    const sharesIn = parseFloat(state.amount);
-    return (
-      Number.isFinite(sharesIn) && sharesIn + 1e-9 >= SOR_MIN_MARKET_SELL_SHARES
-    );
-  })();
-
-  const debouncedSorRoutePreviewAllowed = useDebouncedValue(
-    sorAmountMeetsFloor,
-    350,
-  );
-
-  /** Same identity as orderbook keys / umbrella pills (`marketId` fallback, not only `_id`). */
-  const smartRoutingMarketKey = useMemo(() => getMarketId(market).trim(), [market]);
-
-  const sorQuestionId = useMemo(
-    () => getMarketId(market) || undefined,
-    [market],
-  );
-
-  const sorRouteEnabled = !!state.selectedPosition
-    && sorAmountMeetsFloor
-    && (state.orderType !== "limit" ||
-      (state.tradingVenue !== "all" &&
-        state.tradingVenue !== "dflow" &&
-        sorLimitPriceCents != null))
-    && (state.side === "buy"
-      ? true
-      : sorVenuePositionsForActiveTab.length > 0);
-
-  const sorRouteOutcome: SorOutcome | undefined = state.selectedPosition
-    ? (state.selectedPosition === "yes" ? "A" : "B")
-    : undefined;
-
-  const sorTargetVenue = state.tradingVenue !== "all" ? state.tradingVenue : undefined;
-
-  const sorRoute = useSorRoute({
-    questionId: sorQuestionId,
-    outcome: sorRouteOutcome,
-    side: state.side,
-    amount: sorAmountUsd,
-    /**
-     * Per-chain balances for predictions SOR. When omitted or empty, the server still
-     * walks full books but sets `route.sufficientFunds === false` (execute blocked until
-     * balances cover legs and bridges). Prefer non-empty `buildChainBalances` rows.
-     */
-    walletBalances: sorWalletBalances.length > 0 ? sorWalletBalances : undefined,
-    ...(state.side === "buy" && Number.isFinite(limitlessMakerCashForSor)
-      ? { limitlessMakerBaseUsdc: Math.max(0, limitlessMakerCashForSor) }
-      : {}),
-    ...(state.side === "buy"
-      ? { limitlessFeeRateBps: LIMITLESS_DEFAULT_FEE_RATE_BPS }
-      : {}),
-    /**
-     * Sells: pass FULL position list (not the per-tab slice) so the omnibus channel can
-     * legitimately split across venues. The hook only adds `targetVenue` to the execution
-     * channel; the server filters per channel.
-     */
-    venuePositions: state.side === "sell" ? sorVenuePositions : undefined,
-    enabled: sorRouteEnabled,
-    polyFeeRate: 0.03,
-    predictFunFeeRateBps: predictMarketDetail?.feeRateBps,
-    targetVenue: sorTargetVenue,
-    orderType: state.orderType,
-    limitPriceCents: sorLimitPriceCents,
-    suspendBackgroundRefetch:
-      sorExecution.isExecuting || state.isLoading,
-  });
-
-  /**
-   * Resolved executable plan + status for the active tab:
-   * - "all" → omnibus (`displayRoute` / display channel).
-   * - specific venue → **only** the targeted `executionRoute` with legs. Never use omnibus here:
-   *   executing `displayRoute` while a venue tab is selected sent orders to the wrong venue.
-   */
-  const executableRoute = useMemo(() => {
-    if (state.tradingVenue === "all") {
-      return sorRoute.displayRoute;
-    }
-    const exec = sorRoute.executionRoute;
-    if (exec && exec.legs.length > 0) {
-      return exec;
-    }
-    return null;
-  }, [state.tradingVenue, sorRoute.displayRoute, sorRoute.executionRoute]);
-  const executableLoading =
-    state.tradingVenue === "all" ? sorRoute.displayLoading : sorRoute.executionLoading;
-  const executableStale =
-    state.tradingVenue === "all" ? sorRoute.displayStale : sorRoute.executionStale;
-  const executableError =
-    state.tradingVenue === "all" ? sorRoute.displayError : sorRoute.executionError;
-  const executableErrorCode =
-    state.tradingVenue === "all"
-      ? sorRoute.displayErrorCode
-      : sorRoute.executionErrorCode;
-
-  // Keep ref in sync so handleTrade (defined above) can access latest SOR data.
-  sorRouteRef.current = executableRoute;
-
-  const venueSelectionLocked =
-    sorExecution.isExecuting || state.isLoading;
-  venueSelectionLockedRef.current = venueSelectionLocked;
-
-  const handleTradingVenueChangeGuarded = useCallback(
-    (next: TradingVenue) => {
-      if (sorExecution.isExecuting || state.isLoading) return;
-      handleTradingVenueChange(next);
-    },
-    [sorExecution.isExecuting, state.isLoading, handleTradingVenueChange],
-  );
-
   useEffect(() => {
-    if (venueSelectionLocked) return;
-    const v = state.tradingVenue;
-    if (v === "all") return;
-    if (matchedVenues.has(v)) return;
-    handleTradingVenueChangeGuarded(pandaId ? "all" : "levelup");
-  }, [
-    venueSelectionLocked,
-    matchedVenues,
-    state.tradingVenue,
-    pandaId,
-    handleTradingVenueChangeGuarded,
-  ]);
+    if (!state.orderResult) return;
+    const dismissAfterMs = dflowUninitAtSubmit ? 12_000 : 4_000;
+    const timer = setTimeout(() => {
+      setState((prev) => ({ ...prev, orderResult: null }));
+    }, dismissAfterMs);
+    return () => clearTimeout(timer);
+  }, [state.orderResult, dflowUninitAtSubmit, setState]);
 
-  useEffect(() => {
-    if (venueSelectionLocked) return;
-    if (state.side !== "sell" || !propUmbrellaId || !account) return;
-    if (tradeBoxShareBalances.loading) return;
-    if (!(tradeBoxShareBalances.sellTotalShares > 0)) return;
-    if (maxScopedSellShares > 0) return;
-
-    if (multiVenueEnabled) {
-      handleTradingVenueChangeGuarded("all");
-      return;
-    }
-    const first = sorVenuePositions[0]?.venue;
-    if (first) {
-      handleTradingVenueChangeGuarded(first);
-    }
-  }, [
-    venueSelectionLocked,
-    state.side,
-    propUmbrellaId,
-    account,
-    tradeBoxShareBalances.loading,
-    tradeBoxShareBalances.sellTotalShares,
-    maxScopedSellShares,
-    multiVenueEnabled,
-    sorVenuePositions,
-    handleTradingVenueChangeGuarded,
-  ]);
-
-  const prevSmartRoutingMarketKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    const key = smartRoutingMarketKey;
-    if (!key) return;
-    const prev = prevSmartRoutingMarketKeyRef.current;
-    prevSmartRoutingMarketKeyRef.current = key;
-    if (prev !== null && prev !== key && state.side === "buy") {
-      sorExecution.resetExecution();
-      setState((s) => ({ ...s, orderResult: null }));
-    }
-  }, [
-    smartRoutingMarketKey,
-    state.side,
-    sorExecution.resetExecution,
-    setState,
-  ]);
-
-  const [sorRouteExpired, setSorRouteExpired] = useState(false);
-  useEffect(() => {
-    if (!executableRoute) { setSorRouteExpired(false); return; }
-    const check = () => {
-      if (executableRoute) {
-        setSorRouteExpired(Date.now() > executableRoute.expiresAt);
-      }
-    };
-    check();
-    const timer = setInterval(check, 1000);
-    return () => clearInterval(timer);
-  }, [executableRoute]);
-
-  useEffect(() => {
-    sorRouteExpiredRef.current = sorRouteExpired;
-  }, [sorRouteExpired]);
-
-  const latestBaselineRef = useRef<{
-    routeId: string;
-    baseline: PostTradeBaseline;
-    route: RoutePlan;
-  } | null>(null);
-  const preTradeSnapshotRef = useRef<AccountReconcileSnapshot | null>(null);
-
-  const handleSorExecute = useCallback(() => {
-    if (executableRoute && !sorRouteExpired) {
-      const tv = state.tradingVenue;
-      const legsMatchVenueTab =
-        tv === "all" ||
-        executableRoute.legs.every((l) => l.venue === tv);
-      if (!legsMatchVenueTab) {
-        console.error("[SOR] execute blocked: route legs do not match selected venue tab", {
-          tradingVenue: tv,
-          legVenues: executableRoute.legs.map((l) => l.venue),
-          routeId: executableRoute.routeId,
-        });
-        setState((prev) => ({
-          ...prev,
-          orderResult: {
-            success: false,
-            error:
-              "Venue mismatch — wait for the quote to refresh, then try again.",
-          },
-        }));
-        return;
-      }
-      console.debug("[SOR] Trade button → execute", executableRoute.routeId);
-      // Kalshi/DFlow: each outcome has its own `accountsInitialized*` flag. Only show
-      // the "creating this market" notice when the leg(s) we execute still report
-      // `false` for that outcome — not when the other team's leg is uninitialized.
-      const dflowLink = matchedMonitor?.dflow;
-      const dflowExecutedLegNeedsMarketInit =
-        Boolean(dflowLink) &&
-        executableRoute.legs.some((leg) => {
-          if (leg.venue !== "dflow" || !dflowLink) return false;
-          const initialized =
-            leg.outcome === "A"
-              ? dflowLink.accountsInitializedA
-              : dflowLink.accountsInitializedB;
-          return initialized === false;
-        });
-      setDflowUninitAtSubmit(dflowExecutedLegNeedsMarketInit);
-      const marketId = sorQuestionId as string | undefined;
-      const baseline = capturePostTradeBaseline({
-        queryClient,
-        route: executableRoute,
-        addresses: {
-          polymarketSafe: funding.polymarketSafe,
-          predictWallet: predictPostTradeWallet,
-          solanaAddress: funding.solanaAddress,
-        },
-        levelUp: marketId
-          ? {
-              marketId,
-              yesBalance,
-              noBalance,
-            }
-          : null,
-        shareIdentityCtx: predictShareIdentityCtx,
-      });
-      latestBaselineRef.current = {
-        routeId: executableRoute.routeId,
-        baseline,
-        route: executableRoute,
-      };
-      const midCap = sorQuestionId as string | undefined;
-      preTradeSnapshotRef.current = captureAccountReconcileSnapshot({
-        positions: accountData.positions,
-        cashTotal: accountData.cash.total,
-        accountVersion: accountData.accountVersion,
-        readLevelUpSide: (mid, side) => {
-          const tb = getTokenBalance(mid);
-          if (!tb) return 0;
-          const raw = side === "yes" ? tb.yesBalance : tb.noBalance;
-          const n = parseFloat(raw);
-          return Number.isFinite(n) ? n : 0;
-        },
-        levelUpMarketId: midCap?.trim() ?? null,
-      });
-      void sorExecution
-        .execute(executableRoute)
-        .then((res) => {
-          if (res == null) {
-            console.error("[SOR] execute settled: null result (execute ignored or bug)");
-            return;
-          }
-          const summary = {
-            routeId: res.routeId,
-            status: res.status,
-            totalFilledShares: res.totalFilledShares,
-            totalSpent: res.totalSpent,
-            remainingBudget: res.remainingBudget,
-            legs: res.legs.map((l) => ({
-              venue: l.venue,
-              legStatus: l.status,
-              shares: l.shares,
-              filledShares: l.filledShares,
-              error: l.error ?? null,
-              txHash: l.txHash ?? null,
-              bridgeTxHash: l.bridgeTxHash ?? null,
-            })),
-          };
-          // Routine trace: use debug so default DevTools stays quiet (enable "Verbose").
-          console.debug("[SOR] execute settled", summary);
-          if (res.status !== "complete") {
-            const legLine = res.legs
-              .map(
-                (l) =>
-                  `${l.venue}(${l.status}${l.error ? `: ${l.error}` : ""})`,
-              )
-              .join(" | ");
-            console.error(
-              `[SOR] execute not complete — status=${res.status} | ${legLine}`,
-            );
-          }
-        })
-        .catch((err: unknown) => {
-          console.error("[SOR] execute rejected", err);
-          setState((prev) => ({
-            ...prev,
-            orderResult: {
-              success: false,
-              error: (() => {
-                const formatted = formatErrorForUser(err);
-                return formatted === "Request failed"
-                  ? userMessage(SOR_SMART_ROUTE_FAILED)
-                  : formatted;
-              })(),
-            },
-          }));
-        });
-      return;
-    }
-    setState((prev) => ({
-      ...prev,
-      orderResult: {
-        success: false,
-        error: sorRouteExpired
-          ? "Odds expired. Wait for refresh, then try again."
-          : executableErrorCode === "EXECUTION_NOT_READY"
-            ? "Complete setup for this venue before trading."
-            : executableError?.trim()
-              ? executableError
-              : executableLoading
-                ? "Still finding the best route…"
-                : "No route available. Try a different amount or venue.",
-      },
-    }));
-  }, [
-    executableRoute,
-    sorRouteExpired,
-    executableError,
-    executableLoading,
-    executableErrorCode,
-    sorExecution.execute,
-    setState,
-    queryClient,
-    accountData,
-    funding.polymarketSafe,
-    funding.solanaAddress,
-    predictPostTradeWallet,
-    predictShareIdentityCtx,
-    market,
-    yesBalance,
-    noBalance,
-    matchedMonitor,
-    state.tradingVenue,
-  ]);
-
-  // Forward the freshly-rebound `handleSorExecute` into the late-bound ref
-  // consumed by `useImperativeHandle.executeTrade` above. Must live *below*
-  // `handleSorExecute`'s declaration so we never hit its TDZ.
-  useEffect(() => {
-    handleSorExecuteRef.current = handleSorExecute;
-    return () => {
-      if (handleSorExecuteRef.current === handleSorExecute) {
-        handleSorExecuteRef.current = null;
-      }
-    };
-  }, [handleSorExecute]);
-
-  const prevSorExecutingRef = useRef(false);
-  useEffect(() => {
-    const wasExecuting = prevSorExecutingRef.current;
-    prevSorExecutingRef.current = sorExecution.isExecuting;
-
-    if (!(wasExecuting && !sorExecution.isExecuting && sorExecution.execution)) {
-      return;
-    }
-
-    const { status, legs, routeId } = sorExecution.execution;
-
-    // Defensive guard: `status === "complete"` already implies every leg is
-    // `filled` (see `buildLocalExecution`'s `allFilled` derivation), but a
-    // future refactor that decouples the two would silently regress this
-    // hook into firing the success toast on a partially-failed route. Re-derive
-    // from the leg array and demote anything that doesn't pass to the
-    // failed-or-partial branch so a rejected venue can never look "confirmed"
-    // in the UI.
-    const everyLegFilled =
-      legs.length > 0 && legs.every((l) => l.status === "filled");
-
-    if (status === "complete" && everyLegFilled) {
-      const hasDflowFilledLeg = legs.some(
-        (l) =>
-          l.venue === "dflow" &&
-          l.status === "filled" &&
-          l.filledShares > 0,
-      );
-      if (hasDflowFilledLeg) {
-        void queryClient.invalidateQueries({ queryKey: ["dflow-positions"] });
-        void queryClient.invalidateQueries({
-          queryKey: ["dflow-outcome-balance"],
-        });
-      }
-
-      const syncUiKey =
-        String(
-          (market as { _id?: string })?._id ??
-            (market as { questionId?: string })?.questionId ??
-            "",
-        ).trim() || null;
-
-      const cached = latestBaselineRef.current;
-      if (cached) {
-        for (let i = 0; i < legs.length; i++) {
-          const rl = cached.route.legs[i];
-          const el = legs[i];
-          if (
-            rl?.venue === "dflow" &&
-            el?.status === "filled" &&
-            el.filledShares > 0
-          ) {
-            const m = dflowOutcomeMintForRouteLeg(rl);
-            if (m) registerPendingDflowOutcomeMints([m]);
-          }
-        }
-      }
-
-      const postTradeCommon = {
-        queryClient,
-        addresses: {
-          polymarketSafe: funding.polymarketSafe,
-          predictWallet: predictPostTradeWallet,
-          solanaAddress: funding.solanaAddress,
-        },
-        refreshLevelUpPositions: refreshTokenPositions,
-        refetchCollateral: collateralTokens.refetch,
-        readLevelUpSide: (mid: string, side: "yes" | "no") => {
-          const tb = getTokenBalance(mid);
-          if (!tb) return 0;
-          const raw = side === "yes" ? tb.yesBalance : tb.noBalance;
-          const n = parseFloat(raw);
-          return Number.isFinite(n) ? n : 0;
-        },
-        syncUiKey,
-        shareIdentityCtx: predictShareIdentityCtx,
-      } as const;
-
-      const canUseCachedBaseline =
-        cached &&
-        (cached.routeId === routeId ||
-          routePlanLegsFingerprintMatch(cached.route, sorExecution.execution));
-
-      if (canUseCachedBaseline && cached) {
-        postTradeAccountSync.runAfterSorFilled({
-          ...postTradeCommon,
-          route: cached.route,
-          execution: sorExecution.execution,
-          baseline: cached.baseline,
-          operationId: crypto.randomUUID(),
-          preTradeSnapshot: preTradeSnapshotRef.current,
-        });
-      } else {
-        const accountVenues = accountVenueKeysFromFilledExecutionLegs(legs);
-        const includeLevelUpRpc = filledExecutionHasLevelUp(legs);
-        if (accountVenues.length > 0 || includeLevelUpRpc) {
-          postTradeAccountSync.startBlindBalanceRefresh({
-            queryClient,
-            syncUiKey,
-            accountVenues,
-            includeLevelUpRpc,
-            refreshLevelUpPositions: refreshTokenPositions,
-          });
-        } else if (import.meta.env.DEV) {
-          console.warn(
-            "[PostTradeAccountSync] no baseline match and nothing to blind-refresh — skipping",
-            { routeId, cachedRouteId: cached?.routeId },
-          );
-        }
-      }
-
-      preTradeSnapshotRef.current = null;
-      // First-mint DFlow trades only: nudge the matched-markets refresh so the
-      // umbrella picks up the freshly-tokenized YES/NO mints + `accountsInitialized*`
-      // flags as soon as the predictions-API cron has them, instead of waiting up to
-      // 5 minutes for the next cron tick. Reuses `sendGetState` (== `fetchMappings`).
-      if (dflowUninitAtSubmit) {
-        scheduleDflowFirstMintRefresh();
-      }
-
-      latestBaselineRef.current = null;
-      setState((s) => ({ ...s, amount: "", orderResult: { success: true } }));
-      sorExecution.resetExecution();
-    } else if (status === "failed" || status === "partial" || !everyLegFilled) {
-      latestBaselineRef.current = null;
-      setDflowUninitAtSubmit(false);
-      const failedLeg = legs.find((l) => l.status === "failed");
-      setState((s) => ({
-        ...s,
-        orderResult: {
-          success: false,
-          error:
-            failedLeg?.error ??
-            (status === "partial"
-              ? "Part of the smart route did not fill. Check balances and positions."
-              : "Smart route did not complete."),
-        },
-      }));
-    }
-  }, [
-    sorExecution.isExecuting,
-    sorExecution.execution,
-    sorExecution.resetExecution,
-    queryClient,
-    setState,
-    refreshTokenPositions,
-    collateralTokens,
-    funding.polymarketSafe,
-    funding.solanaAddress,
-    predictPostTradeWallet,
-    predictShareIdentityCtx,
-    market,
-    postTradeAccountSync,
-    getTokenBalance,
-    dflowUninitAtSubmit,
-    scheduleDflowFirstMintRefresh,
-  ]);
-
-  useEffect(() => {
-    if (venueSelectionLocked) return;
-    if (pandaId && state.tradingVenue !== "all") {
-      handleTradingVenueChangeGuarded("all");
-    } else if (!pandaId && state.tradingVenue === "all") {
-      handleTradingVenueChangeGuarded("levelup");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pandaId]);
-
-  useEffect(() => {
-    if (venueSelectionLocked) return;
-    if (venueOverride && venueOverride !== state.tradingVenue) {
-      handleTradingVenueChangeGuarded(venueOverride);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [venueOverride]);
-
-  // Button state logic
-  const buttonState = useButtonState({
-    authenticated,
-    account,
-    state,
-    login,
-    marketOrderHandler,
-    usdcBalance,
-    yesBalance,
-    noBalance,
-    checkSufficientBalance,
-    checkSufficientShares,
-    market,
-    handleAddFunds,
-    polymarketTrading,
-    orderbookWalkPosition,
-    predictTrading,
-    limitlessTrading,
-    dflowProofVerified: dflowProof.isVerified,
-    dflowProofLoading: dflowProof.isLoading,
-    dflowStartProofFlow: handleStartDflowProofForTrade,
-    sorMatchedVenues: matchedVenues,
-    sorState: {
-      // Omnibus route on "all"; single-venue execution route only on a venue tab (never omnibus).
-      route: executableRoute,
-      isLoading: executableLoading,
-      isStale: executableStale,
-      error: executableError,
-      routeErrorCode: executableErrorCode,
-      isExecuting: sorExecution.isExecuting,
-      executionPhase: sorExecution.executionPhase,
-      prefundLegProgress: sorExecution.prefundLegProgress,
-      routeExpired: sorRouteExpired,
-      handleExecute: handleSorExecute,
-      venuePositions: sorVenuePositionsForActiveTab,
-      totalAvailableCash,
-      handleAddFunds,
-    },
-  });
-
-  const buttonStateForUi = useMemo(() => {
-    if (state.tradingVenue === "levelup" && executionGate.blocked) {
-      return {
-        ...buttonState,
-        text: "Complete trading setup",
-        disabled: true,
-        onClick: () => {},
-        depositShortfallUsd: undefined,
-      };
-    }
-    return buttonState;
-  }, [executionGate.blocked, buttonState, state.tradingVenue]);
-
-  /**
-   * Unlock sell UX whenever aggregate holdings are already known (`sellTotalShares`),
-   * even if some venue queries are still catching up — same numbers as MyPositionsRow.
-   */
-  const sharesLoadingForActiveTab = useMemo(() => {
-    if (!authenticated || !propUmbrellaId) return false;
-    if (tradeBoxShareBalances.sellTotalShares > 0) return false;
-    return tradeBoxShareBalances.loading;
-  }, [
-    authenticated,
-    propUmbrellaId,
-    tradeBoxShareBalances.sellTotalShares,
-    tradeBoxShareBalances.loading,
-  ]);
 
   // executionGateBanner removed — internal plumbing not shown to users
   const executionGateBanner = null;
@@ -2827,201 +891,8 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       umbrellaDisplayName={umbrellaDisplayName}
       crossBuyYes={crossBuyPrices.crossBuyYes}
       crossBuyNo={crossBuyPrices.crossBuyNo}
-      state={(() => {
-        // Single-venue tab: overlay the executable (targeted) plan onto the trade-box
-        // numbers when it matches the typed amount. "all" tab falls through to the
-        // local book walk (calculatedMarketOrderData) — same behavior as before.
-        //
-        // **Kalshi/DFlow market buy:** when Pond `/order/quote` matches the typed USD
-        // (debounced), overlay contracts + spend from that quote even if SOR already
-        // matched — SOR can oversize by one whole contract vs `getDflowOrder` / chain.
-        //
-        // We deliberately do NOT gate on `executionStale` — staleness flipping on a
-        // background poll would otherwise flip the To Win between SOR and bookData
-        // numbers (the "requote" feel). As long as the executionRoute matches the
-        // typed amount, it's the freshest authoritative plan and is what Submit signs.
-        const sr = sorRoute.executionRoute;
-        const inputAmount = parseFloat(state.amount) || 0;
-        // Buys: cent-rounded USD match. Sells: share tolerance (same as
-        // `shareAmountMatchesRoute` / sell-all clamp) so 2dp-typed size still
-        // overlays when `requestedAmount` carries full precision.
-        const sorMatchesInput =
-          sr &&
-          sr.legs.length > 0 &&
-          inputAmount > 0 &&
-          (state.side === "buy"
-            ? usdAmountMatchesRoute(sr.requestedAmount, inputAmount)
-            : shareAmountMatchesRoute(sr.requestedAmount, inputAmount));
-        const dflowSorSingleLegMarketBuy =
-          Boolean(
-            sr &&
-              sr.legs.length === 1 &&
-              sr.legs[0].venue === "dflow" &&
-              state.side === "buy",
-          );
-        const hasSorData =
-          sorMatchesInput &&
-          (state.tradingVenue !== "all" ||
-            (state.tradingVenue === "all" && dflowSorSingleLegMarketBuy));
-        const bookData = calculatedMarketOrderData;
-
-        const dflowPondQuoteSurface =
-          state.tradingVenue === "dflow" ||
-          (state.tradingVenue === "all" && dflowSorSingleLegMarketBuy);
-
-        if (hasSorData && state.orderType === "market") {
-          const leg = sr.legs[0];
-          const shareVenueCfg = getVenueConfig(state.tradingVenue);
-          const netBuyShares =
-            state.side === "buy"
-              ? sorBuyNetHeldTotalSharesFromLegs(
-                  sr.legs,
-                  predictMarketDetail?.feeRateBps,
-                )
-              : null;
-          const sorContractsRaw =
-            state.side === "buy" && netBuyShares != null
-              ? shareVenueCfg.requiresWholeShares
-                ? Math.floor(netBuyShares)
-                : netBuyShares
-              : shareVenueCfg.requiresWholeShares
-                ? Math.floor(sr.totalShares)
-                : sr.totalShares;
-          const sorContracts = Number.isFinite(sorContractsRaw)
-            ? sorContractsRaw
-            : undefined;
-          const sorCost = Number.isFinite(sr.totalCost) ? sr.totalCost : undefined;
-          const sorFee = Number.isFinite(sr.totalFees) ? sr.totalFees : undefined;
-
-          if (state.side === "buy") {
-            const rawQ = dflowQuote.data;
-            const sorNumForCmp =
-              typeof sorContracts === "number" && Number.isFinite(sorContracts)
-                ? sorContracts
-                : typeof bookData.calculatedContracts === "number" &&
-                    Number.isFinite(bookData.calculatedContracts)
-                  ? bookData.calculatedContracts
-                  : NaN;
-            let pondPick: NonNullable<typeof rawQ> | null = null;
-            if (
-              dflowPondQuoteSurface &&
-              rawQ != null &&
-              Number.isFinite(rawQ.contracts) &&
-              rawQ.contracts > 0 &&
-              Number.isFinite(rawQ.usd) &&
-              rawQ.usd > 0
-            ) {
-              const debounceAligned = dflowTypedUsdMatchesDebouncedQuote(
-                state.amount,
-                dflowQuote.debouncedAmount,
-              );
-              const budgetUsd = Number.isFinite(sr.requestedAmount)
-                ? sr.requestedAmount
-                : inputAmount;
-              const spendSlopUsd = Math.max(0.05, 0.02 * Math.abs(budgetUsd));
-              const quoteSpendMatchesBudget =
-                usdAmountMatchesRoute(rawQ.usd, inputAmount) ||
-                usdAmountMatchesRoute(rawQ.usd, budgetUsd) ||
-                Math.abs(rawQ.usd - budgetUsd) <= spendSlopUsd;
-              const pondTighterThanSor =
-                Number.isFinite(sorNumForCmp) &&
-                sorNumForCmp > 0 &&
-                rawQ.contracts + 1e-9 < sorNumForCmp;
-              if (debounceAligned || (quoteSpendMatchesBudget && pondTighterThanSor)) {
-                pondPick = rawQ;
-              }
-            }
-            const q = pondPick;
-            const usePondBuyQuote = q != null;
-            return {
-              ...state,
-              calculatedContracts: usePondBuyQuote
-                ? q.contracts
-                : sorContracts ?? bookData.calculatedContracts,
-              remainingUsd: bookData.remainingUsd,
-              spent: usePondBuyQuote
-                ? q.usd
-                : sorCost !== undefined && sorFee !== undefined
-                  ? sorCost - sorFee
-                  : bookData.spent,
-              tradingFee: usePondBuyQuote ? 0 : sorFee ?? bookData.tradingFee,
-              estimatedCost: usePondBuyQuote ? q.usd : sorCost ?? bookData.estimatedCost,
-              grossReceive: null,
-              sellTradingFee: null,
-              netReceive: null,
-            };
-          }
-          // Sell — leg.executionAmountUsd is net proceeds (matches chain settlement target).
-          const legProceedsUsd =
-            typeof leg.executionAmountUsd === "number" &&
-            Number.isFinite(leg.executionAmountUsd) &&
-            leg.executionAmountUsd > 0
-              ? leg.executionAmountUsd
-              : null;
-          return {
-            ...state,
-            calculatedContracts: sorContracts ?? bookData.calculatedContracts,
-            remainingUsd: bookData.remainingUsd,
-            spent: null,
-            tradingFee: null,
-            estimatedCost: null,
-            grossReceive: legProceedsUsd ?? bookData.grossReceive,
-            sellTradingFee: sorFee ?? bookData.sellTradingFee,
-            netReceive: legProceedsUsd ?? bookData.netReceive,
-          };
-        }
-
-        // DFlow `/order/quote` overlay: when on the DFlow tab, the SOR route
-        // hasn't returned (or the user just typed), and the orderbook walk
-        // would mis-price an uninit market (single BBO level seeded from
-        // metadata), prefer the upstream quote which already accounts for
-        // any market-tokenization cost.
-        const dflowQuoteData = dflowQuote.data;
-        if (
-          dflowPondQuoteSurface &&
-          state.orderType === "market" &&
-          dflowQuoteData &&
-          Number.isFinite(dflowQuoteData.contracts) &&
-          dflowQuoteData.contracts > 0
-        ) {
-          if (state.side === "buy") {
-            return {
-              ...state,
-              calculatedContracts: dflowQuoteData.contracts,
-              remainingUsd: bookData.remainingUsd,
-              spent: dflowQuoteData.usd,
-              tradingFee: 0,
-              estimatedCost: dflowQuoteData.usd,
-              grossReceive: null,
-              sellTradingFee: null,
-              netReceive: null,
-            };
-          }
-          return {
-            ...state,
-            calculatedContracts: dflowQuoteData.contracts,
-            remainingUsd: bookData.remainingUsd,
-            spent: null,
-            tradingFee: null,
-            estimatedCost: null,
-            grossReceive: dflowQuoteData.usd,
-            sellTradingFee: 0,
-            netReceive: dflowQuoteData.usd,
-          };
-        }
-
-        return {
-          ...state,
-          calculatedContracts: bookData.calculatedContracts,
-          remainingUsd: bookData.remainingUsd,
-          spent: bookData.spent,
-          tradingFee: bookData.tradingFee,
-          estimatedCost: bookData.estimatedCost,
-          grossReceive: bookData.grossReceive,
-          sellTradingFee: bookData.sellTradingFee,
-          netReceive: bookData.netReceive,
-        };
-      })()}
+      state={state}
+      tradeQuote={tradeQuote}
       onPositionChange={onPositionChangeWrapper}
       onAmountChange={handleAmountChange}
       onPriceChange={handlePriceChange}
@@ -3034,7 +905,6 @@ const PredictionMarketTradeBox = forwardRef<PredictionMarketTradeBoxHandle, Pred
       levelUpVenueBookHints={levelUpVenueBookHints}
       dflowVenueHint={dflowVenueHint}
       matchedVenues={matchedVenues}
-      onTrade={handleTrade}
       buttonState={buttonStateForUi}
       approvalState={approvalState}
       executionGateBanner={executionGateBanner}

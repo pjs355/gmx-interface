@@ -3,12 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { useSendTransaction } from "@privy-io/react-auth";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
-import { useSignerContext } from "context/SignerContext";
-import { classifyLimitlessClientMaker } from "@/trading/limitless/limitlessClientMakerIdentity";
-import { resolvePrivyEvmFundTarget } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { tradingQueryKeys } from "@/trading/queryKeys";
 import {
 	getLimitlessEnsureTradeGate,
@@ -130,8 +127,7 @@ export function useLimitlessEnsureExecutionReady(args: {
 	const qc = useQueryClient();
 	const { getClientForChain } = useSmartWallets();
 	const { sendTransaction: privyEvmSendTransaction } = useSendTransaction();
-	const funding = useFundingAddresses();
-	const { account, signerAddress } = useSignerContext();
+	const venueAddressChainMap = useVenueAddressChainMap();
 	const profileQuery = useCurrentProfile({ enabled: enabled && authenticated });
 	const profileId = profileQuery.data?._id;
 
@@ -367,18 +363,14 @@ export function useLimitlessEnsureExecutionReady(args: {
 			return;
 		}
 
-		const fundTarget = resolvePrivyEvmFundTarget(
-			funding.baseSmartWallet,
-			account,
-		)?.trim();
-		const { effectiveMaker, isDelegatedServerWalletSubAccount } =
-			classifyLimitlessClientMaker({
-				venueMakerFromApi: maker,
-				fundTarget,
-				signerAddress,
-				account,
-				embeddedEoa: funding.embeddedEoa,
-			});
+		const limitlessWallet = venueAddressChainMap?.limitless.walletAddress?.trim();
+		if (!limitlessWallet) return;
+
+		const apiMaker = maker.trim().toLowerCase();
+		const isDelegatedServerWalletSubAccount =
+			apiMaker.length > 0 &&
+			apiMaker !== limitlessWallet.toLowerCase();
+		const effectiveMaker = limitlessWallet;
 		const doneKey = `${String(profileId)}|${slug}|${effectiveMaker.toLowerCase()}`;
 		if (completedWarmupKeyRef.current === doneKey) return;
 		if (warmupInFlightRef.current) return;
@@ -426,17 +418,16 @@ export function useLimitlessEnsureExecutionReady(args: {
 					try {
 						await runLimitlessSignupWarmupBaseApprovals({
 							marketSlug: slug,
+							maker: limitlessWallet,
 							venueMakerFromApi: maker,
-							fundTarget,
-							signerAddress,
-							account,
-							embeddedEoa: funding.embeddedEoa,
 							getTxClientForAddress: (addr) =>
 								getLimitlessBaseTxClientForAddress({
 									address: addr,
 									getClientForChain,
-									baseSmartWallet: funding.baseSmartWallet,
-									embeddedEoa: funding.embeddedEoa,
+									baseSmartWallet:
+										venueAddressChainMap!.levelup.walletAddress,
+									embeddedEoa:
+										venueAddressChainMap!.predictfun.walletAddress,
 									privyEvmSendTransaction,
 								}),
 							postLimitlessVerifyAllowance: (s, o) =>
@@ -497,10 +488,9 @@ export function useLimitlessEnsureExecutionReady(args: {
 		api,
 		getClientForChain,
 		privyEvmSendTransaction,
-		funding.baseSmartWallet,
-		funding.embeddedEoa,
-		account,
-		signerAddress,
+		venueAddressChainMap?.levelup.walletAddress,
+		venueAddressChainMap?.limitless.walletAddress,
+		venueAddressChainMap?.predictfun.walletAddress,
 	]);
 
 	const lastInvalidatedRef = useRef<number>(0);

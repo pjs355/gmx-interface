@@ -1,15 +1,14 @@
 import React, { useMemo } from 'react';
-import type { TradeBoxState } from './types';
+import type { TradeBoxCoreState } from './types';
 import './MobileTradingBoxHeader.scss';
 
 interface MobileTradingBoxHeaderProps {
   market: any;
-  state: TradeBoxState;
+  state: TradeBoxCoreState;
   onSideChange: (side: 'buy' | 'sell') => void;
   onPositionChange: (position: 'yes' | 'no') => void;
   onAmountChange: (amount: string) => void;
   onOrderTypeChange?: (orderType: 'market' | 'limit') => void;
-  onTrade: () => void;
   buttonState: {
     text: string;
     disabled: boolean;
@@ -24,7 +23,6 @@ export default function MobileTradingBoxHeader({
   onPositionChange,
   onAmountChange,
   onOrderTypeChange,
-  onTrade,
   buttonState
 }: MobileTradingBoxHeaderProps) {
   const { selectedPosition, amount, side, orderType } = state;

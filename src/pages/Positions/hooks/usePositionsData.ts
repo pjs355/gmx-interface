@@ -7,7 +7,10 @@ import { useRecentSettlementClaim } from "context/RecentSettlementClaimContext";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useOddsMonitor } from "context/OddsMonitorContext";
 import { usePortfolio } from "@/context/PortfolioContext";
-import { useAccountData } from "@/context/AccountDataContext";
+import {
+	useAccountData,
+	useVenueAddressChainMap,
+} from "@/context/AccountDataContext";
 import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { buildPredictUmbrellaLookup } from "@/trading/predict/resolvePredictUmbrellaFromMonitor";
@@ -63,10 +66,15 @@ export default function usePositionsData() {
 		[appState?.markets, umbrellas],
 	);
 
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const polymarketSafe = venueAddressChainMap?.polymarket.walletAddress ?? null;
+	const solanaAddress = venueAddressChainMap?.dflow.walletAddress ?? null;
+	const limitlessMakerBase = venueAddressChainMap?.limitless.walletAddress ?? null;
+	const predictWalletAddress =
+		venueAddressChainMap?.predictfun.walletAddress ?? null;
+	/** LevelUp SCW — sole wallet for umbrella positions / history resolve gates. */
+	const levelupWalletAddress = venueAddressChainMap?.levelup.walletAddress ?? null;
 	const {
-		polymarketSafe,
-		solanaAddress,
-		limitlessMakerBase,
 		isLoading: fundingAddressesLoading,
 		fundingHydrated,
 	} = useFundingAddresses();
@@ -105,8 +113,6 @@ export default function usePositionsData() {
 	const [claimedMarkets, setClaimedMarkets] = useState<Set<string>>(new Set());
 	const [activeTab, setActiveTab] = useState<"positions" | "orders" | "history">("positions");
 
-	const effectiveAccount = account || null;
-
 	const {
 		all: allPredictPositions,
 		active: predictPositions,
@@ -122,8 +128,7 @@ export default function usePositionsData() {
 		positionsQuery: predictPositionsQuery,
 		marketsQuery: predictMarketsQuery,
 	} = usePredictBundle({
-		signerAddress,
-		effectiveAccount,
+		predictWalletAddress,
 		activeTab,
 		predictSlice: accountPositions.predict,
 	});
@@ -152,7 +157,7 @@ export default function usePositionsData() {
 	});
 
 	const umbrellaPositions = useUmbrellaPositions({
-		effectiveAccount,
+		effectiveAccount: levelupWalletAddress,
 		umbrellas,
 		getQuestionsForUmbrella,
 		tokenBalances,
@@ -219,7 +224,7 @@ export default function usePositionsData() {
 		appStateMarkets: appState?.markets,
 		predictMarketDetails,
 		authenticated,
-		effectiveAccount,
+		effectiveAccount: levelupWalletAddress,
 		privateApi,
 		diag: {
 			polyTradeHistoryRows: polyTradeHistoryQuery.data,
@@ -230,7 +235,7 @@ export default function usePositionsData() {
 	});
 
 	const resolvedUmbrellaPositions = useResolvedUmbrellaPositions({
-		effectiveAccount,
+		effectiveAccount: levelupWalletAddress,
 		resolvedMarketsByUmbrella,
 		umbrellas: historyCatalogUmbrellas,
 		tokenBalances,
@@ -270,7 +275,7 @@ export default function usePositionsData() {
 		isHistoryTabContentReady,
 	} = useReadinessGates({
 		account,
-		effectiveAccount,
+		effectiveAccount: levelupWalletAddress,
 		authenticated,
 		solanaLinked: Boolean(solanaAddress?.trim()),
 		dflowProofIsFetched: dflowProof.isFetched,

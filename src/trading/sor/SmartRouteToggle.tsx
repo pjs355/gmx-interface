@@ -77,10 +77,10 @@ export function SmartRouteToggle({
 	});
 
 	const handleExecute = useCallback(() => {
-		if (sorRoute.route) {
-			sorExecution.execute(sorRoute.route);
+		if (sorRoute.executionRoute) {
+			sorExecution.execute(sorRoute.executionRoute);
 		}
-	}, [sorRoute.route, sorExecution.execute]);
+	}, [sorRoute.executionRoute, sorExecution.execute]);
 
 	if (availableVenueCount <= 1 && !targetVenue) return null;
 
@@ -132,11 +132,11 @@ export function SmartRouteToggle({
 			{enabled && (
 				<div style={{ marginTop: 8 }}>
 					<SorRouteDisplay
-						route={sorRoute.route}
-						isLoading={sorRoute.isLoading}
-						error={sorRoute.error}
-						routeErrorCode={sorRoute.routeErrorCode}
-						isStale={sorRoute.isStale}
+						route={sorRoute.displayRoute}
+						isLoading={sorRoute.displayLoading}
+						error={sorRoute.displayError}
+						routeErrorCode={sorRoute.displayErrorCode}
+						isStale={sorRoute.displayStale}
 						onExecute={handleExecute}
 						onFallback={() => {
 							setEnabled(false);

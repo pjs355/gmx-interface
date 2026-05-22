@@ -44,7 +44,7 @@ import { predictCtfKey } from "@/trading/predict/predictContractKeys";
 import { ensurePredictChain, getBscBrowserSigner } from "@/trading/predict/bnbWallet";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { tradingQueryKeys } from "@/trading/queryKeys";
 import { quoteSignAndSubmitDflowOrder } from "@/trading/dflow/quoteSignAndSubmitDflowOrder";
 import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
@@ -399,22 +399,19 @@ export function useClaimForVenue(
 	const profileQuery = useCurrentProfile();
 	const profileId = profileQuery.data?._id;
 
-	const {
-		solanaAddress,
-		polymarketSafe: polymarketDepositWallet,
-		embeddedEoa,
-		baseSmartWallet,
-	} = useFundingAddresses();
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const solanaAddress = venueAddressChainMap?.dflow.walletAddress;
+	const polymarketDepositWallet = venueAddressChainMap?.polymarket.walletAddress;
+	const predictWallet = venueAddressChainMap?.predictfun.walletAddress;
+	const baseSmartWallet = venueAddressChainMap?.levelup.walletAddress;
 	const { signTransaction: privySolanaSignTransaction } =
 		useSolanaSignTransaction();
 	const { wallets: solanaWallets } = useSolanaWallets();
-	const embeddedSolanaWallet = useMemo(
-		() =>
-			solanaWallets.find((w) => w.address === solanaAddress?.trim()) ??
-			solanaWallets[0] ??
-			null,
-		[solanaWallets, solanaAddress],
-	);
+	const embeddedSolanaWallet = useMemo(() => {
+		const dflowAddr = solanaAddress?.trim();
+		if (!dflowAddr) return null;
+		return solanaWallets.find((w) => w.address === dflowAddr) ?? null;
+	}, [solanaWallets, solanaAddress]);
 
 	const venue: MarketVenue = (market as any)?._venue || "levelup";
 	const isNegRisk = Boolean((market as any)?._isNegRisk);
@@ -767,17 +764,13 @@ export function useClaimForVenue(
 				sendTransaction: privyEvmSendTransaction,
 			});
 
-			const predictAccountRaw =
-				typeof import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS === "string"
-					? import.meta.env.VITE_PREDICT_ACCOUNT_ADDRESS.trim()
-					: "";
-			const predictAccount =
-				predictAccountRaw.length > 0 ? predictAccountRaw : undefined;
+			const predictAccount = predictWallet?.trim();
+			if (!predictAccount) {
+				throw new Error(
+					"Predict wallet missing — venueAddressChainMap.predictfun.walletAddress is required",
+				);
+			}
 
-			// Must mirror `usePredictTradingSession`: single winning index set,
-			// and when `predictAccount` (Kernel) is set, redemption goes through
-			// `kernel.execute` via the SDK — raw EOA→CTF calls revert in
-			// simulation because outcome ERC1155 balances sit on the Kernel.
 			const indexSet = (
 				resolvedOutcome === "yes" ? YES_INDEX_SET : NO_INDEX_SET
 			) as 1 | 2;
@@ -785,7 +778,7 @@ export function useClaimForVenue(
 			const builder = await OrderBuilder.make(
 				ChainId.BnbMainnet,
 				bscSigner as never,
-				predictAccount ? { predictAccount } : {},
+				{ predictAccount },
 			);
 
 			let amount: bigint | undefined;
@@ -796,8 +789,7 @@ export function useClaimForVenue(
 						"No BNB provider available to read Predict position balance",
 					);
 				}
-				const holder =
-					predictAccount ?? (await bscSigner.getAddress());
+				const holder = predictAccount;
 				amount = await readPredictOutcomeTokenBalance({
 					provider,
 					conditionId: market.conditionId,
@@ -980,7 +972,7 @@ export function useClaimForVenue(
 				address: signerAddr,
 				getClientForChain,
 				baseSmartWallet,
-				embeddedEoa,
+				embeddedEoa: predictWallet,
 				privyEvmSendTransaction,
 			});
 			if (!baseTxClient) {
@@ -1025,7 +1017,7 @@ export function useClaimForVenue(
 		privySolanaSignTransaction,
 		queryClient,
 		profileId,
-		embeddedEoa,
+		predictWallet,
 		baseSmartWallet,
 	]);
 

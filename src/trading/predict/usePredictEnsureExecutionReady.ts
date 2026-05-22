@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { tradingQueryKeys } from "@/trading/queryKeys";
@@ -141,7 +142,12 @@ export function usePredictEnsureExecutionReady(args: {
 			setPhase("authenticating");
 			const { signer } = await session.ensureSession();
 			const signerAddress = await signer.getAddress();
-			const makerAddress = session.predictAccount ?? signerAddress;
+			const makerAddress = session.predictAccount?.trim();
+			if (!makerAddress) {
+				throw new Error(
+					"Predict wallet missing — venueAddressChainMap.predictfun.walletAddress is required",
+				);
+			}
 
 			// Step 2: on-chain approvals (only if not already satisfied on-chain).
 			// Scoped to the current market type — non-scoped `setApprovals()`

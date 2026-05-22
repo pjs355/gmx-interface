@@ -5,8 +5,8 @@ import type { OrderbookSnapshot } from "@/services/api/orderbookService";
  * Predict REST orderbook depth uses `[price, size]` tuples (human-readable decimals).
  * Maps to `OrderbookSnapshot` prices in 0–1 probability space for `useMarketOrderHandler`.
  *
- * When the venue is Predict, the trade box fetches the book for the **currently selected**
- * outcome market id, so always walk liquidity with position `"yes"` (outcome-native book).
+ * Caller must pass an outcome-native book (single-market NO: complement REST first).
+ * The trade box then walks with `orderbookWalkPosition` for LevelUp / single-market Predict.
  */
 export function predictBookToOrderbookSnapshot(book: Book | null | undefined): OrderbookSnapshot | null {
 	if (!book || (!book.asks?.length && !book.bids?.length)) return null;

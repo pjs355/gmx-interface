@@ -165,7 +165,8 @@ export function useResolvedUmbrellaPositions({
 					umbrella = {
 						_id: umbrellaId,
 						displayName:
-							firstMarket?.umbrellaName ||
+							(firstMarket as PredictionMarket & { umbrellaName?: string })
+								?.umbrellaName ||
 							`Umbrella ${umbrellaId.slice(0, 8)}...`,
 						children: resolvedMarkets,
 						originalChildren: resolvedMarkets,

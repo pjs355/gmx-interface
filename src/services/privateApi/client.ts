@@ -1137,16 +1137,6 @@ export function createPrivateApiClient(
 			return readJson<DflowEventsResponse>(res);
 		},
 
-		async getDflowOrderQuote(
-			params: DflowOrderParams
-		): Promise<DflowOrderResponse> {
-			const q = dflowOrderParamsToQuery(params);
-			const res = await authorizedFetch(
-				`/api/dflow/order/quote?${q.toString()}`
-			);
-			return readJson<DflowOrderResponse>(res);
-		},
-
 		async getDflowOrder(
 			params: DflowOrderParams
 		): Promise<DflowOrderResponse> {

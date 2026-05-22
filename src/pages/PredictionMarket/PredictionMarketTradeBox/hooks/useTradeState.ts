@@ -38,17 +38,17 @@ type CoreTradeState = {
 	side: "buy" | "sell";
 	isLoading: boolean;
 	orderResult: any;
-	calculatedContracts: number | null;
-	remainingUsd: number | null;
 };
 
-type FullTradeState = CoreTradeState & {
+export type TradeBoxHookState = CoreTradeState & {
 	amount: string;
 	tradingVenue: TradingVenue;
 	orderType: "market" | "limit";
 };
 
-type StateUpdater = FullTradeState | ((prev: FullTradeState) => FullTradeState);
+export type TradeBoxHookSetState = (
+	updater: TradeBoxHookState | ((prev: TradeBoxHookState) => TradeBoxHookState),
+) => void;
 
 export function useTradeState(
 	initialPosition?: "yes" | "no",
@@ -87,8 +87,6 @@ export function useTradeState(
 		side: "buy",
 		isLoading: false,
 		orderResult: null,
-		calculatedContracts: null,
-		remainingUsd: null,
 	});
 
 	const stickyOrderType = shouldBypassSticky ? null : sticky.orderType;
@@ -105,7 +103,7 @@ export function useTradeState(
 	const coreStateRef = useRef(coreState);
 	coreStateRef.current = coreState;
 
-	const state = useMemo<FullTradeState>(
+	const state = useMemo<TradeBoxHookState>(
 		() => ({
 			...coreState,
 			amount: stickyAmount,
@@ -122,7 +120,7 @@ export function useTradeState(
 	}, [initialPosition, coreState.selectedPosition]);
 
 	const setState = useCallback(
-		(updater: StateUpdater) => {
+		(updater: TradeBoxHookState | ((prev: TradeBoxHookState) => TradeBoxHookState)) => {
 			// Compute `next` synchronously and run sticky writes at the call site
 			// (event handler / effect), NEVER inside the `setCoreState` updater.
 			//
@@ -133,7 +131,7 @@ export function useTradeState(
 			// warning. `coreStateRef.current` mirrors the latest committed
 			// `coreState`, which is the right `prev` for callers invoked outside
 			// of render (all current callers are timers / effects / event handlers).
-			const prevFull: FullTradeState =
+			const prevFull: TradeBoxHookState =
 				typeof updater === "function"
 					? {
 							...coreStateRef.current,
@@ -141,7 +139,7 @@ export function useTradeState(
 							tradingVenue,
 							orderType,
 						}
-					: ({} as FullTradeState);
+					: ({} as TradeBoxHookState);
 			const next =
 				typeof updater === "function" ? updater(prevFull) : updater;
 			if (next.amount !== stickyAmount) sticky.setAmount(next.amount);

@@ -3,21 +3,15 @@ import { useLogin } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { useUserData } from "@/context/UserDataContext";
 import { usePortfolio } from "@/context/PortfolioContext";
-import { useFundingAddresses } from "@/trading/hooks/useFundingAddresses";
-import {
-	PrivyGatedDepositButton,
-	resolvePrivyEvmFundTarget,
-} from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
+import { PrivyGatedDepositButton } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import "./ProgressBanner.scss";
 
 export function ProgressBanner() {
 	const { login } = useLogin();
 	const { account, authenticated, ready: signerReady } = useSignerContext();
-	const funding = useFundingAddresses();
-	const fundEvmTarget = resolvePrivyEvmFundTarget(
-		funding.baseSmartWallet,
-		account
-	);
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
 	const { orders, loading: ordersLoading } = useUserData();
 	const { cashBalance, cashLoading } = usePortfolio();
 

@@ -66,9 +66,11 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const { tokenBalances, loading: userDataLoading } = useUserData();
 	const collateral = useCollateralTokens();
 
-	const { positions, dflowProof, addresses } = useAccountData();
+	const { positions, dflowProof, venueAddressChainMap } = useAccountData();
 	const { authenticated } = usePrivy();
-	const solanaLinked = Boolean(addresses.solanaAddress?.trim());
+	const solanaLinked = Boolean(
+		venueAddressChainMap?.dflow.walletAddress?.trim(),
+	);
 	const dflowRpcEnabled =
 		solanaLinked &&
 		Boolean(authenticated) &&

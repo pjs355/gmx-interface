@@ -155,7 +155,7 @@ describe("post-trade share direction vs baseline", () => {
 			estimatedTimeSeconds: 0,
 			bridge: null,
 			minSharesAtSlippage: 0,
-			venueMarketIds: { polyTokenIdA: tokenId },
+			venueMarketIds: { venue: "polymarket", polyTokenIdA: tokenId },
 			orderType: "market",
 		};
 		const route: RoutePlan = {

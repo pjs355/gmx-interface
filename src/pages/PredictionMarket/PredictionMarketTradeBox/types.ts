@@ -10,7 +10,8 @@ import type { VenueRowModel } from "@/hooks/useTradingPagePrices";
 
 export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
-export interface TradeBoxState {
+/** User input + trade lifecycle — does not include quote preview numbers. */
+export interface TradeBoxCoreState {
 	tradingVenue: TradingVenue;
 	selectedPosition: "yes" | "no" | null;
 	amount: string;
@@ -19,13 +20,18 @@ export interface TradeBoxState {
 	side: "buy" | "sell";
 	isLoading: boolean;
 	orderResult: OrderExecutionResult | null;
+}
+
+/**
+ * @deprecated Prefer `TradeBoxCoreState` + `TradeQuote.preview`. Kept for tests/tools
+ * that still expect a single flat object.
+ */
+export interface TradeBoxState extends TradeBoxCoreState {
 	calculatedContracts: number | null;
 	remainingUsd: number | null;
-	// Trading fee fields for market BUY orders
 	spent: number | null;
 	tradingFee: number | null;
 	estimatedCost: number | null;
-	// Trading fee fields for market SELL orders
 	grossReceive: number | null;
 	sellTradingFee: number | null;
 	netReceive: number | null;

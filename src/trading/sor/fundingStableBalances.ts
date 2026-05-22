@@ -20,6 +20,10 @@ import {
 	DEFAULT_RPC_URL,
 } from "@/config/rpc";
 import { POLYGON_PUSD, POLYGON_USDC_E } from "@/trading/polymarket/constants";
+import {
+	allFundingBalanceChainKeys,
+	type FundingBalanceChainKey,
+} from "./fundingStableBalanceChains";
 import type { SorChain } from "./sor-types";
 
 /** Keys aligned with `GET /portfolio/cash-summary` / collateral query slices. */
@@ -46,7 +50,9 @@ const SOLANA_USDC_MINT_PK = new PublicKey(SOLANA_USDC_MINT);
 
 function isLikelySolanaRpcOrTransportFailure(e: unknown): boolean {
 	const text =
-		e instanceof Error ? `${e.name} ${e.message} ${String((e as Error).cause ?? "")}` : String(e);
+		e instanceof Error
+			? `${e.name} ${e.message} ${String((e as Error & { cause?: unknown }).cause ?? "")}`
+			: String(e);
 	const m = text.toLowerCase();
 	return (
 		m.includes("403") ||
@@ -86,7 +92,7 @@ async function readSolanaUsdcHuman(walletAddress: string): Promise<number> {
 			return 0;
 		}
 		// Public Solana RPCs often 403 or drop connections; do not fail the whole
-		// multi-chain `readFundingStableBalancesHuman` Promise.all (SOR prefund, Transfers).
+		// scoped collateral read Promise.all (SOR prefund, Transfers).
 		if (isLikelySolanaRpcOrTransportFailure(e)) {
 			const detail = e instanceof Error ? e.message.slice(0, 240) : String(e).slice(0, 240);
 			console.warn("[readSolanaUsdcHuman] RPC/transport failure; treating SPL USDC as 0", detail);
@@ -114,94 +120,138 @@ export type FundingStableBalancesHuman = Record<SorChain, number> & {
 	limitlessMakerBase?: number;
 };
 
+export function zeroFundingStableBalancesHuman(): FundingStableBalancesHuman {
+	return {
+		base: 0,
+		polygon: 0,
+		bnb: 0,
+		solana: 0,
+		limitlessMakerBase: 0,
+	};
+}
+
+function parseFundingAddresses(addrs: FundingAddressesInput): {
+	baseAddr?: Address;
+	safeAddr?: Address;
+	bnbAddr?: Address;
+	solAddr?: string;
+	limitlessAddr?: Address;
+} {
+	return {
+		baseAddr:
+			addrs.baseSmartWallet && /^0x[a-fA-F0-9]{40}$/i.test(addrs.baseSmartWallet)
+				? (addrs.baseSmartWallet as Address)
+				: undefined,
+		safeAddr:
+			addrs.polymarketSafe && /^0x[a-fA-F0-9]{40}$/i.test(addrs.polymarketSafe)
+				? (addrs.polymarketSafe as Address)
+				: undefined,
+		bnbAddr:
+			addrs.embeddedEoa && /^0x[a-fA-F0-9]{40}$/i.test(addrs.embeddedEoa)
+				? (addrs.embeddedEoa as Address)
+				: undefined,
+		solAddr:
+			addrs.solanaAddress &&
+			addrs.solanaAddress.length >= 32 &&
+			addrs.solanaAddress.length <= 44
+				? addrs.solanaAddress
+				: undefined,
+		limitlessAddr:
+			addrs.limitlessMakerBase && /^0x[a-fA-F0-9]{40}$/i.test(addrs.limitlessMakerBase)
+				? (addrs.limitlessMakerBase as Address)
+				: undefined,
+	};
+}
+
+async function readBaseUsdcHuman(holder: Address): Promise<number> {
+	const raw = await basePublic.readContract({
+		address: getUSDCAddress() as Address,
+		abi: erc20Abi,
+		functionName: "balanceOf",
+		args: [holder],
+	});
+	return Number(formatUnits(raw, 6));
+}
+
+async function readPolygonStableHuman(safeAddr: Address): Promise<number> {
+	const pc = getPolygonPublicClient();
+	const [pusdRaw, usdceRaw] = await Promise.all([
+		pc.readContract({
+			address: POLYGON_PUSD,
+			abi: erc20Abi,
+			functionName: "balanceOf",
+			args: [safeAddr],
+		}),
+		pc.readContract({
+			address: POLYGON_USDC_E,
+			abi: erc20Abi,
+			functionName: "balanceOf",
+			args: [safeAddr],
+		}),
+	]);
+	return Number(formatUnits(pusdRaw, 6)) + Number(formatUnits(usdceRaw, 6));
+}
+
+async function readBnbUsdtHuman(bnbAddr: Address): Promise<number> {
+	const raw = await bscPublic.readContract({
+		address: BSC_MAINNET_USDT_ADDRESS,
+		abi: erc20Abi,
+		functionName: "balanceOf",
+		args: [bnbAddr],
+	});
+	return Number(formatUnits(raw, 18));
+}
+
+/**
+ * Read only the requested collateral slices. Unrequested {@link SorChain} keys are
+ * zero; omitted chains are not contacted on RPC.
+ */
+export async function readFundingStableBalancesForChains(
+	addrs: FundingAddressesInput,
+	chains: readonly FundingBalanceChainKey[],
+): Promise<FundingStableBalancesHuman> {
+	const out = zeroFundingStableBalancesHuman();
+	const parsed = parseFundingAddresses(addrs);
+	const unique = [...new Set(chains)];
+
+	const tasks = unique.map(async (chain): Promise<void> => {
+		switch (chain) {
+			case "base": {
+				if (!parsed.baseAddr) return;
+				out.base = await readBaseUsdcHuman(parsed.baseAddr);
+				return;
+			}
+			case "polygon": {
+				if (!parsed.safeAddr) return;
+				out.polygon = await readPolygonStableHuman(parsed.safeAddr);
+				return;
+			}
+			case "bnb": {
+				if (!parsed.bnbAddr) return;
+				out.bnb = await readBnbUsdtHuman(parsed.bnbAddr);
+				return;
+			}
+			case "solana": {
+				if (!parsed.solAddr) return;
+				out.solana = await readSolanaUsdcHuman(parsed.solAddr);
+				return;
+			}
+			case "limitlessMakerBase": {
+				if (!parsed.limitlessAddr) return;
+				out.limitlessMakerBase = await readBaseUsdcHuman(parsed.limitlessAddr);
+				return;
+			}
+		}
+	});
+
+	await Promise.all(tasks);
+	return out;
+}
+
 export async function readFundingStableBalancesHuman(
 	addrs: FundingAddressesInput,
 ): Promise<FundingStableBalancesHuman> {
-	const baseAddr =
-		addrs.baseSmartWallet && /^0x[a-fA-F0-9]{40}$/i.test(addrs.baseSmartWallet)
-			? (addrs.baseSmartWallet as Address)
-			: undefined;
-	const safeAddr =
-		addrs.polymarketSafe && /^0x[a-fA-F0-9]{40}$/i.test(addrs.polymarketSafe)
-			? (addrs.polymarketSafe as Address)
-			: undefined;
-	const bnbAddr =
-		addrs.embeddedEoa && /^0x[a-fA-F0-9]{40}$/i.test(addrs.embeddedEoa)
-			? (addrs.embeddedEoa as Address)
-			: undefined;
-	const solAddr =
-		addrs.solanaAddress &&
-		addrs.solanaAddress.length >= 32 &&
-		addrs.solanaAddress.length <= 44
-			? addrs.solanaAddress
-			: undefined;
-	const limitlessAddr =
-		addrs.limitlessMakerBase && /^0x[a-fA-F0-9]{40}$/i.test(addrs.limitlessMakerBase)
-			? (addrs.limitlessMakerBase as Address)
-			: undefined;
-
-	const [baseHuman, polygonHuman, bscHuman, solanaHuman, limitlessHuman] = await Promise.all([
-		baseAddr
-			? basePublic
-					.readContract({
-						address: getUSDCAddress() as Address,
-						abi: erc20Abi,
-						functionName: "balanceOf",
-						args: [baseAddr],
-					})
-					.then((raw) => Number(formatUnits(raw, 6)))
-			: Promise.resolve(0),
-		safeAddr
-			? (() => {
-					const pc = getPolygonPublicClient();
-					return Promise.all([
-						pc.readContract({
-							address: POLYGON_PUSD,
-							abi: erc20Abi,
-							functionName: "balanceOf",
-							args: [safeAddr],
-						}),
-						pc.readContract({
-							address: POLYGON_USDC_E,
-							abi: erc20Abi,
-							functionName: "balanceOf",
-							args: [safeAddr],
-						}),
-					]).then(([pusdRaw, usdceRaw]) =>
-						Number(formatUnits(pusdRaw, 6)) + Number(formatUnits(usdceRaw, 6)),
-					);
-				})()
-			: Promise.resolve(0),
-		bnbAddr
-			? bscPublic
-					.readContract({
-						address: BSC_MAINNET_USDT_ADDRESS,
-						abi: erc20Abi,
-						functionName: "balanceOf",
-						args: [bnbAddr],
-					})
-					.then((raw) => Number(formatUnits(raw, 18)))
-			: Promise.resolve(0),
-		solAddr ? readSolanaUsdcHuman(solAddr) : Promise.resolve(0),
-		limitlessAddr
-			? basePublic
-					.readContract({
-						address: getUSDCAddress() as Address,
-						abi: erc20Abi,
-						functionName: "balanceOf",
-						args: [limitlessAddr],
-					})
-					.then((raw) => Number(formatUnits(raw, 6)))
-			: Promise.resolve(0),
-	]);
-
-	return {
-		base: baseHuman,
-		polygon: polygonHuman,
-		bnb: bscHuman,
-		solana: solanaHuman,
-		limitlessMakerBase: limitlessHuman,
-	};
+	return readFundingStableBalancesForChains(addrs, allFundingBalanceChainKeys());
 }
 
 /**

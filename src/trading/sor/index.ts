@@ -37,6 +37,7 @@ export type {
 	RoutePlan,
 	RouteLeg,
 	RouteRequest,
+	SorDflowPondQuote,
 	RouteExecution,
 	ExecutionLeg,
 	ExecutionLegStatus,

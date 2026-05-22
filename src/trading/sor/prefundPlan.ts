@@ -11,7 +11,8 @@ import { floorFloatToDecimalString } from "@/trading/lifi/prefundFromAmountHuman
  */
 export const LIFI_BRIDGE_AMOUNT_MARGIN = 0;
 
-const ALL_SOURCE_CHAINS: SorChain[] = ["base", "polygon", "solana", "bnb"];
+/** Chains that {@link buildPrefundSteps} may pull LI.FI prefund from (excluding destination). */
+export const ALL_SOURCE_CHAINS: SorChain[] = ["base", "polygon", "solana", "bnb"];
 
 /** Skip dust legs that LI.FI often cannot route reliably. Exported for same-chain SCW→maker sweeps. */
 export const MIN_PREFUND_CHUNK_USD = 0.02;
@@ -213,7 +214,12 @@ export function buildPrefundSteps(
 	primaryFrom: SorChain,
 	toChain: SorChain,
 	balances: FundingStableBalancesHuman,
-	opts?: { fullPrefundNeedUsdHuman?: number; limitlessBaseDest?: boolean },
+	opts?: {
+		fullPrefundNeedUsdHuman?: number;
+		limitlessBaseDest?: boolean;
+		/** When set, only these chains may fund LI.FI prefund (excluding destination). Default: all sources. */
+		allowedSourceChains?: readonly SorChain[];
+	},
 ): PrefundStep[] {
 	const need = Math.max(0, needUsdHuman);
 	const lxDest = opts?.limitlessBaseDest === true && toChain === "base";
@@ -259,9 +265,10 @@ export function buildPrefundSteps(
 	pushFromChain(primaryFrom, primaryTake);
 	remaining -= primaryTake;
 
-	const others = ALL_SOURCE_CHAINS.filter((c) => c !== toChain && c !== primaryFrom).sort(
-		(a, b) => sortKey(b) - sortKey(a),
-	);
+	const sourceChains = opts?.allowedSourceChains ?? ALL_SOURCE_CHAINS;
+	const others = sourceChains
+		.filter((c) => c !== toChain && c !== primaryFrom)
+		.sort((a, b) => sortKey(b) - sortKey(a));
 
 	for (const c of others) {
 		if (remaining <= 1e-6) break;

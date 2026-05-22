@@ -1,6 +1,6 @@
 import { waitForBaseTransactionSuccess } from "@/trading/base/waitPrivyBaseTxReceipt";
 import {
-	readFundingStableBalancesHuman,
+	readFundingStableBalancesForChains,
 	type FundingAddressesInput,
 	type FundingStableBalancesHuman,
 } from "@/trading/sor/fundingStableBalances";
@@ -173,7 +173,10 @@ export async function waitForScwUsdcAfterLimitlessPortfolioWithdraw(input: {
 		if (input.balancesHuman!.base + PREFUND_SHORTFALL_COVERED_EPS_USD >= target) {
 			return;
 		}
-		const b = await readFundingStableBalancesHuman(input.fundingAddresses);
+		const b = await readFundingStableBalancesForChains(input.fundingAddresses, [
+			"base",
+			"limitlessMakerBase",
+		]);
 		input.balancesHuman!.base = b.base;
 		input.balancesHuman!.limitlessMakerBase = b.limitlessMakerBase;
 		if (b.base + PREFUND_SHORTFALL_COVERED_EPS_USD >= target) {
@@ -184,7 +187,10 @@ export async function waitForScwUsdcAfterLimitlessPortfolioWithdraw(input: {
 		);
 	}
 
-	const b = await readFundingStableBalancesHuman(input.fundingAddresses);
+	const b = await readFundingStableBalancesForChains(input.fundingAddresses, [
+		"base",
+		"limitlessMakerBase",
+	]);
 	if (input.balancesHuman) {
 		input.balancesHuman.base = b.base;
 		input.balancesHuman.limitlessMakerBase = b.limitlessMakerBase;

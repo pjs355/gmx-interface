@@ -7,23 +7,29 @@ import React, {
 	useState,
 } from "react";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
 import { useAccountOverview } from "@/trading/hooks/useAccountOverview";
-import { usePolymarketBuilder } from "@/trading/hooks/usePolymarketBuilder";
+import {
+	usePolymarketBuilder,
+	type PolymarketBuilderBundle,
+} from "@/trading/hooks/usePolymarketBuilder";
 import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
 import {
-	useFundingAddressesFromQueries,
-	type PolymarketBuilderBundle,
-} from "@/trading/hooks/useFundingAddresses";
+	getAccountWalletGate,
+	normalizeWalletRolesFromOverview,
+	resolveVenueAddressChainMap,
+	type AccountWalletGate,
+	type AccountWalletRolesPartial,
+	type VenueAddressChainMap,
+} from "@/context/accountWallets";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 import { tradingQueryKeys } from "@/trading/queryKeys";
 import { usePolymarketPositions } from "@/trading/polymarket/usePolymarketPositions";
 import { usePredictPositions } from "@/trading/predict/usePredictPositions";
 import { useDflowPositions } from "@/trading/dflow/useDflowPositions";
 import { useLimitlessVenuePositions } from "@/trading/limitless/useLimitlessPortfolioVenue";
-import { resolvePredictAccountAddress } from "@/trading/predict/resolvePredictAccountAddress";
 import {
 	CollateralTokenProvider,
 	useCollateralTokens,
@@ -54,9 +60,7 @@ import type { VenuePosition } from "@/types/trading/venuePosition";
  *     sites (`apiClient.getPredictAccount()`, raw `fetch('/profiles/me')`,
  *     etc.) MUST go through this provider — see Phase 2 of the cleanup plan.
  *   - Refetch / invalidation lives in one place (`refresh.*`).
- *   - Address normalization for Predict.fun positions is centralized via
- *     `resolvePredictAccountAddress` — three previous call sites computed it
- *     three different ways and double-fetched until they converged.
+ *   - Venue wallet addresses come only from `venueAddressChainMap` (VACM).
  *
  * Reads inside the provider:
  *   - profile        ← `useCurrentProfile`           (key: `tradingQueryKeys.profileMe`)
@@ -141,6 +145,12 @@ export type AccountVenueKey =
 	| "dflow"
 	| "limitless";
 
+export type AccountPolyAccountSlice = AccountDataSlice<PolymarketAccountResponse> & {
+	integrationMode: string | undefined;
+	notFound: boolean;
+	verifyOnChain: PolymarketBuilderBundle["verifyOnChain"];
+};
+
 export type AccountReadiness = {
 	/** True after profile resolution + (when profile exists) overview + polymarket settled. */
 	hydrated: boolean;
@@ -155,18 +165,13 @@ export type AccountData = {
 	overview: AccountDataSlice<AccountOverview>;
 	cash: AccountCashSlice;
 	dflowProof: AccountDflowProofSlice;
-	polyAccount: AccountDataSlice<PolymarketAccountResponse>;
 	predictAccount: AccountDataSlice<PredictAccountResponse>;
 	positions: Record<AccountVenueKey, AccountPositionsSlice>;
-	addresses: {
-		baseSmartWallet: string | null;
-		polymarketSafe: string | null;
-		embeddedEoa: string | null;
-		solanaAddress: string | null;
-		limitlessMakerBase: string | null;
-		/** Canonical address used as the Predict.fun positions cache key. */
-		predict: string | null;
-	};
+	/** Venue → chain + collateral + signer; null until wallet gate is ready. */
+	venueAddressChainMap: VenueAddressChainMap | null;
+	walletGate: AccountWalletGate;
+	walletIsLoading: boolean;
+	polyAccount: AccountPolyAccountSlice;
 	readiness: AccountReadiness;
 	/** Bumped after each successful `refresh.account` (weak signal for post-trade reconcile). */
 	accountVersion: number;
@@ -196,8 +201,6 @@ const PREDICT_ACCOUNT_DISABLED_KEY = [
 	"__disabled__",
 ] as const;
 
-type FundingSnapshot = ReturnType<typeof useFundingAddressesFromQueries>;
-
 type AccountDataContextInnerProps = {
 	children: React.ReactNode;
 	authenticated: boolean;
@@ -207,7 +210,9 @@ type AccountDataContextInnerProps = {
 	profileQuery: UseQueryResult<UserProfile>;
 	overviewQuery: UseQueryResult<AccountOverview>;
 	polyBuilder: PolymarketBuilderBundle;
-	funding: FundingSnapshot;
+	walletRoles: AccountWalletRolesPartial;
+	walletHydrated: boolean;
+	walletIsLoading: boolean;
 	profileId: string | null;
 };
 
@@ -220,11 +225,23 @@ function AccountDataContextInner({
 	profileQuery,
 	overviewQuery,
 	polyBuilder,
-	funding,
+	walletRoles,
+	walletHydrated,
+	walletIsLoading,
 	profileId,
 }: AccountDataContextInnerProps) {
 	const collateral = useCollateralTokens();
 	const dflowProofQ = useDflowProofStatus();
+
+	const walletGate = useMemo(
+		() => getAccountWalletGate(walletRoles, walletHydrated),
+		[walletRoles, walletHydrated],
+	);
+
+	const venueAddressChainMap = useMemo(
+		() => resolveVenueAddressChainMap(walletRoles, walletGate),
+		[walletRoles, walletGate],
+	);
 
 	const predictAccountQuery = useQuery<PredictAccountResponse>({
 		queryKey: profileId
@@ -235,25 +252,31 @@ function AccountDataContextInner({
 		queryFn: () => api.getPredictAccount(),
 	});
 
-	const polyPositionsQuery = usePolymarketPositions(funding.polymarketSafe);
+	const polyPositionsQuery = usePolymarketPositions(
+		venueAddressChainMap?.polymarket.walletAddress ?? null,
+	);
 
-	const predictAddress = resolvePredictAccountAddress(signerAddress, account);
-	const predictPositionsQuery = usePredictPositions(predictAddress);
+	const predictPositionsQuery = usePredictPositions(
+		venueAddressChainMap?.predictfun.walletAddress ?? null,
+	);
 
-	const solanaLinked = Boolean(funding.solanaAddress?.trim());
+	const solanaLinked = Boolean(
+		venueAddressChainMap?.dflow.walletAddress?.trim(),
+	);
 	const dflowRpcEnabled =
 		solanaLinked &&
 		Boolean(authenticated) &&
 		dflowProofQ.isFetched &&
 		dflowProofQ.isVerified;
 	const dflowPositionsQuery = useDflowPositions(
-		funding.solanaAddress,
+		venueAddressChainMap?.dflow.walletAddress ?? null,
 		api,
-		{ enabled: dflowRpcEnabled }
+		{ enabled: dflowRpcEnabled },
 	);
 
 	const limitlessEnabled =
-		Boolean(authenticated) && Boolean(funding.limitlessMakerBase?.trim());
+		Boolean(authenticated) &&
+		Boolean(venueAddressChainMap?.limitless.walletAddress?.trim());
 	const limitlessPositionsQuery = useLimitlessVenuePositions(limitlessEnabled);
 
 	const refreshProfile = useCallback(async () => {
@@ -435,12 +458,16 @@ function AccountDataContextInner({
 			refetch: refreshOverview,
 		};
 
-		const polySlice: AccountDataSlice<PolymarketAccountResponse> = {
+		const polySlice: AccountPolyAccountSlice = {
 			data: polyBuilder.data ?? null,
 			status: statusOf(polyBuilder),
 			error: errorMessageOf(polyBuilder.error),
 			isFetched: polyBuilder.isFetched,
 			refetch: refreshPolyAccount,
+			integrationMode:
+				polyBuilder.data?.polymarketAccount?.integrationMode ?? undefined,
+			notFound: Boolean(polyBuilder.data?._clientPolymarketAccountNotFound),
+			verifyOnChain: polyBuilder.verifyOnChain,
 		};
 
 		const predictSlice: AccountDataSlice<PredictAccountResponse> = {
@@ -452,7 +479,7 @@ function AccountDataContextInner({
 		};
 
 		const readiness: AccountReadiness = {
-			hydrated: funding.fundingHydrated,
+			hydrated: walletHydrated,
 			anyPositionsFetched:
 				positions.polymarket.isFetched ||
 				positions.predict.isFetched ||
@@ -469,14 +496,9 @@ function AccountDataContextInner({
 			polyAccount: polySlice,
 			predictAccount: predictSlice,
 			positions,
-			addresses: {
-				baseSmartWallet: funding.baseSmartWallet ?? null,
-				polymarketSafe: funding.polymarketSafe ?? null,
-				embeddedEoa: funding.embeddedEoa ?? null,
-				solanaAddress: funding.solanaAddress ?? null,
-				limitlessMakerBase: funding.limitlessMakerBase ?? null,
-				predict: predictAddress,
-			},
+			venueAddressChainMap,
+			walletGate,
+			walletIsLoading,
 			readiness,
 			accountVersion,
 			lastAccountRefreshAt,
@@ -511,9 +533,11 @@ function AccountDataContextInner({
 		predictPositionsQuery,
 		dflowPositionsQuery,
 		limitlessPositionsQuery,
-		funding,
+		venueAddressChainMap,
+		walletGate,
+		walletIsLoading,
+		walletHydrated,
 		profileId,
-		predictAddress,
 		refreshProfile,
 		refreshOverview,
 		refreshCash,
@@ -551,16 +575,56 @@ export function AccountDataProvider({
 		profileId: profileId ?? undefined,
 		enabled: Boolean(profileId && authenticated),
 	});
-	const funding = useFundingAddressesFromQueries(
-		profileQuery,
-		overviewQuery,
-		polyBuilder
+	const { user } = usePrivy();
+	const { wallets: privyWallets } = usePrivyWallets();
+
+	const predictAccountQuery = useQuery<PredictAccountResponse>({
+		queryKey: profileId
+			? tradingQueryKeys.predictAccount(profileId)
+			: PREDICT_ACCOUNT_DISABLED_KEY,
+		enabled: Boolean(profileId && authenticated),
+		staleTime: 30_000,
+		queryFn: () => api.getPredictAccount(),
+	});
+
+	const walletRoles = useMemo(
+		() =>
+			normalizeWalletRolesFromOverview({
+				user,
+				privyWallets: (privyWallets ?? []) as Parameters<
+					typeof normalizeWalletRolesFromOverview
+				>[0]["privyWallets"],
+				accountOverview: overviewQuery.data,
+				polymarketAccount: polyBuilder.data,
+				predictAccount: predictAccountQuery.data,
+			}),
+		[
+			user,
+			privyWallets,
+			overviewQuery.data,
+			polyBuilder.data,
+			predictAccountQuery.data,
+		],
 	);
+
+	const walletHydrated =
+		profileQuery.isFetched &&
+		(!profileId ||
+			(overviewQuery.isFetched &&
+				polyBuilder.isFetched &&
+				predictAccountQuery.isFetched));
+
+	const walletIsLoading =
+		profileQuery.isLoading ||
+		(Boolean(profileId) &&
+			(overviewQuery.isLoading ||
+				polyBuilder.isFetching ||
+				predictAccountQuery.isFetching));
 
 	return (
 		<CollateralTokenProvider
 			profileId={profileId}
-			fundingHydrated={funding.fundingHydrated}
+			fundingHydrated={walletHydrated}
 		>
 			<AccountDataContextInner
 				authenticated={authenticated}
@@ -570,7 +634,9 @@ export function AccountDataProvider({
 				profileQuery={profileQuery}
 				overviewQuery={overviewQuery}
 				polyBuilder={polyBuilder}
-				funding={funding}
+				walletRoles={walletRoles}
+				walletHydrated={walletHydrated}
+				walletIsLoading={walletIsLoading}
 				profileId={profileId}
 			>
 				{children}
@@ -619,8 +685,26 @@ export function useAccountPositions(
 ): AccountPositionsSlice {
 	return useAccountData().positions[venue];
 }
-export function useAccountAddresses(): AccountData["addresses"] {
-	return useAccountData().addresses;
+export function useVenueAddressChainMap(): VenueAddressChainMap | null {
+	return useAccountData().venueAddressChainMap;
+}
+
+export function useAccountWalletGate(): AccountWalletGate {
+	return useAccountData().walletGate;
+}
+
+/** @deprecated Use {@link useVenueAddressChainMap} and {@link useAccountWalletGate}. */
+export function useAccountAddresses(): {
+	venueAddressChainMap: VenueAddressChainMap | null;
+	walletGate: AccountWalletGate;
+	walletIsLoading: boolean;
+} {
+	const ad = useAccountData();
+	return {
+		venueAddressChainMap: ad.venueAddressChainMap,
+		walletGate: ad.walletGate,
+		walletIsLoading: ad.walletIsLoading,
+	};
 }
 export function useAccountReadiness(): AccountReadiness {
 	return useAccountData().readiness;

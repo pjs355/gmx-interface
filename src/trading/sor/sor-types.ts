@@ -193,11 +193,64 @@ export interface RouteRequest {
 	 * `base`, which is the smart wallet — keeps LevelUp from inheriting maker spend.
 	 */
 	limitlessMakerBaseUsdc?: number;
+	/** Request bundled Pond preview on POST /api/sor/route (authenticated only). */
+	includeDflowPondQuote?: boolean;
 }
+
+/** Pond fill preview on POST /api/sor/route — not part of the signed route plan. */
+export interface SorDflowPondQuote {
+	contracts: number;
+	usd: number;
+	pricePerContract: number;
+	code?: string;
+}
+
+/** Sibling to `RoutePlan` on POST /api/sor/route — not HMAC-signed. */
+export type VenueRoutePreviewQuoteKind = "executable" | "theoreticalOnly";
+
+export interface VenueRoutePreviewBuy {
+	side: "buy";
+	venue: SorVenue;
+	quoteKind: VenueRoutePreviewQuoteKind;
+	requestedAmount: number;
+	remainder: number;
+	insufficientLiquidity: boolean;
+	totalShares: number;
+	totalCost: number;
+	totalFees: number;
+	totalBridgeCost: number;
+	legs: RouteLeg[];
+}
+
+export interface VenueRoutePreviewSellOk {
+	side: "sell";
+	venue: SorVenue;
+	ok: true;
+	shares: number;
+	avgPrice: number;
+	proceeds: number;
+	fees: number;
+	legs: RouteLeg[];
+}
+
+export interface VenueRoutePreviewSellFail {
+	side: "sell";
+	venue: SorVenue;
+	ok: false;
+	code: SorErrorCode;
+	error: string;
+}
+
+export type VenueRoutePreview =
+	| VenueRoutePreviewBuy
+	| VenueRoutePreviewSellOk
+	| VenueRoutePreviewSellFail;
 
 export interface RouteResponse {
 	success: true;
 	route: RoutePlan;
+	venuePreviews?: VenueRoutePreview[];
+	dflowPondQuote?: SorDflowPondQuote;
 }
 
 /** Mirrors server `SorErrorCode` (subset extended as API grows). */
@@ -224,6 +277,7 @@ export interface RouteErrorResponse {
 	code: SorErrorCode;
 	/** Present on some validation responses (e.g. Kalshi whole-share hint). */
 	tone?: "warning" | "error";
+	dflowPondQuote?: SorDflowPondQuote;
 }
 
 export type SorRouteResult = RouteResponse | RouteErrorResponse;

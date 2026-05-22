@@ -70,6 +70,7 @@ describe("predictVenuePositionMatchesPagePredictWiring", () => {
 				marketIdA: String(METIZPORT_MARKET_ID),
 				tokenIdA: METIZPORT_TOKEN,
 				tokenIdB: "other",
+				decimalPrecision: 2,
 			},
 		};
 		expect(

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import type { VenuePosition } from "@/types/trading/venuePosition";
 import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
 
 /**
@@ -8,7 +9,7 @@ export function usePredictPositions(address: string | undefined | null) {
 	const a = address?.trim().toLowerCase() ?? "";
 	const api = usePrivateApiClient();
 
-	return useQuery({
+	return useQuery<VenuePosition[]>({
 		queryKey: ["predict-positions", a],
 		enabled: Boolean(a.startsWith("0x")),
 		staleTime: 30_000,
