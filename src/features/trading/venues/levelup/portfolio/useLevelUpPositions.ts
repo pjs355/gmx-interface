@@ -96,7 +96,7 @@ export function useLevelUpPositions(
 		async (_options?: { force?: boolean }) => {
 			await query.refetch();
 		},
-		[query],
+		[query.refetch],
 	);
 
 	const status = statusOf(query.isFetched, query.isPending, query.isError, enabled);

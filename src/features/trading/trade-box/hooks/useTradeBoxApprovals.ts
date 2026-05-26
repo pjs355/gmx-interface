@@ -2,13 +2,12 @@
  * Trade-box wrapper around `useApprovalGate` (JIT token approvals + DFlow proof).
  *
  * Wires Limitless Base tx client, collateral tokens, relay, and venue session queries
- * into the shared approval runtime. Refetches LevelUp approval status when account
- * connects.
+ * into the shared approval runtime.
  *
  * Returns `ensureTokenApprovalsForSor` / `ensureDflowProofVerified` consumed by
  * `buildTradeBoxSorLegExecutorDeps` and execute paths.
  */
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { useSendTransaction } from "@privy-io/react-auth";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import { useApprovalGate } from "@/features/trading/approvals/useApprovalGate";
@@ -80,10 +79,6 @@ export function useTradeBoxApprovals(args: {
 		dflowProof,
 		handleStartDflowProofForTrade,
 	});
-
-	useEffect(() => {
-		if (account) void approvalGate.refetchLevelUpApprovalStatus();
-	}, [account, approvalGate.refetchLevelUpApprovalStatus]);
 
 	return approvalGate;
 }

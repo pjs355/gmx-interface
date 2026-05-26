@@ -39,7 +39,7 @@ import {
 	bundledCounterStrikeLogoFromTagLabels,
 	resolveLogoByTags,
 } from "@/features/markets/assets/gameLogoResolver";
-import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
+import { preloadPredictionMarketRoute } from "@/App/routes/predictionMarketRouteLazy";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx

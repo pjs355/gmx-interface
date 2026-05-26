@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccountData, useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { refetchLevelUpOrdersAndPositions } from "./refetchLevelUpOrders";
@@ -9,10 +9,12 @@ export function useLevelUpPortfolioRefetch() {
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const accountData = useAccountData();
 	const levelUpWallet = venueAddressChainMap?.levelup.walletAddress ?? null;
+	const refreshPositionsRef = useRef(accountData.refresh.positions);
+	refreshPositionsRef.current = accountData.refresh.positions;
 
 	return useCallback(async () => {
 		await refetchLevelUpOrdersAndPositions(queryClient, levelUpWallet, () =>
-			accountData.refresh.positions("levelup"),
+			refreshPositionsRef.current("levelup"),
 		);
-	}, [queryClient, levelUpWallet, accountData.refresh]);
+	}, [queryClient, levelUpWallet]);
 }

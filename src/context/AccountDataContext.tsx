@@ -246,34 +246,41 @@ function AccountDataContextInner({
 		queryFn: () => api.getPredictAccount(),
 	});
 
+	// First-signup modal runs Predict → Limitless → Polymarket ensure hooks. Position
+	// endpoints compete with those calls and Privy signing — defer until complete.
+	const deferPortfolioBoot =
+		authenticated && profileQuery.isSuccess && !profileQuery.data?.onboardingCompletedAt;
+
 	const polyPositionsQuery = usePolymarketPositions(
-		venueAddressChainMap?.polymarket.walletAddress ?? null,
+		deferPortfolioBoot ? null : (venueAddressChainMap?.polymarket.walletAddress ?? null),
 	);
 
 	const predictPositionsQuery = usePredictPositions(
-		venueAddressChainMap?.predictfun.walletAddress ?? null,
+		deferPortfolioBoot ? null : (venueAddressChainMap?.predictfun.walletAddress ?? null),
 	);
 
 	const solanaLinked = Boolean(venueAddressChainMap?.dflow.walletAddress?.trim());
 	const dflowRpcEnabled =
 		solanaLinked && Boolean(authenticated) && dflowProofQ.isFetched && dflowProofQ.isVerified;
 	const dflowPositionsQuery = useDflowPositions(
-		venueAddressChainMap?.dflow.walletAddress ?? null,
+		deferPortfolioBoot ? null : (venueAddressChainMap?.dflow.walletAddress ?? null),
 		api,
-		{ enabled: dflowRpcEnabled },
+		{ enabled: deferPortfolioBoot ? false : dflowRpcEnabled },
 	);
 
 	const limitlessEnabled =
 		Boolean(authenticated) && Boolean(venueAddressChainMap?.limitless.walletAddress?.trim());
-	const limitlessPositionsQuery = useLimitlessVenuePositions(limitlessEnabled);
+	const limitlessPositionsQuery = useLimitlessVenuePositions(
+		deferPortfolioBoot ? false : limitlessEnabled,
+	);
 
 	const levelUpWalletAddress =
 		venueAddressChainMap?.levelup.walletAddress ?? (typeof account === "string" ? account : null);
-	const levelUpPositions = useLevelUpPositions(levelUpWalletAddress);
+	const levelUpPositions = useLevelUpPositions(deferPortfolioBoot ? null : levelUpWalletAddress);
 
 	const refreshLevelUpPositions = useCallback(async () => {
 		await levelUpPositions.refetch({ force: true });
-	}, [levelUpPositions]);
+	}, [levelUpPositions.refetch]);
 
 	const refreshProfile = useCallback(async () => {
 		await profileQuery.refetch();
@@ -295,6 +302,7 @@ function AccountDataContextInner({
 	}, [predictAccountQuery]);
 	const refreshPositions = useCallback(
 		async (venue?: AccountVenueKey) => {
+			if (deferPortfolioBoot) return;
 			const tasks: Array<Promise<unknown>> = [];
 			if (!venue || venue === "levelup") tasks.push(refreshLevelUpPositions());
 			if (!venue || venue === "polymarket") tasks.push(polyPositionsQuery.refetch());
@@ -304,11 +312,12 @@ function AccountDataContextInner({
 			await Promise.all(tasks);
 		},
 		[
+			deferPortfolioBoot,
 			refreshLevelUpPositions,
-			polyPositionsQuery,
-			predictPositionsQuery,
-			dflowPositionsQuery,
-			limitlessPositionsQuery,
+			polyPositionsQuery.refetch,
+			predictPositionsQuery.refetch,
+			dflowPositionsQuery.refetch,
+			limitlessPositionsQuery.refetch,
 		],
 	);
 	const refreshAll = useCallback(async () => {
@@ -319,9 +328,10 @@ function AccountDataContextInner({
 			refreshDflowProof(),
 			refreshPolyAccount(),
 			refreshPredictAccount(),
-			refreshPositions(),
+			...(deferPortfolioBoot ? [] : [refreshPositions()]),
 		]);
 	}, [
+		deferPortfolioBoot,
 		refreshProfile,
 		refreshOverview,
 		refreshCash,
@@ -347,7 +357,7 @@ function AccountDataContextInner({
 			}
 			try {
 				await Promise.all([
-					refreshPositions(),
+					...(deferPortfolioBoot ? [] : [refreshPositions()]),
 					refreshCash(),
 					refreshOverview(),
 					refreshPolyAccount(),
@@ -364,6 +374,7 @@ function AccountDataContextInner({
 			}
 		},
 		[
+			deferPortfolioBoot,
 			refreshPositions,
 			refreshCash,
 			refreshOverview,

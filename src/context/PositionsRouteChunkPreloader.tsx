@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useSignerContext } from "context/SignerContext";
 import { useAccountReadiness } from "@/context/AccountDataContext";
-import { preloadPositionsRoute } from "@/app/routes/positionsRouteLazy";
+import { preloadPositionsRoute } from "@/App/routes/positionsRouteLazy";
 
 /**
  * After account funding hydration and a connected signer, prefetch the `/positions` JS chunk

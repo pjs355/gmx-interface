@@ -27,7 +27,7 @@ import {
 	resolveLogoByTags,
 } from "@/features/markets/assets/gameLogoResolver";
 import { formatUmbrellaCrossVenueVolumeLabel } from "@/features/markets/presentation/umbrellaVolume";
-import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
+import { preloadPredictionMarketRoute } from "@/App/routes/predictionMarketRouteLazy";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
 

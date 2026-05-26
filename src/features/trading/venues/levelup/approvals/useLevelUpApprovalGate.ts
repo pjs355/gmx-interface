@@ -29,6 +29,7 @@ export function useLevelUpApprovalGate(enabled = true) {
 	const queryEnabled = enabled && Boolean(wallet?.trim());
 
 	const statusQuery = useLevelUpApprovalsStatus(wallet, queryEnabled);
+	const { refetch: refetchApprovalsStatus } = statusQuery;
 	const [isApproving, setIsApproving] = useState(false);
 
 	const approvalState = useMemo((): LevelUpApprovalUiState => {
@@ -90,9 +91,9 @@ export function useLevelUpApprovalGate(enabled = true) {
 
 	const refetchStatus = useCallback(async () => {
 		if (!queryEnabled) return false;
-		const result = await statusQuery.refetch();
+		const result = await refetchApprovalsStatus();
 		return result.data?.isApproved ?? false;
-	}, [queryEnabled, statusQuery]);
+	}, [queryEnabled, refetchApprovalsStatus]);
 
 	return {
 		wallet,

@@ -85,7 +85,7 @@ import { LimitlessBackgroundActivation } from "@/features/trading/venues/limitle
 import { SetupActivationProvider } from "@/features/onboarding/SetupActivationContext";
 import { FirstSignupSetupGate } from "@/features/onboarding/FirstSignupSetupGate";
 
-import App from "./app/App";
+import App from "./App/App";
 import "./styles/globals.css";
 
 // Dev-only: React.StrictMode double-mounts children; you may see duplicate
