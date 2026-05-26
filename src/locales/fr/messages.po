@@ -37,10 +37,6 @@ msgstr ""
 msgid "LevelUp Markets"
 msgstr ""
 
-#: src/components/Header/HomeHeaderLinks.tsx
-msgid "Get Test USDC"
-msgstr ""
-
 #: src/pages/PredictionMarket/Comments/Comments.tsx
 msgid "No comments yet. Be the first to share your thoughts."
 msgstr ""

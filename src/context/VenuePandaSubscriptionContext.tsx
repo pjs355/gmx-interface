@@ -1,11 +1,4 @@
-import React, {
-	createContext,
-	useCallback,
-	useContext,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 
 /** Max distinct PandaScore match IDs on one venue-prices connection (home + trading). */
 export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 52;
@@ -16,14 +9,11 @@ type VenuePandaSubscriptionContextValue = {
 	activePandaMatchIds: string[];
 };
 
-const VenuePandaSubscriptionContext =
-	createContext<VenuePandaSubscriptionContextValue | null>(null);
+const VenuePandaSubscriptionContext = createContext<VenuePandaSubscriptionContextValue | null>(
+	null,
+);
 
-export function VenuePandaSubscriptionProvider({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
+export function VenuePandaSubscriptionProvider({ children }: { children: React.ReactNode }) {
 	const countsRef = useRef<Map<string, number>>(new Map());
 	const [activePandaMatchIds, setActivePandaMatchIds] = useState<string[]>([]);
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -33,9 +23,7 @@ export function VenuePandaSubscriptionProvider({
 			if (b[1] !== a[1]) return b[1] - a[1];
 			return a[0].localeCompare(b[0]);
 		});
-		setActivePandaMatchIds(
-			entries.slice(0, MAX_VENUE_PANDA_SUBSCRIPTIONS).map(([id]) => id),
-		);
+		setActivePandaMatchIds(entries.slice(0, MAX_VENUE_PANDA_SUBSCRIPTIONS).map(([id]) => id));
 	}, []);
 
 	const scheduleFlush = useCallback(() => {
@@ -88,9 +76,7 @@ export function VenuePandaSubscriptionProvider({
 export function useVenuePandaSubscription(): VenuePandaSubscriptionContextValue {
 	const ctx = useContext(VenuePandaSubscriptionContext);
 	if (!ctx) {
-		throw new Error(
-			"useVenuePandaSubscription must be used within VenuePandaSubscriptionProvider",
-		);
+		throw new Error("useVenuePandaSubscription must be used within VenuePandaSubscriptionProvider");
 	}
 	return ctx;
 }

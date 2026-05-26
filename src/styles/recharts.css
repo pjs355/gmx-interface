@@ -1,5 +1,5 @@
 .recharts-surface:focus,
 .recharts-layer:focus,
 .recharts-layer path:focus {
-  outline: none;
+	outline: none;
 }

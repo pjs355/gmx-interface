@@ -14,10 +14,7 @@ import {
 	useHover,
 	useInteractions,
 } from "@floating-ui/react";
-import {
-	getOppositePlacement,
-	getOppositeAlignmentPlacement,
-} from "@floating-ui/utils";
+import { getOppositePlacement, getOppositeAlignmentPlacement } from "@floating-ui/utils";
 import cx from "classnames";
 import {
 	ComponentPropsWithoutRef,
@@ -30,12 +27,8 @@ import {
 	useState,
 } from "react";
 
-import {
-	DEFAULT_TOOLTIP_POSITION,
-	TOOLTIP_CLOSE_DELAY,
-	TOOLTIP_OPEN_DELAY,
-} from "config/ui";
-import { usePrevious } from "@/hooks/usePrevious";
+import { DEFAULT_TOOLTIP_POSITION, TOOLTIP_CLOSE_DELAY, TOOLTIP_OPEN_DELAY } from "config/ui";
+import { usePrevious } from "@/shared/hooks/usePrevious";
 
 import "./Tooltip.scss";
 
@@ -79,14 +72,10 @@ type InnerTooltipProps<T extends ElementType | undefined> = {
 	closeOnDoubleClick?: boolean;
 };
 
-export type TooltipProps<T extends ElementType | undefined> =
-	InnerTooltipProps<T> &
-		(T extends undefined
-			? {}
-			: Omit<
-					ComponentPropsWithoutRef<Exclude<T, undefined>>,
-					keyof InnerTooltipProps<T>
-			  >);
+export type TooltipProps<T extends ElementType | undefined> = InnerTooltipProps<T> &
+	(T extends undefined
+		? {}
+		: Omit<ComponentPropsWithoutRef<Exclude<T, undefined>>, keyof InnerTooltipProps<T>>);
 
 export default function Tooltip<T extends ElementType>({
 	handle,
@@ -175,11 +164,7 @@ export default function Tooltip<T extends ElementType>({
 		enabled: !disabled,
 	});
 
-	const { getReferenceProps, getFloatingProps } = useInteractions([
-		hover,
-		click,
-		dismiss,
-	]);
+	const { getReferenceProps, getFloatingProps } = useInteractions([hover, click, dismiss]);
 
 	const preventClick = useCallback(
 		(event: MouseEvent) => {
@@ -188,7 +173,7 @@ export default function Tooltip<T extends ElementType>({
 				event.stopPropagation();
 			}
 		},
-		[shouldStopPropagation]
+		[shouldStopPropagation],
 	);
 
 	useEffect(
@@ -199,19 +184,19 @@ export default function Tooltip<T extends ElementType>({
 
 			// If element was blurred, allow some time so that activeElement is updated
 			requestAnimationFrame(() => {
-				const focusWithin = (
-					refs.reference.current as HTMLElement
-				)?.contains(document.activeElement);
+				const focusWithin = (refs.reference.current as HTMLElement)?.contains(
+					document.activeElement,
+				);
 
 				if (focusWithin) {
 					setVisible(true);
 				}
 			});
 		},
-		[disabled, refs.reference, visible]
+		[disabled, refs.reference, visible],
 	);
 
-	const finalContent = visible ? content ?? renderContent?.() : undefined;
+	const finalContent = visible ? (content ?? renderContent?.()) : undefined;
 
 	const tooltipContent = visible ? (
 		<div
@@ -220,11 +205,7 @@ export default function Tooltip<T extends ElementType>({
 			{...getFloatingProps()}
 			className={cx("Tooltip-popup", tooltipClassName)}
 		>
-			<FloatingArrow
-				ref={arrowRef}
-				context={context}
-				className="fill-slate-600"
-			/>
+			<FloatingArrow ref={arrowRef} context={context} className="fill-slate-600" />
 			{finalContent}
 		</div>
 	) : undefined;
@@ -244,26 +225,17 @@ export default function Tooltip<T extends ElementType>({
 				})}
 			>
 				{handle ?? children}
-				{visible && withPortal && (
-					<FloatingPortal>{tooltipContent}</FloatingPortal>
-				)}
+				{visible && withPortal && <FloatingPortal>{tooltipContent}</FloatingPortal>}
 				{visible && !withPortal && tooltipContent}
 			</Container>
 		);
 	}
 
 	return (
-		<span
-			{...containerProps}
-			className={cx("Tooltip", className)}
-			style={style}
-		>
+		<span {...containerProps} className={cx("Tooltip", className)} style={style}>
 			<span
 				ref={refs.setReference}
-				className={cx(
-					{ "Tooltip-handle": !disableHandleStyle },
-					handleClassName
-				)}
+				className={cx({ "Tooltip-handle": !disableHandleStyle }, handleClassName)}
 				style={handleStyle}
 				{...getReferenceProps({
 					onClick: (e: MouseEvent) => {
@@ -281,9 +253,7 @@ export default function Tooltip<T extends ElementType>({
 					<>{handle ?? children}</>
 				)}
 			</span>
-			{visible && withPortal && (
-				<FloatingPortal>{tooltipContent}</FloatingPortal>
-			)}
+			{visible && withPortal && <FloatingPortal>{tooltipContent}</FloatingPortal>}
 			{visible && !withPortal && tooltipContent}
 		</span>
 	);

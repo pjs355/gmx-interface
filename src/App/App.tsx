@@ -19,8 +19,7 @@ import { AppRoutes } from "./routes/AppRoutes.tsx";
 
 function App() {
 	useEffect(() => {
-		const defaultLanguage =
-			localStorage.getItem(LANGUAGE_LOCALSTORAGE_KEY) || defaultLocale;
+		const defaultLanguage = localStorage.getItem(LANGUAGE_LOCALSTORAGE_KEY) || defaultLocale;
 		dynamicActivate(defaultLanguage);
 	}, []);
 

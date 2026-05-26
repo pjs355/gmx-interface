@@ -1,9 +1,4 @@
-import { t } from "@lingui/macro";
-
 import discordIcon from "@/assets/img/ic_discord.svg";
-import githubIcon from "@/assets/img/ic_github.svg";
-import substackIcon from "@/assets/img/ic_substack.svg";
-import telegramIcon from "@/assets/img/ic_telegram.svg";
 import xIcon from "@/assets/img/ic_x.svg";
 
 type Link = {

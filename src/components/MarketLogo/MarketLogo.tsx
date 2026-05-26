@@ -1,4 +1,4 @@
-import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
+import { resolveMarketLogo } from "@/features/markets/assets/marketLogoResolver";
 
 interface MarketLogoProps {
 	/** Venue id/label (predict, predictfun, polymarket, poly, kalshi, dflow, limitless, levelup). */
@@ -15,13 +15,7 @@ interface MarketLogoProps {
  * Inline venue logo with slightly rounded corners. Renders nothing when the venue is unknown
  * so callers can safely drop it next to a name without disturbing layout.
  */
-export default function MarketLogo({
-	venue,
-	size = 16,
-	className,
-	alt,
-	style,
-}: MarketLogoProps) {
+export default function MarketLogo({ venue, size = 16, className, alt, style }: MarketLogoProps) {
 	const src = resolveMarketLogo(venue);
 	if (!src) return null;
 	return (

@@ -19,17 +19,13 @@ export default function UmbrellaFormFields({
 }: UmbrellaFormFieldsProps) {
 	// If an umbrella is selected, show its existing questions
 	if (selectedUmbrellaId) {
-		const selectedUmbrella = umbrellas.find(
-			(u) => u._id === selectedUmbrellaId
-		);
+		const selectedUmbrella = umbrellas.find((u) => u._id === selectedUmbrellaId);
 
 		if (!selectedUmbrella) {
 			return null;
 		}
 
-		const children = Array.isArray(selectedUmbrella.children)
-			? selectedUmbrella.children
-			: [];
+		const children = Array.isArray(selectedUmbrella.children) ? selectedUmbrella.children : [];
 
 		return (
 			<div
@@ -41,14 +37,11 @@ export default function UmbrellaFormFields({
 				}}
 			>
 				<div style={{ marginBottom: 8, fontWeight: 600 }}>
-					Existing questions in "{selectedUmbrella.displayName}" (
-					{children.length})
+					Existing questions in "{selectedUmbrella.displayName}" ({children.length})
 				</div>
 
 				{children.length === 0 ? (
-					<div style={{ opacity: 0.8 }}>
-						No questions found under this umbrella.
-					</div>
+					<div style={{ opacity: 0.8 }}>No questions found under this umbrella.</div>
 				) : (
 					<ul
 						style={{
@@ -59,16 +52,9 @@ export default function UmbrellaFormFields({
 						}}
 					>
 						{children.map((child) => (
-							<li
-								key={child.questionId}
-								style={{ marginBottom: 6 }}
-							>
-								<span style={{ color: "white" }}>
-									{child.displayName}
-								</span>
-								<span style={{ color: "#9ca3af" }}>
-									{" — "}
-								</span>
+							<li key={child.questionId} style={{ marginBottom: 6 }}>
+								<span style={{ color: "white" }}>{child.displayName}</span>
+								<span style={{ color: "#9ca3af" }}>{" — "}</span>
 								<span
 									style={{
 										color: "#9ca3af",
@@ -123,4 +109,3 @@ export default function UmbrellaFormFields({
 		</>
 	);
 }
-

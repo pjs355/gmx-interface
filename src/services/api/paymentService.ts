@@ -1,12 +1,12 @@
 /**
  * Payment Service
  * API client for Privy Fiat On-Ramp and Off-Ramp
- * 
+ *
  * API Reference:
  * - On-ramp: https://docs.privy.io/api-reference/fiat/onramp/create
  * - Off-ramp: https://docs.privy.io/api-reference/fiat/offramp/create
  * - Status: https://docs.privy.io/api-reference/fiat/status
- * 
+ *
  * Note: These API calls require server-side authentication with your Privy app secret.
  * The functions here are for reference - implement via your backend.
  */
@@ -129,27 +129,24 @@ function createBasicAuth(appId: string, appSecret: string): string {
 /**
  * Initiate an on-ramp transaction (fiat → USDC)
  * Returns bank deposit instructions
- * 
+ *
  * @note Requires server-side implementation with app secret
  */
 export async function initiateOnramp(
 	userId: string,
 	appId: string,
 	appSecret: string,
-	request: OnrampRequest
+	request: OnrampRequest,
 ): Promise<OnrampResponse> {
-	const response = await fetch(
-		`${PRIVY_API_BASE}/v1/users/${userId}/fiat/onramp`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: createBasicAuth(appId, appSecret),
-				"privy-app-id": appId,
-			},
-			body: JSON.stringify(request),
-		}
-	);
+	const response = await fetch(`${PRIVY_API_BASE}/v1/users/${userId}/fiat/onramp`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: createBasicAuth(appId, appSecret),
+			"privy-app-id": appId,
+		},
+		body: JSON.stringify(request),
+	});
 
 	if (!response.ok) {
 		const error = await response.text();
@@ -162,27 +159,24 @@ export async function initiateOnramp(
 /**
  * Initiate an off-ramp transaction (USDC → fiat)
  * Returns the on-chain address to send funds to
- * 
+ *
  * @note Requires server-side implementation with app secret
  */
 export async function initiateOfframp(
 	userId: string,
 	appId: string,
 	appSecret: string,
-	request: OfframpRequest
+	request: OfframpRequest,
 ): Promise<OfframpResponse> {
-	const response = await fetch(
-		`${PRIVY_API_BASE}/v1/users/${userId}/fiat/offramp`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: createBasicAuth(appId, appSecret),
-				"privy-app-id": appId,
-			},
-			body: JSON.stringify(request),
-		}
-	);
+	const response = await fetch(`${PRIVY_API_BASE}/v1/users/${userId}/fiat/offramp`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: createBasicAuth(appId, appSecret),
+			"privy-app-id": appId,
+		},
+		body: JSON.stringify(request),
+	});
 
 	if (!response.ok) {
 		const error = await response.text();
@@ -194,7 +188,7 @@ export async function initiateOfframp(
 
 /**
  * Get transaction status and history
- * 
+ *
  * @note Requires server-side implementation with app secret
  */
 export async function getTransactionStatus(
@@ -202,23 +196,20 @@ export async function getTransactionStatus(
 	appId: string,
 	appSecret: string,
 	provider: FiatProvider,
-	txHash?: string
+	txHash?: string,
 ): Promise<{ transactions: FiatTransaction[] }> {
 	const body: { provider: FiatProvider; tx_hash?: string } = { provider };
 	if (txHash) body.tx_hash = txHash;
 
-	const response = await fetch(
-		`${PRIVY_API_BASE}/v1/users/${userId}/fiat/status`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: createBasicAuth(appId, appSecret),
-				"privy-app-id": appId,
-			},
-			body: JSON.stringify(body),
-		}
-	);
+	const response = await fetch(`${PRIVY_API_BASE}/v1/users/${userId}/fiat/status`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: createBasicAuth(appId, appSecret),
+			"privy-app-id": appId,
+		},
+		body: JSON.stringify(body),
+	});
 
 	if (!response.ok) {
 		const error = await response.text();

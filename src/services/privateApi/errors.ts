@@ -35,11 +35,7 @@ function tryAxiosLikeErrorMessage(err: unknown): string | null {
 			return `HTTP ${status ?? "?"}: ${o.error}`;
 		}
 		const msg =
-			typeof o.message === "string"
-				? o.message
-				: typeof o.detail === "string"
-					? o.detail
-					: null;
+			typeof o.message === "string" ? o.message : typeof o.detail === "string" ? o.detail : null;
 		if (msg) return `HTTP ${status ?? "?"}: ${msg}`;
 		try {
 			return `HTTP ${status ?? "?"}: ${JSON.stringify(data)}`;

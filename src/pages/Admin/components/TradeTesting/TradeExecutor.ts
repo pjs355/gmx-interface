@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
-import { 
-	EXCHANGE_ADDRESS, 
+import {
+	EXCHANGE_ADDRESS,
 	FEE_RATE_BPS,
 	FEE_RATE_DECIMAL,
 	CTF_ADDRESS,
@@ -130,7 +130,7 @@ interface TestTrade {
 // Fee calculation matching backend exactly
 function calculateFeeMatchingBackend(amountInDollars: number): number {
 	const amountMicro = Math.floor(amountInDollars * 1_000_000);
-	const feeBeforeRounding = Math.floor(amountMicro * 2 / 100);
+	const feeBeforeRounding = Math.floor((amountMicro * 2) / 100);
 	const feeRoundedUp = Math.ceil(feeBeforeRounding / 10000) * 10000;
 	return feeRoundedUp / 1_000_000;
 }
@@ -158,7 +158,10 @@ export class TradeExecutor {
 	private identityToken: string | null = null;
 
 	// Track our own orders to avoid self-crossing
-	private ourLimitOrders: Map<string, { side: "buy" | "sell"; position: "yes" | "no"; price: number }> = new Map();
+	private ourLimitOrders: Map<
+		string,
+		{ side: "buy" | "sell"; position: "yes" | "no"; price: number }
+	> = new Map();
 
 	// Track submitted orders for verification
 	private submittedOrders: Array<{
@@ -178,7 +181,7 @@ export class TradeExecutor {
 		getOrderbook: () => OrderbookSnapshot | null,
 		onPhaseChange: (phase: string) => void,
 		onResult: (result: TradeResult) => void,
-		onError: (error: string) => void
+		onError: (error: string) => void,
 	) {
 		this.market = market;
 		this.account = account;
@@ -204,7 +207,7 @@ export class TradeExecutor {
 	// Fetch current balances via RPC
 	private async fetchBalances(): Promise<BalanceSnapshot> {
 		const provider = new ethers.JsonRpcProvider(DEFAULT_RPC_URL);
-		
+
 		const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
 		const ctfContract = new ethers.Contract(CTF_ADDRESS, CTF_ABI, provider);
 
@@ -242,7 +245,7 @@ export class TradeExecutor {
 	private async fetchUserOrdersFromServer(): Promise<OrderMeta[]> {
 		const apiUrl = getPredictionApiBaseUrl();
 		const endpoint = `${apiUrl}/orders/${this.account}`;
-		
+
 		console.log(`[TradeExecutor] Fetching user orders from: ${endpoint}`);
 
 		try {
@@ -255,13 +258,11 @@ export class TradeExecutor {
 			});
 
 			if (!response.ok) {
-				throw new Error(
-					adminErrorMessage(ADMIN_TRADE_TEST_FETCH_ORDERS_FAILED),
-				);
+				throw new Error(adminErrorMessage(ADMIN_TRADE_TEST_FETCH_ORDERS_FAILED));
 			}
 
 			const responseData = await response.json();
-			
+
 			// Handle different response formats
 			let rawOrders: OrderMeta[];
 			if (Array.isArray(responseData)) {
@@ -289,10 +290,10 @@ export class TradeExecutor {
 		console.log(`[TradeExecutor] Submitted ${this.submittedOrders.length} orders to verify`);
 
 		const serverOrders = await this.fetchUserOrdersFromServer();
-		
+
 		// Filter server orders to only this market
 		const marketId = this.market._id || this.market.questionId || this.market.marketId;
-		const marketOrders = serverOrders.filter(o => o.questionId === marketId);
+		const marketOrders = serverOrders.filter((o) => o.questionId === marketId);
 		console.log(`[TradeExecutor] Found ${marketOrders.length} orders for this market`);
 
 		const matchedOrders: OrderVerification["matchedOrders"] = [];
@@ -301,8 +302,8 @@ export class TradeExecutor {
 		let notFoundCount = 0;
 
 		for (const submitted of this.submittedOrders) {
-			const serverOrder = marketOrders.find(o => o.orderId === submitted.orderId);
-			
+			const serverOrder = marketOrders.find((o) => o.orderId === submitted.orderId);
+
 			if (!serverOrder) {
 				console.log(`[TradeExecutor] ❌ Order ${submitted.orderId} NOT FOUND on server`);
 				notFoundCount++;
@@ -314,11 +315,11 @@ export class TradeExecutor {
 					actualTokenValue: null,
 				});
 			} else {
-				const actualUsdcValue = serverOrder.usdcTotalMicro 
-					? serverOrder.usdcTotalMicro / 1_000_000 
+				const actualUsdcValue = serverOrder.usdcTotalMicro
+					? serverOrder.usdcTotalMicro / 1_000_000
 					: null;
-				const actualTokenValue = serverOrder.tokenTotalMicro 
-					? serverOrder.tokenTotalMicro / 1_000_000 
+				const actualTokenValue = serverOrder.tokenTotalMicro
+					? serverOrder.tokenTotalMicro / 1_000_000
 					: null;
 
 				if (serverOrder.filled) {
@@ -327,8 +328,8 @@ export class TradeExecutor {
 					console.log(`    Side: ${submitted.side.toUpperCase()}`);
 					console.log(`    Position: ${submitted.position.toUpperCase()}`);
 					console.log(`    Expected Amount: $${submitted.expectedAmount.toFixed(2)}`);
-					console.log(`    Actual USDC: $${actualUsdcValue?.toFixed(2) || 'N/A'}`);
-					console.log(`    Actual Tokens: ${actualTokenValue?.toFixed(4) || 'N/A'}`);
+					console.log(`    Actual USDC: $${actualUsdcValue?.toFixed(2) || "N/A"}`);
+					console.log(`    Actual Tokens: ${actualTokenValue?.toFixed(4) || "N/A"}`);
 					console.log(`    Expected Fee: $${submitted.expectedFee.toFixed(4)}`);
 					console.log(`    Filled At: ${serverOrder.filledAt}`);
 					filledCount++;
@@ -355,7 +356,7 @@ export class TradeExecutor {
 		console.log(`[TradeExecutor] ================================================`);
 
 		return {
-			submittedOrders: this.submittedOrders.map(o => ({
+			submittedOrders: this.submittedOrders.map((o) => ({
 				orderId: o.orderId,
 				tradeType: o.tradeType,
 				side: o.side,
@@ -421,34 +422,42 @@ export class TradeExecutor {
 
 		// Helper to generate a market order with liquidity verification
 		const addMarketOrderWithLiquidityCheck = (
-			side: "buy" | "sell", 
+			side: "buy" | "sell",
 			position: "yes" | "no",
-			requestedAmount: number
+			requestedAmount: number,
 		): boolean => {
 			// Check liquidity first
 			const liquidityCheck = this.checkLiquidityForMarketOrder(side, position, requestedAmount);
-			
+
 			if (!liquidityCheck.hasLiquidity || !liquidityCheck.bestPrice) {
 				console.log(`[TradeGen] ⚠️ Skipping ${side} ${position} - insufficient liquidity`);
-				this.onError(`Skipped ${side} ${position}: Only $${liquidityCheck.availableLiquidity.toFixed(2)} liquidity available`);
+				this.onError(
+					`Skipped ${side} ${position}: Only $${liquidityCheck.availableLiquidity.toFixed(2)} liquidity available`,
+				);
 				return false;
 			}
 
 			// Use the adjusted amount (may be less than requested if liquidity is tight)
 			const finalAmount = Math.min(requestedAmount, liquidityCheck.adjustedAmount);
-			if (finalAmount < 0.50) {
-				console.log(`[TradeGen] ⚠️ Skipping ${side} ${position} - adjusted amount too small ($${finalAmount.toFixed(2)})`);
-				this.onError(`Skipped ${side} ${position}: Adjusted amount too small ($${finalAmount.toFixed(2)})`);
+			if (finalAmount < 0.5) {
+				console.log(
+					`[TradeGen] ⚠️ Skipping ${side} ${position} - adjusted amount too small ($${finalAmount.toFixed(2)})`,
+				);
+				this.onError(
+					`Skipped ${side} ${position}: Adjusted amount too small ($${finalAmount.toFixed(2)})`,
+				);
 				return false;
 			}
 
-			console.log(`[TradeGen] ✅ Adding ${side} ${position}: $${finalAmount.toFixed(2)} @ ${liquidityCheck.bestPrice.toFixed(2)}`);
-			trades.push({ 
-				type: "market", 
-				side, 
-				position, 
-				amount: finalAmount, 
-				price: liquidityCheck.bestPrice 
+			console.log(
+				`[TradeGen] ✅ Adding ${side} ${position}: $${finalAmount.toFixed(2)} @ ${liquidityCheck.bestPrice.toFixed(2)}`,
+			);
+			trades.push({
+				type: "market",
+				side,
+				position,
+				amount: finalAmount,
+				price: liquidityCheck.bestPrice,
 			});
 			return true;
 		};
@@ -540,15 +549,23 @@ export class TradeExecutor {
 		// Calculate expected changes from all trades
 		const expectedChanges = this.calculateExpectedChanges(trades);
 		console.log(`[TradeExecutor] ========== EXPECTED CHANGES (if all settle) ==========`);
-		console.log(`  USDC Change: ${expectedChanges.usdc >= 0 ? '+' : ''}$${expectedChanges.usdc.toFixed(2)}`);
-		console.log(`  YES Token Change: ${expectedChanges.yes >= 0 ? '+' : ''}${expectedChanges.yes.toFixed(4)}`);
-		console.log(`  NO Token Change: ${expectedChanges.no >= 0 ? '+' : ''}${expectedChanges.no.toFixed(4)}`);
+		console.log(
+			`  USDC Change: ${expectedChanges.usdc >= 0 ? "+" : ""}$${expectedChanges.usdc.toFixed(2)}`,
+		);
+		console.log(
+			`  YES Token Change: ${expectedChanges.yes >= 0 ? "+" : ""}${expectedChanges.yes.toFixed(4)}`,
+		);
+		console.log(
+			`  NO Token Change: ${expectedChanges.no >= 0 ? "+" : ""}${expectedChanges.no.toFixed(4)}`,
+		);
 		console.log(`[TradeExecutor] ====================================================`);
 
 		// ========== STEP 2: Execute all trades ==========
 		for (let i = 0; i < trades.length; i++) {
 			const trade = trades[i];
-			this.onPhaseChange(`🔄 Executing trade ${i + 1}/${trades.length}: ${trade.type} ${trade.side} ${trade.position}`);
+			this.onPhaseChange(
+				`🔄 Executing trade ${i + 1}/${trades.length}: ${trade.type} ${trade.side} ${trade.position}`,
+			);
 
 			try {
 				await this.executeTrade(trade);
@@ -574,22 +591,32 @@ export class TradeExecutor {
 		for (let poll = 1; poll <= 5; poll++) {
 			this.onPhaseChange(`📡 Checking balances (poll ${poll}/5)...`);
 			console.log(`[TradeExecutor] ========== BALANCE CHECK ${poll}/5 ==========`);
-			
+
 			try {
 				finalBalances = await this.fetchBalances();
-				
+
 				// Calculate current changes
 				const usdcChange = finalBalances.usdc - initialBalances.usdc;
 				const yesChange = finalBalances.yesTokens - initialBalances.yesTokens;
 				const noChange = finalBalances.noTokens - initialBalances.noTokens;
-				
+
 				console.log(`[TradeExecutor] Current Changes:`);
-				console.log(`  USDC: ${usdcChange >= 0 ? '+' : ''}$${usdcChange.toFixed(2)} (expected: ${expectedChanges.usdc >= 0 ? '+' : ''}$${expectedChanges.usdc.toFixed(2)})`);
-				console.log(`  YES: ${yesChange >= 0 ? '+' : ''}${yesChange.toFixed(4)} (expected: ${expectedChanges.yes >= 0 ? '+' : ''}${expectedChanges.yes.toFixed(4)})`);
-				console.log(`  NO: ${noChange >= 0 ? '+' : ''}${noChange.toFixed(4)} (expected: ${expectedChanges.no >= 0 ? '+' : ''}${expectedChanges.no.toFixed(4)})`);
-				
+				console.log(
+					`  USDC: ${usdcChange >= 0 ? "+" : ""}$${usdcChange.toFixed(2)} (expected: ${expectedChanges.usdc >= 0 ? "+" : ""}$${expectedChanges.usdc.toFixed(2)})`,
+				);
+				console.log(
+					`  YES: ${yesChange >= 0 ? "+" : ""}${yesChange.toFixed(4)} (expected: ${expectedChanges.yes >= 0 ? "+" : ""}${expectedChanges.yes.toFixed(4)})`,
+				);
+				console.log(
+					`  NO: ${noChange >= 0 ? "+" : ""}${noChange.toFixed(4)} (expected: ${expectedChanges.no >= 0 ? "+" : ""}${expectedChanges.no.toFixed(4)})`,
+				);
+
 				// Check if any changes detected
-				if (Math.abs(usdcChange) > 0.001 || Math.abs(yesChange) > 0.0001 || Math.abs(noChange) > 0.0001) {
+				if (
+					Math.abs(usdcChange) > 0.001 ||
+					Math.abs(yesChange) > 0.0001 ||
+					Math.abs(noChange) > 0.0001
+				) {
 					console.log(`[TradeExecutor] ✅ Balance changes detected!`);
 				} else {
 					console.log(`[TradeExecutor] ⏳ No balance changes yet...`);
@@ -598,7 +625,7 @@ export class TradeExecutor {
 			} catch (error) {
 				console.error(`[TradeExecutor] Failed to fetch balances on poll ${poll}:`, error);
 			}
-			
+
 			if (poll < 5) {
 				await sleep(5000);
 			}
@@ -610,15 +637,24 @@ export class TradeExecutor {
 		const noChange = finalBalances.noTokens - initialBalances.noTokens;
 
 		// Calculate percentage match
-		const usdcMatch = expectedChanges.usdc !== 0 
-			? Math.abs(usdcChange / expectedChanges.usdc) * 100 
-			: (usdcChange === 0 ? 100 : 0);
-		const yesMatch = expectedChanges.yes !== 0 
-			? Math.abs(yesChange / expectedChanges.yes) * 100 
-			: (yesChange === 0 ? 100 : 0);
-		const noMatch = expectedChanges.no !== 0 
-			? Math.abs(noChange / expectedChanges.no) * 100 
-			: (noChange === 0 ? 100 : 0);
+		const usdcMatch =
+			expectedChanges.usdc !== 0
+				? Math.abs(usdcChange / expectedChanges.usdc) * 100
+				: usdcChange === 0
+					? 100
+					: 0;
+		const yesMatch =
+			expectedChanges.yes !== 0
+				? Math.abs(yesChange / expectedChanges.yes) * 100
+				: yesChange === 0
+					? 100
+					: 0;
+		const noMatch =
+			expectedChanges.no !== 0
+				? Math.abs(noChange / expectedChanges.no) * 100
+				: noChange === 0
+					? 100
+					: 0;
 
 		console.log(`[TradeExecutor] ========== SETTLEMENT VERIFICATION ==========`);
 		console.log(`INITIAL BALANCES:`);
@@ -630,25 +666,29 @@ export class TradeExecutor {
 		console.log(`  YES Tokens: ${finalBalances.yesTokens.toFixed(4)}`);
 		console.log(`  NO Tokens: ${finalBalances.noTokens.toFixed(4)}`);
 		console.log(`ACTUAL CHANGES:`);
-		console.log(`  USDC: ${usdcChange >= 0 ? '+' : ''}$${usdcChange.toFixed(2)}`);
-		console.log(`  YES: ${yesChange >= 0 ? '+' : ''}${yesChange.toFixed(4)}`);
-		console.log(`  NO: ${noChange >= 0 ? '+' : ''}${noChange.toFixed(4)}`);
+		console.log(`  USDC: ${usdcChange >= 0 ? "+" : ""}$${usdcChange.toFixed(2)}`);
+		console.log(`  YES: ${yesChange >= 0 ? "+" : ""}${yesChange.toFixed(4)}`);
+		console.log(`  NO: ${noChange >= 0 ? "+" : ""}${noChange.toFixed(4)}`);
 		console.log(`EXPECTED CHANGES:`);
-		console.log(`  USDC: ${expectedChanges.usdc >= 0 ? '+' : ''}$${expectedChanges.usdc.toFixed(2)}`);
-		console.log(`  YES: ${expectedChanges.yes >= 0 ? '+' : ''}${expectedChanges.yes.toFixed(4)}`);
-		console.log(`  NO: ${expectedChanges.no >= 0 ? '+' : ''}${expectedChanges.no.toFixed(4)}`);
+		console.log(
+			`  USDC: ${expectedChanges.usdc >= 0 ? "+" : ""}$${expectedChanges.usdc.toFixed(2)}`,
+		);
+		console.log(`  YES: ${expectedChanges.yes >= 0 ? "+" : ""}${expectedChanges.yes.toFixed(4)}`);
+		console.log(`  NO: ${expectedChanges.no >= 0 ? "+" : ""}${expectedChanges.no.toFixed(4)}`);
 		console.log(`SETTLEMENT MATCH:`);
 		console.log(`  USDC: ${usdcMatch.toFixed(1)}% of expected`);
 		console.log(`  YES: ${yesMatch.toFixed(1)}% of expected`);
 		console.log(`  NO: ${noMatch.toFixed(1)}% of expected`);
-		
+
 		// Determine overall settlement status
-		const settlementMatches = 
+		const settlementMatches =
 			Math.abs(usdcChange - expectedChanges.usdc) < 0.05 &&
 			Math.abs(yesChange - expectedChanges.yes) < 0.01 &&
 			Math.abs(noChange - expectedChanges.no) < 0.01;
-		
-		console.log(`OVERALL: ${settlementMatches ? '✅ SETTLEMENTS VERIFIED' : '⚠️ SETTLEMENTS DO NOT MATCH EXPECTED'}`);
+
+		console.log(
+			`OVERALL: ${settlementMatches ? "✅ SETTLEMENTS VERIFIED" : "⚠️ SETTLEMENTS DO NOT MATCH EXPECTED"}`,
+		);
 		console.log(`[TradeExecutor] =============================================`);
 
 		// ========== STEP 6: Verify orders from server API ==========
@@ -671,7 +711,11 @@ export class TradeExecutor {
 			});
 		}
 
-		this.onPhaseChange(settlementMatches ? "✅ Complete - Settlements Verified!" : "⚠️ Complete - Check Settlement Logs");
+		this.onPhaseChange(
+			settlementMatches
+				? "✅ Complete - Settlements Verified!"
+				: "⚠️ Complete - Check Settlement Logs",
+		);
 	}
 
 	/**
@@ -679,10 +723,15 @@ export class TradeExecutor {
 	 * Returns the total USDC value available across all price levels
 	 */
 	private checkLiquidityForMarketOrder(
-		side: "buy" | "sell", 
+		side: "buy" | "sell",
 		position: "yes" | "no",
-		requestedAmountUsd: number
-	): { hasLiquidity: boolean; availableLiquidity: number; bestPrice: number | null; adjustedAmount: number } {
+		requestedAmountUsd: number,
+	): {
+		hasLiquidity: boolean;
+		availableLiquidity: number;
+		bestPrice: number | null;
+		adjustedAmount: number;
+	} {
 		const orderbook = this.getOrderbook();
 		if (!orderbook) {
 			return { hasLiquidity: false, availableLiquidity: 0, bestPrice: null, adjustedAmount: 0 };
@@ -699,30 +748,32 @@ export class TradeExecutor {
 		// For SELL: we take from bids (people buying from us)
 		if (position === "yes") {
 			if (side === "buy") {
-				levels = (orderbook.asks || []).map(l => ({ price: l.price, size: getSize(l) }));
+				levels = (orderbook.asks || []).map((l) => ({ price: l.price, size: getSize(l) }));
 				bestPrice = levels[0]?.price || null;
 			} else {
-				levels = (orderbook.bids || []).map(l => ({ price: l.price, size: getSize(l) }));
+				levels = (orderbook.bids || []).map((l) => ({ price: l.price, size: getSize(l) }));
 				bestPrice = levels[0]?.price || null;
 			}
 		} else {
 			// NO position - complement the prices
 			if (side === "buy") {
 				// Buying NO = taking from YES bids
-				levels = (orderbook.bids || []).map(l => ({ price: 1 - l.price, size: getSize(l) }));
+				levels = (orderbook.bids || []).map((l) => ({ price: 1 - l.price, size: getSize(l) }));
 				bestPrice = levels[0]?.price || null;
 			} else {
 				// Selling NO = taking from YES asks
-				levels = (orderbook.asks || []).map(l => ({ price: 1 - l.price, size: getSize(l) }));
+				levels = (orderbook.asks || []).map((l) => ({ price: 1 - l.price, size: getSize(l) }));
 				bestPrice = levels[0]?.price || null;
 			}
 		}
 
 		// Filter out levels with no size
-		levels = levels.filter(l => l.size > 0);
+		levels = levels.filter((l) => l.size > 0);
 
 		if (levels.length === 0) {
-			console.log(`[Liquidity] No ${side === "buy" ? "asks" : "bids"} available for ${position.toUpperCase()}`);
+			console.log(
+				`[Liquidity] No ${side === "buy" ? "asks" : "bids"} available for ${position.toUpperCase()}`,
+			);
 			return { hasLiquidity: false, availableLiquidity: 0, bestPrice: null, adjustedAmount: 0 };
 		}
 
@@ -739,70 +790,31 @@ export class TradeExecutor {
 
 		// For BUY orders, we need to account for the fee in our budget
 		// effectiveBudget = requestedAmount / 1.02
-		const effectiveBudgetNeeded = side === "buy" 
-			? requestedAmountUsd / (1 + FEE_RATE_DECIMAL) 
-			: requestedAmountUsd;
+		const effectiveBudgetNeeded =
+			side === "buy" ? requestedAmountUsd / (1 + FEE_RATE_DECIMAL) : requestedAmountUsd;
 
 		// Calculate how much we can actually trade given available liquidity
 		let adjustedAmount = requestedAmountUsd;
 		if (totalLiquidityUsd < effectiveBudgetNeeded) {
 			// Not enough liquidity - adjust amount down to what's available
 			// Add a small buffer (90% of available) to ensure we don't hit edge cases
-			adjustedAmount = totalLiquidityUsd * 0.90 * (side === "buy" ? (1 + FEE_RATE_DECIMAL) : 1);
+			adjustedAmount = totalLiquidityUsd * 0.9 * (side === "buy" ? 1 + FEE_RATE_DECIMAL : 1);
 			// Round down to nearest cent
 			adjustedAmount = Math.floor(adjustedAmount * 100) / 100;
 		}
 
-		const hasLiquidity = adjustedAmount >= 0.50; // Minimum viable trade
+		const hasLiquidity = adjustedAmount >= 0.5; // Minimum viable trade
 
 		console.log(`[Liquidity] ${side.toUpperCase()} ${position.toUpperCase()} check:`);
 		console.log(`  Requested: $${requestedAmountUsd.toFixed(2)}`);
-		console.log(`  Available liquidity: $${totalLiquidityUsd.toFixed(2)} across ${levels.length} levels`);
-		console.log(`  Best price: ${bestPrice?.toFixed(2) || 'N/A'}`);
+		console.log(
+			`  Available liquidity: $${totalLiquidityUsd.toFixed(2)} across ${levels.length} levels`,
+		);
+		console.log(`  Best price: ${bestPrice?.toFixed(2) || "N/A"}`);
 		console.log(`  Adjusted amount: $${adjustedAmount.toFixed(2)}`);
-		console.log(`  Has sufficient liquidity: ${hasLiquidity ? '✅ YES' : '❌ NO'}`);
+		console.log(`  Has sufficient liquidity: ${hasLiquidity ? "✅ YES" : "❌ NO"}`);
 
 		return { hasLiquidity, availableLiquidity: totalLiquidityUsd, bestPrice, adjustedAmount };
-	}
-
-	private getBestPriceForMarketOrder(side: "buy" | "sell", position: "yes" | "no"): number | null {
-		const orderbook = this.getOrderbook();
-		if (!orderbook) {
-			this.onError("No orderbook available");
-			return null;
-		}
-
-		// Orderbook is for the YES token
-		// For BUY YES: look at asks (selling YES to us)
-		// For SELL YES: look at bids (buying YES from us)
-		// For BUY NO: look at bids (people buying YES = selling NO to us), invert price
-		// For SELL NO: look at asks (people selling YES = buying NO from us), invert price
-		
-		if (position === "yes") {
-			if (side === "buy") {
-				if (orderbook.asks && orderbook.asks.length > 0) {
-					return orderbook.asks[0].price;
-				}
-			} else {
-				if (orderbook.bids && orderbook.bids.length > 0) {
-					return orderbook.bids[0].price;
-				}
-			}
-		} else {
-			// NO position - use complement of YES prices
-			if (side === "buy") {
-				if (orderbook.bids && orderbook.bids.length > 0) {
-					return 1 - orderbook.bids[0].price;
-				}
-			} else {
-				if (orderbook.asks && orderbook.asks.length > 0) {
-					return 1 - orderbook.asks[0].price;
-				}
-			}
-		}
-
-		// Fallback to a reasonable price if no liquidity
-		return 0.50;
 	}
 
 	private getLimitPriceForOrder(side: "buy" | "sell", position: "yes" | "no"): number | null {
@@ -815,10 +827,12 @@ export class TradeExecutor {
 		// Randomly decide: 50% chance to place "in the money" (will fill), 50% "out of the money" (will sit)
 		const shouldFill = Math.random() < 0.5;
 		const smallOffset = 0.01 + Math.random() * 0.02; // 1-3 cent offset for fills
-		const largeOffset = 0.05 + Math.random() * 0.10; // 5-15 cent offset for misses
+		const largeOffset = 0.05 + Math.random() * 0.1; // 5-15 cent offset for misses
 
-		console.log(`[TradeExecutor] Limit ${side} ${position}: ${shouldFill ? 'IN THE MONEY (will fill)' : 'OUT OF MONEY (will sit)'}`);
-		
+		console.log(
+			`[TradeExecutor] Limit ${side} ${position}: ${shouldFill ? "IN THE MONEY (will fill)" : "OUT OF MONEY (will sit)"}`,
+		);
+
 		if (position === "yes") {
 			if (side === "buy") {
 				if (orderbook.asks && orderbook.asks.length > 0) {
@@ -830,13 +844,13 @@ export class TradeExecutor {
 						return price;
 					} else {
 						// OUT OF MONEY: Place well below best bid
-						const bestBid = orderbook.bids?.[0]?.price || bestAsk - 0.10;
+						const bestBid = orderbook.bids?.[0]?.price || bestAsk - 0.1;
 						const price = Math.max(0.01, Math.round((bestBid - largeOffset) * 100) / 100);
 						console.log(`  Best Bid: ${bestBid}, Placing at: ${price} (will sit)`);
 						return price;
 					}
 				}
-				return shouldFill ? 0.60 : 0.20;
+				return shouldFill ? 0.6 : 0.2;
 			} else {
 				// SELL YES
 				if (orderbook.bids && orderbook.bids.length > 0) {
@@ -848,13 +862,13 @@ export class TradeExecutor {
 						return price;
 					} else {
 						// OUT OF MONEY: Place well above best ask
-						const bestAsk = orderbook.asks?.[0]?.price || bestBid + 0.10;
+						const bestAsk = orderbook.asks?.[0]?.price || bestBid + 0.1;
 						const price = Math.min(0.99, Math.round((bestAsk + largeOffset) * 100) / 100);
 						console.log(`  Best Ask: ${bestAsk}, Placing at: ${price} (will sit)`);
 						return price;
 					}
 				}
-				return shouldFill ? 0.40 : 0.80;
+				return shouldFill ? 0.4 : 0.8;
 			}
 		} else {
 			// NO position - prices are complements of YES
@@ -866,18 +880,22 @@ export class TradeExecutor {
 					if (shouldFill) {
 						// IN THE MONEY: Place at or slightly above NO ask (below YES bid)
 						const price = Math.min(0.99, Math.round((noAsk + smallOffset) * 100) / 100);
-						console.log(`  NO Ask (1-YesBid): ${noAsk.toFixed(2)}, Placing at: ${price} (will hit)`);
+						console.log(
+							`  NO Ask (1-YesBid): ${noAsk.toFixed(2)}, Placing at: ${price} (will hit)`,
+						);
 						return price;
 					} else {
 						// OUT OF MONEY: Place well below NO bid
-						const yesAsk = orderbook.asks?.[0]?.price || yesBid + 0.10;
+						const yesAsk = orderbook.asks?.[0]?.price || yesBid + 0.1;
 						const noBid = 1 - yesAsk;
 						const price = Math.max(0.01, Math.round((noBid - largeOffset) * 100) / 100);
-						console.log(`  NO Bid (1-YesAsk): ${noBid.toFixed(2)}, Placing at: ${price} (will sit)`);
+						console.log(
+							`  NO Bid (1-YesAsk): ${noBid.toFixed(2)}, Placing at: ${price} (will sit)`,
+						);
 						return price;
 					}
 				}
-				return shouldFill ? 0.60 : 0.20;
+				return shouldFill ? 0.6 : 0.2;
 			} else {
 				// SELL NO = Buying YES equivalent
 				if (orderbook.asks && orderbook.asks.length > 0) {
@@ -886,18 +904,22 @@ export class TradeExecutor {
 					if (shouldFill) {
 						// IN THE MONEY: Place at or slightly below NO bid (above YES ask)
 						const price = Math.max(0.01, Math.round((noBid - smallOffset) * 100) / 100);
-						console.log(`  NO Bid (1-YesAsk): ${noBid.toFixed(2)}, Placing at: ${price} (will hit)`);
+						console.log(
+							`  NO Bid (1-YesAsk): ${noBid.toFixed(2)}, Placing at: ${price} (will hit)`,
+						);
 						return price;
 					} else {
 						// OUT OF MONEY: Place well above NO ask
-						const yesBid = orderbook.bids?.[0]?.price || yesAsk - 0.10;
+						const yesBid = orderbook.bids?.[0]?.price || yesAsk - 0.1;
 						const noAsk = 1 - yesBid;
 						const price = Math.min(0.99, Math.round((noAsk + largeOffset) * 100) / 100);
-						console.log(`  NO Ask (1-YesBid): ${noAsk.toFixed(2)}, Placing at: ${price} (will sit)`);
+						console.log(
+							`  NO Ask (1-YesBid): ${noAsk.toFixed(2)}, Placing at: ${price} (will sit)`,
+						);
 						return price;
 					}
 				}
-				return shouldFill ? 0.40 : 0.80;
+				return shouldFill ? 0.4 : 0.8;
 			}
 		}
 	}
@@ -906,7 +928,7 @@ export class TradeExecutor {
 		// Check if this trade would cross any of our existing limit orders
 		for (const [, order] of this.ourLimitOrders) {
 			if (order.position !== trade.position) continue;
-			
+
 			if (trade.side === "buy" && order.side === "sell") {
 				// Buy crosses sell if buy price >= sell price
 				if (trade.price >= order.price) {
@@ -977,7 +999,7 @@ export class TradeExecutor {
 		try {
 			// Create the order
 			const order = await this.createOrder(trade);
-			
+
 			// Sign the order
 			const signedOrder = await this.signOrder(order, trade.side);
 
@@ -993,7 +1015,7 @@ export class TradeExecutor {
 			console.log(`[TradeExecutor] Price: ${trade.price}`);
 			console.log(`[TradeExecutor] Expected Fee: $${expectedFee.toFixed(4)}`);
 			console.log(`[TradeExecutor] Full Server Response:`, JSON.stringify(response, null, 2));
-			
+
 			// Log all possible fee-related fields in response
 			console.log(`[TradeExecutor] Checking for fee fields in response:`);
 			console.log(`  - response.fee: ${response.fee}`);
@@ -1003,18 +1025,26 @@ export class TradeExecutor {
 			console.log(`  - response.data?.fee: ${response.data?.fee}`);
 			console.log(`  - response.order?.fee: ${response.order?.fee}`);
 			console.log(`  - response.fill?.fee: ${response.fill?.fee}`);
-			console.log(`  - response.txHash: ${response.txHash || response.transactionHash || response.hash}`);
-			
+			console.log(
+				`  - response.txHash: ${response.txHash || response.transactionHash || response.hash}`,
+			);
+
 			// Fee contract addresses from centralized config (config/addresses.ts)
 			// BUY fees: FeeWrapper | SELL fees: FeeModule
 			// Note: Actual fees may only be visible on-chain after tx is mined
-			console.log(`[TradeExecutor] Fee Contract: ${trade.side === 'buy' ? 'FeeWrapper' : 'FeeModule'}`);
+			console.log(
+				`[TradeExecutor] Fee Contract: ${trade.side === "buy" ? "FeeWrapper" : "FeeModule"}`,
+			);
 			console.log(`[TradeExecutor] =====================================`);
 
 			// Track limit orders to prevent self-crossing
-			const orderId = response.orderId || response.id || response.data?.orderId || 
-				response.data?.log?.o?.id || null;
-			
+			const orderId =
+				response.orderId ||
+				response.id ||
+				response.data?.orderId ||
+				response.data?.log?.o?.id ||
+				null;
+
 			if (trade.type === "limit" && orderId) {
 				this.ourLimitOrders.set(orderId, {
 					side: trade.side,
@@ -1039,11 +1069,23 @@ export class TradeExecutor {
 
 			// Parse actual values from response - try multiple possible field names
 			const actualCost = response.actualCost ?? response.cost ?? response.data?.cost ?? null;
-			const actualReceive = response.actualReceive ?? response.receive ?? response.data?.receive ?? null;
-			const actualFee = response.fee ?? response.feeAmount ?? response.takerFee ?? response.tradeFee ?? 
-				response.data?.fee ?? response.order?.fee ?? response.fill?.fee ?? null;
-			const actualContracts = response.fillAmount ?? response.filled ?? response.amount ?? 
-				response.data?.fillAmount ?? null;
+			const actualReceive =
+				response.actualReceive ?? response.receive ?? response.data?.receive ?? null;
+			const actualFee =
+				response.fee ??
+				response.feeAmount ??
+				response.takerFee ??
+				response.tradeFee ??
+				response.data?.fee ??
+				response.order?.fee ??
+				response.fill?.fee ??
+				null;
+			const actualContracts =
+				response.fillAmount ??
+				response.filled ??
+				response.amount ??
+				response.data?.fillAmount ??
+				null;
 
 			this.onResult({
 				id: resultId,
@@ -1095,9 +1137,7 @@ export class TradeExecutor {
 	}
 
 	private async createOrder(trade: TestTrade): Promise<any> {
-		const tokenId = trade.position === "yes" 
-			? this.market.yesTokenId 
-			: this.market.noTokenId;
+		const tokenId = trade.position === "yes" ? this.market.yesTokenId : this.market.noTokenId;
 
 		if (!tokenId) {
 			throw new Error(adminErrorMessage(ADMIN_TRADE_TEST_MISSING_TOKEN));
@@ -1136,9 +1176,11 @@ export class TradeExecutor {
 
 		// Fetch on-chain nonce
 		try {
-			const provider = (this.signer as any).provider ?? new ethers.JsonRpcProvider(
-				"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG9T1Ih"
-			);
+			const provider =
+				(this.signer as any).provider ??
+				new ethers.JsonRpcProvider(
+					"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG9T1Ih",
+				);
 			const abi = ["function nonces(address) view returns (uint256)"];
 			const exchange = new ethers.Contract(EXCHANGE_ADDRESS, abi, provider);
 			const nonce = await exchange.nonces(signerAddress);
@@ -1150,9 +1192,9 @@ export class TradeExecutor {
 		return order;
 	}
 
-	private async signOrder(order: any, side: "buy" | "sell"): Promise<any> {
+	private async signOrder(order: any, _side: "buy" | "sell"): Promise<any> {
 		const signerAddress = await this.signer.getAddress();
-		
+
 		// Determine if using smart wallet
 		const isSmart = this.account.toLowerCase() !== signerAddress.toLowerCase();
 
@@ -1203,8 +1245,12 @@ export class TradeExecutor {
 					console.log(`[TradeExecutor] Signing retry attempt ${attempt + 1}...`);
 					await sleep(1000 * attempt); // Increasing delay for retries
 				}
-				const signature = await (this.signer as any).signTypedData(domain, types, orderDataForSigning);
-				
+				const signature = await (this.signer as any).signTypedData(
+					domain,
+					types,
+					orderDataForSigning,
+				);
+
 				return {
 					...order,
 					maker: isSmart ? order.maker : signerAddress,
@@ -1215,7 +1261,10 @@ export class TradeExecutor {
 			} catch (e: any) {
 				lastError = e;
 				// If it's an "iframe not initialized" error, retry
-				if (e.message?.includes("iframe not initialized") || e.message?.includes("coalesce error")) {
+				if (
+					e.message?.includes("iframe not initialized") ||
+					e.message?.includes("coalesce error")
+				) {
 					console.log(`[TradeExecutor] Signing failed (iframe issue), will retry...`);
 					continue;
 				}
@@ -1235,9 +1284,10 @@ export class TradeExecutor {
 		const payload = {
 			...signedOrder,
 			type: orderType,
-			size: signedOrder.side === "buy" 
-				? ethers.formatUnits(signedOrder.makerAmount, 6)
-				: ethers.formatUnits(signedOrder.makerAmount, 6),
+			size:
+				signedOrder.side === "buy"
+					? ethers.formatUnits(signedOrder.makerAmount, 6)
+					: ethers.formatUnits(signedOrder.makerAmount, 6),
 			price: this.calculatePriceFromOrder(signedOrder),
 		};
 
@@ -1279,7 +1329,7 @@ export class TradeExecutor {
 	private calculatePriceFromOrder(order: any): string {
 		const makerAmount = BigInt(order.makerAmount);
 		const takerAmount = BigInt(order.takerAmount);
-		
+
 		// For BUY: price = USDC / tokens = makerAmount / takerAmount
 		// For SELL: price = USDC / tokens = takerAmount / makerAmount
 		if (order.side === "buy") {
@@ -1290,12 +1340,4 @@ export class TradeExecutor {
 			return price.toFixed(2);
 		}
 	}
-
-	private shuffleArray<T>(array: T[]): void {
-		for (let i = array.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[array[i], array[j]] = [array[j], array[i]];
-		}
-	}
 }
-

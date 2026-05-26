@@ -83,8 +83,7 @@ export default function Developers() {
 		if (signer) return signer as unknown as ethers.Signer;
 		try {
 			const smart = Array.isArray(privyWallets)
-				? privyWallets.find((w: any) => w?.type === "smart_wallet") ||
-				  privyWallets[0]
+				? privyWallets.find((w: any) => w?.type === "smart_wallet") || privyWallets[0]
 				: null;
 			if (smart && typeof smart.getEthereumProvider === "function") {
 				const eip1193 = await smart.getEthereumProvider();
@@ -103,17 +102,10 @@ export default function Developers() {
 		try {
 			const s = await resolveSigner();
 			if (!s) {
-				throw new Error(
-					"No signer available. Please connect a wallet."
-				);
+				throw new Error("No signer available. Please connect a wallet.");
 			}
 			const addr = await s.getAddress();
-			console.log(
-				"[Developers] resolved signer address:",
-				addr,
-				"connected account:",
-				account
-			);
+			console.log("[Developers] resolved signer address:", addr, "connected account:", account);
 			const res = await createApiKey(passphrase, addr, s);
 			console.log("[Developers] createApiKey result:", res);
 			setCreated(res);
@@ -141,7 +133,6 @@ export default function Developers() {
 		if (l2Auth) {
 			loadKeys();
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [!!l2Auth]);
 
 	async function onRevoke(key: string) {
@@ -170,17 +161,10 @@ export default function Developers() {
 			<div className="developers-keys-section">
 				<h2>Your API Keys</h2>
 				<div className="developers-actions">
-					<button
-						onClick={() => setShowCreate(true)}
-						className="developers-button"
-					>
+					<button onClick={() => setShowCreate(true)} className="developers-button">
 						Create API Key
 					</button>
-					<button
-						onClick={loadKeys}
-						disabled={!l2Auth || loading}
-						className="developers-button"
-					>
+					<button onClick={loadKeys} disabled={!l2Auth || loading} className="developers-button">
 						Refresh
 					</button>
 					{error && <span className="developers-error">{error}</span>}
@@ -189,32 +173,19 @@ export default function Developers() {
 					{keys.map((k) => (
 						<div key={k.key} className="developers-key-card">
 							<div>
-								<div className="developers-key-info">
-									{k.key}
-								</div>
-								<div className="developers-key-meta">
-									disabled: {String(k.disabled ?? false)}
-								</div>
+								<div className="developers-key-info">{k.key}</div>
+								<div className="developers-key-meta">disabled: {String(k.disabled ?? false)}</div>
 							</div>
-							<div className="developers-key-meta">
-								created: {k.createdAt}
-							</div>
-							<div className="developers-key-meta">
-								last used: {k.lastUsedAt || "—"}
-							</div>
+							<div className="developers-key-meta">created: {k.createdAt}</div>
+							<div className="developers-key-meta">last used: {k.lastUsedAt || "—"}</div>
 							<div>
-								<button
-									onClick={() => onRevoke(k.key)}
-									className="developers-button"
-								>
+								<button onClick={() => onRevoke(k.key)} className="developers-button">
 									Revoke
 								</button>
 							</div>
 						</div>
 					))}
-					{keys.length === 0 && (
-						<div className="developers-no-keys">No keys yet.</div>
-					)}
+					{keys.length === 0 && <div className="developers-no-keys">No keys yet.</div>}
 				</div>
 			</div>
 
@@ -224,35 +195,26 @@ export default function Developers() {
 					{!created && (
 						<>
 							<div className="developers-warning">
-								The wallet used to create an API key must be
-								used for authenticated API actions. Operations
-								performed against the LVLUP API require access
-								to that wallet's private key. The embedded Privy
-								wallet shown in the UI cannot sign server-side
-								operations on your behalf. Verify you are
-								connected to the intended wallet before
-								generating a key. You can view your linked
-								accounts in the profile sidebar.
+								The wallet used to create an API key must be used for authenticated API actions.
+								Operations performed against the LVLUP API require access to that wallet's private
+								key. The embedded Privy wallet shown in the UI cannot sign server-side operations on
+								your behalf. Verify you are connected to the intended wallet before generating a
+								key. You can view your linked accounts in the profile sidebar.
 							</div>
 							<div className="developers-instruction">
-								Store your passphrase and secret in your .env.
-								Shown once.
+								Store your passphrase and secret in your .env. Shown once.
 							</div>
 							<label className="developers-passphrase-label">
 								<span>Passphrase</span>
 								<input
 									value={passphrase}
-									onChange={(e) =>
-										setPassphrase(e.target.value)
-									}
+									onChange={(e) => setPassphrase(e.target.value)}
 									className="developers-input"
 								/>
 							</label>
 							<div className="developers-button-group">
 								<button
-									onClick={() =>
-										setPassphrase(generatePassphrase())
-									}
+									onClick={() => setPassphrase(generatePassphrase())}
 									className="developers-button"
 								>
 									Regenerate
@@ -264,37 +226,19 @@ export default function Developers() {
 								>
 									Create
 								</button>
-								<button
-									onClick={() => setShowCreate(false)}
-									className="developers-button"
-								>
+								<button onClick={() => setShowCreate(false)} className="developers-button">
 									Close
 								</button>
 							</div>
-							{error && (
-								<div className="developers-error-message">
-									{error}
-								</div>
-							)}
+							{error && <div className="developers-error-message">{error}</div>}
 						</>
 					)}
 					{created && (
 						<>
 							<div className="developers-created-grid">
-								<ReadOnlyRow
-									label="API Key"
-									value={created.key}
-								/>
-								<ReadOnlyRow
-									label="API Secret"
-									value={created.secret}
-									secret
-								/>
-								<ReadOnlyRow
-									label="Passphrase"
-									value={created.passphrase}
-									secret
-								/>
+								<ReadOnlyRow label="API Key" value={created.key} />
+								<ReadOnlyRow label="API Secret" value={created.secret} secret />
+								<ReadOnlyRow label="Passphrase" value={created.passphrase} secret />
 							</div>
 							<div className="developers-download-section">
 								<EnvDownload
@@ -308,9 +252,7 @@ export default function Developers() {
 								<input
 									type="checkbox"
 									checked={iSaved}
-									onChange={(e) =>
-										setISaved(e.target.checked)
-									}
+									onChange={(e) => setISaved(e.target.checked)}
 								/>
 								<span>I saved it</span>
 							</label>
@@ -335,8 +277,7 @@ export default function Developers() {
 						Call /api/auth/me
 					</button>
 					<div className="developers-test-note">
-						Example: send LVLUP headers with HMAC(LVLUP_API_SECRET,
-						method+path+timestamp)
+						Example: send LVLUP headers with HMAC(LVLUP_API_SECRET, method+path+timestamp)
 					</div>
 				</div>
 			)}

@@ -32,9 +32,9 @@ describe("assertAccountWalletRoles", () => {
 	});
 
 	it("throws listing missing roles", () => {
-		expect(() =>
-			assertAccountWalletRoles({ ...FULL, polymarketSafe: undefined }),
-		).toThrow(/Polymarket deposit wallet/);
+		expect(() => assertAccountWalletRoles({ ...FULL, polymarketSafe: undefined })).toThrow(
+			/Polymarket deposit wallet/,
+		);
 	});
 });
 
@@ -196,8 +196,16 @@ describe("overviewWalletIsEvmSmartWallet", () => {
 
 	it("picks trimmed address from first matching row", () => {
 		const wallets: WalletDescriptor[] = [
-			{ walletType: "embedded", chainFamily: "evm", address: "0x1111111111111111111111111111111111111111" },
-			{ walletType: "smart", chainFamily: "evm", address: "  0x2222222222222222222222222222222222222222  " },
+			{
+				walletType: "embedded",
+				chainFamily: "evm",
+				address: "0x1111111111111111111111111111111111111111",
+			},
+			{
+				walletType: "smart",
+				chainFamily: "evm",
+				address: "  0x2222222222222222222222222222222222222222  ",
+			},
 		];
 		expect(firstSmartOverviewAddress(wallets)).toBe("0x2222222222222222222222222222222222222222");
 	});

@@ -88,29 +88,20 @@ const EventScheduleSection: React.FC<EventScheduleSectionProps> = ({
 		.join(" ")
 		.trim();
 	const inactiveClasses = [buttonClassName]
-		.concat(
-			!isEvent && inactiveButtonClassName ? [inactiveButtonClassName] : []
-		)
+		.concat(!isEvent && inactiveButtonClassName ? [inactiveButtonClassName] : [])
 		.filter(Boolean)
 		.join(" ")
 		.trim();
 
 	return (
-		<div
-			className={className}
-			style={className ? undefined : containerStyle}
-		>
+		<div className={className} style={className ? undefined : containerStyle}>
 			<span>Is this part of an event?</span>
 			<div style={buttonRowStyle}>
 				<button
 					type="button"
 					onClick={() => onToggle(false)}
 					className={inactiveClasses || undefined}
-					style={
-						inactiveButtonClassName && !isEvent
-							? undefined
-							: composeToggleStyle(!isEvent)
-					}
+					style={inactiveButtonClassName && !isEvent ? undefined : composeToggleStyle(!isEvent)}
 				>
 					No
 				</button>
@@ -118,11 +109,7 @@ const EventScheduleSection: React.FC<EventScheduleSectionProps> = ({
 					type="button"
 					onClick={() => onToggle(true)}
 					className={activeClasses || undefined}
-					style={
-						activeButtonClassName && isEvent
-							? undefined
-							: composeToggleStyle(isEvent)
-					}
+					style={activeButtonClassName && isEvent ? undefined : composeToggleStyle(isEvent)}
 				>
 					Yes
 				</button>
@@ -142,9 +129,7 @@ const EventScheduleSection: React.FC<EventScheduleSectionProps> = ({
 								type="datetime-local"
 								ref={eventInputRef}
 								value={eventDate}
-								onChange={(e) =>
-									onEventDateChange(e.target.value)
-								}
+								onChange={(e) => onEventDateChange(e.target.value)}
 								style={inputStyle}
 							/>
 							<button
@@ -157,11 +142,7 @@ const EventScheduleSection: React.FC<EventScheduleSectionProps> = ({
 							{showClearButtons && (
 								<button
 									type="button"
-									onClick={() =>
-										onClearEventDate
-											? onClearEventDate()
-											: onEventDateChange("")
-									}
+									onClick={() => (onClearEventDate ? onClearEventDate() : onEventDateChange(""))}
 									style={smallButtonStyle}
 								>
 									Clear
@@ -183,9 +164,7 @@ const EventScheduleSection: React.FC<EventScheduleSectionProps> = ({
 								ref={endInputRef}
 								value={endDate}
 								min={eventDate || undefined}
-								onChange={(e) =>
-									onEndDateChange(e.target.value)
-								}
+								onChange={(e) => onEndDateChange(e.target.value)}
 								style={inputStyle}
 							/>
 							<button
@@ -198,11 +177,7 @@ const EventScheduleSection: React.FC<EventScheduleSectionProps> = ({
 							{showClearButtons && (
 								<button
 									type="button"
-									onClick={() =>
-										onClearEndDate
-											? onClearEndDate()
-											: onEndDateChange("")
-									}
+									onClick={() => (onClearEndDate ? onClearEndDate() : onEndDateChange(""))}
 									style={smallButtonStyle}
 								>
 									Clear

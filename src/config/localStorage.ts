@@ -26,7 +26,7 @@ export function useLocalStorageSerializeKey<T>(
 	options?: {
 		deserializer?: (value: string) => T;
 		serializer?: (value: T) => string;
-	}
+	},
 ): [T, (value: T) => void] {
 	const serializer = options?.serializer || JSON.stringify;
 	const deserializer = options?.deserializer || JSON.parse;

@@ -1,6 +1,9 @@
 import { predictionMarketCache } from "@/cache/predictionMarketCache";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
 
 export interface PredictionMarket {
 	_id: string;
@@ -62,10 +65,7 @@ export interface PandaScoreMatch {
 }
 
 /** Dedupes concurrent `fetchMatchFromPandascore` (e.g. StrictMode / sibling mounts). */
-const pandascoreMatchInFlight = new Map<
-	string,
-	Promise<PandaScoreMatch | null>
->();
+const pandascoreMatchInFlight = new Map<string, Promise<PandaScoreMatch | null>>();
 
 class PredictionMarketDataService {
 	// NOTE: API_BASE_URL is now fetched dynamically via getter to prevent
@@ -76,9 +76,7 @@ class PredictionMarketDataService {
 
 	async fetchMarketById(id: string): Promise<PredictionMarket | null> {
 		try {
-			const response = await fetch(
-				`${this.API_BASE_URL}/questions/${id}`
-			);
+			const response = await fetch(`${this.API_BASE_URL}/questions/${id}`);
 			if (!response.ok) {
 				if (response.status === 404) {
 					// Quiet missing market warning
@@ -105,7 +103,7 @@ class PredictionMarketDataService {
 
 	async fetchMatchFromPandascore(
 		matchId: string | number,
-		accessToken?: string | null
+		accessToken?: string | null,
 	): Promise<PandaScoreMatch | null> {
 		const key = String(matchId);
 		const inflight = pandascoreMatchInFlight.get(key);
@@ -174,7 +172,7 @@ class PredictionMarketDataService {
 			ts?: number;
 			price: number;
 			volume?: number;
-		}>
+		}>,
 	): void {
 		const transformedPrices = historicalPrices.map((price) => {
 			let timestamp = price.timestamp || price.ts || Date.now();
@@ -193,10 +191,7 @@ class PredictionMarketDataService {
 				volume: price.volume,
 			};
 		});
-		predictionMarketCache.storeHistoricalPrices(
-			questionId,
-			transformedPrices
-		);
+		predictionMarketCache.storeHistoricalPrices(questionId, transformedPrices);
 	}
 
 	getCacheStats() {
@@ -236,19 +231,14 @@ class PredictionMarketDataService {
 						ts?: number;
 						price: number;
 						volume?: number;
-					}>
+					}>,
 				);
 				return true;
 			}
 
 			return false;
 		} catch (error) {
-			console.error(
-				"❌ Error refreshing historical data for",
-				questionId,
-				":",
-				error
-			);
+			console.error("❌ Error refreshing historical data for", questionId, ":", error);
 			return false;
 		}
 	}

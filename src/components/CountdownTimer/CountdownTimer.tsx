@@ -14,7 +14,7 @@ const DEFAULT_EXPIRED = "Expired";
 function normalizeTarget(target: CountdownTimerProps["target"]): number | null {
 	if (target === null || target === undefined) {
 		return null;
-}
+	}
 	if (target instanceof Date) {
 		return target.getTime();
 	}
@@ -84,14 +84,12 @@ export default function CountdownTimer({
 				{suffix ? ` ${suffix}` : ""}
 			</span>
 		);
-}
+	}
 
 	const diff = targetMs - now;
 	const isExpired = diff <= 0;
 
-	const content = isExpired
-		? expiredLabel
-		: formatDuration(diff, showZeroDays);
+	const content = isExpired ? expiredLabel : formatDuration(diff, showZeroDays);
 
 	return (
 		<span className={className}>
@@ -101,4 +99,3 @@ export default function CountdownTimer({
 		</span>
 	);
 }
-

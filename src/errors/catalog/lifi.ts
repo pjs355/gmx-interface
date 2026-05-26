@@ -6,10 +6,7 @@ export const LIFI_NO_BRIDGE_DATA = defineError(
 	"LIFI_NO_BRIDGE_DATA",
 	"No bridge data for this transfer.",
 );
-export const LIFI_BRIDGE_FAILED = defineError(
-	"LIFI_BRIDGE_FAILED",
-	"Transfer failed. Try again.",
-);
+export const LIFI_BRIDGE_FAILED = defineError("LIFI_BRIDGE_FAILED", "Transfer failed. Try again.");
 export const LIFI_NO_BRIDGE_STEPS = defineError(
 	"LIFI_NO_BRIDGE_STEPS",
 	"Bridge quote returned no steps. Refresh the amount and try again.",

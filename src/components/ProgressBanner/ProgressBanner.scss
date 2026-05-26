@@ -17,7 +17,7 @@
 	&--loading {
 		opacity: 0.5;
 		pointer-events: none;
-		
+
 		.progress-banner-content,
 		.progress-banner-button {
 			opacity: 0.3;
@@ -26,7 +26,7 @@
 
 	&--loaded {
 		opacity: 1;
-		
+
 		.progress-banner-content,
 		.progress-banner-button {
 			opacity: 1;
@@ -189,4 +189,3 @@
 		max-width: 300px;
 	}
 }
-

@@ -193,9 +193,7 @@ export default function AchievementPane({ userAchievements = [] }: AchievementPa
 			<div
 				className="AchievementPane-grid"
 				style={{
-					gridTemplateColumns: isMobile
-						? "repeat(3, 1fr)"
-						: "repeat(6, 1fr)",
+					gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(6, 1fr)",
 				}}
 			>
 				{ACHIEVEMENT_DEFINITIONS.map((achievement) => {
@@ -214,13 +212,11 @@ export default function AchievementPane({ userAchievements = [] }: AchievementPa
 									? {
 											borderColor: getTierColor(achievement.tier),
 											boxShadow: getTierGlow(achievement.tier),
-									  }
+										}
 									: undefined
 							}
 						>
-							<div className="AchievementPane-icon">
-								{achievement.icon}
-							</div>
+							<div className="AchievementPane-icon">{achievement.icon}</div>
 							{achievement.tier && (
 								<div
 									className="AchievementPane-tier-badge"
@@ -233,12 +229,8 @@ export default function AchievementPane({ userAchievements = [] }: AchievementPa
 									{achievement.tier === "gold" && "III"}
 								</div>
 							)}
-							<div className="AchievementPane-name">
-								{achievement.name}
-							</div>
-							{!isUnlocked && (
-								<div className="AchievementPane-lock">🔒</div>
-							)}
+							<div className="AchievementPane-name">{achievement.name}</div>
+							{!isUnlocked && <div className="AchievementPane-lock">🔒</div>}
 						</div>
 					);
 				})}

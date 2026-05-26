@@ -53,21 +53,13 @@ type HeaderRightProps = {
 	showRedirectModal: (to: string) => void;
 };
 
-const HeaderLeft = ({
-	isMobile,
-	navigate,
-	showRedirectModal,
-}: HeaderLeftProps) => {
+const HeaderLeft = ({ isMobile, navigate, showRedirectModal }: HeaderLeftProps) => {
 	const HeaderContent = isHomeSite() ? HomeHeaderLinks : AppHeaderLinks;
 	return (
 		<div className="App-header-container-left">
-			{isMobile && (
-				<MobileLogo onClick={() => navigate("/")} />
-			)}
+			{isMobile && <MobileLogo onClick={() => navigate("/")} />}
 			{!isMobile && <DesktopLogo />}
-			{!isMobile && (
-				<HeaderContent showRedirectModal={showRedirectModal} />
-			)}
+			{!isMobile && <HeaderContent showRedirectModal={showRedirectModal} />}
 		</div>
 	);
 };
@@ -81,9 +73,7 @@ const HeaderRight = ({
 }: HeaderRightProps) => (
 	<div className="App-header-container-right">
 		<AppHeaderUser
-			disconnectAccountAndCloseSettings={
-				disconnectAccountAndCloseSettings
-			}
+			disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
 			openSettings={openSettings}
 			showRedirectModal={showRedirectModal}
 			small={isMobile}
@@ -109,10 +99,7 @@ const Drawer = ({
 	return (
 		<div className="App-header-drawer">
 			<div className="App-header-drawer-close">
-				<div
-					className="App-header-menu-icon-block"
-					onClick={closeDrawer}
-				>
+				<div className="App-header-menu-icon-block" onClick={closeDrawer}>
 					<FiX className="App-header-menu-icon" />
 				</div>
 			</div>
@@ -122,33 +109,19 @@ const Drawer = ({
 					clickCloseIcon={closeDrawer}
 					showRedirectModal={showRedirectModal}
 					openSettings={openSettings}
-					disconnectAccountAndCloseSettings={
-						disconnectAccountAndCloseSettings
-					}
+					disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
 				/>
 			</div>
 		</div>
 	);
 };
 
-const Backdrop = ({
-	isVisible,
-	onClick,
-}: {
-	isVisible: boolean;
-	onClick: () => void;
-}) => {
+const Backdrop = ({ isVisible, onClick }: { isVisible: boolean; onClick: () => void }) => {
 	if (!isVisible) return null;
 	return <div className="App-header-backdrop" onClick={onClick} />;
 };
 
-const SelectorBackdrop = ({
-	isVisible,
-	onClick,
-}: {
-	isVisible: boolean;
-	onClick: () => void;
-}) => {
+const SelectorBackdrop = ({ isVisible, onClick }: { isVisible: boolean; onClick: () => void }) => {
 	if (!isVisible) return null;
 	return <div className="selector-backdrop" onClick={onClick} />;
 };
@@ -176,9 +149,7 @@ const DrawerContainer = ({
 				closeDrawer={closeDrawer}
 				showRedirectModal={showRedirectModal}
 				openSettings={openSettings}
-				disconnectAccountAndCloseSettings={
-					disconnectAccountAndCloseSettings
-				}
+				disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
 			/>
 		</>
 	);
@@ -193,8 +164,7 @@ export function Header({
 	const navigate = useNavigate();
 
 	const [isDrawerVisible, setIsDrawerVisible] = useState(false);
-	const [isNativeSelectorModalVisible, setIsNativeSelectorModalVisible] =
-		useState(false);
+	const [isNativeSelectorModalVisible, setIsNativeSelectorModalVisible] = useState(false);
 	const [isHeaderHidden, setIsHeaderHidden] = useState(false);
 
 	const toggleDrawer = useCallback(() => {
@@ -209,18 +179,18 @@ export function Header({
 		if (isDrawerVisible) {
 			// Save current scroll position
 			const scrollY = window.scrollY;
-			
+
 			// Store scroll position
-			document.body.setAttribute('data-scroll-y', scrollY.toString());
-			
+			document.body.setAttribute("data-scroll-y", scrollY.toString());
+
 			// Add class to both html and body for CSS-based scroll lock
-			document.documentElement.classList.add('drawer-open');
-			document.body.classList.add('drawer-open');
+			document.documentElement.classList.add("drawer-open");
+			document.body.classList.add("drawer-open");
 			document.body.style.top = `-${scrollY}px`;
-			
+
 			// Get the drawer element (entire drawer, not just scrollable)
-			const drawer = document.querySelector('.App-header-drawer');
-			
+			const drawer = document.querySelector(".App-header-drawer");
+
 			// Prevent wheel scroll on background (for mouse/laptop)
 			const preventWheelScroll = (e: WheelEvent) => {
 				const target = e.target as HTMLElement;
@@ -231,7 +201,7 @@ export function Header({
 				// Prevent background scrolling
 				e.preventDefault();
 			};
-			
+
 			// Prevent touch scroll on background (for mobile)
 			const preventTouchScroll = (e: TouchEvent) => {
 				const target = e.target as HTMLElement;
@@ -242,30 +212,31 @@ export function Header({
 				// Prevent background scrolling
 				e.preventDefault();
 			};
-			
+
 			// Add event listeners
-			document.addEventListener('wheel', preventWheelScroll, { passive: false });
-			document.addEventListener('touchmove', preventTouchScroll, { passive: false });
-			
+			document.addEventListener("wheel", preventWheelScroll, { passive: false });
+			document.addEventListener("touchmove", preventTouchScroll, { passive: false });
+
 			return () => {
 				// Remove classes
-				document.documentElement.classList.remove('drawer-open');
-				document.body.classList.remove('drawer-open');
-				
+				document.documentElement.classList.remove("drawer-open");
+				document.body.classList.remove("drawer-open");
+
 				// Restore scroll position
-				const scrollY = document.body.getAttribute('data-scroll-y');
-				document.body.removeAttribute('data-scroll-y');
-				document.body.style.top = '';
-				
+				const scrollY = document.body.getAttribute("data-scroll-y");
+				document.body.removeAttribute("data-scroll-y");
+				document.body.style.top = "";
+
 				if (scrollY) {
 					window.scrollTo(0, parseInt(scrollY, 10));
 				}
-				
+
 				// Remove event listeners
-				document.removeEventListener('wheel', preventWheelScroll);
-				document.removeEventListener('touchmove', preventTouchScroll);
+				document.removeEventListener("wheel", preventWheelScroll);
+				document.removeEventListener("touchmove", preventTouchScroll);
 			};
 		}
+		return undefined;
 	}, [isDrawerVisible]);
 
 	// Hide-on-scroll-down / show-on-scroll-up for mobile + tablet.
@@ -307,16 +278,11 @@ export function Header({
 
 	const isHome = isHomeSite();
 	const drawerOpenSettings = isHome ? undefined : openSettings;
-	const drawerDisconnect = isHome
-		? undefined
-		: disconnectAccountAndCloseSettings;
+	const drawerDisconnect = isHome ? undefined : disconnectAccountAndCloseSettings;
 
 	return (
 		<>
-			<SelectorBackdrop
-				isVisible={isNativeSelectorModalVisible}
-				onClick={closeSelectorModal}
-			/>
+			<SelectorBackdrop isVisible={isNativeSelectorModalVisible} onClick={closeSelectorModal} />
 			<header data-qa="header">
 				<div
 					className={cx("App-header", {
@@ -332,9 +298,7 @@ export function Header({
 					<HeaderRight
 						isMobile={isMobile}
 						toggleDrawer={toggleDrawer}
-						disconnectAccountAndCloseSettings={
-							disconnectAccountAndCloseSettings
-						}
+						disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
 						openSettings={openSettings}
 						showRedirectModal={showRedirectModal}
 					/>

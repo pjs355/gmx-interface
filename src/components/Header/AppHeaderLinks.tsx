@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { FiX } from "react-icons/fi";
 
 import { HeaderLink } from "./HeaderLink";
@@ -6,13 +5,14 @@ import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCopyToClipboard } from "react-use";
 import { useNavigate } from "react-router-dom";
-import ExternalLink from "components/ExternalLink/ExternalLink";
 import { shortenAddress } from "@/services/wallets/shortenAddress";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
-import { isHomeSite } from "config/ui";
-import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
-import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/post-trade/usePostTradeAccountSync";
+import { useCurrentProfile } from "@/features/trading/hooks/useCurrentProfile";
+import {
+	useClaimCashSyncPending,
+	usePostTradePositionSyncPendingGlobal,
+} from "@/features/trading/sor/post-trade/usePostTradeAccountSync";
 
 import "./Header.scss";
 
@@ -37,17 +37,14 @@ export function AppHeaderLinks({
 	// Add portfolio data for mobile display
 	const { authenticated: active, account } = useSignerContext();
 	const { logout, login, user } = usePrivy();
-	const [, copyToClipboard] = useCopyToClipboard();
+	useCopyToClipboard();
 	const navigate = useNavigate();
-	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
-		usePortfolio();
+	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolio();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const claimCashSyncPending = useClaimCashSyncPending();
 	const postTradePositionSyncPending = usePostTradePositionSyncPendingGlobal();
 	const showPortfolioMetricSkeleton =
-		portfolioLoading ||
-		blockHeaderMetrics ||
-		postTradePositionSyncPending;
+		portfolioLoading || blockHeaderMetrics || postTradePositionSyncPending;
 	// Cash: show as soon as balance fetches complete, not when positions page is still loading
 	const showCashMetricSkeleton = cashLoading || claimCashSyncPending;
 
@@ -55,15 +52,11 @@ export function AppHeaderLinks({
 	const profileQuery = useCurrentProfile();
 	const username = profileQuery.data?.username ?? null;
 
-	const hasSmartWallet = user?.linkedAccounts?.some(
-		(acct: any) => acct?.type === "smart_wallet"
-	);
+	const hasSmartWallet = user?.linkedAccounts?.some((acct: any) => acct?.type === "smart_wallet");
 	const userEmail = user?.email?.address || user?.google?.email;
 	const isSmartWallet = Boolean(hasSmartWallet && userEmail);
 
-	const formatCurrency = (
-		value: number | string | null | undefined
-	): string => {
+	const formatCurrency = (value: number | string | null | undefined): string => {
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || num === undefined || !isFinite(num)) return "--";
 		const isInt = Math.abs(num % 1) < 1e-9;
@@ -125,10 +118,8 @@ export function AppHeaderLinks({
 								if (clickCloseIcon) clickCloseIcon();
 							}}
 						>
-							<div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
-								<span className="text-xs font-bold text-white">
-									Portfolio
-								</span>
+							<div className="flex flex-col items-center" style={{ pointerEvents: "none" }}>
+								<span className="text-xs font-bold text-white">Portfolio</span>
 								<span
 									className="text-sm font-normal text-white"
 									style={{ minHeight: 20, display: "inline-flex", alignItems: "center" }}
@@ -141,12 +132,10 @@ export function AppHeaderLinks({
 												width: 70,
 												height: 16,
 												borderRadius: 4,
-												backgroundColor:
-													"rgba(255, 255, 255, 0.1)",
+												backgroundColor: "rgba(255, 255, 255, 0.1)",
 											}}
 										/>
-									) : portfolioTotal === null ||
-									  !isFinite(portfolioTotal) ? (
+									) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
 										"--"
 									) : (
 										`$${formatCurrency(portfolioTotal)}`
@@ -156,17 +145,15 @@ export function AppHeaderLinks({
 						</HeaderLink>
 						<HeaderLink
 							className="mobile-metric-box"
-							to="/get-test-usdc"
+							to="/transfers"
 							showRedirectModal={showRedirectModal}
 							onClick={(e) => {
 								e.stopPropagation();
 								if (clickCloseIcon) clickCloseIcon();
 							}}
 						>
-							<div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
-								<span className="text-xs font-bold text-white">
-									Cash
-								</span>
+							<div className="flex flex-col items-center" style={{ pointerEvents: "none" }}>
+								<span className="text-xs font-bold text-white">Cash</span>
 								<span
 									className="text-sm font-normal text-white"
 									style={{ minHeight: 20, display: "inline-flex", alignItems: "center" }}
@@ -179,8 +166,7 @@ export function AppHeaderLinks({
 												width: 70,
 												height: 16,
 												borderRadius: 4,
-												backgroundColor:
-													"rgba(255, 255, 255, 0.1)",
+												backgroundColor: "rgba(255, 255, 255, 0.1)",
 											}}
 										/>
 									) : (
@@ -196,27 +182,27 @@ export function AppHeaderLinks({
             <Trans>Discover</Trans>
           </HeaderLink> */}
 				</div>
-			<div className="App-header-link-container">
-				<HeaderLink
-					qa="markets"
-					to="/"
-					showRedirectModal={showRedirectModal}
-					onClick={small ? clickCloseIcon : undefined}
-					isActive={(_match: any, location: any) => {
-						const path = location.pathname;
-						return (
-							path === "/" ||
-							path === "/predictions" ||
-							path === "/predictions/esports" ||
-							path === "/predictions/games"
-						);
-					}}
-				>
-					Markets
-				</HeaderLink>
-			</div>
-			{/* Second Markets tab (games-only list) disabled — all markets on home */}
-			{/* <div className="App-header-link-container">
+				<div className="App-header-link-container">
+					<HeaderLink
+						qa="markets"
+						to="/"
+						showRedirectModal={showRedirectModal}
+						onClick={small ? clickCloseIcon : undefined}
+						isActive={(_match: any, location: any) => {
+							const path = location.pathname;
+							return (
+								path === "/" ||
+								path === "/predictions" ||
+								path === "/predictions/esports" ||
+								path === "/predictions/games"
+							);
+						}}
+					>
+						Markets
+					</HeaderLink>
+				</div>
+				{/* Second Markets tab (games-only list) disabled — all markets on home */}
+				{/* <div className="App-header-link-container">
 				<HeaderLink
 					qa="predictions"
 					to="/predictions/games"
@@ -237,36 +223,19 @@ export function AppHeaderLinks({
 							to="/transfers"
 							showRedirectModal={showRedirectModal}
 							onClick={small ? clickCloseIcon : undefined}
-							isActive={(_match: any, location: any) =>
-								location.pathname === "/transfers"
-							}
+							isActive={(_match: any, location: any) => location.pathname === "/transfers"}
 						>
 							Transfers
 						</HeaderLink>
 					</div>
 				)}
-				{/* Commented out for production - referral page disabled */}
-				{/* {active && (
-					<div className="App-header-link-container">
-						<HeaderLink
-							qa="get-test-usdc"
-							to="/get-test-usdc"
-							showRedirectModal={showRedirectModal}
-							onClick={small ? clickCloseIcon : undefined}
-						>
-							Referral
-						</HeaderLink>
-					</div>
-				)} */}
 				<div className="App-header-link-container">
 					<HeaderLink
 						qa="about"
 						to="/about"
 						showRedirectModal={showRedirectModal}
 						onClick={small ? clickCloseIcon : undefined}
-						isActive={(_match: any, location: any) =>
-							location.pathname === "/about"
-						}
+						isActive={(_match: any, location: any) => location.pathname === "/about"}
 					>
 						About
 					</HeaderLink>
@@ -283,8 +252,8 @@ export function AppHeaderLinks({
 								{username
 									? `@${username}`
 									: isSmartWallet && userEmail
-									? userEmail
-									: shortenAddress(account as string, 13)}
+										? userEmail
+										: shortenAddress(account as string, 13)}
 							</div>
 						</div>
 						<div className="App-header-link-container">
@@ -304,10 +273,7 @@ export function AppHeaderLinks({
 								href="#"
 								onClick={(e) => {
 									e.preventDefault();
-									(
-										disconnectAccountAndCloseSettings ||
-										(() => {})
-									)();
+									(disconnectAccountAndCloseSettings || (() => {}))();
 									logout();
 								}}
 							>

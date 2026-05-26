@@ -1,18 +1,16 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getAddress, isAddress } from "viem";
-import { useUserData } from "@/context/UserDataContext";
-import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
-import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
-import { executeDirectErc20Withdraw } from "@/trading/lifi/executeDirectEvmWithdraw";
-import { executeDirectSolanaSplWithdraw } from "@/trading/lifi/executeDirectSolanaSplWithdraw";
-import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
-import { useFundingLifiExecution } from "@/trading/lifi/useFundingLifiExecution";
-import {
-	BRIDGE_FUNDING_BALANCES_QUERY_KEY,
-} from "@/trading/hooks/useBridgeFundingBalances";
+import { useLevelUpPortfolioRefetch } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
+import { executeLifiSteps } from "@/features/trading/lifi/executeLifiSteps";
+import { pickLifiSourceTxHashForStatus } from "@/features/trading/lifi/pickLifiSourceTxHashForStatus";
+import { executeDirectErc20Withdraw } from "@/features/trading/lifi/executeDirectEvmWithdraw";
+import { executeDirectSolanaSplWithdraw } from "@/features/trading/lifi/executeDirectSolanaSplWithdraw";
+import { pollLifiUntilTerminal } from "@/features/trading/lifi/pollLifiStatus";
+import { useFundingLifiExecution } from "@/features/trading/lifi/useFundingLifiExecution";
+import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/features/trading/hooks/useBridgeFundingBalances";
 import { useAccountData, useVenueAddressChainMap } from "@/context/AccountDataContext";
-import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
 import { createSolanaConnectionForWalletSend } from "@/config/rpc";
 import {
 	formatLifiErrorForUser,
@@ -26,7 +24,6 @@ import {
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import type {
 	LifiQuoteResponse,
-	LifiWithdrawDirectTransferData,
 	LifiWithdrawLifiData,
 	LifiWithdrawPlanData,
 	LifiWithdrawPlanLeg,
@@ -57,7 +54,7 @@ function pickLifiStatusTool(quote: LifiQuoteResponse): string | undefined {
 function pickTxHashForLifiStatusPoll(
 	txHashes: string[],
 	_quote: LifiQuoteResponse,
-	fromChain: number
+	fromChain: number,
 ): string {
 	return pickLifiSourceTxHashForStatus({
 		txHashes,
@@ -88,7 +85,7 @@ export function useWithdrawPlanExecution() {
 	const accountData = useAccountData();
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const polymarketWallet = venueAddressChainMap?.polymarket.walletAddress;
-	const { refresh: refreshUserData } = useUserData();
+	const refreshLevelUpPortfolio = useLevelUpPortfolioRefetch();
 	const api = usePrivateApiClient();
 	const {
 		getSignerForChain,
@@ -100,9 +97,7 @@ export function useWithdrawPlanExecution() {
 
 	const executePlan = useCallback(
 		async (plan: LifiWithdrawPlanData): Promise<WithdrawPlanExecuteResult> => {
-			const runSingleLeg = async (
-				leg: LifiWithdrawPlanLeg
-			): Promise<WithdrawPlanTxEntry> => {
+			const runSingleLeg = async (leg: LifiWithdrawPlanLeg): Promise<WithdrawPlanTxEntry> => {
 				const abort = new AbortController();
 
 				if (leg.mode === "direct_transfer") {
@@ -120,11 +115,8 @@ export function useWithdrawPlanExecution() {
 							connection: conn,
 							solanaSigner,
 						});
-						await refreshUserData();
-						await Promise.all([
-							accountData.refresh.polyAccount(),
-							accountData.refresh.overview(),
-						]);
+						await refreshLevelUpPortfolio();
+						await Promise.all([accountData.refresh.polyAccount(), accountData.refresh.overview()]);
 						await queryClient.invalidateQueries({
 							queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
 						});
@@ -150,11 +142,8 @@ export function useWithdrawPlanExecution() {
 						polygonRelayWalletAddress: polymarketWallet,
 					});
 
-					await refreshUserData();
-					await Promise.all([
-						accountData.refresh.polyAccount(),
-						accountData.refresh.overview(),
-					]);
+					await refreshLevelUpPortfolio();
+					await Promise.all([accountData.refresh.polyAccount(), accountData.refresh.overview()]);
 					await queryClient.invalidateQueries({
 						queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
 					});
@@ -165,11 +154,9 @@ export function useWithdrawPlanExecution() {
 				const fromChain = leg.fromChain;
 				const toChain = leg.toChain;
 				const routeIncludesSolana =
-					fromChain === SOLANA_LIFI_CHAIN_ID ||
-					toChain === SOLANA_LIFI_CHAIN_ID;
+					fromChain === SOLANA_LIFI_CHAIN_ID || toChain === SOLANA_LIFI_CHAIN_ID;
 
-				const needsPolymarketRelay =
-					leg.selectedSource.lifiChainId === POLYGON;
+				const needsPolymarketRelay = leg.selectedSource.lifiChainId === POLYGON;
 
 				if (needsPolymarketRelay && !polymarketRelay.walletReady) {
 					throw new Error(userMessage(LIFI_POLY_EMBEDDED_WALLET_LOADING));
@@ -189,11 +176,7 @@ export function useWithdrawPlanExecution() {
 					}),
 				);
 
-				const statusTxHash = pickTxHashForLifiStatusPoll(
-					txHashes,
-					quote,
-					fromChain
-				);
+				const statusTxHash = pickTxHashForLifiStatusPoll(txHashes, quote, fromChain);
 				if (!statusTxHash) {
 					throw new Error(userMessage(LIFI_NO_TX_HASH_WALLET));
 				}
@@ -207,7 +190,7 @@ export function useWithdrawPlanExecution() {
 							fromChain,
 							toChain,
 						}),
-					{ intervalMs: 15_000, maxAttempts: 40, signal: abort.signal }
+					{ intervalMs: 15_000, maxAttempts: 40, signal: abort.signal },
 				);
 
 				try {
@@ -215,11 +198,8 @@ export function useWithdrawPlanExecution() {
 				} catch {
 					/* ignore */
 				}
-				await refreshUserData();
-				await Promise.all([
-					accountData.refresh.polyAccount(),
-					accountData.refresh.overview(),
-				]);
+				await refreshLevelUpPortfolio();
+				await Promise.all([accountData.refresh.polyAccount(), accountData.refresh.overview()]);
 				await queryClient.invalidateQueries({
 					queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
 				});
@@ -253,9 +233,9 @@ export function useWithdrawPlanExecution() {
 			polymarketRelay.walletReady,
 			preparePolygonRelay,
 			queryClient,
-			refreshUserData,
+			refreshLevelUpPortfolio,
 			solanaSigner,
-		]
+		],
 	);
 
 	return { executePlan };

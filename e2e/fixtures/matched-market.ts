@@ -6,12 +6,7 @@ import {
 	type VenuePriceSnapshotLite,
 } from "./e2e-venue-book-depth";
 
-export type RequiredVenueKey =
-	| "polymarket"
-	| "levelup"
-	| "predictFun"
-	| "limitless"
-	| "dflow";
+export type RequiredVenueKey = "polymarket" | "levelup" | "predictFun" | "limitless" | "dflow";
 
 export const REQUIRED_VENUE_KEYS: RequiredVenueKey[] = [
 	"polymarket",
@@ -34,20 +29,13 @@ const EXCHANGE_KEY_TO_VENUE_SLUG: Record<RequiredVenueKey, string> = {
 export const MAX_E2E_VENUE_SPREAD_USD = 0.25;
 
 /**
- * Playwright trade size. Keep **≥** app `SOR_MIN_MARKET_BUY_USD` (`src/trading/sor/sorPreflight.ts`, currently $2).
+ * Playwright trade size. Keep **≥** app `SOR_MIN_MARKET_BUY_USD` (`src/features/trading/sor/route/sorPreflight.ts`, currently $2).
  */
 export const E2E_TRADE_NOTIONAL_USD = 2;
 
-export type E2eTradingVenueSlug =
-	| "polymarket"
-	| "levelup"
-	| "predictfun"
-	| "limitless"
-	| "dflow";
+export type E2eTradingVenueSlug = "polymarket" | "levelup" | "predictfun" | "limitless" | "dflow";
 
-export function tradingVenueSlugForKey(
-	key: RequiredVenueKey,
-): E2eTradingVenueSlug {
+export function tradingVenueSlugForKey(key: RequiredVenueKey): E2eTradingVenueSlug {
 	const s = EXCHANGE_KEY_TO_VENUE_SLUG[key];
 	return s as E2eTradingVenueSlug;
 }
@@ -130,9 +118,7 @@ interface VenuePriceSnapshot {
 }
 
 function missingVenues(row: MatchedMarketRow): RequiredVenueKey[] {
-	return REQUIRED_VENUE_KEYS.filter(
-		(key) => row.exchangeMatching[key] === undefined,
-	);
+	return REQUIRED_VENUE_KEYS.filter((key) => row.exchangeMatching[key] === undefined);
 }
 
 /** Past kickoff, keep the row eligible for E2E picks for this long (typical start-time field). */
@@ -142,9 +128,7 @@ const E2E_MATCHED_MARKET_EVENT_GRACE_MS = 2 * 60 * 60 * 1000;
  * Rows whose `displayName` contains any of these substrings (case-insensitive) are
  * omitted from automatic E2E / all-venues resolution so Playwright never trades that fixture.
  */
-const E2E_AUTOMATIC_PICK_DISPLAY_NAME_BLOCKLIST: readonly string[] = [
-	"mouz vs aurora",
-];
+const E2E_AUTOMATIC_PICK_DISPLAY_NAME_BLOCKLIST: readonly string[] = ["mouz vs aurora"];
 
 function isBlockedDisplayNameForE2eAutomaticPicks(row: MatchedMarketRow): boolean {
 	const name = String(row.displayName ?? "").toLowerCase();
@@ -427,10 +411,7 @@ export async function computePerVenueBestPicks(
 				snap as unknown as VenuePriceSnapshotLite,
 				E2E_TRADE_NOTIONAL_USD,
 			);
-			if (
-				lossProbe === null ||
-				lossProbe > MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD
-			) {
+			if (lossProbe === null || lossProbe > MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD) {
 				continue;
 			}
 			const sp = spreadForVenueOnRow(row, key, snaps);
@@ -472,9 +453,7 @@ export async function computePerVenueBestPicks(
 		// LevelUp entirely — better odds the trade box still gets a quote.
 		if (key === "levelup") {
 			const luRows = rowsForVenue("levelup");
-			const candidates = luRows.filter(
-				(r) => r.exchangeMatching.levelup !== undefined,
-			);
+			const candidates = luRows.filter((r) => r.exchangeMatching.levelup !== undefined);
 
 			function rowForPanda(panda: string): MatchedMarketRow | null {
 				const hit = candidates.find((r) => String(r.pandaMatchId) === panda);
@@ -489,11 +468,7 @@ export async function computePerVenueBestPicks(
 				// Prefer the same sports match as another venue that already had a live book in
 				// venue-prices — LevelUp liquidity is much more likely there than on an arbitrary
 				// LevelUp-only umbrella when the feed omits bid/ask for LevelUp.
-				const anchorOrder: RequiredVenueKey[] = [
-					"polymarket",
-					"predictFun",
-					"dflow",
-				];
+				const anchorOrder: RequiredVenueKey[] = ["polymarket", "predictFun", "dflow"];
 				for (const anchorKey of anchorOrder) {
 					const anchor = picks.find((p) => p.venueKey === anchorKey);
 					if (!anchor) continue;
@@ -514,10 +489,7 @@ export async function computePerVenueBestPicks(
 				let bestFb: Scored | null = null;
 				for (const row of candidates) {
 					const snaps = await getSnaps(row.pandaMatchId);
-					const snap = findVenueSnapshot(
-						snaps,
-						EXCHANGE_KEY_TO_VENUE_SLUG.levelup,
-					);
+					const snap = findVenueSnapshot(snaps, EXCHANGE_KEY_TO_VENUE_SLUG.levelup);
 					const score = snap ? 1 : 0;
 					const t = eventTime(row);
 					if (
@@ -537,21 +509,14 @@ export async function computePerVenueBestPicks(
 			if (fallbackRow !== null) {
 				const fr = fallbackRow;
 				const fbSnaps = await getSnaps(fr.pandaMatchId);
-				const luSnap = findVenueSnapshot(
-					fbSnaps,
-					EXCHANGE_KEY_TO_VENUE_SLUG.levelup,
-				);
+				const luSnap = findVenueSnapshot(fbSnaps, EXCHANGE_KEY_TO_VENUE_SLUG.levelup);
 				if (luSnap) {
 					const lossProbe = smallestRoundTripLossUsdForSnapshot(
 						luSnap as unknown as VenuePriceSnapshotLite,
 						E2E_TRADE_NOTIONAL_USD,
 					);
-					if (
-						lossProbe !== null &&
-						lossProbe <= MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD
-					) {
-						const sp =
-							LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK;
+					if (lossProbe !== null && lossProbe <= MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD) {
+						const sp = LEVELUP_SYNTHETIC_SPREAD_WHEN_NO_VENUE_PRICES_BOOK;
 						console.warn(
 							`[matched-market] levelup: no computable venue-prices tightest spread — using synthetic spread=${sp} ` +
 								`for logging only; depth gate passed (umbrella ${fr.umbrellaId}, panda ${fr.pandaMatchId}).`,
@@ -646,9 +611,7 @@ export async function resolveAllVenuesUmbrella(
 	apiBaseUrl: string = PREDICTIONS_API_URL,
 ): Promise<AllVenuesResolution> {
 	const all = await fetchMatchedMarkets(apiBaseUrl);
-	const future = applyE2eMatchedMarketDisplayBlocklist(
-		all.filter(hasFutureEventDate),
-	);
+	const future = applyE2eMatchedMarketDisplayBlocklist(all.filter(hasFutureEventDate));
 	const getSnaps = createVenueSnapshotGetter(apiBaseUrl);
 	const perVenuePicks = await computePerVenueBestPicks(future, getSnaps);
 
@@ -665,7 +628,14 @@ export async function resolveAllVenuesUmbrella(
 			if (
 				chosen === undefined ||
 				bestBottle === undefined ||
-				isBetterAllFiveCandidate(b, t, row.umbrellaId, bestBottle, eventTime(chosen), chosen.umbrellaId)
+				isBetterAllFiveCandidate(
+					b,
+					t,
+					row.umbrellaId,
+					bestBottle,
+					eventTime(chosen),
+					chosen.umbrellaId,
+				)
 			) {
 				chosen = row;
 				bestBottle = b;

@@ -1,11 +1,4 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useMemo,
-	useState,
-	type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 type PositionsPageMetricsGateValue = {
 	/** When true, app header shows skeleton for portfolio + cash until positions page finishes loading. */
@@ -13,14 +6,9 @@ type PositionsPageMetricsGateValue = {
 	setBlockHeaderMetrics: (v: boolean) => void;
 };
 
-const PositionsPageMetricsGateContext =
-	createContext<PositionsPageMetricsGateValue | null>(null);
+const PositionsPageMetricsGateContext = createContext<PositionsPageMetricsGateValue | null>(null);
 
-export function PositionsPageMetricsGateProvider({
-	children,
-}: {
-	children: ReactNode;
-}) {
+export function PositionsPageMetricsGateProvider({ children }: { children: ReactNode }) {
 	const [blockHeaderMetrics, setBlockHeaderMetricsState] = useState(false);
 	const setBlockHeaderMetrics = useCallback((v: boolean) => {
 		setBlockHeaderMetricsState(v);

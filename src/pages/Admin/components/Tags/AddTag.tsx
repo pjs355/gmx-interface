@@ -69,11 +69,8 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 			if (image) {
 				setUploadingImage(true);
 				try {
-					const baseSlugSource =
-						trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
-					const slugForUpload = baseSlugSource
-						.toLowerCase()
-						.replace(/\s+/g, "-");
+					const baseSlugSource = trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
+					const slugForUpload = baseSlugSource.toLowerCase().replace(/\s+/g, "-");
 					const result = await uploadTagImage(image, slugForUpload);
 					payload.imageUrl = result.url;
 				} finally {
@@ -123,11 +120,7 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 					<span>Tag Image</span>
 					{imagePreview && (
 						<div className="tag-image-preview-container">
-							<img
-								src={imagePreview}
-								alt="Preview"
-								className="tag-image-preview"
-							/>
+							<img src={imagePreview} alt="Preview" className="tag-image-preview" />
 							<button
 								type="button"
 								onClick={() => {
@@ -149,25 +142,15 @@ export default function AddTag({ onCreated }: { onCreated?: () => void }) {
 						}}
 						className="tag-file-input"
 					/>
-					{uploadingImage && (
-						<div className="tag-uploading-text">Uploading...</div>
-					)}
+					{uploadingImage && <div className="tag-uploading-text">Uploading...</div>}
 				</div>
 
 				<div className="tag-actions">
-					<button
-						type="submit"
-						disabled={submitting}
-						className="tag-submit-button"
-					>
+					<button type="submit" disabled={submitting} className="tag-submit-button">
 						{submitting ? "Creating..." : "Create Tag"}
 					</button>
-					{message && (
-						<span className="tag-success-message">{message}</span>
-					)}
-					{error && (
-						<span className="tag-error-message">{error}</span>
-					)}
+					{message && <span className="tag-success-message">{message}</span>}
+					{error && <span className="tag-error-message">{error}</span>}
 				</div>
 			</form>
 		</div>

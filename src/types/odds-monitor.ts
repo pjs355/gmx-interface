@@ -3,11 +3,7 @@
 import type { MatchedMarketsDflowWire } from "./matchedMarketsDflowWire";
 
 /** Polymarket CLOB tick size strings when the UIServer includes them on a row. */
-export type PolymarketClobTickSize =
-	| "0.1"
-	| "0.01"
-	| "0.001"
-	| "0.0001";
+export type PolymarketClobTickSize = "0.1" | "0.01" | "0.001" | "0.0001";
 
 export interface OrderbookLevel {
 	price: number;
@@ -73,29 +69,20 @@ export interface MatchedMarket {
 	/** Neg-risk market flag from UIServer, if present. */
 	polyNegRisk?: boolean | null;
 	/**
-	 * DFlow (tokenized Kalshi) — preferred monitor keys when aggregator sources DFlow.
-	 * REST rows include {@link MatchedMarketsDflowWire}; monitor/metadata may add no-mints only.
+	 * DFlow channel (tokenized Kalshi). REST rows include {@link MatchedMarketsDflowWire};
+	 * monitor/metadata may add no-mints only.
 	 */
 	dflow?: MatchedMarketsDflowWire & {
 		/** Not on GET /matched-markets umbrella doc; from monitor or client resolution. */
 		noMintA?: string;
 		noMintB?: string;
 	};
+	/**
+	 * Live Panda A/B books for venue `dflow` from venue-prices WS. Ladder is sourced from
+	 * Kalshi on predictions-api; stored under `dflowPrice*` because that is the client venue id.
+	 */
 	dflowPriceA?: OrderbookData | null;
 	dflowPriceB?: OrderbookData | null;
-	/** @deprecated Prefer `dflow`; kept until all monitors emit DFlow keys only. */
-	kalshi?: {
-		tickerA: string;
-		tickerB?: string;
-		eventTicker: string;
-		yesMintA?: string;
-		noMintA?: string;
-		yesMintB?: string;
-		noMintB?: string;
-	};
-	/** @deprecated Prefer `dflowPriceA` / `dflowPriceB`. */
-	kalshiPriceA?: OrderbookData | null;
-	kalshiPriceB?: OrderbookData | null;
 	limitless?: {
 		slug: string;
 		tokenIdA: string;

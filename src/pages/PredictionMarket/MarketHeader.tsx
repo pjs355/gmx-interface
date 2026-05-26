@@ -7,7 +7,7 @@ import {
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
-} from "@/helpers/gameLogoResolver";
+} from "@/features/markets/assets/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
 
 type MarketHeaderProps = {
@@ -15,17 +15,13 @@ type MarketHeaderProps = {
 	titleRef: React.RefObject<HTMLHeadingElement>;
 };
 
-export const MarketHeader: React.FC<MarketHeaderProps> = ({
-	umbrella,
-	titleRef,
-}) => {
+export const MarketHeader: React.FC<MarketHeaderProps> = ({ umbrella, titleRef }) => {
 	const { tags } = usePredictionData();
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
 	// Priority 1: Check for server image (ic_{umbrellaID})
-	const serverImage =
-		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
+	const serverImage = umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
 
 	// Priority 2: Check for tag imageUrl from tags
 	const tagImage = getTagImageFromUmbrella(umbrella, tags);
@@ -39,8 +35,7 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 
 	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
 	// Determine initial source
-	const initialSrc =
-		cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
+	const initialSrc = cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {
@@ -59,21 +54,21 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 	// Process title to remove dates for daily/player count markets
 	const displayTitle = useMemo(() => {
 		let title = umbrella.displayName;
-		
+
 		// Check if this is a player count market
 		if (title.includes("Player Count")) {
 			// Remove ISO date format (YYYY-MM-DD) from the end
 			title = title.replace(/\s+\d{4}-\d{2}-\d{2}\s*$/, "");
-			
+
 			// Remove other common date formats
 			// "December 9, 2025" or "Dec 9, 2025"
 			title = title.replace(/\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*$/, "");
 			// "12/9/2025" or "12-9-2025"
 			title = title.replace(/\s+\d{1,2}[-/]\d{1,2}[-/]\d{4}\s*$/, "");
-			
+
 			title = title.trim();
 		}
-		
+
 		return title || umbrella.displayName;
 	}, [umbrella.displayName]);
 
@@ -86,11 +81,7 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({
 					className="market-image"
 					onError={handleError}
 				/>
-				<h1
-					ref={titleRef}
-					className="mb-16 text-34 font-bold"
-					style={{ color: "white" }}
-				>
+				<h1 ref={titleRef} className="mb-16 text-34 font-bold" style={{ color: "white" }}>
 					{displayTitle}
 				</h1>
 				{umbrella.description && (

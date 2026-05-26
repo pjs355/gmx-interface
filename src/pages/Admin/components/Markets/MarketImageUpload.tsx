@@ -23,7 +23,7 @@ export default function MarketImageUpload({
 }: MarketImageUploadProps) {
 	const handleFileChange = (
 		e: React.ChangeEvent<HTMLInputElement>,
-		imageType: "image1" | "image2"
+		imageType: "image1" | "image2",
 	) => {
 		const file = e.target.files?.[0];
 		if (file) {
@@ -43,9 +43,7 @@ export default function MarketImageUpload({
 				paddingTop: 12,
 			}}
 		>
-			<div style={{ marginBottom: 12, fontWeight: 600 }}>
-				Images (Optional)
-			</div>
+			<div style={{ marginBottom: 12, fontWeight: 600 }}>Images (Optional)</div>
 
 			<div
 				style={{
@@ -56,9 +54,7 @@ export default function MarketImageUpload({
 			>
 				{/* Image 1 */}
 				<div style={{ display: "grid", gap: 8 }}>
-					<label style={{ fontSize: 14, fontWeight: 500 }}>
-						Banner Image
-					</label>
+					<label style={{ fontSize: 14, fontWeight: 500 }}>Banner Image</label>
 					<div style={{ display: "grid", gap: 8 }}>
 						{image1Preview && (
 							<div
@@ -126,9 +122,7 @@ export default function MarketImageUpload({
 
 				{/* Image 2 */}
 				<div style={{ display: "grid", gap: 8 }}>
-					<label style={{ fontSize: 14, fontWeight: 500 }}>
-						Square Image
-					</label>
+					<label style={{ fontSize: 14, fontWeight: 500 }}>Square Image</label>
 					<div style={{ display: "grid", gap: 8 }}>
 						{image2Preview && (
 							<div
@@ -201,4 +195,3 @@ export default function MarketImageUpload({
 		</div>
 	);
 }
-

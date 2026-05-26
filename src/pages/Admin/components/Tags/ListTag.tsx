@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { tagService } from "@/services/api/tagService";
-import {
-	adminErrorMessage,
-	formatAdminErrorForUser,
-	ADMIN_MISSING_ACCESS_TOKEN,
-} from "@/errors";
+import { adminErrorMessage, formatAdminErrorForUser, ADMIN_MISSING_ACCESS_TOKEN } from "@/errors";
 
 export interface AdminTag {
 	_id: string;
@@ -16,11 +12,7 @@ export interface AdminTag {
 	updatedAt?: string;
 }
 
-export default function ListTag({
-	onEdit,
-}: {
-	onEdit: (tag: AdminTag) => void;
-}) {
+export default function ListTag({ onEdit }: { onEdit: (tag: AdminTag) => void }) {
 	const { getAccessToken } = usePrivy();
 	const [tags, setTags] = useState<AdminTag[]>([]);
 	const [loading, setLoading] = useState<boolean>(false);
@@ -52,17 +44,13 @@ export default function ListTag({
 		if (!query) return tags;
 		const q = query.toLowerCase();
 		return tags.filter(
-			(t) =>
-				(t.label || "").toLowerCase().includes(q) ||
-				(t.slug || "").toLowerCase().includes(q)
+			(t) => (t.label || "").toLowerCase().includes(q) || (t.slug || "").toLowerCase().includes(q),
 		);
 	}, [tags, query]);
 
 	async function handleDelete(tag: AdminTag) {
 		try {
-			const confirmDelete = window.confirm(
-				`Delete tag "${tag.label}"? This cannot be undone.`
-			);
+			const confirmDelete = window.confirm(`Delete tag "${tag.label}"? This cannot be undone.`);
 			if (!confirmDelete) return;
 			const token = await getAccessToken?.();
 			if (typeof token === "undefined" || !token) {
@@ -144,12 +132,8 @@ export default function ListTag({
 									/>
 								)}
 								<div>
-									<div style={{ fontWeight: 600 }}>
-										{t.label}
-									</div>
-									<div style={{ fontSize: 12, opacity: 0.8 }}>
-										slug: {t.slug}
-									</div>
+									<div style={{ fontWeight: 600 }}>{t.label}</div>
+									<div style={{ fontSize: 12, opacity: 0.8 }}>slug: {t.slug}</div>
 									{t.createdAt && (
 										<div
 											style={{
@@ -157,10 +141,7 @@ export default function ListTag({
 												opacity: 0.8,
 											}}
 										>
-											created:{" "}
-											{new Date(
-												t.createdAt
-											).toLocaleString()}
+											created: {new Date(t.createdAt).toLocaleString()}
 										</div>
 									)}
 								</div>
@@ -200,9 +181,7 @@ export default function ListTag({
 						</div>
 					</div>
 				))}
-				{!loading && filtered.length === 0 && (
-					<div style={{ opacity: 0.8 }}>No tags found.</div>
-				)}
+				{!loading && filtered.length === 0 && <div style={{ opacity: 0.8 }}>No tags found.</div>}
 			</div>
 		</div>
 	);

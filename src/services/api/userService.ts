@@ -25,7 +25,6 @@ export interface UserProfile {
 	linked_accounts?: unknown[];
 	referredBy?: string;
 	referralClaimedAt?: Date;
-	claimedTestUsdcExpReward?: boolean;
 	orderCount?: number;
 	filledOrderCount?: number;
 	fundEmailSent?: Date | null;
@@ -47,9 +46,7 @@ export interface UserProfile {
 /**
  * Some API gateways serialize Mongo `_id` as `id`. Prefer `_id` when present.
  */
-export function profileMongoIdFromUserProfile(
-	data: UserProfile | undefined,
-): string | undefined {
+export function profileMongoIdFromUserProfile(data: UserProfile | undefined): string | undefined {
 	if (!data) return undefined;
 	if (typeof data._id === "string") {
 		const t = data._id.trim();
@@ -75,10 +72,7 @@ class UserService {
 	 * Endpoint: GET /profiles/me
 	 * Response: { success: true, data: { exp: number, username: string, ... } }
 	 */
-	async getUserProfile(
-		accessToken: string,
-		identityToken?: string
-	): Promise<UserProfile> {
+	async getUserProfile(accessToken: string, identityToken?: string): Promise<UserProfile> {
 		const headers: HeadersInit = {
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${accessToken}`,
@@ -115,7 +109,7 @@ class UserService {
 	async updateUserProfile(
 		updates: Partial<UserProfile>,
 		accessToken: string,
-		identityToken?: string
+		identityToken?: string,
 	): Promise<UserProfile> {
 		const headers: HeadersInit = {
 			"Content-Type": "application/json",
@@ -152,7 +146,7 @@ class UserService {
 	async updateUsername(
 		username: string,
 		accessToken: string,
-		identityToken?: string
+		identityToken?: string,
 	): Promise<UserProfile> {
 		return this.updateUserProfile({ username }, accessToken, identityToken);
 	}
@@ -161,11 +155,7 @@ class UserService {
 	 * Update exp
 	 * Convenience method for updating exp
 	 */
-	async updateExp(
-		exp: number,
-		accessToken: string,
-		identityToken?: string
-	): Promise<UserProfile> {
+	async updateExp(exp: number, accessToken: string, identityToken?: string): Promise<UserProfile> {
 		return this.updateUserProfile({ exp }, accessToken, identityToken);
 	}
 
@@ -176,59 +166,18 @@ class UserService {
 	async addExp(
 		expToAdd: number,
 		accessToken: string,
-		identityToken?: string
+		identityToken?: string,
 	): Promise<UserProfile> {
 		// First, get current exp
-		const currentProfile = await this.getUserProfile(
-			accessToken,
-			identityToken
-		);
+		const currentProfile = await this.getUserProfile(accessToken, identityToken);
 		const currentExp = currentProfile.exp || 0;
 		const newExp = currentExp + expToAdd;
 
 		// Then save the new total
 		return this.updateExp(newExp, accessToken, identityToken);
 	}
-
-	/**
-	 * Request exp for test USDC claim (server-verified)
-	 * Server verifies the claim actually happened before granting exp
-	 * Endpoint: POST /profiles/exp/claim-test-usdc
-	 * Response: { success: true, data: { exp: number, ... } }
-	 */
-	async requestExpForTestUsdcClaim(
-		accessToken: string,
-		identityToken?: string
-	): Promise<UserProfile> {
-		const headers: HeadersInit = {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${accessToken}`,
-		};
-
-		if (identityToken) {
-			headers["privy-id-token"] = identityToken;
-		}
-
-		const response = await fetch(`${getApiBase()}/profiles/exp/claim-test-usdc`, {
-			method: "POST",
-			headers,
-		});
-
-		if (!response.ok) {
-			throw new Error(`Failed to request exp for claim: ${response.status}`);
-		}
-
-		const result: ApiResponse = await response.json();
-
-		if (!result.success || !result.data) {
-			throw new Error(result.error || "Failed to request exp for claim");
-		}
-
-		return result.data;
-	}
 }
 
 // Export singleton instance
 export const userService = new UserService();
 export default userService;
-

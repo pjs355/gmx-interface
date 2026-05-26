@@ -1,0 +1,31 @@
+@use "../../../styles/themes/scss/predictions-glass" as *;
+
+/*
+ * Desktop trade widget (≥1101px) — split from `PredictionMarketTradeBox.scss` so
+ * mobile / curtain layouts stay unchanged while the docked column UI evolves.
+ */
+
+@media (min-width: 1101px) {
+	/*
+	 * Empty amount / limit fields: replace flat #101114 with a light frost so
+	 * the hero or page content shows through slightly (mobile keeps solid fill).
+	 */
+	.prediction-market-tradebox
+		.input-section
+		.input-container.prediction-input-container.empty-input {
+		background-color: rgba(0, 0, 0, 0.34) !important;
+		background-image: none !important;
+		-webkit-backdrop-filter: blur($predictions-glass-blur);
+		backdrop-filter: blur($predictions-glass-blur);
+	}
+
+	/* Keep the solid dark fill once the user types (do not frost the focused / filled state). */
+	.prediction-market-tradebox
+		.input-section
+		.input-container.prediction-input-container:not(.empty-input) {
+		background-color: #101114 !important;
+		background-image: none !important;
+		-webkit-backdrop-filter: none !important;
+		backdrop-filter: none !important;
+	}
+}

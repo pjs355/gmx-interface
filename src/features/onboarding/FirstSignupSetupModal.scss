@@ -1,0 +1,203 @@
+/*
+ * Post-signup setup modal — pinned to the same palette / radius / spacing
+ * as Privy's auth modal so the user feels a continuous flow:
+ *   Privy login → close → this modal opens with the same look-and-feel.
+ *
+ * Tokens come from `--privy-color-*` (defined in styles/globals.css). Don't
+ * hardcode hex values here — keep this file palette-agnostic so an app-wide
+ * theme tweak still propagates.
+ */
+
+.first-signup-setup-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.65);
+	backdrop-filter: blur(2px);
+	-webkit-backdrop-filter: blur(2px);
+	font-family: $font-primary;
+	color: var(--privy-color-foreground, #ffffff);
+}
+
+.first-signup-setup-modal__card {
+	background: var(--privy-color-background, #101114);
+	border: 1px solid var(--privy-color-background-3, #22262e);
+	border-radius: 16px;
+	padding: 28px 24px 24px;
+	width: min(420px, calc(100vw - 32px));
+	max-width: 420px;
+	box-shadow:
+		0 24px 64px rgba(0, 0, 0, 0.5),
+		0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.first-signup-setup-modal__heading {
+	font-size: 20px;
+	font-weight: 600;
+	margin: 0 0 6px;
+	letter-spacing: -0.01em;
+}
+
+.first-signup-setup-modal__sub {
+	font-size: 14px;
+	line-height: 1.45;
+	color: var(--privy-color-foreground-3, #9ca3af);
+	margin: 0 0 22px;
+}
+
+.first-signup-setup-modal__checklist {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.first-signup-setup-modal__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border-radius: 12px;
+	background: var(--privy-color-background-2, #1a1d24);
+	border: 1px solid var(--privy-color-background-3, #22262e);
+	font-size: 14px;
+	color: var(--privy-color-foreground-2, #d1d5db);
+	transition:
+		opacity 160ms ease,
+		color 160ms ease;
+}
+
+.first-signup-setup-modal__row[data-state="ready"] {
+	color: var(--privy-color-foreground, #ffffff);
+}
+
+.first-signup-setup-modal__row[data-state="pending"] {
+	opacity: 0.65;
+}
+
+.first-signup-setup-modal__row-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	flex: 0 0 20px;
+}
+
+.first-signup-setup-modal__row-label {
+	flex: 1 1 auto;
+}
+
+.first-signup-setup-modal__check {
+	width: 16px;
+	height: 16px;
+	color: var(--privy-color-success, #22c55e);
+}
+
+.first-signup-setup-modal__dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--privy-color-foreground-4, #6b7280);
+}
+
+.first-signup-setup-modal__spinner {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	border: 2px solid var(--privy-color-background-3, #22262e);
+	border-top-color: var(--privy-color-accent, #8b5cf6);
+	animation: first-signup-setup-modal-spin 800ms linear infinite;
+}
+
+@keyframes first-signup-setup-modal-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.first-signup-setup-modal__actions {
+	display: flex;
+	gap: 10px;
+	margin-top: 20px;
+}
+
+.first-signup-setup-modal__btn {
+	flex: 1 1 0;
+	height: 44px;
+	border-radius: 12px;
+	border: 1px solid transparent;
+	font-weight: 600;
+	font-size: 14px;
+	cursor: pointer;
+	transition:
+		filter 160ms ease,
+		background 160ms ease,
+		border-color 160ms ease;
+}
+
+.first-signup-setup-modal__btn[disabled] {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.first-signup-setup-modal__btn--primary {
+	background: var(--privy-color-accent, #8b5cf6);
+	color: var(--privy-color-foreground-accent, #ffffff);
+}
+
+.first-signup-setup-modal__btn--primary:hover:not([disabled]) {
+	filter: brightness(1.06);
+}
+
+.first-signup-setup-modal__btn--secondary {
+	background: var(--privy-color-background-2, #1a1d24);
+	color: var(--privy-color-foreground-2, #d1d5db);
+	border-color: var(--privy-color-background-3, #22262e);
+}
+
+.first-signup-setup-modal__btn--secondary:hover:not([disabled]) {
+	background: var(--privy-color-background-3, #22262e);
+}
+
+.first-signup-setup-modal__error {
+	margin-top: 12px;
+	color: var(--privy-color-error, #ef4444);
+	font-size: 13px;
+}
+
+.first-signup-setup-modal__kalshi {
+	display: flex;
+	flex-direction: column;
+}
+
+.first-signup-setup-modal__deposit-msg {
+	font-size: 14px;
+	color: var(--privy-color-foreground-3, #9ca3af);
+	margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+	.first-signup-setup-modal__card {
+		padding: 24px 20px 20px;
+		width: calc(100vw - 24px);
+		border-radius: 14px;
+	}
+	.first-signup-setup-modal__heading {
+		font-size: 18px;
+	}
+	.first-signup-setup-modal__sub {
+		font-size: 13px;
+	}
+	.first-signup-setup-modal__btn {
+		height: 42px;
+		font-size: 13px;
+	}
+}

@@ -4,4 +4,3 @@
  */
 export { TransfersModal } from "./TransfersModal";
 export { default } from "./TransfersModal";
-

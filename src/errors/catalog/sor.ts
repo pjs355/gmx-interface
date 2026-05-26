@@ -6,14 +6,8 @@ export const SOR_NO_SHARES_AVAILABLE = defineError(
 	"SOR_NO_SHARES_AVAILABLE",
 	"No shares available",
 );
-export const SOR_NO_BIDS_AVAILABLE = defineError(
-	"SOR_NO_BIDS_AVAILABLE",
-	"No bids available",
-);
-export const SOR_ALL_BOOKS_STALE = defineError(
-	"SOR_ALL_BOOKS_STALE",
-	"Refreshing venue prices…",
-);
+export const SOR_NO_BIDS_AVAILABLE = defineError("SOR_NO_BIDS_AVAILABLE", "No bids available");
+export const SOR_ALL_BOOKS_STALE = defineError("SOR_ALL_BOOKS_STALE", "Refreshing venue prices…");
 export const SOR_NO_VENUES_ELIGIBLE = defineError(
 	"SOR_NO_VENUES_ELIGIBLE",
 	"No venue is ready for this size yet. Try a smaller amount or another tab.",
@@ -93,10 +87,7 @@ export const SOR_MISSING_LIMIT_PRICE = defineError(
 	"SOR_MISSING_LIMIT_PRICE",
 	"Missing or invalid limit price on leg",
 );
-export const SOR_NO_WALLET = defineError(
-	"SOR_NO_WALLET",
-	"No wallet connected",
-);
+export const SOR_NO_WALLET = defineError("SOR_NO_WALLET", "No wallet connected");
 export const SOR_MISSING_LEVELUP_QUESTION = defineError(
 	"SOR_MISSING_LEVELUP_QUESTION",
 	"Missing LevelUp question ID",

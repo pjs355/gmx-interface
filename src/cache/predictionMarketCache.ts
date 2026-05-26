@@ -102,11 +102,9 @@ class PredictionMarketCache {
 			timestamp: number;
 			price: number;
 			volume?: number;
-		}>
+		}>,
 	): void {
-		const transformedPrices = this.transformHistoricalPrices(
-			historicalPrices as any[]
-		);
+		const transformedPrices = this.transformHistoricalPrices(historicalPrices as any[]);
 
 		const existing = this.cache.get(questionId);
 		if (existing) {
@@ -151,24 +149,15 @@ class PredictionMarketCache {
 					} else if (item.date && typeof item.date === "number") {
 						timestamp = item.date;
 					} else if (item.ts && typeof item.ts === "number") {
-						timestamp =
-							item.ts > 1e12
-								? Math.floor(item.ts / 1000)
-								: item.ts;
+						timestamp = item.ts > 1e12 ? Math.floor(item.ts / 1000) : item.ts;
 					} else {
 						const date = new Date(
-							item.timestamp ||
-								item.time ||
-								item.date ||
-								item.ts ||
-								Date.now()
+							item.timestamp || item.time || item.date || item.ts || Date.now(),
 						);
 						timestamp = Math.floor(date.getTime() / 1000);
 					}
 
-					price = parseFloat(
-						item.price || item.value || item.close || 0
-					);
+					price = parseFloat(item.price || item.value || item.close || 0);
 					volume = item.volume ? parseFloat(item.volume) : undefined;
 				} else {
 					// Skip invalid items instead of using current time
@@ -209,12 +198,12 @@ class PredictionMarketCache {
 			})
 			.filter(
 				(
-					item
+					item,
 				): item is {
 					timestamp: number;
 					price: number;
 					volume?: number;
-				} => item !== null
+				} => item !== null,
 			)
 			.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -267,10 +256,7 @@ class PredictionMarketCache {
 			const isExpired = now - cached.lastUpdated > this.CACHE_DURATION;
 
 			console.log(`📦 ${key}:`, {
-				name:
-					cached.market?.displayName ||
-					cached.market?.question ||
-					"Unknown",
+				name: cached.market?.displayName || cached.market?.question || "Unknown",
 				ageSeconds: age,
 				expired: isExpired,
 				historicalPoints: cached.historicalPrices?.length || 0,

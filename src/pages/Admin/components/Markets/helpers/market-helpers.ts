@@ -1,8 +1,5 @@
 import type { SeriesMatch } from "@/types/market-types";
-import type {
-	AddMarketForm,
-	CreateMarketRequestPayload,
-} from "@/types/market-types";
+import type { AddMarketForm, CreateMarketRequestPayload } from "@/types/market-types";
 import type { TeamRecord } from "@/services/api/teamService";
 import type { QuestionEntry } from "../MarketQuestions";
 
@@ -13,9 +10,7 @@ export const slugify = (value: string): string =>
 		.replace(/[^a-z0-9]+/g, "-")
 		.replace(/^-+|-+$/g, "");
 
-export const formatDateTimeLocal = (
-	isoString: string | null | undefined
-): string => {
+export const formatDateTimeLocal = (isoString: string | null | undefined): string => {
 	if (typeof isoString !== "string" || isoString.length === 0) {
 		return "";
 	}
@@ -37,7 +32,7 @@ export const formatDateTimeLocal = (
 
 export const addHoursAndFormat = (
 	isoString: string | null | undefined,
-	hoursToAdd: number
+	hoursToAdd: number,
 ): string => {
 	if (typeof isoString !== "string" || isoString.length === 0) {
 		return "";
@@ -63,12 +58,8 @@ export const cleanTeamName = (teamName: string): string => {
 	return teamName.substring(0, openParenIndex).trim();
 };
 
-export const extractTeamKey = (
-	teamName: string,
-	acronym?: string | null
-): string | null => {
-	const acronymValue =
-		typeof acronym === "string" ? acronym.trim() : undefined;
+export const extractTeamKey = (teamName: string, acronym?: string | null): string | null => {
+	const acronymValue = typeof acronym === "string" ? acronym.trim() : undefined;
 	if (acronymValue && acronymValue.length > 0) {
 		return acronymValue.replace(/\./g, "").trim().toUpperCase();
 	}
@@ -83,9 +74,7 @@ export const extractTeamKey = (
 	return normalized.toUpperCase();
 };
 
-export const getTeamCode = (
-	team: Pick<SeriesMatch["team1"], "name" | "acronym">
-): string => {
+export const getTeamCode = (team: Pick<SeriesMatch["team1"], "name" | "acronym">): string => {
 	const key = extractTeamKey(team.name, team.acronym);
 	if (key) {
 		return key;

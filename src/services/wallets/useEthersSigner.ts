@@ -20,18 +20,14 @@ export function useEthersSigner(): WalletSigner | undefined {
 					(w: any) =>
 						w?.type === "smart_wallet" ||
 						w?.type === "embedded_wallet" ||
-						w?.walletClientType === "privy"
+						w?.walletClientType === "privy",
 				);
 				const ext = (privyWallets || []).find(
-					(w: any) =>
-						w?.type === "wallet" || w?.connectorType !== "privy"
+					(w: any) => w?.type === "wallet" || w?.connectorType !== "privy",
 				);
 				const chosen = smart || ext;
 
-				if (
-					!chosen ||
-					typeof chosen.getEthereumProvider !== "function"
-				) {
+				if (!chosen || typeof chosen.getEthereumProvider !== "function") {
 					if (!cancelled) setSigner(undefined);
 					return;
 				}
@@ -41,11 +37,10 @@ export function useEthersSigner(): WalletSigner | undefined {
 				const ethersSigner = await provider.getSigner();
 				const unchecked = new UncheckedJsonRpcSigner(
 					provider as any,
-					await ethersSigner.getAddress()
+					await ethersSigner.getAddress(),
 				);
 				if (!(unchecked as any).address) {
-					(unchecked as any).address =
-						await ethersSigner.getAddress();
+					(unchecked as any).address = await ethersSigner.getAddress();
 				}
 				if (!cancelled) setSigner(unchecked as unknown as WalletSigner);
 			} catch (e) {

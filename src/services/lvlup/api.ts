@@ -21,7 +21,7 @@ export type CreateKeyResult = {
 export async function createApiKey(
 	passphrase: string,
 	address: string,
-	signer: ethers.Signer
+	signer: ethers.Signer,
 ): Promise<CreateKeyResult> {
 	const headers: L1Headers = await signL1Headers({ address, signer });
 	const base = getPredictionApiBaseUrl();
@@ -63,7 +63,7 @@ export async function listApiKeys(auth: L2Secrets): Promise<ApiKeyInfo[]> {
 
 export async function listApiKeysBySession(
 	address: string,
-	accessToken: string
+	accessToken: string,
 ): Promise<ApiKeyInfo[]> {
 	const base = getPredictionApiBaseUrl();
 	const path = `/api/auth/my-api-keys`;
@@ -75,24 +75,18 @@ export async function listApiKeysBySession(
 	if (!resp.ok || !json?.success) {
 		throw new Error(json?.error || `HTTP ${resp.status}`);
 	}
-	const arr = Array.isArray(json?.data)
-		? json.data
-		: Array.isArray(json?.keys)
-		? json.keys
-		: [];
+	const arr = Array.isArray(json?.data) ? json.data : Array.isArray(json?.keys) ? json.keys : [];
 	return arr as ApiKeyInfo[];
 }
 
 export async function listApiKeysByAddress(
 	address: string,
-	accessToken?: string
+	accessToken?: string,
 ): Promise<ApiKeyInfo[]> {
 	const base = getPredictionApiBaseUrl();
 	const path = `/api/auth/api-keys/by-address/${address}`;
 	const resp = await fetch(`${base}${path}`, {
-		headers: accessToken
-			? { Authorization: `Bearer ${accessToken}` }
-			: undefined,
+		headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
 	});
 	const json = await resp.json();
 	if (!resp.ok || !json?.success) {
@@ -101,15 +95,12 @@ export async function listApiKeysByAddress(
 	const keys = Array.isArray(json?.data?.keys)
 		? json.data.keys
 		: Array.isArray(json?.keys)
-		? json.keys
-		: [];
+			? json.keys
+			: [];
 	return keys as ApiKeyInfo[];
 }
 
-export async function deleteApiKey(
-	auth: L2Secrets,
-	key: string
-): Promise<{ success: boolean }> {
+export async function deleteApiKey(auth: L2Secrets, key: string): Promise<{ success: boolean }> {
 	const path = "/api/auth/api-key";
 	const headers: L2Headers = await signL2({ method: "DELETE", path }, auth);
 	const base = getPredictionApiBaseUrl();
@@ -138,8 +129,7 @@ export async function getMe(auth: L2Secrets): Promise<{ address: string }> {
 }
 
 export function generatePassphrase(length = 40): string {
-	const alphabet =
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
 	const arr = new Uint8Array(length);
 	crypto.getRandomValues(arr);
 	return Array.from(arr, (n) => alphabet[n % alphabet.length]).join("");

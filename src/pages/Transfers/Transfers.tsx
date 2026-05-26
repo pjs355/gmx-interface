@@ -1,101 +1,65 @@
 /**
  * Transfers Page (/transfers)
- * 
+ *
  * PURPOSE:
  * Main page for managing deposits and withdrawals. Replaced the old complex Payments page
  * with a clean, simple interface showing portfolio summary and two action buttons.
- * 
+ *
  * ARCHITECTURE:
  * - Deposits: Uses Privy's native fundWallet() - opens Privy's deposit modal
  *   (supports card payments, crypto transfers, Coinbase integration)
  * - Withdrawals: Opens TransfersModal for USDC transfers to external addresses
  *   (Base shows your Coinbase smart wallet and a combined USDC total.)
- * 
+ *
  * DEPOSIT FLOW:
  * 1. User clicks "Deposit Funds"
  * 2. Privy's fundWallet() is called with user's account address
  * 3. Privy modal opens (we cannot customize the text in this modal)
- * 4. After completion, refreshUserData() updates balances
- * 
+ * 4. After completion, refreshLevelUpPortfolio() updates balances
+ *
  * WITHDRAW FLOW:
  * 1. User clicks "Withdraw Funds"
  * 2. Opens TransfersModal (controlled by TransfersModalContext)
  * 3. User enters address + amount, reviews, confirms
  * 4. USDC transfer executed on Base network
- * 
+ *
  * RELATED FILES:
  * - TransfersModal.tsx - The withdrawal modal component
  * - TransfersModalContext.tsx - Controls modal visibility
  * - AppHeaderUser.tsx - "Cash" button in header also triggers deposit
  * - PositionsHeader.tsx - "+" button on portfolio page also triggers deposit
- * 
+ *
  * ROUTES:
  * - /transfers - This page
  * - Old /payments route was removed
- * 
+ *
  * CREATED: Jan 2026 - Simplified from old Payments page
  */
 
-import React, { useCallback, useMemo, useState } from "react";
+import { useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePortfolio } from "@/context/PortfolioContext";
-import { useCollateralTokens } from "@/context/CollateralTokenContext";
 import { useSignerContext } from "@/context/SignerContext";
-import { useUserData } from "@/context/UserDataContext";
+import { useLevelUpPortfolioRefetch } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
 import { useTransfersModal } from "@/context/TransfersModalContext";
-import {
-	useAccountData,
-	useVenueAddressChainMap,
-} from "@/context/AccountDataContext";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { PrivyGatedDepositButton } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 import { TransfersBridgePanel } from "./TransfersBridgePanel";
+import { TransfersVenueAddresses } from "./TransfersVenueAddresses";
 import "@/pages/Profile/Details/Details.scss";
 import "./Transfers.scss";
 
 /** Set to `true` to show the LI.FI Transfer funds card (Base / Polygon / Solana / BNB). */
 const SHOW_TRANSFERS_BRIDGE_PANEL = false;
 
-function formatAddress(value: string | undefined): string {
-	if (!value?.trim()) return "—";
-	return value.trim();
-}
-
 export default function Transfers() {
 	const { login, authenticated } = usePrivy();
 	const { account, ready: signerReady } = useSignerContext();
 	const { portfolioTotal, cashBalance, portfolioLoading, cashLoading } = usePortfolio();
-	const collateral = useCollateralTokens();
-	const { refresh: refreshUserData } = useUserData();
+	const refreshLevelUpPortfolio = useLevelUpPortfolioRefetch();
 	const { openModal: openWithdrawModal } = useTransfersModal();
-	const { walletIsLoading } = useAccountData();
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
-	const [copiedAddressKey, setCopiedAddressKey] = useState<string | null>(null);
-
-	const scwRaw = venueAddressChainMap?.levelup.walletAddress?.trim();
-	const polymarketWallet = venueAddressChainMap?.polymarket.walletAddress;
-	const predictWallet = venueAddressChainMap?.predictfun.walletAddress;
-	const solanaWallet = venueAddressChainMap?.dflow.walletAddress;
-
-	const baseUsdcCombined = useMemo(
-		() => collateral.baseUsdc + collateral.limitlessMakerUsdc,
-		[collateral.baseUsdc, collateral.limitlessMakerUsdc],
-	);
-
-	const handleCopyAddress = useCallback(
-		async (key: string, raw: string | undefined) => {
-			const v = raw?.trim();
-			if (!v) return;
-			try {
-				await navigator.clipboard.writeText(v);
-				setCopiedAddressKey(key);
-				window.setTimeout(() => setCopiedAddressKey(null), 2000);
-			} catch {
-				/* ignore */
-			}
-		},
-		[],
-	);
 
 	// Format currency helper
 	const formatCurrency = useCallback((value: number | null): string => {
@@ -165,7 +129,7 @@ export default function Transfers() {
 						className="transfers-btn transfers-btn-deposit"
 						fundTarget={fundEvmTarget}
 						ready={signerReady}
-						onAfterFund={refreshUserData}
+						onAfterFund={refreshLevelUpPortfolio}
 					>
 						Deposit Funds
 					</PrivyGatedDepositButton>
@@ -180,166 +144,7 @@ export default function Transfers() {
 
 				{SHOW_TRANSFERS_BRIDGE_PANEL ? <TransfersBridgePanel /> : null}
 
-				<details className="transfers-addresses" aria-label="Your wallet addresses">
-					<summary className="transfers-addresses__summary">
-						Your addresses
-					</summary>
-					<div className="transfers-addresses__inner">
-						<p className="transfers-addresses__notice">
-							If sending funds manually, please ensure that you are using the
-							correct currency by chain. LevelUp does not currently support
-							recovering incorrect sent funds.
-						</p>
-
-						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">
-								<span>Polygon (pUSD)</span>
-								<span className="transfers-addresses__balance">
-									{collateral.isFetched ? (
-										`$${formatCurrency(collateral.polygonStable)}`
-									) : (
-										<span className="transfers-skeleton transfers-skeleton--balance" />
-									)}
-								</span>
-							</div>
-							<div className="transfers-addresses__value-row">
-								{walletIsLoading && !polymarketWallet ? (
-									<span className="transfers-skeleton transfers-skeleton--address" />
-								) : (
-									<code className="transfers-addresses__value">
-										{formatAddress(polymarketWallet)}
-									</code>
-								)}
-								<button
-									type="button"
-									className="Details-copy-button Details-copy-button--compact"
-									title="Copy address"
-									aria-label="Copy Polygon pUSD address"
-									disabled={
-										!String(polymarketWallet ?? "").trim() ||
-										(walletIsLoading && !polymarketWallet)
-									}
-									onClick={() =>
-										void handleCopyAddress("polygon", polymarketWallet)
-									}
-								>
-									{copiedAddressKey === "polygon" ? "✓" : "Copy"}
-								</button>
-							</div>
-						</div>
-
-						{scwRaw ? (
-							<div className="transfers-addresses__item">
-								<div className="transfers-addresses__chain">
-									<span>Base (USDC)</span>
-									<span className="transfers-addresses__balance">
-										{collateral.isFetched ? (
-											`$${formatCurrency(baseUsdcCombined)}`
-										) : (
-											<span className="transfers-skeleton transfers-skeleton--balance" />
-										)}
-									</span>
-								</div>
-								<div className="transfers-addresses__value-row">
-									{walletIsLoading && !String(scwRaw ?? "").trim() ? (
-										<span className="transfers-skeleton transfers-skeleton--address" />
-									) : (
-										<code className="transfers-addresses__value">
-											{formatAddress(scwRaw)}
-										</code>
-									)}
-									<button
-										type="button"
-										className="Details-copy-button Details-copy-button--compact"
-										title="Copy address"
-										aria-label="Copy Base USDC address"
-										disabled={
-											!String(scwRaw ?? "").trim() ||
-											(walletIsLoading && !String(scwRaw ?? "").trim())
-										}
-										onClick={() => void handleCopyAddress("base", scwRaw)}
-									>
-										{copiedAddressKey === "base" ? "✓" : "Copy"}
-									</button>
-								</div>
-							</div>
-						) : null}
-
-						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">
-								<span>BNB Chain (USDT)</span>
-								<span className="transfers-addresses__balance">
-									{collateral.isFetched ? (
-										`$${formatCurrency(collateral.bscUsdt)}`
-									) : (
-										<span className="transfers-skeleton transfers-skeleton--balance" />
-									)}
-								</span>
-							</div>
-							<div className="transfers-addresses__value-row">
-								{walletIsLoading && !predictWallet ? (
-									<span className="transfers-skeleton transfers-skeleton--address" />
-								) : (
-									<code className="transfers-addresses__value">
-										{formatAddress(predictWallet)}
-									</code>
-								)}
-								<button
-									type="button"
-									className="Details-copy-button Details-copy-button--compact"
-									title="Copy address"
-									aria-label="Copy BNB Chain USDT address"
-									disabled={
-										!String(predictWallet ?? "").trim() ||
-										(walletIsLoading && !predictWallet)
-									}
-									onClick={() =>
-										void handleCopyAddress("bnb", predictWallet)
-									}
-								>
-									{copiedAddressKey === "bnb" ? "✓" : "Copy"}
-								</button>
-							</div>
-						</div>
-
-						<div className="transfers-addresses__item">
-							<div className="transfers-addresses__chain">
-								<span>Solana (USDC)</span>
-								<span className="transfers-addresses__balance">
-									{collateral.isFetched ? (
-										`$${formatCurrency(collateral.solanaUsdc)}`
-									) : (
-										<span className="transfers-skeleton transfers-skeleton--balance" />
-									)}
-								</span>
-							</div>
-							<div className="transfers-addresses__value-row">
-								{walletIsLoading && !solanaWallet ? (
-									<span className="transfers-skeleton transfers-skeleton--address" />
-								) : (
-									<code className="transfers-addresses__value">
-										{formatAddress(solanaWallet)}
-									</code>
-								)}
-								<button
-									type="button"
-									className="Details-copy-button Details-copy-button--compact"
-									title="Copy address"
-									aria-label="Copy Solana USDC address"
-									disabled={
-										!String(solanaWallet ?? "").trim() ||
-										(walletIsLoading && !solanaWallet)
-									}
-									onClick={() =>
-										void handleCopyAddress("solana", solanaWallet)
-									}
-								>
-									{copiedAddressKey === "solana" ? "✓" : "Copy"}
-								</button>
-							</div>
-						</div>
-					</div>
-				</details>
+				<TransfersVenueAddresses />
 			</div>
 		</div>
 	);

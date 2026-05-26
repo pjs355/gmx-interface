@@ -2,7 +2,7 @@
 import "./polyfills/node-runtime-globals";
 
 // MUST be second - suppress console.log in production before any other code runs
-import { initConsoleSuppress } from "./utils/suppressConsole";
+import { initConsoleSuppress } from "@/shared/bootstrap/suppressConsole";
 initConsoleSuppress();
 
 // CRITICAL: Clean up any lingering environment override in localStorage
@@ -13,7 +13,7 @@ if (typeof window !== "undefined") {
 }
 
 import * as Sentry from "@sentry/react";
-import { shouldDropPrivyDuplicateSolanaInsufficientUnhandled } from "@/utils/sentryPrivySolanaFilter";
+import { shouldDropPrivyDuplicateSolanaInsufficientUnhandled } from "@/shared/observability/sentryPrivySolanaFilter";
 
 Sentry.init({
 	dsn: "https://014a3809164e437ea9fa07f4dc0d3f32@o4508413424893952.ingest.us.sentry.io/4510275102703616",
@@ -26,7 +26,7 @@ Sentry.init({
 	},
 });
 
-import { initMixpanel } from "./utils/mixpanel";
+import { initMixpanel } from "@/shared/analytics/mixpanel";
 initMixpanel("0da2aa66dee9343cec64d0cdeb46562e", {
 	autocapture: true,
 	record_sessions_percent: 100,
@@ -40,16 +40,11 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter as Router } from "react-router-dom";
 import { base, bsc, polygon } from "viem/chains";
-import {
-	BSC_RPC_URL,
-	POLYGON_RPC_URL,
-	SOLANA_RPC_URL,
-	SOLANA_WS_URL,
-} from "@/config/rpc";
+import { BSC_RPC_URL, POLYGON_RPC_URL, SOLANA_RPC_URL, SOLANA_WS_URL } from "@/config/rpc";
 
 const baseOverride = addRpcUrlOverrideToChain(
 	base,
-	"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih"
+	"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih",
 );
 
 /** Embedded-wallet / viem JSON-RPC — overrides Privy defaults (e.g. thirdweb) that often 429 or block CORS from localhost. */
@@ -77,18 +72,18 @@ import { PortfolioProvider } from "@/context/PortfolioContext";
 import { AccountDataProvider } from "@/context/AccountDataContext";
 import { PositionsDataProvider } from "@/context/PositionsDataContext";
 import { PositionsRouteChunkPreloader } from "@/context/PositionsRouteChunkPreloader";
-import { PostTradeAccountSyncProvider } from "@/trading/sor/post-trade/usePostTradeAccountSync";
+import { PostTradeAccountSyncProvider } from "@/features/trading/sor/post-trade/usePostTradeAccountSync";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
 import { TransfersModalProvider } from "context/TransfersModalContext";
 import { OddsDisplayProvider } from "context/OddsDisplayContext";
 import { StickyTradeAmountProvider } from "context/StickyTradeAmountContext";
-import { PolymarketBackgroundActivation } from "@/trading/venues/polymarket/session/PolymarketBackgroundActivation";
-import { PolymarketDepositDeployBackgroundActivation } from "@/trading/venues/polymarket/session/PolymarketDepositDeployBackgroundActivation";
-import { PredictBackgroundActivation } from "@/trading/venues/predict/session/PredictBackgroundActivation";
-import { LimitlessBackgroundActivation } from "@/trading/venues/limitless/session/LimitlessBackgroundActivation";
-import { SetupActivationProvider } from "@/onboarding/SetupActivationContext";
-import { FirstSignupSetupGate } from "@/onboarding/FirstSignupSetupGate";
+import { PolymarketBackgroundActivation } from "@/features/trading/venues/polymarket/session/PolymarketBackgroundActivation";
+import { PolymarketDepositDeployBackgroundActivation } from "@/features/trading/venues/polymarket/session/PolymarketDepositDeployBackgroundActivation";
+import { PredictBackgroundActivation } from "@/features/trading/venues/predict/session/PredictBackgroundActivation";
+import { LimitlessBackgroundActivation } from "@/features/trading/venues/limitless/session/LimitlessBackgroundActivation";
+import { SetupActivationProvider } from "@/features/onboarding/SetupActivationContext";
+import { FirstSignupSetupGate } from "@/features/onboarding/FirstSignupSetupGate";
 
 import App from "./app/App";
 import "./styles/globals.css";
@@ -116,8 +111,7 @@ createRoot(document.getElementById("root")!).render(
 						// for accents/foregrounds live in `globals.css`.
 						theme: "#101114",
 						showWalletLoginFirst: false,
-						loginMessage:
-							"Welcome to LevelUp Predictions! Please create an account or sign in",
+						loginMessage: "Welcome to LevelUp Predictions! Please create an account or sign in",
 					},
 					loginMethods: ["email", "google", "wallet"],
 					embeddedWallets: {
@@ -140,76 +134,76 @@ createRoot(document.getElementById("root")!).render(
 			>
 				<SmartWalletsProvider>
 					<WalletProvider>
-					<EnabledVenuesProvider>
-					<PredictionDataProvider>
-						<OddsMonitorProvider>
-							<SignerProvider>
-								{/*
-								 * `AccountDataProvider` nests `CollateralTokenProvider` and
-								 * maps `useCollateralTokens()` into `useAccountData().cash` so
-								 * `GET /portfolio/cash-summary` runs once. Other per-user
-								 * queries (profile, overview, venue accounts, positions)
-								 * live in the same provider tree.
-								 */}
-								<AccountDataProvider>
-									<PositionsRouteChunkPreloader />
-									<UserDataProvider>
-										<SetupActivationProvider>
+						<EnabledVenuesProvider>
+							<PredictionDataProvider>
+								<OddsMonitorProvider>
+									<SignerProvider>
 										{/*
-										 * Background activators run silently. Three of
-										 * them publish to `SetupActivationContext` so the
-										 * first-signup gate can rush them past
-										 * `requestIdleCallback` and paint the checklist:
-										 *
-										 *   Predict -> Limitless -> Polymarket
-										 *
-										 * `PolymarketDepositDeployBackgroundActivation`
-										 * is a 4th, silent activator that pre-warms the
-										 * Polymarket deposit-wallet deploy + relayer
-										 * registry at boot, in parallel with Predict.
-										 * That removes ~12-15s from the visible
-										 * Polymarket activation later. It does NOT
-										 * publish to `SetupActivationContext` — the user
-										 * sees no UI for it.
+										 * `AccountDataProvider` nests `CollateralTokenProvider` and
+										 * maps `useCollateralTokens()` into `useAccountData().cash` so
+										 * `GET /portfolio/cash-summary` runs once. Other per-user
+										 * queries (profile, overview, venue accounts, positions)
+										 * live in the same provider tree.
 										 */}
-										<PolymarketDepositDeployBackgroundActivation />
-										<PolymarketBackgroundActivation />
-										<PredictBackgroundActivation />
-										<LimitlessBackgroundActivation />
-										{/* Modal gates rendering on the user's
-										 * `onboardingCompletedAt` flag. Existing users
-										 * (including everyone backfilled by the migration
-										 * script) never see it. */}
-										<FirstSignupSetupGate />
-										<RecentSettlementClaimProvider>
-											<PostTradeAccountSyncProvider>
-												<PortfolioProvider>
-													<PositionsDataProvider>
-													<PositionsPageMetricsGateProvider>
-														<RPGProvider>
-															<TransfersModalProvider>
-																<OddsDisplayProvider>
-																	<StickyTradeAmountProvider>
-																		<App />
-																	</StickyTradeAmountProvider>
-																</OddsDisplayProvider>
-															</TransfersModalProvider>
-														</RPGProvider>
-													</PositionsPageMetricsGateProvider>
-													</PositionsDataProvider>
-												</PortfolioProvider>
-											</PostTradeAccountSyncProvider>
-										</RecentSettlementClaimProvider>
-										</SetupActivationProvider>
-									</UserDataProvider>
-								</AccountDataProvider>
-							</SignerProvider>
-						</OddsMonitorProvider>
-					</PredictionDataProvider>
-					</EnabledVenuesProvider>
+										<AccountDataProvider>
+											<PositionsRouteChunkPreloader />
+											<UserDataProvider>
+												<SetupActivationProvider>
+													{/*
+													 * Background activators run silently. Three of
+													 * them publish to `SetupActivationContext` so the
+													 * first-signup gate can rush them past
+													 * `requestIdleCallback` and paint the checklist:
+													 *
+													 *   Predict -> Limitless -> Polymarket
+													 *
+													 * `PolymarketDepositDeployBackgroundActivation`
+													 * is a 4th, silent activator that pre-warms the
+													 * Polymarket deposit-wallet deploy + relayer
+													 * registry at boot, in parallel with Predict.
+													 * That removes ~12-15s from the visible
+													 * Polymarket activation later. It does NOT
+													 * publish to `SetupActivationContext` — the user
+													 * sees no UI for it.
+													 */}
+													<PolymarketDepositDeployBackgroundActivation />
+													<PolymarketBackgroundActivation />
+													<PredictBackgroundActivation />
+													<LimitlessBackgroundActivation />
+													{/* Modal gates rendering on the user's
+													 * `onboardingCompletedAt` flag. Existing users
+													 * (including everyone backfilled by the migration
+													 * script) never see it. */}
+													<FirstSignupSetupGate />
+													<RecentSettlementClaimProvider>
+														<PostTradeAccountSyncProvider>
+															<PositionsDataProvider>
+																<PortfolioProvider>
+																	<PositionsPageMetricsGateProvider>
+																		<RPGProvider>
+																			<TransfersModalProvider>
+																				<OddsDisplayProvider>
+																					<StickyTradeAmountProvider>
+																						<App />
+																					</StickyTradeAmountProvider>
+																				</OddsDisplayProvider>
+																			</TransfersModalProvider>
+																		</RPGProvider>
+																	</PositionsPageMetricsGateProvider>
+																</PortfolioProvider>
+															</PositionsDataProvider>
+														</PostTradeAccountSyncProvider>
+													</RecentSettlementClaimProvider>
+												</SetupActivationProvider>
+											</UserDataProvider>
+										</AccountDataProvider>
+									</SignerProvider>
+								</OddsMonitorProvider>
+							</PredictionDataProvider>
+						</EnabledVenuesProvider>
 					</WalletProvider>
 				</SmartWalletsProvider>
 			</PrivyProvider>
 		</Router>
-	</React.StrictMode>
+	</React.StrictMode>,
 );

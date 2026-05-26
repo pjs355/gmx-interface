@@ -1,10 +1,4 @@
-import React, {
-	createContext,
-	useCallback,
-	useContext,
-	useMemo,
-	useState,
-} from "react";
+import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { TradingVenue } from "@/config/venueConfig";
 
 /**
@@ -42,21 +36,12 @@ type StickyTradeAmountContextValue = {
 	setOrderType: (next: "market" | "limit" | null) => void;
 };
 
-const StickyTradeAmountContext =
-	createContext<StickyTradeAmountContextValue | null>(null);
+const StickyTradeAmountContext = createContext<StickyTradeAmountContextValue | null>(null);
 
-export function StickyTradeAmountProvider({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
+export function StickyTradeAmountProvider({ children }: { children: React.ReactNode }) {
 	const [amount, setAmountState] = useState("");
-	const [tradingVenue, setTradingVenueState] = useState<TradingVenue | null>(
-		null,
-	);
-	const [orderType, setOrderTypeState] = useState<"market" | "limit" | null>(
-		null,
-	);
+	const [tradingVenue, setTradingVenueState] = useState<TradingVenue | null>(null);
+	const [orderType, setOrderTypeState] = useState<"market" | "limit" | null>(null);
 
 	const setAmount = useCallback((next: string) => {
 		setAmountState((prev) => (prev === next ? prev : next));
@@ -79,20 +64,11 @@ export function StickyTradeAmountProvider({
 			orderType,
 			setOrderType,
 		}),
-		[
-			amount,
-			setAmount,
-			tradingVenue,
-			setTradingVenue,
-			orderType,
-			setOrderType,
-		],
+		[amount, setAmount, tradingVenue, setTradingVenue, orderType, setOrderType],
 	);
 
 	return (
-		<StickyTradeAmountContext.Provider value={value}>
-			{children}
-		</StickyTradeAmountContext.Provider>
+		<StickyTradeAmountContext.Provider value={value}>{children}</StickyTradeAmountContext.Provider>
 	);
 }
 

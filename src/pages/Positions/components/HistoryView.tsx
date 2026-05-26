@@ -11,23 +11,24 @@ import { usePredictionData } from "@/context/PredictionDataContext";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import TradeHistoryList from "./TradeHistoryList";
 import UmbrellaImage from "./UmbrellaImage";
+import { umbrellaHeaderLabel } from "@/features/markets/presentation/umbrellaDisplayName";
+import { buildUmbrellaLookupByPolymarketConditionId } from "@/features/trading/venues/polymarket/trade/polymarketConditionLookup";
 import {
-	umbrellaHeaderLabel,
-} from "@/helpers/umbrellaDisplayName";
-import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
-import { buildUmbrellaLookupByDflowEventTicker, buildUmbrellaLookupByDflowOutcomeMint } from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
-import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/venues/levelup/levelUpQuestionIdsForVenueHistory";
+	buildUmbrellaLookupByDflowEventTicker,
+	buildUmbrellaLookupByDflowOutcomeMint,
+} from "@/features/trading/venues/dflow/catalog/dflowUmbrellaLookup";
+import { levelUpQuestionIdsForVenueHistoryRow } from "@/features/trading/venues/levelup/levelUpQuestionIdsForVenueHistory";
 import {
 	getVenueHistoryMarketColumnLabel,
 	isGenericBinaryOutcomeLabel,
-} from "@/trading/venues/predict/portfolio/predictPositionLabel";
+} from "@/features/trading/venues/predict/portfolio/predictPositionLabel";
 import {
 	getTradeCount,
 	formatHistoryReturnPctAbs,
 	historyVenueRowPortfolioYesNoSide,
 	venueHistoryPositionToSyntheticOrders,
 	venueHistoryRowToSyntheticOrder,
-} from "../utils/positionHelpers";
+} from "@/features/positions/utils/positionHelpers";
 import {
 	parseVsTeamsFromTitle,
 	pickResolvedWinnerFromMarkets,
@@ -35,26 +36,24 @@ import {
 	shortTeamDisplayName,
 	winnerLabelFromLevelUpTitle,
 	winnerLabelFromVenuePosition,
-} from "../utils/historyOutcomeWinner";
-import { debugLimitlessPortfolio } from "@/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
-import {
-	buildPredictUmbrellaLookup,
-} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
+} from "@/features/positions/utils/historyOutcomeWinner";
+import { debugLimitlessPortfolio } from "@/features/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
+import { buildPredictUmbrellaLookup } from "@/features/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import {
 	logFullHistoryDebug,
 	type FullHistoryUnifiedBlock,
 	type LogFullHistoryDebugParams,
-} from "../utils/fullHistoryDebugLog";
-import { buildHistoryUnifiedBlocks } from "../utils/buildHistoryUnifiedBlocks";
+} from "@/features/positions/utils/fullHistoryDebugLog";
+import { buildHistoryUnifiedBlocks } from "@/features/positions/utils/buildHistoryUnifiedBlocks";
 import {
 	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
 	polymarketSplitSettlementBadgeVisible,
-} from "../utils/polymarketHistorySplitSettlementBadge";
-import type { UmbrellaPositions } from "../utils/positionHelpers";
+} from "@/features/positions/utils/polymarketHistorySplitSettlementBadge";
+import type { UmbrellaPositions } from "@/features/positions/utils/positionHelpers";
 import {
 	buildHistoryHoldingsBlockedKeys,
 	filterUnifiedHistoryBlocksByOpenPositions,
-} from "../utils/filterHistoryBlocksByOpenPositions";
+} from "@/features/positions/utils/filterHistoryBlocksByOpenPositions";
 
 type MergedHistoryRow = {
 	side: "Yes" | "No";
@@ -127,7 +126,8 @@ export default function HistoryView({
 	const toggleMarketExpansion = (key: string) => {
 		setExpandedMarkets((prev) => {
 			const n = new Set(prev);
-			if (n.has(key)) n.delete(key); else n.add(key);
+			if (n.has(key)) n.delete(key);
+			else n.add(key);
 			return n;
 		});
 	};
@@ -159,16 +159,11 @@ export default function HistoryView({
 	);
 
 	const historyHoldingsBlocked = useMemo(
-		() =>
-			buildHistoryHoldingsBlockedKeys(
-				openUmbrellaPositions,
-				resolvedUmbrellaPositions,
-			),
+		() => buildHistoryHoldingsBlockedKeys(openUmbrellaPositions, resolvedUmbrellaPositions),
 		[openUmbrellaPositions, resolvedUmbrellaPositions],
 	);
 	const unifiedBlocksForDisplay = useMemo(
-		() =>
-			filterUnifiedHistoryBlocksByOpenPositions(unifiedBlocks, historyHoldingsBlocked),
+		() => filterUnifiedHistoryBlocksByOpenPositions(unifiedBlocks, historyHoldingsBlocked),
 		[unifiedBlocks, historyHoldingsBlocked],
 	);
 
@@ -211,7 +206,10 @@ export default function HistoryView({
 		return synth;
 	}, [venueHistory]);
 
-	const allOrders = useMemo(() => [...orders, ...venueHistorySyntheticOrders], [orders, venueHistorySyntheticOrders]);
+	const allOrders = useMemo(
+		() => [...orders, ...venueHistorySyntheticOrders],
+		[orders, venueHistorySyntheticOrders],
+	);
 
 	const mergedRowsByBlock = useMemo(() => {
 		let limitlessHistUiLog = 0;
@@ -229,9 +227,7 @@ export default function HistoryView({
 				block.luMarkets.map((r) => r.market),
 				umbrellaTitle,
 			);
-			let blockOutcomeShort = blockCanonical
-				? shortTeamDisplayName(blockCanonical)
-				: null;
+			let blockOutcomeShort = blockCanonical ? shortTeamDisplayName(blockCanonical) : null;
 			if (!blockOutcomeShort && luWinner) {
 				blockOutcomeShort = shortTeamDisplayName(luWinner);
 			}
@@ -256,7 +252,7 @@ export default function HistoryView({
 			};
 			const sideBuckets: Record<"Yes" | "No", Bucket> = {
 				Yes: { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
-				No:  { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
+				No: { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
 			};
 
 			for (const { market } of block.luMarkets) {
@@ -264,9 +260,7 @@ export default function HistoryView({
 				if (!qid) continue;
 				const resolved = String((market as any).resolvedOutcome || "").toLowerCase();
 				const title = (market?.displayName || (market as any)?.question || "").trim();
-				const vsPair =
-					parseVsTeamsFromTitle(title) ??
-					parseVsTeamsFromTitle(umbrellaTitle);
+				const vsPair = parseVsTeamsFromTitle(title) ?? parseVsTeamsFromTitle(umbrellaTitle);
 				const isVs = vsPair != null;
 
 				for (const side of ["Yes", "No"] as const) {
@@ -276,32 +270,22 @@ export default function HistoryView({
 					bucket.hasData = true;
 					if (!bucket.marketIds.includes(qid)) bucket.marketIds.push(qid);
 					const won =
-						(side === "Yes" && resolved === "yes") ||
-						(side === "No" && resolved === "no");
+						(side === "Yes" && resolved === "yes") || (side === "No" && resolved === "no");
 					bucket.wonByQid[qid] = won;
 
 					if (!bucket.label) {
-						bucket.label = isVs && vsPair
-							? shortTeamDisplayName(side === "Yes" ? vsPair[0] : vsPair[1])
-							: side;
+						bucket.label =
+							isVs && vsPair ? shortTeamDisplayName(side === "Yes" ? vsPair[0] : vsPair[1]) : side;
 					}
 					if (!bucket.outcomeText) {
-						bucket.outcomeText = winnerLabelFromLevelUpTitle(
-							title,
-							resolved,
-							umbrellaTitle,
-						);
+						bucket.outcomeText = winnerLabelFromLevelUpTitle(title, resolved, umbrellaTitle);
 					}
 				}
 			}
 
 			for (const pos of block.venuePositions) {
 				const side = historyVenueRowPortfolioYesNoSide(pos);
-				if (
-					import.meta.env.DEV &&
-					pos.venue === "limitless" &&
-					limitlessHistUiLog < 18
-				) {
+				if (import.meta.env.DEV && pos.venue === "limitless" && limitlessHistUiLog < 18) {
 					limitlessHistUiLog++;
 					const synth = venueHistoryRowToSyntheticOrder(pos);
 					debugLimitlessPortfolio("History tab UI: limitless venueHistory row → bucket + labels", {
@@ -318,6 +302,7 @@ export default function HistoryView({
 							pos.marketTitle,
 							pos,
 							block.venuePositions.length === 1 && block.luMarkets.length === 0,
+							block.umbrella,
 						),
 						syntheticOrderPosition: synth?.position,
 						syntheticPrice: synth?.price,
@@ -339,11 +324,11 @@ export default function HistoryView({
 					pos.marketTitle,
 					pos,
 					singleInGroup,
+					block.umbrella,
 				);
 				if (
 					!bucket.label ||
-					(isGenericBinaryOutcomeLabel(bucket.label) &&
-						!isGenericBinaryOutcomeLabel(columnLabel))
+					(isGenericBinaryOutcomeLabel(bucket.label) && !isGenericBinaryOutcomeLabel(columnLabel))
 				) {
 					bucket.label = columnLabel;
 				}
@@ -380,21 +365,15 @@ export default function HistoryView({
 					const qNorm = normalizeOrderQuestionIdKey(String(qid));
 					let qidShares = 0;
 					for (const o of allOrders) {
-						if (
-							normalizeOrderQuestionIdKey(String(o.questionId ?? "")) !== qNorm
-						) {
+						if (normalizeOrderQuestionIdKey(String(o.questionId ?? "")) !== qNorm) {
 							continue;
 						}
 						if (!o.filled) continue;
 						if (o.position?.toLowerCase() !== sideLower) continue;
 						const shares =
-							typeof o.tokenValue === "number" && Number.isFinite(o.tokenValue)
-								? o.tokenValue
-								: 0;
+							typeof o.tokenValue === "number" && Number.isFinite(o.tokenValue) ? o.tokenValue : 0;
 						const cash =
-							typeof o.usdcValue === "number" && Number.isFinite(o.usdcValue)
-								? o.usdcValue
-								: 0;
+							typeof o.usdcValue === "number" && Number.isFinite(o.usdcValue) ? o.usdcValue : 0;
 						if (o.side === "buy") {
 							qidShares += shares;
 							totalCashOut += cash;
@@ -422,12 +401,9 @@ export default function HistoryView({
 				const displayCost = Math.max(netCashSpent, 0);
 				const totalReturn = payout + totalCashIn - totalCashOut;
 				const retDenom = displayCost > 0 ? displayCost : totalCashOut;
-				const retPct =
-					retDenom > 0 ? (totalReturn / retDenom) * 100 : null;
+				const retPct = retDenom > 0 ? (totalReturn / retDenom) * 100 : null;
 				const outcomeColor = totalReturn >= 0 ? "#16a34a" : "#ef4444";
-				const fallbackOutcome = b.outcomeText
-					? shortTeamDisplayName(b.outcomeText)
-					: "—";
+				const fallbackOutcome = b.outcomeText ? shortTeamDisplayName(b.outcomeText) : "—";
 				const polymarketSplitBadge = polymarketSplitSettlementBadgeVisible(
 					block.venuePositions,
 					side,
@@ -455,7 +431,9 @@ export default function HistoryView({
 		return (
 			<div style={{ textAlign: "center", padding: "40px", color: "#888" }}>
 				<p>No resolved markets with trading history found.</p>
-				<p style={{ fontSize: "14px", marginTop: "8px" }}>Only resolved markets where you have trading history will appear here.</p>
+				<p style={{ fontSize: "14px", marginTop: "8px" }}>
+					Only resolved markets where you have trading history will appear here.
+				</p>
 			</div>
 		);
 	}
@@ -465,7 +443,14 @@ export default function HistoryView({
 			<ScrollableTable minWidth="700px">
 				<div
 					className="grid items-center px-12 py-10"
-					style={{ gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px", borderBottom: "1px solid #333333", color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6 }}
+					style={{
+						gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
+						borderBottom: "1px solid #333333",
+						color: "#888",
+						fontSize: 12,
+						textTransform: "uppercase",
+						letterSpacing: 0.6,
+					}}
 				>
 					<div>Market</div>
 					<div style={{ textAlign: "center" }}>Final Position</div>
@@ -473,7 +458,12 @@ export default function HistoryView({
 					<div style={{ textAlign: "center" }}>Total Cost</div>
 					<div style={{ textAlign: "center" }}>Total Payout</div>
 					<div style={{ textAlign: "center" }}>
-						<Tooltip content="Total return includes total payout of current positions and any past gains you have bought or sold." position="top">Total Return</Tooltip>
+						<Tooltip
+							content="Total return includes total payout of current positions and any past gains you have bought or sold."
+							position="top"
+						>
+							Total Return
+						</Tooltip>
 					</div>
 					<div style={{ textAlign: "center" }}>Trades</div>
 				</div>
@@ -487,10 +477,21 @@ export default function HistoryView({
 									gridTemplateColumns: "minmax(200px, 2fr) repeat(5, 1fr) 80px",
 									background: "#000000",
 									borderBottom: "1px solid #1f1f1f",
-									paddingTop: 16, paddingBottom: 16,
+									paddingTop: 16,
+									paddingBottom: 16,
 								}}
 							>
-								<div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
+								<div
+									style={{
+										gridColumn: "1 / -1",
+										fontWeight: 700,
+										color: "#dedede",
+										fontSize: 20,
+										display: "flex",
+										alignItems: "center",
+										gap: "12px",
+									}}
+								>
 									<UmbrellaImage umbrella={block.umbrella} />
 									{umbrellaHeaderLabel(block.umbrella)}
 								</div>
@@ -500,22 +501,34 @@ export default function HistoryView({
 								const expandKey = `${block.id}-${row.side}`;
 								const isExp = expandedMarkets.has(expandKey);
 								const tradeListMarketTitle =
-									(block.venuePositions.find((p) => p.marketTitle?.trim())
-										?.marketTitle ?? "")
-										.trim() || umbrellaHeaderLabel(block.umbrella) || undefined;
+									(
+										block.venuePositions.find((p) => p.marketTitle?.trim())?.marketTitle ?? ""
+									).trim() ||
+									umbrellaHeaderLabel(block.umbrella) ||
+									undefined;
 
-								const costText = row.totalCost > 0 ? `$${row.totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
-								const payoutText = row.totalPayout > 0 ? `$${row.totalPayout.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "$0";
+								const costText =
+									row.totalCost > 0
+										? `$${row.totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+										: "—";
+								const payoutText =
+									row.totalPayout > 0
+										? `$${row.totalPayout.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+										: "$0";
 								const payoutColor = row.totalPayout > 0 ? "#16a34a" : "#fff";
 								const retC = row.totalReturn >= 0 ? "#16a34a" : "#ef4444";
 								const retT = (() => {
 									const s = row.totalReturn >= 0 ? "+" : "-";
 									const u = `$${Math.abs(row.totalReturn).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-									if (row.totalReturnPct === null || !isFinite(row.totalReturnPct)) return `${s}${u}`;
+									if (row.totalReturnPct === null || !isFinite(row.totalReturnPct))
+										return `${s}${u}`;
 									const sp = row.totalReturnPct >= 0 ? "+" : "-";
 									return `${s}${u} (${sp}${formatHistoryReturnPctAbs(row.totalReturnPct)}%)`;
 								})();
-								const posText = row.finalPosition >= 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—";
+								const posText =
+									row.finalPosition >= 0
+										? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 })
+										: "—";
 
 								return (
 									<React.Fragment key={expandKey}>
@@ -528,17 +541,40 @@ export default function HistoryView({
 												cursor: row.tradeCount > 0 ? "pointer" : "default",
 												transition: "background 0.15s ease",
 											}}
-											onClick={row.tradeCount > 0 ? () => toggleMarketExpansion(expandKey) : undefined}
-											onMouseEnter={(e) => { if (row.tradeCount > 0) e.currentTarget.style.background = "#1a1a1a"; }}
-											onMouseLeave={(e) => { if (row.tradeCount > 0) e.currentTarget.style.background = "transparent"; }}
+											onClick={
+												row.tradeCount > 0 ? () => toggleMarketExpansion(expandKey) : undefined
+											}
+											onMouseEnter={(e) => {
+												if (row.tradeCount > 0) e.currentTarget.style.background = "#1a1a1a";
+											}}
+											onMouseLeave={(e) => {
+												if (row.tradeCount > 0) e.currentTarget.style.background = "transparent";
+											}}
 										>
-											<div style={{ color: "#fff", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+											<div
+												style={{
+													color: "#fff",
+													fontWeight: 600,
+													display: "flex",
+													alignItems: "center",
+													gap: 8,
+												}}
+											>
 												{row.polymarketSplitBadge === true ? (
-													<Tooltip content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY} position="top">
+													<Tooltip
+														content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
+														position="top"
+													>
 														<span
 															aria-label={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
 															role="img"
-															style={{ cursor: "help", color: "#f59e0b", flexShrink: 0, fontSize: 16, lineHeight: 1 }}
+															style={{
+																cursor: "help",
+																color: "#f59e0b",
+																flexShrink: 0,
+																fontSize: 16,
+																lineHeight: 1,
+															}}
 														>
 															⚠
 														</span>
@@ -547,18 +583,34 @@ export default function HistoryView({
 												<span>{row.label}</span>
 											</div>
 											<div style={{ textAlign: "center", color: "#fff" }}>{posText}</div>
-											<div style={{ textAlign: "center", color: row.outcomeColor, fontWeight: 600 }}>{row.outcomeText}</div>
-											<div style={{ textAlign: "center", color: "#fff", fontWeight: 500 }}>{costText}</div>
+											<div
+												style={{ textAlign: "center", color: row.outcomeColor, fontWeight: 600 }}
+											>
+												{row.outcomeText}
+											</div>
+											<div style={{ textAlign: "center", color: "#fff", fontWeight: 500 }}>
+												{costText}
+											</div>
 											<div style={{ textAlign: "center", color: payoutColor }}>{payoutText}</div>
-											<div style={{ textAlign: "center", color: retC, fontWeight: 500 }}>{retT}</div>
+											<div style={{ textAlign: "center", color: retC, fontWeight: 500 }}>
+												{retT}
+											</div>
 											<div style={{ textAlign: "center" }}>
 												{row.tradeCount > 0 && (
 													<button
 														className={`expand-trades-btn ${isExp ? "expanded" : ""}`}
-														onClick={(e) => { e.stopPropagation(); toggleMarketExpansion(expandKey); }}
+														onClick={(e) => {
+															e.stopPropagation();
+															toggleMarketExpansion(expandKey);
+														}}
 													>
 														<span>{row.tradeCount}</span>
-														<span className="expand-icon" style={{ transform: isExp ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
+														<span
+															className="expand-icon"
+															style={{ transform: isExp ? "rotate(180deg)" : "rotate(0deg)" }}
+														>
+															▼
+														</span>
 													</button>
 												)}
 											</div>

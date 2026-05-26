@@ -3,10 +3,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { ALL_VENUES, VENUE_LABELS, type VenueId } from "@/config/venues";
 import { useEnabledVenues } from "@/context/EnabledVenuesContext";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import {
-	adminErrorMessage,
-	ADMIN_MISSING_ACCESS_TOKEN,
-} from "@/errors";
+import { adminErrorMessage, ADMIN_MISSING_ACCESS_TOKEN } from "@/errors";
 
 interface PutResponse {
 	success: boolean;
@@ -14,10 +11,7 @@ interface PutResponse {
 	error?: string;
 }
 
-async function putEnabledVenues(
-	enabled: VenueId[],
-	token: string,
-): Promise<VenueId[]> {
+async function putEnabledVenues(enabled: VenueId[], token: string): Promise<VenueId[]> {
 	const base = getPredictionApiBaseUrl();
 	const res = await fetch(`${base}/admin/settings/enabled-venues`, {
 		method: "PUT",
@@ -45,9 +39,7 @@ async function putEnabledVenues(
 	}
 	const list = body.data?.enabledVenues;
 	if (!Array.isArray(list)) {
-		throw new Error(
-			"PUT /admin/settings/enabled-venues response missing enabledVenues array",
-		);
+		throw new Error("PUT /admin/settings/enabled-venues response missing enabledVenues array");
 	}
 	const out: VenueId[] = [];
 	for (const entry of list) {
@@ -62,9 +54,7 @@ export default function AdminVenues() {
 	const { getAccessToken } = usePrivy();
 	const { enabledVenues, isLoading, error, refresh } = useEnabledVenues();
 
-	const [optimistic, setOptimistic] = useState<ReadonlySet<VenueId> | null>(
-		null,
-	);
+	const [optimistic, setOptimistic] = useState<ReadonlySet<VenueId> | null>(null);
 	const [pendingVenue, setPendingVenue] = useState<VenueId | null>(null);
 	const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -98,11 +88,7 @@ export default function AdminVenues() {
 			} catch (err) {
 				console.error("error", err);
 				setOptimistic(null);
-				setSubmitError(
-					err instanceof Error
-						? err.message
-						: "Failed to update enabled venues",
-				);
+				setSubmitError(err instanceof Error ? err.message : "Failed to update enabled venues");
 			} finally {
 				setPendingVenue(null);
 			}
@@ -114,9 +100,7 @@ export default function AdminVenues() {
 
 	return (
 		<div style={{ padding: 12, color: "white" }}>
-			<div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>
-				Enabled venues
-			</div>
+			<div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Enabled venues</div>
 			<div
 				style={{
 					marginBottom: 12,
@@ -125,16 +109,13 @@ export default function AdminVenues() {
 					lineHeight: 1.4,
 				}}
 			>
-				Click a venue to toggle it on or off for every user. Disabled venues
-				disappear from the home cards, charts, orderbooks, and the trade box
-				within ~30 seconds for other users (immediately for you). The setting
-				is stored on predictions-api as a singleton document.
+				Click a venue to toggle it on or off for every user. Disabled venues disappear from the home
+				cards, charts, orderbooks, and the trade box within ~30 seconds for other users (immediately
+				for you). The setting is stored on predictions-api as a singleton document.
 			</div>
 
 			{isLoading && (
-				<div style={{ marginBottom: 12, color: "#9ca3af" }}>
-					Loading current setting…
-				</div>
+				<div style={{ marginBottom: 12, color: "#9ca3af" }}>Loading current setting…</div>
 			)}
 
 			{error && (
@@ -150,8 +131,8 @@ export default function AdminVenues() {
 				>
 					Failed to read enabled venues from predictions-api: {error}.
 					<br />
-					New users may see all venues until this load succeeds. Refresh the
-					page after fixing the network or API.
+					New users may see all venues until this load succeeds. Refresh the page after fixing the
+					network or API.
 				</div>
 			)}
 
@@ -186,15 +167,10 @@ export default function AdminVenues() {
 								minWidth: 160,
 								padding: "10px 16px",
 								borderRadius: 8,
-								border: isEnabled
-									? "1px solid #22c55e"
-									: "1px solid #ef4444",
-								background: isEnabled
-									? "rgba(34,197,94,0.18)"
-									: "rgba(239,68,68,0.10)",
+								border: isEnabled ? "1px solid #22c55e" : "1px solid #ef4444",
+								background: isEnabled ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.10)",
 								color: isEnabled ? "#bbf7d0" : "#fecaca",
-								cursor:
-									pendingVenue !== null ? "not-allowed" : "pointer",
+								cursor: pendingVenue !== null ? "not-allowed" : "pointer",
 								opacity: pendingVenue !== null && !isPending ? 0.7 : 1,
 								fontWeight: 600,
 								letterSpacing: 0.2,

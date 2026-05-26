@@ -1,524 +1,524 @@
 .prediction-market-chart {
-  width: 100%;
-  height: 100%;
-  background: #000000;
-  padding: 12px 12px 16px;
-  display: flex;
-  flex-direction: column;
+	width: 100%;
+	height: 100%;
+	background: #000000;
+	padding: 12px 12px 16px;
+	display: flex;
+	flex-direction: column;
 
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 12px;
+	.chart-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 20px;
+		flex-wrap: wrap;
+		gap: 12px;
 
-    .chart-logo {
-      height: 32px;
-      width: auto;
-      object-fit: contain;
-      flex-shrink: 0;
-    }
+		.chart-logo {
+			height: 32px;
+			width: auto;
+			object-fit: contain;
+			flex-shrink: 0;
+		}
 
-    .chart-titles {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: nowrap; // Keep both markets on the same line
-      gap: 12px; // Bring markets closer together
-      align-items: center;
-      min-width: 0; // Allow container to shrink
-      flex: 1; // Take available space
-      overflow: hidden; // Prevent overflow from affecting layout
-    }
+		.chart-titles {
+			display: flex;
+			flex-direction: row;
+			flex-wrap: nowrap; // Keep both markets on the same line
+			gap: 12px; // Bring markets closer together
+			align-items: center;
+			min-width: 0; // Allow container to shrink
+			flex: 1; // Take available space
+			overflow: hidden; // Prevent overflow from affecting layout
+		}
 
-    .market-info {
-      display: flex;
-      flex-direction: row; // Title and price on the same line
-      align-items: center;
-      gap: 8px;
-      min-width: 0; // Allow flex item to shrink
-      flex: 0 1 auto; // Size to content; don't stretch apart
+		.market-info {
+			display: flex;
+			flex-direction: row; // Title and price on the same line
+			align-items: center;
+			gap: 8px;
+			min-width: 0; // Allow flex item to shrink
+			flex: 0 1 auto; // Size to content; don't stretch apart
 
-      h3 {
-        color: #ffffff;
-        font-size: 16px; // Match percentage size for consistency
-        font-weight: 600;
-        margin: 0;
-        line-height: 1.2;
-        white-space: nowrap; // Keep name on one line
-        overflow: hidden; // Truncate long names
-        text-overflow: ellipsis; // Show ellipsis for long names
-        min-width: 0; // Allow flex-basis to shrink
-      }
+			h3 {
+				color: #ffffff;
+				font-size: 16px; // Match percentage size for consistency
+				font-weight: 600;
+				margin: 0;
+				line-height: 1.2;
+				white-space: nowrap; // Keep name on one line
+				overflow: hidden; // Truncate long names
+				text-overflow: ellipsis; // Show ellipsis for long names
+				min-width: 0; // Allow flex-basis to shrink
+			}
 
-      .current-price {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        flex: 0 0 auto; // Keep price from shrinking and stay visible
+			.current-price {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				flex: 0 0 auto; // Keep price from shrinking and stay visible
 
-        .price-value {
-          font-size: 16px; // Match title size
-          font-weight: 700;
-        }
+				.price-value {
+					font-size: 16px; // Match title size
+					font-weight: 700;
+				}
 
-        .live-indicator {
-          font-size: 12px;
-          animation: pulse 2s infinite;
-        }
-      }
+				.live-indicator {
+					font-size: 12px;
+					animation: pulse 2s infinite;
+				}
+			}
 
-      &.primary-market {
-        .price-value.primary-price {
-          color: #8b5cf6; // Purple
-        }
+			&.primary-market {
+				.price-value.primary-price {
+					color: #8b5cf6; // Purple
+				}
 
-        .live-indicator.primary-indicator {
-          color: #8b5cf6; // Purple
-        }
-      }
+				.live-indicator.primary-indicator {
+					color: #8b5cf6; // Purple
+				}
+			}
 
-      &.second-market {
-        .price-value.second-price {
-          color: #3b82f6; // Blue
-        }
+			&.second-market {
+				.price-value.second-price {
+					color: #3b82f6; // Blue
+				}
 
-        .live-indicator.second-indicator {
-          color: #3b82f6; // Blue
-        }
-      }
-    }
+				.live-indicator.second-indicator {
+					color: #3b82f6; // Blue
+				}
+			}
+		}
 
-    .chart-header-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-    }
+		.chart-header-right {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			flex-shrink: 0;
+		}
 
-    .time-range-selector {
-      display: flex;
-      gap: 4px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 6px;
-      padding: 4px;
+		.time-range-selector {
+			display: flex;
+			gap: 4px;
+			background: rgba(255, 255, 255, 0.05);
+			border-radius: 6px;
+			padding: 4px;
 
-      .time-range-btn {
-        background: transparent;
-        border: none;
-        color: rgba(255, 255, 255, 0.6);
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
+			.time-range-btn {
+				background: transparent;
+				border: none;
+				color: rgba(255, 255, 255, 0.6);
+				padding: 6px 12px;
+				border-radius: 4px;
+				font-size: 12px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: all 0.2s ease;
 
-        &:hover {
-          color: #ffffff;
-          background: rgba(255, 255, 255, 0.1);
-        }
+				&:hover {
+					color: #ffffff;
+					background: rgba(255, 255, 255, 0.1);
+				}
 
-        &.active {
-          color: #ffffff;
-          background: #8b5cf6; // Purple
-        }
+				&.active {
+					color: #ffffff;
+					background: #8b5cf6; // Purple
+				}
 
-        &:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          
-          &:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: rgba(255, 255, 255, 0.6);
-          }
-        }
-      }
-    }
+				&:disabled {
+					opacity: 0.5;
+					cursor: not-allowed;
 
-    // Scroll controls removed
-  }
+					&:hover {
+						background: rgba(255, 255, 255, 0.05);
+						color: rgba(255, 255, 255, 0.6);
+					}
+				}
+			}
+		}
 
-  .chart-container {
-    flex: 1;
-    min-height: 280px;
-    position: relative;
-    overflow: hidden; // prevent tooltip or controls from causing layout shift on mobile
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    width: 100%;
+		// Scroll controls removed
+	}
 
-    .chart-plot-area {
-      position: relative;
-      width: 100%;
-      min-width: 0;
-      flex: 0 0 auto;
-    }
+	.chart-container {
+		flex: 1;
+		min-height: 280px;
+		position: relative;
+		overflow: hidden; // prevent tooltip or controls from causing layout shift on mobile
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		width: 100%;
 
-    .no-data,
-    .loading-data,
-    .chart-loading {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      
-      p {
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 14px;
-        margin: 0;
-      }
-    }
+		.chart-plot-area {
+			position: relative;
+			width: 100%;
+			min-width: 0;
+			flex: 0 0 auto;
+		}
 
-    .loading-data {
-      p {
-        color: rgba(255, 255, 255, 0.8);
-      }
-    }
+		.no-data,
+		.loading-data,
+		.chart-loading {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			height: 100%;
 
-    .chart-loading {
-      p {
-        color: rgba(255, 255, 255, 0.8);
-        margin-top: 12px;
-      }
+			p {
+				color: rgba(255, 255, 255, 0.6);
+				font-size: 14px;
+				margin: 0;
+			}
+		}
 
-      .loading-spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-top: 3px solid #8b5cf6;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-    }
+		.loading-data {
+			p {
+				color: rgba(255, 255, 255, 0.8);
+			}
+		}
 
-    .exchange-chart-empty {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 200px;
-      color: rgba(255, 255, 255, 0.4);
-      font-size: 13px;
-    }
+		.chart-loading {
+			p {
+				color: rgba(255, 255, 255, 0.8);
+				margin-top: 12px;
+			}
 
-    .chart-plot-area .chart-spinner-overlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      pointer-events: none;
+			.loading-spinner {
+				width: 40px;
+				height: 40px;
+				border: 3px solid rgba(255, 255, 255, 0.1);
+				border-top: 3px solid #8b5cf6;
+				border-radius: 50%;
+				animation: spin 1s linear infinite;
+			}
+		}
 
-      .chart-spinner {
-        width: 36px;
-        height: 36px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-top-color: #8b5cf6;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-    }
+		.exchange-chart-empty {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 200px;
+			color: rgba(255, 255, 255, 0.4);
+			font-size: 13px;
+		}
 
-    .venue-checkbox-bar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 4px;
-      margin-top: 4px;
-      flex: 0 0 auto;
-      min-width: 0;
-      width: 100%;
-      box-sizing: border-box;
+		.chart-plot-area .chart-spinner-overlay {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			z-index: 10;
+			pointer-events: none;
 
-      .venue-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 4px 10px;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.04);
-        color: rgba(255, 255, 255, 0.55);
-        font-size: 11px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        user-select: none;
+			.chart-spinner {
+				width: 36px;
+				height: 36px;
+				border: 3px solid rgba(255, 255, 255, 0.1);
+				border-top-color: #8b5cf6;
+				border-radius: 50%;
+				animation: spin 0.8s linear infinite;
+			}
+		}
 
-        .venue-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          flex-shrink: 0;
-          opacity: 0.5;
-          transition: opacity 0.15s ease;
-        }
+		.venue-checkbox-bar {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 6px;
+			padding: 6px 4px;
+			margin-top: 4px;
+			flex: 0 0 auto;
+			min-width: 0;
+			width: 100%;
+			box-sizing: border-box;
 
-        .venue-logo {
-          opacity: 0.6;
-          transition: opacity 0.15s ease;
-        }
+			.venue-chip {
+				display: inline-flex;
+				align-items: center;
+				gap: 5px;
+				padding: 4px 10px;
+				border-radius: 14px;
+				border: 1px solid rgba(255, 255, 255, 0.12);
+				background: rgba(255, 255, 255, 0.04);
+				color: rgba(255, 255, 255, 0.55);
+				font-size: 11px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: all 0.15s ease;
+				user-select: none;
 
-        &:hover {
-          background: rgba(255, 255, 255, 0.08);
-          color: rgba(255, 255, 255, 0.8);
-        }
+				.venue-dot {
+					width: 8px;
+					height: 8px;
+					border-radius: 50%;
+					flex-shrink: 0;
+					opacity: 0.5;
+					transition: opacity 0.15s ease;
+				}
 
-        &.active {
-          background: rgba(255, 255, 255, 0.1);
-          border-color: rgba(255, 255, 255, 0.25);
-          color: #ffffff;
+				.venue-logo {
+					opacity: 0.6;
+					transition: opacity 0.15s ease;
+				}
 
-          .venue-dot {
-            opacity: 1;
-          }
+				&:hover {
+					background: rgba(255, 255, 255, 0.08);
+					color: rgba(255, 255, 255, 0.8);
+				}
 
-          .venue-logo {
-            opacity: 1;
-          }
-        }
-      }
+				&.active {
+					background: rgba(255, 255, 255, 0.1);
+					border-color: rgba(255, 255, 255, 0.25);
+					color: #ffffff;
 
-    }
+					.venue-dot {
+						opacity: 1;
+					}
 
-    // Time range overlays chart area on desktop; flows below chart on .prediction-market-page.mobile
-    .chart-plot-area .time-range-selector.bottom-right {
-      position: absolute;
-      bottom: 10px;
-      right: 10px;
-      // Stays above the recharts SVG inside this plot area but below the
-      // fixed App-header (z-index 850) so it doesn't bleed through on scroll.
-      z-index: 5;
-      display: flex;
-      gap: 4px;
-      background: rgba(0, 0, 0, 0.8);
-      border-radius: 6px;
-      padding: 4px;
+					.venue-logo {
+						opacity: 1;
+					}
+				}
+			}
+		}
 
-      .time-range-btn {
-        background: transparent;
-        border: none;
-        color: rgba(255, 255, 255, 0.6);
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
+		// Time range overlays chart area on desktop; flows below chart on .prediction-market-page.mobile
+		.chart-plot-area .time-range-selector.bottom-right {
+			position: absolute;
+			bottom: 10px;
+			right: 10px;
+			// Stays above the recharts SVG inside this plot area but below the
+			// fixed App-header (z-index 850) so it doesn't bleed through on scroll.
+			z-index: 5;
+			display: flex;
+			gap: 4px;
+			background: rgba(0, 0, 0, 0.8);
+			border-radius: 6px;
+			padding: 4px;
 
-        &:hover {
-          color: #ffffff;
-          background: rgba(255, 255, 255, 0.1);
-        }
+			.time-range-btn {
+				background: transparent;
+				border: none;
+				color: rgba(255, 255, 255, 0.6);
+				padding: 6px 12px;
+				border-radius: 4px;
+				font-size: 12px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: all 0.2s ease;
 
-        &.active {
-          color: #ffffff;
-          background: #8b5cf6; // Purple
-        }
+				&:hover {
+					color: #ffffff;
+					background: rgba(255, 255, 255, 0.1);
+				}
 
-        &:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          
-          &:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: rgba(255, 255, 255, 0.6);
-          }
-        }
-      }
-    }
-  }
+				&.active {
+					color: #ffffff;
+					background: #8b5cf6; // Purple
+				}
 
-  // Custom tooltip styling
-  .prediction-chart-tooltip {
-    background: rgba(0, 0, 0, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    padding: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+				&:disabled {
+					opacity: 0.5;
+					cursor: not-allowed;
 
-    .tooltip-time {
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 12px;
-      margin: 0 0 8px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding-bottom: 4px;
-    }
+					&:hover {
+						background: rgba(255, 255, 255, 0.05);
+						color: rgba(255, 255, 255, 0.6);
+					}
+				}
+			}
+		}
+	}
 
-    .tooltip-price {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin: 0 0 4px 0;
+	// Custom tooltip styling
+	.prediction-chart-tooltip {
+		background: rgba(0, 0, 0, 0.9);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 6px;
+		padding: 12px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 
-      .tooltip-label {
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 12px;
-        flex: 1;
-      }
+		.tooltip-time {
+			color: rgba(255, 255, 255, 0.8);
+			font-size: 12px;
+			margin: 0 0 8px 0;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+			padding-bottom: 4px;
+		}
 
-      .tooltip-value {
-        font-size: 12px;
-        font-weight: 600;
-      }
+		.tooltip-price {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 12px;
+			margin: 0 0 4px 0;
 
-      .tooltip-live-badge {
-        background: rgba(255, 255, 255, 0.1);
-        color: #ffffff;
-        font-size: 8px;
-        font-weight: 600;
-        padding: 2px 4px;
-        border-radius: 2px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-left: 6px;
-      }
+			.tooltip-label {
+				color: rgba(255, 255, 255, 0.6);
+				font-size: 12px;
+				flex: 1;
+			}
 
-      &.primary-tooltip .tooltip-value.primary-value {
-        color: #8b5cf6; // Purple
-      }
+			.tooltip-value {
+				font-size: 12px;
+				font-weight: 600;
+			}
 
-      &.second-tooltip .tooltip-value.second-value {
-        color: #3b82f6; // Blue
-      }
-    }
-  }
+			.tooltip-live-badge {
+				background: rgba(255, 255, 255, 0.1);
+				color: #ffffff;
+				font-size: 8px;
+				font-weight: 600;
+				padding: 2px 4px;
+				border-radius: 2px;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+				margin-left: 6px;
+			}
 
-  // Animation for live indicator
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.4;
-    }
-  }
+			&.primary-tooltip .tooltip-value.primary-value {
+				color: #8b5cf6; // Purple
+			}
 
-  // Animation for loading spinner
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
-  }
+			&.second-tooltip .tooltip-value.second-value {
+				color: #3b82f6; // Blue
+			}
+		}
+	}
+
+	// Animation for live indicator
+	@keyframes pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.4;
+		}
+	}
+
+	// Animation for loading spinner
+	@keyframes spin {
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
+	}
 }
 
 // Trading page mobile / tablet only — parent class set in PredictionMarket.tsx (does not apply on laptop)
 .prediction-market-page.mobile .prediction-market-chart {
-  padding: 8px 0 12px;
+	padding: 8px 0 12px;
 
-  .chart-header {
-    margin-bottom: 12px;
-    align-items: flex-start;
+	.chart-header {
+		margin-bottom: 12px;
+		align-items: flex-start;
 
-    .chart-header-right {
-      display: none;
-    }
+		.chart-header-right {
+			display: none;
+		}
 
-    .chart-titles {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 10px;
-      overflow: visible;
-      width: 100%;
-      padding-left: 12px;
-      box-sizing: border-box;
-    }
+		.chart-titles {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 10px;
+			overflow: visible;
+			width: 100%;
+			padding-left: 12px;
+			box-sizing: border-box;
+		}
 
-    .market-info {
-      flex: none;
-      width: 100%;
-      min-width: 0;
-      justify-content: flex-start;
+		.market-info {
+			flex: none;
+			width: 100%;
+			min-width: 0;
+			justify-content: flex-start;
 
-      h3 {
-        white-space: normal;
-        overflow: visible;
-        text-overflow: unset;
-        font-size: 1rem;
-      }
+			h3 {
+				white-space: normal;
+				overflow: visible;
+				text-overflow: unset;
+				font-size: 1rem;
+			}
 
-      .current-price .price-value {
-        font-size: 1rem;
-      }
-    }
-  }
+			.current-price .price-value {
+				font-size: 1rem;
+			}
+		}
+	}
 
-  .chart-container {
-    min-height: 220px;
-  }
+	.chart-container {
+		min-height: 220px;
+	}
 
-  .chart-plot-area .time-range-selector.bottom-right {
-    position: absolute;
-    bottom: 4px;
-    right: 4px;
-    margin-top: 0;
-    margin-left: 0;
-    margin-right: 0;
-    align-self: auto;
-    // Match the desktop fix: keep above the recharts SVG but well below the
-    // fixed App-header (z-index 850) so 1H/1D stops painting over it on scroll.
-    z-index: 5;
-    background: rgba(0, 0, 0, 0.75);
-  }
+	.chart-plot-area .time-range-selector.bottom-right {
+		position: absolute;
+		bottom: 4px;
+		right: 4px;
+		margin-top: 0;
+		margin-left: 0;
+		margin-right: 0;
+		align-self: auto;
+		// Match the desktop fix: keep above the recharts SVG but well below the
+		// fixed App-header (z-index 850) so 1H/1D stops painting over it on scroll.
+		z-index: 5;
+		background: rgba(0, 0, 0, 0.75);
+	}
 
-  .chart-plot-area .time-range-selector.bottom-right .time-range-btn {
-    min-height: 44px;
-    min-width: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
+	.chart-plot-area .time-range-selector.bottom-right .time-range-btn {
+		min-height: 44px;
+		min-width: 44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
 
-  .venue-checkbox-bar {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-    gap: 4px;
-    justify-content: stretch;
-    align-items: stretch;
-    margin-top: 6px;
-    padding-left: 4px;
-    padding-right: 4px;
-    width: 100%;
-    box-sizing: border-box;
+	.venue-checkbox-bar {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+		gap: 4px;
+		justify-content: stretch;
+		align-items: stretch;
+		margin-top: 6px;
+		padding-left: 4px;
+		padding-right: 4px;
+		width: 100%;
+		box-sizing: border-box;
 
-    .venue-chip {
-      min-height: 32px;
-      min-width: 0;
-      justify-content: center;
-      text-align: center;
-      font-size: 12px;
-      padding: 4px 8px;
-      box-sizing: border-box;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
+		.venue-chip {
+			min-height: 32px;
+			min-width: 0;
+			justify-content: center;
+			text-align: center;
+			font-size: 12px;
+			padding: 4px 8px;
+			box-sizing: border-box;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+	}
 }
 
 // Recharts customizations for dark theme
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
-  stroke: rgba(255, 255, 255, 0.1);
+	stroke: rgba(255, 255, 255, 0.1);
 }
 
 .recharts-tooltip-wrapper {
-  z-index: 1000;
+	z-index: 1000;
 }
 
 .recharts-active-dot {
-  filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.6));
+	filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.6));
 }
 
 .recharts-reference-line-line {
-  opacity: 0.5;
+	opacity: 0.5;
 }

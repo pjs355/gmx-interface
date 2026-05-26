@@ -43,14 +43,8 @@ export interface OrderbookResponse {
 }
 
 export class OrderbookService {
-	private static inFlight = new Map<
-		string,
-		Promise<OrderbookSnapshot | null>
-	>();
-	private static cache = new Map<
-		string,
-		{ data: OrderbookSnapshot; expiresAt: number }
-	>();
+	private static inFlight = new Map<string, Promise<OrderbookSnapshot | null>>();
+	private static cache = new Map<string, { data: OrderbookSnapshot; expiresAt: number }>();
 	private readonly CACHE_TTL_MS = 30000; // 30s
 
 	private getBaseUrl(): string {
@@ -61,9 +55,7 @@ export class OrderbookService {
 		return base as string;
 	}
 
-	async fetchOrderbook(
-		questionId: string
-	): Promise<OrderbookSnapshot | null> {
+	async fetchOrderbook(questionId: string): Promise<OrderbookSnapshot | null> {
 		try {
 			if (typeof questionId !== "string" || questionId.length === 0) {
 				throw new Error("fetchOrderbook requires a valid questionId");
@@ -82,9 +74,7 @@ export class OrderbookService {
 			if (existing) return existing;
 
 			const p = (async () => {
-				const response = await fetch(
-					`${this.getBaseUrl()}/orderbook/${questionId}`
-				);
+				const response = await fetch(`${this.getBaseUrl()}/orderbook/${questionId}`);
 				if (!response.ok) {
 					throw new Error(`HTTP error! status: ${response.status}`);
 				}
@@ -129,7 +119,7 @@ export class OrderbookService {
 	getTotalVolumeAtPrice(orders: OrderbookEntry[], price: number): number {
 		const sizedAtPrice = orders.filter(
 			(order): order is OrderbookEntry & { size: number } =>
-				order.price === price && typeof order.size === "number"
+				order.price === price && typeof order.size === "number",
 		);
 		return sizedAtPrice.reduce((total, order) => total + order.size, 0);
 	}
@@ -140,14 +130,10 @@ export class OrderbookService {
 		bestAsk: number | null;
 	} {
 		const bestBid =
-			orderbook.bids.length > 0
-				? Math.max(...orderbook.bids.map((bid) => bid.price))
-				: null;
+			orderbook.bids.length > 0 ? Math.max(...orderbook.bids.map((bid) => bid.price)) : null;
 
 		const bestAsk =
-			orderbook.asks.length > 0
-				? Math.min(...orderbook.asks.map((ask) => ask.price))
-				: null;
+			orderbook.asks.length > 0 ? Math.min(...orderbook.asks.map((ask) => ask.price)) : null;
 
 		return { bestBid, bestAsk };
 	}

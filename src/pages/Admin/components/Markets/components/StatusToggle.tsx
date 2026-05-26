@@ -55,29 +55,20 @@ const StatusToggle: React.FC<StatusToggleProps> = ({
 		.join(" ")
 		.trim();
 	const inactiveClasses = [buttonClassName]
-		.concat(
-			!value && inactiveButtonClassName ? [inactiveButtonClassName] : []
-		)
+		.concat(!value && inactiveButtonClassName ? [inactiveButtonClassName] : [])
 		.filter(Boolean)
 		.join(" ")
 		.trim();
 
 	return (
-		<div
-			className={className}
-			style={className ? undefined : baseContainerStyle}
-		>
+		<div className={className} style={className ? undefined : baseContainerStyle}>
 			<span>{label}</span>
 			<div style={baseRowStyle}>
 				<button
 					type="button"
 					onClick={() => onChange(true)}
 					className={activeClasses || undefined}
-					style={
-						activeButtonClassName && value
-							? undefined
-							: composeButtonStyle(value)
-					}
+					style={activeButtonClassName && value ? undefined : composeButtonStyle(value)}
 				>
 					{activeLabel}
 				</button>
@@ -85,11 +76,7 @@ const StatusToggle: React.FC<StatusToggleProps> = ({
 					type="button"
 					onClick={() => onChange(false)}
 					className={inactiveClasses || undefined}
-					style={
-						inactiveButtonClassName && !value
-							? undefined
-							: composeButtonStyle(!value)
-					}
+					style={inactiveButtonClassName && !value ? undefined : composeButtonStyle(!value)}
 				>
 					{inactiveLabel}
 				</button>

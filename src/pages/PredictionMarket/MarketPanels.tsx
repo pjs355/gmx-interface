@@ -12,7 +12,7 @@ import { VenueOrderbooksPanel } from "@/components/VenueOrderbooksPanel/VenueOrd
 import { MarketHeader } from "./MarketHeader";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import type { TradingVenue } from "./PredictionMarketTradeBox/types";
+import type { TradingVenue } from "@/components/PredictionMarketTradeBox";
 import type { SettledInfo } from "./useMatchSettled";
 import {
 	getMarketId,
@@ -21,7 +21,10 @@ import {
 	resolveLevelUpOrderbookKey,
 } from "./utils";
 import { useUmbrellaTradePricing } from "./useUmbrellaTradePricing";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
 
 type PanelsProps = {
@@ -69,7 +72,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	const isMobileViewport = useMedia("(max-width: 1100px)");
 
 	// Track buy/sell side state
-	const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
+	const [tradeSide] = useState<"buy" | "sell">("buy");
 	const [activeTab, setActiveTab] = useState<"basic" | "orderbooks">("basic");
 	const [venueForTradeBox, setVenueForTradeBox] = useState<TradingVenue | undefined>(undefined);
 	/** Default to chart so the stream iframe doesn't auto-load on page open.
@@ -99,27 +102,23 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		chartState.primaryQuestionId ||
 		getMarketId(chartState.primaryMarket) ||
 		(hasQuestions ? getMarketId(sortedQuestions[0]) : "");
-	const primaryChartOrderbook = chartQuestionId
-		? questionOrderbooks[chartQuestionId]
-		: undefined;
+	const primaryChartOrderbook = chartQuestionId ? questionOrderbooks[chartQuestionId] : undefined;
 	const levelUpOrderbookKey = resolveLevelUpOrderbookKey(
 		sortedQuestions,
-		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)
-			?.levelup?.questionId ?? null,
+		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)?.levelup
+			?.questionId ?? null,
 	);
 	const levelUpOrderbook = levelUpOrderbookKey
-		? questionOrderbooks[levelUpOrderbookKey] ?? null
+		? (questionOrderbooks[levelUpOrderbookKey] ?? null)
 		: null;
 	/** LevelUp line on the chart when the LevelUp book has resting shares. */
-	const chartLevelUpBookHasRestingShares =
-		levelUpOrderbookHasRestingShares(levelUpOrderbook);
+	const chartLevelUpBookHasRestingShares = levelUpOrderbookHasRestingShares(levelUpOrderbook);
 	const levelUpContextMarket =
 		(levelUpOrderbookKey
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
 			: null) ?? firstQuestion;
 	const showCrossVenueBooks = Boolean(pandascoreMatchId);
-	const streamUrl =
-		typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
+	const streamUrl = typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
 	const showStream = Boolean(umbrella?.streamEnabled) && streamUrl.length > 0;
 
 	useEffect(() => {
@@ -155,7 +154,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			? {
 					...(chartState.primaryMarket as any),
 					umbrellaChildrenCount: umbrella?.children?.length || 0,
-			  }
+				}
 			: undefined;
 	}, [chartState.primaryMarket, umbrella?.children?.length]);
 
@@ -164,26 +163,27 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			? {
 					...(chartState.secondaryMarket as any),
 					umbrellaChildrenCount: umbrella?.children?.length || 0,
-			  }
+				}
 			: undefined;
 	}, [chartState.secondaryMarket, umbrella?.children?.length]);
 
-	const tabSwitcher = showCrossVenueBooks && !settledView ? (
-		<div className="venue-tab-switcher">
-			<button
-				className={`venue-tab-btn${activeTab === "basic" ? " venue-tab-btn--active" : ""}`}
-				onClick={() => selectVenueBooksTab("basic")}
-			>
-				Basic
-			</button>
-			<button
-				className={`venue-tab-btn${activeTab === "orderbooks" ? " venue-tab-btn--active" : ""}`}
-				onClick={() => selectVenueBooksTab("orderbooks")}
-			>
-				Orderbooks
-			</button>
-		</div>
-	) : null;
+	const tabSwitcher =
+		showCrossVenueBooks && !settledView ? (
+			<div className="venue-tab-switcher">
+				<button
+					className={`venue-tab-btn${activeTab === "basic" ? " venue-tab-btn--active" : ""}`}
+					onClick={() => selectVenueBooksTab("basic")}
+				>
+					Basic
+				</button>
+				<button
+					className={`venue-tab-btn${activeTab === "orderbooks" ? " venue-tab-btn--active" : ""}`}
+					onClick={() => selectVenueBooksTab("orderbooks")}
+				>
+					Orderbooks
+				</button>
+			</div>
+		) : null;
 
 	const bookMarket = activeMarket ?? sortedQuestions[0] ?? null;
 	const bookMarketId = bookMarket ? getMarketId(bookMarket) || "" : "";
@@ -199,9 +199,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					{sortedQuestions.map((question) => {
 						if (!question) return null;
 						const qid = getMarketId(question) || "";
-						const isActive =
-							Boolean(activeMarket) &&
-							getMarketId(activeMarket) === qid;
+						const isActive = Boolean(activeMarket) && getMarketId(activeMarket) === qid;
 						return (
 							<button
 								key={qid}
@@ -225,9 +223,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						loading={!questionOrderbooks[bookMarketId]}
 						error={null}
 						onRefresh={() => fetchAllOrderbooks(sortedQuestions)}
-						customTitle={
-							bookMarket.displayName || (bookMarket as any).question
-						}
+						customTitle={bookMarket.displayName || (bookMarket as any).question}
 						market={
 							{
 								...(bookMarket as any),
@@ -248,16 +244,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		</>
 	);
 
-	const orderbookColumnContent = settledView ? (
-		// <RulesSection umbrella={umbrella} />
-		null
-	) : showCrossVenueBooks ? (
+	const orderbookColumnContent = settledView ? null : showCrossVenueBooks ? ( // <RulesSection umbrella={umbrella} />
 		activeTab === "basic" ? (
 			<>
 				<div className="orderbook-section__cross-venue">
-					<EsportsVenueBooksPanel
-						tradingPagePrices={tradingPagePrices}
-					/>
+					<EsportsVenueBooksPanel tradingPagePrices={tradingPagePrices} />
 				</div>
 				{/* <RulesSection umbrella={umbrella} /> */}
 			</>
@@ -268,10 +259,14 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					umbrellaId={umbrella._id}
 					limitlessFromUmbrella={umbrellaLimitless}
 					levelUpOrderbook={levelUpOrderbook}
-					market={levelUpContextMarket ? {
-						...(levelUpContextMarket as any),
-						umbrellaChildrenCount: umbrella?.children?.length || 0,
-					} as any : undefined}
+					market={
+						levelUpContextMarket
+							? ({
+									...(levelUpContextMarket as any),
+									umbrellaChildrenCount: umbrella?.children?.length || 0,
+								} as any)
+							: undefined
+					}
 					umbrellaDisplayName={umbrella.displayName}
 					onMarketSwitch={onMarketSwitch}
 					onVenueSelect={setVenueForTradeBox}
@@ -296,10 +291,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		);
 
 	// Chart only needs a usable snapshot for the primary chart market; settledView does not change this condition
-	const showChartBlock =
-		hasQuestions && hasUsableOrderbookSnapshot(primaryChartOrderbook);
-	const showChartPlaceholder =
-		!showChartBlock && !(settledView && !hasQuestions);
+	const showChartBlock = hasQuestions && hasUsableOrderbookSnapshot(primaryChartOrderbook);
+	const showChartPlaceholder = !showChartBlock && !(settledView && !hasQuestions);
 
 	// Order inside .venue-books-container: chart → tabs → "Prediction Market Odds" → tab body (e.g. esports table).
 	const chartAtTopOfVenueBooks = showChartBlock ? (
@@ -358,11 +351,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 	/* Chart / Livestream toggle when this umbrella has a stream URL. */
 	const mediaTabSwitcher = showStream ? (
-		<div
-			className="media-tab-switcher"
-			role="tablist"
-			aria-label="Chart or livestream"
-		>
+		<div className="media-tab-switcher" role="tablist" aria-label="Chart or livestream">
 			<button
 				type="button"
 				role="tab"
@@ -388,10 +377,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 	const streamBlock = showStream ? (
 		<div className="venue-books-stream">
-			<StreamEmbed
-				streamUrl={streamUrl}
-				height={isMobileViewport ? "360" : "720"}
-			/>
+			<StreamEmbed streamUrl={streamUrl} height={isMobileViewport ? "360" : "720"} />
 		</div>
 	) : null;
 
@@ -404,15 +390,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					    sticky trade box on the right starts at the same Y as
 					    the header (matches the home-page layout) instead of
 					    being pushed down by a full-width black bar. */}
-					{umbrella && (
-						<MarketHeader umbrella={umbrella} titleRef={titleRef} />
-					)}
+					{umbrella && <MarketHeader umbrella={umbrella} titleRef={titleRef} />}
 
 					<div className="venue-books-container">
 						{mediaTabSwitcher}
-						{mediaTab === "livestream" && showStream
-							? streamBlock
-							: chartAtTopOfVenueBooks}
+						{mediaTab === "livestream" && showStream ? streamBlock : chartAtTopOfVenueBooks}
 						{tabSwitcher}
 						{predictionMarketOddsHeading}
 						<div className="orderbook-section">{orderbookSectionBody}</div>
@@ -420,44 +402,37 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 					{/* Comments Section */}
 					{umbrella && (
-						<Comments
-							umbrellaId={umbrella._id}
-							markets={sortedQuestions as PredictionMarket[]}
-						/>
+						<Comments umbrellaId={umbrella._id} markets={sortedQuestions as PredictionMarket[]} />
 					)}
 				</div>
 
-			<div className="right-panel">
-				{!isMobileViewport && (
-					<UmbrellaTradeBoxPanel
-						umbrella={umbrella}
-						questionOrderbooks={questionOrderbooks}
-						activeMarket={tradeBoxActiveMarket}
-						activePosition={activePosition}
-						onPositionChange={onPositionChange}
-						settledInfo={settledInfo ?? null}
-						tradingPagePrices={tradingPagePrices}
-						venueOverride={venueForTradeBox}
-					/>
-				)}
-			</div>
+				<div className="right-panel">
+					{!isMobileViewport && (
+						<UmbrellaTradeBoxPanel
+							umbrella={umbrella}
+							questionOrderbooks={questionOrderbooks}
+							activeMarket={tradeBoxActiveMarket}
+							activePosition={activePosition}
+							onPositionChange={onPositionChange}
+							settledInfo={settledInfo ?? null}
+							tradingPagePrices={tradingPagePrices}
+							venueOverride={venueForTradeBox}
+						/>
+					)}
+				</div>
 			</div>
 
 			{/* Mobile Layout */}
 			<div className="mobile-layout">
 				{/* Single-column on mobile, so the header sits at the very top
 				    of the stack as the page title. */}
-				{umbrella && (
-					<MarketHeader umbrella={umbrella} titleRef={titleRef} />
-				)}
+				{umbrella && <MarketHeader umbrella={umbrella} titleRef={titleRef} />}
 
 				<div className="venue-books-container">
 					{/* Chart / Livestream tab sits above the chart so users can
 					    opt in to the stream rather than auto-loading it. */}
 					{mediaTabSwitcher}
-					{mediaTab === "livestream" && showStream
-						? streamBlock
-						: chartAtTopOfVenueBooks}
+					{mediaTab === "livestream" && showStream ? streamBlock : chartAtTopOfVenueBooks}
 					{tabSwitcher}
 					{predictionMarketOddsHeading}
 					<div className="orderbook-section-mobile">{orderbookSectionBody}</div>
@@ -465,27 +440,24 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 				{/* Comments Section */}
 				{umbrella && (
-					<Comments
-						umbrellaId={umbrella._id}
-						markets={sortedQuestions as PredictionMarket[]}
-					/>
+					<Comments umbrellaId={umbrella._id} markets={sortedQuestions as PredictionMarket[]} />
 				)}
 
-			{/* Mobile Trading Container - Fixed at bottom */}
-			<div className="mobile-trading-container">
-				{isMobileViewport && (
-					<UmbrellaTradeBoxPanel
-						umbrella={umbrella}
-						questionOrderbooks={questionOrderbooks}
-						activeMarket={tradeBoxActiveMarket}
-						activePosition={activePosition}
-						onPositionChange={onPositionChange}
-						settledInfo={settledInfo ?? null}
-						tradingPagePrices={tradingPagePrices}
-						venueOverride={venueForTradeBox}
-					/>
-				)}
-			</div>
+				{/* Mobile Trading Container - Fixed at bottom */}
+				<div className="mobile-trading-container">
+					{isMobileViewport && (
+						<UmbrellaTradeBoxPanel
+							umbrella={umbrella}
+							questionOrderbooks={questionOrderbooks}
+							activeMarket={tradeBoxActiveMarket}
+							activePosition={activePosition}
+							onPositionChange={onPositionChange}
+							settledInfo={settledInfo ?? null}
+							tradingPagePrices={tradingPagePrices}
+							venueOverride={venueForTradeBox}
+						/>
+					)}
+				</div>
 			</div>
 		</div>
 	);

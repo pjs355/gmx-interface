@@ -3,8 +3,7 @@
  * Keep token values aligned with `themes/_fonts.scss` ($font-primary / $font-secondary / $font-heading).
  */
 :root {
-	--font-primary: "Folio Std", -apple-system, BlinkMacSystemFont, system-ui,
-		sans-serif;
+	--font-primary: "Folio Std", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 	--font-secondary: "Knockout", sans-serif;
 	--font-heading: "Folio Std", "Knockout", sans-serif;
 }

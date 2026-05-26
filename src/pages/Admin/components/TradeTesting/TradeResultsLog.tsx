@@ -39,9 +39,7 @@ export function TradeResultsLog({ results }: TradeResultsLogProps) {
 						<React.Fragment key={result.id || index}>
 							<tr className={result.success ? "success-row" : "error-row"}>
 								<td>{index + 1}</td>
-								<td className="timestamp">
-									{result.timestamp?.toLocaleTimeString?.() || "N/A"}
-								</td>
+								<td className="timestamp">{result.timestamp?.toLocaleTimeString?.() || "N/A"}</td>
 								<td>
 									<span className={`badge ${result.tradeType || "unknown"}`}>
 										{(result.tradeType || "unknown").toUpperCase()}
@@ -60,11 +58,7 @@ export function TradeResultsLog({ results }: TradeResultsLogProps) {
 								<td>${result.amount.toFixed(2)}</td>
 								<td>${result.price.toFixed(2)}</td>
 								<td>${result.expectedFee.toFixed(2)}</td>
-								<td>
-									{result.actualFee !== null
-										? `$${result.actualFee.toFixed(2)}`
-										: "—"}
-								</td>
+								<td>{result.actualFee !== null ? `$${result.actualFee.toFixed(2)}` : "—"}</td>
 								<td>
 									{result.success ? (
 										<span className="status-success">✅</span>
@@ -75,11 +69,7 @@ export function TradeResultsLog({ results }: TradeResultsLogProps) {
 								<td>
 									<button
 										className="expand-btn"
-										onClick={() =>
-											setExpandedId(
-												expandedId === result.id ? null : result.id
-											)
-										}
+										onClick={() => setExpandedId(expandedId === result.id ? null : result.id)}
 									>
 										{expandedId === result.id ? "▼" : "▶"}
 									</button>
@@ -94,27 +84,19 @@ export function TradeResultsLog({ results }: TradeResultsLogProps) {
 												<div className="detail-grid">
 													<div>
 														<span className="label">Cost:</span>
-														<span className="value">
-															${result.expectedCost.toFixed(4)}
-														</span>
+														<span className="value">${result.expectedCost.toFixed(4)}</span>
 													</div>
 													<div>
 														<span className="label">Receive:</span>
-														<span className="value">
-															${result.expectedReceive.toFixed(4)}
-														</span>
+														<span className="value">${result.expectedReceive.toFixed(4)}</span>
 													</div>
 													<div>
 														<span className="label">Fee:</span>
-														<span className="value">
-															${result.expectedFee.toFixed(4)}
-														</span>
+														<span className="value">${result.expectedFee.toFixed(4)}</span>
 													</div>
 													<div>
 														<span className="label">Contracts:</span>
-														<span className="value">
-															{result.expectedContracts.toFixed(4)}
-														</span>
+														<span className="value">{result.expectedContracts.toFixed(4)}</span>
 													</div>
 												</div>
 											</div>
@@ -160,18 +142,14 @@ export function TradeResultsLog({ results }: TradeResultsLogProps) {
 											{result.error && (
 												<div className="detail-section error-section">
 													<h5>Error</h5>
-													<div className="error-message">
-														{result.error}
-													</div>
+													<div className="error-message">{result.error}</div>
 												</div>
 											)}
 
 											{result.orderId && (
 												<div className="detail-section">
 													<h5>Order ID</h5>
-													<div className="monospace">
-														{result.orderId}
-													</div>
+													<div className="monospace">{result.orderId}</div>
 												</div>
 											)}
 
@@ -179,11 +157,7 @@ export function TradeResultsLog({ results }: TradeResultsLogProps) {
 												<div className="detail-section">
 													<h5>Server Response</h5>
 													<pre className="json-response">
-														{JSON.stringify(
-															result.serverResponse,
-															null,
-															2
-														)}
+														{JSON.stringify(result.serverResponse, null, 2)}
 													</pre>
 												</div>
 											)}
@@ -198,4 +172,3 @@ export function TradeResultsLog({ results }: TradeResultsLogProps) {
 		</div>
 	);
 }
-

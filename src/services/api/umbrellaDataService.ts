@@ -1,14 +1,11 @@
-import {
-	predictionMarketDataService,
-	PredictionMarket,
-} from "./predictionMarketDataService";
+import { predictionMarketDataService, PredictionMarket } from "./predictionMarketDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import type { UmbrellaUpdatePayload } from "@/types/market-types";
 export interface UmbrellaQuestion {
 	questionId: string;
 	displayName: string;
 	marketId: string;
-    tagIds?: string[];
+	tagIds?: string[];
 	eventDate?: string | null;
 }
 
@@ -107,7 +104,6 @@ interface UmbrellaApiResponse {
 class UmbrellaDataService {
 	private static CACHE_KEY = "umbrellas_cache_v1";
 	private static CACHE_TS_KEY = "umbrellas_cache_ts";
-	private static STALE_TTL_MS = 5 * 60 * 1000; // treat cache as stale after 5 min
 
 	private get API_BASE_URL(): string {
 		return getPredictionApiBaseUrl();
@@ -121,9 +117,7 @@ class UmbrellaDataService {
 	onRefresh(listener: (data: Umbrella[]) => void): () => void {
 		this.onRefreshListeners.push(listener);
 		return () => {
-			this.onRefreshListeners = this.onRefreshListeners.filter(
-				(l) => l !== listener
-			);
+			this.onRefreshListeners = this.onRefreshListeners.filter((l) => l !== listener);
 		};
 	}
 
@@ -149,14 +143,8 @@ class UmbrellaDataService {
 
 	private writeLocalStorageCache(data: Umbrella[]): void {
 		try {
-			localStorage.setItem(
-				UmbrellaDataService.CACHE_KEY,
-				JSON.stringify(data)
-			);
-			localStorage.setItem(
-				UmbrellaDataService.CACHE_TS_KEY,
-				String(Date.now())
-			);
+			localStorage.setItem(UmbrellaDataService.CACHE_KEY, JSON.stringify(data));
+			localStorage.setItem(UmbrellaDataService.CACHE_TS_KEY, String(Date.now()));
 		} catch {}
 	}
 
@@ -164,28 +152,24 @@ class UmbrellaDataService {
 		const response = await fetch(`${this.API_BASE_URL}/umbrellas`);
 
 		if (!response.ok) {
-			throw new Error(
-				`HTTP error! status: ${response.status} - ${response.statusText}`
-			);
+			throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
 		}
 
 		const rawText = await response.text();
-		const apiResponse: UmbrellaApiResponse = await new Promise(
-			(resolve, reject) => {
-				const parse = () => {
-					try {
-						resolve(JSON.parse(rawText) as UmbrellaApiResponse);
-					} catch (e) {
-						reject(e);
-					}
-				};
-				if (typeof requestIdleCallback !== "undefined") {
-					requestIdleCallback(parse, { timeout: 3000 });
-				} else {
-					queueMicrotask(parse);
+		const apiResponse: UmbrellaApiResponse = await new Promise((resolve, reject) => {
+			const parse = () => {
+				try {
+					resolve(JSON.parse(rawText) as UmbrellaApiResponse);
+				} catch (e) {
+					reject(e);
 				}
-			},
-		);
+			};
+			if (typeof requestIdleCallback !== "undefined") {
+				requestIdleCallback(parse, { timeout: 3000 });
+			} else {
+				queueMicrotask(parse);
+			}
+		});
 
 		if (!apiResponse.success || !Array.isArray(apiResponse.data)) {
 			throw new Error("Invalid API response structure");
@@ -246,9 +230,7 @@ class UmbrellaDataService {
 			// Throw instead of returning `[]` so the caller can show an outage
 			// banner. Returning `[]` here used to make the home page look like
 			// "no markets" during real Predictions API downtime.
-			throw error instanceof Error
-				? error
-				: new Error(String(error ?? "Failed to load umbrellas"));
+			throw error instanceof Error ? error : new Error(String(error ?? "Failed to load umbrellas"));
 		}
 	}
 
@@ -257,9 +239,7 @@ class UmbrellaDataService {
 	 */
 	async fetchUmbrellaById(id: string): Promise<Umbrella | null> {
 		try {
-			const response = await fetch(
-				`${this.API_BASE_URL}/umbrellas/${id}`
-			);
+			const response = await fetch(`${this.API_BASE_URL}/umbrellas/${id}`);
 
 			if (!response.ok) {
 				if (response.status === 404) {
@@ -268,12 +248,12 @@ class UmbrellaDataService {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 
-		const json = await response.json();
-		// Server returns { success: true, data: umbrella }
-		if (json.success && json.data) {
-			return json.data;
-		}
-		return json;
+			const json = await response.json();
+			// Server returns { success: true, data: umbrella }
+			if (json.success && json.data) {
+				return json.data;
+			}
+			return json;
 		} catch (error) {
 			console.error("❌ Error fetching umbrella by ID:", error);
 			throw error;
@@ -286,27 +266,20 @@ class UmbrellaDataService {
 	 */
 	async fetchQuestionsForUmbrella(
 		umbrella: Umbrella,
-		options?: { includeResolved?: boolean }
+		options?: { includeResolved?: boolean },
 	): Promise<PredictionMarket[]> {
 		const includeResolved = options?.includeResolved === true;
-		const cache = includeResolved
-			? this.questionsCacheAll
-			: this.questionsCacheActive;
+		const cache = includeResolved ? this.questionsCacheAll : this.questionsCacheActive;
 		const cached = cache.get(umbrella._id);
 		if (cached) return cached;
 
 		const results = await Promise.all(
 			umbrella.children.map(async (questionRef) => {
 				try {
-					const question =
-						await predictionMarketDataService.fetchMarketById(
-							questionRef.questionId
-						);
-					if (
-						question &&
-						question.historicalPrices &&
-						question.historicalPrices.length > 0
-					) {
+					const question = await predictionMarketDataService.fetchMarketById(
+						questionRef.questionId,
+					);
+					if (question && question.historicalPrices && question.historicalPrices.length > 0) {
 						predictionMarketDataService.storeHistoricalPrices(
 							question._id || question.questionId,
 							question.historicalPrices as unknown as Array<{
@@ -314,7 +287,7 @@ class UmbrellaDataService {
 								ts?: number;
 								price: number;
 								volume?: number;
-							}>
+							}>,
 						);
 					}
 					if (question) {
@@ -329,7 +302,7 @@ class UmbrellaDataService {
 					// ignore and continue
 				}
 				return null;
-			})
+			}),
 		);
 		const filtered = results.filter(Boolean) as PredictionMarket[];
 		if (includeResolved) {
@@ -337,9 +310,7 @@ class UmbrellaDataService {
 			return filtered;
 		}
 		// Exclude markets that are already resolved
-		const activeMarkets = filtered.filter(
-			(q) => (q as any).status !== "resolved"
-		);
+		const activeMarkets = filtered.filter((q) => (q as any).status !== "resolved");
 		this.questionsCacheActive.set(umbrella._id, activeMarkets);
 		return activeMarkets;
 	}
@@ -357,11 +328,7 @@ class UmbrellaDataService {
 		}
 	}
 
-	async updateUmbrella(
-		id: string,
-		payload: UmbrellaUpdatePayload,
-		token?: string
-	) {
+	async updateUmbrella(id: string, payload: UmbrellaUpdatePayload, token?: string) {
 		try {
 			const response = await fetch(`${this.API_BASE_URL}/umbrellas/${id}`, {
 				method: "PUT",
@@ -371,7 +338,7 @@ class UmbrellaDataService {
 				},
 				body: JSON.stringify(payload),
 			});
-			const json = await response.json().catch(() => ({} as any));
+			const json = await response.json().catch(() => ({}) as any);
 			if (!response.ok || json?.success === false) {
 				throw new Error(json?.error || `HTTP ${response.status}`);
 			}

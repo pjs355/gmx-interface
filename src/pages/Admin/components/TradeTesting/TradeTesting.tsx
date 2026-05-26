@@ -2,24 +2,21 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
-import { useUserData } from "@/context/UserDataContext";
+import { useAccountLevelUpPositions } from "@/context/AccountDataContext";
 import { useCollateralTokens } from "@/context/CollateralTokenContext";
-import {
-	getPredictionWebSocketUrl,
-	getPredictionApiBaseUrl,
-	getPredictionOrderApiBaseUrl,
-} from "@/config/predictionApiBase";
+import { getPredictionWebSocketUrl, getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { EXCHANGE_ADDRESS } from "@/config/addresses";
 import { MarketSelector } from "./MarketSelector";
-import { TradeExecutor, type TradeTestConfig, type TradeResult, type SettlementVerification } from "./TradeExecutor";
+import {
+	TradeExecutor,
+	type TradeTestConfig,
+	type TradeResult,
+	type SettlementVerification,
+} from "./TradeExecutor";
 import { TradeResultsLog } from "./TradeResultsLog";
 import OrderbookDisplay from "@/components/OrderbookDisplay/OrderbookDisplay";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
-import {
-	adminErrorMessage,
-	formatAdminHttpError,
-	ADMIN_TRADE_TEST_NO_TOKEN_ID,
-} from "@/errors";
+import { adminErrorMessage, formatAdminHttpError, ADMIN_TRADE_TEST_NO_TOKEN_ID } from "@/errors";
 import "./TradeTesting.scss";
 
 // Error classification types
@@ -35,7 +32,10 @@ export interface ClassifiedError {
 // Patterns for classifying errors
 const EXPECTED_ERROR_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 	// Validation errors
-	{ pattern: /missing.*required.*field/i, reason: "Order missing required fields (expected for malformed orders)" },
+	{
+		pattern: /missing.*required.*field/i,
+		reason: "Order missing required fields (expected for malformed orders)",
+	},
 	{ pattern: /invalid.*field/i, reason: "Order has invalid field value" },
 	{ pattern: /validation.*failed/i, reason: "Server validation failed" },
 	{ pattern: /HTTP 400/i, reason: "Bad request - order validation failed" },
@@ -111,34 +111,34 @@ const UNEXPECTED_ERROR_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 
 function classifyError(errorMessage: string, tradeIndex: number): ClassifiedError {
 	const msg = errorMessage.toLowerCase();
-	
+
 	// Check for unexpected errors first (these are higher priority)
 	for (const { pattern, reason } of UNEXPECTED_ERROR_PATTERNS) {
 		if (pattern.test(msg)) {
 			return { message: errorMessage, category: "unexpected", reason, tradeIndex };
 		}
 	}
-	
+
 	// Check for warning errors
 	for (const { pattern, reason } of WARNING_ERROR_PATTERNS) {
 		if (pattern.test(msg)) {
 			return { message: errorMessage, category: "warning", reason, tradeIndex };
 		}
 	}
-	
+
 	// Check for expected errors
 	for (const { pattern, reason } of EXPECTED_ERROR_PATTERNS) {
 		if (pattern.test(msg)) {
 			return { message: errorMessage, category: "expected", reason, tradeIndex };
 		}
 	}
-	
+
 	// Default to unexpected if we don't recognize the error
-	return { 
-		message: errorMessage, 
-		category: "unexpected", 
+	return {
+		message: errorMessage,
+		category: "unexpected",
 		reason: "⚠️ Unrecognized error - needs investigation",
-		tradeIndex 
+		tradeIndex,
 	};
 }
 
@@ -158,7 +158,7 @@ export default function TradeTesting() {
 	const { authenticated, getAccessToken } = usePrivy();
 	const { identityToken } = useIdentityToken();
 	const { account, signer } = useSignerContext();
-	const { refreshTokenPositions } = useUserData();
+	const { refetch: refreshLevelUpPositions } = useAccountLevelUpPositions();
 	const collateralTokens = useCollateralTokens();
 	const usdcBalance = collateralTokens.baseUsdc;
 	const { umbrellas, getAllQuestionsForUmbrella } = usePredictionData();
@@ -203,10 +203,10 @@ export default function TradeTesting() {
 
 	// Book seeding config (using Privy wallet)
 	const [seedConfig, setSeedConfig] = useState({
-		bidMin: 0.20,
+		bidMin: 0.2,
 		bidMax: 0.45,
 		askMin: 0.55,
-		askMax: 0.80,
+		askMax: 0.8,
 		amountPerLevel: 100, // USDC per price level
 		levels: 10, // Number of price levels
 		delayBetweenOrders: 300, // ms between orders
@@ -323,7 +323,7 @@ export default function TradeTesting() {
 				() => orderbook, // Get latest orderbook
 				(phase) => setTestState((prev) => ({ ...prev, currentPhase: phase })),
 				(result) => setTestState((prev) => ({ ...prev, results: [...prev.results, result] })),
-				(error) => setTestState((prev) => ({ ...prev, errors: [...prev.errors, error] }))
+				(error) => setTestState((prev) => ({ ...prev, errors: [...prev.errors, error] })),
 			);
 
 			// Set the tokens for API authentication
@@ -338,15 +338,14 @@ export default function TradeTesting() {
 			await executor.runTestSuite(config);
 
 			// Refresh balances after all trades — collateral tokens + share positions in parallel.
-			await Promise.all([
-				collateralTokens.refetch(),
-				refreshTokenPositions(),
-			]);
+			await Promise.all([collateralTokens.refetch(), refreshLevelUpPositions()]);
 
 			setTestState((prev) => ({
 				...prev,
 				isRunning: false,
-				currentPhase: prev.settlementVerification?.settlementMatches ? "✅ Complete - Verified!" : "Complete",
+				currentPhase: prev.settlementVerification?.settlementMatches
+					? "✅ Complete - Verified!"
+					: "Complete",
 			}));
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
@@ -357,7 +356,17 @@ export default function TradeTesting() {
 				errors: [...prev.errors, errorMsg],
 			}));
 		}
-	}, [selectedMarket, account, signer, orderbook, config, refreshTokenPositions, collateralTokens, getAccessToken, identityToken]);
+	}, [
+		selectedMarket,
+		account,
+		signer,
+		orderbook,
+		config,
+		refreshLevelUpPositions,
+		collateralTokens,
+		getAccessToken,
+		identityToken,
+	]);
 
 	// Run random stress test - BLAST random orders without any pre-checks
 	// The point is to test edge cases and server error handling
@@ -388,12 +397,12 @@ export default function TradeTesting() {
 
 		for (let i = 0; i < totalOrders; i++) {
 			const tradeNum = i + 1;
-			
+
 			// Random parameters
 			const type: "market" | "limit" = Math.random() > 0.5 ? "market" : "limit";
 			const side: "buy" | "sell" = Math.random() > 0.5 ? "buy" : "sell";
 			const position: "yes" | "no" = Math.random() > 0.5 ? "yes" : "no";
-			
+
 			// Random amount (0.5 to maxAmount, or huge if enabled)
 			let amount: number;
 			if (stressTestConfig.includeHugeAmounts && Math.random() > 0.7) {
@@ -408,11 +417,11 @@ export default function TradeTesting() {
 			let price: number;
 			if (stressTestConfig.includeInvalidPrices && Math.random() > 0.8) {
 				// Edge case prices that are still valid format
-				const edgePrices = [0.01, 0.02, 0.05, 0.10, 0.50, 0.90, 0.95, 0.98, 0.99];
+				const edgePrices = [0.01, 0.02, 0.05, 0.1, 0.5, 0.9, 0.95, 0.98, 0.99];
 				price = edgePrices[Math.floor(Math.random() * edgePrices.length)];
 			} else {
 				// Random valid price between 0.05 and 0.95
-				price = 0.05 + Math.random() * 0.90;
+				price = 0.05 + Math.random() * 0.9;
 			}
 			// ALWAYS ensure exactly 2 decimal places between 0.01 and 0.99
 			price = Math.max(0.01, Math.min(0.99, Math.round(price * 100) / 100));
@@ -429,7 +438,7 @@ export default function TradeTesting() {
 				// Get token ID
 				const tokenId = position === "yes" ? selectedMarket.yesTokenId : selectedMarket.noTokenId;
 				const marketId = selectedMarket._id || selectedMarket.questionId;
-				
+
 				if (!tokenId) {
 					throw new Error(adminErrorMessage(ADMIN_TRADE_TEST_NO_TOKEN_ID));
 				}
@@ -438,12 +447,12 @@ export default function TradeTesting() {
 				// Round token amount to whole number first, then calculate USDC from that
 				const wholeTokens = Math.max(1, Math.round(amount)); // At least 1 share
 				const totalUsd = wholeTokens * price;
-				
+
 				// Token amount is whole shares * 1e6 (6 decimals for the contract)
 				const tokenAmount = (BigInt(wholeTokens) * BigInt(1_000_000)).toString();
 				// USDC amount is totalUsd * 1e6
 				const usdcAmount = ethers.parseUnits(totalUsd.toFixed(6), 6).toString();
-				
+
 				// Get signer address
 				const signerAddress = await signer.getAddress();
 				const isSmart = account.toLowerCase() !== signerAddress.toLowerCase();
@@ -466,12 +475,12 @@ export default function TradeTesting() {
 				};
 
 				// Sign the order
-			const domain = {
-				name: "Polymarket CTF Exchange",
-				version: "1",
-				chainId: 8453,
-				verifyingContract: EXCHANGE_ADDRESS,
-			};
+				const domain = {
+					name: "Polymarket CTF Exchange",
+					version: "1",
+					chainId: 8453,
+					verifyingContract: EXCHANGE_ADDRESS,
+				};
 				const types = {
 					Order: [
 						{ name: "salt", type: "uint256" },
@@ -510,10 +519,11 @@ export default function TradeTesting() {
 				// Calculate price from order amounts (same as TradeExecutor.calculatePriceFromOrder)
 				const makerAmt = BigInt(order.makerAmount);
 				const takerAmt = BigInt(order.takerAmount);
-				const calculatedPrice = side === "buy" 
-					? Number(makerAmt) / Number(takerAmt)
-					: Number(takerAmt) / Number(makerAmt);
-				
+				const calculatedPrice =
+					side === "buy"
+						? Number(makerAmt) / Number(takerAmt)
+						: Number(takerAmt) / Number(makerAmt);
+
 				// Size should be whole number of shares
 				const payload = {
 					...order,
@@ -539,7 +549,11 @@ export default function TradeTesting() {
 				});
 
 				const responseData = await response.json();
-				console.log(`[StressTest] Response ${tradeNum}:`, response.ok ? "✅ SUCCESS" : `❌ ${response.status}`, responseData);
+				console.log(
+					`[StressTest] Response ${tradeNum}:`,
+					response.ok ? "✅ SUCCESS" : `❌ ${response.status}`,
+					responseData,
+				);
 
 				const errorMsg = response.ok
 					? null
@@ -555,61 +569,67 @@ export default function TradeTesting() {
 
 				setTestState((prev) => ({
 					...prev,
-					results: [...prev.results, {
-						id: resultId,
-						timestamp,
-						tradeType: type,
-						side: side,
-						position: position,
-						amount: amount,
-						price: price,
-						expectedCost: amount,
-						expectedReceive: 0,
-						expectedFee: amount * 0.02,
-						expectedContracts: amount / price,
-						actualCost: null,
-						actualReceive: null,
-						actualFee: null,
-						actualContracts: null,
-						success: response.ok,
-						error: errorMsg,
-						orderId: responseData?.orderId || responseData?.data?.log?.o?.id || responseData?.id || null,
-						serverResponse: responseData,
-					}],
-					classifiedErrors: classifiedError 
+					results: [
+						...prev.results,
+						{
+							id: resultId,
+							timestamp,
+							tradeType: type,
+							side: side,
+							position: position,
+							amount: amount,
+							price: price,
+							expectedCost: amount,
+							expectedReceive: 0,
+							expectedFee: amount * 0.02,
+							expectedContracts: amount / price,
+							actualCost: null,
+							actualReceive: null,
+							actualFee: null,
+							actualContracts: null,
+							success: response.ok,
+							error: errorMsg,
+							orderId:
+								responseData?.orderId || responseData?.data?.log?.o?.id || responseData?.id || null,
+							serverResponse: responseData,
+						},
+					],
+					classifiedErrors: classifiedError
 						? [...prev.classifiedErrors, classifiedError]
 						: prev.classifiedErrors,
 				}));
-
 			} catch (error) {
 				const errorMsg = error instanceof Error ? error.message : String(error);
 				console.error(`[StressTest] ❌ Trade ${tradeNum} error:`, errorMsg);
-				
+
 				const classifiedError = classifyError(errorMsg, tradeNum);
 
 				setTestState((prev) => ({
 					...prev,
-					results: [...prev.results, {
-						id: resultId,
-						timestamp,
-						tradeType: type,
-						side: side,
-						position: position,
-						amount: amount,
-						price: price,
-						expectedCost: amount,
-						expectedReceive: 0,
-						expectedFee: amount * 0.02,
-						expectedContracts: amount / price,
-						actualCost: null,
-						actualReceive: null,
-						actualFee: null,
-						actualContracts: null,
-						success: false,
-						error: errorMsg,
-						orderId: null,
-						serverResponse: null,
-					}],
+					results: [
+						...prev.results,
+						{
+							id: resultId,
+							timestamp,
+							tradeType: type,
+							side: side,
+							position: position,
+							amount: amount,
+							price: price,
+							expectedCost: amount,
+							expectedReceive: 0,
+							expectedFee: amount * 0.02,
+							expectedContracts: amount / price,
+							actualCost: null,
+							actualReceive: null,
+							actualFee: null,
+							actualContracts: null,
+							success: false,
+							error: errorMsg,
+							orderId: null,
+							serverResponse: null,
+						},
+					],
 					errors: [...prev.errors, `Trade ${tradeNum}: ${errorMsg}`],
 					classifiedErrors: [...prev.classifiedErrors, classifiedError],
 				}));
@@ -617,31 +637,30 @@ export default function TradeTesting() {
 
 			// Small delay between orders
 			if (i < totalOrders - 1) {
-				await new Promise(resolve => setTimeout(resolve, stressTestConfig.delayBetweenOrders));
+				await new Promise((resolve) => setTimeout(resolve, stressTestConfig.delayBetweenOrders));
 			}
 		}
 
 		// ========== ORDER VERIFICATION ==========
-		// Get all successful order IDs
-		const successfulResults = testState.results.filter(r => r.success && r.orderId);
-		
-		// Also check current state for any we just added
 		setTestState((prev) => {
-			const allSuccessful = prev.results.filter(r => r.success && r.orderId);
+			const allSuccessful = prev.results.filter((r) => r.success && r.orderId);
 			console.log(`[StressTest] 📋 ${allSuccessful.length} successful orders to verify`);
-			return { ...prev, currentPhase: `📋 Verifying ${allSuccessful.length} orders against server...` };
+			return {
+				...prev,
+				currentPhase: `📋 Verifying ${allSuccessful.length} orders against server...`,
+			};
 		});
 
 		// Wait for orders to be recorded on server
-		await new Promise(resolve => setTimeout(resolve, 3000));
+		await new Promise((resolve) => setTimeout(resolve, 3000));
 
 		// Fetch user orders from server
 		try {
 			const apiUrl = getPredictionApiBaseUrl();
 			const ordersEndpoint = `${apiUrl}/orders/${account}`;
-			
+
 			console.log(`[StressTest] Fetching orders from: ${ordersEndpoint}`);
-			
+
 			const ordersResponse = await fetch(ordersEndpoint, {
 				method: "GET",
 				headers: {
@@ -652,7 +671,7 @@ export default function TradeTesting() {
 
 			if (ordersResponse.ok) {
 				const ordersData = await ordersResponse.json();
-				
+
 				// Handle different response formats
 				let serverOrders: any[] = [];
 				if (Array.isArray(ordersData)) {
@@ -666,14 +685,14 @@ export default function TradeTesting() {
 				// Filter to this market
 				const marketId = selectedMarket._id || selectedMarket.questionId;
 				const marketOrders = serverOrders.filter((o: any) => o.questionId === marketId);
-				
+
 				console.log(`[StressTest] ========== ORDER VERIFICATION ==========`);
 				console.log(`[StressTest] Total server orders for user: ${serverOrders.length}`);
 				console.log(`[StressTest] Orders for this market: ${marketOrders.length}`);
 
 				// Check each successful result
 				setTestState((prev) => {
-					const successfulOrders = prev.results.filter(r => r.success && r.orderId);
+					const successfulOrders = prev.results.filter((r) => r.success && r.orderId);
 					let foundCount = 0;
 					let filledCount = 0;
 					let pendingCount = 0;
@@ -686,27 +705,40 @@ export default function TradeTesting() {
 					}> = [];
 
 					for (const result of successfulOrders) {
-						const serverOrder = marketOrders.find((o: any) => 
-							o.orderId === result.orderId || 
-							o.id === result.orderId ||
-							o._id === result.orderId
+						const serverOrder = marketOrders.find(
+							(o: any) =>
+								o.orderId === result.orderId || o.id === result.orderId || o._id === result.orderId,
 						);
 
 						if (serverOrder) {
 							foundCount++;
 							if (serverOrder.filled || serverOrder.status === "filled" || serverOrder.filledAt) {
 								filledCount++;
-								verificationDetails.push({ orderId: result.orderId!, status: "FILLED", serverData: serverOrder });
+								verificationDetails.push({
+									orderId: result.orderId!,
+									status: "FILLED",
+									serverData: serverOrder,
+								});
 								console.log(`[StressTest] ✅ Order ${result.orderId?.slice(0, 10)}... FILLED`);
 							} else {
 								pendingCount++;
-								verificationDetails.push({ orderId: result.orderId!, status: "PENDING", serverData: serverOrder });
+								verificationDetails.push({
+									orderId: result.orderId!,
+									status: "PENDING",
+									serverData: serverOrder,
+								});
 								console.log(`[StressTest] ⏳ Order ${result.orderId?.slice(0, 10)}... PENDING`);
 							}
 						} else {
 							notFoundCount++;
-							verificationDetails.push({ orderId: result.orderId!, status: "NOT_FOUND", serverData: null });
-							console.log(`[StressTest] ❌ Order ${result.orderId?.slice(0, 10)}... NOT FOUND on server`);
+							verificationDetails.push({
+								orderId: result.orderId!,
+								status: "NOT_FOUND",
+								serverData: null,
+							});
+							console.log(
+								`[StressTest] ❌ Order ${result.orderId?.slice(0, 10)}... NOT FOUND on server`,
+							);
 						}
 					}
 
@@ -734,7 +766,7 @@ export default function TradeTesting() {
 							expectedNoTokenChange: 0,
 							settlementMatches: notFoundCount === 0,
 							orderVerification: {
-								submittedOrders: successfulOrders.map(r => ({
+								submittedOrders: successfulOrders.map((r) => ({
 									orderId: r.orderId!,
 									tradeType: r.tradeType,
 									side: r.side,
@@ -743,12 +775,16 @@ export default function TradeTesting() {
 									expectedFee: r.expectedFee,
 								})),
 								serverOrders: marketOrders,
-								matchedOrders: verificationDetails.map(d => ({
+								matchedOrders: verificationDetails.map((d) => ({
 									orderId: d.orderId,
 									filled: d.status === "FILLED",
 									filledAt: d.serverData?.filledAt || null,
-									actualUsdcValue: d.serverData?.usdcTotalMicro ? d.serverData.usdcTotalMicro / 1_000_000 : null,
-									actualTokenValue: d.serverData?.tokenTotalMicro ? d.serverData.tokenTotalMicro / 1_000_000 : null,
+									actualUsdcValue: d.serverData?.usdcTotalMicro
+										? d.serverData.usdcTotalMicro / 1_000_000
+										: null,
+									actualTokenValue: d.serverData?.tokenTotalMicro
+										? d.serverData.tokenTotalMicro / 1_000_000
+										: null,
 								})),
 								filledCount,
 								pendingCount,
@@ -774,8 +810,15 @@ export default function TradeTesting() {
 				errors: [...prev.errors, `Verification error: ${verifyError}`],
 			}));
 		}
-
-	}, [selectedMarket, account, signer, stressTestConfig, getAccessToken, identityToken, testState.results]);
+	}, [
+		selectedMarket,
+		account,
+		signer,
+		stressTestConfig,
+		getAccessToken,
+		identityToken,
+		testState.results,
+	]);
 
 	// Seed orderbook with Privy wallet
 	const seedBookWithPrivy = useCallback(async () => {
@@ -797,8 +840,8 @@ export default function TradeTesting() {
 		const askStep = (seedConfig.askMax - seedConfig.askMin) / (seedConfig.levels - 1);
 
 		for (let i = 0; i < seedConfig.levels; i++) {
-			bidPrices.push(Math.round((seedConfig.bidMin + (bidStep * i)) * 100) / 100);
-			askPrices.push(Math.round((seedConfig.askMin + (askStep * i)) * 100) / 100);
+			bidPrices.push(Math.round((seedConfig.bidMin + bidStep * i) * 100) / 100);
+			askPrices.push(Math.round((seedConfig.askMin + askStep * i) * 100) / 100);
 		}
 
 		// Total orders = (YES bids + YES asks + NO bids + NO asks) = 4 * levels
@@ -819,17 +862,20 @@ export default function TradeTesting() {
 
 		console.log(`[SeedBook] 🌱 Starting to seed ${totalOrders} orders...`);
 		console.log(`[SeedBook] Bid prices (BUY YES):`, bidPrices);
-		console.log(`[SeedBook] Ask prices (BUY NO for YES asks):`, askPrices.map(p => (1 - p).toFixed(2)));
+		console.log(
+			`[SeedBook] Ask prices (BUY NO for YES asks):`,
+			askPrices.map((p) => (1 - p).toFixed(2)),
+		);
 
 		const signerAddress = await signer.getAddress();
 		const isSmart = account.toLowerCase() !== signerAddress.toLowerCase();
 
-			const domain = {
-				name: "Polymarket CTF Exchange",
-				version: "1",
-				chainId: 8453,
-				verifyingContract: EXCHANGE_ADDRESS,
-			};
+		const domain = {
+			name: "Polymarket CTF Exchange",
+			version: "1",
+			chainId: 8453,
+			verifyingContract: EXCHANGE_ADDRESS,
+		};
 		const types = {
 			Order: [
 				{ name: "salt", type: "uint256" },
@@ -853,13 +899,13 @@ export default function TradeTesting() {
 		for (let i = 0; i < seedConfig.levels; i++) {
 			const price = bidPrices[i];
 			const tokenId = selectedMarket.yesTokenId;
-			
+
 			// Calculate amounts: user pays USDC, receives tokens
 			// tokens = amount / price
 			const usdcAmount = seedConfig.amountPerLevel;
 			const tokenAmount = Math.floor(usdcAmount / price);
-			
-			const usdcMicro = (BigInt(Math.floor(usdcAmount * 1_000_000))).toString();
+
+			const usdcMicro = BigInt(Math.floor(usdcAmount * 1_000_000)).toString();
 			const tokenMicro = (BigInt(tokenAmount) * BigInt(1_000_000)).toString();
 
 			setSeedState((prev) => ({
@@ -900,10 +946,10 @@ export default function TradeTesting() {
 				};
 
 				const signature = await signer.signTypedData(domain, types, orderForSigning);
-				
+
 				const marketId = selectedMarket._id || selectedMarket.questionId;
 				const apiUrl = getPredictionApiBaseUrl();
-				
+
 				const payload = {
 					...order,
 					maker: isSmart ? order.maker : signerAddress,
@@ -945,7 +991,7 @@ export default function TradeTesting() {
 				}));
 			}
 
-			await new Promise(resolve => setTimeout(resolve, seedConfig.delayBetweenOrders));
+			await new Promise((resolve) => setTimeout(resolve, seedConfig.delayBetweenOrders));
 		}
 
 		// BUY NO orders at (1 - askPrice) to show as YES asks
@@ -954,12 +1000,12 @@ export default function TradeTesting() {
 			const yesAskPrice = askPrices[i]; // The YES ask price we want to show
 			const noPrice = Math.round((1 - yesAskPrice) * 100) / 100; // Price for NO order
 			const tokenId = selectedMarket.noTokenId;
-			
+
 			// Calculate amounts
 			const usdcAmount = seedConfig.amountPerLevel;
 			const tokenAmount = Math.floor(usdcAmount / noPrice);
-			
-			const usdcMicro = (BigInt(Math.floor(usdcAmount * 1_000_000))).toString();
+
+			const usdcMicro = BigInt(Math.floor(usdcAmount * 1_000_000)).toString();
 			const tokenMicro = (BigInt(tokenAmount) * BigInt(1_000_000)).toString();
 
 			setSeedState((prev) => ({
@@ -1000,10 +1046,10 @@ export default function TradeTesting() {
 				};
 
 				const signature = await signer.signTypedData(domain, types, orderForSigning);
-				
+
 				const marketId = selectedMarket._id || selectedMarket.questionId;
 				const apiUrl = getPredictionApiBaseUrl();
-				
+
 				const payload = {
 					...order,
 					maker: isSmart ? order.maker : signerAddress,
@@ -1028,7 +1074,9 @@ export default function TradeTesting() {
 				if (response.ok) {
 					seededCount++;
 					setSeedState((prev) => ({ ...prev, seededCount }));
-					console.log(`[SeedBook] ✅ BUY NO @ ${noPrice.toFixed(2)} (YES ask @ ${yesAskPrice.toFixed(2)})`);
+					console.log(
+						`[SeedBook] ✅ BUY NO @ ${noPrice.toFixed(2)} (YES ask @ ${yesAskPrice.toFixed(2)})`,
+					);
 				} else {
 					const errData = await response.json().catch(() => ({}));
 					console.error(`[SeedBook] ❌ BUY NO @ ${noPrice.toFixed(2)}:`, errData);
@@ -1045,7 +1093,7 @@ export default function TradeTesting() {
 				}));
 			}
 
-			await new Promise(resolve => setTimeout(resolve, seedConfig.delayBetweenOrders));
+			await new Promise((resolve) => setTimeout(resolve, seedConfig.delayBetweenOrders));
 		}
 
 		setSeedState((prev) => ({
@@ -1055,14 +1103,13 @@ export default function TradeTesting() {
 		}));
 
 		console.log(`[SeedBook] ✅ Seeding complete - ${seededCount}/${totalOrders} orders placed`);
-
 	}, [selectedMarket, account, signer, seedConfig, getAccessToken, identityToken]);
 
 	// Calculate summary stats
 	const summary = React.useMemo(() => {
 		const results = testState.results;
 		const classifiedErrors = testState.classifiedErrors;
-		
+
 		const totalTrades = results.length;
 		const successful = results.filter((r) => r.success).length;
 		const failed = results.filter((r) => !r.success).length;
@@ -1070,7 +1117,7 @@ export default function TradeTesting() {
 		const totalFeesActual = results.reduce((sum, r) => sum + (r.actualFee || 0), 0);
 		const totalSpentExpected = results.reduce((sum, r) => sum + (r.expectedCost || 0), 0);
 		const totalSpentActual = results.reduce((sum, r) => sum + (r.actualCost || 0), 0);
-		
+
 		// Error classification counts
 		const expectedErrors = classifiedErrors.filter((e) => e.category === "expected").length;
 		const unexpectedErrors = classifiedErrors.filter((e) => e.category === "unexpected").length;
@@ -1141,8 +1188,8 @@ export default function TradeTesting() {
 					<div className="ws-status">
 						WebSocket: {wsConnected ? "🟢 Connected" : "🔴 Disconnected"}
 					</div>
-					<OrderbookDisplay 
-						orderbook={orderbook} 
+					<OrderbookDisplay
+						orderbook={orderbook}
 						loading={!wsConnected}
 						error={null}
 						isCollapsed={false}
@@ -1155,8 +1202,8 @@ export default function TradeTesting() {
 				<div className="section seed-book-section">
 					<h3>🌱 Seed Order Book (Privy Wallet)</h3>
 					<p className="seed-desc">
-						Place limit orders from your Privy wallet to populate the orderbook. 
-						Creates BUY YES orders (bids) and BUY NO orders (which show as YES asks).
+						Place limit orders from your Privy wallet to populate the orderbook. Creates BUY YES
+						orders (bids) and BUY NO orders (which show as YES asks).
 					</p>
 
 					<div className="seed-config">
@@ -1172,7 +1219,9 @@ export default function TradeTesting() {
 											min="0.01"
 											max="0.99"
 											value={seedConfig.bidMin}
-											onChange={(e) => setSeedConfig(c => ({ ...c, bidMin: parseFloat(e.target.value) || 0.2 }))}
+											onChange={(e) =>
+												setSeedConfig((c) => ({ ...c, bidMin: parseFloat(e.target.value) || 0.2 }))
+											}
 										/>
 									</label>
 									<label>
@@ -1183,7 +1232,9 @@ export default function TradeTesting() {
 											min="0.01"
 											max="0.99"
 											value={seedConfig.bidMax}
-											onChange={(e) => setSeedConfig(c => ({ ...c, bidMax: parseFloat(e.target.value) || 0.45 }))}
+											onChange={(e) =>
+												setSeedConfig((c) => ({ ...c, bidMax: parseFloat(e.target.value) || 0.45 }))
+											}
 										/>
 									</label>
 								</div>
@@ -1199,7 +1250,9 @@ export default function TradeTesting() {
 											min="0.01"
 											max="0.99"
 											value={seedConfig.askMin}
-											onChange={(e) => setSeedConfig(c => ({ ...c, askMin: parseFloat(e.target.value) || 0.55 }))}
+											onChange={(e) =>
+												setSeedConfig((c) => ({ ...c, askMin: parseFloat(e.target.value) || 0.55 }))
+											}
 										/>
 									</label>
 									<label>
@@ -1210,7 +1263,9 @@ export default function TradeTesting() {
 											min="0.01"
 											max="0.99"
 											value={seedConfig.askMax}
-											onChange={(e) => setSeedConfig(c => ({ ...c, askMax: parseFloat(e.target.value) || 0.8 }))}
+											onChange={(e) =>
+												setSeedConfig((c) => ({ ...c, askMax: parseFloat(e.target.value) || 0.8 }))
+											}
 										/>
 									</label>
 								</div>
@@ -1224,7 +1279,12 @@ export default function TradeTesting() {
 									min="1"
 									max="10000"
 									value={seedConfig.amountPerLevel}
-									onChange={(e) => setSeedConfig(c => ({ ...c, amountPerLevel: parseInt(e.target.value) || 100 }))}
+									onChange={(e) =>
+										setSeedConfig((c) => ({
+											...c,
+											amountPerLevel: parseInt(e.target.value) || 100,
+										}))
+									}
 								/>
 							</label>
 							<label className="seed-config-item">
@@ -1234,7 +1294,9 @@ export default function TradeTesting() {
 									min="1"
 									max="20"
 									value={seedConfig.levels}
-									onChange={(e) => setSeedConfig(c => ({ ...c, levels: parseInt(e.target.value) || 10 }))}
+									onChange={(e) =>
+										setSeedConfig((c) => ({ ...c, levels: parseInt(e.target.value) || 10 }))
+									}
 								/>
 							</label>
 							<label className="seed-config-item">
@@ -1245,21 +1307,26 @@ export default function TradeTesting() {
 									max="2000"
 									step="100"
 									value={seedConfig.delayBetweenOrders}
-									onChange={(e) => setSeedConfig(c => ({ ...c, delayBetweenOrders: parseInt(e.target.value) || 300 }))}
+									onChange={(e) =>
+										setSeedConfig((c) => ({
+											...c,
+											delayBetweenOrders: parseInt(e.target.value) || 300,
+										}))
+									}
 								/>
 							</label>
 						</div>
 					</div>
 
 					<div className="seed-preview">
-						<strong>Preview:</strong> {seedConfig.levels * 2} orders total 
-						(~${seedConfig.levels * 2 * seedConfig.amountPerLevel} USDC)
+						<strong>Preview:</strong> {seedConfig.levels * 2} orders total (~$
+						{seedConfig.levels * 2 * seedConfig.amountPerLevel} USDC)
 						<br />
 						<span className="seed-preview-detail">
 							• YES bids: {seedConfig.bidMin.toFixed(2)} → {seedConfig.bidMax.toFixed(2)}
-							<br />
-							• YES asks: {seedConfig.askMin.toFixed(2)} → {seedConfig.askMax.toFixed(2)} 
-							(via BUY NO @ {(1 - seedConfig.askMax).toFixed(2)} → {(1 - seedConfig.askMin).toFixed(2)})
+							<br />• YES asks: {seedConfig.askMin.toFixed(2)} → {seedConfig.askMax.toFixed(2)}
+							(via BUY NO @ {(1 - seedConfig.askMax).toFixed(2)} →{" "}
+							{(1 - seedConfig.askMin).toFixed(2)})
 						</span>
 					</div>
 
@@ -1269,9 +1336,7 @@ export default function TradeTesting() {
 							onClick={seedBookWithPrivy}
 							disabled={seedState.isSeeding || !signer || testState.isRunning}
 						>
-							{seedState.isSeeding 
-								? `🌱 ${seedState.currentPhase}` 
-								: "🌱 Seed with Privy Wallet"}
+							{seedState.isSeeding ? `🌱 ${seedState.currentPhase}` : "🌱 Seed with Privy Wallet"}
 						</button>
 						{seedState.isSeeding && (
 							<div className="seed-progress">
@@ -1281,9 +1346,7 @@ export default function TradeTesting() {
 					</div>
 
 					{seedState.seededCount > 0 && !seedState.isSeeding && (
-						<div className="seed-result success">
-							✅ {seedState.currentPhase}
-						</div>
+						<div className="seed-result success">✅ {seedState.currentPhase}</div>
 					)}
 
 					{seedState.errors.length > 0 && (
@@ -1293,9 +1356,7 @@ export default function TradeTesting() {
 								{seedState.errors.slice(0, 5).map((err, i) => (
 									<li key={i}>{err}</li>
 								))}
-								{seedState.errors.length > 5 && (
-									<li>...and {seedState.errors.length - 5} more</li>
-								)}
+								{seedState.errors.length > 5 && <li>...and {seedState.errors.length - 5} more</li>}
 							</ul>
 						</div>
 					)}
@@ -1306,7 +1367,7 @@ export default function TradeTesting() {
 			{selectedMarket && orderbook && (
 				<div className="section">
 					<h3>3. Test Configuration</h3>
-					
+
 					{/* Order Count Table */}
 					<div className="config-table-container">
 						<table className="config-table">
@@ -1322,24 +1383,74 @@ export default function TradeTesting() {
 									<td className="row-label">Market Buy</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketBuyYesCount: Math.max(0, c.marketBuyYesCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketBuyYesCount: Math.max(0, c.marketBuyYesCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.marketBuyYesCount}
-												onChange={(e) => setConfig(c => ({ ...c, marketBuyYesCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														marketBuyYesCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketBuyYesCount: Math.min(10, c.marketBuyYesCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketBuyYesCount: Math.min(10, c.marketBuyYesCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketBuyNoCount: Math.max(0, c.marketBuyNoCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketBuyNoCount: Math.max(0, c.marketBuyNoCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.marketBuyNoCount}
-												onChange={(e) => setConfig(c => ({ ...c, marketBuyNoCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														marketBuyNoCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketBuyNoCount: Math.min(10, c.marketBuyNoCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketBuyNoCount: Math.min(10, c.marketBuyNoCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 								</tr>
@@ -1347,24 +1458,74 @@ export default function TradeTesting() {
 									<td className="row-label">Market Sell</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketSellYesCount: Math.max(0, c.marketSellYesCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketSellYesCount: Math.max(0, c.marketSellYesCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.marketSellYesCount}
-												onChange={(e) => setConfig(c => ({ ...c, marketSellYesCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														marketSellYesCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketSellYesCount: Math.min(10, c.marketSellYesCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketSellYesCount: Math.min(10, c.marketSellYesCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketSellNoCount: Math.max(0, c.marketSellNoCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketSellNoCount: Math.max(0, c.marketSellNoCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.marketSellNoCount}
-												onChange={(e) => setConfig(c => ({ ...c, marketSellNoCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														marketSellNoCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, marketSellNoCount: Math.min(10, c.marketSellNoCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														marketSellNoCount: Math.min(10, c.marketSellNoCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 								</tr>
@@ -1372,24 +1533,74 @@ export default function TradeTesting() {
 									<td className="row-label">Limit Buy</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitBuyYesCount: Math.max(0, c.limitBuyYesCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitBuyYesCount: Math.max(0, c.limitBuyYesCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.limitBuyYesCount}
-												onChange={(e) => setConfig(c => ({ ...c, limitBuyYesCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														limitBuyYesCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitBuyYesCount: Math.min(10, c.limitBuyYesCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitBuyYesCount: Math.min(10, c.limitBuyYesCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitBuyNoCount: Math.max(0, c.limitBuyNoCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitBuyNoCount: Math.max(0, c.limitBuyNoCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.limitBuyNoCount}
-												onChange={(e) => setConfig(c => ({ ...c, limitBuyNoCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														limitBuyNoCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitBuyNoCount: Math.min(10, c.limitBuyNoCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitBuyNoCount: Math.min(10, c.limitBuyNoCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 								</tr>
@@ -1397,24 +1608,74 @@ export default function TradeTesting() {
 									<td className="row-label">Limit Sell</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitSellYesCount: Math.max(0, c.limitSellYesCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitSellYesCount: Math.max(0, c.limitSellYesCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.limitSellYesCount}
-												onChange={(e) => setConfig(c => ({ ...c, limitSellYesCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														limitSellYesCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitSellYesCount: Math.min(10, c.limitSellYesCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitSellYesCount: Math.min(10, c.limitSellYesCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 									<td>
 										<div className="stepper-input">
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitSellNoCount: Math.max(0, c.limitSellNoCount - 1) }))}>−</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitSellNoCount: Math.max(0, c.limitSellNoCount - 1),
+													}))
+												}
+											>
+												−
+											</button>
 											<input
 												type="text"
 												value={config.limitSellNoCount}
-												onChange={(e) => setConfig(c => ({ ...c, limitSellNoCount: Math.max(0, parseInt(e.target.value) || 0) }))}
+												onChange={(e) =>
+													setConfig((c) => ({
+														...c,
+														limitSellNoCount: Math.max(0, parseInt(e.target.value) || 0),
+													}))
+												}
 											/>
-											<button type="button" onClick={() => setConfig(c => ({ ...c, limitSellNoCount: Math.min(10, c.limitSellNoCount + 1) }))}>+</button>
+											<button
+												type="button"
+												onClick={() =>
+													setConfig((c) => ({
+														...c,
+														limitSellNoCount: Math.min(10, c.limitSellNoCount + 1),
+													}))
+												}
+											>
+												+
+											</button>
 										</div>
 									</td>
 								</tr>
@@ -1432,7 +1693,9 @@ export default function TradeTesting() {
 								max={100}
 								step={0.5}
 								value={config.minTradeAmount}
-								onChange={(e) => setConfig((c) => ({ ...c, minTradeAmount: Number(e.target.value) || 0.5 }))}
+								onChange={(e) =>
+									setConfig((c) => ({ ...c, minTradeAmount: Number(e.target.value) || 0.5 }))
+								}
 							/>
 						</div>
 						<div className="config-item">
@@ -1443,7 +1706,9 @@ export default function TradeTesting() {
 								max={100}
 								step={0.5}
 								value={config.maxTradeAmount}
-								onChange={(e) => setConfig((c) => ({ ...c, maxTradeAmount: Number(e.target.value) || 1 }))}
+								onChange={(e) =>
+									setConfig((c) => ({ ...c, maxTradeAmount: Number(e.target.value) || 1 }))
+								}
 							/>
 						</div>
 						<div className="config-item">
@@ -1454,7 +1719,9 @@ export default function TradeTesting() {
 								max={5000}
 								step={100}
 								value={config.delayBetweenTrades}
-								onChange={(e) => setConfig((c) => ({ ...c, delayBetweenTrades: Number(e.target.value) || 500 }))}
+								onChange={(e) =>
+									setConfig((c) => ({ ...c, delayBetweenTrades: Number(e.target.value) || 500 }))
+								}
 							/>
 						</div>
 					</div>
@@ -1479,11 +1746,11 @@ export default function TradeTesting() {
 				<div className="section stress-test-section">
 					<h3>🔥 Random Stress Test</h3>
 					<p className="stress-test-desc">
-						Sends completely random orders to stress test the system. 
-						Includes invalid amounts, weird prices, buying without balance, selling without shares.
+						Sends completely random orders to stress test the system. Includes invalid amounts,
+						weird prices, buying without balance, selling without shares.
 						<strong> Expects failures!</strong>
 					</p>
-					
+
 					<div className="stress-config">
 						<div className="stress-config-item">
 							<label>Total Random Orders</label>
@@ -1492,7 +1759,12 @@ export default function TradeTesting() {
 								min={1}
 								max={100}
 								value={stressTestConfig.totalRandomOrders}
-								onChange={(e) => setStressTestConfig(c => ({ ...c, totalRandomOrders: parseInt(e.target.value) || 10 }))}
+								onChange={(e) =>
+									setStressTestConfig((c) => ({
+										...c,
+										totalRandomOrders: parseInt(e.target.value) || 10,
+									}))
+								}
 							/>
 						</div>
 						<div className="stress-config-item">
@@ -1503,7 +1775,12 @@ export default function TradeTesting() {
 								max={5000}
 								step={100}
 								value={stressTestConfig.delayBetweenOrders}
-								onChange={(e) => setStressTestConfig(c => ({ ...c, delayBetweenOrders: parseInt(e.target.value) || 500 }))}
+								onChange={(e) =>
+									setStressTestConfig((c) => ({
+										...c,
+										delayBetweenOrders: parseInt(e.target.value) || 500,
+									}))
+								}
 							/>
 						</div>
 						<div className="stress-config-item checkbox">
@@ -1511,7 +1788,9 @@ export default function TradeTesting() {
 								<input
 									type="checkbox"
 									checked={stressTestConfig.includeHugeAmounts}
-									onChange={(e) => setStressTestConfig(c => ({ ...c, includeHugeAmounts: e.target.checked }))}
+									onChange={(e) =>
+										setStressTestConfig((c) => ({ ...c, includeHugeAmounts: e.target.checked }))
+									}
 								/>
 								Include huge amounts ($10k+)
 							</label>
@@ -1521,7 +1800,9 @@ export default function TradeTesting() {
 								<input
 									type="checkbox"
 									checked={stressTestConfig.includeInvalidPrices}
-									onChange={(e) => setStressTestConfig(c => ({ ...c, includeInvalidPrices: e.target.checked }))}
+									onChange={(e) =>
+										setStressTestConfig((c) => ({ ...c, includeInvalidPrices: e.target.checked }))
+									}
 								/>
 								Include invalid prices (0, 1.5, etc)
 							</label>
@@ -1533,8 +1814,8 @@ export default function TradeTesting() {
 						onClick={runStressTest}
 						disabled={testState.isRunning || !signer}
 					>
-						{testState.isRunning && testState.currentPhase.includes("STRESS") 
-							? `Running: ${testState.currentPhase}` 
+						{testState.isRunning && testState.currentPhase.includes("STRESS")
+							? `Running: ${testState.currentPhase}`
 							: "🔥 Run Stress Test"}
 					</button>
 				</div>
@@ -1581,8 +1862,8 @@ export default function TradeTesting() {
 			{testState.settlementVerification && (
 				<div className="section">
 					<h3>
-						{testState.settlementVerification.settlementMatches 
-							? "✅ Settlement Verification - VERIFIED" 
+						{testState.settlementVerification.settlementMatches
+							? "✅ Settlement Verification - VERIFIED"
 							: "⚠️ Settlement Verification - DISCREPANCY DETECTED"}
 					</h3>
 					<div className="settlement-grid">
@@ -1601,27 +1882,45 @@ export default function TradeTesting() {
 								</thead>
 								<tbody>
 									<tr>
-										<td><strong>USDC</strong></td>
+										<td>
+											<strong>USDC</strong>
+										</td>
 										<td>${testState.settlementVerification.initialBalances.usdc.toFixed(2)}</td>
 										<td>${testState.settlementVerification.finalBalances.usdc.toFixed(2)}</td>
-										<td className={testState.settlementVerification.usdcChange >= 0 ? "positive" : "negative"}>
-											{testState.settlementVerification.usdcChange >= 0 ? "+" : ""}
-											${testState.settlementVerification.usdcChange.toFixed(2)}
+										<td
+											className={
+												testState.settlementVerification.usdcChange >= 0 ? "positive" : "negative"
+											}
+										>
+											{testState.settlementVerification.usdcChange >= 0 ? "+" : ""}$
+											{testState.settlementVerification.usdcChange.toFixed(2)}
 										</td>
 										<td>
-											{testState.settlementVerification.expectedUsdcChange >= 0 ? "+" : ""}
-											${testState.settlementVerification.expectedUsdcChange.toFixed(2)}
+											{testState.settlementVerification.expectedUsdcChange >= 0 ? "+" : ""}$
+											{testState.settlementVerification.expectedUsdcChange.toFixed(2)}
 										</td>
 										<td>
-											{Math.abs(testState.settlementVerification.usdcChange - testState.settlementVerification.expectedUsdcChange) < 0.05 
-												? "✅" : "❌"}
+											{Math.abs(
+												testState.settlementVerification.usdcChange -
+													testState.settlementVerification.expectedUsdcChange,
+											) < 0.05
+												? "✅"
+												: "❌"}
 										</td>
 									</tr>
 									<tr>
-										<td><strong>YES Tokens</strong></td>
+										<td>
+											<strong>YES Tokens</strong>
+										</td>
 										<td>{testState.settlementVerification.initialBalances.yesTokens.toFixed(4)}</td>
 										<td>{testState.settlementVerification.finalBalances.yesTokens.toFixed(4)}</td>
-										<td className={testState.settlementVerification.yesTokenChange >= 0 ? "positive" : "negative"}>
+										<td
+											className={
+												testState.settlementVerification.yesTokenChange >= 0
+													? "positive"
+													: "negative"
+											}
+										>
 											{testState.settlementVerification.yesTokenChange >= 0 ? "+" : ""}
 											{testState.settlementVerification.yesTokenChange.toFixed(4)}
 										</td>
@@ -1630,15 +1929,27 @@ export default function TradeTesting() {
 											{testState.settlementVerification.expectedYesTokenChange.toFixed(4)}
 										</td>
 										<td>
-											{Math.abs(testState.settlementVerification.yesTokenChange - testState.settlementVerification.expectedYesTokenChange) < 0.01 
-												? "✅" : "❌"}
+											{Math.abs(
+												testState.settlementVerification.yesTokenChange -
+													testState.settlementVerification.expectedYesTokenChange,
+											) < 0.01
+												? "✅"
+												: "❌"}
 										</td>
 									</tr>
 									<tr>
-										<td><strong>NO Tokens</strong></td>
+										<td>
+											<strong>NO Tokens</strong>
+										</td>
 										<td>{testState.settlementVerification.initialBalances.noTokens.toFixed(4)}</td>
 										<td>{testState.settlementVerification.finalBalances.noTokens.toFixed(4)}</td>
-										<td className={testState.settlementVerification.noTokenChange >= 0 ? "positive" : "negative"}>
+										<td
+											className={
+												testState.settlementVerification.noTokenChange >= 0
+													? "positive"
+													: "negative"
+											}
+										>
 											{testState.settlementVerification.noTokenChange >= 0 ? "+" : ""}
 											{testState.settlementVerification.noTokenChange.toFixed(4)}
 										</td>
@@ -1647,16 +1958,25 @@ export default function TradeTesting() {
 											{testState.settlementVerification.expectedNoTokenChange.toFixed(4)}
 										</td>
 										<td>
-											{Math.abs(testState.settlementVerification.noTokenChange - testState.settlementVerification.expectedNoTokenChange) < 0.01 
-												? "✅" : "❌"}
+											{Math.abs(
+												testState.settlementVerification.noTokenChange -
+													testState.settlementVerification.expectedNoTokenChange,
+											) < 0.01
+												? "✅"
+												: "❌"}
 										</td>
 									</tr>
 								</tbody>
 							</table>
 						</div>
 						<div className="settlement-notes">
-							<p><strong>Note:</strong> Limit orders may not execute immediately and will show as discrepancies until filled. Market orders should match expected values closely.</p>
-							<p><strong>Fee Contracts:</strong></p>
+							<p>
+								<strong>Note:</strong> Limit orders may not execute immediately and will show as
+								discrepancies until filled. Market orders should match expected values closely.
+							</p>
+							<p>
+								<strong>Fee Contracts:</strong>
+							</p>
 							<ul>
 								<li>BUY fees: FeeWrapper (0xf4cb...78Df)</li>
 								<li>SELL fees: FeeModule (0x06d9...3983)</li>
@@ -1670,19 +1990,27 @@ export default function TradeTesting() {
 								<div className="order-summary-cards">
 									<div className="summary-mini-card">
 										<span className="label">Submitted</span>
-										<span className="value">{testState.settlementVerification.orderVerification.submittedOrders.length}</span>
+										<span className="value">
+											{testState.settlementVerification.orderVerification.submittedOrders.length}
+										</span>
 									</div>
 									<div className="summary-mini-card success">
 										<span className="label">Filled</span>
-										<span className="value">{testState.settlementVerification.orderVerification.filledCount}</span>
+										<span className="value">
+											{testState.settlementVerification.orderVerification.filledCount}
+										</span>
 									</div>
 									<div className="summary-mini-card warning">
 										<span className="label">Pending</span>
-										<span className="value">{testState.settlementVerification.orderVerification.pendingCount}</span>
+										<span className="value">
+											{testState.settlementVerification.orderVerification.pendingCount}
+										</span>
 									</div>
 									<div className="summary-mini-card error">
 										<span className="label">Not Found</span>
-										<span className="value">{testState.settlementVerification.orderVerification.notFoundCount}</span>
+										<span className="value">
+											{testState.settlementVerification.orderVerification.notFoundCount}
+										</span>
 									</div>
 								</div>
 								<table className="settlement-table order-table">
@@ -1699,29 +2027,43 @@ export default function TradeTesting() {
 										</tr>
 									</thead>
 									<tbody>
-										{testState.settlementVerification.orderVerification.matchedOrders.map((order, idx) => {
-											const submitted = testState.settlementVerification?.orderVerification?.submittedOrders[idx];
-											return (
-												<tr key={order.orderId} className={order.filled ? "filled-row" : "pending-row"}>
-													<td className="monospace" title={order.orderId}>
-														{order.orderId.slice(0, 10)}...
-													</td>
-													<td>{submitted?.tradeType?.toUpperCase() || "—"}</td>
-													<td>{submitted?.side?.toUpperCase() || "—"}</td>
-													<td>{submitted?.position?.toUpperCase() || "—"}</td>
-													<td>${submitted?.expectedAmount?.toFixed(2) || "—"}</td>
-													<td>{order.actualUsdcValue !== null ? `$${order.actualUsdcValue.toFixed(2)}` : "—"}</td>
-													<td>{order.actualTokenValue !== null ? order.actualTokenValue.toFixed(4) : "—"}</td>
-													<td>
-														{order.filled ? (
-															<span className="status-badge filled">✅ FILLED</span>
-														) : (
-															<span className="status-badge pending">⏳ PENDING</span>
-														)}
-													</td>
-												</tr>
-											);
-										})}
+										{testState.settlementVerification.orderVerification.matchedOrders.map(
+											(order, idx) => {
+												const submitted =
+													testState.settlementVerification?.orderVerification?.submittedOrders[idx];
+												return (
+													<tr
+														key={order.orderId}
+														className={order.filled ? "filled-row" : "pending-row"}
+													>
+														<td className="monospace" title={order.orderId}>
+															{order.orderId.slice(0, 10)}...
+														</td>
+														<td>{submitted?.tradeType?.toUpperCase() || "—"}</td>
+														<td>{submitted?.side?.toUpperCase() || "—"}</td>
+														<td>{submitted?.position?.toUpperCase() || "—"}</td>
+														<td>${submitted?.expectedAmount?.toFixed(2) || "—"}</td>
+														<td>
+															{order.actualUsdcValue !== null
+																? `$${order.actualUsdcValue.toFixed(2)}`
+																: "—"}
+														</td>
+														<td>
+															{order.actualTokenValue !== null
+																? order.actualTokenValue.toFixed(4)
+																: "—"}
+														</td>
+														<td>
+															{order.filled ? (
+																<span className="status-badge filled">✅ FILLED</span>
+															) : (
+																<span className="status-badge pending">⏳ PENDING</span>
+															)}
+														</td>
+													</tr>
+												);
+											},
+										)}
 									</tbody>
 								</table>
 							</div>
@@ -1742,22 +2084,28 @@ export default function TradeTesting() {
 			{testState.classifiedErrors.length > 0 && (
 				<div className="section error-analysis-section">
 					<h3>🔍 Error Analysis</h3>
-					
+
 					{/* Error Summary Cards */}
 					<div className="error-summary-grid">
-						<div className={`error-summary-card expected ${summary.expectedErrors > 0 ? "has-errors" : ""}`}>
+						<div
+							className={`error-summary-card expected ${summary.expectedErrors > 0 ? "has-errors" : ""}`}
+						>
 							<span className="icon">✅</span>
 							<span className="count">{summary.expectedErrors}</span>
 							<span className="label">Expected Rejections</span>
 							<span className="description">Server correctly rejected invalid orders</span>
 						</div>
-						<div className={`error-summary-card warning ${summary.warningErrors > 0 ? "has-errors" : ""}`}>
+						<div
+							className={`error-summary-card warning ${summary.warningErrors > 0 ? "has-errors" : ""}`}
+						>
 							<span className="icon">⚠️</span>
 							<span className="count">{summary.warningErrors}</span>
 							<span className="label">Warnings</span>
 							<span className="description">User actions or timeouts</span>
 						</div>
-						<div className={`error-summary-card unexpected ${summary.unexpectedErrors > 0 ? "has-errors" : ""}`}>
+						<div
+							className={`error-summary-card unexpected ${summary.unexpectedErrors > 0 ? "has-errors" : ""}`}
+						>
 							<span className="icon">🚨</span>
 							<span className="count">{summary.unexpectedErrors}</span>
 							<span className="label">Unexpected Errors</span>
@@ -1766,12 +2114,15 @@ export default function TradeTesting() {
 					</div>
 
 					{/* Overall Assessment */}
-					<div className={`error-assessment ${summary.unexpectedErrors === 0 ? "all-good" : "needs-attention"}`}>
+					<div
+						className={`error-assessment ${summary.unexpectedErrors === 0 ? "all-good" : "needs-attention"}`}
+					>
 						{summary.unexpectedErrors === 0 ? (
 							<>
 								<span className="assessment-icon">✅</span>
 								<span className="assessment-text">
-									<strong>All errors are expected!</strong> The system is correctly rejecting invalid orders.
+									<strong>All errors are expected!</strong> The system is correctly rejecting
+									invalid orders.
 									{summary.expectedErrors > 0 && ` (${summary.expectedErrors} expected rejections)`}
 								</span>
 							</>
@@ -1779,7 +2130,10 @@ export default function TradeTesting() {
 							<>
 								<span className="assessment-icon">🚨</span>
 								<span className="assessment-text">
-									<strong>{summary.unexpectedErrors} unexpected error{summary.unexpectedErrors > 1 ? "s" : ""} detected!</strong> 
+									<strong>
+										{summary.unexpectedErrors} unexpected error
+										{summary.unexpectedErrors > 1 ? "s" : ""} detected!
+									</strong>
 									These may indicate bugs that need investigation.
 								</span>
 							</>
@@ -1792,7 +2146,7 @@ export default function TradeTesting() {
 							<h4>🚨 Unexpected Errors (Need Investigation)</h4>
 							<div className="error-list">
 								{testState.classifiedErrors
-									.filter(e => e.category === "unexpected")
+									.filter((e) => e.category === "unexpected")
 									.map((err, i) => (
 										<div key={i} className="classified-error-item unexpected">
 											<div className="error-header">
@@ -1811,7 +2165,7 @@ export default function TradeTesting() {
 							<h4>⚠️ Warnings</h4>
 							<div className="error-list">
 								{testState.classifiedErrors
-									.filter(e => e.category === "warning")
+									.filter((e) => e.category === "warning")
 									.map((err, i) => (
 										<div key={i} className="classified-error-item warning">
 											<div className="error-header">
@@ -1829,10 +2183,13 @@ export default function TradeTesting() {
 						<div className="error-group expected-group">
 							<h4>✅ Expected Rejections (System Working Correctly)</h4>
 							<details>
-								<summary>{summary.expectedErrors} expected error{summary.expectedErrors > 1 ? "s" : ""} - click to expand</summary>
+								<summary>
+									{summary.expectedErrors} expected error{summary.expectedErrors > 1 ? "s" : ""} -
+									click to expand
+								</summary>
 								<div className="error-list">
 									{testState.classifiedErrors
-										.filter(e => e.category === "expected")
+										.filter((e) => e.category === "expected")
 										.map((err, i) => (
 											<div key={i} className="classified-error-item expected">
 												<div className="error-header">
@@ -1851,4 +2208,3 @@ export default function TradeTesting() {
 		</div>
 	);
 }
-

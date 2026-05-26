@@ -31,7 +31,7 @@ export function getHomeUrl() {
 	return import.meta.env.VITE_HOME_URL || "";
 }
 
-export function shouldShowRedirectModal(redirectPopupTimestamp: number) {
+export function shouldShowRedirectModal(_redirectPopupTimestamp: number) {
 	// Simple implementation - can be enhanced later
 	return false;
 }

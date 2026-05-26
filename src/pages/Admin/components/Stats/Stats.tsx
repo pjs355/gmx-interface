@@ -51,10 +51,7 @@ export default function Stats() {
 			setLoading(true);
 			setError(null);
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
+				const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 				if (!token) {
 					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
@@ -62,9 +59,7 @@ export default function Stats() {
 				const resp = await fetch(`${base}/admin/stats`, {
 					headers: { Authorization: `Bearer ${token}` },
 				});
-				const json = (await resp
-					.json()
-					.catch(() => ({} as any))) as StatsApiResponse;
+				const json = (await resp.json().catch(() => ({}) as any)) as StatsApiResponse;
 				if (!resp.ok) {
 					throw new Error(formatAdminHttpError(resp.status, json?.error));
 				}
@@ -91,29 +86,19 @@ export default function Stats() {
 	}, [getAccessToken]);
 
 	if (loading) {
-		return (
-			<div style={{ padding: 24, color: "white" }}>
-				Loading stats...
-			</div>
-		);
+		return <div style={{ padding: 24, color: "white" }}>Loading stats...</div>;
 	}
 
 	if (error) {
 		return (
 			<div style={{ padding: 24, color: "white" }}>
-				<div style={{ color: "#f87171", marginBottom: 16 }}>
-					Error: {error}
-				</div>
+				<div style={{ color: "#f87171", marginBottom: 16 }}>Error: {error}</div>
 			</div>
 		);
 	}
 
 	if (!stats) {
-		return (
-			<div style={{ padding: 24, color: "white" }}>
-				No stats available.
-			</div>
-		);
+		return <div style={{ padding: 24, color: "white" }}>No stats available.</div>;
 	}
 
 	return (
@@ -135,9 +120,7 @@ export default function Stats() {
 						borderRadius: 8,
 					}}
 				>
-					<h3 style={{ marginTop: 0, marginBottom: 16 }}>
-						Profiles Created
-					</h3>
+					<h3 style={{ marginTop: 0, marginBottom: 16 }}>Profiles Created</h3>
 					<div style={{ marginBottom: 8 }}>
 						<strong>Last 24 hours:</strong> {stats.profilesCreated.day}
 					</div>
@@ -154,9 +137,7 @@ export default function Stats() {
 						borderRadius: 8,
 					}}
 				>
-					<h3 style={{ marginTop: 0, marginBottom: 16 }}>
-						Market Orders
-					</h3>
+					<h3 style={{ marginTop: 0, marginBottom: 16 }}>Market Orders</h3>
 					<div style={{ marginBottom: 8 }}>
 						<strong>Last 24 hours:</strong> {stats.marketOrders.day}
 					</div>
@@ -173,9 +154,7 @@ export default function Stats() {
 						borderRadius: 8,
 					}}
 				>
-					<h3 style={{ marginTop: 0, marginBottom: 16 }}>
-						Limit Orders
-					</h3>
+					<h3 style={{ marginTop: 0, marginBottom: 16 }}>Limit Orders</h3>
 					<div style={{ fontSize: "12px", color: "#aaa", marginBottom: 8 }}>
 						(excluding test wallet)
 					</div>
@@ -196,9 +175,7 @@ export default function Stats() {
 							borderRadius: 8,
 						}}
 					>
-						<h3 style={{ marginTop: 0, marginBottom: 16 }}>
-							Total Volume (USDC)
-						</h3>
+						<h3 style={{ marginTop: 0, marginBottom: 16 }}>Total Volume (USDC)</h3>
 						<div style={{ marginBottom: 8 }}>
 							<strong>Last 24 hours:</strong> $
 							{stats.totalVolume.day.toLocaleString(undefined, {
@@ -225,9 +202,7 @@ export default function Stats() {
 							borderRadius: 8,
 						}}
 					>
-						<h3 style={{ marginTop: 0, marginBottom: 16 }}>
-							Active Users
-						</h3>
+						<h3 style={{ marginTop: 0, marginBottom: 16 }}>Active Users</h3>
 						<div style={{ marginBottom: 8 }}>
 							<strong>Last 24 hours:</strong> {stats.activeUsers.day}
 						</div>
@@ -240,4 +215,3 @@ export default function Stats() {
 		</div>
 	);
 }
-

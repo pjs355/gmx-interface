@@ -4,29 +4,29 @@ import Button from "components/Button/Button";
 import CountdownTimer from "components/CountdownTimer/CountdownTimer";
 import { SingleMarketActions } from "./SingleMarketActions";
 import { MultiMarketActions } from "./MultiMarketActions";
-import { mixpanelTrack } from "@/utils/mixpanel";
-import type {
-	Umbrella,
-	UmbrellaTeamMapping,
-} from "services/api/umbrellaDataService";
+import { mixpanelTrack } from "@/shared/analytics/mixpanel";
+import type { Umbrella, UmbrellaTeamMapping } from "services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { truncateMarketName } from "@/helpers/predictionUtils";
+import { truncateMarketName } from "@/features/markets/presentation/marketLabels";
 import { resolveTeamLogo } from "@/config/team-map";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
-import { listingBestYesNoFromMatched } from "@/utils/listingVenuePrices";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { resolveUmbrellaEventDate } from "../utils/eventDates";
 import { useHomeTradeDockOptional } from "./HomeInlineTradeLayout";
-import { useCurtainActions } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
+import { useCurtainActions } from "@/components/PredictionMarketTradeBox";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	bundledCounterStrikeLogoFromTagLabels,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
 	resolveLogoByTags,
-} from "@/helpers/gameLogoResolver";
-import { formatUmbrellaCrossVenueVolumeLabel } from "@/helpers/umbrellaVolume";
+} from "@/features/markets/assets/gameLogoResolver";
+import { formatUmbrellaCrossVenueVolumeLabel } from "@/features/markets/presentation/umbrellaVolume";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -76,14 +76,11 @@ interface PredictionCardProps {
 		};
 	};
 	onNavigateToUmbrella: (umbrella: Umbrella) => void;
-	onNavigateToSingleMarket: (
-		umbrella: Umbrella,
-		position: "yes" | "no"
-	) => void;
+	onNavigateToSingleMarket: (umbrella: Umbrella, position: "yes" | "no") => void;
 	onNavigateToMultiMarket: (
 		umbrella: Umbrella,
 		question: PredictionMarket,
-		position: "yes" | "no"
+		position: "yes" | "no",
 	) => void;
 }
 
@@ -157,8 +154,7 @@ function PredictionOutcomeTeamImg({
 
 	const src = candidates[index] ?? gtaIcon;
 	const showController = !teamLogoUrl || index > 0;
-	const invertActive =
-		invertRemoteLogo && index === 0 && Boolean(teamLogoUrl);
+	const invertActive = invertRemoteLogo && index === 0 && Boolean(teamLogoUrl);
 
 	return (
 		<img
@@ -167,9 +163,7 @@ function PredictionOutcomeTeamImg({
 			}${invertActive ? " prediction-card-outcome-logo-img--invert" : ""}`}
 			src={src}
 			alt={displayName}
-			onError={() =>
-				setIndex((i) => (i < candidates.length - 1 ? i + 1 : i))
-			}
+			onError={() => setIndex((i) => (i < candidates.length - 1 ? i + 1 : i))}
 		/>
 	);
 }
@@ -193,14 +187,9 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	}
 
 	const pandascoreMatchIdForVenues =
-		typeof umbrella.pandascore_matchId === "string"
-			? umbrella.pandascore_matchId.trim()
-			: "";
+		typeof umbrella.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
 	const { appState: oddsAppState } = useOddsMonitor();
-	const matchedVenueRow = useMatchVenuePrices(
-		pandascoreMatchIdForVenues || null,
-		umbrella._id,
-	);
+	const matchedVenueRow = useMatchVenuePrices(pandascoreMatchIdForVenues || null, umbrella._id);
 	/** Row object is mutated in place on each WS tick; `timestamp` forces recompute when refs are stable. */
 	const listingVenueYesNo = useMemo(
 		() => listingBestYesNoFromMatched(matchedVenueRow),
@@ -242,10 +231,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			const tag = tags[index];
 			const normalizedLabel = normalizeTagLabel(tag.label);
 			// Check both normalized label and slug
-			if (
-				normalizedLabel === "DAILY" ||
-				tag.slug?.toLowerCase() === "daily"
-			) {
+			if (normalizedLabel === "DAILY" || tag.slug?.toLowerCase() === "daily") {
 				return tag._id;
 			}
 		}
@@ -277,8 +263,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			return false;
 		}
 		// Use originalChildren if available (has tagIds), otherwise fall back to children
-		const children =
-			(umbrella as any).originalChildren || umbrella.children || [];
+		const children = (umbrella as any).originalChildren || umbrella.children || [];
 		if (!Array.isArray(children) || children.length === 0) {
 			return false;
 		}
@@ -315,10 +300,9 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			resolved.push({
 				logoUrl: isStarCraft2
 					? null
-					: typeof resolvedLogoUrl === "string" &&
-					  resolvedLogoUrl.length > 0
-					? resolvedLogoUrl
-					: null,
+					: typeof resolvedLogoUrl === "string" && resolvedLogoUrl.length > 0
+						? resolvedLogoUrl
+						: null,
 				displayName: mapping.displayName,
 				invertLogo: mapping.invertLogo === true,
 			});
@@ -343,21 +327,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 
 	// Format date for daily markets: "Month, Day" (e.g., "January, 15")
 	// Use UTC date to avoid timezone conversion issues
-	const dailyDateText = useMemo(() => {
-		if (!isDailyUmbrella || !eventDate) {
-			return null;
-		}
-		// Get UTC date parts to avoid timezone conversion
-		const utcMonth = eventDate.getUTCMonth();
-		const utcDay = eventDate.getUTCDate();
-		const utcYear = eventDate.getUTCFullYear();
-		const utcDate = new Date(Date.UTC(utcYear, utcMonth, utcDay));
-		return utcDate.toLocaleDateString("en-US", {
-			month: "long",
-			day: "numeric",
-			timeZone: "UTC",
-		});
-	}, [isDailyUmbrella, eventDate]);
 
 	// Process title for daily markets: remove date patterns
 	const dailyTitleWithoutDate = useMemo(() => {
@@ -462,30 +431,17 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				`${month + 1}/${day}/${year}`,
 				`${utcMonth + 1}/${utcDay}`,
 				`${utcMonth + 1}/${utcDay}/${utcYear}`,
-				`${String(month + 1).padStart(2, "0")}/${String(day).padStart(
-					2,
-					"0"
-				)}`,
-				`${String(month + 1).padStart(2, "0")}/${String(day).padStart(
-					2,
-					"0"
-				)}/${year}`,
-				`${String(utcMonth + 1).padStart(2, "0")}/${String(
-					utcDay
-				).padStart(2, "0")}`,
-				`${String(utcMonth + 1).padStart(2, "0")}/${String(
-					utcDay
-				).padStart(2, "0")}/${utcYear}`,
+				`${String(month + 1).padStart(2, "0")}/${String(day).padStart(2, "0")}`,
+				`${String(month + 1).padStart(2, "0")}/${String(day).padStart(2, "0")}/${year}`,
+				`${String(utcMonth + 1).padStart(2, "0")}/${String(utcDay).padStart(2, "0")}`,
+				`${String(utcMonth + 1).padStart(2, "0")}/${String(utcDay).padStart(2, "0")}/${utcYear}`,
 			];
 
 			// Remove each date pattern from the title (case-insensitive)
 			for (const pattern of datePatterns) {
 				if (pattern) {
 					// Escape special characters for regex
-					const escapedPattern = pattern.replace(
-						/[.*+?^${}()|[\]\\]/g,
-						"\\$&"
-					);
+					const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 					const regex = new RegExp(escapedPattern, "gi");
 					title = title.replace(regex, "");
 				}
@@ -504,10 +460,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		if (umbrella.displayName.includes("Player Count")) {
 			const playerCountIndex = title.indexOf("Player Count");
 			if (playerCountIndex !== -1) {
-				title = title.substring(
-					0,
-					playerCountIndex + "Player Count".length
-				);
+				title = title.substring(0, playerCountIndex + "Player Count".length);
 			}
 			title = title.replace(/24\s*Hour\s*/gi, "");
 			title = title.trim();
@@ -519,9 +472,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	// Process title parts for esports and daily markets
 	const esportsTitleParts = useMemo(() => {
 		const result = {
-			headline: isDailyUmbrella
-				? dailyTitleWithoutDate
-				: umbrella.displayName,
+			headline: isDailyUmbrella ? dailyTitleWithoutDate : umbrella.displayName,
 			subtitle: "",
 		};
 		if (!isEsportsUmbrella) {
@@ -539,12 +490,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			}
 		}
 		return result;
-	}, [
-		isEsportsUmbrella,
-		umbrella.displayName,
-		isDailyUmbrella,
-		dailyTitleWithoutDate,
-	]);
+	}, [isEsportsUmbrella, umbrella.displayName, isDailyUmbrella, dailyTitleWithoutDate]);
 
 	// For daily markets, calculate endDate as 23hrs 59min after eventDate
 	const endDate = useMemo(() => {
@@ -597,10 +543,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 
 	const navigateToUmbrella = () => {
 		try {
-			const isSingleMarket =
-				umbrella.children && umbrella.children.length === 1;
-			const isMultiMarket =
-				umbrella.children && umbrella.children.length >= 2;
+			const isSingleMarket = umbrella.children && umbrella.children.length === 1;
+			const isMultiMarket = umbrella.children && umbrella.children.length >= 2;
 
 			const trackingData: any = {
 				umbrellaId: umbrella._id,
@@ -611,25 +555,16 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				const question = singleMarketQuestions[umbrella._id];
 				if (question) {
 					trackingData.marketId = question._id || question.questionId;
-					trackingData.marketName =
-						question.displayName || question.question;
+					trackingData.marketName = question.displayName || question.question;
 					trackingData.marketType = "single";
 				}
 			} else if (isMultiMarket) {
 				trackingData.marketType = "multi";
 				trackingData.marketCount = umbrella.children?.length || 0;
 				const multiData = multiMarketData[umbrella._id];
-				if (
-					multiData &&
-					multiData.questions &&
-					multiData.questions.length > 0
-				) {
-					trackingData.marketIds = multiData.questions.map(
-						(q) => q._id || q.questionId
-					);
-					trackingData.marketNames = multiData.questions.map(
-						(q) => q.displayName || q.question
-					);
+				if (multiData && multiData.questions && multiData.questions.length > 0) {
+					trackingData.marketIds = multiData.questions.map((q) => q._id || q.questionId);
+					trackingData.marketNames = multiData.questions.map((q) => q.displayName || q.question);
 				}
 			} else {
 				trackingData.marketType = "none";
@@ -671,10 +606,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		onNavigateToSingleMarket(umbrella, position);
 	};
 
-	const navigateToMultiMarket = (
-		question: PredictionMarket,
-		position: "yes" | "no"
-	) => {
+	const navigateToMultiMarket = (question: PredictionMarket, position: "yes" | "no") => {
 		try {
 			mixpanelTrack("PredictionCardWSideClick", {
 				umbrellaId: umbrella._id,
@@ -700,11 +632,9 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	};
 
 	const hasPandascoreMatch =
-		typeof umbrella.pandascore_matchId === "string" &&
-		umbrella.pandascore_matchId.length > 0;
+		typeof umbrella.pandascore_matchId === "string" && umbrella.pandascore_matchId.length > 0;
 	const showTeamLogos =
-		teamLogos.length >= 2 &&
-		(hasPandascoreMatch || teamLogos.some((t) => t.logoUrl !== null));
+		teamLogos.length >= 2 && (hasPandascoreMatch || teamLogos.some((t) => t.logoUrl !== null));
 
 	const cardHeadline = useMemo(() => {
 		const sub = (isEsportsUmbrella ? esportsTitleParts.subtitle : "").trim();
@@ -714,9 +644,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			const q = singleMarketQuestions[umbrella._id];
 			if (q) {
 				return truncateMarketName(
-					String(
-						q.displayName || (q as { question?: string }).question || "",
-					),
+					String(q.displayName || (q as { question?: string }).question || ""),
 				);
 			}
 		}
@@ -724,9 +652,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			const md = multiMarketData[umbrella._id];
 			const q = md?.questions?.[0];
 			if (q) {
-				return truncateMarketName(
-					String(q.displayName || q.question || ""),
-				);
+				return truncateMarketName(String(q.displayName || q.question || ""));
 			}
 		}
 		return truncateMarketName(umbrella.displayName);
@@ -747,18 +673,12 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			return (
 				<>
 					<span className="prediction-card__headline-main">{tail[1]}</span>
-					<span className="prediction-card__headline-match-winner">
-						{" - Match Winner"}
-					</span>
+					<span className="prediction-card__headline-match-winner">{" - Match Winner"}</span>
 				</>
 			);
 		}
 		if (/^match winner$/i.test(h.trim())) {
-			return (
-				<span className="prediction-card__headline-match-winner">
-					Match Winner
-				</span>
-			);
+			return <span className="prediction-card__headline-match-winner">Match Winner</span>;
 		}
 		return <span className="prediction-card__headline-main">{h}</span>;
 	}, [cardHeadline]);
@@ -778,17 +698,13 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		);
 	};
 
-	const umbrellaVolumeLabel = formatUmbrellaCrossVenueVolumeLabel(
-		umbrella.volume?.totalUsd,
-	);
+	const umbrellaVolumeLabel = formatUmbrellaCrossVenueVolumeLabel(umbrella.volume?.totalUsd);
 
 	const renderActions = () => {
 		if (umbrella.children && umbrella.children.length === 1) {
 			const orderbook = singleMarketOrderbooks[umbrella._id];
 			const question = singleMarketQuestions[umbrella._id];
-			const isDailyPlayerCount =
-				isDailyUmbrella &&
-				umbrella.displayName.includes("Player Count");
+			const isDailyPlayerCount = isDailyUmbrella && umbrella.displayName.includes("Player Count");
 			return (
 				<SingleMarketActions
 					orderbook={orderbook}
@@ -865,8 +781,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 	}
 
-	const dailyWindowEnded =
-		isDailyUmbrella && endDateMs !== null && now >= endDateMs;
+	const dailyWindowEnded = isDailyUmbrella && endDateMs !== null && now >= endDateMs;
 
 	let topLeftStatus: React.ReactNode = null;
 	if (isLive) {
@@ -877,9 +792,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			</div>
 		);
 	} else if (dailyWindowEnded || (isEsportsUmbrella && isEnded)) {
-		topLeftStatus = (
-			<span className="prediction-ended-label">Ended</span>
-		);
+		topLeftStatus = <span className="prediction-ended-label">Ended</span>;
 	} else if (isDailyUmbrella && endDate !== null && !dailyWindowEnded) {
 		topLeftStatus = (
 			<CountdownTimer
@@ -928,33 +841,24 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		>
 			<div className="prediction-card__top prediction-card__top--split">
 				<div className="prediction-card__top-status">
-					{isDailyUmbrella ? (
-						<span className="prediction-card__daily-badge">Daily</span>
-					) : null}
+					{isDailyUmbrella ? <span className="prediction-card__daily-badge">Daily</span> : null}
 					{topLeftStatus}
 				</div>
 				<div className="prediction-card__top-headline">
-					<span className="prediction-card__headline">
-						{cardHeadlineContent}
-					</span>
+					<span className="prediction-card__headline">{cardHeadlineContent}</span>
 				</div>
 			</div>
 
 			<div className="prediction-actions">{renderActions()}</div>
 
-			{umbrellaVolumeLabel &&
-			umbrella.children &&
-			umbrella.children.length === 1 ? (
+			{umbrellaVolumeLabel && umbrella.children && umbrella.children.length === 1 ? (
 				<div className="prediction-card__meta prediction-card__top--split">
 					<div className="prediction-card__top-status">
 						<span className="prediction-card__volume prediction-card__headline-match-winner">
 							{umbrellaVolumeLabel}
 						</span>
 					</div>
-					<div
-						className="prediction-card__top-headline"
-						aria-hidden="true"
-					/>
+					<div className="prediction-card__top-headline" aria-hidden="true" />
 				</div>
 			) : null}
 		</div>

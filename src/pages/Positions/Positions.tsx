@@ -12,22 +12,19 @@ import HistoryView from "./components/HistoryView";
 import HistoryCardView from "./components/HistoryCardView";
 import BalanceChecker from "./components/BalanceChecker";
 import { usePositionsPageData } from "@/context/PositionsDataContext";
+import { usePortfolio } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "@/context/PositionsPageMetricsGateContext";
-import { useClaimCashSyncPending } from "@/trading/sor/post-trade/usePostTradeAccountSync";
+import { useClaimCashSyncPending } from "@/features/trading/sor/post-trade/usePostTradeAccountSync";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useEffect } from "react";
-import { toCentsString } from "./utils/formatCurrency";
-import type { MarketPosition } from "./utils/positionHelpers";
-import { shortTeamDisplayName } from "./utils/historyOutcomeWinner";
-import { isLimitlessWinningsTabClaimBlocked } from "@/trading/venues/limitless/portfolio/limitlessClaimAck";
+import type { MarketPosition } from "@/features/positions/utils/positionHelpers";
+import { shortTeamDisplayName } from "@/features/positions/utils/historyOutcomeWinner";
+import { isLimitlessWinningsTabClaimBlocked } from "@/features/trading/venues/limitless/portfolio/limitlessClaimAck";
 
 /** Human-readable match / market winner for Winnings debug logs (mirrors ResolvedPositionsTable label routing). */
 function winningsDebugWhoWon(
 	market: PredictionMarket,
-	mp: Pick<
-		MarketPosition,
-		"venue" | "predictOutcomeLabelYes" | "predictOutcomeLabelNo"
-	>,
+	mp: Pick<MarketPosition, "venue" | "predictOutcomeLabelYes" | "predictOutcomeLabelNo">,
 	winningSide: "Yes" | "No",
 ): string {
 	if (
@@ -36,12 +33,14 @@ function winningsDebugWhoWon(
 		mp.venue === "limitless" ||
 		mp.venue === "polymarket"
 	) {
-		const label =
-			winningSide === "Yes" ? mp.predictOutcomeLabelYes : mp.predictOutcomeLabelNo;
+		const label = winningSide === "Yes" ? mp.predictOutcomeLabelYes : mp.predictOutcomeLabelNo;
 		if (label?.trim()) return label.trim();
 	}
 	const title = (market.displayName || market.question || "").trim();
-	const parts = title.split(/\s*vs\.?\s*/i).map((s) => s.trim()).filter(Boolean);
+	const parts = title
+		.split(/\s*vs\.?\s*/i)
+		.map((s) => s.trim())
+		.filter(Boolean);
 	if (parts.length === 2) {
 		return shortTeamDisplayName(winningSide === "Yes" ? parts[0]! : parts[1]!);
 	}
@@ -60,7 +59,10 @@ function SkeletonRow({ widths, height = 16 }: { widths: number[]; height?: numbe
 
 function PortfolioSkeleton() {
 	return (
-		<div className="positions-portfolio-skeleton" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+		<div
+			className="positions-portfolio-skeleton"
+			style={{ display: "flex", flexDirection: "column", gap: 0 }}
+		>
 			{Array.from({ length: 5 }).map((_, i) => (
 				<div
 					key={i}
@@ -72,9 +74,15 @@ function PortfolioSkeleton() {
 						gap: 16,
 					}}
 				>
-					<span className="skeleton-box" style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }} />
+					<span
+						className="skeleton-box"
+						style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }}
+					/>
 					<div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-						<span className="skeleton-box" style={{ width: `${60 - i * 8}%`, maxWidth: 280, height: 16, borderRadius: 4 }} />
+						<span
+							className="skeleton-box"
+							style={{ width: `${60 - i * 8}%`, maxWidth: 280, height: 16, borderRadius: 4 }}
+						/>
 						<SkeletonRow widths={[60, 50, 70, 80, 70, 90]} height={14} />
 					</div>
 				</div>
@@ -87,6 +95,12 @@ export default function Positions() {
 	const isMobile = useMedia("(max-width: 768px)");
 
 	const data = usePositionsPageData();
+	const {
+		portfolioTotal,
+		cashBalance,
+		cashLoading: portfolioCashLoading,
+		portfolioLoading,
+	} = usePortfolio();
 
 	const {
 		account,
@@ -96,11 +110,7 @@ export default function Positions() {
 		// isDataFullyLoaded, // used when Orders tab shell fell back to full-data gate
 		isPositionsTabContentReady,
 		isHistoryTabContentReady,
-		portfolioLoading,
-		cashBalanceCtx,
-		portfolioCashLoading,
 		positionsTotalValue,
-		portfolioTotalCtx,
 		umbrellaPositions,
 		resolvedUmbrellaPositions,
 		umbrellaBalancesPositions,
@@ -148,12 +158,7 @@ export default function Positions() {
 				const whoWonTheMatch = winningSide
 					? winningsDebugWhoWon(m, mp, winningSide)
 					: "(unknown resolved outcome)";
-				const payoutUsd =
-					outcome === "yes"
-						? mp.yesBalance
-						: outcome === "no"
-							? mp.noBalance
-							: 0;
+				const payoutUsd = outcome === "yes" ? mp.yesBalance : outcome === "no" ? mp.noBalance : 0;
 				const venue = mp.venue ?? "levelup";
 				const limitlessMeta =
 					venue === "limitless"
@@ -163,11 +168,9 @@ export default function Positions() {
 									_limitlessMarketStatusApi?: string;
 								};
 								return {
-									limitlessPartnerRedeemableSignal:
-										x._limitlessPartnerRedeemableSignal ?? "omit",
+									limitlessPartnerRedeemableSignal: x._limitlessPartnerRedeemableSignal ?? "omit",
 									limitlessMarketStatusApi: x._limitlessMarketStatusApi,
-									inAppClaimBlockedByPartnerFalse:
-										isLimitlessWinningsTabClaimBlocked(m),
+									inAppClaimBlockedByPartnerFalse: isLimitlessWinningsTabClaimBlocked(m),
 									note: "Shape is LevelUp Winnings-tab projection from resolvedUmbrellaPositions; balances/outcome trace to GET /api/limitless/portfolio/positions-venue (Limitless GET /portfolio/positions via proxy).",
 								};
 							})()
@@ -253,7 +256,10 @@ export default function Positions() {
 					</div>
 				)}
 				{resolvedUmbrellaPositions.length > 0 && (
-					<h3 className="mb-6 text-20 font-bold" style={{ color: "#ffffff", fontSize: 34, marginTop: 40 }}>
+					<h3
+						className="mb-6 text-20 font-bold"
+						style={{ color: "#ffffff", fontSize: 34, marginTop: 40 }}
+					>
 						Positions
 					</h3>
 				)}
@@ -344,7 +350,9 @@ export default function Positions() {
 						<span style={{ fontSize: "16px" }}>DEBUG MODE</span>
 						<span style={{ fontWeight: "normal", marginLeft: "12px", fontSize: "14px" }}>
 							Viewing portfolio for:{" "}
-							<code style={{ background: "rgba(0,0,0,0.2)", padding: "2px 6px", borderRadius: "4px" }}>
+							<code
+								style={{ background: "rgba(0,0,0,0.2)", padding: "2px 6px", borderRadius: "4px" }}
+							>
 								{debugAccount?.slice(0, 6)}...{debugAccount?.slice(-4)}
 							</code>
 						</span>
@@ -356,7 +364,9 @@ export default function Positions() {
 							</>
 						)}
 						Run{" "}
-						<code style={{ background: "rgba(0,0,0,0.2)", padding: "2px 4px", borderRadius: "3px" }}>
+						<code
+							style={{ background: "rgba(0,0,0,0.2)", padding: "2px 4px", borderRadius: "3px" }}
+						>
 							clearSpoof()
 						</code>{" "}
 						in console to exit
@@ -368,12 +378,12 @@ export default function Positions() {
 				<div className="positions-header-group">
 					<PositionsHeader
 						portfolioTotal={
-							portfolioTotalCtx != null && Number.isFinite(portfolioTotalCtx)
-								? portfolioTotalCtx
-								: Number(cashBalanceCtx) + positionsTotalValue
+							portfolioTotal != null && Number.isFinite(portfolioTotal)
+								? portfolioTotal
+								: Number(cashBalance ?? 0) + positionsTotalValue
 						}
 						positionsTotalValue={positionsTotalValue}
-						usdcBalance={Number(cashBalanceCtx)}
+						usdcBalance={Number(cashBalance ?? 0)}
 						cashLoading={portfolioCashLoading || claimCashSyncPending}
 						positionsLoading={pageContentLoading}
 						portfolioLoading={portfolioLoading}

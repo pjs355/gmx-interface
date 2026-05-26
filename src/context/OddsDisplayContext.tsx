@@ -1,18 +1,11 @@
-import React, {
-	createContext,
-	useCallback,
-	useContext,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
 	formatAvgOddsValue,
 	formatOddsPrice,
 	parseOddsDisplayStyle,
 	type OddsDisplayStyle,
 	type OddsPriceLayout,
-} from "@/utils/oddsDisplayFormat";
+} from "@/features/odds-display/oddsDisplayFormat";
 import { ODDS_DISPLAY_STYLE_STORAGE_KEY } from "@/config/localStorage";
 
 type OddsDisplayContextValue = {
@@ -20,10 +13,7 @@ type OddsDisplayContextValue = {
 	setOddsDisplayStyle: (style: OddsDisplayStyle) => void;
 	/** Convenience for Profile toggle (V1). */
 	setAmericanOddsEnabled: (enabled: boolean) => void;
-	formatPrice: (
-		p: number | null | undefined,
-		layout?: OddsPriceLayout,
-	) => string;
+	formatPrice: (p: number | null | undefined, layout?: OddsPriceLayout) => string;
 	formatAvgOdds: (p: number | null | undefined) => string;
 };
 
@@ -39,18 +29,12 @@ function readStoredStyle(): OddsDisplayStyle {
 	}
 }
 
-export function OddsDisplayProvider({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
-	const [oddsDisplayStyle, setStyleState] =
-		useState<OddsDisplayStyle>(readStoredStyle);
+export function OddsDisplayProvider({ children }: { children: React.ReactNode }) {
+	const [oddsDisplayStyle, setStyleState] = useState<OddsDisplayStyle>(readStoredStyle);
 
 	useEffect(() => {
 		const onStorage = (e: StorageEvent) => {
-			if (e.key !== ODDS_DISPLAY_STYLE_STORAGE_KEY || e.newValue == null)
-				return;
+			if (e.key !== ODDS_DISPLAY_STYLE_STORAGE_KEY || e.newValue == null) return;
 			setStyleState(parseOddsDisplayStyle(e.newValue));
 		};
 		window.addEventListener("storage", onStorage);
@@ -80,8 +64,7 @@ export function OddsDisplayProvider({
 	);
 
 	const formatAvgOdds = useCallback(
-		(p: number | null | undefined) =>
-			formatAvgOddsValue(p, oddsDisplayStyle),
+		(p: number | null | undefined) => formatAvgOddsValue(p, oddsDisplayStyle),
 		[oddsDisplayStyle],
 	);
 
@@ -93,20 +76,10 @@ export function OddsDisplayProvider({
 			formatPrice,
 			formatAvgOdds,
 		}),
-		[
-			oddsDisplayStyle,
-			setOddsDisplayStyle,
-			setAmericanOddsEnabled,
-			formatPrice,
-			formatAvgOdds,
-		],
+		[oddsDisplayStyle, setOddsDisplayStyle, setAmericanOddsEnabled, formatPrice, formatAvgOdds],
 	);
 
-	return (
-		<OddsDisplayContext.Provider value={value}>
-			{children}
-		</OddsDisplayContext.Provider>
-	);
+	return <OddsDisplayContext.Provider value={value}>{children}</OddsDisplayContext.Provider>;
 }
 
 export function useOddsDisplay(): OddsDisplayContextValue {
@@ -125,8 +98,7 @@ export function useOddsDisplayOptional(): OddsDisplayContextValue {
 			oddsDisplayStyle: "default" as const,
 			setOddsDisplayStyle: () => {},
 			setAmericanOddsEnabled: () => {},
-			formatPrice: (p, layout = "cell") =>
-				formatOddsPrice(p, "default", layout),
+			formatPrice: (p, layout = "cell") => formatOddsPrice(p, "default", layout),
 			formatAvgOdds: (p) => formatAvgOddsValue(p, "default"),
 		}
 	);

@@ -2,28 +2,24 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { isFeatureEnabled } from "@/config/features";
 import { useRPG } from "@/context/RPGContext";
-import { triggerFireworksAt } from "@/pages/Positions/utils/Fireworks";
+import { triggerFireworksAt } from "@/features/positions/utils/Fireworks";
 import "./RPGPanel.scss";
 
 interface RPGPanelProps {
 	userImageUrl?: string;
 }
 
-export function RPGPanel({ userImageUrl }: RPGPanelProps) {
+export function RPGPanel({ userImageUrl: _userImageUrl }: RPGPanelProps) {
 	const [isExpanded, setIsExpanded] = useState(false); // Start closed
 	const { authenticated, login, user } = usePrivy();
-	const { exp, level, frameAsset, frameName, progress, loading, error } =
-		useRPG();
+	const { exp, level, frameAsset, frameName, progress, loading, error } = useRPG();
 
 	// Animation state for progress bar
 	const [animatedProgress, setAnimatedProgress] = useState(progress.progress);
 	const prevExpRef = useRef(exp);
 	const animationFrameRef = useRef<number | null>(null);
-	const pendingAnimationRef = useRef<{ start: number; end: number } | null>(
-		null
-	);
+	const pendingAnimationRef = useRef<{ start: number; end: number } | null>(null);
 	const collapsedIndicatorRef = useRef<HTMLDivElement | null>(null);
-	const autoExpandTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const autoCollapseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	// When exp updates while panel is OPEN -> animate immediately
@@ -62,12 +58,8 @@ export function RPGPanel({ userImageUrl }: RPGPanelProps) {
 				if (collapsedIndicatorRef.current) {
 					// Find the frame element within the panel
 					const frameElement =
-						collapsedIndicatorRef.current.querySelector(
-							".rpg-profile-frame img"
-						) ||
-						collapsedIndicatorRef.current.querySelector(
-							".rpg-frame-container"
-						);
+						collapsedIndicatorRef.current.querySelector(".rpg-profile-frame img") ||
+						collapsedIndicatorRef.current.querySelector(".rpg-frame-container");
 					if (frameElement) {
 						const rect = frameElement.getBoundingClientRect();
 						const cx = rect.left + rect.width / 2;
@@ -100,8 +92,7 @@ export function RPGPanel({ userImageUrl }: RPGPanelProps) {
 			}
 
 			const eased = 1 - Math.pow(1 - progressRatio, 3);
-			const currentProgress =
-				startProgress + (endProgress - startProgress) * eased;
+			const currentProgress = startProgress + (endProgress - startProgress) * eased;
 			setAnimatedProgress(currentProgress);
 			animationFrameRef.current = requestAnimationFrame(animate);
 		};
@@ -216,18 +207,14 @@ export function RPGPanel({ userImageUrl }: RPGPanelProps) {
 			<button
 				className="rpg-panel-toggle"
 				onClick={togglePanel}
-				aria-label={
-					isExpanded ? "Collapse RPG Panel" : "Expand RPG Panel"
-				}
+				aria-label={isExpanded ? "Collapse RPG Panel" : "Expand RPG Panel"}
 			>
 				{isExpanded ? (
 					<span className="rpg-toggle-desktop">◀</span>
 				) : (
 					<span className="rpg-toggle-desktop">▶</span>
 				)}
-				<span className="rpg-toggle-mobile">
-					{isExpanded ? "▲" : "▼"}
-				</span>
+				<span className="rpg-toggle-mobile">{isExpanded ? "▲" : "▼"}</span>
 			</button>
 
 			{/* Panel Content */}
@@ -247,17 +234,13 @@ export function RPGPanel({ userImageUrl }: RPGPanelProps) {
 										alt={`${frameName} Frame`}
 										className="rpg-frame-image"
 										onError={(e) => {
-											(
-												e.target as HTMLImageElement
-											).style.display = "none";
+											(e.target as HTMLImageElement).style.display = "none";
 										}}
 									/>
 								)}
 							</div>
 							<div className="rpg-profile-image-wrapper">
-								<div className="rpg-profile-initial">
-									{profileInitial}
-								</div>
+								<div className="rpg-profile-initial">{profileInitial}</div>
 							</div>
 						</div>
 
@@ -287,13 +270,8 @@ export function RPGPanel({ userImageUrl }: RPGPanelProps) {
 							{/* Signup Prompt for Unauthenticated Users */}
 							{!authenticated && (
 								<div className="rpg-signup-prompt">
-									<p className="rpg-signup-text">
-										Sign up to save your progress!
-									</p>
-									<button
-										className="rpg-signup-button"
-										onClick={handleSignup}
-									>
+									<p className="rpg-signup-text">Sign up to save your progress!</p>
+									<button className="rpg-signup-button" onClick={handleSignup}>
 										Sign Up
 									</button>
 								</div>

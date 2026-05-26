@@ -166,18 +166,14 @@ const DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE = 1.25;
  */
 const SHARE_FILL_SLIPPAGE_PREDICT_OR_LIMITLESS_PCT = 0.038;
 
-function buyShareFillDeltaTolerance(
-	venueKey: string,
-	buyQuotedShares: number,
-): number {
+function buyShareFillDeltaTolerance(venueKey: string, buyQuotedShares: number): number {
 	const relative = SHARE_FILL_SLIPPAGE_PCT * buyQuotedShares;
 	const base = Math.max(relative, SHARE_FILL_MIN_ABS);
 	if (venueKey === "dflow") {
 		return Math.max(base, DFLOW_SHARE_FILL_QUOTE_EXTRA_ABS_TOLERANCE);
 	}
 	if (venueKey === "predictFun" || venueKey === "limitless") {
-		const wider =
-			SHARE_FILL_SLIPPAGE_PREDICT_OR_LIMITLESS_PCT * buyQuotedShares;
+		const wider = SHARE_FILL_SLIPPAGE_PREDICT_OR_LIMITLESS_PCT * buyQuotedShares;
 		return Math.max(base, wider);
 	}
 	return base;
@@ -219,10 +215,7 @@ test.describe("prinx per-venue trade cycle", () => {
 				"[per-venue-cycle] No per-venue picks (no live bid/ask on any canonical venue row) — all venue blocks will skip.",
 			);
 		}
-		const { withBook, missingBook } = partitionRequestedVenuePicks(
-			REQUESTED_VENUES,
-			picks,
-		);
+		const { withBook, missingBook } = partitionRequestedVenuePicks(REQUESTED_VENUES, picks);
 		if (missingBook.length > 0) {
 			console.warn(
 				`[per-venue-cycle] No matched-markets row with a live venue-prices book for: ${missingBook.join(", ")}. ` +
@@ -314,9 +307,7 @@ test.describe("prinx per-venue trade cycle", () => {
 				try {
 					await cleanupOpenPositions(
 						sharedSession.page,
-						REQUESTED_VENUES.map((key) =>
-							tradingVenueSlugForKey(key),
-						),
+						REQUESTED_VENUES.map((key) => tradingVenueSlugForKey(key)),
 					);
 				} catch (err) {
 					console.error("error", err);
@@ -354,21 +345,16 @@ test.describe("prinx per-venue trade cycle", () => {
 					throw new Error("sharedSession not initialized");
 				}
 				if (buyQuotedShares <= 0) {
-					throw new Error(
-						`buyQuotedShares not set for ${venueKey}; test 1 must succeed first`,
-					);
+					throw new Error(`buyQuotedShares not set for ${venueKey}; test 1 must succeed first`);
 				}
 				const tradebox = new Tradebox(sharedSession.page);
 				await tradebox.waitForBuyRowBaselineSettled(
 					buyRowBaselineSettleTimeoutMsForVenueKey(venueKey),
 				);
-				const sharesBefore =
-					await tradebox.readBuyRowTotalSharesOrZero();
+				const sharesBefore = await tradebox.readBuyRowTotalSharesOrZero();
 				const buyCostQuoteUsd = await tradebox.readQuotedBuyCostUsd();
-				const cashBaselineForBuySpend = await expectHeaderCashUsd(
-					sharedSession.page,
-				);
-				// eslint-disable-next-line no-console -- E2E operator visibility (buy baseline vs venue block)
+				const cashBaselineForBuySpend = await expectHeaderCashUsd(sharedSession.page);
+
 				console.log(
 					`[per-venue-cycle] ${venueKey} buy.submit · headerCash=$${cashBaselineForBuySpend.toFixed(2)} ` +
 						`(venueBlockStart=$${cashBeforeUsd.toFixed(2)} — round-trip test 5 only)`,
@@ -381,17 +367,13 @@ test.describe("prinx per-venue trade cycle", () => {
 				// field before sell. Re-assert side/outcome only.
 				await tradebox.setSide("buy");
 				await tradebox.setPosition("yes");
-				const sharesObserved =
-					await tradebox.waitForBuySharesIncreaseSince(
-						sharesBefore,
-						sharesVisiblePollTimeoutMsForVenueKey(venueKey),
-					);
+				const sharesObserved = await tradebox.waitForBuySharesIncreaseSince(
+					sharesBefore,
+					sharesVisiblePollTimeoutMsForVenueKey(venueKey),
+				);
 				expect(sharesObserved).toBeGreaterThan(0);
 				const deltaShares = sharesObserved - sharesBefore;
-				const shareTol = buyShareFillDeltaTolerance(
-					venueKey,
-					buyQuotedShares,
-				);
+				const shareTol = buyShareFillDeltaTolerance(venueKey, buyQuotedShares);
 				expect(
 					Math.abs(deltaShares - buyQuotedShares),
 					`shares mismatch on ${venueKey}: quotedShares(test1)=${buyQuotedShares} @${buyQuotedPriceCents}¢ ` +
@@ -410,9 +392,7 @@ test.describe("prinx per-venue trade cycle", () => {
 				expect(
 					spentUsd,
 					`buy spend exceeded quoted DOM Cost on ${venueKey}: quotedCost=$${buyCostQuoteUsd.toFixed(4)}`,
-				).toBeLessThanOrEqual(
-					buyCostQuoteUsd + BUDGET_OVERSPEND_EPS_USD,
-				);
+				).toBeLessThanOrEqual(buyCostQuoteUsd + BUDGET_OVERSPEND_EPS_USD);
 				expect(
 					spentUsd,
 					`buy spend exceeded typed notional TRADE_USD=$${TRADE_USD} on ${venueKey}`,
@@ -425,22 +405,14 @@ test.describe("prinx per-venue trade cycle", () => {
 					throw new Error("sharedSession not initialized");
 				}
 				if (buyShares <= 0) {
-					throw new Error(
-						`buyShares not set for ${venueKey}; test 2 must succeed before test 3`,
-					);
+					throw new Error(`buyShares not set for ${venueKey}; test 2 must succeed before test 3`);
 				}
 				// Test 3: quote only — enables Trade + reads SOR leg for the typed sell size.
 				// It does NOT call `submit()`. Test 4 runs the actual market sell.
 				const tradebox = new Tradebox(sharedSession.page);
-				const headlineTol = buyShareFillDeltaTolerance(
-					venueKey,
-					buyQuotedShares,
-				);
+				const headlineTol = buyShareFillDeltaTolerance(venueKey, buyQuotedShares);
 				if (venueKey === "polymarket") {
-					await tradebox.waitForBuyHeadlineSharesNear(
-						buyShares,
-						Math.max(headlineTol, 0.02),
-					);
+					await tradebox.waitForBuyHeadlineSharesNear(buyShares, Math.max(headlineTol, 0.02));
 				}
 				await tradebox.setSide("sell");
 				await tradebox.setPosition("yes");
@@ -451,14 +423,10 @@ test.describe("prinx per-venue trade cycle", () => {
 				await tradebox.waitForAmountInputEnabled(amountUnlockTimeoutMs);
 				// After `setSide("sell")`, buy-headline nodes unmount — read the sell
 				// row `data-qa-shares-count` (same value SOR surfaces as "selling X").
-				await new Promise((r) =>
-					setTimeout(r, venueKey === "polymarket" ? 450 : 250),
-				);
-				const sharesFromSellRow =
-					await tradebox.readSellRowSharesCountAttribute();
+				await new Promise((r) => setTimeout(r, venueKey === "polymarket" ? 450 : 250));
+				const sharesFromSellRow = await tradebox.readSellRowSharesCountAttribute();
 				const rawSellCap =
-					sharesFromSellRow !== null &&
-					sharesFromSellRow.trim() !== ""
+					sharesFromSellRow !== null && sharesFromSellRow.trim() !== ""
 						? Number(sharesFromSellRow)
 						: buyShares;
 				if (!Number.isFinite(rawSellCap) || rawSellCap <= 0) {
@@ -466,11 +434,8 @@ test.describe("prinx per-venue trade cycle", () => {
 						`invalid sell cap for ${venueKey}: sellRow=${JSON.stringify(sharesFromSellRow)} buyShares=${buyShares}`,
 					);
 				}
-				const amountText =
-					sellShareAmountTextRoundedDownLikeUi(rawSellCap);
-				const sellParseTarget = Number.parseFloat(
-					amountText.replace(/[$,\s]/g, ""),
-				);
+				const amountText = sellShareAmountTextRoundedDownLikeUi(rawSellCap);
+				const sellParseTarget = Number.parseFloat(amountText.replace(/[$,\s]/g, ""));
 				if (!Number.isFinite(sellParseTarget) || sellParseTarget <= 0) {
 					throw new Error(
 						`floored sell amount unusable for ${venueKey}: raw=${rawSellCap} text=${JSON.stringify(amountText)}`,
@@ -495,10 +460,7 @@ test.describe("prinx per-venue trade cycle", () => {
 				// (`venuePositions` empty in `useSorRoute.ts`) while the omnibus
 				// display channel already populates the row.
 				const venueSlug = tradingVenueSlugForKey(venueKey);
-				const priceCents = await tradebox.readVenueRowAvgCents(
-					venueSlug,
-					sellSubmitTimeoutMs,
-				);
+				const priceCents = await tradebox.readVenueRowAvgCents(venueSlug, sellSubmitTimeoutMs);
 				expect(
 					priceCents,
 					`market-sell smart-routing-row priceCents must be >0 for ${venueKey}`,
@@ -511,7 +473,7 @@ test.describe("prinx per-venue trade cycle", () => {
 					venueSlug,
 					sellSubmitTimeoutMs,
 				);
-				// eslint-disable-next-line no-console -- E2E operator visibility (sell quote vs later cash)
+
 				console.log(
 					`[per-venue-cycle] ${venueKey} sell.quote · sharesToSell=${sellOrderShares} ` +
 						`(postBuyRow≈${buyShares}) ` +
@@ -525,15 +487,11 @@ test.describe("prinx per-venue trade cycle", () => {
 					throw new Error("sharedSession not initialized");
 				}
 				if (sellReceiveQuoteUsd <= 0) {
-					throw new Error(
-						`sellReceiveQuoteUsd not set for ${venueKey}; test 3 must succeed first`,
-					);
+					throw new Error(`sellReceiveQuoteUsd not set for ${venueKey}; test 3 must succeed first`);
 				}
 				const tradebox = new Tradebox(sharedSession.page);
-				const cashRightBeforeSell = await expectHeaderCashUsd(
-					sharedSession.page,
-				);
-				// eslint-disable-next-line no-console -- E2E operator visibility (cash vs sell submit)
+				const cashRightBeforeSell = await expectHeaderCashUsd(sharedSession.page);
+
 				console.log(
 					`[per-venue-cycle] ${venueKey} sell.submit · headerCash=$${cashRightBeforeSell.toFixed(2)} ` +
 						`shares=${sellOrderShares} quotedReceiveUsd=$${sellReceiveQuoteUsd.toFixed(4)} ` +
@@ -544,9 +502,7 @@ test.describe("prinx per-venue trade cycle", () => {
 				// Stay on the post-submit tradebox (same as after buy in test 2). Re-calling
 				// `selectVenue` here often leaves SOR hidden for >30s with `allowPrime: false`
 				// and does not help shares clear — poll the positions row in place.
-				await tradebox.waitForSharesCleared(
-					sharesVisiblePollTimeoutMsForVenueKey(venueKey),
-				);
+				await tradebox.waitForSharesCleared(sharesVisiblePollTimeoutMsForVenueKey(venueKey));
 				const receiveTolUsd = Math.max(
 					RECEIVE_TOLERANCE_MIN_ABS_USD,
 					RECEIVE_SLIPPAGE_PCT * sellReceiveQuoteUsd,
@@ -561,9 +517,8 @@ test.describe("prinx per-venue trade cycle", () => {
 					postTradeCashMatchTimeoutMsForVenueKey(venueKey),
 				);
 				const impliedReceiveVsPostBuy = cashAfterSell - cashAfterBuy;
-				const impliedReceiveVsPreSubmit =
-					cashAfterSell - cashRightBeforeSell;
-				// eslint-disable-next-line no-console -- E2E operator visibility (actual $ in vs quote)
+				const impliedReceiveVsPreSubmit = cashAfterSell - cashRightBeforeSell;
+
 				console.log(
 					`[per-venue-cycle] ${venueKey} sell.settled · headerCash=$${cashAfterSell.toFixed(2)} ` +
 						`impliedReceiveVsPostBuy=$${impliedReceiveVsPostBuy.toFixed(4)} (matches poll vs quotedReceive) ` +
@@ -580,7 +535,7 @@ test.describe("prinx per-venue trade cycle", () => {
 				// `header-cash.ts` “Limitations / follow-ups”.
 				const cashAfter = await expectHeaderCashUsd(sharedSession.page);
 				const drop = cashBeforeUsd - cashAfter;
-				// eslint-disable-next-line no-console -- E2E round-trip summary (venue block start vs end)
+
 				console.log(
 					`[per-venue-cycle] ${venueKey} roundTrip · cashStartOfVenueBlock=$${cashBeforeUsd.toFixed(2)} ` +
 						`cashAfterSellPoll=$${cashAfterSell.toFixed(2)} cashFinalRead=$${cashAfter.toFixed(2)} ` +
@@ -591,9 +546,7 @@ test.describe("prinx per-venue trade cycle", () => {
 					`header Cash should recover to within $${CASH_RECOVERY_TOLERANCE_USD} of pre-buy ` +
 						`($${cashBeforeUsd.toFixed(2)}) on ${venueKey} after a $${TRADE_USD} round-trip; ` +
 						`actual = $${cashAfter.toFixed(2)} (drop=$${drop.toFixed(2)})`,
-				).toBeGreaterThanOrEqual(
-					cashBeforeUsd - CASH_RECOVERY_TOLERANCE_USD,
-				);
+				).toBeGreaterThanOrEqual(cashBeforeUsd - CASH_RECOVERY_TOLERANCE_USD);
 			});
 		});
 	}

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Trans } from "@lingui/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { useAccountData } from "@/context/AccountDataContext";
@@ -18,17 +17,13 @@ type CsAccount = { steamId64?: string; handle?: string };
 function parseCsAccount(value: unknown): CsAccount | null {
 	if (!value || typeof value !== "object") return null;
 	const v = value as Record<string, unknown>;
-	const steamId64 =
-		typeof v.steamId64 === "string" ? v.steamId64 : undefined;
+	const steamId64 = typeof v.steamId64 === "string" ? v.steamId64 : undefined;
 	const handle = typeof v.handle === "string" ? v.handle : undefined;
 	if (!steamId64 && !handle) return null;
 	return { steamId64, handle };
 }
 
-function readStringField(
-	value: unknown,
-	key: string
-): string | undefined {
+function readStringField(value: unknown, key: string): string | undefined {
 	if (!value || typeof value !== "object") return undefined;
 	const v = (value as Record<string, unknown>)[key];
 	return typeof v === "string" && v.length > 0 ? v : undefined;
@@ -43,17 +38,11 @@ export default function GamingAccounts() {
 	// index signature, so direct access is `unknown`. Narrow once here.
 	const profileSteamId = readStringField(userProfile, "steamId");
 	const profileSteamUsername = readStringField(userProfile, "steamUsername");
-	const isLoadingProfile =
-		profileSlice.status === "pending" && !profileSlice.isFetched;
+	const isLoadingProfile = profileSlice.status === "pending" && !profileSlice.isFetched;
 	const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
 	const [isLinkingSteam, setIsLinkingSteam] = useState(false);
-	const [isLinkingLoL, setIsLinkingLoL] = useState(false);
-	const [steamLinkStatus, setSteamLinkStatus] = useState<
-		"idle" | "success" | "error"
-	>("idle");
-	const [isUnlinking, setIsUnlinking] = useState<"steam" | "lol" | null>(
-		null
-	);
+	const [steamLinkStatus, setSteamLinkStatus] = useState<"idle" | "success" | "error">("idle");
+	const [isUnlinking, setIsUnlinking] = useState<"steam" | "lol" | null>(null);
 
 	// Handle redirect back from Steam OAuth
 	useEffect(() => {
@@ -96,19 +85,14 @@ export default function GamingAccounts() {
 			// Get the Privy access token
 			const accessToken = await getAccessToken();
 			if (!accessToken) {
-				throw new Error(
-					"No access token available. Please ensure you're logged in."
-				);
+				throw new Error("No access token available. Please ensure you're logged in.");
 			}
 
 			// Get the redirect URL from the server
 			const serverUrl = getPredictionApiBaseUrl();
 			const steamAuthUrl = `${serverUrl}/auth/steam/start?json=1`;
 
-			console.log(
-				"Requesting Steam OAuth redirect URL from:",
-				steamAuthUrl
-			);
+			console.log("Requesting Steam OAuth redirect URL from:", steamAuthUrl);
 
 			const response = await fetch(steamAuthUrl, {
 				method: "GET",
@@ -150,9 +134,7 @@ export default function GamingAccounts() {
 			// Get the Privy access token
 			const accessToken = await getAccessToken();
 			if (!accessToken) {
-				console.warn(
-					"No access token available for fetching linked accounts"
-				);
+				console.warn("No access token available for fetching linked accounts");
 				return;
 			}
 
@@ -176,31 +158,6 @@ export default function GamingAccounts() {
 		}
 	};
 
-	const handleLoLLink = async () => {
-		setIsLinkingLoL(true);
-		try {
-			// TODO: Implement LoL API integration
-			console.log("Linking League of Legends account...");
-			// Simulate API call
-			await new Promise((resolve) => setTimeout(resolve, 2000));
-
-			// Mock successful link
-			const newAccount: LinkedAccount = {
-				platform: "lol",
-				username: "SummonerName",
-				userId: "summoner123",
-				linkedAt: new Date().toISOString(),
-				verified: true,
-			};
-
-			setLinkedAccounts((prev) => [...prev, newAccount]);
-		} catch (error) {
-			console.error("Failed to link LoL account:", error);
-		} finally {
-			setIsLinkingLoL(false);
-		}
-	};
-
 	const handleUnlink = async (platform: "steam" | "lol") => {
 		setIsUnlinking(platform);
 		try {
@@ -219,9 +176,7 @@ export default function GamingAccounts() {
 			// Get the Privy access token
 			const accessToken = await getAccessToken();
 			if (!accessToken) {
-				throw new Error(
-					"No access token available. Please ensure you're logged in."
-				);
+				throw new Error("No access token available. Please ensure you're logged in.");
 			}
 
 			const response = await fetch(apiUrl, {
@@ -244,15 +199,11 @@ export default function GamingAccounts() {
 				await refresh.profile();
 
 				// Remove from local state
-				setLinkedAccounts((prev) =>
-					prev.filter((acc) => acc.platform !== platform)
-				);
+				setLinkedAccounts((prev) => prev.filter((acc) => acc.platform !== platform));
 
 				console.log(`${platform} account unlinked successfully!`);
 			} else {
-				throw new Error(
-					result.error || `Failed to unlink ${platform} account`
-				);
+				throw new Error(result.error || `Failed to unlink ${platform} account`);
 			}
 		} catch (error) {
 			console.error(`Failed to unlink ${platform} account:`, error);
@@ -299,9 +250,8 @@ export default function GamingAccounts() {
 		<div style={{ padding: 24, color: "white" }}>
 			<h1>Gaming Accounts</h1>
 			<div style={{ marginBottom: 24, opacity: 0.9, lineHeight: 1.5 }}>
-				Link your gaming accounts to verify matches and participate in
-				gaming predictions. Your accounts are used solely for match
-				verification and prediction participation.
+				Link your gaming accounts to verify matches and participate in gaming predictions. Your
+				accounts are used solely for match verification and prediction participation.
 			</div>
 
 			{/* Steam Account Section */}
@@ -321,19 +271,11 @@ export default function GamingAccounts() {
 							marginBottom: 12,
 						}}
 					>
-						<span style={{ fontSize: 24, marginRight: 12 }}>
-							🎮
-						</span>
-						<h2
-							style={{ margin: 0, fontSize: 20, fontWeight: 600 }}
-						>
-							Steam Account
-						</h2>
+						<span style={{ fontSize: 24, marginRight: 12 }}>🎮</span>
+						<h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Steam Account</h2>
 					</div>
 
-					<div
-						style={{ marginBottom: 16, opacity: 0.8, fontSize: 14 }}
-					>
+					<div style={{ marginBottom: 16, opacity: 0.8, fontSize: 14 }}>
 						{getPlatformDescription("steam")}
 					</div>
 
@@ -354,18 +296,12 @@ export default function GamingAccounts() {
 									marginBottom: 4,
 								}}
 							>
-								<span
-									style={{ color: "#3b82f6", marginRight: 8 }}
-								>
-									✓
-								</span>
-								<span style={{ fontWeight: 600 }}>
-									Steam account linked successfully!
-								</span>
+								<span style={{ color: "#3b82f6", marginRight: 8 }}>✓</span>
+								<span style={{ fontWeight: 600 }}>Steam account linked successfully!</span>
 							</div>
 							<div style={{ fontSize: 14, opacity: 0.8 }}>
-								Your Steam account has been connected. You can
-								now participate in CS:GO/CS2 predictions.
+								Your Steam account has been connected. You can now participate in CS:GO/CS2
+								predictions.
 							</div>
 						</div>
 					)}
@@ -387,18 +323,11 @@ export default function GamingAccounts() {
 									marginBottom: 4,
 								}}
 							>
-								<span
-									style={{ color: "#ef4444", marginRight: 8 }}
-								>
-									✗
-								</span>
-								<span style={{ fontWeight: 600 }}>
-									Failed to link Steam account
-								</span>
+								<span style={{ color: "#ef4444", marginRight: 8 }}>✗</span>
+								<span style={{ fontWeight: 600 }}>Failed to link Steam account</span>
 							</div>
 							<div style={{ fontSize: 14, opacity: 0.8 }}>
-								There was an error linking your Steam account.
-								Please try again.
+								There was an error linking your Steam account. Please try again.
 							</div>
 						</div>
 					)}
@@ -424,9 +353,7 @@ export default function GamingAccounts() {
 							/>
 							Loading profile...
 						</div>
-					) : linkedAccounts.find(
-							(acc) => acc.platform === "steam"
-					  ) ||
+					) : linkedAccounts.find((acc) => acc.platform === "steam") ||
 					  profileSteamId ||
 					  csAccount?.steamId64 ? (
 						<div
@@ -456,29 +383,20 @@ export default function GamingAccounts() {
 									>
 										✓
 									</span>
-									<span style={{ fontWeight: 600 }}>
-										Linked
-									</span>
+									<span style={{ fontWeight: 600 }}>Linked</span>
 								</div>
 								<div style={{ fontSize: 14, opacity: 0.8 }}>
 									Username:{" "}
-									{linkedAccounts.find(
-										(acc) => acc.platform === "steam"
-									)?.username ||
+									{linkedAccounts.find((acc) => acc.platform === "steam")?.username ||
 										profileSteamUsername ||
 										csAccount?.handle ||
 										"Steam User"}
 								</div>
 								<div style={{ fontSize: 12, opacity: 0.6 }}>
-									{linkedAccounts.find(
-										(acc) => acc.platform === "steam"
-									)?.linkedAt
+									{linkedAccounts.find((acc) => acc.platform === "steam")?.linkedAt
 										? `Linked on ${new Date(
-												linkedAccounts.find(
-													(acc) =>
-														acc.platform === "steam"
-												)?.linkedAt || ""
-										  ).toLocaleDateString()}`
+												linkedAccounts.find((acc) => acc.platform === "steam")?.linkedAt || "",
+											).toLocaleDateString()}`
 										: "Connected via Steam"}
 								</div>
 							</div>
@@ -491,10 +409,7 @@ export default function GamingAccounts() {
 									borderRadius: 6,
 									background: "rgba(139, 92, 246, 0.1)",
 									color: "#8b5cf6",
-									cursor:
-										isUnlinking === "steam"
-											? "not-allowed"
-											: "pointer",
+									cursor: isUnlinking === "steam" ? "not-allowed" : "pointer",
 									fontSize: 14,
 									opacity: isUnlinking === "steam" ? 0.7 : 1,
 									display: "flex",
@@ -503,13 +418,11 @@ export default function GamingAccounts() {
 								}}
 								onMouseEnter={(e) => {
 									if (isUnlinking !== "steam") {
-										e.currentTarget.style.backgroundColor =
-											"rgba(139, 92, 246, 0.2)";
+										e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.2)";
 									}
 								}}
 								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor =
-										"rgba(139, 92, 246, 0.1)";
+									e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.1)";
 								}}
 							>
 								{isUnlinking === "steam" ? (
@@ -539,13 +452,9 @@ export default function GamingAccounts() {
 								padding: "12px 24px",
 								border: "1px solid #8b5cf6",
 								borderRadius: 8,
-								background: isLinkingSteam
-									? "rgba(139, 92, 246, 0.5)"
-									: "#8b5cf6",
+								background: isLinkingSteam ? "rgba(139, 92, 246, 0.5)" : "#8b5cf6",
 								color: "white",
-								cursor: isLinkingSteam
-									? "not-allowed"
-									: "pointer",
+								cursor: isLinkingSteam ? "not-allowed" : "pointer",
 								fontSize: 16,
 								fontWeight: 600,
 								display: "flex",
@@ -594,21 +503,12 @@ export default function GamingAccounts() {
 							marginBottom: 12,
 						}}
 					>
-						<span style={{ fontSize: 24, marginRight: 12 }}>
-							⚔️
-						</span>
-						<h2
-							style={{ margin: 0, fontSize: 20, fontWeight: 600 }}
-						>
-							League of Legends
-						</h2>
+						<span style={{ fontSize: 24, marginRight: 12 }}>⚔️</span>
+						<h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>League of Legends</h2>
 					</div>
 
-					<div
-						style={{ marginBottom: 16, opacity: 0.8, fontSize: 14 }}
-					>
-						League of Legends account linking is coming soon! Stay
-						tuned for esports predictions.
+					<div style={{ marginBottom: 16, opacity: 0.8, fontSize: 14 }}>
+						League of Legends account linking is coming soon! Stay tuned for esports predictions.
 					</div>
 
 					{linkedAccounts.find((acc) => acc.platform === "lol") ? (
@@ -639,24 +539,15 @@ export default function GamingAccounts() {
 									>
 										✓
 									</span>
-									<span style={{ fontWeight: 600 }}>
-										Linked
-									</span>
+									<span style={{ fontWeight: 600 }}>Linked</span>
 								</div>
 								<div style={{ fontSize: 14, opacity: 0.8 }}>
-									Username:{" "}
-									{
-										linkedAccounts.find(
-											(acc) => acc.platform === "lol"
-										)?.username
-									}
+									Username: {linkedAccounts.find((acc) => acc.platform === "lol")?.username}
 								</div>
 								<div style={{ fontSize: 12, opacity: 0.6 }}>
 									Linked on{" "}
 									{new Date(
-										linkedAccounts.find(
-											(acc) => acc.platform === "lol"
-										)?.linkedAt || ""
+										linkedAccounts.find((acc) => acc.platform === "lol")?.linkedAt || "",
 									).toLocaleDateString()}
 								</div>
 							</div>
@@ -672,12 +563,10 @@ export default function GamingAccounts() {
 									fontSize: 14,
 								}}
 								onMouseEnter={(e) => {
-									e.currentTarget.style.backgroundColor =
-										"rgba(139, 92, 246, 0.2)";
+									e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.2)";
 								}}
 								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor =
-										"rgba(139, 92, 246, 0.1)";
+									e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.1)";
 								}}
 							>
 								Unlink
@@ -749,9 +638,7 @@ export default function GamingAccounts() {
 										{getPlatformIcon(account.platform)}
 									</span>
 									<div>
-										<div style={{ fontWeight: 600 }}>
-											{getPlatformName(account.platform)}
-										</div>
+										<div style={{ fontWeight: 600 }}>{getPlatformName(account.platform)}</div>
 										<div
 											style={{
 												fontSize: 14,
@@ -774,8 +661,7 @@ export default function GamingAccounts() {
 											style={{
 												fontSize: 12,
 												color: "#3b82f6",
-												background:
-													"rgba(59, 130, 246, 0.1)",
+												background: "rgba(59, 130, 246, 0.1)",
 												padding: "4px 8px",
 												borderRadius: 4,
 											}}
@@ -784,9 +670,7 @@ export default function GamingAccounts() {
 										</span>
 									)}
 									<button
-										onClick={() =>
-											handleUnlink(account.platform)
-										}
+										onClick={() => handleUnlink(account.platform)}
 										style={{
 											padding: "6px 12px",
 											border: "1px solid #ef4444",

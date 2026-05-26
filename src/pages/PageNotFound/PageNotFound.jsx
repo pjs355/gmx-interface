@@ -25,14 +25,14 @@ function PageNotFound() {
 							<Trans id="pageNotFound.title">Page not found</Trans>
 						</h2>
 						<p className="go-back">
-						<Trans
-							id="pageNotFound.goBack"
-							components={{
-								homepage: <a href={homeUrl} />,
-								trade: <a href={tradePageUrl} />,
-							}}
-							defaults="Return to <homepage>Homepage</homepage> or <trade>Trade</trade>"
-						/>
+							<Trans
+								id="pageNotFound.goBack"
+								components={{
+									homepage: <a href={homeUrl} />,
+									trade: <a href={tradePageUrl} />,
+								}}
+								defaults="Return to <homepage>Homepage</homepage> or <trade>Trade</trade>"
+							/>
 						</p>
 					</div>
 				</div>

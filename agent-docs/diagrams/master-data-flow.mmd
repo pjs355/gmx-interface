@@ -1,0 +1,112 @@
+%% prinx-interface master data-flow — SOURCE OF TRUTH
+%% Sync to: architecture.md §11 (mermaid fence). Preview: Cursor Mermaid extensions (see guide.md).
+%% Rule: .cursor/rules/agent-docs-architecture.mdc
+
+flowchart TB
+  subgraph sources [External sources]
+    direction LR
+    PRIVY[Privy auth + embedded wallets]
+    API[predictions-api private REST]
+    OMS_WS[Odds Monitor WebSocket]
+    VENUES[Venue APIs via SOR legs]
+  end
+
+  subgraph publicStores [Public stores - no login]
+    direction TB
+    PDD["PredictionDataContext<br/>umbrellas · orderbooks · tags"]
+    OMS["OddsMonitorContext<br/>live book deltas"]
+    PDD --- OMS
+  end
+
+  subgraph identity [Identity]
+    SIGNER["SignerProvider<br/>account · signerAddress"]
+    PRIVY --> SIGNER
+  end
+
+  subgraph accountStores [Account stores - TanStack + context]
+    direction TB
+    ADP["AccountDataContext<br/>profile · VACM · venue accounts · positions"]
+    CTP["CollateralTokenProvider<br/>GET /portfolio/cash-summary"]
+    ADP --> CTP
+    ME["GET /profiles/me"]
+    OV["GET /account-overview"]
+    CASH["GET /portfolio/cash-summary"]
+    V_POLY["GET /polymarket/account"]
+    V_PRED["GET /api/predict/account"]
+    V_DF["GET /api/dflow/account"]
+    V_POS_PRED["GET /api/predict/positions"]
+    V_POS_LX["GET /api/limitless/positions"]
+    V_POS_DF["DFlow positions pipeline"]
+    V_POS_PM["GET /api/polymarket/positions"]
+    V_ACT_PM["GET /api/polymarket/activity"]
+    V_POS_LU["GET /api/levelup/positions"]
+    API --> ME --> ADP
+    API --> OV --> ADP
+    API --> CASH --> CTP
+    API --> V_POLY --> ADP
+    API --> V_PRED --> ADP
+    API --> V_DF --> ADP
+    API --> V_POS_PRED --> ADP
+    API --> V_POS_LX --> ADP
+    API --> V_POS_DF --> ADP
+    API --> V_POS_PM --> ADP
+    API --> V_ACT_PM --> ADP
+    API --> V_POS_LU --> ADP
+    PDD -.->|market catalog · token IDs| ADP
+  end
+
+  subgraph derivedStores [Derived stores]
+    direction TB
+    PDS["PositionsDataProvider<br/>rows + MTM summary"]
+    PF["PortfolioProvider<br/>cash + positions total"]
+    ADP --> PDS
+    PDS --> PF
+    CTP --> PF
+  end
+
+  subgraph ui [UI consumers - subscribe only]
+    direction LR
+    MARKETS[Market pages]
+    TB[PredictionMarketTradeBox]
+    POS[Positions page]
+    HDR[Header chip]
+    TRF[TransfersModal]
+    PDD --> MARKETS
+    OMS --> MARKETS
+    PDD --> TB
+    OMS --> TB
+    ADP --> TB
+    CTP --> TB
+    PDS --> POS
+    PF --> HDR
+    ADP --> TRF
+    CTP --> TRF
+  end
+
+  subgraph tradePath [Trade path - user action]
+    direction TB
+    STA[StickyTradeAmountProvider]
+    CTRL[useTradeBoxController]
+    SOR_ROUTE["useSorRoute<br/>POST /api/sor/route"]
+    SOR_EXEC["useSorExecution · useSorLegExecutor"]
+    POST[PostTradeAccountSyncProvider]
+    STA --> CTRL
+    ADP -.->|VACM · walletBalances| CTRL
+    CTP -.->|cash snapshot| CTRL
+    ADP -.->|venue positions sell| CTRL
+    CTRL --> SOR_ROUTE
+    API --> SOR_ROUTE
+    SOR_ROUTE --> CTRL
+    CTRL -->|Execute| SOR_EXEC
+    SOR_EXEC --> VENUES
+    SOR_EXEC --> POST
+    POST -.->|refresh| CTP
+    POST -.->|refresh| ADP
+    POST -.->|refresh| PDS
+  end
+
+  OMS_WS --> OMS
+  API --> PDD
+  SIGNER --> ADP
+  TB --> STA
+  TB --> CTRL

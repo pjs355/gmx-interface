@@ -18,11 +18,7 @@ import StatusToggle from "./components/StatusToggle";
 import QuestionEditor from "./components/QuestionEditor";
 import QuestionSelector from "./components/QuestionSelector";
 import { usePredictionData } from "@/context/PredictionDataContext";
-import {
-	QuestionDetails,
-	TeamCandidate,
-	type UmbrellaUpdatePayload,
-} from "@/types/market-types";
+import { QuestionDetails, TeamCandidate, type UmbrellaUpdatePayload } from "@/types/market-types";
 import {
 	adminErrorMessage,
 	formatAdminErrorForUser,
@@ -58,9 +54,7 @@ function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
 	return clone;
 }
 
-function cloneDeepMappings(
-	mappings: UmbrellaTeamMapping[]
-): UmbrellaTeamMapping[] {
+function cloneDeepMappings(mappings: UmbrellaTeamMapping[]): UmbrellaTeamMapping[] {
 	return mappings.map((mapping) => ({
 		teamId: mapping.teamId,
 		displayName: mapping.displayName,
@@ -90,7 +84,7 @@ function teamRecordToMapping(team: TeamRecord): UmbrellaTeamMapping {
 
 function areMappingsEqual(
 	current: UmbrellaTeamMapping | undefined,
-	next: UmbrellaTeamMapping
+	next: UmbrellaTeamMapping,
 ): boolean {
 	if (!current) {
 		return false;
@@ -125,9 +119,7 @@ export default function EditMarket({
 }) {
 	const { getAccessToken } = usePrivy();
 	const [selectedChild, setSelectedChild] = useState<UmbrellaQuestion | null>(
-		umbrella.children && umbrella.children.length > 0
-			? umbrella.children[0]
-			: null
+		umbrella.children && umbrella.children.length > 0 ? umbrella.children[0] : null,
 	);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -135,25 +127,19 @@ export default function EditMarket({
 	const [qSaving, setQSaving] = useState<boolean>(false);
 	const [qSaveMsg, setQSaveMsg] = useState<string | null>(null);
 	const [qSaveErr, setQSaveErr] = useState<string | null>(null);
-	const [umbDisplayName, setUmbDisplayName] = useState<string>(
-		umbrella.displayName || ""
-	);
-	const [umbRule, setUmbRule] = useState<string>(
-		(umbrella as any).rule || ""
-	);
+	const [umbDisplayName, setUmbDisplayName] = useState<string>(umbrella.displayName || "");
+	const [umbRule, setUmbRule] = useState<string>((umbrella as any).rule || "");
 	const [umbActive, setUmbActive] = useState<boolean>(() => {
 		const v = (umbrella as any).active;
 		if (typeof v === "boolean") return v;
 		return false;
 	});
-	const [umbIsEvent, setUmbIsEvent] = useState<boolean>(
-		Boolean((umbrella as any).eventDate)
-	);
+	const [umbIsEvent, setUmbIsEvent] = useState<boolean>(Boolean((umbrella as any).eventDate));
 	const [umbEventDate, setUmbEventDate] = useState<string>(() =>
-		formatDateTimeLocal((umbrella as any).eventDate)
+		formatDateTimeLocal((umbrella as any).eventDate),
 	);
 	const [umbEndDate, setUmbEndDate] = useState<string>(() =>
-		formatDateTimeLocal((umbrella as any).endDate)
+		formatDateTimeLocal((umbrella as any).endDate),
 	);
 	const [umbSaving, setUmbSaving] = useState<boolean>(false);
 	const [umbSaveMsg, setUmbSaveMsg] = useState<string | null>(null);
@@ -162,11 +148,8 @@ export default function EditMarket({
 	// Twitch integration states
 	const initialStreamEnabled = Boolean((umbrella as any).streamEnabled);
 	const initialStreamUrl =
-		typeof (umbrella as any).streamUrl === "string"
-			? (umbrella as any).streamUrl
-			: "";
-	const [streamEnabled, setStreamEnabled] =
-		useState<boolean>(initialStreamEnabled);
+		typeof (umbrella as any).streamUrl === "string" ? (umbrella as any).streamUrl : "";
+	const [streamEnabled, setStreamEnabled] = useState<boolean>(initialStreamEnabled);
 	const [streamUrl, setStreamUrl] = useState<string>(initialStreamUrl);
 
 	// Image upload states
@@ -174,30 +157,18 @@ export default function EditMarket({
 	const [image2, setImage2] = useState<File | null>(null);
 	const [image1Preview, setImage1Preview] = useState<string | null>(null);
 	const [image2Preview, setImage2Preview] = useState<string | null>(null);
-	const [image1Url, setImage1Url] = useState<string>(
-		(umbrella as any).image1Url || ""
+	const [image1Url, setImage1Url] = useState<string>((umbrella as any).image1Url || "");
+	const [image2Url, setImage2Url] = useState<string>((umbrella as any).image2Url || "");
+	const [uploadingImage, setUploadingImage] = useState<"image1" | "image2" | null>(null);
+	const [teamMappingsState, setTeamMappingsState] = useState<UmbrellaTeamMapping[]>(() =>
+		cloneDeepMappings(umbrella.teamMappings ?? []),
 	);
-	const [image2Url, setImage2Url] = useState<string>(
-		(umbrella as any).image2Url || ""
-	);
-	const [uploadingImage, setUploadingImage] = useState<
-		"image1" | "image2" | null
-	>(null);
-	const [teamMappingsState, setTeamMappingsState] = useState<
-		UmbrellaTeamMapping[]
-	>(() => cloneDeepMappings(umbrella.teamMappings ?? []));
-	const [linkedTeams, setLinkedTeams] = useState<Record<string, TeamRecord>>(
-		{}
-	);
-	const [prefilledTeamCandidates, setPrefilledTeamCandidates] = useState<
-		TeamCandidate[]
-	>([]);
+	const [linkedTeams, setLinkedTeams] = useState<Record<string, TeamRecord>>({});
+	const [prefilledTeamCandidates, setPrefilledTeamCandidates] = useState<TeamCandidate[]>([]);
 
 	// Tags state
-	const { tags: availableTags, tagsLoading: loadingTags } =
-		usePredictionData();
-	const [hasAttemptedPandascorePrefill, setHasAttemptedPandascorePrefill] =
-		useState(false);
+	const { tags: availableTags, tagsLoading: loadingTags } = usePredictionData();
+	const [hasAttemptedPandascorePrefill, setHasAttemptedPandascorePrefill] = useState(false);
 
 	const children = useMemo(() => umbrella.children || [], [umbrella]);
 
@@ -208,10 +179,7 @@ export default function EditMarket({
 		if (teamMappingsState && teamMappingsState.length > 0) {
 			return teamMappingsState.map((mapping) => {
 				const displayNameValue = mapping.displayName;
-				if (
-					typeof displayNameValue !== "string" ||
-					displayNameValue.length === 0
-				) {
+				if (typeof displayNameValue !== "string" || displayNameValue.length === 0) {
 					throw new Error(adminErrorMessage(ADMIN_MARKET_TEAM_MAPPING_DISPLAY_NAME));
 				}
 				const slugValue = mapping.slug;
@@ -220,15 +188,10 @@ export default function EditMarket({
 				}
 				const shortCodeValue = mapping.shortCode;
 				const shortCode =
-					typeof shortCodeValue === "string" &&
-					shortCodeValue.length > 0
-						? shortCodeValue
-						: null;
+					typeof shortCodeValue === "string" && shortCodeValue.length > 0 ? shortCodeValue : null;
 				const logoUrlValue = mapping.logoUrl;
 				const logoUrl =
-					typeof logoUrlValue === "string" && logoUrlValue.length > 0
-						? logoUrlValue
-						: null;
+					typeof logoUrlValue === "string" && logoUrlValue.length > 0 ? logoUrlValue : null;
 				return {
 					displayName: displayNameValue,
 					slug: slugValue,
@@ -241,9 +204,7 @@ export default function EditMarket({
 		return [createEmptyCandidate(), createEmptyCandidate()];
 	}, [prefilledTeamCandidates, teamMappingsState]);
 
-	const shouldRenderTeamLinker = Boolean(
-		umbrella.pandascore_matchId && teamCandidates.length > 0
-	);
+	const shouldRenderTeamLinker = Boolean(umbrella.pandascore_matchId && teamCandidates.length > 0);
 
 	useEffect(() => {
 		console.log("EditMarket umbrella changed, resetting state", umbrella);
@@ -279,7 +240,7 @@ export default function EditMarket({
 
 	const umbrellaTeamMappingsKey = useMemo(
 		() => JSON.stringify(umbrella.teamMappings ?? []),
-		[umbrella.teamMappings]
+		[umbrella.teamMappings],
 	);
 
 	const prevLoadedTeamsSnapshot = useRef<string>("");
@@ -305,16 +266,10 @@ export default function EditMarket({
 					let record: TeamRecord | null = null;
 					try {
 						if (typeof mapping.pandaId === "number") {
-							record = await teamService.lookupByPandaId(
-								mapping.pandaId,
-								token
-							);
+							record = await teamService.lookupByPandaId(mapping.pandaId, token);
 						}
 						if (!record && mapping.shortCode) {
-							record = await teamService.lookupByShortCode(
-								mapping.shortCode,
-								token
-							);
+							record = await teamService.lookupByShortCode(mapping.shortCode, token);
 						}
 					} catch (error) {
 						console.error("error", error);
@@ -322,18 +277,10 @@ export default function EditMarket({
 					if (!record && mapping.teamId) {
 						record = {
 							_id: mapping.teamId,
-							displayName:
-								mapping.displayName ||
-								mapping.shortCode ||
-								mapping.slug,
-							slug:
-								mapping.slug ||
-								slugify(mapping.displayName ?? ""),
+							displayName: mapping.displayName || mapping.shortCode || mapping.slug,
+							slug: mapping.slug || slugify(mapping.displayName ?? ""),
 							shortCode: mapping.shortCode || mapping.slug || "",
-							pandaId:
-								typeof mapping.pandaId === "number"
-									? mapping.pandaId
-									: 0,
+							pandaId: typeof mapping.pandaId === "number" ? mapping.pandaId : 0,
 							logoUrl: mapping.logoUrl,
 							backgroundUrl: mapping.backgroundUrl,
 							primaryColor: mapping.primaryColor,
@@ -376,19 +323,18 @@ export default function EditMarket({
 				if (!token) {
 					return;
 				}
-				const match =
-					await predictionMarketDataService.fetchMatchFromPandascore(
-						umbrella.pandascore_matchId,
-						token
-					);
+				const match = await predictionMarketDataService.fetchMatchFromPandascore(
+					umbrella.pandascore_matchId,
+					token,
+				);
 				if (!match) {
 					return;
 				}
 				const rawTeams = Array.isArray((match as any).opponents)
 					? (match as any).opponents
 					: Array.isArray((match as any).teams)
-					? (match as any).teams
-					: [];
+						? (match as any).teams
+						: [];
 				const mapped = rawTeams
 					.slice(0, 2)
 					.map((entry: any) => {
@@ -396,8 +342,7 @@ export default function EditMarket({
 						if (!opponent) {
 							return null;
 						}
-						const name =
-							opponent.displayName || opponent.name || "";
+						const name = opponent.displayName || opponent.name || "";
 						const cleanedName = name.trim();
 						if (!cleanedName) {
 							return null;
@@ -409,10 +354,9 @@ export default function EditMarket({
 							typeof entry?.id === "number"
 								? entry.id
 								: typeof opponent.id === "number"
-								? opponent.id
-								: null;
-						const logoUrl =
-							opponent.imageUrl || opponent.image_url || null;
+									? opponent.id
+									: null;
+						const logoUrl = opponent.imageUrl || opponent.image_url || null;
 						return {
 							displayName: cleanedName,
 							slug: opponent.slug || slugify(cleanedName),
@@ -447,49 +391,41 @@ export default function EditMarket({
 		getAccessToken,
 	]);
 
-	const handleTeamLinked = useCallback(
-		(shortCode: string, team: TeamRecord) => {
-			setLinkedTeams((prev) => ({ ...prev, [shortCode]: team }));
-			setTeamMappingsState((prev) => {
-				const nextMapping = teamRecordToMapping(team);
-				const existingIndex = prev.findIndex((mapping) => {
-					if (mapping.shortCode && nextMapping.shortCode) {
-						return mapping.shortCode === nextMapping.shortCode;
-					}
-					if (mapping.teamId && nextMapping.teamId) {
-						return mapping.teamId === nextMapping.teamId;
-					}
-					return false;
-				});
-				if (existingIndex >= 0) {
-					const current = prev[existingIndex];
-					if (areMappingsEqual(current, nextMapping)) {
-						return prev;
-					}
-					const clone = [...prev];
-					clone[existingIndex] = nextMapping;
-					return clone;
+	const handleTeamLinked = useCallback((shortCode: string, team: TeamRecord) => {
+		setLinkedTeams((prev) => ({ ...prev, [shortCode]: team }));
+		setTeamMappingsState((prev) => {
+			const nextMapping = teamRecordToMapping(team);
+			const existingIndex = prev.findIndex((mapping) => {
+				if (mapping.shortCode && nextMapping.shortCode) {
+					return mapping.shortCode === nextMapping.shortCode;
 				}
-				return [...prev, nextMapping];
+				if (mapping.teamId && nextMapping.teamId) {
+					return mapping.teamId === nextMapping.teamId;
+				}
+				return false;
 			});
-		},
-		[]
-	);
-
-	const handleTeamReorder = useCallback(
-		(fromIndex: number, toIndex: number) => {
-			setTeamMappingsState((prev) =>
-				reorderList(prev, fromIndex, toIndex)
-			);
-			setPrefilledTeamCandidates((prev) => {
-				if (!Array.isArray(prev) || prev.length === 0) {
+			if (existingIndex >= 0) {
+				const current = prev[existingIndex];
+				if (areMappingsEqual(current, nextMapping)) {
 					return prev;
 				}
-				return reorderList(prev, fromIndex, toIndex);
-			});
-		},
-		[]
-	);
+				const clone = [...prev];
+				clone[existingIndex] = nextMapping;
+				return clone;
+			}
+			return [...prev, nextMapping];
+		});
+	}, []);
+
+	const handleTeamReorder = useCallback((fromIndex: number, toIndex: number) => {
+		setTeamMappingsState((prev) => reorderList(prev, fromIndex, toIndex));
+		setPrefilledTeamCandidates((prev) => {
+			if (!Array.isArray(prev) || prev.length === 0) {
+				return prev;
+			}
+			return reorderList(prev, fromIndex, toIndex);
+		});
+	}, []);
 
 	const teamMappingsPayload = useMemo(() => {
 		if (teamMappingsState.length > 0) {
@@ -526,49 +462,36 @@ export default function EditMarket({
 			displayName: child.displayName,
 			yesColor: (child as any).yesColor,
 			noColor: (child as any).noColor,
-			tagIds: Array.isArray((child as any).tagIds)
-				? [...((child as any).tagIds as string[])]
-				: [],
+			tagIds: Array.isArray((child as any).tagIds) ? [...((child as any).tagIds as string[])] : [],
 		} as QuestionDetails;
 
 		setDetails(baseDetails);
 
 		if (!umbrella.pandascore_matchId) {
-			console.log(
-				"EditMarket.loadQuestion using umbrella child only",
-				baseDetails
-			);
+			console.log("EditMarket.loadQuestion using umbrella child only", baseDetails);
 			return;
 		}
 
 		setLoading(true);
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			const base = getPredictionApiBaseUrl();
 			const resp = await fetch(`${base}/questions/${qid}`, {
 				headers: {
 					...(token ? { Authorization: `Bearer ${token}` } : {}),
 				},
 			});
-			const json = await resp.json().catch(() => ({} as any));
+			const json = await resp.json().catch(() => ({}) as any);
 			console.log("EditMarket.loadQuestion response", json);
 			const payload = json?.data ?? json;
-			let normalized: any = Array.isArray(payload)
-				? payload[0]
-				: payload?.question ?? payload;
+			const normalized: any = Array.isArray(payload) ? payload[0] : (payload?.question ?? payload);
 
 			if (!resp.ok || !json?.success) {
 				throw new Error(formatAdminHttpError(resp.status, json?.error));
 			}
 
 			if (!normalized || typeof normalized !== "object") {
-				console.warn(
-					"EditMarket.loadQuestion unexpected payload",
-					payload
-				);
+				console.warn("EditMarket.loadQuestion unexpected payload", payload);
 				return;
 			}
 
@@ -576,17 +499,11 @@ export default function EditMarket({
 				normalized.questionId = qid;
 			}
 
-			if (
-				!normalized.displayName &&
-				typeof normalized.display_name === "string"
-			) {
+			if (!normalized.displayName && typeof normalized.display_name === "string") {
 				normalized.displayName = normalized.display_name;
 			}
 
-			if (
-				Array.isArray(baseDetails.tagIds) &&
-				!Array.isArray(normalized.tagIds)
-			) {
+			if (Array.isArray(baseDetails.tagIds) && !Array.isArray(normalized.tagIds)) {
 				normalized.tagIds = baseDetails.tagIds;
 			}
 
@@ -610,19 +527,14 @@ export default function EditMarket({
 			if (!prev) return prev;
 			const current = Array.isArray(prev.tagIds) ? prev.tagIds : [];
 			const exists = current.includes(tagId);
-			const next = exists
-				? current.filter((t) => t !== tagId)
-				: [...current, tagId];
+			const next = exists ? current.filter((t) => t !== tagId) : [...current, tagId];
 			return { ...prev, tagIds: next };
 		});
 	}, []);
 
-	const handleDetailsChange = useCallback(
-		(patch: Partial<QuestionDetails>) => {
-			setDetails((prev) => (prev ? { ...prev, ...patch } : prev));
-		},
-		[]
-	);
+	const handleDetailsChange = useCallback((patch: Partial<QuestionDetails>) => {
+		setDetails((prev) => (prev ? { ...prev, ...patch } : prev));
+	}, []);
 
 	function handleSelectQuestion(question: UmbrellaQuestion) {
 		setSelectedChild(question);
@@ -638,10 +550,7 @@ export default function EditMarket({
 		setQSaveMsg(null);
 		setQSaveErr(null);
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			const body: any = {
 				displayName: details.displayName || undefined,
 				yesColor: details.yesColor || undefined,
@@ -657,7 +566,7 @@ export default function EditMarket({
 				},
 				body: JSON.stringify(body),
 			});
-			const json = await resp.json().catch(() => ({} as any));
+			const json = await resp.json().catch(() => ({}) as any);
 			console.log("EditMarket.saveQuestion response", json);
 			if (!resp.ok || !json?.success) {
 				throw new Error(formatAdminHttpError(resp.status, json?.error));
@@ -700,21 +609,16 @@ export default function EditMarket({
 
 	const uploadImageToFirebase = async (
 		file: File,
-		imageType: "image1" | "image2"
+		imageType: "image1" | "image2",
 	): Promise<string> => {
 		setUploadingImage(imageType);
 
 		try {
 			// Map image1/image2 to banner/square
-			const firebaseImageType =
-				imageType === "image1" ? "banner" : "square";
+			const firebaseImageType = imageType === "image1" ? "banner" : "square";
 
 			// Upload to Firebase Storage
-			const result = await uploadUmbrellaImage(
-				file,
-				umbrella._id,
-				firebaseImageType
-			);
+			const result = await uploadUmbrellaImage(file, umbrella._id, firebaseImageType);
 
 			setUploadingImage(null);
 			return result.url;
@@ -730,10 +634,7 @@ export default function EditMarket({
 		setUmbSaveMsg(null);
 		setUmbSaveErr(null);
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			const payload: UmbrellaUpdatePayload = {
 				displayName: umbDisplayName || undefined,
 				rule: umbRule || undefined,
@@ -745,12 +646,8 @@ export default function EditMarket({
 			};
 
 			if (umbIsEvent) {
-				payload.eventDate = umbEventDate
-					? new Date(umbEventDate).toISOString()
-					: null;
-				payload.endDate = umbEndDate
-					? new Date(umbEndDate).toISOString()
-					: null;
+				payload.eventDate = umbEventDate ? new Date(umbEventDate).toISOString() : null;
+				payload.endDate = umbEndDate ? new Date(umbEndDate).toISOString() : null;
 			}
 
 			let nextImage1Url: string | null | undefined = image1Url;
@@ -778,7 +675,7 @@ export default function EditMarket({
 			const response = await umbrellaDataService.updateUmbrella(
 				umbrella._id,
 				payload,
-				token ?? undefined
+				token ?? undefined,
 			);
 
 			if (!response?.success) {
@@ -793,12 +690,10 @@ export default function EditMarket({
 					typeof nextImage1Url === "string"
 						? nextImage1Url
 						: nextImage1Url === null
-						? null
-						: image1Preview
+							? null
+							: image1Preview,
 				);
-				setImage1Url(
-					typeof nextImage1Url === "string" ? nextImage1Url : ""
-				);
+				setImage1Url(typeof nextImage1Url === "string" ? nextImage1Url : "");
 			}
 			if (image2) {
 				setImage2(null);
@@ -806,12 +701,10 @@ export default function EditMarket({
 					typeof nextImage2Url === "string"
 						? nextImage2Url
 						: nextImage2Url === null
-						? null
-						: image2Preview
+							? null
+							: image2Preview,
 				);
-				setImage2Url(
-					typeof nextImage2Url === "string" ? nextImage2Url : ""
-				);
+				setImage2Url(typeof nextImage2Url === "string" ? nextImage2Url : "");
 			}
 		} catch (e: any) {
 			setUmbSaveErr(e?.message || String(e));
@@ -916,12 +809,8 @@ export default function EditMarket({
 				>
 					{umbSaving ? "Saving..." : "Save Umbrella"}
 				</button>
-				{umbSaveMsg && (
-					<span className="edit-success-message">{umbSaveMsg}</span>
-				)}
-				{umbSaveErr && (
-					<span className="edit-error-message">{umbSaveErr}</span>
-				)}
+				{umbSaveMsg && <span className="edit-success-message">{umbSaveMsg}</span>}
+				{umbSaveErr && <span className="edit-error-message">{umbSaveErr}</span>}
 			</div>
 
 			<QuestionSelector

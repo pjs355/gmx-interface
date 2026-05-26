@@ -1,8 +1,5 @@
-import type { SorVenue, VenueRequirements } from "@/trading/sor/core/sor-types";
-import {
-	READINESS_BLOCKED_FALLBACK,
-	READINESS_BLOCKING_MESSAGES,
-} from "./catalog/readiness";
+import type { SorVenue, VenueRequirements } from "@/features/trading/sor/core/sor-types";
+import { READINESS_BLOCKED_FALLBACK, READINESS_BLOCKING_MESSAGES } from "./catalog/readiness";
 import { userMessage } from "./messages";
 
 export function blockingReasonToMessage(code: string | undefined | null): string {

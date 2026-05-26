@@ -131,9 +131,7 @@ export function bestBidAskFromConsolidatedSides(
 	asks: ConsolidatedRestingLevel[],
 	bids: ConsolidatedRestingLevel[],
 ): { bestAsk: number | null; bestBid: number | null } {
-	const bestAsk =
-		asks.length > 0 ? Math.min(...asks.map((a) => a.price)) : null;
-	const bestBid =
-		bids.length > 0 ? Math.max(...bids.map((b) => b.price)) : null;
+	const bestAsk = asks.length > 0 ? Math.min(...asks.map((a) => a.price)) : null;
+	const bestBid = bids.length > 0 ? Math.max(...bids.map((b) => b.price)) : null;
 	return { bestAsk, bestBid };
 }

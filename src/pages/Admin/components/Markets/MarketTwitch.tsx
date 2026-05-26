@@ -22,9 +22,7 @@ export default function MarketTwitch({
 						padding: "6px 10px",
 						border: "1px solid white",
 						borderRadius: 6,
-						background: streamEnabled
-							? "transparent"
-							: "rgba(255,255,255,0.2)",
+						background: streamEnabled ? "transparent" : "rgba(255,255,255,0.2)",
 						color: "white",
 						cursor: "pointer",
 					}}
@@ -38,9 +36,7 @@ export default function MarketTwitch({
 						padding: "6px 10px",
 						border: "1px solid white",
 						borderRadius: 6,
-						background: streamEnabled
-							? "rgba(255,255,255,0.2)"
-							: "transparent",
+						background: streamEnabled ? "rgba(255,255,255,0.2)" : "transparent",
 						color: "white",
 						cursor: "pointer",
 					}}
@@ -63,8 +59,7 @@ export default function MarketTwitch({
 					}}
 				/>
 				<span style={{ fontSize: 12, opacity: 0.8 }}>
-					Provide a full streaming URL (Twitch, Kick, etc.). Leave
-					blank if no stream is associated.
+					Provide a full streaming URL (Twitch, Kick, etc.). Leave blank if no stream is associated.
 				</span>
 			</label>
 		</div>

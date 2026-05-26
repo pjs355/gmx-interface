@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 
 import { helperToast } from "@/components/Toast/toast";
 import { shortenAddress } from "@/services/wallets/shortenAddress";
-import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
+import { useCurrentProfile } from "@/features/trading/hooks/useCurrentProfile";
 
 import ExternalLink from "components/ExternalLink/ExternalLink";
 
@@ -48,8 +48,8 @@ export default function AddressDropdown({
 	const displayText = username
 		? `@${username}`
 		: isSmartWallet && userEmail
-		? userEmail
-		: shortenAddress(account, displayAddressLength);
+			? userEmail
+			: shortenAddress(account, displayAddressLength);
 
 	return (
 		<Menu>
@@ -57,10 +57,7 @@ export default function AddressDropdown({
 				<button className="App-cta small transparent address-btn">
 					{/* avatar intentionally omitted */}
 					<span className="user-address">{displayText}</span>
-					<FaChevronDown
-						className="address-btn__chevron"
-						aria-hidden
-					/>
+					<FaChevronDown className="address-btn__chevron" aria-hidden />
 				</button>
 			</Menu.Button>
 			<div>
@@ -73,27 +70,17 @@ export default function AddressDropdown({
 									className="menu-item"
 									onClick={() => {
 										copyToClipboard(account);
-										helperToast.success(
-											t`Address copied to your clipboard`
-										);
+										helperToast.success(t`Address copied to your clipboard`);
 									}}
 								>
-									<img
-										width={20}
-										className="size-20"
-										src={copy}
-										alt="Copy user address"
-									/>
+									<img width={20} className="size-20" src={copy} alt="Copy user address" />
 									<p>
 										<Trans>Copy Address</Trans>
 									</p>
 								</div>
 							</Menu.Item>
 							<Menu.Item>
-								<ExternalLink
-									href={accountUrl}
-									className="menu-item"
-								>
+								<ExternalLink href={accountUrl} className="menu-item">
 									<img
 										width={20}
 										className="size-20"
@@ -128,12 +115,7 @@ export default function AddressDropdown({
 								logout();
 							}}
 						>
-							<img
-								width={20}
-								className="size-20"
-								src={disconnect}
-								alt="Sign out"
-							/>
+							<img width={20} className="size-20" src={disconnect} alt="Sign out" />
 							<p>Sign out</p>
 						</div>
 					</Menu.Item>

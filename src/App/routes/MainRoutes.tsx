@@ -38,11 +38,8 @@ type ChunkBoundaryState = {
 };
 
 // Error boundary for lazy chunk load failures (network errors, deploy cache busts)
-class ChunkErrorBoundary extends Component<
-	{ children: ReactNode },
-	ChunkBoundaryState
-> {
-	state: ChunkBoundaryState = { hasError: false, loadErrorMessage: null };
+class ChunkErrorBoundary extends Component<{ children: ReactNode }, ChunkBoundaryState> {
+	override state: ChunkBoundaryState = { hasError: false, loadErrorMessage: null };
 
 	static getDerivedStateFromError(error: Error): Partial<ChunkBoundaryState> {
 		return {
@@ -51,23 +48,18 @@ class ChunkErrorBoundary extends Component<
 		};
 	}
 
-	componentDidCatch(error: Error, info: ErrorInfo) {
+	override componentDidCatch(error: Error, info: ErrorInfo) {
 		// Never loop: unconditionally reloading lets a persistent chunk/HMR failure
 		// hammer the tab forever. At most one automatic retry per tab session.
 		if (isChunkOrDynamicImportError(error)) {
 			let alreadyRetried = false;
 			try {
-				alreadyRetried =
-					sessionStorage.getItem(SESSION_CHUNK_RELOAD_KEY) === "1";
+				alreadyRetried = sessionStorage.getItem(SESSION_CHUNK_RELOAD_KEY) === "1";
 			} catch {
 				alreadyRetried = true;
 			}
 			if (alreadyRetried) {
-				console.error(
-					"LazyPage chunk error (not auto-reloading to avoid a loop):",
-					error,
-					info
-				);
+				console.error("LazyPage chunk error (not auto-reloading to avoid a loop):", error, info);
 				return;
 			}
 			try {
@@ -81,7 +73,7 @@ class ChunkErrorBoundary extends Component<
 		console.error("LazyPage error:", error, info);
 	}
 
-	render() {
+	override render() {
 		if (this.state.hasError) {
 			const msg = this.state.loadErrorMessage ?? "";
 			const looksLikeViteStaleDeps =
@@ -101,9 +93,9 @@ class ChunkErrorBoundary extends Component<
 								textAlign: "left",
 							}}
 						>
-							This often happens in <strong>Vite dev</strong> when the browser still
-							has old <code style={{ color: "#93c5fd" }}>node_modules/.vite/deps/*</code>{" "}
-							URLs after a server restart or dependency change (
+							This often happens in <strong>Vite dev</strong> when the browser still has old{" "}
+							<code style={{ color: "#93c5fd" }}>node_modules/.vite/deps/*</code> URLs after a
+							server restart or dependency change (
 							<code style={{ color: "#93c5fd" }}>504 Outdated Optimize Dep</code>
 							). Fix: hard refresh (Cmd+Shift+R), or stop the dev server, run{" "}
 							<code style={{ color: "#93c5fd" }}>yarn dev:clean</code> (or{" "}
@@ -158,40 +150,90 @@ export function MainRoutes() {
 	return (
 		<div className="main-routes-shell">
 			<Routes>
-			{/* Home: all markets (esports + non-esports) */}
-			<Route path="/" element={<FilteredPredictions filterType="all" />} />
+				{/* Home: all markets (esports + non-esports) */}
+				<Route path="/" element={<FilteredPredictions filterType="all" />} />
 
-			{/* Standalone predictions list + split routes disabled; redirect to home */}
-			{/* <Route path="/predictions" element={<Predictions />} /> */}
-			<Route path="/predictions" element={<Navigate to="/" replace />} />
-			{/* <Route
+				{/* Standalone predictions list + split routes disabled; redirect to home */}
+				{/* <Route path="/predictions" element={<Predictions />} /> */}
+				<Route path="/predictions" element={<Navigate to="/" replace />} />
+				{/* <Route
 				path="/predictions/esports"
 				element={<FilteredPredictions filterType="esports" />}
 			/> */}
-			<Route path="/predictions/esports" element={<Navigate to="/" replace />} />
-			{/* <Route
+				<Route path="/predictions/esports" element={<Navigate to="/" replace />} />
+				{/* <Route
 				path="/predictions/games"
 				element={<FilteredPredictions filterType="games" />}
 			/> */}
-			<Route path="/predictions/games" element={<Navigate to="/" replace />} />
-			<Route
-				path="/predictions/umbrella/:umbrellaId"
-				element={<LazyPage><PredictionMarket /></LazyPage>}
-			/>
+				<Route path="/predictions/games" element={<Navigate to="/" replace />} />
+				<Route
+					path="/predictions/umbrella/:umbrellaId"
+					element={
+						<LazyPage>
+							<PredictionMarket />
+						</LazyPage>
+					}
+				/>
 
-			<Route path="/profile" element={<LazyPage><Profile /></LazyPage>} />
-			<Route path="/admin" element={<LazyPage><Admin /></LazyPage>} />
-			<Route path="/positions" element={<LazyPage><Positions /></LazyPage>} />
-			<Route path="/transfers" element={<LazyPage><Transfers /></LazyPage>} />
-			<Route path="/about" element={<LazyPage><About /></LazyPage>} />
-			{/* Admin-only test pages */}
-			<Route
-				path="/test/tradebox/:umbrellaId"
-				element={<LazyPage><TradeBoxTest /></LazyPage>}
-			/>
-			<Route path="/test" element={<LazyPage><TestPage /></LazyPage>} />
+				<Route
+					path="/profile"
+					element={
+						<LazyPage>
+							<Profile />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/admin"
+					element={
+						<LazyPage>
+							<Admin />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/positions"
+					element={
+						<LazyPage>
+							<Positions />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/transfers"
+					element={
+						<LazyPage>
+							<Transfers />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/about"
+					element={
+						<LazyPage>
+							<About />
+						</LazyPage>
+					}
+				/>
+				{/* Admin-only test pages */}
+				<Route
+					path="/test/tradebox/:umbrellaId"
+					element={
+						<LazyPage>
+							<TradeBoxTest />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/test"
+					element={
+						<LazyPage>
+							<TestPage />
+						</LazyPage>
+					}
+				/>
 
-			<Route path="*" element={<PageNotFound />} />
+				<Route path="*" element={<PageNotFound />} />
 			</Routes>
 		</div>
 	);

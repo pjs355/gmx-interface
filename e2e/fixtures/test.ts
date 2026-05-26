@@ -1,8 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test";
-import {
-	openAuthenticatedSession,
-	type AuthenticatedSession,
-} from "./authenticated-page";
+import { openAuthenticatedSession, type AuthenticatedSession } from "./authenticated-page";
 import { resolvePerVenueBestPicks, type PerVenueBestPick } from "./matched-market";
 
 interface CustomFixtures {

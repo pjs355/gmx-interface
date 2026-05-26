@@ -67,7 +67,6 @@ export default function MarketQuestions({
 				noColor: resolvedDefaultNoColor,
 			},
 		]);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	useEffect(() => {
@@ -115,7 +114,6 @@ export default function MarketQuestions({
 
 		async function loadTags() {
 			try {
-				const token = await getAccessToken();
 				const tags = await tagService.fetchAllTags();
 				if (mounted) setAvailableTags(tags);
 			} catch (err) {
@@ -142,16 +140,10 @@ export default function MarketQuestions({
 		) {
 			return;
 		}
-		const normalizedPreferred = preferredTagLabels.map((label) =>
-			label.toLowerCase()
-		);
+		const normalizedPreferred = preferredTagLabels.map((label) => label.toLowerCase());
 		const preferredTag = availableTags.find((tag) => {
-			const labelMatch = normalizedPreferred.includes(
-				tag.label.toLowerCase()
-			);
-			const slugMatch = normalizedPreferred.includes(
-				tag.slug.toLowerCase()
-			);
+			const labelMatch = normalizedPreferred.includes(tag.label.toLowerCase());
+			const slugMatch = normalizedPreferred.includes(tag.slug.toLowerCase());
 			return labelMatch || slugMatch;
 		});
 		if (!preferredTag) {
@@ -162,18 +154,9 @@ export default function MarketQuestions({
 			...updated[0],
 			tagIds: [preferredTag._id],
 		};
-		console.log(
-			"MarketQuestions preferred tag applied",
-			preferredTag.label,
-			updated[0].tagIds
-		);
+		console.log("MarketQuestions preferred tag applied", preferredTag.label, updated[0].tagIds);
 		onQuestionsChange(updated);
-	}, [
-		availableTags,
-		preferredTagLabels,
-		questions,
-		onQuestionsChange,
-	]);
+	}, [availableTags, preferredTagLabels, questions, onQuestionsChange]);
 
 	// Auto-match tags when tags are loaded and gameName is provided
 	useEffect(() => {
@@ -185,28 +168,17 @@ export default function MarketQuestions({
 		}
 		let matchedTagId: string | null = null;
 		if (preferredTagLabels && preferredTagLabels.length > 0) {
-			const normalizedPreferred = preferredTagLabels.map((label) =>
-				label.toLowerCase()
-			);
+			const normalizedPreferred = preferredTagLabels.map((label) => label.toLowerCase());
 			const preferredTag = availableTags.find((tag) => {
-				const labelMatch = normalizedPreferred.includes(
-					tag.label.toLowerCase()
-				);
-				const slugMatch = normalizedPreferred.includes(
-					tag.slug.toLowerCase()
-				);
+				const labelMatch = normalizedPreferred.includes(tag.label.toLowerCase());
+				const slugMatch = normalizedPreferred.includes(tag.slug.toLowerCase());
 				return labelMatch || slugMatch;
 			});
 			if (preferredTag) {
 				matchedTagId = preferredTag._id;
 			}
 		}
-		if (
-			!matchedTagId &&
-			availableTags.length > 0 &&
-			gameName &&
-			autoMatchTags
-		) {
+		if (!matchedTagId && availableTags.length > 0 && gameName && autoMatchTags) {
 			matchedTagId = findMatchingTag(gameName, availableTags);
 		}
 		if (matchedTagId) {
@@ -215,41 +187,22 @@ export default function MarketQuestions({
 				...updated[0],
 				tagIds: [matchedTagId],
 			};
-			console.log(
-				"MarketQuestions auto-match applied",
-				matchedTagId,
-				updated[0].tagIds
-			);
+			console.log("MarketQuestions auto-match applied", matchedTagId, updated[0].tagIds);
 			onQuestionsChange(updated);
 		}
-	}, [
-		availableTags,
-		gameName,
-		autoMatchTags,
-		preferredTagLabels,
-		questions,
-		onQuestionsChange,
-	]);
+	}, [availableTags, gameName, autoMatchTags, preferredTagLabels, questions, onQuestionsChange]);
 
 	function updateQuestion<K extends keyof QuestionEntry>(
 		index: number,
 		key: K,
-		value: QuestionEntry[K]
+		value: QuestionEntry[K],
 	) {
-		const updated = questions.map((q, i) =>
-			i === index ? { ...q, [key]: value } : q
-		);
+		const updated = questions.map((q, i) => (i === index ? { ...q, [key]: value } : q));
 		onQuestionsChange(updated);
 	}
 
-	function updateQuestionColor(
-		index: number,
-		key: "yesColor" | "noColor",
-		value: string
-	) {
-		const updated = questions.map((q, i) =>
-			i === index ? { ...q, [key]: value } : q
-		);
+	function updateQuestionColor(index: number, key: "yesColor" | "noColor", value: string) {
+		const updated = questions.map((q, i) => (i === index ? { ...q, [key]: value } : q));
 		onQuestionsChange(updated);
 	}
 
@@ -259,9 +212,7 @@ export default function MarketQuestions({
 			const has = q.tagIds.includes(tagId);
 			return {
 				...q,
-				tagIds: has
-					? q.tagIds.filter((t) => t !== tagId)
-					: [...q.tagIds, tagId],
+				tagIds: has ? q.tagIds.filter((t) => t !== tagId) : [...q.tagIds, tagId],
 			};
 		});
 		onQuestionsChange(updated);
@@ -296,9 +247,7 @@ export default function MarketQuestions({
 					marginBottom: 8,
 				}}
 			>
-				<div style={{ fontWeight: 600 }}>
-					Questions (add one or more entries)
-				</div>
+				<div style={{ fontWeight: 600 }}>Questions (add one or more entries)</div>
 			</div>
 			<div style={{ display: "grid", gap: 12 }}>
 				{questions.map((q, idx) => (
@@ -319,9 +268,7 @@ export default function MarketQuestions({
 								marginBottom: 8,
 							}}
 						>
-							<div style={{ fontWeight: 600 }}>
-								Question #{idx + 1}
-							</div>
+							<div style={{ fontWeight: 600 }}>Question #{idx + 1}</div>
 							<button
 								type="button"
 								onClick={() => removeQuestionEntry(idx)}
@@ -334,13 +281,7 @@ export default function MarketQuestions({
 							<span>Display Name</span>
 							<input
 								value={q.displayName}
-								onChange={(e) =>
-									updateQuestion(
-										idx,
-										"displayName",
-										e.target.value
-									)
-								}
+								onChange={(e) => updateQuestion(idx, "displayName", e.target.value)}
 								placeholder="Question display name"
 								style={{
 									padding: 8,
@@ -364,9 +305,7 @@ export default function MarketQuestions({
 								<input
 									type="color"
 									value={q.yesColor || resolvedDefaultYesColor}
-									onChange={(event) =>
-										updateQuestionColor(idx, "yesColor", event.target.value)
-									}
+									onChange={(event) => updateQuestionColor(idx, "yesColor", event.target.value)}
 									style={{
 										height: 40,
 										padding: 0,
@@ -381,9 +320,7 @@ export default function MarketQuestions({
 								<input
 									type="color"
 									value={q.noColor || resolvedDefaultNoColor}
-									onChange={(event) =>
-										updateQuestionColor(idx, "noColor", event.target.value)
-									}
+									onChange={(event) => updateQuestionColor(idx, "noColor", event.target.value)}
 									style={{
 										height: 40,
 										padding: 0,
@@ -410,31 +347,20 @@ export default function MarketQuestions({
 								}}
 							>
 								{loadingTags ? (
-									<div style={{ fontSize: 12, opacity: 0.8 }}>
-										Loading tags...
-									</div>
+									<div style={{ fontSize: 12, opacity: 0.8 }}>Loading tags...</div>
 								) : (
 									availableTags.map((tag) => {
-										const isSelected = q.tagIds.includes(
-											tag._id
-										);
+										const isSelected = q.tagIds.includes(tag._id);
 										return (
 											<button
 												type="button"
 												key={tag._id}
-												onClick={() =>
-													toggleTagForQuestion(
-														idx,
-														tag._id
-													)
-												}
+												onClick={() => toggleTagForQuestion(idx, tag._id)}
 												style={{
 													padding: "6px 10px",
 													border: "1px solid white",
 													borderRadius: 999,
-													background: isSelected
-														? "rgba(255,255,255,0.2)"
-														: "transparent",
+													background: isSelected ? "rgba(255,255,255,0.2)" : "transparent",
 													color: "white",
 													cursor: "pointer",
 												}}

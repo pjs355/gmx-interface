@@ -1,7 +1,7 @@
-import React, { useCallback } from "react";
+import { useCallback } from "react";
 import { useLogin } from "@privy-io/react-auth";
 import { useSignerContext } from "@/context/SignerContext";
-import { useUserData } from "@/context/UserDataContext";
+import { useLevelUpOrders } from "@/features/trading/venues/levelup/portfolio/useLevelUpOrders";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { PrivyGatedDepositButton } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
@@ -12,7 +12,10 @@ export function ProgressBanner() {
 	const { account, authenticated, ready: signerReady } = useSignerContext();
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
-	const { orders, loading: ordersLoading } = useUserData();
+	const { orders, isLoading: ordersLoading } = useLevelUpOrders(
+		fundEvmTarget,
+		Boolean(authenticated && account && fundEvmTarget),
+	);
 	const { cashBalance, cashLoading } = usePortfolio();
 
 	// Handle Get Started - opens Privy login
@@ -31,10 +34,7 @@ export function ProgressBanner() {
 							Start trading gaming prediction markets today.
 						</h3>
 					</div>
-					<button
-						className="progress-banner-button"
-						onClick={handleGetStarted}
-					>
+					<button className="progress-banner-button" onClick={handleGetStarted}>
 						Get Started
 					</button>
 				</div>
@@ -45,7 +45,7 @@ export function ProgressBanner() {
 	// For authenticated users, check if they need the Fund Account banner
 	// Wait until we've finished loading balance and trading history
 	const isLoading = cashLoading || ordersLoading;
-	
+
 	// Only show Fund Account banner if:
 	// - Balance is 0
 	// - User has never made a trade (no orders)

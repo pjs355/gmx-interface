@@ -23,9 +23,7 @@ export default function SettleMarket({
 	resolvedAt,
 }: SettleMarketProps) {
 	const { getAccessToken } = usePrivy();
-	const [settleOutcome, setSettleOutcome] = useState<"yes" | "no" | null>(
-		null
-	);
+	const [settleOutcome, setSettleOutcome] = useState<"yes" | "no" | null>(null);
 	const [settling, setSettling] = useState<boolean>(false);
 	const [settleMsg, setSettleMsg] = useState<string | null>(null);
 	const [settleErr, setSettleErr] = useState<string | null>(null);
@@ -43,23 +41,17 @@ export default function SettleMarket({
 		setSettleMsg(null);
 		setSettleErr(null);
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			const base = getPredictionApiBaseUrl();
-			const resp = await fetch(
-				`${base}/admin/markets/settle/${questionId}`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...(token ? { Authorization: `Bearer ${token}` } : {}),
-					},
-					body: JSON.stringify({ outcome: settleOutcome }),
-				}
-			);
-			const json = await resp.json().catch(() => ({} as any));
+			const resp = await fetch(`${base}/admin/markets/settle/${questionId}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					...(token ? { Authorization: `Bearer ${token}` } : {}),
+				},
+				body: JSON.stringify({ outcome: settleOutcome }),
+			});
+			const json = await resp.json().catch(() => ({}) as any);
 			if (!resp.ok || !json?.success) {
 				throw new Error(formatAdminHttpError(resp.status, json?.error));
 			}
@@ -81,9 +73,7 @@ export default function SettleMarket({
 	const isResolved = status === "resolved" && resolvedOutcome;
 
 	if (isResolved) {
-		const formattedDate = resolvedAt
-			? new Date(resolvedAt).toLocaleString()
-			: "Unknown date";
+		const formattedDate = resolvedAt ? new Date(resolvedAt).toLocaleString() : "Unknown date";
 
 		return (
 			<div
@@ -105,9 +95,7 @@ export default function SettleMarket({
 						padding: "12px 16px",
 						background: "rgba(255,255,255,0.05)",
 						borderRadius: 8,
-						border: `2px solid ${
-							resolvedOutcome === "yes" ? "#22c55e" : "#ef4444"
-						}`,
+						border: `2px solid ${resolvedOutcome === "yes" ? "#22c55e" : "#ef4444"}`,
 					}}
 				>
 					<div
@@ -115,10 +103,7 @@ export default function SettleMarket({
 							width: 12,
 							height: 12,
 							borderRadius: "50%",
-							background:
-								resolvedOutcome === "yes"
-									? "#22c55e"
-									: "#ef4444",
+							background: resolvedOutcome === "yes" ? "#22c55e" : "#ef4444",
 						}}
 					/>
 					<div
@@ -132,17 +117,12 @@ export default function SettleMarket({
 							style={{
 								fontWeight: 600,
 								fontSize: 16,
-								color:
-									resolvedOutcome === "yes"
-										? "#22c55e"
-										: "#ef4444",
+								color: resolvedOutcome === "yes" ? "#22c55e" : "#ef4444",
 							}}
 						>
 							Settled: {resolvedOutcome.toUpperCase()}
 						</span>
-						<span style={{ fontSize: 12, opacity: 0.7 }}>
-							{formattedDate}
-						</span>
+						<span style={{ fontSize: 12, opacity: 0.7 }}>{formattedDate}</span>
 					</div>
 				</div>
 			</div>
@@ -169,10 +149,7 @@ export default function SettleMarket({
 						padding: "6px 10px",
 						border: "1px solid white",
 						borderRadius: 6,
-						background:
-							settleOutcome === "yes"
-								? "rgba(255,255,255,0.2)"
-								: "transparent",
+						background: settleOutcome === "yes" ? "rgba(255,255,255,0.2)" : "transparent",
 						color: "white",
 						cursor: "pointer",
 					}}
@@ -186,10 +163,7 @@ export default function SettleMarket({
 						padding: "6px 10px",
 						border: "1px solid white",
 						borderRadius: 6,
-						background:
-							settleOutcome === "no"
-								? "rgba(255,255,255,0.2)"
-								: "transparent",
+						background: settleOutcome === "no" ? "rgba(255,255,255,0.2)" : "transparent",
 						color: "white",
 						cursor: "pointer",
 					}}
@@ -212,12 +186,8 @@ export default function SettleMarket({
 				>
 					{settling ? "Settling..." : "Settle"}
 				</button>
-				{settleMsg && (
-					<span style={{ color: "#22c55e" }}>{settleMsg}</span>
-				)}
-				{settleErr && (
-					<span style={{ color: "#ff6b6b" }}>{settleErr}</span>
-				)}
+				{settleMsg && <span style={{ color: "#22c55e" }}>{settleMsg}</span>}
+				{settleErr && <span style={{ color: "#ff6b6b" }}>{settleErr}</span>}
 			</div>
 		</div>
 	);

@@ -6,20 +6,18 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
 import ScrollableTable from "components/ScrollableTable/ScrollableTable";
-import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
-import { portfolioColumnTeamLabels } from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
-import { getPredictPositionRowLabel } from "@/trading/venues/predict/portfolio/predictPositionLabel";
-import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
+import { umbrellaHeaderLabel } from "@/features/markets/presentation/umbrellaDisplayName";
+import { labelForPortfolioSide } from "@/features/markets/presentation/outcomeSideLabels";
 import TradeHistoryList from "./TradeHistoryList";
 import UmbrellaImage from "./UmbrellaImage";
-import { formatCurrency } from "../utils/formatCurrency";
-import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
+import { formatCurrency } from "@/features/positions/utils/formatCurrency";
+import { formatShareCountDisplay } from "@/features/trading/trade-box/checkBalances";
 import {
 	getTradeCount,
 	fifoAlignedBasisForPositionsRow,
-} from "../utils/positionHelpers";
+} from "@/features/positions/utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
-import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
+import { oddsDualLayoutForStyle } from "@/features/odds-display/oddsDisplayFormat";
 
 type MergedRow = {
 	side: "Yes" | "No";
@@ -68,7 +66,11 @@ export default function PositionsTableView({
 		});
 	};
 
-	const navigateToTradingPage = (umbrella: Umbrella, market: PredictionMarket, position: "yes" | "no") => {
+	const navigateToTradingPage = (
+		umbrella: Umbrella,
+		market: PredictionMarket,
+		position: "yes" | "no",
+	) => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
 		localStorage.setItem("currentPredictionMarket", JSON.stringify(market));
 		localStorage.setItem("activePosition", position);
@@ -79,44 +81,52 @@ export default function PositionsTableView({
 
 	const mergedByUmbrella = useMemo(() => {
 		return umbrellaBalances.map(({ umbrella, markets }: any) => {
-			const hasDflowVenue = markets.some(
-				(m: { venue?: string; includesDflowVenue?: boolean }) =>
-					m.venue === "dflow" || Boolean(m.includesDflowVenue),
-			);
-			const hasLimitlessVenue = markets.some(
-				(m: { venue?: string; includesLimitlessVenue?: boolean }) =>
-					m.venue === "limitless" || Boolean(m.includesLimitlessVenue),
-			);
-			const teamPortfolioCols =
-				hasDflowVenue || hasLimitlessVenue
-					? portfolioColumnTeamLabels(umbrella)
-					: null;
-
-			const sideBuckets: Record<"Yes" | "No", {
-				shares: number; marketValue: number; totalCost: number;
-				hasCost: boolean; marketIds: string[];
-				weightedPriceSum: number; priceShares: number;
-				weightedAvgSum: number; avgShares: number;
-				label: string; primaryMarket: any;
-			}> = {
-				Yes: { shares: 0, marketValue: 0, totalCost: 0, hasCost: false, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
-				No: { shares: 0, marketValue: 0, totalCost: 0, hasCost: false, marketIds: [], weightedPriceSum: 0, priceShares: 0, weightedAvgSum: 0, avgShares: 0, label: "", primaryMarket: null },
+			const sideBuckets: Record<
+				"Yes" | "No",
+				{
+					shares: number;
+					marketValue: number;
+					totalCost: number;
+					hasCost: boolean;
+					marketIds: string[];
+					weightedPriceSum: number;
+					priceShares: number;
+					weightedAvgSum: number;
+					avgShares: number;
+					label: string;
+					primaryMarket: any;
+				}
+			> = {
+				Yes: {
+					shares: 0,
+					marketValue: 0,
+					totalCost: 0,
+					hasCost: false,
+					marketIds: [],
+					weightedPriceSum: 0,
+					priceShares: 0,
+					weightedAvgSum: 0,
+					avgShares: 0,
+					label: "",
+					primaryMarket: null,
+				},
+				No: {
+					shares: 0,
+					marketValue: 0,
+					totalCost: 0,
+					hasCost: false,
+					marketIds: [],
+					weightedPriceSum: 0,
+					priceShares: 0,
+					weightedAvgSum: 0,
+					avgShares: 0,
+					label: "",
+					primaryMarket: null,
+				},
 			};
 
-			for (const {
-				market,
-				yes,
-				no,
-				venue,
-				includesDflowVenue,
-				includesLimitlessVenue,
-				predictOutcomeLabelYes,
-				predictOutcomeLabelNo,
-			} of markets) {
+			for (const { market, yes, no, predictOutcomeLabelYes, predictOutcomeLabelNo } of markets) {
 				const qid = market._id || market.questionId || market.marketId;
-				const title = (market?.displayName || (market as any)?.question || "").trim();
-				const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-				const isVs = parts.length === 2;
 
 				for (const { side, amount } of [
 					{ side: "Yes" as const, amount: Number(yes) },
@@ -135,7 +145,9 @@ export default function PositionsTableView({
 						bucket.marketValue += price * amount;
 					}
 
-					const sideAgg = aggregates[qid]?.[side] as { avgPrice: number | null; cost: number | null } | undefined;
+					const sideAgg = aggregates[qid]?.[side] as
+						| { avgPrice: number | null; cost: number | null }
+						| undefined;
 					const effectiveAvgPrice = sideAgg?.avgPrice ?? null;
 					const fallbackSpent = spentByQid[qid]?.[side];
 					const effectiveCost = sideAgg?.cost ?? fallbackSpent ?? null;
@@ -149,31 +161,18 @@ export default function PositionsTableView({
 					}
 
 					if (!bucket.label) {
-						const useCatalogTeamCols =
-							teamPortfolioCols &&
-							(venue === "dflow" ||
-								includesDflowVenue ||
-								venue === "limitless" ||
-								Boolean(includesLimitlessVenue));
-						if (useCatalogTeamCols) {
-							bucket.label =
-								(side === "Yes"
-									? teamPortfolioCols!.columnYes
-									: teamPortfolioCols!.columnNo) || side;
-						} else if (venue === "predictfun" || venue === "limitless") {
-							bucket.label =
-								getPredictPositionRowLabel(
-									title,
-									side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo,
-									side,
-								) || side;
-						} else if (isVs) {
-							bucket.label = shortTeamDisplayName(
-								side === "Yes" ? parts[0] : parts[1],
-							);
-						} else {
-							bucket.label = side;
-						}
+						bucket.label =
+							labelForPortfolioSide(
+								{
+									umbrella,
+									market,
+									hints: {
+										outcomeName: side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo,
+									},
+								},
+								side,
+								side === "Yes" ? predictOutcomeLabelYes : predictOutcomeLabelNo,
+							) || side;
 					}
 				}
 			}
@@ -189,12 +188,7 @@ export default function PositionsTableView({
 					tradeCountDeduped += getTradeCount(orders, qid, side);
 				}
 
-				const fifo = fifoAlignedBasisForPositionsRow(
-					orders,
-					uniqMarketIds,
-					side,
-					b.shares,
-				);
+				const fifo = fifoAlignedBasisForPositionsRow(orders, uniqMarketIds, side, b.shares);
 
 				let totalCostDisplay: number | null = b.hasCost ? b.totalCost : null;
 				let avgPriceDisplay: number | null =
@@ -226,18 +220,14 @@ export default function PositionsTableView({
 					side,
 					label: b.label || side,
 					totalShares: b.shares,
-					currentPrice:
-						b.priceShares > 0 ? b.weightedPriceSum / b.priceShares : null,
+					currentPrice: b.priceShares > 0 ? b.weightedPriceSum / b.priceShares : null,
 					marketValue: mvDisplay,
 					avgPrice: avgPriceDisplay,
 					totalCost: totalCostDisplay,
 					payout: b.shares,
 					totalReturn: hasRet ? totalReturnDisplay : null,
 					totalReturnPct:
-						hasRet &&
-						totalCostDisplay != null &&
-						totalCostDisplay > 0 &&
-						totalReturnDisplay != null
+						hasRet && totalCostDisplay != null && totalCostDisplay > 0 && totalReturnDisplay != null
 							? (totalReturnDisplay / totalCostDisplay) * 100
 							: null,
 					tradeCount: tradeCountDeduped,
@@ -297,7 +287,17 @@ export default function PositionsTableView({
 									paddingBottom: 16,
 								}}
 							>
-								<div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#dedede", fontSize: 20, display: "flex", alignItems: "center", gap: "12px" }}>
+								<div
+									style={{
+										gridColumn: "1 / -1",
+										fontWeight: 700,
+										color: "#dedede",
+										fontSize: 20,
+										display: "flex",
+										alignItems: "center",
+										gap: "12px",
+									}}
+								>
 									<UmbrellaImage umbrella={umbrella} />
 									{umbrellaHeaderLabel(umbrella)}
 								</div>
@@ -308,12 +308,14 @@ export default function PositionsTableView({
 								const isExpanded = expandedMarkets.has(expandKey);
 								const singleSide = rows.length === 1;
 
-								const totalReturnColor = row.totalReturn === null ? "#fff" : row.totalReturn >= 0 ? "#16a34a" : "#ef4444";
+								const totalReturnColor =
+									row.totalReturn === null ? "#fff" : row.totalReturn >= 0 ? "#16a34a" : "#ef4444";
 								const totalReturnText = (() => {
 									if (row.totalReturn === null || !isFinite(row.totalReturn)) return "—";
 									const signUsd = row.totalReturn >= 0 ? "+" : "-";
 									const usdPart = formatCurrency(Math.abs(row.totalReturn));
-									if (row.totalReturnPct === null || !isFinite(row.totalReturnPct)) return `${signUsd}${usdPart}`;
+									if (row.totalReturnPct === null || !isFinite(row.totalReturnPct))
+										return `${signUsd}${usdPart}`;
 									const signPct = row.totalReturnPct >= 0 ? "+" : "-";
 									return `${signUsd}${usdPart} (${signPct}${Math.round(Math.abs(row.totalReturnPct))}%)`;
 								})();
@@ -329,24 +331,56 @@ export default function PositionsTableView({
 												cursor: "pointer",
 												transition: "background-color 0.2s ease",
 											}}
-											onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#2a2a2a"; }}
-											onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-											onClick={() => navigateToTradingPage(row.primaryUmbrella, row.primaryMarket, row.side.toLowerCase() as "yes" | "no")}
+											onMouseEnter={(e) => {
+												e.currentTarget.style.backgroundColor = "#2a2a2a";
+											}}
+											onMouseLeave={(e) => {
+												e.currentTarget.style.backgroundColor = "transparent";
+											}}
+											onClick={() =>
+												navigateToTradingPage(
+													row.primaryUmbrella,
+													row.primaryMarket,
+													row.side.toLowerCase() as "yes" | "no",
+												)
+											}
 										>
 											<div style={{ color: "#fff", fontWeight: 600 }}>
 												{singleSide && row.label === row.side ? (
-													<span style={{ color: row.side === "Yes" ? "#16a34a" : "#ef4444" }}>{row.side}</span>
+													<span style={{ color: row.side === "Yes" ? "#16a34a" : "#ef4444" }}>
+														{row.side}
+													</span>
 												) : (
 													<span>{row.label}</span>
 												)}
 											</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{formatPrice(row.currentPrice, portfolioPriceLayout)}</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{formatShareCountDisplay(row.totalShares)}</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{row.avgPrice === null ? "—" : formatPrice(row.avgPrice, portfolioPriceLayout)}</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{row.totalCost === null ? "—" : formatCurrency(row.totalCost)}</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{formatCurrency(row.payout)}</div>
-											<div style={{ textAlign: "center", color: "#fff" }}>{row.marketValue === null || isNaN(row.marketValue) ? "—" : formatCurrency(row.marketValue)}</div>
-											<div style={{ textAlign: "center", color: totalReturnColor, fontWeight: "bold" }}>{totalReturnText}</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>
+												{formatPrice(row.currentPrice, portfolioPriceLayout)}
+											</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>
+												{formatShareCountDisplay(row.totalShares)}
+											</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>
+												{row.avgPrice === null
+													? "—"
+													: formatPrice(row.avgPrice, portfolioPriceLayout)}
+											</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>
+												{row.totalCost === null ? "—" : formatCurrency(row.totalCost)}
+											</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>
+												{formatCurrency(row.payout)}
+											</div>
+											<div style={{ textAlign: "center", color: "#fff" }}>
+												{row.marketValue === null || isNaN(row.marketValue)
+													? "—"
+													: formatCurrency(row.marketValue)}
+											</div>
+											<div
+												style={{ textAlign: "center", color: totalReturnColor, fontWeight: "bold" }}
+											>
+												{totalReturnText}
+											</div>
 											<div
 												style={{ textAlign: "center" }}
 												onMouseEnter={(e) => {
@@ -366,7 +400,12 @@ export default function PositionsTableView({
 														}}
 													>
 														<span>{row.tradeCount}</span>
-														<span className="expand-icon" style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
+														<span
+															className="expand-icon"
+															style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+														>
+															▼
+														</span>
 													</button>
 												)}
 											</div>
@@ -379,10 +418,11 @@ export default function PositionsTableView({
 												position={row.side}
 												positionDisplayLabel={row.label}
 												marketTitle={
-													(row.primaryMarket?.displayName ||
+													(
+														row.primaryMarket?.displayName ||
 														(row.primaryMarket as { question?: string })?.question ||
-														"")
-														.trim() || undefined
+														""
+													).trim() || undefined
 												}
 											/>
 										)}

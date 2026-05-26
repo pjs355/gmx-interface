@@ -13,9 +13,7 @@ export const MAX_E2E_ACCEPTABLE_SMALLEST_LOSS_USD = 0.25;
  * `"no_liquidity"` in some feeds while bestBid/bestAsk totals are still populated.
  * E2E selection probes TOB / ladders either way; other explicit statuses stay blocked.
  */
-export function venueSnapshotStatusAllowsBookProbe(
-	status: string | undefined,
-): boolean {
+export function venueSnapshotStatusAllowsBookProbe(status: string | undefined): boolean {
 	if (status === undefined || String(status).trim() === "") {
 		return true;
 	}
@@ -52,9 +50,7 @@ function sortDepthLevels(
 	dir: "asc" | "desc",
 ): DepthLevelLite[] {
 	if (!levels?.length) return [];
-	return [...levels].sort((a, b) =>
-		dir === "asc" ? a.price - b.price : b.price - a.price,
-	);
+	return [...levels].sort((a, b) => (dir === "asc" ? a.price - b.price : b.price - a.price));
 }
 
 export function simulateBuyNotionalUsd(
@@ -120,9 +116,7 @@ function jsonFiniteNumber(x: unknown): number | null {
 	return null;
 }
 
-function depthLevelsHaveLiquidity(
-	levels: DepthLevelLite[] | undefined,
-): boolean {
+function depthLevelsHaveLiquidity(levels: DepthLevelLite[] | undefined): boolean {
 	if (!levels?.length) return false;
 	return levels.some(
 		(l) =>
@@ -137,16 +131,10 @@ function depthLevelsHaveLiquidity(
 }
 
 function teamHasNonemptyLadders(team: VenueTeamBookLite): boolean {
-	return (
-		depthLevelsHaveLiquidity(team.asks) &&
-		depthLevelsHaveLiquidity(team.bids)
-	);
+	return depthLevelsHaveLiquidity(team.asks) && depthLevelsHaveLiquidity(team.bids);
 }
 
-function ladderRoundTripUsd(
-	team: VenueTeamBookLite,
-	notionalUsd: number,
-): number | null {
+function ladderRoundTripUsd(team: VenueTeamBookLite, notionalUsd: number): number | null {
 	const asks = sortDepthLevels(team.asks, "asc");
 	const bids = sortDepthLevels(team.bids, "desc");
 	if (asks.length === 0 || bids.length === 0) {
@@ -164,10 +152,7 @@ function ladderRoundTripUsd(
 }
 
 /** Best ask / best bid only, sizes from venue-prices totals (contracts at TOB). */
-function tobTotalsRoundTripUsd(
-	team: VenueTeamBookLite,
-	notionalUsd: number,
-): number | null {
+function tobTotalsRoundTripUsd(team: VenueTeamBookLite, notionalUsd: number): number | null {
 	const ask = jsonFiniteNumber(team.bestAsk);
 	const bid = jsonFiniteNumber(team.bestBid);
 	const askSz = jsonFiniteNumber(team.totalAskLiquidity);
@@ -182,15 +167,9 @@ function tobTotalsRoundTripUsd(
 	) {
 		return null;
 	}
-	const buy = simulateBuyNotionalUsd(
-		[{ price: ask, size: askSz }],
-		notionalUsd,
-	);
+	const buy = simulateBuyNotionalUsd([{ price: ask, size: askSz }], notionalUsd);
 	if (!buy.complete || buy.shares <= DEPTH_EPS) return null;
-	const sell = simulateSellShares(
-		[{ price: bid, size: bidSz }],
-		buy.shares,
-	);
+	const sell = simulateSellShares([{ price: bid, size: bidSz }], buy.shares);
 	if (!sell.complete) return null;
 	return sell.usd;
 }
@@ -227,16 +206,8 @@ export function smallestRoundTripLossUsdForSnapshot(
 	const teamBLad = teamHasNonemptyLadders(snap.teamB);
 	const hasAnyVenueLadder = teamALad || teamBLad;
 
-	const ra = teamRoundTripSellbackUsdRobust(
-		snap.teamA,
-		notionalUsd,
-		hasAnyVenueLadder,
-	);
-	const rb = teamRoundTripSellbackUsdRobust(
-		snap.teamB,
-		notionalUsd,
-		hasAnyVenueLadder,
-	);
+	const ra = teamRoundTripSellbackUsdRobust(snap.teamA, notionalUsd, hasAnyVenueLadder);
+	const rb = teamRoundTripSellbackUsdRobust(snap.teamB, notionalUsd, hasAnyVenueLadder);
 	const backs = [ra, rb].filter((x): x is number => x !== null && Number.isFinite(x));
 	if (backs.length === 0) {
 		return null;

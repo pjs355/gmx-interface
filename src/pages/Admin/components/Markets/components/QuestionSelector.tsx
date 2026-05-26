@@ -16,28 +16,19 @@ const QuestionSelector: React.FC<QuestionSelectorProps> = ({
 		<div className="edit-questions-list-section">
 			<div className="edit-questions-title">Questions</div>
 			{questions.length === 0 ? (
-				<div className="edit-no-questions">
-					No questions in this umbrella.
-				</div>
+				<div className="edit-no-questions">No questions in this umbrella.</div>
 			) : (
 				<div className="edit-questions-grid">
 					{questions.map((question) => {
-						const isSelected =
-							selectedQuestionId === question.questionId;
+						const isSelected = selectedQuestionId === question.questionId;
 						return (
 							<div
 								key={question.questionId}
-								className={`edit-question-item ${
-									isSelected ? "selected" : ""
-								}`}
+								className={`edit-question-item ${isSelected ? "selected" : ""}`}
 							>
 								<div>
-									<div className="edit-question-info-name">
-										{question.displayName}
-									</div>
-									<div className="edit-question-info-id">
-										id: {question.questionId}
-									</div>
+									<div className="edit-question-info-name">{question.displayName}</div>
+									<div className="edit-question-info-id">id: {question.questionId}</div>
 								</div>
 								<button
 									type="button"

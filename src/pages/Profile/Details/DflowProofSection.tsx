@@ -3,8 +3,8 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useWallets as useSolanaWallets } from "@privy-io/react-auth/solana";
 import { useQuery } from "@tanstack/react-query";
 import Tooltip from "@/components/Tooltip/Tooltip";
-import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { startDflowProofRedirect } from "@/trading/venues/dflow/onboarding/startDflowProofRedirect";
+import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
+import { startDflowProofRedirect } from "@/features/trading/venues/dflow/onboarding/startDflowProofRedirect";
 import { useAccountData } from "@/context/AccountDataContext";
 
 const KALSHI_NOT_VERIFIED_TOOLTIP =
@@ -25,10 +25,9 @@ export default function DflowProofSection() {
 	const accountLoading = dflowProof.status === "pending" && !dflowProof.isFetched;
 
 	const solanaLinked = user?.linkedAccounts?.find(
-		(a: any) => a.type === "wallet" && a.chainType === "solana"
+		(a: any) => a.type === "wallet" && a.chainType === "solana",
 	) as { address?: string } | undefined;
-	const solanaAddress =
-		proofState?.solanaWalletAddress ?? solanaLinked?.address ?? null;
+	const solanaAddress = proofState?.solanaWalletAddress ?? solanaLinked?.address ?? null;
 
 	const embeddedSolanaWallet = useMemo(
 		() => solanaWallets.find((w) => w.address === solanaAddress) ?? solanaWallets[0] ?? null,
@@ -53,11 +52,7 @@ export default function DflowProofSection() {
 			}
 			return result;
 		},
-		enabled:
-			authenticated &&
-			Boolean(solanaAddress) &&
-			dflowProof.isFetched &&
-			!isVerified,
+		enabled: authenticated && Boolean(solanaAddress) && dflowProof.isFetched && !isVerified,
 		staleTime: 120_000,
 		retry: false,
 	});
@@ -68,9 +63,7 @@ export default function DflowProofSection() {
 		setBusy(true);
 		try {
 			if (!embeddedSolanaWallet) {
-				throw new Error(
-					"No Solana wallet available. Reload the page, then try again.",
-				);
+				throw new Error("No Solana wallet available. Reload the page, then try again.");
 			}
 			const returnUrl = `${window.location.origin}/profile?dflow_proof=1`;
 			const out = await startDflowProofRedirect(
@@ -89,8 +82,7 @@ export default function DflowProofSection() {
 				setSuccessMsg("Proof KYC verified.");
 			}
 		} catch (e: unknown) {
-			const msg =
-				e instanceof Error ? e.message : "Proof verification failed.";
+			const msg = e instanceof Error ? e.message : "Proof verification failed.";
 			setError(msg);
 		} finally {
 			setBusy(false);
@@ -100,15 +92,8 @@ export default function DflowProofSection() {
 	if (!authenticated) return null;
 
 	return (
-		<div
-			id="dflow-kyc"
-			className="Details-info-section"
-			style={{ marginTop: 24 }}
-		>
-			<div
-				className="Details-info-label"
-				style={{ fontSize: 16, fontWeight: 700, opacity: 1 }}
-			>
+		<div id="dflow-kyc" className="Details-info-section" style={{ marginTop: 24 }}>
+			<div className="Details-info-label" style={{ fontSize: 16, fontWeight: 700, opacity: 1 }}>
 				Kalshi enabled trading
 			</div>
 
@@ -120,15 +105,9 @@ export default function DflowProofSection() {
 					) : verifySyncQuery.isFetching ? (
 						<span style={{ color: "#888", fontSize: 13 }}>Syncing with Proof…</span>
 					) : isVerified ? (
-						<span style={{ color: "#16a34a", fontSize: 13, fontWeight: 600 }}>
-							Enabled
-						</span>
+						<span style={{ color: "#16a34a", fontSize: 13, fontWeight: 600 }}>Enabled</span>
 					) : (
-						<Tooltip
-							content={KALSHI_NOT_VERIFIED_TOOLTIP}
-							position="top"
-							withPortal={true}
-						>
+						<Tooltip content={KALSHI_NOT_VERIFIED_TOOLTIP} position="top" withPortal={true}>
 							<span
 								style={{
 									color: "#f59e0b",
@@ -157,15 +136,9 @@ export default function DflowProofSection() {
 					</div>
 				)}
 
-				{error && (
-					<div style={{ color: "#ef4444", fontSize: 13, marginTop: 8 }}>
-						{error}
-					</div>
-				)}
+				{error && <div style={{ color: "#ef4444", fontSize: 13, marginTop: 8 }}>{error}</div>}
 				{successMsg && (
-					<div style={{ color: "#16a34a", fontSize: 13, marginTop: 8 }}>
-						{successMsg}
-					</div>
+					<div style={{ color: "#16a34a", fontSize: 13, marginTop: 8 }}>{successMsg}</div>
 				)}
 			</div>
 		</div>

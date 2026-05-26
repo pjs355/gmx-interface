@@ -1,27 +1,14 @@
-import {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getPredictionWebSocketUrl } from "@/config/predictionApiBase";
-import {
-	normalizeOrderbookPayload,
-	hasUsableOrderbookSnapshot,
-} from "./utils";
+import { normalizeOrderbookPayload, hasUsableOrderbookSnapshot } from "./utils";
 
 type GetOrderbookForQuestion = (
 	umbrellaId: string,
 	questionId: string,
 ) => unknown | null | undefined;
 
-type RefreshOrderbook = (
-	umbrellaId: string,
-	questionId: string,
-) => Promise<unknown | null>;
+type RefreshOrderbook = (umbrellaId: string, questionId: string) => Promise<unknown | null>;
 
 export function useUmbrellaLiveOrderbooks(
 	umbrellaId: string | undefined,
@@ -29,9 +16,7 @@ export function useUmbrellaLiveOrderbooks(
 	getOrderbookForQuestion: GetOrderbookForQuestion,
 	_refreshOrderbook: RefreshOrderbook,
 ) {
-	const [questionOrderbooks, setQuestionOrderbooks] = useState<
-		Record<string, any>
-	>({});
+	const [questionOrderbooks, setQuestionOrderbooks] = useState<Record<string, any>>({});
 	const [orderbooksReady, setOrderbooksReady] = useState(false);
 	const wsPayloadDevLoggedRef = useRef(new Set<string>());
 
@@ -83,26 +68,20 @@ export function useUmbrellaLiveOrderbooks(
 				raw && typeof raw === "object" && !Array.isArray(raw)
 					? (raw as Record<string, unknown>)
 					: null;
-			const inner =
-				wrapped?.snapshot ?? wrapped?.orderbook ?? wrapped?.data ?? raw;
+			const inner = wrapped?.snapshot ?? wrapped?.orderbook ?? wrapped?.data ?? raw;
 			const orderbook = normalizeOrderbookPayload(inner);
 
 			if (import.meta.env.DEV && !hasUsableOrderbookSnapshot(orderbook)) {
 				const mid = String(marketId);
 				if (!wsPayloadDevLoggedRef.current.has(mid)) {
 					wsPayloadDevLoggedRef.current.add(mid);
-					console.debug(
-						"[PredictionMarket] multiplex WS orderbook not usable after normalize",
-						{
-							marketId: mid,
-							rawKeys:
-								inner &&
-								typeof inner === "object" &&
-								!Array.isArray(inner)
-									? Object.keys(inner as object)
-									: typeof inner,
-						},
-					);
+					console.debug("[PredictionMarket] multiplex WS orderbook not usable after normalize", {
+						marketId: mid,
+						rawKeys:
+							inner && typeof inner === "object" && !Array.isArray(inner)
+								? Object.keys(inner as object)
+								: typeof inner,
+					});
 				}
 			}
 
@@ -120,17 +99,11 @@ export function useUmbrellaLiveOrderbooks(
 			if (!message || typeof message !== "object") return;
 			const m = message as Record<string, unknown>;
 			const t = m.type;
-			if (
-				t === "subscribed" ||
-				t === "unsubscribed" ||
-				t === "pong" ||
-				t === "error"
-			) {
+			if (t === "subscribed" || t === "unsubscribed" || t === "pong" || t === "error") {
 				return;
 			}
 
-			const midRaw =
-				m.market ?? m.questionId ?? m.question_id ?? m.conditionId;
+			const midRaw = m.market ?? m.questionId ?? m.question_id ?? m.conditionId;
 			if (typeof midRaw === "string" && midRaw) {
 				applyOrderbookForMarket(midRaw, m.snapshot ?? m.orderbook ?? m);
 				return;
@@ -153,11 +126,7 @@ export function useUmbrellaLiveOrderbooks(
 		try {
 			ws = new WebSocket(wsUrl);
 		} catch (error) {
-			console.error(
-				"error",
-				"Failed to create multiplex orderbook WebSocket:",
-				error,
-			);
+			console.error("error", "Failed to create multiplex orderbook WebSocket:", error);
 			return;
 		}
 
@@ -176,11 +145,7 @@ export function useUmbrellaLiveOrderbooks(
 				const message = JSON.parse(event.data as string);
 				routeMessage(message);
 			} catch (error) {
-				console.error(
-					"error",
-					"Failed to parse multiplex WebSocket message:",
-					error,
-				);
+				console.error("error", "Failed to parse multiplex WebSocket message:", error);
 			}
 		};
 

@@ -7,11 +7,7 @@ import { REQUESTED_VENUES } from "../e2e/fixtures/requested-venues";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PRINX_INTERFACE_DIR = path.resolve(__dirname, "..");
-const PREDICTIONS_API_DIR = path.resolve(
-	PRINX_INTERFACE_DIR,
-	"..",
-	"predictions-api",
-);
+const PREDICTIONS_API_DIR = path.resolve(PRINX_INTERFACE_DIR, "..", "predictions-api");
 
 const FRONTEND_PORT = 3010;
 const PREDICTIONS_API_PORT = 8080;
@@ -21,10 +17,7 @@ const E2E_USER_DATA_DIR = path.join(PRINX_INTERFACE_DIR, "e2e", ".user-data");
 
 /** When true: build both repos, spawn API + vite preview, run tests, tear down. */
 function parseBootstrapFlag(): boolean {
-	return (
-		process.argv.includes("--bootstrap") ||
-		process.argv.includes("--spawn-and-build")
-	);
+	return process.argv.includes("--bootstrap") || process.argv.includes("--spawn-and-build");
 }
 
 type ChildHandle = {
@@ -64,12 +57,7 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function runStep(
-	name: string,
-	cmd: string,
-	args: string[],
-	cwd: string,
-): Promise<void> {
+function runStep(name: string, cmd: string, args: string[], cwd: string): Promise<void> {
 	return new Promise((resolve, reject) => {
 		console.log(`[predeploy] [${name}] ${cmd} ${args.join(" ")} (cwd=${cwd})`);
 		const proc = spawn(cmd, args, {
@@ -109,27 +97,19 @@ function startBackground(
 	children.push(handle);
 	proc.on("exit", (code, signal) => {
 		if (shuttingDown || handle.stopped) return;
-		console.error(
-			`[predeploy] [${name}] exited unexpectedly (code=${code}, signal=${signal})`,
-		);
+		console.error(`[predeploy] [${name}] exited unexpectedly (code=${code}, signal=${signal})`);
 	});
 	return handle;
 }
 
-async function waitForHttp(
-	url: string,
-	timeoutMs: number,
-	label: string,
-): Promise<void> {
+async function waitForHttp(url: string, timeoutMs: number, label: string): Promise<void> {
 	const start = Date.now();
 	let lastErr: unknown = null;
 	while (Date.now() - start < timeoutMs) {
 		try {
 			const res = await fetch(url);
 			if (res.ok || res.status === 304) {
-				console.log(
-					`[predeploy] ${label} ready (${res.status}) after ${Date.now() - start}ms`,
-				);
+				console.log(`[predeploy] ${label} ready (${res.status}) after ${Date.now() - start}ms`);
 				return;
 			}
 			lastErr = new Error(`HTTP ${res.status} ${res.statusText}`);
@@ -158,9 +138,7 @@ interface MatchedMarketRow {
 }
 
 function missingRequestedVenues(row: MatchedMarketRow): string[] {
-	return REQUESTED_VENUES.filter(
-		(k) => row.exchangeMatching?.[k] === undefined,
-	);
+	return REQUESTED_VENUES.filter((k) => row.exchangeMatching?.[k] === undefined);
 }
 
 function assertE2eUserDataExists(): void {
@@ -173,9 +151,7 @@ function assertE2eUserDataExists(): void {
 		);
 	}
 	if (!fs.statSync(E2E_USER_DATA_DIR).isDirectory()) {
-		throw new Error(
-			`E2E user-data path exists but is not a directory: ${E2E_USER_DATA_DIR}`,
-		);
+		throw new Error(`E2E user-data path exists but is not a directory: ${E2E_USER_DATA_DIR}`);
 	}
 }
 
@@ -253,9 +229,7 @@ async function main(): Promise<void> {
 		`[predeploy] mode: ${bootstrap ? "--bootstrap (build + spawn + teardown)" : "default (use servers you already started; full shell env applies)"}`,
 	);
 
-	console.log(
-		"[predeploy] verifying Playwright persistent profile at e2e/.user-data/ …",
-	);
+	console.log("[predeploy] verifying Playwright persistent profile at e2e/.user-data/ …");
 	assertE2eUserDataExists();
 
 	if (bootstrap) {
@@ -266,29 +240,18 @@ async function main(): Promise<void> {
 		await runStep("ui-build", "yarn", ["build"], PRINX_INTERFACE_DIR);
 
 		console.log("[predeploy] === bootstrap: start predictions-api ===");
-		startBackground(
-			"predictions-api",
-			"node",
-			["dist/cjs/server.js"],
-			PREDICTIONS_API_DIR,
-			{ ...process.env, PORT: String(PREDICTIONS_API_PORT) },
-		);
-		await waitForHttp(
-			`${PREDICTIONS_API_URL}/health`,
-			120_000,
-			"predictions-api /health",
-		);
+		startBackground("predictions-api", "node", ["dist/cjs/server.js"], PREDICTIONS_API_DIR, {
+			...process.env,
+			PORT: String(PREDICTIONS_API_PORT),
+		});
+		await waitForHttp(`${PREDICTIONS_API_URL}/health`, 120_000, "predictions-api /health");
 	} else {
 		console.log(
 			`[predeploy] waiting for already-running services (no spawn; uses your terminals' env):`,
 		);
 		console.log(`[predeploy]   ${PREDICTIONS_API_URL}/health`);
 		console.log(`[predeploy]   ${FRONTEND_URL}/`);
-		await waitForHttp(
-			`${PREDICTIONS_API_URL}/health`,
-			120_000,
-			"predictions-api /health",
-		);
+		await waitForHttp(`${PREDICTIONS_API_URL}/health`, 120_000, "predictions-api /health");
 		await waitForHttp(FRONTEND_URL, 120_000, "prinx-interface (or preview) /");
 	}
 
@@ -296,20 +259,11 @@ async function main(): Promise<void> {
 	await probeMatchedMarkets();
 
 	if (bootstrap) {
-		console.log(
-			"[predeploy] === bootstrap: serve prinx-interface (vite preview) ===",
-		);
+		console.log("[predeploy] === bootstrap: serve prinx-interface (vite preview) ===");
 		startBackground(
 			"prinx-interface",
 			"yarn",
-			[
-				"preview",
-				"--port",
-				String(FRONTEND_PORT),
-				"--strictPort",
-				"--host",
-				"127.0.0.1",
-			],
+			["preview", "--port", String(FRONTEND_PORT), "--strictPort", "--host", "127.0.0.1"],
 			PRINX_INTERFACE_DIR,
 			{ ...process.env },
 		);
@@ -334,9 +288,7 @@ async function main(): Promise<void> {
 		await shutdownAll();
 	}
 
-	console.log(
-		"[predeploy] GREEN. Suite passed; safe to run `railway up` when you are ready. ===",
-	);
+	console.log("[predeploy] GREEN. Suite passed; safe to run `railway up` when you are ready. ===");
 }
 
 process.on("SIGINT", () => {

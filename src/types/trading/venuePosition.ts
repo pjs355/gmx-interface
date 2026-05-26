@@ -7,24 +7,13 @@
  * which exchange the shares live on.
  */
 
-export type VenueId =
-	| "levelup"
-	| "polymarket"
-	| "predictfun"
-	| "dflow"
-	| "limitless";
+export type VenueId = "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
 /** True when venue `marketStatus` indicates settlement (History tab, not open portfolio). */
-export function isVenueMarketResolvedLike(
-	status: string | null | undefined,
-): boolean {
+export function isVenueMarketResolvedLike(status: string | null | undefined): boolean {
 	const s = (status ?? "").toUpperCase().trim();
 	return (
-		s === "RESOLVED" ||
-		s === "CLOSED" ||
-		s === "SETTLED" ||
-		s === "FINALIZED" ||
-		s === "DETERMINED"
+		s === "RESOLVED" || s === "CLOSED" || s === "SETTLED" || s === "FINALIZED" || s === "DETERMINED"
 	);
 }
 
@@ -177,7 +166,9 @@ export function venuePositionPortfolioDedupeKey(
 	p: Pick<VenuePosition, "tokenId"> & { conditionId?: string },
 ): string {
 	const tid = String(p.tokenId ?? "").trim();
-	const cid = String(p.conditionId ?? "").trim().toLowerCase();
+	const cid = String(p.conditionId ?? "")
+		.trim()
+		.toLowerCase();
 	if (cid) return `${tid}::${cid}`;
 	return tid;
 }

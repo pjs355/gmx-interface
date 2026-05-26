@@ -1,4 +1,4 @@
-import { formatBridgeQuoteUsdLines } from "@/trading/lifi/quoteDisplay";
+import { formatBridgeQuoteUsdLines } from "@/features/trading/lifi/quoteDisplay";
 import type { BridgeEndpoint } from "./useBridgeFlow";
 import { useBridgeFlow } from "./useBridgeFlow";
 
@@ -24,11 +24,11 @@ export function TransfersBridgePanel() {
 	const levelupUsd = formatWalletUsd(balances.data?.baseUsdcHuman ?? null, balances.isLoading);
 	const limitlessUsd = formatWalletUsd(
 		balances.data?.baseLimitlessUsdcHuman ?? null,
-		balances.isLoading
+		balances.isLoading,
 	);
 	const polymarketUsd = formatWalletUsd(
 		balances.data?.polygonUsdcEHuman ?? null,
-		balances.isLoading
+		balances.isLoading,
 	);
 	const bnbUsd = formatWalletUsd(balances.data?.bscUsdtHuman ?? null, balances.isLoading);
 	const solanaUsd = formatWalletUsd(balances.data?.solanaUsdcHuman ?? null, balances.isLoading);
@@ -55,8 +55,6 @@ export function TransfersBridgePanel() {
 
 	const routeUsesPolymarket =
 		flow.fromEndpoint === "polymarket" || flow.toEndpoint === "polymarket";
-
-	const routeUsesLimitless = flow.toEndpoint === "limitless";
 
 	const canConfirm =
 		flow.quoteAppliesToCurrentInput &&
@@ -96,8 +94,7 @@ export function TransfersBridgePanel() {
 
 			{routeUsesPolymarket && flow.funding.polymarketAccountNotFound ? (
 				<p className="transfers-bridge__warn" role="status">
-					Polymarket account not found (
-					<code className="transfers-bridge__code">404</code>). Check{" "}
+					Polymarket account not found (<code className="transfers-bridge__code">404</code>). Check{" "}
 					<code className="transfers-bridge__code">VITE_PRIVATE_API_BASE</code> and{" "}
 					<code className="transfers-bridge__code">VITE_POLYMARKET_ACCOUNT_PATH</code>.
 				</p>
@@ -131,7 +128,8 @@ export function TransfersBridgePanel() {
 					Integration mode is{" "}
 					<code className="transfers-bridge__code">{String(flow.funding.integrationMode)}</code>
 					{" — expected "}
-					<code className="transfers-bridge__code">builder_privy_deposit_wallet</code> for standard setup.
+					<code className="transfers-bridge__code">builder_privy_deposit_wallet</code> for standard
+					setup.
 				</div>
 			) : null}
 
@@ -147,9 +145,9 @@ export function TransfersBridgePanel() {
 							flow.fromEndpoint}
 					</div>
 					<p className="transfers-bridge__muted transfers-bridge__hint" role="note">
-						Source wallet is picked automatically from the largest on-screen balance among
-						wallets you can sign from for this destination (withdrawals use quote-based ranking
-						on the server instead).
+						Source wallet is picked automatically from the largest on-screen balance among wallets
+						you can sign from for this destination (withdrawals use quote-based ranking on the
+						server instead).
 					</p>
 				</div>
 				<span className="transfers-bridge__arrow" aria-hidden>
@@ -174,7 +172,10 @@ export function TransfersBridgePanel() {
 				</div>
 			</div>
 
-			<div className="transfers-bridge__from-to-balances" aria-label="Balances for selected wallets">
+			<div
+				className="transfers-bridge__from-to-balances"
+				aria-label="Balances for selected wallets"
+			>
 				<div className="transfers-bridge__from-to-balance-row">
 					<span className="transfers-bridge__balance-amount">{fromBalanceDisplay}</span>
 					<span className="transfers-bridge__balance-spacer" aria-hidden />
@@ -204,8 +205,7 @@ export function TransfersBridgePanel() {
 							v = v.replace(/^0+(?=\d)/, "");
 						} else {
 							const [intPart, frac = ""] = v.split(".");
-							const intNorm =
-								intPart.replace(/^0+(?=\d)/, "") || (frac.length > 0 ? "0" : "");
+							const intNorm = intPart.replace(/^0+(?=\d)/, "") || (frac.length > 0 ? "0" : "");
 							v = v.endsWith(".") && frac === "" ? `${intNorm}.` : `${intNorm}.${frac}`;
 						}
 						flow.setAmount(v);
@@ -261,9 +261,7 @@ export function TransfersBridgePanel() {
 				</button>
 			</div>
 
-			{flow.statusNote ? (
-				<p className="transfers-bridge__status">{flow.statusNote}</p>
-			) : null}
+			{flow.statusNote ? <p className="transfers-bridge__status">{flow.statusNote}</p> : null}
 			{flow.error ? (
 				<p className="transfers-bridge__error" role="alert">
 					{flow.error}
@@ -296,7 +294,7 @@ function balanceForEndpoint(
 		polymarket: string;
 		bnb: string;
 		solana: string;
-	}
+	},
 ): string {
 	switch (e) {
 		case "levelup":

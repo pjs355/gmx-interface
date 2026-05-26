@@ -66,8 +66,7 @@ export async function evaluateVenueLiquidityBeforeTrade(args: {
 			return {
 				skip: true,
 				reason: "venue-prices response not an array",
-				warning:
-					`[e2e liquidity] skipping ${args.venueKey}: bad venue-prices body for panda ${args.pandaMatchId}`,
+				warning: `[e2e liquidity] skipping ${args.venueKey}: bad venue-prices body for panda ${args.pandaMatchId}`,
 			};
 		}
 		snaps = body as VenuePriceSnapshotRaw[];
@@ -76,8 +75,7 @@ export async function evaluateVenueLiquidityBeforeTrade(args: {
 		return {
 			skip: true,
 			reason: "venue-prices fetch failed",
-			warning:
-				`[e2e liquidity] skipping ${args.venueKey}: fetch venue-prices failed for panda ${args.pandaMatchId}`,
+			warning: `[e2e liquidity] skipping ${args.venueKey}: fetch venue-prices failed for panda ${args.pandaMatchId}`,
 		};
 	}
 
@@ -87,8 +85,7 @@ export async function evaluateVenueLiquidityBeforeTrade(args: {
 		return {
 			skip: true,
 			reason: "no snapshot row for venue",
-			warning:
-				`[e2e liquidity] skipping ${args.venueKey}: no "${slug}" row in venue-prices for panda ${args.pandaMatchId}`,
+			warning: `[e2e liquidity] skipping ${args.venueKey}: no "${slug}" row in venue-prices for panda ${args.pandaMatchId}`,
 		};
 	}
 
@@ -102,8 +99,7 @@ export async function evaluateVenueLiquidityBeforeTrade(args: {
 			`(ladders incomplete or missing TOB totalAskLiquidity/totalBidLiquidity pairs) — panda ${args.pandaMatchId}, spreadAtPick=${args.spreadAtPickTime.toFixed(4)}.`;
 		return {
 			skip: true,
-			reason:
-				"no executable ladder or TOB-total liquidity for configured notional",
+			reason: "no executable ladder or TOB-total liquidity for configured notional",
 			warning: w,
 		};
 	}

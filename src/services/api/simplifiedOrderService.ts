@@ -67,15 +67,15 @@ function getApiBaseUrl(): string {
 const TOKEN_POSITION_MAP = new Map<string, "Yes" | "No">();
 
 /** Case-insensitive key for matching REST `questionId` to catalog `_id` / `questionId`. */
-export function normalizeOrderQuestionIdKey(
-	raw: string | null | undefined,
-): string {
-	return String(raw ?? "").trim().toLowerCase();
+export function normalizeOrderQuestionIdKey(raw: string | null | undefined): string {
+	return String(raw ?? "")
+		.trim()
+		.toLowerCase();
 }
 
 export async function fetchUserOrders(
 	account: string,
-	marketData?: Map<string, { yesTokenId: string; noTokenId: string }>
+	marketData?: Map<string, { yesTokenId: string; noTokenId: string }>,
 ): Promise<ProcessedOrder[]> {
 	try {
 		const response = await fetch(`${getApiBaseUrl()}/orders/${account}`, {
@@ -114,8 +114,7 @@ export async function fetchUserOrders(
 
 					const isLegacy = (o: any) => {
 						const uOk =
-							typeof (o as any)?.usdcTotalMicro === "number" &&
-							!isNaN((o as any)?.usdcTotalMicro);
+							typeof (o as any)?.usdcTotalMicro === "number" && !isNaN((o as any)?.usdcTotalMicro);
 						const tOk =
 							typeof (o as any)?.tokenTotalMicro === "number" &&
 							!isNaN((o as any)?.tokenTotalMicro);
@@ -140,17 +139,15 @@ export async function fetchUserOrders(
 							position = "No";
 						} else {
 							throw new Error(
-								`TokenId ${order.tokenId} does not match any known token for questionId ${order.questionId}. Expected yesTokenId: ${market.yesTokenId}, noTokenId: ${market.noTokenId}`
+								`TokenId ${order.tokenId} does not match any known token for questionId ${order.questionId}. Expected yesTokenId: ${market.yesTokenId}, noTokenId: ${market.noTokenId}`,
 							);
 						}
 					} else {
 						// Try to get from our map as fallback
-						const mappedPosition = TOKEN_POSITION_MAP.get(
-							order.tokenId
-						);
+						const mappedPosition = TOKEN_POSITION_MAP.get(order.tokenId);
 						if (!mappedPosition) {
 							throw new Error(
-								`Cannot determine position for tokenId: ${order.tokenId}. Market data not provided and token not mapped.`
+								`Cannot determine position for tokenId: ${order.tokenId}. Market data not provided and token not mapped.`,
 							);
 						}
 						position = mappedPosition;
@@ -158,10 +155,7 @@ export async function fetchUserOrders(
 
 					// Calculate price from available data if not provided
 					let price: number;
-					if (
-						typeof order.price === "number" &&
-						!isNaN(order.price)
-					) {
+					if (typeof order.price === "number" && !isNaN(order.price)) {
 						price = order.price;
 					} else if (
 						order.usdcTotalMicro &&
@@ -170,10 +164,7 @@ export async function fetchUserOrders(
 						order.tokenTotalMicro > 0
 					) {
 						// Calculate price as USDC per token (convert from micro units)
-						price =
-							order.usdcTotalMicro /
-							1_000_000 /
-							(order.tokenTotalMicro / 1_000_000);
+						price = order.usdcTotalMicro / 1_000_000 / (order.tokenTotalMicro / 1_000_000);
 					} else if (
 						order.makerAmount &&
 						order.takerAmount &&
@@ -181,22 +172,14 @@ export async function fetchUserOrders(
 						parseFloat(order.takerAmount) > 0
 					) {
 						// Calculate price from maker/taker amounts
-						price =
-							parseFloat(order.makerAmount) /
-							parseFloat(order.takerAmount);
+						price = parseFloat(order.makerAmount) / parseFloat(order.takerAmount);
 					} else {
-						throw new Error(
-							"Cannot calculate price - missing required fields"
-						);
+						throw new Error("Cannot calculate price - missing required fields");
 					}
 
 					// Calculate size from available data if not provided
 					let size: number;
-					if (
-						typeof order.size === "number" &&
-						!isNaN(order.size) &&
-						order.size > 0
-					) {
+					if (typeof order.size === "number" && !isNaN(order.size) && order.size > 0) {
 						size = order.size;
 					} else if (
 						order.filled &&
@@ -207,54 +190,35 @@ export async function fetchUserOrders(
 						order.tokenTotalMicro > 0
 					) {
 						size = order.tokenTotalMicro / 1_000_000;
-					} else if (
-						order.tokenTotalMicro &&
-						order.tokenTotalMicro > 0
-					) {
+					} else if (order.tokenTotalMicro && order.tokenTotalMicro > 0) {
 						// Use token amount as size
 						size = order.tokenTotalMicro / 1_000_000;
-					} else if (
-						order.committedMicro &&
-						order.committedMicro > 0
-					) {
+					} else if (order.committedMicro && order.committedMicro > 0) {
 						// Use committed amount as size
 						size = order.committedMicro / 1_000_000;
-					} else if (
-						order.takerAmount &&
-						parseFloat(order.takerAmount) > 0
-					) {
+					} else if (order.takerAmount && parseFloat(order.takerAmount) > 0) {
 						// Use taker amount as size
 						size = parseFloat(order.takerAmount);
-					} else if (
-						order.makerAmount &&
-						parseFloat(order.makerAmount) > 0
-					) {
+					} else if (order.makerAmount && parseFloat(order.makerAmount) > 0) {
 						// Use maker amount as size
 						size = parseFloat(order.makerAmount);
 					} else {
 						// For orders with zero amounts, set size to 0 but don't throw error
-						console.warn(
-							"Order with zero amounts, setting size to 0:",
-							{
-								orderId: order.orderId,
-								tokenTotalMicro: order.tokenTotalMicro,
-								committedMicro: order.committedMicro,
-								takerAmount: order.takerAmount,
-								makerAmount: order.makerAmount,
-							}
-						);
+						console.warn("Order with zero amounts, setting size to 0:", {
+							orderId: order.orderId,
+							tokenTotalMicro: order.tokenTotalMicro,
+							committedMicro: order.committedMicro,
+							takerAmount: order.takerAmount,
+							makerAmount: order.makerAmount,
+						});
 						size = 0;
 					}
 
 					// Validate required fields - NO FALLBACKS for financial data
 					if (!order.orderId) throw new Error("Missing orderId");
-					if (!order.questionId)
-						throw new Error("Missing questionId");
+					if (!order.questionId) throw new Error("Missing questionId");
 					if (!order.tokenId) throw new Error("Missing tokenId");
-					if (
-						!order.side ||
-						(order.side !== "buy" && order.side !== "sell")
-					)
+					if (!order.side || (order.side !== "buy" && order.side !== "sell"))
 						throw new Error("Invalid side");
 					if (typeof price !== "number" || isNaN(price) || price <= 0)
 						throw new Error("Invalid calculated price");
@@ -262,19 +226,13 @@ export async function fetchUserOrders(
 						throw new Error("Invalid calculated size");
 					if (order.filled && size <= 0)
 						throw new Error("Invalid calculated size for filled order");
-					if (
-						typeof order.usdcTotalMicro !== "number" ||
-						isNaN(order.usdcTotalMicro)
-					) {
+					if (typeof order.usdcTotalMicro !== "number" || isNaN(order.usdcTotalMicro)) {
 						if (isLegacy(order)) {
 							return null;
 						}
 						throw new Error("Invalid usdcTotalMicro");
 					}
-					if (
-						typeof order.tokenTotalMicro !== "number" ||
-						isNaN(order.tokenTotalMicro)
-					) {
+					if (typeof order.tokenTotalMicro !== "number" || isNaN(order.tokenTotalMicro)) {
 						if (isLegacy(order)) {
 							return null;
 						}
@@ -308,10 +266,7 @@ export async function fetchUserOrders(
 					console.warn("Error processing order:", {
 						orderId: order?.orderId,
 						questionId: order?.questionId,
-						error:
-							error instanceof Error
-								? error.message
-								: String(error),
+						error: error instanceof Error ? error.message : String(error),
 						orderData: {
 							hasPrice: "price" in order,
 							hasSize: "size" in order,
@@ -330,9 +285,7 @@ export async function fetchUserOrders(
 			})
 			.filter(
 				(order): order is ProcessedOrder =>
-					order !== null &&
-					Boolean(order.questionId) &&
-					Boolean(order.tokenId)
+					order !== null && Boolean(order.questionId) && Boolean(order.tokenId),
 			); // Filter out invalid orders
 
 		return processedOrders;
@@ -344,28 +297,21 @@ export async function fetchUserOrders(
 
 export async function fetchOrdersForMarket(
 	account: string,
-	questionId: string
+	questionId: string,
 ): Promise<ProcessedOrder[]> {
 	const allOrders = await fetchUserOrders(account);
 	const want = normalizeOrderQuestionIdKey(questionId);
-	return allOrders.filter(
-		(order) => normalizeOrderQuestionIdKey(order.questionId) === want,
-	);
+	return allOrders.filter((order) => normalizeOrderQuestionIdKey(order.questionId) === want);
 }
 
 // Cancel a specific order by ID via backend route
-export async function cancelOrder(
-	orderId: string
-): Promise<{ success: boolean; error?: string }> {
+export async function cancelOrder(orderId: string): Promise<{ success: boolean; error?: string }> {
 	if (!orderId) return { success: false, error: "Missing orderId" };
 	try {
-		const res = await fetch(
-			`${getApiBaseUrl()}/orders/cancel/${encodeURIComponent(orderId)}`,
-			{
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-			}
-		);
+		const res = await fetch(`${getApiBaseUrl()}/orders/cancel/${encodeURIComponent(orderId)}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+		});
 		const json = await res.json().catch(() => ({}));
 		if (!res.ok || json?.success === false) {
 			return {
@@ -380,10 +326,7 @@ export async function cancelOrder(
 }
 
 // Helper to get order aggregates by position for a specific market
-export function getOrderAggregates(
-	orders: ProcessedOrder[],
-	questionId: string
-): OrderAggregates {
+export function getOrderAggregates(orders: ProcessedOrder[], questionId: string): OrderAggregates {
 	const want = normalizeOrderQuestionIdKey(questionId);
 	const marketOrders = orders
 		.filter((order) => normalizeOrderQuestionIdKey(order.questionId) === want)
@@ -395,27 +338,19 @@ export function getOrderAggregates(
 	return {
 		Yes: {
 			totalSize: yesOrders.reduce((sum, order) => sum + order.size, 0),
-			totalValue: yesOrders.reduce(
-				(sum, order) => sum + order.usdcValue,
-				0
-			),
+			totalValue: yesOrders.reduce((sum, order) => sum + order.usdcValue, 0),
 			avgPrice:
 				yesOrders.length > 0
-					? yesOrders.reduce((sum, order) => sum + order.price, 0) /
-					  yesOrders.length
+					? yesOrders.reduce((sum, order) => sum + order.price, 0) / yesOrders.length
 					: null,
 			count: yesOrders.length,
 		},
 		No: {
 			totalSize: noOrders.reduce((sum, order) => sum + order.size, 0),
-			totalValue: noOrders.reduce(
-				(sum, order) => sum + order.usdcValue,
-				0
-			),
+			totalValue: noOrders.reduce((sum, order) => sum + order.usdcValue, 0),
 			avgPrice:
 				noOrders.length > 0
-					? noOrders.reduce((sum, order) => sum + order.price, 0) /
-					  noOrders.length
+					? noOrders.reduce((sum, order) => sum + order.price, 0) / noOrders.length
 					: null,
 			count: noOrders.length,
 		},
@@ -436,16 +371,12 @@ export function getOpenOrders(orders: ProcessedOrder[]): ProcessedOrder[] {
 // This ignores leftover unmatched shares and only accounts for buys matched with sells (FIFO per leg Yes/No).
 export function getTradingReturns(
 	orders: ProcessedOrder[],
-	questionId: string
+	questionId: string,
 ): { yesPnL: number; noPnL: number } {
 	const marketOrders = orders
 		.filter((o) => o.questionId === questionId && o.filled)
 		.slice()
-		.sort(
-			(a, b) =>
-				new Date(a.createdAt).getTime() -
-				new Date(b.createdAt).getTime()
-		);
+		.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
 	function realizedForLeg(leg: "Yes" | "No"): number {
 		// Work in micro-dollars to avoid FP rounding errors
@@ -456,24 +387,10 @@ export function getTradingReturns(
 		for (const o of marketOrders) {
 			if (o.position !== leg) continue;
 			// NO FALLBACKS: require valid tokenValue (shares), usdcValue (total USD), and price
-			if (
-				typeof o.tokenValue !== "number" ||
-				!isFinite(o.tokenValue) ||
-				o.tokenValue <= 0
-			)
+			if (typeof o.tokenValue !== "number" || !isFinite(o.tokenValue) || o.tokenValue <= 0)
 				continue;
-			if (
-				typeof o.usdcValue !== "number" ||
-				!isFinite(o.usdcValue) ||
-				o.usdcValue <= 0
-			)
-				continue;
-			if (
-				typeof o.price !== "number" ||
-				!isFinite(o.price) ||
-				o.price <= 0
-			)
-				continue;
+			if (typeof o.usdcValue !== "number" || !isFinite(o.usdcValue) || o.usdcValue <= 0) continue;
+			if (typeof o.price !== "number" || !isFinite(o.price) || o.price <= 0) continue;
 
 			const qtyMicro = Math.round(o.tokenValue * 1_000_000); // shares in micro-shares
 			const priceMicro = Math.round(o.price * 1_000_000); // dollars per share in micro-dollars
@@ -486,16 +403,11 @@ export function getTradingReturns(
 				let remainingMicro = qtyMicro;
 				for (let i = 0; i < buyLots.length && remainingMicro > 0; i++) {
 					const lot = buyLots[i];
-					const closeMicro = Math.min(
-						lot.sharesMicro,
-						remainingMicro
-					);
+					const closeMicro = Math.min(lot.sharesMicro, remainingMicro);
 					if (closeMicro > 0) {
 						const deltaPriceMicro = priceMicro - lot.priceMicro; // micro-dollars/share
 						// micro-dollars = round((micro$/share * micro-shares) / 1e6)
-						const pnlMicro = Math.round(
-							(deltaPriceMicro * closeMicro) / 1_000_000
-						);
+						const pnlMicro = Math.round((deltaPriceMicro * closeMicro) / 1_000_000);
 						realizedMicro += pnlMicro;
 
 						lot.sharesMicro -= closeMicro;
@@ -510,8 +422,7 @@ export function getTradingReturns(
 			}
 		}
 		// Convert micro-dollars to dollars rounded to 2 decimals
-		const realizedDollars =
-			Math.round((realizedMicro / 1_000_000) * 100) / 100;
+		const realizedDollars = Math.round((realizedMicro / 1_000_000) * 100) / 100;
 		return realizedDollars;
 	}
 
@@ -524,19 +435,13 @@ export function getTradingReturns(
 // Calculate final leftover shares and their cost using FIFO
 export function getFinalAmount(
 	orders: ProcessedOrder[],
-	questionId: string
+	questionId: string,
 ): { yesShares: number; noShares: number; yesCost: number; noCost: number } {
 	const want = normalizeOrderQuestionIdKey(questionId);
 	const marketOrders = orders
-		.filter(
-			(o) => normalizeOrderQuestionIdKey(o.questionId) === want && o.filled,
-		)
+		.filter((o) => normalizeOrderQuestionIdKey(o.questionId) === want && o.filled)
 		.slice()
-		.sort(
-			(a, b) =>
-				new Date(a.createdAt).getTime() -
-				new Date(b.createdAt).getTime()
-		);
+		.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
 	function calculateFinalForLeg(leg: "Yes" | "No"): {
 		shares: number;
@@ -550,24 +455,10 @@ export function getFinalAmount(
 		for (const o of marketOrders) {
 			if (o.position !== leg) continue;
 			// NO FALLBACKS: require valid tokenValue (shares), usdcValue (total USD), and price
-			if (
-				typeof o.tokenValue !== "number" ||
-				!isFinite(o.tokenValue) ||
-				o.tokenValue <= 0
-			)
+			if (typeof o.tokenValue !== "number" || !isFinite(o.tokenValue) || o.tokenValue <= 0)
 				continue;
-			if (
-				typeof o.usdcValue !== "number" ||
-				!isFinite(o.usdcValue) ||
-				o.usdcValue <= 0
-			)
-				continue;
-			if (
-				typeof o.price !== "number" ||
-				!isFinite(o.price) ||
-				o.price <= 0
-			)
-				continue;
+			if (typeof o.usdcValue !== "number" || !isFinite(o.usdcValue) || o.usdcValue <= 0) continue;
+			if (typeof o.price !== "number" || !isFinite(o.price) || o.price <= 0) continue;
 
 			const qtyMicro = Math.round(o.tokenValue * 1_000_000); // shares in micro-shares
 			const priceMicro = Math.round(o.price * 1_000_000); // dollars per share in micro-dollars
@@ -581,10 +472,7 @@ export function getFinalAmount(
 				let remainingMicro = qtyMicro;
 				for (let i = 0; i < buyLots.length && remainingMicro > 0; i++) {
 					const lot = buyLots[i];
-					const closeMicro = Math.min(
-						lot.sharesMicro,
-						remainingMicro
-					);
+					const closeMicro = Math.min(lot.sharesMicro, remainingMicro);
 					if (closeMicro > 0) {
 						lot.sharesMicro -= closeMicro;
 						remainingMicro -= closeMicro;
@@ -603,27 +491,17 @@ export function getFinalAmount(
 		let sharesToAccountFor = remainingSharesMicro;
 
 		// Go through buy lots in reverse order (most recent first)
-		for (
-			let i = buyLots.length - 1;
-			i >= 0 && sharesToAccountFor > 0;
-			i--
-		) {
+		for (let i = buyLots.length - 1; i >= 0 && sharesToAccountFor > 0; i--) {
 			const lot = buyLots[i];
-			const sharesFromThisLot = Math.min(
-				lot.sharesMicro,
-				sharesToAccountFor
-			);
+			const sharesFromThisLot = Math.min(lot.sharesMicro, sharesToAccountFor);
 			// priceMicro is micro-dollars per share, sharesFromThisLot is micro-shares
 			// So we need to divide by 1M to get the cost in micro-dollars
-			remainingCostMicro += Math.round(
-				(sharesFromThisLot * lot.priceMicro) / 1_000_000
-			);
+			remainingCostMicro += Math.round((sharesFromThisLot * lot.priceMicro) / 1_000_000);
 			sharesToAccountFor -= sharesFromThisLot;
 		}
 
 		// Convert back to regular units
-		const shares =
-			Math.round((remainingSharesMicro / 1_000_000) * 100) / 100;
+		const shares = Math.round((remainingSharesMicro / 1_000_000) * 100) / 100;
 		const cost = Math.round((remainingCostMicro / 1_000_000) * 100) / 100;
 
 		return { shares, cost };

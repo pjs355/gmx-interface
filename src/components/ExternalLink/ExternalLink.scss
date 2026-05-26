@@ -1,10 +1,10 @@
 .link-underline {
-  text-decoration: underline;
-  cursor: pointer;
-  display: inline-flex;
-  color: var(--color-slate-100);
-  &:hover {
-    color: var(--color-slate-100);
-    opacity: 0.8;
-  }
+	text-decoration: underline;
+	cursor: pointer;
+	display: inline-flex;
+	color: var(--color-slate-100);
+	&:hover {
+		color: var(--color-slate-100);
+		opacity: 0.8;
+	}
 }

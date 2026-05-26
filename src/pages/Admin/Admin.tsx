@@ -1,12 +1,4 @@
-import {
-	lazy,
-	Suspense,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
@@ -30,30 +22,22 @@ import TradeTesting from "./components/TradeTesting/TradeTesting";
 import AdminWallet from "./components/Wallet/AdminWallet";
 import AdminVenues from "./components/Venues/AdminVenues";
 import { adminErrorMessage, ADMIN_MISSING_ACCESS_TOKEN } from "@/errors";
-import {
-	umbrellaDataService,
-	type Umbrella,
-} from "@/services/api/umbrellaDataService";
+import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "@/context/PredictionDataContext";
-import {
-	teamService,
-	type TeamRecord,
-} from "@/services/api/teamService";
+import { teamService, type TeamRecord } from "@/services/api/teamService";
 
-const AdminExportKeys = lazy(
-	() => import("./components/Keys/AdminExportKeys")
-);
+const AdminExportKeys = lazy(() => import("./components/Keys/AdminExportKeys"));
 
 type AdminView =
-		| "markets-list"
-		| "markets-add"
-		| "markets-resolve"
-		| "markets-edit"
-		| "tags-list"
-		| "tags-add"
-		| "tags-edit"
-		| "series-list"
-		| "series-add"
+	| "markets-list"
+	| "markets-add"
+	| "markets-resolve"
+	| "markets-edit"
+	| "tags-list"
+	| "tags-add"
+	| "tags-edit"
+	| "series-list"
+	| "series-add"
 	| "teams-list"
 	| "teams-edit"
 	| "profiles-list"
@@ -143,10 +127,10 @@ export default function Admin() {
 					}
 					return next;
 				},
-				{ replace: false }
+				{ replace: false },
 			);
 		},
-		[setSearchParams]
+		[setSearchParams],
 	);
 
 	const runUmbrellaRefresh = useCallback(async () => {
@@ -185,9 +169,7 @@ export default function Admin() {
 		let cancelled = false;
 		(async () => {
 			try {
-				const fetched = await umbrellaDataService.fetchUmbrellaById(
-					umbrellaId
-				);
+				const fetched = await umbrellaDataService.fetchUmbrellaById(umbrellaId);
 				if (!cancelled && fetched) {
 					setSelected(fetched);
 				}
@@ -220,8 +202,7 @@ export default function Admin() {
 		(async () => {
 			try {
 				const getTok = getAccessTokenRef.current;
-				const token =
-					typeof getTok === "function" ? await getTok() : null;
+				const token = typeof getTok === "function" ? await getTok() : null;
 				if (typeof token !== "string" || token.length === 0) {
 					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
@@ -237,11 +218,7 @@ export default function Admin() {
 			} catch (error) {
 				console.error("error", error);
 				if (!cancelled) {
-					setTeamError(
-						error instanceof Error
-							? error.message
-							: "Failed to load team"
-					);
+					setTeamError(error instanceof Error ? error.message : "Failed to load team");
 				}
 			} finally {
 				if (!cancelled) {
@@ -259,20 +236,14 @@ export default function Admin() {
 		(async () => {
 			try {
 				const getTok = getAccessTokenRef.current;
-				const token =
-					typeof getTok === "function" ? await getTok() : undefined;
-				const resp = await fetch(
-					`${getPredictionApiBaseUrl()}/admin/session`,
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...(token
-								? { Authorization: `Bearer ${token}` }
-								: {}),
-						},
-					}
-				);
+				const token = typeof getTok === "function" ? await getTok() : undefined;
+				const resp = await fetch(`${getPredictionApiBaseUrl()}/admin/session`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...(token ? { Authorization: `Bearer ${token}` } : {}),
+					},
+				});
 				if (!mounted) return;
 				if (resp.ok) {
 					setChecking(false);
@@ -295,22 +266,20 @@ export default function Admin() {
 	}, [navigate]);
 
 	if (checking) {
-		return (
-			<div style={{ padding: 24, color: "white" }}>
-				Checking admin session…
-			</div>
-		);
+		return <div style={{ padding: 24, color: "white" }}>Checking admin session…</div>;
 	}
 
 	return (
-		<div style={{ 
-			padding: 24, 
-			color: "white", 
-			backgroundColor: "#000000",
-			minHeight: "100vh",
-			position: "relative",
-			zIndex: 1,
-		}}>
+		<div
+			style={{
+				padding: 24,
+				color: "white",
+				backgroundColor: "#000000",
+				minHeight: "100vh",
+				position: "relative",
+				zIndex: 1,
+			}}
+		>
 			<div
 				style={{
 					display: "flex",
@@ -321,9 +290,7 @@ export default function Admin() {
 				}}
 			>
 				<div>
-					<div style={{ fontWeight: 700, marginBottom: 8 }}>
-						Markets
-					</div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Markets</div>
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
@@ -339,10 +306,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "markets-list"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "markets-list" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -362,10 +326,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "markets-add"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "markets-add" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -385,10 +346,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "markets-resolve"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "markets-resolve" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -413,10 +371,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "tags-list"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "tags-list" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -436,10 +391,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "tags-add"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "tags-add" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -463,10 +415,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "series-list"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "series-list" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -485,10 +434,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "series-add"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "series-add" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -509,10 +455,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "teams-list"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "teams-list" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -538,10 +481,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "profiles-list"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "profiles-list" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -568,10 +508,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "stats"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "stats" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -580,9 +517,7 @@ export default function Admin() {
 					</div>
 				</div>
 				<div>
-					<div style={{ fontWeight: 700, marginBottom: 8 }}>
-						Daily Games
-					</div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Daily Games</div>
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
@@ -600,10 +535,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "daily-games-list"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "daily-games-list" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -625,10 +557,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background:
-									view === "daily-games-add"
-										? "rgba(255,255,255,0.2)"
-										: "transparent",
+								background: view === "daily-games-add" ? "rgba(255,255,255,0.2)" : "transparent",
 								color: "white",
 							}}
 						>
@@ -637,9 +566,7 @@ export default function Admin() {
 					</div>
 				</div>
 				<div>
-					<div style={{ fontWeight: 700, marginBottom: 8 }}>
-						Trade Testing
-					</div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Trade Testing</div>
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
@@ -657,10 +584,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid #f59e0b",
 								borderRadius: 6,
-								background:
-									view === "trade-testing"
-										? "rgba(245,158,11,0.2)"
-										: "transparent",
+								background: view === "trade-testing" ? "rgba(245,158,11,0.2)" : "transparent",
 								color: "#f59e0b",
 							}}
 						>
@@ -669,9 +593,7 @@ export default function Admin() {
 					</div>
 				</div>
 				<div>
-					<div style={{ fontWeight: 700, marginBottom: 8 }}>
-						Wallet
-					</div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Wallet</div>
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
@@ -689,10 +611,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid #8b5cf6",
 								borderRadius: 6,
-								background:
-									view === "wallet"
-										? "rgba(139,92,246,0.2)"
-										: "transparent",
+								background: view === "wallet" ? "rgba(139,92,246,0.2)" : "transparent",
 								color: "#8b5cf6",
 							}}
 						>
@@ -719,10 +638,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid #22c55e",
 								borderRadius: 6,
-								background:
-									view === "keys"
-										? "rgba(34,197,94,0.2)"
-										: "transparent",
+								background: view === "keys" ? "rgba(34,197,94,0.2)" : "transparent",
 								color: "#86efac",
 							}}
 						>
@@ -731,9 +647,7 @@ export default function Admin() {
 					</div>
 				</div>
 				<div>
-					<div style={{ fontWeight: 700, marginBottom: 8 }}>
-						Venues
-					</div>
+					<div style={{ fontWeight: 700, marginBottom: 8 }}>Venues</div>
 					<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 						<button
 							type="button"
@@ -751,10 +665,7 @@ export default function Admin() {
 								padding: "6px 10px",
 								border: "1px solid #38bdf8",
 								borderRadius: 6,
-								background:
-									view === "venues"
-										? "rgba(56,189,248,0.2)"
-										: "transparent",
+								background: view === "venues" ? "rgba(56,189,248,0.2)" : "transparent",
 								color: "#7dd3fc",
 							}}
 						>
@@ -774,9 +685,7 @@ export default function Admin() {
 				/>
 			)}
 
-			{view === "markets-add" && (
-				<AddMarket onCreated={handleMarketCreated} />
-			)}
+			{view === "markets-add" && <AddMarket onCreated={handleMarketCreated} />}
 
 			{view === "markets-resolve" && <ResolveMarkets />}
 
@@ -800,9 +709,7 @@ export default function Admin() {
 			)}
 
 			{view === "tags-add" && (
-				<AddTag
-					onCreated={() => updateView("tags-list", { umbrellaId: null })}
-				/>
+				<AddTag onCreated={() => updateView("tags-list", { umbrellaId: null })} />
 			)}
 
 			{view === "tags-edit" && selectedTag && (
@@ -818,9 +725,7 @@ export default function Admin() {
 				/>
 			)}
 
-			{view === "series-list" && (
-				<ListSeries onMarketCreated={handleMarketCreated} />
-			)}
+			{view === "series-list" && <ListSeries onMarketCreated={handleMarketCreated} />}
 
 			{view === "series-add" && <AddSeries />}
 
@@ -834,8 +739,8 @@ export default function Admin() {
 				/>
 			)}
 
-			{view === "teams-edit" && (
-				teamLoading ? (
+			{view === "teams-edit" &&
+				(teamLoading ? (
 					<div style={{ padding: 12 }}>Loading team…</div>
 				) : teamError ? (
 					<div style={{ padding: 12, color: "#f87171" }}>{teamError}</div>
@@ -852,11 +757,8 @@ export default function Admin() {
 						}}
 					/>
 				) : (
-					<div style={{ padding: 12 }}>
-						Select a team from the list to edit.
-					</div>
-				)
-			)}
+					<div style={{ padding: 12 }}>Select a team from the list to edit.</div>
+				))}
 
 			{view === "profiles-list" && (
 				<ListProfiles
@@ -913,13 +815,7 @@ export default function Admin() {
 			{view === "wallet" && <AdminWallet />}
 
 			{view === "keys" && (
-				<Suspense
-					fallback={
-						<div style={{ padding: 12, color: "#aaa" }}>
-							Loading keys…
-						</div>
-					}
-				>
+				<Suspense fallback={<div style={{ padding: 12, color: "#aaa" }}>Loading keys…</div>}>
 					<AdminExportKeys />
 				</Suspense>
 			)}

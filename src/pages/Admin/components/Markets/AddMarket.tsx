@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import {
-	umbrellaDataService,
-	type Umbrella,
-} from "@/services/api/umbrellaDataService";
+import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataService";
 import { uploadUmbrellaImage } from "@/services/firebase/firebaseStorage";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import MarketImageUpload from "./MarketImageUpload";
@@ -16,12 +13,7 @@ import EventScheduleSection from "./components/EventScheduleSection";
 import StatusToggle from "./components/StatusToggle";
 import PandascoreFields from "./components/PandascoreFields";
 import { buildCreateMarketPayload } from "./helpers/market-helpers";
-import {
-	TeamColors,
-	AddMarketForm,
-	AddMarketProps,
-	TeamCandidate,
-} from "@/types/market-types";
+import { TeamColors, AddMarketForm, AddMarketProps, TeamCandidate } from "@/types/market-types";
 import {
 	adminErrorMessage,
 	formatAdminHttpError,
@@ -40,11 +32,7 @@ import {
 } from "./helpers/market-helpers";
 import "./Markets.scss";
 
-export default function AddMarket({
-	series,
-	match,
-	onCreated,
-}: AddMarketProps = {}) {
+export default function AddMarket({ series, match, onCreated }: AddMarketProps = {}) {
 	const { getAccessToken } = usePrivy();
 
 	// Track if component was used with props (for disabling certain fields)
@@ -52,17 +40,11 @@ export default function AddMarket({
 
 	// Prefill umbrella display name if series/match provided
 	const initialUmbrellaDisplayName =
-		series && match
-			? `${buildLongMatchDisplayName(match)} - ${series.name}`
-			: "";
+		series && match ? `${buildLongMatchDisplayName(match)} - ${series.name}` : "";
 
 	// Prefill event timing if match provided
-	const initialEventDate = match?.scheduledAt
-		? formatDateTimeLocal(match.scheduledAt)
-		: "";
-	const initialEndDate = match?.scheduledAt
-		? addHoursAndFormat(match.scheduledAt, 3)
-		: "";
+	const initialEventDate = match?.scheduledAt ? formatDateTimeLocal(match.scheduledAt) : "";
+	const initialEndDate = match?.scheduledAt ? addHoursAndFormat(match.scheduledAt, 3) : "";
 
 	const [form, setForm] = useState<AddMarketForm>({
 		oracle: "",
@@ -84,9 +66,7 @@ export default function AddMarket({
 	const [loadingUmbrellas, setLoadingUmbrellas] = useState<boolean>(false);
 
 	// Prefill question display name if match provided
-	const initialQuestionDisplayName = match
-		? buildShortMatchDisplayName(match)
-		: "";
+	const initialQuestionDisplayName = match ? buildShortMatchDisplayName(match) : "";
 
 	const [questions, setQuestions] = useState<QuestionEntry[]>([
 		{
@@ -106,26 +86,16 @@ export default function AddMarket({
 	const [image2, setImage2] = useState<File | null>(null);
 	const [image1Preview, setImage1Preview] = useState<string | null>(null);
 	const [image2Preview, setImage2Preview] = useState<string | null>(null);
-	const [uploadingImage, setUploadingImage] = useState<
-		"image1" | "image2" | null
-	>(null);
-	const [linkedTeams, setLinkedTeams] = useState<Record<string, TeamRecord>>(
-		{}
-	);
+	const [uploadingImage, setUploadingImage] = useState<"image1" | "image2" | null>(null);
+	const [linkedTeams, setLinkedTeams] = useState<Record<string, TeamRecord>>({});
 	const teamCandidates = useMemo<TeamCandidate[]>(() => {
 		if (!match) {
 			return [];
 		}
 		const displayName1 = cleanTeamName(match.team1.name);
 		const displayName2 = cleanTeamName(match.team2.name);
-		const team1Short = extractTeamKey(
-			match.team1.name,
-			match.team1.acronym
-		);
-		const team2Short = extractTeamKey(
-			match.team2.name,
-			match.team2.acronym
-		);
+		const team1Short = extractTeamKey(match.team1.name, match.team1.acronym);
+		const team2Short = extractTeamKey(match.team2.name, match.team2.acronym);
 		return [
 			{
 				displayName: displayName1,
@@ -159,22 +129,17 @@ export default function AddMarket({
 		};
 	}, [linkedTeams, teamCandidates]);
 
-	const handleTeamLinked = useCallback(
-		(shortCode: string, team: TeamRecord) => {
-			setLinkedTeams((prev) => {
-				const clone = { ...prev };
-				const normalizedKey =
-					normalizeTeamKey(shortCode) ??
-					normalizeTeamKey(team.shortCode);
-				if (!normalizedKey) {
-					return prev;
-				}
-				clone[normalizedKey] = team;
-				return clone;
-			});
-		},
-		[]
-	);
+	const handleTeamLinked = useCallback((shortCode: string, team: TeamRecord) => {
+		setLinkedTeams((prev) => {
+			const clone = { ...prev };
+			const normalizedKey = normalizeTeamKey(shortCode) ?? normalizeTeamKey(team.shortCode);
+			if (!normalizedKey) {
+				return prev;
+			}
+			clone[normalizedKey] = team;
+			return clone;
+		});
+	}, []);
 
 	useEffect(() => {
 		let mounted = true;
@@ -195,10 +160,7 @@ export default function AddMarket({
 		};
 	}, []);
 
-	function update<K extends keyof AddMarketForm>(
-		key: K,
-		value: AddMarketForm[K]
-	) {
+	function update<K extends keyof AddMarketForm>(key: K, value: AddMarketForm[K]) {
 		setForm((prev) => ({ ...prev, [key]: value }));
 	}
 
@@ -231,24 +193,19 @@ export default function AddMarket({
 
 	const uploadImageToFirebase = async (
 		file: File,
-		imageType: "image1" | "image2"
+		imageType: "image1" | "image2",
 	): Promise<string> => {
 		setUploadingImage(imageType);
 
 		try {
 			// Map image1/image2 to banner/square
-			const firebaseImageType =
-				imageType === "image1" ? "banner" : "square";
+			const firebaseImageType = imageType === "image1" ? "banner" : "square";
 
 			// For new umbrellas, we'll use a temporary ID
 			const tempUmbrellaId = `new-${Date.now()}`;
 
 			// Upload to Firebase Storage
-			const result = await uploadUmbrellaImage(
-				file,
-				tempUmbrellaId,
-				firebaseImageType
-			);
+			const result = await uploadUmbrellaImage(file, tempUmbrellaId, firebaseImageType);
 
 			setUploadingImage(null);
 			return result.url;
@@ -273,28 +230,19 @@ export default function AddMarket({
 				uploadImage: uploadImageToFirebase,
 			});
 
-			const accessToken =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const accessToken = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 
-			const resp = await fetch(
-				`${getPredictionApiBaseUrl()}/admin/markets`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...(accessToken
-							? { Authorization: `Bearer ${accessToken}` }
-							: {}),
-					},
-					body: JSON.stringify(payload),
-				}
-			);
-			const data = await resp.json().catch(() => ({} as any));
+			const resp = await fetch(`${getPredictionApiBaseUrl()}/admin/markets`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+				},
+				body: JSON.stringify(payload),
+			});
+			const data = await resp.json().catch(() => ({}) as any);
 			if (!resp.ok || !data?.success) {
-				const detail =
-					typeof data?.error === "string" ? data.error : undefined;
+				const detail = typeof data?.error === "string" ? data.error : undefined;
 				if (!resp.ok) {
 					throw new Error(formatAdminHttpError(resp.status, detail));
 				}
@@ -308,13 +256,8 @@ export default function AddMarket({
 				umbrellaDataService.invalidateCache();
 				setLoadingUmbrellas(true);
 				try {
-					const refreshedUmbrellas =
-						await umbrellaDataService.fetchAllUmbrellas();
-					setUmbrellas(
-						Array.isArray(refreshedUmbrellas)
-							? refreshedUmbrellas
-							: []
-					);
+					const refreshedUmbrellas = await umbrellaDataService.fetchAllUmbrellas();
+					setUmbrellas(Array.isArray(refreshedUmbrellas) ? refreshedUmbrellas : []);
 				} catch (refreshListError) {
 					console.error("error", refreshListError);
 				} finally {
@@ -337,9 +280,7 @@ export default function AddMarket({
 					<span>Umbrella (optional)</span>
 					<select
 						value={form.selectedUmbrellaId}
-						onChange={(e) =>
-							update("selectedUmbrellaId", e.target.value)
-						}
+						onChange={(e) => update("selectedUmbrellaId", e.target.value)}
 						className="admin-form-select"
 					>
 						<option value="">Create new umbrella (default)</option>
@@ -349,11 +290,7 @@ export default function AddMarket({
 							</option>
 						))}
 					</select>
-					{loadingUmbrellas && (
-						<span className="admin-hint-text">
-							Loading umbrellas...
-						</span>
-					)}
+					{loadingUmbrellas && <span className="admin-hint-text">Loading umbrellas...</span>}
 				</label>
 
 				<UmbrellaFormFields
@@ -361,9 +298,7 @@ export default function AddMarket({
 					umbrellas={umbrellas}
 					umbrellaDisplayName={form.umbrellaDisplayName}
 					umbrellaRule={form.umbrellaRule}
-					onDisplayNameChange={(value) =>
-						update("umbrellaDisplayName", value)
-					}
+					onDisplayNameChange={(value) => update("umbrellaDisplayName", value)}
 					onRuleChange={(value) => update("umbrellaRule", value)}
 				/>
 
@@ -385,18 +320,15 @@ export default function AddMarket({
 					/>
 				</label>
 
-				{form.pandascore_matchId &&
-					form.pandascore_matchId.length > 0 && (
-						<PandascoreFields
-							game={form.game}
-							matchId={form.pandascore_matchId}
-							onGameChange={(value) => update("game", value)}
-							onMatchIdChange={(value) =>
-								update("pandascore_matchId", value)
-							}
-							disabled={isPrefilled}
-						/>
-					)}
+				{form.pandascore_matchId && form.pandascore_matchId.length > 0 && (
+					<PandascoreFields
+						game={form.game}
+						matchId={form.pandascore_matchId}
+						onGameChange={(value) => update("game", value)}
+						onMatchIdChange={(value) => update("pandascore_matchId", value)}
+						disabled={isPrefilled}
+					/>
+				)}
 
 				{/* Removed top-level tags; tags are configured per-question below */}
 
@@ -409,18 +341,13 @@ export default function AddMarket({
 					onEndDateChange={(value) => update("endDate", value)}
 				/>
 
-				<StatusToggle
-					value={form.status}
-					onChange={(value) => update("status", value)}
-				/>
+				<StatusToggle value={form.status} onChange={(value) => update("status", value)} />
 
 				{/* Twitch Enabled */}
 				<MarketTwitch
 					streamEnabled={form.streamEnabled}
 					streamUrl={form.streamUrl}
-					onStreamEnabledChange={(enabled) =>
-						update("streamEnabled", enabled)
-					}
+					onStreamEnabledChange={(enabled) => update("streamEnabled", enabled)}
 					onStreamUrlChange={(value) => update("streamUrl", value)}
 				/>
 
@@ -444,10 +371,7 @@ export default function AddMarket({
 				/>
 
 				{teamCandidates.length > 0 && (
-					<TeamLinker
-						candidates={teamCandidates}
-						onTeamLinked={handleTeamLinked}
-					/>
+					<TeamLinker candidates={teamCandidates} onTeamLinked={handleTeamLinked} />
 				)}
 
 				{/* Multiple Questions Section */}
@@ -462,11 +386,7 @@ export default function AddMarket({
 				/>
 
 				<div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-					<button
-						type="submit"
-						disabled={submitting}
-						style={{ padding: "8px 16px" }}
-					>
+					<button type="submit" disabled={submitting} style={{ padding: "8px 16px" }}>
 						{submitting ? "Creating..." : "Create Market"}
 					</button>
 				</div>

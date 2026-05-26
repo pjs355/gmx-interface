@@ -16,11 +16,6 @@ export interface MatchedMarketExchange {
 	tournament?: string;
 	startTime?: number;
 	status?: string;
-	kalshi?: {
-		tickerA: string;
-		tickerB?: string;
-		eventTicker: string;
-	};
 	dflow?: MatchedMarketsDflowWire;
 	predictFun?: {
 		marketIdA?: string;
@@ -55,11 +50,6 @@ interface RemoteMatchedMarket {
 			negRisk: boolean;
 			tickSize: string;
 		};
-		kalshi?: {
-			tickerA: string;
-			tickerB?: string;
-			eventTicker: string;
-		};
 		dflow?: MatchedMarketsDflowWire;
 		predictFun?: {
 			marketIdA?: string;
@@ -81,8 +71,7 @@ function remoteToExchange(remote: RemoteMatchedMarket): MatchedMarketExchange | 
 	const em = remote.exchangeMatching;
 	if (!em) return null;
 
-	const hasAnyExchange =
-		em.polymarket || em.kalshi || em.dflow || em.predictFun || em.limitless;
+	const hasAnyExchange = em.polymarket || em.dflow || em.predictFun || em.limitless;
 	if (!hasAnyExchange) return null;
 
 	const poly = em.polymarket;
@@ -101,7 +90,6 @@ function remoteToExchange(remote: RemoteMatchedMarket): MatchedMarketExchange | 
 		game: remote.game,
 		status: remote.status,
 		startTime: remote.eventDate ? new Date(remote.eventDate).getTime() : undefined,
-		kalshi: em.kalshi,
 		dflow: em.dflow,
 		predictFun: em.predictFun,
 		limitless: em.limitless,
@@ -124,7 +112,9 @@ export async function fetchMatchedMarkets(): Promise<MatchedMarketExchange[]> {
 	}
 
 	const remoteData: RemoteMatchedMarket[] = await res.json();
-	const data = remoteData.map(remoteToExchange).filter((m): m is MatchedMarketExchange => m !== null);
+	const data = remoteData
+		.map(remoteToExchange)
+		.filter((m): m is MatchedMarketExchange => m !== null);
 	cachedMarkets = data;
 	lastFetchTime = now;
 	return data;

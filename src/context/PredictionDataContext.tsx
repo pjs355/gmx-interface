@@ -1,15 +1,5 @@
-import React, {
-	createContext,
-	useCallback,
-	useContext,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
-import {
-	umbrellaDataService,
-	type Umbrella,
-} from "@/services/api/umbrellaDataService";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataService";
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
 
@@ -66,14 +56,8 @@ type PredictionDataContextValue = {
 	getQuestionsForUmbrella: (umbrellaId: string) => any[];
 	getAllQuestionsForUmbrella: (umbrellaId: string) => any[];
 	getResolvedQuestionsForUmbrella: (umbrellaId: string) => any[];
-	getOrderbookForQuestion: (
-		umbrellaId: string,
-		questionId: string
-	) => any | null;
-	refreshOrderbook: (
-		umbrellaId: string,
-		questionId: string
-	) => Promise<any | null>;
+	getOrderbookForQuestion: (umbrellaId: string, questionId: string) => any | null;
+	refreshOrderbook: (umbrellaId: string, questionId: string) => Promise<any | null>;
 };
 
 const PredictionDataContext = createContext<PredictionDataContextValue>({
@@ -100,31 +84,19 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	refreshOrderbook: async () => null,
 });
 
-export function PredictionDataProvider({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
+export function PredictionDataProvider({ children }: { children: React.ReactNode }) {
 	const [loading, setLoading] = useState(false);
 	const [umbrellas, setUmbrellas] = useState<Umbrella[]>([]);
-	const [marketsByUmbrella, setMarketsByUmbrella] = useState<
-		Record<string, MarketLite[]>
-	>({});
-	const [allMarketsByUmbrella, setAllMarketsByUmbrella] = useState<
-		Record<string, MarketLite[]>
-	>({});
+	const [marketsByUmbrella, setMarketsByUmbrella] = useState<Record<string, MarketLite[]>>({});
+	const [allMarketsByUmbrella, setAllMarketsByUmbrella] = useState<Record<string, MarketLite[]>>(
+		{},
+	);
 	const [resolvedMarketsByUmbrella, setResolvedMarketsByUmbrella] = useState<
 		Record<string, MarketLite[]>
 	>({});
-	const [singleMarketQuestions, setSingleMarketQuestions] = useState<
-		Record<string, any>
-	>({});
-	const [singleMarketOrderbooks, setSingleMarketOrderbooks] = useState<
-		Record<string, any>
-	>({});
-	const [multiMarketData, setMultiMarketData] = useState<Record<string, any>>(
-		{}
-	);
+	const [singleMarketQuestions, setSingleMarketQuestions] = useState<Record<string, any>>({});
+	const [singleMarketOrderbooks, setSingleMarketOrderbooks] = useState<Record<string, any>>({});
+	const [multiMarketData, setMultiMarketData] = useState<Record<string, any>>({});
 	const [tags, setTags] = useState<Tag[]>([]);
 	const [tagsLoading, setTagsLoading] = useState(true);
 	const [tagsError, setTagsError] = useState<string | null>(null);
@@ -144,21 +116,13 @@ export function PredictionDataProvider({
 			const entries = await Promise.all(
 				umbrellas.map(async (umbrella: any) => {
 					const markets = umbrella.children;
-					const key =
-						umbrella?._id ||
-						umbrella?.id ||
-						umbrella?.slug ||
-						JSON.stringify(umbrella);
+					const key = umbrella?._id || umbrella?.id || umbrella?.slug || JSON.stringify(umbrella);
 
 					// Quiet detailed context debug counts to keep console clean
 
 					// Filter out resolved markets here so downstream consumers never see them
 					const filteredMarkets = Array.isArray(markets)
-						? markets.filter(
-								(m: any) =>
-									String(m?.status ?? "").toLowerCase() !==
-									"resolved"
-						  )
+						? markets.filter((m: any) => String(m?.status ?? "").toLowerCase() !== "resolved")
 						: [];
 					// Provide a cleaned umbrella copy with filtered children for backward compatibility
 					// Store original children separately for image/tag resolution
@@ -167,13 +131,8 @@ export function PredictionDataProvider({
 						children: filteredMarkets, // Filtered for backward compatibility with existing components
 						originalChildren: markets, // Keep original unfiltered children for image resolution (has tagIds)
 					};
-					return [
-						key as string,
-						filteredMarkets,
-						cleanedUmbrella,
-						markets,
-					] as const;
-				})
+					return [key as string, filteredMarkets, cleanedUmbrella, markets] as const;
+				}),
 			);
 			const marketsMap: Record<string, MarketLite[]> = {};
 			const allMarketsMap: Record<string, MarketLite[]> = {};
@@ -189,8 +148,7 @@ export function PredictionDataProvider({
 
 				// Store only resolved markets separately
 				const resolvedMarkets = allMarkets.filter(
-					(m: any) =>
-						String(m?.status ?? "").toLowerCase() === "resolved"
+					(m: any) => String(m?.status ?? "").toLowerCase() === "resolved",
 				);
 				if (resolvedMarkets.length > 0) {
 					resolvedMarketsMap[key] = resolvedMarkets;
@@ -238,7 +196,7 @@ export function PredictionDataProvider({
 		(umbrellaId: string) => {
 			return umbrellas.find((u: any) => u?._id === umbrellaId);
 		},
-		[umbrellas]
+		[umbrellas],
 	);
 
 	const getQuestionsForUmbrella = useCallback(
@@ -246,11 +204,9 @@ export function PredictionDataProvider({
 			const umbrellaMarkets = marketsByUmbrella[umbrellaId];
 			if (Array.isArray(umbrellaMarkets)) return umbrellaMarkets as any[];
 			const umbrella = getUmbrellaById(umbrellaId) as any;
-			return umbrella && Array.isArray(umbrella.children)
-				? umbrella.children
-				: [];
+			return umbrella && Array.isArray(umbrella.children) ? umbrella.children : [];
 		},
-		[marketsByUmbrella, getUmbrellaById]
+		[marketsByUmbrella, getUmbrellaById],
 	);
 
 	const getOrderbookForQuestion = useCallback(
@@ -270,7 +226,7 @@ export function PredictionDataProvider({
 			}
 			return null;
 		},
-		[singleMarketQuestions, singleMarketOrderbooks, multiMarketData]
+		[singleMarketQuestions, singleMarketOrderbooks, multiMarketData],
 	);
 
 	const getAllQuestionsForUmbrella = useCallback(
@@ -285,7 +241,7 @@ export function PredictionDataProvider({
 			// Quiet fallback log
 			return getQuestionsForUmbrella(umbrellaId);
 		},
-		[allMarketsByUmbrella, getQuestionsForUmbrella]
+		[allMarketsByUmbrella, getQuestionsForUmbrella],
 	);
 
 	const getResolvedQuestionsForUmbrella = useCallback(
@@ -299,7 +255,7 @@ export function PredictionDataProvider({
 			// Quiet no resolved markets log
 			return [];
 		},
-		[resolvedMarketsByUmbrella]
+		[resolvedMarketsByUmbrella],
 	);
 
 	const refreshOrderbook = useCallback(
@@ -323,9 +279,7 @@ export function PredictionDataProvider({
 								orderbooks: {},
 							}),
 							orderbooks: {
-								...((prev[umbrellaId] &&
-									prev[umbrellaId].orderbooks) ||
-									{}),
+								...((prev[umbrellaId] && prev[umbrellaId].orderbooks) || {}),
 								[questionId]: ob,
 							},
 						},
@@ -336,7 +290,7 @@ export function PredictionDataProvider({
 				return null;
 			}
 		},
-		[singleMarketQuestions, getQuestionsForUmbrella]
+		[singleMarketQuestions, getQuestionsForUmbrella],
 	);
 
 	useEffect(() => {
@@ -437,14 +391,10 @@ export function PredictionDataProvider({
 			getResolvedQuestionsForUmbrella,
 			getOrderbookForQuestion,
 			refreshOrderbook,
-		]
+		],
 	);
 
-	return (
-		<PredictionDataContext.Provider value={value}>
-			{children}
-		</PredictionDataContext.Provider>
-	);
+	return <PredictionDataContext.Provider value={value}>{children}</PredictionDataContext.Provider>;
 }
 
 export function usePredictionData(): PredictionDataContextValue {

@@ -21,10 +21,7 @@ export function formatUnknownSorVenue(venue: string): string {
 	return `Unknown venue: ${venue}`;
 }
 
-export function formatPolymarketOrderRejected(
-	context: string,
-	status: number | undefined,
-): string {
+export function formatPolymarketOrderRejected(context: string, status: number | undefined): string {
 	const verb = context.includes("limit") ? "limit order" : "market order";
 	if (status != null) {
 		return `Polymarket rejected the ${verb} (HTTP ${status}). Try again.`;

@@ -1,16 +1,13 @@
 import React, { useEffect } from "react";
 import Button from "components/Button/Button";
-import {
-	shortenTeamLabelForButton,
-	hexToRgba,
-	getContrastingTextColor,
-	oddsBarPercent,
-} from "@/helpers/predictionUtils";
+import { shortenTeamLabelForButton } from "@/features/markets/presentation/marketLabels";
+import { hexToRgba, getContrastingTextColor } from "@/features/markets/presentation/teamColors";
+import { oddsBarPercent } from "@/features/markets/pricing/orderbookDisplayPrices";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import {
 	isPredictionPricingDebugEnabled,
 	priceDebugLog,
-} from "@/utils/debugPredictionPricing";
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 
 interface SingleMarketActionsProps {
@@ -32,7 +29,7 @@ interface SingleMarketActionsProps {
 }
 
 export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
-	orderbook,
+	orderbook: _orderbook,
 	onNavigate,
 	question,
 	isDailyPlayerCount = false,
@@ -62,9 +59,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			? "live_ws"
 			: "none";
 	const noSource: "live_ws" | "none" =
-		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice)
-			? "live_ws"
-			: "none";
+		typeof liveVenueNoPrice === "number" && Number.isFinite(liveVenueNoPrice) ? "live_ws" : "none";
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
@@ -95,10 +90,8 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 		noSource,
 	]);
 
-	const yesPriceCents =
-		yesPrice !== null && yesPrice !== undefined ? formatPrice(yesPrice) : "--";
-	const noPriceCents =
-		noPrice !== null && noPrice !== undefined ? formatPrice(noPrice) : "--";
+	const yesPriceCents = yesPrice !== null && yesPrice !== undefined ? formatPrice(yesPrice) : "--";
+	const noPriceCents = noPrice !== null && noPrice !== undefined ? formatPrice(noPrice) : "--";
 
 	const deriveLabels = (): {
 		yesLabel: string;
@@ -106,14 +99,8 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 		settlementNumber: string | null;
 	} => {
 		if (isDailyPlayerCount) {
-			const questionDisplay = (
-				question?.displayName ||
-				(question as any)?.question ||
-				""
-			).trim();
-			const settlementNum = questionDisplay
-				.replace(/^(Over|Under)\s*/i, "")
-				.trim();
+			const questionDisplay = (question?.displayName || (question as any)?.question || "").trim();
+			const settlementNum = questionDisplay.replace(/^(Over|Under)\s*/i, "").trim();
 			return {
 				yesLabel: "Over",
 				noLabel: "Under",
@@ -121,18 +108,10 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 			};
 		}
 
-		const umbrellaCleaned = (umbrellaDisplayName || "")
-			.replace(/\s*-\s*Match Winner$/i, "")
-			.trim();
+		const umbrellaCleaned = (umbrellaDisplayName || "").replace(/\s*-\s*Match Winner$/i, "").trim();
 		const raw =
-			umbrellaCleaned ||
-			(
-				question?.displayName ||
-				(question as any)?.question ||
-				""
-			).trim();
-		if (!raw)
-			return { yesLabel: "Yes", noLabel: "No", settlementNumber: null };
+			umbrellaCleaned || (question?.displayName || (question as any)?.question || "").trim();
+		if (!raw) return { yesLabel: "Yes", noLabel: "No", settlementNumber: null };
 		const parts = raw
 			.split(/\s*vs\.?\s*/i)
 			.map((s: any) => s.trim())
@@ -150,16 +129,9 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const { yesLabel, noLabel, settlementNumber } = deriveLabels();
 
 	const isVsSingle = (() => {
-		const umbrellaCleaned = (umbrellaDisplayName || "")
-			.replace(/\s*-\s*Match Winner$/i, "")
-			.trim();
+		const umbrellaCleaned = (umbrellaDisplayName || "").replace(/\s*-\s*Match Winner$/i, "").trim();
 		const raw =
-			umbrellaCleaned ||
-			(
-				question?.displayName ||
-				(question as any)?.question ||
-				""
-			).trim();
+			umbrellaCleaned || (question?.displayName || (question as any)?.question || "").trim();
 		const parts = raw
 			.split(/\s*vs\.?\s*/i)
 			.map((s: any) => s.trim())
@@ -171,12 +143,8 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const yesTextColor = getContrastingTextColor(yesColor);
 	const noTextColor = getContrastingTextColor(noColor);
 
-	const yesDisplayLabel = isVsSingle
-		? shortenTeamLabelForButton(yesLabel)
-		: yesLabel;
-	const noDisplayLabel = isVsSingle
-		? shortenTeamLabelForButton(noLabel)
-		: noLabel;
+	const yesDisplayLabel = isVsSingle ? shortenTeamLabelForButton(yesLabel) : yesLabel;
+	const noDisplayLabel = isVsSingle ? shortenTeamLabelForButton(noLabel) : noLabel;
 
 	const yesRowLabel = yesLabel;
 	const noRowLabel = noLabel;
@@ -203,34 +171,19 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	if (compact) {
 		const yesBarPct = oddsBarPercent(yesPrice);
 		const noBarPct = oddsBarPercent(noPrice);
-		const yesBarColor = isVsSingle
-			? yesInvertLogo
-				? "#ffffff"
-				: yesColor
-			: "#22c55e";
-		const noBarColor = isVsSingle
-			? noInvertLogo
-				? "#ffffff"
-				: noColor
-			: "#ef4444";
+		const yesBarColor = isVsSingle ? (yesInvertLogo ? "#ffffff" : yesColor) : "#22c55e";
+		const noBarColor = isVsSingle ? (noInvertLogo ? "#ffffff" : noColor) : "#ef4444";
 
 		return (
 			<div className="single-market-actions single-market-actions--compact">
 				{settlementBlock}
 				<div className="prediction-card-outcome-rows">
 					<div className="prediction-card-outcome-row">
-						<div className="prediction-card-outcome-logo">
-							{yesLogoSlot}
-						</div>
+						<div className="prediction-card-outcome-logo">{yesLogoSlot}</div>
 						<div className="prediction-card-outcome-middle">
-							<span className="prediction-card-outcome-label">
-								{yesRowLabel}
-							</span>
+							<span className="prediction-card-outcome-label">{yesRowLabel}</span>
 							{yesBarPct !== null ? (
-								<div
-									className="prediction-card-outcome-odds-bar"
-									aria-hidden
-								>
+								<div className="prediction-card-outcome-odds-bar" aria-hidden>
 									<div
 										className="prediction-card-outcome-odds-bar__fill"
 										style={{
@@ -247,21 +200,15 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 							aria-label={yesAriaLabel}
 							onClick={() => onNavigate("yes")}
 							style={{
-								background: isVsSingle
-									? yesColor
-									: "rgba(34, 197, 94, 0.1)",
+								background: isVsSingle ? yesColor : "rgba(34, 197, 94, 0.1)",
 								color: isVsSingle ? yesTextColor : "#22c55e",
-								border: `2px solid ${
-									isVsSingle ? yesColor : "#22c55e"
-								}`,
+								border: `2px solid ${isVsSingle ? yesColor : "#22c55e"}`,
 								fontSize: "16px",
 								padding: "10px 12px",
 								minHeight: "44px",
 							}}
 							onMouseEnter={(e) => {
-								e.currentTarget.style.background = isVsSingle
-									? yesColor
-									: "rgba(34, 197, 94, 0.2)";
+								e.currentTarget.style.background = isVsSingle ? yesColor : "rgba(34, 197, 94, 0.2)";
 								e.currentTarget.style.transform = "translateY(-1px)";
 								e.currentTarget.style.boxShadow = isVsSingle
 									? `0 4px 8px ${hexToRgba(yesColor, 0.45)}`
@@ -271,9 +218,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 								}
 							}}
 							onMouseLeave={(e) => {
-								e.currentTarget.style.background = isVsSingle
-									? yesColor
-									: "rgba(34, 197, 94, 0.1)";
+								e.currentTarget.style.background = isVsSingle ? yesColor : "rgba(34, 197, 94, 0.1)";
 								e.currentTarget.style.transform = "translateY(0)";
 								e.currentTarget.style.boxShadow = "none";
 								if (isVsSingle) {
@@ -285,18 +230,11 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						</Button>
 					</div>
 					<div className="prediction-card-outcome-row">
-						<div className="prediction-card-outcome-logo">
-							{noLogoSlot}
-						</div>
+						<div className="prediction-card-outcome-logo">{noLogoSlot}</div>
 						<div className="prediction-card-outcome-middle">
-							<span className="prediction-card-outcome-label">
-								{noRowLabel}
-							</span>
+							<span className="prediction-card-outcome-label">{noRowLabel}</span>
 							{noBarPct !== null ? (
-								<div
-									className="prediction-card-outcome-odds-bar"
-									aria-hidden
-								>
+								<div className="prediction-card-outcome-odds-bar" aria-hidden>
 									<div
 										className="prediction-card-outcome-odds-bar__fill"
 										style={{
@@ -313,9 +251,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 							aria-label={noAriaLabel}
 							onClick={() => onNavigate("no")}
 							style={{
-								background: isVsSingle
-									? noColor
-									: "rgba(239, 68, 68, 0.1)",
+								background: isVsSingle ? noColor : "rgba(239, 68, 68, 0.1)",
 								color: isVsSingle ? noTextColor : "#ef4444",
 								border: `2px solid ${isVsSingle ? noColor : "#ef4444"}`,
 								fontSize: "16px",
@@ -323,9 +259,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 								minHeight: "44px",
 							}}
 							onMouseEnter={(e) => {
-								e.currentTarget.style.background = isVsSingle
-									? noColor
-									: "rgba(239, 68, 68, 0.2)";
+								e.currentTarget.style.background = isVsSingle ? noColor : "rgba(239, 68, 68, 0.2)";
 								e.currentTarget.style.transform = "translateY(-1px)";
 								e.currentTarget.style.boxShadow = isVsSingle
 									? `0 4px 8px ${hexToRgba(noColor, 0.45)}`
@@ -335,9 +269,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 								}
 							}}
 							onMouseLeave={(e) => {
-								e.currentTarget.style.background = isVsSingle
-									? noColor
-									: "rgba(239, 68, 68, 0.1)";
+								e.currentTarget.style.background = isVsSingle ? noColor : "rgba(239, 68, 68, 0.1)";
 								e.currentTarget.style.transform = "translateY(0)";
 								e.currentTarget.style.boxShadow = "none";
 								if (isVsSingle) {
@@ -362,22 +294,16 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 					className="action-button yes-button"
 					onClick={() => onNavigate("yes")}
 					style={{
-						background: isVsSingle
-							? yesColor
-							: "rgba(34, 197, 94, 0.1)",
+						background: isVsSingle ? yesColor : "rgba(34, 197, 94, 0.1)",
 						color: isVsSingle ? yesTextColor : "#22c55e",
-						border: `2px solid ${
-							isVsSingle ? yesColor : "#22c55e"
-						}`,
+						border: `2px solid ${isVsSingle ? yesColor : "#22c55e"}`,
 						fontSize: "16px",
 						padding: "12px 24px",
 						minHeight: "48px",
 						width: "100%",
 					}}
 					onMouseEnter={(e) => {
-						e.currentTarget.style.background = isVsSingle
-							? yesColor
-							: "rgba(34, 197, 94, 0.2)";
+						e.currentTarget.style.background = isVsSingle ? yesColor : "rgba(34, 197, 94, 0.2)";
 						e.currentTarget.style.transform = "translateY(-1px)";
 						e.currentTarget.style.boxShadow = isVsSingle
 							? `0 4px 8px ${hexToRgba(yesColor, 0.45)}`
@@ -387,9 +313,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						}
 					}}
 					onMouseLeave={(e) => {
-						e.currentTarget.style.background = isVsSingle
-							? yesColor
-							: "rgba(34, 197, 94, 0.1)";
+						e.currentTarget.style.background = isVsSingle ? yesColor : "rgba(34, 197, 94, 0.1)";
 						e.currentTarget.style.transform = "translateY(0)";
 						e.currentTarget.style.boxShadow = "none";
 						if (isVsSingle) {
@@ -425,9 +349,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 					className="action-button no-button"
 					onClick={() => onNavigate("no")}
 					style={{
-						background: isVsSingle
-							? noColor
-							: "rgba(239, 68, 68, 0.1)",
+						background: isVsSingle ? noColor : "rgba(239, 68, 68, 0.1)",
 						color: isVsSingle ? noTextColor : "#ef4444",
 						border: `2px solid ${isVsSingle ? noColor : "#ef4444"}`,
 						fontSize: "16px",
@@ -436,9 +358,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						width: "100%",
 					}}
 					onMouseEnter={(e) => {
-						e.currentTarget.style.background = isVsSingle
-							? noColor
-							: "rgba(239, 68, 68, 0.2)";
+						e.currentTarget.style.background = isVsSingle ? noColor : "rgba(239, 68, 68, 0.2)";
 						e.currentTarget.style.transform = "translateY(-1px)";
 						e.currentTarget.style.boxShadow = isVsSingle
 							? `0 4px 8px ${hexToRgba(noColor, 0.45)}`
@@ -448,9 +368,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 						}
 					}}
 					onMouseLeave={(e) => {
-						e.currentTarget.style.background = isVsSingle
-							? noColor
-							: "rgba(239, 68, 68, 0.1)";
+						e.currentTarget.style.background = isVsSingle ? noColor : "rgba(239, 68, 68, 0.1)";
 						e.currentTarget.style.transform = "translateY(0)";
 						e.currentTarget.style.boxShadow = "none";
 						if (isVsSingle) {

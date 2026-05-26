@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
 	normalizeOrderQuestionIdKey,
 	type ProcessedOrder,
@@ -10,23 +10,24 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import TradeHistoryListMobile from "./TradeHistoryListMobile";
 import UmbrellaImage from "./UmbrellaImage";
 import Tooltip from "components/Tooltip/Tooltip";
+import { umbrellaHeaderLabel } from "@/features/markets/presentation/umbrellaDisplayName";
+import { buildUmbrellaLookupByPolymarketConditionId } from "@/features/trading/venues/polymarket/trade/polymarketConditionLookup";
 import {
-	umbrellaHeaderLabel,
-} from "@/helpers/umbrellaDisplayName";
-import { buildUmbrellaLookupByPolymarketConditionId } from "@/trading/venues/polymarket/trade/polymarketConditionLookup";
-import { buildUmbrellaLookupByDflowEventTicker, buildUmbrellaLookupByDflowOutcomeMint } from "@/trading/venues/dflow/catalog/dflowUmbrellaLookup";
-import { levelUpQuestionIdsForVenueHistoryRow } from "@/trading/venues/levelup/levelUpQuestionIdsForVenueHistory";
+	buildUmbrellaLookupByDflowEventTicker,
+	buildUmbrellaLookupByDflowOutcomeMint,
+} from "@/features/trading/venues/dflow/catalog/dflowUmbrellaLookup";
+import { levelUpQuestionIdsForVenueHistoryRow } from "@/features/trading/venues/levelup/levelUpQuestionIdsForVenueHistory";
 import {
 	getVenueHistoryMarketColumnLabel,
 	isGenericBinaryOutcomeLabel,
-} from "@/trading/venues/predict/portfolio/predictPositionLabel";
+} from "@/features/trading/venues/predict/portfolio/predictPositionLabel";
 import {
 	getTradeCount,
 	formatHistoryReturnPctAbs,
 	historyVenueRowPortfolioYesNoSide,
 	venueHistoryPositionToSyntheticOrders,
 	venueHistoryRowToSyntheticOrder,
-} from "../utils/positionHelpers";
+} from "@/features/positions/utils/positionHelpers";
 import {
 	parseVsTeamsFromTitle,
 	pickResolvedWinnerFromMarkets,
@@ -34,26 +35,24 @@ import {
 	shortTeamDisplayName,
 	winnerLabelFromLevelUpTitle,
 	winnerLabelFromVenuePosition,
-} from "../utils/historyOutcomeWinner";
-import { debugLimitlessPortfolio } from "@/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
-import {
-	buildPredictUmbrellaLookup,
-} from "@/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
+} from "@/features/positions/utils/historyOutcomeWinner";
+import { debugLimitlessPortfolio } from "@/features/trading/venues/limitless/portfolio/limitlessPortfolioDebug";
+import { buildPredictUmbrellaLookup } from "@/features/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor";
 import {
 	logFullHistoryDebug,
 	type FullHistoryUnifiedBlock,
 	type LogFullHistoryDebugParams,
-} from "../utils/fullHistoryDebugLog";
-import { buildHistoryUnifiedBlocks } from "../utils/buildHistoryUnifiedBlocks";
+} from "@/features/positions/utils/fullHistoryDebugLog";
+import { buildHistoryUnifiedBlocks } from "@/features/positions/utils/buildHistoryUnifiedBlocks";
 import {
 	POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY,
 	polymarketSplitSettlementBadgeVisible,
-} from "../utils/polymarketHistorySplitSettlementBadge";
-import type { UmbrellaPositions } from "../utils/positionHelpers";
+} from "@/features/positions/utils/polymarketHistorySplitSettlementBadge";
+import type { UmbrellaPositions } from "@/features/positions/utils/positionHelpers";
 import {
 	buildHistoryHoldingsBlockedKeys,
 	filterUnifiedHistoryBlocksByOpenPositions,
-} from "../utils/filterHistoryBlocksByOpenPositions";
+} from "@/features/positions/utils/filterHistoryBlocksByOpenPositions";
 
 type MergedHistoryRow = {
 	side: "Yes" | "No";
@@ -120,7 +119,8 @@ export default function HistoryCardView({
 
 	const toggle = (set: Set<string>, id: string) => {
 		const n = new Set(set);
-		if (n.has(id)) n.delete(id); else n.add(id);
+		if (n.has(id)) n.delete(id);
+		else n.add(id);
 		return n;
 	};
 
@@ -132,7 +132,10 @@ export default function HistoryCardView({
 		return synth;
 	}, [venueHistory]);
 
-	const allOrders = useMemo(() => [...orders, ...venueHistorySyntheticOrders], [orders, venueHistorySyntheticOrders]);
+	const allOrders = useMemo(
+		() => [...orders, ...venueHistorySyntheticOrders],
+		[orders, venueHistorySyntheticOrders],
+	);
 
 	const unifiedBlocks = useMemo(
 		() =>
@@ -161,16 +164,11 @@ export default function HistoryCardView({
 	);
 
 	const historyHoldingsBlocked = useMemo(
-		() =>
-			buildHistoryHoldingsBlockedKeys(
-				openUmbrellaPositions,
-				resolvedUmbrellaPositions,
-			),
+		() => buildHistoryHoldingsBlockedKeys(openUmbrellaPositions, resolvedUmbrellaPositions),
 		[openUmbrellaPositions, resolvedUmbrellaPositions],
 	);
 	const unifiedBlocksForDisplay = useMemo(
-		() =>
-			filterUnifiedHistoryBlocksByOpenPositions(unifiedBlocks, historyHoldingsBlocked),
+		() => filterUnifiedHistoryBlocksByOpenPositions(unifiedBlocks, historyHoldingsBlocked),
 		[unifiedBlocks, historyHoldingsBlocked],
 	);
 
@@ -221,9 +219,7 @@ export default function HistoryCardView({
 				block.luMarkets.map((r) => r.market),
 				umbrellaTitle,
 			);
-			let blockOutcomeShort = blockCanonical
-				? shortTeamDisplayName(blockCanonical)
-				: null;
+			let blockOutcomeShort = blockCanonical ? shortTeamDisplayName(blockCanonical) : null;
 			if (!blockOutcomeShort && luWinner) {
 				blockOutcomeShort = shortTeamDisplayName(luWinner);
 			}
@@ -248,7 +244,7 @@ export default function HistoryCardView({
 			};
 			const sideBuckets: Record<"Yes" | "No", Bucket> = {
 				Yes: { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
-				No:  { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
+				No: { hasData: false, label: "", outcomeText: "", marketIds: [], wonByQid: {} },
 			};
 
 			for (const { market } of block.luMarkets) {
@@ -256,9 +252,7 @@ export default function HistoryCardView({
 				if (!qid) continue;
 				const resolved = String((market as any).resolvedOutcome || "").toLowerCase();
 				const title = (market?.displayName || (market as any)?.question || "").trim();
-				const vsPair =
-					parseVsTeamsFromTitle(title) ??
-					parseVsTeamsFromTitle(umbrellaTitle);
+				const vsPair = parseVsTeamsFromTitle(title) ?? parseVsTeamsFromTitle(umbrellaTitle);
 				const isVs = vsPair != null;
 
 				for (const side of ["Yes", "No"] as const) {
@@ -268,32 +262,22 @@ export default function HistoryCardView({
 					bucket.hasData = true;
 					if (!bucket.marketIds.includes(qid)) bucket.marketIds.push(qid);
 					const won =
-						(side === "Yes" && resolved === "yes") ||
-						(side === "No" && resolved === "no");
+						(side === "Yes" && resolved === "yes") || (side === "No" && resolved === "no");
 					bucket.wonByQid[qid] = won;
 
 					if (!bucket.label) {
-						bucket.label = isVs && vsPair
-							? shortTeamDisplayName(side === "Yes" ? vsPair[0] : vsPair[1])
-							: side;
+						bucket.label =
+							isVs && vsPair ? shortTeamDisplayName(side === "Yes" ? vsPair[0] : vsPair[1]) : side;
 					}
 					if (!bucket.outcomeText) {
-						bucket.outcomeText = winnerLabelFromLevelUpTitle(
-							title,
-							resolved,
-							umbrellaTitle,
-						);
+						bucket.outcomeText = winnerLabelFromLevelUpTitle(title, resolved, umbrellaTitle);
 					}
 				}
 			}
 
 			for (const pos of block.venuePositions) {
 				const side = historyVenueRowPortfolioYesNoSide(pos);
-				if (
-					import.meta.env.DEV &&
-					pos.venue === "limitless" &&
-					limitlessHistUiLog < 18
-				) {
+				if (import.meta.env.DEV && pos.venue === "limitless" && limitlessHistUiLog < 18) {
 					limitlessHistUiLog++;
 					const synth = venueHistoryRowToSyntheticOrder(pos);
 					debugLimitlessPortfolio("History tab UI (card): limitless row → bucket + labels", {
@@ -310,6 +294,7 @@ export default function HistoryCardView({
 							pos.marketTitle,
 							pos,
 							block.venuePositions.length === 1 && block.luMarkets.length === 0,
+							block.umbrella,
 						),
 						syntheticOrderPosition: synth?.position,
 						syntheticPrice: synth?.price,
@@ -331,11 +316,11 @@ export default function HistoryCardView({
 					pos.marketTitle,
 					pos,
 					singleInGroup,
+					block.umbrella,
 				);
 				if (
 					!bucket.label ||
-					(isGenericBinaryOutcomeLabel(bucket.label) &&
-						!isGenericBinaryOutcomeLabel(columnLabel))
+					(isGenericBinaryOutcomeLabel(bucket.label) && !isGenericBinaryOutcomeLabel(columnLabel))
 				) {
 					bucket.label = columnLabel;
 				}
@@ -372,21 +357,15 @@ export default function HistoryCardView({
 					const qNorm = normalizeOrderQuestionIdKey(String(qid));
 					let qidShares = 0;
 					for (const o of allOrders) {
-						if (
-							normalizeOrderQuestionIdKey(String(o.questionId ?? "")) !== qNorm
-						) {
+						if (normalizeOrderQuestionIdKey(String(o.questionId ?? "")) !== qNorm) {
 							continue;
 						}
 						if (!o.filled) continue;
 						if (o.position?.toLowerCase() !== sideLower) continue;
 						const shares =
-							typeof o.tokenValue === "number" && Number.isFinite(o.tokenValue)
-								? o.tokenValue
-								: 0;
+							typeof o.tokenValue === "number" && Number.isFinite(o.tokenValue) ? o.tokenValue : 0;
 						const cash =
-							typeof o.usdcValue === "number" && Number.isFinite(o.usdcValue)
-								? o.usdcValue
-								: 0;
+							typeof o.usdcValue === "number" && Number.isFinite(o.usdcValue) ? o.usdcValue : 0;
 						if (o.side === "buy") {
 							qidShares += shares;
 							totalCashOut += cash;
@@ -408,12 +387,9 @@ export default function HistoryCardView({
 				const displayCost = Math.max(netCashSpent, 0);
 				const totalReturn = payout + totalCashIn - totalCashOut;
 				const retDenom = displayCost > 0 ? displayCost : totalCashOut;
-				const retPct =
-					retDenom > 0 ? (totalReturn / retDenom) * 100 : null;
+				const retPct = retDenom > 0 ? (totalReturn / retDenom) * 100 : null;
 				const outcomeColor = totalReturn >= 0 ? "#16a34a" : "#ef4444";
-				const fallbackOutcome = b.outcomeText
-					? shortTeamDisplayName(b.outcomeText)
-					: "—";
+				const fallbackOutcome = b.outcomeText ? shortTeamDisplayName(b.outcomeText) : "—";
 				const polymarketSplitBadge = polymarketSplitSettlementBadgeVisible(
 					block.venuePositions,
 					side,
@@ -441,7 +417,9 @@ export default function HistoryCardView({
 		return (
 			<div style={{ textAlign: "center", padding: "40px", color: "#888" }}>
 				<p>No resolved markets with trading history found.</p>
-				<p style={{ fontSize: "14px", marginTop: "8px" }}>Only resolved markets where you have trading history will appear here.</p>
+				<p style={{ fontSize: "14px", marginTop: "8px" }}>
+					Only resolved markets where you have trading history will appear here.
+				</p>
 			</div>
 		);
 	}
@@ -458,9 +436,11 @@ export default function HistoryCardView({
 							const thKey = `${block.id}-${row.side}-th`;
 							const isThExpanded = expandedTradeHistory.has(thKey);
 							const tradeListMarketTitle =
-								(block.venuePositions.find((p) => p.marketTitle?.trim())
-									?.marketTitle ?? "")
-									.trim() || umbrellaHeaderLabel(block.umbrella) || undefined;
+								(
+									block.venuePositions.find((p) => p.marketTitle?.trim())?.marketTitle ?? ""
+								).trim() ||
+								umbrellaHeaderLabel(block.umbrella) ||
+								undefined;
 
 							const retC = row.totalReturn >= 0 ? "#16a34a" : "#ef4444";
 							const retT = (() => {
@@ -472,21 +452,65 @@ export default function HistoryCardView({
 							})();
 
 							return (
-								<div key={cardId} style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+								<div
+									key={cardId}
+									style={{
+										background: "#1a1a1a",
+										border: "1px solid #2a2a2a",
+										borderRadius: 12,
+										overflow: "hidden",
+										marginBottom: 12,
+									}}
+								>
 									{/* Card Header */}
-									<div style={{ padding: "16px", background: "#0a0a0a", borderBottom: "1px solid #2a2a2a", display: "flex", alignItems: "center", gap: 12 }}>
+									<div
+										style={{
+											padding: "16px",
+											background: "#0a0a0a",
+											borderBottom: "1px solid #2a2a2a",
+											display: "flex",
+											alignItems: "center",
+											gap: 12,
+										}}
+									>
 										<UmbrellaImage umbrella={block.umbrella} size={40} />
 										<div style={{ flex: 1 }}>
-											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+											<div
+												style={{
+													color: "#888",
+													fontSize: 11,
+													textTransform: "uppercase",
+													letterSpacing: 0.6,
+													marginBottom: 4,
+												}}
+											>
 												{blockUmbrellaTitle}
 											</div>
-											<div style={{ color: "#fff", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+											<div
+												style={{
+													color: "#fff",
+													fontSize: 16,
+													fontWeight: 600,
+													display: "flex",
+													alignItems: "center",
+													gap: 8,
+												}}
+											>
 												{row.polymarketSplitBadge === true ? (
-													<Tooltip content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY} position="top">
+													<Tooltip
+														content={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
+														position="top"
+													>
 														<span
 															aria-label={POLYMARKET_SPLIT_SETTLEMENT_TOOLTIP_COPY}
 															role="img"
-															style={{ cursor: "help", color: "#f59e0b", flexShrink: 0, fontSize: 16, lineHeight: 1 }}
+															style={{
+																cursor: "help",
+																color: "#f59e0b",
+																flexShrink: 0,
+																fontSize: 16,
+																lineHeight: 1,
+															}}
 														>
 															⚠
 														</span>
@@ -500,43 +524,139 @@ export default function HistoryCardView({
 									{/* Summary row */}
 									<div
 										onClick={() => setExpandedCards((p) => toggle(p, cardId))}
-										style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: isDetailOpen ? "#0f0f0f" : "transparent" }}
+										style={{
+											padding: "16px",
+											display: "flex",
+											justifyContent: "space-between",
+											alignItems: "center",
+											cursor: "pointer",
+											background: isDetailOpen ? "#0f0f0f" : "transparent",
+										}}
 									>
 										<div style={{ flex: 1 }}>
-											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Outcome</div>
-											<div style={{ color: row.outcomeColor, fontSize: 16, fontWeight: 700 }}>{row.outcomeText}</div>
+											<div
+												style={{
+													color: "#888",
+													fontSize: 11,
+													textTransform: "uppercase",
+													letterSpacing: 0.6,
+													marginBottom: 4,
+												}}
+											>
+												Outcome
+											</div>
+											<div style={{ color: row.outcomeColor, fontSize: 16, fontWeight: 700 }}>
+												{row.outcomeText}
+											</div>
 										</div>
 										<div style={{ flex: 1, textAlign: "right" }}>
-											<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Return</div>
+											<div
+												style={{
+													color: "#888",
+													fontSize: 11,
+													textTransform: "uppercase",
+													letterSpacing: 0.6,
+													marginBottom: 4,
+												}}
+											>
+												Return
+											</div>
 											<div style={{ color: retC, fontSize: 16, fontWeight: 500 }}>{retT}</div>
 										</div>
-										<div style={{ marginLeft: 12, color: "#888", fontSize: 20, width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.2s ease", transform: isDetailOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+										<div
+											style={{
+												marginLeft: 12,
+												color: "#888",
+												fontSize: 20,
+												width: 24,
+												height: 24,
+												display: "flex",
+												alignItems: "center",
+												justifyContent: "center",
+												transition: "transform 0.2s ease",
+												transform: isDetailOpen ? "rotate(180deg)" : "rotate(0deg)",
+											}}
+										>
 											▼
 										</div>
 									</div>
 
 									{/* Expanded details */}
 									{isDetailOpen && (
-										<div style={{ padding: "16px", borderTop: "1px solid #2a2a2a", background: "#0f0f0f", display: "flex", flexDirection: "column", gap: 12 }}>
+										<div
+											style={{
+												padding: "16px",
+												borderTop: "1px solid #2a2a2a",
+												background: "#0f0f0f",
+												display: "flex",
+												flexDirection: "column",
+												gap: 12,
+											}}
+										>
 											<div style={{ display: "flex", justifyContent: "space-between" }}>
 												<span style={{ color: "#888", fontSize: 13 }}>Position</span>
-												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.finalPosition >= 0 ? row.finalPosition.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
+												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>
+													{row.finalPosition >= 0
+														? row.finalPosition.toLocaleString("en-US", {
+																maximumFractionDigits: 2,
+															})
+														: "—"}
+												</span>
 											</div>
 											<div style={{ display: "flex", justifyContent: "space-between" }}>
 												<span style={{ color: "#888", fontSize: 13 }}>Cost</span>
-												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{row.totalCost > 0 ? `$${row.totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}</span>
+												<span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>
+													{row.totalCost > 0
+														? `$${row.totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+														: "—"}
+												</span>
 											</div>
 											<div style={{ display: "flex", justifyContent: "space-between" }}>
 												<span style={{ color: "#888", fontSize: 13 }}>Payout</span>
-												<span style={{ color: row.totalPayout > 0 ? "#16a34a" : "#fff", fontSize: 13, fontWeight: 600 }}>{row.totalPayout > 0 ? `$${row.totalPayout.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "$0"}</span>
+												<span
+													style={{
+														color: row.totalPayout > 0 ? "#16a34a" : "#fff",
+														fontSize: 13,
+														fontWeight: 600,
+													}}
+												>
+													{row.totalPayout > 0
+														? `$${row.totalPayout.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+														: "$0"}
+												</span>
 											</div>
 											{row.tradeCount > 0 && (
 												<div
-													onClick={(e) => { e.stopPropagation(); setExpandedTradeHistory((p) => toggle(p, thKey)); }}
-													style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #1f1f1f", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: "#666", fontSize: 13, cursor: "pointer" }}
+													onClick={(e) => {
+														e.stopPropagation();
+														setExpandedTradeHistory((p) => toggle(p, thKey));
+													}}
+													style={{
+														marginTop: 8,
+														paddingTop: 8,
+														borderTop: "1px solid #1f1f1f",
+														display: "flex",
+														alignItems: "center",
+														justifyContent: "center",
+														gap: 6,
+														color: "#666",
+														fontSize: 13,
+														cursor: "pointer",
+													}}
 												>
-													<span>{isThExpanded ? "Hide" : "View"} {row.tradeCount} trade{row.tradeCount !== 1 ? "s" : ""}</span>
-													<span style={{ transition: "transform 0.2s", transform: isThExpanded ? "rotate(180deg)" : "rotate(0deg)", fontSize: 10 }}>▼</span>
+													<span>
+														{isThExpanded ? "Hide" : "View"} {row.tradeCount} trade
+														{row.tradeCount !== 1 ? "s" : ""}
+													</span>
+													<span
+														style={{
+															transition: "transform 0.2s",
+															transform: isThExpanded ? "rotate(180deg)" : "rotate(0deg)",
+															fontSize: 10,
+														}}
+													>
+														▼
+													</span>
 												</div>
 											)}
 											{isThExpanded && (

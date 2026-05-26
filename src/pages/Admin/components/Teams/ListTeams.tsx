@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-	teamService,
-	type TeamRecord,
-} from "@/services/api/teamService";
-import "./TeamsAdmin.scss";
+import { teamService, type TeamRecord } from "@/services/api/teamService";
+import "./scss/TeamsAdmin.scss";
 
 interface ListTeamsProps {
 	onEdit: (team: TeamRecord) => void;
@@ -28,11 +25,7 @@ export default function ListTeams({ onEdit, refreshKey }: ListTeamsProps) {
 			} catch (err) {
 				console.error("error", err);
 				if (!cancelled) {
-					setError(
-						err instanceof Error
-							? err.message
-							: "Failed to load teams"
-					);
+					setError(err instanceof Error ? err.message : "Failed to load teams");
 				}
 			} finally {
 				if (!cancelled) {
@@ -53,9 +46,7 @@ export default function ListTeams({ onEdit, refreshKey }: ListTeamsProps) {
 			</div>
 			{loading && <div className="teams-admin__status">Loading teams…</div>}
 			{!loading && error && (
-				<div className="teams-admin__status teams-admin__status--error">
-					{error}
-				</div>
+				<div className="teams-admin__status teams-admin__status--error">{error}</div>
 			)}
 			{!loading && !error && teams.length === 0 && (
 				<div className="teams-admin__status">No teams found.</div>
@@ -99,8 +90,7 @@ export default function ListTeams({ onEdit, refreshKey }: ListTeamsProps) {
 												<span
 													className="teams-admin__color-swatch"
 													style={{
-														backgroundColor:
-															team.secondaryColor,
+														backgroundColor: team.secondaryColor,
 													}}
 												/>
 											)}

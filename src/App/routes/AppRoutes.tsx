@@ -16,8 +16,8 @@ import { NotifyModal } from "components/NotifyModal/NotifyModal";
 import Footer from "components/Footer/Footer";
 import { RPGPanel } from "components/RPGPanel";
 import { TransfersModal } from "components/TransfersModal";
-import { useDflowProofStatus } from "@/trading/hooks/useDflowProofStatus";
-import { DflowProofReturnSync } from "@/trading/venues/dflow/onboarding/DflowProofReturnSync";
+import { useDflowProofStatus } from "@/features/trading/hooks/useDflowProofStatus";
+import { DflowProofReturnSync } from "@/features/trading/venues/dflow/onboarding/DflowProofReturnSync";
 
 import { MainRoutes } from "./MainRoutes";
 
@@ -65,9 +65,7 @@ export function AppRoutes() {
 			<div className="App">
 				<div className="App-content">
 					<Header
-						disconnectAccountAndCloseSettings={
-							disconnectAccountAndCloseSettings
-						}
+						disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
 						openSettings={openSettings}
 						showRedirectModal={showRedirectModal}
 					/>

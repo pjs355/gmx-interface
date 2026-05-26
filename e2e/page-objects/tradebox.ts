@@ -9,24 +9,14 @@ const PREDICTION_MARKET_LAYOUT_BREAKPOINT_PX = 1100;
 
 /** Resolves to exactly one `.prediction-market-tradebox` for the current viewport width. */
 export function tradeboxRootLocator(page: Page): Locator {
-	const w =
-		page.viewportSize()?.width ??
-		PREDICTION_MARKET_LAYOUT_BREAKPOINT_PX + 1;
+	const w = page.viewportSize()?.width ?? PREDICTION_MARKET_LAYOUT_BREAKPOINT_PX + 1;
 	if (w <= PREDICTION_MARKET_LAYOUT_BREAKPOINT_PX) {
-		return page.locator(
-			".mobile-trading-container .prediction-market-tradebox",
-		);
+		return page.locator(".mobile-trading-container .prediction-market-tradebox");
 	}
 	return page.locator(".right-panel .prediction-market-tradebox");
 }
 
-export type TradingVenue =
-	| "all"
-	| "levelup"
-	| "polymarket"
-	| "predictfun"
-	| "dflow"
-	| "limitless";
+export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 export type Side = "buy" | "sell";
 export type Position = "yes" | "no";
 
@@ -80,9 +70,7 @@ export const SHARES_VISIBLE_TIMEOUT_DFLOW_MS = 180_000;
 const SHARES_VISIBLE_TIMEOUT_LIMITLESS_MS = 120_000;
 
 /** Longer share-row polling for Kalshi/DFlow on-chain lag; other venues use 60s (`SHARES_VISIBLE_TIMEOUT_MS`). */
-export function sharesVisiblePollTimeoutMsForVenueKey(
-	venueKey: string,
-): number {
+export function sharesVisiblePollTimeoutMsForVenueKey(venueKey: string): number {
 	if (venueKey === "dflow") return SHARES_VISIBLE_TIMEOUT_DFLOW_MS;
 	if (venueKey === "polymarket") return SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS;
 	if (venueKey === "limitless") return SHARES_VISIBLE_TIMEOUT_LIMITLESS_MS;
@@ -96,9 +84,7 @@ export function sharesVisiblePollTimeoutMsForVenueKey(
  * so `data-qa-shares-count` is 0 even when the wallet already holds YES — a bogus
  * baseline makes `waitForBuySharesIncreaseSince` / delta-vs-quote assertions lie.
  */
-export function buyRowBaselineSettleTimeoutMsForVenueKey(
-	venueKey: string,
-): number {
+export function buyRowBaselineSettleTimeoutMsForVenueKey(venueKey: string): number {
 	if (venueKey === "limitless") return 90_000;
 	if (venueKey === "dflow") return 60_000;
 	if (venueKey === "polymarket") return 45_000;
@@ -139,18 +125,12 @@ export function sellShareAmountTextRoundedDownLikeUi(n: number): string {
 }
 
 /** Logs real DOM from the resolved node (Playwright `Locator` is not loggable as HTML). */
-async function logTradeboxDomSnapshot(
-	label: string,
-	locator: Locator,
-): Promise<void> {
+async function logTradeboxDomSnapshot(label: string, locator: Locator): Promise<void> {
 	const info = await locator
 		.evaluate((el) => ({
 			tag: el.tagName,
 			disabled:
-				el instanceof HTMLButtonElement ||
-				el instanceof HTMLInputElement
-					? el.disabled
-					: null,
+				el instanceof HTMLButtonElement || el instanceof HTMLInputElement ? el.disabled : null,
 			ariaDisabled: el.getAttribute("aria-disabled"),
 			text: (el as HTMLElement).innerText?.trim().slice(0, 200) ?? "",
 			outerHTML: el.outerHTML.slice(0, 600),
@@ -170,18 +150,13 @@ export class Tradebox {
 		await this.root.waitFor({ state: "visible", timeout: 60_000 });
 	}
 
-	async selectVenue(
-		venue: TradingVenue,
-		opts?: { allowPrime?: boolean },
-	): Promise<void> {
+	async selectVenue(venue: TradingVenue, opts?: { allowPrime?: boolean }): Promise<void> {
 		const allowPrime = opts?.allowPrime ?? true;
 		await sleepBetweenTradeboxActions();
 		const smartRow =
 			venue === "all"
 				? this.root.locator('[data-qa="smart-routing-split-row"]')
-				: this.root.locator(
-						`[data-qa="smart-routing-venue-row-${venue}"]`,
-					);
+				: this.root.locator(`[data-qa="smart-routing-venue-row-${venue}"]`);
 
 		// Initial page load (and post-trade reload) often has no amount typed.
 		// `SmartRoutingSection` returns null until SOR has previews
@@ -219,9 +194,7 @@ export class Tradebox {
 
 		if (rowVisible) {
 			if (venue === "all") {
-				await smartRow
-					.locator("button.smart-routing-row__main")
-					.click();
+				await smartRow.locator("button.smart-routing-row__main").click();
 			} else {
 				await smartRow.click();
 			}
@@ -244,9 +217,7 @@ export class Tradebox {
 
 	async setPosition(position: Position): Promise<void> {
 		await sleepBetweenTradeboxActions();
-		await this.root
-			.locator(`[data-qa="tradebox-position-${position}"]`)
-			.click();
+		await this.root.locator(`[data-qa="tradebox-position-${position}"]`).click();
 	}
 
 	async setAmount(amount: string | number): Promise<void> {
@@ -267,9 +238,7 @@ export class Tradebox {
 	}
 
 	/** Wait until sell (or buy) amount field is enabled — sell stays disabled until `maxScopedSellShares` catches up to positions. */
-	async waitForAmountInputEnabled(
-		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
-	): Promise<void> {
+	async waitForAmountInputEnabled(timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS): Promise<void> {
 		const input = this.root.locator('[data-qa="tradebox-amount-input"]');
 		await expect(
 			input,
@@ -283,9 +252,7 @@ export class Tradebox {
 	 * to a sell-only layout after `setSide("sell")`). Do not call this after sell.
 	 */
 	async readBuyHeadlineLineSharesAttribute(): Promise<string | null> {
-		const headline = this.root
-			.locator('[data-qa="my-positions-buy-headline"]')
-			.first();
+		const headline = this.root.locator('[data-qa="my-positions-buy-headline"]').first();
 		const visible = await headline.isVisible().catch(() => false);
 		if (!visible) return null;
 		const raw = await headline.getAttribute("data-qa-line-shares");
@@ -299,9 +266,7 @@ export class Tradebox {
 	 * `data-qa-shares-count`, same source as max-sell).
 	 */
 	async readSellRowSharesCountAttribute(): Promise<string | null> {
-		const row = this.root.locator(
-			'[data-qa="my-positions-row"][data-qa-side="sell"]',
-		);
+		const row = this.root.locator('[data-qa="my-positions-row"][data-qa-side="sell"]');
 		const visible = await row.isVisible().catch(() => false);
 		if (!visible) return null;
 		const raw = await row.getAttribute("data-qa-shares-count");
@@ -343,9 +308,7 @@ export class Tradebox {
 			}
 
 			await input.click();
-			await this.page.keyboard.press(
-				process.platform === "darwin" ? "Meta+a" : "Control+a",
-			);
+			await this.page.keyboard.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
 			await input.pressSequentially(text, { delay: 25 });
 			await sleepBetweenTradeboxActions();
 			const raw2 = await input.inputValue().catch(() => "");
@@ -373,9 +336,7 @@ export class Tradebox {
 		absTolerance: number,
 		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_POLYMARKET_MS,
 	): Promise<void> {
-		const headline = this.root.locator(
-			'[data-qa="my-positions-buy-headline"]',
-		);
+		const headline = this.root.locator('[data-qa="my-positions-buy-headline"]');
 		const start = Date.now();
 		while (Date.now() - start < timeoutMs) {
 			const n = await headline.count().catch(() => 0);
@@ -386,10 +347,7 @@ export class Tradebox {
 					.catch(() => null);
 				if (raw !== null && raw.trim() !== "") {
 					const v = Number(raw);
-					if (
-						Number.isFinite(v) &&
-						Math.abs(v - expectedShares) <= absTolerance
-					) {
+					if (Number.isFinite(v) && Math.abs(v - expectedShares) <= absTolerance) {
 						return;
 					}
 				}
@@ -427,14 +385,11 @@ export class Tradebox {
 	}
 
 	/** Just assert the submit button reaches the enabled state. Used by `*.price-populates` tests. */
-	async expectSubmitEnabled(
-		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
-	): Promise<void> {
+	async expectSubmitEnabled(timeoutMs: number = QUOTE_READY_TIMEOUT_MS): Promise<void> {
 		const button = this.root.locator('[data-qa="tradebox-submit"]');
-		await expect(
-			button,
-			"tradebox-submit did not become enabled (no SOR quote)",
-		).toBeEnabled({ timeout: timeoutMs });
+		await expect(button, "tradebox-submit did not become enabled (no SOR quote)").toBeEnabled({
+			timeout: timeoutMs,
+		});
 	}
 
 	/**
@@ -449,9 +404,7 @@ export class Tradebox {
 			state: "attached",
 			timeout: toggleAttachTimeoutMs,
 		});
-		const expandBtn = block
-			.locator("button.smart-routing-row__expand")
-			.first();
+		const expandBtn = block.locator("button.smart-routing-row__expand").first();
 		await expandBtn.waitFor({
 			state: "attached",
 			timeout: toggleAttachTimeoutMs,
@@ -489,16 +442,12 @@ export class Tradebox {
 		venue: TradingVenue,
 		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
 	): Promise<number> {
-		const row = this.root.locator(
-			`[data-qa="smart-routing-venue-row-${venue}"]`,
-		);
+		const row = this.root.locator(`[data-qa="smart-routing-venue-row-${venue}"]`);
 		const sub = row.locator(".smart-routing-row__sub").first();
 		const start = Date.now();
 		let lastText = "";
 		while (Date.now() - start < timeoutMs) {
-			await row
-				.waitFor({ state: "attached", timeout: 1_000 })
-				.catch(() => {});
+			await row.waitFor({ state: "attached", timeout: 1_000 }).catch(() => {});
 			const visible = await sub.isVisible().catch(() => false);
 			if (visible) {
 				const text = (await sub.innerText().catch(() => "")).trim();
@@ -532,21 +481,19 @@ export class Tradebox {
 		venue: TradingVenue,
 		timeoutMs: number = MARKET_SELL_LEG_TIMEOUT_MS,
 	): Promise<number> {
-		const row = this.root.locator(
-			`[data-qa="smart-routing-venue-row-${venue}"]`,
-		);
+		const row = this.root.locator(`[data-qa="smart-routing-venue-row-${venue}"]`);
 		// `data-qa="smart-routing-venue-row-${venue}"` is on the inner main button
 		// (`SmartRoutingSection.tsx` line 1109), so the value-btn is a sibling under
 		// the parent `.smart-routing-block`. Walk up to that block, then locate the
 		// value-btn so we read the same row's USD figure.
-		const block = row.locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' smart-routing-block ')][1]");
+		const block = row.locator(
+			"xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' smart-routing-block ')][1]",
+		);
 		const valueBtn = block.locator(".smart-routing-row__value-btn").first();
 		const start = Date.now();
 		let lastText = "";
 		while (Date.now() - start < timeoutMs) {
-			await row
-				.waitFor({ state: "attached", timeout: 1_000 })
-				.catch(() => {});
+			await row.waitFor({ state: "attached", timeout: 1_000 }).catch(() => {});
 			const visible = await valueBtn.isVisible().catch(() => false);
 			if (visible) {
 				const text = (await valueBtn.innerText().catch(() => "")).trim();
@@ -585,11 +532,7 @@ export class Tradebox {
 		const venue = await leg.getAttribute("data-leg-venue");
 		const numSharesAttr = await leg.getAttribute("data-leg-num-shares");
 		const priceCentsAttr = await leg.getAttribute("data-leg-price-cents");
-		if (
-			venue === null ||
-			numSharesAttr === null ||
-			priceCentsAttr === null
-		) {
+		if (venue === null || numSharesAttr === null || priceCentsAttr === null) {
 			throw new Error(
 				`sor-leg[data-leg-side="${legSide}"] missing one of data-leg-{venue,num-shares,price-cents}: ` +
 					`venue=${venue} numShares=${numSharesAttr} priceCents=${priceCentsAttr}`,
@@ -609,9 +552,7 @@ export class Tradebox {
 	 * Single-venue market buy: Details "Cost:" row exposes `data-cost-usd` on
 	 * `[data-qa="sor-leg-cost"]`.
 	 */
-	async readQuotedBuyCostUsd(
-		timeoutMs: number = QUOTE_READY_TIMEOUT_MS,
-	): Promise<number> {
+	async readQuotedBuyCostUsd(timeoutMs: number = QUOTE_READY_TIMEOUT_MS): Promise<number> {
 		await this.expandSorDetailsIfCollapsed(timeoutMs);
 		const loc = this.root
 			.locator(
@@ -627,9 +568,7 @@ export class Tradebox {
 		}
 		const n = Number(raw);
 		if (!Number.isFinite(n) || n < 0) {
-			throw new Error(
-				`readQuotedBuyCostUsd: invalid data-cost-usd=${JSON.stringify(raw)}`,
-			);
+			throw new Error(`readQuotedBuyCostUsd: invalid data-cost-usd=${JSON.stringify(raw)}`);
 		}
 		return n;
 	}
@@ -640,9 +579,7 @@ export class Tradebox {
 	 * for delta-vs-quote assertions after a fill.
 	 */
 	async readBuyRowTotalSharesOrZero(): Promise<number> {
-		const row = this.root.locator(
-			'[data-qa="my-positions-row"][data-qa-side="buy"]',
-		);
+		const row = this.root.locator('[data-qa="my-positions-row"][data-qa-side="buy"]');
 		const visible = await row.isVisible().catch(() => false);
 		if (!visible) return 0;
 		const sharesAttr = await row.getAttribute("data-qa-shares-count");
@@ -657,18 +594,14 @@ export class Tradebox {
 	 * loading shell that keeps `data-qa-shares-count` at 0). No-op if the row is absent.
 	 */
 	async waitForBuyRowBaselineSettled(timeoutMs: number): Promise<void> {
-		const row = this.root.locator(
-			'[data-qa="my-positions-row"][data-qa-side="buy"]',
-		);
+		const row = this.root.locator('[data-qa="my-positions-row"][data-qa-side="buy"]');
 		const start = Date.now();
 		while (Date.now() - start < timeoutMs) {
 			const visible = await row.isVisible().catch(() => false);
 			if (!visible) {
 				return;
 			}
-			const refreshing = await row.getAttribute(
-				"data-qa-position-refreshing",
-			);
+			const refreshing = await row.getAttribute("data-qa-position-refreshing");
 			if (refreshing !== "true") {
 				return;
 			}
@@ -690,25 +623,17 @@ export class Tradebox {
 	 * {@link waitForBuySharesIncreaseSince} so we wait for the **post-fill** bump,
 	 * not the first `> 0` poll (which would return immediately).
 	 */
-	async waitForBuyShares(
-		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS,
-	): Promise<number> {
-		const row = this.root.locator(
-			'[data-qa="my-positions-row"][data-qa-side="buy"]',
-		);
+	async waitForBuyShares(timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS): Promise<number> {
+		const row = this.root.locator('[data-qa="my-positions-row"][data-qa-side="buy"]');
 		const start = Date.now();
 		while (Date.now() - start < timeoutMs) {
 			const visible = await row.isVisible().catch(() => false);
 			if (visible) {
-				const sharesAttr = await row.getAttribute(
-					"data-qa-shares-count",
-				);
+				const sharesAttr = await row.getAttribute("data-qa-shares-count");
 				if (sharesAttr !== null) {
 					const parsed = Number(sharesAttr);
 					if (Number.isFinite(parsed) && parsed > 0) {
-						const refreshing = await row.getAttribute(
-							"data-qa-position-refreshing",
-						);
+						const refreshing = await row.getAttribute("data-qa-position-refreshing");
 						if (refreshing !== "true") {
 							return parsed;
 						}
@@ -733,17 +658,13 @@ export class Tradebox {
 		sharesBefore: number,
 		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS,
 	): Promise<number> {
-		const row = this.root.locator(
-			'[data-qa="my-positions-row"][data-qa-side="buy"]',
-		);
+		const row = this.root.locator('[data-qa="my-positions-row"][data-qa-side="buy"]');
 		const start = Date.now();
 		let sawIncreasedButStillRefreshing: number | null = null;
 		while (Date.now() - start < timeoutMs) {
 			const visible = await row.isVisible().catch(() => false);
 			if (visible) {
-				const sharesAttr = await row.getAttribute(
-					"data-qa-shares-count",
-				);
+				const sharesAttr = await row.getAttribute("data-qa-shares-count");
 				if (sharesAttr !== null) {
 					const parsed = Number(sharesAttr);
 					const ok =
@@ -751,9 +672,7 @@ export class Tradebox {
 							? Number.isFinite(parsed) && parsed > 0
 							: Number.isFinite(parsed) && parsed > sharesBefore;
 					if (ok) {
-						const refreshing = await row.getAttribute(
-							"data-qa-position-refreshing",
-						);
+						const refreshing = await row.getAttribute("data-qa-position-refreshing");
 						if (refreshing !== "true") {
 							return parsed;
 						}
@@ -779,17 +698,13 @@ export class Tradebox {
 	}
 
 	/** Poll until the rendered `MyPositionsRow` reports `data-qa-shares-count <= 0`. */
-	async waitForSharesCleared(
-		timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS,
-	): Promise<void> {
+	async waitForSharesCleared(timeoutMs: number = SHARES_VISIBLE_TIMEOUT_MS): Promise<void> {
 		const row = this.root.locator('[data-qa="my-positions-row"]');
 		const start = Date.now();
 		while (Date.now() - start < timeoutMs) {
 			const visible = await row.isVisible().catch(() => false);
 			if (visible) {
-				const sharesAttr = await row.getAttribute(
-					"data-qa-shares-count",
-				);
+				const sharesAttr = await row.getAttribute("data-qa-shares-count");
 				if (sharesAttr !== null) {
 					const parsed = Number(sharesAttr);
 					if (Number.isFinite(parsed) && parsed <= 0) {
@@ -819,14 +734,10 @@ export class Tradebox {
 			success
 				.waitFor({ state: "attached", timeout: FILL_TIMEOUT_MS })
 				.then(() => "success" as const),
-			failure
-				.waitFor({ state: "attached", timeout: FILL_TIMEOUT_MS })
-				.then(() => "error" as const),
+			failure.waitFor({ state: "attached", timeout: FILL_TIMEOUT_MS }).then(() => "error" as const),
 		]);
 		if (winner === "error") {
-			const message = await failure
-				.getAttribute("data-qa-fill-error")
-				.catch(() => null);
+			const message = await failure.getAttribute("data-qa-fill-error").catch(() => null);
 			throw new Error(`Order failed: ${message ?? "(no message)"}`);
 		}
 		await new Promise((r) => setTimeout(r, SETTLE_AFTER_FILL_MS));
@@ -848,9 +759,7 @@ export class Tradebox {
 		await row.waitFor({ state: "visible", timeout: 10_000 });
 		const sharesAttr = await row.getAttribute("data-qa-shares-count");
 		if (sharesAttr === null) {
-			throw new Error(
-				`my-positions-row missing data-qa-shares-count for position=${position}`,
-			);
+			throw new Error(`my-positions-row missing data-qa-shares-count for position=${position}`);
 		}
 		const parsed = Number(sharesAttr);
 		if (!Number.isFinite(parsed)) {

@@ -1,11 +1,8 @@
 import React, { createContext, useCallback, useContext, useMemo } from "react";
-import {
-	useQuery,
-	type UseQueryResult,
-} from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useSignerContext } from "context/SignerContext";
-import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import type { FundingStableBalancesHuman } from "@/trading/sor/prefund/fundingStableBalances";
+import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
+import type { FundingStableBalancesHuman } from "@/features/trading/sor/prefund/fundingStableBalances";
 
 /**
  * Live collateral-token balances (USDC and bridge stables) keyed off the
@@ -27,11 +24,7 @@ import type { FundingStableBalancesHuman } from "@/trading/sor/prefund/fundingSt
  *   - Base USDC on Limitless maker             (delegated server wallet)
  */
 /** Aligns with `AccountDataContext` `SliceStatus` for the cash-summary query. */
-export type CollateralCashSliceStatus =
-	| "idle"
-	| "pending"
-	| "success"
-	| "error";
+export type CollateralCashSliceStatus = "idle" | "pending" | "success" | "error";
 
 export function sumCollateralCashSlices(slices: {
 	baseUsdc: number;
@@ -77,10 +70,7 @@ export const COLLATERAL_TOKENS_QUERY_KEY = "collateral-tokens" as const;
 const COLLATERAL_TOKENS_STALE_TIME_MS = 15_000;
 
 function cashStatusOf(
-	q: Pick<
-		UseQueryResult<FundingStableBalancesHuman>,
-		"status" | "isFetched" | "fetchStatus"
-	>
+	q: Pick<UseQueryResult<FundingStableBalancesHuman>, "status" | "isFetched" | "fetchStatus">,
 ): CollateralCashSliceStatus {
 	if (q.status === "pending" && q.fetchStatus === "idle") return "idle";
 	if (q.status === "pending") return "pending";
@@ -186,9 +176,7 @@ export function CollateralTokenProvider({
 	]);
 
 	return (
-		<CollateralTokenContext.Provider value={value}>
-			{children}
-		</CollateralTokenContext.Provider>
+		<CollateralTokenContext.Provider value={value}>{children}</CollateralTokenContext.Provider>
 	);
 }
 
@@ -214,7 +202,5 @@ export function useCollateralTokens(): CollateralTokens {
 		}
 		return COLLATERAL_TOKENS_FALLBACK;
 	}
-	throw new Error(
-		"useCollateralTokens must be used within a <CollateralTokenProvider>",
-	);
+	throw new Error("useCollateralTokens must be used within a <CollateralTokenProvider>");
 }

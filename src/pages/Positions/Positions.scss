@@ -51,7 +51,9 @@
 .soft-blur {
 	filter: blur(2px);
 	opacity: 0.7;
-	transition: filter 160ms ease, opacity 160ms ease;
+	transition:
+		filter 160ms ease,
+		opacity 160ms ease;
 }
 
 /* Match prior table layout spacing and full-width grid */
@@ -205,7 +207,7 @@
 /* Row with expandable content */
 .position-row-expandable {
 	cursor: pointer;
-	
+
 	&:hover {
 		background: #1a1a1a;
 	}

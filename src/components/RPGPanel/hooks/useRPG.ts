@@ -1,18 +1,8 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIdentityToken } from "@privy-io/react-auth";
-import {
-	getLevelFromExp,
-	getProgressToNextLevel,
-	CACHED_EXP_KEY,
-} from "../config/rpgConfig";
-import {
-	getUserProfile,
-	saveUserExp,
-	addUserExp,
-	requestExpForTestUsdcClaim,
-	type UserProfile,
-} from "../services/rpgService";
+import { getLevelFromExp, getProgressToNextLevel, CACHED_EXP_KEY } from "../config/rpgConfig";
+import { getUserProfile, saveUserExp, addUserExp } from "../services/rpgService";
 
 export interface RPGState {
 	exp: number;
@@ -126,7 +116,15 @@ export function useRPG() {
 				const cachedExp = getCachedExp();
 				const totalExp = exp + cachedExp;
 
-				console.log("🔄 Total exp to set:", totalExp, "(server exp:", exp, "+ cached:", cachedExp, ")");
+				console.log(
+					"🔄 Total exp to set:",
+					totalExp,
+					"(server exp:",
+					exp,
+					"+ cached:",
+					cachedExp,
+					")",
+				);
 
 				if (cachedExp > 0) {
 					// Save merged exp to server
@@ -152,7 +150,15 @@ export function useRPG() {
 				error: error?.message || "Failed to load exp",
 			}));
 		}
-	}, [authenticated, ready, getAccessToken, identityToken, getCachedExp, clearCachedExp, updateStateFromExp]);
+	}, [
+		authenticated,
+		ready,
+		getAccessToken,
+		identityToken,
+		getCachedExp,
+		clearCachedExp,
+		updateStateFromExp,
+	]);
 
 	// Add exp (for when user performs actions)
 	const addExp = useCallback(
@@ -194,29 +200,8 @@ export function useRPG() {
 			state.exp,
 			updateStateFromExp,
 			saveCachedExp,
-		]
+		],
 	);
-
-	// Request exp for test USDC claim (server-verified)
-	const requestExpForClaim = useCallback(async () => {
-		if (!authenticated || !ready || !identityToken) {
-			throw new Error("User must be authenticated with identity token to request exp for claim");
-		}
-
-		try {
-			const token = await getAccessToken();
-			if (!token) {
-				throw new Error("No access token available");
-			}
-
-			const profile = await requestExpForTestUsdcClaim(token, identityToken);
-			const exp = profile.exp || 0;
-			updateStateFromExp(exp);
-		} catch (error: any) {
-			console.error("Failed to request exp for claim:", error);
-			throw error;
-		}
-	}, [authenticated, ready, getAccessToken, identityToken, updateStateFromExp]);
 
 	// Load exp on mount and when auth state changes (wait for identity token)
 	useEffect(() => {
@@ -240,8 +225,6 @@ export function useRPG() {
 		loading: state.loading,
 		error: state.error,
 		addExp,
-		requestExpForClaim,
 		refresh: loadExp,
 	};
 }
-

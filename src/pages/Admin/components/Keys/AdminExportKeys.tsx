@@ -1,38 +1,19 @@
-import {
-	useCallback,
-	useMemo,
-	useState,
-	type CSSProperties,
-} from "react";
+import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import { usePrivy, type WalletWithMetadata } from "@privy-io/react-auth";
 import { useExportWallet } from "@privy-io/react-auth/solana";
 
-function isPrivyEthereumEmbedded(
-	account: unknown
-): account is WalletWithMetadata {
+function isPrivyEthereumEmbedded(account: unknown): account is WalletWithMetadata {
 	const a = account as Record<string, unknown> | null | undefined;
-	return (
-		a?.type === "wallet" &&
-		a?.walletClientType === "privy" &&
-		a?.chainType === "ethereum"
-	);
+	return a?.type === "wallet" && a?.walletClientType === "privy" && a?.chainType === "ethereum";
 }
 
-function isPrivySolanaEmbedded(
-	account: unknown
-): account is WalletWithMetadata {
+function isPrivySolanaEmbedded(account: unknown): account is WalletWithMetadata {
 	const a = account as Record<string, unknown> | null | undefined;
-	return (
-		a?.type === "wallet" &&
-		a?.walletClientType === "privy" &&
-		a?.chainType === "solana"
-	);
+	return a?.type === "wallet" && a?.walletClientType === "privy" && a?.chainType === "solana";
 }
 
 function hasSmartWalletLinked(linked: unknown[] | undefined): boolean {
-	return (linked || []).some(
-		(a) => (a as { type?: string })?.type === "smart_wallet"
-	);
+	return (linked || []).some((a) => (a as { type?: string })?.type === "smart_wallet");
 }
 
 const panelStyle: CSSProperties = {
@@ -79,31 +60,25 @@ export default function AdminExportKeys() {
 			(linked || [])
 				.filter(isPrivyEthereumEmbedded)
 				.filter((w) => typeof w.address === "string" && w.address.length > 0),
-		[linked]
+		[linked],
 	);
 	const solEmbedded = useMemo(
 		() =>
 			(linked || [])
 				.filter(isPrivySolanaEmbedded)
 				.filter((w) => typeof w.address === "string" && w.address.length > 0),
-		[linked]
+		[linked],
 	);
 	const smartLinked = useMemo(
 		() => hasSmartWalletLinked(linked as unknown[] | undefined),
-		[linked]
+		[linked],
 	);
 
 	const canExportEvm =
-		ready &&
-		authenticated &&
-		typeof exportWallet === "function" &&
-		evmEmbedded.length > 0;
+		ready && authenticated && typeof exportWallet === "function" && evmEmbedded.length > 0;
 
 	const canExportSol =
-		ready &&
-		authenticated &&
-		typeof exportSolanaWallet === "function" &&
-		solEmbedded.length > 0;
+		ready && authenticated && typeof exportSolanaWallet === "function" && solEmbedded.length > 0;
 
 	const onExportEvm = useCallback(
 		async (address?: string) => {
@@ -118,14 +93,12 @@ export default function AdminExportKeys() {
 					await exportWallet();
 				}
 			} catch (e) {
-				setLastError(
-					e instanceof Error ? e.message : "EVM export failed"
-				);
+				setLastError(e instanceof Error ? e.message : "EVM export failed");
 			} finally {
 				setBusyAddress(null);
 			}
 		},
-		[exportWallet]
+		[exportWallet],
 	);
 
 	const onExportSol = useCallback(
@@ -140,14 +113,12 @@ export default function AdminExportKeys() {
 					await exportSolanaWallet();
 				}
 			} catch (e) {
-				setLastError(
-					e instanceof Error ? e.message : "Solana export failed"
-				);
+				setLastError(e instanceof Error ? e.message : "Solana export failed");
 			} finally {
 				setBusyAddress(null);
 			}
 		},
-		[exportSolanaWallet]
+		[exportSolanaWallet],
 	);
 
 	if (!ready) {
@@ -166,10 +137,9 @@ export default function AdminExportKeys() {
 		<div style={panelStyle}>
 			<h2 style={{ margin: "0 0 12px", fontSize: 20 }}>Keys</h2>
 			<p style={{ margin: "0 0 16px", color: "#aaa", lineHeight: 1.5 }}>
-				Export uses Privy&apos;s secure flow: a Privy modal opens where you
-				can view and copy your embedded wallet private key. The key is not
-				pasted into this page. Use the copy from that modal in server code or
-				another wallet client.
+				Export uses Privy&apos;s secure flow: a Privy modal opens where you can view and copy your
+				embedded wallet private key. The key is not pasted into this page. Use the copy from that
+				modal in server code or another wallet client.
 			</p>
 			<p style={{ margin: "0 0 16px", color: "#888", fontSize: 14 }}>
 				Alternate surface:{" "}
@@ -197,10 +167,9 @@ export default function AdminExportKeys() {
 						lineHeight: 1.5,
 					}}
 				>
-					You have a smart wallet linked. EVM export returns the{" "}
-					<strong>signer</strong> (EOA) private key that controls the smart
-					wallet, not the smart contract address as a normal externally owned
-					account.
+					You have a smart wallet linked. EVM export returns the <strong>signer</strong> (EOA)
+					private key that controls the smart wallet, not the smart contract address as a normal
+					externally owned account.
 				</div>
 			)}
 
@@ -218,14 +187,11 @@ export default function AdminExportKeys() {
 				</div>
 			)}
 
-			<div style={{ fontWeight: 700, marginBottom: 8, color: "#e5e5e5" }}>
-				Embedded EVM (Privy)
-			</div>
+			<div style={{ fontWeight: 700, marginBottom: 8, color: "#e5e5e5" }}>Embedded EVM (Privy)</div>
 			{evmEmbedded.length === 0 ? (
 				<p style={{ color: "#888", margin: "0 0 20px" }}>
-					No Privy embedded Ethereum wallet on this account. If you only use
-					an external wallet (e.g. MetaMask), there is no Privy embedded key
-					to export here.
+					No Privy embedded Ethereum wallet on this account. If you only use an external wallet
+					(e.g. MetaMask), there is no Privy embedded key to export here.
 				</p>
 			) : (
 				<div style={{ marginBottom: 24 }}>
@@ -263,9 +229,7 @@ export default function AdminExportKeys() {
 				Embedded Solana (Privy)
 			</div>
 			{solEmbedded.length === 0 ? (
-				<p style={{ color: "#888", margin: 0 }}>
-					No Privy embedded Solana wallet on this account.
-				</p>
+				<p style={{ color: "#888", margin: 0 }}>No Privy embedded Solana wallet on this account.</p>
 			) : (
 				<div>
 					{solEmbedded.map((w) => {

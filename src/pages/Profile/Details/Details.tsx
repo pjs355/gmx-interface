@@ -7,11 +7,9 @@ import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import {
 	parseOddsDisplayStyle,
 	ODDS_DISPLAY_SELECT_OPTIONS,
-} from "@/utils/oddsDisplayFormat";
+} from "@/features/odds-display/oddsDisplayFormat";
 import { useAccountData } from "@/context/AccountDataContext";
-import { tradingQueryKeys } from "@/trading/queryKeys";
-import RPGPane from "../RPGPane/RPGPane";
-import AchievementPane from "../AchievementPane/AchievementPane";
+import { tradingQueryKeys } from "@/features/trading/queryKeys";
 import DflowProofSection from "./DflowProofSection";
 import "./Details.scss";
 
@@ -31,8 +29,7 @@ export default function Details() {
 	const queryClient = useQueryClient();
 	const { profile: profileSlice } = useAccountData();
 	const userDetails = profileSlice.data;
-	const isLoading =
-		profileSlice.status === "pending" && !profileSlice.isFetched;
+	const isLoading = profileSlice.status === "pending" && !profileSlice.isFetched;
 	const [isEditingUsername, setIsEditingUsername] = useState(false);
 	const [usernameValue, setUsernameValue] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
@@ -102,7 +99,7 @@ export default function Details() {
 			const updatedProfile = await userService.updateUsername(
 				usernameValue.trim(),
 				accessToken,
-				identityToken
+				identityToken,
 			);
 
 			writeProfileToCache(updatedProfile);
@@ -111,10 +108,7 @@ export default function Details() {
 			setUsernameError(null);
 		} catch (error) {
 			console.error("Failed to update username:", error);
-			const errorMessage =
-				error instanceof Error
-					? error.message
-					: "An unexpected error occurred";
+			const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
 			setUsernameError(errorMessage);
 		} finally {
 			setIsSaving(false);
@@ -134,10 +128,7 @@ export default function Details() {
 		return (
 			<div className="Details">
 				<div className="Details-error-container">
-					<div>
-						Unable to load user details. Please try refreshing the
-						page.
-					</div>
+					<div>Unable to load user details. Please try refreshing the page.</div>
 				</div>
 			</div>
 		);
@@ -145,14 +136,14 @@ export default function Details() {
 
 	const hasUsername = !!userDetails.username;
 	const isSettingNewUsername = !hasUsername; // User doesn't have a username yet
-	const inputValue = isEditingUsername || isSettingNewUsername
-		? usernameValue
-		: userDetails.username || "";
+	const inputValue =
+		isEditingUsername || isSettingNewUsername ? usernameValue : userDetails.username || "";
 	const canSave = !isSaving && usernameValue.trim().length > 0;
 	const saveButtonText = isSaving ? "Saving..." : "Save";
-	
+
 	// Check if error is about the 7-day cooldown
-	const is7DayError = usernameError?.toLowerCase().includes("7 day") || 
+	const is7DayError =
+		usernameError?.toLowerCase().includes("7 day") ||
 		usernameError?.toLowerCase().includes("once every") ||
 		usernameError?.toLowerCase().includes("cooldown");
 
@@ -184,7 +175,7 @@ export default function Details() {
 			const updatedProfile = await userService.updateUserProfile(
 				{ emailPreferences },
 				accessToken,
-				identityToken
+				identityToken,
 			);
 			writeProfileToCache(updatedProfile);
 			setPreferencesSaved(true);
@@ -220,11 +211,7 @@ export default function Details() {
 		if (isEditingUsername && hasUsername) {
 			return (
 				<>
-					<button
-						className="Details-button"
-						onClick={handleSaveUsername}
-						disabled={!canSave}
-					>
+					<button className="Details-button" onClick={handleSaveUsername} disabled={!canSave}>
 						{saveButtonText}
 					</button>
 					<button
@@ -240,11 +227,7 @@ export default function Details() {
 		// User doesn't have a username yet - show Save button
 		if (isSettingNewUsername) {
 			return (
-				<button
-					className="Details-button"
-					onClick={handleSaveUsername}
-					disabled={!canSave}
-				>
+				<button className="Details-button" onClick={handleSaveUsername} disabled={!canSave}>
 					{saveButtonText}
 				</button>
 			);
@@ -276,9 +259,7 @@ export default function Details() {
 								type="text"
 								className="Details-username-input"
 								value={inputValue}
-								onChange={(e) =>
-									setUsernameValue(e.target.value)
-								}
+								onChange={(e) => setUsernameValue(e.target.value)}
 								disabled={!isEditingUsername && !isSettingNewUsername}
 								placeholder="Enter username"
 								onKeyDown={handleKeyDown}
@@ -287,7 +268,7 @@ export default function Details() {
 						</div>
 
 						{usernameError && (
-							<div className={`Details-error ${is7DayError ? 'Details-error-cooldown' : ''}`}>
+							<div className={`Details-error ${is7DayError ? "Details-error-cooldown" : ""}`}>
 								<span>⚠️ {usernameError}</span>
 								{is7DayError && (
 									<span className="Details-cooldown-warning">
@@ -298,9 +279,7 @@ export default function Details() {
 						)}
 
 						{!isSettingNewUsername && (
-							<div className="Details-hint">
-								Username will be displayed on comments.
-							</div>
+							<div className="Details-hint">Username will be displayed on comments.</div>
 						)}
 					</div>
 
@@ -318,15 +297,12 @@ export default function Details() {
 					{userPhone && (
 						<div className="Details-info-section">
 							<div className="Details-info-label">Phone</div>
-							<div className="Details-info-value">
-								{userPhone}
-							</div>
+							<div className="Details-info-value">{userPhone}</div>
 						</div>
 					)}
 
 					<DflowProofSection />
 				</div>
-
 			</div>
 
 			<div className="Details-odds-display-section">
@@ -334,9 +310,7 @@ export default function Details() {
 					<div className="Details-username-label">Odds display</div>
 					<select
 						value={oddsDisplayStyle}
-						onChange={(e) =>
-							setOddsDisplayStyle(parseOddsDisplayStyle(e.target.value))
-						}
+						onChange={(e) => setOddsDisplayStyle(parseOddsDisplayStyle(e.target.value))}
 						className="Details-odds-select"
 						aria-label="Odds display format"
 					>
@@ -362,9 +336,7 @@ export default function Details() {
 					onClick={() => setEmailPrefsExpanded(!emailPrefsExpanded)}
 				>
 					<span>Email Preferences</span>
-					<span className={`Details-expand-icon ${emailPrefsExpanded ? 'expanded' : ''}`}>
-						▼
-					</span>
+					<span className={`Details-expand-icon ${emailPrefsExpanded ? "expanded" : ""}`}>▼</span>
 				</button>
 
 				{emailPrefsExpanded && (
@@ -440,8 +412,8 @@ export default function Details() {
 								{isSavingPreferences
 									? "Saving..."
 									: preferencesSaved
-									? "✓ Saved"
-									: "Save Preferences"}
+										? "✓ Saved"
+										: "Save Preferences"}
 							</button>
 						</div>
 					</div>

@@ -21,10 +21,7 @@ interface SeedResult {
 	spread: number;
 }
 
-export default function SeedMarket({
-	questionId,
-	questionDisplayName,
-}: SeedMarketProps) {
+export default function SeedMarket({ questionId, questionDisplayName }: SeedMarketProps) {
 	const { getAccessToken } = usePrivy();
 	const [bidMin, setBidMin] = useState<string>("0.2");
 	const [bidMax, setBidMax] = useState<string>("0.4");
@@ -83,10 +80,7 @@ export default function SeedMarket({
 		setResult(null);
 
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			const base = getPredictionApiBaseUrl();
 
 			const body = {
@@ -95,19 +89,16 @@ export default function SeedMarket({
 				amount: Number(amount),
 			};
 
-			const response = await fetch(
-				`${base}/admin/markets/seed/${questionId}`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...(token ? { Authorization: `Bearer ${token}` } : {}),
-					},
-					body: JSON.stringify(body),
-				}
-			);
+			const response = await fetch(`${base}/admin/markets/seed/${questionId}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					...(token ? { Authorization: `Bearer ${token}` } : {}),
+				},
+				body: JSON.stringify(body),
+			});
 
-			const json = await response.json().catch(() => ({} as any));
+			const json = await response.json().catch(() => ({}) as any);
 
 			if (!response.ok || !json?.success) {
 				throw new Error(formatAdminHttpError(response.status, json?.error));
@@ -134,24 +125,18 @@ export default function SeedMarket({
 		setClearResult(null);
 
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			const base = getPredictionApiBaseUrl();
 
-			const response = await fetch(
-				`${base}/admin/markets/clear-book/${questionId}`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...(token ? { Authorization: `Bearer ${token}` } : {}),
-					},
-				}
-			);
+			const response = await fetch(`${base}/admin/markets/clear-book/${questionId}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					...(token ? { Authorization: `Bearer ${token}` } : {}),
+				},
+			});
 
-			const json = await response.json().catch(() => ({} as any));
+			const json = await response.json().catch(() => ({}) as any);
 
 			if (!response.ok || !json?.success) {
 				throw new Error(formatAdminHttpError(response.status, json?.error));
@@ -178,24 +163,18 @@ export default function SeedMarket({
 		setWipeResult(null);
 
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			const base = getPredictionApiBaseUrl();
 
-			const response = await fetch(
-				`${base}/admin/markets/wipe-book/${questionId}`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...(token ? { Authorization: `Bearer ${token}` } : {}),
-					},
-				}
-			);
+			const response = await fetch(`${base}/admin/markets/wipe-book/${questionId}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					...(token ? { Authorization: `Bearer ${token}` } : {}),
+				},
+			});
 
-			const json = await response.json().catch(() => ({} as any));
+			const json = await response.json().catch(() => ({}) as any);
 
 			if (!response.ok || !json?.success) {
 				throw new Error(formatAdminHttpError(response.status, json?.error));
@@ -237,9 +216,7 @@ export default function SeedMarket({
 				paddingTop: 12,
 			}}
 		>
-			<div style={{ marginBottom: 8, fontWeight: 600 }}>
-				Seed Order Book
-			</div>
+			<div style={{ marginBottom: 8, fontWeight: 600 }}>Seed Order Book</div>
 
 			{questionDisplayName && (
 				<div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
@@ -297,9 +274,7 @@ export default function SeedMarket({
 							/>
 						</label>
 					</div>
-					<div style={{ fontWeight: 600, marginTop: 8 }}>
-						Ask Range
-					</div>
+					<div style={{ fontWeight: 600, marginTop: 8 }}>Ask Range</div>
 					<div
 						style={{
 							display: "grid",
@@ -386,13 +361,10 @@ export default function SeedMarket({
 							padding: "6px 12px",
 							border: "1px solid #8b5cf6",
 							borderRadius: 4,
-							background: seeding
-								? "transparent"
-								: "rgba(139, 92, 246, 0.2)",
+							background: seeding ? "transparent" : "rgba(139, 92, 246, 0.2)",
 							color: "white",
 							fontSize: 12,
-							cursor:
-								seeding || clearing ? "not-allowed" : "pointer",
+							cursor: seeding || clearing ? "not-allowed" : "pointer",
 							opacity: seeding || clearing ? 0.6 : 1,
 						}}
 					>
@@ -407,15 +379,10 @@ export default function SeedMarket({
 							padding: "6px 12px",
 							border: "1px solid #ef4444",
 							borderRadius: 4,
-							background: clearing
-								? "transparent"
-								: "rgba(239, 68, 68, 0.2)",
+							background: clearing ? "transparent" : "rgba(239, 68, 68, 0.2)",
 							color: "white",
 							fontSize: 12,
-							cursor:
-								seeding || clearing || wiping
-									? "not-allowed"
-									: "pointer",
+							cursor: seeding || clearing || wiping ? "not-allowed" : "pointer",
 							opacity: seeding || clearing || wiping ? 0.6 : 1,
 						}}
 					>
@@ -430,15 +397,10 @@ export default function SeedMarket({
 							padding: "6px 12px",
 							border: "1px solid #f59e0b",
 							borderRadius: 4,
-							background: wiping
-								? "transparent"
-								: "rgba(245, 158, 11, 0.2)",
+							background: wiping ? "transparent" : "rgba(245, 158, 11, 0.2)",
 							color: "white",
 							fontSize: 12,
-							cursor:
-								seeding || clearing || wiping
-									? "not-allowed"
-									: "pointer",
+							cursor: seeding || clearing || wiping ? "not-allowed" : "pointer",
 							opacity: seeding || clearing || wiping ? 0.6 : 1,
 						}}
 					>
@@ -456,10 +418,7 @@ export default function SeedMarket({
 							background: "transparent",
 							color: "white",
 							fontSize: 12,
-							cursor:
-								seeding || clearing || wiping
-									? "not-allowed"
-									: "pointer",
+							cursor: seeding || clearing || wiping ? "not-allowed" : "pointer",
 							opacity: seeding || clearing || wiping ? 0.6 : 1,
 						}}
 					>
@@ -486,18 +445,10 @@ export default function SeedMarket({
 						>
 							✓ Seeding Complete
 						</div>
-						<div style={{ opacity: 0.9 }}>
-							• {result.seededNo} NO orders seeded
-						</div>
-						<div style={{ opacity: 0.9 }}>
-							• {result.seededYes} YES orders seeded
-						</div>
-						<div style={{ opacity: 0.9 }}>
-							• {result.levels} price levels
-						</div>
-						<div style={{ opacity: 0.9 }}>
-							• ${result.spread} spread
-						</div>
+						<div style={{ opacity: 0.9 }}>• {result.seededNo} NO orders seeded</div>
+						<div style={{ opacity: 0.9 }}>• {result.seededYes} YES orders seeded</div>
+						<div style={{ opacity: 0.9 }}>• {result.levels} price levels</div>
+						<div style={{ opacity: 0.9 }}>• ${result.spread} spread</div>
 					</div>
 				)}
 
@@ -555,9 +506,8 @@ export default function SeedMarket({
 					maxWidth: 400,
 				}}
 			>
-				Creates 10 price levels with BUY NO orders (showing as SELL YES
-				asks) and BUY YES orders (bids) with a 5¢ spread to avoid
-				overlap.
+				Creates 10 price levels with BUY NO orders (showing as SELL YES asks) and BUY YES orders
+				(bids) with a 5¢ spread to avoid overlap.
 			</div>
 		</div>
 	);

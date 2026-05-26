@@ -52,4 +52,3 @@ export function startOfLocalDay(date: Date): Date {
 	result.setHours(0, 0, 0, 0);
 	return result;
 }
-

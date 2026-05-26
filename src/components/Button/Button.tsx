@@ -8,108 +8,115 @@ import "./Button.scss";
 type ButtonVariant = "primary" | "primary-action" | "secondary" | "link" | "ghost";
 
 type ButtonProps = HTMLProps<HTMLButtonElement> & {
-  children: ReactNode;
-  variant: ButtonVariant;
-  className?: string;
-  textAlign?: "center" | "left" | "right";
-  disabled?: boolean;
-  onClick?: (event: ReactMouseEvent) => void;
-  to?: string;
-  type?: "button" | "submit" | "reset";
-  imgSrc?: string;
-  imgAlt?: string;
-  imgClassName?: string;
-  newTab?: boolean;
-  showExternalLinkArrow?: boolean;
-  buttonRef?: RefObject<HTMLButtonElement>;
-  slim?: boolean;
-  qa?: string;
+	children: ReactNode;
+	variant: ButtonVariant;
+	className?: string;
+	textAlign?: "center" | "left" | "right";
+	disabled?: boolean;
+	onClick?: (event: ReactMouseEvent) => void;
+	to?: string;
+	type?: "button" | "submit" | "reset";
+	imgSrc?: string;
+	imgAlt?: string;
+	imgClassName?: string;
+	newTab?: boolean;
+	showExternalLinkArrow?: boolean;
+	buttonRef?: RefObject<HTMLButtonElement>;
+	slim?: boolean;
+	qa?: string;
 };
 
 export default function Button({
-  variant,
-  disabled,
-  onClick,
-  children,
-  textAlign = "center",
-  to,
-  className,
-  imgSrc,
-  imgAlt = "",
-  imgClassName = "",
-  type,
-  newTab,
-  buttonRef,
-  showExternalLinkArrow: showExternalLinkArrowOverride,
-  slim,
-  qa,
-  ...rest
+	variant,
+	disabled,
+	onClick,
+	children,
+	textAlign = "center",
+	to,
+	className,
+	imgSrc,
+	imgAlt = "",
+	imgClassName = "",
+	type,
+	newTab,
+	buttonRef,
+	showExternalLinkArrow: showExternalLinkArrowOverride,
+	slim,
+	qa,
+	...rest
 }: ButtonProps) {
-  const classNames = cx("button", variant, className, textAlign, { slim });
-  const showExternalLinkArrow = showExternalLinkArrowOverride ?? variant === "secondary";
+	const classNames = cx("button", variant, className, textAlign, { slim });
+	const showExternalLinkArrow = showExternalLinkArrowOverride ?? variant === "secondary";
 
-  const img = useMemo(() => {
-    if (!imgSrc) {
-      return null;
-    }
+	const img = useMemo(() => {
+		if (!imgSrc) {
+			return null;
+		}
 
-    return <img className={cx("btn-image", imgClassName)} src={imgSrc} alt={imgAlt} />;
-  }, [imgSrc, imgAlt, imgClassName]);
+		return <img className={cx("btn-image", imgClassName)} src={imgSrc} alt={imgAlt} />;
+	}, [imgSrc, imgAlt, imgClassName]);
 
-  const contents = (
-    <span className="button__label-nudge">
-      {img}
-      {children}
-    </span>
-  );
+	const contents = (
+		<span className="button__label-nudge">
+			{img}
+			{children}
+		</span>
+	);
 
-  function handleClick(event: ReactMouseEvent) {
-    if (disabled || !onClick) {
-      return;
-    }
+	function handleClick(event: ReactMouseEvent) {
+		if (disabled || !onClick) {
+			return;
+		}
 
-    if (onClick) {
-      onClick(event);
-    }
-  }
+		if (onClick) {
+			onClick(event);
+		}
+	}
 
-  if (to) {
-    return (
-      <ButtonLink
-        className={classNames}
-        to={to}
-        onClick={onClick}
-        newTab={newTab}
-        showExternalLinkArrow={showExternalLinkArrow}
-        disabled={disabled}
-        ref={buttonRef}
-        qa={qa}
-        {...rest}
-      >
-        {contents}
-      </ButtonLink>
-    );
-  }
+	if (to) {
+		return (
+			<ButtonLink
+				className={classNames}
+				to={to}
+				onClick={onClick}
+				newTab={newTab}
+				showExternalLinkArrow={showExternalLinkArrow}
+				disabled={disabled}
+				ref={buttonRef}
+				qa={qa}
+				{...rest}
+			>
+				{contents}
+			</ButtonLink>
+		);
+	}
 
-  if (onClick) {
-    return (
-      <button
-        data-qa={qa}
-        ref={buttonRef}
-        type={type}
-        className={classNames}
-        onClick={handleClick}
-        disabled={disabled}
-        {...rest}
-      >
-        {contents}
-      </button>
-    );
-  }
+	if (onClick) {
+		return (
+			<button
+				data-qa={qa}
+				ref={buttonRef}
+				type={type}
+				className={classNames}
+				onClick={handleClick}
+				disabled={disabled}
+				{...rest}
+			>
+				{contents}
+			</button>
+		);
+	}
 
-  return (
-    <button data-qa={qa} ref={buttonRef} type={type} className={classNames} disabled={disabled} {...rest}>
-      {contents}
-    </button>
-  );
+	return (
+		<button
+			data-qa={qa}
+			ref={buttonRef}
+			type={type}
+			className={classNames}
+			disabled={disabled}
+			{...rest}
+		>
+			{contents}
+		</button>
+	);
 }

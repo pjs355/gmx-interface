@@ -10,6 +10,12 @@ export type {
 	VenueRegistryStatus,
 } from "./accountOverview";
 export type {
+	VenueRegulatorySetup,
+	VenueSetupSlice,
+	VenueSetupWallets,
+	OverviewVenueId,
+} from "./venueSetup";
+export type {
 	PolymarketAccountResponse,
 	PolymarketAccountState,
 	PolymarketBuilderSignBody,

@@ -4,10 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMedia } from "react-use";
 import Button from "components/Button/Button";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import {
-	Umbrella,
-	umbrellaDataService,
-} from "@/services/api/umbrellaDataService";
+import { Umbrella, umbrellaDataService } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "context/PredictionDataContext";
 import GameLinks from "@/pages/Predictions/components/GameLinks";
 import {
@@ -20,18 +17,13 @@ import { useVolumeSortedQuestions } from "./useVolumeSortedQuestions";
 import { useChartState } from "./useChartState";
 import { useMatchSettled } from "./useMatchSettled";
 import "../Predictions/Predictions.scss";
-import "./PredictionMarket.scss";
-import { PredictionCurtainProvider } from "./PredictionMarketTradeBox/PredictionCurtain";
-import { hasUsableOrderbookSnapshot } from "./utils";
+import "./scss/PredictionMarket.scss";
+import { PredictionCurtainProvider } from "@/components/PredictionMarketTradeBox";
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
 
 function sanitizeUmbrellaQuestions(raw: unknown[]): PredictionMarket[] {
 	return raw.filter(
-		(q) =>
-			q &&
-			((q as any)._id ||
-				(q as any).questionId ||
-				(q as any).marketId),
+		(q) => q && ((q as any)._id || (q as any).questionId || (q as any).marketId),
 	) as PredictionMarket[];
 }
 
@@ -65,7 +57,6 @@ function PredictionMarketContent() {
 		getOrderbookForQuestion,
 		refreshOrderbook,
 		loading: contextLoading,
-		refresh: refreshContext,
 	} = usePredictionData();
 
 	/*
@@ -108,10 +99,7 @@ function PredictionMarketContent() {
 		const storedMarketId = localStorage.getItem("selectedMarketId");
 		if (!storedMarketId) return null;
 		const hit = questions.find((q) => {
-			const qid =
-				(q as any)._id ||
-				(q as any).questionId ||
-				(q as any).marketId;
+			const qid = (q as any)._id || (q as any).questionId || (q as any).marketId;
 			return qid === storedMarketId;
 		});
 		if (hit) {
@@ -121,17 +109,14 @@ function PredictionMarketContent() {
 		}
 		return null;
 		// Intentionally only run on mount — `questions` is the lazy-init value.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 	const [activeMarket, setActiveMarket] = useState<PredictionMarket | null>(
-		() => initialStoredMatch ?? questions[0] ?? null
+		() => initialStoredMatch ?? questions[0] ?? null,
 	);
 	const [activePosition, setActivePosition] = useState<"yes" | "no">(() => {
 		// Read activePosition from localStorage, default to 'yes' if not found
 		const storedPosition = localStorage.getItem("activePosition");
-		return storedPosition === "yes" || storedPosition === "no"
-			? storedPosition
-			: "yes";
+		return storedPosition === "yes" || storedPosition === "no" ? storedPosition : "yes";
 	});
 	const [hasUserSelectedMarket, setHasUserSelectedMarket] = useState(false);
 	/*
@@ -142,11 +127,10 @@ function PredictionMarketContent() {
 	 * (the trade box stays mounted across that change because it's keyed by
 	 * `umbrella._id`, so no remount / skeleton flash).
 	 */
-	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] =
-		useState(() => Boolean(initialStoredMatch));
-	const [loading, setLoading] = useState(
-		() => !umbrella && contextLoading,
+	const [hasProcessedStoredSelection, setHasProcessedStoredSelection] = useState(() =>
+		Boolean(initialStoredMatch),
 	);
+	const [loading, setLoading] = useState(() => !umbrella && contextLoading);
 	const isMobile = useMedia("(max-width: 1100px)");
 	const sidebarSelectedGame = getHomeGameFilter();
 	const handleTradingSidebarSelect = useCallback(
@@ -181,19 +165,14 @@ function PredictionMarketContent() {
 		}
 
 		setUmbrella(umbrellaFromContext);
-		const sanitized = resolveQuestionsForUmbrella(
-			umbrellaFromContext,
-			getQuestionsForUmbrella,
-		);
+		const sanitized = resolveQuestionsForUmbrella(umbrellaFromContext, getQuestionsForUmbrella);
 		if (sanitized.length === 0) {
 			if (contextLoading) {
 				setLoading(true);
 				return;
 			}
 			// Check if markets are resolved before redirecting
-			const resolvedQs = getResolvedQuestionsForUmbrella(
-				umbrellaFromContext._id,
-			);
+			const resolvedQs = getResolvedQuestionsForUmbrella(umbrellaFromContext._id);
 			if (resolvedQs.length > 0) {
 				setQuestions([]);
 				setLoading(false);
@@ -218,11 +197,7 @@ function PredictionMarketContent() {
 		navigate,
 	]);
 
-	const {
-		questionOrderbooks,
-		orderbooksReady,
-		fetchAllOrderbooks,
-	} = useUmbrellaLiveOrderbooks(
+	const { questionOrderbooks, orderbooksReady, fetchAllOrderbooks } = useUmbrellaLiveOrderbooks(
 		umbrella?._id,
 		questions,
 		getOrderbookForQuestion,
@@ -236,8 +211,7 @@ function PredictionMarketContent() {
 		const interval = setInterval(async () => {
 			try {
 				// Fetch only this specific umbrella using umbrellaDataService
-				const updatedUmbrella =
-					await umbrellaDataService.fetchUmbrellaById(umbrella._id);
+				const updatedUmbrella = await umbrellaDataService.fetchUmbrellaById(umbrella._id);
 				if (updatedUmbrella) {
 					// Update local umbrella state with fresh data
 					setUmbrella((prev) => ({
@@ -271,8 +245,7 @@ function PredictionMarketContent() {
 
 		const fits = () => {
 			// Removed unused lineHeight calculation
-			const computedLineHeight =
-				parseFloat(getComputedStyle(el).lineHeight) || maxFont * 1.2;
+			const computedLineHeight = parseFloat(getComputedStyle(el).lineHeight) || maxFont * 1.2;
 			const maxHeight = computedLineHeight * maxLines;
 			return el.scrollHeight <= maxHeight + 1; // small tolerance
 		};
@@ -303,14 +276,11 @@ function PredictionMarketContent() {
 	}, [isMobile, umbrella?.displayName]);
 
 	// Function to switch active market and position when Trade Yes/No is clicked
-	const handleMarketSwitch = useCallback(
-		(market: PredictionMarket, position: "yes" | "no") => {
-			setActiveMarket(market);
-			setActivePosition(position);
-			setHasUserSelectedMarket(true);
-		},
-		[]
-	);
+	const handleMarketSwitch = useCallback((market: PredictionMarket, position: "yes" | "no") => {
+		setActiveMarket(market);
+		setActivePosition(position);
+		setHasUserSelectedMarket(true);
+	}, []);
 
 	// Function to update just the position (for trading box callbacks)
 	const handlePositionChange = useCallback((position: "yes" | "no") => {
@@ -325,16 +295,13 @@ function PredictionMarketContent() {
 			setActivePosition(position);
 			setHasUserSelectedMarket(true); // Mark as user-selected to prevent auto-reset
 		},
-		[]
+		[],
 	);
 
 	// Get the active market's orderbook
 	const activeMarketOrderbook = useMemo(() => {
 		if (!activeMarket) return null;
-		const orderBookId =
-			activeMarket._id ||
-			activeMarket.questionId ||
-			activeMarket.marketId;
+		const orderBookId = activeMarket._id || activeMarket.questionId || activeMarket.marketId;
 		const orderbook = questionOrderbooks[orderBookId] || null;
 		return orderbook;
 	}, [activeMarket, questionOrderbooks]);
@@ -351,9 +318,9 @@ function PredictionMarketContent() {
 			localStorage.setItem("homeDockPinnedUmbrellaId", umbrella._id);
 			const id = activeMarket
 				? (activeMarket as any)._id ||
-				  (activeMarket as any).questionId ||
-				  (activeMarket as any).marketId ||
-				  ""
+					(activeMarket as any).questionId ||
+					(activeMarket as any).marketId ||
+					""
 				: "";
 			if (id) {
 				localStorage.setItem("homeDockActiveMarketId", id);
@@ -365,21 +332,14 @@ function PredictionMarketContent() {
 
 	// Update the live ask store with the active market's best ask price
 	useEffect(() => {
-		if (
-			activeMarketOrderbook?.asks &&
-			activeMarketOrderbook.asks.length > 0
-		) {
+		if (activeMarketOrderbook?.asks && activeMarketOrderbook.asks.length > 0) {
 			// Removed unused bestAsk calculation
 			// NOTE: Live ask store is now managed separately for chart independence
 			// The chart has its own live ask management that doesn't depend on activeMarket
 		}
 	}, [activeMarketOrderbook, activeMarket]);
 
-	const sortedQuestions = useVolumeSortedQuestions(
-		questions,
-		questionOrderbooks,
-		orderbooksReady,
-	);
+	const sortedQuestions = useVolumeSortedQuestions(questions, questionOrderbooks, orderbooksReady);
 
 	// COMPLETELY ISOLATED CHART STATE - Never changes after initial load
 	// Chart state managed by useChartState hook
@@ -392,11 +352,7 @@ function PredictionMarketContent() {
 
 	// Handle initial market selection from stored data or default to top market
 	useEffect(() => {
-		if (
-			!hasUserSelectedMarket &&
-			!hasProcessedStoredSelection &&
-			sortedQuestions.length > 0
-		) {
+		if (!hasUserSelectedMarket && !hasProcessedStoredSelection && sortedQuestions.length > 0) {
 			setHasProcessedStoredSelection(true);
 
 			// Check for stored market ID from navigation
@@ -407,10 +363,7 @@ function PredictionMarketContent() {
 				// Find the market with the stored ID
 				targetMarket =
 					sortedQuestions.find((question) => {
-						const marketId =
-							question._id ||
-							question.questionId ||
-							question.marketId;
+						const marketId = question._id || question.questionId || question.marketId;
 						return marketId === storedMarketId;
 					}) || null;
 
@@ -426,12 +379,10 @@ function PredictionMarketContent() {
 			// Set the target market as active
 			if (
 				targetMarket &&
-				(!activeMarket ||
-					getMarketId(activeMarket) !== getMarketId(targetMarket))
+				(!activeMarket || getMarketId(activeMarket) !== getMarketId(targetMarket))
 			) {
 				setActiveMarket(targetMarket);
 			}
-
 		}
 	}, [
 		hasUserSelectedMarket,
@@ -455,9 +406,7 @@ function PredictionMarketContent() {
 				setActiveMarket(sortedQuestions[0]);
 				return;
 			}
-			const stillInUmbrella = sortedQuestions.some(
-				(q) => getMarketId(q) === id,
-			);
+			const stillInUmbrella = sortedQuestions.some((q) => getMarketId(q) === id);
 			if (!stillInUmbrella) {
 				setActiveMarket(sortedQuestions[0]);
 			}
@@ -467,15 +416,10 @@ function PredictionMarketContent() {
 	}, [sortedQuestions, activeMarket, getMarketId]);
 
 	// Hooks must be called unconditionally on every render
-	const chartOnlyState = useChartState(
-		sortedQuestions as any[],
-		questionOrderbooks
-	);
+	const chartOnlyState = useChartState(sortedQuestions as any[], questionOrderbooks);
 
 	const pandascoreMatchIdRaw =
-		typeof umbrella?.pandascore_matchId === "string"
-			? umbrella.pandascore_matchId.trim()
-			: "";
+		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
 	const settledInfo = useMatchSettled(
 		umbrella?._id,
 		pandascoreMatchIdRaw || undefined,
@@ -485,7 +429,7 @@ function PredictionMarketContent() {
 					displayName: umbrella.displayName,
 					teamMappings: umbrella.teamMappings,
 				}
-			: null
+			: null,
 	);
 
 	if (!umbrella && (loading || contextLoading)) {
@@ -500,9 +444,7 @@ function PredictionMarketContent() {
 					<h1 className="mb-16 text-34 font-bold">
 						<Trans>Umbrella Not Found</Trans>
 					</h1>
-					<p className="error-message">
-						Please navigate to this page from the Predictions list.
-					</p>
+					<p className="error-message">Please navigate to this page from the Predictions list.</p>
 					<Button
 						variant="primary"
 						onClick={() => navigate("/")}
@@ -521,11 +463,7 @@ function PredictionMarketContent() {
 
 	return (
 		<PredictionCurtainProvider>
-			<div
-				className={`prediction-market-page ${
-					isMobile ? "mobile" : "desktop"
-				}`}
-			>
+			<div className={`prediction-market-page ${isMobile ? "mobile" : "desktop"}`}>
 				{isMobile ? (
 					<MarketPanels
 						umbrella={umbrella!}
@@ -535,9 +473,7 @@ function PredictionMarketContent() {
 						activeMarket={activeMarket as any}
 						activePosition={activePosition}
 						onMarketSwitch={handleMarketSwitch}
-						onMarketSwitchWithOrderbook={
-							handleMarketSwitchWithOrderbook
-						}
+						onMarketSwitchWithOrderbook={handleMarketSwitchWithOrderbook}
 						onPositionChange={handlePositionChange}
 						fetchAllOrderbooks={fetchAllOrderbooks}
 						chartState={chartOnlyState}
@@ -560,9 +496,7 @@ function PredictionMarketContent() {
 							activeMarket={activeMarket as any}
 							activePosition={activePosition}
 							onMarketSwitch={handleMarketSwitch}
-							onMarketSwitchWithOrderbook={
-								handleMarketSwitchWithOrderbook
-							}
+							onMarketSwitchWithOrderbook={handleMarketSwitchWithOrderbook}
 							onPositionChange={handlePositionChange}
 							fetchAllOrderbooks={fetchAllOrderbooks}
 							chartState={chartOnlyState}

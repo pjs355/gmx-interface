@@ -57,9 +57,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 						<span>Display Name</span>
 						<input
 							value={details.displayName || ""}
-							onChange={(e) =>
-								onDetailsChange({ displayName: e.target.value })
-							}
+							onChange={(e) => onDetailsChange({ displayName: e.target.value })}
 							className="edit-form-input"
 							name="questionDisplayName"
 						/>
@@ -70,9 +68,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 							<input
 								type="color"
 								value={details.yesColor || "#22c55e"}
-								onChange={(e) =>
-									onDetailsChange({ yesColor: e.target.value })
-								}
+								onChange={(e) => onDetailsChange({ yesColor: e.target.value })}
 								className="edit-color-input"
 								name="questionYesColor"
 							/>
@@ -82,9 +78,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 							<input
 								type="color"
 								value={details.noColor || "#ef4444"}
-								onChange={(e) =>
-									onDetailsChange({ noColor: e.target.value })
-								}
+								onChange={(e) => onDetailsChange({ noColor: e.target.value })}
 								className="edit-color-input"
 								name="questionNoColor"
 							/>
@@ -94,22 +88,17 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 						<span>Tags</span>
 						<div className="edit-tags-container">
 							{loadingTags ? (
-								<div style={{ fontSize: 12, opacity: 0.8 }}>
-									Loading tags...
-								</div>
+								<div style={{ fontSize: 12, opacity: 0.8 }}>Loading tags...</div>
 							) : (
 								availableTags.map((tag) => {
 									const selected =
-										Array.isArray(details.tagIds) &&
-										details.tagIds.includes(tag._id);
+										Array.isArray(details.tagIds) && details.tagIds.includes(tag._id);
 									return (
 										<button
 											type="button"
 											key={tag._id}
 											onClick={() => onTagToggle(tag._id)}
-											className={`edit-tag-button ${
-												selected ? "selected" : ""
-											}`}
+											className={`edit-tag-button ${selected ? "selected" : ""}`}
 										>
 											{tag.label}
 										</button>
@@ -131,9 +120,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 								padding: "8px 14px",
 								border: "1px solid rgba(255,255,255,0.2)",
 								borderRadius: 6,
-								background: detailsExpanded
-									? "rgba(59, 130, 246, 0.2)"
-									: "rgba(255,255,255,0.05)",
+								background: detailsExpanded ? "rgba(59, 130, 246, 0.2)" : "rgba(255,255,255,0.05)",
 								color: "white",
 								cursor: "pointer",
 								fontSize: 13,
@@ -144,9 +131,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 						>
 							<span
 								style={{
-									transform: detailsExpanded
-										? "rotate(90deg)"
-										: "rotate(0deg)",
+									transform: detailsExpanded ? "rotate(90deg)" : "rotate(0deg)",
 									transition: "transform 0.2s ease",
 									display: "inline-block",
 								}}
@@ -268,11 +253,11 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 					</div>
 
 					<SettleMarket
-					questionId={details.questionId}
-					status={details.status}
-					resolvedOutcome={details.resolvedOutcome}
-					resolvedAt={details.resolvedAt}
-				/>
+						questionId={details.questionId}
+						status={details.status}
+						resolvedOutcome={details.resolvedOutcome}
+						resolvedAt={details.resolvedAt}
+					/>
 					<div className="edit-save-question-section">
 						<button
 							type="button"
@@ -282,17 +267,10 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 						>
 							{saving ? "Saving..." : "Save Question"}
 						</button>
-						{saveMessage && (
-							<span className="edit-success-message">{saveMessage}</span>
-						)}
-						{saveError && (
-							<span className="edit-error-message">{saveError}</span>
-						)}
+						{saveMessage && <span className="edit-success-message">{saveMessage}</span>}
+						{saveError && <span className="edit-error-message">{saveError}</span>}
 					</div>
-					<SeedMarket
-						questionId={details.questionId}
-						questionDisplayName={details.displayName}
-					/>
+					<SeedMarket questionId={details.questionId} questionDisplayName={details.displayName} />
 				</div>
 			)}
 		</div>

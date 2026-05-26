@@ -1,23 +1,23 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { useCurtainActions } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
+import { useCurtainActions } from "@/components/PredictionMarketTradeBox";
 import {
-	shortenTeamLabelForButton,
 	hexToRgba,
 	getContrastingTextColor,
 	getBorderColorForSelected,
 	mixHexOnBlack,
-} from "@/helpers/predictionUtils";
-import { getYesNoTeamLabels } from "@/pages/PredictionMarket/PredictionMarketTradeBox/teamLabels";
+} from "@/features/markets/presentation/teamColors";
+import { shortenTeamLabelForButton } from "@/features/markets/presentation/marketLabels";
+import { getYesNoTeamLabels } from "@/features/trading/trade-box/teamLabels";
 import DepthBar from "./DepthBar";
-import "./OrderbookDisplay.scss";
+import "./scss/OrderbookDisplay.scss";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import {
 	formatCentsLabel,
 	formatOrderbookLevelShares,
 	oddsDualLayoutForStyle,
-} from "@/utils/oddsDisplayFormat";
+} from "@/features/odds-display/oddsDisplayFormat";
 import type { ConsolidatedRestingLevel } from "./orderbookDisplayLevels";
 import {
 	bestBidAskFromConsolidatedSides,
@@ -36,10 +36,7 @@ interface OrderbookDisplayProps {
 	customTitle?: string;
 	market?: PredictionMarket;
 	onMarketSwitch?: (market: PredictionMarket, position: "yes" | "no") => void;
-	onMarketSwitchWithOrderbook?: (
-		market: PredictionMarket,
-		position: "yes" | "no"
-	) => void;
+	onMarketSwitchWithOrderbook?: (market: PredictionMarket, position: "yes" | "no") => void;
 	onOrderbookToggle?: (marketId: string) => void;
 	isActiveMarket?: boolean;
 	activePosition?: "yes" | "no";
@@ -65,11 +62,11 @@ export default function OrderbookDisplay({
 	noSideOrderbook,
 	loading,
 	error,
-	onRefresh,
+	onRefresh: _onRefresh,
 	customTitle,
 	market,
 	onMarketSwitch,
-	onMarketSwitchWithOrderbook,
+	onMarketSwitchWithOrderbook: _onMarketSwitchWithOrderbook,
 	onOrderbookToggle,
 	isActiveMarket,
 	activePosition,
@@ -119,11 +116,7 @@ export default function OrderbookDisplay({
 	}, [ladderExpanded, orderbook, activeTab]);
 
 	const effectiveMinDisplayable = useMemo(
-		() =>
-			effectiveMinDisplayableRestingSize(
-				wholeContractRestingBook,
-				minDisplayableRestingSize,
-			),
+		() => effectiveMinDisplayableRestingSize(wholeContractRestingBook, minDisplayableRestingSize),
 		[wholeContractRestingBook, minDisplayableRestingSize],
 	);
 
@@ -150,9 +143,7 @@ export default function OrderbookDisplay({
 			min,
 		);
 		const yesBbo = bestBidAskFromConsolidatedSides(yesAskF, yesBidF);
-		const sortedAsksYes = [...yesAskF]
-			.sort((a, b) => a.price - b.price)
-			.reverse();
+		const sortedAsksYes = [...yesAskF].sort((a, b) => a.price - b.price).reverse();
 		const sortedBidsYes = [...yesBidF].sort((a, b) => b.price - a.price);
 
 		if (noSideOrderbook) {
@@ -165,9 +156,7 @@ export default function OrderbookDisplay({
 				min,
 			);
 			const noBbo = bestBidAskFromConsolidatedSides(noAskF, noBidF);
-			const noTabAsks = [...noAskF]
-				.sort((a, b) => a.price - b.price)
-				.reverse();
+			const noTabAsks = [...noAskF].sort((a, b) => a.price - b.price).reverse();
 			const noTabBids = [...noBidF].sort((a, b) => b.price - a.price);
 			return {
 				marketBestBid: yesBbo.bestBid,
@@ -214,11 +203,7 @@ export default function OrderbookDisplay({
 
 	// Check if this is an "Over {number}" market (daily player count style)
 	const overUnderMatch = useMemo(() => {
-		const title = (
-			market?.displayName ||
-			(market as any)?.question ||
-			""
-		).trim();
+		const title = (market?.displayName || (market as any)?.question || "").trim();
 		// Match "Over" followed by a number (with optional commas)
 		const match = title.match(/^Over\s+([\d,]+)/i);
 		if (match) {
@@ -229,10 +214,7 @@ export default function OrderbookDisplay({
 
 	const { yesTeamLabel, noTeamLabel } = useMemo(() => {
 		if (!market) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-		const { yesTeamLabel: y, noTeamLabel: n } = getYesNoTeamLabels(
-			market,
-			umbrellaDisplayName,
-		);
+		const { yesTeamLabel: y, noTeamLabel: n } = getYesNoTeamLabels(market, umbrellaDisplayName);
 		return {
 			yesTeamLabel: shortenTeamLabelForButton(y),
 			noTeamLabel: shortenTeamLabelForButton(n),
@@ -249,16 +231,9 @@ export default function OrderbookDisplay({
 
 	const isVsSingle = useMemo(() => {
 		if (!market || (market as any)?.umbrellaChildrenCount !== 1) return false;
-		const mt = (
-			market?.displayName ||
-			(market as any)?.question ||
-			""
-		).trim();
+		const mt = (market?.displayName || (market as any)?.question || "").trim();
 		if (mt.match(/^Over\s+/i)) return false;
-		const raw =
-			(umbrellaDisplayName || "")
-				.replace(/\s*-\s*Match Winner$/i, "")
-				.trim() || mt;
+		const raw = (umbrellaDisplayName || "").replace(/\s*-\s*Match Winner$/i, "").trim() || mt;
 		const parts = raw
 			.split(/\s*vs\.?\s*/i)
 			.map((s: string) => s.trim())
@@ -269,18 +244,12 @@ export default function OrderbookDisplay({
 	const yesColor: string = (market as any)?.yesColor || "#8b5cf6";
 	const noColor: string = (market as any)?.noColor || "#3b82f6";
 
-	const yesTextOnSolid = useMemo(
-		() => getContrastingTextColor(yesColor),
-		[yesColor],
-	);
+	const yesTextOnSolid = useMemo(() => getContrastingTextColor(yesColor), [yesColor]);
 	const yesTextOnTint = useMemo(
 		() => getContrastingTextColor(mixHexOnBlack(yesColor, 0.35)),
 		[yesColor],
 	);
-	const noTextOnSolid = useMemo(
-		() => getContrastingTextColor(noColor),
-		[noColor],
-	);
+	const noTextOnSolid = useMemo(() => getContrastingTextColor(noColor), [noColor]);
 	const noTextOnTint = useMemo(
 		() => getContrastingTextColor(mixHexOnBlack(noColor, 0.35)),
 		[noColor],
@@ -291,17 +260,19 @@ export default function OrderbookDisplay({
 
 	const yesLabelPrice = side === "buy" ? marketBestAsk : marketBestBid;
 	const noLabelPrice = noSideOrderbook
-		? (side === "buy" ? noBestAsk : noBestBid)
-		: (side === "buy"
-			? (marketBestBid === null ? null : 1 - marketBestBid)
-			: (marketBestAsk === null ? null : 1 - marketBestAsk));
-	
-	const yesLabel =
-		yesLabelPrice !== null
-			? formatPrice(yesLabelPrice, teamOddsLayout)
-			: "--";
-	const noLabel =
-		noLabelPrice !== null ? formatPrice(noLabelPrice, teamOddsLayout) : "--";
+		? side === "buy"
+			? noBestAsk
+			: noBestBid
+		: side === "buy"
+			? marketBestBid === null
+				? null
+				: 1 - marketBestBid
+			: marketBestAsk === null
+				? null
+				: 1 - marketBestAsk;
+
+	const yesLabel = yesLabelPrice !== null ? formatPrice(yesLabelPrice, teamOddsLayout) : "--";
+	const noLabel = noLabelPrice !== null ? formatPrice(noLabelPrice, teamOddsLayout) : "--";
 
 	const teamTabRow = (
 		<div className="orderbook-embedded-team-row">
@@ -317,10 +288,7 @@ export default function OrderbookDisplay({
 						if (market && onMarketSwitch) {
 							onMarketSwitch(market, "yes");
 						}
-						if (
-							typeof window !== "undefined" &&
-							window.innerWidth <= 1100
-						) {
+						if (typeof window !== "undefined" && window.innerWidth <= 1100) {
 							openCurtain();
 						}
 					}}
@@ -331,29 +299,20 @@ export default function OrderbookDisplay({
 					}}
 					onMouseLeave={(e) => {
 						if (isVsSingle && activeTab !== "yes") {
-							e.currentTarget.style.border = `2px solid ${hexToRgba(
-								yesColor,
-								0.35,
-							)}`;
+							e.currentTarget.style.border = `2px solid ${hexToRgba(yesColor, 0.35)}`;
 						}
 					}}
 					style={
 						isVsSingle
 							? {
-									background:
-										activeTab === "yes"
-											? yesColor
-											: hexToRgba(yesColor, 0.35),
-									color:
-										activeTab === "yes"
-											? yesTextOnSolid
-											: yesTextOnTint,
+									background: activeTab === "yes" ? yesColor : hexToRgba(yesColor, 0.35),
+									color: activeTab === "yes" ? yesTextOnSolid : yesTextOnTint,
 									border: `2px solid ${
 										activeTab === "yes"
 											? getBorderColorForSelected(yesColor)
 											: hexToRgba(yesColor, 0.35)
 									}`,
-							  }
+								}
 							: undefined
 					}
 				>
@@ -391,10 +350,7 @@ export default function OrderbookDisplay({
 						if (market && onMarketSwitch) {
 							onMarketSwitch(market, "no");
 						}
-						if (
-							typeof window !== "undefined" &&
-							window.innerWidth <= 1100
-						) {
+						if (typeof window !== "undefined" && window.innerWidth <= 1100) {
 							openCurtain();
 						}
 					}}
@@ -405,29 +361,20 @@ export default function OrderbookDisplay({
 					}}
 					onMouseLeave={(e) => {
 						if (isVsSingle && activeTab !== "no") {
-							e.currentTarget.style.border = `2px solid ${hexToRgba(
-								noColor,
-								0.35,
-							)}`;
+							e.currentTarget.style.border = `2px solid ${hexToRgba(noColor, 0.35)}`;
 						}
 					}}
 					style={
 						isVsSingle
 							? {
-									background:
-										activeTab === "no"
-											? noColor
-											: hexToRgba(noColor, 0.35),
-									color:
-										activeTab === "no"
-											? noTextOnSolid
-											: noTextOnTint,
+									background: activeTab === "no" ? noColor : hexToRgba(noColor, 0.35),
+									color: activeTab === "no" ? noTextOnSolid : noTextOnTint,
 									border: `2px solid ${
 										activeTab === "no"
 											? getBorderColorForSelected(noColor)
 											: hexToRgba(noColor, 0.35)
 									}`,
-							  }
+								}
 							: undefined
 					}
 				>
@@ -523,30 +470,19 @@ export default function OrderbookDisplay({
 										isVsSingle
 											? {
 													background:
-														isActiveMarket &&
-														activePosition === "yes"
+														isActiveMarket && activePosition === "yes"
 															? yesColor
-															: hexToRgba(
-																	yesColor,
-																	0.35,
-															  ),
+															: hexToRgba(yesColor, 0.35),
 													color:
-														isActiveMarket &&
-														activePosition === "yes"
+														isActiveMarket && activePosition === "yes"
 															? yesTextOnSolid
 															: yesTextOnTint,
 													border: `2px solid ${
-														isActiveMarket &&
-														activePosition === "yes"
-															? getBorderColorForSelected(
-																	yesColor,
-															  )
-															: hexToRgba(
-																	yesColor,
-																	0.35,
-															  )
+														isActiveMarket && activePosition === "yes"
+															? getBorderColorForSelected(yesColor)
+															: hexToRgba(yesColor, 0.35)
 													}`,
-											  }
+												}
 											: undefined
 									}
 								>
@@ -575,30 +511,19 @@ export default function OrderbookDisplay({
 										isVsSingle
 											? {
 													background:
-														isActiveMarket &&
-														activePosition === "no"
+														isActiveMarket && activePosition === "no"
 															? noColor
-															: hexToRgba(
-																	noColor,
-																	0.35,
-															  ),
+															: hexToRgba(noColor, 0.35),
 													color:
-														isActiveMarket &&
-														activePosition === "no"
+														isActiveMarket && activePosition === "no"
 															? noTextOnSolid
 															: noTextOnTint,
 													border: `2px solid ${
-														isActiveMarket &&
-														activePosition === "no"
-															? getBorderColorForSelected(
-																	noColor,
-															  )
-															: hexToRgba(
-																	noColor,
-																	0.35,
-															  )
+														isActiveMarket && activePosition === "no"
+															? getBorderColorForSelected(noColor)
+															: hexToRgba(noColor, 0.35)
 													}`,
-											  }
+												}
 											: undefined
 									}
 								>
@@ -641,9 +566,7 @@ export default function OrderbookDisplay({
 				<div className="orderbook-display orderbook-display--embedded">
 					{teamTabRow}
 					<div className="orderbook-content">
-						<div className="no-data-message">
-							No orderbook data available
-						</div>
+						<div className="no-data-message">No orderbook data available</div>
 					</div>
 				</div>
 			);
@@ -654,45 +577,32 @@ export default function OrderbookDisplay({
 					<h3>{displayTitle || "Order Book"}</h3>
 				</div>
 				<div className="orderbook-content">
-					<div className="no-data-message">
-						No orderbook data available
-					</div>
+					<div className="no-data-message">No orderbook data available</div>
 				</div>
 			</div>
 		);
 	}
 
 	const displayAsks =
-		activeTab === "yes"
-			? orderbookDerived.sortedAsksYes
-			: orderbookDerived.noTabAsks;
+		activeTab === "yes" ? orderbookDerived.sortedAsksYes : orderbookDerived.noTabAsks;
 	const displayBids =
-		activeTab === "yes"
-			? orderbookDerived.sortedBidsYes
-			: orderbookDerived.noTabBids;
+		activeTab === "yes" ? orderbookDerived.sortedBidsYes : orderbookDerived.noTabBids;
 
 	// Get best prices and spread based on active tab
 	const bestAsk =
-		displayAsks.length > 0
-			? safeOrderbookNumber(displayAsks[displayAsks.length - 1].price)
-			: null;
-	const bestBid =
-		displayBids.length > 0
-			? safeOrderbookNumber(displayBids[0].price)
-			: null;
+		displayAsks.length > 0 ? safeOrderbookNumber(displayAsks[displayAsks.length - 1].price) : null;
+	const bestBid = displayBids.length > 0 ? safeOrderbookNumber(displayBids[0].price) : null;
 	const spread = bestBid && bestAsk ? bestAsk - bestBid : null;
-	const spreadPercentage =
-		spread && bestBid ? (spread / bestBid) * 100 : null;
 
 	// Calculate cumulative depth percentages for visualization
 	const calculateDepthPercentages = (
 		orders: Array<{ price: number; size: number; id: string }>,
-		isAsks: boolean = false
+		isAsks: boolean = false,
 	) => {
 		if (orders.length === 0) return [];
 
 		// Calculate running totals for each order
-		const ordersWithTotals = orders.map((order, index) => {
+		const ordersWithTotals = orders.map((order) => {
 			const total = order.price * order.size;
 			return { ...order, total };
 		});
@@ -708,34 +618,26 @@ export default function OrderbookDisplay({
 		// because asks are sorted with best ask (lowest price) at the end
 		if (isAsks) {
 			let reverseCumulativeTotal = 0;
-			const reversedOrders = ordersWithCumulative
-				.reverse()
-				.map((order) => {
-					reverseCumulativeTotal += order.total;
-					return {
-						...order,
-						cumulativeTotal: reverseCumulativeTotal,
-					};
-				});
-			ordersWithCumulative.splice(
-				0,
-				ordersWithCumulative.length,
-				...reversedOrders.reverse()
-			);
+			const reversedOrders = ordersWithCumulative.reverse().map((order) => {
+				reverseCumulativeTotal += order.total;
+				return {
+					...order,
+					cumulativeTotal: reverseCumulativeTotal,
+				};
+			});
+			ordersWithCumulative.splice(0, ordersWithCumulative.length, ...reversedOrders.reverse());
 		}
 
 		// Find the maximum cumulative total for percentage calculation
 		const maxCumulativeTotal = Math.max(
-			...ordersWithCumulative.map((order) => order.cumulativeTotal)
+			...ordersWithCumulative.map((order) => order.cumulativeTotal),
 		);
 
 		// Calculate depth percentages based on cumulative totals
 		return ordersWithCumulative.map((order) => ({
 			...order,
 			depthPercentage:
-				maxCumulativeTotal > 0
-					? (order.cumulativeTotal / maxCumulativeTotal) * 100
-					: 0,
+				maxCumulativeTotal > 0 ? (order.cumulativeTotal / maxCumulativeTotal) * 100 : 0,
 		}));
 	};
 
@@ -744,43 +646,26 @@ export default function OrderbookDisplay({
 
 	return (
 		<div
-			className={
-				isEmbedded
-					? "orderbook-display orderbook-display--embedded"
-					: "orderbook-display"
-			}
+			className={isEmbedded ? "orderbook-display orderbook-display--embedded" : "orderbook-display"}
 		>
 			{isEmbedded ? (
 				teamTabRow
 			) : (
 				<div className="orderbook-header">
 					<div
-						className={`header-top clickable-header ${
-							isCollapsed ? "collapsed" : "expanded"
-						}`}
+						className={`header-top clickable-header ${isCollapsed ? "collapsed" : "expanded"}`}
 						onClick={() => {
 							if (market && onOrderbookToggle) {
-								const marketId =
-									market._id ||
-									market.questionId ||
-									market.marketId;
+								const marketId = market._id || market.questionId || market.marketId;
 
-								if (
-									!isActiveMarket &&
-									onMarketSwitch &&
-									activePosition
-								) {
+								if (!isActiveMarket && onMarketSwitch && activePosition) {
 									onMarketSwitch(market, activePosition);
 								}
 
 								onOrderbookToggle(marketId);
 							}
 						}}
-						title={
-							isCollapsed
-								? "Click to expand orderbook"
-								: "Click to collapse orderbook"
-						}
+						title={isCollapsed ? "Click to expand orderbook" : "Click to collapse orderbook"}
 					>
 						<div className="header-left">
 							<div className="header-title-section">
@@ -793,9 +678,7 @@ export default function OrderbookDisplay({
 								<button
 									type="button"
 									className={`tab-button trade-yes ${
-										isActiveMarket && activePosition === "yes"
-											? "active-yes"
-											: ""
+										isActiveMarket && activePosition === "yes" ? "active-yes" : ""
 									}`}
 									onClick={(e) => {
 										e.stopPropagation();
@@ -803,10 +686,7 @@ export default function OrderbookDisplay({
 										if (market && onMarketSwitch) {
 											onMarketSwitch(market, "yes");
 										}
-										if (
-											typeof window !== "undefined" &&
-											window.innerWidth <= 1100
-										) {
+										if (typeof window !== "undefined" && window.innerWidth <= 1100) {
 											openCurtain();
 										}
 									}}
@@ -817,37 +697,20 @@ export default function OrderbookDisplay({
 									}}
 									onMouseLeave={(e) => {
 										if (isVsSingle && activeTab !== "yes") {
-											e.currentTarget.style.border = `2px solid ${hexToRgba(
-												yesColor,
-												0.35,
-											)}`;
+											e.currentTarget.style.border = `2px solid ${hexToRgba(yesColor, 0.35)}`;
 										}
 									}}
 									style={
 										isVsSingle
 											? {
-													background:
-														activeTab === "yes"
-															? yesColor
-															: hexToRgba(
-																	yesColor,
-																	0.35,
-															  ),
-													color:
-														activeTab === "yes"
-															? yesTextOnSolid
-															: yesTextOnTint,
+													background: activeTab === "yes" ? yesColor : hexToRgba(yesColor, 0.35),
+													color: activeTab === "yes" ? yesTextOnSolid : yesTextOnTint,
 													border: `2px solid ${
 														activeTab === "yes"
-															? getBorderColorForSelected(
-																	yesColor,
-															  )
-															: hexToRgba(
-																	yesColor,
-																	0.35,
-															  )
+															? getBorderColorForSelected(yesColor)
+															: hexToRgba(yesColor, 0.35)
 													}`,
-											  }
+												}
 											: undefined
 									}
 								>
@@ -877,9 +740,7 @@ export default function OrderbookDisplay({
 								<button
 									type="button"
 									className={`tab-button trade-no ${
-										isActiveMarket && activePosition === "no"
-											? "active-no"
-											: ""
+										isActiveMarket && activePosition === "no" ? "active-no" : ""
 									}`}
 									onClick={(e) => {
 										e.stopPropagation();
@@ -887,10 +748,7 @@ export default function OrderbookDisplay({
 										if (market && onMarketSwitch) {
 											onMarketSwitch(market, "no");
 										}
-										if (
-											typeof window !== "undefined" &&
-											window.innerWidth <= 1100
-										) {
+										if (typeof window !== "undefined" && window.innerWidth <= 1100) {
 											openCurtain();
 										}
 									}}
@@ -901,37 +759,20 @@ export default function OrderbookDisplay({
 									}}
 									onMouseLeave={(e) => {
 										if (isVsSingle && activeTab !== "no") {
-											e.currentTarget.style.border = `2px solid ${hexToRgba(
-												noColor,
-												0.35,
-											)}`;
+											e.currentTarget.style.border = `2px solid ${hexToRgba(noColor, 0.35)}`;
 										}
 									}}
 									style={
 										isVsSingle
 											? {
-													background:
-														activeTab === "no"
-															? noColor
-															: hexToRgba(
-																	noColor,
-																	0.35,
-															  ),
-													color:
-														activeTab === "no"
-															? noTextOnSolid
-															: noTextOnTint,
+													background: activeTab === "no" ? noColor : hexToRgba(noColor, 0.35),
+													color: activeTab === "no" ? noTextOnSolid : noTextOnTint,
 													border: `2px solid ${
 														activeTab === "no"
-															? getBorderColorForSelected(
-																	noColor,
-															  )
-															: hexToRgba(
-																	noColor,
-																	0.35,
-															  )
+															? getBorderColorForSelected(noColor)
+															: hexToRgba(noColor, 0.35)
 													}`,
-											  }
+												}
 											: undefined
 									}
 								>
@@ -975,43 +816,24 @@ export default function OrderbookDisplay({
 					</div>
 
 					<div className="orderbook-content">
-						<div
-							className="unified-orders-list"
-							ref={ordersListRef}
-						>
+						<div className="unified-orders-list" ref={ordersListRef}>
 							{/* Asks */}
 							{asksWithDepth.length > 0 ? (
 								asksWithDepth.map((ask, index) => {
-									const isLowestAsk =
-										index === asksWithDepth.length - 1; // Last ask (lowest price)
+									const isLowestAsk = index === asksWithDepth.length - 1; // Last ask (lowest price)
 
 									return (
-										<div
-											key={`ask-${ask.id}-${index}`}
-											className="order-row ask"
-										>
-											<DepthBar
-												depth={ask.depthPercentage}
-												side="ask"
-											/>
-											<span className="side-label ask">
-												{isLowestAsk ? "Asks" : ""}
-											</span>
-											<span className="price ask">
-												{formatPrice(ask.price, teamOddsLayout)}
-											</span>
-											<span className="size">
-												{formatOrderbookLevelShares(ask.size)}
-											</span>
+										<div key={`ask-${ask.id}-${index}`} className="order-row ask">
+											<DepthBar depth={ask.depthPercentage} side="ask" />
+											<span className="side-label ask">{isLowestAsk ? "Asks" : ""}</span>
+											<span className="price ask">{formatPrice(ask.price, teamOddsLayout)}</span>
+											<span className="size">{formatOrderbookLevelShares(ask.size)}</span>
 											<span className="total">
 												$
-												{ask.cumulativeTotal.toLocaleString(
-													"en-US",
-													{
-														minimumFractionDigits: 2,
-														maximumFractionDigits: 2,
-													}
-												)}
+												{ask.cumulativeTotal.toLocaleString("en-US", {
+													minimumFractionDigits: 2,
+													maximumFractionDigits: 2,
+												})}
 											</span>
 										</div>
 									);
@@ -1021,18 +843,11 @@ export default function OrderbookDisplay({
 							)}
 
 							{/* Separator with Spread */}
-							<div
-								className="orderbook-separator"
-								ref={spreadRef}
-							>
+							<div className="orderbook-separator" ref={spreadRef}>
 								{spread !== null && (
 									<div className="spread-display">
-										<span className="spread-label">
-											Spread:
-										</span>
-										<span className="spread-value">
-											{formatCentsLabel(spread)}
-										</span>
+										<span className="spread-label">Spread:</span>
+										<span className="spread-value">{formatCentsLabel(spread)}</span>
 									</div>
 								)}
 							</div>
@@ -1043,32 +858,17 @@ export default function OrderbookDisplay({
 									const isHighestBid = index === 0; // First bid (highest price)
 
 									return (
-										<div
-											key={`bid-${bid.id}-${index}`}
-											className="order-row bid"
-										>
-											<DepthBar
-												depth={bid.depthPercentage}
-												side="bid"
-											/>
-											<span className="side-label bid">
-												{isHighestBid ? "Bids" : ""}
-											</span>
-											<span className="price bid">
-												{formatPrice(bid.price, teamOddsLayout)}
-											</span>
-											<span className="size">
-												{formatOrderbookLevelShares(bid.size)}
-											</span>
+										<div key={`bid-${bid.id}-${index}`} className="order-row bid">
+											<DepthBar depth={bid.depthPercentage} side="bid" />
+											<span className="side-label bid">{isHighestBid ? "Bids" : ""}</span>
+											<span className="price bid">{formatPrice(bid.price, teamOddsLayout)}</span>
+											<span className="size">{formatOrderbookLevelShares(bid.size)}</span>
 											<span className="total">
 												$
-												{bid.cumulativeTotal.toLocaleString(
-													"en-US",
-													{
-														minimumFractionDigits: 2,
-														maximumFractionDigits: 2,
-													}
-												)}
+												{bid.cumulativeTotal.toLocaleString("en-US", {
+													minimumFractionDigits: 2,
+													maximumFractionDigits: 2,
+												})}
 											</span>
 										</div>
 									);
@@ -1083,4 +883,3 @@ export default function OrderbookDisplay({
 		</div>
 	);
 }
-

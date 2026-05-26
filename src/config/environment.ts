@@ -1,14 +1,14 @@
 /**
  * Centralized Environment Configuration for LevelUp Predictions
- * 
+ *
  * This is the SINGLE SOURCE OF TRUTH for environment detection.
  * All other config files (addresses, API URLs, RPC) should import from here.
- * 
+ *
  * Environment modes:
  * - TESTNET: Uses testnet contract addresses + localhost API (for local development)
  * - PRODUCTION: Uses live contract addresses + production API (for deployed app)
  * - LOCAL-PRODUCTION: Uses live contract addresses + localhost API (for local backend with real contracts)
- * 
+ *
  * Priority order for environment detection:
  * 1. VITE_ENVIRONMENT_MODE env variable (set by yarn dev prompt)
  * 2. localStorage override (for manual testing in browser)
@@ -30,12 +30,12 @@ function getBuildTimeEnvironment(): Environment | null {
 
 /**
  * Determines the current environment.
- * 
+ *
  * Logic (PRODUCTION SAFE - no localStorage override):
  * 1. Check VITE_ENVIRONMENT_MODE (set by dev script prompt)
  * 2. Check if running on localhost → testnet
  * 3. Otherwise → production (ALWAYS for deployed environments)
- * 
+ *
  * NOTE: localStorage override was REMOVED to prevent accidental
  * environment switching in production which caused critical bugs.
  */
@@ -111,13 +111,12 @@ export function clearEnvironmentOverride(): void {
  */
 export function getEnvironmentLabel(): string {
 	const env = getEnvironment();
-	
+
 	// Check if set via dev script
 	const buildTimeEnv = getBuildTimeEnvironment();
 	if (buildTimeEnv) {
 		return `${env.toUpperCase()} (dev mode)`;
 	}
-	
+
 	return env.toUpperCase();
 }
-

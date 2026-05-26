@@ -47,11 +47,7 @@ function getFlag(languageCode: string): string {
 	return flag;
 }
 
-export default function LanguageListContent({
-	currentLanguage,
-	onClose,
-	onSelect,
-}: Props) {
+export default function LanguageListContent({ currentLanguage, onClose, onSelect }: Props) {
 	const languageCodes = Object.keys(locales);
 
 	return (
@@ -63,12 +59,9 @@ export default function LanguageListContent({
 				return (
 					<div
 						key={code}
-						className={cx(
-							"network-dropdown-menu-item",
-							"menu-item",
-							"language-modal-item",
-							{ active: isActive }
-						)}
+						className={cx("network-dropdown-menu-item", "menu-item", "language-modal-item", {
+							active: isActive,
+						})}
 						onClick={() => {
 							dynamicActivate(code)
 								.then(() => {
@@ -93,11 +86,7 @@ export default function LanguageListContent({
 										🫐
 									</span>
 								) : (
-									<img
-										className="network-dropdown-icon"
-										src={getFlag(code)}
-										alt={label}
-									/>
+									<img className="network-dropdown-icon" src={getFlag(code)} alt={label} />
 								)}
 							</div>
 							<span className="language-item">{label}</span>
@@ -111,5 +100,3 @@ export default function LanguageListContent({
 		</>
 	);
 }
-
-

@@ -31,7 +31,8 @@ export default function ButtonLink({
 	...rest
 }: ButtonProps) {
 	const classNames = cx(className, { disabled: disabled });
-	const isExternalLink = to.startsWith("http") || to.startsWith("https") || to.startsWith("mailto:");
+	const isExternalLink =
+		to.startsWith("http") || to.startsWith("https") || to.startsWith("mailto:");
 	if (isExternalLink) {
 		const anchorProps = {
 			href: disabled ? undefined : to,
@@ -42,30 +43,20 @@ export default function ButtonLink({
 				? {
 						target: "_blank",
 						rel: "noopener",
-				  }
+					}
 				: {}),
 		};
 		return (
 			<a data-qa={qa} {...anchorProps}>
 				{showExternalLinkArrow && (
-					<img
-						className="arrow-icon"
-						src={openInNewTab}
-						width="100%"
-						alt="open in new tab"
-					/>
+					<img className="arrow-icon" src={openInNewTab} width="100%" alt="open in new tab" />
 				)}
 				{children}
 			</a>
 		);
 	}
 	return (
-		<Link
-			data-qa={qa}
-			className={classNames}
-			to={to}
-			onClick={disabled ? preventClick : onClick}
-		>
+		<Link data-qa={qa} className={classNames} to={to} onClick={disabled ? preventClick : onClick}>
 			{children}
 		</Link>
 	);

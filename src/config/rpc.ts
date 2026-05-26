@@ -1,6 +1,6 @@
 /**
  * Centralized RPC Configuration for LevelUp Predictions
- * 
+ *
  * Note: Both testnet and production use Base Mainnet RPCs
  * (testnet contracts are deployed on Base Mainnet, not a separate testnet)
  */
@@ -170,10 +170,8 @@ export function getSolanaHttpRpcEndpoints(): readonly string[] {
 
 const SOLANA_HTTP_RPC_ENDPOINTS = getSolanaHttpRpcEndpoints();
 
-function createSolanaRpcFetchWithFallback(
-	endpoints: readonly string[],
-): typeof globalThis.fetch {
-	return async (input, init) => {
+function createSolanaRpcFetchWithFallback(endpoints: readonly string[]): typeof globalThis.fetch {
+	return async (_input, init) => {
 		let lastNonOk: Response | undefined;
 		let lastErr: unknown;
 		for (const endpoint of endpoints) {

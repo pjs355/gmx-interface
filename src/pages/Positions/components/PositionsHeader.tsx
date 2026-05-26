@@ -1,6 +1,6 @@
 // React import not required with automatic JSX runtime
 import type { CSSProperties } from "react";
-import { formatUsdAmount } from "../utils/formatCurrency";
+import { formatUsdAmount } from "@/features/positions/utils/formatCurrency";
 
 /** Same as AppHeaderUser / AppHeaderLinks `header-metric` cash skeleton. */
 const cashBalanceSkeletonBoxStyle: CSSProperties = {
@@ -34,20 +34,13 @@ export default function PositionsHeader({
 	// Cash is independent: show as soon as wallet/balance calls complete; do not wait on positions table/history shell
 	const showCashSkeleton = cashLoading;
 	const showPositionsSkeleton =
-		lockAll ||
-		positionsLoading ||
-		(positionsTotalValue === 0 && portfolioLoading);
+		lockAll || positionsLoading || (positionsTotalValue === 0 && portfolioLoading);
 	const showPortfolioSkeleton =
-		lockAll ||
-		portfolioLoading ||
-		(portfolioTotal === 0 && positionsLoading);
+		lockAll || portfolioLoading || (portfolioTotal === 0 && positionsLoading);
 	return (
 		<div className="mb-36">
 			{/* Desktop layout (unchanged) */}
-			<div
-				style={{ display: "none" }}
-				className="md:!flex items-end justify-start"
-			>
+			<div style={{ display: "none" }} className="md:!flex items-end justify-start">
 				<div className="flex items-end gap-32">
 					<div>
 						<div
@@ -143,14 +136,9 @@ export default function PositionsHeader({
 							}}
 						>
 							{showCashSkeleton ? (
-								<span
-									className="skeleton-box"
-									style={cashBalanceSkeletonBoxStyle}
-								/>
+								<span className="skeleton-box" style={cashBalanceSkeletonBoxStyle} />
 							) : (
-								<>
-									${formatUsdAmount(Number(usdcBalance || 0))}
-								</>
+								<>${formatUsdAmount(Number(usdcBalance || 0))}</>
 							)}
 						</div>
 					</div>
@@ -158,10 +146,7 @@ export default function PositionsHeader({
 			</div>
 
 			{/* Tablet & Mobile layout: Portfolio on top, then Positions and Cash below */}
-			<div
-				style={{ display: "block", marginTop: "0px" }}
-				className="md:!hidden"
-			>
+			<div style={{ display: "block", marginTop: "0px" }} className="md:!hidden">
 				<div>
 					<div
 						style={{
@@ -257,14 +242,9 @@ export default function PositionsHeader({
 							}}
 						>
 							{showCashSkeleton ? (
-								<span
-									className="skeleton-box"
-									style={cashBalanceSkeletonBoxStyle}
-								/>
+								<span className="skeleton-box" style={cashBalanceSkeletonBoxStyle} />
 							) : (
-								<>
-									${formatUsdAmount(Number(usdcBalance || 0))}
-								</>
+								<>${formatUsdAmount(Number(usdcBalance || 0))}</>
 							)}
 						</div>
 					</div>

@@ -6,17 +6,17 @@ import { MdOutlineClose } from "react-icons/md";
 import "./HeaderPromoBanner.scss";
 
 export function HeaderPromoBanner({ children }: { children: ReactNode }) {
-  const [hidden, setHidden] = useState(false); // Simplified state without GMX localStorage
-  const onClick = useCallback(() => {
-    setHidden(true);
-  }, [setHidden]);
+	const [hidden, setHidden] = useState(false); // Simplified state without GMX localStorage
+	const onClick = useCallback(() => {
+		setHidden(true);
+	}, [setHidden]);
 
-  if (hidden) return null;
+	if (hidden) return null;
 
-  return (
-    <div className="HeaderPromoBanner">
-      {children}
-      <MdOutlineClose onClick={onClick} className="cross-icon" color="white" />
-    </div>
-  );
+	return (
+		<div className="HeaderPromoBanner">
+			{children}
+			<MdOutlineClose onClick={onClick} className="cross-icon" color="white" />
+		</div>
+	);
 }

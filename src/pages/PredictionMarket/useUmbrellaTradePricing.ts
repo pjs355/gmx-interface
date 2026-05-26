@@ -1,25 +1,20 @@
 import { useEffect } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
-import { useTradingPagePrices } from "@/hooks/useTradingPagePrices";
+import { useTradingPagePrices } from "@/features/markets/pricing/useTradingPagePrices";
 
 export type UseUmbrellaTradePricingArgs = {
 	umbrella: Umbrella | null | undefined;
 };
 
 /** Shared venue monitor + `useTradingPagePrices` for MarketPanels and home trade dock. */
-export function useUmbrellaTradePricing({
-	umbrella,
-}: UseUmbrellaTradePricingArgs) {
+export function useUmbrellaTradePricing({ umbrella }: UseUmbrellaTradePricingArgs) {
 	const pandascoreMatchId =
-		typeof umbrella?.pandascore_matchId === "string"
-			? umbrella.pandascore_matchId.trim()
-			: "";
+		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 
-	const { subscribePandaMatchId, unsubscribePandaMatchId } =
-		useVenuePandaSubscription();
+	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
 	useEffect(() => {
 		if (!pandascoreMatchId) return;
 		subscribePandaMatchId(pandascoreMatchId);

@@ -1,9 +1,9 @@
 /**
  * AccountHealthChecker - Verifies account share balances against order history
- * 
+ *
  * This tool fetches order history for accounts and compares expected share balances
  * (calculated from filled orders) against actual RPC balances on-chain.
- * 
+ *
  * NOTE: Does not check historical/claimed markets since tokens are burned after claiming.
  */
 
@@ -60,7 +60,7 @@ interface MarketData {
  */
 function getSmartWalletAddress(profile: Profile): string | null {
 	const linkedSmartWallet = profile.linked_accounts?.find(
-		(acc: any) => acc.type === "smart_wallet"
+		(acc: any) => acc.type === "smart_wallet",
 	);
 	if (linkedSmartWallet?.address) {
 		return linkedSmartWallet.address;
@@ -80,12 +80,12 @@ function getSmartWalletAddress(profile: Profile): string | null {
 function calculateExpectedBalance(
 	orders: ProcessedOrder[],
 	marketId: string,
-	position: "Yes" | "No"
+	position: "Yes" | "No",
 ): number {
 	const relevantOrders = orders.filter(
-		(o) => o.questionId === marketId && o.filled && o.position === position
+		(o) => o.questionId === marketId && o.filled && o.position === position,
 	);
-	
+
 	return relevantOrders.reduce((sum, o) => {
 		// Buy = +shares, Sell = -shares
 		return sum + (o.side === "buy" ? o.tokenValue : -o.tokenValue);
@@ -116,19 +116,19 @@ export default function AccountHealthChecker({
 
 		setIsChecking(true);
 		setProgress({ current: 0, total: profiles.length });
-		
+
 		const newResults = new Map<string, AccountHealthResult>();
 		const provider = new JsonRpcProvider(DEFAULT_RPC_URL);
 		const ctfContract = new Contract(
 			CTF_ADDRESS,
 			["function balanceOf(address, uint256) view returns (uint256)"],
-			provider
+			provider,
 		);
 
 		// Fetch all active markets to build token lookup
 		const API_BASE = getPredictionApiBaseUrl();
 		let allMarkets: MarketData[] = [];
-		
+
 		try {
 			const marketsResp = await fetch(`${API_BASE}/markets?status=active`);
 			const marketsJson = await marketsResp.json();
@@ -140,13 +140,16 @@ export default function AccountHealthChecker({
 		}
 
 		// Build token -> market lookup
-		const tokenToMarket = new Map<string, { marketId: string; position: "Yes" | "No"; name: string }>();
+		const tokenToMarket = new Map<
+			string,
+			{ marketId: string; position: "Yes" | "No"; name: string }
+		>();
 		const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
-		
+
 		allMarkets.forEach((market) => {
 			const marketId = market._id || market.questionId || market.marketId || "";
 			const name = market.displayName || market.question || marketId;
-			
+
 			if (market.yesTokenId) {
 				tokenToMarket.set(market.yesTokenId, { marketId, position: "Yes", name });
 			}
@@ -165,7 +168,7 @@ export default function AccountHealthChecker({
 		for (let i = 0; i < profiles.length; i++) {
 			const profile = profiles[i];
 			const wallet = getSmartWalletAddress(profile);
-			
+
 			setProgress({ current: i + 1, total: profiles.length });
 
 			if (!wallet) {
@@ -186,10 +189,13 @@ export default function AccountHealthChecker({
 			try {
 				// Fetch orders for this account
 				const orders = await fetchUserOrders(wallet, marketDataMap);
-				
+
 				// Get unique market/token combinations from filled orders
-				const positionsToCheck = new Map<string, { marketId: string; tokenId: string; position: "Yes" | "No" }>();
-				
+				const positionsToCheck = new Map<
+					string,
+					{ marketId: string; tokenId: string; position: "Yes" | "No" }
+				>();
+
 				orders
 					.filter((o) => o.filled)
 					.forEach((o) => {
@@ -209,9 +215,9 @@ export default function AccountHealthChecker({
 				// Check each position
 				for (const [, pos] of positionsToCheck) {
 					totalChecked++;
-					
+
 					const expected = calculateExpectedBalance(orders, pos.marketId, pos.position);
-					
+
 					// Skip if expected balance is 0 or negative (fully sold)
 					if (expected <= 0) {
 						continue;
@@ -220,7 +226,7 @@ export default function AccountHealthChecker({
 					try {
 						const actualRaw = await ctfContract.balanceOf(wallet, pos.tokenId);
 						const actual = parseFloat(formatUnits(actualRaw, 6));
-						
+
 						// Allow small tolerance for rounding
 						const difference = Math.abs(actual - expected);
 						if (difference > 0.01) {
@@ -248,7 +254,6 @@ export default function AccountHealthChecker({
 					mismatchDetails,
 					checkedAt: new Date(),
 				});
-
 			} catch (err) {
 				console.error(`Error checking profile ${profile._id}:`, err);
 				newResults.set(profile._id, {
@@ -277,7 +282,10 @@ export default function AccountHealthChecker({
 	// Calculate summary stats
 	const healthyCount = Array.from(results.values()).filter((r) => r.isHealthy && !r.error).length;
 	const problemCount = Array.from(results.values()).filter((r) => !r.isHealthy || r.error).length;
-	const totalMismatches = Array.from(results.values()).reduce((sum, r) => sum + r.totalMismatches, 0);
+	const totalMismatches = Array.from(results.values()).reduce(
+		(sum, r) => sum + r.totalMismatches,
+		0,
+	);
 
 	return (
 		<div
@@ -405,7 +413,9 @@ export default function AccountHealthChecker({
 										border: "1px solid #333",
 									}}
 								>
-									<div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+									<div
+										style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}
+									>
 										<div>
 											<strong>{result.username || "Unknown"}</strong>
 											<div style={{ fontSize: 12, color: "#888", fontFamily: "monospace" }}>
@@ -444,9 +454,9 @@ export default function AccountHealthChecker({
 														{m.position}
 													</span>
 													<span>
-														Expected: <strong>{m.expected.toFixed(2)}</strong> | 
-														Actual: <strong>{m.actual.toFixed(2)}</strong> | 
-														Diff: <strong style={{ color: "#fbbf24" }}>{m.difference.toFixed(2)}</strong>
+														Expected: <strong>{m.expected.toFixed(2)}</strong> | Actual:{" "}
+														<strong>{m.actual.toFixed(2)}</strong> | Diff:{" "}
+														<strong style={{ color: "#fbbf24" }}>{m.difference.toFixed(2)}</strong>
 													</span>
 												</div>
 											))}
@@ -556,7 +566,3 @@ export function HealthStatusIndicator({
 		</span>
 	);
 }
-
-
-
-

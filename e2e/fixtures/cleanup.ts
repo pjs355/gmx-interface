@@ -28,9 +28,7 @@ export async function cleanupOpenPositions(
 		.isVisible()
 		.catch(() => false);
 	if (!tradeboxVisible) {
-		console.log(
-			"[cleanup] tradebox not visible; skipping per-venue cleanup sweep",
-		);
+		console.log("[cleanup] tradebox not visible; skipping per-venue cleanup sweep");
 		return;
 	}
 
@@ -44,25 +42,19 @@ export async function cleanupOpenPositions(
 				try {
 					const shares = await tradebox.getSellableShares(position);
 					if (shares > 0) {
-						console.log(
-							`[cleanup] selling ${shares} ${position.toUpperCase()} shares on ${venue}`,
-						);
+						console.log(`[cleanup] selling ${shares} ${position.toUpperCase()} shares on ${venue}`);
 						await tradebox.setAmount(shares);
 						await tradebox.submit();
 						await tradebox.waitForFill();
 					}
 				} catch (err) {
 					console.error("error", err);
-					console.error(
-						`[cleanup] failed to sell ${position} on ${venue}; continuing`,
-					);
+					console.error(`[cleanup] failed to sell ${position} on ${venue}; continuing`);
 				}
 			}
 		} catch (err) {
 			console.error("error", err);
-			console.error(
-				`[cleanup] failed to select venue ${venue}; continuing sweep`,
-			);
+			console.error(`[cleanup] failed to select venue ${venue}; continuing sweep`);
 		}
 	}
 }

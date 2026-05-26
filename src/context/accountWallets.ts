@@ -1,14 +1,10 @@
-import type { SorChain, SorVenue } from "@/trading/sor/core/sor-types";
+import type { SorChain, SorVenue } from "@/features/trading/sor/core/sor-types";
 import type { PredictAccountResponse } from "@/services/privateApi/client";
-import type {
-	AccountOverview,
-	PolymarketAccountResponse,
-	WalletDescriptor,
-} from "@/types/trading";
+import type { AccountOverview, PolymarketAccountResponse, WalletDescriptor } from "@/types/trading";
 import {
 	findEvmPrivyEmbeddedWallet,
 	type PrivyWalletListEntry,
-} from "@/trading/venues/polymarket/wallet/privyEmbeddedWallet";
+} from "@/features/trading/venues/polymarket/wallet/privyEmbeddedWallet";
 
 /** Optional wallet roles before the account wallet gate is ready. */
 export type AccountWalletRolesPartial = {
@@ -101,9 +97,9 @@ export function overviewWalletIsEvmSmartWallet(w: WalletDescriptor): boolean {
 function readSmartWalletFromUser(user: unknown): string | undefined {
 	const linked = (user as { linkedAccounts?: unknown[] } | null)?.linkedAccounts;
 	if (!Array.isArray(linked)) return undefined;
-	const smart = linked.find(
-		(a) => (a as { type?: string })?.type === "smart_wallet",
-	) as { address?: string } | undefined;
+	const smart = linked.find((a) => (a as { type?: string })?.type === "smart_wallet") as
+		| { address?: string }
+		| undefined;
 	return smart?.address;
 }
 
@@ -115,9 +111,7 @@ function readSolanaAddressFromUser(user: unknown): string | undefined {
 			(a as { type?: string; chainType?: string })?.type === "wallet" &&
 			(a as { chainType?: string })?.chainType === "solana",
 	) as { address?: string } | undefined;
-	return typeof sol?.address === "string" && sol.address.trim()
-		? sol.address.trim()
-		: undefined;
+	return typeof sol?.address === "string" && sol.address.trim() ? sol.address.trim() : undefined;
 }
 
 export type NormalizeWalletRolesInput = {
@@ -153,27 +147,21 @@ function readPredictMakerFromOverview(
 export function normalizeWalletRolesFromOverview(
 	input: NormalizeWalletRolesInput,
 ): AccountWalletRolesPartial {
-	const { user, privyWallets, accountOverview, polymarketAccount, predictAccount } =
-		input;
+	const { user, privyWallets, accountOverview, polymarketAccount, predictAccount } = input;
 	const smartFromUser = readSmartWalletFromUser(user);
 	const overviewWallet = accountOverview?.wallets?.find(overviewWalletIsEvmSmartWallet);
 	const overviewAddr =
 		typeof overviewWallet?.address === "string" ? overviewWallet.address.trim() : "";
 	const privyScw =
-		typeof smartFromUser === "string" && smartFromUser.trim()
-			? smartFromUser.trim()
-			: undefined;
+		typeof smartFromUser === "string" && smartFromUser.trim() ? smartFromUser.trim() : undefined;
 	const baseSmartWallet = overviewAddr || privyScw || undefined;
 
-	const embedded = findEvmPrivyEmbeddedWallet(privyWallets) as
-		| { address?: string }
-		| undefined;
+	const embedded = findEvmPrivyEmbeddedWallet(privyWallets) as { address?: string } | undefined;
 
 	const embeddedEoa = trimEvmOrUndefined(embedded?.address);
 
 	const polygonSigner =
-		trimEvmOrUndefined(polymarketAccount?.polymarketAccount?.signerAddress) ??
-		embeddedEoa;
+		trimEvmOrUndefined(polymarketAccount?.polymarketAccount?.signerAddress) ?? embeddedEoa;
 
 	const predictMaker =
 		trimEvmOrUndefined(predictAccount?.predictAccount?.makerAddress) ??
@@ -183,18 +171,14 @@ export function normalizeWalletRolesFromOverview(
 	const polymarketSafe =
 		(typeof polymarketAccount?.polymarketAccount?.safeWalletAddress === "string" &&
 			polymarketAccount.polymarketAccount.safeWalletAddress) ||
-		(accountOverview?.venues
-			?.find((v) => String(v.venueId).toLowerCase() === "polymarket")
+		(accountOverview?.venues?.find((v) => String(v.venueId).toLowerCase() === "polymarket")
 			?.fundingDestination?.address as string | undefined);
 
 	const lxDest = accountOverview?.venues?.find(
 		(v) => String(v.venueId).toLowerCase() === "limitless",
 	)?.fundingDestination;
-	const limitlessMakerRaw =
-		typeof lxDest?.address === "string" ? lxDest.address.trim() : "";
-	const limitlessMakerBase = EVM_RE.test(limitlessMakerRaw)
-		? limitlessMakerRaw
-		: undefined;
+	const limitlessMakerRaw = typeof lxDest?.address === "string" ? lxDest.address.trim() : "";
+	const limitlessMakerBase = EVM_RE.test(limitlessMakerRaw) ? limitlessMakerRaw : undefined;
 
 	const solWallet = privyWallets.find((w) => {
 		const cw = w as { chainType?: string; address?: string };
@@ -240,9 +224,7 @@ function missingRoles(wallets: AccountWalletRolesPartial): WalletRole[] {
 	return missing;
 }
 
-export function resolveAccountWalletRoles(
-	wallets: AccountWalletRolesPartial,
-): AccountWalletRoles {
+export function resolveAccountWalletRoles(wallets: AccountWalletRolesPartial): AccountWalletRoles {
 	const embeddedEoa = wallets.embeddedEoa!.trim();
 	return {
 		baseSmartWallet: wallets.baseSmartWallet!.trim(),
@@ -255,15 +237,11 @@ export function resolveAccountWalletRoles(
 	};
 }
 
-export function isAccountWalletRolesComplete(
-	wallets: AccountWalletRolesPartial,
-): boolean {
+export function isAccountWalletRolesComplete(wallets: AccountWalletRolesPartial): boolean {
 	return missingRoles(wallets).length === 0;
 }
 
-export function assertAccountWalletRoles(
-	wallets: AccountWalletRolesPartial,
-): AccountWalletRoles {
+export function assertAccountWalletRoles(wallets: AccountWalletRolesPartial): AccountWalletRoles {
 	const missing = missingRoles(wallets);
 	if (missing.length > 0) {
 		const labels = missing.map((r) => ROLE_LABEL[r]).join(", ");
@@ -282,9 +260,7 @@ export function getAccountWalletGate(
 	if (!hydrated) {
 		return {
 			status: "loading",
-			message: opts?.accountSetupInProgress
-				? "Setting up your account"
-				: "Loading wallets",
+			message: opts?.accountSetupInProgress ? "Setting up your account" : "Loading wallets",
 		};
 	}
 	const missing = missingRoles(wallets);
@@ -306,9 +282,7 @@ function trimEvm(addr: string): string {
  * Venue-indexed trading wallets. Limitless collateral is always the embedded EOA,
  * not the Base SCW, even when the overview row is stale.
  */
-export function buildVenueAddressChainMap(
-	roles: AccountWalletRoles,
-): VenueAddressChainMap {
+export function buildVenueAddressChainMap(roles: AccountWalletRoles): VenueAddressChainMap {
 	const scw = trimEvm(roles.baseSmartWallet);
 	const embeddedEoa = trimEvm(roles.embeddedEoa);
 	const overviewLimitlessMaker = trimEvm(roles.limitlessMakerBase);
@@ -388,10 +362,7 @@ export function predictKernelAddressFromVacm(
 	entry: VenueAddressChainEntry | undefined,
 ): string | undefined {
 	if (!entry) return undefined;
-	if (
-		entry.walletAddress.trim().toLowerCase() ===
-		entry.signerAddress.trim().toLowerCase()
-	) {
+	if (entry.walletAddress.trim().toLowerCase() === entry.signerAddress.trim().toLowerCase()) {
 		return undefined;
 	}
 	return entry.walletAddress.trim();
@@ -403,14 +374,11 @@ export function isVacmReady(
 	walletGate: Extract<AccountWalletGate, { status: "ready" }>;
 	venueAddressChainMap: VenueAddressChainMap;
 } {
-	return (
-		account.walletGate.status === "ready" && account.venueAddressChainMap != null
-	);
+	return account.walletGate.status === "ready" && account.venueAddressChainMap != null;
 }
 
 /** User-facing copy when execute runs before VACM is hydrated. */
-export const ACCOUNT_WALLETS_NOT_READY_MESSAGE =
-	"Finishing wallet setup. Try again in a moment.";
+export const ACCOUNT_WALLETS_NOT_READY_MESSAGE = "Finishing wallet setup. Try again in a moment.";
 
 /**
  * Fail-fast boundary for SOR execute / prefund — after hydration, VACM must exist.

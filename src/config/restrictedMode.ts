@@ -36,12 +36,7 @@ export const RESTRICTED_VIDEOGAME_SLUG = "cs-go" as const;
 export function isCounterStrikeTagLabel(label: string | undefined): boolean {
 	if (!label) return false;
 	const l = label.trim().toLowerCase();
-	return (
-		l === "counter-strike" ||
-		l === "counter-strike 2" ||
-		l === "cs2" ||
-		l === "cs-go"
-	);
+	return l === "counter-strike" || l === "counter-strike 2" || l === "cs2" || l === "cs-go";
 }
 
 /** First Counter-Strike-family tag in `tags`, or undefined. */

@@ -24,10 +24,7 @@ export interface ReferralClaimResponse {
 }
 
 export const referralService = {
-	async getReferralCode(
-		accessToken: string,
-		identityToken: string
-	): Promise<string> {
+	async getReferralCode(accessToken: string, identityToken: string): Promise<string> {
 		const baseUrl = getPredictionApiBaseUrl();
 		const response = await fetch(`${baseUrl}/referrals/code`, {
 			headers: {
@@ -50,7 +47,7 @@ export const referralService = {
 
 	async getReferralStatus(
 		accessToken: string,
-		identityToken: string
+		identityToken: string,
 	): Promise<ReferralStatusResponse> {
 		const baseUrl = getPredictionApiBaseUrl();
 		const response = await fetch(`${baseUrl}/referrals/status`, {
@@ -61,9 +58,7 @@ export const referralService = {
 		});
 
 		if (!response.ok) {
-			throw new Error(
-				`Failed to get referral status: ${response.status}`
-			);
+			throw new Error(`Failed to get referral status: ${response.status}`);
 		}
 
 		const data: ReferralStatusResponse = await response.json();
@@ -73,7 +68,7 @@ export const referralService = {
 	async claimReferralBonus(
 		accessToken: string,
 		identityToken: string,
-		referralCode: string
+		referralCode: string,
 	): Promise<ReferralClaimResponse> {
 		const baseUrl = getPredictionApiBaseUrl();
 		const response = await fetch(`${baseUrl}/referrals/claim`, {
@@ -89,9 +84,7 @@ export const referralService = {
 		const data = await response.json();
 
 		if (!response.ok) {
-			throw new Error(
-				data.error || `Failed to claim referral: ${response.status}`
-			);
+			throw new Error(data.error || `Failed to claim referral: ${response.status}`);
 		}
 
 		return data;

@@ -2,27 +2,12 @@ import { useRPG } from "@/context/RPGContext";
 import { useMedia } from "react-use";
 import "./RPGPane.scss";
 
-interface Prize {
-	name: string;
-	description: string;
-	requiredLevel: number;
-}
-
-const PRIZES: Prize[] = [
-	{
-		name: "Weekly Steam Card Giveaway",
-		description: "1 entry into the weekly Steam gift card drawing",
-		requiredLevel: 5,
-	},
-];
-
 interface RPGPaneProps {
 	profilePicture?: string | null;
 }
 
 export default function RPGPane({ profilePicture }: RPGPaneProps) {
-	const { exp, level, frameAsset, frameName, progress, loading, error } =
-		useRPG();
+	const { level, frameAsset, frameName, progress, loading, error } = useRPG();
 	const isMobile = useMedia("(max-width: 768px)");
 
 	if (loading) {
@@ -42,10 +27,7 @@ export default function RPGPane({ profilePicture }: RPGPaneProps) {
 	}
 
 	return (
-		<div
-			className="RPGPane"
-			style={{ flexDirection: isMobile ? "column" : "row" }}
-		>
+		<div className="RPGPane" style={{ flexDirection: isMobile ? "column" : "row" }}>
 			{/* Left Pane - Experience */}
 			<div className="RPGPane-left">
 				<div className="RPGPane-header">
@@ -61,15 +43,11 @@ export default function RPGPane({ profilePicture }: RPGPaneProps) {
 									alt="Profile"
 									className="RPGPane-avatar"
 									onError={(e) => {
-										(
-											e.target as HTMLImageElement
-										).style.display = "none";
+										(e.target as HTMLImageElement).style.display = "none";
 									}}
 								/>
 							) : (
-								<div className="RPGPane-avatar-placeholder">
-									?
-								</div>
+								<div className="RPGPane-avatar-placeholder">?</div>
 							)}
 							{frameAsset && (
 								<img
@@ -77,9 +55,7 @@ export default function RPGPane({ profilePicture }: RPGPaneProps) {
 									alt={`${frameName} Frame`}
 									className="RPGPane-frame-overlay"
 									onError={(e) => {
-										(
-											e.target as HTMLImageElement
-										).style.display = "none";
+										(e.target as HTMLImageElement).style.display = "none";
 									}}
 								/>
 							)}
@@ -100,12 +76,8 @@ export default function RPGPane({ profilePicture }: RPGPaneProps) {
 								</div>
 							</div>
 							<div className="RPGPane-level-text">
-								<span className="RPGPane-level">
-									Level {level}
-								</span>
-								<span className="RPGPane-rank">
-									{frameName}
-								</span>
+								<span className="RPGPane-level">Level {level}</span>
+								<span className="RPGPane-rank">{frameName}</span>
 							</div>
 						</div>
 					</div>

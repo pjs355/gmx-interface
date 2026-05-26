@@ -27,20 +27,14 @@ function removeChromeSingletonArtifacts(profileDir: string): void {
 }
 
 function isChromeProfileSingletonLaunchError(err: unknown): boolean {
-	const msg =
-		err instanceof Error
-			? `${err.message}\n${err.stack ?? ""}`
-			: String(err);
+	const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
 	return /ProcessSingleton|SingletonLock|profile is already in use|Failed to create a ProcessSingleton|File exists \(17\)/i.test(
 		msg,
 	);
 }
 
 async function launchPersistentContextOnce(): Promise<BrowserContext> {
-	return chromium.launchPersistentContext(
-		USER_DATA_DIR,
-		E2E_PERSISTENT_CONTEXT_OPTIONS,
-	);
+	return chromium.launchPersistentContext(USER_DATA_DIR, E2E_PERSISTENT_CONTEXT_OPTIONS);
 }
 
 /** Only present in the header when Privy + signer report an account (see AppHeaderUser). */

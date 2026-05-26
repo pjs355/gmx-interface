@@ -1,19 +1,29 @@
-import React, { useMemo, useState, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
+import React, {
+	useMemo,
+	useState,
+	useCallback,
+	useRef,
+	useImperativeHandle,
+	forwardRef,
+} from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import { triggerFireworksForElement } from "../utils/Fireworks";
-import { reportClaimError, useClaimForVenue } from "@/helpers/claimEarnings";
+import { triggerFireworksForElement } from "@/features/positions/utils/Fireworks";
+import { reportClaimError, useClaimForVenue } from "@/features/trading/claims/claimEarnings";
 import UmbrellaImage from "./UmbrellaImage";
-import { formatCurrency } from "../utils/formatCurrency";
-import { formatShareCountDisplay } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
-import { shortTeamDisplayName } from "../utils/historyOutcomeWinner";
-import { getPredictPositionRowLabel } from "@/trading/venues/predict/portfolio/predictPositionLabel";
+import { formatCurrency } from "@/features/positions/utils/formatCurrency";
+import { formatShareCountDisplay } from "@/features/trading/trade-box/checkBalances";
+import { shortTeamDisplayName } from "@/features/positions/utils/historyOutcomeWinner";
+import { getPredictPositionRowLabel } from "@/features/trading/venues/predict/portfolio/predictPositionLabel";
 import {
 	titlesMatchVenue,
 	umbrellaHeaderLabel,
-} from "@/helpers/umbrellaDisplayName";
-import { allWinningsMarketsAreLimitlessSettlementBlocked, LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP } from "@/trading/venues/limitless/portfolio/limitlessClaimAck";
-import { useAnimatedDots } from "@/hooks/useAnimatedDots";
+} from "@/features/markets/presentation/umbrellaDisplayName";
+import {
+	allWinningsMarketsAreLimitlessSettlementBlocked,
+	LIMITLESS_WINNINGS_CLAIM_BLOCKED_TOOLTIP,
+} from "@/features/trading/venues/limitless/portfolio/limitlessClaimAck";
+import { useAnimatedDots } from "@/shared/hooks/useAnimatedDots";
 
 type MarketEntry = {
 	market: PredictionMarket;
@@ -75,62 +85,69 @@ export default function ResolvedPositionsCardView({
 	}, [umbrellaBalances]);
 
 	const mergedByBlock = useMemo(() => {
-		return unifiedBlocks.map((block) => {
-			const sideBuckets: Record<"Yes" | "No", {
-				shares: number; markets: Array<{ market: PredictionMarket; resolvedOutcome: "yes" | "no" }>; label: string;
-			}> = {
-				Yes: { shares: 0, markets: [], label: "" },
-				No: { shares: 0, markets: [], label: "" },
-			};
+		return unifiedBlocks
+			.map((block) => {
+				const sideBuckets: Record<
+					"Yes" | "No",
+					{
+						shares: number;
+						markets: Array<{ market: PredictionMarket; resolvedOutcome: "yes" | "no" }>;
+						label: string;
+					}
+				> = {
+					Yes: { shares: 0, markets: [], label: "" },
+					No: { shares: 0, markets: [], label: "" },
+				};
 
-			for (const entry of block.allMarkets) {
-				const { market, yes, no, venue, yesLabel, noLabel } = entry;
-				const outcome = String((market as any).resolvedOutcome || "").toLowerCase() as "yes" | "no";
-				const winningSide: "Yes" | "No" = outcome === "yes" ? "Yes" : "No";
-				const shares = winningSide === "Yes" ? Number(yes) : Number(no);
-				if (shares <= 0) continue;
+				for (const entry of block.allMarkets) {
+					const { market, yes, no, venue, yesLabel, noLabel } = entry;
+					const outcome = String((market as any).resolvedOutcome || "").toLowerCase() as
+						| "yes"
+						| "no";
+					const winningSide: "Yes" | "No" = outcome === "yes" ? "Yes" : "No";
+					const shares = winningSide === "Yes" ? Number(yes) : Number(no);
+					if (shares <= 0) continue;
 
-				const bucket = sideBuckets[winningSide];
-				bucket.shares += shares;
-				bucket.markets.push({ market, resolvedOutcome: outcome });
+					const bucket = sideBuckets[winningSide];
+					bucket.shares += shares;
+					bucket.markets.push({ market, resolvedOutcome: outcome });
 
-				if (!bucket.label) {
-					const sideLabel = winningSide === "Yes" ? yesLabel : noLabel;
-					if (sideLabel?.trim()) {
-						bucket.label = sideLabel.trim();
-					} else if (
-						venue === "predictfun" ||
-						venue === "dflow" ||
-						venue === "limitless"
-					) {
-						const title = (market?.displayName || (market as any)?.question || "").trim();
-						bucket.label =
-							getPredictPositionRowLabel(title, sideLabel, winningSide) ||
-							winningSide;
-					} else {
-						const title = (market?.displayName || (market as any)?.question || "").trim();
-						const parts = title.split(/\s*vs\.?\s*/i).map((s: string) => s.trim()).filter(Boolean);
-						if (parts.length === 2) {
-							bucket.label = shortTeamDisplayName(winningSide === "Yes" ? parts[0]! : parts[1]!);
+					if (!bucket.label) {
+						const sideLabel = winningSide === "Yes" ? yesLabel : noLabel;
+						if (sideLabel?.trim()) {
+							bucket.label = sideLabel.trim();
+						} else if (venue === "predictfun" || venue === "dflow" || venue === "limitless") {
+							const title = (market?.displayName || (market as any)?.question || "").trim();
+							bucket.label =
+								getPredictPositionRowLabel(title, sideLabel, winningSide) || winningSide;
+						} else {
+							const title = (market?.displayName || (market as any)?.question || "").trim();
+							const parts = title
+								.split(/\s*vs\.?\s*/i)
+								.map((s: string) => s.trim())
+								.filter(Boolean);
+							if (parts.length === 2) {
+								bucket.label = shortTeamDisplayName(winningSide === "Yes" ? parts[0]! : parts[1]!);
+							}
 						}
 					}
 				}
-			}
 
-			const rows: MergedWinningsRow[] = [];
-			for (const side of ["Yes", "No"] as const) {
-				const b = sideBuckets[side];
-				if (b.shares <= 0) continue;
-				rows.push({
-					label: b.label || side,
-					winningSide: side,
-					totalShares: b.shares,
-					totalPayout: b.shares,
-					markets: b.markets,
-				});
-			}
-			return { block, rows };
-		}).filter((entry) => entry.rows.length > 0);
+				const rows: MergedWinningsRow[] = [];
+				for (const side of ["Yes", "No"] as const) {
+					const b = sideBuckets[side];
+					if (b.shares <= 0) continue;
+					rows.push({
+						label: b.label || side,
+						winningSide: side,
+						totalShares: b.shares,
+						totalPayout: b.shares,
+						markets: b.markets,
+					});
+				}
+				return { block, rows };
+			})
+			.filter((entry) => entry.rows.length > 0);
 	}, [unifiedBlocks]);
 
 	if (mergedByBlock.length === 0) return null;
@@ -185,10 +202,26 @@ export default function ResolvedPositionsCardView({
 									</div>
 
 									{/* Card Content */}
-									<div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}>
-										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+									<div
+										style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}
+									>
+										<div
+											style={{
+												display: "flex",
+												justifyContent: "space-between",
+												alignItems: "center",
+											}}
+										>
 											<div style={{ flex: 1 }}>
-												<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+												<div
+													style={{
+														color: "#888",
+														fontSize: 11,
+														textTransform: "uppercase",
+														letterSpacing: 0.6,
+														marginBottom: 4,
+													}}
+												>
 													Shares
 												</div>
 												<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
@@ -196,7 +229,15 @@ export default function ResolvedPositionsCardView({
 												</div>
 											</div>
 											<div style={{ flex: 1, textAlign: "right" }}>
-												<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+												<div
+													style={{
+														color: "#888",
+														fontSize: 11,
+														textTransform: "uppercase",
+														letterSpacing: 0.6,
+														marginBottom: 4,
+													}}
+												>
 													Total Payout
 												</div>
 												<div style={{ color: "#16a34a", fontSize: 20, fontWeight: 700 }}>
@@ -224,14 +265,21 @@ export default function ResolvedPositionsCardView({
 
 type ClaimSlotHandle = { fire: () => Promise<boolean> };
 
-const ClaimSlot = forwardRef<ClaimSlotHandle, {
-	market: PredictionMarket;
-	resolvedOutcome: "yes" | "no";
-}>(function ClaimSlot({ market, resolvedOutcome }, ref) {
+const ClaimSlot = forwardRef<
+	ClaimSlotHandle,
+	{
+		market: PredictionMarket;
+		resolvedOutcome: "yes" | "no";
+	}
+>(function ClaimSlot({ market, resolvedOutcome }, ref) {
 	const { claim } = useClaimForVenue(market, resolvedOutcome);
 	useImperativeHandle(ref, () => ({ fire: claim }), [claim]);
 	return null;
-}) as React.FC<{ market: PredictionMarket; resolvedOutcome: "yes" | "no"; ref: React.Ref<ClaimSlotHandle> }>;
+}) as React.FC<{
+	market: PredictionMarket;
+	resolvedOutcome: "yes" | "no";
+	ref: React.Ref<ClaimSlotHandle>;
+}>;
 
 function MultiClaimButton({
 	markets,
@@ -267,7 +315,8 @@ function MultiClaimButton({
 				if (slot) {
 					const ok = await slot.fire();
 					if (ok) {
-						const mid = markets[i].market._id || markets[i].market.questionId || markets[i].market.marketId;
+						const mid =
+							markets[i].market._id || markets[i].market.questionId || markets[i].market.marketId;
 						if (mid) claimed.push(mid);
 					}
 				}
@@ -295,7 +344,10 @@ function MultiClaimButton({
 			{markets.map((m, i) => (
 				<ClaimSlot
 					key={(m.market._id || m.market.questionId || m.market.marketId) as string}
-					ref={(handle) => { if (handle) slotRefs.current.set(i, handle); else slotRefs.current.delete(i); }}
+					ref={(handle) => {
+						if (handle) slotRefs.current.set(i, handle);
+						else slotRefs.current.delete(i);
+					}}
 					market={m.market}
 					resolvedOutcome={m.resolvedOutcome}
 				/>
@@ -306,20 +358,17 @@ function MultiClaimButton({
 				disabled={isClaiming || allLimitlessWinningsClaimBlocked}
 				style={{
 					width: "100%",
-					background:
-						isClaiming || allLimitlessWinningsClaimBlocked ? "#6d28d9" : "#7c3aed",
+					background: isClaiming || allLimitlessWinningsClaimBlocked ? "#6d28d9" : "#7c3aed",
 					color: "#fff",
 					border: "none",
 					padding: "12px 16px",
 					borderRadius: 6,
 					fontWeight: 600,
 					fontSize: 15,
-					cursor:
-						isClaiming || allLimitlessWinningsClaimBlocked
-							? "not-allowed"
-							: "pointer",
+					cursor: isClaiming || allLimitlessWinningsClaimBlocked ? "not-allowed" : "pointer",
 					opacity: isClaiming || allLimitlessWinningsClaimBlocked ? 0.7 : 1,
-					transition: "background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
+					transition:
+						"background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
 					boxShadow: isClaiming ? "0 0 0 0 rgba(0,0,0,0)" : "0 4px 10px rgba(124, 58, 237, 0.35)",
 				}}
 				onMouseEnter={(e) => {
@@ -334,7 +383,9 @@ function MultiClaimButton({
 					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
 						(e.currentTarget as HTMLButtonElement).style.transform = "translateY(1px)";
 				}}
-				onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
+				onMouseUp={(e) => {
+					(e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+				}}
 				onClick={handleClick}
 				title={
 					error

@@ -132,18 +132,12 @@ export async function readHeaderCashUsd(page: Page): Promise<number | null> {
  * “we parsed a number”, not “post-trade balance is final”. After trades, use
  * {@link waitForHeaderCashAfterBuySpend} / {@link waitForHeaderCashAfterSellReceive}.
  */
-export async function expectHeaderCashUsd(
-	page: Page,
-	timeoutMs = 30_000,
-): Promise<number> {
+export async function expectHeaderCashUsd(page: Page, timeoutMs = 30_000): Promise<number> {
 	const cashBox = page.locator('[data-qa="header-cash"]').first();
-	await expect(
-		cashBox,
-		"header-cash element not found; user may not be logged in",
-	).toBeVisible({ timeout: timeoutMs });
-	const cashAttr = page
-		.locator('[data-qa="header-cash"][data-qa-cash-amount]')
-		.first();
+	await expect(cashBox, "header-cash element not found; user may not be logged in").toBeVisible({
+		timeout: timeoutMs,
+	});
+	const cashAttr = page.locator('[data-qa="header-cash"][data-qa-cash-amount]').first();
 	await expect(
 		cashAttr,
 		"header-cash never wrote data-qa-cash-amount within timeout — collateral query did not settle",
@@ -188,9 +182,7 @@ export async function waitForHeaderCashAfterBuySpend(
 		if (v !== null) {
 			lastSeen = v;
 			const spentUsd = baselineCashUsd - v;
-			if (
-				Math.abs(spentUsd - quotedCostUsd) <= toleranceUsd
-			) {
+			if (Math.abs(spentUsd - quotedCostUsd) <= toleranceUsd) {
 				return v;
 			}
 		}
@@ -225,9 +217,7 @@ export async function waitForHeaderCashAfterSellReceive(
 		if (v !== null) {
 			lastSeen = v;
 			const receivedUsd = v - cashAfterBuyUsd;
-			if (
-				Math.abs(receivedUsd - quotedReceiveUsd) <= toleranceUsd
-			) {
+			if (Math.abs(receivedUsd - quotedReceiveUsd) <= toleranceUsd) {
 				return v;
 			}
 		}

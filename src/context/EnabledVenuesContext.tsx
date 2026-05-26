@@ -25,9 +25,7 @@ export interface EnabledVenuesContextValue {
 	error: string | null;
 }
 
-const EnabledVenuesContext = createContext<EnabledVenuesContextValue | null>(
-	null,
-);
+const EnabledVenuesContext = createContext<EnabledVenuesContextValue | null>(null);
 
 interface EnabledVenuesResponse {
 	success: boolean;
@@ -38,14 +36,8 @@ interface EnabledVenuesResponse {
 }
 
 function parseEnabledVenuesPayload(payload: unknown): VenueId[] {
-	if (
-		payload === null ||
-		typeof payload !== "object" ||
-		Array.isArray(payload)
-	) {
-		throw new Error(
-			"enabled-venues response is malformed (expected an object body)",
-		);
+	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+		throw new Error("enabled-venues response is malformed (expected an object body)");
 	}
 	const body = payload as EnabledVenuesResponse;
 	if (body.success !== true || !body.data) {
@@ -75,19 +67,13 @@ async function fetchEnabledVenues(signal?: AbortSignal): Promise<VenueId[]> {
 		cache: "no-store",
 	});
 	if (!res.ok) {
-		throw new Error(
-			`GET /settings/enabled-venues failed: HTTP ${res.status} ${res.statusText}`,
-		);
+		throw new Error(`GET /settings/enabled-venues failed: HTTP ${res.status} ${res.statusText}`);
 	}
 	const json = (await res.json()) as unknown;
 	return parseEnabledVenuesPayload(json);
 }
 
-export function EnabledVenuesProvider({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
+export function EnabledVenuesProvider({ children }: { children: React.ReactNode }) {
 	const [enabledList, setEnabledList] = useState<VenueId[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -108,8 +94,7 @@ export function EnabledVenuesProvider({
 		} catch (err) {
 			if (controller.signal.aborted) return;
 			console.error("error", err);
-			const message =
-				err instanceof Error ? err.message : "Failed to load enabled venues";
+			const message = err instanceof Error ? err.message : "Failed to load enabled venues";
 			setEnabledList((prev) => prev);
 			setError(message);
 		} finally {
@@ -141,10 +126,7 @@ export function EnabledVenuesProvider({
 		return new Set<VenueId>(enabledList);
 	}, [enabledList]);
 
-	const isVenueEnabled = useCallback(
-		(venue: VenueId) => enabledVenues.has(venue),
-		[enabledVenues],
-	);
+	const isVenueEnabled = useCallback((venue: VenueId) => enabledVenues.has(venue), [enabledVenues]);
 
 	const value = useMemo<EnabledVenuesContextValue>(
 		() => ({
@@ -157,19 +139,13 @@ export function EnabledVenuesProvider({
 		[enabledVenues, isVenueEnabled, load, enabledList, error],
 	);
 
-	return (
-		<EnabledVenuesContext.Provider value={value}>
-			{children}
-		</EnabledVenuesContext.Provider>
-	);
+	return <EnabledVenuesContext.Provider value={value}>{children}</EnabledVenuesContext.Provider>;
 }
 
 export function useEnabledVenues(): EnabledVenuesContextValue {
 	const ctx = useContext(EnabledVenuesContext);
 	if (!ctx) {
-		throw new Error(
-			"useEnabledVenues must be used within EnabledVenuesProvider",
-		);
+		throw new Error("useEnabledVenues must be used within EnabledVenuesProvider");
 	}
 	return ctx;
 }

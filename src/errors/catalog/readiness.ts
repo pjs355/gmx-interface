@@ -34,7 +34,8 @@ export const READINESS_BLOCKING_MESSAGES: Record<string, string> = {
 	"polymarket:execution_fields_unresolved": "Finish Polymarket account setup before trading.",
 	"polymarket:usdc_approval_required": "Approve USDC for Polymarket trading.",
 	"polymarket:ctf_approval_required": "Approve outcome tokens for Polymarket trading.",
-	"polymarket:stale_cache_provisioning": "Polymarket account is still provisioning. Refresh in a moment.",
+	"polymarket:stale_cache_provisioning":
+		"Polymarket account is still provisioning. Refresh in a moment.",
 
 	// ── Predict.fun ──
 	"predict_fun:not_connected": "Connect Predict.fun on Account & venues.",

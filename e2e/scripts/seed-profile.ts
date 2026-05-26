@@ -31,9 +31,7 @@ async function waitForFrontendReady(): Promise<void> {
 		if (now >= nextHintAt) {
 			nextHintAt = now + 10_000;
 			const elapsedSec = Math.round((now - start) / 1000);
-			console.log(
-				`[seed-profile] still waiting for ${FRONTEND_URL} (${elapsedSec}s) …`,
-			);
+			console.log(`[seed-profile] still waiting for ${FRONTEND_URL} (${elapsedSec}s) …`);
 			console.log(
 				"            In another terminal from prinx-interface, start the app on port 3010, e.g.:",
 			);
@@ -60,9 +58,7 @@ async function main(): Promise<void> {
 	console.log("[seed-profile] waiting for the app to accept connections …");
 	await waitForFrontendReady();
 	console.log("");
-	console.log(
-		"Opening Google Chrome (Playwright channel: chrome) — required for Google sign-in …",
-	);
+	console.log("Opening Google Chrome (Playwright channel: chrome) — required for Google sign-in …");
 	console.log("");
 	console.log("Complete the Privy login flow manually in the browser window.");
 	console.log("When you see the portfolio header showing your balance, the");

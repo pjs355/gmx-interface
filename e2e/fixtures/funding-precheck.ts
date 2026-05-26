@@ -58,8 +58,7 @@ export async function fundingPrecheck(page: Page): Promise<void> {
 		const now = Date.now();
 		if (now - lastProgressLog >= PROGRESS_LOG_MS) {
 			lastProgressLog = now;
-			const shown =
-				parsed === null ? "(still loading / unreadable)" : `$${parsed.toFixed(2)}`;
+			const shown = parsed === null ? "(still loading / unreadable)" : `$${parsed.toFixed(2)}`;
 			console.log(
 				`[funding-precheck] Still checking header Cash >= $${MIN_BALANCE_USD}… ` +
 					`${Math.round((now - start) / 1000)}s / ${BALANCE_READY_TIMEOUT_MS / 1000}s — current: ${shown}`,
@@ -72,9 +71,7 @@ export async function fundingPrecheck(page: Page): Promise<void> {
 	const last = await readHeaderCashUsd(page);
 	const err = new Error(
 		`Funding precheck failed: timed out after ${BALANCE_READY_TIMEOUT_MS}ms. ` +
-			`Last header Cash read: ${
-				last === null ? "null (unreadable)" : `$${last.toFixed(2)}`
-			}. ` +
+			`Last header Cash read: ${last === null ? "null (unreadable)" : `$${last.toFixed(2)}`}. ` +
 			`Required minimum is $${MIN_BALANCE_USD} (header Cash, not Portfolio).`,
 	);
 	console.error("error", err);

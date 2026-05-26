@@ -40,9 +40,7 @@
 	 * `.prediction-market-page:not(.mobile)` override this per-element for a
 	 * flush-right rail (one horizontal gutter); other pages keep this :root value.
 	 */
-	--predictions-trade-panel-width: calc(
-		((100vw - 100px) * 0.8 - 24px) / 2.55
-	);
+	--predictions-trade-panel-width: calc(((100vw - 100px) * 0.8 - 24px) / 2.55);
 
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;

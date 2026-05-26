@@ -1,0 +1,239 @@
+.mobile-trading-header {
+	background: #101114;
+	border: 1px solid #4b5563;
+	border-radius: 12px;
+	padding: 16px;
+	margin-bottom: 16px;
+
+	.mobile-trading-header-content {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.market-title-mobile {
+		font-size: 1.6rem;
+		font-weight: 600;
+		color: #ffffff;
+		line-height: 1.3;
+		margin-bottom: 8px;
+	}
+
+	.mobile-controls {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.side-selector-mobile {
+		display: flex;
+		gap: 8px;
+
+		.side-btn-mobile {
+			flex: 1;
+			padding: 10px 16px;
+			border-radius: 8px;
+			font-size: 16px;
+			font-weight: 600;
+			transition: all 0.2s ease;
+			border: 2px solid #6b7280;
+			color: #6b7280;
+			background: transparent;
+
+			&:hover:not(.active) {
+				border-color: #9ca3af;
+				color: #9ca3af;
+			}
+
+			&.active {
+				background: transparent;
+				border-color: #ffffff;
+				color: #ffffff;
+				font-weight: 700;
+			}
+		}
+	}
+
+	.position-selector-mobile {
+		display: flex;
+		gap: 8px;
+
+		.position-btn-mobile {
+			flex: 1;
+			padding: 8px 12px;
+			border-radius: 8px;
+			font-size: 18px;
+			font-weight: 600;
+			transition: all 0.2s ease;
+			border: 2px solid #6b7280;
+			color: #6b7280;
+			background: transparent;
+
+			&:hover {
+				transform: translateY(-1px);
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+			}
+
+			&.active.yes {
+				background: rgba(34, 197, 94, 0.1);
+				border-color: #22c55e;
+				color: #22c55e;
+				box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+				transform: scale(1.02);
+			}
+
+			&.active.no {
+				background: rgba(239, 68, 68, 0.1);
+				border-color: #ef4444;
+				color: #ef4444;
+				box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+				transform: scale(1.02);
+			}
+
+			// Yes button (first child) - always green theme
+			&:first-child {
+				&:hover {
+					background: rgba(34, 197, 94, 0.1);
+					border-color: #22c55e;
+					color: #22c55e;
+				}
+			}
+
+			// No button (second child) - always red theme
+			&:last-child {
+				&:hover {
+					background: rgba(239, 68, 68, 0.1);
+					border-color: #ef4444;
+					color: #ef4444;
+				}
+			}
+		}
+	}
+
+	.order-type-selector-mobile {
+		display: flex;
+		gap: 8px;
+
+		.order-type-btn-mobile {
+			flex: 1;
+			padding: 8px 12px;
+			border-radius: 8px;
+			font-size: 16px;
+			font-weight: 600;
+			transition: all 0.2s ease;
+			border: 2px solid #6b7280;
+			color: #6b7280;
+			background: transparent;
+
+			&:hover {
+				border-color: #8b5cf6;
+				color: #8b5cf6;
+				transform: translateY(-1px);
+			}
+
+			&.active {
+				background: rgba(139, 92, 246, 0.1);
+				border-color: #8b5cf6;
+				color: #8b5cf6;
+				font-weight: 700;
+				box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+				transform: scale(1.02);
+			}
+		}
+	}
+
+	.amount-input-mobile {
+		.amount-input-field {
+			width: 100%;
+			padding: 12px 16px;
+			border: 2px solid #4b5563;
+			border-radius: 8px;
+			font-size: 28px;
+			font-weight: 600;
+			background: #101114;
+			color: #ffffff;
+			transition: all 0.2s ease;
+
+			&:focus {
+				outline: none;
+				border-color: #8b5cf6;
+				background: #101114;
+				box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+			}
+
+			&::placeholder {
+				color: #6b7280;
+				font-weight: 400;
+				font-size: 28px;
+			}
+		}
+
+		// When input is empty, make the text grey like placeholder
+		&.empty-input {
+			.amount-input-field {
+				color: #6b7280;
+			}
+		}
+	}
+
+	.trade-btn-mobile {
+		width: 100%;
+		padding: 16px;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 16px;
+		background: #8b5cf6;
+		border: none;
+		color: white;
+		cursor: pointer;
+		transition: all 0.2s ease;
+
+		&:hover:not(.disabled) {
+			background: #7c3aed;
+			transform: translateY(-1px);
+		}
+
+		&.disabled {
+			opacity: 0.6;
+			cursor: not-allowed;
+			color: white;
+		}
+	}
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+	.mobile-trading-header {
+		padding: 12px;
+		margin-bottom: 12px;
+
+		.market-title-mobile {
+			font-size: 1.4rem;
+		}
+
+		.mobile-controls {
+			gap: 10px;
+		}
+
+		.side-selector-mobile,
+		.position-selector-mobile {
+			.side-btn-mobile,
+			.position-btn-mobile {
+				padding: 10px 12px;
+				font-size: 14px;
+			}
+		}
+
+		.amount-input-mobile {
+			.amount-input-field {
+				padding: 10px 14px;
+				font-size: 16px;
+			}
+		}
+
+		.trade-btn-mobile {
+			padding: 14px;
+			font-size: 16px;
+		}
+	}
+}

@@ -13,15 +13,13 @@ export function getChainName(chainId: number) {
 export const SUPPORTED_CHAINS = [BASE_CHAIN_ID];
 
 export class UncheckedJsonRpcSigner extends JsonRpcSigner {
-	async estimateGas(tx: TransactionRequest): Promise<bigint> {
+	override async estimateGas(tx: TransactionRequest): Promise<bigint> {
 		await this.assertNetwork();
 
 		return super.estimateGas(tx);
 	}
 
-	async sendTransaction(
-		transaction: TransactionRequest
-	): Promise<TransactionResponse> {
+	override async sendTransaction(transaction: TransactionRequest): Promise<TransactionResponse> {
 		await this.assertNetwork();
 
 		return this.sendUncheckedTransaction(transaction).then((hash) => {
@@ -36,10 +34,7 @@ export class UncheckedJsonRpcSigner extends JsonRpcSigner {
 				confirmations: 0,
 				from: null,
 				wait: (confirmations?: number) => {
-					return this.provider.waitForTransaction(
-						hash,
-						confirmations
-					);
+					return this.provider.waitForTransaction(hash, confirmations);
 				},
 			} as unknown as TransactionResponse;
 		});
@@ -47,14 +42,12 @@ export class UncheckedJsonRpcSigner extends JsonRpcSigner {
 
 	private async assertNetwork() {
 		// Sometimes getNetwork call asserts the network itself, but its metamask, so we need to check it again
-		const assumedChainId = Number(
-			(await this.provider.getNetwork()).chainId
-		);
+		const assumedChainId = Number((await this.provider.getNetwork()).chainId);
 		const realChainId = 8453;
 
 		if (realChainId !== undefined && assumedChainId !== realChainId) {
 			throw new Error(
-				`Invalid network: wallet is connected to ${realChainId}, but the app is on ${assumedChainId}`
+				`Invalid network: wallet is connected to ${realChainId}, but the app is on ${assumedChainId}`,
 			);
 		}
 	}

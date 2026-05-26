@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import "./TeamLinker.scss";
+import "./scss/TeamLinker.scss";
 
-import {
-	teamService,
-	type TeamRecord,
-	type CreateTeamPayload,
-} from "@/services/api/teamService";
+import { teamService, type TeamRecord, type CreateTeamPayload } from "@/services/api/teamService";
 import { uploadTeamLogo } from "@/services/firebase/firebaseStorage";
 import type { TeamCandidate } from "@/types/market-types";
 import { adminErrorMessage, ADMIN_MISSING_ACCESS_TOKEN } from "@/errors";
@@ -88,9 +84,7 @@ export default function TeamLinker({
 	onReorder,
 }: TeamLinkerProps) {
 	const { getAccessToken } = usePrivy();
-	const [states, setStates] = useState<CandidateState[]>(
-		candidates.map(buildInitialState)
-	);
+	const [states, setStates] = useState<CandidateState[]>(candidates.map(buildInitialState));
 
 	useEffect(() => {
 		setStates(candidates.map(buildInitialState));
@@ -117,20 +111,13 @@ export default function TeamLinker({
 				});
 				try {
 					const accessToken = await getAccessToken();
-					if (
-						typeof accessToken !== "string" ||
-						accessToken.length === 0
-					) {
+					if (typeof accessToken !== "string" || accessToken.length === 0) {
 						throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 					}
-					let team: TeamRecord | null =
-						await teamService.lookupByPandaId(pandaId, accessToken);
+					let team: TeamRecord | null = await teamService.lookupByPandaId(pandaId, accessToken);
 					if (!team && candidate.shortCode) {
 						try {
-							team = await teamService.lookupByShortCode(
-								candidate.shortCode,
-								accessToken
-							);
+							team = await teamService.lookupByShortCode(candidate.shortCode, accessToken);
 						} catch (fallbackError) {
 							// swallow; we'll surface below
 						}
@@ -170,9 +157,7 @@ export default function TeamLinker({
 						const current = { ...clone[index] };
 						current.status = "error";
 						current.errorMessage =
-							error instanceof Error
-								? error.message
-								: "Failed to look up team";
+							error instanceof Error ? error.message : "Failed to look up team";
 						clone[index] = current;
 						return clone;
 					});
@@ -193,7 +178,7 @@ export default function TeamLinker({
 				return clone;
 			});
 		},
-		[]
+		[],
 	);
 
 	const handleInputChange = useCallback(
@@ -204,16 +189,13 @@ export default function TeamLinker({
 				errorMessage: null,
 			}));
 		},
-		[updateState]
+		[updateState],
 	);
 
 	const handleDisplayNameChange = useCallback(
 		(index: number, value: string) => {
 			updateState(index, (prev) => {
-				const nextSlug =
-					prev.slug === slugify(prev.displayName)
-						? slugify(value)
-						: prev.slug;
+				const nextSlug = prev.slug === slugify(prev.displayName) ? slugify(value) : prev.slug;
 				return {
 					...prev,
 					displayName: value,
@@ -222,7 +204,7 @@ export default function TeamLinker({
 				};
 			});
 		},
-		[updateState]
+		[updateState],
 	);
 
 	const reorderCandidates = useCallback(
@@ -249,7 +231,7 @@ export default function TeamLinker({
 				onReorder(fromIndex, toIndex);
 			}
 		},
-		[onReorder, states]
+		[onReorder, states],
 	);
 
 	const toggleExpanded = useCallback(
@@ -259,14 +241,13 @@ export default function TeamLinker({
 				isExpanded: !prev.isExpanded,
 			}));
 		},
-		[updateState]
+		[updateState],
 	);
 
 	const handleFileSelect = useCallback(
 		(index: number, fileList: FileList | null) => {
 			const state = states[index];
-			const fieldsDisabled =
-				state.status === "linked" || readOnly === true;
+			const fieldsDisabled = state.status === "linked" || readOnly === true;
 			if (fieldsDisabled) {
 				return;
 			}
@@ -282,8 +263,7 @@ export default function TeamLinker({
 			const file = fileList[0];
 			const reader = new FileReader();
 			reader.onload = () => {
-				const preview =
-					typeof reader.result === "string" ? reader.result : null;
+				const preview = typeof reader.result === "string" ? reader.result : null;
 				updateState(index, (prev) => ({
 					...prev,
 					logoFile: file,
@@ -293,7 +273,7 @@ export default function TeamLinker({
 			};
 			reader.readAsDataURL(file);
 		},
-		[updateState, states, readOnly]
+		[updateState, states, readOnly],
 	);
 
 	const handleCreateTeam = useCallback(
@@ -344,10 +324,7 @@ export default function TeamLinker({
 			let accessToken: string | null = null;
 			try {
 				const retrievedToken = await getAccessToken();
-				if (
-					typeof retrievedToken !== "string" ||
-					retrievedToken.length === 0
-				) {
+				if (typeof retrievedToken !== "string" || retrievedToken.length === 0) {
 					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				accessToken = retrievedToken;
@@ -356,9 +333,7 @@ export default function TeamLinker({
 				updateState(index, (prev) => ({
 					...prev,
 					errorMessage:
-						error instanceof Error
-							? error.message
-							: "Failed to get authentication token.",
+						error instanceof Error ? error.message : "Failed to get authentication token.",
 					saving: false,
 				}));
 				return;
@@ -366,10 +341,7 @@ export default function TeamLinker({
 			try {
 				let logoUrlToUse: string | null = state.logoUrl;
 				if (state.logoFile) {
-					const uploadResult = await uploadTeamLogo(
-						state.logoFile,
-						normalizedShortCode
-					);
+					const uploadResult = await uploadTeamLogo(state.logoFile, normalizedShortCode);
 					logoUrlToUse = uploadResult.url;
 				}
 				const payload: CreateTeamPayload = {
@@ -388,10 +360,7 @@ export default function TeamLinker({
 				if (state.secondaryColor.trim().length > 0) {
 					payload.secondaryColor = state.secondaryColor.trim();
 				}
-				const createdTeam = await teamService.createTeam(
-					payload,
-					accessToken
-				);
+				const createdTeam = await teamService.createTeam(payload, accessToken);
 				updateState(index, (prev) => ({
 					...prev,
 					status: "linked",
@@ -400,8 +369,7 @@ export default function TeamLinker({
 					displayName: createdTeam.displayName,
 					shortCode: createdTeam.shortCode,
 					logoUrl: createdTeam.logoUrl ?? prev.logoUrl,
-					backgroundUrl:
-						createdTeam.backgroundUrl ?? prev.backgroundUrl,
+					backgroundUrl: createdTeam.backgroundUrl ?? prev.backgroundUrl,
 					saving: false,
 					isExpanded: false,
 				}));
@@ -412,15 +380,12 @@ export default function TeamLinker({
 				console.error("error", error);
 				updateState(index, (prev) => ({
 					...prev,
-					errorMessage:
-						error instanceof Error
-							? error.message
-							: "Failed to create team record.",
+					errorMessage: error instanceof Error ? error.message : "Failed to create team record.",
 					saving: false,
 				}));
 			}
 		},
-		[getAccessToken, onTeamLinked, readOnly, states, updateState]
+		[getAccessToken, onTeamLinked, readOnly, states, updateState],
 	);
 
 	const canReorder = typeof onReorder === "function";
@@ -430,9 +395,7 @@ export default function TeamLinker({
 			<h3 className="team-linker__header">Team Links</h3>
 			{enrichedStates.map((state, index) => {
 				const isLocked = state.status === "linked" || readOnly === true;
-				const inputClass = `team-linker__input${
-					isLocked ? " team-linker__input--disabled" : ""
-				}`;
+				const inputClass = `team-linker__input${isLocked ? " team-linker__input--disabled" : ""}`;
 				const logoPickerClass = `team-linker__logo-picker${
 					isLocked ? " team-linker__logo-picker--disabled" : ""
 				}`;
@@ -444,10 +407,7 @@ export default function TeamLinker({
 				].join(" ");
 
 				return (
-					<div
-						key={`${state.shortCode}-${index}`}
-						className="team-linker__card"
-					>
+					<div key={`${state.shortCode}-${index}`} className="team-linker__card">
 						<div className="team-linker__card-top">
 							<div className="team-linker__card-top-left">
 								<button
@@ -455,41 +415,24 @@ export default function TeamLinker({
 									onClick={() => toggleExpanded(index)}
 									className="team-linker__toggle-button"
 								>
-									<span>
-										{state.isExpanded
-											? "Collapse"
-											: "Expand"}
-									</span>
+									<span>{state.isExpanded ? "Collapse" : "Expand"}</span>
 								</button>
 								<div className="team-linker__summary">
-									<strong>
-										{state.candidate.displayName}
-									</strong>
+									<strong>{state.candidate.displayName}</strong>
 									<span className="team-linker__shortcode-label">
-										Short code:{" "}
-										{state.shortCode.length > 0
-											? state.shortCode
-											: "—"}
+										Short code: {state.shortCode.length > 0 ? state.shortCode : "—"}
 									</span>
 								</div>
 							</div>
 							<div className="team-linker__card-top-right">
-								{state.status === "linked" &&
-									state.existingTeam && (
-										<span className="team-linker__status-badge">
-											Linked
-										</span>
-									)}
+								{state.status === "linked" && state.existingTeam && (
+									<span className="team-linker__status-badge">Linked</span>
+								)}
 								{canReorder && (
 									<div className="team-linker__reorder-controls">
 										<button
 											type="button"
-											onClick={() =>
-												reorderCandidates(
-													index,
-													index - 1
-												)
-											}
+											onClick={() => reorderCandidates(index, index - 1)}
 											disabled={index === 0}
 											className="team-linker__reorder-button"
 										>
@@ -497,16 +440,8 @@ export default function TeamLinker({
 										</button>
 										<button
 											type="button"
-											onClick={() =>
-												reorderCandidates(
-													index,
-													index + 1
-												)
-											}
-											disabled={
-												index ===
-												enrichedStates.length - 1
-											}
+											onClick={() => reorderCandidates(index, index + 1)}
+											disabled={index === enrichedStates.length - 1}
 											className="team-linker__reorder-button"
 										>
 											↓
@@ -524,12 +459,7 @@ export default function TeamLinker({
 										<input
 											name={`team-display-name-${index}`}
 											value={state.displayName}
-											onChange={(event) =>
-												handleDisplayNameChange(
-													index,
-													event.target.value
-												)
-											}
+											onChange={(event) => handleDisplayNameChange(index, event.target.value)}
 											disabled={isLocked}
 											className={inputClass}
 										/>
@@ -539,13 +469,7 @@ export default function TeamLinker({
 										<input
 											name={`team-slug-${index}`}
 											value={state.slug}
-											onChange={(event) =>
-												handleInputChange(
-													index,
-													"slug",
-													event.target.value
-												)
-											}
+											onChange={(event) => handleInputChange(index, "slug", event.target.value)}
 											disabled={isLocked}
 											className={inputClass}
 										/>
@@ -556,11 +480,7 @@ export default function TeamLinker({
 											name={`team-shortcode-${index}`}
 											value={state.shortCode}
 											onChange={(event) =>
-												handleInputChange(
-													index,
-													"shortCode",
-													event.target.value
-												)
+												handleInputChange(index, "shortCode", event.target.value)
 											}
 											disabled={isLocked}
 											className={inputClass}
@@ -570,23 +490,12 @@ export default function TeamLinker({
 										<span>PandaScore ID</span>
 										<input
 											name={`team-panda-${index}`}
-											value={
-												state.pandaId !== null
-													? String(state.pandaId)
-													: ""
-											}
+											value={state.pandaId !== null ? String(state.pandaId) : ""}
 											onChange={(event) => {
-												const value =
-													event.target.value.trim();
+												const value = event.target.value.trim();
 												updateState(index, (prev) => ({
 													...prev,
-													pandaId:
-														value.length === 0
-															? null
-															: Number.parseInt(
-																	value,
-																	10
-															  ),
+													pandaId: value.length === 0 ? null : Number.parseInt(value, 10),
 													errorMessage: null,
 												}));
 											}}
@@ -603,11 +512,7 @@ export default function TeamLinker({
 											name={`team-primary-${index}`}
 											value={state.primaryColor}
 											onChange={(event) =>
-												handleInputChange(
-													index,
-													"primaryColor",
-													event.target.value
-												)
+												handleInputChange(index, "primaryColor", event.target.value)
 											}
 											placeholder="#000000"
 											disabled={isLocked}
@@ -620,11 +525,7 @@ export default function TeamLinker({
 											name={`team-secondary-${index}`}
 											value={state.secondaryColor}
 											onChange={(event) =>
-												handleInputChange(
-													index,
-													"secondaryColor",
-													event.target.value
-												)
+												handleInputChange(index, "secondaryColor", event.target.value)
 											}
 											placeholder="#ffffff"
 											disabled={isLocked}
@@ -639,11 +540,7 @@ export default function TeamLinker({
 										name={`team-background-${index}`}
 										value={state.backgroundUrl}
 										onChange={(event) =>
-											handleInputChange(
-												index,
-												"backgroundUrl",
-												event.target.value
-											)
+											handleInputChange(index, "backgroundUrl", event.target.value)
 										}
 										placeholder="https://..."
 										disabled={isLocked}
@@ -659,12 +556,7 @@ export default function TeamLinker({
 												type="file"
 												name={`team-logo-${index}`}
 												accept="image/*"
-												onChange={(event) =>
-													handleFileSelect(
-														index,
-														event.target.files
-													)
-												}
+												onChange={(event) => handleFileSelect(index, event.target.files)}
 												disabled={isLocked}
 												className="team-linker__file-input"
 											/>
@@ -677,45 +569,39 @@ export default function TeamLinker({
 												className="team-linker__logo-preview"
 											/>
 										)}
-										{state.logoUrl &&
-											!state.logoPreview && (
-												<img
-													src={state.logoUrl}
-													alt={`${state.displayName} current logo`}
-													className="team-linker__logo-preview"
-												/>
-											)}
+										{state.logoUrl && !state.logoPreview && (
+											<img
+												src={state.logoUrl}
+												alt={`${state.displayName} current logo`}
+												className="team-linker__logo-preview"
+											/>
+										)}
 									</div>
 								</div>
 
 								{state.errorMessage && (
-									<div className="team-linker__error">
-										{state.errorMessage}
-									</div>
+									<div className="team-linker__error">{state.errorMessage}</div>
 								)}
 
 								{!readOnly && (
 									<div>
 										<button
 											type="button"
-											onClick={() =>
-												handleCreateTeam(index)
-											}
+											onClick={() => handleCreateTeam(index)}
 											disabled={state.saving || isLocked}
 											className={saveButtonClass}
 										>
 											{state.status === "linked"
 												? "Team Linked"
 												: state.saving
-												? "Saving..."
-												: "Save team"}
+													? "Saving..."
+													: "Save team"}
 										</button>
 									</div>
 								)}
 								{readOnly && state.status === "linked" && (
 									<div className="team-linker__read-only-note">
-										Manage updates in the Teams admin
-										section.
+										Manage updates in the Teams admin section.
 									</div>
 								)}
 							</>

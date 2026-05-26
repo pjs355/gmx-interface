@@ -40,9 +40,7 @@ class CommentsService {
 		if (umbrellaId === undefined) {
 			throw new Error("umbrellaId is required to fetch comments");
 		}
-		const requestUrl = `${this.baseUrl}/comments?umbrellaId=${encodeURIComponent(
-			umbrellaId
-		)}`;
+		const requestUrl = `${this.baseUrl}/comments?umbrellaId=${encodeURIComponent(umbrellaId)}`;
 		const response = await fetch(requestUrl);
 		if (!response.ok) {
 			throw new Error(`Failed to load comments (${response.status})`);
@@ -120,5 +118,3 @@ class CommentsService {
 }
 
 export const commentsService = new CommentsService();
-
-

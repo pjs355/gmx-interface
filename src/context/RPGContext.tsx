@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+	createContext,
+	useCallback,
+	useContext,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIdentityToken } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,11 +18,10 @@ import {
 import {
 	saveUserExp,
 	addUserExp,
-	requestExpForTestUsdcClaim,
 	type UserProfile,
 } from "@/components/RPGPanel/services/rpgService";
-import { useCurrentProfile } from "@/trading/hooks/useCurrentProfile";
-import { tradingQueryKeys } from "@/trading/queryKeys";
+import { useCurrentProfile } from "@/features/trading/hooks/useCurrentProfile";
+import { tradingQueryKeys } from "@/features/trading/queryKeys";
 
 export interface RPGState {
 	exp: number;
@@ -45,7 +52,6 @@ type RPGContextValue = {
 	error: string | null;
 	profile: UserProfile | null;
 	addExp: (amount: number) => Promise<void>;
-	requestExpForClaim: () => Promise<void>;
 	refresh: () => Promise<void>;
 };
 
@@ -153,7 +159,18 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 			const cachedExp = getCachedExp();
 			updateStateFromExp(cachedExp, null);
 		}
-	}, [profileQuery.isLoading, profileQuery.isError, profileQuery.data, authenticated, getCachedExp, clearCachedExp, getAccessToken, identityToken, updateStateFromExp, queryClient]);
+	}, [
+		profileQuery.isLoading,
+		profileQuery.isError,
+		profileQuery.data,
+		authenticated,
+		getCachedExp,
+		clearCachedExp,
+		getAccessToken,
+		identityToken,
+		updateStateFromExp,
+		queryClient,
+	]);
 
 	// Reset sync flag on logout
 	useEffect(() => {
@@ -182,24 +199,17 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 				updateStateFromExp(currentCached + amount, null);
 			}
 		},
-		[authenticated, ready, getAccessToken, identityToken, getCachedExp, setCachedExp, updateStateFromExp, queryClient]
+		[
+			authenticated,
+			ready,
+			getAccessToken,
+			identityToken,
+			getCachedExp,
+			setCachedExp,
+			updateStateFromExp,
+			queryClient,
+		],
 	);
-
-	const requestExpForClaim = useCallback(async () => {
-		if (!authenticated || !ready || !identityToken) return;
-
-		try {
-			const token = await getAccessToken();
-			if (!token) throw new Error("No access token available");
-
-			const profile = await requestExpForTestUsdcClaim(token, identityToken);
-			const exp = profile.exp || 0;
-			updateStateFromExp(exp, profile);
-			queryClient.invalidateQueries({ queryKey: tradingQueryKeys.profileMe });
-		} catch (error: any) {
-			console.error("error", error);
-		}
-	}, [authenticated, ready, getAccessToken, identityToken, updateStateFromExp, queryClient]);
 
 	const refresh = useCallback(async () => {
 		queryClient.invalidateQueries({ queryKey: tradingQueryKeys.profileMe });
@@ -216,10 +226,9 @@ export function RPGProvider({ children }: { children: React.ReactNode }) {
 			error: state.error,
 			profile: state.profile,
 			addExp: addExpFn,
-			requestExpForClaim,
 			refresh,
 		}),
-		[state, addExpFn, requestExpForClaim, refresh]
+		[state, addExpFn, refresh],
 	);
 
 	return <RPGContext.Provider value={value}>{children}</RPGContext.Provider>;

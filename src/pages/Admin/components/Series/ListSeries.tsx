@@ -2,10 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import AddMarket from "../Markets/AddMarket";
-import {
-	umbrellaDataService,
-	type Umbrella,
-} from "@/services/api/umbrellaDataService";
+import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataService";
 import {
 	adminErrorMessage,
 	formatAdminErrorForUser,
@@ -89,13 +86,9 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 				const resp = await fetch(`${base}/admin/series`, {
 					headers: { Authorization: `Bearer ${token}` },
 				});
-				const json = (await resp
-					.json()
-					.catch(() => ({} as any))) as SeriesApiResponse;
+				const json = (await resp.json().catch(() => ({}) as any)) as SeriesApiResponse;
 				if (!resp.ok) {
-					throw new Error(
-						formatAdminHttpError(resp.status, (json as SeriesApiResponse).message),
-					);
+					throw new Error(formatAdminHttpError(resp.status, (json as SeriesApiResponse).message));
 				}
 				if (typeof json.success === "undefined") {
 					throw new Error(adminErrorMessage(ADMIN_SERIES_LIST_INVALID));
@@ -149,12 +142,7 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 			}
 		});
 		console.log("Existing PandaScore Match IDs:", Array.from(ids));
-		console.log(
-			"Total umbrellas:",
-			umbrellas.length,
-			"- With pandascore_matchId:",
-			ids.size
-		);
+		console.log("Total umbrellas:", umbrellas.length, "- With pandascore_matchId:", ids.size);
 		return ids;
 	}, [umbrellas]);
 
@@ -166,8 +154,8 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 					match,
 					tournament,
 					serie,
-				}))
-			)
+				})),
+			),
 		);
 
 		console.log(
@@ -175,24 +163,18 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 			matches.slice(0, 5).map((m) => ({
 				id: m.match.id,
 				name: m.match.name,
-				team1: `${m.match.team1.name} (${
-					m.match.team1.acronym ?? "-"
-				})`,
-				team2: `${m.match.team2.name} (${
-					m.match.team2.acronym ?? "-"
-				})`,
-			}))
+				team1: `${m.match.team1.name} (${m.match.team1.acronym ?? "-"})`,
+				team2: `${m.match.team2.name} (${m.match.team2.acronym ?? "-"})`,
+			})),
 		);
 
 		// Filter out matches that already have an umbrella
-		const filtered = matches.filter(
-			({ match }) => !existingMatchIds.has(String(match.id))
-		);
+		const filtered = matches.filter(({ match }) => !existingMatchIds.has(String(match.id)));
 
 		console.log(
 			`Filtered: ${matches.length} total matches → ${
 				filtered.length
-			} new matches (${matches.length - filtered.length} already exist)`
+			} new matches (${matches.length - filtered.length} already exist)`,
 		);
 
 		return filtered;
@@ -259,14 +241,8 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 					marginBottom: 12,
 				}}
 			>
-				{loading && (
-					<span style={{ opacity: 0.8 }}>Loading series…</span>
-				)}
-				{loadingUmbrellas && (
-					<span style={{ opacity: 0.8 }}>
-						Loading existing markets…
-					</span>
-				)}
+				{loading && <span style={{ opacity: 0.8 }}>Loading series…</span>}
+				{loadingUmbrellas && <span style={{ opacity: 0.8 }}>Loading existing markets…</span>}
 				{error && <span style={{ color: "#ff6b6b" }}>{error}</span>}
 			</div>
 
@@ -283,8 +259,7 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 							<tr
 								style={{
 									background: "rgba(255,255,255,0.1)",
-									borderBottom:
-										"1px solid rgba(255,255,255,0.2)",
+									borderBottom: "1px solid rgba(255,255,255,0.2)",
 								}}
 							>
 								<th
@@ -353,103 +328,81 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 							</tr>
 						</thead>
 						<tbody>
-							{allKnownMatches.map(
-								({ match, tournament, serie }) => (
-									<tr
-										key={match.id}
-										style={{
-											borderBottom:
-												"1px solid rgba(255,255,255,0.1)",
-										}}
-									>
-										<td style={{ padding: 12 }}>
-											{match.id}
-										</td>
-										<td style={{ padding: 12 }}>
-											{serie.game}
-										</td>
-										<td style={{ padding: 12 }}>
-											<div style={{ fontWeight: 500 }}>
-												{match.name}
-											</div>
-											<div
-												style={{
-													fontSize: 12,
-													opacity: 0.7,
-													marginTop: 4,
-												}}
-											>
-												{tournament.name}
-											</div>
-										</td>
-										<td style={{ padding: 12 }}>
-											<div>
-												{match.team1.name}{" "}
-												{match.team1.acronym &&
-													`(${match.team1.acronym})`}
-											</div>
-											<div style={{ opacity: 0.7 }}>
-												vs
-											</div>
-											<div>
-												{match.team2.name}{" "}
-												{match.team2.acronym &&
-													`(${match.team2.acronym})`}
-											</div>
-										</td>
-										<td style={{ padding: 12 }}>
-											{match.scheduledAt
-												? new Date(
-														match.scheduledAt
-												  ).toLocaleString()
-												: "N/A"}
-										</td>
-										<td style={{ padding: 12 }}>
-											<span
-												style={{
-													padding: "4px 8px",
-													borderRadius: 4,
-													background:
-														match.status ===
-														"not_started"
-															? "rgba(59, 130, 246, 0.2)"
-															: match.status ===
-															  "running"
+							{allKnownMatches.map(({ match, tournament, serie }) => (
+								<tr
+									key={match.id}
+									style={{
+										borderBottom: "1px solid rgba(255,255,255,0.1)",
+									}}
+								>
+									<td style={{ padding: 12 }}>{match.id}</td>
+									<td style={{ padding: 12 }}>{serie.game}</td>
+									<td style={{ padding: 12 }}>
+										<div style={{ fontWeight: 500 }}>{match.name}</div>
+										<div
+											style={{
+												fontSize: 12,
+												opacity: 0.7,
+												marginTop: 4,
+											}}
+										>
+											{tournament.name}
+										</div>
+									</td>
+									<td style={{ padding: 12 }}>
+										<div>
+											{match.team1.name} {match.team1.acronym && `(${match.team1.acronym})`}
+										</div>
+										<div style={{ opacity: 0.7 }}>vs</div>
+										<div>
+											{match.team2.name} {match.team2.acronym && `(${match.team2.acronym})`}
+										</div>
+									</td>
+									<td style={{ padding: 12 }}>
+										{match.scheduledAt ? new Date(match.scheduledAt).toLocaleString() : "N/A"}
+									</td>
+									<td style={{ padding: 12 }}>
+										<span
+											style={{
+												padding: "4px 8px",
+												borderRadius: 4,
+												background:
+													match.status === "not_started"
+														? "rgba(59, 130, 246, 0.2)"
+														: match.status === "running"
 															? "rgba(34, 197, 94, 0.2)"
 															: "rgba(156, 163, 175, 0.2)",
-													fontSize: 12,
-													fontWeight: 500,
-												}}
-											>
-												{match.status}
-											</span>
-										</td>
-										<td style={{ padding: 12 }}>
-											<button
-												type="button"
-												onClick={() =>
-													setSelectedMatch({
-														match,
-														serie,
-													})
-												}
-												style={{
-													padding: "6px 10px",
-													border: "1px solid white",
-													borderRadius: 6,
-													background:
-														"rgba(255,255,255,0.2)",
-													color: "white",
-													cursor: "pointer",
-													whiteSpace: "nowrap",
-												}}
-											>
-												Add
-											</button>
-										</td>
-									</tr>
-								)
-							)}
+												fontSize: 12,
+												fontWeight: 500,
+											}}
+										>
+											{match.status}
+										</span>
+									</td>
+									<td style={{ padding: 12 }}>
+										<button
+											type="button"
+											onClick={() =>
+												setSelectedMatch({
+													match,
+													serie,
+												})
+											}
+											style={{
+												padding: "6px 10px",
+												border: "1px solid white",
+												borderRadius: 6,
+												background: "rgba(255,255,255,0.2)",
+												color: "white",
+												cursor: "pointer",
+												whiteSpace: "nowrap",
+											}}
+										>
+											Add
+										</button>
+									</td>
+								</tr>
+							))}
 						</tbody>
 					</table>
 				</div>
@@ -457,8 +410,7 @@ export default function ListSeries({ onMarketCreated }: ListSeriesProps = {}) {
 
 			{!loading && !loadingUmbrellas && allKnownMatches.length === 0 && (
 				<div style={{ opacity: 0.8 }}>
-					No new matches found. All matches already have markets
-					created.
+					No new matches found. All matches already have markets created.
 				</div>
 			)}
 		</div>

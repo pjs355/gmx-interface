@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { tagService, type TagPayload } from "@/services/api/tagService";
-import {
-	uploadTagImage,
-	uploadTagBannerImage,
-} from "@/services/firebase/firebaseStorage";
+import { uploadTagImage, uploadTagBannerImage } from "@/services/firebase/firebaseStorage";
 import type { AdminTag } from "./ListTag";
 import "./Tags.scss";
 import {
@@ -32,24 +29,17 @@ export default function EditTag({
 
 	// Image upload states
 	const [image, setImage] = useState<File | null>(null);
-	const [imagePreview, setImagePreview] = useState<string | null>(
-		(tag as any).imageUrl || null
-	);
-	const [imageUrl, setImageUrl] = useState<string>(
-		(tag as any).imageUrl || ""
-	);
+	const [imagePreview, setImagePreview] = useState<string | null>((tag as any).imageUrl || null);
+	const [imageUrl, setImageUrl] = useState<string>((tag as any).imageUrl || "");
 	const [uploadingImage, setUploadingImage] = useState<boolean>(false);
 
 	// Banner image upload states
 	const [bannerImage, setBannerImage] = useState<File | null>(null);
 	const [bannerImagePreview, setBannerImagePreview] = useState<string | null>(
-		(tag as any).bannerImageUrl || null
+		(tag as any).bannerImageUrl || null,
 	);
-	const [bannerImageUrl, setBannerImageUrl] = useState<string>(
-		(tag as any).bannerImageUrl || ""
-	);
-	const [uploadingBannerImage, setUploadingBannerImage] =
-		useState<boolean>(false);
+	const [bannerImageUrl, setBannerImageUrl] = useState<string>((tag as any).bannerImageUrl || "");
+	const [uploadingBannerImage, setUploadingBannerImage] = useState<boolean>(false);
 
 	useEffect(() => {
 		setLabel(tag.label || "");
@@ -129,11 +119,8 @@ export default function EditTag({
 			if (image) {
 				setUploadingImage(true);
 				try {
-					const baseSlugSource =
-						trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
-					const slugForUpload = baseSlugSource
-						.toLowerCase()
-						.replace(/\s+/g, "-");
+					const baseSlugSource = trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
+					const slugForUpload = baseSlugSource.toLowerCase().replace(/\s+/g, "-");
 					const result = await uploadTagImage(image, slugForUpload);
 					payload.imageUrl = result.url;
 				} finally {
@@ -147,15 +134,9 @@ export default function EditTag({
 			if (bannerImage) {
 				setUploadingBannerImage(true);
 				try {
-					const baseSlugSource =
-						trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
-					const slugForUpload = baseSlugSource
-						.toLowerCase()
-						.replace(/\s+/g, "-");
-					const result = await uploadTagBannerImage(
-						bannerImage,
-						slugForUpload
-					);
+					const baseSlugSource = trimmedSlug.length > 0 ? trimmedSlug : trimmedLabel;
+					const slugForUpload = baseSlugSource.toLowerCase().replace(/\s+/g, "-");
+					const result = await uploadTagBannerImage(bannerImage, slugForUpload);
 					payload.bannerImageUrl = result.url;
 				} finally {
 					setUploadingBannerImage(false);
@@ -178,8 +159,7 @@ export default function EditTag({
 				computedImageUrl = rawNextImageUrl;
 			}
 			setImageUrl(computedImageUrl);
-			const previewValue =
-				computedImageUrl.length > 0 ? computedImageUrl : null;
+			const previewValue = computedImageUrl.length > 0 ? computedImageUrl : null;
 			setImagePreview(previewValue);
 
 			if (bannerImage) {
@@ -191,10 +171,7 @@ export default function EditTag({
 				computedBannerImageUrl = rawNextBannerImageUrl;
 			}
 			setBannerImageUrl(computedBannerImageUrl);
-			const bannerPreviewValue =
-				computedBannerImageUrl.length > 0
-					? computedBannerImageUrl
-					: null;
+			const bannerPreviewValue = computedBannerImageUrl.length > 0 ? computedBannerImageUrl : null;
 			setBannerImagePreview(bannerPreviewValue);
 			onSaved?.(nextTag);
 		} catch (err: unknown) {
@@ -236,11 +213,7 @@ export default function EditTag({
 					<span>Tag Image</span>
 					{imagePreview && (
 						<div className="tag-image-preview-container">
-							<img
-								src={imagePreview}
-								alt="Preview"
-								className="tag-image-preview"
-							/>
+							<img src={imagePreview} alt="Preview" className="tag-image-preview" />
 							<button
 								type="button"
 								onClick={() => {
@@ -262,29 +235,19 @@ export default function EditTag({
 						}}
 						className="tag-file-input"
 					/>
-					{uploadingImage && (
-						<div className="tag-uploading-text">Uploading...</div>
-					)}
+					{uploadingImage && <div className="tag-uploading-text">Uploading...</div>}
 				</div>
 
 				<div className="tag-form-label">
-					<span>
-						Banner Image (fallback: uses tag image if not set)
-					</span>
+					<span>Banner Image (fallback: uses tag image if not set)</span>
 					{bannerImagePreview && (
 						<div className="tag-image-preview-container">
-							<img
-								src={bannerImagePreview}
-								alt="Banner Preview"
-								className="tag-image-preview"
-							/>
+							<img src={bannerImagePreview} alt="Banner Preview" className="tag-image-preview" />
 							<button
 								type="button"
 								onClick={() => {
 									setBannerImage(null);
-									setBannerImagePreview(
-										bannerImageUrl || null
-									);
+									setBannerImagePreview(bannerImageUrl || null);
 								}}
 								className="tag-image-remove-button"
 							>
@@ -301,9 +264,7 @@ export default function EditTag({
 						}}
 						className="tag-file-input"
 					/>
-					{uploadingBannerImage && (
-						<div className="tag-uploading-text">Uploading...</div>
-					)}
+					{uploadingBannerImage && <div className="tag-uploading-text">Uploading...</div>}
 				</div>
 
 				<div className="tag-actions">
@@ -315,12 +276,8 @@ export default function EditTag({
 					>
 						{saving ? "Saving..." : "Save"}
 					</button>
-					{message && (
-						<span className="tag-success-message">{message}</span>
-					)}
-					{error && (
-						<span className="tag-error-message">{error}</span>
-					)}
+					{message && <span className="tag-success-message">{message}</span>}
+					{error && <span className="tag-error-message">{error}</span>}
 				</div>
 			</div>
 		</div>

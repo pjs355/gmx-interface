@@ -11,7 +11,7 @@ import { usePrivy } from "@privy-io/react-auth";
 
 // Removed all userAnalytics and GMX-specific imports
 import { useSignerContext } from "context/SignerContext";
-import { useUserData } from "@/context/UserDataContext";
+import { useLevelUpPortfolioRefetch } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
 import { useVenueAddressChainMap } from "@/context/AccountDataContext";
 import { PrivyGatedFundTrigger } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
 
@@ -26,7 +26,10 @@ import ConnectWalletButton from "../Common/ConnectWalletButton";
 import "./Header.scss";
 import { usePortfolio as usePortfolioContext } from "@/context/PortfolioContext";
 import { usePositionsPageMetricsGate } from "context/PositionsPageMetricsGateContext";
-import { useClaimCashSyncPending, usePostTradePositionSyncPendingGlobal } from "@/trading/sor/post-trade/usePostTradeAccountSync";
+import {
+	useClaimCashSyncPending,
+	usePostTradePositionSyncPendingGlobal,
+} from "@/features/trading/sor/post-trade/usePostTradeAccountSync";
 
 type Props = {
 	openSettings: () => void;
@@ -48,34 +51,26 @@ export function AppHeaderUser({
 	showRedirectModal,
 }: Props) {
 	// Simplified for prediction markets - centralized signer context
-	const { authenticated: active, account, ready: signerReady } =
-		useSignerContext();
+	const { authenticated: active, account, ready: signerReady } = useSignerContext();
 	const { login, user } = usePrivy();
-	const { refresh: refreshUserData } = useUserData();
+	const refreshLevelUpPortfolio = useLevelUpPortfolioRefetch();
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
-	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } =
-		usePortfolioContext();
+	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const claimCashSyncPending = useClaimCashSyncPending();
 	const postTradePositionSyncPending = usePostTradePositionSyncPendingGlobal();
 	const showPortfolioMetricSkeleton =
-		portfolioLoading ||
-		blockHeaderMetrics ||
-		postTradePositionSyncPending;
+		portfolioLoading || blockHeaderMetrics || postTradePositionSyncPending;
 	// Cash: do not block on positions page shell — show when balance fetches complete
 	const showCashMetricSkeleton = cashLoading || claimCashSyncPending;
 
 	// Detect if user logged in with email (smart wallet) or external wallet
-	const hasSmartWallet = user?.linkedAccounts?.some(
-		(acct: any) => acct?.type === "smart_wallet",
-	);
+	const hasSmartWallet = user?.linkedAccounts?.some((acct: any) => acct?.type === "smart_wallet");
 	const userEmail = user?.email?.address || user?.google?.email;
 	const isSmartWallet = Boolean(hasSmartWallet && userEmail);
 
-	const formatCurrency = (
-		value: number | string | null | undefined,
-	): string => {
+	const formatCurrency = (value: number | string | null | undefined): string => {
 		const num = typeof value === "string" ? parseFloat(value) : value;
 		if (num === null || num === undefined || !isFinite(num)) return "--";
 		const isInt = Math.abs(num % 1) < 1e-9;
@@ -90,15 +85,8 @@ export function AppHeaderUser({
 		return (
 			<div className="App-header-user">
 				{false ? ( // Removed isHomeSite check
-					<div
-						data-qa="trade"
-						className="App-header-trade-link homepage-header text-body-medium"
-					>
-						<HeaderLink
-							className="default-btn"
-							to="/"
-							showRedirectModal={showRedirectModal}
-						>
+					<div data-qa="trade" className="App-header-trade-link homepage-header text-body-medium">
+						<HeaderLink className="default-btn" to="/" showRedirectModal={showRedirectModal}>
 							Launch App
 						</HeaderLink>
 					</div>
@@ -125,12 +113,10 @@ export function AppHeaderUser({
 									fontWeight: "700",
 								}}
 								onMouseEnter={(e) => {
-									e.currentTarget.style.backgroundColor =
-										"#1f2937";
+									e.currentTarget.style.backgroundColor = "#1f2937";
 								}}
 								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor =
-										"transparent";
+									e.currentTarget.style.backgroundColor = "transparent";
 								}}
 							>
 								Log In
@@ -144,9 +130,7 @@ export function AppHeaderUser({
 						>
 							{small ? "Get Started" : "Sign Up"}
 						</ConnectWalletButton>
-						{!small && (
-							<OneClickButton openSettings={openSettings} />
-						)}
+						{!small && <OneClickButton openSettings={openSettings} />}
 						{/* <NetworkDropdown
               small={small}
               networkOptions={NETWORK_OPTIONS}
@@ -161,18 +145,13 @@ export function AppHeaderUser({
 	}
 
 	// Build simple Base explorer URL
-	const accountUrl = account
-		? `https://basescan.org/address/${account}`
-		: "";
+	const accountUrl = account ? `https://basescan.org/address/${account}` : "";
 
 	/* Desktop: three direct siblings under `.App-header-container-right` (no extra row wrapper). */
 	if (!small) {
 		return (
 			<>
-				<div
-					className="App-header-nav-portfolio"
-					data-qa="header-portfolio-wrap"
-				>
+				<div className="App-header-nav-portfolio" data-qa="header-portfolio-wrap">
 					<HeaderLink
 						className="header-metric-box header-metric-box--portfolio"
 						to="/positions"
@@ -189,12 +168,10 @@ export function AppHeaderUser({
 											width: 64,
 											height: 14,
 											borderRadius: 4,
-											backgroundColor:
-												"rgba(255, 255, 255, 0.1)",
+											backgroundColor: "rgba(255, 255, 255, 0.1)",
 										}}
 									/>
-								) : portfolioTotal === null ||
-								  !isFinite(portfolioTotal) ? (
+								) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
 									"--"
 								) : (
 									`$${formatCurrency(portfolioTotal)}`
@@ -203,22 +180,17 @@ export function AppHeaderUser({
 						</div>
 					</HeaderLink>
 				</div>
-				<div
-					className="App-header-nav-cash"
-					data-qa="header-cash-wrap"
-				>
+				<div className="App-header-nav-cash" data-qa="header-cash-wrap">
 					<PrivyGatedFundTrigger
 						fundTarget={fundEvmTarget}
 						ready={signerReady}
-						onAfterFund={refreshUserData}
+						onAfterFund={refreshLevelUpPortfolio}
 					>
 						{({ openFund, canFund }) => (
 							<div
 								data-qa="header-cash"
 								data-qa-cash-amount={
-									!cashLoading &&
-									typeof cashBalance === "number" &&
-									isFinite(cashBalance)
+									!cashLoading && typeof cashBalance === "number" && isFinite(cashBalance)
 										? cashBalance
 										: undefined
 								}
@@ -231,9 +203,7 @@ export function AppHeaderUser({
 								}}
 							>
 								<div className="header-metric-row">
-									<span className="header-metric-label">
-										Cash
-									</span>
+									<span className="header-metric-label">Cash</span>
 									<span className="header-metric-value">
 										{showCashMetricSkeleton ? (
 											<span
@@ -243,8 +213,7 @@ export function AppHeaderUser({
 													width: 64,
 													height: 14,
 													borderRadius: 4,
-													backgroundColor:
-														"rgba(255, 255, 255, 0.1)",
+													backgroundColor: "rgba(255, 255, 255, 0.1)",
 												}}
 											/>
 										) : (
@@ -256,16 +225,11 @@ export function AppHeaderUser({
 						)}
 					</PrivyGatedFundTrigger>
 				</div>
-				<div
-					data-qa="user-address"
-					className="App-header-nav-email App-header-user-address"
-				>
+				<div data-qa="user-address" className="App-header-nav-email App-header-user-address">
 					<AddressDropdown
 						account={account as string}
 						accountUrl={accountUrl}
-						disconnectAccountAndCloseSettings={
-							disconnectAccountAndCloseSettings
-						}
+						disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
 						userEmail={userEmail}
 						isSmartWallet={isSmartWallet}
 					/>

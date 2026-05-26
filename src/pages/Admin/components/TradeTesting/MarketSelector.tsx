@@ -1,4 +1,3 @@
-import React from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 
 // Extended market type that may include additional fields from context
@@ -76,7 +75,9 @@ export function MarketSelector({ markets, selectedMarket, onSelect }: MarketSele
 						</div>
 						<div className="detail-row">
 							<span className="label">WS ID (used):</span>
-							<span className="value monospace" style={{ color: "#10b981" }}>{getMarketId(selectedMarket)}</span>
+							<span className="value monospace" style={{ color: "#10b981" }}>
+								{getMarketId(selectedMarket)}
+							</span>
 						</div>
 						<div className="detail-row">
 							<span className="label">YES Token ID:</span>
@@ -92,4 +93,3 @@ export function MarketSelector({ markets, selectedMarket, onSelect }: MarketSele
 		</div>
 	);
 }
-

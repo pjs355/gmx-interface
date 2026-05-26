@@ -1,12 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { RiSearchLine, RiCloseLine } from "react-icons/ri";
-import { usePredictionData } from "@/context/PredictionDataContext";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { isRestrictedProductionMode } from "@/config/restrictedMode";
-import { resolveUmbrellaBannerById } from "@/helpers/umbrellaBanners";
-import { isCounterStrikeUmbrella } from "@/helpers/umbrellaGame";
+import { resolveUmbrellaBannerById } from "@/features/markets/presentation/umbrellaBanners";
+import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
 import "./Search.scss";
 
 type SearchResponse = {
@@ -20,11 +19,7 @@ type SearchProps = {
 	activeQuery?: string;
 };
 
-export function Search({
-	onSearchActive,
-	searchResults,
-	activeQuery,
-}: SearchProps) {
+export function Search({ onSearchActive, searchResults, activeQuery }: SearchProps) {
 	const navigate = useNavigate();
 	const [query, setQuery] = useState("");
 	const [results, setResults] = useState<Umbrella[]>([]);
@@ -34,17 +29,13 @@ export function Search({
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
-			if (
-				searchRef.current &&
-				!searchRef.current.contains(event.target as Node)
-			) {
+			if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
 				setShowDropdown(false);
 			}
 		};
 
 		document.addEventListener("mousedown", handleClickOutside);
-		return () =>
-			document.removeEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
 	}, []);
 
 	const searchUmbrellas = useCallback(
@@ -62,9 +53,7 @@ export function Search({
 			try {
 				const baseUrl = getPredictionApiBaseUrl();
 				const response = await fetch(
-					`${baseUrl}/umbrellas/search?q=${encodeURIComponent(
-						searchQuery
-					)}`
+					`${baseUrl}/umbrellas/search?q=${encodeURIComponent(searchQuery)}`,
 				);
 
 				if (!response.ok) {
@@ -90,7 +79,7 @@ export function Search({
 				setIsLoading(false);
 			}
 		},
-		[onSearchActive]
+		[onSearchActive],
 	);
 
 	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,39 +132,28 @@ export function Search({
 
 			{showDropdown && (
 				<div className="search-results">
-					{isLoading && (
-						<div className="search-loading">Searching...</div>
-					)}
+					{isLoading && <div className="search-loading">Searching...</div>}
 					{!isLoading && results.length === 0 && (
-						<div className="search-no-results">
-							No markets found
-						</div>
+						<div className="search-no-results">No markets found</div>
 					)}
 					{!isLoading && results.length > 0 && (
 						<>
 							<div className="search-results-header">
 								{results.length} market
-								{results.length !== 1 ? "s" : ""} found - Press
-								Enter to filter
+								{results.length !== 1 ? "s" : ""} found - Press Enter to filter
 							</div>
 							<ul className="search-results-list">
 								{results.map((result) => {
 									const umbrella = result as any;
 									const eventDate =
-										umbrella.eventDate ||
-										(umbrella.children &&
-											umbrella.children[0]?.eventDate);
-									const imageUrl =
-										umbrella.image ||
-										resolveUmbrellaBannerById(umbrella._id);
+										umbrella.eventDate || (umbrella.children && umbrella.children[0]?.eventDate);
+									const imageUrl = umbrella.image || resolveUmbrellaBannerById(umbrella._id);
 									return (
 										<li
 											key={result._id}
 											className="search-result-item"
 											onClick={() => {
-												navigate(
-													`/predictions/umbrella/${result._id}`
-												);
+												navigate(`/predictions/umbrella/${result._id}`);
 												setQuery("");
 												setResults([]);
 												setShowDropdown(false);
@@ -190,14 +168,11 @@ export function Search({
 											)}
 											<div className="search-result-content">
 												<div className="search-result-title">
-													{umbrella.displayName ||
-														umbrella.title}
+													{umbrella.displayName || umbrella.title}
 												</div>
 												{eventDate && (
 													<div className="search-result-date">
-														{new Date(
-															eventDate
-														).toLocaleDateString()}
+														{new Date(eventDate).toLocaleDateString()}
 													</div>
 												)}
 											</div>
@@ -213,14 +188,10 @@ export function Search({
 			{activeQuery && searchResults && (
 				<div className="search-active-filter">
 					<span className="search-filter-text">
-						Searching for: <strong>{activeQuery}</strong> (
-						{searchResults.length} result
+						Searching for: <strong>{activeQuery}</strong> ({searchResults.length} result
 						{searchResults.length !== 1 ? "s" : ""})
 					</span>
-					<button
-						className="search-filter-clear"
-						onClick={handleClear}
-					>
+					<button className="search-filter-clear" onClick={handleClear}>
 						<RiCloseLine />
 					</button>
 				</div>

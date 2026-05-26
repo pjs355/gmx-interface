@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
-import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "./PredictionCard";
 import { LoadingState } from "./LoadingState";
 import { HomeSkeleton } from "./HomeSkeleton";
@@ -11,10 +10,7 @@ import "../Predictions.scss";
 import GameLinks from "./GameLinks";
 import { HomeInlineTradeLayout } from "./HomeInlineTradeLayout";
 import PredictionsCalendarOddsPicker from "./PredictionsCalendarOddsPicker";
-import {
-	resolveUmbrellaEventDate,
-	startOfLocalDay,
-} from "../utils/eventDates";
+import { resolveUmbrellaEventDate, startOfLocalDay } from "../utils/eventDates";
 import {
 	MAX_VENUE_PANDA_SUBSCRIPTIONS,
 	useVenuePandaSubscription,
@@ -23,9 +19,8 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import {
 	getListingYesNoPricesForUmbrella,
 	isDeemphasizedSettledLeanOdds,
-} from "@/helpers/predictionUtils";
+} from "@/features/markets/listing/umbrellaListingOdds";
 import {
-	defaultEsportsTagLabel,
 	findEsportsTag,
 	gameFilterResetSelection,
 	homeDefaultSelectedTagLabel,
@@ -36,17 +31,14 @@ import {
 	STARTING_SOON_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
-import {
-	consumeHomePendingGameFilter,
-	setHomeGameFilter,
-} from "../utils/gameFilterNavigation";
+import { consumeHomePendingGameFilter, setHomeGameFilter } from "../utils/gameFilterNavigation";
 import { isRestrictedProductionMode } from "@/config/restrictedMode";
-import { isCounterStrikeUmbrella } from "@/helpers/umbrellaGame";
+import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
 import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
 import {
 	bundledCounterStrikeLogoFromTagLabels,
 	resolveLogoByTags,
-} from "@/helpers/gameLogoResolver";
+} from "@/features/markets/assets/gameLogoResolver";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -91,18 +83,13 @@ function umbrellaPandascoreMatchId(umbrella: Umbrella): string {
 
 /** Prefer the listing with more cross-venue volume when two umbrellas share a Panda match. */
 function umbrellaHomeListingScore(umbrella: Umbrella): number {
-	const totalUsd = (umbrella as { volume?: { totalUsd?: unknown } }).volume
-		?.totalUsd;
+	const totalUsd = (umbrella as { volume?: { totalUsd?: unknown } }).volume?.totalUsd;
 	if (typeof totalUsd === "number" && Number.isFinite(totalUsd)) {
 		return totalUsd;
 	}
-	const children = (umbrella as { children?: Array<{ tradeCount?: number }> })
-		.children;
+	const children = (umbrella as { children?: Array<{ tradeCount?: number }> }).children;
 	if (!children?.length) return 0;
-	return children.reduce(
-		(sum, child) => sum + (child?.tradeCount ?? 0),
-		0,
-	);
+	return children.reduce((sum, child) => sum + (child?.tradeCount ?? 0), 0);
 }
 
 /**
@@ -116,10 +103,7 @@ function dedupeUmbrellasByPandascoreMatch(umbrellas: Umbrella[]): Umbrella[] {
 		const pandaId = umbrellaPandascoreMatchId(umbrella);
 		if (!pandaId) continue;
 		const existing = winnerByPanda.get(pandaId);
-		if (
-			!existing ||
-			umbrellaHomeListingScore(umbrella) > umbrellaHomeListingScore(existing)
-		) {
+		if (!existing || umbrellaHomeListingScore(umbrella) > umbrellaHomeListingScore(existing)) {
 			winnerByPanda.set(pandaId, umbrella);
 		}
 	}
@@ -169,7 +153,7 @@ function buildDayKey(date: Date): string {
 
 function formatDayLabel(
 	targetDate: Date,
-	todayStartMs: number
+	todayStartMs: number,
 ): { primary: string; secondary: string } {
 	const dayStart = startOfLocalDay(targetDate);
 	const diffMs = dayStart.getTime() - todayStartMs;
@@ -241,11 +225,8 @@ function calendarPageHeadingTitle(selectedGame: string | null): string {
 	return gameFilterDisplayLabel(selectedGame) ?? selectedGame;
 }
 
-export default function FilteredPredictions({
-	filterType,
-}: FilteredPredictionsProps) {
+export default function FilteredPredictions({ filterType }: FilteredPredictionsProps) {
 	const navigate = useNavigate();
-	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [defaultTagApplied, setDefaultTagApplied] = useState(false);
 
@@ -310,7 +291,7 @@ export default function FilteredPredictions({
 
 	const restrictedMode = isRestrictedProductionMode();
 
-	const filteredUmbrellas = React.useMemo(() => {
+	const filteredUmbrellas = useMemo(() => {
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			// Restricted production mode: hide every non-Counter-Strike
 			// umbrella from the public home list. Applied BEFORE the
@@ -326,14 +307,11 @@ export default function FilteredPredictions({
 		const esportsTagId = esportsTag?._id;
 
 		let filtered = activeUmbrellas.filter((umbrella) => {
-			const children = (umbrella as any).children as
-				| Array<any>
-				| undefined;
+			const children = (umbrella as any).children as Array<any> | undefined;
 			if (!children || children.length === 0) return false;
 
 			const hasEsportsTag = children.some((q) => {
-				const tagIds: string[] | undefined = (q &&
-					(q as any).tagIds) as any;
+				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
 				if (!Array.isArray(tagIds) || tagIds.length === 0) {
 					return false;
 				}
@@ -347,22 +325,15 @@ export default function FilteredPredictions({
 			return true;
 		});
 
-		if (
-			selectedGame &&
-			selectedGame !== LIVE_PILL_ID &&
-			selectedGame !== STARTING_SOON_PILL_ID
-		) {
+		if (selectedGame && selectedGame !== LIVE_PILL_ID && selectedGame !== STARTING_SOON_PILL_ID) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
 			if (selectedTag && !isEsportsMetaTagLabel(selectedTag.label)) {
 				filtered = filtered.filter((umbrella) => {
-					const children = (umbrella as any).children as
-						| Array<any>
-						| undefined;
+					const children = (umbrella as any).children as Array<any> | undefined;
 					if (!children || children.length === 0) return false;
 
 					return children.some((q) => {
-						const tagIds: string[] | undefined = (q &&
-							(q as any).tagIds) as any;
+						const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
 						if (!Array.isArray(tagIds) || tagIds.length === 0) {
 							return false;
 						}
@@ -391,7 +362,7 @@ export default function FilteredPredictions({
 		return deduped;
 	}, [umbrellas, filterType, selectedGame, tags, now, restrictedMode]);
 
-	const calendarData = React.useMemo(() => {
+	const calendarData = useMemo(() => {
 		if (filterType === "games") {
 			return null;
 		}
@@ -439,14 +410,10 @@ export default function FilteredPredictions({
 			day.events.push(event);
 		}
 
-		const sortByDate = (a: CalendarDay, b: CalendarDay) =>
-			a.date.getTime() - b.date.getTime();
+		const sortByDate = (a: CalendarDay, b: CalendarDay) => a.date.getTime() - b.date.getTime();
 
 		const scoreDead = (umbrella: Umbrella): number => {
-			const { yes, no } = getListingYesNoPricesForUmbrella(
-				umbrella,
-				appState?.markets,
-			);
+			const { yes, no } = getListingYesNoPricesForUmbrella(umbrella, appState?.markets);
 			return isDeemphasizedSettledLeanOdds(yes, no) ? 1 : 0;
 		};
 
@@ -474,10 +441,7 @@ export default function FilteredPredictions({
 	 *
 	 * Kept in sync with the keys defined in `HomeInlineTradeLayout.tsx`.
 	 */
-	const pinHomeDockForUmbrella = (
-		umbrellaId: string,
-		marketId: string | null,
-	) => {
+	const pinHomeDockForUmbrella = (umbrellaId: string, marketId: string | null) => {
 		try {
 			localStorage.setItem("homeDockPinnedUmbrellaId", umbrellaId);
 			if (marketId) {
@@ -500,24 +464,15 @@ export default function FilteredPredictions({
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
-	const navigateToSingleMarket = (
-		umbrella: Umbrella,
-		position: "yes" | "no"
-	) => {
+	const navigateToSingleMarket = (umbrella: Umbrella, position: "yes" | "no") => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
 		const question = singleMarketQuestions[umbrella._id];
 		if (question) {
-			localStorage.setItem(
-				"currentPredictionMarket",
-				JSON.stringify(question)
-			);
+			localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 			localStorage.setItem("activePosition", position);
 		}
 		const qid = question
-			? question._id ||
-			  (question as any).questionId ||
-			  (question as any).marketId ||
-			  null
+			? question._id || (question as any).questionId || (question as any).marketId || null
 			: null;
 		pinHomeDockForUmbrella(umbrella._id, qid);
 		navigate(`/predictions/umbrella/${umbrella._id}`);
@@ -526,18 +481,14 @@ export default function FilteredPredictions({
 	const navigateToMultiMarket = (
 		umbrella: Umbrella,
 		question: PredictionMarket,
-		position: "yes" | "no"
+		position: "yes" | "no",
 	) => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		localStorage.setItem(
-			"currentPredictionMarket",
-			JSON.stringify(question)
-		);
+		localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 		localStorage.setItem("activePosition", position);
 
 		// Store the selected market ID so it becomes the active market on the trading page
-		const marketId =
-			question._id || question.questionId || question.marketId;
+		const marketId = question._id || question.questionId || question.marketId;
 		if (marketId) {
 			localStorage.setItem("selectedMarketId", marketId);
 		}
@@ -548,10 +499,9 @@ export default function FilteredPredictions({
 
 	const shouldUseCalendar = filterType === "esports" || filterType === "all";
 
-	const { subscribePandaMatchId, unsubscribePandaMatchId } =
-		useVenuePandaSubscription();
+	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
 
-	const visibleUmbrellasForVenueWs = React.useMemo(
+	const visibleUmbrellasForVenueWs = useMemo(
 		() =>
 			collectVisibleUmbrellas(
 				shouldUseCalendar,
@@ -561,7 +511,7 @@ export default function FilteredPredictions({
 		[shouldUseCalendar, calendarData, filteredUmbrellas],
 	);
 
-	const visiblePandaIdsForVenueWs = React.useMemo(() => {
+	const visiblePandaIdsForVenueWs = useMemo(() => {
 		const out: string[] = [];
 		const seen = new Set<string>();
 		for (const u of visibleUmbrellasForVenueWs) {
@@ -615,11 +565,7 @@ export default function FilteredPredictions({
 	}
 
 	const pageTitle =
-		filterType === "esports"
-			? "Esports"
-			: filterType === "games"
-				? "Games"
-				: "Markets";
+		filterType === "esports" ? "Esports" : filterType === "games" ? "Games" : "Markets";
 	const noMarketsMessage =
 		filterType === "esports"
 			? "No current esports markets"
@@ -627,7 +573,7 @@ export default function FilteredPredictions({
 				? "No current games markets"
 				: "No current markets";
 
-	let content: React.ReactNode = null;
+	let content: ReactNode = null;
 
 	if (shouldUseCalendar && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
@@ -652,7 +598,7 @@ export default function FilteredPredictions({
 			);
 		} else {
 			let calendarOddsPickerShown = false;
-			const calendarSections: React.ReactNode[] = [];
+			const calendarSections: ReactNode[] = [];
 
 			for (const day of calendarData.upcomingDays) {
 				const eventsToShow = day.events;
@@ -661,27 +607,18 @@ export default function FilteredPredictions({
 				const showOddsPicker = !calendarOddsPickerShown;
 				if (showOddsPicker) calendarOddsPickerShown = true;
 				calendarSections.push(
-					<section
-						key={`upcoming-${buildDayKey(day.date)}`}
-						className="prediction-calendar-day"
-					>
+					<section key={`upcoming-${buildDayKey(day.date)}`} className="prediction-calendar-day">
 						<header className="prediction-calendar-header">
 							<div className="prediction-calendar-title">
-								<span className="prediction-calendar-primary">
-									{label.primary}
-								</span>
-								<span className="prediction-calendar-secondary">
-									{label.secondary}
-								</span>
+								<span className="prediction-calendar-primary">{label.primary}</span>
+								<span className="prediction-calendar-secondary">{label.secondary}</span>
 							</div>
 							{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
 						</header>
 						<div className="predictions-grid prediction-calendar-grid">
-							{eventsToShow.map((event) =>
-								renderPredictionCard(event.umbrella)
-							)}
+							{eventsToShow.map((event) => renderPredictionCard(event.umbrella))}
 						</div>
-					</section>
+					</section>,
 				);
 			}
 
@@ -697,21 +634,15 @@ export default function FilteredPredictions({
 					>
 						<header className="prediction-calendar-header">
 							<div className="prediction-calendar-title">
-								<span className="prediction-calendar-primary">
-									To Be Scheduled
-								</span>
-								<span className="prediction-calendar-secondary">
-									Event date not provided
-								</span>
+								<span className="prediction-calendar-primary">To Be Scheduled</span>
+								<span className="prediction-calendar-secondary">Event date not provided</span>
 							</div>
 							{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
 						</header>
 						<div className="predictions-grid prediction-calendar-grid">
-							{unscheduledToShow.map((umbrellaItem) =>
-								renderPredictionCard(umbrellaItem)
-							)}
+							{unscheduledToShow.map((umbrellaItem) => renderPredictionCard(umbrellaItem))}
 						</div>
-					</section>
+					</section>,
 				);
 			}
 
@@ -720,17 +651,15 @@ export default function FilteredPredictions({
 					<header className="prediction-calendar-page-heading">
 						<div className="prediction-calendar-page-heading__title-row">
 							{(() => {
-								const calendarTitle =
-									calendarPageHeadingTitle(selectedGame);
+								const calendarTitle = calendarPageHeadingTitle(selectedGame);
 								const showGameLogo =
 									selectedGame &&
 									!isEsportsMetaTagLabel(selectedGame) &&
 									selectedGame !== LIVE_PILL_ID &&
 									selectedGame !== STARTING_SOON_PILL_ID;
 								const calendarLogo = showGameLogo
-									? (bundledCounterStrikeLogoFromTagLabels([
-											selectedGame,
-										]) ?? resolveLogoByTags([selectedGame]))
+									? (bundledCounterStrikeLogoFromTagLabels([selectedGame]) ??
+										resolveLogoByTags([selectedGame]))
 									: null;
 								return (
 									<>
@@ -744,9 +673,7 @@ export default function FilteredPredictions({
 												decoding="async"
 											/>
 										) : null}
-										<h2 className="prediction-calendar-page-heading__title">
-											{calendarTitle}
-										</h2>
+										<h2 className="prediction-calendar-page-heading__title">{calendarTitle}</h2>
 									</>
 								);
 							})()}
@@ -758,17 +685,13 @@ export default function FilteredPredictions({
 		}
 	} else {
 		const gridClassName =
-			filterType === "esports"
-				? "predictions-grid predictions-grid--carousel"
-				: "predictions-grid";
+			filterType === "esports" ? "predictions-grid predictions-grid--carousel" : "predictions-grid";
 
 		content = (
 			<div className={gridClassName}>
 				{filteredUmbrellas.length > 0 ? (
 					<>
-						{filteredUmbrellas.map((umbrella) =>
-							renderPredictionCard(umbrella)
-						)}
+						{filteredUmbrellas.map((umbrella) => renderPredictionCard(umbrella))}
 						{filterType === "esports" && (
 							<div
 								className="view-all-card-filtered"
@@ -793,12 +716,8 @@ export default function FilteredPredictions({
 											strokeLinejoin="round"
 										/>
 									</svg>
-									<h3 className="view-all-card-title">
-										See All Esports
-									</h3>
-									<p className="view-all-card-count">
-										{filteredUmbrellas.length} markets
-									</p>
+									<h3 className="view-all-card-title">See All Esports</h3>
+									<p className="view-all-card-count">{filteredUmbrellas.length} markets</p>
 								</div>
 							</div>
 						)}

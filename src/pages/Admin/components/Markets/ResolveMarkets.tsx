@@ -15,9 +15,7 @@ type ExpiredMarket = {
 
 export default function ResolveMarkets() {
 	const { umbrellas, allMarketsByUmbrella, loading } = usePredictionData();
-	const [selectedMarket, setSelectedMarket] = useState<ExpiredMarket | null>(
-		null
-	);
+	const [selectedMarket, setSelectedMarket] = useState<ExpiredMarket | null>(null);
 
 	const expiredMarkets = useMemo(() => {
 		const now = new Date();
@@ -38,13 +36,9 @@ export default function ResolveMarkets() {
 						expired.push({
 							_id: market._id || market.questionId,
 							questionId: market.questionId || market._id,
-							displayName:
-								market.displayName ||
-								market.question ||
-								"Unnamed",
+							displayName: market.displayName || market.question || "Unnamed",
 							umbrellaId: umbrella._id,
-							umbrellaDisplayName:
-								umbrella.displayName || "Unnamed Umbrella",
+							umbrellaDisplayName: umbrella.displayName || "Unnamed Umbrella",
 							endDate: endDate,
 							status: market.status || "active",
 						});
@@ -85,9 +79,7 @@ export default function ResolveMarkets() {
 		return (
 			<div className="admin-market-container">
 				<h2 className="admin-market-title">Resolve Expired Markets</h2>
-				<div className="admin-loading-text">
-					Loading expired markets...
-				</div>
+				<div className="admin-loading-text">Loading expired markets...</div>
 			</div>
 		);
 	}
@@ -96,33 +88,25 @@ export default function ResolveMarkets() {
 		<div className="admin-market-container">
 			<h2 className="admin-market-title">Resolve Expired Markets</h2>
 			<p className="admin-hint-text" style={{ marginBottom: 16 }}>
-				Markets that are still active but have passed their end date and
-				need to be resolved.
+				Markets that are still active but have passed their end date and need to be resolved.
 			</p>
 
 			{expiredMarkets.length === 0 ? (
 				<div className="edit-no-questions">
-					No expired markets found. All markets are either resolved or
-					still active within their time window.
+					No expired markets found. All markets are either resolved or still active within their
+					time window.
 				</div>
 			) : (
 				<div className="edit-questions-grid">
 					{expiredMarkets.map((market) => (
 						<div key={market._id} className="edit-question-item">
 							<div>
-								<div className="edit-question-info-name">
-									{market.displayName}
-								</div>
+								<div className="edit-question-info-name">{market.displayName}</div>
+								<div className="edit-question-info-id">Umbrella: {market.umbrellaDisplayName}</div>
 								<div className="edit-question-info-id">
-									Umbrella: {market.umbrellaDisplayName}
+									Ended: {formatDate(market.endDate)} ({getTimeExpired(market.endDate)})
 								</div>
-								<div className="edit-question-info-id">
-									Ended: {formatDate(market.endDate)} (
-									{getTimeExpired(market.endDate)})
-								</div>
-								<div className="edit-question-info-id">
-									Question ID: {market.questionId}
-								</div>
+								<div className="edit-question-info-id">Question ID: {market.questionId}</div>
 							</div>
 							<button
 								type="button"
@@ -167,13 +151,8 @@ export default function ResolveMarkets() {
 						}}
 						onClick={(e) => e.stopPropagation()}
 					>
-						<div className="edit-editing-title">
-							Resolve: {selectedMarket.displayName}
-						</div>
-						<div
-							className="edit-question-info-id"
-							style={{ marginBottom: 16 }}
-						>
+						<div className="edit-editing-title">Resolve: {selectedMarket.displayName}</div>
+						<div className="edit-question-info-id" style={{ marginBottom: 16 }}>
 							Umbrella: {selectedMarket.umbrellaDisplayName}
 						</div>
 						<button

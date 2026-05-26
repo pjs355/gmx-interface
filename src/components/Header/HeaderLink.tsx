@@ -1,11 +1,10 @@
 import cx from "classnames";
 import { MouseEventHandler, ReactNode } from "react";
-import { NavLink, NavLinkProps } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 // Removed GMX legacy imports - not needed for prediction markets
-import { useRedirectPopupTimestamp } from "@/hooks/useRedirectPopupTimestamp";
+import { useRedirectPopupTimestamp } from "@/shared/hooks/useRedirectPopupTimestamp";
 
-import { TrackingLink } from "components/TrackingLink/TrackingLink";
 import "./Header.scss";
 
 type Props = {
@@ -26,50 +25,12 @@ export function HeaderLink({
 	exact,
 	to,
 	children,
-	showRedirectModal,
+	showRedirectModal: _showRedirectModal,
 	onClick,
 	isActive,
 	qa,
 }: Props) {
-	const isOnHomePage = window.location.pathname === "/";
-	const isHome = false; // Prediction markets are always app, not home
-	const { timestamp: redirectPopupTimestamp } = useRedirectPopupTimestamp();
-
-	if (isHome && !(isHomeLink && !isOnHomePage)) {
-		if (false) {
-			// Disabled GMX redirect modal logic
-			return (
-				<div
-					className={cx("a", className, { active: isHomeLink })}
-					onClick={(e) => {
-						if (onClick) {
-							onClick(e);
-						}
-						showRedirectModal(to);
-					}}
-				>
-					{children}
-				</div>
-			);
-		} else {
-			const baseUrl = ""; // No base URL needed for prediction markets
-
-			const LinkComponent = (
-				<a
-					className={cx("a", className, { active: isHomeLink })}
-					href={baseUrl + to}
-				>
-					{children}
-				</a>
-			);
-
-			return onClick ? (
-				<TrackingLink onClick={onClick}>{LinkComponent}</TrackingLink>
-			) : (
-				LinkComponent
-			);
-		}
-	}
+	useRedirectPopupTimestamp();
 
 	if (isHomeLink) {
 		return (

@@ -1,4 +1,3 @@
-import React from "react";
 import Button from "components/Button/Button";
 import "../Positions.scss";
 
@@ -15,9 +14,7 @@ export default function PositionsTabs({
 				<Button
 					variant="ghost"
 					onClick={() => setActiveTab("positions")}
-					className={`side-btn ${
-						activeTab === "positions" ? "selected primary" : ""
-					}`}
+					className={`side-btn ${activeTab === "positions" ? "selected primary" : ""}`}
 				>
 					Positions
 				</Button>
@@ -34,9 +31,7 @@ export default function PositionsTabs({
 				<Button
 					variant="ghost"
 					onClick={() => setActiveTab("history")}
-					className={`side-btn ${
-						activeTab === "history" ? "selected primary" : ""
-					}`}
+					className={`side-btn ${activeTab === "history" ? "selected primary" : ""}`}
 				>
 					History
 				</Button>

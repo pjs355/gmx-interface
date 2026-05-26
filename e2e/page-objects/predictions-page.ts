@@ -11,9 +11,7 @@ export class PredictionsPage {
 	}
 
 	findCardByUmbrellaId(umbrellaId: string): Locator {
-		return this.page.locator(
-			`[data-qa="prediction-card"][data-qa-umbrella-id="${umbrellaId}"]`,
-		);
+		return this.page.locator(`[data-qa="prediction-card"][data-qa-umbrella-id="${umbrellaId}"]`);
 	}
 
 	locatorHomeTradeboxForUmbrella(umbrellaId: string): Locator {

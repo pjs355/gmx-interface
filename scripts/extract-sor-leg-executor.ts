@@ -7,7 +7,7 @@ import path from "node:path";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const SRC = path.join(ROOT, "src");
-const EXECUTOR = path.join(SRC, "trading/sor/core/useSorLegExecutor.ts");
+const EXECUTOR = path.join(SRC, "features/trading/sor/core/useSorLegExecutor.ts");
 
 const lines = fs.readFileSync(EXECUTOR, "utf8").split("\n");
 
@@ -52,24 +52,27 @@ function write(rel: string, content: string): void {
 }
 
 write(
-	"trading/sor/execute/helpers.ts",
+	"features/trading/sor/execute/helpers.ts",
 	`${legHelpers.replace(/^function /gm, "export function ")}
 `,
 );
 
 write(
-	"trading/sor/execute/bridgeHelpers.ts",
-	`import { CHAIN_LIFI_IDS } from "@/trading/sor/core/sor-types";
+	"features/trading/sor/execute/bridgeHelpers.ts",
+	`import { CHAIN_LIFI_IDS } from "@/features/trading/sor/core/sor-types";
 import type { AccountWalletRoles } from "@/context/accountWallets";
-import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
-import type { PrefundStep } from "@/trading/sor/prefund/prefundPlan";
+import { pickLifiSourceTxHashForStatus } from "@/features/trading/lifi/pickLifiSourceTxHashForStatus";
+import type { PrefundStep } from "@/features/trading/sor/prefund/prefundPlan";
 
-${bridgeHelpers.replace(/^type SorChainKey/gm, "type SorChainKey").replace(/^function /gm, "export function ").replace(/^const SOLANA/gm, "export const SOLANA")}
+${bridgeHelpers
+	.replace(/^type SorChainKey/gm, "type SorChainKey")
+	.replace(/^function /gm, "export function ")
+	.replace(/^const SOLANA/gm, "export const SOLANA")}
 `,
 );
 
-const venueLegHeader = `import type { VenueLegDispatchInput } from "@/trading/sor/execute/venueLegContext";
-import type { SorLegResult } from "@/trading/sor/execute/types";
+const venueLegHeader = `import type { VenueLegDispatchInput } from "@/features/trading/sor/execute/venueLegContext";
+import type { SorLegResult } from "@/features/trading/sor/execute/types";
 
 export async function executeLeg(input: VenueLegDispatchInput): Promise<SorLegResult> {
 	const {
@@ -96,12 +99,7 @@ function indentCase(body: string): string {
 		.join("\n");
 }
 
-function genVenueLeg(
-	venuePath: string,
-	fnName: string,
-	body: string,
-	extraImports: string,
-): void {
+function genVenueLeg(venuePath: string, fnName: string, body: string, extraImports: string): void {
 	const destructuring = `
 	const {
 		tradeExecutionService,
@@ -143,46 +141,46 @@ ${venueLegFooter}`,
 const importBlock = slice(1, 151);
 
 genVenueLeg(
-	"trading/venues/levelup/execute/executeLeg.ts",
+	"features/trading/venues/levelup/execute/executeLeg.ts",
 	"executeLevelUpLeg",
 	levelupBody,
 	importBlock,
 );
 genVenueLeg(
-	"trading/venues/polymarket/execute/executeLeg.ts",
+	"features/trading/venues/polymarket/execute/executeLeg.ts",
 	"executePolymarketLeg",
 	polymarketBody,
 	importBlock +
-		'\nimport { isPolymarketAllowanceRecoverableError } from "@/trading/sor/execute/helpers";\n',
+		'\nimport { isPolymarketAllowanceRecoverableError } from "@/features/trading/sor/execute/helpers";\n',
 );
 genVenueLeg(
-	"trading/venues/dflow/execute/executeLeg.ts",
+	"features/trading/venues/dflow/execute/executeLeg.ts",
 	"executeDflowLeg",
 	dflowBody,
 	importBlock +
-		'\nimport { sumDflowFillOutBaseUnitsForOutputMint } from "@/trading/sor/execute/helpers";\n',
+		'\nimport { sumDflowFillOutBaseUnitsForOutputMint } from "@/features/trading/sor/execute/helpers";\n',
 );
 genVenueLeg(
-	"trading/venues/limitless/execute/executeLeg.ts",
+	"features/trading/venues/limitless/execute/executeLeg.ts",
 	"executeLimitlessLeg",
 	limitlessBody,
 	importBlock +
-		'\nimport { floorLimitlessFokMakerAmountHuman, interpretLimitlessDelegatedOrderResponse } from "@/trading/sor/execute/helpers";\n',
+		'\nimport { floorLimitlessFokMakerAmountHuman, interpretLimitlessDelegatedOrderResponse } from "@/features/trading/sor/execute/helpers";\n',
 );
 genVenueLeg(
-	"trading/venues/predict/execute/executeLeg.ts",
+	"features/trading/venues/predict/execute/executeLeg.ts",
 	"executePredictLeg",
 	predictBody,
 	importBlock,
 );
 
 write(
-	"trading/sor/execute/venueLegContext.ts",
+	"features/trading/sor/execute/venueLegContext.ts",
 	`import type { MutableRefObject } from "react";
 import type { AccountWalletRoles } from "@/context/accountWallets";
-import type { RouteLeg } from "@/trading/sor/core/sor-types";
-import type { SorExecutionPhase, SorLegRouteContext } from "@/trading/sor/core/useSorExecution";
-import type { UseSorLegExecutorDeps } from "@/trading/sor/execute/deps";
+import type { RouteLeg } from "@/features/trading/sor/core/sor-types";
+import type { SorExecutionPhase, SorLegRouteContext } from "@/features/trading/sor/core/useSorExecution";
+import type { UseSorLegExecutorDeps } from "@/features/trading/sor/execute/deps";
 
 /** Privy \`sendTransaction\` from \`useSendTransaction()\`. */
 export type PrivyEvmSendTransaction = (input: {
@@ -217,13 +215,13 @@ export type SorBridgeExecuteInput = {
 	reportSorExecutionPhase: (phase: SorExecutionPhase) => void;
 	privyEvmSendTransaction: PrivyEvmSendTransaction;
 	getSignerForChain: ReturnType<
-		typeof import("@/trading/lifi/useFundingLifiExecution").useFundingLifiExecution
+		typeof import("@/features/trading/lifi/useFundingLifiExecution").useFundingLifiExecution
 	>["getSignerForChain"];
 	preparePolygonRelay: ReturnType<
-		typeof import("@/trading/lifi/useFundingLifiExecution").useFundingLifiExecution
+		typeof import("@/features/trading/lifi/useFundingLifiExecution").useFundingLifiExecution
 	>["preparePolygonRelay"];
 	buildExecuteLifiStepsOptions: ReturnType<
-		typeof import("@/trading/lifi/useFundingLifiExecution").useFundingLifiExecution
+		typeof import("@/features/trading/lifi/useFundingLifiExecution").useFundingLifiExecution
 	>["buildExecuteLifiStepsOptions"];
 };
 `,
@@ -232,16 +230,16 @@ export type SorBridgeExecuteInput = {
 // deps.ts - extract interface only (lines 300-485 but interface ends before addressForChain)
 const depsInterface = slice(300, 468);
 write(
-	"trading/sor/execute/deps.ts",
-	`${slice(1, 12).replace('from "./sor-types"', 'from "@/trading/sor/core/sor-types"')}
+	"features/trading/sor/execute/deps.ts",
+	`${slice(1, 12).replace('from "./sor-types"', 'from "@/features/trading/sor/core/sor-types"')}
 import type { MutableRefObject } from "react";
 import type { RelayClient } from "@polymarket/builder-relayer-client";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { MatchedMarket } from "@/types/odds-monitor";
-import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
+import type { PredictMarketDetail } from "@/features/trading/venues/predict/portfolio/predictMarketApi";
 import type { Book } from "@predictdotfun/sdk";
-import type { TradeExecutionParams } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
-import type { SolanaSignerCapable, SendTransactionCapable } from "@/trading/lifi/sendTransactionTypes";
+import type { TradeExecutionParams } from "@/components/PredictionMarketTradeBox/types";
+import type { SolanaSignerCapable, SendTransactionCapable } from "@/features/trading/lifi/sendTransactionTypes";
 import type {
 	BaseSmartWalletPendingUsdc,
 } from "@/types/trading";
@@ -251,9 +249,9 @@ import type {
 	DflowOrderSubmitBody,
 	DflowOrderSubmitResponse,
 } from "@/services/privateApi/client";
-import type { SorExecutionPhase } from "@/trading/sor/core/useSorExecution";
-import type { BuildLimitlessSorOrderInput } from "@/trading/venues/limitless/trade/limitlessSignedClobOrder";
-import type { LimitlessSignedOrderSubmit } from "@/trading/venues/limitless/trade/limitlessPrivateApiTypes";
+import type { SorExecutionPhase } from "@/features/trading/sor/core/useSorExecution";
+import type { BuildLimitlessSorOrderInput } from "@/features/trading/venues/limitless/trade/limitlessSignedClobOrder";
+import type { LimitlessSignedOrderSubmit } from "@/features/trading/venues/limitless/trade/limitlessPrivateApiTypes";
 import type { AccountWalletGate, VenueAddressChainMap } from "@/context/accountWallets";
 
 ${depsInterface.replace("export interface UseSorLegExecutorDeps", "export interface UseSorLegExecutorDeps")}
@@ -261,16 +259,16 @@ ${depsInterface.replace("export interface UseSorLegExecutorDeps", "export interf
 );
 
 write(
-	"trading/sor/execute/dispatchLeg.ts",
+	"features/trading/sor/execute/dispatchLeg.ts",
 	`import { formatUnknownSorVenue, userMessage, SOR_MISSING_LIMIT_PRICE, SOR_REFUSE_BRIDGE_ON_SELL } from "@/errors";
-import type { RouteLeg, SorVenue } from "@/trading/sor/core/sor-types";
-import type { SorLegResult } from "@/trading/sor/execute/types";
-import type { VenueLegDispatchInput } from "@/trading/sor/execute/venueLegContext";
-import { executeLeg as executeDflowLeg } from "@/trading/venues/dflow/execute/executeLeg";
-import { executeLeg as executeLevelUpLeg } from "@/trading/venues/levelup/execute/executeLeg";
-import { executeLeg as executeLimitlessLeg } from "@/trading/venues/limitless/execute/executeLeg";
-import { executeLeg as executePolymarketLeg } from "@/trading/venues/polymarket/execute/executeLeg";
-import { executeLeg as executePredictLeg } from "@/trading/venues/predict/execute/executeLeg";
+import type { RouteLeg, SorVenue } from "@/features/trading/sor/core/sor-types";
+import type { SorLegResult } from "@/features/trading/sor/execute/types";
+import type { VenueLegDispatchInput } from "@/features/trading/sor/execute/venueLegContext";
+import { executeLeg as executeDflowLeg } from "@/features/trading/venues/dflow/execute/executeLeg";
+import { executeLeg as executeLevelUpLeg } from "@/features/trading/venues/levelup/execute/executeLeg";
+import { executeLeg as executeLimitlessLeg } from "@/features/trading/venues/limitless/execute/executeLeg";
+import { executeLeg as executePolymarketLeg } from "@/features/trading/venues/polymarket/execute/executeLeg";
+import { executeLeg as executePredictLeg } from "@/features/trading/venues/predict/execute/executeLeg";
 
 export async function dispatchSorLeg(
 	input: Omit<VenueLegDispatchInput, "isLimit" | "limitPrice"> & {
@@ -332,18 +330,18 @@ export async function dispatchSorLeg(
 );
 
 write(
-	"trading/sor/execute/executeBridge.ts",
-	`${importBlock.replace('from "./sor-types"', 'from "@/trading/sor/core/sor-types"').replace('from "./useSorExecution"', 'from "@/trading/sor/core/useSorExecution"')}
-import type { SorBridgeResult } from "@/trading/sor/execute/types";
-import type { SorBridgeExecuteInput } from "@/trading/sor/execute/venueLegContext";
+	"features/trading/sor/execute/executeBridge.ts",
+	`${importBlock.replace('from "./sor-types"', 'from "@/features/trading/sor/core/sor-types"').replace('from "./useSorExecution"', 'from "@/features/trading/sor/core/useSorExecution"')}
+import type { SorBridgeResult } from "@/features/trading/sor/execute/types";
+import type { SorBridgeExecuteInput } from "@/features/trading/sor/execute/venueLegContext";
 import {
 	addressForChain,
 	maskFundingAddress,
 	pickBridgeSourceTxHashForLifiStatus,
 	prefundSourceAddressForStep,
 	SOLANA_LIFI_CHAIN_ID,
-} from "@/trading/sor/execute/bridgeHelpers";
-import { scwPendingMicrosToHumanUsd } from "@/trading/sor/execute/helpers";
+} from "@/features/trading/sor/execute/bridgeHelpers";
+import { scwPendingMicrosToHumanUsd } from "@/features/trading/sor/execute/helpers";
 
 export async function executeSorBridge(
 	input: SorBridgeExecuteInput,
@@ -366,4 +364,6 @@ ${indentCase(bridgeBody.replace(/^\t\t\t/gm, "\t"))}
 `,
 );
 
-console.log("Extraction complete. Replace useSorLegExecutor.ts with thin hook manually or re-run hook generator.");
+console.log(
+	"Extraction complete. Replace useSorLegExecutor.ts with thin hook manually or re-run hook generator.",
+);

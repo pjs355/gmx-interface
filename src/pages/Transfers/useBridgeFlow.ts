@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress } from "viem";
 import { bsc } from "viem/chains";
-import { useUserData } from "@/context/UserDataContext";
+import { useLevelUpPortfolioRefetch } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
 import {
 	formatLifiErrorForUser,
 	userMessage,
@@ -11,16 +11,16 @@ import {
 	LIFI_POLY_EMBEDDED_WALLET_LOADING,
 	LIFI_SOLANA_WALLET_UNAVAILABLE,
 } from "@/errors";
-import { executeLifiSteps } from "@/trading/lifi/executeLifiSteps";
-import { pickLifiSourceTxHashForStatus } from "@/trading/lifi/pickLifiSourceTxHashForStatus";
-import { pollLifiUntilTerminal } from "@/trading/lifi/pollLifiStatus";
-import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/trading/hooks/useBridgeFundingBalances";
+import { executeLifiSteps } from "@/features/trading/lifi/executeLifiSteps";
+import { pickLifiSourceTxHashForStatus } from "@/features/trading/lifi/pickLifiSourceTxHashForStatus";
+import { pollLifiUntilTerminal } from "@/features/trading/lifi/pollLifiStatus";
+import { BRIDGE_FUNDING_BALANCES_QUERY_KEY } from "@/features/trading/hooks/useBridgeFundingBalances";
 import { useAccountData } from "@/context/AccountDataContext";
 import { walletRolesFromVenueAddressChainMap } from "@/context/accountWallets";
-import { useLifiQuoteMutation } from "@/trading/hooks/useLifiBridge";
-import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { getBridgeQuoteFingerprint } from "@/trading/lifi/quoteDisplay";
-import { useFundingLifiExecution } from "@/trading/lifi/useFundingLifiExecution";
+import { useLifiQuoteMutation } from "@/features/trading/hooks/useLifiBridge";
+import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
+import { getBridgeQuoteFingerprint } from "@/features/trading/lifi/quoteDisplay";
+import { useFundingLifiExecution } from "@/features/trading/lifi/useFundingLifiExecution";
 import type { LifiQuoteResponse } from "@/types/trading";
 
 const BASE = 8453;
@@ -75,7 +75,7 @@ function pickLifiStatusTool(quote: LifiQuoteResponse): string | undefined {
 function pickTxHashForLifiStatusPoll(
 	txHashes: string[],
 	_quote: LifiQuoteResponse,
-	fromChain: number
+	fromChain: number,
 ): string {
 	return pickLifiSourceTxHashForStatus({
 		txHashes,
@@ -107,7 +107,7 @@ function addressForEndpoint(
 		polymarketSafe?: string | null;
 		embeddedEoa?: string | null;
 		solanaAddress?: string | null;
-	}
+	},
 ): string | undefined {
 	switch (e) {
 		case "levelup":
@@ -132,7 +132,7 @@ export function routeHasRequiredAddresses(
 		polymarketSafe?: string | null;
 		embeddedEoa?: string | null;
 		solanaAddress?: string | null;
-	}
+	},
 ): boolean {
 	/** User cannot sign from the Limitless server-wallet — no LI.FI sourcing from this pocket. */
 	if (from === "limitless") return false;
@@ -224,9 +224,7 @@ export function useBridgeFlow() {
 			isLoading: accountData.walletIsLoading,
 			integrationMode: accountData.polyAccount.integrationMode,
 			polymarketAccountNotFound: accountData.polyAccount.notFound,
-			accountOverviewNotFound: Boolean(
-				accountData.overview.data?._clientAccountOverviewNotFound,
-			),
+			accountOverviewNotFound: Boolean(accountData.overview.data?._clientAccountOverviewNotFound),
 			polymarketAccount: accountData.polyAccount.data ?? undefined,
 			accountOverview: accountData.overview.data ?? undefined,
 			refetchPolymarket: accountData.refresh.polyAccount,
@@ -276,9 +274,9 @@ export function useBridgeFlow() {
 			accountCash.bnb,
 			accountCash.solana,
 			refreshAccount.cash,
-		]
+		],
 	);
-	const { refresh: refreshUserData } = useUserData();
+	const refreshLevelUpPortfolio = useLevelUpPortfolioRefetch();
 	const api = usePrivateApiClient();
 	const quoteMutation = useLifiQuoteMutation();
 	const {
@@ -346,15 +344,14 @@ export function useBridgeFlow() {
 	const isAmountValid =
 		Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= 100_000;
 
-	const canQuote =
-		!funding.isLoading && Boolean(funding.profileId) && routeOk && isAmountValid;
+	const canQuote = !funding.isLoading && Boolean(funding.profileId) && routeOk && isAmountValid;
 
 	const quoteAppliesToCurrentInput = Boolean(
 		quote?.steps?.length &&
-			quoteInputContext &&
-			quoteInputContext.fromEndpoint === fromEndpoint &&
-			quoteInputContext.toEndpoint === toEndpoint &&
-			quoteInputContext.parsedAmount === parsedAmount
+		quoteInputContext &&
+		quoteInputContext.fromEndpoint === fromEndpoint &&
+		quoteInputContext.toEndpoint === toEndpoint &&
+		quoteInputContext.parsedAmount === parsedAmount,
 	);
 
 	const sourceBalanceHuman = useMemo(() => {
@@ -420,8 +417,7 @@ export function useBridgeFlow() {
 		}
 	}, []);
 
-	const routeIncludesSolana =
-		fromEndpoint === "solana" || toEndpoint === "solana";
+	const routeIncludesSolana = fromEndpoint === "solana" || toEndpoint === "solana";
 
 	const executeQuoteFetch = useCallback(
 		async (options?: { silent?: boolean }) => {
@@ -509,7 +505,7 @@ export function useBridgeFlow() {
 			applyDepositSlippage,
 			routeIncludesSolana,
 			quoteMutation.mutateAsync,
-		]
+		],
 	);
 
 	useEffect(() => {
@@ -534,11 +530,7 @@ export function useBridgeFlow() {
 
 		const timer = window.setTimeout(() => {
 			const latest = phaseRef.current;
-			if (
-				latest === "executing" ||
-				latest === "polling" ||
-				latest === "done"
-			) {
+			if (latest === "executing" || latest === "polling" || latest === "done") {
 				return;
 			}
 			void executeQuoteFetch();
@@ -568,12 +560,7 @@ export function useBridgeFlow() {
 
 		const id = window.setInterval(() => {
 			const p = phaseRef.current;
-			if (
-				p === "executing" ||
-				p === "polling" ||
-				p === "done" ||
-				p === "quoting"
-			) {
+			if (p === "executing" || p === "polling" || p === "done" || p === "quoting") {
 				return;
 			}
 			void executeQuoteFetch({ silent: true });
@@ -613,8 +600,7 @@ export function useBridgeFlow() {
 		}
 
 		const srcHumanNow = sourceBalanceHuman;
-		const balNow =
-			srcHumanNow == null || srcHumanNow === "" ? Number.NaN : parseFloat(srcHumanNow);
+		const balNow = srcHumanNow == null || srcHumanNow === "" ? Number.NaN : parseFloat(srcHumanNow);
 		if (
 			Number.isFinite(parsedAmount) &&
 			parsedAmount > 0 &&
@@ -663,7 +649,7 @@ export function useBridgeFlow() {
 						fromChain,
 						toChain,
 					}),
-				{ intervalMs: 15_000, maxAttempts: 40, signal: ac.signal }
+				{ intervalMs: 15_000, maxAttempts: 40, signal: ac.signal },
 			);
 
 			setError(null);
@@ -673,7 +659,7 @@ export function useBridgeFlow() {
 			} catch {
 				/* ignore */
 			}
-			await refreshUserData();
+			await refreshLevelUpPortfolio();
 			await Promise.all([funding.refetchPolymarket(), funding.refetchOverview()]);
 			await queryClient.invalidateQueries({ queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY] });
 			setPhase("done");
@@ -704,14 +690,13 @@ export function useBridgeFlow() {
 		preparePolygonRelay,
 		buildExecuteLifiStepsOptions,
 		api,
-		refreshUserData,
+		refreshLevelUpPortfolio,
 		queryClient,
 		sourceBalanceHuman,
 	]);
 
 	const safeOk =
-		funding.integrationMode === "builder_privy_deposit_wallet" ||
-		funding.integrationMode == null;
+		funding.integrationMode === "builder_privy_deposit_wallet" || funding.integrationMode == null;
 
 	const isConfirming = phase === "executing" || phase === "polling";
 

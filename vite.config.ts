@@ -1,11 +1,5 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin";
-import {
-	createLogger,
-	defineConfig,
-	loadEnv,
-	type Logger,
-	type Plugin,
-} from "vite";
+import { createLogger, defineConfig, loadEnv, type Logger, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "path";
@@ -21,10 +15,7 @@ function createViteLoggerWithoutBaseOrgSourcemapNoise(): Logger {
 	const logger = createLogger();
 	const warnOnce = logger.warnOnce.bind(logger);
 	logger.warnOnce = (msg, options) => {
-		if (
-			msg.includes("Sourcemap for") &&
-			msg.includes("@base-org/account")
-		) {
+		if (msg.includes("Sourcemap for") && msg.includes("@base-org/account")) {
 			return;
 		}
 		warnOnce(msg, options);
@@ -45,9 +36,7 @@ function createViteLoggerWithoutBaseOrgSourcemapNoise(): Logger {
  * Railway /proxy expects: POST { url, method, headers?, body? }
  * Railway /proxy returns: { status, data, ... }
  */
-function installLimitlessExchangeProxy(
-	middlewares: import("connect").Server,
-): void {
+function installLimitlessExchangeProxy(middlewares: import("connect").Server): void {
 	middlewares.use((req, res, next) => {
 		const raw = req.url ?? "";
 		const pathOnly = raw.split("?")[0] ?? "";
@@ -81,10 +70,7 @@ function installLimitlessExchangeProxy(
 					res.setHeader("Access-Control-Allow-Origin", "*");
 					const ct = up.headers["content-type"];
 					if (ct) {
-						res.setHeader(
-							"Content-Type",
-							Array.isArray(ct) ? ct[0] : ct,
-						);
+						res.setHeader("Content-Type", Array.isArray(ct) ? ct[0] : ct);
 					}
 					res.statusCode = up.statusCode ?? 502;
 					up.pipe(res);
@@ -114,7 +100,7 @@ function limitlessExchangeDevProxyPlugin(): Plugin {
 function railwayDevProxyPlugin(
 	proxyUrl: string,
 	proxyToken: string,
-	levelupApiOrigin: string
+	levelupApiOrigin: string,
 ): Plugin {
 	const apiBase = levelupApiOrigin.replace(/\/$/, "");
 
@@ -124,23 +110,22 @@ function railwayDevProxyPlugin(
 			server.middlewares.use((req, res, next) => {
 				const url = req.url ?? "";
 
-				const route =
-					url.startsWith("/polymarket-clob")
+				const route = url.startsWith("/polymarket-clob")
+					? {
+							pathPrefix: "/polymarket-clob",
+							upstreamOrigin: "https://clob.polymarket.com",
+						}
+					: url.startsWith("/private-api-proxy")
 						? {
-								pathPrefix: "/polymarket-clob",
-								upstreamOrigin: "https://clob.polymarket.com",
-						  }
-						: url.startsWith("/private-api-proxy")
-						  ? {
-									pathPrefix: "/private-api-proxy",
-									upstreamOrigin: apiBase,
-							  }
-						  : url.startsWith("/limitless-exchange-proxy")
-						    ? {
-										pathPrefix: "/limitless-exchange-proxy",
-										upstreamOrigin: "https://api.limitless.exchange",
-							  }
-						    : null;
+								pathPrefix: "/private-api-proxy",
+								upstreamOrigin: apiBase,
+							}
+						: url.startsWith("/limitless-exchange-proxy")
+							? {
+									pathPrefix: "/limitless-exchange-proxy",
+									upstreamOrigin: "https://api.limitless.exchange",
+								}
+							: null;
 
 				if (!route) return next();
 
@@ -149,23 +134,16 @@ function railwayDevProxyPlugin(
 				// CORS preflight
 				if (req.method === "OPTIONS") {
 					res.setHeader("Access-Control-Allow-Origin", "*");
-					res.setHeader(
-						"Access-Control-Allow-Methods",
-						"GET, POST, PUT, DELETE, OPTIONS"
-					);
+					res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
 					res.setHeader("Access-Control-Allow-Headers", "*");
 					res.statusCode = 204;
 					res.end();
 					return;
 				}
 
-				const targetPath = url.replace(
-					new RegExp(`^${pathPrefix}`),
-					""
-				);
+				const targetPath = url.replace(new RegExp(`^${pathPrefix}`), "");
 				if (pathPrefix === "/private-api-proxy") {
-					const tn =
-						(targetPath.split("?")[0] ?? "").split("#")[0] ?? "";
+					const tn = (targetPath.split("?")[0] ?? "").split("#")[0] ?? "";
 					if (tn !== "/api/predict/orders") {
 						res.statusCode = 404;
 						res.setHeader("Content-Type", "application/json");
@@ -173,7 +151,7 @@ function railwayDevProxyPlugin(
 							JSON.stringify({
 								error:
 									"private-api-proxy only forwards POST /api/predict/orders (use direct private API host for reads)",
-							})
+							}),
 						);
 						return;
 					}
@@ -190,9 +168,7 @@ function railwayDevProxyPlugin(
 						lower === "accept" ||
 						lower === "authorization"
 					) {
-						forwardHeaders[key] = Array.isArray(val)
-							? val.join(", ")
-							: val;
+						forwardHeaders[key] = Array.isArray(val) ? val.join(", ") : val;
 					}
 				}
 
@@ -200,21 +176,16 @@ function railwayDevProxyPlugin(
 				const chunks: Buffer[] = [];
 				req.on("data", (chunk: Buffer) => chunks.push(chunk));
 				req.on("end", () => {
-					const rawBody =
-						chunks.length > 0
-							? Buffer.concat(chunks).toString("utf8")
-							: undefined;
+					const rawBody = chunks.length > 0 ? Buffer.concat(chunks).toString("utf8") : undefined;
 
-				// Railway proxy expects `body` (not `data`) — must be the
-				// raw string so the HMAC stays valid byte-for-byte.
-				const envelope = JSON.stringify({
-					url: targetUrl,
-					method: req.method ?? "GET",
-					headers: forwardHeaders,
-					...(rawBody !== undefined
-						? { body: rawBody }
-						: {}),
-				});
+					// Railway proxy expects `body` (not `data`) — must be the
+					// raw string so the HMAC stays valid byte-for-byte.
+					const envelope = JSON.stringify({
+						url: targetUrl,
+						method: req.method ?? "GET",
+						headers: forwardHeaders,
+						...(rawBody !== undefined ? { body: rawBody } : {}),
+					});
 
 					const proxyParsed = new URL(proxyUrl);
 					const options: http.RequestOptions = {
@@ -229,58 +200,39 @@ function railwayDevProxyPlugin(
 						},
 					};
 
-					const transport =
-						proxyParsed.protocol === "https:"
-							? https
-							: http;
+					const transport = proxyParsed.protocol === "https:" ? https : http;
 
-					const proxyReq = transport.request(
-						options,
-						(proxyRes: http.IncomingMessage) => {
-							const respChunks: Buffer[] = [];
-							proxyRes.on("data", (c: Buffer) =>
-								respChunks.push(c)
-							);
-							proxyRes.on("end", () => {
-								const body = Buffer.concat(respChunks).toString(
-									"utf8"
+					const proxyReq = transport.request(options, (proxyRes: http.IncomingMessage) => {
+						const respChunks: Buffer[] = [];
+						proxyRes.on("data", (c: Buffer) => respChunks.push(c));
+						proxyRes.on("end", () => {
+							const body = Buffer.concat(respChunks).toString("utf8");
+
+							res.setHeader("Access-Control-Allow-Origin", "*");
+							res.setHeader("Content-Type", "application/json");
+
+							try {
+								const wrapped = JSON.parse(body);
+								// Unwrap: Railway returns { status, data, ... }
+								res.statusCode = wrapped.status ?? 200;
+								res.end(
+									typeof wrapped.data === "string" ? wrapped.data : JSON.stringify(wrapped.data),
 								);
-
-								res.setHeader(
-									"Access-Control-Allow-Origin",
-									"*"
-								);
-								res.setHeader("Content-Type", "application/json");
-
-								try {
-									const wrapped = JSON.parse(body);
-									// Unwrap: Railway returns { status, data, ... }
-									res.statusCode = wrapped.status ?? 200;
-									res.end(
-										typeof wrapped.data === "string"
-											? wrapped.data
-											: JSON.stringify(wrapped.data)
-									);
-								} catch {
-									// Non-JSON or unexpected — forward raw
-									res.statusCode =
-										proxyRes.statusCode ?? 502;
-									res.end(body);
-								}
-							});
-						}
-					);
+							} catch {
+								// Non-JSON or unexpected — forward raw
+								res.statusCode = proxyRes.statusCode ?? 502;
+								res.end(body);
+							}
+						});
+					});
 
 					proxyReq.on("error", (err: Error) => {
-						console.error(
-							"[railway-dev-proxy] upstream error:",
-							err.message
-						);
+						console.error("[railway-dev-proxy] upstream error:", err.message);
 						res.statusCode = 502;
 						res.end(
 							JSON.stringify({
 								error: `Proxy error: ${err.message}`,
-							})
+							}),
 						);
 					});
 
@@ -298,26 +250,20 @@ export default defineConfig(({ mode }) => {
 
 	/** Must match client (`import.meta.env`): `.env` is in `viteEnv`, not always on `process.env`. */
 	const clobProxyFlag =
-		process.env.VITE_POLYMARKET_CLOB_PROXY ??
-		viteEnv.VITE_POLYMARKET_CLOB_PROXY ??
-		"";
+		process.env.VITE_POLYMARKET_CLOB_PROXY ?? viteEnv.VITE_POLYMARKET_CLOB_PROXY ?? "";
 	const clobProxyEnabled = String(clobProxyFlag).trim() === "true";
 	const clobProxyUrl =
 		process.env.VITE_POLY_PROXY_URL ||
 		viteEnv.VITE_POLY_PROXY_URL ||
 		"https://patriotic-sheepdog.up.railway.app/proxy";
-	const clobProxyToken =
-		process.env.VITE_POLY_PROXY_TOKEN ||
-		viteEnv.VITE_POLY_PROXY_TOKEN ||
-		"";
+	const clobProxyToken = process.env.VITE_POLY_PROXY_TOKEN || viteEnv.VITE_POLY_PROXY_TOKEN || "";
 
 	const viteEnvMode = (
 		process.env.VITE_ENVIRONMENT_MODE ||
 		viteEnv.VITE_ENVIRONMENT_MODE ||
 		""
 	).trim();
-	const isLocalOrderEnv =
-		viteEnvMode === "testnet" || viteEnvMode === "local-production";
+	const isLocalOrderEnv = viteEnvMode === "testnet" || viteEnvMode === "local-production";
 
 	const privateApiHostDefault =
 		(process.env.VITE_PRIVATE_API_BASE || viteEnv.VITE_PRIVATE_API_BASE || "")
@@ -335,9 +281,7 @@ export default defineConfig(({ mode }) => {
 	/** Predict order POST upstream for Railway proxy; LIVE defaults to prod Railway unless overridden. */
 	const predictProxyTarget =
 		predictProxyExplicit ||
-		(isLocalOrderEnv
-			? privateApiHostDefault
-			: "https://prediction-api-production.up.railway.app");
+		(isLocalOrderEnv ? privateApiHostDefault : "https://prediction-api-production.up.railway.app");
 
 	const limitlessLegacyClientFallbacks =
 		process.env.VITE_LIMITLESS_LEGACY_CLIENT_FALLBACKS === "true" ||
@@ -361,16 +305,10 @@ export default defineConfig(({ mode }) => {
 							project: "levelup-interface",
 							authToken: process.env.SENTRY_AUTH_TOKEN,
 						}),
-				  ]
+					]
 				: []),
 			...(clobProxyEnabled
-				? [
-						railwayDevProxyPlugin(
-							clobProxyUrl,
-							clobProxyToken,
-							predictProxyTarget
-						),
-				  ]
+				? [railwayDevProxyPlugin(clobProxyUrl, clobProxyToken, predictProxyTarget)]
 				: []),
 		],
 		define: {},
@@ -396,11 +334,9 @@ export default defineConfig(({ mode }) => {
 				"@": path.resolve(projectRoot, "./src"),
 				components: path.resolve(projectRoot, "./src/components"),
 				pages: path.resolve(projectRoot, "./src/pages"),
-				lib: path.resolve(projectRoot, "./src/lib"),
 				context: path.resolve(projectRoot, "./src/context"),
 				config: path.resolve(projectRoot, "./src/config"),
 				domain: path.resolve(projectRoot, "./src/domain"),
-				utils: path.resolve(projectRoot, "./src/utils"),
 				img: path.resolve(projectRoot, "./src/img"),
 				styles: path.resolve(projectRoot, "./src/styles"),
 				crypto: path.resolve(projectRoot, "./src/polyfills/crypto-hmac-shim.ts"),
@@ -413,7 +349,7 @@ export default defineConfig(({ mode }) => {
 					api: "modern-compiler",
 					silenceDeprecations: ["legacy-js-api"],
 					includePaths: [path.join(projectRoot, "src/styles")],
-					additionalData: `@use "themes/fonts" as *;\n`,
+					additionalData: `@use "themes/scss/fonts" as *;\n`,
 				},
 			},
 		},

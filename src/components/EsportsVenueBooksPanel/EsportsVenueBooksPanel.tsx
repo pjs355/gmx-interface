@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo } from "react";
 import type { SnapshotStatus } from "@/types/odds-monitor";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
-import type { TradingPagePrices, VenueRowModel } from "@/hooks/useTradingPagePrices";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
+import type {
+	TradingPagePrices,
+	VenueRowModel,
+} from "@/features/markets/pricing/useTradingPagePrices";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
-import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
+import { resolveMarketLogo } from "@/features/markets/assets/marketLogoResolver";
 import "./EsportsVenueBooksPanel.scss";
 
 const MIN_VALID_PRICE = 0.005;
@@ -60,10 +66,7 @@ function sortVenueRowsNoSharesLast(
 const ASK_BEST_EPS = 1e-10;
 
 /** Row indices at the numerically best (lowest) ask in the column — whole-cent rounding hid sub-cent ties. */
-function indicesAtBestDisplayedCents(
-	rows: VenueRowModel[],
-	key: "askA" | "askB",
-): Set<number> {
+function indicesAtBestDisplayedCents(rows: VenueRowModel[], key: "askA" | "askB"): Set<number> {
 	let minP = Infinity;
 	for (const r of rows) {
 		const p = r[key];
@@ -95,8 +98,7 @@ function askCellClass(
 	venueId?: string,
 ): string {
 	const base = "esports-venue-books__td esports-venue-books__td--num";
-	const limitlessLinkedNoQuote =
-		isLimitlessVenueRow(venueId) && linked && prob === null && !status;
+	const limitlessLinkedNoQuote = isLimitlessVenueRow(venueId) && linked && prob === null && !status;
 	if (!linked || (prob === null && !status && !limitlessLinkedNoQuote)) {
 		return `${base} esports-venue-books__td--empty`;
 	}
@@ -120,10 +122,7 @@ type Props = {
 
 export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 	const { formatPrice } = useOddsDisplay();
-	const formatProbDisplay = useCallback(
-		(p: number) => formatPrice(p),
-		[formatPrice],
-	);
+	const formatProbDisplay = useCallback((p: number) => formatPrice(p), [formatPrice]);
 
 	const {
 		venueRows,
@@ -196,9 +195,8 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 		return (
 			<div className="esports-venue-books">
 				<p className="esports-venue-books__muted">
-					Cross-venue odds are not configured. Set{" "}
-					<code>VITE_ODDS_WS_BASE</code> to override the venue-prices
-					WebSocket URL if needed, then restart the dev server.
+					Cross-venue odds are not configured. Set <code>VITE_ODDS_WS_BASE</code> to override the
+					venue-prices WebSocket URL if needed, then restart the dev server.
 				</p>
 			</div>
 		);
@@ -216,9 +214,9 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 			return (
 				<div className="esports-venue-books">
 					<p className="esports-venue-books__muted">
-						Couldn&apos;t load cross-venue prices: the odds WebSocket is disconnected and
-						the backup odds API request failed. Check your network, VPN, or odds service
-						config (<code>VITE_ODDS_WS_BASE</code> / private API), then refresh.
+						Couldn&apos;t load cross-venue prices: the odds WebSocket is disconnected and the backup
+						odds API request failed. Check your network, VPN, or odds service config (
+						<code>VITE_ODDS_WS_BASE</code> / private API), then refresh.
 					</p>
 				</div>
 			);
@@ -227,8 +225,7 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 			return (
 				<div className="esports-venue-books">
 					<p className="esports-venue-books__muted">
-						No monitor row for this match. The match may not be linked on
-						the odds server yet.
+						No monitor row for this match. The match may not be linked on the odds server yet.
 					</p>
 				</div>
 			);
@@ -277,85 +274,63 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 								className="esports-venue-books__th esports-venue-books__th--team"
 								title={teamA}
 							>
-								<span className="esports-venue-books__th-text">
-									{teamA}
-								</span>
+								<span className="esports-venue-books__th-text">{teamA}</span>
 							</th>
 							<th
 								scope="col"
 								className="esports-venue-books__th esports-venue-books__th--team"
 								title={teamB}
 							>
-								<span className="esports-venue-books__th-text">
-									{teamB}
-								</span>
+								<span className="esports-venue-books__th-text">{teamB}</span>
 							</th>
 						</tr>
 					</thead>
 					<tbody>
-					{orderedVenueRows.map((row: VenueRowModel, idx: number) => (
-						<tr key={row.id} className="esports-venue-books__tr">
-							<th
-								scope="row"
-								className="esports-venue-books__td esports-venue-books__td--label"
-							>
-								<span className="esports-venue-books__label-row">
-									{resolveMarketLogo(row.id) ? (
-										<MarketLogo
-											venue={row.id}
-											size={16}
-											className="esports-venue-books__market-logo"
-											style={{ display: "block", verticalAlign: "unset" }}
-										/>
-									) : (
-										<span
-											className="esports-venue-books__logo-placeholder"
-											aria-hidden="true"
-										/>
-									)}
-									<span>{row.label}</span>
-								</span>
-							</th>
-							<td
-								className={askCellClass(
-									row.linked,
-									row.askA,
-									row.statusA,
-									bestAIndices.has(idx),
-									row.id,
-								)}
-							>
-								<span className="esports-venue-books__num-cell">
-									{formatAskCell(
+						{orderedVenueRows.map((row: VenueRowModel, idx: number) => (
+							<tr key={row.id} className="esports-venue-books__tr">
+								<th scope="row" className="esports-venue-books__td esports-venue-books__td--label">
+									<span className="esports-venue-books__label-row">
+										{resolveMarketLogo(row.id) ? (
+											<MarketLogo
+												venue={row.id}
+												size={16}
+												className="esports-venue-books__market-logo"
+												style={{ display: "block", verticalAlign: "unset" }}
+											/>
+										) : (
+											<span className="esports-venue-books__logo-placeholder" aria-hidden="true" />
+										)}
+										<span>{row.label}</span>
+									</span>
+								</th>
+								<td
+									className={askCellClass(
 										row.linked,
 										row.askA,
 										row.statusA,
+										bestAIndices.has(idx),
 										row.id,
-										formatProbDisplay,
 									)}
-								</span>
-							</td>
-							<td
-								className={askCellClass(
-									row.linked,
-									row.askB,
-									row.statusB,
-									bestBIndices.has(idx),
-									row.id,
-								)}
-							>
-								<span className="esports-venue-books__num-cell">
-									{formatAskCell(
+								>
+									<span className="esports-venue-books__num-cell">
+										{formatAskCell(row.linked, row.askA, row.statusA, row.id, formatProbDisplay)}
+									</span>
+								</td>
+								<td
+									className={askCellClass(
 										row.linked,
 										row.askB,
 										row.statusB,
+										bestBIndices.has(idx),
 										row.id,
-										formatProbDisplay,
 									)}
-								</span>
-							</td>
-						</tr>
-					))}
+								>
+									<span className="esports-venue-books__num-cell">
+										{formatAskCell(row.linked, row.askB, row.statusB, row.id, formatProbDisplay)}
+									</span>
+								</td>
+							</tr>
+						))}
 					</tbody>
 				</table>
 			</div>

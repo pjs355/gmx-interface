@@ -1,5 +1,10 @@
-import type { SorErrorCode, SorRouteResult, SorSide, SorVenue } from "@/trading/sor/core/sor-types";
-import { VENUE_DISPLAY_NAMES } from "@/trading/sor/core/sor-types";
+import type {
+	SorErrorCode,
+	SorRouteResult,
+	SorSide,
+	SorVenue,
+} from "@/features/trading/sor/core/sor-types";
+import { VENUE_DISPLAY_NAMES } from "@/features/trading/sor/core/sor-types";
 import { getPrivateApiErrorMessage } from "@/services/privateApi/errors";
 import { AppError, isAppError } from "./AppError";
 import {
@@ -42,7 +47,6 @@ import {
 	SOR_ALL_BOOKS_STALE,
 	SOR_AMOUNT_TOO_SMALL,
 	SOR_API_HTTP_ERROR,
-	SOR_API_INVALID_RESPONSE,
 	SOR_API_NOT_AUTHENTICATED,
 	SOR_EXECUTION_NOT_READY,
 	SOR_NO_BIDS_AVAILABLE,
@@ -65,10 +69,7 @@ const SOR_API_ERROR_RE = /^SOR API error (\d{3})\b/i;
 /**
  * Map non-2xx SOR HTTP responses — never surface raw body text in the UI.
  */
-export function mapSorApiHttpError(
-	status: number,
-	rawBody?: string | null,
-): string {
+export function mapSorApiHttpError(status: number, rawBody?: string | null): string {
 	const body = (rawBody ?? "").trim();
 	if (body.length > 0) {
 		console.error("[SOR API] HTTP error", {
@@ -104,10 +105,7 @@ export function mapPolymarketClobError(
 	if (/insufficient\s*(asks|bids|liquidity)/i.test(text)) {
 		return userMessage(POLYMARKET_INSUFFICIENT_LIQUIDITY);
 	}
-	if (
-		status === 401 ||
-		/unauthorized|invalid (signature|api key)|missing.*l2/i.test(text)
-	) {
+	if (status === 401 || /unauthorized|invalid (signature|api key)|missing.*l2/i.test(text)) {
 		return userMessage(POLYMARKET_SESSION_EXPIRED);
 	}
 	if (status === 429 || /rate ?limit/i.test(text)) {
@@ -159,10 +157,7 @@ export function formatSorRouteFailureMessage(
 }
 
 /** Map DFlow/Kalshi API error fields — log raw code/msg, return catalog copy. */
-export function mapDflowOrderError(
-	code?: string | null,
-	msg?: string | null,
-): string {
+export function mapDflowOrderError(code?: string | null, msg?: string | null): string {
 	const detail = [code, msg].filter(Boolean).join(": ");
 	if (detail.length > 0) {
 		console.error("[DFlow] order error", { code: code ?? null, msg: msg ?? null });
@@ -266,11 +261,7 @@ function mapLifiAndTransferMessage(message: string): string | null {
 function mapPolymarketRelayerMessage(message: string): string | null {
 	const t = message.trim();
 	if (!t) return null;
-	if (
-		/wallet busy/i.test(t) ||
-		/active action exists/i.test(t) ||
-		/active action/i.test(t)
-	) {
+	if (/wallet busy/i.test(t) || /active action exists/i.test(t) || /active action/i.test(t)) {
 		return userMessage(POLYMARKET_RELAYER_WALLET_BUSY);
 	}
 	return null;

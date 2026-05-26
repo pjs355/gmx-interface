@@ -29,7 +29,7 @@ This suite spends real money on mainnet. Read this whole file before running.
 yarn playwright install chrome
 ```
 
-   If you prefer only the Chromium download for non-Google flows: `yarn playwright install chromium` — Google sign-in may still fail in that browser.
+If you prefer only the Chromium download for non-Google flows: `yarn playwright install chromium` — Google sign-in may still fail in that browser.
 
 3. **Start the app on port 3010** in a separate terminal (`seed-profile` opens `http://localhost:3010` — nothing is started for you):
 
@@ -37,7 +37,7 @@ yarn playwright install chrome
 yarn dev:live
 ```
 
-   Or run `yarn dev` and choose **LIVE** so Vite still listens on **3010** (see `vite.config.ts`).
+Or run `yarn dev` and choose **LIVE** so Vite still listens on **3010** (see `vite.config.ts`).
 
 4. Seed the persistent profile (with the dev server still running):
 

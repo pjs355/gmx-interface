@@ -167,10 +167,7 @@ export const ADMIN_STATS_INVALID = defineError(
 	"ADMIN_STATS_INVALID",
 	"Invalid response for stats.",
 );
-export const ADMIN_STATS_EMPTY = defineError(
-	"ADMIN_STATS_EMPTY",
-	"No stats data in response.",
-);
+export const ADMIN_STATS_EMPTY = defineError("ADMIN_STATS_EMPTY", "No stats data in response.");
 export const ADMIN_SERIES_LIST_INVALID = defineError(
 	"ADMIN_SERIES_LIST_INVALID",
 	"Invalid response for series list.",
@@ -182,14 +179,8 @@ export const ADMIN_WALLET_INFO_FAILED = defineError(
 	"ADMIN_WALLET_INFO_FAILED",
 	"Failed to load admin wallet info.",
 );
-export const ADMIN_CLAIM_FAILED = defineError(
-	"ADMIN_CLAIM_FAILED",
-	"Claim failed.",
-);
-export const ADMIN_CLAIM_ALL_FAILED = defineError(
-	"ADMIN_CLAIM_ALL_FAILED",
-	"Claim all failed.",
-);
+export const ADMIN_CLAIM_FAILED = defineError("ADMIN_CLAIM_FAILED", "Claim failed.");
+export const ADMIN_CLAIM_ALL_FAILED = defineError("ADMIN_CLAIM_ALL_FAILED", "Claim all failed.");
 
 // ── Trade testing (admin stress tools) ────────────────────────────────────
 
@@ -262,10 +253,7 @@ export const ADMIN_OPERATION_FAILED = defineError(
  * Map admin HTTP status (+ optional server detail for logs) to catalog copy.
  * Never return raw response bodies to the UI.
  */
-export function formatAdminHttpError(
-	status: number,
-	serverDetail?: string | null,
-): string {
+export function formatAdminHttpError(status: number, serverDetail?: string | null): string {
 	const detail = (serverDetail ?? "").trim();
 	if (detail.length > 0) {
 		console.error("[admin] HTTP error", { status, detail: detail.slice(0, 500) });

@@ -1,11 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import {
-	teamService,
-	type TeamRecord,
-	type UpdateTeamPayload,
-} from "@/services/api/teamService";
-import "./TeamsAdmin.scss";
+import { teamService, type TeamRecord, type UpdateTeamPayload } from "@/services/api/teamService";
+import "./scss/TeamsAdmin.scss";
 import {
 	adminErrorMessage,
 	formatAdminErrorForUser,
@@ -51,9 +47,7 @@ function buildEditableForm(team: TeamRecord): EditableTeamForm {
 
 export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 	const { getAccessToken } = usePrivy();
-	const [form, setForm] = useState<EditableTeamForm>(() =>
-		buildEditableForm(team)
-	);
+	const [form, setForm] = useState<EditableTeamForm>(() => buildEditableForm(team));
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
@@ -76,7 +70,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 		<T extends keyof EditableTeamForm>(key: T, value: EditableTeamForm[T]) => {
 			setForm((prev) => ({ ...prev, [key]: value }));
 		},
-		[]
+		[],
 	);
 
 	const handleReset = useCallback(() => {
@@ -90,10 +84,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 		setError(null);
 		setSuccess(null);
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: null;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : null;
 			if (typeof token !== "string" || token.length === 0) {
 				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
@@ -135,13 +126,11 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 			}
 			const trimmedSecondary = form.secondaryColor.trim();
 			if ((team.secondaryColor ?? "") !== trimmedSecondary) {
-				payload.secondaryColor =
-					trimmedSecondary.length === 0 ? null : trimmedSecondary;
+				payload.secondaryColor = trimmedSecondary.length === 0 ? null : trimmedSecondary;
 			}
 			const trimmedBackground = form.backgroundUrl.trim();
 			if ((team.backgroundUrl ?? "") !== trimmedBackground) {
-				payload.backgroundUrl =
-					trimmedBackground.length === 0 ? null : trimmedBackground;
+				payload.backgroundUrl = trimmedBackground.length === 0 ? null : trimmedBackground;
 			}
 			const trimmedLogo = form.logoUrl.trim();
 			if ((team.logoUrl ?? "") !== trimmedLogo) {
@@ -175,11 +164,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 			<div className="teams-admin__header">
 				<h2 className="teams-admin__title">Edit Team</h2>
 				<div className="teams-admin__header-actions">
-					<button
-						type="button"
-						onClick={onBack}
-						className="teams-admin__back-button"
-					>
+					<button type="button" onClick={onBack} className="teams-admin__back-button">
 						Back
 					</button>
 				</div>
@@ -189,9 +174,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 					<span>Display Name</span>
 					<input
 						value={form.displayName}
-						onChange={(event) =>
-							updateField("displayName", event.target.value)
-						}
+						onChange={(event) => updateField("displayName", event.target.value)}
 						className="teams-admin__input teams-admin__input--wide"
 					/>
 				</label>
@@ -207,9 +190,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 					<span>Short Code</span>
 					<input
 						value={form.shortCode}
-						onChange={(event) =>
-							updateField("shortCode", event.target.value)
-						}
+						onChange={(event) => updateField("shortCode", event.target.value)}
 						className="teams-admin__input"
 					/>
 				</label>
@@ -226,9 +207,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 					<span>Primary Color</span>
 					<input
 						value={form.primaryColor}
-						onChange={(event) =>
-							updateField("primaryColor", event.target.value)
-						}
+						onChange={(event) => updateField("primaryColor", event.target.value)}
 						className="teams-admin__input"
 						placeholder="#000000"
 					/>
@@ -237,9 +216,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 					<span>Secondary Color</span>
 					<input
 						value={form.secondaryColor}
-						onChange={(event) =>
-							updateField("secondaryColor", event.target.value)
-						}
+						onChange={(event) => updateField("secondaryColor", event.target.value)}
 						className="teams-admin__input"
 						placeholder="#ffffff"
 					/>
@@ -248,9 +225,7 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 					<span>Background URL</span>
 					<input
 						value={form.backgroundUrl}
-						onChange={(event) =>
-							updateField("backgroundUrl", event.target.value)
-						}
+						onChange={(event) => updateField("backgroundUrl", event.target.value)}
 						className="teams-admin__input teams-admin__input--wide"
 						placeholder="https://..."
 					/>
@@ -266,16 +241,8 @@ export default function EditTeam({ team, onBack, onSaved }: EditTeamProps) {
 				</label>
 			</div>
 
-			{error && (
-				<div className="teams-admin__status teams-admin__status--error">
-					{error}
-				</div>
-			)}
-			{success && (
-				<div className="teams-admin__status teams-admin__status--success">
-					{success}
-				</div>
-			)}
+			{error && <div className="teams-admin__status teams-admin__status--error">{error}</div>}
+			{success && <div className="teams-admin__status teams-admin__status--success">{success}</div>}
 
 			<div className="teams-admin__actions-row">
 				<button

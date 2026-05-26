@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
-import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "../Predictions/components/PredictionCard";
 import { LoadingState } from "../Predictions/components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -14,7 +13,6 @@ const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 export default function Home() {
 	const navigate = useNavigate();
-	const { authenticated } = useSignerContext();
 	const [imagesReady, setImagesReady] = useState(false);
 
 	const {
@@ -35,31 +33,26 @@ export default function Home() {
 			.replace(/[^A-Z0-9]+/g, "_")
 			.replace(/^_+|_+$/g, "");
 
-	const { gamingUmbrellas, esportsUmbrellas } = React.useMemo(() => {
+	const { gamingUmbrellas, esportsUmbrellas } = useMemo(() => {
 		// First filter out inactive umbrellas
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			return (umbrella as any).active === true;
 		});
 
 		// Find ESPORTS tag
-		const esportsTag = tags.find(
-			(t) => normalizeTag(t.label) === "ESPORTS"
-		);
+		const esportsTag = tags.find((t) => normalizeTag(t.label) === "ESPORTS");
 
 		const gaming: Umbrella[] = [];
 		const esports: Umbrella[] = [];
 		const now = Date.now();
 
 		activeUmbrellas.forEach((umbrella) => {
-			const children = (umbrella as any).children as
-				| Array<any>
-				| undefined;
+			const children = (umbrella as any).children as Array<any> | undefined;
 			if (!children || children.length === 0) return;
 
 			// Check if any child has the ESPORTS tag
 			const hasEsportsTag = children.some((q) => {
-				const tagIds: string[] | undefined = (q &&
-					(q as any).tagIds) as any;
+				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
 				// MUST have tagIds array (skip questions with legacy tags only)
 				if (!Array.isArray(tagIds) || tagIds.length === 0) {
 					return false;
@@ -91,8 +84,8 @@ export default function Home() {
 			const bEventMs = bEventDate ? bEventDate.getTime() : null;
 
 			// Determine if markets are live
-			const aIsLive = aEventMs !== null && now >= aEventMs && (now - aEventMs) <= LIVE_WINDOW_MS;
-			const bIsLive = bEventMs !== null && now >= bEventMs && (now - bEventMs) <= LIVE_WINDOW_MS;
+			const aIsLive = aEventMs !== null && now >= aEventMs && now - aEventMs <= LIVE_WINDOW_MS;
+			const bIsLive = bEventMs !== null && now >= bEventMs && now - bEventMs <= LIVE_WINDOW_MS;
 
 			// Live markets come first
 			if (aIsLive && !bIsLive) return -1;
@@ -115,23 +108,16 @@ export default function Home() {
 	}, [umbrellas, tags]);
 
 	// Get total counts for "View all" links
-	const gamingCount = React.useMemo(() => {
-		const activeUmbrellas = umbrellas.filter(
-			(umbrella) => (umbrella as any).active === true
-		);
-		const esportsTag = tags.find(
-			(t) => normalizeTag(t.label) === "ESPORTS"
-		);
+	const gamingCount = useMemo(() => {
+		const activeUmbrellas = umbrellas.filter((umbrella) => (umbrella as any).active === true);
+		const esportsTag = tags.find((t) => normalizeTag(t.label) === "ESPORTS");
 
 		return activeUmbrellas.filter((umbrella) => {
-			const children = (umbrella as any).children as
-				| Array<any>
-				| undefined;
+			const children = (umbrella as any).children as Array<any> | undefined;
 			if (!children || children.length === 0) return false;
 
 			const hasEsportsTag = children.some((q) => {
-				const tagIds: string[] | undefined = (q &&
-					(q as any).tagIds) as any;
+				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
 				if (!Array.isArray(tagIds) || tagIds.length === 0) {
 					return false;
 				}
@@ -142,23 +128,16 @@ export default function Home() {
 		}).length;
 	}, [umbrellas, tags]);
 
-	const esportsCount = React.useMemo(() => {
-		const activeUmbrellas = umbrellas.filter(
-			(umbrella) => (umbrella as any).active === true
-		);
-		const esportsTag = tags.find(
-			(t) => normalizeTag(t.label) === "ESPORTS"
-		);
+	const esportsCount = useMemo(() => {
+		const activeUmbrellas = umbrellas.filter((umbrella) => (umbrella as any).active === true);
+		const esportsTag = tags.find((t) => normalizeTag(t.label) === "ESPORTS");
 
 		return activeUmbrellas.filter((umbrella) => {
-			const children = (umbrella as any).children as
-				| Array<any>
-				| undefined;
+			const children = (umbrella as any).children as Array<any> | undefined;
 			if (!children || children.length === 0) return false;
 
 			const hasEsportsTag = children.some((q) => {
-				const tagIds: string[] | undefined = (q &&
-					(q as any).tagIds) as any;
+				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
 				if (!Array.isArray(tagIds) || tagIds.length === 0) {
 					return false;
 				}
@@ -175,17 +154,11 @@ export default function Home() {
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
-	const navigateToSingleMarket = (
-		umbrella: Umbrella,
-		position: "yes" | "no"
-	) => {
+	const navigateToSingleMarket = (umbrella: Umbrella, position: "yes" | "no") => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
 		const question = singleMarketQuestions[umbrella._id];
 		if (question) {
-			localStorage.setItem(
-				"currentPredictionMarket",
-				JSON.stringify(question)
-			);
+			localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 			localStorage.setItem("activePosition", position);
 		}
 		navigate(`/predictions/umbrella/${umbrella._id}`);
@@ -194,18 +167,14 @@ export default function Home() {
 	const navigateToMultiMarket = (
 		umbrella: Umbrella,
 		question: PredictionMarket,
-		position: "yes" | "no"
+		position: "yes" | "no",
 	) => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		localStorage.setItem(
-			"currentPredictionMarket",
-			JSON.stringify(question)
-		);
+		localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 		localStorage.setItem("activePosition", position);
 
 		// Store the selected market ID so it becomes the active market on the trading page
-		const marketId =
-			question._id || question.questionId || question.marketId;
+		const marketId = question._id || question.questionId || question.marketId;
 		if (marketId) {
 			localStorage.setItem("selectedMarketId", marketId);
 		}
@@ -217,10 +186,7 @@ export default function Home() {
 	useEffect(() => {
 		if (loading) return;
 
-		const allDisplayedUmbrellas = [
-			...gamingUmbrellas,
-			...esportsUmbrellas,
-		];
+		const allDisplayedUmbrellas = [...gamingUmbrellas, ...esportsUmbrellas];
 
 		if (allDisplayedUmbrellas.length === 0) {
 			setImagesReady(true);
@@ -228,9 +194,7 @@ export default function Home() {
 		}
 
 		// Only preload if umbrella has an explicit image URL set
-		const imageUrls = allDisplayedUmbrellas
-			.map((u) => u.image)
-			.filter(Boolean);
+		const imageUrls = allDisplayedUmbrellas.map((u) => u.image).filter(Boolean);
 
 		if (imageUrls.length === 0) {
 			setImagesReady(true);
@@ -266,10 +230,9 @@ export default function Home() {
 		return () => clearTimeout(timeout);
 	}, [loading, gamingUmbrellas, esportsUmbrellas]);
 
-	const { subscribePandaMatchId, unsubscribePandaMatchId } =
-		useVenuePandaSubscription();
+	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
 
-	const homeDisplayedPandaIdsKey = React.useMemo(() => {
+	const homeDisplayedPandaIdsKey = useMemo(() => {
 		const ids = new Set<string>();
 		for (const u of [...gamingUmbrellas, ...esportsUmbrellas]) {
 			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
@@ -300,10 +263,7 @@ export default function Home() {
 			{/* Gaming Section */}
 			<div className="home-section">
 				<div className="home-section-header">
-					<h2
-						className="home-section-title"
-						onClick={() => navigate("/predictions/games")}
-					>
+					<h2 className="home-section-title" onClick={() => navigate("/predictions/games")}>
 						Gaming
 						<svg
 							className="home-section-arrow"
@@ -340,17 +300,12 @@ export default function Home() {
 								singleMarketQuestions={singleMarketQuestions}
 								multiMarketData={multiMarketData}
 								onNavigateToUmbrella={navigateToUmbrella}
-								onNavigateToSingleMarket={
-									navigateToSingleMarket
-								}
+								onNavigateToSingleMarket={navigateToSingleMarket}
 								onNavigateToMultiMarket={navigateToMultiMarket}
 							/>
 						))}
 						{/* View All Card - Only visible on mobile */}
-						<div
-							className="view-all-card"
-							onClick={() => navigate("/predictions/games")}
-						>
+						<div className="view-all-card" onClick={() => navigate("/predictions/games")}>
 							<div className="view-all-card-content">
 								<svg
 									className="view-all-card-icon"
@@ -368,12 +323,8 @@ export default function Home() {
 										strokeLinejoin="round"
 									/>
 								</svg>
-								<h3 className="view-all-card-title">
-									View All Gaming
-								</h3>
-								<p className="view-all-card-count">
-									{gamingCount} markets
-								</p>
+								<h3 className="view-all-card-title">View All Gaming</h3>
+								<p className="view-all-card-count">{gamingCount} markets</p>
 							</div>
 						</div>
 					</div>
@@ -387,10 +338,7 @@ export default function Home() {
 			{/* Esports Section */}
 			<div className="home-section">
 				<div className="home-section-header">
-					<h2
-						className="home-section-title"
-						onClick={() => navigate("/predictions/esports")}
-					>
+					<h2 className="home-section-title" onClick={() => navigate("/predictions/esports")}>
 						Esports
 						<svg
 							className="home-section-arrow"
@@ -427,17 +375,12 @@ export default function Home() {
 								singleMarketQuestions={singleMarketQuestions}
 								multiMarketData={multiMarketData}
 								onNavigateToUmbrella={navigateToUmbrella}
-								onNavigateToSingleMarket={
-									navigateToSingleMarket
-								}
+								onNavigateToSingleMarket={navigateToSingleMarket}
 								onNavigateToMultiMarket={navigateToMultiMarket}
 							/>
 						))}
 						{/* View All Card - Only visible on mobile */}
-						<div
-							className="view-all-card"
-							onClick={() => navigate("/predictions/esports")}
-						>
+						<div className="view-all-card" onClick={() => navigate("/predictions/esports")}>
 							<div className="view-all-card-content">
 								<svg
 									className="view-all-card-icon"
@@ -455,12 +398,8 @@ export default function Home() {
 										strokeLinejoin="round"
 									/>
 								</svg>
-								<h3 className="view-all-card-title">
-									View All Esports
-								</h3>
-								<p className="view-all-card-count">
-									{esportsCount} markets
-								</p>
+								<h3 className="view-all-card-title">View All Esports</h3>
+								<p className="view-all-card-count">{esportsCount} markets</p>
 							</div>
 						</div>
 					</div>
@@ -473,4 +412,3 @@ export default function Home() {
 		</div>
 	);
 }
-

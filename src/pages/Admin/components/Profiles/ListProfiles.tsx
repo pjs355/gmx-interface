@@ -5,8 +5,8 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { getUSDCAddress } from "@/config/addresses";
 import { DEFAULT_RPC_URL } from "@/config/rpc";
 import { usePredictionData } from "@/context/PredictionDataContext";
-import { fetchNonZeroCtfBalancesRpc } from "@/helpers/fetchNonZeroCtfBalancesRpc";
-import { fromMicroUnits } from "@/helpers/ctfMicroUnits";
+import { fetchNonZeroCtfBalancesRpc } from "@/features/trading/chain/fetchNonZeroCtfBalancesRpc";
+import { fromMicroUnits } from "@/features/trading/chain/ctfMicroUnits";
 import AccountHealthChecker, {
 	HealthStatusIndicator,
 	type AccountHealthResult,
@@ -63,7 +63,7 @@ type SortDirection = "asc" | "desc";
 function getSmartWalletAddress(profile: Profile): string | null {
 	// First try linked_accounts
 	const linkedSmartWallet = profile.linked_accounts?.find(
-		(acc: any) => acc.type === "smart_wallet"
+		(acc: any) => acc.type === "smart_wallet",
 	);
 	if (linkedSmartWallet?.address) {
 		return linkedSmartWallet.address;
@@ -84,11 +84,7 @@ function getSmartWalletAddress(profile: Profile): string | null {
 
 export default function ListProfiles({ onView }: ListProfilesProps) {
 	const { getAccessToken } = usePrivy();
-	const {
-		umbrellas,
-		getAllQuestionsForUmbrella,
-		resolvedMarketsByUmbrella,
-	} = usePredictionData();
+	const { umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella } = usePredictionData();
 	const [profiles, setProfiles] = useState<Profile[]>([]);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
@@ -115,7 +111,9 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 			}
 		}
 		fetchToken();
-		return () => { mounted = false; };
+		return () => {
+			mounted = false;
+		};
 	}, [getAccessToken]);
 
 	// Callback for when health check completes
@@ -125,7 +123,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 
 	const knownCtfTokenIds = useMemo(() => {
 		const ids: string[] = [];
-		umbrellas.forEach(u => {
+		umbrellas.forEach((u) => {
 			const qs = getAllQuestionsForUmbrella(u._id) || [];
 			qs.forEach((market: any) => {
 				if (market?.yesTokenId) ids.push(String(market.yesTokenId));
@@ -148,10 +146,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 			setLoading(true);
 			setError(null);
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
+				const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 				if (!token) {
 					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
@@ -159,9 +154,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 				const resp = await fetch(`${base}/admin/profiles`, {
 					headers: { Authorization: `Bearer ${token}` },
 				});
-				const json = (await resp
-					.json()
-					.catch(() => ({} as any))) as ProfilesApiResponse;
+				const json = (await resp.json().catch(() => ({}) as any)) as ProfilesApiResponse;
 				if (!resp.ok) {
 					throw new Error(formatAdminHttpError(resp.status, json?.error));
 				}
@@ -175,7 +168,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 					} else if (json.data) {
 						profilesData = [json.data];
 					}
-					
+
 					// Debug log to see what data we're getting
 					console.log("[ListProfiles] Profiles fetched:", profilesData.length);
 					if (profilesData.length > 0) {
@@ -187,7 +180,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 							linked_accounts: profilesData[0].linked_accounts,
 						});
 					}
-					
+
 					setProfiles(profilesData);
 				}
 			} catch (err: unknown) {
@@ -217,7 +210,13 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 				}
 			});
 
-			console.log("[ListProfiles] Found smart wallets:", smartWallets.length, "out of", profiles.length, "profiles");
+			console.log(
+				"[ListProfiles] Found smart wallets:",
+				smartWallets.length,
+				"out of",
+				profiles.length,
+				"profiles",
+			);
 
 			if (smartWallets.length === 0) {
 				if (mounted) {
@@ -260,7 +259,11 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 								const usdcBalanceNum = Number.parseFloat(formatUnits(rawUsdc, usdcDecimals));
 								let portfolioEstimate = 0;
 								if (knownCtfTokenIds.length > 0) {
-									const nonzero = await fetchNonZeroCtfBalancesRpc(provider, address, knownCtfTokenIds);
+									const nonzero = await fetchNonZeroCtfBalancesRpc(
+										provider,
+										address,
+										knownCtfTokenIds,
+									);
 									portfolioEstimate = nonzero.reduce((acc, row) => {
 										return acc + Number(fromMicroUnits(row.balance)) * 0.5;
 									}, 0);
@@ -332,7 +335,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 	const sortedProfiles = useMemo(() => {
 		const sorted = [...enrichedProfiles].sort((a, b) => {
 			let comparison = 0;
-			
+
 			switch (sortField) {
 				case "profileActivity":
 					const aTime = a.profileActivityDate?.getTime() || 0;
@@ -346,10 +349,10 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 					comparison = a.usdcBalance - b.usdcBalance;
 					break;
 			}
-			
+
 			return sortDirection === "desc" ? -comparison : comparison;
 		});
-		
+
 		return sorted;
 	}, [enrichedProfiles, sortField, sortDirection]);
 
@@ -368,19 +371,11 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 	};
 
 	if (loading) {
-		return (
-			<div style={{ padding: 24, color: "white" }}>
-				Loading profiles...
-			</div>
-		);
+		return <div style={{ padding: 24, color: "white" }}>Loading profiles...</div>;
 	}
 
 	if (error) {
-		return (
-			<div style={{ padding: 24, color: "red" }}>
-				Error: {error}
-			</div>
-		);
+		return <div style={{ padding: 24, color: "red" }}>Error: {error}</div>;
 	}
 
 	return (
@@ -397,9 +392,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 			)}
 
 			{onChainLoading && (
-				<div style={{ marginBottom: 16, color: "#888" }}>
-					Loading on-chain balances...
-				</div>
+				<div style={{ marginBottom: 16, color: "#888" }}>Loading on-chain balances...</div>
 			)}
 			{profiles.length === 0 ? (
 				<div>No profiles found.</div>
@@ -486,10 +479,10 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 											borderBottom: "1px solid #333",
 										}}
 									>
-										<td 
-											style={{ 
-												padding: "12px", 
-												fontFamily: "monospace", 
+										<td
+											style={{
+												padding: "12px",
+												fontFamily: "monospace",
 												fontSize: "12px",
 												wordBreak: "break-all",
 												maxWidth: "320px",
@@ -497,25 +490,21 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 										>
 											{profile.smartWalletAddress || "--"}
 										</td>
+										<td style={{ padding: "12px" }}>{profile.username || "--"}</td>
 										<td style={{ padding: "12px" }}>
-											{profile.username || "--"}
+											{profile.portfolioValue > 0 ? `$${profile.portfolioValue.toFixed(2)}` : "--"}
 										</td>
 										<td style={{ padding: "12px" }}>
-											{profile.portfolioValue > 0
-												? `$${profile.portfolioValue.toFixed(2)}`
-												: "--"}
-										</td>
-										<td style={{ padding: "12px" }}>
-											{profile.usdcBalance > 0
-												? `$${profile.usdcBalance.toFixed(2)}`
-												: "--"}
+											{profile.usdcBalance > 0 ? `$${profile.usdcBalance.toFixed(2)}` : "--"}
 										</td>
 										<td style={{ padding: "12px" }}>
 											{profile.profileActivityDate
 												? profile.profileActivityDate.toLocaleDateString()
 												: "--"}
 										</td>
-										<td style={{ padding: "12px", display: "flex", gap: "8px", alignItems: "center" }}>
+										<td
+											style={{ padding: "12px", display: "flex", gap: "8px", alignItems: "center" }}
+										>
 											<button
 												type="button"
 												onClick={() => {
@@ -543,7 +532,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 															// Use the global spoofAccount function (same as console command)
 															(window as any).spoofAccount(profile.smartWalletAddress);
 															// Navigate to positions page with full reload
-															window.location.assign('/positions');
+															window.location.assign("/positions");
 														}}
 														style={{
 															padding: "6px 12px",

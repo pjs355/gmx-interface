@@ -8,13 +8,7 @@
  * five tradeable venues stay in lockstep across the codebase.
  */
 
-export const ALL_VENUES = [
-	"levelup",
-	"polymarket",
-	"dflow",
-	"predictfun",
-	"limitless",
-] as const;
+export const ALL_VENUES = ["levelup", "polymarket", "dflow", "predictfun", "limitless"] as const;
 
 export type VenueId = (typeof ALL_VENUES)[number];
 

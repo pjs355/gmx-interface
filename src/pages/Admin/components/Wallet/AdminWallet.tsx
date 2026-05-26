@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Contract, JsonRpcProvider, formatUnits } from "ethers";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import { getCTFAddress, getUSDCAddress } from "@/config/addresses";
+import { getUSDCAddress } from "@/config/addresses";
 import { DEFAULT_RPC_URL } from "@/config/rpc";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
-import { getListingYesNoPricesForUmbrella } from "@/helpers/predictionUtils";
-import { fetchNonZeroCtfBalancesRpc } from "@/helpers/fetchNonZeroCtfBalancesRpc";
-import { fromMicroUnits } from "@/helpers/ctfMicroUnits";
-import { fetchUserOrders, type ProcessedOrder, getFinalAmount } from "@/services/api/simplifiedOrderService";
+import { getListingYesNoPricesForUmbrella } from "@/features/markets/listing/umbrellaListingOdds";
+import { fetchNonZeroCtfBalancesRpc } from "@/features/trading/chain/fetchNonZeroCtfBalancesRpc";
+import { fromMicroUnits } from "@/features/trading/chain/ctfMicroUnits";
+import { fetchUserOrders, type ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import ScrollableTable from "@/components/ScrollableTable/ScrollableTable";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
@@ -18,7 +18,7 @@ import {
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
-} from "@/helpers/gameLogoResolver";
+} from "@/features/markets/assets/gameLogoResolver";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import {
@@ -60,15 +60,13 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
-	const serverImage =
-		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
+	const serverImage = umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
 	const tagImage = getTagImageFromUmbrella(umbrella, tags);
 	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 	const gameLogo = resolveLogoByTags(tagLabels);
 	const fallbackLogo = gameLogo || gtaIcon;
 	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
-	const initialSrc =
-		cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
+	const initialSrc = cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {
@@ -102,11 +100,7 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 
 export default function AdminWallet() {
 	const { getAccessToken } = usePrivy();
-	const {
-		umbrellas,
-		getAllQuestionsForUmbrella,
-		resolvedMarketsByUmbrella,
-	} = usePredictionData();
+	const { umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella } = usePredictionData();
 	const { appState } = useOddsMonitor();
 
 	// Wallet info state
@@ -154,8 +148,7 @@ export default function AdminWallet() {
 
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => ({}));
-				const detail =
-					typeof errorData?.error === "string" ? errorData.error : undefined;
+				const detail = typeof errorData?.error === "string" ? errorData.error : undefined;
 				throw new Error(formatAdminHttpError(response.status, detail));
 			}
 
@@ -163,8 +156,7 @@ export default function AdminWallet() {
 			if (data.success && data.wallet) {
 				setWalletInfo(data.wallet);
 			} else {
-				const detail =
-					typeof data?.error === "string" ? data.error : undefined;
+				const detail = typeof data?.error === "string" ? data.error : undefined;
 				if (detail) {
 					console.error("[admin] wallet info", detail);
 				}
@@ -179,137 +171,146 @@ export default function AdminWallet() {
 	}, [getAccessToken]);
 
 	// Fetch USDC balance via RPC
-	const fetchUsdcBalance = useCallback(async (address: string) => {
-		try {
-			const provider = getProvider();
-			const erc20 = new Contract(
-				getUSDCAddress(),
-				[
-					"function balanceOf(address account) view returns (uint256)",
-					"function decimals() view returns (uint8)",
-				],
-				provider
-			);
+	const fetchUsdcBalance = useCallback(
+		async (address: string) => {
+			try {
+				const provider = getProvider();
+				const erc20 = new Contract(
+					getUSDCAddress(),
+					[
+						"function balanceOf(address account) view returns (uint256)",
+						"function decimals() view returns (uint8)",
+					],
+					provider,
+				);
 
-			const [usdcRaw, usdcDecimals] = await Promise.all([
-				erc20.balanceOf(address),
-				erc20.decimals(),
-			]);
+				const [usdcRaw, usdcDecimals] = await Promise.all([
+					erc20.balanceOf(address),
+					erc20.decimals(),
+				]);
 
-			setUsdcBalance(formatUnits(usdcRaw, usdcDecimals));
-		} catch (error) {
-			console.error("Error fetching USDC balance:", error);
-			setUsdcBalance("0");
-		}
-	}, [getProvider]);
-
-	const fetchTokenBalances = useCallback(async (address: string) => {
-		try {
-			const provider = getProvider();
-
-			const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
-			umbrellas.forEach((u) => {
-				const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
-				marketsForUmb.forEach((market) => {
-					const marketId = market?._id;
-					if (marketId && market?.yesTokenId && market?.noTokenId) {
-						marketDataMap.set(marketId, {
-							yesTokenId: market.yesTokenId,
-							noTokenId: market.noTokenId,
-						});
-					}
-				});
-			});
-
-			// Include resolved markets
-			Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
-				resolvedMarkets.forEach((market: any) => {
-					const marketId = market?._id;
-					if (marketId && market?.yesTokenId && market?.noTokenId) {
-						marketDataMap.set(marketId, {
-							yesTokenId: market.yesTokenId,
-							noTokenId: market.noTokenId,
-						});
-					}
-				});
-			});
-
-			// Create reverse lookup: tokenId -> { marketId, isYes }
-			const tokenToMarket = new Map<string, { marketId: string; isYes: boolean }>();
-			for (const [marketId, { yesTokenId, noTokenId }] of marketDataMap.entries()) {
-				tokenToMarket.set(yesTokenId, { marketId, isYes: true });
-				tokenToMarket.set(noTokenId, { marketId, isYes: false });
+				setUsdcBalance(formatUnits(usdcRaw, usdcDecimals));
+			} catch (error) {
+				console.error("Error fetching USDC balance:", error);
+				setUsdcBalance("0");
 			}
+		},
+		[getProvider],
+	);
 
-			const result = new Map<string, TokenBalance>();
+	const fetchTokenBalances = useCallback(
+		async (address: string) => {
+			try {
+				const provider = getProvider();
 
-			for (const [marketId, { yesTokenId, noTokenId }] of marketDataMap.entries()) {
-				result.set(marketId, {
-					yesTokenId,
-					noTokenId,
-					yesBalance: "0.000000",
-					noBalance: "0.000000",
+				const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
+				umbrellas.forEach((u) => {
+					const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
+					marketsForUmb.forEach((market) => {
+						const marketId = market?._id;
+						if (marketId && market?.yesTokenId && market?.noTokenId) {
+							marketDataMap.set(marketId, {
+								yesTokenId: market.yesTokenId,
+								noTokenId: market.noTokenId,
+							});
+						}
+					});
 				});
-			}
 
-			const ids: string[] = [];
-			tokenToMarket.forEach((_, id) => ids.push(id));
-			const nonzero = await fetchNonZeroCtfBalancesRpc(provider, address, ids);
-			for (const row of nonzero) {
-				const mapping = tokenToMarket.get(row.tokenId);
-				const existing = mapping ? result.get(mapping.marketId) : undefined;
-				if (!mapping || !existing) continue;
-				const balanceFormatted = fromMicroUnits(row.balance);
-				if (mapping.isYes) {
-					existing.yesBalance = balanceFormatted;
-				} else {
-					existing.noBalance = balanceFormatted;
+				// Include resolved markets
+				Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
+					resolvedMarkets.forEach((market: any) => {
+						const marketId = market?._id;
+						if (marketId && market?.yesTokenId && market?.noTokenId) {
+							marketDataMap.set(marketId, {
+								yesTokenId: market.yesTokenId,
+								noTokenId: market.noTokenId,
+							});
+						}
+					});
+				});
+
+				// Create reverse lookup: tokenId -> { marketId, isYes }
+				const tokenToMarket = new Map<string, { marketId: string; isYes: boolean }>();
+				for (const [marketId, { yesTokenId, noTokenId }] of marketDataMap.entries()) {
+					tokenToMarket.set(yesTokenId, { marketId, isYes: true });
+					tokenToMarket.set(noTokenId, { marketId, isYes: false });
 				}
-			}
 
-			setTokenBalances(result);
-		} catch (err) {
-			console.error("error", err);
-		}
-	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, getProvider]);
+				const result = new Map<string, TokenBalance>();
+
+				for (const [marketId, { yesTokenId, noTokenId }] of marketDataMap.entries()) {
+					result.set(marketId, {
+						yesTokenId,
+						noTokenId,
+						yesBalance: "0.000000",
+						noBalance: "0.000000",
+					});
+				}
+
+				const ids: string[] = [];
+				tokenToMarket.forEach((_, id) => ids.push(id));
+				const nonzero = await fetchNonZeroCtfBalancesRpc(provider, address, ids);
+				for (const row of nonzero) {
+					const mapping = tokenToMarket.get(row.tokenId);
+					const existing = mapping ? result.get(mapping.marketId) : undefined;
+					if (!mapping || !existing) continue;
+					const balanceFormatted = fromMicroUnits(row.balance);
+					if (mapping.isYes) {
+						existing.yesBalance = balanceFormatted;
+					} else {
+						existing.noBalance = balanceFormatted;
+					}
+				}
+
+				setTokenBalances(result);
+			} catch (err) {
+				console.error("error", err);
+			}
+		},
+		[umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella, getProvider],
+	);
 
 	// Fetch user orders
-	const fetchOrders = useCallback(async (address: string) => {
-		try {
-			// Build market data map
-			const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
-			umbrellas.forEach((u) => {
-				const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
-				marketsForUmb.forEach((market) => {
-					const marketId = market?._id;
-					if (marketId && market?.yesTokenId && market?.noTokenId) {
-						marketDataMap.set(marketId, {
-							yesTokenId: market.yesTokenId,
-							noTokenId: market.noTokenId,
-						});
-					}
+	const fetchOrders = useCallback(
+		async (address: string) => {
+			try {
+				// Build market data map
+				const marketDataMap = new Map<string, { yesTokenId: string; noTokenId: string }>();
+				umbrellas.forEach((u) => {
+					const marketsForUmb = getAllQuestionsForUmbrella(u._id) as any[];
+					marketsForUmb.forEach((market) => {
+						const marketId = market?._id;
+						if (marketId && market?.yesTokenId && market?.noTokenId) {
+							marketDataMap.set(marketId, {
+								yesTokenId: market.yesTokenId,
+								noTokenId: market.noTokenId,
+							});
+						}
+					});
 				});
-			});
 
-			// Include resolved markets
-			Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
-				resolvedMarkets.forEach((market: any) => {
-					const marketId = market?._id;
-					if (marketId && market?.yesTokenId && market?.noTokenId) {
-						marketDataMap.set(marketId, {
-							yesTokenId: market.yesTokenId,
-							noTokenId: market.noTokenId,
-						});
-					}
+				// Include resolved markets
+				Object.values(resolvedMarketsByUmbrella).forEach((resolvedMarkets) => {
+					resolvedMarkets.forEach((market: any) => {
+						const marketId = market?._id;
+						if (marketId && market?.yesTokenId && market?.noTokenId) {
+							marketDataMap.set(marketId, {
+								yesTokenId: market.yesTokenId,
+								noTokenId: market.noTokenId,
+							});
+						}
+					});
 				});
-			});
 
-			const userOrders = await fetchUserOrders(address, marketDataMap);
-			setOrders(userOrders);
-		} catch (error) {
-			console.error("Error fetching orders:", error);
-		}
-	}, [umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella]);
+				const userOrders = await fetchUserOrders(address, marketDataMap);
+				setOrders(userOrders);
+			} catch (error) {
+				console.error("Error fetching orders:", error);
+			}
+		},
+		[umbrellas, getAllQuestionsForUmbrella, resolvedMarketsByUmbrella],
+	);
 
 	// Load all data when wallet info is available
 	const loadAllData = useCallback(async () => {
@@ -331,68 +332,68 @@ export default function AdminWallet() {
 	}, [walletInfo?.address, fetchUsdcBalance, fetchTokenBalances, fetchOrders]);
 
 	// Claim winnings via backend API
-	const handleClaim = useCallback(async (market: PredictionMarket, resolvedOutcome: "yes" | "no") => {
-		const marketId = market._id || market.questionId || market.marketId;
-		if (!marketId) return;
+	const handleClaim = useCallback(
+		async (market: PredictionMarket, resolvedOutcome: "yes" | "no") => {
+			const marketId = market._id || market.questionId || market.marketId;
+			if (!marketId) return;
 
-		setClaimingMarkets((prev) => new Set([...prev, marketId]));
-		setClaimErrors((prev) => {
-			const next = new Map(prev);
-			next.delete(marketId);
-			return next;
-		});
-
-		try {
-			const token = typeof getAccessToken === "function" ? await getAccessToken() : null;
-			const base = getPredictionApiBaseUrl();
-
-			const response = await fetch(`${base}/admin/seeder-wallet/claim`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					...(token ? { Authorization: `Bearer ${token}` } : {}),
-				},
-				body: JSON.stringify({
-					conditionId: market.conditionId,
-					outcome: resolvedOutcome,
-				}),
-			});
-
-			const data = await response.json().catch(() => ({}));
-
-			if (!response.ok || !data?.success) {
-				const detail =
-					typeof data?.error === "string" ? data.error : undefined;
-				throw new Error(
-					formatAdminHttpError(response.status, detail),
-				);
-			}
-
-			// Mark as claimed
-			setClaimedMarkets((prev) => new Set([...prev, marketId]));
-
-			// Refresh balances
-			if (walletInfo?.address) {
-				await Promise.all([
-					fetchUsdcBalance(walletInfo.address),
-					fetchTokenBalances(walletInfo.address),
-				]);
-			}
-		} catch (err) {
-			console.error("error", err);
+			setClaimingMarkets((prev) => new Set([...prev, marketId]));
 			setClaimErrors((prev) => {
 				const next = new Map(prev);
-				next.set(marketId, formatErrorForUser(err));
-				return next;
-			});
-		} finally {
-			setClaimingMarkets((prev) => {
-				const next = new Set(prev);
 				next.delete(marketId);
 				return next;
 			});
-		}
-	}, [getAccessToken, walletInfo?.address, fetchUsdcBalance, fetchTokenBalances]);
+
+			try {
+				const token = typeof getAccessToken === "function" ? await getAccessToken() : null;
+				const base = getPredictionApiBaseUrl();
+
+				const response = await fetch(`${base}/admin/seeder-wallet/claim`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...(token ? { Authorization: `Bearer ${token}` } : {}),
+					},
+					body: JSON.stringify({
+						conditionId: market.conditionId,
+						outcome: resolvedOutcome,
+					}),
+				});
+
+				const data = await response.json().catch(() => ({}));
+
+				if (!response.ok || !data?.success) {
+					const detail = typeof data?.error === "string" ? data.error : undefined;
+					throw new Error(formatAdminHttpError(response.status, detail));
+				}
+
+				// Mark as claimed
+				setClaimedMarkets((prev) => new Set([...prev, marketId]));
+
+				// Refresh balances
+				if (walletInfo?.address) {
+					await Promise.all([
+						fetchUsdcBalance(walletInfo.address),
+						fetchTokenBalances(walletInfo.address),
+					]);
+				}
+			} catch (err) {
+				console.error("error", err);
+				setClaimErrors((prev) => {
+					const next = new Map(prev);
+					next.set(marketId, formatErrorForUser(err));
+					return next;
+				});
+			} finally {
+				setClaimingMarkets((prev) => {
+					const next = new Set(prev);
+					next.delete(marketId);
+					return next;
+				});
+			}
+		},
+		[getAccessToken, walletInfo?.address, fetchUsdcBalance, fetchTokenBalances],
+	);
 
 	// Claim ALL winnings
 	const handleClaimAll = useCallback(async () => {
@@ -411,11 +412,8 @@ export default function AdminWallet() {
 			const data = await response.json().catch(() => ({}));
 
 			if (!response.ok || !data?.success) {
-				const detail =
-					typeof data?.error === "string" ? data.error : undefined;
-				throw new Error(
-					formatAdminHttpError(response.status, detail),
-				);
+				const detail = typeof data?.error === "string" ? data.error : undefined;
+				throw new Error(formatAdminHttpError(response.status, detail));
 			}
 
 			// Refresh all data
@@ -466,7 +464,13 @@ export default function AdminWallet() {
 				return { umbrella, markets: processedMarkets };
 			})
 			.filter((umbrella) => umbrella.markets.length > 0);
-	}, [walletInfo?.address, umbrellas, getAllQuestionsForUmbrella, tokenBalances, appState?.markets]);
+	}, [
+		walletInfo?.address,
+		umbrellas,
+		getAllQuestionsForUmbrella,
+		tokenBalances,
+		appState?.markets,
+	]);
 
 	// Derive resolved winnings
 	const resolvedUmbrellaPositions: UmbrellaPositions[] = useMemo(() => {
@@ -624,7 +628,15 @@ export default function AdminWallet() {
 					border: "1px solid #334155",
 				}}
 			>
-				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+				<div
+					style={{
+						display: "flex",
+						justifyContent: "space-between",
+						alignItems: "flex-start",
+						flexWrap: "wrap",
+						gap: 16,
+					}}
+				>
 					<div>
 						<div style={{ fontSize: 14, color: "#94a3b8", marginBottom: 4 }}>Seeder Wallet</div>
 						<div style={{ fontSize: 16, fontFamily: "monospace", color: "#e2e8f0" }}>
@@ -687,7 +699,9 @@ export default function AdminWallet() {
 						</div>
 					</div>
 					<div style={{ background: "#0f172a", borderRadius: 8, padding: 16 }}>
-						<div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>Unclaimed Winnings</div>
+						<div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>
+							Unclaimed Winnings
+						</div>
 						<div style={{ fontSize: 24, fontWeight: 700, color: "#f59e0b" }}>
 							{loadingBalances ? "..." : formatCurrency(totalWinnings)}
 						</div>
@@ -731,7 +745,14 @@ export default function AdminWallet() {
 					{/* Winnings Section */}
 					{resolvedUmbrellaPositions.length > 0 && (
 						<div style={{ marginBottom: 32 }}>
-							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+							<div
+								style={{
+									display: "flex",
+									justifyContent: "space-between",
+									alignItems: "center",
+									marginBottom: 16,
+								}}
+							>
 								<h3 style={{ fontSize: 20, fontWeight: 700, color: "#f59e0b", margin: 0 }}>
 									🏆 Unclaimed Winnings
 								</h3>
@@ -817,7 +838,9 @@ export default function AdminWallet() {
 															{outcome.toUpperCase()}
 														</span>
 													</div>
-													<div style={{ textAlign: "center", color: "#fff" }}>{winningShares.toFixed(2)}</div>
+													<div style={{ textAlign: "center", color: "#fff" }}>
+														{winningShares.toFixed(2)}
+													</div>
 													<div style={{ textAlign: "center", color: "#22c55e", fontWeight: 700 }}>
 														{formatCurrency(winningShares)}
 													</div>
@@ -915,10 +938,17 @@ export default function AdminWallet() {
 												<div style={{ color: "#fff" }}>
 													{market.displayName || (market as any).question}
 												</div>
-												<div style={{ textAlign: "center", color: yesBalance > 0 ? "#16a34a" : "#666" }}>
+												<div
+													style={{
+														textAlign: "center",
+														color: yesBalance > 0 ? "#16a34a" : "#666",
+													}}
+												>
 													{yesBalance > 0 ? yesBalance.toFixed(2) : "—"}
 												</div>
-												<div style={{ textAlign: "center", color: noBalance > 0 ? "#ef4444" : "#666" }}>
+												<div
+													style={{ textAlign: "center", color: noBalance > 0 ? "#ef4444" : "#666" }}
+												>
 													{noBalance > 0 ? noBalance.toFixed(2) : "—"}
 												</div>
 												<div style={{ textAlign: "center", color: "#fff" }}>
@@ -1019,7 +1049,7 @@ export default function AdminWallet() {
 													day: "numeric",
 													hour: "2-digit",
 													minute: "2-digit",
-											  })
+												})
 											: "—"}
 									</div>
 								</div>
@@ -1036,4 +1066,3 @@ export default function AdminWallet() {
 		</div>
 	);
 }
-

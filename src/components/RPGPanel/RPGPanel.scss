@@ -312,7 +312,9 @@
 				max-height: 0;
 				overflow: hidden;
 				opacity: 0;
-				transition: max-height 0.3s ease, opacity 0.3s ease;
+				transition:
+					max-height 0.3s ease,
+					opacity 0.3s ease;
 			}
 		}
 
@@ -320,7 +322,9 @@
 			.rpg-panel-content {
 				max-height: 500px; // Enough for content
 				opacity: 1;
-				transition: max-height 0.3s ease, opacity 0.3s ease;
+				transition:
+					max-height 0.3s ease,
+					opacity 0.3s ease;
 			}
 		}
 	}

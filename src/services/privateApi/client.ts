@@ -1,34 +1,35 @@
 import type { Book } from "@predictdotfun/sdk";
 import { getAccountOverviewApiPath } from "@/config/accountOverviewApi";
 import { getPolymarketAccountApiPath } from "@/config/polymarketPrivateApiPath";
-import {
-	getPrivateApiAbsoluteUrl,
-	getPrivateApiRequestUrl,
-} from "@/config/privateApiBase";
-import type { CreateOrderPayload } from "@/trading/venues/predict/trade/predictOrderSubmit";
+import { getPrivateApiRequestUrl } from "@/config/privateApiBase";
+import type { CreateOrderPayload } from "@/features/trading/venues/predict/trade/predictOrderSubmit";
+import type {
+	ChainReadRequest,
+	ChainReadResultFor,
+} from "@/features/trading/chain-reads/chainReadTypes";
 import type {
 	LimitlessEnsureAccountResponse,
 	LimitlessSignedOrderSubmit,
 	LimitlessVerifyAllowanceResult,
-} from "@/trading/venues/limitless/trade/limitlessPrivateApiTypes";
-import type { PredictMarketDetail } from "@/trading/venues/predict/portfolio/predictMarketApi";
+} from "@/features/trading/venues/limitless/trade/limitlessPrivateApiTypes";
+import type { PredictMarketDetail } from "@/features/trading/venues/predict/portfolio/predictMarketApi";
 import {
 	mapPredictPositionRows,
 	type PredictPositionRow,
-} from "@/trading/venues/predict/portfolio/predictPositionsApi";
-import type { PredictOrderRow } from "@/trading/venues/predict/portfolio/predictOrdersApi";
+} from "@/features/trading/venues/predict/portfolio/predictPositionsApi";
+import type { PredictOrderRow } from "@/features/trading/venues/predict/portfolio/predictOrdersApi";
 import {
 	normalizePredictMatchesList,
 	type PredictMatchEventRow,
-} from "@/trading/venues/predict/trade/predictMatchesApi";
+} from "@/features/trading/venues/predict/trade/predictMatchesApi";
 import {
 	normalizePredictActivityList,
 	type PredictActivityEvent,
 	type PredictActivityEventName,
-} from "@/trading/venues/predict/portfolio/predictActivityApi";
+} from "@/features/trading/venues/predict/portfolio/predictActivityApi";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import type { UmbrellaExchangeResolveQuery } from "@/trading/umbrellaVenueResolveKey";
-import type { VenuePosition } from "@/types/trading/venuePosition";
+import type { UmbrellaExchangeResolveQuery } from "@/features/trading/umbrellaVenueResolveKey";
+import type { VenuePosition, PolymarketDataApiPosition } from "@/types/trading/venuePosition";
 import type {
 	AccountOverview,
 	LifiQuoteRequestBody,
@@ -338,16 +339,15 @@ function extractDflowOnchainTradesPayload(payload: unknown): {
 		return { trades: [], cursor: null };
 	}
 	const o = payload as Record<string, unknown>;
-	const raw =
-		Array.isArray(o.trades)
-			? o.trades
-			: Array.isArray(o.results)
-				? o.results
-				: Array.isArray(o.items)
-					? o.items
-					: Array.isArray(o.data)
-						? o.data
-						: [];
+	const raw = Array.isArray(o.trades)
+		? o.trades
+		: Array.isArray(o.results)
+			? o.results
+			: Array.isArray(o.items)
+				? o.items
+				: Array.isArray(o.data)
+					? o.data
+					: [];
 	const trades = raw as DflowOnchainTrade[];
 	const cursorRaw = o.cursor ?? o.nextCursor ?? o.next_cursor;
 	let cursor: string | null = null;
@@ -356,11 +356,7 @@ function extractDflowOnchainTradesPayload(payload: unknown): {
 		o.pagination && typeof o.pagination === "object"
 			? (o.pagination as Record<string, unknown>).cursor
 			: undefined;
-	if (
-		!cursor &&
-		typeof nestedPag === "string" &&
-		nestedPag.trim()
-	) {
+	if (!cursor && typeof nestedPag === "string" && nestedPag.trim()) {
 		cursor = nestedPag.trim();
 	}
 	return { trades, cursor };
@@ -374,8 +370,7 @@ function dflowOrderParamsToQuery(params: DflowOrderParams): URLSearchParams {
 	if (params.slippageBps) q.set("slippageBps", params.slippageBps);
 	if (params.predictionMarketSlippageBps)
 		q.set("predictionMarketSlippageBps", params.predictionMarketSlippageBps);
-	if (params.destinationWallet)
-		q.set("destinationWallet", params.destinationWallet);
+	if (params.destinationWallet) q.set("destinationWallet", params.destinationWallet);
 	if (params.prioritizationFeeLamports)
 		q.set("prioritizationFeeLamports", params.prioritizationFeeLamports);
 	if (params.predictionMarketInitPayer)
@@ -407,10 +402,7 @@ function unwrapEnvelope<T>(raw: unknown): T {
 	if (raw && typeof raw === "object" && "data" in raw) {
 		const envelope = raw as Record<string, unknown>;
 		const inner = envelope.data;
-		if (
-			(inner === null || inner === undefined) &&
-			envelope.success === true
-		) {
+		if ((inner === null || inner === undefined) && envelope.success === true) {
 			throw new PrivateApiError(
 				"Private API returned success with null or missing `data` in the envelope.",
 				502,
@@ -432,9 +424,10 @@ export type UmbrellaResolveExchangeKeysPayload = {
  * expect `{ success, data: { byClientKey, umbrellasById? } }` — re-wrap when the
  * payload is already the inner shape.
  */
-function normalizeUmbrellaResolveExchangeKeysResponse(
-	afterReadJson: unknown,
-): { success: boolean; data?: UmbrellaResolveExchangeKeysPayload } {
+function normalizeUmbrellaResolveExchangeKeysResponse(afterReadJson: unknown): {
+	success: boolean;
+	data?: UmbrellaResolveExchangeKeysPayload;
+} {
 	if (!afterReadJson || typeof afterReadJson !== "object") {
 		return { success: false };
 	}
@@ -473,11 +466,7 @@ function normalizeUmbrellaResolveExchangeKeysResponse(
 function isPredictOrderRowShape(x: unknown): x is PredictOrderRow {
 	if (!x || typeof x !== "object") return false;
 	const r = x as Record<string, unknown>;
-	return (
-		typeof r.id === "string" &&
-		r.order != null &&
-		typeof r.order === "object"
-	);
+	return typeof r.id === "string" && r.order != null && typeof r.order === "object";
 }
 
 /** Predict `GET /v1/orders` payloads after optional LevelUp `{ data: … }` unwrap — still may be `{ success, cursor, data: rows }`. */
@@ -542,40 +531,30 @@ function privateApiHttpErrorMessage(body: unknown, status: number): string {
 	}
 	if (typeof body !== "object") return `HTTP ${status}`;
 	const o = body as Record<string, unknown>;
-	const tryStr = (v: unknown) =>
-		typeof v === "string" && v.trim() ? v.trim() : null;
+	const tryStr = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 	const errCode = tryStr(o.error);
 	const errDetail = tryStr(o.detail);
 	if (errCode) {
 		if (errDetail && !errCode.includes(errDetail)) {
-			return appendDflowOrderSubmitDetailMessage(
-				`${errCode}: ${errDetail}`,
-				o,
-			);
+			return appendDflowOrderSubmitDetailMessage(`${errCode}: ${errDetail}`, o);
 		}
 		return appendDflowOrderSubmitDetailMessage(errCode, o);
 	}
-	if (tryStr(o.message))
-		return appendDflowOrderSubmitDetailMessage(tryStr(o.message)!, o);
-	if (tryStr(o.detail))
-		return appendDflowOrderSubmitDetailMessage(tryStr(o.detail)!, o);
+	if (tryStr(o.message)) return appendDflowOrderSubmitDetailMessage(tryStr(o.message)!, o);
+	if (tryStr(o.detail)) return appendDflowOrderSubmitDetailMessage(tryStr(o.detail)!, o);
 	if (Array.isArray(o.message)) {
 		const parts = o.message
 			.filter((x): x is string => typeof x === "string")
 			.map((x) => x.trim())
 			.filter(Boolean);
-		if (parts.length)
-			return appendDflowOrderSubmitDetailMessage(parts.join("; "), o);
+		if (parts.length) return appendDflowOrderSubmitDetailMessage(parts.join("; "), o);
 	}
 	const nested = o.data;
 	if (nested && typeof nested === "object") {
 		const d = nested as Record<string, unknown>;
-		if (tryStr(d.error))
-			return appendDflowOrderSubmitDetailMessage(tryStr(d.error)!, o);
-		if (tryStr(d.message))
-			return appendDflowOrderSubmitDetailMessage(tryStr(d.message)!, o);
-		if (tryStr(d.detail))
-			return appendDflowOrderSubmitDetailMessage(tryStr(d.detail)!, o);
+		if (tryStr(d.error)) return appendDflowOrderSubmitDetailMessage(tryStr(d.error)!, o);
+		if (tryStr(d.message)) return appendDflowOrderSubmitDetailMessage(tryStr(d.message)!, o);
+		if (tryStr(d.detail)) return appendDflowOrderSubmitDetailMessage(tryStr(d.detail)!, o);
 	}
 	try {
 		const s = JSON.stringify(body);
@@ -625,14 +604,8 @@ function pickPredictAuthMessage(unwrapped: unknown): string | null {
 	return null;
 }
 
-export function createPrivateApiClient(
-	getToken: GetToken,
-	getIdentityToken?: GetIdentityToken
-) {
-	async function authorizedFetch(
-		path: string,
-		init: RequestInit = {}
-	): Promise<Response> {
+export function createPrivateApiClient(getToken: GetToken, getIdentityToken?: GetIdentityToken) {
+	async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
 		const token = await getToken();
 		if (!token) {
 			throw new PrivateApiError("Not authenticated", 401, null);
@@ -677,16 +650,53 @@ export function createPrivateApiClient(
 			return readJson<CashSummary>(res);
 		},
 
+		async postChainRead<R extends ChainReadRequest>(request: R): Promise<ChainReadResultFor<R>> {
+			const res = await authorizedFetch("/chain/read", {
+				method: "POST",
+				body: JSON.stringify(request),
+			});
+			return readJson<ChainReadResultFor<R>>(res);
+		},
+
 		async getBaseSmartWalletPendingUsdc(): Promise<BaseSmartWalletPendingUsdc> {
-			const res = await authorizedFetch(
-				"/portfolio/base-smart-wallet-pending-usdc",
-			);
+			const res = await authorizedFetch("/portfolio/base-smart-wallet-pending-usdc");
 			return readJson<BaseSmartWalletPendingUsdc>(res);
 		},
 
 		async getPolymarketAccount(): Promise<PolymarketAccountResponse> {
 			const res = await authorizedFetch(getPolymarketAccountApiPath());
 			return readJson<PolymarketAccountResponse>(res);
+		},
+
+		async getPolymarketPositions(options?: {
+			signal?: AbortSignal;
+		}): Promise<PolymarketDataApiPosition[]> {
+			const res = await authorizedFetch("/api/polymarket/positions", {
+				signal: options?.signal,
+			});
+			return readJson<PolymarketDataApiPosition[]>(res);
+		},
+
+		async getPolymarketActivity(q: {
+			type: "TRADE" | "REDEEM";
+			limit: number;
+			offset: number;
+			signal?: AbortSignal;
+		}): Promise<unknown[]> {
+			const p = new URLSearchParams({
+				type: q.type,
+				limit: String(q.limit),
+				offset: String(q.offset),
+			});
+			const res = await authorizedFetch(`/api/polymarket/activity?${p.toString()}`, {
+				signal: q.signal,
+			});
+			return readJson<unknown[]>(res);
+		},
+
+		async getLevelUpPositions(): Promise<VenuePosition[]> {
+			const res = await authorizedFetch("/api/levelup/positions");
+			return readJson<VenuePosition[]>(res);
 		},
 
 		async postPolymarketSync(body: PolymarketSyncBody): Promise<unknown> {
@@ -697,9 +707,7 @@ export function createPrivateApiClient(
 			return readJson<unknown>(res);
 		},
 
-		async postPolymarketL2Credentials(
-			body: PolymarketL2CredentialsBody
-		): Promise<unknown> {
+		async postPolymarketL2Credentials(body: PolymarketL2CredentialsBody): Promise<unknown> {
 			const res = await authorizedFetch("/polymarket/account/l2-credentials", {
 				method: "POST",
 				body: JSON.stringify(body),
@@ -707,21 +715,16 @@ export function createPrivateApiClient(
 			return readJson<unknown>(res);
 		},
 
-		async postPolymarketVerifyOnChain(
-			body: PolymarketVerifyOnChainBody = {}
-		): Promise<unknown> {
-			const res = await authorizedFetch(
-				"/polymarket/account/verify-on-chain",
-				{
-					method: "POST",
-					body: JSON.stringify(body),
-				}
-			);
+		async postPolymarketVerifyOnChain(body: PolymarketVerifyOnChainBody = {}): Promise<unknown> {
+			const res = await authorizedFetch("/polymarket/account/verify-on-chain", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
 			return readJson<unknown>(res);
 		},
 
 		async postPolymarketBuilderSign(
-			body: PolymarketBuilderSignBody
+			body: PolymarketBuilderSignBody,
 		): Promise<PolymarketBuilderSignResponse> {
 			const res = await authorizedFetch("/polymarket/builder/sign", {
 				method: "POST",
@@ -737,9 +740,7 @@ export function createPrivateApiClient(
 		 * credentials to forward the order to the Polymarket CLOB and persists
 		 * a `VenueOrder` audit row.
 		 */
-		async postPolymarketOrder(
-			body: PolymarketOrderSubmitBody
-		): Promise<unknown> {
+		async postPolymarketOrder(body: PolymarketOrderSubmitBody): Promise<unknown> {
 			const res = await authorizedFetch("/api/polymarket/orders", {
 				method: "POST",
 				body: JSON.stringify(body),
@@ -747,9 +748,7 @@ export function createPrivateApiClient(
 			return readJson<unknown>(res);
 		},
 
-		async postFundingLifiQuote(
-			body: LifiQuoteRequestBody
-		): Promise<LifiQuoteResponse> {
+		async postFundingLifiQuote(body: LifiQuoteRequestBody): Promise<LifiQuoteResponse> {
 			const res = await authorizedFetch("/funding/lifi/quote", {
 				method: "POST",
 				body: JSON.stringify(body),
@@ -757,15 +756,12 @@ export function createPrivateApiClient(
 			const out = await readJson<LifiQuoteResponse>(res);
 			if (
 				typeof import.meta.env !== "undefined" &&
-				(import.meta.env.DEV === true ||
-					import.meta.env.VITE_DEBUG_TRADING === "true")
+				(import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_TRADING === "true")
 			) {
 				try {
 					console.debug(
 						"[PrivateApi][LifiQuote] data.quote_raw_json",
-						out?.quote != null
-							? JSON.stringify(out.quote)
-							: "(no quote)",
+						out?.quote != null ? JSON.stringify(out.quote) : "(no quote)",
 					);
 				} catch (e) {
 					console.error("error", e);
@@ -775,7 +771,7 @@ export function createPrivateApiClient(
 		},
 
 		async postFundingLifiWithdrawPlan(
-			body: LifiWithdrawPlanRequestBody
+			body: LifiWithdrawPlanRequestBody,
 		): Promise<LifiWithdrawPlanData> {
 			const res = await authorizedFetch("/funding/lifi/withdraw/plan", {
 				method: "POST",
@@ -787,17 +783,11 @@ export function createPrivateApiClient(
 				throw new PrivateApiError(msg, res.status, raw);
 			}
 			if (!raw || typeof raw !== "object") {
-				throw new PrivateApiError(
-					"Withdraw plan: empty response",
-					res.status,
-					raw
-				);
+				throw new PrivateApiError("Withdraw plan: empty response", res.status, raw);
 			}
 			const obj = raw as Record<string, unknown>;
 			const inner =
-				obj.success === true &&
-				obj.data != null &&
-				typeof obj.data === "object"
+				obj.success === true && obj.data != null && typeof obj.data === "object"
 					? (obj.data as Record<string, unknown>)
 					: (raw as Record<string, unknown>);
 			if (inner.mode === "composite") {
@@ -814,11 +804,7 @@ export function createPrivateApiClient(
 					!Array.isArray(legsRaw) ||
 					legsRaw.length < 2
 				) {
-					throw new PrivateApiError(
-						"Withdraw plan: invalid composite response",
-						res.status,
-						raw
-					);
+					throw new PrivateApiError("Withdraw plan: invalid composite response", res.status, raw);
 				}
 				const legs: LifiWithdrawPlanLeg[] = [];
 				for (const leg of legsRaw) {
@@ -827,7 +813,7 @@ export function createPrivateApiClient(
 						throw new PrivateApiError(
 							"Withdraw plan: invalid leg in composite response",
 							res.status,
-							raw
+							raw,
 						);
 					}
 					legs.push(parsed);
@@ -852,14 +838,11 @@ export function createPrivateApiClient(
 			return inner as LifiWithdrawPlanData;
 		},
 
-		async getFundingLifiStatus(
-			params: LifiStatusParams
-		): Promise<LifiStatusResponse> {
+		async getFundingLifiStatus(params: LifiStatusParams): Promise<LifiStatusResponse> {
 			const q = new URLSearchParams();
 			q.set("txHash", params.txHash);
 			if (params.tool != null) q.set("tool", params.tool);
-			if (params.fromChain != null)
-				q.set("fromChain", String(params.fromChain));
+			if (params.fromChain != null) q.set("fromChain", String(params.fromChain));
 			if (params.toChain != null) q.set("toChain", String(params.toChain));
 			const res = await authorizedFetch(`/funding/lifi/status?${q.toString()}`);
 			return readJson<LifiStatusResponse>(res);
@@ -872,9 +855,7 @@ export function createPrivateApiClient(
 		},
 
 		async getPredictOrderbook(marketId: number): Promise<Book> {
-			const res = await authorizedFetch(
-				`/api/predict/markets/${marketId}/orderbook`
-			);
+			const res = await authorizedFetch(`/api/predict/markets/${marketId}/orderbook`);
 			return readJson<Book>(res);
 		},
 
@@ -905,11 +886,7 @@ export function createPrivateApiClient(
 			const raw = await readJson<unknown>(res);
 			const message = pickPredictAuthMessage(raw);
 			if (!message) {
-				throw new PrivateApiError(
-					"Predict auth: no message in response",
-					res.status,
-					raw
-				);
+				throw new PrivateApiError("Predict auth: no message in response", res.status, raw);
 			}
 			return { message };
 		},
@@ -926,9 +903,7 @@ export function createPrivateApiClient(
 			await readJson<unknown>(res);
 		},
 
-		async getPredictOrders(
-			status?: "FILLED" | "OPEN"
-		): Promise<PredictOrderRow[]> {
+		async getPredictOrders(status?: "FILLED" | "OPEN"): Promise<PredictOrderRow[]> {
 			const params = new URLSearchParams();
 			if (status) params.set("status", status);
 			params.set("first", "200");
@@ -947,11 +922,11 @@ export function createPrivateApiClient(
 					const s = JSON.stringify(body);
 					console.debug(
 						"[PrivateApi] getPredictOrders: 0 parsed rows; unexpected shape:",
-						s.length > 800 ? `${s.slice(0, 800)}…` : s
+						s.length > 800 ? `${s.slice(0, 800)}…` : s,
 					);
 				} catch {
 					console.debug(
-						"[PrivateApi] getPredictOrders: parse yielded 0 rows (unserializable body)"
+						"[PrivateApi] getPredictOrders: parse yielded 0 rows (unserializable body)",
 					);
 				}
 			}
@@ -981,19 +956,16 @@ export function createPrivateApiClient(
 			if (params.isSignerMaker) q.set("isSignerMaker", params.isSignerMaker);
 			const qs = q.toString();
 			const rawPath =
-				import.meta.env.VITE_PREDICT_ORDER_MATCHES_PATH?.trim() ||
-				"/api/predict/orders/matches";
+				import.meta.env.VITE_PREDICT_ORDER_MATCHES_PATH?.trim() || "/api/predict/orders/matches";
 			const matchesPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-			const res = await authorizedFetch(
-				`${matchesPath}${qs ? `?${qs}` : ""}`
-			);
+			const res = await authorizedFetch(`${matchesPath}${qs ? `?${qs}` : ""}`);
 			if (import.meta.env.DEV && res.status === 404) {
 				console.debug(
 					"[PrivateApi] getPredictOrderMatches:",
 					res.status,
 					"— nothing is listening at",
 					matchesPath,
-					"on your private API. Deploy/register GET /api/predict/orders/matches (or set VITE_PREDICT_ORDER_MATCHES_PATH to your mount)."
+					"on your private API. Deploy/register GET /api/predict/orders/matches (or set VITE_PREDICT_ORDER_MATCHES_PATH to your mount).",
 				);
 			}
 			const body = await readJson<unknown>(res);
@@ -1017,15 +989,13 @@ export function createPrivateApiClient(
 			if (params?.eventTypes?.length) {
 				q.set("eventTypes", params.eventTypes.join(","));
 			}
-			const res = await authorizedFetch(
-				`/api/predict/account/activity?${q.toString()}`
-			);
+			const res = await authorizedFetch(`/api/predict/account/activity?${q.toString()}`);
 			if (import.meta.env.DEV && res.status === 404) {
 				console.debug(
 					"[PrivateApi] getPredictAccountActivity:",
 					res.status,
 					"— nothing is listening at /api/predict/account/activity on your private API.",
-					"Deploy/register GET /api/predict/account/activity (proxy of GET /v1/account/activity)."
+					"Deploy/register GET /api/predict/account/activity (proxy of GET /v1/account/activity).",
 				);
 			}
 			const body = await readJson<unknown>(res);
@@ -1065,9 +1035,7 @@ export function createPrivateApiClient(
 		},
 
 		/** Resolve a single Polymarket CTF `conditionId` to a lean umbrella + children (same rules as batch Poly resolve). */
-		async postUmbrellaResolvePolymarketCondition(body: {
-			conditionId: string;
-		}): Promise<{
+		async postUmbrellaResolvePolymarketCondition(body: { conditionId: string }): Promise<{
 			success: boolean;
 			data?: { conditionId: string; umbrella: Umbrella | null };
 		}> {
@@ -1078,9 +1046,7 @@ export function createPrivateApiClient(
 			return readJson(res);
 		},
 
-		async removePredictOrders(
-			body: unknown
-		): Promise<unknown> {
+		async removePredictOrders(body: unknown): Promise<unknown> {
 			const res = await authorizedFetch("/api/predict/orders/remove", {
 				method: "POST",
 				body: JSON.stringify(body),
@@ -1089,7 +1055,7 @@ export function createPrivateApiClient(
 		},
 
 		async postPredictOrder(
-			body: CreateOrderPayload
+			body: CreateOrderPayload,
 		): Promise<{ orderId: string; orderHash: string }> {
 			const res = await authorizedFetch("/api/predict/orders", {
 				method: "POST",
@@ -1101,7 +1067,7 @@ export function createPrivateApiClient(
 				throw new PrivateApiError(
 					"Predict order: missing orderHash in response",
 					res.status,
-					unwrapped
+					unwrapped,
 				);
 			}
 			return { orderId: data.orderId ?? "", orderHash: data.orderHash };
@@ -1127,23 +1093,15 @@ export function createPrivateApiClient(
 			return readJson<DflowVerifyResponse>(res);
 		},
 
-		async getDflowEvents(
-			params?: Record<string, string>
-		): Promise<DflowEventsResponse> {
+		async getDflowEvents(params?: Record<string, string>): Promise<DflowEventsResponse> {
 			const q = new URLSearchParams(params);
-			const res = await authorizedFetch(
-				`/api/dflow/events?${q.toString()}`
-			);
+			const res = await authorizedFetch(`/api/dflow/events?${q.toString()}`);
 			return readJson<DflowEventsResponse>(res);
 		},
 
-		async getDflowOrder(
-			params: DflowOrderParams
-		): Promise<DflowOrderResponse> {
+		async getDflowOrder(params: DflowOrderParams): Promise<DflowOrderResponse> {
 			const q = dflowOrderParamsToQuery(params);
-			const res = await authorizedFetch(
-				`/api/dflow/order?${q.toString()}`
-			);
+			const res = await authorizedFetch(`/api/dflow/order?${q.toString()}`);
 			return readJson<DflowOrderResponse>(res);
 		},
 
@@ -1153,9 +1111,7 @@ export function createPrivateApiClient(
 		 * DFlow reported refund `reverts` while fills still delivered the route `outputMint`.
 		 * Non-2xx carries DFlow failure (`error`, optional `dflow`).
 		 */
-		async postDflowOrder(
-			body: DflowOrderSubmitBody
-		): Promise<DflowOrderSubmitResponse> {
+		async postDflowOrder(body: DflowOrderSubmitBody): Promise<DflowOrderSubmitResponse> {
 			const controller = new AbortController();
 			const timer = setTimeout(() => {
 				controller.abort();
@@ -1168,10 +1124,7 @@ export function createPrivateApiClient(
 				});
 				return readJson<DflowOrderSubmitResponse>(res);
 			} catch (e: unknown) {
-				if (
-					e instanceof Error &&
-					e.name === "AbortError"
-				) {
+				if (e instanceof Error && e.name === "AbortError") {
 					throw new PrivateApiError(
 						"Kalshi order confirmation timed out waiting for the server. Check Positions or try again.",
 						504,
@@ -1188,9 +1141,7 @@ export function createPrivateApiClient(
 		 * DFlow claim / redeem — same body and response as `postDflowOrder`, but POSTs
 		 * `/api/claims/dflow` so winnings use the dedicated claims namespace on the API.
 		 */
-		async postClaimDflow(
-			body: DflowOrderSubmitBody
-		): Promise<DflowOrderSubmitResponse> {
+		async postClaimDflow(body: DflowOrderSubmitBody): Promise<DflowOrderSubmitResponse> {
 			const controller = new AbortController();
 			const timer = setTimeout(() => {
 				controller.abort();
@@ -1203,10 +1154,7 @@ export function createPrivateApiClient(
 				});
 				return readJson<DflowOrderSubmitResponse>(res);
 			} catch (e: unknown) {
-				if (
-					e instanceof Error &&
-					e.name === "AbortError"
-				) {
+				if (e instanceof Error && e.name === "AbortError") {
 					throw new PrivateApiError(
 						"Kalshi claim confirmation timed out waiting for the server. Check Positions or try again.",
 						504,
@@ -1237,15 +1185,11 @@ export function createPrivateApiClient(
 			) {
 				q.set("lastValidBlockHeight", String(lastValidBlockHeight));
 			}
-			const res = await authorizedFetch(
-				`/api/dflow/order-status?${q.toString()}`
-			);
+			const res = await authorizedFetch(`/api/dflow/order-status?${q.toString()}`);
 			return readJson<DflowOrderStatusResponse>(res);
 		},
 
-		async postDflowFilterOutcomeMints(
-			addresses: string[]
-		): Promise<string[]> {
+		async postDflowFilterOutcomeMints(addresses: string[]): Promise<string[]> {
 			const res = await authorizedFetch("/api/dflow/filter_outcome_mints", {
 				method: "POST",
 				body: JSON.stringify({ addresses }),
@@ -1253,9 +1197,7 @@ export function createPrivateApiClient(
 			return readJson<string[]>(res);
 		},
 
-		async postDflowMarketsBatch(
-			mints: string[]
-		): Promise<DflowBatchMarket[]> {
+		async postDflowMarketsBatch(mints: string[]): Promise<DflowBatchMarket[]> {
 			const res = await authorizedFetch("/api/dflow/markets/batch", {
 				method: "POST",
 				body: JSON.stringify({ mints }),
@@ -1266,9 +1208,7 @@ export function createPrivateApiClient(
 		async postDflowTokenBalances(
 			wallet: string,
 			mints: string[],
-		): Promise<
-			Array<{ mint: string; balance: number; decimals: number }>
-		> {
+		): Promise<Array<{ mint: string; balance: number; decimals: number }>> {
 			const res = await authorizedFetch("/api/dflow/token-balances", {
 				method: "POST",
 				body: JSON.stringify({
@@ -1276,14 +1216,10 @@ export function createPrivateApiClient(
 					mints,
 				}),
 			});
-			return readJson<
-				Array<{ mint: string; balance: number; decimals: number }>
-			>(res);
+			return readJson<Array<{ mint: string; balance: number; decimals: number }>>(res);
 		},
 
-		async getDflowOnchainTrades(
-			wallet: string
-		): Promise<DflowOnchainTrade[]> {
+		async getDflowOnchainTrades(wallet: string): Promise<DflowOnchainTrade[]> {
 			const walletTrim = wallet.trim();
 			const merged: DflowOnchainTrade[] = [];
 			const dedupeKeys = new Set<string>();
@@ -1296,20 +1232,13 @@ export function createPrivateApiClient(
 				q.set("limit", String(limit));
 				if (cursor) q.set("cursor", cursor);
 
-				const res = await authorizedFetch(
-					`/api/dflow/onchain-trades?${q.toString()}`
-				);
+				const res = await authorizedFetch(`/api/dflow/onchain-trades?${q.toString()}`);
 				const body = await parseJsonSafe(res);
 				if (!res.ok) {
-					throw new PrivateApiError(
-						privateApiHttpErrorMessage(body, res.status),
-						res.status,
-						body,
-					);
+					throw new PrivateApiError(privateApiHttpErrorMessage(body, res.status), res.status, body);
 				}
 				const inner = unwrapEnvelope(body);
-				const { trades, cursor: nextCursor } =
-					extractDflowOnchainTradesPayload(inner);
+				const { trades, cursor: nextCursor } = extractDflowOnchainTradesPayload(inner);
 				for (const t of trades) {
 					const k = `${t.transactionSignature}:${t.id}`;
 					if (dedupeKeys.has(k)) continue;
@@ -1317,10 +1246,7 @@ export function createPrivateApiClient(
 					merged.push(t);
 				}
 
-				const nc =
-					typeof nextCursor === "string" && nextCursor.trim()
-						? nextCursor.trim()
-						: null;
+				const nc = typeof nextCursor === "string" && nextCursor.trim() ? nextCursor.trim() : null;
 				if (!nc || trades.length === 0) break;
 				if (nc === cursor) break;
 				cursor = nc;
@@ -1362,11 +1288,7 @@ export function createPrivateApiClient(
 				body: JSON.stringify(body ?? {}),
 			});
 			const data = await readJson<LimitlessEnsureAccountResponse>(res);
-			if (
-				import.meta.env.DEV &&
-				isTradingDebugLoggingEnabled() &&
-				data?.canonicalSlugMissing
-			) {
+			if (import.meta.env.DEV && isTradingDebugLoggingEnabled() && data?.canonicalSlugMissing) {
 				console.info("[Limitless/API]", "ensure-account", {
 					canonicalSlugMissing: true,
 					note: "Warmup allowance probe skipped — configure an active Umbrella with exchangeMatching.limitless.slug for server-side spender snapshot.",
@@ -1397,12 +1319,7 @@ export function createPrivateApiClient(
 				body: JSON.stringify(body),
 			});
 			const out = await readJson<LimitlessVerifyAllowanceResult>(res);
-			if (
-				import.meta.env.DEV &&
-				isTradingDebugLoggingEnabled() &&
-				out &&
-				typeof out === "object"
-			) {
+			if (import.meta.env.DEV && isTradingDebugLoggingEnabled() && out && typeof out === "object") {
 				const o = out as Record<string, unknown>;
 				const clip = (s: unknown, n = 12) =>
 					typeof s === "string" && s.length > n ? `${s.slice(0, n)}…` : s;
@@ -1415,7 +1332,8 @@ export function createPrivateApiClient(
 					usdcSpendersCount: Array.isArray(o.usdcSpenders)
 						? (o.usdcSpenders as unknown[]).length
 						: 0,
-					hasCtfAddress: typeof o.ctfAddress === "string" && Boolean((o.ctfAddress as string).trim()),
+					hasCtfAddress:
+						typeof o.ctfAddress === "string" && Boolean((o.ctfAddress as string).trim()),
 					hasVenueAdapter: o.venueAdapter != null && String(o.venueAdapter).trim() !== "",
 					partnerAllowanceOwnerId: o.partnerAllowanceOwnerId,
 					limitlessPartnerAllowanceType: o.limitlessPartnerAllowanceType,
@@ -1424,19 +1342,11 @@ export function createPrivateApiClient(
 				});
 			}
 			if (!out || typeof out !== "object") {
-				throw new PrivateApiError(
-					"verify-allowance returned an invalid payload.",
-					502,
-					out,
-				);
+				throw new PrivateApiError("verify-allowance returned an invalid payload.", 502, out);
 			}
 			const o = out as Record<string, unknown>;
 			if (typeof o.marketSlug !== "string" || !o.marketSlug.trim()) {
-				throw new PrivateApiError(
-					"verify-allowance response missing marketSlug.",
-					502,
-					out,
-				);
+				throw new PrivateApiError("verify-allowance response missing marketSlug.", 502, out);
 			}
 			if (typeof o.spender !== "string" || !o.spender.trim()) {
 				throw new PrivateApiError(
@@ -1474,7 +1384,9 @@ export function createPrivateApiClient(
 							: undefined;
 					const keysWithoutMeta =
 						po && typeof po === "object"
-							? Object.keys(po).filter((k) => k !== "_meta").slice(0, 20)
+							? Object.keys(po)
+									.filter((k) => k !== "_meta")
+									.slice(0, 20)
 							: [];
 					console.info("[Limitless/API]", "POST orders OK", {
 						requestMarketSlug: body.marketSlug,
@@ -1496,8 +1408,7 @@ export function createPrivateApiClient(
 						if (details !== undefined) {
 							try {
 								const s = JSON.stringify(details);
-								detailsForLog =
-									s.length > 4000 ? `${s.slice(0, 4000)}…` : details;
+								detailsForLog = s.length > 4000 ? `${s.slice(0, 4000)}…` : details;
 							} catch {
 								detailsForLog = "(unserializable details)";
 							}
@@ -1510,8 +1421,7 @@ export function createPrivateApiClient(
 							diagnostic: diag,
 							details: detailsForLog,
 							hint:
-								msg.includes("null or missing `data`") ||
-								msg.includes("reading 'data')")
+								msg.includes("null or missing `data`") || msg.includes("reading 'data')")
 									? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
 									: undefined,
 						});
@@ -1522,8 +1432,7 @@ export function createPrivateApiClient(
 							message: msg,
 							httpStatus: err.status,
 							hint:
-								msg.includes("null or missing `data`") ||
-								msg.includes("reading 'data')")
+								msg.includes("null or missing `data`") || msg.includes("reading 'data')")
 									? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
 									: undefined,
 						});
@@ -1534,8 +1443,7 @@ export function createPrivateApiClient(
 						orderType: body.orderType,
 						message: msg,
 						hint:
-							msg.includes("null or missing `data`") ||
-							msg.includes("reading 'data')")
+							msg.includes("null or missing `data`") || msg.includes("reading 'data')")
 								? "If message mentions envelope `data`, the private API returned `{ success, data: null }`. If it mentions reading 'data' from null, that is usually Privy embedded RPC, not this HTTP response."
 								: undefined,
 					});
@@ -1567,9 +1475,7 @@ export function createPrivateApiClient(
 			const p = new URLSearchParams({ limit: String(q.limit) });
 			const c = q.cursor?.trim();
 			if (c) p.set("cursor", c);
-			const res = await authorizedFetch(
-				`/api/limitless/portfolio/history?${p.toString()}`,
-			);
+			const res = await authorizedFetch(`/api/limitless/portfolio/history?${p.toString()}`);
 			return readJson<unknown>(res);
 		},
 
@@ -1612,14 +1518,12 @@ export function createPrivateApiClient(
 		async postOnboardingComplete(): Promise<{
 			onboardingCompletedAt: string | null;
 		}> {
-			const res = await authorizedFetch(
-				"/profiles/me/onboarding/complete",
-				{ method: "POST" },
-			);
-			const data = (await readJson<{
-				success?: boolean;
-				data?: { onboardingCompletedAt?: string | null };
-			}>(res)) ?? {};
+			const res = await authorizedFetch("/profiles/me/onboarding/complete", { method: "POST" });
+			const data =
+				(await readJson<{
+					success?: boolean;
+					data?: { onboardingCompletedAt?: string | null };
+				}>(res)) ?? {};
 			const ts = data?.data?.onboardingCompletedAt ?? null;
 			return { onboardingCompletedAt: ts };
 		},

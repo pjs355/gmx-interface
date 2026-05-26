@@ -14,10 +14,7 @@ export const BTN_POLY_SETUP_REQUIRED = defineError(
 	"BTN_POLY_SETUP_REQUIRED",
 	"Polymarket setup required",
 );
-export const BTN_POLY_UNAVAILABLE = defineError(
-	"BTN_POLY_UNAVAILABLE",
-	"Polymarket unavailable",
-);
+export const BTN_POLY_UNAVAILABLE = defineError("BTN_POLY_UNAVAILABLE", "Polymarket unavailable");
 
 export const BTN_LIMITLESS_ESPORTS_NOT_LINKED = defineError(
 	"BTN_LIMITLESS_ESPORTS_NOT_LINKED",

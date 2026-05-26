@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import "./StreamEmbed.scss";
+import "./scss/StreamEmbed.scss";
 
 interface StreamEmbedProps {
 	streamUrl: string;
@@ -59,13 +59,16 @@ function getStreamEmbedUrl(streamUrl: string, hostname: string): string {
 
 export function StreamEmbed({ streamUrl, height }: StreamEmbedProps) {
 	const trimmedUrl = streamUrl.trim();
-	if (trimmedUrl.length === 0) {
-		return null;
-	}
 	const embedUrl = useMemo(() => {
+		if (trimmedUrl.length === 0) {
+			return "";
+		}
 		const hostname = window.location.hostname;
 		return getStreamEmbedUrl(trimmedUrl, hostname);
 	}, [trimmedUrl]);
+	if (trimmedUrl.length === 0) {
+		return null;
+	}
 	if (embedUrl.length === 0) {
 		return null;
 	}
@@ -75,11 +78,7 @@ export function StreamEmbed({ streamUrl, height }: StreamEmbedProps) {
 	 * which eliminates the top/bottom black bars Twitch/Kick used to add
 	 * when the iframe was forced to a fixed height. */
 	const maxHeightPx =
-		typeof height === "string"
-			? height.includes("px")
-				? height
-				: `${height}px`
-			: undefined;
+		typeof height === "string" ? (height.includes("px") ? height : `${height}px`) : undefined;
 	return (
 		<div
 			className="stream-embed-container"

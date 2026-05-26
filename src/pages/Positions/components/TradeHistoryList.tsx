@@ -1,15 +1,14 @@
-import React from "react";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
-import { outcomeSideLabelColor } from "../utils/positionHelpers";
+import { outcomeSideLabelColor } from "@/features/positions/utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
-import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
+import { oddsDualLayoutForStyle } from "@/features/odds-display/oddsDisplayFormat";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import {
 	getPredictPositionRowLabel,
 	isGenericBinaryOutcomeLabel,
-} from "@/trading/venues/predict/portfolio/predictPositionLabel";
-import { floorSharesAtDecimals } from "@/trading/utils/floorShares";
+} from "@/features/trading/venues/predict/portfolio/predictPositionLabel";
+import { floorSharesAtDecimals } from "@/features/trading/utils/floorShares";
 
 interface TradeHistoryListProps {
 	orders: ProcessedOrder[];
@@ -42,9 +41,7 @@ export default function TradeHistoryList({
 		.sort((a, b) => {
 			const ta = new Date(a.filledAt || a.createdAt).getTime();
 			const tb = new Date(b.filledAt || b.createdAt).getTime();
-			return (
-				(Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
-			);
+			return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
 		});
 
 	if (!isExpanded || marketOrders.length === 0) {
@@ -136,10 +133,7 @@ export default function TradeHistoryList({
 				<div style={{ textAlign: "center" }}>Side</div>
 				<div style={{ textAlign: "center" }}>Shares</div>
 				<div style={{ textAlign: "center" }}>
-					<Tooltip
-						content="Average execution price"
-						position="top"
-					>
+					<Tooltip content="Average execution price" position="top">
 						Avg Price
 					</Tooltip>
 				</div>
@@ -155,14 +149,8 @@ export default function TradeHistoryList({
 				const op = (order.position ?? "").trim();
 				const ol = op.toLowerCase();
 				const pdl = order.positionDisplayLabel?.trim();
-				const yn =
-					ol === "yes"
-						? ("Yes" as const)
-						: ol === "no"
-							? ("No" as const)
-							: null;
-				const titleMapped =
-					mt && yn ? getPredictPositionRowLabel(mt, undefined, yn) : "";
+				const yn = ol === "yes" ? ("Yes" as const) : ol === "no" ? ("No" as const) : null;
+				const titleMapped = mt && yn ? getPredictPositionRowLabel(mt, undefined, yn) : "";
 				const sideDisplayText =
 					yn && mt && isGenericBinaryOutcomeLabel(pdl)
 						? titleMapped
@@ -174,163 +162,156 @@ export default function TradeHistoryList({
 				const shareChange = isBuy ? order.tokenValue : -order.tokenValue;
 
 				return (
-				<div
-					key={order.orderId}
-					className="grid items-center px-12 py-12"
-					style={{
-						gridTemplateColumns: "minmax(200px, 2fr) repeat(6, 1fr) 80px",
-						borderBottom: "1px solid #1f1f1f",
-						fontSize: 14,
-						background: index % 2 === 0 ? "#0a0a0a" : "#080808",
-						transition: "background 0.15s ease",
-					}}
-					onMouseEnter={(e) => {
-						e.currentTarget.style.background = "#151515";
-					}}
-					onMouseLeave={(e) => {
-						e.currentTarget.style.background =
-							index % 2 === 0 ? "#0a0a0a" : "#080808";
-					}}
-				>
-					{/* Date */}
-					<div style={{ color: "#888", paddingLeft: 60 }}>
-						{formatDate(order.filledAt || order.createdAt)}
-					</div>
-
-					{/* Action (Buy/Sell) - simple text */}
 					<div
+						key={order.orderId}
+						className="grid items-center px-12 py-12"
 						style={{
-							textAlign: "center",
-							fontWeight: 600,
-							color: isBuy ? "#16a34a" : "#ef4444",
+							gridTemplateColumns: "minmax(200px, 2fr) repeat(6, 1fr) 80px",
+							borderBottom: "1px solid #1f1f1f",
+							fontSize: 14,
+							background: index % 2 === 0 ? "#0a0a0a" : "#080808",
+							transition: "background 0.15s ease",
+						}}
+						onMouseEnter={(e) => {
+							e.currentTarget.style.background = "#151515";
+						}}
+						onMouseLeave={(e) => {
+							e.currentTarget.style.background = index % 2 === 0 ? "#0a0a0a" : "#080808";
 						}}
 					>
-						{isBuy ? "Buy" : "Sell"}
-					</div>
+						{/* Date */}
+						<div style={{ color: "#888", paddingLeft: 60 }}>
+							{formatDate(order.filledAt || order.createdAt)}
+						</div>
 
-					{/* Side: team name for vs markets — neutral unless literal Yes/No */}
-					<div
-						style={{
-							textAlign: "center",
-							fontWeight: 500,
-							color: outcomeSideLabelColor(
-								sideDisplayText,
-								"#22c55e",
-								"#f87171",
-							),
-						}}
-					>
-						{sideDisplayText || "—"}
-					</div>
+						{/* Action (Buy/Sell) - simple text */}
+						<div
+							style={{
+								textAlign: "center",
+								fontWeight: 600,
+								color: isBuy ? "#16a34a" : "#ef4444",
+							}}
+						>
+							{isBuy ? "Buy" : "Sell"}
+						</div>
 
-					{/* Shares with +/- */}
-					<div
-						style={{
-							textAlign: "center",
-							color: isBuy ? "#22c55e" : "#f87171",
-							fontWeight: 500,
-						}}
-					>
-						{formatQuantity(shareChange, true)}
-					</div>
+						{/* Side: team name for vs markets — neutral unless literal Yes/No */}
+						<div
+							style={{
+								textAlign: "center",
+								fontWeight: 500,
+								color: outcomeSideLabelColor(sideDisplayText, "#22c55e", "#f87171"),
+							}}
+						>
+							{sideDisplayText || "—"}
+						</div>
 
-					{/* Price */}
-					<div style={{ textAlign: "center", color: "#fff" }}>
-						{formatPrice(order.price, portfolioPriceLayout)}
-					</div>
+						{/* Shares with +/- */}
+						<div
+							style={{
+								textAlign: "center",
+								color: isBuy ? "#22c55e" : "#f87171",
+								fontWeight: 500,
+							}}
+						>
+							{formatQuantity(shareChange, true)}
+						</div>
 
-					{/* Cash Flow with clear in/out indicator */}
-					<div
-						style={{
-							textAlign: "center",
-							fontWeight: 600,
-							color: cashFlow >= 0 ? "#22c55e" : "#f87171",
-						}}
-					>
-						{formatCurrency(cashFlow, true)}
-					</div>
+						{/* Price */}
+						<div style={{ textAlign: "center", color: "#fff" }}>
+							{formatPrice(order.price, portfolioPriceLayout)}
+						</div>
 
-					{/* Market venue */}
-					<div
-						style={{
-							textAlign: "center",
-							color: "#888",
-							fontSize: 12,
-							display: "inline-flex",
-							alignItems: "center",
-							justifyContent: "center",
-							gap: 6,
-						}}
-					>
-						<MarketLogo venue={order.venue} size={14} />
-						<span>{order.venue ?? "LevelUp"}</span>
-					</div>
+						{/* Cash Flow with clear in/out indicator */}
+						<div
+							style={{
+								textAlign: "center",
+								fontWeight: 600,
+								color: cashFlow >= 0 ? "#22c55e" : "#f87171",
+							}}
+						>
+							{formatCurrency(cashFlow, true)}
+						</div>
 
-					{/* Empty column to match parent grid */}
-					<div></div>
-				</div>
+						{/* Market venue */}
+						<div
+							style={{
+								textAlign: "center",
+								color: "#888",
+								fontSize: 12,
+								display: "inline-flex",
+								alignItems: "center",
+								justifyContent: "center",
+								gap: 6,
+							}}
+						>
+							<MarketLogo venue={order.venue} size={14} />
+							<span>{order.venue ?? "LevelUp"}</span>
+						</div>
+
+						{/* Empty column to match parent grid */}
+						<div></div>
+					</div>
 				);
 			})}
 
-		{/* Summary Footer - aligned with columns */}
-		<div
-			className="grid items-center px-12 py-12"
-			style={{
-				gridTemplateColumns: "minmax(200px, 2fr) repeat(6, 1fr) 80px",
-				background: "#0d0d0d",
-				borderTop: "2px solid #1f1f1f",
-				fontSize: 13,
-			}}
-		>
-			{/* Trade count */}
-			<div style={{ color: "#888", paddingLeft: 60 }}>
-				<span style={{ color: "#fff", fontWeight: 600 }}>
-					{marketOrders.length}
-				</span>{" "}
-				trade{marketOrders.length !== 1 ? "s" : ""}
+			{/* Summary Footer - aligned with columns */}
+			<div
+				className="grid items-center px-12 py-12"
+				style={{
+					gridTemplateColumns: "minmax(200px, 2fr) repeat(6, 1fr) 80px",
+					background: "#0d0d0d",
+					borderTop: "2px solid #1f1f1f",
+					fontSize: 13,
+				}}
+			>
+				{/* Trade count */}
+				<div style={{ color: "#888", paddingLeft: 60 }}>
+					<span style={{ color: "#fff", fontWeight: 600 }}>{marketOrders.length}</span> trade
+					{marketOrders.length !== 1 ? "s" : ""}
+				</div>
+
+				{/* Empty - Action column */}
+				<div></div>
+
+				{/* Empty - Side column */}
+				<div></div>
+
+				{/* Net Shares - aligned with Shares column */}
+				<div style={{ textAlign: "center" }}>
+					<span style={{ color: "#888", fontSize: 11 }}>NET: </span>
+					<span
+						style={{
+							color: netShares > 0 ? "#22c55e" : netShares < 0 ? "#f87171" : "#fff",
+							fontWeight: 600,
+						}}
+					>
+						{formatQuantity(netShares, true)}
+					</span>
+				</div>
+
+				{/* Empty - Price column */}
+				<div></div>
+
+				{/* Net Cash Flow - aligned with Cash Flow column */}
+				<div style={{ textAlign: "center" }}>
+					<span style={{ color: "#888", fontSize: 11 }}>NET: </span>
+					<span
+						style={{
+							color: netCashFlow >= 0 ? "#22c55e" : "#f87171",
+							fontWeight: 700,
+						}}
+					>
+						{formatCurrency(netCashFlow, true)}
+					</span>
+				</div>
+
+				{/* Empty - Market column */}
+				<div></div>
+
+				{/* Empty column */}
+				<div></div>
 			</div>
-
-			{/* Empty - Action column */}
-			<div></div>
-
-			{/* Empty - Side column */}
-			<div></div>
-
-			{/* Net Shares - aligned with Shares column */}
-			<div style={{ textAlign: "center" }}>
-				<span style={{ color: "#888", fontSize: 11 }}>NET: </span>
-				<span
-					style={{
-						color: netShares > 0 ? "#22c55e" : netShares < 0 ? "#f87171" : "#fff",
-						fontWeight: 600,
-					}}
-				>
-					{formatQuantity(netShares, true)}
-				</span>
-			</div>
-
-			{/* Empty - Price column */}
-			<div></div>
-
-			{/* Net Cash Flow - aligned with Cash Flow column */}
-			<div style={{ textAlign: "center" }}>
-				<span style={{ color: "#888", fontSize: 11 }}>NET: </span>
-				<span
-					style={{
-						color: netCashFlow >= 0 ? "#22c55e" : "#f87171",
-						fontWeight: 700,
-					}}
-				>
-					{formatCurrency(netCashFlow, true)}
-				</span>
-			</div>
-
-			{/* Empty - Market column */}
-			<div></div>
-
-			{/* Empty column */}
-			<div></div>
-		</div>
 		</div>
 	);
 }

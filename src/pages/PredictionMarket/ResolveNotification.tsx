@@ -1,22 +1,11 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
-import { useUserData } from "@/context/UserDataContext";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
+import { useLevelUpOrders } from "@/features/trading/venues/levelup/portfolio/useLevelUpOrders";
 import { usePredictionData } from "@/context/PredictionDataContext";
 import { useRPG } from "@/context/RPGContext";
-import "./ResolveNotification.scss";
-
-// Animated loading dots
-function LoadingDots() {
-	const [dots, setDots] = useState('');
-	useEffect(() => {
-		const interval = setInterval(() => {
-			setDots(prev => prev.length >= 3 ? '' : prev + '.');
-		}, 400);
-		return () => clearInterval(interval);
-	}, []);
-	return <span>Loading{dots}</span>;
-}
+import "./scss/ResolveNotification.scss";
 
 interface ResolveNotificationProps {
 	umbrellaId: string;
@@ -37,9 +26,10 @@ interface UmbrellaWithResolveComments {
 export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 	const { authenticated, getAccessToken, login } = usePrivy();
 	const { identityToken } = useIdentityToken();
-	const { orders } = useUserData();
-	const { getQuestionsForUmbrella, getUmbrellaById, umbrellas } =
-		usePredictionData();
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const levelUpWallet = venueAddressChainMap?.levelup.walletAddress ?? null;
+	const { orders } = useLevelUpOrders(levelUpWallet, Boolean(authenticated && levelUpWallet));
+	const { getQuestionsForUmbrella, getUmbrellaById, umbrellas } = usePredictionData();
 	const { profile } = useRPG();
 	const [expanded, setExpanded] = useState(false);
 	const [resolveComment, setResolveComment] = useState("");
@@ -47,18 +37,14 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 	const [submitted, setSubmitted] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [hasAlreadySubmitted, setHasAlreadySubmitted] = useState(false);
-	const [viewState, setViewState] = useState<'form' | 'thankyou' | 'already'>('form');
-	
+	const [viewState, setViewState] = useState<"form" | "thankyou" | "already">("form");
+
 	// Context is ready when we have the necessary data
 	const isContextReady = authenticated && identityToken;
 
 	// Get user profile ID from RPG context (MongoDB _id)
 	const userProfileId = useMemo(() => {
-		if (
-			profile &&
-			typeof profile._id === "string" &&
-			profile._id.length > 0
-		) {
+		if (profile && typeof profile._id === "string" && profile._id.length > 0) {
 			return profile._id;
 		}
 		return null;
@@ -66,9 +52,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 
 	// Get umbrella data - depend on umbrellas array to ensure we get updates
 	const umbrella = useMemo(() => {
-		return getUmbrellaById(umbrellaId) as
-			| UmbrellaWithResolveComments
-			| undefined;
+		return getUmbrellaById(umbrellaId) as UmbrellaWithResolveComments | undefined;
 	}, [umbrellaId, getUmbrellaById, umbrellas]);
 
 	// Check if user has already submitted a resolution request
@@ -90,15 +74,13 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 			return;
 		}
 
-		const userHasSubmitted = resolveComments.some(
-			(comment: ResolveComment) => {
-				return comment.submittedBy === userProfileId;
-			}
-		);
+		const userHasSubmitted = resolveComments.some((comment: ResolveComment) => {
+			return comment.submittedBy === userProfileId;
+		});
 
 		setHasAlreadySubmitted(userHasSubmitted);
 		if (userHasSubmitted) {
-			setViewState('already');
+			setViewState("already");
 		}
 	}, [userProfileId, umbrellaId, umbrella]);
 
@@ -137,26 +119,25 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 					}
 					return null;
 				})
-				.filter(
-					(id): id is string =>
-						typeof id === "string" && id.length > 0
-				)
+				.filter((id): id is string => typeof id === "string" && id.length > 0),
 		);
 		return orders.some((order) => questionIds.has(order.questionId));
 	}, [orders, umbrellaId, getQuestionsForUmbrella]);
 
 	// Timer: thank you for 15 seconds then switch to already
 	useEffect(() => {
-		if (viewState === 'thankyou') {
-			const timer = setTimeout(() => setViewState('already'), 15000);
+		if (viewState === "thankyou") {
+			const timer = setTimeout(() => setViewState("already"), 15000);
 			return () => clearTimeout(timer);
 		}
+		return undefined;
 	}, [viewState]);
 
-	const canSubmit = isContextReady && resolveComment.trim().length > 0 && !submitting && viewState === 'form';
+	const canSubmit =
+		isContextReady && resolveComment.trim().length > 0 && !submitting && viewState === "form";
 
 	const handleSubmit = useCallback(async () => {
-		if (!isContextReady || !resolveComment.trim() || submitting || viewState !== 'form') return;
+		if (!isContextReady || !resolveComment.trim() || submitting || viewState !== "form") return;
 
 		setSubmitting(true);
 		try {
@@ -182,7 +163,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 						umbrellaId,
 						resolveComment: resolveComment.trim(),
 					}),
-				}
+				},
 			);
 
 			// If response is NOT ok (any error), treat as already submitted
@@ -191,11 +172,9 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				let errorMsg = "Failed to submit notification";
 
 				if (response.status === 403) {
-					errorMsg =
-						"You must have at least one order for this market to submit a notification.";
+					errorMsg = "You must have at least one order for this market to submit a notification.";
 				} else if (response.status === 409) {
-					errorMsg =
-						"You have already submitted a notification for this market.";
+					errorMsg = "You have already submitted a notification for this market.";
 				} else {
 					try {
 						const errorJson = JSON.parse(errorText);
@@ -213,17 +192,17 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				setSubmitted(true);
 				setHasAlreadySubmitted(true);
 				setResolveComment("");
-				setViewState('already');
+				setViewState("already");
 				setSubmitting(false);
 				return;
 			}
 
 			// Success - show thank you
 			setResolveComment("");
-			setViewState('thankyou');
+			setViewState("thankyou");
 		} catch (error) {
 			// Any error = already submitted
-			setViewState('already');
+			setViewState("already");
 		} finally {
 			setSubmitting(false);
 		}
@@ -245,7 +224,7 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				setErrorMessage(null);
 			}
 		},
-		[errorMessage]
+		[errorMessage],
 	);
 
 	// Don't render if user doesn't have orders
@@ -261,32 +240,21 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 				style={{ cursor: "pointer" }}
 			>
 				<h3>Propose Resolution</h3>
-				<span className={`resolve-notification-arrow ${expanded ? "expanded" : ""}`}>
-					▼
-				</span>
+				<span className={`resolve-notification-arrow ${expanded ? "expanded" : ""}`}>▼</span>
 			</div>
 
 			{expanded && (
 				<div className="resolve-notification-content">
 					{!authenticated ? (
 						<div className="resolve-notification-auth-prompt">
-							<p>
-								Please log in to submit a settlement
-								notification.
-							</p>
-							<button
-								type="button"
-								onClick={login}
-								className="resolve-notification-login-btn"
-							>
+							<p>Please log in to submit a settlement notification.</p>
+							<button type="button" onClick={login} className="resolve-notification-login-btn">
 								Log In
 							</button>
 						</div>
 					) : hasAlreadySubmitted || submitted ? (
 						<div className="resolve-notification-success">
-							<p>
-								Thank you for submitting a resolution request.
-							</p>
+							<p>Thank you for submitting a resolution request.</p>
 						</div>
 					) : (
 						<div className="resolve-notification-form">
@@ -298,20 +266,14 @@ export function ResolveNotification({ umbrellaId }: ResolveNotificationProps) {
 								className="resolve-notification-textarea"
 								disabled={submitting}
 							/>
-							{errorMessage && (
-								<div className="resolve-notification-error">
-									{errorMessage}
-								</div>
-							)}
+							{errorMessage && <div className="resolve-notification-error">{errorMessage}</div>}
 							<button
 								type="button"
 								onClick={handleSubmit}
 								disabled={!canSubmit}
 								className="resolve-notification-submit-btn"
 							>
-								{submitting
-									? "Submitting..."
-									: "Submit Resolution"}
+								{submitting ? "Submitting..." : "Submit Resolution"}
 							</button>
 						</div>
 					)}

@@ -164,11 +164,7 @@ button.App-connect-wallet:hover {
 }
 
 .App-box-solid {
-	background: linear-gradient(
-		90deg,
-		rgba(20, 21, 38, 1) 0%,
-		rgba(25, 27, 47, 1) 100%
-	);
+	background: linear-gradient(90deg, rgba(20, 21, 38, 1) 0%, rgba(25, 27, 47, 1) 100%);
 }
 
 .Page {
@@ -414,11 +410,7 @@ button.App-cta {
 	font-size: var(--font-size-body-medium);
 	color: var(--color-white);
 	text-decoration: none;
-	background: linear-gradient(
-		90deg,
-		rgba(45, 66, 252, 1) 0%,
-		var(--color-blue-700) 100%
-	);
+	background: linear-gradient(90deg, rgba(45, 66, 252, 1) 0%, var(--color-blue-700) 100%);
 }
 
 .App-cta.small {
@@ -616,11 +608,7 @@ button.App-button {
 }
 
 .positive-background {
-	background: linear-gradient(
-		45deg,
-		rgba(10, 115, 75, 1) 0%,
-		rgba(12, 154, 100, 1) 100%
-	);
+	background: linear-gradient(45deg, rgba(10, 115, 75, 1) 0%, rgba(12, 154, 100, 1) 100%);
 }
 
 .negative {
@@ -628,11 +616,7 @@ button.App-button {
 }
 
 .negative-background {
-	background: linear-gradient(
-		45deg,
-		rgba(115, 30, 43, 1) 0%,
-		rgba(174, 43, 63, 1) 100%
-	);
+	background: linear-gradient(45deg, rgba(115, 30, 43, 1) 0%, rgba(174, 43, 63, 1) 100%);
 }
 
 .warning {

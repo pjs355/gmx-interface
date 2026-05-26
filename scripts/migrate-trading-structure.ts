@@ -1,7 +1,8 @@
 /**
- * One-time migration: trading/polymarket|dflow|predict|limitless → venues/*,
+ * One-time migration: features/trading/polymarket|dflow|predict|limitless → venues/*,
  * sor/* → sor/{core,route,prefund,post-trade}/.
  *
+ * Paths in `moves` are relative to `src/` (e.g. `features/trading/...`).
  * Run: npx tsx scripts/migrate-trading-structure.ts
  */
 import fs from "node:fs";
@@ -14,160 +15,562 @@ type Move = { from: string; to: string };
 
 const moves: Move[] = [
 	// ── Polymarket ──
-	{ from: "trading/polymarket/usePolymarketClobTradingSession.ts", to: "trading/venues/polymarket/session/usePolymarketClobTradingSession.ts" },
-	{ from: "trading/polymarket/usePolymarketEnsureExecutionReady.ts", to: "trading/venues/polymarket/session/usePolymarketEnsureExecutionReady.ts" },
-	{ from: "trading/polymarket/usePolymarketEnsureDepositWalletDeployed.ts", to: "trading/venues/polymarket/session/usePolymarketEnsureDepositWalletDeployed.ts" },
-	{ from: "trading/polymarket/PolymarketBackgroundActivation.tsx", to: "trading/venues/polymarket/session/PolymarketBackgroundActivation.tsx" },
-	{ from: "trading/polymarket/PolymarketDepositDeployBackgroundActivation.tsx", to: "trading/venues/polymarket/session/PolymarketDepositDeployBackgroundActivation.tsx" },
-	{ from: "trading/polymarket/relayClient.ts", to: "trading/venues/polymarket/session/relayClient.ts" },
-	{ from: "trading/polymarket/safeActions.ts", to: "trading/venues/polymarket/session/safeActions.ts" },
-	{ from: "trading/polymarket/usePolymarketRelay.ts", to: "trading/venues/polymarket/session/usePolymarketRelay.ts" },
-	{ from: "trading/polymarket/POLYMARKET_TRADING.md", to: "trading/venues/polymarket/session/POLYMARKET_TRADING.md" },
-	{ from: "trading/polymarket/usePolymarketEoaWalletClient.ts", to: "trading/venues/polymarket/wallet/usePolymarketEoaWalletClient.ts" },
-	{ from: "trading/polymarket/embeddedPrivyViemSend.ts", to: "trading/venues/polymarket/wallet/embeddedPrivyViemSend.ts" },
-	{ from: "trading/polymarket/privyEmbeddedWallet.ts", to: "trading/venues/polymarket/wallet/privyEmbeddedWallet.ts" },
-	{ from: "trading/polymarket/ethers5FromEip1193.ts", to: "trading/venues/polymarket/wallet/ethers5FromEip1193.ts" },
-	{ from: "trading/polymarket/usePolymarketPositions.ts", to: "trading/venues/polymarket/portfolio/usePolymarketPositions.ts" },
-	{ from: "trading/polymarket/usePolymarketTradeHistory.ts", to: "trading/venues/polymarket/portfolio/usePolymarketTradeHistory.ts" },
-	{ from: "trading/polymarket/polymarketPositionsRefetchMerge.ts", to: "trading/venues/polymarket/portfolio/polymarketPositionsRefetchMerge.ts" },
-	{ from: "trading/polymarket/polymarketClobOrderResult.ts", to: "trading/venues/polymarket/trade/polymarketClobOrderResult.ts" },
-	{ from: "trading/polymarket/polymarketSellShareClamp.ts", to: "trading/venues/polymarket/trade/polymarketSellShareClamp.ts" },
-	{ from: "trading/polymarket/polymarketSellShareClamp.test.ts", to: "trading/venues/polymarket/trade/polymarketSellShareClamp.test.ts" },
-	{ from: "trading/polymarket/polyOutcomeTokenId.ts", to: "trading/venues/polymarket/trade/polyOutcomeTokenId.ts" },
-	{ from: "trading/polymarket/polyPositionSide.ts", to: "trading/venues/polymarket/trade/polyPositionSide.ts" },
-	{ from: "trading/polymarket/monitorOrderbookAdapter.ts", to: "trading/venues/polymarket/trade/monitorOrderbookAdapter.ts" },
-	{ from: "trading/polymarket/polygonCollateralWrap.ts", to: "trading/venues/polymarket/trade/polygonCollateralWrap.ts" },
-	{ from: "trading/polymarket/approvalTxs.ts", to: "trading/venues/polymarket/trade/approvalTxs.ts" },
-	{ from: "trading/polymarket/polymarketBuilderCode.ts", to: "trading/venues/polymarket/trade/polymarketBuilderCode.ts" },
-	{ from: "trading/polymarket/levelUpBuilderConfig.ts", to: "trading/venues/polymarket/trade/levelUpBuilderConfig.ts" },
-	{ from: "trading/polymarket/normalizeBuilderSignTimestamp.ts", to: "trading/venues/polymarket/trade/normalizeBuilderSignTimestamp.ts" },
-	{ from: "trading/polymarket/polymarketConditionLookup.ts", to: "trading/venues/polymarket/trade/polymarketConditionLookup.ts" },
-	{ from: "trading/polymarket/polymarketOrderDebug.ts", to: "trading/venues/polymarket/trade/polymarketOrderDebug.ts" },
-	{ from: "trading/polymarket/constants.ts", to: "trading/venues/polymarket/trade/constants.ts" },
-	{ from: "trading/polymarket/__tests__/usePolymarketEnsureExecutionReady.test.tsx", to: "trading/venues/polymarket/session/__tests__/usePolymarketEnsureExecutionReady.test.tsx" },
-	{ from: "trading/venues/polymarket/PolymarketVenueCard.tsx", to: "trading/venues/polymarket/ui/PolymarketVenueCard.tsx" },
+	{
+		from: "features/trading/polymarket/usePolymarketClobTradingSession.ts",
+		to: "features/trading/venues/polymarket/session/usePolymarketClobTradingSession.ts",
+	},
+	{
+		from: "features/trading/polymarket/usePolymarketEnsureExecutionReady.ts",
+		to: "features/trading/venues/polymarket/session/usePolymarketEnsureExecutionReady.ts",
+	},
+	{
+		from: "features/trading/polymarket/usePolymarketEnsureDepositWalletDeployed.ts",
+		to: "features/trading/venues/polymarket/session/usePolymarketEnsureDepositWalletDeployed.ts",
+	},
+	{
+		from: "features/trading/polymarket/PolymarketBackgroundActivation.tsx",
+		to: "features/trading/venues/polymarket/session/PolymarketBackgroundActivation.tsx",
+	},
+	{
+		from: "features/trading/polymarket/PolymarketDepositDeployBackgroundActivation.tsx",
+		to: "features/trading/venues/polymarket/session/PolymarketDepositDeployBackgroundActivation.tsx",
+	},
+	{
+		from: "features/trading/polymarket/relayClient.ts",
+		to: "features/trading/venues/polymarket/session/relayClient.ts",
+	},
+	{
+		from: "features/trading/polymarket/safeActions.ts",
+		to: "features/trading/venues/polymarket/session/safeActions.ts",
+	},
+	{
+		from: "features/trading/polymarket/usePolymarketRelay.ts",
+		to: "features/trading/venues/polymarket/session/usePolymarketRelay.ts",
+	},
+	{
+		from: "features/trading/polymarket/POLYMARKET_TRADING.md",
+		to: "features/trading/venues/polymarket/session/POLYMARKET_TRADING.md",
+	},
+	{
+		from: "features/trading/polymarket/usePolymarketEoaWalletClient.ts",
+		to: "features/trading/venues/polymarket/wallet/usePolymarketEoaWalletClient.ts",
+	},
+	{
+		from: "features/trading/polymarket/embeddedPrivyViemSend.ts",
+		to: "features/trading/venues/polymarket/wallet/embeddedPrivyViemSend.ts",
+	},
+	{
+		from: "features/trading/polymarket/privyEmbeddedWallet.ts",
+		to: "features/trading/venues/polymarket/wallet/privyEmbeddedWallet.ts",
+	},
+	{
+		from: "features/trading/polymarket/ethers5FromEip1193.ts",
+		to: "features/trading/venues/polymarket/wallet/ethers5FromEip1193.ts",
+	},
+	{
+		from: "features/trading/polymarket/usePolymarketPositions.ts",
+		to: "features/trading/venues/polymarket/portfolio/usePolymarketPositions.ts",
+	},
+	{
+		from: "features/trading/polymarket/usePolymarketTradeHistory.ts",
+		to: "features/trading/venues/polymarket/portfolio/usePolymarketTradeHistory.ts",
+	},
+	{
+		from: "features/trading/polymarket/polymarketPositionsRefetchMerge.ts",
+		to: "features/trading/venues/polymarket/portfolio/polymarketPositionsRefetchMerge.ts",
+	},
+	{
+		from: "features/trading/polymarket/polymarketClobOrderResult.ts",
+		to: "features/trading/venues/polymarket/trade/polymarketClobOrderResult.ts",
+	},
+	{
+		from: "features/trading/polymarket/polymarketSellShareClamp.ts",
+		to: "features/trading/venues/polymarket/trade/polymarketSellShareClamp.ts",
+	},
+	{
+		from: "features/trading/polymarket/polymarketSellShareClamp.test.ts",
+		to: "features/trading/venues/polymarket/trade/polymarketSellShareClamp.test.ts",
+	},
+	{
+		from: "features/trading/polymarket/polyOutcomeTokenId.ts",
+		to: "features/trading/venues/polymarket/trade/polyOutcomeTokenId.ts",
+	},
+	{
+		from: "features/trading/polymarket/polyPositionSide.ts",
+		to: "features/trading/venues/polymarket/trade/polyPositionSide.ts",
+	},
+	{
+		from: "features/trading/polymarket/monitorOrderbookAdapter.ts",
+		to: "features/trading/venues/polymarket/trade/monitorOrderbookAdapter.ts",
+	},
+	{
+		from: "features/trading/polymarket/polygonCollateralWrap.ts",
+		to: "features/trading/venues/polymarket/trade/polygonCollateralWrap.ts",
+	},
+	{
+		from: "features/trading/polymarket/approvalTxs.ts",
+		to: "features/trading/venues/polymarket/trade/approvalTxs.ts",
+	},
+	{
+		from: "features/trading/polymarket/polymarketBuilderCode.ts",
+		to: "features/trading/venues/polymarket/trade/polymarketBuilderCode.ts",
+	},
+	{
+		from: "features/trading/polymarket/levelUpBuilderConfig.ts",
+		to: "features/trading/venues/polymarket/trade/levelUpBuilderConfig.ts",
+	},
+	{
+		from: "features/trading/polymarket/normalizeBuilderSignTimestamp.ts",
+		to: "features/trading/venues/polymarket/trade/normalizeBuilderSignTimestamp.ts",
+	},
+	{
+		from: "features/trading/polymarket/polymarketConditionLookup.ts",
+		to: "features/trading/venues/polymarket/trade/polymarketConditionLookup.ts",
+	},
+	{
+		from: "features/trading/polymarket/polymarketOrderDebug.ts",
+		to: "features/trading/venues/polymarket/trade/polymarketOrderDebug.ts",
+	},
+	{
+		from: "features/trading/polymarket/constants.ts",
+		to: "features/trading/venues/polymarket/trade/constants.ts",
+	},
+	{
+		from: "features/trading/polymarket/__tests__/usePolymarketEnsureExecutionReady.test.tsx",
+		to: "features/trading/venues/polymarket/session/__tests__/usePolymarketEnsureExecutionReady.test.tsx",
+	},
+	{
+		from: "features/trading/venues/polymarket/PolymarketVenueCard.tsx",
+		to: "features/trading/venues/polymarket/ui/PolymarketVenueCard.tsx",
+	},
 
 	// ── DFlow ──
-	{ from: "trading/dflow/quoteSignAndSubmitDflowOrder.ts", to: "trading/venues/dflow/quote/quoteSignAndSubmitDflowOrder.ts" },
-	{ from: "trading/dflow/dflowOrderQuoteTypes.ts", to: "trading/venues/dflow/quote/dflowOrderQuoteTypes.ts" },
-	{ from: "trading/dflow/dflowOutcomeAmount.ts", to: "trading/venues/dflow/quote/dflowOutcomeAmount.ts" },
-	{ from: "trading/dflow/dflowOutcomeAmount.test.ts", to: "trading/venues/dflow/quote/dflowOutcomeAmount.test.ts" },
-	{ from: "trading/dflow/useDflowPositions.ts", to: "trading/venues/dflow/portfolio/useDflowPositions.ts" },
-	{ from: "trading/dflow/dflowPositionsApi.ts", to: "trading/venues/dflow/portfolio/dflowPositionsApi.ts" },
-	{ from: "trading/dflow/dflowPositionsQueryCache.ts", to: "trading/venues/dflow/portfolio/dflowPositionsQueryCache.ts" },
-	{ from: "trading/dflow/useDflowOutcomeBalance.ts", to: "trading/venues/dflow/portfolio/useDflowOutcomeBalance.ts" },
-	{ from: "trading/dflow/pendingDflowOutcomeMints.ts", to: "trading/venues/dflow/portfolio/pendingDflowOutcomeMints.ts" },
-	{ from: "trading/dflow/dflowCatalogDriftIgnoredMints.ts", to: "trading/venues/dflow/catalog/dflowCatalogDriftIgnoredMints.ts" },
-	{ from: "trading/dflow/monitorDflowBooks.ts", to: "trading/venues/dflow/catalog/monitorDflowBooks.ts" },
-	{ from: "trading/dflow/dflowUmbrellaLookup.ts", to: "trading/venues/dflow/catalog/dflowUmbrellaLookup.ts" },
-	{ from: "trading/dflow/dflowRouteOutcomeMint.ts", to: "trading/venues/dflow/catalog/dflowRouteOutcomeMint.ts" },
-	{ from: "trading/dflow/useDflowMintResolver.ts", to: "trading/venues/dflow/catalog/useDflowMintResolver.ts" },
-	{ from: "trading/dflow/startDflowProofRedirect.ts", to: "trading/venues/dflow/onboarding/startDflowProofRedirect.ts" },
-	{ from: "trading/dflow/DflowProofReturnSync.tsx", to: "trading/venues/dflow/onboarding/DflowProofReturnSync.tsx" },
-	{ from: "trading/dflow/dflowHistoryResolveWire.ts", to: "trading/venues/dflow/onboarding/dflowHistoryResolveWire.ts" },
+	{
+		from: "features/trading/dflow/quoteSignAndSubmitDflowOrder.ts",
+		to: "features/trading/venues/dflow/quote/quoteSignAndSubmitDflowOrder.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowOrderQuoteTypes.ts",
+		to: "features/trading/venues/dflow/quote/dflowOrderQuoteTypes.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowOutcomeAmount.ts",
+		to: "features/trading/venues/dflow/quote/dflowOutcomeAmount.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowOutcomeAmount.test.ts",
+		to: "features/trading/venues/dflow/quote/dflowOutcomeAmount.test.ts",
+	},
+	{
+		from: "features/trading/dflow/useDflowPositions.ts",
+		to: "features/trading/venues/dflow/portfolio/useDflowPositions.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowPositionsApi.ts",
+		to: "features/trading/venues/dflow/portfolio/dflowPositionsApi.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowPositionsQueryCache.ts",
+		to: "features/trading/venues/dflow/portfolio/dflowPositionsQueryCache.ts",
+	},
+	{
+		from: "features/trading/dflow/useDflowOutcomeBalance.ts",
+		to: "features/trading/venues/dflow/portfolio/useDflowOutcomeBalance.ts",
+	},
+	{
+		from: "features/trading/dflow/pendingDflowOutcomeMints.ts",
+		to: "features/trading/venues/dflow/portfolio/pendingDflowOutcomeMints.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowCatalogDriftIgnoredMints.ts",
+		to: "features/trading/venues/dflow/catalog/dflowCatalogDriftIgnoredMints.ts",
+	},
+	{
+		from: "features/trading/dflow/monitorDflowBooks.ts",
+		to: "features/trading/venues/dflow/catalog/monitorDflowBooks.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowUmbrellaLookup.ts",
+		to: "features/trading/venues/dflow/catalog/dflowUmbrellaLookup.ts",
+	},
+	{
+		from: "features/trading/dflow/dflowRouteOutcomeMint.ts",
+		to: "features/trading/venues/dflow/catalog/dflowRouteOutcomeMint.ts",
+	},
+	{
+		from: "features/trading/dflow/useDflowMintResolver.ts",
+		to: "features/trading/venues/dflow/catalog/useDflowMintResolver.ts",
+	},
+	{
+		from: "features/trading/dflow/startDflowProofRedirect.ts",
+		to: "features/trading/venues/dflow/onboarding/startDflowProofRedirect.ts",
+	},
+	{
+		from: "features/trading/dflow/DflowProofReturnSync.tsx",
+		to: "features/trading/venues/dflow/onboarding/DflowProofReturnSync.tsx",
+	},
+	{
+		from: "features/trading/dflow/dflowHistoryResolveWire.ts",
+		to: "features/trading/venues/dflow/onboarding/dflowHistoryResolveWire.ts",
+	},
 
 	// ── Predict ──
-	{ from: "trading/predict/usePredictTradingSession.ts", to: "trading/venues/predict/session/usePredictTradingSession.ts" },
-	{ from: "trading/predict/usePredictEnsureExecutionReady.ts", to: "trading/venues/predict/session/usePredictEnsureExecutionReady.ts" },
-	{ from: "trading/predict/usePredictEnsureAuth.ts", to: "trading/venues/predict/session/usePredictEnsureAuth.ts" },
-	{ from: "trading/predict/PredictBackgroundActivation.tsx", to: "trading/venues/predict/session/PredictBackgroundActivation.tsx" },
-	{ from: "trading/predict/predictSingleMarketBook.ts", to: "trading/venues/predict/book/predictSingleMarketBook.ts" },
-	{ from: "trading/predict/predictSingleMarketBook.test.ts", to: "trading/venues/predict/book/predictSingleMarketBook.test.ts" },
-	{ from: "trading/predict/predictBookToOrderbookSnapshot.ts", to: "trading/venues/predict/book/predictBookToOrderbookSnapshot.ts" },
-	{ from: "trading/predict/usePredictOrderbook.ts", to: "trading/venues/predict/book/usePredictOrderbook.ts" },
-	{ from: "trading/predict/usePredictPositions.ts", to: "trading/venues/predict/portfolio/usePredictPositions.ts" },
-	{ from: "trading/predict/usePredictOrders.ts", to: "trading/venues/predict/portfolio/usePredictOrders.ts" },
-	{ from: "trading/predict/usePredictAccountActivity.ts", to: "trading/venues/predict/portfolio/usePredictAccountActivity.ts" },
-	{ from: "trading/predict/usePredictMarketDetailsMap.ts", to: "trading/venues/predict/portfolio/usePredictMarketDetailsMap.ts" },
-	{ from: "trading/predict/usePredictMarketDetail.ts", to: "trading/venues/predict/portfolio/usePredictMarketDetail.ts" },
-	{ from: "trading/predict/usePredictOrderMatches.ts", to: "trading/venues/predict/portfolio/usePredictOrderMatches.ts" },
-	{ from: "trading/predict/predictPositionsApi.ts", to: "trading/venues/predict/portfolio/predictPositionsApi.ts" },
-	{ from: "trading/predict/predictActivityApi.ts", to: "trading/venues/predict/portfolio/predictActivityApi.ts" },
-	{ from: "trading/predict/predictOrdersApi.ts", to: "trading/venues/predict/portfolio/predictOrdersApi.ts" },
-	{ from: "trading/predict/predictMarketApi.ts", to: "trading/venues/predict/portfolio/predictMarketApi.ts" },
-	{ from: "trading/predict/sumPredictPositionMarkValue.ts", to: "trading/venues/predict/portfolio/sumPredictPositionMarkValue.ts" },
-	{ from: "trading/predict/predictPositionLabel.ts", to: "trading/venues/predict/portfolio/predictPositionLabel.ts" },
-	{ from: "trading/predict/predictTradeBoxMatch.ts", to: "trading/venues/predict/trade/predictTradeBoxMatch.ts" },
-	{ from: "trading/predict/predictTradeBoxMatch.test.ts", to: "trading/venues/predict/trade/predictTradeBoxMatch.test.ts" },
-	{ from: "trading/predict/predictSellShareClamp.ts", to: "trading/venues/predict/trade/predictSellShareClamp.ts" },
-	{ from: "trading/predict/predictOrderSubmit.ts", to: "trading/venues/predict/trade/predictOrderSubmit.ts" },
-	{ from: "trading/predict/predictPositionSide.ts", to: "trading/venues/predict/trade/predictPositionSide.ts" },
-	{ from: "trading/predict/predictOutcome.ts", to: "trading/venues/predict/trade/predictOutcome.ts" },
-	{ from: "trading/predict/predictMatchesApi.ts", to: "trading/venues/predict/trade/predictMatchesApi.ts" },
-	{ from: "trading/predict/predictGasGuidance.ts", to: "trading/venues/predict/trade/predictGasGuidance.ts" },
-	{ from: "trading/predict/predictContractKeys.ts", to: "trading/venues/predict/trade/predictContractKeys.ts" },
-	{ from: "trading/predict/resolvePredictUmbrellaFromMonitor.ts", to: "trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor.ts" },
-	{ from: "trading/predict/resolvePredictUmbrellaFromMonitor.test.ts", to: "trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor.test.ts" },
-	{ from: "trading/predict/usePredictBnbBalances.ts", to: "trading/venues/predict/wallet/usePredictBnbBalances.ts" },
-	{ from: "trading/predict/bnbWallet.ts", to: "trading/venues/predict/wallet/bnbWallet.ts" },
-	{ from: "trading/predict/usePredictApprovalsStatus.ts", to: "trading/venues/predict/wallet/usePredictApprovalsStatus.ts" },
+	{
+		from: "features/trading/predict/usePredictTradingSession.ts",
+		to: "features/trading/venues/predict/session/usePredictTradingSession.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictEnsureExecutionReady.ts",
+		to: "features/trading/venues/predict/session/usePredictEnsureExecutionReady.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictEnsureAuth.ts",
+		to: "features/trading/venues/predict/session/usePredictEnsureAuth.ts",
+	},
+	{
+		from: "features/trading/predict/PredictBackgroundActivation.tsx",
+		to: "features/trading/venues/predict/session/PredictBackgroundActivation.tsx",
+	},
+	{
+		from: "features/trading/predict/predictSingleMarketBook.ts",
+		to: "features/trading/venues/predict/book/predictSingleMarketBook.ts",
+	},
+	{
+		from: "features/trading/predict/predictSingleMarketBook.test.ts",
+		to: "features/trading/venues/predict/book/predictSingleMarketBook.test.ts",
+	},
+	{
+		from: "features/trading/predict/predictBookToOrderbookSnapshot.ts",
+		to: "features/trading/venues/predict/book/predictBookToOrderbookSnapshot.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictOrderbook.ts",
+		to: "features/trading/venues/predict/book/usePredictOrderbook.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictPositions.ts",
+		to: "features/trading/venues/predict/portfolio/usePredictPositions.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictOrders.ts",
+		to: "features/trading/venues/predict/portfolio/usePredictOrders.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictAccountActivity.ts",
+		to: "features/trading/venues/predict/portfolio/usePredictAccountActivity.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictMarketDetailsMap.ts",
+		to: "features/trading/venues/predict/portfolio/usePredictMarketDetailsMap.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictMarketDetail.ts",
+		to: "features/trading/venues/predict/portfolio/usePredictMarketDetail.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictOrderMatches.ts",
+		to: "features/trading/venues/predict/portfolio/usePredictOrderMatches.ts",
+	},
+	{
+		from: "features/trading/predict/predictPositionsApi.ts",
+		to: "features/trading/venues/predict/portfolio/predictPositionsApi.ts",
+	},
+	{
+		from: "features/trading/predict/predictActivityApi.ts",
+		to: "features/trading/venues/predict/portfolio/predictActivityApi.ts",
+	},
+	{
+		from: "features/trading/predict/predictOrdersApi.ts",
+		to: "features/trading/venues/predict/portfolio/predictOrdersApi.ts",
+	},
+	{
+		from: "features/trading/predict/predictMarketApi.ts",
+		to: "features/trading/venues/predict/portfolio/predictMarketApi.ts",
+	},
+	{
+		from: "features/trading/predict/sumPredictPositionMarkValue.ts",
+		to: "features/trading/venues/predict/portfolio/sumPredictPositionMarkValue.ts",
+	},
+	{
+		from: "features/trading/predict/predictPositionLabel.ts",
+		to: "features/trading/venues/predict/portfolio/predictPositionLabel.ts",
+	},
+	{
+		from: "features/trading/predict/predictTradeBoxMatch.ts",
+		to: "features/trading/venues/predict/trade/predictTradeBoxMatch.ts",
+	},
+	{
+		from: "features/trading/predict/predictTradeBoxMatch.test.ts",
+		to: "features/trading/venues/predict/trade/predictTradeBoxMatch.test.ts",
+	},
+	{
+		from: "features/trading/predict/predictSellShareClamp.ts",
+		to: "features/trading/venues/predict/trade/predictSellShareClamp.ts",
+	},
+	{
+		from: "features/trading/predict/predictOrderSubmit.ts",
+		to: "features/trading/venues/predict/trade/predictOrderSubmit.ts",
+	},
+	{
+		from: "features/trading/predict/predictPositionSide.ts",
+		to: "features/trading/venues/predict/trade/predictPositionSide.ts",
+	},
+	{
+		from: "features/trading/predict/predictOutcome.ts",
+		to: "features/trading/venues/predict/trade/predictOutcome.ts",
+	},
+	{
+		from: "features/trading/predict/predictMatchesApi.ts",
+		to: "features/trading/venues/predict/trade/predictMatchesApi.ts",
+	},
+	{
+		from: "features/trading/predict/predictGasGuidance.ts",
+		to: "features/trading/venues/predict/trade/predictGasGuidance.ts",
+	},
+	{
+		from: "features/trading/predict/predictContractKeys.ts",
+		to: "features/trading/venues/predict/trade/predictContractKeys.ts",
+	},
+	{
+		from: "features/trading/predict/resolvePredictUmbrellaFromMonitor.ts",
+		to: "features/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor.ts",
+	},
+	{
+		from: "features/trading/predict/resolvePredictUmbrellaFromMonitor.test.ts",
+		to: "features/trading/venues/predict/trade/resolvePredictUmbrellaFromMonitor.test.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictBnbBalances.ts",
+		to: "features/trading/venues/predict/wallet/usePredictBnbBalances.ts",
+	},
+	{
+		from: "features/trading/predict/bnbWallet.ts",
+		to: "features/trading/venues/predict/wallet/bnbWallet.ts",
+	},
+	{
+		from: "features/trading/predict/usePredictApprovalsStatus.ts",
+		to: "features/trading/venues/predict/wallet/usePredictApprovalsStatus.ts",
+	},
 
 	// ── Limitless ──
-	{ from: "trading/limitless/useLimitlessEnsureExecutionReady.ts", to: "trading/venues/limitless/session/useLimitlessEnsureExecutionReady.ts" },
-	{ from: "trading/limitless/limitlessEnsureTradeGate.ts", to: "trading/venues/limitless/session/limitlessEnsureTradeGate.ts" },
-	{ from: "trading/limitless/limitlessEnsureAccountRequest.ts", to: "trading/venues/limitless/session/limitlessEnsureAccountRequest.ts" },
-	{ from: "trading/limitless/limitlessEnsureEoaBody.ts", to: "trading/venues/limitless/session/limitlessEnsureEoaBody.ts" },
-	{ from: "trading/limitless/LimitlessBackgroundActivation.tsx", to: "trading/venues/limitless/session/LimitlessBackgroundActivation.tsx" },
-	{ from: "trading/limitless/limitlessSignupWarmupBaseApprovals.ts", to: "trading/venues/limitless/session/limitlessSignupWarmupBaseApprovals.ts" },
-	{ from: "trading/limitless/limitlessTradingApprovalsOnBase.ts", to: "trading/venues/limitless/approvals/limitlessTradingApprovalsOnBase.ts" },
-	{ from: "trading/limitless/useLimitlessPortfolioVenue.ts", to: "trading/venues/limitless/portfolio/useLimitlessPortfolioVenue.ts" },
-	{ from: "trading/limitless/useLimitlessPositions.ts", to: "trading/venues/limitless/portfolio/useLimitlessPositions.ts" },
-	{ from: "trading/limitless/splitLimitlessVenuePositions.ts", to: "trading/venues/limitless/portfolio/splitLimitlessVenuePositions.ts" },
-	{ from: "trading/limitless/limitlessVenueSharesFilter.ts", to: "trading/venues/limitless/portfolio/limitlessVenueSharesFilter.ts" },
-	{ from: "trading/limitless/limitlessPortfolioDebug.ts", to: "trading/venues/limitless/portfolio/limitlessPortfolioDebug.ts" },
-	{ from: "trading/limitless/limitlessRedeemOnBase.ts", to: "trading/venues/limitless/portfolio/limitlessRedeemOnBase.ts" },
-	{ from: "trading/limitless/limitlessClaimAck.ts", to: "trading/venues/limitless/portfolio/limitlessClaimAck.ts" },
-	{ from: "trading/limitless/limitlessSignedClobOrder.ts", to: "trading/venues/limitless/trade/limitlessSignedClobOrder.ts" },
-	{ from: "trading/limitless/limitlessTradeBoxMatch.ts", to: "trading/venues/limitless/trade/limitlessTradeBoxMatch.ts" },
-	{ from: "trading/limitless/limitlessOrderbook.ts", to: "trading/venues/limitless/trade/limitlessOrderbook.ts" },
-	{ from: "trading/limitless/limitlessTokenId.ts", to: "trading/venues/limitless/trade/limitlessTokenId.ts" },
-	{ from: "trading/limitless/limitlessCatalogTokenPair.ts", to: "trading/venues/limitless/trade/limitlessCatalogTokenPair.ts" },
-	{ from: "trading/limitless/limitlessClientMakerIdentity.ts", to: "trading/venues/limitless/trade/limitlessClientMakerIdentity.ts" },
-	{ from: "trading/limitless/limitlessPrivateApiTypes.ts", to: "trading/venues/limitless/trade/limitlessPrivateApiTypes.ts" },
-	{ from: "trading/limitless/limitlessConsoleDebug.ts", to: "trading/venues/limitless/trade/limitlessConsoleDebug.ts" },
-	{ from: "trading/limitless/limitlessBaseTxClientForAddress.ts", to: "trading/venues/limitless/trade/limitlessBaseTxClientForAddress.ts" },
-	{ from: "trading/limitless/limitlessQueryKeys.ts", to: "trading/venues/limitless/trade/limitlessQueryKeys.ts" },
+	{
+		from: "features/trading/limitless/useLimitlessEnsureExecutionReady.ts",
+		to: "features/trading/venues/limitless/session/useLimitlessEnsureExecutionReady.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessEnsureTradeGate.ts",
+		to: "features/trading/venues/limitless/session/limitlessEnsureTradeGate.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessEnsureAccountRequest.ts",
+		to: "features/trading/venues/limitless/session/limitlessEnsureAccountRequest.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessEnsureEoaBody.ts",
+		to: "features/trading/venues/limitless/session/limitlessEnsureEoaBody.ts",
+	},
+	{
+		from: "features/trading/limitless/LimitlessBackgroundActivation.tsx",
+		to: "features/trading/venues/limitless/session/LimitlessBackgroundActivation.tsx",
+	},
+	{
+		from: "features/trading/limitless/limitlessSignupWarmupBaseApprovals.ts",
+		to: "features/trading/venues/limitless/session/limitlessSignupWarmupBaseApprovals.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessTradingApprovalsOnBase.ts",
+		to: "features/trading/venues/limitless/approvals/limitlessTradingApprovalsOnBase.ts",
+	},
+	{
+		from: "features/trading/limitless/useLimitlessPortfolioVenue.ts",
+		to: "features/trading/venues/limitless/portfolio/useLimitlessPortfolioVenue.ts",
+	},
+	{
+		from: "features/trading/limitless/useLimitlessPositions.ts",
+		to: "features/trading/venues/limitless/portfolio/useLimitlessPositions.ts",
+	},
+	{
+		from: "features/trading/limitless/splitLimitlessVenuePositions.ts",
+		to: "features/trading/venues/limitless/portfolio/splitLimitlessVenuePositions.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessVenueSharesFilter.ts",
+		to: "features/trading/venues/limitless/portfolio/limitlessVenueSharesFilter.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessPortfolioDebug.ts",
+		to: "features/trading/venues/limitless/portfolio/limitlessPortfolioDebug.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessRedeemOnBase.ts",
+		to: "features/trading/venues/limitless/portfolio/limitlessRedeemOnBase.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessClaimAck.ts",
+		to: "features/trading/venues/limitless/portfolio/limitlessClaimAck.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessSignedClobOrder.ts",
+		to: "features/trading/venues/limitless/trade/limitlessSignedClobOrder.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessTradeBoxMatch.ts",
+		to: "features/trading/venues/limitless/trade/limitlessTradeBoxMatch.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessOrderbook.ts",
+		to: "features/trading/venues/limitless/trade/limitlessOrderbook.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessTokenId.ts",
+		to: "features/trading/venues/limitless/trade/limitlessTokenId.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessCatalogTokenPair.ts",
+		to: "features/trading/venues/limitless/trade/limitlessCatalogTokenPair.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessClientMakerIdentity.ts",
+		to: "features/trading/venues/limitless/trade/limitlessClientMakerIdentity.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessPrivateApiTypes.ts",
+		to: "features/trading/venues/limitless/trade/limitlessPrivateApiTypes.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessConsoleDebug.ts",
+		to: "features/trading/venues/limitless/trade/limitlessConsoleDebug.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessBaseTxClientForAddress.ts",
+		to: "features/trading/venues/limitless/trade/limitlessBaseTxClientForAddress.ts",
+	},
+	{
+		from: "features/trading/limitless/limitlessQueryKeys.ts",
+		to: "features/trading/venues/limitless/trade/limitlessQueryKeys.ts",
+	},
 
 	// ── LevelUp (from sor) ──
-	{ from: "trading/sor/levelUpSorSigning.ts", to: "trading/venues/levelup/execute/levelUpSorSigning.ts" },
+	{
+		from: "features/trading/sor/levelUpSorSigning.ts",
+		to: "features/trading/venues/levelup/execute/levelUpSorSigning.ts",
+	},
 
 	// ── SOR core ──
-	{ from: "trading/sor/sor-types.ts", to: "trading/sor/core/sor-types.ts" },
-	{ from: "trading/sor/sor-api.ts", to: "trading/sor/core/sor-api.ts" },
-	{ from: "trading/sor/useSorRoute.ts", to: "trading/sor/core/useSorRoute.ts" },
-	{ from: "trading/sor/useSorExecution.ts", to: "trading/sor/core/useSorExecution.ts" },
-	{ from: "trading/sor/useSorLegExecutor.ts", to: "trading/sor/core/useSorLegExecutor.ts" },
-	{ from: "trading/sor/buildChainBalances.ts", to: "trading/sor/core/buildChainBalances.ts" },
-	{ from: "trading/sor/wireAmount.ts", to: "trading/sor/core/wireAmount.ts" },
-	{ from: "trading/sor/sorPredictNetHeldDisplay.ts", to: "trading/sor/core/sorPredictNetHeldDisplay.ts" },
-	{ from: "trading/sor/SorKalshiKycShortfallBanner.tsx", to: "trading/sor/core/SorKalshiKycShortfallBanner.tsx" },
-	{ from: "trading/sor/SorTransientRouteErrorText.tsx", to: "trading/sor/core/SorTransientRouteErrorText.tsx" },
+	{ from: "features/trading/sor/sor-types.ts", to: "features/trading/sor/core/sor-types.ts" },
+	{ from: "features/trading/sor/sor-api.ts", to: "features/trading/sor/core/sor-api.ts" },
+	{ from: "features/trading/sor/useSorRoute.ts", to: "features/trading/sor/core/useSorRoute.ts" },
+	{
+		from: "features/trading/sor/useSorExecution.ts",
+		to: "features/trading/sor/core/useSorExecution.ts",
+	},
+	{
+		from: "features/trading/sor/useSorLegExecutor.ts",
+		to: "features/trading/sor/core/useSorLegExecutor.ts",
+	},
+	{
+		from: "features/trading/sor/buildChainBalances.ts",
+		to: "features/trading/sor/core/buildChainBalances.ts",
+	},
+	{ from: "features/trading/sor/wireAmount.ts", to: "features/trading/sor/core/wireAmount.ts" },
+	{
+		from: "features/trading/sor/sorPredictNetHeldDisplay.ts",
+		to: "features/trading/sor/core/sorPredictNetHeldDisplay.ts",
+	},
+	{
+		from: "features/trading/sor/SorKalshiKycShortfallBanner.tsx",
+		to: "features/trading/sor/core/SorKalshiKycShortfallBanner.tsx",
+	},
+	{
+		from: "features/trading/sor/SorTransientRouteErrorText.tsx",
+		to: "features/trading/sor/core/SorTransientRouteErrorText.tsx",
+	},
 
 	// ── SOR route ──
-	{ from: "trading/sor/sorQuoteTrust.ts", to: "trading/sor/route/sorQuoteTrust.ts" },
-	{ from: "trading/sor/sorPreflight.ts", to: "trading/sor/route/sorPreflight.ts" },
+	{
+		from: "features/trading/sor/sorQuoteTrust.ts",
+		to: "features/trading/sor/route/sorQuoteTrust.ts",
+	},
+	{
+		from: "features/trading/sor/sorPreflight.ts",
+		to: "features/trading/sor/route/sorPreflight.ts",
+	},
 
 	// ── SOR prefund ──
-	{ from: "trading/sor/prefundPlan.ts", to: "trading/sor/prefund/prefundPlan.ts" },
-	{ from: "trading/sor/fundingStableBalances.ts", to: "trading/sor/prefund/fundingStableBalances.ts" },
-	{ from: "trading/sor/fundingStableBalanceChains.ts", to: "trading/sor/prefund/fundingStableBalanceChains.ts" },
-	{ from: "trading/sor/lifiPrefundQuoteSolve.ts", to: "trading/sor/prefund/lifiPrefundQuoteSolve.ts" },
-	{ from: "trading/sor/limitlessPrefundSweep.ts", to: "trading/sor/prefund/limitlessPrefundSweep.ts" },
-	{ from: "trading/sor/sorPrefundLifiExecutionAlignment.ts", to: "trading/sor/prefund/sorPrefundLifiExecutionAlignment.ts" },
-	{ from: "trading/sor/sorBridgeWallTimeBudget.ts", to: "trading/sor/prefund/sorBridgeWallTimeBudget.ts" },
-	{ from: "trading/sor/sorBridgeGroups.ts", to: "trading/sor/prefund/sorBridgeGroups.ts" },
-	{ from: "trading/sor/predictionBuyCollateralMicro.ts", to: "trading/sor/prefund/predictionBuyCollateralMicro.ts" },
-	{ from: "trading/sor/limitlessMakerToScwWithdrawWait.ts", to: "trading/sor/prefund/limitlessMakerToScwWithdrawWait.ts" },
-	{ from: "trading/sor/postBridgeOrderResize.ts", to: "trading/sor/prefund/postBridgeOrderResize.ts" },
+	{
+		from: "features/trading/sor/prefundPlan.ts",
+		to: "features/trading/sor/prefund/prefundPlan.ts",
+	},
+	{
+		from: "features/trading/sor/fundingStableBalances.ts",
+		to: "features/trading/sor/prefund/fundingStableBalances.ts",
+	},
+	{
+		from: "features/trading/sor/fundingStableBalanceChains.ts",
+		to: "features/trading/sor/prefund/fundingStableBalanceChains.ts",
+	},
+	{
+		from: "features/trading/sor/lifiPrefundQuoteSolve.ts",
+		to: "features/trading/sor/prefund/lifiPrefundQuoteSolve.ts",
+	},
+	{
+		from: "features/trading/sor/limitlessPrefundSweep.ts",
+		to: "features/trading/sor/prefund/limitlessPrefundSweep.ts",
+	},
+	{
+		from: "features/trading/sor/sorPrefundLifiExecutionAlignment.ts",
+		to: "features/trading/sor/prefund/sorPrefundLifiExecutionAlignment.ts",
+	},
+	{
+		from: "features/trading/sor/sorBridgeWallTimeBudget.ts",
+		to: "features/trading/sor/prefund/sorBridgeWallTimeBudget.ts",
+	},
+	{
+		from: "features/trading/sor/sorBridgeGroups.ts",
+		to: "features/trading/sor/prefund/sorBridgeGroups.ts",
+	},
+	{
+		from: "features/trading/sor/predictionBuyCollateralMicro.ts",
+		to: "features/trading/sor/prefund/predictionBuyCollateralMicro.ts",
+	},
+	{
+		from: "features/trading/sor/limitlessMakerToScwWithdrawWait.ts",
+		to: "features/trading/sor/prefund/limitlessMakerToScwWithdrawWait.ts",
+	},
+	{
+		from: "features/trading/sor/postBridgeOrderResize.ts",
+		to: "features/trading/sor/prefund/postBridgeOrderResize.ts",
+	},
 
 	// ── SOR post-trade ──
-	{ from: "trading/sor/performPostTradeDataRefresh.ts", to: "trading/sor/post-trade/performPostTradeDataRefresh.ts" },
-	{ from: "trading/sor/usePostTradeAccountSync.tsx", to: "trading/sor/post-trade/usePostTradeAccountSync.tsx" },
-	{ from: "trading/sor/postTradeVenueRefresh.ts", to: "trading/sor/post-trade/postTradeVenueRefresh.ts" },
-	{ from: "trading/sor/postTradeRouteAlign.ts", to: "trading/sor/post-trade/postTradeRouteAlign.ts" },
-	{ from: "trading/sor/postTradeReconcile.ts", to: "trading/sor/post-trade/postTradeReconcile.ts" },
-	{ from: "trading/sor/postTradeBaseline.ts", to: "trading/sor/post-trade/postTradeBaseline.ts" },
-	{ from: "trading/sor/pollAccountRefresh.ts", to: "trading/sor/post-trade/pollAccountRefresh.ts" },
+	{
+		from: "features/trading/sor/performPostTradeDataRefresh.ts",
+		to: "features/trading/sor/post-trade/performPostTradeDataRefresh.ts",
+	},
+	{
+		from: "features/trading/sor/usePostTradeAccountSync.tsx",
+		to: "features/trading/sor/post-trade/usePostTradeAccountSync.tsx",
+	},
+	{
+		from: "features/trading/sor/postTradeVenueRefresh.ts",
+		to: "features/trading/sor/post-trade/postTradeVenueRefresh.ts",
+	},
+	{
+		from: "features/trading/sor/postTradeRouteAlign.ts",
+		to: "features/trading/sor/post-trade/postTradeRouteAlign.ts",
+	},
+	{
+		from: "features/trading/sor/postTradeReconcile.ts",
+		to: "features/trading/sor/post-trade/postTradeReconcile.ts",
+	},
+	{
+		from: "features/trading/sor/postTradeBaseline.ts",
+		to: "features/trading/sor/post-trade/postTradeBaseline.ts",
+	},
+	{
+		from: "features/trading/sor/pollAccountRefresh.ts",
+		to: "features/trading/sor/post-trade/pollAccountRefresh.ts",
+	},
 ];
 
 function ensureDir(filePath: string): void {
@@ -219,7 +622,7 @@ function applyImportReplacements(content: string, reps: Array<[string, string]>)
 
 function fixSorRelativeImports(content: string, fileRel: string): string {
 	// sor/__tests__/*.test.ts: ../foo → ../core/foo or correct subfolder
-	if (!fileRel.includes("trading/sor/")) return content;
+	if (!fileRel.includes("features/trading/sor/")) return content;
 
 	const subfolderMap: Record<string, string> = {
 		"sor-types": "core/sor-types",
@@ -255,10 +658,7 @@ function fixSorRelativeImports(content: string, fileRel: string): string {
 
 	let s = content;
 	for (const [name, target] of Object.entries(subfolderMap)) {
-		s = s.replace(
-			new RegExp(`from "\\.\\./${name}"`, "g"),
-			`from "../${target}"`,
-		);
+		s = s.replace(new RegExp(`from "\\.\\./${name}"`, "g"), `from "../${target}"`);
 		s = s.replace(
 			new RegExp(`from "\\./${name}"`, "g"),
 			`from "./${target.replace(/^\.\.\//, "")}"`,
@@ -293,10 +693,10 @@ function main(): void {
 
 	// Remove empty legacy dirs only (never remove trading/venues/* — subdirs hold moved files)
 	for (const d of [
-		"trading/polymarket",
-		"trading/dflow",
-		"trading/predict",
-		"trading/limitless",
+		"features/trading/polymarket",
+		"features/trading/dflow",
+		"features/trading/predict",
+		"features/trading/limitless",
 	]) {
 		const p = path.join(SRC, d);
 		if (fs.existsSync(p)) {

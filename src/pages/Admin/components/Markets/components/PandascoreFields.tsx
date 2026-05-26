@@ -1,5 +1,3 @@
-import React from "react";
-
 interface PandascoreFieldsProps {
 	game: string;
 	matchId: string;
@@ -10,14 +8,15 @@ interface PandascoreFieldsProps {
 
 const fieldStyles = {
 	wrapper: { display: "grid", gap: 6 } as const,
-	input: (disabled: boolean) => ({
-		padding: 8,
-		color: disabled ? "#888" : "cyan",
-		border: "1px solid white",
-		borderRadius: "4px",
-		background: disabled ? "rgba(0,0,0,0.2)" : "transparent",
-		cursor: disabled ? "not-allowed" : "text",
-	}) as const,
+	input: (disabled: boolean) =>
+		({
+			padding: 8,
+			color: disabled ? "#888" : "cyan",
+			border: "1px solid white",
+			borderRadius: "4px",
+			background: disabled ? "rgba(0,0,0,0.2)" : "transparent",
+			cursor: disabled ? "not-allowed" : "text",
+		}) as const,
 };
 
 export default function PandascoreFields({

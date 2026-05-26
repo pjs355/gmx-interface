@@ -158,9 +158,7 @@ export type LifiWithdrawLifiData = {
 };
 
 /** One executable slice from POST /funding/lifi/withdraw/plan */
-export type LifiWithdrawPlanLeg =
-	| LifiWithdrawDirectTransferData
-	| LifiWithdrawLifiData;
+export type LifiWithdrawPlanLeg = LifiWithdrawDirectTransferData | LifiWithdrawLifiData;
 
 export type LifiWithdrawCompositeData = {
 	mode: "composite";
@@ -171,9 +169,7 @@ export type LifiWithdrawCompositeData = {
 	legs: LifiWithdrawPlanLeg[];
 };
 
-export type LifiWithdrawPlanData =
-	| LifiWithdrawPlanLeg
-	| LifiWithdrawCompositeData;
+export type LifiWithdrawPlanData = LifiWithdrawPlanLeg | LifiWithdrawCompositeData;
 
 export type LifiWithdrawPlanResponse = {
 	success: boolean;

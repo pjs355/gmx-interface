@@ -6,31 +6,22 @@ import {
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
-} from "@/helpers/gameLogoResolver";
+} from "@/features/markets/assets/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
 
-export default function UmbrellaImage({
-	umbrella,
-	size = 48,
-}: {
-	umbrella: any;
-	size?: number;
-}) {
+export default function UmbrellaImage({ umbrella, size = 48 }: { umbrella: any; size?: number }) {
 	const { tags } = usePredictionData();
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
 	const polyIcon = umbrella?._polyIcon || null;
-	const serverImage =
-		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
+	const serverImage = umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
 	const tagImage = getTagImageFromUmbrella(umbrella, tags);
 	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 	const gameLogo = resolveLogoByTags(tagLabels);
 	const fallbackLogo = gameLogo || gtaIcon;
 	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
-	const initialSrc =
-		cs2Bundled ??
-		(polyIcon || serverImage || tagImage || fallbackLogo);
+	const initialSrc = cs2Bundled ?? (polyIcon || serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {

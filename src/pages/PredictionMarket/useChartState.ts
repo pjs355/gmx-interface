@@ -9,10 +9,7 @@ type ChartState = {
 	frozenOrderbooks: Record<string, any>;
 };
 
-export function useChartState(
-	sortedQuestions: any[],
-	questionOrderbooks: Record<string, any>
-) {
+export function useChartState(sortedQuestions: any[], questionOrderbooks: Record<string, any>) {
 	const [chartOnlyState, setChartOnlyState] = useState<ChartState>({
 		isInitialized: false,
 		primaryMarket: null,
@@ -35,9 +32,7 @@ export function useChartState(
 				"") as string;
 			const secondaryQuestionId =
 				sortedQuestions.length > 1
-					? sortedQuestions[1]._id ||
-					  sortedQuestions[1].questionId ||
-					  sortedQuestions[1].marketId
+					? sortedQuestions[1]._id || sortedQuestions[1].questionId || sortedQuestions[1].marketId
 					: null;
 
 			// Only update if the markets actually changed
@@ -47,10 +42,7 @@ export function useChartState(
 
 			if (marketsChanged) {
 				const primaryMarket = { ...sortedQuestions[0] };
-				const secondaryMarket =
-					sortedQuestions.length > 1
-						? { ...sortedQuestions[1] }
-						: null;
+				const secondaryMarket = sortedQuestions.length > 1 ? { ...sortedQuestions[1] } : null;
 
 				setChartOnlyState((prev) => ({
 					...prev,
@@ -63,11 +55,7 @@ export function useChartState(
 				}));
 			}
 		}
-	}, [
-		sortedQuestions,
-		chartOnlyState.primaryQuestionId,
-		chartOnlyState.secondaryQuestionId,
-	]);
+	}, [sortedQuestions, chartOnlyState.primaryQuestionId, chartOnlyState.secondaryQuestionId]);
 
 	// Chart uses frozen data from global context - no additional API calls needed
 

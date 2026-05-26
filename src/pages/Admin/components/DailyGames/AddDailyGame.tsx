@@ -22,10 +22,7 @@ interface AddDailyGameProps {
 	onBack?: () => void;
 }
 
-export default function AddDailyGame({
-	onCreated,
-	onBack,
-}: AddDailyGameProps) {
+export default function AddDailyGame({ onCreated, onBack }: AddDailyGameProps) {
 	const { getAccessToken } = usePrivy();
 	const { identityToken } = useIdentityToken();
 	const [gameId, setGameId] = useState<string>("");
@@ -46,10 +43,6 @@ export default function AddDailyGame({
 		let mounted = true;
 		async function loadTags() {
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
 				const tags = await tagService.fetchAllTags();
 				if (mounted) {
 					setAvailableTags(tags);
@@ -93,10 +86,7 @@ export default function AddDailyGame({
 		setSuccess(false);
 
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			if (!token) {
 				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
@@ -164,13 +154,11 @@ export default function AddDailyGame({
 				}),
 			});
 
-			const json = await resp.json().catch(() => ({} as any));
+			const json = await resp.json().catch(() => ({}) as any);
 
 			if (!resp.ok) {
 				const errorText = await resp.text().catch(() => "");
-				throw new Error(
-					formatAdminHttpError(resp.status, json?.error ?? errorText),
-				);
+				throw new Error(formatAdminHttpError(resp.status, json?.error ?? errorText));
 			}
 
 			if (json?.success !== true) {
@@ -178,7 +166,7 @@ export default function AddDailyGame({
 			}
 
 			setSuccess(true);
-			
+
 			// Reset form
 			setGameId("");
 			setGameName("");
@@ -242,8 +230,8 @@ export default function AddDailyGame({
 					color: "#aaa",
 				}}
 			>
-				<strong>Note:</strong> These games drive the Steam cron: counts every
-				~14 minutes, markets auto-create when the daily window starts.
+				<strong>Note:</strong> These games drive the Steam cron: counts every ~14 minutes, markets
+				auto-create when the daily window starts.
 			</div>
 
 			{error && (
@@ -434,8 +422,7 @@ export default function AddDailyGame({
 								color: "#aaa",
 							}}
 						>
-							Time is in UTC. Use the time picker or enter time in HH:MM format
-							(e.g., 04:00).
+							Time is in UTC. Use the time picker or enter time in HH:MM format (e.g., 04:00).
 						</div>
 					</div>
 
@@ -474,8 +461,7 @@ export default function AddDailyGame({
 								color: "#aaa",
 							}}
 						>
-							Manual number used when there's not enough data. An algorithm will
-							take over later.
+							Manual number used when there's not enough data. An algorithm will take over later.
 						</div>
 					</div>
 
@@ -490,9 +476,7 @@ export default function AddDailyGame({
 							Tags
 						</label>
 						{loadingTags ? (
-							<div style={{ color: "#aaa", fontSize: "14px" }}>
-								Loading tags...
-							</div>
+							<div style={{ color: "#aaa", fontSize: "14px" }}>Loading tags...</div>
 						) : (
 							<div
 								style={{
@@ -519,9 +503,7 @@ export default function AddDailyGame({
 													return;
 												}
 												if (isSelected) {
-													setSelectedTagIds(
-														selectedTagIds.filter((id) => id !== tag._id)
-													);
+													setSelectedTagIds(selectedTagIds.filter((id) => id !== tag._id));
 												} else {
 													setSelectedTagIds([...selectedTagIds, tag._id]);
 												}
@@ -530,9 +512,7 @@ export default function AddDailyGame({
 												padding: "6px 12px",
 												border: `1px solid ${isSelected ? "#6a6ff5" : "#333"}`,
 												borderRadius: 6,
-												backgroundColor: isSelected
-													? "rgba(106, 111, 245, 0.2)"
-													: "transparent",
+												backgroundColor: isSelected ? "rgba(106, 111, 245, 0.2)" : "transparent",
 												color: "white",
 												cursor: isDailyTag && isSelected ? "not-allowed" : "pointer",
 												fontSize: "14px",
@@ -575,9 +555,7 @@ export default function AddDailyGame({
 								padding: "10px 20px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background: loading
-									? "rgba(255,255,255,0.1)"
-									: "rgba(106, 111, 245, 0.2)",
+								background: loading ? "rgba(255,255,255,0.1)" : "rgba(106, 111, 245, 0.2)",
 								color: "white",
 								cursor: loading ? "not-allowed" : "pointer",
 								fontSize: "14px",
@@ -610,4 +588,3 @@ export default function AddDailyGame({
 		</div>
 	);
 }
-

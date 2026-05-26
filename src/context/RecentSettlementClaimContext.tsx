@@ -1,11 +1,4 @@
-import React, {
-	createContext,
-	useCallback,
-	useContext,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useSignerContext } from "context/SignerContext";
 
 type RecentSettlementClaimContextValue = {
@@ -19,19 +12,14 @@ type RecentSettlementClaimContextValue = {
 	acknowledgeClearedPayouts: (keys: string[]) => void;
 };
 
-const RecentSettlementClaimContext =
-	createContext<RecentSettlementClaimContextValue | null>(null);
+const RecentSettlementClaimContext = createContext<RecentSettlementClaimContextValue | null>(null);
 
 /**
  * After a successful claim, register the same `marketId` values passed to
  * `onClaimSuccess` so `PortfolioContext` can ignore stale winning balances / venue
  * rows until RPC + queries converge.
  */
-export function RecentSettlementClaimProvider({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
+export function RecentSettlementClaimProvider({ children }: { children: React.ReactNode }) {
 	const { account } = useSignerContext();
 	const [keys, setKeys] = useState<string[]>([]);
 
@@ -39,10 +27,7 @@ export function RecentSettlementClaimProvider({
 		setKeys([]);
 	}, [account]);
 
-	const acknowledgedClearedPayoutKeys = useMemo(
-		() => new Set(keys),
-		[keys],
-	);
+	const acknowledgedClearedPayoutKeys = useMemo(() => new Set(keys), [keys]);
 
 	const acknowledgeClearedPayouts = useCallback((next: string[]) => {
 		if (next.length === 0) return;
@@ -70,9 +55,7 @@ export function RecentSettlementClaimProvider({
 export function useRecentSettlementClaim(): RecentSettlementClaimContextValue {
 	const ctx = useContext(RecentSettlementClaimContext);
 	if (!ctx) {
-		throw new Error(
-			"useRecentSettlementClaim must be used within RecentSettlementClaimProvider",
-		);
+		throw new Error("useRecentSettlementClaim must be used within RecentSettlementClaimProvider");
 	}
 	return ctx;
 }
@@ -90,11 +73,6 @@ export function syntheticVenueWinningsRowId(
 	if (venue === "limitless") {
 		return `lx-win-${tid}`;
 	}
-	const p =
-		venue === "polymarket"
-			? "poly-win"
-			: venue === "dflow"
-				? "dflow-win"
-				: "predict-win";
+	const p = venue === "polymarket" ? "poly-win" : venue === "dflow" ? "dflow-win" : "predict-win";
 	return `${p}-${tid.slice(0, 12)}`;
 }

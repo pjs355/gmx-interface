@@ -6,24 +6,20 @@
  * the Limitless maker address, so LI.FI can quote legs from the correct `fromAddress`.
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import Tooltip from "@/components/Tooltip/Tooltip";
 import Modal from "@/components/Modal/Modal";
 import { useTransfersModal } from "@/context/TransfersModalContext";
 import { usePortfolio } from "@/context/PortfolioContext";
-import { useSignerContext } from "@/context/SignerContext";
-import { useUserData } from "@/context/UserDataContext";
-import {
-	useAccountData,
-	useVenueAddressChainMap,
-} from "@/context/AccountDataContext";
-import { buildChainBalances } from "@/trading/sor/core/buildChainBalances";
-import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
+import { useLevelUpPortfolioRefetch } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
+import { useAccountData, useVenueAddressChainMap } from "@/context/AccountDataContext";
+import { buildChainBalances } from "@/features/trading/sor/core/buildChainBalances";
+import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
 import {
 	useWithdrawPlanExecution,
 	getWithdrawExecutionErrorMessage,
 } from "@/pages/Transfers/useWithdrawPlanExecution";
-import { readFundingStableBalancesHuman } from "@/trading/sor/prefund/fundingStableBalances";
+import { readFundingStableBalancesHuman } from "@/features/trading/sor/prefund/fundingStableBalances";
 import type { LifiWithdrawPlanData, LifiWithdrawPlanLeg } from "@/types/trading";
 import "./TransfersModal.scss";
 
@@ -93,10 +89,7 @@ function sumLifiProtocolFeeUsd(quote: unknown): number {
 }
 
 /** Quoted destination stable received for this leg (human units on `destChainId`). */
-function legDestinationReceiveHuman(
-	leg: LifiWithdrawPlanLeg,
-	destChainId: number
-): number {
+function legDestinationReceiveHuman(leg: LifiWithdrawPlanLeg, destChainId: number): number {
 	if (leg.toChain !== destChainId) return 0;
 	if (leg.mode === "direct_transfer") {
 		const n = parseFloat(leg.amountHuman);
@@ -122,8 +115,7 @@ function legDestinationReceiveHuman(
 export function TransfersModal() {
 	const { isOpen, closeModal } = useTransfersModal();
 	const { cashBalance } = usePortfolio();
-	const { account } = useSignerContext();
-	const { refresh: refreshUserData } = useUserData();
+	const refreshLevelUpPortfolio = useLevelUpPortfolioRefetch();
 	const { cash: accountCash, refresh: refreshAccount } = useAccountData();
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const levelupWallet = venueAddressChainMap?.levelup.walletAddress?.trim() ?? "";
@@ -164,28 +156,22 @@ export function TransfersModal() {
 			polymarketWallet,
 			predictWallet,
 			solanaWallet,
-		]
+		],
 	);
 
 	const totalFundingOnRails = useMemo(
 		() =>
 			chainBalances.reduce((sum, b) => {
-				const n =
-					typeof b.balance === "number" && Number.isFinite(b.balance)
-						? b.balance
-						: 0;
+				const n = typeof b.balance === "number" && Number.isFinite(b.balance) ? b.balance : 0;
 				return sum + n;
 			}, 0),
-		[chainBalances]
+		[chainBalances],
 	);
 
 	/** Withdrawable total: portfolio cash capped by balances reported on funding chains. */
 	const maxWithdrawAmount = useMemo(
-		() =>
-			cashBalance === null
-				? 0
-				: Math.min(cashBalance, totalFundingOnRails),
-		[cashBalance, totalFundingOnRails]
+		() => (cashBalance === null ? 0 : Math.min(cashBalance, totalFundingOnRails)),
+		[cashBalance, totalFundingOnRails],
 	);
 
 	const [view, setView] = useState<ModalView>("withdraw");
@@ -236,12 +222,7 @@ export function TransfersModal() {
 	 */
 	const reviewFeeAndReceive = useMemo(() => {
 		const grossHuman = effectiveWithdrawAmount;
-		if (
-			!plan ||
-			toChain == null ||
-			!Number.isFinite(grossHuman) ||
-			grossHuman <= 0
-		) {
+		if (!plan || toChain == null || !Number.isFinite(grossHuman) || grossHuman <= 0) {
 			return {
 				requestHuman: 0,
 				protocolFeesUsd: 0,
@@ -267,10 +248,7 @@ export function TransfersModal() {
 		const reqC = Math.round(grossHuman * 100) / 100;
 		const feeC = Math.round(protocolFeesSum * 100) / 100;
 		const recvC = Math.round(receiveHuman * 100) / 100;
-		const routeSpreadUsd = Math.max(
-			0,
-			Math.round((reqC - feeC - recvC) * 100) / 100
-		);
+		const routeSpreadUsd = Math.max(0, Math.round((reqC - feeC - recvC) * 100) / 100);
 		const combinedCostUsd = Math.round((feeC + routeSpreadUsd) * 100) / 100;
 		return {
 			requestHuman: grossHuman,
@@ -296,6 +274,7 @@ export function TransfersModal() {
 			}, 200);
 			return () => clearTimeout(timer);
 		}
+		return undefined;
 	}, [isOpen]);
 
 	const formatCurrency = useCallback((value: number | null | string): string => {
@@ -315,11 +294,7 @@ export function TransfersModal() {
 				<p>Gas is sponsored (not in this total).</p>
 			</div>
 		),
-		[
-			formatCurrency,
-			reviewFeeAndReceive.protocolFeesUsd,
-			reviewFeeAndReceive.routeSpreadUsd,
-		]
+		[formatCurrency, reviewFeeAndReceive.protocolFeesUsd, reviewFeeAndReceive.routeSpreadUsd],
 	);
 
 	const destIsSolana = toChain === SOLANA_LIFI_CHAIN_ID;
@@ -332,11 +307,7 @@ export function TransfersModal() {
 	const isAddressInvalid = addressHasInput && !isAddressValid;
 
 	const canRequestReview =
-		networkChosen &&
-		assetChosen &&
-		isAddressValid &&
-		isAmountValid &&
-		chainBalances.length > 0;
+		networkChosen && assetChosen && isAddressValid && isAmountValid && chainBalances.length > 0;
 
 	const handleProceedToReview = useCallback(async () => {
 		if (!canRequestReview || toChain === null || toAsset === null) return;
@@ -344,7 +315,6 @@ export function TransfersModal() {
 		setIsPlanning(true);
 		setPlan(null);
 		try {
-			const gross = effectiveWithdrawAmount;
 			const fundingSnap = {
 				baseSmartWallet: levelupWallet || null,
 				limitlessMakerBase: limitlessWallet || null,
@@ -352,7 +322,7 @@ export function TransfersModal() {
 				embeddedEoa: predictWallet || null,
 				solanaAddress: solanaWallet || null,
 			};
-			let balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
+			const balancesSnap = await readFundingStableBalancesHuman(fundingSnap);
 			const planBalances = buildChainBalances({
 				baseUsdcBalance: Math.max(0, balancesSnap.base ?? 0),
 				baseWalletAddress: levelupWallet,
@@ -403,7 +373,7 @@ export function TransfersModal() {
 		predictWallet,
 		solanaWallet,
 		recipientAddress,
-		refreshUserData,
+		refreshLevelUpPortfolio,
 		toAsset,
 		toChain,
 	]);
@@ -424,16 +394,14 @@ export function TransfersModal() {
 		try {
 			await executePlan(plan);
 			setView("submitted");
-			// `refreshUserData` reloads LevelUp positions / orders — it does not hit
-			// `GET /portfolio/cash-summary`. Repull cash so Transfers + header match
-			// post-withdraw balances (same path as maker prefund in review flow).
-			await Promise.allSettled([refreshUserData(), refreshAccount.cash()]);
+			// Repull LevelUp orders/positions and cash after withdraw.
+			await Promise.allSettled([refreshLevelUpPortfolio(), refreshAccount.cash()]);
 		} catch (err) {
 			setError(getWithdrawExecutionErrorMessage(err));
 		} finally {
 			setIsSubmitting(false);
 		}
-	}, [executePlan, plan, refreshAccount, refreshUserData]);
+	}, [executePlan, plan, refreshAccount, refreshLevelUpPortfolio]);
 
 	const handleDone = useCallback(() => {
 		closeModal();
@@ -472,8 +440,8 @@ export function TransfersModal() {
 					<span className="transfers-error-text">{error}</span>
 				</div>
 			)}
-			{chainBalances.length === 0 && (
-				accountCash.status === "pending" || !accountCash.isFetched ? (
+			{chainBalances.length === 0 &&
+				(accountCash.status === "pending" || !accountCash.isFetched ? (
 					<div className="transfers-field-loading" style={{ marginBottom: 12 }}>
 						Loading wallet balances…
 					</div>
@@ -481,24 +449,17 @@ export function TransfersModal() {
 					<div className="transfers-field-error" style={{ marginBottom: 12 }}>
 						No funded wallets detected yet. Deposit or wait for balances to load.
 					</div>
-				)
-			)}
+				))}
 
 			<div className="transfers-input-group">
 				<label>Destination network</label>
-				<div
-					className="transfers-pill-row"
-					role="group"
-					aria-label="Destination network"
-				>
+				<div className="transfers-pill-row" role="group" aria-label="Destination network">
 					{DEST_CHAINS.map((c) => (
 						<button
 							key={c.chainId}
 							type="button"
 							className={
-								toChain === c.chainId
-									? "transfers-pill transfers-pill--active"
-									: "transfers-pill"
+								toChain === c.chainId ? "transfers-pill transfers-pill--active" : "transfers-pill"
 							}
 							onClick={() => setToChain(c.chainId)}
 						>
@@ -516,9 +477,7 @@ export function TransfersModal() {
 							key={sym}
 							type="button"
 							className={
-								toAsset === sym
-									? "transfers-pill transfers-pill--active"
-									: "transfers-pill"
+								toAsset === sym ? "transfers-pill transfers-pill--active" : "transfers-pill"
 							}
 							onClick={() => setToAsset(sym)}
 						>
@@ -534,11 +493,7 @@ export function TransfersModal() {
 					type="text"
 					className={getAddressInputClass()}
 					placeholder={
-						!networkChosen
-							? "Select network first…"
-							: destIsSolana
-								? "Solana address…"
-								: "0x…"
+						!networkChosen ? "Select network first…" : destIsSolana ? "Solana address…" : "0x…"
 					}
 					value={recipientAddress}
 					onChange={(e) => setRecipientAddress(e.target.value)}
@@ -563,23 +518,20 @@ export function TransfersModal() {
 					min="0"
 				/>
 				<div className="transfers-available">
-					Cash across wallets:{" "}
-					<span>${formatCurrency(cashBalance)}</span>
+					Cash across wallets: <span>${formatCurrency(cashBalance)}</span>
 					{cashBalance !== null &&
 						totalFundingOnRails > 0 &&
 						totalFundingOnRails + 1e-6 < cashBalance && (
 							<span className="transfers-available-cap">
 								{" "}
-								· Withdrawable now:{" "}
-								<span>${formatCurrency(maxWithdrawAmount)}</span> (funded
+								· Withdrawable now: <span>${formatCurrency(maxWithdrawAmount)}</span> (funded
 								on-chain balances)
 							</span>
 						)}
 				</div>
 				{isAmountOverMaxWithdraw && (
 					<div className="transfers-field-error">
-						Amount exceeds what you can withdraw (${formatCurrency(maxWithdrawAmount)}{" "}
-						available).
+						Amount exceeds what you can withdraw (${formatCurrency(maxWithdrawAmount)} available).
 					</div>
 				)}
 			</div>
@@ -617,9 +569,7 @@ export function TransfersModal() {
 				<div className="transfers-review-row">
 					<span className="transfers-review-label">Destination</span>
 					<span className="transfers-review-value">
-						{toChain != null && toAsset != null
-							? `${chainLabel(toChain)} · ${toAsset}`
-							: "—"}
+						{toChain != null && toAsset != null ? `${chainLabel(toChain)} · ${toAsset}` : "—"}
 					</span>
 				</div>
 				<div className="transfers-review-row">
@@ -659,9 +609,7 @@ export function TransfersModal() {
 				</div>
 			</div>
 
-			<p className="transfers-review-irreversible">
-				Fund transfers cannot be reversed.
-			</p>
+			<p className="transfers-review-irreversible">Fund transfers cannot be reversed.</p>
 
 			<div className="transfers-form-actions">
 				<button

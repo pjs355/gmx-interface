@@ -6,15 +6,18 @@ import {
 	useMultiExchangeChartData,
 } from "./useMultiExchangeChartData";
 import { ExchangeOverlayChart, VENUE_COLORS, VENUE_LABELS } from "./SeriesChart";
-import { getYesNoTeamLabels } from "../PredictionMarketTradeBox/teamLabels";
-import { getChartStrokeColorForDarkBg } from "@/helpers/predictionUtils";
+import { getYesNoTeamLabels } from "@/features/trading/trade-box/teamLabels";
+import { getChartStrokeColorForDarkBg } from "@/features/markets/presentation/teamColors";
 import type { TimeRange } from "./types";
 import type { MergedExchangePoint } from "./types";
 import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
-import { resolveMarketLogo } from "@/helpers/marketLogoResolver";
+import { resolveMarketLogo } from "@/features/markets/assets/marketLogoResolver";
 import "./PredictionMarketChart.scss";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 
 export interface PredictionMarketChartProps {
@@ -47,7 +50,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	questionId,
 	umbrellaId,
 	pandaMatchId,
-	limitlessFromUmbrella,
+	limitlessFromUmbrella: _limitlessFromUmbrella,
 	umbrellaDisplayName,
 	activeMarket,
 	secondMarket,
@@ -72,11 +75,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 	const effectiveQuestionId = useMemo(
 		() =>
-			questionId ||
-			activeMarket?._id ||
-			activeMarket?.questionId ||
-			activeMarket?.marketId ||
-			"",
+			questionId || activeMarket?._id || activeMarket?.questionId || activeMarket?.marketId || "",
 		[questionId, activeMarket],
 	);
 
@@ -97,14 +96,8 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	const teamAColor: string = (activeMarket as any)?.yesColor || "#22c55e";
 	const teamBColor: string = (activeMarket as any)?.noColor || "#ef4444";
 
-	const chartTeamAColor = useMemo(
-		() => getChartStrokeColorForDarkBg(teamAColor),
-		[teamAColor],
-	);
-	const chartTeamBColor = useMemo(
-		() => getChartStrokeColorForDarkBg(teamBColor),
-		[teamBColor],
-	);
+	const chartTeamAColor = useMemo(() => getChartStrokeColorForDarkBg(teamAColor), [teamAColor]);
+	const chartTeamBColor = useMemo(() => getChartStrokeColorForDarkBg(teamBColor), [teamBColor]);
 
 	const { data: levelUpChartData } = usePredictionChartData({
 		questionId: effectiveQuestionId,
@@ -140,8 +133,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 			hasKalshi: exchangeChart.hasKalshi,
 			hasPredictFun: exchangeChart.hasPredictFun,
 			hasLimitless: exchangeChart.hasLimitless,
-			note:
-				"LevelUp line: usePredictionChartData. Multi-venue / best-odds: useMultiExchangeChartData (server batch + exchange APIs + WS live overlay).",
+			note: "LevelUp line: usePredictionChartData. Multi-venue / best-odds: useMultiExchangeChartData (server batch + exchange APIs + WS live overlay).",
 		});
 	}, [
 		effectiveQuestionId,
@@ -187,8 +179,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	}
 
 	const displayData = useMemo(() => {
-		const raw =
-			exchangeChart.data.length > 0 ? exchangeChart.data : staleRef.current.data;
+		const raw = exchangeChart.data.length > 0 ? exchangeChart.data : staleRef.current.data;
 		return raw.map((p) => {
 			if (levelUpOrderbookHasRestingShares) {
 				return attachBestOddsToMergedPoint(p, true);
@@ -222,11 +213,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 			if (teamA === null && p?.percentage != null && Number.isFinite(p.percentage)) {
 				teamA = p.percentage;
 			}
-			if (
-				teamB === null &&
-				p?.secondPercentage != null &&
-				Number.isFinite(p.secondPercentage)
-			) {
+			if (teamB === null && p?.secondPercentage != null && Number.isFinite(p.secondPercentage)) {
 				teamB = p.secondPercentage;
 			}
 			if (teamA !== null && teamB !== null) break;
@@ -278,11 +265,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 								<div className="current-price">
 									<span
 										className="price-value primary-price"
-										style={
-											isVsSingleMarket
-												? { color: chartTeamAColor }
-												: undefined
-										}
+										style={isVsSingleMarket ? { color: chartTeamAColor } : undefined}
 									>
 										{Math.round(headerBestOdds.teamA)}%
 									</span>
@@ -293,11 +276,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 								<div className="current-price">
 									<span
 										className="price-value second-price"
-										style={
-											isVsSingleMarket
-												? { color: chartTeamBColor }
-												: undefined
-										}
+										style={isVsSingleMarket ? { color: chartTeamBColor } : undefined}
 									>
 										{Math.round(headerBestOdds.teamB)}%
 									</span>
@@ -323,10 +302,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 				</div>
 			</div>
 
-			<div
-				className="chart-container"
-				style={{ minWidth: 0, minHeight: 280 }}
-			>
+			<div className="chart-container" style={{ minWidth: 0, minHeight: 280 }}>
 				<div className="chart-plot-area">
 					{exchangeChart.loading && (
 						<div className="chart-spinner-overlay">
@@ -365,11 +341,12 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 				<div className="venue-checkbox-bar">
 					{availableVenues.map((venue) => {
 						const logoUrl = resolveMarketLogo(venue);
-						const dotStyle = venue === "bestOdds"
-							? {
-									background: `linear-gradient(135deg, ${chartTeamAColor} 50%, ${chartTeamBColor} 50%)`,
-								}
-							: { backgroundColor: VENUE_COLORS[venue] };
+						const dotStyle =
+							venue === "bestOdds"
+								? {
+										background: `linear-gradient(135deg, ${chartTeamAColor} 50%, ${chartTeamBColor} 50%)`,
+									}
+								: { backgroundColor: VENUE_COLORS[venue] };
 						return (
 							<button
 								key={venue}
@@ -405,10 +382,7 @@ const PredictionMarketChart = React.memo<PredictionMarketChartProps>(
 
 		if (prevProps.pandaMatchId !== nextProps.pandaMatchId) return false;
 
-		if (
-			prevProps.levelUpOrderbookHasRestingShares !==
-			nextProps.levelUpOrderbookHasRestingShares
-		) {
+		if (prevProps.levelUpOrderbookHasRestingShares !== nextProps.levelUpOrderbookHasRestingShares) {
 			return false;
 		}
 

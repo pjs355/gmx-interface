@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import {
-	umbrellaDataService,
-	type Umbrella,
-} from "@/services/api/umbrellaDataService";
+import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataService";
 import { tagService, type Tag } from "@/services/api/tagService";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import CountdownTimer from "@/components/CountdownTimer/CountdownTimer";
 import streamLogo from "@/assets/img/twitch-logo.png";
 
@@ -36,12 +32,8 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 	const [query, setQuery] = useState<string>("");
 	const [hideSettled, setHideSettled] = useState<boolean>(false);
 	const [tagMap, setTagMap] = useState<Record<string, string>>({});
-	const [notificationData, setNotificationData] = useState<
-		Record<string, NotificationData>
-	>({});
-	const [expandedNotifications, setExpandedNotifications] = useState<
-		Set<string>
-	>(new Set());
+	const [notificationData, setNotificationData] = useState<Record<string, NotificationData>>({});
+	const [expandedNotifications, setExpandedNotifications] = useState<Set<string>>(new Set());
 	const { getAccessToken } = usePrivy();
 
 	useEffect(() => {
@@ -64,10 +56,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 		let mounted = true;
 		async function loadTags() {
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: null;
+				const token = typeof getAccessToken === "function" ? await getAccessToken() : null;
 				if (!token) {
 					return;
 				}
@@ -77,7 +66,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 				}
 				console.log(
 					"ListMarket loaded tags:",
-					tags.map((tag) => ({ id: tag._id, label: tag.label }))
+					tags.map((tag) => ({ id: tag._id, label: tag.label })),
 				);
 				const mapped: Record<string, string> = {};
 				tags.forEach((tag: Tag) => {
@@ -96,9 +85,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 
 	const filtered = useMemo(() => {
 		let base = query
-			? umbrellas.filter((u) =>
-					u.displayName.toLowerCase().includes(query.toLowerCase())
-			  )
+			? umbrellas.filter((u) => u.displayName.toLowerCase().includes(query.toLowerCase()))
 			: umbrellas;
 
 		// If hideSettled is enabled, only show umbrellas with at least one unsettled child
@@ -106,9 +93,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 			base = base.filter((u) => {
 				const children = Array.isArray(u.children) ? u.children : [];
 				// Keep umbrella if it has at least one child that is NOT resolved
-				return children.some(
-					(child: any) => child.status !== "resolved"
-				);
+				return children.some((child: any) => child.status !== "resolved");
 			});
 		}
 
@@ -119,22 +104,16 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 	const zeroQuestionIds = useMemo(
 		() =>
 			filtered
-				.filter(
-					(u) => !Array.isArray(u.children) || u.children.length === 0
-				)
+				.filter((u) => !Array.isArray(u.children) || u.children.length === 0)
 				.map((u) => u._id),
-		[filtered]
+		[filtered],
 	);
 
 	useEffect(() => {
 		if (zeroQuestionIds.length > 0) {
-			console.warn(
-				`⚠️ The following umbrellas have no questions: ${zeroQuestionIds.join(
-					", "
-				)}`
-			);
+			console.warn(`⚠️ The following umbrellas have no questions: ${zeroQuestionIds.join(", ")}`);
 			console.error(
-				"CTF Interrupted: One or more umbrellas returned zero questions. Investigate immediately."
+				"CTF Interrupted: One or more umbrellas returned zero questions. Investigate immediately.",
 			);
 		}
 	}, [zeroQuestionIds]);
@@ -147,7 +126,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 			// Access resolveComments directly from umbrella object
 			const umbrellaData = umbrella as any;
 			const comments = umbrellaData.resolveComments || [];
-			
+
 			data[umbrella._id] = {
 				count: comments.length,
 				comments: comments,
@@ -224,9 +203,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 					const isActive = Boolean((u as any).active);
 					const statusColor = isActive ? "#22c55e" : "#ef4444";
 					const statusLabel = isActive ? "Active" : "Inactive";
-					const children = Array.isArray(u.children)
-						? u.children
-						: [];
+					const children = Array.isArray(u.children) ? u.children : [];
 					const tagCounts = new Map<string, number>();
 					children.forEach((child) => {
 						const tagIds = Array.isArray((child as any).tagIds)
@@ -237,23 +214,14 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 							tagCounts.set(tagId, existing + 1);
 						});
 					});
-					const tagBadges = Array.from(tagCounts.entries()).map(
-						([tagId, count]) => ({
-							label: tagMap[tagId] ?? tagId,
-							count,
-						})
-					);
-					const eventDateRaw = (u as any).eventDate as
-						| string
-						| null
-						| undefined;
-					const eventDate = eventDateRaw
-						? new Date(eventDateRaw)
-						: null;
+					const tagBadges = Array.from(tagCounts.entries()).map(([tagId, count]) => ({
+						label: tagMap[tagId] ?? tagId,
+						count,
+					}));
+					const eventDateRaw = (u as any).eventDate as string | null | undefined;
+					const eventDate = eventDateRaw ? new Date(eventDateRaw) : null;
 					const rawStreamUrl =
-						typeof (u as any).streamUrl === "string"
-							? ((u as any).streamUrl as string)
-							: "";
+						typeof (u as any).streamUrl === "string" ? ((u as any).streamUrl as string) : "";
 					const streamEnabled = Boolean((u as any).streamEnabled);
 					const hasStream = streamEnabled && rawStreamUrl.length > 0;
 					let streamPlatformLabel = "Stream";
@@ -270,17 +238,13 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 						<div
 							key={u._id}
 							style={{
-								border: hasNotifications
-									? "2px solid #fbbf24"
-									: "1px solid rgba(255,255,255,0.2)",
+								border: hasNotifications ? "2px solid #fbbf24" : "1px solid rgba(255,255,255,0.2)",
 								borderRadius: 8,
 								padding: 12,
 								background: hasNotifications
 									? "rgba(251, 191, 36, 0.08)"
 									: "rgba(255,255,255,0.03)",
-								boxShadow: hasNotifications
-									? "0 0 12px rgba(251, 191, 36, 0.3)"
-									: "none",
+								boxShadow: hasNotifications ? "0 0 12px rgba(251, 191, 36, 0.3)" : "none",
 							}}
 						>
 							<div
@@ -321,16 +285,12 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 													borderRadius: "50%",
 													background: statusColor,
 													boxShadow: `0 0 6px ${
-														isActive
-															? "rgba(34,197,94,0.6)"
-															: "rgba(239,68,68,0.6)"
+														isActive ? "rgba(34,197,94,0.6)" : "rgba(239,68,68,0.6)"
 													}`,
 												}}
 												title={statusLabel}
 											/>
-											<div style={{ fontWeight: 600 }}>
-												{u.displayName}
-											</div>
+											<div style={{ fontWeight: 600 }}>{u.displayName}</div>
 										</div>
 										<div
 											style={{
@@ -360,50 +320,30 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 												Questions: 0
 											</div>
 										)}
-										{notificationData[u._id] !==
-											undefined && (
+										{notificationData[u._id] !== undefined && (
 											<div
 												onClick={() =>
-													notificationData[u._id]
-														?.count > 0 &&
-													toggleNotifications(u._id)
+													notificationData[u._id]?.count > 0 && toggleNotifications(u._id)
 												}
 												style={{
 													fontSize: 12,
 													opacity: 0.8,
-													color:
-														notificationData[u._id]
-															?.count > 0
-															? "#fbbf24"
-															: undefined,
-													cursor:
-														notificationData[u._id]
-															?.count > 0
-															? "pointer"
-															: "default",
+													color: notificationData[u._id]?.count > 0 ? "#fbbf24" : undefined,
+													cursor: notificationData[u._id]?.count > 0 ? "pointer" : "default",
 													display: "flex",
 													alignItems: "center",
 													gap: 4,
 												}}
 											>
-												<span>
-													📋 Notifications:{" "}
-													{notificationData[u._id]
-														?.count || 0}
-												</span>
-												{notificationData[u._id]
-													?.count > 0 && (
+												<span>📋 Notifications: {notificationData[u._id]?.count || 0}</span>
+												{notificationData[u._id]?.count > 0 && (
 													<span
 														style={{
 															fontSize: 10,
-															transition:
-																"transform 0.2s",
-															transform:
-																expandedNotifications.has(
-																	u._id
-																)
-																	? "rotate(180deg)"
-																	: "rotate(0deg)",
+															transition: "transform 0.2s",
+															transform: expandedNotifications.has(u._id)
+																? "rotate(180deg)"
+																: "rotate(0deg)",
 														}}
 													>
 														▼
@@ -429,22 +369,17 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 												minWidth: 180,
 											}}
 										>
-											<div style={{ opacity: 0.7 }}>
-												Event Date
-											</div>
+											<div style={{ opacity: 0.7 }}>Event Date</div>
 											{eventDate ? (
 												<div>
 													<div>
-														{eventDate.toLocaleString(
-															undefined,
-															{
-																year: "numeric",
-																month: "short",
-																day: "numeric",
-																hour: "2-digit",
-																minute: "2-digit",
-															}
-														)}
+														{eventDate.toLocaleString(undefined, {
+															year: "numeric",
+															month: "short",
+															day: "numeric",
+															hour: "2-digit",
+															minute: "2-digit",
+														})}
 													</div>
 													<CountdownTimer
 														target={eventDate}
@@ -454,9 +389,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 													/>
 												</div>
 											) : (
-												<div style={{ opacity: 0.7 }}>
-													No event date
-												</div>
+												<div style={{ opacity: 0.7 }}>No event date</div>
 											)}
 										</div>
 										<div
@@ -493,13 +426,11 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 														width: 16,
 														height: 16,
 														borderRadius: "50%",
-														background:
-															streamIndicator.color,
+														background: streamIndicator.color,
 														color: "#0f0f0f",
 														display: "flex",
 														alignItems: "center",
-														justifyContent:
-															"center",
+														justifyContent: "center",
 														fontSize: 10,
 														fontWeight: 700,
 														border: "1px solid rgba(0,0,0,0.4)",
@@ -515,8 +446,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 													opacity: 0.75,
 												}}
 											>
-												{streamPlatformLabel}{" "}
-												{streamIndicator.label}
+												{streamPlatformLabel} {streamIndicator.label}
 											</div>
 										</div>
 										<button
@@ -526,8 +456,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 												padding: "6px 10px",
 												border: "1px solid white",
 												borderRadius: 6,
-												background:
-													"rgba(255,255,255,0.15)",
+												background: "rgba(255,255,255,0.15)",
 												color: "white",
 												cursor: "pointer",
 												whiteSpace: "nowrap",
@@ -539,15 +468,13 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 								</div>
 								{/* Expanded Notifications Section */}
 								{expandedNotifications.has(u._id) &&
-									notificationData[u._id]?.comments?.length >
-										0 && (
+									notificationData[u._id]?.comments?.length > 0 && (
 										<div
 											style={{
 												marginTop: 12,
 												padding: 12,
 												borderRadius: 8,
-												background:
-													"rgba(251, 191, 36, 0.1)",
+												background: "rgba(251, 191, 36, 0.1)",
 												border: "1px solid rgba(251, 191, 36, 0.3)",
 											}}
 										>
@@ -568,20 +495,14 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 													gap: 8,
 												}}
 											>
-												{notificationData[
-													u._id
-												]?.comments.map(
-													(
-														comment: ResolveComment,
-														idx: number
-													) => (
+												{notificationData[u._id]?.comments.map(
+													(comment: ResolveComment, idx: number) => (
 														<div
 															key={idx}
 															style={{
 																padding: 10,
 																borderRadius: 6,
-																background:
-																	"rgba(0,0,0,0.3)",
+																background: "rgba(0,0,0,0.3)",
 																border: "1px solid rgba(255,255,255,0.1)",
 															}}
 														>
@@ -590,25 +511,19 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 																	fontSize: 11,
 																	opacity: 0.7,
 																	marginBottom: 4,
-																	display:
-																		"flex",
-																	justifyContent:
-																		"space-between",
-																	flexWrap:
-																		"wrap",
+																	display: "flex",
+																	justifyContent: "space-between",
+																	flexWrap: "wrap",
 																	gap: 8,
 																}}
 															>
 																<span>
-																	👤{" "}
-																	{comment.username ||
-																		comment.submittedBy ||
-																		"Unknown User"}
+																	👤 {comment.username || comment.submittedBy || "Unknown User"}
 																</span>
 																{(comment.submittedAt || comment.createdAt) && (
 																	<span>
 																		{new Date(
-																			comment.submittedAt || comment.createdAt || ""
+																			comment.submittedAt || comment.createdAt || "",
 																		).toLocaleString()}
 																	</span>
 																)}
@@ -617,10 +532,8 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 																style={{
 																	fontSize: 13,
 																	color: "#fff",
-																	whiteSpace:
-																		"pre-wrap",
-																	wordBreak:
-																		"break-word",
+																	whiteSpace: "pre-wrap",
+																	wordBreak: "break-word",
 																	marginTop: 4,
 																}}
 															>
@@ -635,19 +548,19 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 																!comment.comment &&
 																!comment.message &&
 																!comment.text && (
-																<div
-																	style={{
-																		fontSize: 10,
-																		opacity: 0.5,
-																		marginTop: 4,
-																		fontFamily: "monospace",
-																	}}
-																>
-																	Raw: {JSON.stringify(comment)}
-																</div>
-															)}
+																	<div
+																		style={{
+																			fontSize: 10,
+																			opacity: 0.5,
+																			marginTop: 4,
+																			fontFamily: "monospace",
+																		}}
+																	>
+																		Raw: {JSON.stringify(comment)}
+																	</div>
+																)}
 														</div>
-													)
+													),
 												)}
 											</div>
 										</div>
@@ -669,8 +582,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 											display: "inline-flex",
 											alignItems: "center",
 											gap: 10,
-											animation:
-												"shakeWarn 0.9s infinite",
+											animation: "shakeWarn 0.9s infinite",
 										}}
 									>
 										<span
@@ -683,16 +595,12 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 												alignItems: "center",
 												justifyContent: "center",
 												fontSize: 12,
-												boxShadow:
-													"0 0 8px rgba(248,113,113,0.7)",
+												boxShadow: "0 0 8px rgba(248,113,113,0.7)",
 											}}
 										>
 											!
 										</span>
-										<span>
-											No Questions! CTF Interrupted. Try
-											Again.
-										</span>
+										<span>No Questions! CTF Interrupted. Try Again.</span>
 									</div>
 								)}
 								<div
@@ -703,11 +611,7 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 										alignItems: "center",
 									}}
 								>
-									<span
-										style={{ fontSize: 12, opacity: 0.7 }}
-									>
-										Tags:
-									</span>
+									<span style={{ fontSize: 12, opacity: 0.7 }}>Tags:</span>
 									{tagBadges.length > 0 ? (
 										tagBadges.map(({ label, count }) => (
 											<span
@@ -716,20 +620,12 @@ export default function ListMarket({ onEdit, refreshKey }: ListMarketProps) {
 													padding: "4px 8px",
 													borderRadius: 999,
 													border: "1px solid rgba(255,255,255,0.2)",
-													background:
-														"rgba(255,255,255,0.08)",
+													background: "rgba(255,255,255,0.08)",
 													fontSize: 12,
 												}}
 											>
 												{label}
-												{count > 1 ? (
-													<span
-														style={{ opacity: 0.7 }}
-													>
-														{" "}
-														×{count}
-													</span>
-												) : null}
+												{count > 1 ? <span style={{ opacity: 0.7 }}> ×{count}</span> : null}
 											</span>
 										))
 									) : (

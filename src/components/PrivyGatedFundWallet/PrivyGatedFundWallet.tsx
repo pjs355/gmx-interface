@@ -16,11 +16,7 @@ type WithFundWalletProps = {
  * Renders `children` with `useFundWallet` only when `fundTo` is a valid EVM address, so
  * Privy’s funding UI is not mounted with an undefined / non-EVM target (TEE + Solana case).
  */
-function WithFundWallet({
-	fundTo,
-	children,
-	onAfterFund,
-}: WithFundWalletProps) {
+function WithFundWallet({ fundTo, children, onAfterFund }: WithFundWalletProps) {
 	const { fundWallet } = useFundWallet();
 	const openFund = useCallback(async () => {
 		try {
@@ -49,21 +45,15 @@ export function PrivyGatedFundTrigger({
 	children,
 	onAfterFund,
 }: PrivyGatedFundTriggerProps) {
-	const can =
-		ready && Boolean(fundTarget) && isAddress(fundTarget as `0x${string}`);
+	const can = ready && Boolean(fundTarget) && isAddress(fundTarget as `0x${string}`);
 	if (can) {
 		return (
-			<WithFundWallet
-				fundTo={fundTarget as `0x${string}`}
-				onAfterFund={onAfterFund}
-			>
+			<WithFundWallet fundTo={fundTarget as `0x${string}`} onAfterFund={onAfterFund}>
 				{children}
 			</WithFundWallet>
 		);
 	}
-	return (
-		<>{children({ openFund: () => {}, canFund: false })}</>
-	);
+	return <>{children({ openFund: () => {}, canFund: false })}</>;
 }
 
 type GatedButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -82,11 +72,7 @@ export function PrivyGatedDepositButton({
 	...rest
 }: GatedButtonProps) {
 	return (
-		<PrivyGatedFundTrigger
-			fundTarget={fundTarget}
-			ready={ready}
-			onAfterFund={onAfterFund}
-		>
+		<PrivyGatedFundTrigger fundTarget={fundTarget} ready={ready} onAfterFund={onAfterFund}>
 			{({ openFund, canFund }) => (
 				<button
 					type="button"
@@ -143,17 +129,9 @@ export function RegisterPrivyOpenFundAction({
 	fundActionRef: React.MutableRefObject<(() => void | Promise<void>) | null>;
 }) {
 	return (
-		<PrivyGatedFundTrigger
-			fundTarget={fundTarget}
-			ready={ready}
-			onAfterFund={onAfterFund}
-		>
+		<PrivyGatedFundTrigger fundTarget={fundTarget} ready={ready} onAfterFund={onAfterFund}>
 			{({ openFund, canFund }) => (
-				<SyncOpenFundToRef
-					canFund={canFund}
-					openFund={openFund}
-					fundActionRef={fundActionRef}
-				/>
+				<SyncOpenFundToRef canFund={canFund} openFund={openFund} fundActionRef={fundActionRef} />
 			)}
 		</PrivyGatedFundTrigger>
 	);

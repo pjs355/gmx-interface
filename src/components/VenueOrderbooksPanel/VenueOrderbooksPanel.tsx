@@ -4,17 +4,20 @@ import OrderbookDisplay from "@/components/OrderbookDisplay/OrderbookDisplay";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import type { TradingVenue } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
+import type { TradingVenue } from "@/features/trading/trade-box/types";
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
-import { mergeMonitorLimitlessFromUmbrella } from "@/utils/mergeMonitorLimitlessFromUmbrella";
-import { getDflowKalshiMonitorLink } from "@/trading/venues/dflow/catalog/monitorDflowBooks";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
-import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+import { mergeMonitorLimitlessFromUmbrella } from "@/features/markets/odds-monitor/mergeMonitorLimitlessFromUmbrella";
+import { getDflowKalshiMonitorLink } from "@/features/trading/venues/dflow/catalog/monitorDflowBooks";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
+import { findOddsMatchedMarket } from "@/features/markets/odds-monitor/findOddsMatchedMarket";
 import {
 	computeLevelUpCrossVenueBooks,
 	monitorOrderbookDataToRestingSnapshot,
-} from "@/trading/venues/levelup/levelUpCrossVenueBookPresence";
+} from "@/features/trading/venues/levelup/levelUpCrossVenueBookPresence";
 
 type VenueEntry = {
 	id: string;
@@ -30,10 +33,7 @@ function buildVenueEntries(
 ): VenueEntry[] {
 	const entries: VenueEntry[] = [];
 
-	const { hasLevelUp, luBookA, luBookB } = computeLevelUpCrossVenueBooks(
-		matched,
-		levelUpOrderbook,
-	);
+	const { hasLevelUp, luBookA, luBookB } = computeLevelUpCrossVenueBooks(matched, levelUpOrderbook);
 
 	if (hasLevelUp) {
 		entries.push({
@@ -59,12 +59,8 @@ function buildVenueEntries(
 		entries.push({
 			id: "dflow",
 			label: "Kalshi",
-			bookA: monitorOrderbookDataToRestingSnapshot(
-				matched.dflowPriceA ?? matched.kalshiPriceA,
-			),
-			bookB: monitorOrderbookDataToRestingSnapshot(
-				matched.dflowPriceB ?? matched.kalshiPriceB,
-			),
+			bookA: monitorOrderbookDataToRestingSnapshot(matched.dflowPriceA),
+			bookB: monitorOrderbookDataToRestingSnapshot(matched.dflowPriceB),
 			restricted: false,
 		});
 	}
@@ -86,9 +82,7 @@ function buildVenueEntries(
 			label: "Predict",
 			bookA: monitorOrderbookDataToRestingSnapshot(matched.predictFunPriceA),
 			// One CLOB: second tab inverts team A ladder (same model as trade box), not a separate B stream.
-			bookB: singleMarket
-				? null
-				: monitorOrderbookDataToRestingSnapshot(matched.predictFunPriceB),
+			bookB: singleMarket ? null : monitorOrderbookDataToRestingSnapshot(matched.predictFunPriceB),
 			restricted: false,
 		});
 	}
@@ -98,12 +92,18 @@ function buildVenueEntries(
 
 function venueIdToTradingVenue(id: string): TradingVenue | null {
 	switch (id) {
-		case "levelup": return "levelup";
-		case "poly": return "polymarket";
-		case "dflow": return "dflow";
-		case "predictFun": return "predictfun";
-		case "limitless": return "limitless";
-		default: return null;
+		case "levelup":
+			return "levelup";
+		case "poly":
+			return "polymarket";
+		case "dflow":
+			return "dflow";
+		case "predictFun":
+			return "predictfun";
+		case "limitless":
+			return "limitless";
+		default:
+			return null;
 	}
 }
 
@@ -139,11 +139,7 @@ export function VenueOrderbooksPanel({
 	const hasLiquidityDefaultedRef = useRef(false);
 
 	const matched = useMemo((): MatchedMarket | null => {
-		const base = findOddsMatchedMarket(
-			appState?.markets,
-			pandascoreMatchId,
-			umbrellaId,
-		);
+		const base = findOddsMatchedMarket(appState?.markets, pandascoreMatchId, umbrellaId);
 		return mergeMonitorLimitlessFromUmbrella(base, limitlessFromUmbrella);
 	}, [appState?.markets, pandascoreMatchId, umbrellaId, limitlessFromUmbrella]);
 
@@ -228,8 +224,7 @@ export function VenueOrderbooksPanel({
 	if (venues.length === 0) return null;
 
 	const activeVenueId = selectedVenueId || venues[0].id;
-	const selectedVenue =
-		venues.find((v) => v.id === activeVenueId) ?? venues[0];
+	const selectedVenue = venues.find((v) => v.id === activeVenueId) ?? venues[0];
 	const isLevelUp = selectedVenue.id === "levelup";
 
 	return (
@@ -272,9 +267,7 @@ export function VenueOrderbooksPanel({
 						}}
 					>
 						<span style={{ fontSize: "1.1rem" }}>&#9888;</span>
-						<span>
-							{selectedVenue.label} orderbook is unavailable from your region
-						</span>
+						<span>{selectedVenue.label} orderbook is unavailable from your region</span>
 					</div>
 				) : (
 					<OrderbookDisplay
@@ -291,8 +284,7 @@ export function VenueOrderbooksPanel({
 						isCollapsed={false}
 						side={side}
 						wholeContractRestingBook={
-							selectedVenue.id === "dflow" ||
-							selectedVenue.id === "levelup"
+							selectedVenue.id === "dflow" || selectedVenue.id === "levelup"
 						}
 					/>
 				)}

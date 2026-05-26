@@ -1,17 +1,14 @@
 import { ethers } from "ethers";
-import { 
-	CTF_ADDRESS, 
-	EXCHANGE_ADDRESS, 
+import {
+	CTF_ADDRESS,
+	EXCHANGE_ADDRESS,
 	USDC_ADDRESS,
 	FEE_WRAPPER_ADDRESS,
 	FEE_MODULE_ADDRESS,
 	FEE_RATE_BPS,
 } from "config/addresses";
-import {
-	getPredictionApiBaseUrl,
-	getPredictionOrderApiBaseUrl,
-} from "@/config/predictionApiBase";
-import { predictionBuyMakerMicroUsdc } from "@/trading/sor/prefund/predictionBuyCollateralMicro";
+import { getPredictionApiBaseUrl, getPredictionOrderApiBaseUrl } from "@/config/predictionApiBase";
+import { predictionBuyMakerMicroUsdc } from "@/features/trading/sor/prefund/predictionBuyCollateralMicro";
 
 // Utility function to round dollar amounts based on buy/sell direction
 function roundDollarAmount(amount: number, side: "buy" | "sell"): number {
@@ -33,8 +30,7 @@ const CONTRACTS = {
 	FEE_MODULE: FEE_MODULE_ADDRESS, // For SELL orders
 };
 
-const BASE_RPC =
-	"https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih";
+const BASE_RPC = "https://api.developer.coinbase.com/rpc/v1/base/WMQ4Y6b5ZsqmO9MTCfyjZG2aQXG5T1Ih";
 
 // NOTE: API URL is now fetched dynamically to prevent stale URL caching issues
 function getProductionApi(): string {
@@ -62,9 +58,7 @@ const USDC_ABI = [
 	"function balanceOf(address account) view returns (uint256)",
 ];
 
-const CTF_ABI = [
-	"function balanceOf(address account, uint256 id) view returns (uint256)",
-];
+const CTF_ABI = ["function balanceOf(address account, uint256 id) view returns (uint256)"];
 
 export interface PredictionMarketOrder {
 	marketId: string;
@@ -120,9 +114,7 @@ export class PredictionMarketService {
 		}
 	}
 
-	async executeOrder(
-		order: PredictionMarketOrder
-	): Promise<OrderExecutionResult> {
+	async executeOrder(order: PredictionMarketOrder): Promise<OrderExecutionResult> {
 		try {
 			console.log("🚀 Starting real order execution process...");
 			console.log("📊 Order Details:", {
@@ -141,9 +133,7 @@ export class PredictionMarketService {
 
 			// Use the order price - no defaults allowed
 			if (!order.price) {
-				throw new Error(
-					"CRITICAL: Order price is required and cannot be undefined"
-				);
+				throw new Error("CRITICAL: Order price is required and cannot be undefined");
 			}
 
 			throw new Error(
@@ -167,7 +157,7 @@ export class PredictionMarketService {
 		userAddress: string,
 		marketData?: any, // Add market data parameter
 		side?: "buy" | "sell", // Add side parameter for proper signing
-		signerAddress?: string // Add signer address parameter
+		signerAddress?: string, // Add signer address parameter
 	): Promise<MarketOrder> {
 		console.log("🔧 Creating order with parameters:", {
 			marketId,
@@ -191,61 +181,52 @@ export class PredictionMarketService {
 
 		// CRITICAL: Validate position parameter
 		if (position !== "yes" && position !== "no") {
-			throw new Error(
-				`Invalid position: ${position}. Must be 'yes' or 'no'`
-			);
+			throw new Error(`Invalid position: ${position}. Must be 'yes' or 'no'`);
 		}
 
 		// CRITICAL: Validate side parameter
 		if (!side || (side !== "buy" && side !== "sell")) {
-			throw new Error(
-				`CRITICAL ERROR: Invalid side parameter: ${side}. Must be 'buy' or 'sell'.`
-			);
+			throw new Error(`CRITICAL ERROR: Invalid side parameter: ${side}. Must be 'buy' or 'sell'.`);
 		}
 
 		// CRITICAL: NO FALLBACKS - Market data is REQUIRED
 		if (!marketData) {
 			throw new Error(
-				`CRITICAL ERROR: No market data provided for market ${marketId}. Trade cannot proceed without valid market data.`
+				`CRITICAL ERROR: No market data provided for market ${marketId}. Trade cannot proceed without valid market data.`,
 			);
 		}
 
 		if (!marketData.yesTokenId || !marketData.noTokenId) {
 			throw new Error(
-				`CRITICAL ERROR: Missing token IDs for market ${marketId}. yesTokenId: ${marketData.yesTokenId}, noTokenId: ${marketData.noTokenId}. Trade cannot proceed.`
+				`CRITICAL ERROR: Missing token IDs for market ${marketId}. yesTokenId: ${marketData.yesTokenId}, noTokenId: ${marketData.noTokenId}. Trade cannot proceed.`,
 			);
 		}
 
 		// SINGLE SOURCE OF TRUTH: Use only the market data token IDs
-		const tokenId =
-			position === "yes" ? marketData.yesTokenId : marketData.noTokenId;
+		const tokenId = position === "yes" ? marketData.yesTokenId : marketData.noTokenId;
 
-		console.log(
-			"✅ SINGLE SOURCE OF TRUTH - Using market data token IDs:",
-			{
-				position: position,
-				yesTokenId: marketData.yesTokenId,
-				noTokenId: marketData.noTokenId,
-				selectedTokenId: tokenId,
-				isCorrectMapping:
-					(position === "yes" && tokenId === marketData.yesTokenId) ||
-					(position === "no" && tokenId === marketData.noTokenId),
-			}
-		);
+		console.log("✅ SINGLE SOURCE OF TRUTH - Using market data token IDs:", {
+			position: position,
+			yesTokenId: marketData.yesTokenId,
+			noTokenId: marketData.noTokenId,
+			selectedTokenId: tokenId,
+			isCorrectMapping:
+				(position === "yes" && tokenId === marketData.yesTokenId) ||
+				(position === "no" && tokenId === marketData.noTokenId),
+		});
 
 		// CRITICAL: Final validation of token ID mapping
 		if (position === "yes" && tokenId !== marketData.yesTokenId) {
 			throw new Error(
-				`TOKEN ID MAPPING ERROR: Position is 'yes' but tokenId (${tokenId}) does not match yesTokenId (${marketData.yesTokenId})`
+				`TOKEN ID MAPPING ERROR: Position is 'yes' but tokenId (${tokenId}) does not match yesTokenId (${marketData.yesTokenId})`,
 			);
 		}
 		if (position === "no" && tokenId !== marketData.noTokenId) {
 			throw new Error(
-				`TOKEN ID MAPPING ERROR: Position is 'no' but tokenId (${tokenId}) does not match noTokenId (${marketData.noTokenId})`
+				`TOKEN ID MAPPING ERROR: Position is 'no' but tokenId (${tokenId}) does not match noTokenId (${marketData.noTokenId})`,
 			);
 		}
-		const expiration =
-			Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60 * 100; // ~100 years (effectively infinite)
+		const expiration = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60 * 100; // ~100 years (effectively infinite)
 
 		console.log("📋 Order components:", {
 			tokenId,
@@ -268,14 +249,9 @@ export class PredictionMarketService {
 			side === "buy"
 				? predictionBuyMakerMicroUsdc(amount, price).toString()
 				: ethers
-						.parseUnits(
-							roundToDecimals(roundDollarAmount(amount * price, side), 6),
-							6,
-						)
+						.parseUnits(roundToDecimals(roundDollarAmount(amount * price, side), 6), 6)
 						.toString();
-		const tokenAmount = ethers
-			.parseUnits(roundToDecimals(Number(amount), 6), 6)
-			.toString();
+		const tokenAmount = ethers.parseUnits(roundToDecimals(Number(amount), 6), 6).toString();
 
 		const order: MarketOrder = {
 			salt: ethers.id(`order-${Date.now()}-${Math.random()}`),
@@ -371,7 +347,7 @@ export class PredictionMarketService {
 		amount: number,
 		price: number,
 		userAddress: string,
-		marketData?: any
+		marketData?: any,
 	): { domain: any; types: any; message: any } {
 		console.log("🔧 Creating EIP-712 data for order:", {
 			marketId,
@@ -382,8 +358,7 @@ export class PredictionMarketService {
 		});
 
 		// Get token ID strictly from provided market data (single source of truth)
-		const tokenId: string =
-			position === "yes" ? marketData.yesTokenId : marketData.noTokenId;
+		const tokenId: string = position === "yes" ? marketData.yesTokenId : marketData.noTokenId;
 
 		// EIP-712 Domain
 		const domain = {
@@ -432,14 +407,8 @@ export class PredictionMarketService {
 			types,
 			message: {
 				...message,
-				makerAmountFormatted: ethers.formatUnits(
-					message.makerAmount,
-					6
-				),
-				takerAmountFormatted: ethers.formatUnits(
-					message.takerAmount,
-					6
-				),
+				makerAmountFormatted: ethers.formatUnits(message.makerAmount, 6),
+				takerAmountFormatted: ethers.formatUnits(message.takerAmount, 6),
 			},
 		});
 
@@ -451,12 +420,9 @@ export class PredictionMarketService {
 		order: MarketOrder,
 		questionId?: string,
 		accessToken?: string,
-		identityToken?: string
+		identityToken?: string,
 	): Promise<any> {
-		console.log(
-			"🌐 Submitting order to API (PREDICTION MARKETS ONLY):",
-			getOrderSubmissionApi()
-		);
+		console.log("🌐 Submitting order to API (PREDICTION MARKETS ONLY):", getOrderSubmissionApi());
 		console.log("📤 Order payload:", JSON.stringify(order, null, 2));
 		console.log("🔍 Question ID for endpoint:", questionId);
 
@@ -496,10 +462,7 @@ export class PredictionMarketService {
 			});
 
 			console.log("📡 API Response status:", response.status);
-			console.log(
-				"📡 API Response headers:",
-				Object.fromEntries(response.headers.entries())
-			);
+			console.log("📡 API Response headers:", Object.fromEntries(response.headers.entries()));
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -509,7 +472,7 @@ export class PredictionMarketService {
 					errorText,
 				});
 				throw new Error(
-					`API request failed: ${response.status} ${response.statusText} - ${errorText}`
+					`API request failed: ${response.status} ${response.statusText} - ${errorText}`,
 				);
 			}
 
@@ -526,33 +489,23 @@ export class PredictionMarketService {
 		// Market existence is validated by server; no local token map check
 
 		// Fetch real market data from server - no fallbacks, no mocks
-		console.log(
-			"🌐 Fetching market data from:",
-			`${getProductionApi()}/markets/${marketId}`
-		);
+		console.log("🌐 Fetching market data from:", `${getProductionApi()}/markets/${marketId}`);
 		const response = await fetch(`${getProductionApi()}/markets/${marketId}`);
 
 		if (!response.ok) {
 			throw new Error(
-				`CRITICAL: Failed to fetch market data for ${marketId}: ${response.status} ${response.statusText}`
+				`CRITICAL: Failed to fetch market data for ${marketId}: ${response.status} ${response.statusText}`,
 			);
 		}
 
 		const marketData = await response.json();
 
 		if (!marketData.yesTokenId || !marketData.noTokenId) {
-			throw new Error(
-				`CRITICAL: Market data missing required token IDs for ${marketId}`
-			);
+			throw new Error(`CRITICAL: Market data missing required token IDs for ${marketId}`);
 		}
 
-		if (
-			marketData.currentPrice === undefined ||
-			marketData.currentPrice === null
-		) {
-			throw new Error(
-				`CRITICAL: Market data missing current price for ${marketId}`
-			);
+		if (marketData.currentPrice === undefined || marketData.currentPrice === null) {
+			throw new Error(`CRITICAL: Market data missing current price for ${marketId}`);
 		}
 
 		console.log("✅ Market data from server:", marketData);
@@ -577,16 +530,8 @@ export class PredictionMarketService {
 		}
 
 		return {
-			exchange: new ethers.Contract(
-				CONTRACTS.EXCHANGE,
-				EXCHANGE_ABI,
-				this.provider
-			),
-			usdc: new ethers.Contract(
-				CONTRACTS.COLLATERAL,
-				USDC_ABI,
-				this.provider
-			),
+			exchange: new ethers.Contract(CONTRACTS.EXCHANGE, EXCHANGE_ABI, this.provider),
+			usdc: new ethers.Contract(CONTRACTS.COLLATERAL, USDC_ABI, this.provider),
 			ctf: new ethers.Contract(CONTRACTS.CTF, CTF_ABI, this.provider),
 		};
 	}

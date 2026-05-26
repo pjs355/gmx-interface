@@ -17,11 +17,6 @@ export interface TagPayload {
 }
 
 class TagService {
-	// NOTE: URLs are now fetched dynamically via getters to prevent
-	// stale URL caching issues that caused production bugs
-	private get API_BASE_URL(): string {
-		return getPredictionApiBaseUrl();
-	}
 	private get publicTagsUrl(): string {
 		return `${getPredictionApiBaseUrl()}/tags`;
 	}
@@ -47,9 +42,7 @@ class TagService {
 		const response = await fetch(this.publicTagsUrl);
 
 		if (!response.ok) {
-			throw new Error(
-				`HTTP error! status: ${response.status} - ${response.statusText}`
-			);
+			throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
 		}
 
 		const apiResponse = await response.json();
@@ -96,9 +89,7 @@ class TagService {
 				throw new Error(fallbackError);
 			}
 			const extractedError =
-				typeof (json as any).error === "string"
-					? (json as any).error
-					: fallbackError;
+				typeof (json as any).error === "string" ? (json as any).error : fallbackError;
 			throw new Error(extractedError);
 		}
 		const tag = await response.json();
@@ -106,11 +97,7 @@ class TagService {
 		return tag as Tag;
 	}
 
-	async updateTag(
-		id: string,
-		payload: TagPayload,
-		accessToken: string
-	): Promise<Tag> {
+	async updateTag(id: string, payload: TagPayload, accessToken: string): Promise<Tag> {
 		if (!accessToken) {
 			throw new Error("Admin access token required to update tag");
 		}
@@ -130,9 +117,7 @@ class TagService {
 				throw new Error(fallbackError);
 			}
 			const extractedError =
-				typeof (json as any).error === "string"
-					? (json as any).error
-					: fallbackError;
+				typeof (json as any).error === "string" ? (json as any).error : fallbackError;
 			throw new Error(extractedError);
 		}
 		const tag = await response.json();
@@ -158,9 +143,7 @@ class TagService {
 				throw new Error(fallbackError);
 			}
 			const extractedError =
-				typeof (json as any).error === "string"
-					? (json as any).error
-					: fallbackError;
+				typeof (json as any).error === "string" ? (json as any).error : fallbackError;
 			throw new Error(extractedError);
 		}
 		this.clearCache();

@@ -1,2 +1,1 @@
-export { default } from './TradeBoxTest';
-
+export { default } from "./TradeBoxTest";

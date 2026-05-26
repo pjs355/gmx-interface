@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { Tag } from "@/services/api/tagService";
-import {
-	isRestrictedProductionMode,
-	restrictedDefaultTagLabel,
-} from "@/config/restrictedMode";
+import { isRestrictedProductionMode, restrictedDefaultTagLabel } from "@/config/restrictedMode";
 import { resolveUmbrellaEventDate } from "./eventDates";
 
 export const LIVE_PILL_ID = "__LIVE__";
@@ -100,9 +97,7 @@ export function isUmbrellaStartingSoonByEventDate(
 	const eventDate = resolveUmbrellaEventDate(umbrella);
 	if (!eventDate) return false;
 	const eventMs = eventDate.getTime();
-	return (
-		nowMs < eventMs && eventMs <= nowMs + STARTING_SOON_WINDOW_MS
-	);
+	return nowMs < eventMs && eventMs <= nowMs + STARTING_SOON_WINDOW_MS;
 }
 
 export function useNowTick(intervalMs = 60_000): number {

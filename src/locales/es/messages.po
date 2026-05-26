@@ -37,10 +37,6 @@ msgstr "Eliminando..."
 msgid "LevelUp Markets"
 msgstr "LevelUp Markets"
 
-#: src/components/Header/HomeHeaderLinks.tsx
-msgid "Get Test USDC"
-msgstr "Obtener USDC de prueba"
-
 #: src/pages/PredictionMarket/Comments/Comments.tsx
 msgid "No comments yet. Be the first to share your thoughts."
 msgstr "Aún no hay comentarios. Sé el primero en compartir tu opinión."

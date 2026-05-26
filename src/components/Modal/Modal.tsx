@@ -81,7 +81,7 @@ export default function Modal({
 				}
 			}
 		},
-		[isVisible]
+		[isVisible],
 	);
 
 	const modalStyle = useMemo(() => ({ zIndex }), [zIndex]);
@@ -107,24 +107,15 @@ export default function Modal({
 							onClick={() => setIsVisible(false)}
 						/>
 						<div
-							className={cx(
-								"Modal-content flex flex-col",
-								contentClassName
-							)}
+							className={cx("Modal-content flex flex-col", contentClassName)}
 							onClick={stopPropagation}
 							data-qa={qa}
 						>
 							<div className="Modal-header-wrapper">
 								<div className="Modal-title-bar">
 									<div className="Modal-title">{label}</div>
-									<div
-										className="Modal-close-button pb-5"
-										onClick={() => setIsVisible(false)}
-									>
-										<MdClose
-											fontSize={20}
-											className="Modal-close-icon"
-										/>
+									<div className="Modal-close-button pb-5" onClick={() => setIsVisible(false)}>
+										<MdClose fontSize={20} className="Modal-close-icon" />
 									</div>
 								</div>
 								{headerContent}

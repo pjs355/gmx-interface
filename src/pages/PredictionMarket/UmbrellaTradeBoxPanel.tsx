@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { useMedia } from "react-use";
-import PredictionMarketTradeBox from "./PredictionMarketTradeBox/PredictionMarketTradeBox";
+import PredictionMarketTradeBox from "@/components/PredictionMarketTradeBox";
+import type { TradingVenue } from "@/components/PredictionMarketTradeBox";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
-import type { TradingVenue } from "./PredictionMarketTradeBox/types";
 import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
-import type { TradingPagePrices } from "@/hooks/useTradingPagePrices";
+import type { TradingPagePrices } from "@/features/markets/pricing/useTradingPagePrices";
 import { TradeBoxSkeleton } from "./Skeletons";
 
 export type UmbrellaTradeBoxPanelProps = {
@@ -41,10 +41,7 @@ export function UmbrellaTradeBoxPanel({
 	 * (that component’s responsive container already wraps desktop with the shell). */
 	const desktopTradeDockShell = (child: React.ReactNode) =>
 		wideTradeDock ? (
-			<div
-				className="prediction-trade-column-shell"
-				data-qa="prediction-tradebox"
-			>
+			<div className="prediction-trade-column-shell" data-qa="prediction-tradebox">
 				<div className="prediction-trade-column-underlay" aria-hidden />
 				<div className="prediction-trade-column-body">{child}</div>
 			</div>
@@ -53,9 +50,7 @@ export function UmbrellaTradeBoxPanel({
 		);
 
 	const pandascoreMatchId =
-		typeof umbrella?.pandascore_matchId === "string"
-			? umbrella.pandascore_matchId.trim()
-			: "";
+		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 	const umbrellaPredictFun = umbrella?.exchangeMatching?.predictFun;
@@ -64,11 +59,9 @@ export function UmbrellaTradeBoxPanel({
 		return desktopTradeDockShell(
 			<div className="prediction-market-tradebox match-settled-banner">
 				<div className="match-settled-banner__content">
-					<div className="match-settled-banner__winner">
-						{settledInfo.winnerName} has won!
-					</div>
+					<div className="match-settled-banner__winner">{settledInfo.winnerName} has won!</div>
 				</div>
-			</div>
+			</div>,
 		);
 	}
 
@@ -107,13 +100,9 @@ export function UmbrellaTradeBoxPanel({
 			venueOverride={venueOverride}
 			crossBuyYes={tradingPagePrices.bestYesPrice}
 			crossBuyNo={tradingPagePrices.bestNoPrice}
-			venueRowsForSellStrip={
-				pandascoreMatchId ? tradingPagePrices.venueRows : undefined
-			}
+			venueRowsForSellStrip={pandascoreMatchId ? tradingPagePrices.venueRows : undefined}
 			mobilePeekBar={mobilePeekBar}
-			tradeRouteIsolationKey={
-				compactTradeDock ? tradeRouteIsolationKey : undefined
-			}
+			tradeRouteIsolationKey={compactTradeDock ? tradeRouteIsolationKey : undefined}
 		/>
 	);
 }

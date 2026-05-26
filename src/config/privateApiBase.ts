@@ -59,10 +59,7 @@ export function shouldTunnelPredictOrders(): boolean {
  */
 export function getPrivateApiRequestUrl(path: string): string {
 	const p = path.startsWith("/") ? path : `/${path}`;
-	if (
-		shouldTunnelPredictOrders() &&
-		isPredictOrdersTunnelPath(p)
-	) {
+	if (shouldTunnelPredictOrders() && isPredictOrdersTunnelPath(p)) {
 		return `/private-api-proxy${p}`;
 	}
 	return `${getPrivateApiBaseUrl()}${p}`;
@@ -82,10 +79,7 @@ export function getPrivateApiAbsoluteUrl(path: string): string {
 export function getPrivateApiRoutingDescription(): string {
 	const base = getPrivateApiBaseUrl();
 	if (!isClobProxyEnabled()) return base;
-	const origin =
-		typeof window !== "undefined"
-			? window.location.origin
-			: "http://localhost:3010";
+	const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3010";
 	if (shouldTunnelPredictOrders()) {
 		return `Predict POST /api/predict/orders → ${origin}/private-api-proxy; other → ${base}`;
 	}

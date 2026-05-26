@@ -1,19 +1,16 @@
 /**
  * Per-venue fee estimates and **effective buy budget** (how much of the typed USD
  * goes to notional vs reserved fees). Polymarket’s row uses price-dependent taker
- * fees — see `feePolymarket.ts` and `src/trading/polymarket/POLYMARKET_TRADING.md` §4.
+ * fees — see `src/features/trading/fees/polymarket.ts` and `src/features/trading/venues/polymarket/session/POLYMARKET_TRADING.md` §4.
  */
-import { calculateFeeMatchingBackend } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLevelUp";
-import { calculatePolymarketFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePolymarket";
-import { calculatePredictFee } from "@/pages/PredictionMarket/PredictionMarketTradeBox/feePredict";
-import {
-	calculateDflowFee,
-	dflowEffectiveBuyBudget,
-} from "@/lib/dflowFees";
+import { calculateFeeMatchingBackend } from "@/features/trading/fees/levelUp";
+import { calculatePolymarketFee } from "@/features/trading/fees/polymarket";
+import { calculatePredictFee } from "@/features/trading/fees/predict";
+import { calculateDflowFee, dflowEffectiveBuyBudget } from "@/features/trading/fees/dflow";
 import {
 	calculateLimitlessFee,
 	LIMITLESS_DEFAULT_FEE_RATE_BPS,
-} from "@/pages/PredictionMarket/PredictionMarketTradeBox/feeLimitless";
+} from "@/features/trading/fees/limitless";
 
 export type TradingVenue = "all" | "levelup" | "polymarket" | "predictfun" | "dflow" | "limitless";
 
@@ -148,10 +145,7 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 		requiresWholeShares: false,
 		estimateFee: ({ contracts, price, feeRateBps }) => {
 			const notional = contracts * price;
-			return calculateLimitlessFee(
-				notional,
-				feeRateBps ?? LIMITLESS_DEFAULT_FEE_RATE_BPS,
-			);
+			return calculateLimitlessFee(notional, feeRateBps ?? LIMITLESS_DEFAULT_FEE_RATE_BPS);
 		},
 		effectiveBuyBudget: (usd, opts) => {
 			const bps = opts?.feeRateBps ?? LIMITLESS_DEFAULT_FEE_RATE_BPS;

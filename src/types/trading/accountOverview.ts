@@ -29,8 +29,8 @@ export type AccountVenueSlice = {
 	readiness?: VenueReadiness;
 	fundingDestination?: FundingDestination | null;
 	approvalRequirements?: ApprovalRequirement[];
-	/** Opaque server fields */
-	[key: string]: unknown;
+	/** Uniform setup projection from predictions-api (SOR / onboarding). */
+	setup?: import("./venueSetup").VenueSetupSlice;
 };
 
 export type WalletDescriptor = {
@@ -51,7 +51,8 @@ export type VenueRoutingEligibility = {
 export type RoutingEligibility = {
 	polymarket?: VenueRoutingEligibility;
 	limitless?: VenueRoutingEligibility;
-	kalshiViaDflow?: VenueRoutingEligibility;
+	predictFun?: VenueRoutingEligibility;
+	dflow?: VenueRoutingEligibility;
 };
 
 export type AccountOverview = {

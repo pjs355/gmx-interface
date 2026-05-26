@@ -1,81 +1,81 @@
 .connect-wallet-btn {
-  background: #8b5cf6;
-  padding: 0.85rem 1.4rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
-  border: none;
-  color: #ffffff;
-  font-size: var(--font-size-body-medium);
-  white-space: nowrap;
-  cursor: pointer;
-  border-radius: 0.8rem;
+	background: #8b5cf6;
+	padding: 0.85rem 1.4rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.8rem;
+	border: none;
+	color: #ffffff;
+	font-size: var(--font-size-body-medium);
+	white-space: nowrap;
+	cursor: pointer;
+	border-radius: 0.8rem;
 
-  .btn-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .btn-label {
-    font-weight: 700;
-    font-size: var(--font-size-body-medium);
-    margin-left: 0;
-    letter-spacing: 0;
-    text-align: center;
-  }
-  &:hover {
-    background: #7c3aed;
-  }
-  &:active {
-    background: #6d28d9;
-  }
+	.btn-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.btn-label {
+		font-weight: 700;
+		font-size: var(--font-size-body-medium);
+		margin-left: 0;
+		letter-spacing: 0;
+		text-align: center;
+	}
+	&:hover {
+		background: #7c3aed;
+	}
+	&:active {
+		background: #6d28d9;
+	}
 }
 
 @media (max-width: 768px) {
-  .connect-wallet-btn {
-    padding: 0.5rem 0.85rem;
-    font-size: 13px;
-    border-radius: 0.6rem;
+	.connect-wallet-btn {
+		padding: 0.5rem 0.85rem;
+		font-size: 13px;
+		border-radius: 0.6rem;
 
-    .btn-label {
-      font-size: 13px;
-    }
-  }
+		.btn-label {
+			font-size: 13px;
+		}
+	}
 }
 
 @media (max-width: 450px) {
-  .connect-wallet-btn {
-    padding: 0.4rem 0.7rem;
-    font-size: 12px;
-    gap: 0.4rem;
+	.connect-wallet-btn {
+		padding: 0.4rem 0.7rem;
+		font-size: 12px;
+		gap: 0.4rem;
 
-    .btn-label {
-      font-size: 12px;
-    }
-  }
+		.btn-label {
+			font-size: 12px;
+		}
+	}
 }
 
 @media (max-width: 380px) {
-  .connect-wallet-btn {
-    padding: 0.35rem 0.55rem;
-    font-size: 11px;
+	.connect-wallet-btn {
+		padding: 0.35rem 0.55rem;
+		font-size: 11px;
 
-    .btn-label {
-      font-size: 11px;
-    }
-  }
+		.btn-label {
+			font-size: 11px;
+		}
+	}
 }
 
 @media (max-width: 350px) {
-  .connect-wallet-btn {
-    padding: 0.3rem 0.5rem;
-    .btn-icon {
-      display: none;
-    }
-    .btn-label {
-      margin-left: 0px;
-      font-size: 11px;
-    }
-  }
+	.connect-wallet-btn {
+		padding: 0.3rem 0.5rem;
+		.btn-icon {
+			display: none;
+		}
+		.btn-label {
+			margin-left: 0px;
+			font-size: 11px;
+		}
+	}
 }

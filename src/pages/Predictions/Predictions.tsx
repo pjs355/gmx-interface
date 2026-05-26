@@ -1,15 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
-import { useSignerContext } from "context/SignerContext";
 import { PredictionCard } from "./components/PredictionCard";
 import { LoadingState } from "./components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./Predictions.scss";
 import GameLinks from "./components/GameLinks";
-import { Search } from "./components/Search/Search";
 import {
 	gameFilterResetSelection,
 	isUmbrellaLiveByEventDate,
@@ -38,11 +35,7 @@ function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 
 export default function Predictions() {
 	const navigate = useNavigate();
-	const { authenticated } = useSignerContext();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
-	const [searchActive, setSearchActive] = useState(false);
-	const [searchQuery, setSearchQuery] = useState("");
-	const [searchResults, setSearchResults] = useState<Umbrella[]>([]);
 
 	const {
 		umbrellas,
@@ -66,63 +59,26 @@ export default function Predictions() {
 		};
 	}, [tags]);
 
-	const handleSearchActive = useCallback(
-		async (active: boolean, query: string) => {
-			if (!active) {
-				setSearchActive(false);
-				setSearchQuery("");
-				setSearchResults([]);
-				return;
-			}
-
-			try {
-				const baseUrl = getPredictionApiBaseUrl();
-				const response = await fetch(
-					`${baseUrl}/umbrellas/search?q=${encodeURIComponent(query)}`
-				);
-				if (!response.ok) throw new Error("Search failed");
-
-				const data = await response.json();
-				setSearchResults(data.data || []);
-				setSearchQuery(query);
-				setSearchActive(true);
-			} catch (error) {
-				console.error("error", error);
-			}
-		},
-		[]
-	);
-
 	const now = useNowTick(60_000);
 
-	const filteredUmbrellas = React.useMemo(() => {
-		// If search is active, use search results instead
-		if (searchActive && searchResults.length > 0) {
-			return searchResults;
-		}
-
+	const filteredUmbrellas = useMemo(() => {
 		// First filter out inactive umbrellas
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			return (umbrella as any).active === true;
 		});
 
 		// Find ESPORTS tag to exclude esports markets from home page
-		const esportsTag = tags.find(
-			(t) => normalizeTagLabel(t.label) === "ESPORTS",
-		);
+		const esportsTag = tags.find((t) => normalizeTagLabel(t.label) === "ESPORTS");
 		const esportsTagId = esportsTag?._id;
 
 		// Filter out esports-tagged umbrellas
 		let filtered = activeUmbrellas.filter((umbrella) => {
-			const children = (umbrella as any).children as
-				| Array<any>
-				| undefined;
+			const children = (umbrella as any).children as Array<any> | undefined;
 			if (!children || children.length === 0) return false;
 
 			// Check if any child has the ESPORTS tag
 			const hasEsportsTag = children.some((q) => {
-				const tagIds: string[] | undefined = (q &&
-					(q as any).tagIds) as any;
+				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
 				// MUST have tagIds array (skip questions with legacy tags only)
 				if (!Array.isArray(tagIds) || tagIds.length === 0) {
 					return false;
@@ -134,21 +90,14 @@ export default function Predictions() {
 			return !hasEsportsTag;
 		});
 
-		if (
-			selectedGame &&
-			selectedGame !== LIVE_PILL_ID &&
-			selectedGame !== STARTING_SOON_PILL_ID
-		) {
+		if (selectedGame && selectedGame !== LIVE_PILL_ID && selectedGame !== STARTING_SOON_PILL_ID) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
 			if (selectedTag) {
 				filtered = filtered.filter((umbrella) => {
-					const children = (umbrella as any).children as
-						| Array<any>
-						| undefined;
+					const children = (umbrella as any).children as Array<any> | undefined;
 					if (!children || children.length === 0) return false;
 					return children.some((q) => {
-						const tagIds: string[] | undefined = (q &&
-							(q as any).tagIds) as any;
+						const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
 						if (!Array.isArray(tagIds) || tagIds.length === 0) {
 							return false;
 						}
@@ -170,7 +119,7 @@ export default function Predictions() {
 
 		// Sort by trading activity (most trades first)
 		return sortByTradingActivity(filtered);
-	}, [umbrellas, selectedGame, tags, searchActive, searchResults, now]);
+	}, [umbrellas, selectedGame, tags, now]);
 
 	const filterLabelForEmpty =
 		selectedGame === LIVE_PILL_ID
@@ -185,17 +134,11 @@ export default function Predictions() {
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
-	const navigateToSingleMarket = (
-		umbrella: Umbrella,
-		position: "yes" | "no"
-	) => {
+	const navigateToSingleMarket = (umbrella: Umbrella, position: "yes" | "no") => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
 		const question = singleMarketQuestions[umbrella._id];
 		if (question) {
-			localStorage.setItem(
-				"currentPredictionMarket",
-				JSON.stringify(question)
-			);
+			localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 			localStorage.setItem("activePosition", position);
 		}
 		navigate(`/predictions/umbrella/${umbrella._id}`);
@@ -204,18 +147,14 @@ export default function Predictions() {
 	const navigateToMultiMarket = (
 		umbrella: Umbrella,
 		question: PredictionMarket,
-		position: "yes" | "no"
+		position: "yes" | "no",
 	) => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		localStorage.setItem(
-			"currentPredictionMarket",
-			JSON.stringify(question)
-		);
+		localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 		localStorage.setItem("activePosition", position);
 
 		// Store the selected market ID so it becomes the active market on the trading page
-		const marketId =
-			question._id || question.questionId || question.marketId;
+		const marketId = question._id || question.questionId || question.marketId;
 		if (marketId) {
 			localStorage.setItem("selectedMarketId", marketId);
 		}
@@ -265,9 +204,7 @@ export default function Predictions() {
 							))
 						) : (
 							<div className="no-markets-message no-markets-message--empty">
-								<p>{`No current markets for ${
-									filterLabelForEmpty ?? "this filter"
-								}`}</p>
+								<p>{`No current markets for ${filterLabelForEmpty ?? "this filter"}`}</p>
 							</div>
 						)}
 					</div>

@@ -68,11 +68,9 @@ interface ViewProfileProps {
  */
 function getSmartWalletAddress(profile: ProfileData | null): string | null {
 	if (!profile) return null;
-	
+
 	// First try linked_accounts
-	const linkedSmartWallet = profile.linked_accounts?.find(
-		(acc) => acc.type === "smart_wallet"
-	);
+	const linkedSmartWallet = profile.linked_accounts?.find((acc) => acc.type === "smart_wallet");
 	if (linkedSmartWallet?.address) {
 		return linkedSmartWallet.address;
 	}
@@ -103,23 +101,15 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 			setLoading(true);
 			setError(null);
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
+				const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 				if (!token) {
 					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
 				const base = getPredictionApiBaseUrl();
-				const resp = await fetch(
-					`${base}/admin/profiles/${profileId}`,
-					{
-						headers: { Authorization: `Bearer ${token}` },
-					}
-				);
-				const json = (await resp
-					.json()
-					.catch(() => ({} as any))) as ProfileApiResponse;
+				const resp = await fetch(`${base}/admin/profiles/${profileId}`, {
+					headers: { Authorization: `Bearer ${token}` },
+				});
+				const json = (await resp.json().catch(() => ({}) as any)) as ProfileApiResponse;
 				if (!resp.ok) {
 					throw new Error(formatAdminHttpError(resp.status, json?.error));
 				}
@@ -127,10 +117,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 					throw new Error(adminErrorMessage(ADMIN_PROFILE_INVALID));
 				}
 				if (mounted) {
-					console.log(
-						"🔍 ViewProfile: Profile data received:",
-						json.data
-					);
+					console.log("🔍 ViewProfile: Profile data received:", json.data);
 
 					// The response has profile and orders as separate properties
 					const responseData = json.data || {};
@@ -143,26 +130,11 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 						orders: orders,
 					};
 
-					console.log(
-						"🔍 ViewProfile: Profile _id:",
-						combinedProfile._id
-					);
-					console.log(
-						"🔍 ViewProfile: Profile userId:",
-						combinedProfile.userId
-					);
-					console.log(
-						"🔍 ViewProfile: Profile exp:",
-						combinedProfile.exp
-					);
-					console.log(
-						"🔍 ViewProfile: Profile username:",
-						combinedProfile.username
-					);
-					console.log(
-						"🔍 ViewProfile: Profile orders count:",
-						combinedProfile.orders?.length
-					);
+					console.log("🔍 ViewProfile: Profile _id:", combinedProfile._id);
+					console.log("🔍 ViewProfile: Profile userId:", combinedProfile.userId);
+					console.log("🔍 ViewProfile: Profile exp:", combinedProfile.exp);
+					console.log("🔍 ViewProfile: Profile username:", combinedProfile.username);
+					console.log("🔍 ViewProfile: Profile orders count:", combinedProfile.orders?.length);
 
 					setProfile(combinedProfile);
 				}
@@ -197,11 +169,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 			questions.forEach((question: any) => {
 				// Use _id (MongoDB id) as the key, not questionId
 				const questionMongoId = question._id;
-				if (
-					questionMongoId &&
-					question.yesTokenId &&
-					question.noTokenId
-				) {
+				if (questionMongoId && question.yesTokenId && question.noTokenId) {
 					map.set(questionMongoId, {
 						umbrellaId: umbrella._id,
 						umbrellaName: umbrella.displayName,
@@ -233,7 +201,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 			if (umbrellaInfo) {
 				console.log(
 					`✅ Found umbrella for questionId ${order.questionId}:`,
-					umbrellaInfo.umbrellaName
+					umbrellaInfo.umbrellaName,
 				);
 
 				// Determine position by comparing tokenId
@@ -255,48 +223,40 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 					questionDisplayName: umbrellaInfo.questionName,
 				};
 			} else {
-				console.log(
-					`❌ Could not find umbrella for questionId: ${order.questionId}`
-				);
+				console.log(`❌ Could not find umbrella for questionId: ${order.questionId}`);
 				return order;
 			}
 		});
 	}, [profile?.orders, questionToUmbrellaMap]);
 
 	// Group orders by umbrella
-	const ordersByUmbrella = ordersWithPosition.reduce((acc, order) => {
-		const umbrellaId = order.umbrellaId || "unknown";
-		const umbrellaName =
-			order.umbrellaDisplayName || `Umbrella ${umbrellaId}`;
-		if (!acc[umbrellaId]) {
-			acc[umbrellaId] = {
-				umbrellaId,
-				umbrellaName,
-				orders: [],
-			};
-		}
-		acc[umbrellaId].orders.push(order);
-		return acc;
-	}, {} as Record<string, { umbrellaId: string; umbrellaName: string; orders: Order[] }>);
+	const ordersByUmbrella = ordersWithPosition.reduce(
+		(acc, order) => {
+			const umbrellaId = order.umbrellaId || "unknown";
+			const umbrellaName = order.umbrellaDisplayName || `Umbrella ${umbrellaId}`;
+			if (!acc[umbrellaId]) {
+				acc[umbrellaId] = {
+					umbrellaId,
+					umbrellaName,
+					orders: [],
+				};
+			}
+			acc[umbrellaId].orders.push(order);
+			return acc;
+		},
+		{} as Record<string, { umbrellaId: string; umbrellaName: string; orders: Order[] }>,
+	);
 
-	const umbrellaGroups = ordersByUmbrella
-		? Object.values(ordersByUmbrella)
-		: [];
+	const umbrellaGroups = ordersByUmbrella ? Object.values(ordersByUmbrella) : [];
 
 	if (loading) {
-		return (
-			<div style={{ padding: 24, color: "white" }}>
-				Loading profile...
-			</div>
-		);
+		return <div style={{ padding: 24, color: "white" }}>Loading profile...</div>;
 	}
 
 	if (error) {
 		return (
 			<div style={{ padding: 24, color: "white" }}>
-				<div style={{ color: "#f87171", marginBottom: 16 }}>
-					Error: {error}
-				</div>
+				<div style={{ color: "#f87171", marginBottom: 16 }}>Error: {error}</div>
 				<button
 					type="button"
 					onClick={onBack}
@@ -372,7 +332,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 								// Use the global spoofAccount function (same as console command)
 								(window as any).spoofAccount(smartWallet);
 								// Navigate to positions page with full reload
-								window.location.assign('/positions');
+								window.location.assign("/positions");
 							}}
 							style={{
 								padding: "8px 16px",
@@ -416,21 +376,14 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 					return (
 						<div style={{ marginBottom: 8 }}>
 							<strong>Smart Wallet:</strong>{" "}
-							<span style={{ fontFamily: "monospace", fontSize: "13px" }}>
-								{smartWallet}
-							</span>
+							<span style={{ fontFamily: "monospace", fontSize: "13px" }}>{smartWallet}</span>
 						</div>
 					);
 				})()}
-				{profile.linked_accounts?.find((acc) => acc.type === "email")
-					?.address && (
+				{profile.linked_accounts?.find((acc) => acc.type === "email")?.address && (
 					<div style={{ marginBottom: 8 }}>
 						<strong>Email:</strong>{" "}
-						{
-							profile.linked_accounts.find(
-								(acc) => acc.type === "email"
-							)?.address
-						}
+						{profile.linked_accounts.find((acc) => acc.type === "email")?.address}
 					</div>
 				)}
 				<div style={{ marginBottom: 8 }}>
@@ -438,15 +391,12 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 				</div>
 				{profile.createdAt && (
 					<div>
-						<strong>Created:</strong>{" "}
-						{new Date(profile.createdAt).toLocaleString()}
+						<strong>Created:</strong> {new Date(profile.createdAt).toLocaleString()}
 					</div>
 				)}
 			</div>
 
-			<h3 style={{ marginBottom: 16 }}>
-				Orders ({profile.orders?.length || 0})
-			</h3>
+			<h3 style={{ marginBottom: 16 }}>Orders ({profile.orders?.length || 0})</h3>
 
 			{umbrellaGroups.length === 0 ? (
 				<div
@@ -476,8 +426,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 							}}
 						>
 							<h4 style={{ marginTop: 0, marginBottom: 16 }}>
-								{group.umbrellaName} ({group.orders.length}{" "}
-								orders)
+								{group.umbrellaName} ({group.orders.length} orders)
 							</h4>
 							<div style={{ overflowX: "auto" }}>
 								<table
@@ -572,8 +521,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 											<tr
 												key={order._id || order.orderId}
 												style={{
-													borderBottom:
-														"1px solid #222",
+													borderBottom: "1px solid #222",
 												}}
 											>
 												<td
@@ -591,21 +539,13 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 															padding: "4px 8px",
 															borderRadius: 4,
 															backgroundColor:
-																order.marketType ===
-																"market"
+																order.marketType === "market"
 																	? "rgba(59, 130, 246, 0.2)"
 																	: "rgba(168, 85, 247, 0.2)",
-															color:
-																order.marketType ===
-																"market"
-																	? "#3b82f6"
-																	: "#a855f7",
+															color: order.marketType === "market" ? "#3b82f6" : "#a855f7",
 														}}
 													>
-														{(
-															order.marketType ||
-															"market"
-														).toUpperCase()}
+														{(order.marketType || "market").toUpperCase()}
 													</span>
 												</td>
 												<td style={{ padding: "8px" }}>
@@ -614,37 +554,22 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 															padding: "4px 8px",
 															borderRadius: 4,
 															backgroundColor:
-																order.side ===
-																"buy"
+																order.side === "buy"
 																	? "rgba(34, 197, 94, 0.2)"
 																	: "rgba(239, 68, 68, 0.2)",
-															color:
-																order.side ===
-																"buy"
-																	? "#22c55e"
-																	: "#ef4444",
+															color: order.side === "buy" ? "#22c55e" : "#ef4444",
 														}}
 													>
 														{order.side.toUpperCase()}
 													</span>
 												</td>
+												<td style={{ padding: "8px" }}>{order.position || "--"}</td>
 												<td style={{ padding: "8px" }}>
-													{order.position || "--"}
+													{order.price ? `$${order.price.toFixed(2)}` : "--"}
 												</td>
 												<td style={{ padding: "8px" }}>
-													{order.price
-														? `$${order.price.toFixed(
-																2
-														  )}`
-														: "--"}
-												</td>
-												<td style={{ padding: "8px" }}>
-													{order.usdcTotalMicro !==
-													undefined
-														? `$${(
-																order.usdcTotalMicro /
-																1000000
-														  ).toFixed(2)}`
+													{order.usdcTotalMicro !== undefined
+														? `$${(order.usdcTotalMicro / 1000000).toFixed(2)}`
 														: "--"}
 												</td>
 												<td style={{ padding: "8px" }}>
@@ -652,18 +577,13 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 														style={{
 															padding: "4px 8px",
 															borderRadius: 4,
-															backgroundColor:
-																order.filled
-																	? "rgba(34, 197, 94, 0.2)"
-																	: "rgba(156, 163, 175, 0.2)",
-															color: order.filled
-																? "#22c55e"
-																: "#9ca3af",
+															backgroundColor: order.filled
+																? "rgba(34, 197, 94, 0.2)"
+																: "rgba(156, 163, 175, 0.2)",
+															color: order.filled ? "#22c55e" : "#9ca3af",
 														}}
 													>
-														{order.filled
-															? "Filled"
-															: "Open"}
+														{order.filled ? "Filled" : "Open"}
 													</span>
 												</td>
 												<td
@@ -672,11 +592,7 @@ export default function ViewProfile({ profileId, onBack }: ViewProfileProps) {
 														fontSize: "12px",
 													}}
 												>
-													{order.createdAt
-														? new Date(
-																order.createdAt
-														  ).toLocaleString()
-														: "--"}
+													{order.createdAt ? new Date(order.createdAt).toLocaleString() : "--"}
 												</td>
 											</tr>
 										))}

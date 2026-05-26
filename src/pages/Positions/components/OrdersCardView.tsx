@@ -6,8 +6,8 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { type VenueOrder, venueDisplayLabel } from "@/types/trading/venuePosition";
 import { cancelOrder } from "@/services/api/simplifiedOrderService";
-import { usePrivateApiClient } from "@/trading/hooks/usePrivateApiClient";
-import { limitlessQueryKeys } from "@/trading/venues/limitless/trade/limitlessQueryKeys";
+import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
+import { limitlessQueryKeys } from "@/features/trading/venues/limitless/trade/limitlessQueryKeys";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	bundledCounterStrikeLogoFromTagLabels,
@@ -15,12 +15,12 @@ import {
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
-} from "@/helpers/gameLogoResolver";
+} from "@/features/markets/assets/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
-import { umbrellaHeaderLabel } from "@/helpers/umbrellaDisplayName";
-import { outcomeSideLabelColor } from "../utils/positionHelpers";
+import { umbrellaHeaderLabel } from "@/features/markets/presentation/umbrellaDisplayName";
+import { outcomeSideLabelColor } from "@/features/positions/utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
-import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
+import { oddsDualLayoutForStyle } from "@/features/odds-display/oddsDisplayFormat";
 
 // Component to handle image with proper fallback
 function UmbrellaImage({ umbrella }: { umbrella: any }) {
@@ -28,15 +28,13 @@ function UmbrellaImage({ umbrella }: { umbrella: any }) {
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
 
-	const serverImage =
-		umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
+	const serverImage = umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
 	const tagImage = getTagImageFromUmbrella(umbrella, tags);
 	const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 	const gameLogo = resolveLogoByTags(tagLabels);
 	const fallbackLogo = gameLogo || gtaIcon;
 	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
-	const initialSrc =
-		cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
+	const initialSrc = cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {
@@ -86,7 +84,7 @@ export default function OrdersCardView({
 	const navigateToTradingPage = (
 		umbrella: Umbrella,
 		market: PredictionMarket,
-		position: "yes" | "no"
+		position: "yes" | "no",
 	) => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
 		localStorage.setItem("currentPredictionMarket", JSON.stringify(market));
@@ -101,9 +99,7 @@ export default function OrdersCardView({
 	};
 
 	const ordersByMarket = useMemo(() => {
-		const unfilledOrders = orders.filter(
-			(order) => !order.filled && Number(order.size) > 0
-		);
+		const unfilledOrders = orders.filter((order) => !order.filled && Number(order.size) > 0);
 		const grouped: Record<string, ProcessedOrder[]> = {};
 
 		unfilledOrders.forEach((order) => {
@@ -130,33 +126,19 @@ export default function OrdersCardView({
 		<div className="flex flex-col gap-12">
 			{umbrellaBalances.map(({ umbrella, markets }) => {
 				const marketsWithOrders = markets.filter(({ market }: any) => {
-					const qid =
-						market._id || market.questionId || market.marketId;
-					return (
-						qid &&
-						Array.isArray(ordersByMarket[qid]) &&
-						ordersByMarket[qid].length > 0
-					);
+					const qid = market._id || market.questionId || market.marketId;
+					return qid && Array.isArray(ordersByMarket[qid]) && ordersByMarket[qid].length > 0;
 				});
 				if (marketsWithOrders.length === 0) return null;
 
 				return (
 					<div key={umbrella._id} className="umbrella-card">
 						{marketsWithOrders.map(({ market }: any) => {
-							const qid =
-								market._id ||
-								market.questionId ||
-								market.marketId;
-							const list = (ordersByMarket[qid] || []).filter(
-								(o) => !removedIds.has(o.orderId)
-							);
+							const qid = market._id || market.questionId || market.marketId;
+							const list = (ordersByMarket[qid] || []).filter((o) => !removedIds.has(o.orderId));
 
 							return list.map((o) => {
-								const title = (
-									market?.displayName ||
-									(market as any)?.question ||
-									""
-								).trim();
+								const title = (market?.displayName || (market as any)?.question || "").trim();
 								const parts = title
 									.split(/\s*vs\.?\s*/i)
 									.map((s: string) => s.trim())
@@ -174,36 +156,32 @@ export default function OrdersCardView({
 											marginBottom: 12,
 										}}
 									>
-									{/* Card Header */}
-									<div
-										onClick={() =>
-											navigateToTradingPage(
-												umbrella,
-												market,
-												o.position.toLowerCase() as "yes" | "no"
-											)
-										}
-										style={{
-											padding: "16px",
-											background: "#0a0a0a",
-											borderBottom:
-												"1px solid #2a2a2a",
-											display: "flex",
-											alignItems: "center",
-											gap: 12,
-											cursor: "pointer",
-										}}
-									>
-											<UmbrellaImage
-												umbrella={umbrella}
-											/>
+										{/* Card Header */}
+										<div
+											onClick={() =>
+												navigateToTradingPage(
+													umbrella,
+													market,
+													o.position.toLowerCase() as "yes" | "no",
+												)
+											}
+											style={{
+												padding: "16px",
+												background: "#0a0a0a",
+												borderBottom: "1px solid #2a2a2a",
+												display: "flex",
+												alignItems: "center",
+												gap: 12,
+												cursor: "pointer",
+											}}
+										>
+											<UmbrellaImage umbrella={umbrella} />
 											<div style={{ flex: 1 }}>
 												<div
 													style={{
 														color: "#888",
 														fontSize: 11,
-														textTransform:
-															"uppercase",
+														textTransform: "uppercase",
 														letterSpacing: 0.6,
 														marginBottom: 4,
 													}}
@@ -219,33 +197,19 @@ export default function OrdersCardView({
 												>
 													{isVs ? (
 														<>
-															<span>
-																{o.position ===
-																"Yes"
-																	? parts[0]
-																	: parts[1]}
-															</span>{" "}
+															<span>{o.position === "Yes" ? parts[0] : parts[1]}</span>{" "}
 															<span
 																style={{
-																	color:
-																		o.side ===
-																		"buy"
-																			? "#16a34a"
-																			: "#ef4444",
+																	color: o.side === "buy" ? "#16a34a" : "#ef4444",
 																}}
 															>
-																{o.side ===
-																"buy"
-																	? "Buy"
-																	: "Sell"}
+																{o.side === "buy" ? "Buy" : "Sell"}
 															</span>
 														</>
 													) : (
 														<>
-															{market.displayName ||
-																market.question}{" "}
-															{o.position ===
-																"Yes" && (
+															{market.displayName || market.question}{" "}
+															{o.position === "Yes" && (
 																<span
 																	style={{
 																		color: "#16a34a",
@@ -254,8 +218,7 @@ export default function OrdersCardView({
 																	Yes
 																</span>
 															)}
-															{o.position ===
-																"No" && (
+															{o.position === "No" && (
 																<span
 																	style={{
 																		color: "#ef4444",
@@ -266,17 +229,10 @@ export default function OrdersCardView({
 															)}{" "}
 															<span
 																style={{
-																	color:
-																		o.side ===
-																		"buy"
-																			? "#16a34a"
-																			: "#ef4444",
+																	color: o.side === "buy" ? "#16a34a" : "#ef4444",
 																}}
 															>
-																{o.side ===
-																"buy"
-																	? "Buy"
-																	: "Sell"}
+																{o.side === "buy" ? "Buy" : "Sell"}
 															</span>
 														</>
 													)}
@@ -299,8 +255,7 @@ export default function OrdersCardView({
 													style={{
 														color: "#888",
 														fontSize: 11,
-														textTransform:
-															"uppercase",
+														textTransform: "uppercase",
 														letterSpacing: 0.6,
 														marginBottom: 4,
 													}}
@@ -329,8 +284,7 @@ export default function OrdersCardView({
 													style={{
 														color: "#888",
 														fontSize: 11,
-														textTransform:
-															"uppercase",
+														textTransform: "uppercase",
 														letterSpacing: 0.6,
 														marginBottom: 4,
 													}}
@@ -344,11 +298,7 @@ export default function OrdersCardView({
 														fontWeight: 700,
 													}}
 												>
-													{o.size !== undefined
-														? Math.round(
-																Number(o.size)
-														  )
-														: "—"}
+													{o.size !== undefined ? Math.round(Number(o.size)) : "—"}
 												</div>
 											</div>
 											<div
@@ -366,79 +316,35 @@ export default function OrdersCardView({
 														border: "none",
 														borderRadius: 6,
 														padding: "8px 16px",
-														cursor: cancelingIds.has(
-															o.orderId
-														)
-															? "default"
-															: "pointer",
-														opacity:
-															cancelingIds.has(
-																o.orderId
-															)
-																? 0.7
-																: 1,
+														cursor: cancelingIds.has(o.orderId) ? "default" : "pointer",
+														opacity: cancelingIds.has(o.orderId) ? 0.7 : 1,
 														fontWeight: 600,
 														fontSize: 13,
 														whiteSpace: "nowrap",
 													}}
 													onClick={async (e) => {
 														e.stopPropagation();
-														if (
-															cancelingIds.has(
-																o.orderId
-															)
-														)
-															return;
-														setCancelingIds(
-															(prev) =>
-																new Set(
-																	prev
-																).add(o.orderId)
-														);
+														if (cancelingIds.has(o.orderId)) return;
+														setCancelingIds((prev) => new Set(prev).add(o.orderId));
 														try {
-															const res =
-																await cancelOrder(
-																	o.orderId
-																);
-															console.log(
-																"Cancel order result:",
-																res
-															);
+															const res = await cancelOrder(o.orderId);
+															console.log("Cancel order result:", res);
 														} catch (e) {
-															console.error(
-																"Cancel order error:",
-																e
-															);
+															console.error("Cancel order error:", e);
 														} finally {
 															setTimeout(() => {
-																setRemovedIds(
-																	(prev) =>
-																		new Set(
-																			prev
-																		).add(
-																			o.orderId
-																		)
-																);
-																setCancelingIds(
-																	(prev) => {
-																		const ns =
-																			new Set(
-																				prev
-																			);
-																		ns.delete(
-																			o.orderId
-																		);
-																		return ns;
-																	}
-																);
+																setRemovedIds((prev) => new Set(prev).add(o.orderId));
+																setCancelingIds((prev) => {
+																	const ns = new Set(prev);
+																	ns.delete(o.orderId);
+																	return ns;
+																});
 															}, 3000);
 														}
 													}}
 												>
 													{cancelingIds.has(o.orderId)
-														? `Canceling${".".repeat(
-																(tick % 3) + 1
-														  )}`
+														? `Canceling${".".repeat((tick % 3) + 1)}`
 														: "Cancel"}
 												</button>
 											</div>
@@ -451,113 +357,155 @@ export default function OrdersCardView({
 				);
 			})}
 
-		{/* Venue orders (Predict, etc.) */}
-		{venueOrders.filter((vo) => !removedIds.has(vo.orderId)).map((vo) => (
-			<div
-				key={`venue-${vo.orderId}`}
-				style={{
-					background: "#1a1a1a",
-					border: "1px solid #2a2a2a",
-					borderRadius: 12,
-					overflow: "hidden",
-					marginBottom: 12,
-				}}
-			>
-				<div
-					style={{
-						padding: "16px",
-						background: "#0a0a0a",
-						borderBottom: "1px solid #2a2a2a",
-						display: "flex",
-						alignItems: "center",
-						gap: 12,
-					}}
-				>
-					<div style={{ flex: 1 }}>
-						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
-							{venueDisplayLabel(vo.venue)}
-						</div>
-						<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
-							{vo.marketTitle}{" "}
-							<span style={{ color: outcomeSideLabelColor(vo.position) }}>
-								{vo.position}
-							</span>{" "}
-							<span style={{ color: vo.side === "buy" ? "#16a34a" : "#ef4444" }}>
-								{vo.side === "buy" ? "Buy" : "Sell"}
-							</span>
-						</div>
-					</div>
-				</div>
-				<div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-					<div style={{ flex: 1 }}>
-						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Price</div>
-						<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{formatPrice(vo.price, portfolioPriceLayout)}</div>
-					</div>
-					<div style={{ flex: 1, textAlign: "center" }}>
-						<div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Shares</div>
-						<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{Math.round(vo.size)}</div>
-					</div>
-					<div style={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
-						<button
-							type="button"
+			{/* Venue orders (Predict, etc.) */}
+			{venueOrders
+				.filter((vo) => !removedIds.has(vo.orderId))
+				.map((vo) => (
+					<div
+						key={`venue-${vo.orderId}`}
+						style={{
+							background: "#1a1a1a",
+							border: "1px solid #2a2a2a",
+							borderRadius: 12,
+							overflow: "hidden",
+							marginBottom: 12,
+						}}
+					>
+						<div
 							style={{
-								background: "#ef4444",
-								color: "#fff",
-								border: "none",
-								borderRadius: 6,
-								padding: "8px 16px",
-								cursor: cancelingIds.has(vo.orderId) ? "default" : "pointer",
-								opacity: cancelingIds.has(vo.orderId) ? 0.7 : 1,
-								fontWeight: 600,
-								fontSize: 13,
-								whiteSpace: "nowrap",
-							}}
-							onClick={async (e) => {
-								e.stopPropagation();
-								if (cancelingIds.has(vo.orderId)) return;
-								setCancelingIds((prev) => new Set(prev).add(vo.orderId));
-								try {
-									if (vo.venue === "predictfun" && vo.rawOrder) {
-										await privateApi.removePredictOrders({ orders: [vo.rawOrder] });
-									} else if (vo.venue === "limitless") {
-										await privateApi.deleteLimitlessOrder(vo.orderId);
-										await queryClient.invalidateQueries({
-											queryKey: limitlessQueryKeys.root,
-										});
-									}
-								} catch (err) {
-									console.error("Cancel venue order error:", err);
-								} finally {
-									setTimeout(() => {
-										setRemovedIds((prev) => new Set(prev).add(vo.orderId));
-										setCancelingIds((prev) => {
-											const ns = new Set(prev);
-											ns.delete(vo.orderId);
-											return ns;
-										});
-									}, 3000);
-								}
+								padding: "16px",
+								background: "#0a0a0a",
+								borderBottom: "1px solid #2a2a2a",
+								display: "flex",
+								alignItems: "center",
+								gap: 12,
 							}}
 						>
-							{cancelingIds.has(vo.orderId) ? `Canceling${".".repeat((tick % 3) + 1)}` : "Cancel"}
-						</button>
+							<div style={{ flex: 1 }}>
+								<div
+									style={{
+										color: "#888",
+										fontSize: 11,
+										textTransform: "uppercase",
+										letterSpacing: 0.6,
+										marginBottom: 4,
+									}}
+								>
+									{venueDisplayLabel(vo.venue)}
+								</div>
+								<div style={{ color: "#fff", fontSize: 16, fontWeight: 600 }}>
+									{vo.marketTitle}{" "}
+									<span style={{ color: outcomeSideLabelColor(vo.position) }}>{vo.position}</span>{" "}
+									<span style={{ color: vo.side === "buy" ? "#16a34a" : "#ef4444" }}>
+										{vo.side === "buy" ? "Buy" : "Sell"}
+									</span>
+								</div>
+							</div>
+						</div>
+						<div
+							style={{
+								padding: "16px",
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								gap: 12,
+							}}
+						>
+							<div style={{ flex: 1 }}>
+								<div
+									style={{
+										color: "#888",
+										fontSize: 11,
+										textTransform: "uppercase",
+										letterSpacing: 0.6,
+										marginBottom: 4,
+									}}
+								>
+									Price
+								</div>
+								<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
+									{formatPrice(vo.price, portfolioPriceLayout)}
+								</div>
+							</div>
+							<div style={{ flex: 1, textAlign: "center" }}>
+								<div
+									style={{
+										color: "#888",
+										fontSize: 11,
+										textTransform: "uppercase",
+										letterSpacing: 0.6,
+										marginBottom: 4,
+									}}
+								>
+									Shares
+								</div>
+								<div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
+									{Math.round(vo.size)}
+								</div>
+							</div>
+							<div style={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
+								<button
+									type="button"
+									style={{
+										background: "#ef4444",
+										color: "#fff",
+										border: "none",
+										borderRadius: 6,
+										padding: "8px 16px",
+										cursor: cancelingIds.has(vo.orderId) ? "default" : "pointer",
+										opacity: cancelingIds.has(vo.orderId) ? 0.7 : 1,
+										fontWeight: 600,
+										fontSize: 13,
+										whiteSpace: "nowrap",
+									}}
+									onClick={async (e) => {
+										e.stopPropagation();
+										if (cancelingIds.has(vo.orderId)) return;
+										setCancelingIds((prev) => new Set(prev).add(vo.orderId));
+										try {
+											if (vo.venue === "predictfun" && vo.rawOrder) {
+												await privateApi.removePredictOrders({ orders: [vo.rawOrder] });
+											} else if (vo.venue === "limitless") {
+												await privateApi.deleteLimitlessOrder(vo.orderId);
+												await queryClient.invalidateQueries({
+													queryKey: limitlessQueryKeys.root,
+												});
+											}
+										} catch (err) {
+											console.error("Cancel venue order error:", err);
+										} finally {
+											setTimeout(() => {
+												setRemovedIds((prev) => new Set(prev).add(vo.orderId));
+												setCancelingIds((prev) => {
+													const ns = new Set(prev);
+													ns.delete(vo.orderId);
+													return ns;
+												});
+											}, 3000);
+										}
+									}}
+								>
+									{cancelingIds.has(vo.orderId)
+										? `Canceling${".".repeat((tick % 3) + 1)}`
+										: "Cancel"}
+								</button>
+							</div>
+						</div>
 					</div>
-				</div>
-			</div>
-		))}
+				))}
 
-		{Object.keys(ordersByMarket).length === 0 &&
-			venueOrders.filter((vo) => !removedIds.has(vo.orderId)).length === 0 && (
-				<div
-					style={{
-						textAlign: "center",
-						padding: "40px",
-						color: "#888",
-					}}
-				>
-					<p>No open orders found</p>
-				</div>
-			)}
-	</div>
+			{Object.keys(ordersByMarket).length === 0 &&
+				venueOrders.filter((vo) => !removedIds.has(vo.orderId)).length === 0 && (
+					<div
+						style={{
+							textAlign: "center",
+							padding: "40px",
+							color: "#888",
+						}}
+					>
+						<p>No open orders found</p>
+					</div>
+				)}
+		</div>
 	);
 }

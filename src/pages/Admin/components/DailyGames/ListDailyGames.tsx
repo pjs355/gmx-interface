@@ -8,7 +8,6 @@ import {
 	formatAdminHttpError,
 	ADMIN_DAILY_GAMES_LIST_INVALID,
 	ADMIN_DAILY_GAMES_LIST_NOT_AVAILABLE,
-	ADMIN_DAILY_GAME_UPDATE_FAILED,
 	ADMIN_MISSING_ACCESS_TOKEN,
 } from "@/errors";
 
@@ -48,10 +47,6 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 		let mounted = true;
 		async function loadTags() {
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
 				const tags = await tagService.fetchAllTags();
 				if (mounted) {
 					setAvailableTags(tags);
@@ -81,10 +76,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 			setLoading(true);
 			setError(null);
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
+				const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 				if (!token) {
 					throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 				}
@@ -92,7 +84,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 				const resp = await fetch(`${base}/admin/daily-games`, {
 					headers: { Authorization: `Bearer ${token}` },
 				});
-				
+
 				// Handle 404 - GET endpoint might not exist yet
 				if (resp.status === 404) {
 					if (mounted) {
@@ -101,10 +93,8 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 					}
 					return;
 				}
-				
-				const json = (await resp
-					.json()
-					.catch(() => ({} as any))) as DailyGamesApiResponse;
+
+				const json = (await resp.json().catch(() => ({}) as any)) as DailyGamesApiResponse;
 				if (!resp.ok) {
 					throw new Error(formatAdminHttpError(resp.status, json?.error));
 				}
@@ -146,10 +136,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 
 		setUpdatingIds((prev) => new Set(prev).add(gameId));
 		try {
-			const token =
-				typeof getAccessToken === "function"
-					? await getAccessToken()
-					: undefined;
+			const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
 			if (!token) {
 				throw new Error(adminErrorMessage(ADMIN_MISSING_ACCESS_TOKEN));
 			}
@@ -165,7 +152,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 				}),
 			});
 
-			const json = await resp.json().catch(() => ({} as any));
+			const json = await resp.json().catch(() => ({}) as any);
 
 			if (!resp.ok) {
 				throw new Error(formatAdminHttpError(resp.status, json?.error));
@@ -173,11 +160,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 
 			// Update the local state
 			setGames((prevGames) =>
-				prevGames.map((game) =>
-					game._id === gameId
-						? { ...game, active: newActiveState }
-						: game
-				)
+				prevGames.map((game) => (game._id === gameId ? { ...game, active: newActiveState } : game)),
 			);
 		} catch (err: unknown) {
 			console.error("error", err);
@@ -192,19 +175,13 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 	};
 
 	if (loading) {
-		return (
-			<div style={{ padding: 24, color: "white" }}>
-				Loading daily games...
-			</div>
-		);
+		return <div style={{ padding: 24, color: "white" }}>Loading daily games...</div>;
 	}
 
 	if (error) {
 		return (
 			<div style={{ padding: 24, color: "white" }}>
-				<div style={{ color: "#f87171", marginBottom: 16 }}>
-					Error: {error}
-				</div>
+				<div style={{ color: "#f87171", marginBottom: 16 }}>Error: {error}</div>
 			</div>
 		);
 	}
@@ -285,53 +262,53 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 							>
 								Game Slug
 							</th>
-											<th
-												style={{
-													padding: "12px",
-													textAlign: "left",
-													borderBottom: "1px solid #333",
-												}}
-											>
-												Daily Start (UTC)
-											</th>
-											<th
-												style={{
-													padding: "12px",
-													textAlign: "left",
-													borderBottom: "1px solid #333",
-												}}
-											>
-												Initial Over Number
-											</th>
-											<th
-												style={{
-													padding: "12px",
-													textAlign: "left",
-													borderBottom: "1px solid #333",
-												}}
-											>
-												Tags
-											</th>
-											<th
-												style={{
-													padding: "12px",
-													textAlign: "left",
-													borderBottom: "1px solid #333",
-												}}
-											>
-												Active
-											</th>
-											<th
-												style={{
-													padding: "12px",
-													textAlign: "left",
-													borderBottom: "1px solid #333",
-												}}
-											>
-												Created
-											</th>
-										</tr>
-									</thead>
+							<th
+								style={{
+									padding: "12px",
+									textAlign: "left",
+									borderBottom: "1px solid #333",
+								}}
+							>
+								Daily Start (UTC)
+							</th>
+							<th
+								style={{
+									padding: "12px",
+									textAlign: "left",
+									borderBottom: "1px solid #333",
+								}}
+							>
+								Initial Over Number
+							</th>
+							<th
+								style={{
+									padding: "12px",
+									textAlign: "left",
+									borderBottom: "1px solid #333",
+								}}
+							>
+								Tags
+							</th>
+							<th
+								style={{
+									padding: "12px",
+									textAlign: "left",
+									borderBottom: "1px solid #333",
+								}}
+							>
+								Active
+							</th>
+							<th
+								style={{
+									padding: "12px",
+									textAlign: "left",
+									borderBottom: "1px solid #333",
+								}}
+							>
+								Created
+							</th>
+						</tr>
+					</thead>
 					<tbody>
 						{games.map((game) => (
 							<tr
@@ -343,13 +320,9 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 								<td style={{ padding: "12px" }}>{game.gameId}</td>
 								<td style={{ padding: "12px" }}>{game.gameName}</td>
 								<td style={{ padding: "12px" }}>{game.gameSlug}</td>
+								<td style={{ padding: "12px" }}>{game.dailyStart || "--"}</td>
 								<td style={{ padding: "12px" }}>
-									{game.dailyStart || "--"}
-								</td>
-								<td style={{ padding: "12px" }}>
-									{game.initialOverNumber !== undefined
-										? game.initialOverNumber.toFixed(2)
-										: "--"}
+									{game.initialOverNumber !== undefined ? game.initialOverNumber.toFixed(2) : "--"}
 								</td>
 								<td style={{ padding: "12px" }}>
 									{game.tagIds && game.tagIds.length > 0 ? (
@@ -386,23 +359,17 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 								<td style={{ padding: "12px" }}>
 									<button
 										type="button"
-										onClick={() =>
-											handleToggleActive(game._id, game.active ?? false)
-										}
+										onClick={() => handleToggleActive(game._id, game.active ?? false)}
 										disabled={updatingIds.has(game._id)}
 										style={{
 											padding: "4px 12px",
-											border: `1px solid ${
-												game.active ? "#22c55e" : "#6b7280"
-											}`,
+											border: `1px solid ${game.active ? "#22c55e" : "#6b7280"}`,
 											borderRadius: 6,
 											background: game.active
 												? "rgba(34, 197, 94, 0.2)"
 												: "rgba(107, 114, 128, 0.2)",
 											color: game.active ? "#4ade80" : "#9ca3af",
-											cursor: updatingIds.has(game._id)
-												? "not-allowed"
-												: "pointer",
+											cursor: updatingIds.has(game._id) ? "not-allowed" : "pointer",
 											fontSize: "12px",
 											opacity: updatingIds.has(game._id) ? 0.6 : 1,
 										}}
@@ -410,14 +377,12 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 										{updatingIds.has(game._id)
 											? "Updating..."
 											: game.active
-											? "Active"
-											: "Inactive"}
+												? "Active"
+												: "Inactive"}
 									</button>
 								</td>
 								<td style={{ padding: "12px" }}>
-									{game.createdAt
-										? new Date(game.createdAt).toLocaleDateString()
-										: "--"}
+									{game.createdAt ? new Date(game.createdAt).toLocaleDateString() : "--"}
 								</td>
 							</tr>
 						))}
@@ -427,4 +392,3 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 		</div>
 	);
 }
-

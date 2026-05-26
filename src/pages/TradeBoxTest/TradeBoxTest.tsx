@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
-import { useUserData } from "context/UserDataContext";
+import { useAccountLevelUpPositions } from "@/context/AccountDataContext";
 import { useCollateralTokens } from "context/CollateralTokenContext";
 import { usePredictionData } from "context/PredictionDataContext";
 import { OrderbookService } from "@/services/api/orderbookService";
@@ -10,17 +10,14 @@ import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import PredictionMarketTradeBox, {
 	type PredictionMarketTradeBoxHandle,
-} from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionMarketTradeBox";
+} from "@/components/PredictionMarketTradeBox";
 import {
 	TradeBoxTestRunner,
 	type TestResult,
 	type TestScenario,
-} from "utils/TradeBoxTestRunner";
-import { TradeBoxTestScenarios } from "utils/TradeBoxTestScenarios";
-import { useTradeExecutionService } from "@/pages/PredictionMarket/PredictionMarketTradeBox/TradeExecutionService";
-import { useMarketOrderHandler } from "@/pages/PredictionMarket/PredictionMarketTradeBox/MarketOrderHandler";
-import { useYesNoBalances } from "@/pages/PredictionMarket/PredictionMarketTradeBox/checkBalances";
-import type { TradeExecutionParams } from "@/pages/PredictionMarket/PredictionMarketTradeBox/types";
+} from "@/pages/TradeBoxTest/lib/TradeBoxTestRunner";
+import { TradeBoxTestScenarios } from "@/pages/TradeBoxTest/lib/TradeBoxTestScenarios";
+import { useYesNoBalances } from "@/features/trading/trade-box/checkBalances";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "./TradeBoxTest.scss";
 
@@ -31,10 +28,11 @@ export default function TradeBoxTest() {
 function TradeBoxTestInner() {
 	const navigate = useNavigate();
 	const { umbrellaId } = useParams<{ umbrellaId: string }>();
-	const { authenticated, user, getAccessToken } = usePrivy();
+	const { authenticated, getAccessToken } = usePrivy();
 	const { account, ready, signer, signerAddress } = useSignerContext(); // Get signer and account from context like production
 	const { wallets: privyWallets, ready: walletsReady } = usePrivyWallets(); // Same as production line 32
-	const userData = useUserData();
+	const levelUpPositions = useAccountLevelUpPositions();
+	const getMarketBalance = levelUpPositions.getMarketBalance;
 	const collateralTokens = useCollateralTokens();
 	const predictionData = usePredictionData();
 	const [checkingAdmin, setCheckingAdmin] = useState(true);
@@ -44,22 +42,14 @@ function TradeBoxTestInner() {
 		let mounted = true;
 		(async () => {
 			try {
-				const token =
-					typeof getAccessToken === "function"
-						? await getAccessToken()
-						: undefined;
-				const resp = await fetch(
-					`${getPredictionApiBaseUrl()}/admin/session`,
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...(token
-								? { Authorization: `Bearer ${token}` }
-								: {}),
-						},
-					}
-				);
+				const token = typeof getAccessToken === "function" ? await getAccessToken() : undefined;
+				const resp = await fetch(`${getPredictionApiBaseUrl()}/admin/session`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...(token ? { Authorization: `Bearer ${token}` } : {}),
+					},
+				});
 				if (!mounted) return;
 				if (resp.ok) {
 					setCheckingAdmin(false);
@@ -79,13 +69,8 @@ function TradeBoxTestInner() {
 		};
 	}, [getAccessToken, navigate]);
 
-	// Get the trade execution service - signer is stable after login!
-	const tradeExecutionService = useTradeExecutionService();
-
-	// Safely destructure with fallbacks
-	const { getTokenBalance } = userData || {};
 	const usdcBalance = collateralTokens.baseUsdc;
-	const { getQuestionsForUmbrella, umbrellas } = predictionData || {};
+	const { getQuestionsForUmbrella } = predictionData || {};
 
 	const [market, setMarket] = useState<PredictionMarket | null>(null);
 	const [orderbook, setOrderbook] = useState<OrderbookSnapshot | null>(null);
@@ -97,8 +82,7 @@ function TradeBoxTestInner() {
 		try {
 			console.log("🔄 Refreshing orderbook...");
 			const orderbookService = new OrderbookService();
-			const orderBookId =
-				market._id || market.questionId || (market as any).marketId;
+			const orderBookId = market._id || market.questionId || (market as any).marketId;
 			const ob = await orderbookService.fetchOrderbook(orderBookId);
 			setOrderbook(ob);
 			console.log("✅ Orderbook refreshed successfully");
@@ -110,8 +94,7 @@ function TradeBoxTestInner() {
 	}, [market]);
 
 	// Use the WORKING hook that updates reactively!
-	const { yesBalance: liveYesBalance, noBalance: liveNoBalance } =
-		useYesNoBalances(market!);
+	const { yesBalance: liveYesBalance, noBalance: liveNoBalance } = useYesNoBalances(market!);
 
 	// Store in a ref so getCurrentBalances can ALWAYS access latest values (no closure issues!)
 	const balancesRef = useRef({ yes: 0, no: 0, usdc: 0 });
@@ -128,9 +111,6 @@ function TradeBoxTestInner() {
 
 	// Ref to control the PredictionMarketTradeBox programmatically
 	const tradeBoxRef = useRef<PredictionMarketTradeBoxHandle>(null);
-
-	// Must declare orderbook before using it in hooks
-	const marketOrderHandlerInstance = useMarketOrderHandler(orderbook);
 
 	const [testRunner] = useState(
 		() =>
@@ -187,7 +167,7 @@ function TradeBoxTestInner() {
 						},
 					]);
 				},
-			})
+			}),
 	);
 
 	const [scenarios, setScenarios] = useState<TestScenario[]>([]);
@@ -201,9 +181,7 @@ function TradeBoxTestInner() {
 	>([]);
 	const [isRunning, setIsRunning] = useState(false);
 	const [currentTest, setCurrentTest] = useState<TestScenario | null>(null);
-	const [selectedPosition, setSelectedPosition] = useState<"yes" | "no">(
-		"yes"
-	);
+	const [selectedPosition, setSelectedPosition] = useState<"yes" | "no">("yes");
 	const [selectedScenarioType, setSelectedScenarioType] = useState<
 		"essential" | "all" | "market-only"
 	>("essential");
@@ -224,10 +202,7 @@ function TradeBoxTestInner() {
 					console.log("✅ [Auto-refresh] Orderbook updated");
 				}
 			} catch (error) {
-				console.warn(
-					"⚠️ [Auto-refresh] Failed to refresh orderbook:",
-					error
-				);
+				console.warn("⚠️ [Auto-refresh] Failed to refresh orderbook:", error);
 			}
 		}, 10000); // Every 10 seconds
 
@@ -250,19 +225,9 @@ function TradeBoxTestInner() {
 
 					// Load orderbook - use same field priority as other pages
 					const orderbookService = new OrderbookService();
-					const orderBookId =
-						firstMarket._id ||
-						firstMarket.questionId ||
-						firstMarket.marketId;
-					console.log(
-						"🔍 Fetching orderbook with ID:",
-						orderBookId,
-						"from market:",
-						firstMarket
-					);
-					const ob = await orderbookService.fetchOrderbook(
-						orderBookId
-					);
+					const orderBookId = firstMarket._id || firstMarket.questionId || firstMarket.marketId;
+					console.log("🔍 Fetching orderbook with ID:", orderBookId, "from market:", firstMarket);
+					const ob = await orderbookService.fetchOrderbook(orderBookId);
 					setOrderbook(ob);
 					console.log("✅ Orderbook loaded successfully");
 
@@ -270,26 +235,21 @@ function TradeBoxTestInner() {
 					if (ob) {
 						let generatedScenarios: TestScenario[] = [];
 						if (selectedScenarioType === "essential") {
-							generatedScenarios =
-								TradeBoxTestScenarios.generateEssentialScenarios(
-									ob
-								);
+							generatedScenarios = TradeBoxTestScenarios.generateEssentialScenarios(ob);
 						} else if (selectedScenarioType === "all") {
-							generatedScenarios =
-								TradeBoxTestScenarios.generateAllScenarios(ob);
+							generatedScenarios = TradeBoxTestScenarios.generateAllScenarios(ob);
 						} else {
 							// Market only
-							generatedScenarios =
-								TradeBoxTestScenarios.generateCustomScenarios(
-									{
-										includeMarketBuy: true,
-										includeMarketSell: true,
-										positions: ["yes", "no"],
-										dollarAmounts: [5, 10, 25],
-										shareAmounts: [10, 25],
-									},
-									ob
-								);
+							generatedScenarios = TradeBoxTestScenarios.generateCustomScenarios(
+								{
+									includeMarketBuy: true,
+									includeMarketSell: true,
+									positions: ["yes", "no"],
+									dollarAmounts: [5, 10, 25],
+									shareAmounts: [10, 25],
+								},
+								ob,
+							);
 						}
 						setScenarios(generatedScenarios);
 						testRunner.setScenarios(generatedScenarios);
@@ -334,10 +294,7 @@ function TradeBoxTestInner() {
 			throw new Error("Trade box ref not available");
 		}
 
-		console.log(
-			"🎯 Executing trade scenario via TradeBox component:",
-			scenario
-		);
+		console.log("🎯 Executing trade scenario via TradeBox component:", scenario);
 
 		try {
 			// CRITICAL: Update parent state first so initialPosition prop syncs
@@ -376,28 +333,20 @@ function TradeBoxTestInner() {
 			let stateCorrect = false;
 			while (verifyAttempts < 10 && !stateCorrect) {
 				const currentState = tradeBoxRef.current.getState();
-				console.log(
-					`🔍 Verifying component state (attempt ${
-						verifyAttempts + 1
-					}):`,
-					{
-						expectedPosition: scenario.position,
-						actualPosition: currentState.selectedPosition,
-						positionMatch:
-							currentState.selectedPosition === scenario.position,
-						expectedSide: scenario.side,
-						actualSide: currentState.side,
-						sideMatch: currentState.side === scenario.side,
-						expectedType: scenario.orderType,
-						actualType: currentState.orderType,
-						typeMatch:
-							currentState.orderType === scenario.orderType,
-						expectedAmount: scenario.amount.toString(),
-						actualAmount: currentState.amount,
-						amountMatch:
-							currentState.amount === scenario.amount.toString(),
-					}
-				);
+				console.log(`🔍 Verifying component state (attempt ${verifyAttempts + 1}):`, {
+					expectedPosition: scenario.position,
+					actualPosition: currentState.selectedPosition,
+					positionMatch: currentState.selectedPosition === scenario.position,
+					expectedSide: scenario.side,
+					actualSide: currentState.side,
+					sideMatch: currentState.side === scenario.side,
+					expectedType: scenario.orderType,
+					actualType: currentState.orderType,
+					typeMatch: currentState.orderType === scenario.orderType,
+					expectedAmount: scenario.amount.toString(),
+					actualAmount: currentState.amount,
+					amountMatch: currentState.amount === scenario.amount.toString(),
+				});
 
 				if (
 					currentState.selectedPosition === scenario.position &&
@@ -408,20 +357,12 @@ function TradeBoxTestInner() {
 					stateCorrect = true;
 					console.log("✅ Component state verified!");
 				} else {
-					console.log(
-						"⏳ Component state NOT matching. Differences:",
-						{
-							positionOff:
-								currentState.selectedPosition !==
-								scenario.position,
-							sideOff: currentState.side !== scenario.side,
-							typeOff:
-								currentState.orderType !== scenario.orderType,
-							amountOff:
-								currentState.amount !==
-								scenario.amount.toString(),
-						}
-					);
+					console.log("⏳ Component state NOT matching. Differences:", {
+						positionOff: currentState.selectedPosition !== scenario.position,
+						sideOff: currentState.side !== scenario.side,
+						typeOff: currentState.orderType !== scenario.orderType,
+						amountOff: currentState.amount !== scenario.amount.toString(),
+					});
 					await new Promise((resolve) => setTimeout(resolve, 500));
 					verifyAttempts++;
 				}
@@ -431,7 +372,7 @@ function TradeBoxTestInner() {
 				const finalState = tradeBoxRef.current.getState();
 				console.error("❌ FINAL STATE MISMATCH:", finalState);
 				throw new Error(
-					`Component state did not match after 5 seconds. Expected position=${scenario.position} but got ${finalState.selectedPosition}`
+					`Component state did not match after 5 seconds. Expected position=${scenario.position} but got ${finalState.selectedPosition}`,
 				);
 			}
 
@@ -477,14 +418,8 @@ function TradeBoxTestInner() {
 		await new Promise((resolve) => setTimeout(resolve, 3000));
 
 		console.log("✅ Balances loaded:", balancesRef.current);
-		console.log(
-			"✅ Starting balance snapshot:",
-			await getCurrentBalances()
-		);
-		console.log(
-			"✅ All checks passed. Starting tests with signer:",
-			signerAddress
-		);
+		console.log("✅ Starting balance snapshot:", await getCurrentBalances());
+		console.log("✅ All checks passed. Starting tests with signer:", signerAddress);
 
 		setIsRunning(true);
 		setTestResults([]);
@@ -498,16 +433,14 @@ function TradeBoxTestInner() {
 
 		// CRITICAL: Wait 2 seconds for the TradeBox component to fully initialize
 		// This ensures useTradeExecutionService has captured the signer values
-		console.log(
-			"⏳ Waiting 2 seconds for component to fully initialize..."
-		);
+		console.log("⏳ Waiting 2 seconds for component to fully initialize...");
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 
 		try {
 			await testRunner.runAllTests(
 				executeTradeScenario,
 				getCurrentBalances,
-				45000 // 45 second delay between tests for balance updates
+				45000, // 45 second delay between tests for balance updates
 			);
 		} catch (error: any) {
 			console.error("Test run failed:", error);
@@ -540,10 +473,7 @@ function TradeBoxTestInner() {
 		const total = testResults.length;
 		const passed = testResults.filter((r) => r.success).length;
 		const failed = total - passed;
-		const avgDuration =
-			total > 0
-				? testResults.reduce((sum, r) => sum + r.duration, 0) / total
-				: 0;
+		const avgDuration = total > 0 ? testResults.reduce((sum, r) => sum + r.duration, 0) / total : 0;
 
 		return { total, passed, failed, avgDuration };
 	}, [testResults]);
@@ -561,16 +491,11 @@ function TradeBoxTestInner() {
 				walletsCount: privyWallets?.length || 0,
 			});
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [authenticated, ready, account]);
 
 	// Show loading while checking admin session
 	if (checkingAdmin) {
-		return (
-			<div style={{ padding: 24, color: "white" }}>
-				Checking admin session…
-			</div>
-		);
+		return <div style={{ padding: 24, color: "white" }}>Checking admin session…</div>;
 	}
 
 	// Simple validation like other pages do
@@ -580,9 +505,7 @@ function TradeBoxTestInner() {
 				<div className="test-header">
 					<h1>Trade Box Test Page</h1>
 					<p className="error">No market ID provided.</p>
-					<button onClick={() => navigate("/")}>
-						Go to Predictions
-					</button>
+					<button onClick={() => navigate("/")}>Go to Predictions</button>
 				</div>
 			</div>
 		);
@@ -592,14 +515,10 @@ function TradeBoxTestInner() {
 		<div className="trade-box-test">
 			<div className="test-header">
 				<h1>Trade Box Test Runner</h1>
-				<p className="subtitle">
-					Automated testing for prediction market trading box
-				</p>
+				<p className="subtitle">Automated testing for prediction market trading box</p>
 				<button
 					className="btn-back"
-					onClick={() =>
-						navigate(`/predictions/umbrella/${umbrellaId}`)
-					}
+					onClick={() => navigate(`/predictions/umbrella/${umbrellaId}`)}
 				>
 					← Back to Market
 				</button>
@@ -612,9 +531,7 @@ function TradeBoxTestInner() {
 					{market && (
 						<div className="market-info">
 							<h3>{market.question}</h3>
-							<p className="market-id">
-								Market ID: {market.marketId}
-							</p>
+							<p className="market-id">Market ID: {market.marketId}</p>
 						</div>
 					)}
 
@@ -635,41 +552,25 @@ function TradeBoxTestInner() {
 						<h3>Current Balances</h3>
 						<div className="balance-row">
 							<span>USDC:</span>
-							<span className="balance-value">
-								${usdcBalance.toFixed(2)}
-							</span>
+							<span className="balance-value">${usdcBalance.toFixed(2)}</span>
 						</div>
 						{market &&
-							getTokenBalance &&
+							getMarketBalance &&
 							(() => {
-								// Use same method as production trade box - getTokenBalance with market ID
-								const marketId =
-									market._id ||
-									market.questionId ||
-									market.marketId;
-								const tokenBalance = marketId
-									? getTokenBalance(marketId)
-									: null;
-								const yesNum = tokenBalance
-									? Number(tokenBalance.yesBalance)
-									: 0;
-								const noNum = tokenBalance
-									? Number(tokenBalance.noBalance)
-									: 0;
+								const marketId = market._id || market.questionId || market.marketId;
+								const tokenBalance = marketId ? getMarketBalance(marketId) : null;
+								const yesNum = tokenBalance ? Number(tokenBalance.yesBalance) : 0;
+								const noNum = tokenBalance ? Number(tokenBalance.noBalance) : 0;
 
 								return (
 									<>
 										<div className="balance-row">
 											<span>YES Tokens:</span>
-											<span className="balance-value">
-												{yesNum.toFixed(2)}
-											</span>
+											<span className="balance-value">{yesNum.toFixed(2)}</span>
 										</div>
 										<div className="balance-row">
 											<span>NO Tokens:</span>
-											<span className="balance-value">
-												{noNum.toFixed(2)}
-											</span>
+											<span className="balance-value">{noNum.toFixed(2)}</span>
 										</div>
 									</>
 								);
@@ -687,57 +588,29 @@ function TradeBoxTestInner() {
 							<label>Test Scenario Set:</label>
 							<select
 								value={selectedScenarioType}
-								onChange={(e) =>
-									setSelectedScenarioType(
-										e.target.value as any
-									)
-								}
+								onChange={(e) => setSelectedScenarioType(e.target.value as any)}
 								disabled={isRunning}
 							>
-								<option value="essential">
-									Essential (6 tests)
-								</option>
-								<option value="market-only">
-									Market Orders Only (10 tests)
-								</option>
-								<option value="all">
-									All Orders (40+ tests)
-								</option>
+								<option value="essential">Essential (6 tests)</option>
+								<option value="market-only">Market Orders Only (10 tests)</option>
+								<option value="all">All Orders (40+ tests)</option>
 							</select>
 						</div>
 
 						<div className="control-group">
-							<p className="scenario-count">
-								{scenarios.length} scenarios loaded
-							</p>
+							<p className="scenario-count">{scenarios.length} scenarios loaded</p>
 						</div>
 
 						<button
-							className={`btn-start-tests ${
-								isRunning ? "disabled" : ""
-							}`}
+							className={`btn-start-tests ${isRunning ? "disabled" : ""}`}
 							onClick={startTestRun}
-							disabled={
-								isRunning ||
-								!authenticated ||
-								!account ||
-								!market ||
-								!orderbook
-							}
+							disabled={isRunning || !authenticated || !account || !market || !orderbook}
 						>
-							{isRunning
-								? "🔄 Running Tests..."
-								: "🚀 Start Test Run"}
+							{isRunning ? "🔄 Running Tests..." : "🚀 Start Test Run"}
 						</button>
 
-						{!authenticated && (
-							<p className="warning">
-								Please log in with Privy to run tests
-							</p>
-						)}
-						{authenticated && !account && (
-							<p className="warning">Loading wallet...</p>
-						)}
+						{!authenticated && <p className="warning">Please log in with Privy to run tests</p>}
+						{authenticated && !account && <p className="warning">Loading wallet...</p>}
 					</div>
 
 					{/* Test Summary */}
@@ -747,32 +620,19 @@ function TradeBoxTestInner() {
 							<div className="summary-stats">
 								<div className="stat">
 									<span className="stat-label">Total:</span>
-									<span className="stat-value">
-										{testSummary.total}
-									</span>
+									<span className="stat-value">{testSummary.total}</span>
 								</div>
 								<div className="stat success">
 									<span className="stat-label">Passed:</span>
-									<span className="stat-value">
-										{testSummary.passed}
-									</span>
+									<span className="stat-value">{testSummary.passed}</span>
 								</div>
 								<div className="stat error">
 									<span className="stat-label">Failed:</span>
-									<span className="stat-value">
-										{testSummary.failed}
-									</span>
+									<span className="stat-value">{testSummary.failed}</span>
 								</div>
 								<div className="stat">
-									<span className="stat-label">
-										Avg Duration:
-									</span>
-									<span className="stat-value">
-										{(
-											testSummary.avgDuration / 1000
-										).toFixed(1)}
-										s
-									</span>
+									<span className="stat-label">Avg Duration:</span>
+									<span className="stat-value">{(testSummary.avgDuration / 1000).toFixed(1)}s</span>
 								</div>
 							</div>
 						</div>
@@ -783,9 +643,7 @@ function TradeBoxTestInner() {
 						<div className="current-test">
 							<h3>Currently Running</h3>
 							<p className="test-name">{currentTest.name}</p>
-							<p className="test-description">
-								{currentTest.description}
-							</p>
+							<p className="test-description">{currentTest.description}</p>
 							<div className="spinner"></div>
 						</div>
 					)}
@@ -795,18 +653,9 @@ function TradeBoxTestInner() {
 						<h3>Test Logs</h3>
 						<div className="logs-container">
 							{testLogs.map((log, index) => (
-								<div
-									key={index}
-									className={`log-entry ${log.type}`}
-								>
-									<span className="log-time">
-										{new Date(
-											log.timestamp
-										).toLocaleTimeString()}
-									</span>
-									<span className="log-message">
-										{log.message}
-									</span>
+								<div key={index} className={`log-entry ${log.type}`}>
+									<span className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
+									<span className="log-message">{log.message}</span>
 								</div>
 							))}
 						</div>
@@ -820,43 +669,28 @@ function TradeBoxTestInner() {
 								{testResults.map((result, index) => (
 									<div
 										key={index}
-										className={`result-card ${
-											result.success ? "success" : "error"
-										}`}
+										className={`result-card ${result.success ? "success" : "error"}`}
 									>
 										<div className="result-header">
-											<span className="result-icon">
-												{result.success ? "✅" : "❌"}
-											</span>
-											<span className="result-name">
-												{result.scenarioName}
-											</span>
+											<span className="result-icon">{result.success ? "✅" : "❌"}</span>
+											<span className="result-name">{result.scenarioName}</span>
 											<span className="result-duration">
-												{(
-													result.duration / 1000
-												).toFixed(1)}
-												s
+												{(result.duration / 1000).toFixed(1)}s
 											</span>
 										</div>
 
 										{result.error && (
 											<div className="result-error">
-												<strong>Error:</strong>{" "}
-												{result.error}
+												<strong>Error:</strong> {result.error}
 											</div>
 										)}
 
 										<div className="result-comparison">
-											{result.comparison.details.map(
-												(detail, i) => (
-													<div
-														key={i}
-														className="comparison-detail"
-													>
-														{detail}
-													</div>
-												)
-											)}
+											{result.comparison.details.map((detail, i) => (
+												<div key={i} className="comparison-detail">
+													{detail}
+												</div>
+											))}
 										</div>
 
 										<details className="result-details">
@@ -864,57 +698,27 @@ function TradeBoxTestInner() {
 											<div className="details-content">
 												<div className="detail-section">
 													<h4>Expected</h4>
-													<pre>
-														{JSON.stringify(
-															result.expected,
-															null,
-															2
-														)}
-													</pre>
+													<pre>{JSON.stringify(result.expected, null, 2)}</pre>
 												</div>
 												<div className="detail-section">
 													<h4>Actual</h4>
 													<pre>
 														{JSON.stringify(
 															{
-																contractsReceived:
-																	result
-																		.actual
-																		.contractsReceived,
-																usdSpent:
-																	result
-																		.actual
-																		.usdSpent,
-																usdReceived:
-																	result
-																		.actual
-																		.usdReceived,
-																avgPrice:
-																	result
-																		.actual
-																		.avgPrice,
+																contractsReceived: result.actual.contractsReceived,
+																usdSpent: result.actual.usdSpent,
+																usdReceived: result.actual.usdReceived,
+																avgPrice: result.actual.avgPrice,
 															},
 															null,
-															2
+															2,
 														)}
 													</pre>
 												</div>
 												<div className="detail-section">
 													<h4>Balances</h4>
-													<p>
-														Before:{" "}
-														{JSON.stringify(
-															result.actual
-																.balanceBefore
-														)}
-													</p>
-													<p>
-														After:{" "}
-														{JSON.stringify(
-															result.actual
-																.balanceAfter
-														)}
-													</p>
+													<p>Before: {JSON.stringify(result.actual.balanceBefore)}</p>
+													<p>After: {JSON.stringify(result.actual.balanceAfter)}</p>
 												</div>
 											</div>
 										</details>

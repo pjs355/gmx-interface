@@ -4,8 +4,5 @@
  * Production builds also strip `console.info` via `initConsoleSuppress()` in `index.tsx`.
  */
 export function isTradingDebugLoggingEnabled(): boolean {
-	return (
-		typeof import.meta.env !== "undefined" &&
-		import.meta.env.VITE_DEBUG_TRADING === "true"
-	);
+	return typeof import.meta.env !== "undefined" && import.meta.env.VITE_DEBUG_TRADING === "true";
 }

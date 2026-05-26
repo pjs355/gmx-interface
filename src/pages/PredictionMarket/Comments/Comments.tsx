@@ -3,10 +3,7 @@ import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { Trans, t } from "@lingui/macro";
 import ConnectWalletButton from "components/Common/ConnectWalletButton";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import {
-	commentsService,
-	type UmbrellaComment,
-} from "@/services/api/commentsService";
+import { commentsService, type UmbrellaComment } from "@/services/api/commentsService";
 import { useAccountData } from "@/context/AccountDataContext";
 
 import "./Comment.scss";
@@ -91,7 +88,7 @@ function formatTimestamp(isoTimestamp: string): string {
 
 function resolveTokenMeta(
 	tokenId: string,
-	options: TokenOption[]
+	options: TokenOption[],
 ): { label: string; side: "yes" | "no" } | null {
 	const option = options.find((item) => item.value === tokenId);
 	if (!option) {
@@ -112,9 +109,7 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 	// The server returns both `id` (Mongoose virtual) and `_id` for the same
 	// document — we standardize on `_id` here since it matches the canonical
 	// `UserProfile._id` already in `AccountDataContext`.
-	const currentProfileId = authenticated
-		? (profileSlice.data?._id ?? null)
-		: null;
+	const currentProfileId = authenticated ? (profileSlice.data?._id ?? null) : null;
 	const currentIdentityToken = identityToken ?? null;
 
 	const tokenOptions = useMemo(() => buildTokenOptions(markets), [markets]);
@@ -126,10 +121,7 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 			const list = await commentsService.list(umbrellaId);
 			setComments(list);
 		} catch (error) {
-			const message =
-				error instanceof Error
-					? error.message
-					: "Failed to load comments";
+			const message = error instanceof Error ? error.message : "Failed to load comments";
 			setErrorMessage(message);
 		} finally {
 			setLoading(false);
@@ -140,12 +132,9 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 		loadComments();
 	}, [loadComments]);
 
-	const handleCreated = useCallback<CreateResponseHandler>(
-		(newComment) => {
-			setComments((prev) => [newComment, ...prev]);
-		},
-		[]
-	);
+	const handleCreated = useCallback<CreateResponseHandler>((newComment) => {
+		setComments((prev) => [newComment, ...prev]);
+	}, []);
 
 	const handleDeleted = useCallback(
 		async (commentId: string) => {
@@ -169,16 +158,13 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 				});
 				setComments((prev) => prev.filter((item) => item._id !== commentId));
 			} catch (error) {
-				const message =
-					error instanceof Error
-						? error.message
-						: "Failed to delete comment";
+				const message = error instanceof Error ? error.message : "Failed to delete comment";
 				setErrorMessage(message);
 			} finally {
 				setIsDeleting(null);
 			}
 		},
-		[getAccessToken, currentIdentityToken]
+		[getAccessToken, currentIdentityToken],
 	);
 
 	const renderComment = useCallback(
@@ -190,10 +176,10 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 					: "";
 			const displayName = username.length > 0 ? username : t`Unknown user`;
 			const timestampLabel = formatTimestamp(comment.createdAt);
-	const tokenMeta =
-		comment.token && comment.token.length > 0
-			? resolveTokenMeta(comment.token, tokenOptions)
-			: null;
+			const tokenMeta =
+				comment.token && comment.token.length > 0
+					? resolveTokenMeta(comment.token, tokenOptions)
+					: null;
 			const isOwnComment =
 				currentProfileId !== null &&
 				resolvedProfile !== undefined &&
@@ -207,9 +193,7 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 						<span className="comments__timestamp">{timestampLabel}</span>
 					</div>
 					{tokenMeta !== null && (
-						<span
-							className={`comments__side comments__side--${tokenMeta.side}`}
-						>
+						<span className={`comments__side comments__side--${tokenMeta.side}`}>
 							{tokenMeta.label}
 						</span>
 					)}
@@ -227,7 +211,7 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 				</li>
 			);
 		},
-		[currentProfileId, handleDeleted, isDeleting, tokenOptions]
+		[currentProfileId, handleDeleted, isDeleting, tokenOptions],
 	);
 
 	return (
@@ -237,26 +221,22 @@ export function Comments({ umbrellaId, markets }: CommentsProps) {
 					<Trans>Comments</Trans>
 				</h2>
 			</div>
-		<NewComment
-			umbrellaId={umbrellaId}
-			onCreated={handleCreated}
-			isAuthenticated={authenticated}
-			identityToken={currentIdentityToken}
-			requestLogin={login}
-		/>
+			<NewComment
+				umbrellaId={umbrellaId}
+				onCreated={handleCreated}
+				isAuthenticated={authenticated}
+				identityToken={currentIdentityToken}
+				requestLogin={login}
+			/>
 			{loading && <div className="comments__status">{t`Loading comments...`}</div>}
-			{!loading && errorMessage !== null && (
-				<div className="comments__error">{errorMessage}</div>
-			)}
+			{!loading && errorMessage !== null && <div className="comments__error">{errorMessage}</div>}
 			{!loading && errorMessage === null && comments.length === 0 && (
 				<p className="comments__empty">
 					<Trans>No comments yet. Be the first to share your thoughts.</Trans>
 				</p>
 			)}
 			{!loading && errorMessage === null && comments.length > 0 && (
-				<ul className="comments__list">
-					{comments.map((comment) => renderComment(comment))}
-				</ul>
+				<ul className="comments__list">{comments.map((comment) => renderComment(comment))}</ul>
 			)}
 		</section>
 	);
@@ -286,8 +266,7 @@ function NewComment({
 	const remainingCharacters = COMMENT_MAX_LENGTH - commentLength;
 	const isNearLimit = commentLength >= 480;
 
-	const canSubmit =
-		commentText.trim().length > 0 && remainingCharacters >= 0 && !submitting;
+	const canSubmit = commentText.trim().length > 0 && remainingCharacters >= 0 && !submitting;
 
 	const handleSubmit = useCallback(async () => {
 		if (!isAuthenticated) {
@@ -317,10 +296,7 @@ function NewComment({
 			onCreated(created);
 			setCommentText("");
 		} catch (error) {
-			const message =
-				error instanceof Error
-					? error.message
-					: "Failed to post comment";
+			const message = error instanceof Error ? error.message : "Failed to post comment";
 			setErrorMessage(message);
 		} finally {
 			setSubmitting(false);
@@ -351,9 +327,7 @@ function NewComment({
 			/>
 			<div className="new-comment__actions">
 				<span
-					className={`new-comment__counter${
-						isNearLimit ? " new-comment__counter--warning" : ""
-					}`}
+					className={`new-comment__counter${isNearLimit ? " new-comment__counter--warning" : ""}`}
 				>
 					{commentLength} / {COMMENT_MAX_LENGTH}
 				</span>
@@ -372,11 +346,7 @@ function NewComment({
 					</button>
 				)}
 			</div>
-			{errorMessage !== null && (
-				<div className="new-comment__error">{errorMessage}</div>
-			)}
+			{errorMessage !== null && <div className="new-comment__error">{errorMessage}</div>}
 		</div>
 	);
 }
-
-

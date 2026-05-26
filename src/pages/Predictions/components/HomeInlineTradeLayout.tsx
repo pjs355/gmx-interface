@@ -1,15 +1,9 @@
-import React, {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMedia } from "react-use";
 import { usePredictionData } from "context/PredictionDataContext";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
-import { PredictionCurtainProvider } from "@/pages/PredictionMarket/PredictionMarketTradeBox/PredictionCurtain";
+import { PredictionCurtainProvider } from "@/components/PredictionMarketTradeBox";
 import { useUmbrellaLiveOrderbooks } from "@/pages/PredictionMarket/useUmbrellaLiveOrderbooks";
 import { useUmbrellaTradePricing } from "@/pages/PredictionMarket/useUmbrellaTradePricing";
 import { useVolumeSortedQuestions } from "@/pages/PredictionMarket/useVolumeSortedQuestions";
@@ -27,8 +21,7 @@ type HomeTradeDockContextValue = {
 	isHomeTradeMobile: boolean;
 } | null;
 
-export const HomeTradeDockContext =
-	React.createContext<HomeTradeDockContextValue>(null);
+export const HomeTradeDockContext = React.createContext<HomeTradeDockContextValue>(null);
 
 export function useHomeTradeDockOptional() {
 	return React.useContext(HomeTradeDockContext);
@@ -84,11 +77,8 @@ export function HomeInlineTradeLayout({
 	const isDesktop = useMedia("(min-width: 1101px)");
 	const isMobile = useMedia("(max-width: 1100px)");
 
-	const {
-		getQuestionsForUmbrella,
-		getOrderbookForQuestion,
-		refreshOrderbook,
-	} = usePredictionData();
+	const { getQuestionsForUmbrella, getOrderbookForQuestion, refreshOrderbook } =
+		usePredictionData();
 
 	/*
 	 * Lazy-init the focused umbrella from localStorage. When the user comes
@@ -98,26 +88,23 @@ export function HomeInlineTradeLayout({
 	 * effect below drops the pin if the stored umbrella isn't in the current
 	 * filter result.
 	 */
-	const [pinnedUmbrellaId, setPinnedUmbrellaId] = useState<string | null>(
-		() => readStoredId(HOME_DOCK_PINNED_UMBRELLA_KEY),
+	const [pinnedUmbrellaId, setPinnedUmbrellaId] = useState<string | null>(() =>
+		readStoredId(HOME_DOCK_PINNED_UMBRELLA_KEY),
 	);
 	const [hasUserSelected, setHasUserSelected] = useState<boolean>(
 		() => readStoredId(HOME_DOCK_PINNED_UMBRELLA_KEY) !== null,
 	);
-	const [activeMarket, setActiveMarket] = useState<PredictionMarket | null>(
-		() => {
-			// We only have an ID at mount time; resolve to a full PredictionMarket
-			// once we know which umbrella + question list applies (effect below).
-			return null;
-		},
-	);
+	const [activeMarket, setActiveMarket] = useState<PredictionMarket | null>(() => {
+		// We only have an ID at mount time; resolve to a full PredictionMarket
+		// once we know which umbrella + question list applies (effect below).
+		return null;
+	});
 	const [activePosition, setActivePosition] = useState<"yes" | "no">(() => {
 		const stored = localStorage.getItem("activePosition");
 		return stored === "yes" || stored === "no" ? stored : "yes";
 	});
 
 	const firstVisible = visibleUmbrellas[0] ?? null;
-	const firstVisibleId = firstVisible?._id ?? null;
 
 	/**
 	 * Reset the dock when the user changes filters/search. Distinguishes
@@ -143,9 +130,7 @@ export function HomeInlineTradeLayout({
 	useEffect(() => {
 		if (!pinnedUmbrellaId) return;
 		if (visibleUmbrellas.length === 0) return; // still loading
-		const stillVisible = visibleUmbrellas.some(
-			(u) => u._id === pinnedUmbrellaId,
-		);
+		const stillVisible = visibleUmbrellas.some((u) => u._id === pinnedUmbrellaId);
 		if (!stillVisible) {
 			setPinnedUmbrellaId(null);
 			setHasUserSelected(false);
@@ -206,8 +191,7 @@ export function HomeInlineTradeLayout({
 	);
 
 	/** Same idea as `MarketPanels`: never leave the dock trade column on skeleton while we have questions. */
-	const tradeBoxActiveMarket =
-		activeMarket ?? sortedQuestions[0] ?? null;
+	const tradeBoxActiveMarket = activeMarket ?? sortedQuestions[0] ?? null;
 
 	const { tradingPagePrices } = useUmbrellaTradePricing({
 		umbrella: enabled ? focusedUmbrella : null,
@@ -249,10 +233,7 @@ export function HomeInlineTradeLayout({
 
 		// Match-by-id helper (PredictionMarket has any of `_id`/`questionId`/`marketId`).
 		const idOf = (q: PredictionMarket): string =>
-			(q as any)._id ||
-			(q as any).questionId ||
-			(q as any).marketId ||
-			"";
+			(q as any)._id || (q as any).questionId || (q as any).marketId || "";
 
 		// Prefer a stored selection for the *current* focused umbrella; the
 		// stored id was written either by `handleHomeOddsSelect` or by the
@@ -284,9 +265,7 @@ export function HomeInlineTradeLayout({
 		// (e.g. storage cleared, bad id). Without this branch `activeMarket` stays null forever
 		// while `hasUserSelected` is true → permanent `TradeBoxSkeleton`.
 		const curId = activeMarket ? idOf(activeMarket) : "";
-		const inList =
-			Boolean(curId) &&
-			sortedQuestions.some((q) => idOf(q) === curId);
+		const inList = Boolean(curId) && sortedQuestions.some((q) => idOf(q) === curId);
 		if (!activeMarket || !inList) {
 			setActiveMarket(sortedQuestions[0]);
 		}
@@ -299,24 +278,19 @@ export function HomeInlineTradeLayout({
 
 	/** Persist the active market id whenever it changes (or clears). */
 	useEffect(() => {
-		const id =
-			activeMarket
-				? (activeMarket as any)._id ||
-				  (activeMarket as any).questionId ||
-				  (activeMarket as any).marketId ||
-				  null
-				: null;
+		const id = activeMarket
+			? (activeMarket as any)._id ||
+				(activeMarket as any).questionId ||
+				(activeMarket as any).marketId ||
+				null
+			: null;
 		writeStoredId(HOME_DOCK_ACTIVE_MARKET_KEY, id);
 	}, [activeMarket]);
 
 	const handleHomeOddsSelect = useCallback(
 		(payload: HomeOddsSelectPayload) => {
 			const closedFrom = lastClosedUmbrellaIdRef.current;
-			if (
-				isMobile &&
-				closedFrom !== null &&
-				payload.umbrella._id !== closedFrom
-			) {
+			if (isMobile && closedFrom !== null && payload.umbrella._id !== closedFrom) {
 				writeStoredId(HOME_DOCK_ACTIVE_MARKET_KEY, null);
 				setHasUserSelected(false);
 			}

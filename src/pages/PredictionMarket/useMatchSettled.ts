@@ -7,8 +7,7 @@ import {
 	pickResolvedWinnerFromMarkets,
 	resolveCanonicalMatchWinner,
 	type UmbrellaForHistoryWinner,
-} from "@/pages/Positions/utils/historyOutcomeWinner";
-import { findOddsMatchedMarket } from "@/utils/findOddsMatchedMarket";
+} from "@/features/positions/utils/historyOutcomeWinner";
 
 function isGenericYesNoWinnerLabel(name: string): boolean {
 	const t = name.trim().toLowerCase();
@@ -29,7 +28,7 @@ export interface SettledInfo {
 export function useMatchSettled(
 	umbrellaId: string | undefined,
 	pandascoreMatchId: string | undefined,
-	umbrellaForWinner?: UmbrellaForHistoryWinner | null
+	umbrellaForWinner?: UmbrellaForHistoryWinner | null,
 ): SettledInfo | null {
 	const { getResolvedQuestionsForUmbrella } = usePredictionData();
 	const { appState: oddsAppState } = useOddsMonitor();
@@ -41,17 +40,12 @@ export function useMatchSettled(
 
 	const pandaId = pandascoreMatchId?.trim() ?? "";
 
-	const pandaWinner =
-		pandaWinnerForMatch?.pandaId === pandaId
-			? pandaWinnerForMatch.name
-			: null;
+	const pandaWinner = pandaWinnerForMatch?.pandaId === pandaId ? pandaWinnerForMatch.name : null;
 
 	// Source 1: Odds monitor — instant, no API call
 	const monitorInfo = useMemo<SettledInfo | null>(() => {
 		if (!pandaId || !oddsAppState?.markets?.length) return null;
-		const row = oddsAppState.markets.find(
-			(m) => String(m.pandaMatchId) === pandaId
-		);
+		const row = oddsAppState.markets.find((m) => String(m.pandaMatchId) === pandaId);
 		if (!row || row.status !== "finished" || !row.winner) return null;
 		return {
 			isSettled: true,
@@ -67,10 +61,7 @@ export function useMatchSettled(
 		if (resolved.length === 0) return null;
 
 		const umbrellaTitle = umbrellaForWinner?.displayName?.trim();
-		const fromPick = pickResolvedWinnerFromMarkets(
-			resolved,
-			umbrellaTitle || undefined,
-		);
+		const fromPick = pickResolvedWinnerFromMarkets(resolved, umbrellaTitle || undefined);
 		if (fromPick && !isGenericYesNoWinnerLabel(fromPick)) {
 			return { isSettled: true, winnerName: fromPick };
 		}
@@ -111,19 +102,12 @@ export function useMatchSettled(
 		(async () => {
 			try {
 				const token = await getAccessToken();
-				const match =
-					await predictionMarketDataService.fetchMatchFromPandascore(
-						pandaId,
-						token
-					);
+				const match = await predictionMarketDataService.fetchMatchFromPandascore(pandaId, token);
 				if (cancelled) return;
 				if (match?.status === "finished" && match.winner) {
 					setPandaWinnerForMatch({
 						pandaId,
-						name:
-							match.winner.name ||
-							match.winner.acronym ||
-							"Winner",
+						name: match.winner.name || match.winner.acronym || "Winner",
 					});
 				}
 			} catch {

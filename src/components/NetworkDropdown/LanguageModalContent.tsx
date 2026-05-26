@@ -10,22 +10,16 @@ type Props = {
 	onClose: () => void;
 };
 
-export default function LanguageModalContent({
-	currentLanguage,
-	onClose,
-}: Props) {
+export default function LanguageModalContent({ currentLanguage, onClose }: Props) {
 	return (
 		<>
 			{Object.keys(locales).map((item) => {
 				return (
 					<div
 						key={item}
-						className={cx(
-							"network-dropdown-menu-item  menu-item language-modal-item",
-							{
-								active: currentLanguage === item,
-							}
-						)}
+						className={cx("network-dropdown-menu-item  menu-item language-modal-item", {
+							active: currentLanguage === item,
+						})}
 						onClick={() => {
 							dynamicActivate(item).then(onClose);
 						}}
@@ -42,17 +36,10 @@ export default function LanguageModalContent({
 									/>
 								)}
 							</div>
-							<span className="language-item">
-								{(locales as any)[item]}
-							</span>
+							<span className="language-item">{(locales as any)[item]}</span>
 						</div>
 						<div className="network-dropdown-menu-item-img">
-							{currentLanguage === item && (
-								<img
-									src={checkedIcon}
-									alt={(locales as any)[item]}
-								/>
-							)}
+							{currentLanguage === item && <img src={checkedIcon} alt={(locales as any)[item]} />}
 						</div>
 					</div>
 				);

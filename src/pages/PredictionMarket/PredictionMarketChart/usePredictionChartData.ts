@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { predictionMarketDataService } from "@/services/api/predictionMarketDataService";
-import { isPredictionPricingDebugEnabled, priceDebugLog } from "@/utils/debugPredictionPricing";
+import {
+	isPredictionPricingDebugEnabled,
+	priceDebugLog,
+} from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { normalizeOrderbookPayload } from "../utils";
 import type { ChartDataPoint, TimeRange } from "./types";
 
@@ -84,7 +87,10 @@ function restingSizeFromRow(row: unknown): number {
 	return 0;
 }
 
-function getLivePrice(qId: string, orderbooks: { [questionId: string]: any } | undefined): number | null {
+function getLivePrice(
+	qId: string,
+	orderbooks: { [questionId: string]: any } | undefined,
+): number | null {
 	try {
 		const orderbook = normalizeOrderbookPayload(orderbooks?.[qId]);
 		if (!orderbook || typeof orderbook !== "object" || Array.isArray(orderbook)) return null;
@@ -97,21 +103,17 @@ function getLivePrice(qId: string, orderbooks: { [questionId: string]: any } | u
 		const bestAsk = tradeableAsks.reduce((best: unknown, current: unknown) => {
 			const currentPrice = parseFloat(
 				String(
-					(Array.isArray(current) ? current[0] : (current as { price?: unknown })?.price) ??
-						"0",
+					(Array.isArray(current) ? current[0] : (current as { price?: unknown })?.price) ?? "0",
 				),
 			);
 			const bestPrice = parseFloat(
-				String(
-					(Array.isArray(best) ? best[0] : (best as { price?: unknown })?.price) ?? "0",
-				),
+				String((Array.isArray(best) ? best[0] : (best as { price?: unknown })?.price) ?? "0"),
 			);
 			return currentPrice < bestPrice ? current : best;
 		});
 		const price = parseFloat(
 			String(
-				(Array.isArray(bestAsk) ? bestAsk[0] : (bestAsk as { price?: unknown })?.price) ??
-					"0",
+				(Array.isArray(bestAsk) ? bestAsk[0] : (bestAsk as { price?: unknown })?.price) ?? "0",
 			),
 		);
 		return isNaN(price) || price <= 0 ? null : price;
@@ -218,7 +220,12 @@ export function usePredictionChartData({
 			const secondSorted = normalizePrices(secondHistorical);
 
 			const { intervalSeconds, maxPoints } = getIntervalConfig(timeRange);
-			const evenTimestamps = generateEvenTimestamps(windowStart, windowEnd, intervalSeconds, maxPoints);
+			const evenTimestamps = generateEvenTimestamps(
+				windowStart,
+				windowEnd,
+				intervalSeconds,
+				maxPoints,
+			);
 
 			if (primarySorted.length === 0 && secondSorted.length === 0) return [];
 
@@ -271,10 +278,11 @@ export function usePredictionChartData({
 			if (livePrice === null && liveSecondPrice === null) return [];
 			const now = Math.floor(Date.now() / 1000);
 			const windowStart =
-				timeRange === "all"
-					? now - 30 * 86400
-					: now - (timeRange === "1h" ? 3600 : 86400);
-			const mk = (ts: number, liveFlags: { isLive: boolean; secondIsLive: boolean }): ChartDataPoint => {
+				timeRange === "all" ? now - 30 * 86400 : now - (timeRange === "1h" ? 3600 : 86400);
+			const mk = (
+				ts: number,
+				liveFlags: { isLive: boolean; secondIsLive: boolean },
+			): ChartDataPoint => {
 				const date = new Date(ts * 1000);
 				return {
 					timestamp: ts,
@@ -305,7 +313,8 @@ export function usePredictionChartData({
 			price: livePrice ?? lastPoint.price,
 			percentage: livePrice !== null ? livePrice * 100 : lastPoint.percentage,
 			secondPrice: liveSecondPrice ?? lastPoint.secondPrice,
-			secondPercentage: liveSecondPrice !== null ? liveSecondPrice * 100 : lastPoint.secondPercentage,
+			secondPercentage:
+				liveSecondPrice !== null ? liveSecondPrice * 100 : lastPoint.secondPercentage,
 			isLive: livePrice !== null,
 			secondIsLive: liveSecondPrice !== null,
 		};
@@ -315,13 +324,9 @@ export function usePredictionChartData({
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
-		const livePrice = questionOrderbooks
-			? getLivePrice(questionId, questionOrderbooks)
-			: null;
+		const livePrice = questionOrderbooks ? getLivePrice(questionId, questionOrderbooks) : null;
 		const liveSecond =
-			secondId && questionOrderbooks
-				? getLivePrice(secondId, questionOrderbooks)
-				: null;
+			secondId && questionOrderbooks ? getLivePrice(secondId, questionOrderbooks) : null;
 		const last = data[data.length - 1];
 		priceDebugLog("usePredictionChartData LevelUp series + live orderbook tick", {
 			questionId,
@@ -330,19 +335,11 @@ export function usePredictionChartData({
 			outputPoints: data.length,
 			liveFromOrderbookPrimary: livePrice,
 			liveFromOrderbookSecondary: liveSecond,
-			lastPointLiveFlags: last
-				? { isLive: last.isLive, secondIsLive: last.secondIsLive }
-				: null,
+			lastPointLiveFlags: last ? { isLive: last.isLive, secondIsLive: last.secondIsLive } : null,
 			dataSource:
 				"History: market payload + predictionMarketCache (GET getPredictionApiBaseUrl()/questions/:id); live: min ask from questionOrderbooks on trading page",
 		});
-	}, [
-		data,
-		historicalData.length,
-		questionId,
-		secondId,
-		questionOrderbooks,
-	]);
+	}, [data, historicalData.length, questionId, secondId, questionOrderbooks]);
 
 	// Cache refresh interval: only bumps cacheVersion when data count actually grows
 	useEffect(() => {
@@ -361,7 +358,8 @@ export function usePredictionChartData({
 			if (!cachedData) {
 				try {
 					await predictionMarketDataService.refreshHistoricalData(questionId);
-					const newCachedHistorical = predictionMarketDataService.getHistoricalPrices(questionId) || [];
+					const newCachedHistorical =
+						predictionMarketDataService.getHistoricalPrices(questionId) || [];
 					if (newCachedHistorical.length > lastCacheCountRef.current) {
 						lastCacheCountRef.current = newCachedHistorical.length;
 						setCacheVersion((v) => v + 1);

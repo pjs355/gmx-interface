@@ -1,0 +1,15 @@
+@use "sass:list";
+
+/// Body and UI sans stack (self-hosted Folio Std Light + system fallbacks).
+$font-primary:
+	"Folio Std",
+	-apple-system,
+	BlinkMacSystemFont,
+	system-ui,
+	sans-serif;
+
+/// Display pairing (Knockout + generic fallback).
+$font-secondary: "Knockout", sans-serif;
+
+/// Heading stack: primary face then `$font-secondary`.
+$font-heading: list.join(("Folio Std"), $font-secondary, $separator: comma);

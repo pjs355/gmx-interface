@@ -44,6 +44,7 @@ VITE_ENABLE_RPG=true
 ```
 
 Or in your `.env` file:
+
 ```
 VITE_ENABLE_RPG=true
 ```
@@ -57,6 +58,7 @@ The component expects the following endpoints:
 - `POST /profile/exp` - Add exp incrementally
 
 All endpoints should accept:
+
 - `Authorization: Bearer <accessToken>` header
 - `privy-id-token: <identityToken>` header (optional but recommended)
 
@@ -76,6 +78,7 @@ Levels are configured in `config/rpgConfig.ts`:
 ## Frame Assets
 
 Frame images should be placed in `/public/assets/rpg/frames/`:
+
 - `level-1.png` through `level-8.png`
 
 ## Future Enhancements
@@ -84,4 +87,3 @@ Frame images should be placed in `/public/assets/rpg/frames/`:
 - Frame display in comments
 - Achievement system
 - Leaderboards
-

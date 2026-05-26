@@ -159,18 +159,15 @@ For questions or concerns, email:
 support@levelupmarkets.com`;
 
 export default function Footer({
-	showRedirectModal,
-	redirectPopupTimestamp,
+	showRedirectModal: _showRedirectModal,
+	redirectPopupTimestamp: _redirectPopupTimestamp,
 	isMobileTradePage,
 }: Props) {
 	const isHome = isHomeSite();
-	const isMobile = useMedia("(max-width: 1024px)");
 	const isVerySmall = useMedia("(max-width: 580px)");
 	const [isPrivacyModalVisible, setIsPrivacyModalVisible] = useState(false);
 
-	const linkClassName = `Footer-link ${
-		!isVerySmall ? "text-body-medium" : "text-body-small"
-	}`;
+	const linkClassName = `Footer-link ${!isVerySmall ? "text-body-medium" : "text-body-small"}`;
 
 	const formatPrivacyPolicy = (text: string) => {
 		const paragraphs = text.split("\n\n");
@@ -194,7 +191,7 @@ export default function Footer({
 						}}
 					>
 						{trimmed}
-					</h2>
+					</h2>,
 				);
 			}
 			// Subsection headers (like "1.1. Information You Provide")
@@ -211,19 +208,13 @@ export default function Footer({
 						}}
 					>
 						{trimmed}
-					</h3>
+					</h3>,
 				);
 			}
 			// List items (lines separated by single newlines within a paragraph)
 			else if (
 				trimmed.includes("\n") &&
-				trimmed
-					.split("\n")
-					.every(
-						(line) =>
-							line.trim().startsWith("-") ||
-							line.trim().length < 100
-					)
+				trimmed.split("\n").every((line) => line.trim().startsWith("-") || line.trim().length < 100)
 			) {
 				const items = trimmed.split("\n").filter((line) => line.trim());
 				formatted.push(
@@ -247,7 +238,7 @@ export default function Footer({
 								{item.trim().replace(/^-/, "").trim()}
 							</li>
 						))}
-					</ul>
+					</ul>,
 				);
 			}
 			// Regular paragraphs
@@ -266,7 +257,7 @@ export default function Footer({
 								}}
 							>
 								{cleanLine}
-							</p>
+							</p>,
 						);
 					}
 				});
@@ -278,93 +269,61 @@ export default function Footer({
 
 	return (
 		<>
-			<div
-				className={`Footer ${
-					isMobileTradePage ? "pb-large" : "pb-normal"
-				}`}
-			>
+			<div className={`Footer ${isMobileTradePage ? "pb-large" : "pb-normal"}`}>
 				<div className="Footer-content">
 					<div className="Footer-left">
 						<img src={levelUpLogo} alt="LevelUp" className="Footer-logo-img" />
 					</div>
 					<div className="Footer-center">
-						{getFooterLinks(isHome).map(
-							({
-								external,
-								label,
-								link,
-								isAppLink,
-								opensModal,
-							}) => {
-								if (opensModal) {
-									return (
-										<button
-											key={label}
-											onClick={() =>
-												setIsPrivacyModalVisible(true)
-											}
-											className={linkClassName}
-											style={{
-												background: "none",
-												border: "none",
-												cursor: "pointer",
-												padding: 0,
-											}}
-										>
-											{label}
-										</button>
-									);
-								}
-								if (external) {
-									return (
-										<ExternalLink
-											key={label}
-											href={link}
-											className={linkClassName}
-										>
-											{label}
-										</ExternalLink>
-									);
-								}
-								if (isAppLink) {
-									const baseUrl = "";
-									return (
-										<a
-											key={label}
-											href={baseUrl + link}
-											className={linkClassName}
-										>
-											{label}
-										</a>
-									);
-								}
+						{getFooterLinks(isHome).map(({ external, label, link, isAppLink, opensModal }) => {
+							if (opensModal) {
 								return (
-									<NavLink
-										key={link}
-										to={link}
-										className={({ isActive }) =>
-											`${linkClassName} ${
-												isActive ? "active" : ""
-											}`
-										}
+									<button
+										key={label}
+										onClick={() => setIsPrivacyModalVisible(true)}
+										className={linkClassName}
+										style={{
+											background: "none",
+											border: "none",
+											cursor: "pointer",
+											padding: 0,
+										}}
 									>
 										{label}
-									</NavLink>
+									</button>
 								);
 							}
-						)}
+							if (external) {
+								return (
+									<ExternalLink key={label} href={link} className={linkClassName}>
+										{label}
+									</ExternalLink>
+								);
+							}
+							if (isAppLink) {
+								const baseUrl = "";
+								return (
+									<a key={label} href={baseUrl + link} className={linkClassName}>
+										{label}
+									</a>
+								);
+							}
+							return (
+								<NavLink
+									key={link}
+									to={link}
+									className={({ isActive }) => `${linkClassName} ${isActive ? "active" : ""}`}
+								>
+									{label}
+								</NavLink>
+							);
+						})}
 					</div>
 					<div className="Footer-right">
 						{SOCIAL_LINKS.map((platform) => (
 							<TrackingLink key={platform.name}>
-								<ExternalLink
-									href={platform.link}
-									className="Footer-social"
-								>
-									<img
-										src={platform.icon}
-										alt={platform.name}
-									/>
+								<ExternalLink href={platform.link} className="Footer-social">
+									<img src={platform.icon} alt={platform.name} />
 								</ExternalLink>
 							</TrackingLink>
 						))}

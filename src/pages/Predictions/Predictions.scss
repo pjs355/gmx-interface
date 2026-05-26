@@ -1,4 +1,4 @@
-@use "../../styles/themes/predictions-glass" as *;
+@use "../../styles/themes/scss/predictions-glass" as *;
 @use "../../components/OddsFormatMenu/odds-format-menu" as *;
 
 /* Compact cards + calendar headings (Counter-Strike, Today, date) share this inset. */
@@ -657,9 +657,7 @@ $predictions-compact-card-inline: 60px;
 	text-align: right;
 }
 
-.prediction-card--compact
-	.prediction-card__top-headline
-	.prediction-card__headline {
+.prediction-card--compact .prediction-card__top-headline .prediction-card__headline {
 	display: block;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -707,9 +705,7 @@ $predictions-compact-card-inline: 60px;
 	box-sizing: border-box;
 }
 
-.prediction-card--compact
-	.prediction-card-outcome-middle
-	.prediction-card-outcome-label {
+.prediction-card--compact .prediction-card-outcome-middle .prediction-card-outcome-label {
 	flex: 0 1 auto;
 	width: 100%;
 	line-height: 1.2;
@@ -732,9 +728,7 @@ $predictions-compact-card-inline: 60px;
 	transition: width 0.2s ease;
 }
 
-.prediction-card--compact
-	.multi-market-actions--compact
-	.multi-market-actions__market-title {
+.prediction-card--compact .multi-market-actions--compact .multi-market-actions__market-title {
 	padding-left: var(--prediction-card-inline);
 	padding-right: var(--prediction-card-inline);
 }
@@ -1657,8 +1651,7 @@ $predictions-compact-card-inline: 60px;
 
 		.prediction-calendar {
 			--prediction-calendar-heading-inline: calc(
-				#{$predictions-compact-card-inline} -
-					var(--predictions-split-gutter, 24px)
+				#{$predictions-compact-card-inline} - var(--predictions-split-gutter, 24px)
 			);
 		}
 
@@ -1733,8 +1726,14 @@ $predictions-compact-card-inline: 60px;
 		}
 	}
 
-	.predictions-page--market-bg .predictions-markets-body > .game-links-wrapper > .game-links-underlay,
-	.prediction-market-page:not(.mobile) .predictions-markets-body > .game-links-wrapper > .game-links-underlay {
+	.predictions-page--market-bg
+		.predictions-markets-body
+		> .game-links-wrapper
+		> .game-links-underlay,
+	.prediction-market-page:not(.mobile)
+		.predictions-markets-body
+		> .game-links-wrapper
+		> .game-links-underlay {
 		@include predictions-glass-backdrop;
 	}
 

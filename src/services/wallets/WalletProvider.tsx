@@ -21,9 +21,7 @@ const queryClient = new QueryClient({
 });
 
 export default function WalletProvider({ children }: { children: ReactNode }) {
-	return (
-		<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-	);
+	return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
 export { queryClient };

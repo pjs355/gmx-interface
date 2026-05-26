@@ -1,14 +1,13 @@
-import React from "react";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import Tooltip from "components/Tooltip/Tooltip";
-import { outcomeSideLabelColor } from "../utils/positionHelpers";
+import { outcomeSideLabelColor } from "@/features/positions/utils/positionHelpers";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
-import { oddsDualLayoutForStyle } from "@/utils/oddsDisplayFormat";
+import { oddsDualLayoutForStyle } from "@/features/odds-display/oddsDisplayFormat";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import {
 	getPredictPositionRowLabel,
 	isGenericBinaryOutcomeLabel,
-} from "@/trading/venues/predict/portfolio/predictPositionLabel";
+} from "@/features/trading/venues/predict/portfolio/predictPositionLabel";
 
 interface TradeHistoryListMobileProps {
 	orders: ProcessedOrder[];
@@ -40,9 +39,7 @@ export default function TradeHistoryListMobile({
 		.sort((a, b) => {
 			const ta = new Date(a.filledAt || a.createdAt).getTime();
 			const tb = new Date(b.filledAt || b.createdAt).getTime();
-			return (
-				(Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
-			);
+			return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
 		});
 
 	if (!isExpanded || marketOrders.length === 0) {
@@ -121,14 +118,8 @@ export default function TradeHistoryListMobile({
 					const op = (order.position ?? "").trim();
 					const ol = op.toLowerCase();
 					const pdl = order.positionDisplayLabel?.trim();
-					const yn =
-						ol === "yes"
-							? ("Yes" as const)
-							: ol === "no"
-								? ("No" as const)
-								: null;
-					const titleMapped =
-						mt && yn ? getPredictPositionRowLabel(mt, undefined, yn) : "";
+					const yn = ol === "yes" ? ("Yes" as const) : ol === "no" ? ("No" as const) : null;
+					const titleMapped = mt && yn ? getPredictPositionRowLabel(mt, undefined, yn) : "";
 					const sideText =
 						yn && mt && isGenericBinaryOutcomeLabel(pdl)
 							? titleMapped
@@ -175,128 +166,124 @@ export default function TradeHistoryListMobile({
 									>
 										{isBuy ? "Buy" : "Sell"}
 									</span>
-								{/* Team / Yes/No with faded background */}
-								<span
-									style={{
-										color: outcomeSideLabelColor(
-											sideText,
-											"#22c55e",
-											"#f87171",
-										),
-										fontSize: 12,
-										fontWeight: 600,
-										background: binaryYesNoBg,
-										padding: "2px 6px",
-										borderRadius: 4,
-									}}
-								>
-									{sideText || "—"}
-								</span>
+									{/* Team / Yes/No with faded background */}
+									<span
+										style={{
+											color: outcomeSideLabelColor(sideText, "#22c55e", "#f87171"),
+											fontSize: 12,
+											fontWeight: 600,
+											background: binaryYesNoBg,
+											padding: "2px 6px",
+											borderRadius: 4,
+										}}
+									>
+										{sideText || "—"}
+									</span>
 								</div>
 								<span style={{ color: "#666", fontSize: 11 }}>
 									{formatDate(order.filledAt || order.createdAt)}
 								</span>
 							</div>
 
-						{/* Bottom row: Details */}
-						<div
-							style={{
-								display: "grid",
-								gridTemplateColumns: "1fr 1fr 1fr",
-								gap: 8,
-							}}
-						>
-							<div>
-								<div
-									style={{
-										color: "#666",
-										fontSize: 10,
-										textTransform: "uppercase",
-										marginBottom: 2,
-									}}
-								>
-									Shares
-								</div>
-								<div
-									style={{
-										color: isBuy ? "#22c55e" : "#f87171",
-										fontSize: 14,
-										fontWeight: 600,
-									}}
-								>
-									{formatQuantity(shareChange, true)}
-								</div>
-							</div>
-							<div style={{ textAlign: "center" }}>
-								<div
-									style={{
-										color: "#666",
-										fontSize: 10,
-										textTransform: "uppercase",
-										marginBottom: 2,
-										display: "flex",
-										alignItems: "center",
-										justifyContent: "center",
-										gap: 4,
-									}}
-								>
-									Avg Price
-									<Tooltip
-										content="Average execution price"
-										position="top"
-										closeOnDoubleClick
+							{/* Bottom row: Details */}
+							<div
+								style={{
+									display: "grid",
+									gridTemplateColumns: "1fr 1fr 1fr",
+									gap: 8,
+								}}
+							>
+								<div>
+									<div
+										style={{
+											color: "#666",
+											fontSize: 10,
+											textTransform: "uppercase",
+											marginBottom: 2,
+										}}
 									>
-										<span style={{ 
-											fontSize: 10, 
-											color: "#888",
-											cursor: "pointer",
-											padding: "2px 4px",
-										}}>
-											ⓘ
-										</span>
-									</Tooltip>
+										Shares
+									</div>
+									<div
+										style={{
+											color: isBuy ? "#22c55e" : "#f87171",
+											fontSize: 14,
+											fontWeight: 600,
+										}}
+									>
+										{formatQuantity(shareChange, true)}
+									</div>
 								</div>
-								<div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>
-									{formatPrice(order.price, portfolioPriceLayout)}
+								<div style={{ textAlign: "center" }}>
+									<div
+										style={{
+											color: "#666",
+											fontSize: 10,
+											textTransform: "uppercase",
+											marginBottom: 2,
+											display: "flex",
+											alignItems: "center",
+											justifyContent: "center",
+											gap: 4,
+										}}
+									>
+										Avg Price
+										<Tooltip content="Average execution price" position="top" closeOnDoubleClick>
+											<span
+												style={{
+													fontSize: 10,
+													color: "#888",
+													cursor: "pointer",
+													padding: "2px 4px",
+												}}
+											>
+												ⓘ
+											</span>
+										</Tooltip>
+									</div>
+									<div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>
+										{formatPrice(order.price, portfolioPriceLayout)}
+									</div>
+								</div>
+								<div style={{ textAlign: "right" }}>
+									<div
+										style={{
+											color: "#666",
+											fontSize: 10,
+											textTransform: "uppercase",
+											marginBottom: 2,
+										}}
+									>
+										Cash Flow
+									</div>
+									<div
+										style={{
+											color: cashFlow >= 0 ? "#22c55e" : "#f87171",
+											fontSize: 14,
+											fontWeight: 700,
+										}}
+									>
+										{formatCurrency(cashFlow, true)}
+									</div>
 								</div>
 							</div>
-							<div style={{ textAlign: "right" }}>
-								<div
-									style={{
-										color: "#666",
-										fontSize: 10,
-										textTransform: "uppercase",
-										marginBottom: 2,
-									}}
-								>
-									Cash Flow
-								</div>
-								<div
-									style={{
-										color: cashFlow >= 0 ? "#22c55e" : "#f87171",
-										fontSize: 14,
-										fontWeight: 700,
-									}}
-								>
-									{formatCurrency(cashFlow, true)}
-								</div>
+							{/* Market venue */}
+							<div
+								style={{
+									marginTop: 8,
+									textAlign: "right",
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "flex-end",
+									gap: 6,
+								}}
+							>
+								<span style={{ color: "#666", fontSize: 10, textTransform: "uppercase" }}>
+									Market:{" "}
+								</span>
+								<MarketLogo venue={order.venue} size={14} />
+								<span style={{ color: "#888", fontSize: 12 }}>{order.venue ?? "LevelUp"}</span>
 							</div>
-						</div>
-						{/* Market venue */}
-						<div
-							style={{
-								marginTop: 8,
-								textAlign: "right",
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "flex-end",
-								gap: 6,
-							}}
-						>
-							<span style={{ color: "#666", fontSize: 10, textTransform: "uppercase" }}>Market: </span>
-							<MarketLogo venue={order.venue} size={14} />
-							<span style={{ color: "#888", fontSize: 12 }}>{order.venue ?? "LevelUp"}</span>
-						</div>
 						</div>
 					);
 				})}
@@ -314,17 +301,10 @@ export default function TradeHistoryListMobile({
 				}}
 			>
 				<div>
-					<div style={{ color: "#666", fontSize: 11, marginBottom: 2 }}>
-						Net Shares
-					</div>
+					<div style={{ color: "#666", fontSize: 11, marginBottom: 2 }}>Net Shares</div>
 					<div
 						style={{
-							color:
-								netShares > 0
-									? "#22c55e"
-									: netShares < 0
-									? "#f87171"
-									: "#fff",
+							color: netShares > 0 ? "#22c55e" : netShares < 0 ? "#f87171" : "#fff",
 							fontSize: 14,
 							fontWeight: 500,
 						}}
@@ -333,9 +313,7 @@ export default function TradeHistoryListMobile({
 					</div>
 				</div>
 				<div style={{ textAlign: "right" }}>
-					<div style={{ color: "#666", fontSize: 11, marginBottom: 2 }}>
-						Net Cash Flow
-					</div>
+					<div style={{ color: "#666", fontSize: 11, marginBottom: 2 }}>Net Cash Flow</div>
 					<div
 						style={{
 							color: netCashFlow >= 0 ? "#22c55e" : "#f87171",

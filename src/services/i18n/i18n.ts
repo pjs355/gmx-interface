@@ -40,7 +40,7 @@ i18n.load(defaultLocale, enMessages as unknown as Messages);
 i18n.activate(defaultLocale);
 
 export function useLocalizedMap<T extends Record<string, MessageDescriptor>>(
-	map: T
+	map: T,
 ): Record<keyof T, string> {
 	const { _ } = useLingui();
 

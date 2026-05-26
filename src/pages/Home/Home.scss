@@ -114,7 +114,7 @@
 
 	/* Gradient border effect */
 	&::before {
-		content: '';
+		content: "";
 		position: absolute;
 		top: 0;
 		left: 0;
@@ -123,12 +123,12 @@
 		border-radius: 16px;
 		padding: 2px;
 		background: linear-gradient(135deg, #1e3a8a 0%, #8b5cf6 100%);
-		-webkit-mask: 
-			linear-gradient(#fff 0 0) content-box, 
+		-webkit-mask:
+			linear-gradient(#fff 0 0) content-box,
 			linear-gradient(#fff 0 0);
 		-webkit-mask-composite: xor;
-		mask: 
-			linear-gradient(#fff 0 0) content-box, 
+		mask:
+			linear-gradient(#fff 0 0) content-box,
 			linear-gradient(#fff 0 0);
 		mask-composite: exclude;
 		pointer-events: none;
@@ -229,4 +229,3 @@
 		flex-shrink: 0;
 	}
 }
-
