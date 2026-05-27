@@ -76,6 +76,49 @@ export function umbrellaHasEsportsChildTag(
 	});
 }
 
+export type UmbrellaChildTagState = {
+	hasEsportsTag: boolean;
+	hasAnyTagId: boolean;
+};
+
+export function readUmbrellaChildTagState(
+	umbrella: Umbrella,
+	esportsTagId: string | undefined,
+): UmbrellaChildTagState {
+	const children = (umbrella as { children?: unknown }).children as
+		| Array<{ tagIds?: string[] }>
+		| undefined;
+	if (!children?.length) {
+		return { hasEsportsTag: false, hasAnyTagId: false };
+	}
+
+	let hasAnyTagId = false;
+	let hasEsportsTag = false;
+
+	for (const q of children) {
+		const tagIds = q?.tagIds;
+		if (!Array.isArray(tagIds) || tagIds.length === 0) continue;
+		hasAnyTagId = true;
+		if (esportsTagId && tagIds.includes(esportsTagId)) {
+			hasEsportsTag = true;
+		}
+	}
+
+	return { hasEsportsTag, hasAnyTagId };
+}
+
+export function umbrellaMatchesHomeFilterType(
+	umbrella: Umbrella,
+	filterType: "esports" | "games" | "all",
+	esportsTagId: string | undefined,
+): boolean {
+	const { hasEsportsTag, hasAnyTagId } = readUmbrellaChildTagState(umbrella, esportsTagId);
+	if (!hasAnyTagId) return false;
+	if (filterType === "games") return !hasEsportsTag;
+	if (filterType === "esports") return hasEsportsTag;
+	return true;
+}
+
 export function isUmbrellaLiveByEventDate(
 	umbrella: Umbrella,
 	nowMs: number,

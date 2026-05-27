@@ -4,7 +4,7 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "context/PredictionDataContext";
 import type { Tag } from "@/services/api/tagService";
 import {
-	bundledCounterStrikeLogoFromTagLabels,
+	resolveBundledTagLogo,
 	resolveLogoByTags,
 } from "@/features/markets/assets/gameLogoResolver";
 import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
@@ -18,12 +18,13 @@ import {
 	isUmbrellaStartingSoonByEventDate,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
+	umbrellaMatchesHomeFilterType,
 	useNowTick,
 } from "../utils/gameLinkFilters";
 
 function resolveTagLinkLogo(tag: Tag): string | null {
-	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels([tag.label]);
-	if (cs2Bundled) return cs2Bundled;
+	const bundled = resolveBundledTagLogo(tag);
+	if (bundled) return bundled;
 	if (tag.imageUrl) return tag.imageUrl;
 	return resolveLogoByTags([tag.label]);
 }
@@ -94,30 +95,9 @@ export default function GameLinks({
 		const esportsTagId = esportsTag?._id;
 
 		const typeFilteredUmbrellas = filterType
-			? activeUmbrellas.filter((umbrella) => {
-					const children = (umbrella as any).children as Array<any> | undefined;
-					if (!children || children.length === 0) return false;
-
-					const hasEsportsTag = children.some((q) => {
-						const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
-
-						if (!Array.isArray(tagIds) || tagIds.length === 0) {
-							return false;
-						}
-
-						if (esportsTag) {
-							return tagIds.includes(esportsTag._id);
-						}
-
-						return false;
-					});
-
-					if (filterType === "games") return !hasEsportsTag;
-					if (filterType === "esports" || filterType === "all") {
-						return hasEsportsTag;
-					}
-					return true;
-				})
+			? activeUmbrellas.filter((umbrella) =>
+					umbrellaMatchesHomeFilterType(umbrella, filterType, esportsTagId),
+				)
 			: activeUmbrellas;
 
 		const tagsWithActiveMarkets = tags.filter((tag) => {

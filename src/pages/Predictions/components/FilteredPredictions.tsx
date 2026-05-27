@@ -29,6 +29,7 @@ import {
 	isUmbrellaStartingSoonByEventDate,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
+	umbrellaMatchesHomeFilterType,
 	useNowTick,
 } from "../utils/gameLinkFilters";
 import { consumeHomePendingGameFilter, setHomeGameFilter } from "../utils/gameFilterNavigation";
@@ -36,7 +37,7 @@ import { isRestrictedProductionMode } from "@/config/restrictedMode";
 import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
 import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
 import {
-	bundledCounterStrikeLogoFromTagLabels,
+	bundledGameLogoFromTagLabels,
 	resolveLogoByTags,
 } from "@/features/markets/assets/gameLogoResolver";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
@@ -306,24 +307,9 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		const esportsTag = findEsportsTag(tags);
 		const esportsTagId = esportsTag?._id;
 
-		let filtered = activeUmbrellas.filter((umbrella) => {
-			const children = (umbrella as any).children as Array<any> | undefined;
-			if (!children || children.length === 0) return false;
-
-			const hasEsportsTag = children.some((q) => {
-				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
-				if (!Array.isArray(tagIds) || tagIds.length === 0) {
-					return false;
-				}
-				return esportsTag && tagIds.includes(esportsTag._id);
-			});
-
-			if (filterType === "games") return !hasEsportsTag;
-			if (filterType === "esports" || filterType === "all") {
-				return hasEsportsTag;
-			}
-			return true;
-		});
+		let filtered = activeUmbrellas.filter((umbrella) =>
+			umbrellaMatchesHomeFilterType(umbrella, filterType, esportsTagId),
+		);
 
 		if (selectedGame && selectedGame !== LIVE_PILL_ID && selectedGame !== STARTING_SOON_PILL_ID) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
@@ -658,7 +644,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 									selectedGame !== LIVE_PILL_ID &&
 									selectedGame !== STARTING_SOON_PILL_ID;
 								const calendarLogo = showGameLogo
-									? (bundledCounterStrikeLogoFromTagLabels([selectedGame]) ??
+									? (bundledGameLogoFromTagLabels([selectedGame]) ??
 										resolveLogoByTags([selectedGame]))
 									: null;
 								return (

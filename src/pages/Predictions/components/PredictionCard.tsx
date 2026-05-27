@@ -21,7 +21,7 @@ import { useHomeTradeDockOptional } from "./HomeInlineTradeLayout";
 import { useCurtainActions } from "@/components/PredictionMarketTradeBox";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
-	bundledCounterStrikeLogoFromTagLabels,
+	bundledGameLogoFromTagLabels,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
 	resolveLogoByTags,
@@ -127,10 +127,10 @@ function PredictionOutcomeTeamImg({
 		const tagImg = getTagImageFromUmbrella(umbrella, tags);
 		const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 		const gameLogo = resolveLogoByTags(tagLabels);
-		const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
+		const bundledGameLogo = bundledGameLogoFromTagLabels(tagLabels);
 		const list: string[] = [];
 		if (teamLogoUrl) list.push(teamLogoUrl);
-		if (cs2Bundled) list.push(cs2Bundled);
+		if (bundledGameLogo) list.push(bundledGameLogo);
 		else {
 			if (tagImg) list.push(tagImg);
 			if (gameLogo) list.push(gameLogo);

@@ -1,9 +1,15 @@
 // Reusable resolver for picking a game logo from game-logos by tags, with fallback
 
 import cs2GameLogoUrl from "@/assets/game-logos/cs2.png";
+import fifaWorldCupGameLogoUrl from "@/assets/game-logos/fifa-26-logo.png";
 
 /** Same asset as the CS2 / Counter-Strike pill and trading-card game fallback. */
 export const CS2_GAME_LOGO_URL = cs2GameLogoUrl;
+
+/** Bundled FIFA World Cup pill / card logo (client-only; not stored on Tag.imageUrl). */
+export const FIFA_WORLD_CUP_LOGO_URL = fifaWorldCupGameLogoUrl;
+
+export const FIFA_WORLD_CUP_TAG_SLUG = "fifa-wc-2026";
 
 // Load all game logos at build time via Vite glob
 const logoModules = import.meta.glob("@/assets/game-logos/*.{png,jpg,jpeg,svg,webp}", {
@@ -70,6 +76,11 @@ for (const key of CS2_EXPLICIT_LOGO_KEYS) {
 	logoMap[key] = cs2GameLogoUrl;
 }
 
+const FIFA_EXPLICIT_LOGO_KEYS = ["FIFA_WORLD_CUP", "FIFA_WC_2026", "FIFA_26_LOGO"] as const;
+for (const key of FIFA_EXPLICIT_LOGO_KEYS) {
+	logoMap[key] = fifaWorldCupGameLogoUrl;
+}
+
 export function resolveLogoByTags(tags: string[] | undefined | null): string | null {
 	if (Array.isArray(tags)) {
 		for (const raw of tags) {
@@ -91,6 +102,38 @@ export function bundledCounterStrikeLogoFromTagLabels(
 ): string | null {
 	const logo = resolveLogoByTags(tagLabels);
 	return logo === CS2_GAME_LOGO_URL ? logo : null;
+}
+
+/**
+ * When tag labels resolve to FIFA World Cup, prefer bundled {@link FIFA_WORLD_CUP_LOGO_URL}
+ * over remote tag.imageUrl (same pattern as Counter-Strike).
+ */
+export function bundledFifaWorldCupLogoFromTagLabels(
+	tagLabels: string[] | undefined | null,
+): string | null {
+	const logo = resolveLogoByTags(tagLabels);
+	return logo === FIFA_WORLD_CUP_LOGO_URL ? logo : null;
+}
+
+export function isFifaWorldCupTag(tag: { label: string; slug?: string }): boolean {
+	if (tag.slug === FIFA_WORLD_CUP_TAG_SLUG) return true;
+	return normalizeTag(tag.label) === "FIFA_WORLD_CUP";
+}
+
+/** Bundled logo for a tag document (slug or label), when applicable. */
+export function resolveBundledTagLogo(tag: { label: string; slug?: string }): string | null {
+	if (isFifaWorldCupTag(tag)) return FIFA_WORLD_CUP_LOGO_URL;
+	const cs2 = bundledCounterStrikeLogoFromTagLabels([tag.label]);
+	if (cs2) return cs2;
+	return null;
+}
+
+/** Bundled game logo from umbrella tag labels (CS2 or FIFA). */
+export function bundledGameLogoFromTagLabels(tagLabels: string[] | undefined | null): string | null {
+	return (
+		bundledCounterStrikeLogoFromTagLabels(tagLabels) ??
+		bundledFifaWorldCupLogoFromTagLabels(tagLabels)
+	);
 }
 
 // Server-based resolver for umbrella icons using Firebase Storage
@@ -158,7 +201,7 @@ export function collectTagsFromUmbrella(umbrella: any): string[] {
  */
 export function getTagImageFromUmbrella(
 	umbrella: any,
-	tags: Array<{ _id: string; label: string; imageUrl?: string }>,
+	tags: Array<{ _id: string; label: string; slug?: string; imageUrl?: string }>,
 ): string | null {
 	// Use originalChildren (unfiltered, has all tagIds) if available, otherwise fall back to children
 	const children: any[] | undefined =
@@ -170,12 +213,12 @@ export function getTagImageFromUmbrella(
 		const tagIds: string[] | undefined = child && (child as any).tagIds;
 
 		if (Array.isArray(tagIds) && tagIds.length > 0) {
-			// Look for tags with imageUrl
 			for (const tagId of tagIds) {
 				const tag = tags.find((t) => t._id === tagId);
-				if (tag?.imageUrl) {
-					return tag.imageUrl;
-				}
+				if (!tag) continue;
+				const bundled = resolveBundledTagLogo(tag);
+				if (bundled) return bundled;
+				if (tag.imageUrl) return tag.imageUrl;
 			}
 		}
 	}
