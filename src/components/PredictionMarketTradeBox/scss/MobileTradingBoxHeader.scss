@@ -168,12 +168,10 @@
 			}
 		}
 
-		// When input is empty, blue-tinted inactive surface (still very dark)
+		// When input is empty, make the text grey like placeholder
 		&.empty-input {
 			.amount-input-field {
 				color: #6b7280;
-				background: var(--brand-surface-inactive);
-				border-color: var(--brand-surface-inactive-border);
 			}
 		}
 	}

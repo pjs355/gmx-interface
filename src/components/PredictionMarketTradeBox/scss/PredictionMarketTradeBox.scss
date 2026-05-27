@@ -387,15 +387,6 @@
 				border-color: #9ca3af;
 			}
 
-			&.empty-input {
-				background: var(--brand-surface-inactive) !important;
-				border-color: var(--brand-surface-inactive-border);
-
-				&:hover {
-					border-color: var(--brand-tint-30);
-				}
-			}
-
 			// Hide by default for other inputs; amount wrapper handles its own styling
 			.currency-symbol {
 				display: none;
