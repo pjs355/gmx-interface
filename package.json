@@ -7,9 +7,9 @@
 	"scripts": {
 		"dev": "tsx scripts/dev-prompt.ts",
 		"dev:clean": "rm -rf node_modules/.vite && vite",
-		"dev:clean:test": "rm -rf node_modules/.vite && VITE_ENVIRONMENT_MODE=testnet vite",
+		"dev:clean:local": "rm -rf node_modules/.vite && VITE_ENVIRONMENT_MODE=local vite",
 		"dev:live": "VITE_ENVIRONMENT_MODE=production vite",
-		"dev:test": "VITE_ENVIRONMENT_MODE=testnet vite",
+		"dev:local": "VITE_ENVIRONMENT_MODE=local vite",
 		"build": "NODE_OPTIONS=--max-old-space-size=8192 vite build",
 		"build:production": "NODE_OPTIONS=--max-old-space-size=8192 vite build --mode sourcemaps && yarn upload-sourcemaps",
 		"upload-sourcemaps": "sentry-cli sourcemaps upload --org prinx --project levelup-interface --release ${RAILWAY_GIT_COMMIT_SHA:-local} ./dist",

@@ -6,14 +6,16 @@
  *
  * | Venue       | Share count source              | Avg / cost / trade rows        |
  * |-------------|---------------------------------|--------------------------------|
- * | levelup     | GET `/api/levelup/positions` (server Base CTF RPC) | GET `/orders/:wallet` (API)    |
+ * | levelup     | GET `/api/levelup/positions` (subgraph on boot) | GET `/orders/:wallet` (API)    |
+ * |             | POST `/api/levelup/positions/refresh` (scoped RPC after trade) |                |
  * | polymarket  | Polymarket Data API (HTTP)      | same row (avg on position)     |
  * | predictfun  | Predict API via private proxy   | matches + position row       |
  * | dflow       | Private API (server Solana RPC) | on-chain trades API            |
  * | limitless   | Limitless partner API (proxy)   | portfolio / history APIs       |
  *
- * LevelUp share **counts** are on-chain CTF `balanceOf` reads on the server
- * (`GET /api/levelup/positions`). Fills and avg price are always our order book API.
+ * LevelUp share **counts**: subgraph on full reload (`GET /api/levelup/positions`);
+ * after a fill, scoped RPC refresh (`POST /api/levelup/positions/refresh`) when tokenIds are known.
+ * Fills and avg price are our order book API.
  */
 import type { QueryClient } from "@tanstack/react-query";
 import type { AccountVenueKey } from "@/context/AccountDataContext";
@@ -23,6 +25,7 @@ import { levelUpQueryKeys } from "@/features/trading/venues/levelup/levelUpQuery
 export type PostTradeAccountRefetch = {
 	refreshVenuePositions: (venue?: AccountVenueKey) => Promise<void>;
 	refreshCash: () => Promise<void>;
+	refreshLevelUpPositionsByTokenIds: (tokenIds: readonly string[]) => Promise<void>;
 };
 import type { VenueId } from "@/types/trading/venuePosition";
 import { COLLATERAL_TOKENS_QUERY_KEY } from "@/context/CollateralTokenContext";
@@ -38,6 +41,8 @@ export type PostTradeVenueRefreshContext = {
 	account: PostTradeAccountRefetch;
 	/** VACM LevelUp SCW — `GET /orders/:wallet` cache key. */
 	levelUpWallet: string | null;
+	/** Outcome token IDs for scoped post-trade RPC refresh (filled LevelUp legs). */
+	levelUpRefreshTokenIds?: readonly string[];
 };
 
 export type PostTradeVenueRefreshRegistry = Record<PostTradeVenueRefreshKey, () => Promise<void>>;
@@ -111,6 +116,18 @@ export function createPostTradeVenueRefreshRegistry(
 		},
 
 		levelup: async () => {
+			const tokenIds = (ctx.levelUpRefreshTokenIds ?? [])
+				.map((id) => String(id ?? "").trim())
+				.filter((id) => id.length > 0);
+
+			if (tokenIds.length > 0) {
+				await Promise.all([
+					account.refreshLevelUpPositionsByTokenIds(tokenIds),
+					refetchLevelUpOrders(ctx.queryClient, ctx.levelUpWallet),
+				]);
+				return;
+			}
+
 			if (ctx.levelUpWallet) {
 				await queryClient.invalidateQueries({
 					queryKey: levelUpQueryKeys.positions(ctx.levelUpWallet),

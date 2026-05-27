@@ -215,13 +215,14 @@ describe("performPostTradeDataRefreshPass", () => {
 
 		const refreshVenuePositions = vi.fn().mockResolvedValue(undefined);
 		const refreshCash = vi.fn().mockResolvedValue(undefined);
+		const refreshLevelUpPositionsByTokenIds = vi.fn().mockResolvedValue(undefined);
 
 		await performPostTradeDataRefreshPass(
 			qc,
 			{
 				levelUpWallet: "0xabc",
 			},
-			{ refreshVenuePositions, refreshCash },
+			{ refreshVenuePositions, refreshCash, refreshLevelUpPositionsByTokenIds },
 			{
 				venueShareKeys: ["polymarket"],
 				predictMarketSupplement: false,
@@ -259,6 +260,7 @@ describe("performPostTradeDataRefreshPass", () => {
 			{
 				refreshVenuePositions: vi.fn().mockResolvedValue(undefined),
 				refreshCash: vi.fn().mockResolvedValue(undefined),
+				refreshLevelUpPositionsByTokenIds: vi.fn().mockResolvedValue(undefined),
 			},
 			{
 				venueShareKeys: ["predict"],

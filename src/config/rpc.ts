@@ -1,8 +1,7 @@
 /**
  * Centralized RPC Configuration for LevelUp Predictions
  *
- * Note: Both testnet and production use Base Mainnet RPCs
- * (testnet contracts are deployed on Base Mainnet, not a separate testnet)
+ * Base mainnet RPC endpoints (localhost and deployed app use the same chain).
  */
 
 import { Connection } from "@solana/web3.js";

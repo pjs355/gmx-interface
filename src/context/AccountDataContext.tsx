@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { usePrivy, useWallets as usePrivyWallets } from "@privy-io/react-auth";
 import { useSignerContext } from "context/SignerContext";
 import { useCurrentProfile } from "@/features/trading/hooks/useCurrentProfile";
@@ -24,6 +24,7 @@ import { usePredictPositions } from "@/features/trading/venues/predict/portfolio
 import { useDflowPositions } from "@/features/trading/venues/dflow/portfolio/useDflowPositions";
 import { useLimitlessVenuePositions } from "@/features/trading/venues/limitless/portfolio/useLimitlessPortfolioVenue";
 import { useLevelUpPositions } from "@/features/trading/venues/levelup/portfolio/useLevelUpPositions";
+import { refreshLevelUpPositionsByTokenIds as mergeLevelUpPositionsByTokenIdsRpc } from "@/features/trading/venues/levelup/portfolio/refreshLevelUpPositionsByTokenIds";
 import type { LevelUpTokenBalance } from "@/features/trading/venues/levelup/portfolio/levelUpTokenBalanceTypes";
 import {
 	CollateralTokenProvider,
@@ -185,6 +186,8 @@ export type AccountData = {
 		polyAccount: () => Promise<void>;
 		predictAccount: () => Promise<void>;
 		positions: (venue?: AccountVenueKey) => Promise<void>;
+		/** RPC-confirm specific LevelUp outcome token balances and merge into cache. */
+		levelUpPositionsByTokenIds: (tokenIds: readonly string[]) => Promise<void>;
 		all: () => Promise<void>;
 		/** Broad refetch for post-trade / manual sync (positions + cash + venue accounts + overview). */
 		account: (reason: string) => Promise<void>;
@@ -226,6 +229,7 @@ function AccountDataContextInner({
 	walletIsLoading,
 	profileId,
 }: AccountDataContextInnerProps) {
+	const queryClient = useQueryClient();
 	const collateral = useCollateralTokens();
 	const dflowProofQ = useDflowProofStatus();
 
@@ -281,6 +285,18 @@ function AccountDataContextInner({
 	const refreshLevelUpPositions = useCallback(async () => {
 		await levelUpPositions.refetch({ force: true });
 	}, [levelUpPositions.refetch]);
+
+	const refreshLevelUpPositionsByTokenIds = useCallback(
+		async (tokenIds: readonly string[]) => {
+			await mergeLevelUpPositionsByTokenIdsRpc(
+				queryClient,
+				api,
+				levelUpWalletAddress,
+				tokenIds,
+			);
+		},
+		[queryClient, api, levelUpWalletAddress],
+	);
 
 	const refreshProfile = useCallback(async () => {
 		await profileQuery.refetch();
@@ -512,6 +528,7 @@ function AccountDataContextInner({
 				polyAccount: refreshPolyAccount,
 				predictAccount: refreshPredictAccount,
 				positions: refreshPositions,
+				levelUpPositionsByTokenIds: refreshLevelUpPositionsByTokenIds,
 				all: refreshAll,
 				account: refreshAccount,
 			},
@@ -537,6 +554,7 @@ function AccountDataContextInner({
 		levelUpPositions.readSideShares,
 		levelUpPositions.getMarketBalance,
 		refreshLevelUpPositions,
+		refreshLevelUpPositionsByTokenIds,
 		venueAddressChainMap,
 		walletGate,
 		walletIsLoading,

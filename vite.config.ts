@@ -263,7 +263,8 @@ export default defineConfig(({ mode }) => {
 		viteEnv.VITE_ENVIRONMENT_MODE ||
 		""
 	).trim();
-	const isLocalOrderEnv = viteEnvMode === "testnet" || viteEnvMode === "local-production";
+	const isLocalOrderEnv =
+		viteEnvMode === "local" || viteEnvMode === "local-production" || viteEnvMode === "testnet";
 
 	const privateApiHostDefault =
 		(process.env.VITE_PRIVATE_API_BASE || viteEnv.VITE_PRIVATE_API_BASE || "")

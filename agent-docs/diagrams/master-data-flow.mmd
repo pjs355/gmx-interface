@@ -39,7 +39,7 @@ flowchart TB
     V_POS_DF["DFlow positions pipeline"]
     V_POS_PM["GET /api/polymarket/positions"]
     V_ACT_PM["GET /api/polymarket/activity"]
-    V_POS_LU["GET /api/levelup/positions"]
+    V_POS_LU["GET /api/levelup/positions<br/>POST …/refresh post-trade"]
     API --> ME --> ADP
     API --> OV --> ADP
     API --> CASH --> CTP

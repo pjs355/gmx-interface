@@ -1,6 +1,6 @@
 # prinx-interface — architecture
 
-**Last verified:** 2026-05-26 (UTC)
+**Last verified:** 2026-05-27 (UTC)
 
 Canonical wiring diagram for **agents and humans**. Update when provider order, data ownership, SOR/trade paths, or major module boundaries change (see workspace rule `agent-docs-architecture.mdc`).
 
@@ -146,7 +146,7 @@ flowchart TB
 ### Mental model
 
 1. **Identity** — almost every user-scoped query keys off `SignerProvider` or `/profiles/me` → `profileId`.
-2. **Account store** — `AccountDataContext` + TanStack owns profile, VACM, venue accounts, and all venue position slices (including LevelUp `positions.levelup` via `useLevelUpPositions` → `GET /api/levelup/positions`). Cash is mapped from nested `CollateralTokenProvider`. LevelUp approvals are venue hooks (`useLevelUpApprovalGate`), not a separate context store.
+2. **Account store** — `AccountDataContext` + TanStack owns profile, VACM, venue accounts, and all venue position slices (including LevelUp `positions.levelup` via `useLevelUpPositions` → `GET /api/levelup/positions`; post-trade / claim use `POST /api/levelup/positions/refresh` with scoped tokenIds). Cash is mapped from nested `CollateralTokenProvider`. LevelUp approvals are venue hooks (`useLevelUpApprovalGate`), not a separate context store.
 3. **Portfolio header** — `PortfolioProvider` derives `portfolioTotal = cashBalance + positionsTotalValue`; `positionsTotalValue` comes from `PositionsDataProvider` (single MTM source for header).
 
 ```mermaid
@@ -603,7 +603,7 @@ flowchart TB
     V_POS_DF["DFlow positions pipeline"]
     V_POS_PM["GET /api/polymarket/positions"]
     V_ACT_PM["GET /api/polymarket/activity"]
-    V_POS_LU["GET /api/levelup/positions"]
+    V_POS_LU["GET /api/levelup/positions<br/>POST …/refresh post-trade"]
     API --> ME --> ADP
     API --> OV --> ADP
     API --> CASH --> CTP

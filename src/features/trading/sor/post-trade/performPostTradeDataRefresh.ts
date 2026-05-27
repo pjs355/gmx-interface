@@ -70,6 +70,8 @@ export type PostTradeSyncRequest = {
 	addresses: PostTradeBaselineAddresses;
 	/** VACM LevelUp SCW — invalidates `levelUpQueryKeys.orders`. */
 	levelUpWallet: string | null;
+	/** Outcome token IDs for scoped LevelUp RPC refresh after a fill. */
+	levelUpRefreshTokenIds?: readonly string[];
 	refetchCollateral: () => Promise<FundingStableBalancesHuman | undefined>;
 	readLevelUpSide: (marketId: string, side: "yes" | "no") => number;
 	syncUiKey: string | null;
@@ -82,6 +84,7 @@ export type BlindPostTradeBalanceRefreshRequest = {
 	accountVenues: AccountVenueKey[];
 	includeLevelUpRpc: boolean;
 	levelUpWallet: string | null;
+	levelUpRefreshTokenIds?: readonly string[];
 	iterations?: number;
 	intervalMs?: number;
 };
@@ -396,7 +399,7 @@ export type PostTradeRefetchPassOpts = {
  */
 export async function performPostTradeDataRefreshPass(
 	queryClient: QueryClient,
-	req: Pick<PostTradeSyncRequest, "levelUpWallet">,
+	req: Pick<PostTradeSyncRequest, "levelUpWallet" | "levelUpRefreshTokenIds">,
 	account: PostTradeAccountRefetch,
 	opts: PostTradeRefetchPassOpts,
 ): Promise<void> {
@@ -409,6 +412,7 @@ export async function performPostTradeDataRefreshPass(
 		queryClient,
 		account,
 		levelUpWallet: req.levelUpWallet,
+		levelUpRefreshTokenIds: req.levelUpRefreshTokenIds,
 	};
 	const registry = createPostTradeVenueRefreshRegistry(registryCtx);
 
@@ -476,7 +480,7 @@ export async function refetchForPending(
 
 export async function runPostTradeExitBurst(
 	queryClient: QueryClient,
-	req: Pick<PostTradeSyncRequest, "levelUpWallet">,
+	req: Pick<PostTradeSyncRequest, "levelUpWallet" | "levelUpRefreshTokenIds">,
 	account: PostTradeAccountRefetch,
 	pendingSnapshot: readonly PostTradePendingTarget[],
 ): Promise<void> {
