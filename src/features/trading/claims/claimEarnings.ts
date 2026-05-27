@@ -32,6 +32,8 @@ import {
 import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
 import { useCurrentProfile } from "@/features/trading/hooks/useCurrentProfile";
 import { useVenueAddressChainMap } from "@/context/AccountDataContext";
+import { predictKernelAddressFromVacm } from "@/context/accountWallets";
+import { findEvmPrivyEmbeddedWallet } from "@/features/trading/venues/polymarket/wallet/privyEmbeddedWallet";
 import { tradingQueryKeys } from "@/features/trading/queryKeys";
 import { quoteSignAndSubmitDflowOrder } from "@/features/trading/venues/dflow/quote/quoteSignAndSubmitDflowOrder";
 import type { DflowOrderSubmitBody } from "@/services/privateApi/client";
@@ -277,7 +279,9 @@ export function useClaimForVenue(market: PredictionMarket, resolvedOutcome: "yes
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const solanaAddress = venueAddressChainMap?.dflow.walletAddress;
 	const polymarketDepositWallet = venueAddressChainMap?.polymarket.walletAddress;
-	const predictWallet = venueAddressChainMap?.predictfun.walletAddress;
+	const predictEntry = venueAddressChainMap?.predictfun;
+	const predictWallet = predictEntry?.walletAddress;
+	const predictKernel = predictKernelAddressFromVacm(predictEntry);
 	const baseSmartWallet = venueAddressChainMap?.levelup.walletAddress;
 	const { signTransaction: privySolanaSignTransaction } = useSolanaSignTransaction();
 	const { wallets: solanaWallets } = useSolanaWallets();
@@ -594,15 +598,23 @@ export function useClaimForVenue(market: PredictionMarket, resolvedOutcome: "yes
 		}
 
 		async function redeemPredict(): Promise<string> {
-			const embedded = (wallets || []).find(
-				(w: any) => w?.walletClientType === "privy" || w?.connectorType === "privy",
-			) as { getEthereumProvider?: () => Promise<any>; address?: string } | undefined;
+			const embedded = findEvmPrivyEmbeddedWallet(wallets) as
+				| { getEthereumProvider?: () => Promise<unknown>; address?: string }
+				| undefined;
 
-			if (!embedded?.getEthereumProvider || !embedded.address)
+			if (!embedded?.getEthereumProvider || !embedded.address) {
 				throw new Error("Embedded wallet required for Predict claims on BNB");
+			}
+
+			const vacmSigner = predictEntry?.signerAddress?.trim();
+			if (vacmSigner && embedded.address.trim().toLowerCase() !== vacmSigner.toLowerCase()) {
+				throw new Error(
+					"Privy embedded wallet does not match venueAddressChainMap.predictfun.signerAddress",
+				);
+			}
 
 			const address = embedded.address as `0x${string}`;
-			const ethereum = await embedded.getEthereumProvider();
+			const ethereum = (await embedded.getEthereumProvider()) as never;
 			await ensurePredictChain(ethereum);
 			const bscSigner = await getBscBrowserSigner({
 				ethereum,
@@ -610,8 +622,8 @@ export function useClaimForVenue(market: PredictionMarket, resolvedOutcome: "yes
 				sendTransaction: privyEvmSendTransaction,
 			});
 
-			const predictAccount = predictWallet?.trim();
-			if (!predictAccount) {
+			const predictMaker = predictWallet?.trim();
+			if (!predictMaker) {
 				throw new Error(
 					"Predict wallet missing — venueAddressChainMap.predictfun.walletAddress is required",
 				);
@@ -619,8 +631,9 @@ export function useClaimForVenue(market: PredictionMarket, resolvedOutcome: "yes
 
 			const indexSet = (resolvedOutcome === "yes" ? YES_INDEX_SET : NO_INDEX_SET) as 1 | 2;
 
+			// Match usePredictTradingSession: predictAccount only when maker is a kernel (≠ signer EOA).
 			const builder = await OrderBuilder.make(ChainId.BnbMainnet, bscSigner as never, {
-				predictAccount,
+				...(predictKernel ? { predictAccount: predictKernel } : {}),
 			});
 
 			let amount: bigint | undefined;
@@ -629,7 +642,7 @@ export function useClaimForVenue(market: PredictionMarket, resolvedOutcome: "yes
 				if (!provider) {
 					throw new Error("No BNB provider available to read Predict position balance");
 				}
-				const holder = predictAccount;
+				const holder = predictMaker;
 				amount = await readPredictOutcomeTokenBalance({
 					provider,
 					conditionId: market.conditionId,
@@ -648,6 +661,9 @@ export function useClaimForVenue(market: PredictionMarket, resolvedOutcome: "yes
 				indexSet,
 				isNegRisk,
 				isYieldBearing,
+				predictMaker,
+				predictKernel: predictKernel ?? null,
+				embeddedEoa: address,
 				negRiskAmount: amount?.toString() ?? null,
 			});
 
@@ -844,6 +860,8 @@ export function useClaimForVenue(market: PredictionMarket, resolvedOutcome: "yes
 		queryClient,
 		profileId,
 		predictWallet,
+		predictEntry,
+		predictKernel,
 		baseSmartWallet,
 	]);
 
