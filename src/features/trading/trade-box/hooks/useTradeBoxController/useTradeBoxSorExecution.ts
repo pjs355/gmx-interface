@@ -37,6 +37,7 @@ import {
 } from "@/features/trading/sor/post-trade/postTradeBaseline";
 import { registerPendingDflowOutcomeMints } from "@/features/trading/venues/dflow/portfolio/pendingDflowOutcomeMints";
 import { dflowOutcomeMintForRouteLeg } from "@/features/trading/venues/dflow/catalog/dflowRouteOutcomeMint";
+import { levelUpTokenIdsFromFilledRoute } from "@/features/trading/venues/levelup/portfolio/levelUpRefreshTokenIds";
 import { requireVenueAddressChainMapForExecute } from "@/context/accountWallets";
 import type { AccountDataVacmSlice } from "@/context/accountWallets";
 import type { useAccountData, AccountLevelUpPositionsSlice } from "@/context/AccountDataContext";
@@ -420,6 +421,11 @@ export function useTradeBoxSorExecuteActions(
 					route: cached.route,
 					execution: sorExecution.execution,
 					baseline: cached.baseline,
+					levelUpRefreshTokenIds: levelUpTokenIdsFromFilledRoute(
+						cached.route,
+						sorExecution.execution,
+						market as { yesTokenId?: string | null; noTokenId?: string | null },
+					),
 					operationId: crypto.randomUUID(),
 					preTradeSnapshot: preTradeSnapshotRef.current,
 				});

@@ -107,10 +107,13 @@ export function PostTradeAccountSyncProvider({ children }: { children: ReactNode
 	const accountPostTradeRef = useRef<PostTradeAccountRefetch>({
 		refreshVenuePositions: async () => {},
 		refreshCash: async () => {},
+		refreshLevelUpPositionsByTokenIds: async () => {},
 	});
 	accountPostTradeRef.current = {
 		refreshVenuePositions: (venue) => accountData.refresh.positions(venue),
 		refreshCash: () => accountData.refresh.cash(),
+		refreshLevelUpPositionsByTokenIds: (tokenIds) =>
+			accountData.refresh.levelUpPositionsByTokenIds(tokenIds),
 	};
 
 	const runAfterSorFilled = useCallback((input: SorPostTradeSyncInput) => {
@@ -284,6 +287,7 @@ export function PostTradeAccountSyncProvider({ children }: { children: ReactNode
 				const account = accountPostTradeRef.current;
 				const reqSlice = {
 					levelUpWallet: breq.levelUpWallet,
+					levelUpRefreshTokenIds: breq.levelUpRefreshTokenIds,
 				};
 				const synthetic = buildSyntheticBlindPending(breq.accountVenues, breq.includeLevelUpRpc);
 				const opts = refetchPassOptsFromPending(synthetic);

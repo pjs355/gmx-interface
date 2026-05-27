@@ -2,10 +2,7 @@
  * Base URL for authenticated "private" trading / account routes.
  * Override when the API host differs from the public prediction API.
  *
- * `local-production` (yarn dev → [3]): public market catalog uses Railway via
- * `getPredictionApiBaseUrl()`, but this defaults to **localhost** so Polymarket /
- * account-overview / builder / funding routes hit your laptop (prod Railway often
- * omits those mounts). Set `VITE_PRIVATE_API_BASE` to override the host or port.
+ * **local** (yarn dev → [2] or localhost): private + chain routes default to localhost:8080.
  *
  * **Predict 403 (geo)**: Predict.fun sees the **egress of whoever calls their API** — usually your
  * `localhost:8080` process (US). That is a **backend/network** concern (EU-hosted API, or outbound HTTP
@@ -13,7 +10,7 @@
  * (Railway `/proxy` → `VITE_AMSTERDAM_PROXY_LEVELUP_API_URL`) so the **server at that URL** runs in NL/EU.
  * Tunneling to ngrok→laptop still calls Predict from your IP unless the backend uses its own EU proxy.
  *
- * Railway CLOB flag: **LIVE** always tunnels order POST via `/private-api-proxy`. **TEST/DEV** tunnel
+ * Railway CLOB flag: **LIVE** always tunnels order POST via `/private-api-proxy`. **LOCAL** tunnels
  * orders only if you set **`VITE_AMSTERDAM_PROXY_LEVELUP_API_URL`** (EU/API base the Railway proxy can reach).
  * Otherwise orders go to `getPrivateApiBaseUrl()` (local). Umbrella/catalog URLs unchanged (`predictionApiBase.ts`).
  *
@@ -21,7 +18,7 @@
  * - `VITE_ACCOUNT_OVERVIEW_PATH` — default `me` (`/profiles/me/account-overview`); see `accountOverviewApi.ts`
  * - `VITE_POLYMARKET_ACCOUNT_PATH` — default `/polymarket/account`; use `/api/polymarket/account` if needed
  */
-import { getEnvironment } from "@/config/environment";
+import { getEnvironment, isLocalApi } from "@/config/environment";
 import { API_URL_CONFIG, getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 /**
@@ -44,7 +41,7 @@ function hasExplicitPredictProxyTarget(): boolean {
 }
 
 /**
- * Order POST uses `/private-api-proxy` when CLOB proxy is on and: **LIVE**, or **TEST/DEV** with
+ * Order POST uses `/private-api-proxy` when CLOB proxy is on and: **LIVE**, or **LOCAL** with
  * `VITE_AMSTERDAM_PROXY_LEVELUP_API_URL` set (EU-reachable API the /proxy fetches).
  */
 export function shouldTunnelPredictOrders(): boolean {
@@ -83,7 +80,7 @@ export function getPrivateApiRoutingDescription(): string {
 	if (shouldTunnelPredictOrders()) {
 		return `Predict POST /api/predict/orders → ${origin}/private-api-proxy; other → ${base}`;
 	}
-	return `CLOB proxy on; Predict orders → ${base} (set VITE_AMSTERDAM_PROXY_LEVELUP_API_URL to tunnel from TEST/DEV)`;
+	return `CLOB proxy on; Predict orders → ${base} (set VITE_AMSTERDAM_PROXY_LEVELUP_API_URL to tunnel from LOCAL)`;
 }
 
 export function getPrivateApiBaseUrl(): string {
@@ -92,7 +89,7 @@ export function getPrivateApiBaseUrl(): string {
 		return env.replace(/\/$/, "");
 	}
 	if (getEnvironment() === "local-production") {
-		return API_URL_CONFIG.testnet.api;
+		return API_URL_CONFIG.local.api;
 	}
 	return getPredictionApiBaseUrl();
 }

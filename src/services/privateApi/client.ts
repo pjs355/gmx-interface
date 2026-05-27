@@ -699,6 +699,14 @@ export function createPrivateApiClient(getToken: GetToken, getIdentityToken?: Ge
 			return readJson<VenuePosition[]>(res);
 		},
 
+		async refreshLevelUpPositions(body: { tokenIds: string[] }): Promise<VenuePosition[]> {
+			const res = await authorizedFetch("/api/levelup/positions/refresh", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson<VenuePosition[]>(res);
+		},
+
 		async postPolymarketSync(body: PolymarketSyncBody): Promise<unknown> {
 			const res = await authorizedFetch("/polymarket/account/sync", {
 				method: "POST",

@@ -8,10 +8,12 @@ import {
 	usePostTradeAccountSync,
 } from "@/features/trading/sor/post-trade/usePostTradeAccountSync";
 
+import type { LevelUpPortfolioRefreshOptions } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
+
 export type UseHandleClaimSuccessArgs = {
 	acknowledgeClearedPayouts: (keys: string[]) => void;
 	setClaimedMarkets: (updater: (prev: Set<string>) => Set<string>) => void;
-	refreshLevelUpPortfolio: () => Promise<void> | void;
+	refreshLevelUpPortfolio: (opts?: LevelUpPortfolioRefreshOptions) => Promise<void> | void;
 	collateralTokens: {
 		refetch: () => Promise<FundingStableBalancesHuman | undefined>;
 	};
@@ -67,7 +69,7 @@ export function useHandleClaimSuccess({
 				// portfolio total matches fresh cash; cash alone can update while stale mark values
 				// double-count.
 				await Promise.all([
-					refreshLevelUpPortfolio(),
+					refreshLevelUpPortfolio({ claimMarketIds: payoutKeys }),
 					queryClient.invalidateQueries({
 						queryKey: [BRIDGE_FUNDING_BALANCES_QUERY_KEY],
 					}),

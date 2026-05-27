@@ -14,10 +14,7 @@ import {
 	parsePrivyEvmTxHash,
 	waitForBaseTransactionSuccess,
 } from "@/features/trading/chains/waitPrivyBaseTxReceipt";
-import {
-	findEvmPrivyEmbeddedWallet,
-	type PrivyWalletListEntry,
-} from "@/features/trading/venues/polymarket/wallet/privyEmbeddedWallet";
+import type { PrivyWalletListEntry } from "@/features/trading/venues/polymarket/wallet/privyEmbeddedWallet";
 
 export type LevelUpApprovalStatus = {
 	isApproved: boolean;
@@ -25,6 +22,9 @@ export type LevelUpApprovalStatus = {
 	hasCtfApproval: boolean;
 	hasFeeWrapperApproval: boolean;
 };
+
+const POST_APPROVAL_READ_POLL_MS = 2_000;
+const POST_APPROVAL_READ_MAX_ATTEMPTS = 6;
 
 function normalizeWallet(wallet: string | null | undefined): string {
 	const trimmed = wallet?.trim();
@@ -34,6 +34,24 @@ function normalizeWallet(wallet: string | null | undefined): string {
 	return trimmed;
 }
 
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolvePrivySmartWalletAddress(user: User | null): string {
+	const smartWalletAccount = (user?.linkedAccounts || []).find(
+		(acct: { type?: string }) => acct?.type === "smart_wallet",
+	) as { address?: string } | undefined;
+
+	const smartWalletAddress = smartWalletAccount?.address?.trim();
+	if (!smartWalletAddress || !smartWalletAddress.startsWith("0x")) {
+		throw new Error(
+			"LevelUp trading requires a Base smart wallet. Finish account setup and try again.",
+		);
+	}
+	return smartWalletAddress;
+}
+
 export type WriteLevelUpApprovalsParams = {
 	wallet: string;
 	user: User | null;
@@ -41,109 +59,84 @@ export type WriteLevelUpApprovalsParams = {
 	getClientForChain: ReturnType<typeof useSmartWallets>["getClientForChain"];
 };
 
-/** Send LevelUp USDC + CTF approvals on Base (SCW batch or external wallet). */
+/** Send LevelUp USDC + CTF approvals on Base smart wallet (3 calls in one batch). */
 export async function writeLevelUpApprovals(params: WriteLevelUpApprovalsParams): Promise<void> {
-	const { user, privyWallets, getClientForChain } = params;
+	const { user, getClientForChain } = params;
 
-	const smartWalletAccount = (user?.linkedAccounts || []).find(
-		(acct: { type?: string }) => acct?.type === "smart_wallet",
-	) as { address?: string } | undefined;
+	const venueWallet = normalizeWallet(params.wallet);
+	const privySmartWallet = resolvePrivySmartWalletAddress(user);
+	if (privySmartWallet.toLowerCase() !== venueWallet.toLowerCase()) {
+		throw new Error(
+			`LevelUp approval wallet mismatch: account overview SCW (${venueWallet}) does not match Privy smart wallet (${privySmartWallet})`,
+		);
+	}
 
-	const embeddedWallet = findEvmPrivyEmbeddedWallet(privyWallets) as
-		| { address?: string }
-		| undefined;
-
-	const externalWallet = privyWallets.find(
-		(w) => w?.type === "wallet" || w?.connectorType !== "privy",
-	);
-
-	const useSmartWallet = Boolean(smartWalletAccount?.address) || Boolean(embeddedWallet);
-	const useExternalWallet = Boolean(externalWallet) && !useSmartWallet;
+	const smartWalletClient = await getClientForChain({ id: 8453 });
+	if (!smartWalletClient) {
+		throw new Error("No Base smart wallet client available");
+	}
 
 	const usdcAbi = ["function approve(address spender, uint256 amount) returns (bool)"];
 	const ctfAbi = ["function setApprovalForAll(address operator, bool approved)"];
 
-	if (useSmartWallet) {
-		const smartWalletClient = await getClientForChain({ id: 8453 });
-		if (!smartWalletClient) {
-			throw new Error("No smart wallet client available");
-		}
+	const usdcInterface = new ethers.Interface(usdcAbi);
+	const ctfInterface = new ethers.Interface(ctfAbi);
 
-		const usdcInterface = new ethers.Interface(usdcAbi);
-		const ctfInterface = new ethers.Interface(ctfAbi);
+	const usdcExchangeApproval = usdcInterface.encodeFunctionData("approve", [
+		getExchangeAddress(),
+		ethers.MaxUint256,
+	]);
+	const ctfApproval = ctfInterface.encodeFunctionData("setApprovalForAll", [
+		getExchangeAddress(),
+		true,
+	]);
+	const usdcFeeWrapperApproval = usdcInterface.encodeFunctionData("approve", [
+		getFeeWrapperAddress(),
+		ethers.MaxUint256,
+	]);
 
-		const usdcExchangeApproval = usdcInterface.encodeFunctionData("approve", [
-			getExchangeAddress(),
-			ethers.MaxUint256,
-		]);
-		const ctfApproval = ctfInterface.encodeFunctionData("setApprovalForAll", [
-			getExchangeAddress(),
-			true,
-		]);
-		const usdcFeeWrapperApproval = usdcInterface.encodeFunctionData("approve", [
-			getFeeWrapperAddress(),
-			ethers.MaxUint256,
-		]);
-
-		console.log("🔐 Sending batched approval transaction (3 approvals in 1 signature)...");
-		const batched = await smartWalletClient.sendTransaction({
-			calls: [
-				{
-					to: getUSDCAddress() as `0x${string}`,
-					data: usdcExchangeApproval as `0x${string}`,
-					value: 0n,
-				},
-				{
-					to: getCTFAddress() as `0x${string}`,
-					data: ctfApproval as `0x${string}`,
-					value: 0n,
-				},
-				{
-					to: getUSDCAddress() as `0x${string}`,
-					data: usdcFeeWrapperApproval as `0x${string}`,
-					value: 0n,
-				},
-			],
-		});
-		await waitForBaseTransactionSuccess(
-			parsePrivyEvmTxHash(batched),
-			"LevelUp batched USDC/CTF approvals",
-		);
-		console.log("✅ Batched approval complete!");
-		return;
-	}
-
-	if (useExternalWallet && externalWallet) {
-		if (!externalWallet.getEthereumProvider) {
-			throw new Error("External wallet provider unavailable");
-		}
-		const eip1193 = await externalWallet.getEthereumProvider();
-		const provider = new ethers.BrowserProvider(eip1193 as never);
-		const signer = await provider.getSigner();
-
-		console.log("🔐 Approving USDC for Exchange...");
-		const usdcContract = new ethers.Contract(getUSDCAddress(), usdcAbi, signer);
-		const tx1 = await usdcContract.approve(getExchangeAddress(), ethers.MaxUint256);
-		await tx1.wait();
-
-		console.log("🔐 Approving CTF for Exchange...");
-		const ctfContract = new ethers.Contract(getCTFAddress(), ctfAbi, signer);
-		const tx2 = await ctfContract.setApprovalForAll(getExchangeAddress(), true);
-		await tx2.wait();
-
-		console.log("🔐 Approving USDC for Fee Wrapper...");
-		const tx3 = await usdcContract.approve(getFeeWrapperAddress(), ethers.MaxUint256);
-		await tx3.wait();
-		console.log("✅ All approvals complete!");
-		return;
-	}
-
-	throw new Error("No compatible wallet found");
+	console.log("🔐 Sending batched approval transaction (3 approvals in 1 signature)...");
+	const batched = await smartWalletClient.sendTransaction({
+		calls: [
+			{
+				to: getUSDCAddress() as `0x${string}`,
+				data: usdcExchangeApproval as `0x${string}`,
+				value: 0n,
+			},
+			{
+				to: getCTFAddress() as `0x${string}`,
+				data: ctfApproval as `0x${string}`,
+				value: 0n,
+			},
+			{
+				to: getUSDCAddress() as `0x${string}`,
+				data: usdcFeeWrapperApproval as `0x${string}`,
+				value: 0n,
+			},
+		],
+	});
+	await waitForBaseTransactionSuccess(
+		parsePrivyEvmTxHash(batched),
+		"LevelUp batched USDC/CTF approvals",
+	);
+	console.log("✅ Batched approval complete!");
 }
 
 export type EnsureLevelUpApprovalsParams = WriteLevelUpApprovalsParams & {
 	chainRead: ChainReadClient;
 };
+
+async function readApprovalsWithPoll(
+	chainRead: ChainReadClient,
+	wallet: string,
+): Promise<LevelUpApprovalStatus> {
+	let status = await fetchLevelUpApprovalsChainRead(chainRead, wallet);
+	for (let attempt = 1; attempt < POST_APPROVAL_READ_MAX_ATTEMPTS && !status.isApproved; attempt++) {
+		await sleep(POST_APPROVAL_READ_POLL_MS);
+		status = await fetchLevelUpApprovalsChainRead(chainRead, wallet);
+	}
+	return status;
+}
 
 /** Read via server → auto-approve if needed → read again (trade hot path). */
 export async function ensureLevelUpApprovals(params: EnsureLevelUpApprovalsParams): Promise<void> {
@@ -153,8 +146,14 @@ export async function ensureLevelUpApprovals(params: EnsureLevelUpApprovalsParam
 
 	await writeLevelUpApprovals(params);
 
-	status = await fetchLevelUpApprovalsChainRead(params.chainRead, wallet);
+	status = await readApprovalsWithPoll(params.chainRead, wallet);
 	if (!status.isApproved) {
+		console.error("[LevelUpApprovals] incomplete after write", {
+			wallet,
+			hasUsdcApproval: status.hasUsdcApproval,
+			hasCtfApproval: status.hasCtfApproval,
+			hasFeeWrapperApproval: status.hasFeeWrapperApproval,
+		});
 		throw new Error(userMessage(TRADE_LEVELUP_APPROVALS_INCOMPLETE));
 	}
 }
