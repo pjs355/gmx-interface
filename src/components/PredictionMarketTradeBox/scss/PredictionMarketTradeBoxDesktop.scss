@@ -13,7 +13,8 @@
 	.prediction-market-tradebox
 		.input-section
 		.input-container.prediction-input-container.empty-input {
-		background-color: rgba(0, 0, 0, 0.34) !important;
+		background-color: var(--brand-surface-inactive) !important;
+		border: 1px solid var(--brand-surface-inactive-border) !important;
 		background-image: none !important;
 		-webkit-backdrop-filter: blur($predictions-glass-blur);
 		backdrop-filter: blur($predictions-glass-blur);

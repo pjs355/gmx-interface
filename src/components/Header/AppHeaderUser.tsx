@@ -103,7 +103,7 @@ export function AppHeaderUser({
 									login();
 								}}
 								style={{
-									color: "#8b5cf6",
+									color: "var(--brand-primary)",
 									cursor: "pointer",
 									padding: "8px 12px",
 									borderRadius: "6px",

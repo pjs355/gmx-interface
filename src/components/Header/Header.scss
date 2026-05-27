@@ -175,18 +175,18 @@ html.drawer-open {
 
 .mobile-auth-button.login-button {
 	background-color: transparent;
-	color: #8b5cf6;
-	border: 1px solid #8b5cf6;
+	color: var(--brand-primary);
+	border: 1px solid var(--brand-primary);
 }
 
 .mobile-auth-button.login-button:hover {
-	background-color: rgba(139, 92, 246, 0.1);
+	background-color: var(--brand-tint-10);
 	color: #9d6ff7;
 	border-color: #9d6ff7;
 }
 
 .mobile-auth-button.signup-button {
-	background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+	background: var(--brand-gradient);
 	color: #ffffff;
 	border: none;
 }
@@ -194,7 +194,7 @@ html.drawer-open {
 .mobile-auth-button.signup-button:hover {
 	background: linear-gradient(135deg, #9d6ff7 0%, #7477f2 100%);
 	transform: translateY(-1px);
-	box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+	box-shadow: 0 4px 12px var(--brand-tint-30);
 }
 
 .App-header-mobile-metrics {
@@ -263,12 +263,12 @@ html.drawer-open {
 .App-header-drawer .App-header-link-container .a:active,
 .App-header-drawer .App-header-link-container a:hover,
 .App-header-drawer .App-header-link-container a:focus {
-	color: #9285f3 !important;
+	color: var(--brand-primary) !important;
 	background-color: #1a1a1a !important;
 }
 
 .App-header-drawer .App-header-link-container a.active {
-	color: #9285f3 !important;
+	color: var(--brand-primary) !important;
 	font-weight: bold !important;
 }
 
@@ -348,7 +348,7 @@ html.drawer-open {
 }
 
 .App-header-logo-img {
-	height: 22px;
+	height: 28px;
 	width: auto;
 	object-fit: contain;
 	vertical-align: middle;
@@ -388,7 +388,7 @@ html.drawer-open {
 .App-header .a:hover,
 .App-header a:hover {
 	opacity: 1;
-	color: #9285f3;
+	color: var(--brand-primary);
 }
 
 .App-header-container-left .a,
@@ -411,7 +411,7 @@ html.drawer-open {
 }
 
 .App-header-container-left a.active {
-	color: #9285f3;
+	color: var(--brand-primary);
 	font-weight: bold;
 }
 

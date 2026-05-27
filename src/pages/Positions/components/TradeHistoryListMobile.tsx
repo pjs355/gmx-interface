@@ -105,7 +105,7 @@ export default function TradeHistoryListMobile({
 			className="trade-history-mobile-container"
 			style={{
 				background: "#0a0a0a",
-				borderTop: "2px solid #8b5cf6",
+				borderTop: "2px solid var(--brand-primary)",
 				padding: "12px",
 			}}
 		>

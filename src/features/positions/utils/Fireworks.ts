@@ -12,7 +12,15 @@ type Particle = {
 	alpha: number;
 };
 
-const COLORS = ["#ff4757", "#ffa502", "#2ed573", "#1e90ff", "#7c3aed", "#f1c40f", "#e84393"];
+const COLORS = [
+	"#ff4757",
+	"#ffa502",
+	"#2ed573",
+	"#1e90ff",
+	"var(--brand-primary-dark)",
+	"#f1c40f",
+	"#e84393",
+];
 
 export function triggerFireworksAt(x: number, y: number, durationMs: number = 800) {
 	const canvas = document.createElement("canvas");

@@ -109,7 +109,7 @@
 }
 
 .progress-banner-button {
-	background: #8b5cf6;
+	background: var(--brand-primary);
 	color: #ffffff;
 	font-size: 16px;
 	font-weight: 700;
@@ -123,9 +123,9 @@
 	z-index: 1;
 
 	&:hover:not(:disabled) {
-		background: #7c3aed;
+		background: var(--brand-primary-dark);
 		transform: translateY(-2px);
-		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+		box-shadow: 0 4px 12px var(--brand-tint-40);
 	}
 
 	&:active:not(:disabled) {

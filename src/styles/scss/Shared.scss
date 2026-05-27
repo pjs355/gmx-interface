@@ -78,9 +78,9 @@ input {
 	--dark-blue: var(--color-slate-800);
 	--dark-blue-bg: var(--color-slate-800);
 	--dark-blue-accent: var(--color-slate-100);
-	--primary-btn-bg: #9285f3;
-	--primary-btn-hover: #7c6ef6;
-	--primary-btn-active: #6b5ce7;
+	--primary-btn-bg: var(--brand-primary);
+	--primary-btn-hover: var(--brand-primary-hover);
+	--primary-btn-active: var(--brand-primary-active);
 	--dark-blue-hover: var(--color-cold-blue-900);
 	--dark-blue-border: var(--color-gray-800);
 	--dark-blue-active: var(--color-cold-blue-700);
@@ -197,17 +197,17 @@ a.plain {
 }
 
 .trade-button-purple {
-	background-color: #9285f3 !important;
+	background-color: var(--brand-primary) !important;
 	color: white !important;
 	border: none !important;
 }
 
 .trade-button-purple:hover {
-	background-color: #7c6ef6 !important;
+	background-color: var(--brand-primary-hover) !important;
 }
 
 .trade-button-purple:active {
-	background-color: #6b5ce7 !important;
+	background-color: var(--brand-primary-active) !important;
 }
 
 .default-btn {

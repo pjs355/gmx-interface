@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "node:url";
 import http from "node:http";
 import https from "node:https";
+import { siteMetadataHtmlPlugin } from "./scripts/viteSiteMetadataHtml";
 
 /** Config file directory — use for .env + aliases so behavior matches other laptops regardless of `process.cwd()`. */
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -290,6 +291,7 @@ export default defineConfig(({ mode }) => {
 	return {
 		customLogger: createViteLoggerWithoutBaseOrgSourcemapNoise(),
 		plugins: [
+			siteMetadataHtmlPlugin(),
 			react({
 				babel: {
 					plugins: ["macros"],
@@ -349,7 +351,7 @@ export default defineConfig(({ mode }) => {
 					api: "modern-compiler",
 					silenceDeprecations: ["legacy-js-api"],
 					includePaths: [path.join(projectRoot, "src/styles")],
-					additionalData: `@use "themes/scss/fonts" as *;\n`,
+					additionalData: `@use "themes/scss/fonts" as *;\n@use "themes/scss/colors" as *;\n`,
 				},
 			},
 		},

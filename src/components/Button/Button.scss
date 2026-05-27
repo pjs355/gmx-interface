@@ -8,6 +8,7 @@
 	padding: 1.1rem 1.6rem;
 	border: none;
 	user-select: none;
+	text-decoration: none;
 
 	&.center {
 		justify-content: center;
@@ -23,34 +24,38 @@
 
 	&.primary {
 		background: var(--primary-btn-bg);
-		color: var(--color-white);
+		color: #ffffff;
 		border-radius: 0.625rem;
 		padding: 1.65rem 1.6rem;
 
 		&:not([disabled]):hover {
 			background: var(--primary-btn-hover);
+			color: #ffffff;
 		}
 
 		&:not([disabled]):active {
 			background-color: var(--primary-btn-active);
+			color: #ffffff;
 		}
 	}
 
 	&.primary-action {
 		background: var(--primary-btn-bg);
-		color: var(--color-white);
+		color: #ffffff;
 		border-radius: 0.625rem;
 		padding: 1.65rem 1.6rem;
 		font-weight: bold;
 
 		&:not([disabled], .disabled):hover {
 			background: var(--primary-btn-hover);
-			box-shadow: 0 0 0.4rem 0.5rem color-mix(in srgb, #9285f3 10%, transparent);
+			color: #ffffff;
+			box-shadow: 0 0 0.4rem 0.5rem color-mix(in srgb, var(--brand-primary) 10%, transparent);
 		}
 
 		&:not([disabled], .disabled):active {
 			background-color: var(--primary-btn-active);
-			box-shadow: 0 0 0.4rem 0.6rem color-mix(in srgb, #9285f3 10%, transparent);
+			color: #ffffff;
+			box-shadow: 0 0 0.4rem 0.6rem color-mix(in srgb, var(--brand-primary) 10%, transparent);
 		}
 	}
 

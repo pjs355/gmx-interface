@@ -11,9 +11,11 @@ import { HomeHeaderLinks } from "./HomeHeaderLinks";
 import { isHomeSite } from "@/config/ui";
 
 import "./Header.scss";
-import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
+import { BRAND_NAME, clutchCometLogo } from "@/assets/brandLogo";
 
-const LogoImage = () => <img src={levelUpLogo} alt="LevelUp" className="App-header-logo-img" />;
+const LogoImage = () => (
+	<img src={clutchCometLogo} alt={BRAND_NAME} className="App-header-logo-img" />
+);
 
 const MobileLogo = ({ onClick }: { onClick: () => void }) => (
 	<div className="App-header-link-main clickable" onClick={onClick}>

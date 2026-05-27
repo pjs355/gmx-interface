@@ -71,7 +71,7 @@
 	color: white;
 
 	&.transfers-cash-value {
-		color: #8b5cf6;
+		color: var(--brand-primary);
 	}
 }
 
@@ -125,13 +125,13 @@
 }
 
 .transfers-btn-deposit {
-	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+	background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
 	color: white;
-	box-shadow: 0 4px 20px rgba(139, 92, 246, 0.25);
+	box-shadow: 0 4px 20px var(--brand-tint-25);
 
 	&:hover:not(:disabled) {
 		transform: translateY(-2px);
-		box-shadow: 0 6px 24px rgba(139, 92, 246, 0.35);
+		box-shadow: 0 6px 24px var(--brand-tint-35);
 	}
 }
 
@@ -142,7 +142,7 @@
 
 	&:hover:not(:disabled) {
 		background: #282830;
-		border-color: rgba(139, 92, 246, 0.5);
+		border-color: rgba(4, 120, 255, 0.5);
 	}
 
 	&:disabled {
@@ -177,19 +177,19 @@
 
 .transfers-btn-primary {
 	padding: 14px 40px;
-	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+	background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
 	border: none;
 	border-radius: 12px;
 	color: white;
 	font-size: 16px;
 	font-weight: 600;
 	cursor: pointer;
-	box-shadow: 0 4px 20px rgba(139, 92, 246, 0.25);
+	box-shadow: 0 4px 20px var(--brand-tint-25);
 	transition: all 0.2s ease;
 
 	&:hover {
 		transform: translateY(-2px);
-		box-shadow: 0 6px 24px rgba(139, 92, 246, 0.35);
+		box-shadow: 0 6px 24px var(--brand-tint-35);
 	}
 }
 
@@ -198,7 +198,7 @@
 	margin-top: 28px;
 	padding: 18px 20px;
 	background: rgba(20, 20, 25, 0.92);
-	border: 1px solid rgba(139, 92, 246, 0.22);
+	border: 1px solid var(--brand-tint-22);
 	border-radius: 14px;
 	text-align: left;
 
@@ -392,7 +392,7 @@
 		}
 
 		&--primary {
-			background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+			background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
 			color: #fff;
 		}
 
@@ -506,8 +506,8 @@
 	margin-top: 8px;
 	padding: 8px 10px;
 	border-radius: 8px;
-	background: rgba(139, 92, 246, 0.08);
-	border: 1px dashed rgba(139, 92, 246, 0.35);
+	background: var(--brand-tint-08);
+	border: 1px dashed var(--brand-tint-35);
 }
 
 .transfers-addresses__badge--debug {

@@ -395,7 +395,7 @@ export default function Details() {
 									className="Details-checkbox"
 								/>
 								<div className="Details-preference-content">
-									<span className="Details-preference-label">LevelUp Announcements</span>
+									<span className="Details-preference-label">ClutchComment Announcements</span>
 									<span className="Details-preference-description">
 										Stay updated with new features, promotions, and platform news
 									</span>

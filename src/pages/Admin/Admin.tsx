@@ -609,10 +609,10 @@ export default function Admin() {
 							}}
 							style={{
 								padding: "6px 10px",
-								border: "1px solid #8b5cf6",
+								border: "1px solid var(--brand-primary)",
 								borderRadius: 6,
-								background: view === "wallet" ? "rgba(139,92,246,0.2)" : "transparent",
-								color: "#8b5cf6",
+								background: view === "wallet" ? "var(--brand-tint-20)" : "transparent",
+								color: "var(--brand-primary)",
 							}}
 						>
 							💰 Seeder Wallet

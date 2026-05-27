@@ -370,7 +370,10 @@ function MultiClaimButton({
 				className="side-btn"
 				disabled={isClaiming || allLimitlessWinningsClaimBlocked}
 				style={{
-					background: isClaiming || allLimitlessWinningsClaimBlocked ? "#6d28d9" : "#7c3aed",
+					background:
+						isClaiming || allLimitlessWinningsClaimBlocked
+							? "var(--brand-primary-darkest)"
+							: "var(--brand-primary-dark)",
 					color: "#fff",
 					border: "none",
 					padding: "10px 16px",
@@ -380,15 +383,15 @@ function MultiClaimButton({
 					opacity: isClaiming || allLimitlessWinningsClaimBlocked ? 0.7 : 1,
 					transition:
 						"background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease",
-					boxShadow: isClaiming ? "0 0 0 0 rgba(0,0,0,0)" : "0 4px 10px rgba(124, 58, 237, 0.35)",
+					boxShadow: isClaiming ? "0 0 0 0 rgba(0,0,0,0)" : "0 4px 10px var(--brand-tint-35)",
 				}}
 				onMouseEnter={(e) => {
 					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
-						(e.currentTarget as HTMLButtonElement).style.background = "#8b5cf6";
+						(e.currentTarget as HTMLButtonElement).style.background = "var(--brand-primary)";
 				}}
 				onMouseLeave={(e) => {
 					if (!isClaiming && !allLimitlessWinningsClaimBlocked)
-						(e.currentTarget as HTMLButtonElement).style.background = "#7c3aed";
+						(e.currentTarget as HTMLButtonElement).style.background = "var(--brand-primary-dark)";
 				}}
 				onMouseDown={(e) => {
 					if (!isClaiming && !allLimitlessWinningsClaimBlocked)

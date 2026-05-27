@@ -63,12 +63,12 @@
 	}
 
 	&.unlocked {
-		border-color: rgba(139, 92, 246, 0.5);
-		background: rgba(139, 92, 246, 0.1);
+		border-color: rgba(4, 120, 255, 0.5);
+		background: var(--brand-tint-10);
 
 		&:hover {
-			border-color: rgba(139, 92, 246, 0.8);
-			box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+			border-color: var(--brand-tint-80);
+			box-shadow: 0 0 20px var(--brand-tint-30);
 		}
 	}
 
@@ -171,10 +171,10 @@
 @keyframes glowPulse {
 	0%,
 	100% {
-		box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+		box-shadow: 0 0 10px var(--brand-tint-30);
 	}
 	50% {
-		box-shadow: 0 0 25px rgba(139, 92, 246, 0.6);
+		box-shadow: 0 0 25px var(--brand-tint-60);
 	}
 }
 

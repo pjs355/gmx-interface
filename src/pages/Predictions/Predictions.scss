@@ -343,9 +343,9 @@ $predictions-compact-card-inline: 60px;
 		color 0.2s ease;
 
 	&:hover {
-		border-color: #8b5cf6;
-		background: rgba(139, 92, 246, 0.1);
-		color: #8b5cf6;
+		border-color: var(--brand-primary);
+		background: var(--brand-tint-10);
+		color: var(--brand-primary);
 	}
 
 	/* Hide scroll arrows on mobile - use touch scrolling instead */
@@ -414,11 +414,11 @@ $predictions-compact-card-inline: 60px;
 	transition: color 0.15s ease-in-out;
 
 	&:hover {
-		color: #9285f3;
+		color: var(--brand-primary);
 	}
 
 	&.active {
-		color: #9285f3;
+		color: var(--brand-primary);
 		font-weight: bold;
 	}
 }
@@ -453,7 +453,7 @@ $predictions-compact-card-inline: 60px;
 
 .game-link:hover .game-link__count,
 .game-link.active .game-link__count {
-	color: #9285f3;
+	color: var(--brand-primary);
 }
 
 .game-link__label {
@@ -601,7 +601,7 @@ $predictions-compact-card-inline: 60px;
 		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 
 		.prediction-card__headline-main {
-			color: #8b5cf6;
+			color: var(--brand-primary);
 		}
 	}
 
@@ -1183,7 +1183,7 @@ $predictions-compact-card-inline: 60px;
 	transition: color 0.2s ease;
 
 	&:hover {
-		color: #8b5cf6;
+		color: var(--brand-primary);
 	}
 
 	svg {
@@ -1321,7 +1321,7 @@ $predictions-compact-card-inline: 60px;
 		bottom: 0;
 		border-radius: 16px;
 		padding: 2px;
-		background: linear-gradient(135deg, #1e3a8a 0%, #8b5cf6 100%);
+		background: linear-gradient(135deg, #1e3a8a 0%, var(--brand-primary) 100%);
 		-webkit-mask:
 			linear-gradient(#fff 0 0) content-box,
 			linear-gradient(#fff 0 0);
@@ -1354,7 +1354,7 @@ $predictions-compact-card-inline: 60px;
 }
 
 .view-all-card-icon {
-	color: #8b5cf6;
+	color: var(--brand-primary);
 }
 
 .view-all-card-title {
@@ -1366,7 +1366,7 @@ $predictions-compact-card-inline: 60px;
 
 .view-all-card-count {
 	font-size: 16px;
-	color: #8b5cf6;
+	color: var(--brand-primary);
 	margin: 0;
 	font-weight: 600;
 }
@@ -1772,18 +1772,18 @@ $predictions-compact-card-inline: 60px;
 		transition: color 0.15s ease-in-out;
 
 		&:hover {
-			color: #9285f3;
+			color: var(--brand-primary);
 		}
 
 		&.active {
-			color: #9285f3;
+			color: var(--brand-primary);
 			font-weight: bold;
 		}
 	}
 
 	.predictions-markets-body > .game-links-wrapper .game-link:hover .game-link__count,
 	.predictions-markets-body > .game-links-wrapper .game-link.active .game-link__count {
-		color: #9285f3;
+		color: var(--brand-primary);
 	}
 
 	.predictions-markets-body > .game-links-wrapper .game-link__inner {

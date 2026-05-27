@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import Button from "components/Button/Button";
+import { Link } from "react-router-dom";
 import { resolveMarketLogo } from "@/features/markets/assets/marketLogoResolver";
 
 import "./About.scss";
@@ -16,13 +16,13 @@ const VENUES: Array<{ slug: string; name: string }> = [
 const STEPS: Array<{ title: string; body: ReactNode }> = [
 	{
 		title: "Create an account",
-		body: "Sign up with your email and create your LevelUp account.",
+		body: "Sign up with your email and create your ClutchComet account.",
 	},
 	{
 		title: "Add funds",
 		body: (
 			<>
-				Deposit into your LevelUp account using the built-in deposit flow. Your account has one
+				Deposit into your ClutchComet account using the built-in deposit flow. Your account has one
 				balance — you do not need to manually move money between Polymarket, Kalshi, Predict,
 				Limitless, and LevelUp. We handle the routing behind the scenes.
 			</>
@@ -38,7 +38,7 @@ const STEPS: Array<{ title: string; body: ReactNode }> = [
 	},
 	{
 		title: "Track everything in one place",
-		body: "Your positions, balance, trades, and winnings are all shown inside LevelUp.",
+		body: "Your positions, balance, trades, and winnings are all shown inside ClutchComet.",
 	},
 ];
 
@@ -50,7 +50,7 @@ export function About() {
 					<div className="about-eyebrow">Prediction Market Trading Aggregator</div>
 					<h1 className="about-title">Trade prediction markets without jumping between apps.</h1>
 					<p className="about-lead">
-						LevelUp connects the biggest prediction markets into one simple trading screen.
+						ClutchComet connects the biggest prediction markets into one simple trading screen.
 					</p>
 				</header>
 
@@ -107,12 +107,12 @@ export function About() {
 				<section className="about-section">
 					<h2 className="about-section-title">One balance across markets</h2>
 					<p className="about-body">
-						LevelUp is built so you do not need to worry about where your funds are sitting. You
+						ClutchComet is built so you do not need to worry about where your funds are sitting. You
 						deposit once. You trade across connected markets. We manage the bankroll routing
 						automatically.
 					</p>
 					<p className="about-muted">
-						Your funds are held in a Privy crypto wallet connected to your account. LevelUp does not
+						Your funds are held in a Privy crypto wallet connected to your account. ClutchComet does not
 						have custody or control over your funds.
 					</p>
 				</section>
@@ -122,13 +122,13 @@ export function About() {
 					<p className="about-body">Kalshi trading requires identity verification through DFlow.</p>
 					<p className="about-body">
 						You can enable Kalshi trading from your profile. Once verified, Kalshi markets can be
-						traded through LevelUp where supported.
+						traded through ClutchComet where supported.
 					</p>
 				</section>
 
 				<section className="about-section">
 					<h2 className="about-section-title">Funding your account</h2>
-					<p className="about-body">Please use the normal deposit flow inside LevelUp.</p>
+					<p className="about-body">Please use the normal deposit flow inside ClutchComet.</p>
 					<div className="about-warning">
 						<h3 className="about-warning__title">
 							Sending the wrong token or network can mean permanent loss.
@@ -143,16 +143,16 @@ export function About() {
 				<section className="about-section">
 					<h2 className="about-section-title">Start trading</h2>
 					<p className="about-body">
-						There are a lot of places to trade predictions. LevelUp is built for the trader who
+						There are a lot of places to trade predictions. ClutchComet is built for the trader who
 						wants the best available price without jumping between five different apps.
 					</p>
 					<p className="about-body">
 						Create an account, fund once, compare every connected market, and trade smarter.
 					</p>
 					<div className="about-cta">
-						<Button variant="primary" to="/">
+						<Link className="brand-outline-button" to="/">
 							Start trading
-						</Button>
+						</Link>
 					</div>
 				</section>
 
@@ -163,9 +163,9 @@ export function About() {
 						Send it over. We actually read every message.
 					</p>
 					<div className="about-cta">
-						<Button variant="primary" to="mailto:brendan@levelup.markets">
+						<a className="brand-outline-button" href="mailto:brendan@levelup.markets">
 							Send a message
-						</Button>
+						</a>
 					</div>
 				</section>
 			</div>

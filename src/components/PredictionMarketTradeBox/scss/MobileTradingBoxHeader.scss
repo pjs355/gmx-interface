@@ -126,17 +126,17 @@
 			background: transparent;
 
 			&:hover {
-				border-color: #8b5cf6;
-				color: #8b5cf6;
+				border-color: var(--brand-primary);
+				color: var(--brand-primary);
 				transform: translateY(-1px);
 			}
 
 			&.active {
-				background: rgba(139, 92, 246, 0.1);
-				border-color: #8b5cf6;
-				color: #8b5cf6;
+				background: var(--brand-tint-10);
+				border-color: var(--brand-primary);
+				color: var(--brand-primary);
 				font-weight: 700;
-				box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+				box-shadow: 0 2px 8px var(--brand-tint-20);
 				transform: scale(1.02);
 			}
 		}
@@ -156,9 +156,9 @@
 
 			&:focus {
 				outline: none;
-				border-color: #8b5cf6;
+				border-color: var(--brand-primary);
 				background: #101114;
-				box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+				box-shadow: 0 0 0 3px var(--brand-tint-10);
 			}
 
 			&::placeholder {
@@ -168,10 +168,12 @@
 			}
 		}
 
-		// When input is empty, make the text grey like placeholder
+		// When input is empty, blue-tinted inactive surface (still very dark)
 		&.empty-input {
 			.amount-input-field {
 				color: #6b7280;
+				background: var(--brand-surface-inactive);
+				border-color: var(--brand-surface-inactive-border);
 			}
 		}
 	}
@@ -182,14 +184,14 @@
 		border-radius: 8px;
 		font-weight: 600;
 		font-size: 16px;
-		background: #8b5cf6;
+		background: var(--brand-primary);
 		border: none;
 		color: white;
 		cursor: pointer;
 		transition: all 0.2s ease;
 
 		&:hover:not(.disabled) {
-			background: #7c3aed;
+			background: var(--brand-primary-dark);
 			transform: translateY(-1px);
 		}
 

@@ -10,7 +10,7 @@ import { getYesNoTeamLabels } from "@/features/trading/trade-box/teamLabels";
 import { getChartStrokeColorForDarkBg } from "@/features/markets/presentation/teamColors";
 import type { TimeRange } from "./types";
 import type { MergedExchangePoint } from "./types";
-import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
+import { BRAND_NAME, clutchCometLogo } from "@/assets/brandLogo";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import { resolveMarketLogo } from "@/features/markets/assets/marketLogoResolver";
 import "./PredictionMarketChart.scss";
@@ -298,7 +298,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 				</div>
 
 				<div className="chart-header-right">
-					<img src={levelUpLogo} alt="LevelUp" className="chart-logo" />
+					<img src={clutchCometLogo} alt={BRAND_NAME} className="chart-logo" />
 				</div>
 			</div>
 

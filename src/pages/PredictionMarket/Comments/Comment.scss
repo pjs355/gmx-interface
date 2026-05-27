@@ -140,7 +140,7 @@
 
 .new-comment__counter {
 	font-size: 12px;
-	color: #8b5cf6;
+	color: var(--brand-primary);
 }
 
 .new-comment__counter--warning {
@@ -151,7 +151,7 @@
 	border: none;
 	border-radius: 999px;
 	padding: 10px 20px;
-	background: #8b5cf6;
+	background: var(--brand-primary);
 	color: #ffffff;
 	font-weight: 600;
 	cursor: pointer;
@@ -159,7 +159,7 @@
 }
 
 .new-comment__submit:hover:not(:disabled) {
-	background: #7c3aed;
+	background: var(--brand-primary-dark);
 }
 
 .new-comment__submit:disabled {

@@ -403,7 +403,7 @@
 	.run-tests-btn {
 		width: 100%;
 		padding: 14px 20px;
-		background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+		background: linear-gradient(135deg, #3b82f6, var(--brand-primary));
 		border: none;
 		border-radius: 8px;
 		color: white;
@@ -803,8 +803,8 @@
 				}
 
 				&.limit {
-					background: rgba(139, 92, 246, 0.2);
-					color: #a78bfa;
+					background: var(--brand-tint-20);
+					color: var(--brand-primary-light);
 				}
 
 				&.buy {
@@ -923,8 +923,8 @@
 
 	// Error Analysis Section
 	.error-analysis-section {
-		border: 1px solid rgba(139, 92, 246, 0.3);
-		background: rgba(139, 92, 246, 0.05);
+		border: 1px solid var(--brand-tint-30);
+		background: var(--brand-tint-05);
 	}
 
 	.error-summary-grid {

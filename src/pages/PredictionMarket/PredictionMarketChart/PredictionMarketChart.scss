@@ -71,11 +71,11 @@
 
 			&.primary-market {
 				.price-value.primary-price {
-					color: #8b5cf6; // Purple
+					color: var(--brand-primary); // Purple
 				}
 
 				.live-indicator.primary-indicator {
-					color: #8b5cf6; // Purple
+					color: var(--brand-primary); // Purple
 				}
 			}
 
@@ -122,7 +122,7 @@
 
 				&.active {
 					color: #ffffff;
-					background: #8b5cf6; // Purple
+					background: var(--brand-primary); // Purple
 				}
 
 				&:disabled {
@@ -189,7 +189,7 @@
 				width: 40px;
 				height: 40px;
 				border: 3px solid rgba(255, 255, 255, 0.1);
-				border-top: 3px solid #8b5cf6;
+				border-top: 3px solid var(--brand-primary);
 				border-radius: 50%;
 				animation: spin 1s linear infinite;
 			}
@@ -217,7 +217,7 @@
 				width: 36px;
 				height: 36px;
 				border: 3px solid rgba(255, 255, 255, 0.1);
-				border-top-color: #8b5cf6;
+				border-top-color: var(--brand-primary);
 				border-radius: 50%;
 				animation: spin 0.8s linear infinite;
 			}
@@ -317,7 +317,7 @@
 
 				&.active {
 					color: #ffffff;
-					background: #8b5cf6; // Purple
+					background: var(--brand-primary); // Purple
 				}
 
 				&:disabled {
@@ -380,7 +380,7 @@
 			}
 
 			&.primary-tooltip .tooltip-value.primary-value {
-				color: #8b5cf6; // Purple
+				color: var(--brand-primary); // Purple
 			}
 
 			&.second-tooltip .tooltip-value.second-value {
@@ -516,7 +516,7 @@
 }
 
 .recharts-active-dot {
-	filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.6));
+	filter: drop-shadow(0 0 4px var(--brand-tint-60));
 }
 
 .recharts-reference-line-line {

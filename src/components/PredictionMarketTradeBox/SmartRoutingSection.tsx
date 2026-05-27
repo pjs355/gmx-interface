@@ -36,7 +36,7 @@ const SR_VALUE_FLASH_CLASS = "smart-routing-row__value--flash";
 /** Only snap away from a missing venue after previews stay without it — avoids jumping to "best" on one stale poll tick. */
 const VENUE_IMPOSSIBLE_TAB_DEBOUNCE_MS = 650;
 
-/** Brand blue→purple gradient (matches Header / RPGPanel). Inline SVG so the
+/** Brand blue gradient (matches Header / RPGPanel). Inline SVG so the
  *  fork lines paint a real gradient instead of a flat color. */
 function SplitGradientIcon({ size = 18 }: { size?: number }) {
 	return (
@@ -50,8 +50,8 @@ function SplitGradientIcon({ size = 18 }: { size?: number }) {
 					y2="24"
 					gradientUnits="userSpaceOnUse"
 				>
-					<stop offset="0%" stopColor="#6a6ff5" />
-					<stop offset="100%" stopColor="#8b5cf6" />
+					<stop offset="0%" stopColor="#0369e6" />
+					<stop offset="100%" stopColor="#0478ff" />
 				</linearGradient>
 			</defs>
 			{/* Trunk + two diverging arrows ("Y" with arrowheads). */}

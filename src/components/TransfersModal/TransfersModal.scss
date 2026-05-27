@@ -63,19 +63,19 @@
 		box-shadow 0.2s ease;
 
 	&:hover {
-		border-color: rgba(139, 92, 246, 0.45);
+		border-color: var(--brand-tint-45);
 		color: rgba(255, 255, 255, 0.92);
-		background: rgba(139, 92, 246, 0.08);
+		background: var(--brand-tint-08);
 	}
 
 	&--active {
-		border-color: rgba(139, 92, 246, 0.85);
-		background: linear-gradient(135deg, rgba(139, 92, 246, 0.35) 0%, rgba(124, 58, 237, 0.22) 100%);
+		border-color: var(--brand-tint-85);
+		background: var(--brand-gradient-selected);
 		color: #fff;
-		box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2);
+		box-shadow: 0 0 0 1px var(--brand-tint-20);
 
 		&:hover {
-			border-color: rgba(167, 139, 250, 0.95);
+			border-color: var(--brand-tint-95);
 			color: #fff;
 		}
 	}
@@ -107,8 +107,8 @@
 
 		&:focus {
 			outline: none;
-			border-color: #8b5cf6;
-			background: rgba(139, 92, 246, 0.05);
+			border-color: var(--brand-primary);
+			background: var(--brand-tint-05);
 		}
 
 		&::placeholder {
@@ -167,7 +167,7 @@
 	margin-top: 4px;
 
 	span {
-		color: #8b5cf6;
+		color: var(--brand-primary);
 		font-weight: 600;
 	}
 
@@ -198,7 +198,7 @@
 .transfers-btn-send {
 	flex: 1;
 	padding: 14px 20px;
-	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+	background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
 	border: none;
 	border-radius: 10px;
 	color: white;
@@ -209,7 +209,7 @@
 
 	&:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+		box-shadow: 0 4px 16px var(--brand-tint-30);
 	}
 
 	&:disabled {
@@ -231,7 +231,7 @@
 	transition: all 0.2s ease;
 
 	&:hover:not(:disabled) {
-		border-color: rgba(139, 92, 246, 0.5);
+		border-color: rgba(4, 120, 255, 0.5);
 		color: white;
 	}
 
@@ -506,7 +506,7 @@
 .transfers-btn-done {
 	width: 100%;
 	padding: 14px 20px;
-	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+	background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
 	border: none;
 	border-radius: 10px;
 	color: white;
@@ -517,7 +517,7 @@
 
 	&:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+		box-shadow: 0 4px 16px var(--brand-tint-30);
 	}
 }
 

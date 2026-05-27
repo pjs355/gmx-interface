@@ -178,7 +178,7 @@ export function useDflowPositions(
 				if (import.meta.env.VITE_DEBUG_DFLOW_PERF === "1") {
 					console.log(
 						"%c[DFlow positions] Network mint coverage",
-						"color:#a78bfa;font-weight:bold",
+						"color:var(--brand-primary-light);font-weight:bold",
 						{
 							catalogWireMintCount: catalogWire.size,
 							postFilterOutcomeMintCount: outcomeMintsDeduped.length,

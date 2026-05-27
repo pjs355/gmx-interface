@@ -516,7 +516,7 @@ export default function ListProfiles({ onView }: ListProfilesProps) {
 													padding: "6px 12px",
 													border: "1px solid rgba(255, 255, 255, 0.3)",
 													borderRadius: 4,
-													background: "rgba(106, 111, 245, 0.2)",
+													background: "var(--brand-tint-20)",
 													color: "white",
 													cursor: "pointer",
 													fontSize: "14px",

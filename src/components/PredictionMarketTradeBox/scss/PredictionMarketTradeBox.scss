@@ -100,7 +100,7 @@
 		div[class*="z-"] > div:hover,
 		.p-8:hover,
 		.text-body-medium:hover {
-			background: #808aff14 !important;
+			background: var(--brand-tint-08) !important;
 			border-radius: 0.4rem !important;
 			opacity: 1 !important;
 			color: #ffffff !important;
@@ -387,6 +387,15 @@
 				border-color: #9ca3af;
 			}
 
+			&.empty-input {
+				background: var(--brand-surface-inactive) !important;
+				border-color: var(--brand-surface-inactive-border);
+
+				&:hover {
+					border-color: var(--brand-tint-30);
+				}
+			}
+
 			// Hide by default for other inputs; amount wrapper handles its own styling
 			.currency-symbol {
 				display: none;
@@ -601,9 +610,9 @@
 			.contracts-info {
 				margin-top: 8px;
 				padding: 8px 12px;
-				background: rgba(139, 92, 246, 0.1);
+				background: var(--brand-tint-10);
 				border-radius: 6px;
-				border: 1px solid rgba(139, 92, 246, 0.2);
+				border: 1px solid var(--brand-tint-20);
 
 				.contracts-row {
 					display: flex;
@@ -627,7 +636,7 @@
 				.contracts-value {
 					font-size: 14px;
 					font-weight: 600;
-					color: #8b5cf6;
+					color: var(--brand-primary);
 				}
 
 				.contracts-warning {
@@ -862,7 +871,7 @@
 		border-radius: 8px;
 		font-weight: 600;
 		font-size: 16px;
-		background: #8b5cf6;
+		background: var(--brand-primary);
 		border: none;
 		color: white;
 		cursor: pointer;
@@ -881,7 +890,7 @@
 		}
 
 		&:hover:not(:disabled) {
-			background: #7c3aed;
+			background: var(--brand-primary-dark);
 			transform: translateY(-1px);
 		}
 
@@ -944,8 +953,8 @@
 	.wallet-status {
 		margin-top: 16px;
 		padding: 12px;
-		background: rgba(139, 92, 246, 0.1);
-		border: 1px solid rgba(139, 92, 246, 0.3);
+		background: var(--brand-tint-10);
+		border: 1px solid var(--brand-tint-30);
 		border-radius: 8px;
 
 		.wallet-info {
@@ -965,7 +974,7 @@
 			}
 
 			.value {
-				color: #8b5cf6;
+				color: var(--brand-primary);
 				font-weight: 600;
 				font-family: monospace;
 			}
@@ -1435,10 +1444,11 @@ html.curtain-open {
 	background: rgba(24, 26, 32, 0.95);
 	overflow: hidden;
 
-	/* Selected row: brand purple (matches Header / RPGPanel gradients). */
+	/* Selected venue / market row */
 	&--selected {
-		border-color: rgba(139, 92, 246, 0.85);
-		box-shadow: 0 0 0 1px rgba(106, 111, 245, 0.35);
+		border-color: var(--brand-tint-85);
+		background: linear-gradient(180deg, var(--brand-tint-08) 0%, rgba(24, 26, 32, 0.98) 100%);
+		box-shadow: 0 0 0 1px var(--brand-tint-35);
 
 		/* Selected row's headline number: same size as the Amount input
 		 * (28px / 600) and bright green to call out the payout. */

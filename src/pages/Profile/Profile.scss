@@ -25,11 +25,11 @@
 		white-space: nowrap; /* Prevent text wrapping */
 
 		&:hover {
-			border-color: #8b5cf6; /* purple hover border */
-			color: #8b5cf6; /* purple hover text */
+			border-color: var(--brand-primary); /* purple hover border */
+			color: var(--brand-primary); /* purple hover text */
 			background: #000000 !important; /* solid black on hover */
 			transform: translateY(-2px) scale(1.02);
-			box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+			box-shadow: 0 4px 12px var(--brand-primary-lightest);
 		}
 
 		&:active {
@@ -39,20 +39,20 @@
 
 		&.selected.primary {
 			background: #000000 !important; /* solid black when selected */
-			border-color: #8b5cf6; /* purple border when selected */
-			color: #7c3aed; /* dark purple text when selected */
+			border-color: var(--brand-primary); /* purple border when selected */
+			color: var(--brand-primary-dark); /* dark purple text when selected */
 			font-weight: 700;
 			transform: translateY(-1px) scale(1.05);
-			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+			box-shadow: 0 6px 16px var(--brand-tint-20);
 		}
 
 		&.selected.secondary {
 			background: #000000 !important;
-			border-color: #8b5cf6;
-			color: #7c3aed;
+			border-color: var(--brand-primary);
+			color: var(--brand-primary-dark);
 			font-weight: 700;
 			transform: translateY(-1px) scale(1.05);
-			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+			box-shadow: 0 6px 16px var(--brand-tint-20);
 		}
 	}
 }

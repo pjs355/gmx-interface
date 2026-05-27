@@ -1,4 +1,4 @@
-import { Trans, t } from "@lingui/macro";
+import { Trans } from "@lingui/macro";
 
 // Removed lib/legacy imports - not needed for prediction markets
 
@@ -17,7 +17,7 @@ function PageNotFound() {
 	}, [homeUrl]);
 
 	return (
-		<SEO title={t`Page not found | LevelUp Predictions`}>
+		<SEO title="Page not found | ClutchComet">
 			<div className="page-layout">
 				<div className="page-not-found-container">
 					<div className="page-not-found">
