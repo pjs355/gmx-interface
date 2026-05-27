@@ -359,9 +359,9 @@ export default function SeedMarket({ questionId, questionDisplayName }: SeedMark
 						disabled={seeding || clearing}
 						style={{
 							padding: "6px 12px",
-							border: "1px solid #8b5cf6",
+							border: "1px solid var(--brand-primary)",
 							borderRadius: 4,
-							background: seeding ? "transparent" : "rgba(139, 92, 246, 0.2)",
+							background: seeding ? "transparent" : "var(--brand-tint-20)",
 							color: "white",
 							fontSize: 12,
 							cursor: seeding || clearing ? "not-allowed" : "pointer",

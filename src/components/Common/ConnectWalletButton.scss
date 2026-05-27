@@ -1,5 +1,5 @@
 .connect-wallet-btn {
-	background: #8b5cf6;
+	background: var(--brand-primary);
 	padding: 0.85rem 1.4rem;
 	display: inline-flex;
 	align-items: center;
@@ -25,10 +25,10 @@
 		text-align: center;
 	}
 	&:hover {
-		background: #7c3aed;
+		background: var(--brand-primary-dark);
 	}
 	&:active {
-		background: #6d28d9;
+		background: var(--brand-primary-darkest);
 	}
 }
 

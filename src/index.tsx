@@ -104,14 +104,14 @@ createRoot(document.getElementById("root")!).render(
 					defaultChain: baseOverride,
 					supportedChains: [baseOverride, polygonOverride, bscOverride],
 					appearance: {
-						// Brand purple from the trade widget (`.trade-btn-mobile`, etc.)
-						accentColor: "#8B5CF6",
+						// Brand blue from the trade widget (`.trade-btn-mobile`, etc.)
+						accentColor: "#0478FF",
 						// Match the trade widget surface (#101114). Privy auto-derives
 						// the rest of the dark palette from this; precise overrides
 						// for accents/foregrounds live in `globals.css`.
 						theme: "#101114",
 						showWalletLoginFirst: false,
-						loginMessage: "Welcome to LevelUp Predictions! Please create an account or sign in",
+						loginMessage: "Welcome to ClutchComet! Please create an account or sign in",
 					},
 					loginMethods: ["email", "google", "wallet"],
 					embeddedWallets: {

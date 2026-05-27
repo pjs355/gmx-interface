@@ -15,11 +15,11 @@
 		overflow: hidden;
 
 		&:hover {
-			border-color: #8b5cf6; /* purple hover border */
-			color: #8b5cf6; /* purple hover text */
+			border-color: var(--brand-primary); /* purple hover border */
+			color: var(--brand-primary); /* purple hover text */
 			background: #000000 !important; /* solid black on hover */
 			transform: translateY(-2px) scale(1.02);
-			box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+			box-shadow: 0 4px 12px var(--brand-primary-lightest);
 		}
 
 		&:active {
@@ -28,21 +28,21 @@
 		}
 
 		&.selected.primary {
-			background: #000000 !important; /* solid black when selected */
-			border-color: #8b5cf6; /* purple border when selected */
-			color: #7c3aed; /* dark purple text when selected */
+			background: var(--brand-tint-08) !important;
+			border-color: var(--brand-primary);
+			color: var(--brand-primary-dark);
 			font-weight: 700;
 			transform: translateY(-1px) scale(1.05);
-			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+			box-shadow: 0 6px 16px var(--brand-tint-20);
 		}
 
 		&.selected.secondary {
-			background: #000000 !important;
-			border-color: #8b5cf6;
-			color: #7c3aed;
+			background: var(--brand-tint-08) !important;
+			border-color: var(--brand-primary);
+			color: var(--brand-primary-dark);
 			font-weight: 700;
 			transform: translateY(-1px) scale(1.05);
-			box-shadow: 0 6px 16px rgba(139, 92, 246, 0.2);
+			box-shadow: 0 6px 16px var(--brand-tint-20);
 		}
 	}
 }
@@ -185,16 +185,16 @@
 	transition: all 0.2s ease;
 
 	&:hover {
-		background: rgba(139, 92, 246, 0.25) !important;
-		border-color: #8b5cf6 !important;
-		color: #a78bfa !important;
+		background: var(--brand-tint-25) !important;
+		border-color: var(--brand-primary) !important;
+		color: var(--brand-primary-light) !important;
 		transform: translateY(-1px);
 	}
 
 	&.expanded {
-		background: rgba(139, 92, 246, 0.15);
-		color: #a78bfa;
-		border-color: #8b5cf6;
+		background: var(--brand-primary-lightest);
+		color: var(--brand-primary-light);
+		border-color: var(--brand-primary);
 	}
 
 	.expand-icon {

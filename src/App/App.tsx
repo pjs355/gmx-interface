@@ -15,6 +15,7 @@ import "./App.scss";
 import { LANGUAGE_LOCALSTORAGE_KEY } from "config/localStorage";
 import { defaultLocale, dynamicActivate } from "@/services/i18n/i18n.ts";
 
+import SEO from "components/Common/SEO";
 import { AppRoutes } from "./routes/AppRoutes.tsx";
 
 function App() {
@@ -25,7 +26,9 @@ function App() {
 
 	return (
 		<I18nProvider i18n={i18n as any}>
-			<AppRoutes />
+			<SEO>
+				<AppRoutes />
+			</SEO>
 		</I18nProvider>
 	);
 }

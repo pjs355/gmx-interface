@@ -15,7 +15,7 @@ export const VENUE_COLORS: Record<string, string> = {
 	levelUp: "#ffffff",
 	polymarket: "#3b82f6",
 	kalshi: "#10b981",
-	predictFun: "#8b5cf6",
+	predictFun: "var(--brand-primary)",
 	limitless: "#f97316",
 	bestOdds: "#06b6d4",
 };
@@ -200,7 +200,7 @@ export function SeriesChart({
 						yAxisId="right"
 						type="monotone"
 						dataKey="percentage"
-						stroke={isVsSingleMarket ? yesTeamColor : "#8b5cf6"}
+						stroke={isVsSingleMarket ? yesTeamColor : "var(--brand-primary)"}
 						strokeWidth={2}
 						dot={false}
 						connectNulls
@@ -208,7 +208,7 @@ export function SeriesChart({
 						animationEasing="ease-out"
 						activeDot={{
 							r: 4,
-							fill: isVsSingleMarket ? yesTeamColor : "#8b5cf6",
+							fill: isVsSingleMarket ? yesTeamColor : "var(--brand-primary)",
 							stroke: "#ffffff",
 							strokeWidth: 2,
 						}}

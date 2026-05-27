@@ -1,0 +1,50 @@
+/*
+ * Brand colors as CSS variables (for globals.css, plain CSS, and inline styles).
+ * Keep token values aligned with `themes/scss/_colors.scss`.
+ */
+:root {
+	--brand-primary: #0478ff;
+	--brand-primary-hover: #0369e6;
+	--brand-primary-active: #025acc;
+	--brand-primary-light: #4da3ff;
+	--brand-primary-lightest: rgba(4, 120, 255, 0.15);
+	--brand-primary-dark: #0366db;
+	--brand-primary-darkest: #024fb8;
+
+	--brand-tint-05: rgba(4, 120, 255, 0.05);
+	--brand-tint-08: rgba(4, 120, 255, 0.08);
+	--brand-tint-10: rgba(4, 120, 255, 0.1);
+	--brand-tint-20: rgba(4, 120, 255, 0.2);
+	--brand-tint-22: rgba(4, 120, 255, 0.22);
+	--brand-tint-25: rgba(4, 120, 255, 0.25);
+	--brand-tint-30: rgba(4, 120, 255, 0.3);
+	--brand-tint-35: rgba(4, 120, 255, 0.35);
+	--brand-tint-40: rgba(4, 120, 255, 0.4);
+	--brand-tint-45: rgba(4, 120, 255, 0.45);
+	--brand-tint-50: rgba(4, 120, 255, 0.5);
+	--brand-tint-60: rgba(4, 120, 255, 0.6);
+	--brand-tint-80: rgba(4, 120, 255, 0.8);
+	--brand-tint-85: rgba(4, 120, 255, 0.85);
+	--brand-tint-95: rgba(4, 120, 255, 0.95);
+
+	--brand-surface-inactive: #0c1219;
+	--brand-surface-inactive-border: rgba(4, 120, 255, 0.18);
+
+	--brand-gradient: linear-gradient(
+		135deg,
+		var(--brand-primary) 0%,
+		var(--brand-primary-dark) 100%
+	);
+	--brand-gradient-rpg: linear-gradient(90deg, #0369e6 0%, var(--brand-primary) 100%);
+	--brand-gradient-selected: linear-gradient(
+		135deg,
+		var(--brand-tint-35) 0%,
+		rgba(3, 102, 219, 0.22) 100%
+	);
+
+	--primary-btn-bg: var(--brand-primary);
+	--primary-btn-hover: var(--brand-primary-hover);
+	--primary-btn-active: var(--brand-primary-active);
+
+	--color-white: #ffffff;
+}

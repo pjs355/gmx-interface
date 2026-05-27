@@ -205,7 +205,7 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 							padding: "8px 16px",
 							border: "1px solid white",
 							borderRadius: 6,
-							background: "rgba(106, 111, 245, 0.2)",
+							background: "var(--brand-tint-20)",
 							color: "white",
 							cursor: "pointer",
 						}}
@@ -340,8 +340,8 @@ export default function ListDailyGames({ onAdd }: ListDailyGamesProps) {
 														key={tagId}
 														style={{
 															padding: "2px 8px",
-															backgroundColor: "rgba(106, 111, 245, 0.2)",
-															border: "1px solid #6a6ff5",
+															backgroundColor: "var(--brand-tint-20)",
+															border: "1px solid var(--brand-primary)",
 															borderRadius: 4,
 															fontSize: "12px",
 															color: "#a5b4fc",

@@ -192,7 +192,7 @@
 .about-step__num {
 	font-size: 24px;
 	font-weight: 700;
-	color: #8b5cf6;
+	color: var(--brand-primary);
 	font-variant-numeric: tabular-nums;
 	letter-spacing: 0.02em;
 
@@ -248,13 +248,8 @@
 	margin: 0;
 }
 
-// CTA wrapper — let global Button component handle its own styling
+// CTA wrapper
 .about-cta {
 	margin-top: 22px;
 	display: flex;
-
-	a,
-	button {
-		text-decoration: none;
-	}
 }

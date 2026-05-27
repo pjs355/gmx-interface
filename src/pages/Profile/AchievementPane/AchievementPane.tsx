@@ -153,14 +153,14 @@ function getTierColor(tier: AchievementTier): string {
 	if (tier === "bronze") return "#cd7f32";
 	if (tier === "silver") return "#c0c0c0";
 	if (tier === "gold") return "#ffd700";
-	return "#8b5cf6";
+	return "var(--brand-primary)";
 }
 
 function getTierGlow(tier: AchievementTier): string {
 	if (tier === "bronze") return "0 0 20px rgba(205, 127, 50, 0.5)";
 	if (tier === "silver") return "0 0 20px rgba(192, 192, 192, 0.5)";
 	if (tier === "gold") return "0 0 20px rgba(255, 215, 0, 0.6)";
-	return "0 0 20px rgba(139, 92, 246, 0.5)";
+	return "0 0 20px rgba(4, 120, 255, 0.5)";
 }
 
 export default function AchievementPane({ userAchievements = [] }: AchievementPaneProps) {

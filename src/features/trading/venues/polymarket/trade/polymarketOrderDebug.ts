@@ -79,7 +79,7 @@ export function wrapEip1193ForPolymarketDevLogging(eip1193: Eip1193Like): Eip119
 
 						console.info(
 							"%c[Polymarket CLOB] EIP-712 Order (about to sign)",
-							"color:#7c3aed;font-weight:bold",
+							"color:var(--brand-primary-dark);font-weight:bold",
 							{
 								chainId: dom?.chainId,
 								exchange: dom?.verifyingContract,

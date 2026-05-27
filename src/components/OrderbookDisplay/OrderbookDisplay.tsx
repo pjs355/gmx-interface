@@ -241,7 +241,7 @@ export default function OrderbookDisplay({
 		return parts.length === 2;
 	}, [market, umbrellaDisplayName]);
 
-	const yesColor: string = (market as any)?.yesColor || "#8b5cf6";
+	const yesColor: string = (market as any)?.yesColor || "var(--brand-primary)";
 	const noColor: string = (market as any)?.noColor || "#3b82f6";
 
 	const yesTextOnSolid = useMemo(() => getContrastingTextColor(yesColor), [yesColor]);

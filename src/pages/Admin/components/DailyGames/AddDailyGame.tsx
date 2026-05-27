@@ -510,9 +510,9 @@ export default function AddDailyGame({ onCreated, onBack }: AddDailyGameProps) {
 											}}
 											style={{
 												padding: "6px 12px",
-												border: `1px solid ${isSelected ? "#6a6ff5" : "#333"}`,
+												border: `1px solid ${isSelected ? "var(--brand-primary)" : "#333"}`,
 												borderRadius: 6,
-												backgroundColor: isSelected ? "rgba(106, 111, 245, 0.2)" : "transparent",
+												backgroundColor: isSelected ? "var(--brand-tint-20)" : "transparent",
 												color: "white",
 												cursor: isDailyTag && isSelected ? "not-allowed" : "pointer",
 												fontSize: "14px",
@@ -555,7 +555,7 @@ export default function AddDailyGame({ onCreated, onBack }: AddDailyGameProps) {
 								padding: "10px 20px",
 								border: "1px solid white",
 								borderRadius: 6,
-								background: loading ? "rgba(255,255,255,0.1)" : "rgba(106, 111, 245, 0.2)",
+								background: loading ? "rgba(255,255,255,0.1)" : "var(--brand-tint-20)",
 								color: "white",
 								cursor: loading ? "not-allowed" : "pointer",
 								fontSize: "14px",

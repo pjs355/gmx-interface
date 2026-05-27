@@ -7,7 +7,7 @@ import ExternalLink from "components/ExternalLink/ExternalLink";
 import { TrackingLink } from "components/TrackingLink/TrackingLink";
 import Modal from "components/Modal/Modal";
 
-import levelUpLogo from "@/assets/img/LevelUp_Full.jpeg";
+import { BRAND_NAME, clutchCometLogo } from "@/assets/brandLogo";
 
 import { SOCIAL_LINKS, getFooterLinks } from "./constants";
 import "./Footer.scss";
@@ -272,7 +272,7 @@ export default function Footer({
 			<div className={`Footer ${isMobileTradePage ? "pb-large" : "pb-normal"}`}>
 				<div className="Footer-content">
 					<div className="Footer-left">
-						<img src={levelUpLogo} alt="LevelUp" className="Footer-logo-img" />
+						<img src={clutchCometLogo} alt={BRAND_NAME} className="Footer-logo-img" />
 					</div>
 					<div className="Footer-center">
 						{getFooterLinks(isHome).map(({ external, label, link, isAppLink, opensModal }) => {

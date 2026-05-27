@@ -141,7 +141,7 @@ export default function BalanceChecker({ debugAccount }: BalanceCheckerProps) {
 					disabled={isChecking}
 					style={{
 						padding: "6px 12px",
-						background: isChecking ? "#333" : "#8b5cf6",
+						background: isChecking ? "#333" : "var(--brand-primary)",
 						border: "none",
 						borderRadius: 4,
 						color: "#fff",

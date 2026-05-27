@@ -760,7 +760,7 @@ export default function AdminWallet() {
 									onClick={handleClaimAll}
 									style={{
 										padding: "8px 16px",
-										background: "#7c3aed",
+										background: "var(--brand-primary-dark)",
 										color: "white",
 										border: "none",
 										borderRadius: 6,
@@ -850,7 +850,9 @@ export default function AdminWallet() {
 															disabled={isClaiming}
 															style={{
 																padding: "6px 12px",
-																background: isClaiming ? "#6d28d9" : "#7c3aed",
+																background: isClaiming
+																	? "var(--brand-primary-darkest)"
+																	: "var(--brand-primary-dark)",
 																color: "white",
 																border: "none",
 																borderRadius: 4,

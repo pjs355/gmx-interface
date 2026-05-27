@@ -113,7 +113,7 @@
 	height: 14px;
 	border-radius: 50%;
 	border: 2px solid var(--privy-color-background-3, #22262e);
-	border-top-color: var(--privy-color-accent, #8b5cf6);
+	border-top-color: var(--privy-color-accent, var(--brand-primary));
 	animation: first-signup-setup-modal-spin 800ms linear infinite;
 }
 
@@ -149,7 +149,7 @@
 }
 
 .first-signup-setup-modal__btn--primary {
-	background: var(--privy-color-accent, #8b5cf6);
+	background: var(--privy-color-accent, var(--brand-primary));
 	color: var(--privy-color-foreground-accent, #ffffff);
 }
 

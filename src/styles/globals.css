@@ -1,6 +1,8 @@
 /* Global styles for LevelUp Predictions */
 @import "./fonts.css";
 @import "./themes/fonts.css";
+@import "./themes/colors.css";
+@import "./themes/outline-button.css";
 
 :root {
 	font-family: var(--font-primary);
@@ -81,8 +83,8 @@ body {
 	/*
 	 * Privy modal theme overrides — pin the Privy login/auth modal to the
 	 * same palette as the rest of the app so it feels native. Surface
-	 * (#101114) matches `.prediction-market-tradebox` and accent purple
-	 * (#8B5CF6) matches `.trade-btn-mobile`. Privy reads these CSS vars
+	 * (#101114) matches `.prediction-market-tradebox` and accent blue
+	 * (--brand-primary) matches `.trade-btn-mobile`. Privy reads these CSS vars
 	 * off `body` per https://docs.privy.io/basics/get-started/dashboard/configuring-appearance#css-overrides
 	 */
 	--privy-color-background: #101114;
@@ -93,11 +95,11 @@ body {
 	--privy-color-foreground-3: #9ca3af;
 	--privy-color-foreground-4: #6b7280;
 	--privy-color-foreground-accent: #ffffff;
-	--privy-color-accent: #8b5cf6;
-	--privy-color-accent-light: #a78bfa;
-	--privy-color-accent-lightest: rgba(139, 92, 246, 0.15);
-	--privy-color-accent-dark: #7c3aed;
-	--privy-color-accent-darkest: #6d28d9;
+	--privy-color-accent: var(--brand-primary);
+	--privy-color-accent-light: var(--brand-primary-light);
+	--privy-color-accent-lightest: var(--brand-primary-lightest);
+	--privy-color-accent-dark: var(--brand-primary-dark);
+	--privy-color-accent-darkest: var(--brand-primary-darkest);
 	--privy-color-success: #22c55e;
 	--privy-color-error: #ef4444;
 	--privy-color-error-light: rgba(239, 68, 68, 0.15);
@@ -122,14 +124,14 @@ h6 {
 	box-sizing: border-box;
 }
 
-/* Only apply global link styles to non-header links */
-a:not(.App-header a):not(.App-header-drawer a) {
+/* Only apply global link styles to non-header, non-button links */
+a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button) {
 	font-weight: 500;
-	color: #646cff;
+	color: var(--brand-primary-light);
 	text-decoration: inherit;
 }
-a:not(.App-header a):not(.App-header-drawer a):hover {
-	color: #535bf2;
+a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button):hover {
+	color: var(--brand-primary);
 }
 
 button {
@@ -145,7 +147,7 @@ button {
 	transition: border-color 0.25s;
 }
 button:hover {
-	border-color: #646cff;
+	border-color: var(--brand-primary);
 }
 button:focus,
 button:focus-visible {

@@ -347,7 +347,7 @@ export default function GamingAccounts() {
 									width: 16,
 									height: 16,
 									border: "2px solid transparent",
-									borderTop: "2px solid #8b5cf6",
+									borderTop: "2px solid var(--brand-primary)",
 									borderRadius: "50%",
 								}}
 							/>
@@ -405,10 +405,10 @@ export default function GamingAccounts() {
 								disabled={isUnlinking === "steam"}
 								style={{
 									padding: "8px 16px",
-									border: "1px solid #8b5cf6",
+									border: "1px solid var(--brand-primary)",
 									borderRadius: 6,
-									background: "rgba(139, 92, 246, 0.1)",
-									color: "#8b5cf6",
+									background: "var(--brand-tint-10)",
+									color: "var(--brand-primary)",
 									cursor: isUnlinking === "steam" ? "not-allowed" : "pointer",
 									fontSize: 14,
 									opacity: isUnlinking === "steam" ? 0.7 : 1,
@@ -418,11 +418,11 @@ export default function GamingAccounts() {
 								}}
 								onMouseEnter={(e) => {
 									if (isUnlinking !== "steam") {
-										e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.2)";
+										e.currentTarget.style.backgroundColor = "var(--brand-tint-20)";
 									}
 								}}
 								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.1)";
+									e.currentTarget.style.backgroundColor = "var(--brand-tint-10)";
 								}}
 							>
 								{isUnlinking === "steam" ? (
@@ -433,7 +433,7 @@ export default function GamingAccounts() {
 												width: 12,
 												height: 12,
 												border: "2px solid transparent",
-												borderTop: "2px solid #8b5cf6",
+												borderTop: "2px solid var(--brand-primary)",
 												borderRadius: "50%",
 											}}
 										/>
@@ -450,9 +450,9 @@ export default function GamingAccounts() {
 							disabled={isLinkingSteam}
 							style={{
 								padding: "12px 24px",
-								border: "1px solid #8b5cf6",
+								border: "1px solid var(--brand-primary)",
 								borderRadius: 8,
-								background: isLinkingSteam ? "rgba(139, 92, 246, 0.5)" : "#8b5cf6",
+								background: isLinkingSteam ? "rgba(4, 120, 255, 0.5)" : "var(--brand-primary)",
 								color: "white",
 								cursor: isLinkingSteam ? "not-allowed" : "pointer",
 								fontSize: 16,
@@ -555,18 +555,18 @@ export default function GamingAccounts() {
 								onClick={() => handleUnlink("lol")}
 								style={{
 									padding: "8px 16px",
-									border: "1px solid #8b5cf6",
+									border: "1px solid var(--brand-primary)",
 									borderRadius: 6,
-									background: "rgba(139, 92, 246, 0.1)",
-									color: "#8b5cf6",
+									background: "var(--brand-tint-10)",
+									color: "var(--brand-primary)",
 									cursor: "pointer",
 									fontSize: 14,
 								}}
 								onMouseEnter={(e) => {
-									e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.2)";
+									e.currentTarget.style.backgroundColor = "var(--brand-tint-20)";
 								}}
 								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.1)";
+									e.currentTarget.style.backgroundColor = "var(--brand-tint-10)";
 								}}
 							>
 								Unlink

@@ -111,7 +111,7 @@ export default function MarketImageUpload({
 								style={{
 									fontSize: 12,
 									opacity: 0.8,
-									color: "#8b5cf6",
+									color: "var(--brand-primary)",
 								}}
 							>
 								Uploading...
@@ -179,7 +179,7 @@ export default function MarketImageUpload({
 								style={{
 									fontSize: 12,
 									opacity: 0.8,
-									color: "#8b5cf6",
+									color: "var(--brand-primary)",
 								}}
 							>
 								Uploading...
