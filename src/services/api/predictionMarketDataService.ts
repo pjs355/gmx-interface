@@ -1,9 +1,12 @@
 import { predictionMarketCache } from "@/cache/predictionMarketCache";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
+import type { UmbrellaExchangeMatching } from "@/services/api/umbrellaDataService";
 import {
 	isPredictionPricingDebugEnabled,
 	priceDebugLog,
 } from "@/features/markets/odds-monitor/debugPredictionPricing";
+
+export type MoneylineLeg = "home" | "draw" | "away";
 
 export interface PredictionMarket {
 	_id: string;
@@ -19,6 +22,10 @@ export interface PredictionMarket {
 	__v: number;
 	displayName?: string;
 	image?: string;
+	/** Polymarket sports mirror — venue-prices subscribe key for this leg. */
+	polymarketMarketId?: string;
+	moneylineLeg?: MoneylineLeg;
+	exchangeMatching?: UmbrellaExchangeMatching;
 	historicalPricesYes: Array<{
 		ts: number | string;
 		price: number;

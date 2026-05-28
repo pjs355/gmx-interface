@@ -48,7 +48,9 @@ rl.question(`${COLORS.magenta}Enter choice (1, 2, or 3): ${COLORS.reset}`, (answ
 		console.log(`\n${COLORS.green}✓ LIVE environment${COLORS.reset}`);
 	} else if (choice === "2" || choice.toLowerCase() === "local") {
 		envMode = "local";
-		console.log(`\n${COLORS.yellow}✓ LOCAL: http://localhost:8080 + production contracts${COLORS.reset}`);
+		console.log(
+			`\n${COLORS.yellow}✓ LOCAL: http://localhost:8080 + production contracts${COLORS.reset}`,
+		);
 	} else if (choice === "3" || choice.toLowerCase() === "dev") {
 		envMode = "local-production";
 		console.log(

@@ -1,6 +1,6 @@
 # prinx-interface — architecture
 
-**Last verified:** 2026-05-27 (UTC)
+**Last verified:** 2026-05-28 (UTC)
 
 Canonical wiring diagram for **agents and humans**. Update when provider order, data ownership, SOR/trade paths, or major module boundaries change (see workspace rule `agent-docs-architecture.mdc`).
 
@@ -129,15 +129,15 @@ flowchart TB
 
 ## 3. Public vs per-user data
 
-| Layer             | Owner                                | Source                                                                 | Examples                                                       |
-| ----------------- | ------------------------------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Market catalog    | `PredictionDataContext`              | `GET /umbrellas`, orderbook fetches, tags                              | umbrellas, questions, orderbooks                               |
-| Live odds         | `OddsMonitorContext`                 | WebSocket                                                              | book updates                                                   |
-| Identity          | `SignerProvider`                     | Privy                                                                  | `account`, `signerAddress`                                     |
-| Cash (stables)    | `CollateralTokenProvider`            | `GET /portfolio/cash-summary`                                          | header cash, SOR funding input                                 |
-| Venue positions   | `AccountDataContext` → `positions.*` | venue REST / API proxy / server RPC; LevelUp = Base CTF RPC in browser | see [positions-share-sources.md](./positions-share-sources.md) |
-| Positions UI rows | `PositionsDataProvider`              | `usePositionsData` assembler                                           | Positions page tables + summary MTM                            |
-| Header total      | `PortfolioProvider`                  | `cash + positionsTotalValue` from above                                | portfolio chip                                                 |
+| Layer             | Owner                                | Source                                                                 | Examples                                                                                                                                                      |
+| ----------------- | ------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Market catalog    | `PredictionDataContext`              | `GET /umbrellas`, orderbook fetches, tags                              | umbrellas, questions, orderbooks                                                                                                                              |
+| Live odds         | `OddsMonitorContext`                 | WebSocket `/ws/venue-prices` + `GET /matched-markets`                  | cross-venue books; esports = binary Team A/B; FIFA polymarket = 3-way home/draw/away via `resolveFifaThreeWayOddsContext` + `buildFifaThreeWayVenuePriceRows` |
+| Identity          | `SignerProvider`                     | Privy                                                                  | `account`, `signerAddress`                                                                                                                                    |
+| Cash (stables)    | `CollateralTokenProvider`            | `GET /portfolio/cash-summary`                                          | header cash, SOR funding input                                                                                                                                |
+| Venue positions   | `AccountDataContext` → `positions.*` | venue REST / API proxy / server RPC; LevelUp = Base CTF RPC in browser | see [positions-share-sources.md](./positions-share-sources.md)                                                                                                |
+| Positions UI rows | `PositionsDataProvider`              | `usePositionsData` assembler                                           | Positions page tables + summary MTM                                                                                                                           |
+| Header total      | `PortfolioProvider`                  | `cash + positionsTotalValue` from above                                | portfolio chip                                                                                                                                                |
 
 ---
 

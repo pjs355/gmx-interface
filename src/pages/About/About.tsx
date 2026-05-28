@@ -112,8 +112,8 @@ export function About() {
 						automatically.
 					</p>
 					<p className="about-muted">
-						Your funds are held in a Privy crypto wallet connected to your account. ClutchComet does not
-						have custody or control over your funds.
+						Your funds are held in a Privy crypto wallet connected to your account. ClutchComet does
+						not have custody or control over your funds.
 					</p>
 				</section>
 

@@ -14,14 +14,30 @@ import {
 	computeBestVenueAskIndices,
 } from "@/features/markets/pricing/buildVenuePriceRows";
 import { isValidProbPrice } from "@/features/markets/pricing/orderbookBbo";
+import type {
+	FifaThreeWayColumns,
+	FifaVenueRowModel,
+} from "@/features/markets/pricing/fifaVenueRowModel";
 import type { VenueRowModel } from "@/features/markets/pricing/venueRowModel";
 
 export type { VenueRowModel } from "@/features/markets/pricing/venueRowModel";
+export type {
+	FifaVenueRowModel,
+	FifaThreeWayColumns,
+} from "@/features/markets/pricing/fifaVenueRowModel";
+
+export type TradingPagePricesLayout = "binary" | "threeWay";
 
 export interface TradingPagePrices {
+	layout: TradingPagePricesLayout;
 	venueRows: VenueRowModel[];
+	/** FIFA 3-way rows when `layout === "threeWay"`. */
+	fifaVenueRows?: FifaVenueRowModel[];
+	fifaColumns?: FifaThreeWayColumns;
 	bestAIdx: number;
 	bestBIdx: number;
+	/** Best draw column index when `layout === "threeWay"`. */
+	bestDrawIdx?: number;
 	bestYesPrice: number | null;
 	bestNoPrice: number | null;
 	teamA: string;
@@ -95,6 +111,7 @@ export function useTradingPagePrices(
 			const bestYes = bestAIdx >= 0 ? rows[bestAIdx].askA : null;
 			const bestNo = bestBIdx >= 0 ? rows[bestBIdx].askB : null;
 			return {
+				layout: "binary",
 				venueRows: rows,
 				bestAIdx,
 				bestBIdx,
@@ -112,6 +129,7 @@ export function useTradingPagePrices(
 		const isLoading = Boolean(wsEnabled && pandaReady && connected && !matched);
 
 		return {
+			layout: "binary",
 			venueRows: [],
 			bestAIdx: -1,
 			bestBIdx: -1,

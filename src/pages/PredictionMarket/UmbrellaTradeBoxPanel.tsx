@@ -17,6 +17,8 @@ export type UmbrellaTradeBoxPanelProps = {
 	onPositionChange: (p: "yes" | "no") => void;
 	settledInfo?: SettledInfo | null;
 	tradingPagePrices: TradingPagePrices;
+	/** Venue-prices wire key for active leg (Panda id or polymarketMarketId). */
+	oddsSubscriptionKey?: string;
 	venueOverride?: TradingVenue;
 	mobilePeekBar?: "default" | "hidden";
 };
@@ -29,6 +31,7 @@ export function UmbrellaTradeBoxPanel({
 	onPositionChange,
 	settledInfo,
 	tradingPagePrices,
+	oddsSubscriptionKey,
 	venueOverride,
 	mobilePeekBar = "default",
 }: UmbrellaTradeBoxPanelProps) {
@@ -49,8 +52,7 @@ export function UmbrellaTradeBoxPanel({
 			child
 		);
 
-	const pandascoreMatchId =
-		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
+	const wireOddsKey = typeof oddsSubscriptionKey === "string" ? oddsSubscriptionKey.trim() : "";
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 	const umbrellaPredictFun = umbrella?.exchangeMatching?.predictFun;
@@ -89,7 +91,7 @@ export function UmbrellaTradeBoxPanel({
 				} as any
 			}
 			orderbook={orderbook ?? null}
-			pandascoreMatchId={pandascoreMatchId || undefined}
+			pandascoreMatchId={wireOddsKey || undefined}
 			umbrellaId={umbrella._id}
 			limitlessMappingFromUmbrella={umbrellaLimitless}
 			predictFunMappingFromUmbrella={umbrellaPredictFun}
@@ -100,7 +102,7 @@ export function UmbrellaTradeBoxPanel({
 			venueOverride={venueOverride}
 			crossBuyYes={tradingPagePrices.bestYesPrice}
 			crossBuyNo={tradingPagePrices.bestNoPrice}
-			venueRowsForSellStrip={pandascoreMatchId ? tradingPagePrices.venueRows : undefined}
+			venueRowsForSellStrip={wireOddsKey ? tradingPagePrices.venueRows : undefined}
 			mobilePeekBar={mobilePeekBar}
 			tradeRouteIsolationKey={compactTradeDock ? tradeRouteIsolationKey : undefined}
 		/>

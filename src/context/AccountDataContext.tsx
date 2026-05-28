@@ -288,12 +288,7 @@ function AccountDataContextInner({
 
 	const refreshLevelUpPositionsByTokenIds = useCallback(
 		async (tokenIds: readonly string[]) => {
-			await mergeLevelUpPositionsByTokenIdsRpc(
-				queryClient,
-				api,
-				levelUpWalletAddress,
-				tokenIds,
-			);
+			await mergeLevelUpPositionsByTokenIdsRpc(queryClient, api, levelUpWalletAddress, tokenIds);
 		},
 		[queryClient, api, levelUpWalletAddress],
 	);

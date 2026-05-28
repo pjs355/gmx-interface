@@ -193,8 +193,10 @@ export function HomeInlineTradeLayout({
 	/** Same idea as `MarketPanels`: never leave the dock trade column on skeleton while we have questions. */
 	const tradeBoxActiveMarket = activeMarket ?? sortedQuestions[0] ?? null;
 
-	const { tradingPagePrices } = useUmbrellaTradePricing({
+	const { activeLegTradingPagePrices, oddsSubscriptionKey } = useUmbrellaTradePricing({
 		umbrella: enabled ? focusedUmbrella : null,
+		activeQuestion: tradeBoxActiveMarket,
+		questions: sortedQuestions,
 	});
 
 	const pandascoreMatchIdRaw =
@@ -339,7 +341,8 @@ export function HomeInlineTradeLayout({
 								activePosition={activePosition}
 								onPositionChange={handlePositionChange}
 								settledInfo={settledInfo}
-								tradingPagePrices={tradingPagePrices}
+								tradingPagePrices={activeLegTradingPagePrices}
+								oddsSubscriptionKey={oddsSubscriptionKey ?? undefined}
 								mobilePeekBar="default"
 							/>
 						</div>
@@ -354,7 +357,8 @@ export function HomeInlineTradeLayout({
 							activePosition={activePosition}
 							onPositionChange={handlePositionChange}
 							settledInfo={settledInfo}
-							tradingPagePrices={tradingPagePrices}
+							tradingPagePrices={activeLegTradingPagePrices}
+							oddsSubscriptionKey={oddsSubscriptionKey ?? undefined}
 							mobilePeekBar="hidden"
 						/>
 					</div>

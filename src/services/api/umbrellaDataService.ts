@@ -87,6 +87,10 @@ export interface Umbrella {
 	updatedAt: string;
 	__v: number;
 	game?: string;
+	/** `pandascore` (esports) or `polymarket` (FIFA / sports mirror). */
+	source?: string;
+	matchKey?: string;
+	polymarketEventId?: string;
 	pandascore_matchId?: string;
 	teamMappings?: UmbrellaTeamMapping[];
 	eventDate?: string | null;

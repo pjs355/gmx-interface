@@ -18,7 +18,7 @@
  * - `VITE_ACCOUNT_OVERVIEW_PATH` — default `me` (`/profiles/me/account-overview`); see `accountOverviewApi.ts`
  * - `VITE_POLYMARKET_ACCOUNT_PATH` — default `/polymarket/account`; use `/api/polymarket/account` if needed
  */
-import { getEnvironment, isLocalApi } from "@/config/environment";
+import { getEnvironment } from "@/config/environment";
 import { API_URL_CONFIG, getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 
 /**

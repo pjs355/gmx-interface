@@ -86,15 +86,22 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		}
 	}, []);
 
-	const { tradingPagePrices, pandascoreMatchId } = useUmbrellaTradePricing({
-		umbrella,
-	});
-
-	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
-
 	const firstQuestion = sortedQuestions[0] ?? null;
 	/** `PredictionMarket` `activeMarket` can lag one frame; trade box skeletons forever on null. */
 	const tradeBoxActiveMarket = activeMarket ?? firstQuestion;
+
+	const {
+		tradingPagePrices,
+		activeLegTradingPagePrices,
+		oddsSubscriptionKey,
+		limitlessFromUmbrella,
+		showCrossVenueBooks,
+	} = useUmbrellaTradePricing({
+		umbrella,
+		activeQuestion: tradeBoxActiveMarket,
+		questions: sortedQuestions,
+	});
+
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
 	const settledView = Boolean(settledInfo);
 	/** Same key as chart + `primaryChartOrderbook` (multiplex map); not always `resolveLevelUpOrderbookKey`. */
@@ -117,14 +124,13 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		(levelUpOrderbookKey
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
 			: null) ?? firstQuestion;
-	const showCrossVenueBooks = Boolean(pandascoreMatchId);
 	const streamUrl = typeof umbrella?.streamUrl === "string" ? umbrella.streamUrl : "";
 	const showStream = Boolean(umbrella?.streamEnabled) && streamUrl.length > 0;
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
 		priceDebugLog("MarketPanels venue / tab state", {
-			pandascoreMatchId: pandascoreMatchId || null,
+			oddsSubscriptionKey: oddsSubscriptionKey || null,
 			activeTab,
 			showCrossVenueBooks,
 			tradingPageSource: tradingPagePrices.source,
@@ -133,7 +139,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			note: "Basic tab = EsportsVenueBooksPanel; Orderbooks = VenueOrderbooksPanel (MatchedMarket + multiplex LevelUp orderbook).",
 		});
 	}, [
-		pandascoreMatchId,
+		oddsSubscriptionKey,
 		activeTab,
 		showCrossVenueBooks,
 		tradingPagePrices.source,
@@ -255,9 +261,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		) : (
 			<>
 				<VenueOrderbooksPanel
-					pandascoreMatchId={pandascoreMatchId}
+					pandascoreMatchId={oddsSubscriptionKey ?? ""}
 					umbrellaId={umbrella._id}
-					limitlessFromUmbrella={umbrellaLimitless}
+					limitlessFromUmbrella={limitlessFromUmbrella}
 					levelUpOrderbook={levelUpOrderbook}
 					market={
 						levelUpContextMarket
@@ -311,8 +317,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				<PredictionMarketChart
 					questionId={chartQuestionId}
 					umbrellaId={umbrella?._id}
-					pandaMatchId={pandascoreMatchId || undefined}
-					limitlessFromUmbrella={umbrellaLimitless}
+					pandaMatchId={oddsSubscriptionKey ?? undefined}
+					limitlessFromUmbrella={limitlessFromUmbrella}
 					levelUpOrderbookHasRestingShares={chartLevelUpBookHasRestingShares}
 					umbrellaDisplayName={umbrella?.displayName}
 					activeMarket={chartPrimaryMarket}
@@ -415,7 +421,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							activePosition={activePosition}
 							onPositionChange={onPositionChange}
 							settledInfo={settledInfo ?? null}
-							tradingPagePrices={tradingPagePrices}
+							tradingPagePrices={activeLegTradingPagePrices}
+							oddsSubscriptionKey={oddsSubscriptionKey ?? undefined}
 							venueOverride={venueForTradeBox}
 						/>
 					)}
@@ -453,7 +460,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							activePosition={activePosition}
 							onPositionChange={onPositionChange}
 							settledInfo={settledInfo ?? null}
-							tradingPagePrices={tradingPagePrices}
+							tradingPagePrices={activeLegTradingPagePrices}
+							oddsSubscriptionKey={oddsSubscriptionKey ?? undefined}
 							venueOverride={venueForTradeBox}
 						/>
 					)}
