@@ -26,10 +26,7 @@ function levelUpRow(
 
 describe("mergeLevelUpPositionRows", () => {
 	it("updates matching outcome and preserves other markets", () => {
-		const existing = [
-			levelUpRow("m1", "Yes", 10, "yes-1"),
-			levelUpRow("m2", "No", 5, "no-2"),
-		];
+		const existing = [levelUpRow("m1", "Yes", 10, "yes-1"), levelUpRow("m2", "No", 5, "no-2")];
 		const fresh = [levelUpRow("m1", "Yes", 12, "yes-1")];
 
 		const merged = mergeLevelUpPositionRows(existing, fresh);

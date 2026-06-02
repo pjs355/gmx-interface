@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo, useRef, useLayoutEffect, type ReactNode } from "react";
+import { useNavigate, useNavigationType } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { PredictionCard } from "./PredictionCard";
 import { LoadingState } from "./LoadingState";
@@ -23,18 +23,29 @@ import {
 import {
 	findEsportsTag,
 	gameFilterResetSelection,
-	homeDefaultSelectedTagLabel,
 	isEsportsMetaTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
+	isSpecificGameTagSelection,
+	filterHomeCatalogUmbrellas,
+	resolveInitialHomeGameFilter,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
+	umbrellaHasTagId,
 	umbrellaMatchesHomeFilterType,
 	useNowTick,
 } from "../utils/gameLinkFilters";
+import { resolveHomeMatchWinnerQuestion } from "@/features/markets/presentation/esportsHomeCard";
 import { consumeHomePendingGameFilter, setHomeGameFilter } from "../utils/gameFilterNavigation";
+import {
+	clearHomeCatalogScroll,
+	HOME_CATALOG_SCROLL_RETRY_MS,
+	restoreHomeCatalogScrollIfPending,
+	saveHomeCatalogScroll,
+	subscribeHomeCatalogScrollSave,
+} from "../utils/homeScrollRestore";
 import { isRestrictedProductionMode } from "@/config/restrictedMode";
-import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
+import { isRestrictedProductionUmbrella } from "@/features/markets/presentation/umbrellaGame";
 import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
 import {
 	bundledGameLogoFromTagLabels,
@@ -77,56 +88,6 @@ function sortCalendarEventsByPlayOrder(
 }
 
 // Sort umbrellas by trading activity (number of trades across all children markets)
-function umbrellaPandascoreMatchId(umbrella: Umbrella): string {
-	const raw = (umbrella as { pandascore_matchId?: unknown }).pandascore_matchId;
-	return typeof raw === "string" ? raw.trim() : "";
-}
-
-/** Prefer the listing with more cross-venue volume when two umbrellas share a Panda match. */
-function umbrellaHomeListingScore(umbrella: Umbrella): number {
-	const totalUsd = (umbrella as { volume?: { totalUsd?: unknown } }).volume?.totalUsd;
-	if (typeof totalUsd === "number" && Number.isFinite(totalUsd)) {
-		return totalUsd;
-	}
-	const children = (umbrella as { children?: Array<{ tradeCount?: number }> }).children;
-	if (!children?.length) return 0;
-	return children.reduce((sum, child) => sum + (child?.tradeCount ?? 0), 0);
-}
-
-/**
- * One home card per Panda match — duplicate umbrellas (same `pandascore_matchId`)
- * keep the higher-volume listing.
- */
-function dedupeUmbrellasByPandascoreMatch(umbrellas: Umbrella[]): Umbrella[] {
-	const winnerByPanda = new Map<string, Umbrella>();
-
-	for (const umbrella of umbrellas) {
-		const pandaId = umbrellaPandascoreMatchId(umbrella);
-		if (!pandaId) continue;
-		const existing = winnerByPanda.get(pandaId);
-		if (!existing || umbrellaHomeListingScore(umbrella) > umbrellaHomeListingScore(existing)) {
-			winnerByPanda.set(pandaId, umbrella);
-		}
-	}
-
-	const emittedPanda = new Set<string>();
-	const out: Umbrella[] = [];
-
-	for (const umbrella of umbrellas) {
-		const pandaId = umbrellaPandascoreMatchId(umbrella);
-		if (!pandaId) {
-			out.push(umbrella);
-			continue;
-		}
-		if (emittedPanda.has(pandaId)) continue;
-		const winner = winnerByPanda.get(pandaId);
-		if (winner) out.push(winner);
-		emittedPanda.add(pandaId);
-	}
-
-	return out;
-}
-
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
 		const aChildren = (a as any).children || [];
@@ -226,10 +187,43 @@ function calendarPageHeadingTitle(selectedGame: string | null): string {
 	return gameFilterDisplayLabel(selectedGame) ?? selectedGame;
 }
 
+function PredictionPageHeading({ selectedGame }: { selectedGame: string | null }) {
+	const title = calendarPageHeadingTitle(selectedGame);
+	const showGameLogo =
+		selectedGame &&
+		!isEsportsMetaTagLabel(selectedGame) &&
+		selectedGame !== LIVE_PILL_ID &&
+		selectedGame !== STARTING_SOON_PILL_ID;
+	const gameLogo = showGameLogo
+		? (bundledGameLogoFromTagLabels([selectedGame]) ?? resolveLogoByTags([selectedGame]))
+		: null;
+
+	return (
+		<header className="prediction-calendar-page-heading">
+			<div className="prediction-calendar-page-heading__title-row">
+				{gameLogo ? (
+					<img
+						className="prediction-calendar-page-heading__game-logo"
+						src={gameLogo}
+						alt=""
+						width={40}
+						height={40}
+						decoding="async"
+					/>
+				) : null}
+				<h2 className="prediction-calendar-page-heading__title">{title}</h2>
+			</div>
+		</header>
+	);
+}
+
 export default function FilteredPredictions({ filterType }: FilteredPredictionsProps) {
 	const navigate = useNavigate();
+	const navigationType = useNavigationType();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [defaultTagApplied, setDefaultTagApplied] = useState(false);
+	const scrollRestoreEligibleRef = useRef(navigationType === "POP");
+	const [scrollSaveReady, setScrollSaveReady] = useState(!scrollRestoreEligibleRef.current);
 
 	const {
 		umbrellas,
@@ -242,33 +236,33 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		tagsLoading,
 	} = usePredictionData();
 
-	// Trading sidebar → home: apply the filter the user clicked before bootstrap.
+	// Trading sidebar → home: pending filter wins; else restore stored filter; else Live default.
 	useEffect(() => {
-		if (tagsLoading) return;
+		if (defaultTagApplied || tagsLoading) return;
 		const pending = consumeHomePendingGameFilter();
 		if (pending) {
 			setSelectedGame(pending);
-			setDefaultTagApplied(true);
+		} else {
+			setSelectedGame(resolveInitialHomeGameFilter(tags));
 		}
-	}, [tagsLoading]);
-
-	useEffect(() => {
-		setHomeGameFilter(selectedGame);
-	}, [selectedGame]);
-
-	// Default sidebar filter on first load: Counter-Strike in restricted
-	// production mode (the only pill kept besides Live / Starting Soon),
-	// ESPORTS otherwise. `homeDefaultSelectedTagLabel` keeps that decision
-	// in one place so the header reset and the first-load default cannot
-	// drift.
-	useEffect(() => {
-		if (defaultTagApplied || tagsLoading) return;
-		const label = homeDefaultSelectedTagLabel(tags);
-		if (label) {
-			setSelectedGame(label);
-			setDefaultTagApplied(true);
-		}
+		setDefaultTagApplied(true);
 	}, [tags, tagsLoading, defaultTagApplied]);
+
+	useEffect(() => {
+		if (!defaultTagApplied) return;
+		setHomeGameFilter(selectedGame);
+	}, [selectedGame, defaultTagApplied]);
+
+	useEffect(() => {
+		if (!scrollRestoreEligibleRef.current) {
+			clearHomeCatalogScroll();
+		}
+	}, []);
+
+	useEffect(() => {
+		if (!scrollSaveReady) return;
+		return subscribeHomeCatalogScrollSave();
+	}, [scrollSaveReady]);
 
 	// Prefetch umbrella trading route chunk so card clicks are not blocked on Suspense.
 	useEffect(() => {
@@ -278,6 +272,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	// Listen for reset filter event from header
 	useEffect(() => {
 		const handleResetFilter = () => {
+			clearHomeCatalogScroll();
 			setSelectedGame(gameFilterResetSelection(tags));
 		};
 
@@ -294,11 +289,8 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 	const filteredUmbrellas = useMemo(() => {
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
-			// Restricted production mode: hide every non-Counter-Strike
-			// umbrella from the public home list. Applied BEFORE the
-			// active-flag check so the count of esports-with-active-bets
-			// also reflects only CS2.
-			if (restrictedMode && !isCounterStrikeUmbrella(umbrella as any)) {
+			// Restricted production mode: hide umbrellas outside CS2 + LoL allowlist.
+			if (restrictedMode && !isRestrictedProductionUmbrella(umbrella as any)) {
 				return false;
 			}
 			return (umbrella as any).active === true;
@@ -314,18 +306,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		if (selectedGame && selectedGame !== LIVE_PILL_ID && selectedGame !== STARTING_SOON_PILL_ID) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
 			if (selectedTag && !isEsportsMetaTagLabel(selectedTag.label)) {
-				filtered = filtered.filter((umbrella) => {
-					const children = (umbrella as any).children as Array<any> | undefined;
-					if (!children || children.length === 0) return false;
-
-					return children.some((q) => {
-						const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
-						if (!Array.isArray(tagIds) || tagIds.length === 0) {
-							return false;
-						}
-						return tagIds.includes(selectedTag._id);
-					});
-				});
+				filtered = filtered.filter((umbrella) => umbrellaHasTagId(umbrella, selectedTag._id));
 			}
 		}
 
@@ -339,14 +320,48 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 			);
 		}
 
-		const deduped = dedupeUmbrellasByPandascoreMatch(filtered);
+		filtered = filterHomeCatalogUmbrellas(filtered, now, esportsTagId);
 
 		if (filterType === "games") {
-			return sortByTradingActivity(deduped);
+			return sortByTradingActivity(filtered);
 		}
 
-		return deduped;
+		return filtered;
 	}, [umbrellas, filterType, selectedGame, tags, now, restrictedMode]);
+
+	// Restore saved scrollY after browser back (retries until layout is tall enough).
+	useLayoutEffect(() => {
+		if (!scrollRestoreEligibleRef.current) return;
+		if (loading || tagsLoading || !defaultTagApplied || selectedGame === null) return;
+
+		let cancelled = false;
+		let attempt = 0;
+
+		const finish = () => {
+			if (!cancelled) setScrollSaveReady(true);
+		};
+
+		const run = () => {
+			if (cancelled) return;
+			const done = restoreHomeCatalogScrollIfPending();
+			if (done) {
+				finish();
+				return;
+			}
+			attempt += 1;
+			if (attempt >= HOME_CATALOG_SCROLL_RETRY_MS.length) {
+				clearHomeCatalogScroll();
+				finish();
+				return;
+			}
+			window.setTimeout(run, HOME_CATALOG_SCROLL_RETRY_MS[attempt]);
+		};
+
+		run();
+		return () => {
+			cancelled = true;
+		};
+	}, [loading, tagsLoading, defaultTagApplied, selectedGame, filteredUmbrellas.length]);
 
 	const calendarData = useMemo(() => {
 		if (filterType === "games") {
@@ -447,12 +462,16 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		// list modes). Inline home dock is updated via odds-button clicks (`onHomeOddsSelect`)
 		// — not via the card chrome.
 		pinHomeDockForUmbrella(umbrella._id, null);
+		saveHomeCatalogScroll();
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
 	const navigateToSingleMarket = (umbrella: Umbrella, position: "yes" | "no") => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		const question = singleMarketQuestions[umbrella._id];
+		const question = resolveHomeMatchWinnerQuestion(umbrella, {
+			singleMarketQuestions,
+			multiMarketData,
+		});
 		if (question) {
 			localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 			localStorage.setItem("activePosition", position);
@@ -461,6 +480,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 			? question._id || (question as any).questionId || (question as any).marketId || null
 			: null;
 		pinHomeDockForUmbrella(umbrella._id, qid);
+		saveHomeCatalogScroll();
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
@@ -480,21 +500,23 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		}
 		pinHomeDockForUmbrella(umbrella._id, marketId ?? null);
 
+		saveHomeCatalogScroll();
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
 	const shouldUseCalendar = filterType === "esports" || filterType === "all";
+	const useCalendarLayout = shouldUseCalendar;
 
 	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
 
 	const visibleUmbrellasForVenueWs = useMemo(
 		() =>
 			collectVisibleUmbrellas(
-				shouldUseCalendar,
-				shouldUseCalendar ? calendarData : null,
+				useCalendarLayout,
+				useCalendarLayout ? calendarData : null,
 				filteredUmbrellas,
 			),
-		[shouldUseCalendar, calendarData, filteredUmbrellas],
+		[useCalendarLayout, calendarData, filteredUmbrellas],
 	);
 
 	const visiblePandaIdsForVenueWs = useMemo(() => {
@@ -561,7 +583,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 	let content: ReactNode = null;
 
-	if (shouldUseCalendar && calendarData) {
+	if (useCalendarLayout && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
 		const hasUnscheduled = calendarData.unscheduled.length > 0;
 		// Past events are intentionally dropped at the `calendarData` stage
@@ -634,37 +656,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 			content = (
 				<div className="prediction-calendar">
-					<header className="prediction-calendar-page-heading">
-						<div className="prediction-calendar-page-heading__title-row">
-							{(() => {
-								const calendarTitle = calendarPageHeadingTitle(selectedGame);
-								const showGameLogo =
-									selectedGame &&
-									!isEsportsMetaTagLabel(selectedGame) &&
-									selectedGame !== LIVE_PILL_ID &&
-									selectedGame !== STARTING_SOON_PILL_ID;
-								const calendarLogo = showGameLogo
-									? (bundledGameLogoFromTagLabels([selectedGame]) ??
-										resolveLogoByTags([selectedGame]))
-									: null;
-								return (
-									<>
-										{calendarLogo ? (
-											<img
-												className="prediction-calendar-page-heading__game-logo"
-												src={calendarLogo}
-												alt=""
-												width={40}
-												height={40}
-												decoding="async"
-											/>
-										) : null}
-										<h2 className="prediction-calendar-page-heading__title">{calendarTitle}</h2>
-									</>
-								);
-							})()}
-						</div>
-					</header>
+					<PredictionPageHeading selectedGame={selectedGame} />
 					{calendarSections}
 				</div>
 			);
@@ -672,8 +664,9 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	} else {
 		const gridClassName =
 			filterType === "esports" ? "predictions-grid predictions-grid--carousel" : "predictions-grid";
+		const showGamePageHeading = isSpecificGameTagSelection(selectedGame);
 
-		content = (
+		const grid = (
 			<div className={gridClassName}>
 				{filteredUmbrellas.length > 0 ? (
 					<>
@@ -721,6 +714,15 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 					</div>
 				)}
 			</div>
+		);
+
+		content = showGamePageHeading ? (
+			<div className="prediction-calendar">
+				<PredictionPageHeading selectedGame={selectedGame} />
+				{grid}
+			</div>
+		) : (
+			grid
 		);
 	}
 

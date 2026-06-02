@@ -5,7 +5,7 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { isRestrictedProductionMode } from "@/config/restrictedMode";
 import { resolveUmbrellaBannerById } from "@/features/markets/presentation/umbrellaBanners";
-import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
+import { isRestrictedProductionUmbrella } from "@/features/markets/presentation/umbrellaGame";
 import "./Search.scss";
 
 type SearchResponse = {
@@ -62,13 +62,13 @@ export function Search({ onSearchActive, searchResults, activeQuery }: SearchPro
 
 				const data: SearchResponse = await response.json();
 				console.log("Search results:", data);
-				// Restricted production mode hides non-Counter-Strike umbrellas
+				// Restricted production mode hides non-allowlisted umbrellas (CS2 + LoL only).
 				// from public discovery surfaces. The /umbrellas/search endpoint
 				// returns every game; we filter client-side here so a Dota
 				// search like "mongolz" cannot surface a non-CS2 result.
 				const raw = data.data ?? [];
 				const filtered = isRestrictedProductionMode()
-					? raw.filter((u) => isCounterStrikeUmbrella(u as any))
+					? raw.filter((u) => isRestrictedProductionUmbrella(u as any))
 					: raw;
 				setResults(filtered);
 				setShowDropdown(true);

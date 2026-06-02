@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import http from "node:http";
 import https from "node:https";
 import { siteMetadataHtmlPlugin } from "./scripts/viteSiteMetadataHtml";
+import { spaEntryManifestPlugin } from "./scripts/spaEntryManifestPlugin";
 
 /** Config file directory — use for .env + aliases so behavior matches other laptops regardless of `process.cwd()`. */
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -293,6 +294,7 @@ export default defineConfig(({ mode }) => {
 		customLogger: createViteLoggerWithoutBaseOrgSourcemapNoise(),
 		plugins: [
 			siteMetadataHtmlPlugin(),
+			spaEntryManifestPlugin(),
 			react({
 				babel: {
 					plugins: ["macros"],
@@ -364,6 +366,9 @@ export default defineConfig(({ mode }) => {
 					changeOrigin: true,
 				},
 			},
+		},
+		preview: {
+			port: 3010,
 		},
 		build: {
 			outDir: "dist",

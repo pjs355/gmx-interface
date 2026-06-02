@@ -1,9 +1,11 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import Button from "components/Button/Button";
 import { shortenTeamLabelForButton } from "@/features/markets/presentation/marketLabels";
+import { resolveOutcomeSideLabels } from "@/features/markets/presentation/outcomeSideLabels";
 import { hexToRgba, getContrastingTextColor } from "@/features/markets/presentation/teamColors";
 import { oddsBarPercent } from "@/features/markets/pricing/orderbookDisplayPrices";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
 import {
 	isPredictionPricingDebugEnabled,
 	priceDebugLog,
@@ -15,6 +17,7 @@ interface SingleMarketActionsProps {
 	onNavigate: (position: "yes" | "no") => void;
 	question: PredictionMarket;
 	isDailyPlayerCount?: boolean;
+	umbrella?: Umbrella | null;
 	umbrellaDisplayName?: string;
 	/** When set from OddsMonitor venue-prices, overrides listing preview for that side */
 	liveVenueYesPrice?: number | null;
@@ -33,6 +36,7 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	onNavigate,
 	question,
 	isDailyPlayerCount = false,
+	umbrella,
 	umbrellaDisplayName,
 	liveVenueYesPrice,
 	liveVenueNoPrice,
@@ -93,51 +97,26 @@ export const SingleMarketActions: React.FC<SingleMarketActionsProps> = ({
 	const yesPriceCents = yesPrice !== null && yesPrice !== undefined ? formatPrice(yesPrice) : "--";
 	const noPriceCents = noPrice !== null && noPrice !== undefined ? formatPrice(noPrice) : "--";
 
-	const deriveLabels = (): {
-		yesLabel: string;
-		noLabel: string;
-		settlementNumber: string | null;
-	} => {
+	const settlementNumber = useMemo((): string | null => {
+		if (!isDailyPlayerCount) return null;
+		const questionDisplay = (question?.displayName || (question as any)?.question || "").trim();
+		const settlementNum = questionDisplay.replace(/^(Over|Under)\s*/i, "").trim();
+		return settlementNum || null;
+	}, [isDailyPlayerCount, question]);
+
+	const outcomeSideLabels = useMemo(() => {
 		if (isDailyPlayerCount) {
-			const questionDisplay = (question?.displayName || (question as any)?.question || "").trim();
-			const settlementNum = questionDisplay.replace(/^(Over|Under)\s*/i, "").trim();
-			return {
-				yesLabel: "Over",
-				noLabel: "Under",
-				settlementNumber: settlementNum || null,
-			};
+			return { yesLabel: "Over", noLabel: "Under", kind: "over_under" as const };
 		}
+		return resolveOutcomeSideLabels({
+			umbrella: umbrella ?? undefined,
+			umbrellaDisplayName: umbrella ? undefined : umbrellaDisplayName,
+			market: question,
+		});
+	}, [isDailyPlayerCount, umbrella, umbrellaDisplayName, question]);
 
-		const umbrellaCleaned = (umbrellaDisplayName || "").replace(/\s*-\s*Match Winner$/i, "").trim();
-		const raw =
-			umbrellaCleaned || (question?.displayName || (question as any)?.question || "").trim();
-		if (!raw) return { yesLabel: "Yes", noLabel: "No", settlementNumber: null };
-		const parts = raw
-			.split(/\s*vs\.?\s*/i)
-			.map((s: any) => s.trim())
-			.filter(Boolean);
-		if (parts.length === 2) {
-			return {
-				yesLabel: parts[0],
-				noLabel: parts[1],
-				settlementNumber: null,
-			};
-		}
-		return { yesLabel: "Yes", noLabel: "No", settlementNumber: null };
-	};
-
-	const { yesLabel, noLabel, settlementNumber } = deriveLabels();
-
-	const isVsSingle = (() => {
-		const umbrellaCleaned = (umbrellaDisplayName || "").replace(/\s*-\s*Match Winner$/i, "").trim();
-		const raw =
-			umbrellaCleaned || (question?.displayName || (question as any)?.question || "").trim();
-		const parts = raw
-			.split(/\s*vs\.?\s*/i)
-			.map((s: any) => s.trim())
-			.filter(Boolean);
-		return Boolean(question && parts.length === 2);
-	})();
+	const { yesLabel, noLabel } = outcomeSideLabels;
+	const isVsSingle = !isDailyPlayerCount && outcomeSideLabels.kind === "h2h";
 	const yesColor = (question as any)?.yesColor || "#22c55e";
 	const noColor = (question as any)?.noColor || "#ef4444";
 	const yesTextColor = getContrastingTextColor(yesColor);

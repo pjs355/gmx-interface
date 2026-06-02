@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { Tag } from "@/services/api/tagService";
-import { isRestrictedProductionMode, restrictedDefaultTagLabel } from "@/config/restrictedMode";
-import { resolveUmbrellaEventDate } from "./eventDates";
+import { getHomeGameFilter } from "./gameFilterNavigation";
+import { normalizeEventDateInput, resolveUmbrellaEventDate } from "./eventDates";
 
 export const LIVE_PILL_ID = "__LIVE__";
 export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
@@ -14,37 +14,67 @@ export function findEsportsTag(tags: Tag[]): Tag | undefined {
 	return tags.find((t) => normalizeTagLabel(t.label) === "ESPORTS");
 }
 
-/**
- * Default sidebar selection on `/` — the ESPORTS tag label, or `null` if
- * not loaded yet. In restricted production mode this is overridden to the
- * Counter-Strike tag label by {@link homeDefaultSelectedTagLabel}.
- */
+/** ESPORTS meta tag label for the "All" pill, or `null` if tags are not loaded yet. */
 export function defaultEsportsTagLabel(tags: Tag[]): string | null {
 	return findEsportsTag(tags)?.label ?? null;
 }
 
 /**
- * Tag label to use as the home page's default-selected pill on first load.
- * Counter-Strike in restricted production mode (the "All" pill is hidden
- * there), ESPORTS otherwise.
+ * Default sidebar selection on `/` — Live markets on first load.
  */
-export function homeDefaultSelectedTagLabel(tags: Tag[]): string | null {
-	if (isRestrictedProductionMode()) {
-		return restrictedDefaultTagLabel(tags);
-	}
-	return defaultEsportsTagLabel(tags);
+export function homeDefaultSelectedTagLabel(_tags: Tag[]): string {
+	return LIVE_PILL_ID;
 }
 
 /**
  * Value to use when resetting the game filter (e.g. header home click).
- * Returns Counter-Strike in restricted production mode, ESPORTS otherwise.
  */
-export function gameFilterResetSelection(tags: Tag[]): string | null {
+export function gameFilterResetSelection(_tags: Tag[]): string {
+	return LIVE_PILL_ID;
+}
+
+/**
+ * Validates a stored home filter value against loaded tags.
+ * Returns null when the stored pill no longer applies.
+ */
+export function resolveStoredHomeGameFilter(stored: string | null, tags: Tag[]): string | null {
+	if (stored === null || stored.length === 0) return null;
+	if (stored === LIVE_PILL_ID || stored === STARTING_SOON_PILL_ID) return stored;
+	if (isEsportsMetaTagLabel(stored)) {
+		const esports = findEsportsTag(tags);
+		return esports?.label === stored ? stored : null;
+	}
+	return tags.some((t) => t.label === stored) ? stored : null;
+}
+
+/** Bootstrap selection: stored filter → Live default. */
+export function resolveInitialHomeGameFilter(tags: Tag[]): string {
+	const stored = getHomeGameFilter();
+	const resolved = resolveStoredHomeGameFilter(stored, tags);
+	if (resolved !== null) return resolved;
 	return homeDefaultSelectedTagLabel(tags);
 }
 
 export function isEsportsMetaTagLabel(tagLabel: string): boolean {
 	return normalizeTagLabel(tagLabel) === "ESPORTS";
+}
+
+/** Live / Starting Soon / ESPORTS "All" — not a per-game tag pill. */
+export function isSpecificGameTagSelection(selectedGame: string | null): boolean {
+	if (!selectedGame) return false;
+	if (selectedGame === LIVE_PILL_ID || selectedGame === STARTING_SOON_PILL_ID) return false;
+	if (isEsportsMetaTagLabel(selectedGame)) return false;
+	return true;
+}
+
+/** True when any child question carries this tag id. */
+export function umbrellaHasTagId(umbrella: Umbrella, tagId: string): boolean {
+	const children = (umbrella as { children?: Array<{ tagIds?: string[] }> }).children;
+	if (!children?.length) return false;
+	return children.some((q) => {
+		const tagIds = q?.tagIds;
+		return Array.isArray(tagIds) && tagIds.length > 0 && tagIds.includes(tagId);
+	});
 }
 
 /** Same 4h post-start window as PredictionCard / FilteredPredictions calendar / Home. */
@@ -141,6 +171,47 @@ export function isUmbrellaStartingSoonByEventDate(
 	if (!eventDate) return false;
 	const eventMs = eventDate.getTime();
 	return nowMs < eventMs && eventMs <= nowMs + STARTING_SOON_WINDOW_MS;
+}
+
+/**
+ * Same ended semantics as {@link PredictionCard} — esports: past the 4h live
+ * window; daily/non-esports: `endDate` reached. No event/end date → not ended.
+ */
+export function isUmbrellaEndedForHomeCatalog(
+	umbrella: Umbrella,
+	nowMs: number,
+	esportsTagId: string | undefined,
+): boolean {
+	if (umbrellaHasEsportsChildTag(umbrella, esportsTagId)) {
+		const eventDate = resolveUmbrellaEventDate(umbrella);
+		if (eventDate === null) {
+			return false;
+		}
+		const eventMs = eventDate.getTime();
+		if (nowMs < eventMs) {
+			return false;
+		}
+		if (nowMs <= eventMs + LIVE_WINDOW_MS) {
+			return false;
+		}
+		return true;
+	}
+
+	const endDate = normalizeEventDateInput((umbrella as { endDate?: unknown }).endDate);
+	if (endDate === null) {
+		return false;
+	}
+	return nowMs >= endDate.getTime();
+}
+
+export function filterHomeCatalogUmbrellas(
+	umbrellas: Umbrella[],
+	nowMs: number,
+	esportsTagId: string | undefined,
+): Umbrella[] {
+	return umbrellas.filter(
+		(umbrella) => !isUmbrellaEndedForHomeCatalog(umbrella, nowMs, esportsTagId),
+	);
 }
 
 export function useNowTick(intervalMs = 60_000): number {

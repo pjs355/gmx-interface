@@ -131,7 +131,11 @@ async function readApprovalsWithPoll(
 	wallet: string,
 ): Promise<LevelUpApprovalStatus> {
 	let status = await fetchLevelUpApprovalsChainRead(chainRead, wallet);
-	for (let attempt = 1; attempt < POST_APPROVAL_READ_MAX_ATTEMPTS && !status.isApproved; attempt++) {
+	for (
+		let attempt = 1;
+		attempt < POST_APPROVAL_READ_MAX_ATTEMPTS && !status.isApproved;
+		attempt++
+	) {
 		await sleep(POST_APPROVAL_READ_POLL_MS);
 		status = await fetchLevelUpApprovalsChainRead(chainRead, wallet);
 	}

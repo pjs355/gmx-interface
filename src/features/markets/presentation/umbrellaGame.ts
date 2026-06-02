@@ -8,9 +8,14 @@
  * If the backend resolver gains a new alias, add it here too.
  *
  * Used by public market lists (`FilteredPredictions`, `GameLinks`) to hide
- * non-Counter-Strike umbrellas. Admin views do not use this — admins keep
- * full visibility of every game's markets.
+ * umbrellas outside restricted production allowlist. Admin views do not use
+ * this — admins keep full visibility of every game's markets.
  */
+
+import {
+	isRestrictedProductionVideogameSlug,
+	RESTRICTED_VIDEOGAME_SLUGS,
+} from "@/config/restrictedMode";
 
 const UMBRELLA_GAME_LABEL_TO_VIDEOGAME: Readonly<Record<string, string>> = {
 	"counter-strike": "cs-go",
@@ -58,3 +63,10 @@ function resolveUmbrellaVideogame(game: string | undefined | null): string | nul
 export function isCounterStrikeUmbrella(umbrella: { game?: string | null }): boolean {
 	return resolveUmbrellaVideogame(umbrella.game) === "cs-go";
 }
+
+/** True iff umbrella is visible on public prod surfaces (allowlisted videogames). */
+export function isRestrictedProductionUmbrella(umbrella: { game?: string | null }): boolean {
+	return isRestrictedProductionVideogameSlug(resolveUmbrellaVideogame(umbrella.game));
+}
+
+export { RESTRICTED_VIDEOGAME_SLUGS };

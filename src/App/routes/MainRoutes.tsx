@@ -1,7 +1,8 @@
 import { Component, lazy, Suspense, useEffect, type ErrorInfo, type ReactNode } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
 
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
+import { peekHomeCatalogScroll } from "@/pages/Predictions/utils/homeScrollRestore";
 import { loadPositionsPage } from "@/app/routes/positionsRouteLazy";
 import { loadPredictionMarketPage } from "@/app/routes/predictionMarketRouteLazy";
 
@@ -142,10 +143,18 @@ function LazyPage({ children }: { children: ReactNode }) {
 
 export function MainRoutes() {
 	const { pathname } = useLocation();
+	const navigationType = useNavigationType();
 
 	useEffect(() => {
+		// Browser back to home: FilteredPredictions restores scrollY in useLayoutEffect.
+		if (pathname === "/" && navigationType === "POP") {
+			return;
+		}
+		if (pathname === "/" && peekHomeCatalogScroll() !== null) {
+			return;
+		}
 		window.scrollTo(0, 0);
-	}, [pathname]);
+	}, [pathname, navigationType]);
 
 	return (
 		<div className="main-routes-shell">

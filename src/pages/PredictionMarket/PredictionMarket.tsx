@@ -20,6 +20,7 @@ import "../Predictions/Predictions.scss";
 import "./scss/PredictionMarket.scss";
 import { PredictionCurtainProvider } from "@/components/PredictionMarketTradeBox";
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
+import { useOddsFormatUrlSync } from "@/features/odds-display/useOddsFormatUrlSync";
 
 function sanitizeUmbrellaQuestions(raw: unknown[]): PredictionMarket[] {
 	return raw.filter(
@@ -48,6 +49,7 @@ export default function PredictionMarket() {
 
 function PredictionMarketContent() {
 	const { umbrellaId } = useParams<{ umbrellaId: string }>();
+	useOddsFormatUrlSync();
 	const navigate = useNavigate();
 	const {
 		umbrellas,

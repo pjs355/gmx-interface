@@ -10,10 +10,36 @@ function stripUmbrellaPrefix(title: string): string {
 	return title.replace(/^umbrella/gi, "").trim();
 }
 
+function normalizeVsTitleDashes(s: string): string {
+	return s
+		.replace(/\u2013/g, "-")
+		.replace(/\u2014/g, "-")
+		.replace(/\u2212/g, "-");
+}
+
+/**
+ * "A vs B - League - Serie" → ["A","B"] — stop team B at tournament suffix or (Bo3).
+ * Matches {@link extractVsCore} in umbrellaDisplayName.ts (case preserved).
+ */
+function parseVsTeamsFromTitleCore(core: string): [string, string] | null {
+	const normalized = normalizeVsTitleDashes(core);
+	const noPrefix = normalized.replace(/^[^:]+:\s*/, "");
+	const m = noPrefix.match(/^(.+?)\s+vs\.?\s+(.+?)(?:\s*[\(-]|$)/i);
+	if (!m) return null;
+	const a = m[1].trim();
+	const b = m[2].trim();
+	if (a.length < 1 || b.length < 1) return null;
+	return [a, b];
+}
+
 /** "A vs B - Match Winner" → ["A","B"]; also finds embedded "X vs Y" in longer questions. */
 export function parseVsTeamsFromTitle(title: string): [string, string] | null {
 	const stripped = stripUmbrellaPrefix(title);
 	const core = stripped.replace(/\s*-\s*Match Winner\b.*$/i, "").trim();
+
+	const fromCore = parseVsTeamsFromTitleCore(core);
+	if (fromCore) return fromCore;
+
 	const parts = core
 		.split(/\s*vs\.?\s*/i)
 		.map((s) => s.trim())

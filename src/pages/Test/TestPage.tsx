@@ -8,6 +8,7 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import "../Predictions/Predictions.scss";
+import { resolveHomeMatchWinnerQuestion } from "@/features/markets/presentation/esportsHomeCard";
 import GameLinks from "../Predictions/components/GameLinks";
 import {
 	gameFilterResetSelection,
@@ -172,7 +173,10 @@ export default function TestPage() {
 
 	const navigateToSingleMarket = (umbrella: Umbrella, position: "yes" | "no") => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		const question = singleMarketQuestions[umbrella._id];
+		const question = resolveHomeMatchWinnerQuestion(umbrella, {
+			singleMarketQuestions,
+			multiMarketData,
+		});
 		if (question) {
 			localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 			localStorage.setItem("activePosition", position);

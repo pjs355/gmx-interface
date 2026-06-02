@@ -53,6 +53,36 @@ describe("resolveOutcomeSideLabels", () => {
 		expect(r.noLabel).toBe("Team Beta");
 	});
 
+	it("strips tournament suffix from long panda umbrella displayName", () => {
+		const r = resolveOutcomeSideLabels({
+			umbrellaDisplayName:
+				"Team Alpha vs Carstensz - Esports World Cup - Southeast Asia Closed Qualifier 2026",
+		});
+		expect(r.kind).toBe("h2h");
+		expect(r.yesLabel).toBe("Team Alpha");
+		expect(r.noLabel).toBe("Carstensz");
+	});
+
+	it("prefers child question vs title over long umbrella displayName", () => {
+		const r = resolveOutcomeSideLabels({
+			umbrella: minimalUmbrella({
+				displayName:
+					"Team Alpha vs Carstensz - Esports World Cup - Southeast Asia Closed Qualifier 2026",
+				children: [
+					{
+						displayName: "Team Alpha vs Carstensz",
+						tagIds: [],
+						questionId: "q1",
+						marketId: "m1",
+					},
+				],
+			}),
+		});
+		expect(r.kind).toBe("h2h");
+		expect(r.yesLabel).toBe("Team Alpha");
+		expect(r.noLabel).toBe("Carstensz");
+	});
+
 	it("uses DFlow tickers when title parse fails", () => {
 		const r = resolveOutcomeSideLabels({
 			umbrella: minimalUmbrella({

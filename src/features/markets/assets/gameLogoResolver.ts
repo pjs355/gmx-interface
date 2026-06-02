@@ -129,7 +129,9 @@ export function resolveBundledTagLogo(tag: { label: string; slug?: string }): st
 }
 
 /** Bundled game logo from umbrella tag labels (CS2 or FIFA). */
-export function bundledGameLogoFromTagLabels(tagLabels: string[] | undefined | null): string | null {
+export function bundledGameLogoFromTagLabels(
+	tagLabels: string[] | undefined | null,
+): string | null {
 	return (
 		bundledCounterStrikeLogoFromTagLabels(tagLabels) ??
 		bundledFifaWorldCupLogoFromTagLabels(tagLabels)

@@ -7,17 +7,22 @@ import {
 	resolveBundledTagLogo,
 	resolveLogoByTags,
 } from "@/features/markets/assets/gameLogoResolver";
-import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
-import { isCounterStrikeTagLabel, isRestrictedProductionMode } from "@/config/restrictedMode";
+import { isRestrictedProductionUmbrella } from "@/features/markets/presentation/umbrellaGame";
+import {
+	isRestrictedProductionMode,
+	isRestrictedProductionTagLabel,
+	restrictedDefaultTagLabel,
+} from "@/config/restrictedMode";
 import {
 	defaultEsportsTagLabel,
+	filterHomeCatalogUmbrellas,
 	findEsportsTag,
-	homeDefaultSelectedTagLabel,
 	isEsportsMetaTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
+	umbrellaHasTagId,
 	umbrellaMatchesHomeFilterType,
 	useNowTick,
 } from "../utils/gameLinkFilters";
@@ -85,7 +90,7 @@ export default function GameLinks({
 		}
 
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
-			if (restrictedMode && !isCounterStrikeUmbrella(umbrella as any)) {
+			if (restrictedMode && !isRestrictedProductionUmbrella(umbrella as any)) {
 				return false;
 			}
 			return (umbrella as any).active === true;
@@ -94,45 +99,33 @@ export default function GameLinks({
 		const esportsTag = findEsportsTag(tags);
 		const esportsTagId = esportsTag?._id;
 
-		const typeFilteredUmbrellas = filterType
-			? activeUmbrellas.filter((umbrella) =>
-					umbrellaMatchesHomeFilterType(umbrella, filterType, esportsTagId),
-				)
-			: activeUmbrellas;
+		const typeFilteredUmbrellas = filterHomeCatalogUmbrellas(
+			filterType
+				? activeUmbrellas.filter((umbrella) =>
+						umbrellaMatchesHomeFilterType(umbrella, filterType, esportsTagId),
+					)
+				: activeUmbrellas,
+			now,
+			esportsTagId,
+		);
 
 		const tagsWithActiveMarkets = tags.filter((tag) => {
-			return typeFilteredUmbrellas.some((umbrella) => {
-				const children = (umbrella as any).children as Array<any> | undefined;
-				if (!children || children.length === 0) return false;
-
-				return children.some((q) => {
-					const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
-
-					if (!Array.isArray(tagIds) || tagIds.length === 0) {
-						return false;
-					}
-
-					return tagIds.includes(tag._id);
-				});
-			});
+			return typeFilteredUmbrellas.some((umbrella) => umbrellaHasTagId(umbrella, tag._id));
 		});
 
 		const tagsSorted = sortTagsForSidebar(tagsWithActiveMarkets);
 
 		return { typeFilteredUmbrellas, tagsSorted, esportsTagId };
-	}, [umbrellas, loading, tagsLoading, filterType, tags, restrictedMode]);
+	}, [umbrellas, loading, tagsLoading, filterType, tags, restrictedMode, now]);
 
 	const esportsTagLabel = defaultEsportsTagLabel(tags);
 	const esportsMetaTag = linkFilterState.tagsSorted.find((t) => isEsportsMetaTagLabel(t.label));
 	const allGameTags = linkFilterState.tagsSorted.filter((t) => !isEsportsMetaTagLabel(t.label));
 	const gameTagsOnly = restrictedMode
-		? allGameTags.filter((t) => isCounterStrikeTagLabel(t.label))
+		? allGameTags.filter((t) => isRestrictedProductionTagLabel(t.label))
 		: allGameTags;
-	// Label the home-reset target uses (Counter-Strike in restricted mode,
-	// ESPORTS otherwise). Live / Starting Soon toggle-off paths route here
-	// when restricted so users do not land on a hidden ESPORTS view.
-	const restrictedDefaultLabel = restrictedMode ? homeDefaultSelectedTagLabel(tags) : null;
-	const toggleOffTarget = restrictedMode ? restrictedDefaultLabel : esportsTagLabel;
+	// Restricted prod has no ESPORTS "All" pill — toggle Live/Starting Soon off to CS2 (etc.).
+	const toggleOffTarget = restrictedMode ? restrictedDefaultTagLabel(tags) : esportsTagLabel;
 
 	const liveMarketCount = React.useMemo(() => {
 		let n = 0;
@@ -168,16 +161,7 @@ export default function GameLinks({
 			}
 			let c = 0;
 			for (const umbrella of pool) {
-				const children = (umbrella as any).children as Array<any> | undefined;
-				if (!children || children.length === 0) continue;
-				const hit = children.some((q) => {
-					const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
-					if (!Array.isArray(tagIds) || tagIds.length === 0) {
-						return false;
-					}
-					return tagIds.includes(tag._id);
-				});
-				if (hit) c += 1;
+				if (umbrellaHasTagId(umbrella, tag._id)) c += 1;
 			}
 			map.set(tag._id, c);
 		}

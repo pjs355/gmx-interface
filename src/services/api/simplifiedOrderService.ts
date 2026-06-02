@@ -304,13 +304,20 @@ export async function fetchOrdersForMarket(
 	return allOrders.filter((order) => normalizeOrderQuestionIdKey(order.questionId) === want);
 }
 
-// Cancel a specific order by ID via backend route
-export async function cancelOrder(orderId: string): Promise<{ success: boolean; error?: string }> {
+// Cancel a specific order by ID via backend route (requires Privy session)
+export async function cancelOrder(
+	orderId: string,
+	accessToken: string,
+): Promise<{ success: boolean; error?: string }> {
 	if (!orderId) return { success: false, error: "Missing orderId" };
+	if (!accessToken) return { success: false, error: "Unauthorized" };
 	try {
 		const res = await fetch(`${getApiBaseUrl()}/orders/cancel/${encodeURIComponent(orderId)}`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${accessToken}`,
+			},
 		});
 		const json = await res.json().catch(() => ({}));
 		if (!res.ok || json?.success === false) {
