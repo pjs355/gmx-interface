@@ -17,8 +17,10 @@ export function useOddsFormatUrlSync(): void {
 	const urlToContextRef = useRef(false);
 	const contextToUrlRef = useRef(false);
 	const bootstrappedRef = useRef(false);
+	const oddsDisplayStyleRef = useRef(oddsDisplayStyle);
+	oddsDisplayStyleRef.current = oddsDisplayStyle;
 
-	// URL → context (shared link or back/forward)
+	// URL → context (shared link or back/forward only — not when the menu changes context)
 	useEffect(() => {
 		if (contextToUrlRef.current) {
 			contextToUrlRef.current = false;
@@ -26,10 +28,10 @@ export function useOddsFormatUrlSync(): void {
 		}
 		if (!searchParams.has(ODDS_FORMAT_QUERY_KEY)) return;
 		const fromUrl = parseFormatQueryParam(searchParams.get(ODDS_FORMAT_QUERY_KEY));
-		if (fromUrl === oddsDisplayStyle) return;
+		if (fromUrl === oddsDisplayStyleRef.current) return;
 		urlToContextRef.current = true;
 		setOddsDisplayStyle(fromUrl);
-	}, [searchParams, oddsDisplayStyle, setOddsDisplayStyle]);
+	}, [searchParams, setOddsDisplayStyle]);
 
 	// Context → URL (odds menu / profile preference on this page)
 	useEffect(() => {
