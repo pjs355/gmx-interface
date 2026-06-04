@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import OrderbookDisplay from "@/components/OrderbookDisplay/OrderbookDisplay";
+import type { OrderbookOutcomeTab } from "@/components/OrderbookDisplay/OrderbookDisplay";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -17,6 +18,7 @@ import { findOddsMatchedMarket } from "@/features/markets/odds-monitor/findOddsM
 import {
 	computeLevelUpCrossVenueBooks,
 	monitorOrderbookDataToRestingSnapshot,
+	orderbookSnapshotHasWholeShareRestingLiquidity,
 } from "@/features/trading/venues/levelup/levelUpCrossVenueBookPresence";
 
 type VenueEntry = {
@@ -35,7 +37,15 @@ function buildVenueEntries(
 
 	const { hasLevelUp, luBookA, luBookB } = computeLevelUpCrossVenueBooks(matched, levelUpOrderbook);
 
-	if (hasLevelUp) {
+	// Only surface the LevelUp tab when its book has real whole-share resting depth.
+	// No LevelUp market (null books) or an empty book shouldn't show a dead tab —
+	// applies to every market type sharing this panel (FIFA, esports, …).
+	const levelUpHasRestingShares =
+		hasLevelUp &&
+		(orderbookSnapshotHasWholeShareRestingLiquidity(luBookA) ||
+			orderbookSnapshotHasWholeShareRestingLiquidity(luBookB));
+
+	if (levelUpHasRestingShares) {
 		entries.push({
 			id: "levelup",
 			label: "LevelUp",
@@ -119,6 +129,8 @@ export type VenueOrderbooksPanelProps = {
 	onVenueSelect?: (venue: TradingVenue) => void;
 	activePosition?: "yes" | "no";
 	side?: "buy" | "sell";
+	/** FIFA 3-way: leg buttons that replace the orderbook Yes/No tabs (each = YES of a leg). */
+	outcomeTabs?: OrderbookOutcomeTab[];
 };
 
 export function VenueOrderbooksPanel({
@@ -132,6 +144,7 @@ export function VenueOrderbooksPanel({
 	onVenueSelect,
 	activePosition,
 	side = "buy",
+	outcomeTabs,
 }: VenueOrderbooksPanelProps) {
 	const { appState } = useOddsMonitor();
 	const [selectedVenueId, setSelectedVenueId] = useState("");
@@ -283,6 +296,7 @@ export function VenueOrderbooksPanel({
 						activePosition={activePosition}
 						isCollapsed={false}
 						side={side}
+						outcomeTabs={outcomeTabs}
 						wholeContractRestingBook={
 							selectedVenue.id === "dflow" || selectedVenue.id === "levelup"
 						}

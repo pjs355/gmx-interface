@@ -163,13 +163,19 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 				}
 
 				marketsMap[key] = markets;
-				const isSingle = Array.isArray(markets) && markets.length === 1;
+				// Home cards show moneyline-only: aggregator sub-markets (tradeable === false)
+				// are trading-page-only. Keep `marketsMap`/children with all questions so the
+				// trading page still loads subs; derive single/multi home shape from moneyline.
+				const homeMarkets = markets.filter(
+					(m: any) => (m as { tradeable?: boolean }).tradeable !== false,
+				);
+				const isSingle = homeMarkets.length === 1;
 				if (isSingle) {
-					singleQuestions[key] = markets[0];
-				} else {
+					singleQuestions[key] = homeMarkets[0];
+				} else if (homeMarkets.length >= 2) {
 					// Legacy shape expected by utils: { questions: any[], orderbooks: { [id]: orderbook } }
 					multiData[key] = {
-						questions: markets,
+						questions: homeMarkets,
 						orderbooks: {},
 					};
 				}

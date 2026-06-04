@@ -134,6 +134,20 @@ export async function findMatchedMarketByUmbrellaId(
 	return markets.find((m) => m.umbrellaId === umbrellaId);
 }
 
+/**
+ * Resolve a matched market by its PandaScore id. Used for aggregator sub-question
+ * cards (Map N winner, totals), whose `/matched-markets` row is keyed by the
+ * sub-question's own `pandascore_marketId` rather than the umbrella match id.
+ */
+export async function findMatchedMarketByPandaMatchId(
+	pandaMatchId: string,
+): Promise<MatchedMarketExchange | undefined> {
+	const id = String(pandaMatchId ?? "").trim();
+	if (!id) return undefined;
+	const markets = await fetchMatchedMarkets();
+	return markets.find((m) => String(m.pandaMatchId ?? "").trim() === id);
+}
+
 export function clearMatchDataCache(): void {
 	cachedMarkets = null;
 	lastFetchTime = 0;

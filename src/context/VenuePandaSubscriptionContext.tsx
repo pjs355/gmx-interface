@@ -1,11 +1,24 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 
-/** Max distinct PandaScore match IDs on one venue-prices connection (home + trading). */
-export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 52;
+/**
+ * Max distinct PandaScore match IDs on one venue-prices connection (home + trading).
+ * Not a backend/venue limit — the venue-prices WS relays from a shared, fully
+ * subscribed server-side feed and even supports `subscribe_all`. This is a
+ * client-side ceiling that bounds browser memory and per-tick re-render churn.
+ */
+export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 80;
+
+/**
+ * Subscription weights decide who wins a slot when more than MAX ids are
+ * requested (flush keeps the highest-weight ids). On-screen cards must always
+ * be priced, so they outrank the anticipatory leading-window prefetch.
+ */
+export const VENUE_SUB_WEIGHT_VIEWPORT = 2;
+export const VENUE_SUB_WEIGHT_PREFETCH = 1;
 
 type VenuePandaSubscriptionContextValue = {
-	subscribePandaMatchId: (pandaMatchId: string) => void;
-	unsubscribePandaMatchId: (pandaMatchId: string) => void;
+	subscribePandaMatchId: (pandaMatchId: string, weight?: number) => void;
+	unsubscribePandaMatchId: (pandaMatchId: string, weight?: number) => void;
 	activePandaMatchIds: string[];
 };
 
@@ -27,18 +40,21 @@ export function VenuePandaSubscriptionProvider({ children }: { children: React.R
 	}, []);
 
 	const scheduleFlush = useCallback(() => {
+		// Short debounce: long enough to coalesce the synchronous batch of
+		// subscribe() calls a tab switch fires (and brief scroll bursts), short
+		// enough that prices start arriving almost immediately on tab click.
 		if (debounceRef.current) clearTimeout(debounceRef.current);
 		debounceRef.current = setTimeout(() => {
 			debounceRef.current = null;
 			flushActive();
-		}, 150);
+		}, 50);
 	}, [flushActive]);
 
 	const subscribePandaMatchId = useCallback(
-		(pandaMatchId: string) => {
+		(pandaMatchId: string, weight = 1) => {
 			const id = String(pandaMatchId ?? "").trim();
-			if (!id) return;
-			const n = (countsRef.current.get(id) ?? 0) + 1;
+			if (!id || weight <= 0) return;
+			const n = (countsRef.current.get(id) ?? 0) + weight;
 			countsRef.current.set(id, n);
 			scheduleFlush();
 		},
@@ -46,10 +62,10 @@ export function VenuePandaSubscriptionProvider({ children }: { children: React.R
 	);
 
 	const unsubscribePandaMatchId = useCallback(
-		(pandaMatchId: string) => {
+		(pandaMatchId: string, weight = 1) => {
 			const id = String(pandaMatchId ?? "").trim();
-			if (!id) return;
-			const n = (countsRef.current.get(id) ?? 0) - 1;
+			if (!id || weight <= 0) return;
+			const n = (countsRef.current.get(id) ?? 0) - weight;
 			if (n <= 0) countsRef.current.delete(id);
 			else countsRef.current.set(id, n);
 			scheduleFlush();

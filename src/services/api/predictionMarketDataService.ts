@@ -32,6 +32,31 @@ export interface PredictionMarket {
 		price: number;
 		volume?: number;
 	}>;
+	/**
+	 * Source-agnostic market taxonomy (esports / FIFA / MLB). Present on questions
+	 * served by GET /umbrellas and GET /questions/:id. Optional for back-compat
+	 * with rows created before the taxonomy migration.
+	 */
+	marketType?: "moneyline" | "winner" | "total" | "spread" | "prop";
+	segment?: string;
+	line?: number;
+	/** Headline market the home page + canonical routing key off. */
+	isPrimary?: boolean;
+	/** LevelUp runs an on-chain order book (moneyline true, aggregator subs false). */
+	tradeable?: boolean;
+	sortOrder?: number;
+	/** PandaScore market id; per-sub lookup key for venue prices / orderbooks / chart. */
+	pandascore_marketId?: string | number;
+	pandascore_template?: string;
+	/**
+	 * Polymarket Gamma market id. For Polymarket-sourced sports (FIFA World Cup
+	 * 3-way moneyline) this is the per-leg cross-venue lookup key, used in place
+	 * of the umbrella's `pandascore_matchId` for venue prices / orderbooks / SOR.
+	 */
+	polymarketMarketId?: string;
+	/** 3-way moneyline leg (Team A win / Draw / Team B win) when `marketType === "moneyline"`. */
+	moneylineLeg?: "home" | "away" | "draw";
+	status?: string;
 }
 
 interface PandaMatchTeam {

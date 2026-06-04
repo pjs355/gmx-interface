@@ -195,6 +195,7 @@ export function HomeInlineTradeLayout({
 
 	const { tradingPagePrices } = useUmbrellaTradePricing({
 		umbrella: enabled ? focusedUmbrella : null,
+		activeQuestion: tradeBoxActiveMarket,
 	});
 
 	const pandascoreMatchIdRaw =
@@ -253,10 +254,15 @@ export function HomeInlineTradeLayout({
 		}
 
 		// User hasn't pinned a market on this umbrella yet — show the top one.
+		// Pick the default ONCE (when nothing is active or the active leg left the
+		// list); do NOT chase the volume-sorted top, which re-orders on every WS
+		// tick. For multi-leg umbrellas (FIFA 3-way) chasing the moving top makes
+		// the dock snap between Team A / Team B / Draw on every orderbook update.
 		if (!hasUserSelected) {
-			const top = sortedQuestions[0];
-			if (!activeMarket || idOf(activeMarket) !== idOf(top)) {
-				setActiveMarket(top);
+			const curId = activeMarket ? idOf(activeMarket) : "";
+			const inList = Boolean(curId) && sortedQuestions.some((q) => idOf(q) === curId);
+			if (!inList) {
+				setActiveMarket(sortedQuestions[0]);
 			}
 			return;
 		}
@@ -301,6 +307,19 @@ export function HomeInlineTradeLayout({
 			setActiveMarket(payload.question);
 			setActivePosition(payload.position);
 			localStorage.setItem("activePosition", payload.position);
+
+			// Persist the clicked leg's id SYNCHRONOUSLY. The hydration effect treats
+			// localStorage as the source of truth and would otherwise read the stale
+			// previously-stored leg and revert `activeMarket` — which fights the persist
+			// effect (activeMarket -> storage) and ping-pongs every render. For 3-way
+			// (FIFA) the clicked leg differs from the stored one, so without this the
+			// trade box rapid-fire flickers between Team A / Team B / Draw.
+			const q = payload.question as {
+				_id?: string;
+				questionId?: string;
+				marketId?: string;
+			};
+			writeStoredId(HOME_DOCK_ACTIVE_MARKET_KEY, q._id || q.questionId || q.marketId || null);
 		},
 		[isMobile],
 	);

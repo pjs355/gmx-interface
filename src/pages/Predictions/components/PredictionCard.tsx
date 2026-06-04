@@ -1,14 +1,26 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Trans } from "@lingui/macro";
-import Button from "components/Button/Button";
+import { useInViewport } from "@/shared/hooks/useInViewport";
+import {
+	useVenuePandaSubscription,
+	VENUE_SUB_WEIGHT_VIEWPORT,
+} from "@/context/VenuePandaSubscriptionContext";
+import { umbrellaVenuePandaIds } from "../utils/gameLinkFilters";
 import CountdownTimer from "components/CountdownTimer/CountdownTimer";
+import EventStartStatus from "@/components/EventStartStatus/EventStartStatus";
 import { SingleMarketActions } from "./SingleMarketActions";
 import { MultiMarketActions } from "./MultiMarketActions";
+import { ThreeWayMoneylineActions } from "./ThreeWayMoneylineActions";
+import { GroupWinnerActions } from "./GroupWinnerActions";
+import { isThreeWayMoneylineQuestions } from "@/features/markets/listing/threeWayMoneyline";
+import {
+	groupWinnerGroupLabel,
+	isGroupWinnerQuestions,
+} from "@/features/markets/listing/groupWinner";
 import { mixpanelTrack } from "@/shared/analytics/mixpanel";
-import type { Umbrella, UmbrellaTeamMapping } from "services/api/umbrellaDataService";
+import type { Umbrella } from "services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { truncateMarketName } from "@/features/markets/presentation/marketLabels";
-import { resolveTeamLogo } from "@/config/team-map";
+import { resolveTeamLogoUrl } from "@/features/markets/assets/teamLogo";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
@@ -22,6 +34,7 @@ import { useCurtainActions } from "@/components/PredictionMarketTradeBox";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
 	bundledCounterStrikeLogoFromTagLabels,
+	bundledWorldCupLogoFromUmbrella,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
 	resolveLogoByTags,
@@ -84,31 +97,6 @@ interface PredictionCardProps {
 	) => void;
 }
 
-const resolveTeamLogoUrl = (team: UmbrellaTeamMapping): string | undefined => {
-	if (team.logoUrl) {
-		return team.logoUrl;
-	}
-	if (team.shortCode) {
-		const resolved = resolveTeamLogo(team.shortCode);
-		if (resolved) {
-			return resolved;
-		}
-	}
-	if (team.slug) {
-		const resolved = resolveTeamLogo(team.slug);
-		if (resolved) {
-			return resolved;
-		}
-	}
-	if (team.displayName) {
-		const resolved = resolveTeamLogo(team.displayName);
-		if (resolved) {
-			return resolved;
-		}
-	}
-	return undefined;
-};
-
 /** Same idea as Winnings / UmbrellaImage: team logo, then CS2 bundled asset before remote tag art when applicable, then GTA. */
 function PredictionOutcomeTeamImg({
 	umbrella,
@@ -127,10 +115,12 @@ function PredictionOutcomeTeamImg({
 		const tagImg = getTagImageFromUmbrella(umbrella, tags);
 		const tagLabels = getTagLabelsFromUmbrella(umbrella, tags);
 		const gameLogo = resolveLogoByTags(tagLabels);
+		const worldCupBundled = bundledWorldCupLogoFromUmbrella(umbrella);
 		const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
 		const list: string[] = [];
 		if (teamLogoUrl) list.push(teamLogoUrl);
-		if (cs2Bundled) list.push(cs2Bundled);
+		if (worldCupBundled) list.push(worldCupBundled);
+		else if (cs2Bundled) list.push(cs2Bundled);
 		else {
 			if (tagImg) list.push(tagImg);
 			if (gameLogo) list.push(gameLogo);
@@ -182,6 +172,37 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const { tags } = usePredictionData();
 	const [now, setNow] = useState(() => Date.now());
 
+	/**
+	 * Home cards display moneyline only. Aggregator sub-markets (Map N winner,
+	 * totals, …) carry `tradeable === false` and live only on the trading page,
+	 * so the single-vs-multi card decision must ignore them. Works generically for
+	 * esports (1 moneyline), FIFA (multi leg), and MLB later.
+	 */
+	const displayChildren = useMemo(() => {
+		const children = umbrella.children;
+		if (!Array.isArray(children)) return [];
+		return children.filter((c) => (c as { tradeable?: boolean }).tradeable !== false);
+	}, [umbrella.children]);
+	const displayChildrenCount = displayChildren.length;
+
+	/** 3-way moneyline (Team A / Team B / Draw, e.g. FIFA): treated like esports for
+	 * the countdown/status header, and the headline reads "Money Line". */
+	const isThreeWayMoneyline = useMemo(
+		() => isThreeWayMoneylineQuestions(multiMarketData[umbrella._id]?.questions),
+		[multiMarketData, umbrella._id],
+	);
+
+	/** FIFA World Cup "Group X Winner" prop (N team legs, no Draw). Treated like a
+	 * 3-way moneyline for the countdown/status header; headline reads "Group X Winner". */
+	const isGroupWinner = useMemo(
+		() => isGroupWinnerQuestions(multiMarketData[umbrella._id]?.questions),
+		[multiMarketData, umbrella._id],
+	);
+	const groupWinnerLabel = useMemo(
+		() => (isGroupWinner ? groupWinnerGroupLabel(multiMarketData[umbrella._id]?.questions) : null),
+		[isGroupWinner, multiMarketData, umbrella._id],
+	);
+
 	if (typeof umbrella.displayName !== "string") {
 		throw new Error("umbrella displayName missing");
 	}
@@ -190,6 +211,34 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		typeof umbrella.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
 	const { appState: oddsAppState } = useOddsMonitor();
 	const matchedVenueRow = useMatchVenuePrices(pandascoreMatchIdForVenues || null, umbrella._id);
+
+	/*
+	 * Viewport-driven venue-prices subscription. The venue-prices WS caps at
+	 * MAX_VENUE_PANDA_SUBSCRIPTIONS distinct match IDs, so we can't subscribe the
+	 * whole list at once. Each card claims its own match IDs only while it is in
+	 * (or near) the viewport, so the subscription budget follows the user as they
+	 * scroll and BBO loads in for whatever is on screen — instead of only the
+	 * first N cards in the list. `rootMargin` pre-subscribes just before a card
+	 * enters view so prices are present by the time it lands.
+	 */
+	// ~2 screens of pre-subscribe lead so BBO is already arriving before a card
+	// scrolls into view (weight 2 keeps on-screen cards prioritised over the
+	// leading-window prefetch when the budget is contended).
+	const [cardViewportRef, cardInView] = useInViewport<HTMLDivElement>("1000px 0px");
+	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
+	const venuePandaIds = useMemo(() => umbrellaVenuePandaIds(umbrella), [umbrella]);
+	const venuePandaIdsKey = venuePandaIds.join(",");
+	useEffect(() => {
+		if (!cardInView || venuePandaIds.length === 0) return;
+		// On-screen cards subscribe at the higher viewport weight so they always
+		// hold a slot over the anticipatory leading-window prefetch (weight 1).
+		for (const id of venuePandaIds) subscribePandaMatchId(id, VENUE_SUB_WEIGHT_VIEWPORT);
+		return () => {
+			for (const id of venuePandaIds) unsubscribePandaMatchId(id, VENUE_SUB_WEIGHT_VIEWPORT);
+		};
+		// venuePandaIdsKey captures the id-set identity; subscribe/unsubscribe are stable.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [cardInView, venuePandaIdsKey, subscribePandaMatchId, unsubscribePandaMatchId]);
 	/** Row object is mutated in place on each WS tick; `timestamp` forces recompute when refs are stable. */
 	const listingVenueYesNo = useMemo(
 		() => listingBestYesNoFromMatched(matchedVenueRow),
@@ -310,13 +359,13 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return resolved;
 	}, [umbrella.teamMappings, umbrella.game]);
 
-	// Get eventDate for both esports and daily
+	// Get eventDate for esports, daily, and 3-way moneyline (FIFA) cards
 	const eventDate = useMemo(() => {
-		if (!isEsportsUmbrella && !isDailyUmbrella) {
+		if (!isEsportsUmbrella && !isDailyUmbrella && !isThreeWayMoneyline && !isGroupWinner) {
 			return null;
 		}
 		return resolveUmbrellaEventDate(umbrella);
-	}, [isEsportsUmbrella, isDailyUmbrella, umbrella]);
+	}, [isEsportsUmbrella, isDailyUmbrella, isThreeWayMoneyline, isGroupWinner, umbrella]);
 
 	const eventDateMs = useMemo(() => {
 		if (eventDate === null) {
@@ -516,11 +565,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		if (isDailyUmbrella && endDate !== null) {
 			return endDate;
 		}
-		if (isEsportsUmbrella && eventDate !== null) {
+		if ((isEsportsUmbrella || isThreeWayMoneyline || isGroupWinner) && eventDate !== null) {
 			return eventDate;
 		}
 		return null;
-	}, [isDailyUmbrella, isEsportsUmbrella, endDate, eventDate]);
+	}, [isDailyUmbrella, isEsportsUmbrella, isThreeWayMoneyline, isGroupWinner, endDate, eventDate]);
 
 	const countdownDateMs = useMemo(() => {
 		if (countdownDate === null) {
@@ -543,8 +592,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 
 	const navigateToUmbrella = () => {
 		try {
-			const isSingleMarket = umbrella.children && umbrella.children.length === 1;
-			const isMultiMarket = umbrella.children && umbrella.children.length >= 2;
+			const isSingleMarket = displayChildrenCount === 1;
+			const isMultiMarket = displayChildrenCount >= 2;
 
 			const trackingData: any = {
 				umbrellaId: umbrella._id,
@@ -560,7 +609,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				}
 			} else if (isMultiMarket) {
 				trackingData.marketType = "multi";
-				trackingData.marketCount = umbrella.children?.length || 0;
+				trackingData.marketCount = displayChildrenCount;
 				const multiData = multiMarketData[umbrella._id];
 				if (multiData && multiData.questions && multiData.questions.length > 0) {
 					trackingData.marketIds = multiData.questions.map((q) => q._id || q.questionId);
@@ -637,10 +686,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		teamLogos.length >= 2 && (hasPandascoreMatch || teamLogos.some((t) => t.logoUrl !== null));
 
 	const cardHeadline = useMemo(() => {
+		if (isGroupWinner) return groupWinnerLabel ?? "Group Winner";
+		if (isThreeWayMoneyline) return "Money Line";
 		const sub = (isEsportsUmbrella ? esportsTitleParts.subtitle : "").trim();
 		if (sub.length > 0) return sub;
-		const children = umbrella.children;
-		if (Array.isArray(children) && children.length === 1) {
+		if (displayChildrenCount === 1) {
 			const q = singleMarketQuestions[umbrella._id];
 			if (q) {
 				return truncateMarketName(
@@ -648,7 +698,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				);
 			}
 		}
-		if (Array.isArray(children) && children.length >= 2) {
+		if (displayChildrenCount >= 2) {
 			const md = multiMarketData[umbrella._id];
 			const q = md?.questions?.[0];
 			if (q) {
@@ -657,9 +707,12 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 		return truncateMarketName(umbrella.displayName);
 	}, [
+		isThreeWayMoneyline,
+		isGroupWinner,
+		groupWinnerLabel,
 		isEsportsUmbrella,
 		esportsTitleParts.subtitle,
-		umbrella.children,
+		displayChildrenCount,
 		umbrella.displayName,
 		umbrella._id,
 		singleMarketQuestions,
@@ -701,7 +754,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const umbrellaVolumeLabel = formatUmbrellaCrossVenueVolumeLabel(umbrella.volume?.totalUsd);
 
 	const renderActions = () => {
-		if (umbrella.children && umbrella.children.length === 1) {
+		if (displayChildrenCount === 1) {
 			const orderbook = singleMarketOrderbooks[umbrella._id];
 			const question = singleMarketQuestions[umbrella._id];
 			const isDailyPlayerCount = isDailyUmbrella && umbrella.displayName.includes("Player Count");
@@ -721,7 +774,30 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					noInvertLogo={teamLogos[1]?.invertLogo === true}
 				/>
 			);
-		} else if (umbrella.children && umbrella.children.length >= 2) {
+		} else if (displayChildrenCount >= 2) {
+			// FIFA "Group X Winner" prop: N team legs (no Draw), each its own binary
+			// Polymarket market. Render one YES row per team.
+			if (isGroupWinner) {
+				return (
+					<GroupWinnerActions
+						umbrellaId={umbrella._id}
+						multiMarketData={multiMarketData}
+						onNavigate={navigateToMultiMarket}
+					/>
+				);
+			}
+			// 3-way moneyline (Team A / Draw / Team B), e.g. FIFA: each leg is its own
+			// binary Polymarket market, so render per-leg YES prices instead of the
+			// top-2 shared-price MultiMarketActions.
+			if (isThreeWayMoneylineQuestions(multiMarketData[umbrella._id]?.questions)) {
+				return (
+					<ThreeWayMoneylineActions
+						umbrellaId={umbrella._id}
+						multiMarketData={multiMarketData}
+						onNavigate={navigateToMultiMarket}
+					/>
+				);
+			}
 			return (
 				<MultiMarketActions
 					umbrellaId={umbrella._id}
@@ -733,24 +809,16 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					compact
 				/>
 			);
-		} else {
-			return (
-				<Button
-					variant="primary-action"
-					className="action-button yes-button"
-					onClick={navigateToUmbrella}
-				>
-					<strong>
-						<Trans>Explore Questions</Trans>
-					</strong>
-				</Button>
-			);
 		}
+		return null;
 	};
 
-	// Live logic only for esports (based on eventDate)
+	const actionContent = renderActions();
+
+	// Live logic for esports and 3-way moneyline (FIFA), based on eventDate
+	const isEventDriven = isEsportsUmbrella || isThreeWayMoneyline || isGroupWinner;
 	let isLive = false;
-	if (isEsportsUmbrella && eventDateMs !== null) {
+	if (isEventDriven && eventDateMs !== null) {
 		if (now >= eventDateMs) {
 			const elapsed = now - eventDateMs;
 			if (elapsed <= LIVE_WINDOW_MS) {
@@ -760,7 +828,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	}
 
 	let isUpcoming = false;
-	if (isEsportsUmbrella && eventDateMs !== null) {
+	if (isEventDriven && eventDateMs !== null) {
 		if (now < eventDateMs) {
 			isUpcoming = true;
 		}
@@ -771,7 +839,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	}
 
 	let isEnded = false;
-	if (isEsportsUmbrella && eventDateMs !== null) {
+	if (isEventDriven && eventDateMs !== null) {
 		if (!isLive && !isUpcoming) {
 			isEnded = true;
 		}
@@ -791,7 +859,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				<span className="prediction-live-text">Live</span>
 			</div>
 		);
-	} else if (dailyWindowEnded || (isEsportsUmbrella && isEnded)) {
+	} else if (dailyWindowEnded || (isEventDriven && isEnded)) {
 		topLeftStatus = <span className="prediction-ended-label">Ended</span>;
 	} else if (isDailyUmbrella && endDate !== null && !dailyWindowEnded) {
 		topLeftStatus = (
@@ -803,9 +871,9 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				showZeroDays={false}
 			/>
 		);
-	} else if (isEsportsUmbrella && isUpcoming && countdownDate !== null) {
+	} else if (isEventDriven && isUpcoming && countdownDate !== null) {
 		topLeftStatus = (
-			<CountdownTimer
+			<EventStartStatus
 				target={countdownDate}
 				className="prediction-countdown"
 				prefix="Starts In:"
@@ -830,6 +898,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	return (
 		<div
 			key={umbrella._id}
+			ref={cardViewportRef}
 			data-qa="prediction-card"
 			data-qa-umbrella-id={umbrella._id}
 			data-qa-panda-match-id={umbrella.pandascore_matchId}
@@ -849,9 +918,9 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				</div>
 			</div>
 
-			<div className="prediction-actions">{renderActions()}</div>
+			{actionContent ? <div className="prediction-actions">{actionContent}</div> : null}
 
-			{umbrellaVolumeLabel && umbrella.children && umbrella.children.length === 1 ? (
+			{umbrellaVolumeLabel && displayChildrenCount === 1 ? (
 				<div className="prediction-card__meta prediction-card__top--split">
 					<div className="prediction-card__top-status">
 						<span className="prediction-card__volume prediction-card__headline-match-winner">

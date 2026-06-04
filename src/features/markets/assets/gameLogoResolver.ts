@@ -1,9 +1,14 @@
 // Reusable resolver for picking a game logo from game-logos by tags, with fallback
 
 import cs2GameLogoUrl from "@/assets/game-logos/cs2.png";
+import fifaWorldCupLogoUrl from "@/assets/game-logos/fifa-world-cup-2026--white.9ba8a004.png";
+import { WORLD_CUP_GAME_SLUG } from "@/pages/Predictions/utils/gameLinkFilters";
 
 /** Same asset as the CS2 / Counter-Strike pill and trading-card game fallback. */
 export const CS2_GAME_LOGO_URL = cs2GameLogoUrl;
+
+/** FIFA World Cup sidebar pill, trading header, and listing cards (`Umbrella.game`). */
+export const WORLD_CUP_GAME_LOGO_URL = fifaWorldCupLogoUrl;
 
 // Load all game logos at build time via Vite glob
 const logoModules = import.meta.glob("@/assets/game-logos/*.{png,jpg,jpeg,svg,webp}", {
@@ -70,6 +75,33 @@ for (const key of CS2_EXPLICIT_LOGO_KEYS) {
 	logoMap[key] = cs2GameLogoUrl;
 }
 
+const WORLD_CUP_EXPLICIT_LOGO_KEYS = [
+	"WORLD_CUP",
+	"FIFA",
+	"FIFA_WORLD_CUP",
+	"FIFA_WORLD_CUP_2026",
+	"SOCCER_FIFWC",
+	"SOCCER",
+] as const;
+for (const key of WORLD_CUP_EXPLICIT_LOGO_KEYS) {
+	logoMap[key] = fifaWorldCupLogoUrl;
+}
+
+export function worldCupLogoFromUmbrella(
+	umbrella: { game?: string } | null | undefined,
+): string | null {
+	return (umbrella as { game?: string } | null | undefined)?.game === WORLD_CUP_GAME_SLUG
+		? WORLD_CUP_GAME_LOGO_URL
+		: null;
+}
+
+/** Prefer bundled World Cup art over remote tag/Firebase icons (same pattern as CS2). */
+export function bundledWorldCupLogoFromUmbrella(
+	umbrella: { game?: string } | null | undefined,
+): string | null {
+	return worldCupLogoFromUmbrella(umbrella);
+}
+
 export function resolveLogoByTags(tags: string[] | undefined | null): string | null {
 	if (Array.isArray(tags)) {
 		for (const raw of tags) {
@@ -108,9 +140,12 @@ export function resolveUmbrellaIconById(umbrellaId?: string): string | null {
 // Enhanced resolver with priority: Game logo → Fallback
 // Note: Server images are handled at component level with error fallback
 export function resolveLogoWithPriority(
-	_umbrella: unknown,
+	umbrella: unknown,
 	tags: string[] | undefined | null,
 ): string | null {
+	const worldCupLogo = worldCupLogoFromUmbrella(umbrella as { game?: string });
+	if (worldCupLogo) return worldCupLogo;
+
 	// Check for game logo based on tags
 	const gameLogo = resolveLogoByTags(tags);
 	if (gameLogo) {

@@ -7,7 +7,9 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
 import type { TradingPagePrices } from "@/features/markets/pricing/useTradingPagePrices";
+import { resolveUmbrellaVenueKey } from "@/features/markets/pricing/venueLookupKey";
 import { TradeBoxSkeleton } from "./Skeletons";
+import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
 
 export type UmbrellaTradeBoxPanelProps = {
 	umbrella: Umbrella;
@@ -49,8 +51,12 @@ export function UmbrellaTradeBoxPanel({
 			child
 		);
 
-	const pandascoreMatchId =
-		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
+	/**
+	 * Umbrella-level `pandascore_matchId` for esports; per-leg `polymarketMarketId`
+	 * for FIFA 3-way mirror markets. Drives `multiVenueEnabled` + cross-venue SOR in
+	 * `PredictionMarketTradeBox` identically for both.
+	 */
+	const pandascoreMatchId = resolveUmbrellaVenueKey(umbrella, activeMarket);
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 	const umbrellaPredictFun = umbrella?.exchangeMatching?.predictFun;
@@ -93,7 +99,7 @@ export function UmbrellaTradeBoxPanel({
 			umbrellaId={umbrella._id}
 			limitlessMappingFromUmbrella={umbrellaLimitless}
 			predictFunMappingFromUmbrella={umbrellaPredictFun}
-			umbrellaDisplayName={umbrella.displayName}
+			umbrellaDisplayName={formatUmbrellaTitleForTradingPage(umbrella)}
 			initialPosition={activePosition}
 			onPositionChange={onPositionChange}
 			onSideChange={setTradeSide}

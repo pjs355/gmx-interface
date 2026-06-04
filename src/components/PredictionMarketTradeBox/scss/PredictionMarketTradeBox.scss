@@ -40,6 +40,29 @@
 			text-overflow: clip;
 			flex: 1;
 			min-width: 0;
+
+			// Selected outcome (3-way leg): green, paired with the grey match line above.
+			&--outcome {
+				color: #22c55e;
+			}
+		}
+
+		// Stacked header for 3-way (FIFA) legs: grey "A vs B" over green outcome.
+		.market-name-header__stack {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+			flex: 1;
+			min-width: 0;
+
+			.market-name-header__match {
+				font-size: 13px;
+				font-weight: 500;
+				color: #9ca3af;
+				white-space: normal;
+				word-break: break-word;
+				overflow-wrap: anywhere;
+			}
 		}
 
 		&__venue.trade-mode-selector {

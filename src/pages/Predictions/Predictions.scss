@@ -468,6 +468,10 @@ $predictions-compact-card-inline: 60px;
 	flex-shrink: 0;
 }
 
+.game-link__logo--world-cup {
+	border-radius: 4px;
+}
+
 .game-link__live-dot {
 	width: 8px;
 	height: 8px;
@@ -805,6 +809,11 @@ $predictions-compact-card-inline: 60px;
 	filter: invert(1);
 }
 
+/* Draw outcome: render the (black) soccer-ball as a neutral grey, not a team. */
+.prediction-card-outcome-logo-img--draw {
+	filter: brightness(0) invert(0.62);
+}
+
 /* Umbrella-style fallbacks (tag / game logo); boxed look when not the primary team asset */
 .prediction-card-outcome-logo-img--controller {
 	border-radius: 8px;
@@ -995,6 +1004,96 @@ $predictions-compact-card-inline: 60px;
 		color: #f9fafb;
 		letter-spacing: 0.02em;
 		line-height: 1.2;
+	}
+}
+
+/* World Cup sidebar accordion (Games / Groups under World Cup pill). */
+.game-link-world-cup-block {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+}
+
+.game-link--world-cup-parent {
+	width: 100%;
+	/* Inherit .game-link padding from the sidebar column; do not zero it out. */
+}
+
+.game-link--world-cup-parent .game-link__inner {
+	align-items: center;
+}
+
+.game-link--world-cup-parent .game-link__main {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	text-align: left;
+	font: inherit;
+	display: flex;
+	align-items: center;
+}
+
+.game-link__world-cup-trailing {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
+	min-height: 0;
+}
+
+.game-link--world-cup-parent .game-link__caret {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	line-height: 1;
+
+	&:hover {
+		color: var(--brand-primary);
+	}
+
+	svg {
+		display: block;
+		width: 14px;
+		height: 14px;
+	}
+}
+
+.game-link--world-cup-parent .game-link__count {
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+}
+
+.game-links-world-cup-children {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding-left: 12px;
+	gap: 2px;
+	box-sizing: border-box;
+}
+
+.game-link--sub {
+	padding-left: 8px;
+	font-size: 13px;
+	font-weight: 500;
+
+	.game-link__label {
+		font-weight: 500;
 	}
 }
 
@@ -1793,5 +1892,14 @@ $predictions-compact-card-inline: 60px;
 
 	.predictions-markets-body > .game-links-wrapper .game-link__count {
 		font-size: 17px;
+	}
+
+	.predictions-markets-body > .game-links-wrapper .game-link--world-cup-parent .game-link__inner {
+		width: 100%;
+		align-items: center;
+	}
+
+	.predictions-markets-body > .game-links-wrapper .game-link--world-cup-parent .game-link__count {
+		line-height: 1;
 	}
 }

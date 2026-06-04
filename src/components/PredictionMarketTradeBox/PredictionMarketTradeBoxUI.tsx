@@ -130,7 +130,16 @@ export default function PredictionMarketTradeBoxUI({
 	return (
 		<div className="prediction-market-tradebox">
 			<div className="market-name-header">
-				<h3 className="market-name-header__title">{team.displayMarketTitle}</h3>
+				{team.matchTitle ? (
+					<div className="market-name-header__stack">
+						<span className="market-name-header__match">{team.matchTitle}</span>
+						<h3 className="market-name-header__title market-name-header__title--outcome">
+							{team.displayMarketTitle}
+						</h3>
+					</div>
+				) : (
+					<h3 className="market-name-header__title">{team.displayMarketTitle}</h3>
+				)}
 			</div>
 
 			<div className="tradebox-header">

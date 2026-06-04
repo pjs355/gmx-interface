@@ -1,0 +1,25 @@
+/* 3-way (FIFA) Basic-tab odds table: reuses every `.esports-venue-books__*`
+ * style, only re-balancing column widths so three outcome columns fit beside
+ * the prediction-market (venue) column. */
+.three-way-venue-books {
+	.esports-venue-books__th--venue {
+		width: 25%;
+		min-width: 7rem;
+	}
+
+	.esports-venue-books__th--team {
+		width: 25%;
+		max-width: none;
+	}
+}
+
+.prediction-market-page.mobile .three-way-venue-books {
+	.esports-venue-books__th--venue {
+		width: 34%;
+		min-width: 0;
+	}
+
+	.esports-venue-books__th--team {
+		width: 22%;
+	}
+}

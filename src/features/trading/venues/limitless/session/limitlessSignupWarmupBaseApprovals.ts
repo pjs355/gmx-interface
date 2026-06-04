@@ -84,16 +84,25 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 		return;
 	}
 
-	const buyOnChainOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-		maker: vacmMaker,
-		verify: allowance,
-		chainRead: opts.chainRead,
-	});
+	// Partner `verify-allowance` is the authoritative "can you trade" signal. When it
+	// reports the maker already has minimum allowance, the maker can trade and any
+	// on-chain `approve` here is a no-op — sending one (and retrying when our own
+	// on-chain read disagrees) just spams sponsored Base txs. Only fall through to
+	// on-chain approvals when the partner says allowance is missing.
+	const buyOnChainOk =
+		allowance.hasMinimumAllowance ||
+		(await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+			maker: vacmMaker,
+			verify: allowance,
+			chainRead: opts.chainRead,
+		}));
 	if (buyOnChainOk) {
 		if (isTradingDebugLoggingEnabled()) {
 			console.info(LOG, "buy_usdc_warmup_skip", {
 				slug,
-				reason: "already_sufficient_on_chain",
+				reason: allowance.hasMinimumAllowance
+					? "partner_has_minimum_allowance"
+					: "already_sufficient_on_chain",
 				maker: clipAddr(vacmMaker),
 			});
 		}
@@ -106,11 +115,13 @@ export async function runLimitlessSignupWarmupBaseApprovals(opts: {
 			chainRead: opts.chainRead,
 		});
 		allowance = await opts.postLimitlessVerifyAllowance(slug);
-		const afterBuy = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-			maker: vacmMaker,
-			verify: allowance,
-			chainRead: opts.chainRead,
-		});
+		const afterBuy =
+			allowance.hasMinimumAllowance ||
+			(await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+				maker: vacmMaker,
+				verify: allowance,
+				chainRead: opts.chainRead,
+			}));
 		if (!afterBuy) {
 			const detail = [
 				`maker=${clipAddr(vacmMaker)}`,

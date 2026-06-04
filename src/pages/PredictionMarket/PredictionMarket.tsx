@@ -10,12 +10,23 @@ import GameLinks from "@/pages/Predictions/components/GameLinks";
 import {
 	getHomeGameFilter,
 	setHomePendingGameFilter,
+	setHomePendingWorldCupSection,
 } from "@/pages/Predictions/utils/gameFilterNavigation";
+import type { WorldCupSection } from "@/pages/Predictions/components/GameLinks";
+import {
+	isWorldCupPropUmbrella,
+	isWorldCupUmbrella,
+	WORLD_CUP_PILL_ID,
+} from "@/pages/Predictions/utils/gameLinkFilters";
 import { MarketPanels } from "./MarketPanels";
 import { useUmbrellaLiveOrderbooks } from "./useUmbrellaLiveOrderbooks";
 import { useVolumeSortedQuestions } from "./useVolumeSortedQuestions";
 import { useChartState } from "./useChartState";
 import { useMatchSettled } from "./useMatchSettled";
+import {
+	isThreeWayMoneylineQuestions,
+	orderThreeWayLegs,
+} from "@/features/markets/listing/threeWayMoneyline";
 import "../Predictions/Predictions.scss";
 import "./scss/PredictionMarket.scss";
 import { PredictionCurtainProvider } from "@/components/PredictionMarketTradeBox";
@@ -140,6 +151,34 @@ function PredictionMarketContent() {
 		},
 		[navigate],
 	);
+
+	const handleTradingWorldCupSectionSelect = useCallback(
+		(section: WorldCupSection) => {
+			setHomePendingGameFilter(WORLD_CUP_PILL_ID);
+			setHomePendingWorldCupSection(section);
+			navigate("/");
+		},
+		[navigate],
+	);
+
+	const tradingWorldCupSection = useMemo((): WorldCupSection => {
+		if (!umbrella) return "games";
+		if (isWorldCupPropUmbrella(umbrella)) return "groups";
+		if (isWorldCupUmbrella(umbrella)) return "games";
+		return "games";
+	}, [umbrella]);
+
+	const tradingWorldCupSectionCounts = useMemo(() => {
+		let games = 0;
+		let groups = 0;
+		for (const u of umbrellas) {
+			if ((u as { active?: boolean }).active !== true) continue;
+			if (!isWorldCupUmbrella(u)) continue;
+			if (isWorldCupPropUmbrella(u)) groups += 1;
+			else games += 1;
+		}
+		return { games, groups };
+	}, [umbrellas]);
 	const titleRef = useRef<HTMLHeadingElement | null>(null);
 	const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({
 		umbrella: false,
@@ -197,9 +236,21 @@ function PredictionMarketContent() {
 		navigate,
 	]);
 
+	/**
+	 * Aggregator sub-markets (Map N winner, totals, …) carry `tradeable === false`
+	 * and have no LevelUp order book / on-chain CTF. Keep them out of the moneyline
+	 * pipeline (orderbook fetch, volume sort, chart, trade box) and render them as
+	 * view-only cards. Markets without subs (esports moneyline-only, FIFA legs) are
+	 * unaffected because their questions are all `tradeable !== false`.
+	 */
+	const moneylineQuestions = useMemo(
+		() => questions.filter((q) => (q as { tradeable?: boolean }).tradeable !== false),
+		[questions],
+	);
+
 	const { questionOrderbooks, orderbooksReady, fetchAllOrderbooks } = useUmbrellaLiveOrderbooks(
 		umbrella?._id,
-		questions,
+		moneylineQuestions,
 		getOrderbookForQuestion,
 		refreshOrderbook,
 	);
@@ -339,7 +390,11 @@ function PredictionMarketContent() {
 		}
 	}, [activeMarketOrderbook, activeMarket]);
 
-	const sortedQuestions = useVolumeSortedQuestions(questions, questionOrderbooks, orderbooksReady);
+	const sortedQuestions = useVolumeSortedQuestions(
+		moneylineQuestions,
+		questionOrderbooks,
+		orderbooksReady,
+	);
 
 	// COMPLETELY ISOLATED CHART STATE - Never changes after initial load
 	// Chart state managed by useChartState hook
@@ -415,8 +470,16 @@ function PredictionMarketContent() {
 		setActiveMarket(sortedQuestions[0]);
 	}, [sortedQuestions, activeMarket, getMarketId]);
 
+	// Chart input: for a 3-way moneyline (FIFA) plot only the two team legs
+	// (home + away YES); the draw is excluded from the chart per product spec
+	// while remaining tradeable / shown in the order-book tabs.
+	const chartQuestions = useMemo(() => {
+		if (!isThreeWayMoneylineQuestions(sortedQuestions)) return sortedQuestions;
+		return orderThreeWayLegs(sortedQuestions).filter((q) => q.moneylineLeg !== "draw");
+	}, [sortedQuestions]);
+
 	// Hooks must be called unconditionally on every render
-	const chartOnlyState = useChartState(sortedQuestions as any[], questionOrderbooks);
+	const chartOnlyState = useChartState(chartQuestions as any[], questionOrderbooks);
 
 	const pandascoreMatchIdRaw =
 		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
@@ -487,6 +550,10 @@ function PredictionMarketContent() {
 							umbrellas={umbrellas}
 							loading={contextLoading}
 							filterType="all"
+							disableFilterToggle
+							worldCupSection={tradingWorldCupSection}
+							onWorldCupSectionSelect={handleTradingWorldCupSectionSelect}
+							worldCupSectionCounts={tradingWorldCupSectionCounts}
 						/>
 						<MarketPanels
 							umbrella={umbrella!}
