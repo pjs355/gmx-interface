@@ -12,6 +12,8 @@ import { resolveTeamLogo } from "@/config/team-map";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
+import { buildPandaOddsRowSpecs } from "@/features/markets/presentation/pandaOddsRows";
+import { EsportsMatchMapOddsGrid } from "./EsportsMatchMapOddsGrid";
 import {
 	isPredictionPricingDebugEnabled,
 	priceDebugLog,
@@ -27,6 +29,10 @@ import {
 	resolveLogoByTags,
 } from "@/features/markets/assets/gameLogoResolver";
 import { formatUmbrellaCrossVenueVolumeLabel } from "@/features/markets/presentation/umbrellaVolume";
+import {
+	resolveEsportsCardGameHeadline,
+	resolveHomeMatchWinnerQuestion,
+} from "@/features/markets/presentation/esportsHomeCard";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -469,28 +475,28 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return title || umbrella.displayName;
 	}, [isDailyUmbrella, umbrella.displayName, eventDate]);
 
-	// Process title parts for esports and daily markets
-	const esportsTitleParts = useMemo(() => {
-		const result = {
-			headline: isDailyUmbrella ? dailyTitleWithoutDate : umbrella.displayName,
-			subtitle: "",
-		};
-		if (!isEsportsUmbrella) {
-			return result;
-		}
-		const lastDash = umbrella.displayName.lastIndexOf(" - ");
-		if (lastDash !== -1) {
-			const teams = umbrella.displayName.slice(0, lastDash).trim();
-			const marketType = umbrella.displayName.slice(lastDash + 3).trim();
-			if (teams.length > 0) {
-				result.headline = teams;
-			}
-			if (marketType.length > 0) {
-				result.subtitle = marketType;
-			}
-		}
-		return result;
-	}, [isEsportsUmbrella, umbrella.displayName, isDailyUmbrella, dailyTitleWithoutDate]);
+	const hasPandascoreMatch =
+		typeof umbrella.pandascore_matchId === "string" && umbrella.pandascore_matchId.length > 0;
+
+	const matchWinnerQuestion = useMemo(
+		() => resolveHomeMatchWinnerQuestion(umbrella, { singleMarketQuestions, multiMarketData }),
+		[umbrella, singleMarketQuestions, multiMarketData],
+	);
+
+	const isPandaEsportsListing = isEsportsUmbrella || hasPandascoreMatch;
+	const useEsportsMatchWinnerCard = isPandaEsportsListing && matchWinnerQuestion !== null;
+
+	// Series winner + each map that exists, as token-pair odds rows for the card.
+	const esportsOddsRowSpecs = useMemo(
+		() =>
+			isPandaEsportsListing && pandascoreMatchIdForVenues
+				? buildPandaOddsRowSpecs(
+						pandascoreMatchIdForVenues,
+						(umbrella.children ?? []) as unknown as Parameters<typeof buildPandaOddsRowSpecs>[1],
+					)
+				: [],
+		[isPandaEsportsListing, pandascoreMatchIdForVenues, umbrella.children],
+	);
 
 	// For daily markets, calculate endDate as 23hrs 59min after eventDate
 	const endDate = useMemo(() => {
@@ -578,20 +584,21 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	};
 
 	const navigateToSingleMarket = (position: "yes" | "no") => {
+		const question = useEsportsMatchWinnerCard
+			? matchWinnerQuestion
+			: singleMarketQuestions[umbrella._id];
 		try {
-			const question = singleMarketQuestions[umbrella._id];
 			mixpanelTrack("PredictionCardWSideClick", {
 				umbrellaId: umbrella._id,
 				umbrellaName: umbrella.displayName,
 				marketId: question?._id || question?.questionId,
 				marketName: question?.displayName || question?.question,
 				position: position,
-				marketType: "single",
+				marketType: useEsportsMatchWinnerCard ? "esports-match-winner" : "single",
 			});
 		} catch (error) {
 			console.error("error", error);
 		}
-		const question = singleMarketQuestions[umbrella._id];
 		if (homeTradeDock?.onHomeOddsSelect && question) {
 			homeTradeDock.onHomeOddsSelect({
 				umbrella,
@@ -631,14 +638,16 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		onNavigateToMultiMarket(umbrella, question, position);
 	};
 
-	const hasPandascoreMatch =
-		typeof umbrella.pandascore_matchId === "string" && umbrella.pandascore_matchId.length > 0;
 	const showTeamLogos =
 		teamLogos.length >= 2 && (hasPandascoreMatch || teamLogos.some((t) => t.logoUrl !== null));
 
 	const cardHeadline = useMemo(() => {
-		const sub = (isEsportsUmbrella ? esportsTitleParts.subtitle : "").trim();
-		if (sub.length > 0) return sub;
+		if (isPandaEsportsListing) {
+			return resolveEsportsCardGameHeadline(umbrella, tags);
+		}
+		if (isDailyUmbrella) {
+			return truncateMarketName(dailyTitleWithoutDate);
+		}
 		const children = umbrella.children;
 		if (Array.isArray(children) && children.length === 1) {
 			const q = singleMarketQuestions[umbrella._id];
@@ -657,10 +666,12 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 		return truncateMarketName(umbrella.displayName);
 	}, [
-		isEsportsUmbrella,
-		esportsTitleParts.subtitle,
+		isPandaEsportsListing,
+		isDailyUmbrella,
+		dailyTitleWithoutDate,
+		umbrella,
+		tags,
 		umbrella.children,
-		umbrella.displayName,
 		umbrella._id,
 		singleMarketQuestions,
 		multiMarketData,
@@ -701,6 +712,43 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const umbrellaVolumeLabel = formatUmbrellaCrossVenueVolumeLabel(umbrella.volume?.totalUsd);
 
 	const renderActions = () => {
+		if (useEsportsMatchWinnerCard && matchWinnerQuestion) {
+			// Maps present → matrix: teams as rows, markets (Series, Map 1, …) as
+			// columns, team-colored price cells.
+			if (esportsOddsRowSpecs.length > 1) {
+				return (
+					<EsportsMatchMapOddsGrid
+						specs={esportsOddsRowSpecs}
+						markets={oddsAppState?.markets}
+						storeTimestamp={oddsAppState?.timestamp}
+						umbrella={umbrella}
+						question={matchWinnerQuestion}
+						teamALogo={renderOutcomeLogoSlot(0)}
+						teamBLogo={renderOutcomeLogoSlot(1)}
+						teamAInvertLogo={teamLogos[0]?.invertLogo === true}
+						teamBInvertLogo={teamLogos[1]?.invertLogo === true}
+						onSelect={navigateToUmbrella}
+					/>
+				);
+			}
+			const orderbook = singleMarketOrderbooks[umbrella._id];
+			return (
+				<SingleMarketActions
+					orderbook={orderbook}
+					onNavigate={navigateToSingleMarket}
+					question={matchWinnerQuestion}
+					umbrella={umbrella}
+					umbrellaDisplayName={umbrella.displayName}
+					liveVenueYesPrice={listingVenueYesNo.yes ?? undefined}
+					liveVenueNoPrice={listingVenueYesNo.no ?? undefined}
+					compact
+					yesLogoSlot={renderOutcomeLogoSlot(0)}
+					noLogoSlot={renderOutcomeLogoSlot(1)}
+					yesInvertLogo={teamLogos[0]?.invertLogo === true}
+					noInvertLogo={teamLogos[1]?.invertLogo === true}
+				/>
+			);
+		}
 		if (umbrella.children && umbrella.children.length === 1) {
 			const orderbook = singleMarketOrderbooks[umbrella._id];
 			const question = singleMarketQuestions[umbrella._id];
@@ -711,6 +759,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 					onNavigate={navigateToSingleMarket}
 					question={question}
 					isDailyPlayerCount={isDailyPlayerCount}
+					umbrella={umbrella}
 					umbrellaDisplayName={umbrella.displayName}
 					liveVenueYesPrice={listingVenueYesNo.yes ?? undefined}
 					liveVenueNoPrice={listingVenueYesNo.no ?? undefined}
@@ -851,7 +900,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 
 			<div className="prediction-actions">{renderActions()}</div>
 
-			{umbrellaVolumeLabel && umbrella.children && umbrella.children.length === 1 ? (
+			{umbrellaVolumeLabel && (useEsportsMatchWinnerCard || umbrella.children?.length === 1) ? (
 				<div className="prediction-card__meta prediction-card__top--split">
 					<div className="prediction-card__top-status">
 						<span className="prediction-card__volume prediction-card__headline-match-winner">

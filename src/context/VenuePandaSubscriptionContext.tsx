@@ -1,8 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 
-/** Max distinct PandaScore match IDs on one venue-prices connection (home + trading). */
-export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 52;
-
 type VenuePandaSubscriptionContextValue = {
 	subscribePandaMatchId: (pandaMatchId: string) => void;
 	unsubscribePandaMatchId: (pandaMatchId: string) => void;
@@ -19,11 +16,11 @@ export function VenuePandaSubscriptionProvider({ children }: { children: React.R
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const flushActive = useCallback(() => {
-		const entries = [...countsRef.current.entries()].sort((a, b) => {
-			if (b[1] !== a[1]) return b[1] - a[1];
-			return a[0].localeCompare(b[0]);
-		});
-		setActivePandaMatchIds(entries.slice(0, MAX_VENUE_PANDA_SUBSCRIPTIONS).map(([id]) => id));
+		// No cap: subscribe to every match the UI currently references (ref-counted on
+		// mount/unmount). The server maintains all books; the per-client subscribe set
+		// follows what the UI has on screen. Later optimization: scope to actually
+		// rendered (virtualized) rows so we only open WS for what's truly visible.
+		setActivePandaMatchIds([...countsRef.current.keys()]);
 	}, []);
 
 	const scheduleFlush = useCallback(() => {

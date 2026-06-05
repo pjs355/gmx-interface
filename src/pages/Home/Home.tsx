@@ -6,7 +6,9 @@ import { LoadingState } from "../Predictions/components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { resolveUmbrellaEventDate } from "../Predictions/utils/eventDates";
+import { resolveHomeMatchWinnerQuestion } from "@/features/markets/presentation/esportsHomeCard";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
+import { pandaVenueWireKeys } from "@/features/markets/presentation/pandaOddsRows";
 import "./Home.scss";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -156,7 +158,10 @@ export default function Home() {
 
 	const navigateToSingleMarket = (umbrella: Umbrella, position: "yes" | "no") => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		const question = singleMarketQuestions[umbrella._id];
+		const question = resolveHomeMatchWinnerQuestion(umbrella, {
+			singleMarketQuestions,
+			multiMarketData,
+		});
 		if (question) {
 			localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 			localStorage.setItem("activePosition", position);
@@ -237,7 +242,17 @@ export default function Home() {
 		for (const u of [...gamingUmbrellas, ...esportsUmbrellas]) {
 			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
 			const pid = typeof raw === "string" ? raw.trim() : "";
-			if (pid) ids.add(pid);
+			if (!pid) continue;
+			// Subscribe series + each map wire key so per-map odds stream on the card.
+			const children = (u as { children?: unknown }).children;
+			const keys = pandaVenueWireKeys(
+				pid,
+				Array.isArray(children)
+					? (children as unknown as Parameters<typeof pandaVenueWireKeys>[1])
+					: [],
+			);
+			if (keys.length === 0) ids.add(pid);
+			else for (const k of keys) ids.add(k);
 		}
 		return [...ids].sort().join("\0");
 	}, [gamingUmbrellas, esportsUmbrellas]);

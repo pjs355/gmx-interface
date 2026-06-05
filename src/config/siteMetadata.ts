@@ -2,8 +2,8 @@
  * Canonical site / link-preview metadata.
  * `index.html` uses placeholders filled by `scripts/viteSiteMetadataHtml.ts` at build/dev.
  */
-/** Production origin (ClutchComent.com). */
-export const SITE_ORIGIN = "https://clutchcoment.com";
+/** Production origin (clutchcomet.com). */
+export const SITE_ORIGIN = "https://clutchcomet.com";
 
 export const SITE_NAME = "ClutchComet";
 

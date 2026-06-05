@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { usePrivy } from "@privy-io/react-auth";
 import type { ProcessedOrder } from "@/services/api/simplifiedOrderService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -78,6 +79,7 @@ export default function OrdersView({
 	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
 	const portfolioPriceLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const navigate = useNavigate();
+	const { getAccessToken } = usePrivy();
 	const privateApi = usePrivateApiClient();
 	const queryClient = useQueryClient();
 
@@ -300,7 +302,12 @@ export default function OrdersView({
 													if (cancelingIds.has(o.orderId)) return;
 													setCancelingIds((prev) => new Set(prev).add(o.orderId));
 													try {
-														const res = await cancelOrder(o.orderId);
+														const token = await getAccessToken();
+														if (!token) {
+															console.error("Cancel order error: missing access token");
+															return;
+														}
+														const res = await cancelOrder(o.orderId, token);
 														console.log("Cancel order result:", res);
 													} catch (e) {
 														console.error("Cancel order error:", e);

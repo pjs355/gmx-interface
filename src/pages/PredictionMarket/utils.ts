@@ -1,3 +1,5 @@
+import { pickPandaMoneylineQuestion } from "@/features/markets/presentation/pandaMoneylineQuestion";
+
 export const getMarketId = (market: any): string => {
 	if (!market) return "";
 	return market._id || market.questionId || market.marketId || "";
@@ -23,6 +25,8 @@ export function resolveLevelUpOrderbookKey(
 		const byMongoOrOtherId = qs.find((q) => getMarketId(q) === raw);
 		if (byMongoOrOtherId) return getMarketId(byMongoOrOtherId);
 	}
+	const moneyline = pickPandaMoneylineQuestion(qs);
+	if (moneyline) return getMarketId(moneyline);
 	const winner = qs.find((q) => String(q?.pandascore_template ?? "") === "winner-2-way");
 	if (winner) return getMarketId(winner);
 	return getMarketId(qs[0]);

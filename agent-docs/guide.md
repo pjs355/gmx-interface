@@ -77,11 +77,12 @@ When a user opens `architecture.md`, `master-data-flow.mmd`, or asks about data-
 
 ## Related (outside this folder)
 
-| Doc                                                                                                  | Purpose                                                              |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [../coding-standards/standards.md](../coding-standards/standards.md)                                 | Shared `tsconfig` profiles + ESLint policy (versioned in this repo)  |
-| [../../refactor-2-handoff.md](../../refactor-2-handoff.md)                                           | Refactor-2 snapshot + multi-session project context (workspace root) |
-| [../../predictions-api/agent-docs/architecture.md](../../predictions-api/agent-docs/architecture.md) | Server-side architecture (SOR, private API, MongoDB)                 |
+| Doc                                                                                                                                  | Purpose                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| [../coding-standards/standards.md](../coding-standards/standards.md)                                                                 | Shared `tsconfig` profiles + ESLint policy (versioned in this repo)  |
+| [../../refactor-2-handoff.md](../../refactor-2-handoff.md)                                                                           | Refactor-2 snapshot + multi-session project context (workspace root) |
+| [../../predictions-api/agent-docs/architecture.md](../../predictions-api/agent-docs/architecture.md)                                 | Server-side architecture (SOR, private API, MongoDB)                 |
+| [../../predictions-api/agent-docs/diagrams/master-server-flow.mmd](../../predictions-api/agent-docs/diagrams/master-server-flow.mmd) | Server master flow diagram (counterpart to client master data-flow)  |
 
 ## Conventions
 
