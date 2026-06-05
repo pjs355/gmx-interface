@@ -1,0 +1,122 @@
+.esports-grid {
+	display: grid;
+	column-gap: 8px;
+	row-gap: 6px;
+	align-items: center;
+	width: 100%;
+	box-sizing: border-box;
+	// Align the team logo / cells with the rest of the card content (the
+	// "Starts In" header uses the same inline padding).
+	padding: 0 var(--prediction-card-inline, 20px) 12px;
+
+	&__corner {
+		min-height: 1px;
+	}
+
+	&__colhead {
+		font-size: 11px;
+		font-weight: 600;
+		text-align: center;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		white-space: nowrap;
+		color: #9ca3af;
+	}
+
+	&__team {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	&__team-logo {
+		flex: 0 0 36px;
+		width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+
+		img {
+			width: 100%;
+			height: 100%;
+			object-fit: contain;
+		}
+	}
+
+	&__team-name {
+		font-size: 14px;
+		font-weight: 600;
+		color: #f9fafb;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__cell {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		justify-content: center;
+		gap: 4px;
+		min-width: 0;
+	}
+
+	&__cell--price {
+		cursor: pointer;
+		background: transparent;
+		border: none;
+		padding: 0;
+		font: inherit;
+
+		&:hover .esports-grid__chip {
+			transform: translateY(-1px);
+			filter: brightness(1.06);
+		}
+	}
+
+	&__chip {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 28px;
+		border-radius: 7px;
+		padding: 4px 8px;
+		font-size: 13px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		transition:
+			transform 0.1s ease,
+			filter 0.1s ease;
+	}
+
+	&__bar {
+		display: block;
+		width: 100%;
+		height: 3px;
+		border-radius: 9999px;
+		background: rgba(255, 255, 255, 0.08);
+		overflow: hidden;
+	}
+
+	&__bar-fill {
+		display: block;
+		height: 100%;
+		border-radius: 9999px;
+		min-width: 0;
+		transition: width 0.2s ease;
+	}
+
+	&__cell--empty {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 28px;
+		border-radius: 7px;
+		color: rgba(255, 255, 255, 0.4);
+		background: rgba(255, 255, 255, 0.04);
+		font-weight: 600;
+	}
+}

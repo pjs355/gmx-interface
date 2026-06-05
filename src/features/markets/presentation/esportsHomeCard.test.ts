@@ -39,6 +39,23 @@ describe("pickMatchWinnerQuestion", () => {
 		]);
 		expect(picked?.displayName).toBe("Alpha vs Beta");
 	});
+
+	it("prefers match-level winner-2-way over game-level map legs", () => {
+		const picked = pickMatchWinnerQuestion([
+			{
+				displayName: "SHK vs MIBR",
+				pandascore_template: "winner-2-way",
+				pandascore_eventType: "game",
+				pandascore_gamePosition: 3,
+			},
+			{
+				displayName: "SHK vs MIBR",
+				pandascore_template: "winner-2-way",
+				pandascore_eventType: "match",
+			},
+		]);
+		expect(picked?.pandascore_eventType).toBe("match");
+	});
 });
 
 describe("resolveEsportsCardGameHeadline", () => {
@@ -100,6 +117,17 @@ describe("isMatchWinnerMarketQuestion", () => {
 			isMatchWinnerMarketQuestion({
 				displayName: "Total Maps O/U 2.5",
 				pandascore_template: "map-over-under",
+			}),
+		).toBe(false);
+	});
+
+	it("rejects game-level winner-2-way map leg", () => {
+		expect(
+			isMatchWinnerMarketQuestion({
+				displayName: "FaZe vs NAVI",
+				pandascore_template: "winner-2-way",
+				pandascore_eventType: "game",
+				pandascore_gamePosition: 1,
 			}),
 		).toBe(false);
 	});

@@ -2,11 +2,13 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { stripUmbrellaDisplayPrefix } from "@/features/markets/presentation/umbrellaDisplayName";
 import { parseVsTeamsFromTitle } from "@/features/positions/utils/historyOutcomeWinner";
+import {
+	isPandaMoneylineQuestion,
+	pickPandaMoneylineQuestion,
+	type PandaQuestionRow,
+} from "@/features/markets/presentation/pandaMoneylineQuestion";
 
-type MarketLike = Pick<PredictionMarket, "displayName"> & {
-	question?: string;
-	pandascore_template?: string;
-};
+type MarketLike = Pick<PredictionMarket, "displayName"> & PandaQuestionRow;
 
 type TagLike = { _id: string; label: string };
 
@@ -92,6 +94,11 @@ function marketTitle(q: MarketLike): string {
 
 /** True for match-winner / team-vs-team rows — not map/round O/U props. */
 export function isMatchWinnerMarketQuestion(q: MarketLike): boolean {
+	const hasPandaShape =
+		String(q.pandascore_eventType ?? "").trim().length > 0 ||
+		(typeof q.pandascore_gamePosition === "number" && Number.isFinite(q.pandascore_gamePosition));
+	if (hasPandaShape) return isPandaMoneylineQuestion(q);
+
 	const template = q.pandascore_template?.trim();
 	if (template === "winner-2-way") return true;
 	if (template === "map-over-under" || template === "round-over-under") return false;
@@ -105,11 +112,24 @@ export function isMatchWinnerMarketQuestion(q: MarketLike): boolean {
 	return parseVsTeamsFromTitle(title) !== null;
 }
 
-/** Prefer winner-2-way / Match Winner / first vs-style child. */
+/** Prefer match moneyline; excludes Panda map legs (also winner-2-way). */
 export function pickMatchWinnerQuestion<T extends MarketLike>(
 	questions: readonly T[] | null | undefined,
 ): T | null {
 	if (!questions?.length) return null;
+
+	const hasPandaGameLeg = questions.some((q) => {
+		const eventType = String(q.pandascore_eventType ?? "")
+			.trim()
+			.toLowerCase();
+		if (eventType === "game") return true;
+		const pos = q.pandascore_gamePosition;
+		return typeof pos === "number" && Number.isFinite(pos) && pos >= 1;
+	});
+	if (hasPandaGameLeg) {
+		return pickPandaMoneylineQuestion(questions);
+	}
+
 	if (questions.length === 1) return questions[0]!;
 
 	const byTemplate = questions.filter((q) => q.pandascore_template === "winner-2-way");

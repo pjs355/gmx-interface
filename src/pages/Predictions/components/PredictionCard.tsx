@@ -12,6 +12,8 @@ import { resolveTeamLogo } from "@/config/team-map";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
+import { buildPandaOddsRowSpecs } from "@/features/markets/presentation/pandaOddsRows";
+import { EsportsMatchMapOddsGrid } from "./EsportsMatchMapOddsGrid";
 import {
 	isPredictionPricingDebugEnabled,
 	priceDebugLog,
@@ -484,6 +486,18 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const isPandaEsportsListing = isEsportsUmbrella || hasPandascoreMatch;
 	const useEsportsMatchWinnerCard = isPandaEsportsListing && matchWinnerQuestion !== null;
 
+	// Series winner + each map that exists, as token-pair odds rows for the card.
+	const esportsOddsRowSpecs = useMemo(
+		() =>
+			isPandaEsportsListing && pandascoreMatchIdForVenues
+				? buildPandaOddsRowSpecs(
+						pandascoreMatchIdForVenues,
+						(umbrella.children ?? []) as unknown as Parameters<typeof buildPandaOddsRowSpecs>[1],
+					)
+				: [],
+		[isPandaEsportsListing, pandascoreMatchIdForVenues, umbrella.children],
+	);
+
 	// For daily markets, calculate endDate as 23hrs 59min after eventDate
 	const endDate = useMemo(() => {
 		if (!isDailyUmbrella || eventDate === null) {
@@ -699,6 +713,24 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 
 	const renderActions = () => {
 		if (useEsportsMatchWinnerCard && matchWinnerQuestion) {
+			// Maps present → matrix: teams as rows, markets (Series, Map 1, …) as
+			// columns, team-colored price cells.
+			if (esportsOddsRowSpecs.length > 1) {
+				return (
+					<EsportsMatchMapOddsGrid
+						specs={esportsOddsRowSpecs}
+						markets={oddsAppState?.markets}
+						storeTimestamp={oddsAppState?.timestamp}
+						umbrella={umbrella}
+						question={matchWinnerQuestion}
+						teamALogo={renderOutcomeLogoSlot(0)}
+						teamBLogo={renderOutcomeLogoSlot(1)}
+						teamAInvertLogo={teamLogos[0]?.invertLogo === true}
+						teamBInvertLogo={teamLogos[1]?.invertLogo === true}
+						onSelect={navigateToUmbrella}
+					/>
+				);
+			}
 			const orderbook = singleMarketOrderbooks[umbrella._id];
 			return (
 				<SingleMarketActions

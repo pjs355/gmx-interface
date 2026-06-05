@@ -2,7 +2,6 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataService";
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
-
 /** Avoid an infinite home skeleton when `fetch` hangs (no browser timeout on stalled TCP). */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -121,17 +120,19 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 					// Quiet detailed context debug counts to keep console clean
 
 					// Filter out resolved markets here so downstream consumers never see them
-					const filteredMarkets = Array.isArray(markets)
+					const openMarkets = Array.isArray(markets)
 						? markets.filter((m: any) => String(m?.status ?? "").toLowerCase() !== "resolved")
 						: [];
-					// Provide a cleaned umbrella copy with filtered children for backward compatibility
-					// Store original children separately for image/tag resolution
+					// Panda esports: let map legs flow through to the UI alongside the match
+					// moneyline. Home cards still pick the match-level row via
+					// pickPandaMoneylineQuestion; the detail view receives all questions.
+					const displayMarkets = openMarkets;
 					const cleanedUmbrella = {
 						...umbrella,
-						children: filteredMarkets, // Filtered for backward compatibility with existing components
-						originalChildren: markets, // Keep original unfiltered children for image resolution (has tagIds)
+						children: displayMarkets,
+						originalChildren: markets,
 					};
-					return [key as string, filteredMarkets, cleanedUmbrella, markets] as const;
+					return [key as string, displayMarkets, cleanedUmbrella, markets] as const;
 				}),
 			);
 			const marketsMap: Record<string, MarketLite[]> = {};

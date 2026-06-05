@@ -11,10 +11,8 @@ import GameLinks from "./GameLinks";
 import { HomeInlineTradeLayout } from "./HomeInlineTradeLayout";
 import PredictionsCalendarOddsPicker from "./PredictionsCalendarOddsPicker";
 import { resolveUmbrellaEventDate, startOfLocalDay } from "../utils/eventDates";
-import {
-	MAX_VENUE_PANDA_SUBSCRIPTIONS,
-	useVenuePandaSubscription,
-} from "@/context/VenuePandaSubscriptionContext";
+import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
+import { pandaVenueWireKeys } from "@/features/markets/presentation/pandaOddsRows";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import {
 	getListingYesNoPricesForUmbrella,
@@ -525,10 +523,21 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		for (const u of visibleUmbrellasForVenueWs) {
 			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
 			const pid = typeof raw === "string" ? raw.trim() : "";
-			if (!pid || seen.has(pid)) continue;
-			seen.add(pid);
-			out.push(pid);
-			if (out.length >= MAX_VENUE_PANDA_SUBSCRIPTIONS) break;
+			if (!pid) continue;
+			// Subscribe series + each map wire key so per-map odds stream, not just series.
+			const children = (u as { children?: unknown }).children;
+			const keys = pandaVenueWireKeys(
+				pid,
+				Array.isArray(children)
+					? (children as unknown as Parameters<typeof pandaVenueWireKeys>[1])
+					: [],
+			);
+			const wireKeys = keys.length > 0 ? keys : [pid];
+			for (const k of wireKeys) {
+				if (seen.has(k)) continue;
+				seen.add(k);
+				out.push(k);
+			}
 		}
 		return out;
 	}, [visibleUmbrellasForVenueWs]);
