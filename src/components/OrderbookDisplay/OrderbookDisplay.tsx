@@ -27,6 +27,21 @@ import {
 	safeOrderbookNumber,
 } from "./orderbookDisplayLevels";
 
+/**
+ * One outcome button for the embedded orderbook tab row. When provided (FIFA
+ * 3-way moneyline), these replace the binary Yes/No tabs: each button selects a
+ * leg whose YES book is shown. Selecting a leg is always a YES bet on that leg,
+ * so the ladder is locked to the YES side.
+ */
+export type OrderbookOutcomeTab = {
+	id: string;
+	label: string;
+	active: boolean;
+	onSelect: () => void;
+	/** Outcome color (team color for home/away, grey for Draw). Applied to the tab button. */
+	color?: string;
+};
+
 interface OrderbookDisplayProps {
 	orderbook: OrderbookSnapshot | null;
 	noSideOrderbook?: OrderbookSnapshot | null;
@@ -55,6 +70,11 @@ interface OrderbookDisplayProps {
 	 * whole-contract books ~1. Pass `0` on fractional books to disable the dust floor.
 	 */
 	minDisplayableRestingSize?: number;
+	/**
+	 * 3-way moneyline (FIFA) outcome tabs. When set, the binary Yes/No tab buttons
+	 * are replaced by these leg buttons and the ladder is locked to the YES side.
+	 */
+	outcomeTabs?: OrderbookOutcomeTab[];
 }
 
 export default function OrderbookDisplay({
@@ -76,8 +96,11 @@ export default function OrderbookDisplay({
 	layout = "accordion",
 	wholeContractRestingBook = false,
 	minDisplayableRestingSize,
+	outcomeTabs,
 }: OrderbookDisplayProps) {
 	const isEmbedded = layout === "embedded";
+	/** FIFA 3-way: leg buttons replace Yes/No and the ladder is locked to YES. */
+	const useOutcomeTabs = Array.isArray(outcomeTabs) && outcomeTabs.length > 0;
 	const { formatPrice, oddsDisplayStyle } = useOddsDisplay();
 	const teamOddsLayout = oddsDualLayoutForStyle(oddsDisplayStyle);
 	const [activeTab, setActiveTab] = useState<"yes" | "no">("yes");
@@ -274,7 +297,57 @@ export default function OrderbookDisplay({
 	const yesLabel = yesLabelPrice !== null ? formatPrice(yesLabelPrice, teamOddsLayout) : "--";
 	const noLabel = noLabelPrice !== null ? formatPrice(noLabelPrice, teamOddsLayout) : "--";
 
-	const teamTabRow = (
+	const teamTabRow = useOutcomeTabs ? (
+		<div className="orderbook-embedded-team-row">
+			<div className="orderbook-tabs" role="tablist" aria-label="Outcomes">
+				{outcomeTabs!.map((tab) => (
+					<button
+						key={tab.id}
+						type="button"
+						role="tab"
+						aria-selected={tab.active}
+						className={`tab-button tab-button--outcome ${tab.active ? "active-outcome" : ""}`}
+						style={
+							tab.color
+								? {
+										// Solid team-color fill (matches the home-page team buttons).
+										// Unselected outcomes are simply dimmed — no grey tint,
+										// faded outline, or glow.
+										background: tab.color,
+										border: `2px solid ${tab.color}`,
+										color: getContrastingTextColor(tab.color),
+										fontWeight: tab.active ? 700 : 600,
+										opacity: tab.active ? 1 : 0.45,
+									}
+								: undefined
+						}
+						onClick={(e) => {
+							if (!isEmbedded) e.stopPropagation();
+							tab.onSelect();
+							if (typeof window !== "undefined" && window.innerWidth <= 1100) {
+								openCurtain();
+							}
+						}}
+					>
+						<span
+							style={{
+								display: "inline-flex",
+								alignItems: "center",
+								justifyContent: "center",
+								maxWidth: "100%",
+								minWidth: 0,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{tab.label}
+						</span>
+					</button>
+				))}
+			</div>
+		</div>
+	) : (
 		<div className="orderbook-embedded-team-row">
 			<div className="orderbook-tabs">
 				<button
@@ -583,10 +656,12 @@ export default function OrderbookDisplay({
 		);
 	}
 
+	/** FIFA leg tabs always show that leg's YES book (selecting a leg = YES bet). */
+	const ladderTab = useOutcomeTabs ? "yes" : activeTab;
 	const displayAsks =
-		activeTab === "yes" ? orderbookDerived.sortedAsksYes : orderbookDerived.noTabAsks;
+		ladderTab === "yes" ? orderbookDerived.sortedAsksYes : orderbookDerived.noTabAsks;
 	const displayBids =
-		activeTab === "yes" ? orderbookDerived.sortedBidsYes : orderbookDerived.noTabBids;
+		ladderTab === "yes" ? orderbookDerived.sortedBidsYes : orderbookDerived.noTabBids;
 
 	// Get best prices and spread based on active tab
 	const bestAsk =

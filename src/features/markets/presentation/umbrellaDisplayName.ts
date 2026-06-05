@@ -1,3 +1,8 @@
+import { WORLD_CUP_GAME_SLUG } from "@/pages/Predictions/utils/gameLinkFilters";
+
+/** Trailing Polymarket catalog suffix on FIFA umbrellas (games + group props). */
+const FIFA_WORLD_CUP_CATALOG_SUFFIX = /\s+[—–-]\s*FIFA\s+World\s+Cup\s*$/i;
+
 /**
  * Remove leading catalog noise token `umbrella` — either as a separate word
  * (`umbrella Monte …`) or glued (`umbrellaMonte…`, `umbrellaCounter-Strike…`).
@@ -16,6 +21,29 @@ export function umbrellaHeaderLabel(
 	umbrellaLike: { displayName?: string | null } | null | undefined,
 ): string {
 	return stripUmbrellaDisplayPrefix(umbrellaLike?.displayName ?? "").trim();
+}
+
+/** Strip ` — FIFA World Cup` (and hyphen variants) from catalog display names. */
+export function stripFifaWorldCupCatalogSuffix(name: string | undefined | null): string {
+	const s = (name ?? "").trim();
+	if (!s) return "";
+	return s.replace(FIFA_WORLD_CUP_CATALOG_SUFFIX, "").trim();
+}
+
+/**
+ * Umbrella title for prediction-market (trading) pages — strips catalog noise and,
+ * for FIFA games/group props, the trailing FIFA World Cup suffix.
+ */
+export function formatUmbrellaTitleForTradingPage(
+	umbrella: { displayName?: string | null; game?: string } | null | undefined,
+): string {
+	const raw = (umbrella?.displayName ?? "").trim();
+	if (!raw) return "";
+	let title = stripUmbrellaDisplayPrefix(raw).trim() || raw;
+	if (umbrella?.game === WORLD_CUP_GAME_SLUG) {
+		title = stripFifaWorldCupCatalogSuffix(title);
+	}
+	return title.trim() || raw;
 }
 
 /** Map en dash, em dash, minus sign to ASCII hyphen so VS-core parsing can terminate after team B. */

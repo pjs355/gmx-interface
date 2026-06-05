@@ -7,11 +7,13 @@ import {
 } from "./useMultiExchangeChartData";
 import { ExchangeOverlayChart, VENUE_COLORS, VENUE_LABELS } from "./SeriesChart";
 import { getYesNoTeamLabels } from "@/features/trading/trade-box/teamLabels";
+import { threeWayLegLabel } from "@/features/markets/listing/threeWayMoneyline";
 import { getChartStrokeColorForDarkBg } from "@/features/markets/presentation/teamColors";
 import type { TimeRange } from "./types";
 import type { MergedExchangePoint } from "./types";
 import { BRAND_NAME, clutchCometLogo } from "@/assets/brandLogo";
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
+import EventStartStatus from "@/components/EventStartStatus/EventStartStatus";
 import { resolveMarketLogo } from "@/features/markets/assets/marketLogoResolver";
 import "./PredictionMarketChart.scss";
 import {
@@ -33,7 +35,16 @@ export interface PredictionMarketChartProps {
 	className?: string;
 	/** Primary chart market orderbook has resting size; drives LevelUp series + toggles on Recharts. */
 	levelUpOrderbookHasRestingShares: boolean;
+	/** Team A (home / YES) logo or flag for the centered match header. */
+	teamALogoUrl?: string | null;
+	/** Team B (away / NO) logo or flag for the centered match header. */
+	teamBLogoUrl?: string | null;
+	/** Kickoff time (ms) — drives the centered header's date / LIVE state. */
+	eventDateMs?: number;
 }
+
+/** Same 4h post-kickoff window as the home cards / calendar. */
+const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 const TIME_RANGES: { key: TimeRange; label: string; seconds: number }[] = [
 	{ key: "1h", label: "1H", seconds: 3600 },
@@ -57,6 +68,9 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	questionOrderbooks,
 	className = "",
 	levelUpOrderbookHasRestingShares,
+	teamALogoUrl,
+	teamBLogoUrl,
+	eventDateMs,
 }) => {
 	const isTradingMobileLayout = useMedia("(max-width: 1100px)");
 	const chartHeight = isTradingMobileLayout ? CHART_HEIGHT_MOBILE_LAYOUT : CHART_HEIGHT_DESKTOP;
@@ -81,6 +95,19 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 	const conditionId = activeMarket?.conditionId as string | undefined;
 
+	/**
+	 * 3-way moneyline (FIFA): team-B is the away leg's own YES, not the home market's
+	 * NO complement. Pass the away leg's conditionId so the chart sources a second
+	 * matched-market batch for the team-B series.
+	 */
+	const awayConditionId = useMemo<string | undefined>(() => {
+		if (activeMarket?.moneylineLeg && secondMarket?.moneylineLeg) {
+			const cid = (secondMarket as { conditionId?: unknown })?.conditionId;
+			return typeof cid === "string" && cid.trim() !== "" ? cid : undefined;
+		}
+		return undefined;
+	}, [activeMarket, secondMarket]);
+
 	const isVsSingleMarket = useMemo(() => {
 		const title = (activeMarket?.displayName || activeMarket?.question || "").trim();
 		const hasVs = /\svs\.?\s/i.test(title);
@@ -88,10 +115,18 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		return Boolean(single && hasVs);
 	}, [activeMarket]);
 
-	const { yesTeamLabel: teamAName, noTeamLabel: teamBName } = useMemo(
-		() => getYesNoTeamLabels(activeMarket, umbrellaDisplayName),
-		[activeMarket, umbrellaDisplayName],
-	);
+	const { yesTeamLabel: teamAName, noTeamLabel: teamBName } = useMemo(() => {
+		// 3-way moneyline (FIFA): the two lines are the home + away legs' YES series,
+		// so label them by each leg's team name ("Mexico" / "South Africa"). The
+		// generic Yes/No label path returns "Yes"/"No" for moneyline legs.
+		if (activeMarket?.moneylineLeg && secondMarket?.moneylineLeg) {
+			return {
+				yesTeamLabel: threeWayLegLabel(activeMarket),
+				noTeamLabel: threeWayLegLabel(secondMarket),
+			};
+		}
+		return getYesNoTeamLabels(activeMarket, umbrellaDisplayName);
+	}, [activeMarket, secondMarket, umbrellaDisplayName]);
 
 	const teamAColor: string = (activeMarket as any)?.yesColor || "#22c55e";
 	const teamBColor: string = (activeMarket as any)?.noColor || "#ef4444";
@@ -115,6 +150,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		levelUpChartData,
 		timeRange,
 		includeLevelUp: levelUpOrderbookHasRestingShares,
+		awayConditionId,
 	});
 
 	useEffect(() => {
@@ -239,6 +275,18 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 	const marketTitle = activeMarket?.displayName || activeMarket?.question || "Market";
 
+	/** Two-team (esports "vs" / 3-way FIFA) markets get the centered logo · date · logo header. */
+	const showMatchHeader =
+		Boolean(activeMarket?.moneylineLeg && secondMarket?.moneylineLeg) ||
+		isVsSingleMarket ||
+		Boolean(secondMarket);
+
+	const isLive = useMemo(() => {
+		if (eventDateMs == null || !Number.isFinite(eventDateMs)) return false;
+		const now = Date.now();
+		return now >= eventDateMs && now - eventDateMs <= LIVE_WINDOW_MS;
+	}, [eventDateMs]);
+
 	if (!effectiveQuestionId) {
 		return (
 			<div className={`prediction-market-chart ${className}`}>
@@ -256,34 +304,51 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 	return (
 		<div className={`prediction-market-chart ${className}`}>
-			<div className="chart-header">
-				<div className="chart-titles">
-					{headerBestOdds.teamA != null && headerBestOdds.teamB != null ? (
-						<>
-							<div className="market-info primary-market">
-								<h3>{teamAName}</h3>
-								<div className="current-price">
-									<span
-										className="price-value primary-price"
-										style={isVsSingleMarket ? { color: chartTeamAColor } : undefined}
-									>
-										{Math.round(headerBestOdds.teamA)}%
-									</span>
-								</div>
-							</div>
-							<div className="market-info second-market">
-								<h3>{teamBName}</h3>
-								<div className="current-price">
-									<span
-										className="price-value second-price"
-										style={isVsSingleMarket ? { color: chartTeamBColor } : undefined}
-									>
-										{Math.round(headerBestOdds.teamB)}%
-									</span>
-								</div>
-							</div>
-						</>
-					) : (
+			<div className={`chart-header${showMatchHeader ? " chart-header--match" : ""}`}>
+				{showMatchHeader ? (
+					<div className="chart-match-header">
+						<div className="chart-match-team chart-match-team--a">
+							{teamALogoUrl ? (
+								<img
+									className="chart-match-team__logo"
+									src={teamALogoUrl}
+									alt={teamAName}
+									loading="lazy"
+								/>
+							) : null}
+							<span className="chart-match-team__name">{teamAName}</span>
+						</div>
+						<div className="chart-match-center">
+							{isLive ? (
+								<span className="chart-match-live">
+									<span className="chart-match-live__dot" />
+									LIVE
+								</span>
+							) : eventDateMs != null && Number.isFinite(eventDateMs) ? (
+								<EventStartStatus
+									target={eventDateMs}
+									className="chart-match-time"
+									prefix="Starts In:"
+									expiredLabel="Ended"
+									showZeroDays={false}
+									whenPast="date"
+								/>
+							) : null}
+						</div>
+						<div className="chart-match-team chart-match-team--b">
+							{teamBLogoUrl ? (
+								<img
+									className="chart-match-team__logo"
+									src={teamBLogoUrl}
+									alt={teamBName}
+									loading="lazy"
+								/>
+							) : null}
+							<span className="chart-match-team__name">{teamBName}</span>
+						</div>
+					</div>
+				) : (
+					<div className="chart-titles">
 						<div className="market-info primary-market">
 							<h3>{marketTitle}</h3>
 							{headerBestOdds.teamA != null && (
@@ -294,8 +359,8 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 								</div>
 							)}
 						</div>
-					)}
-				</div>
+					</div>
+				)}
 
 				<div className="chart-header-right">
 					<img src={clutchCometLogo} alt={BRAND_NAME} className="chart-logo" />

@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useLayoutEffect, type ReactNode } from "react";
-import { useNavigate, useNavigationType } from "react-router-dom";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePredictionData } from "context/PredictionDataContext";
 import { PredictionCard } from "./PredictionCard";
 import { LoadingState } from "./LoadingState";
@@ -11,8 +11,6 @@ import GameLinks from "./GameLinks";
 import { HomeInlineTradeLayout } from "./HomeInlineTradeLayout";
 import PredictionsCalendarOddsPicker from "./PredictionsCalendarOddsPicker";
 import { resolveUmbrellaEventDate, startOfLocalDay } from "../utils/eventDates";
-import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
-import { pandaVenueWireKeys } from "@/features/markets/presentation/pandaOddsRows";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import {
 	getListingYesNoPricesForUmbrella,
@@ -21,33 +19,38 @@ import {
 import {
 	findEsportsTag,
 	gameFilterResetSelection,
+	homeDefaultSelectedTagLabel,
 	isEsportsMetaTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
-	isSpecificGameTagSelection,
-	filterHomeCatalogUmbrellas,
-	resolveInitialHomeGameFilter,
+	isWorldCupPropUmbrella,
+	isWorldCupUmbrella,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
-	umbrellaHasTagId,
-	umbrellaMatchesHomeFilterType,
+	umbrellaHasTradeableHomeChildren,
+	umbrellaVenuePandaIds,
+	worldCupPropGroupSortKey,
+	WORLD_CUP_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
-import { resolveHomeMatchWinnerQuestion } from "@/features/markets/presentation/esportsHomeCard";
-import { consumeHomePendingGameFilter, setHomeGameFilter } from "../utils/gameFilterNavigation";
 import {
-	clearHomeCatalogScroll,
-	HOME_CATALOG_SCROLL_RETRY_MS,
-	restoreHomeCatalogScrollIfPending,
-	saveHomeCatalogScroll,
-	subscribeHomeCatalogScrollSave,
-} from "../utils/homeScrollRestore";
+	MAX_VENUE_PANDA_SUBSCRIPTIONS,
+	useVenuePandaSubscription,
+	VENUE_SUB_WEIGHT_PREFETCH,
+} from "@/context/VenuePandaSubscriptionContext";
+import {
+	consumeHomePendingGameFilter,
+	consumeHomePendingWorldCupSection,
+	setHomeGameFilter,
+} from "../utils/gameFilterNavigation";
+import type { WorldCupSection } from "./GameLinks";
 import { isRestrictedProductionMode } from "@/config/restrictedMode";
-import { isRestrictedProductionUmbrella } from "@/features/markets/presentation/umbrellaGame";
+import { isCounterStrikeUmbrella } from "@/features/markets/presentation/umbrellaGame";
 import { resolveMarketBackgroundUrl } from "../utils/marketBackgrounds";
 import {
-	bundledGameLogoFromTagLabels,
+	bundledCounterStrikeLogoFromTagLabels,
 	resolveLogoByTags,
+	WORLD_CUP_GAME_LOGO_URL,
 } from "@/features/markets/assets/gameLogoResolver";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
 
@@ -66,6 +69,7 @@ function sortCalendarEventsByPlayOrder(
 	events: CalendarEvent[],
 	now: number,
 	scoreDead: (umbrella: Umbrella) => number,
+	sortByGroupLetter: boolean,
 ): void {
 	events.sort((left, right) => {
 		const leftMs = left.eventDate.getTime();
@@ -81,11 +85,68 @@ function sortCalendarEventsByPlayOrder(
 			if (dL !== dR) return dL - dR;
 		}
 
+		if (sortByGroupLetter) {
+			const gL = worldCupPropGroupSortKey(left.umbrella);
+			const gR = worldCupPropGroupSortKey(right.umbrella);
+			const gCmp = gL.localeCompare(gR);
+			if (gCmp !== 0) return gCmp;
+		}
+
 		return leftMs - rightMs;
 	});
 }
 
 // Sort umbrellas by trading activity (number of trades across all children markets)
+function umbrellaPandascoreMatchId(umbrella: Umbrella): string {
+	const raw = (umbrella as { pandascore_matchId?: unknown }).pandascore_matchId;
+	return typeof raw === "string" ? raw.trim() : "";
+}
+
+/** Prefer the listing with more cross-venue volume when two umbrellas share a Panda match. */
+function umbrellaHomeListingScore(umbrella: Umbrella): number {
+	const totalUsd = (umbrella as { volume?: { totalUsd?: unknown } }).volume?.totalUsd;
+	if (typeof totalUsd === "number" && Number.isFinite(totalUsd)) {
+		return totalUsd;
+	}
+	const children = (umbrella as { children?: Array<{ tradeCount?: number }> }).children;
+	if (!children?.length) return 0;
+	return children.reduce((sum, child) => sum + (child?.tradeCount ?? 0), 0);
+}
+
+/**
+ * One home card per Panda match — duplicate umbrellas (same `pandascore_matchId`)
+ * keep the higher-volume listing.
+ */
+function dedupeUmbrellasByPandascoreMatch(umbrellas: Umbrella[]): Umbrella[] {
+	const winnerByPanda = new Map<string, Umbrella>();
+
+	for (const umbrella of umbrellas) {
+		const pandaId = umbrellaPandascoreMatchId(umbrella);
+		if (!pandaId) continue;
+		const existing = winnerByPanda.get(pandaId);
+		if (!existing || umbrellaHomeListingScore(umbrella) > umbrellaHomeListingScore(existing)) {
+			winnerByPanda.set(pandaId, umbrella);
+		}
+	}
+
+	const emittedPanda = new Set<string>();
+	const out: Umbrella[] = [];
+
+	for (const umbrella of umbrellas) {
+		const pandaId = umbrellaPandascoreMatchId(umbrella);
+		if (!pandaId) {
+			out.push(umbrella);
+			continue;
+		}
+		if (emittedPanda.has(pandaId)) continue;
+		const winner = winnerByPanda.get(pandaId);
+		if (winner) out.push(winner);
+		emittedPanda.add(pandaId);
+	}
+
+	return out;
+}
+
 function sortByTradingActivity(array: Umbrella[]): Umbrella[] {
 	return [...array].sort((a, b) => {
 		const aChildren = (a as any).children || [];
@@ -172,6 +233,7 @@ function gameFilterDisplayLabel(selectedGame: string | null): string | null {
 	if (!selectedGame) return null;
 	if (selectedGame === LIVE_PILL_ID) return "Live";
 	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
+	if (selectedGame === WORLD_CUP_PILL_ID) return "World Cup";
 	if (isEsportsMetaTagLabel(selectedGame)) return "All";
 	return selectedGame;
 }
@@ -179,49 +241,19 @@ function gameFilterDisplayLabel(selectedGame: string | null): string | null {
 function calendarPageHeadingTitle(selectedGame: string | null): string {
 	if (selectedGame === LIVE_PILL_ID) return "Live";
 	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
+	if (selectedGame === WORLD_CUP_PILL_ID) return "World Cup";
 	if (!selectedGame || isEsportsMetaTagLabel(selectedGame)) {
 		return DEFAULT_CALENDAR_PAGE_TITLE;
 	}
 	return gameFilterDisplayLabel(selectedGame) ?? selectedGame;
 }
 
-function PredictionPageHeading({ selectedGame }: { selectedGame: string | null }) {
-	const title = calendarPageHeadingTitle(selectedGame);
-	const showGameLogo =
-		selectedGame &&
-		!isEsportsMetaTagLabel(selectedGame) &&
-		selectedGame !== LIVE_PILL_ID &&
-		selectedGame !== STARTING_SOON_PILL_ID;
-	const gameLogo = showGameLogo
-		? (bundledGameLogoFromTagLabels([selectedGame]) ?? resolveLogoByTags([selectedGame]))
-		: null;
-
-	return (
-		<header className="prediction-calendar-page-heading">
-			<div className="prediction-calendar-page-heading__title-row">
-				{gameLogo ? (
-					<img
-						className="prediction-calendar-page-heading__game-logo"
-						src={gameLogo}
-						alt=""
-						width={40}
-						height={40}
-						decoding="async"
-					/>
-				) : null}
-				<h2 className="prediction-calendar-page-heading__title">{title}</h2>
-			</div>
-		</header>
-	);
-}
-
 export default function FilteredPredictions({ filterType }: FilteredPredictionsProps) {
 	const navigate = useNavigate();
-	const navigationType = useNavigationType();
 	const [selectedGame, setSelectedGame] = useState<string | null>(null);
 	const [defaultTagApplied, setDefaultTagApplied] = useState(false);
-	const scrollRestoreEligibleRef = useRef(navigationType === "POP");
-	const [scrollSaveReady, setScrollSaveReady] = useState(!scrollRestoreEligibleRef.current);
+	/** World Cup sub-section: moneyline matches ("games") vs group-winner ("groups"). */
+	const [worldCupSection, setWorldCupSection] = useState<WorldCupSection>("games");
 
 	const {
 		umbrellas,
@@ -234,33 +266,33 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		tagsLoading,
 	} = usePredictionData();
 
-	// Trading sidebar → home: pending filter wins; else restore stored filter; else Live default.
 	useEffect(() => {
-		if (defaultTagApplied || tagsLoading) return;
+		setHomeGameFilter(selectedGame);
+	}, [selectedGame]);
+
+	// Trading sidebar → home + first-load default (single effect avoids race overwriting pending filter).
+	useEffect(() => {
+		if (tagsLoading) return;
 		const pending = consumeHomePendingGameFilter();
 		if (pending) {
 			setSelectedGame(pending);
-		} else {
-			setSelectedGame(resolveInitialHomeGameFilter(tags));
+			const pendingSection = consumeHomePendingWorldCupSection();
+			if (pendingSection) setWorldCupSection(pendingSection);
+			setDefaultTagApplied(true);
+			return;
 		}
-		setDefaultTagApplied(true);
-	}, [tags, tagsLoading, defaultTagApplied]);
-
-	useEffect(() => {
-		if (!defaultTagApplied) return;
-		setHomeGameFilter(selectedGame);
-	}, [selectedGame, defaultTagApplied]);
-
-	useEffect(() => {
-		if (!scrollRestoreEligibleRef.current) {
-			clearHomeCatalogScroll();
+		if (defaultTagApplied) return;
+		const label = homeDefaultSelectedTagLabel(tags);
+		if (label) {
+			setSelectedGame(label);
+			setDefaultTagApplied(true);
 		}
-	}, []);
+	}, [tagsLoading, tags, defaultTagApplied]);
 
-	useEffect(() => {
-		if (!scrollSaveReady) return;
-		return subscribeHomeCatalogScrollSave();
-	}, [scrollSaveReady]);
+	const handleWorldCupSectionSelect = (section: WorldCupSection) => {
+		setSelectedGame(WORLD_CUP_PILL_ID);
+		setWorldCupSection(section);
+	};
 
 	// Prefetch umbrella trading route chunk so card clicks are not blocked on Suspense.
 	useEffect(() => {
@@ -270,7 +302,6 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	// Listen for reset filter event from header
 	useEffect(() => {
 		const handleResetFilter = () => {
-			clearHomeCatalogScroll();
 			setSelectedGame(gameFilterResetSelection(tags));
 		};
 
@@ -287,8 +318,11 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 	const filteredUmbrellas = useMemo(() => {
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
-			// Restricted production mode: hide umbrellas outside CS2 + LoL allowlist.
-			if (restrictedMode && !isRestrictedProductionUmbrella(umbrella as any)) {
+			// Restricted production mode: hide every non-Counter-Strike
+			// umbrella from the public home list. Applied BEFORE the
+			// active-flag check so the count of esports-with-active-bets
+			// also reflects only CS2.
+			if (restrictedMode && !isCounterStrikeUmbrella(umbrella as any)) {
 				return false;
 			}
 			return (umbrella as any).active === true;
@@ -297,14 +331,52 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		const esportsTag = findEsportsTag(tags);
 		const esportsTagId = esportsTag?._id;
 
-		let filtered = activeUmbrellas.filter((umbrella) =>
-			umbrellaMatchesHomeFilterType(umbrella, filterType, esportsTagId),
-		);
+		// FIFA World Cup (Polymarket mirror) is non-esports and carries no tagIds, so it
+		// is excluded from the default esports/all pool. Surface it only when its dev-only
+		// pill is selected (restricted production mode already strips the non-CS pool above).
+		const worldCupPillActive = selectedGame === WORLD_CUP_PILL_ID;
+
+		let filtered = activeUmbrellas.filter((umbrella) => {
+			if (!umbrellaHasTradeableHomeChildren(umbrella)) return false;
+			const children = (umbrella as any).children as Array<any> | undefined;
+			if (!children || children.length === 0) return false;
+
+			if (worldCupPillActive) {
+				if (!isWorldCupUmbrella(umbrella)) return false;
+				const isProp = isWorldCupPropUmbrella(umbrella);
+				return worldCupSection === "groups" ? isProp : !isProp;
+			}
+
+			const hasEsportsTag = children.some((q) => {
+				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
+				if (!Array.isArray(tagIds) || tagIds.length === 0) {
+					return false;
+				}
+				return esportsTag && tagIds.includes(esportsTag._id);
+			});
+
+			if (filterType === "games") return !hasEsportsTag;
+			if (filterType === "esports" || filterType === "all") {
+				return hasEsportsTag;
+			}
+			return true;
+		});
 
 		if (selectedGame && selectedGame !== LIVE_PILL_ID && selectedGame !== STARTING_SOON_PILL_ID) {
 			const selectedTag = tags.find((t) => t.label === selectedGame);
 			if (selectedTag && !isEsportsMetaTagLabel(selectedTag.label)) {
-				filtered = filtered.filter((umbrella) => umbrellaHasTagId(umbrella, selectedTag._id));
+				filtered = filtered.filter((umbrella) => {
+					const children = (umbrella as any).children as Array<any> | undefined;
+					if (!children || children.length === 0) return false;
+
+					return children.some((q) => {
+						const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
+						if (!Array.isArray(tagIds) || tagIds.length === 0) {
+							return false;
+						}
+						return tagIds.includes(selectedTag._id);
+					});
+				});
 			}
 		}
 
@@ -318,48 +390,33 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 			);
 		}
 
-		filtered = filterHomeCatalogUmbrellas(filtered, now, esportsTagId);
+		const deduped = dedupeUmbrellasByPandascoreMatch(filtered);
 
 		if (filterType === "games") {
-			return sortByTradingActivity(filtered);
+			return sortByTradingActivity(deduped);
 		}
 
-		return filtered;
-	}, [umbrellas, filterType, selectedGame, tags, now, restrictedMode]);
+		if (worldCupPillActive && worldCupSection === "groups") {
+			return [...deduped].sort((a, b) =>
+				worldCupPropGroupSortKey(a).localeCompare(worldCupPropGroupSortKey(b)),
+			);
+		}
 
-	// Restore saved scrollY after browser back (retries until layout is tall enough).
-	useLayoutEffect(() => {
-		if (!scrollRestoreEligibleRef.current) return;
-		if (loading || tagsLoading || !defaultTagApplied || selectedGame === null) return;
+		return deduped;
+	}, [umbrellas, filterType, selectedGame, worldCupSection, tags, now, restrictedMode]);
 
-		let cancelled = false;
-		let attempt = 0;
-
-		const finish = () => {
-			if (!cancelled) setScrollSaveReady(true);
-		};
-
-		const run = () => {
-			if (cancelled) return;
-			const done = restoreHomeCatalogScrollIfPending();
-			if (done) {
-				finish();
-				return;
-			}
-			attempt += 1;
-			if (attempt >= HOME_CATALOG_SCROLL_RETRY_MS.length) {
-				clearHomeCatalogScroll();
-				finish();
-				return;
-			}
-			window.setTimeout(run, HOME_CATALOG_SCROLL_RETRY_MS[attempt]);
-		};
-
-		run();
-		return () => {
-			cancelled = true;
-		};
-	}, [loading, tagsLoading, defaultTagApplied, selectedGame, filteredUmbrellas.length]);
+	/** Games vs Groups counts for the World Cup sidebar (active World Cup umbrellas only). */
+	const worldCupSectionCounts = useMemo(() => {
+		let games = 0;
+		let groups = 0;
+		for (const u of umbrellas) {
+			if ((u as { active?: boolean }).active !== true) continue;
+			if (!isWorldCupUmbrella(u)) continue;
+			if (isWorldCupPropUmbrella(u)) groups += 1;
+			else games += 1;
+		}
+		return { games, groups };
+	}, [umbrellas]);
 
 	const calendarData = useMemo(() => {
 		if (filterType === "games") {
@@ -382,8 +439,11 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		 * calendar JSX, the venue-WS subscription list) automatically
 		 * excludes past umbrellas without each having to filter again.
 		 */
+		const sortCalendarByGroup = selectedGame === WORLD_CUP_PILL_ID && worldCupSection === "groups";
+
 		for (let index = 0; index < filteredUmbrellas.length; index += 1) {
 			const umbrella = filteredUmbrellas[index];
+			if (!umbrellaHasTradeableHomeChildren(umbrella)) continue;
 			const eventDate = resolveUmbrellaEventDate(umbrella);
 			if (eventDate === null) {
 				unscheduled.push(umbrella);
@@ -419,17 +479,18 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		const upcomingDays = Array.from(upcomingMap.values())
 			.sort(sortByDate)
 			.map((day) => {
-				sortCalendarEventsByPlayOrder(day.events, now, scoreDead);
+				sortCalendarEventsByPlayOrder(day.events, now, scoreDead, sortCalendarByGroup);
 				return day;
-			});
+			})
+			.filter((day) => day.events.length > 0);
 
 		return {
 			todayStartMs,
 			upcomingDays,
 			pastDays: [] as CalendarDay[],
-			unscheduled,
+			unscheduled: unscheduled.filter(umbrellaHasTradeableHomeChildren),
 		};
-	}, [filteredUmbrellas, filterType, appState?.markets, now]);
+	}, [filteredUmbrellas, filterType, selectedGame, worldCupSection, appState?.markets, now]);
 
 	/**
 	 * Pin the home dock onto the umbrella the user is about to navigate into.
@@ -460,16 +521,12 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		// list modes). Inline home dock is updated via odds-button clicks (`onHomeOddsSelect`)
 		// — not via the card chrome.
 		pinHomeDockForUmbrella(umbrella._id, null);
-		saveHomeCatalogScroll();
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
 	const navigateToSingleMarket = (umbrella: Umbrella, position: "yes" | "no") => {
 		localStorage.setItem("currentUmbrella", JSON.stringify(umbrella));
-		const question = resolveHomeMatchWinnerQuestion(umbrella, {
-			singleMarketQuestions,
-			multiMarketData,
-		});
+		const question = singleMarketQuestions[umbrella._id];
 		if (question) {
 			localStorage.setItem("currentPredictionMarket", JSON.stringify(question));
 			localStorage.setItem("activePosition", position);
@@ -478,7 +535,6 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 			? question._id || (question as any).questionId || (question as any).marketId || null
 			: null;
 		pinHomeDockForUmbrella(umbrella._id, qid);
-		saveHomeCatalogScroll();
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
@@ -498,56 +554,58 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		}
 		pinHomeDockForUmbrella(umbrella._id, marketId ?? null);
 
-		saveHomeCatalogScroll();
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
 	const shouldUseCalendar = filterType === "esports" || filterType === "all";
-	const useCalendarLayout = shouldUseCalendar;
 
+	/*
+	 * Venue-prices subscriptions use a hybrid model:
+	 *   1. Per-card viewport subscriptions (PredictionCard, weight 2) guarantee
+	 *      every on-screen card is priced and follow the scroll position.
+	 *   2. An eager leading-window prefetch (below, weight 1) subscribes the top
+	 *      MAX_VENUE_PANDA_SUBSCRIPTIONS ids of the active filter the moment a
+	 *      tab/section is selected — so prices are already arriving before the
+	 *      user scrolls. The weight split lets on-screen cards always win a slot
+	 *      while the prefetch fills the remaining budget with the leading
+	 *      off-screen markets the user is most likely to reach next.
+	 *
+	 * `visibleUmbrellasForVenueWs` is still computed below because it also feeds
+	 * the HomeInlineTradeLayout dock (unrelated to the WS subscription set).
+	 */
 	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
+	const prefetchPandaIds = useMemo(() => {
+		const ids: string[] = [];
+		const seen = new Set<string>();
+		for (const umbrella of filteredUmbrellas) {
+			for (const id of umbrellaVenuePandaIds(umbrella)) {
+				if (seen.has(id)) continue;
+				seen.add(id);
+				ids.push(id);
+				if (ids.length >= MAX_VENUE_PANDA_SUBSCRIPTIONS) return ids;
+			}
+		}
+		return ids;
+	}, [filteredUmbrellas]);
+	const prefetchPandaIdsKey = prefetchPandaIds.join(",");
+	useEffect(() => {
+		if (prefetchPandaIds.length === 0) return;
+		for (const id of prefetchPandaIds) subscribePandaMatchId(id, VENUE_SUB_WEIGHT_PREFETCH);
+		return () => {
+			for (const id of prefetchPandaIds) unsubscribePandaMatchId(id, VENUE_SUB_WEIGHT_PREFETCH);
+		};
+		// prefetchPandaIdsKey captures the id-set identity; subscribe/unsubscribe are stable.
+	}, [prefetchPandaIdsKey, subscribePandaMatchId, unsubscribePandaMatchId]);
 
 	const visibleUmbrellasForVenueWs = useMemo(
 		() =>
 			collectVisibleUmbrellas(
-				useCalendarLayout,
-				useCalendarLayout ? calendarData : null,
+				shouldUseCalendar,
+				shouldUseCalendar ? calendarData : null,
 				filteredUmbrellas,
 			),
-		[useCalendarLayout, calendarData, filteredUmbrellas],
+		[shouldUseCalendar, calendarData, filteredUmbrellas],
 	);
-
-	const visiblePandaIdsForVenueWs = useMemo(() => {
-		const out: string[] = [];
-		const seen = new Set<string>();
-		for (const u of visibleUmbrellasForVenueWs) {
-			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
-			const pid = typeof raw === "string" ? raw.trim() : "";
-			if (!pid) continue;
-			// Subscribe series + each map wire key so per-map odds stream, not just series.
-			const children = (u as { children?: unknown }).children;
-			const keys = pandaVenueWireKeys(
-				pid,
-				Array.isArray(children)
-					? (children as unknown as Parameters<typeof pandaVenueWireKeys>[1])
-					: [],
-			);
-			const wireKeys = keys.length > 0 ? keys : [pid];
-			for (const k of wireKeys) {
-				if (seen.has(k)) continue;
-				seen.add(k);
-				out.push(k);
-			}
-		}
-		return out;
-	}, [visibleUmbrellasForVenueWs]);
-
-	useEffect(() => {
-		for (const id of visiblePandaIdsForVenueWs) subscribePandaMatchId(id);
-		return () => {
-			for (const id of visiblePandaIdsForVenueWs) unsubscribePandaMatchId(id);
-		};
-	}, [visiblePandaIdsForVenueWs, subscribePandaMatchId, unsubscribePandaMatchId]);
 
 	const handleRetry = () => {
 		window.location.reload();
@@ -592,7 +650,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 	let content: ReactNode = null;
 
-	if (useCalendarLayout && calendarData) {
+	if (shouldUseCalendar && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
 		const hasUnscheduled = calendarData.unscheduled.length > 0;
 		// Past events are intentionally dropped at the `calendarData` stage
@@ -619,6 +677,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 			for (const day of calendarData.upcomingDays) {
 				const eventsToShow = day.events;
+				if (eventsToShow.length === 0) continue;
 
 				const label = formatDayLabel(day.date, calendarData.todayStartMs);
 				const showOddsPicker = !calendarOddsPickerShown;
@@ -641,31 +700,66 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 			if (hasUnscheduled) {
 				const unscheduledToShow = calendarData.unscheduled;
-
-				const showOddsPicker = !calendarOddsPickerShown;
-				if (showOddsPicker) calendarOddsPickerShown = true;
-				calendarSections.push(
-					<section
-						key="unscheduled"
-						className="prediction-calendar-day prediction-calendar-day--unscheduled"
-					>
-						<header className="prediction-calendar-header">
-							<div className="prediction-calendar-title">
-								<span className="prediction-calendar-primary">To Be Scheduled</span>
-								<span className="prediction-calendar-secondary">Event date not provided</span>
+				if (unscheduledToShow.length > 0) {
+					const showOddsPicker = !calendarOddsPickerShown;
+					if (showOddsPicker) calendarOddsPickerShown = true;
+					calendarSections.push(
+						<section
+							key="unscheduled"
+							className="prediction-calendar-day prediction-calendar-day--unscheduled"
+						>
+							<header className="prediction-calendar-header">
+								<div className="prediction-calendar-title">
+									<span className="prediction-calendar-primary">To Be Scheduled</span>
+									<span className="prediction-calendar-secondary">Event date not provided</span>
+								</div>
+								{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
+							</header>
+							<div className="predictions-grid prediction-calendar-grid">
+								{unscheduledToShow.map((umbrellaItem) => renderPredictionCard(umbrellaItem))}
 							</div>
-							{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
-						</header>
-						<div className="predictions-grid prediction-calendar-grid">
-							{unscheduledToShow.map((umbrellaItem) => renderPredictionCard(umbrellaItem))}
-						</div>
-					</section>,
-				);
+						</section>,
+					);
+				}
 			}
 
 			content = (
 				<div className="prediction-calendar">
-					<PredictionPageHeading selectedGame={selectedGame} />
+					<header className="prediction-calendar-page-heading">
+						<div className="prediction-calendar-page-heading__title-row">
+							{(() => {
+								const calendarTitle = calendarPageHeadingTitle(selectedGame);
+								const showGameLogo =
+									selectedGame &&
+									!isEsportsMetaTagLabel(selectedGame) &&
+									selectedGame !== LIVE_PILL_ID &&
+									selectedGame !== STARTING_SOON_PILL_ID &&
+									selectedGame !== WORLD_CUP_PILL_ID;
+								const calendarLogo =
+									selectedGame === WORLD_CUP_PILL_ID
+										? WORLD_CUP_GAME_LOGO_URL
+										: showGameLogo
+											? (bundledCounterStrikeLogoFromTagLabels([selectedGame]) ??
+												resolveLogoByTags([selectedGame]))
+											: null;
+								return (
+									<>
+										{calendarLogo ? (
+											<img
+												className="prediction-calendar-page-heading__game-logo"
+												src={calendarLogo}
+												alt=""
+												width={40}
+												height={40}
+												decoding="async"
+											/>
+										) : null}
+										<h2 className="prediction-calendar-page-heading__title">{calendarTitle}</h2>
+									</>
+								);
+							})()}
+						</div>
+					</header>
 					{calendarSections}
 				</div>
 			);
@@ -673,9 +767,8 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	} else {
 		const gridClassName =
 			filterType === "esports" ? "predictions-grid predictions-grid--carousel" : "predictions-grid";
-		const showGamePageHeading = isSpecificGameTagSelection(selectedGame);
 
-		const grid = (
+		content = (
 			<div className={gridClassName}>
 				{filteredUmbrellas.length > 0 ? (
 					<>
@@ -724,15 +817,6 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 				)}
 			</div>
 		);
-
-		content = showGamePageHeading ? (
-			<div className="prediction-calendar">
-				<PredictionPageHeading selectedGame={selectedGame} />
-				{grid}
-			</div>
-		) : (
-			grid
-		);
 	}
 
 	const marketBgUrl = resolveMarketBackgroundUrl(selectedGame);
@@ -752,6 +836,9 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 					umbrellas={umbrellas}
 					loading={loading}
 					filterType={filterType}
+					worldCupSection={worldCupSection}
+					onWorldCupSectionSelect={handleWorldCupSectionSelect}
+					worldCupSectionCounts={worldCupSectionCounts}
 				/>
 				<HomeInlineTradeLayout
 					enabled={filterType === "all"}

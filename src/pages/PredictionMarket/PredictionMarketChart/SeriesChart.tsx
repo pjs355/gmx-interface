@@ -453,7 +453,7 @@ export function ExchangeOverlayChart({
 							strokeDasharray={l.dash}
 							dot={false}
 							connectNulls
-							animationDuration={500}
+							isAnimationActive={false}
 							activeDot={{ r: 3, stroke: "#fff", strokeWidth: 1 }}
 						/>
 					))}

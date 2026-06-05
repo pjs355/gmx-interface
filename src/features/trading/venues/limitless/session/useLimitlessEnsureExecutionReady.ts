@@ -149,14 +149,22 @@ export function useLimitlessEnsureExecutionReady(args: {
 
 			const apiClient = apiRef.current;
 			const initialAllowance = await apiClient.postLimitlessVerifyAllowance(slug);
-			const buyAlreadyOk = await readLimitlessBuyUsdcAllowancesSufficientOnBase({
-				maker: limitlessWallet,
-				verify: initialAllowance,
-				chainRead: apiClient,
-			});
+			// Partner allowance is authoritative. If it already reports minimum allowance the
+			// maker can trade, so skip warmup approvals entirely rather than trusting our own
+			// on-chain read (which can disagree and trigger repeated sponsored approvals).
+			const buyAlreadyOk =
+				initialAllowance.hasMinimumAllowance ||
+				(await readLimitlessBuyUsdcAllowancesSufficientOnBase({
+					maker: limitlessWallet,
+					verify: initialAllowance,
+					chainRead: apiClient,
+				}));
 			if (buyAlreadyOk) {
 				if (isTradingDebugLoggingEnabled()) {
-					console.info(LOG_TAG, "warmup:skipBuyUsdcOnChainOk", { slug });
+					console.info(LOG_TAG, "warmup:skipBuyUsdcOnChainOk", {
+						slug,
+						partnerHasMinimumAllowance: initialAllowance.hasMinimumAllowance,
+					});
 				}
 				return;
 			}

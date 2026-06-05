@@ -2,13 +2,15 @@ import React, { useState, useMemo } from "react";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
-	bundledGameLogoFromTagLabels,
+	bundledCounterStrikeLogoFromTagLabels,
+	bundledWorldCupLogoFromUmbrella,
 	resolveLogoByTags,
 	resolveUmbrellaIconById,
 	getTagImageFromUmbrella,
 	getTagLabelsFromUmbrella,
 } from "@/features/markets/assets/gameLogoResolver";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
 
 type MarketHeaderProps = {
 	umbrella: Umbrella;
@@ -33,9 +35,10 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({ umbrella, titleRef }
 	// Priority 4: Fallback to game controller
 	const fallbackLogo = gameLogo || gtaIcon;
 
-	const bundledGameLogo = bundledGameLogoFromTagLabels(tagLabels);
+	const worldCupBundled = bundledWorldCupLogoFromUmbrella(umbrella);
+	const cs2Bundled = bundledCounterStrikeLogoFromTagLabels(tagLabels);
 	// Determine initial source
-	const initialSrc = bundledGameLogo ?? (serverImage || tagImage || fallbackLogo);
+	const initialSrc = worldCupBundled ?? cs2Bundled ?? (serverImage || tagImage || fallbackLogo);
 
 	const handleError = () => {
 		if (!imageError) {
@@ -53,7 +56,7 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({ umbrella, titleRef }
 
 	// Process title to remove dates for daily/player count markets
 	const displayTitle = useMemo(() => {
-		let title = umbrella.displayName;
+		let title = formatUmbrellaTitleForTradingPage(umbrella);
 
 		// Check if this is a player count market
 		if (title.includes("Player Count")) {
@@ -69,8 +72,8 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({ umbrella, titleRef }
 			title = title.trim();
 		}
 
-		return title || umbrella.displayName;
-	}, [umbrella.displayName]);
+		return title || formatUmbrellaTitleForTradingPage(umbrella);
+	}, [umbrella.displayName, umbrella.game]);
 
 	return (
 		<div className="market-header">

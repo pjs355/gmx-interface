@@ -6,6 +6,7 @@ import {
 	shortTeamDisplayName,
 } from "@/features/positions/utils/historyOutcomeWinner";
 import { stripUmbrellaDisplayPrefix } from "@/features/markets/presentation/umbrellaDisplayName";
+import { isGroupWinnerLeg } from "@/features/markets/listing/groupWinner";
 
 export type OutcomeLabelKind = "h2h" | "over_under" | "binary";
 
@@ -113,6 +114,20 @@ export function resolveOutcomeSideLabels(input: ResolveOutcomeSideLabelsInput): 
 
 	if (marketTitle.match(/^Over\s+([\d,]+)/i)) {
 		return { yesLabel: "Over", noLabel: "Under", kind: "over_under" };
+	}
+
+	// 3-way moneyline leg (FIFA): each leg is its own binary market, so the sides
+	// are plain Yes/No — not the two team names from the umbrella's teamMappings.
+	const leg = input.market?.moneylineLeg;
+	if (leg === "home" || leg === "away" || leg === "draw") {
+		return binaryFallback();
+	}
+
+	// Group-winner leg (FIFA): single-team binary ("Will <Team> win Group X?").
+	// Force Yes/No — the group umbrella's teamMappings hold all N teams and would
+	// otherwise be mistaken for a two-team head-to-head.
+	if (isGroupWinnerLeg(input.market)) {
+		return binaryFallback();
 	}
 
 	const umbrella = umbrellaFromInput(input);

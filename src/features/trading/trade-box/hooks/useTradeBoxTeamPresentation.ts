@@ -9,6 +9,12 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import { getContrastingTextColor, mixHexOnBlack } from "@/features/markets/presentation/teamColors";
 import { getYesNoTeamLabels } from "../teamLabels";
 import { resolveOutcomeSideLabels } from "@/features/markets/presentation/outcomeSideLabels";
+import { threeWayLegLabel } from "@/features/markets/listing/threeWayMoneyline";
+import {
+	groupWinnerLegGroupTitle,
+	groupWinnerLegLabel,
+	isGroupWinnerLeg,
+} from "@/features/markets/listing/groupWinner";
 
 export function useTradeBoxTeamPresentation(
 	market: PredictionMarket,
@@ -50,8 +56,46 @@ export function useTradeBoxTeamPresentation(
 		if (overUnderMatch) {
 			return `${overUnderMatch} Players`;
 		}
+		// Group-winner leg (FIFA): title is the team name ("Czechia").
+		if (isGroupWinnerLeg(market)) {
+			return groupWinnerLegLabel(market);
+		}
+		// 3-way moneyline leg (FIFA): title is the short outcome name ("Korea", "Draw").
+		if (
+			market.moneylineLeg === "home" ||
+			market.moneylineLeg === "away" ||
+			market.moneylineLeg === "draw"
+		) {
+			return threeWayLegLabel(market);
+		}
 		return market.displayName || market.question;
-	}, [overUnderMatch, market.displayName, market.question]);
+	}, [overUnderMatch, market]);
+
+	/**
+	 * Match context for 3-way (FIFA) legs — the "Team A vs Team B" line shown in
+	 * grey above the green selected outcome, so it's clear which match the bet
+	 * belongs to. Derived from the leg's `displayName` ("<A> vs <B> — <Leg>").
+	 */
+	const matchTitle = useMemo(() => {
+		// Group-winner leg: context line is the group, e.g. "Group A Winner".
+		if (isGroupWinnerLeg(market)) {
+			return groupWinnerLegGroupTitle(market);
+		}
+		if (
+			market.moneylineLeg !== "home" &&
+			market.moneylineLeg !== "away" &&
+			market.moneylineLeg !== "draw"
+		) {
+			return null;
+		}
+		const display = (market.displayName || "").trim();
+		const idx = display.lastIndexOf(" — ");
+		if (idx !== -1) {
+			const head = display.slice(0, idx).trim();
+			if (head) return head;
+		}
+		return null;
+	}, [market]);
 
 	return {
 		yesTeamLabel,
@@ -64,6 +108,7 @@ export function useTradeBoxTeamPresentation(
 		noTeamTextSolid,
 		noTeamTextTint,
 		displayMarketTitle,
+		matchTitle,
 	};
 }
 

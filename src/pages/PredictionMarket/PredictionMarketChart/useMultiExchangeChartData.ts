@@ -2,11 +2,15 @@ import { useEffect, useMemo, useReducer, useRef, useCallback, useState } from "r
 import { usePrivy } from "@privy-io/react-auth";
 import type { TimeRange, MergedExchangePoint, ChartDataPoint } from "./types";
 import type { PricePoint } from "@/services/api/exchangePriceHistoryService";
-import { fetchChartPriceHistoryBatch } from "@/services/api/serverChartPriceHistoryService";
+import {
+	EMPTY_CHART_VENUE_BUNDLE,
+	fetchChartPriceHistoryBatch,
+} from "@/services/api/serverChartPriceHistoryService";
 import {
 	type MatchedMarketExchange,
 	findMatchedMarketByConditionId,
 	findMatchedMarketByUmbrellaId,
+	findMatchedMarketByPandaMatchId,
 } from "@/services/api/matchDataService";
 import { mergeExchangeTimeSeries } from "@/features/markets/chart/mergeExchangeTimeSeries";
 import {
@@ -37,6 +41,13 @@ interface Args {
 	timeRange: TimeRange;
 	/** When false, LevelUp history/live/Best Odds omit REST-backed LevelUp (empty book). */
 	includeLevelUp: boolean;
+	/**
+	 * 3-way moneyline (FIFA): the away leg's Polymarket `conditionId`. When set, the
+	 * team-B series is sourced from the away leg's OWN best-YES across venues (a second
+	 * matched-market batch) instead of the home market's NO side. For a 3-way market
+	 * P(away) ≠ 1 − P(home) (the draw absorbs probability), so the NO complement is wrong.
+	 */
+	awayConditionId?: string;
 }
 
 const LIVE_BUCKET_SEC = 3;
@@ -124,6 +135,8 @@ interface VenueData {
 
 interface State {
 	matchedMarket: MatchedMarketExchange | null;
+	/** Away-leg matched market for 3-way (FIFA) team-B series; null for 2-way markets. */
+	matchedMarketAway: MatchedMarketExchange | null;
 	matchResolved: boolean;
 	venueData: VenueData;
 	loading: boolean;
@@ -132,7 +145,11 @@ interface State {
 
 type Action =
 	| { type: "MATCH_START" }
-	| { type: "MATCH_RESOLVED"; market: MatchedMarketExchange | null }
+	| {
+			type: "MATCH_RESOLVED";
+			market: MatchedMarketExchange | null;
+			away: MatchedMarketExchange | null;
+	  }
 	| { type: "FETCH_START" }
 	| { type: "FETCH_DONE"; data: VenueData }
 	| { type: "FETCH_CACHED"; data: VenueData }
@@ -165,7 +182,12 @@ function reducer(state: State, action: Action): State {
 		case "MATCH_START":
 			return { ...state, matchResolved: false };
 		case "MATCH_RESOLVED":
-			return { ...state, matchedMarket: action.market, matchResolved: true };
+			return {
+				...state,
+				matchedMarket: action.market,
+				matchedMarketAway: action.away,
+				matchResolved: true,
+			};
 		case "FETCH_START":
 			return { ...state, venueData: EMPTY_VENUE, loading: true, error: null };
 		case "FETCH_DONE":
@@ -186,6 +208,7 @@ function reducer(state: State, action: Action): State {
 
 const initialState: State = {
 	matchedMarket: null,
+	matchedMarketAway: null,
 	matchResolved: false,
 	venueData: EMPTY_VENUE,
 	loading: true,
@@ -201,6 +224,7 @@ export function useMultiExchangeChartData({
 	levelUpChartData,
 	timeRange,
 	includeLevelUp,
+	awayConditionId,
 }: Args): MultiExchangeChartResult {
 	const { getAccessToken } = usePrivy();
 	const [state, dispatch] = useReducer(reducer, initialState);
@@ -228,8 +252,12 @@ export function useMultiExchangeChartData({
 	}, [appState?.markets, appState?.timestamp, pandaMatchId, umbrellaId, liveTick]);
 
 	useEffect(() => {
-		if (!umbrellaId && !conditionId) {
-			dispatch({ type: "MATCH_RESOLVED", market: null });
+		// Aggregator sub-question cards pass only a pandaMatchId (their own
+		// pandascore_marketId) — no umbrellaId/conditionId — and resolve history
+		// off that key. Moneyline keeps resolving by umbrellaId/conditionId.
+		const subPandaId = String(pandaMatchId ?? "").trim();
+		if (!umbrellaId && !conditionId && !subPandaId) {
+			dispatch({ type: "MATCH_RESOLVED", market: null, away: null });
 			return;
 		}
 		dispatch({ type: "MATCH_START" });
@@ -240,20 +268,27 @@ export function useMultiExchangeChartData({
 				let match: MatchedMarketExchange | undefined;
 				if (umbrellaId) match = await findMatchedMarketByUmbrellaId(umbrellaId);
 				if (!match && conditionId) match = await findMatchedMarketByConditionId(conditionId);
-				if (!cancelled) dispatch({ type: "MATCH_RESOLVED", market: match ?? null });
+				if (!match && !umbrellaId && !conditionId && subPandaId) {
+					match = await findMatchedMarketByPandaMatchId(subPandaId);
+				}
+				// 3-way (FIFA): resolve the away leg's own matched market so team-B uses
+				// the away YES series rather than the home market's NO complement.
+				const awayId = String(awayConditionId ?? "").trim();
+				const away = awayId ? ((await findMatchedMarketByConditionId(awayId)) ?? null) : null;
+				if (!cancelled) dispatch({ type: "MATCH_RESOLVED", market: match ?? null, away });
 			} catch {
-				if (!cancelled) dispatch({ type: "MATCH_RESOLVED", market: null });
+				if (!cancelled) dispatch({ type: "MATCH_RESOLVED", market: null, away: null });
 			}
 		})();
 
 		return () => {
 			cancelled = true;
 		};
-	}, [umbrellaId, conditionId]);
+	}, [umbrellaId, conditionId, pandaMatchId, awayConditionId]);
 
 	useEffect(() => {
 		venueCacheRef.current.clear();
-	}, [state.matchedMarket]);
+	}, [state.matchedMarket, state.matchedMarketAway]);
 
 	useEffect(() => {
 		if (!state.matchResolved) return;
@@ -283,6 +318,7 @@ export function useMultiExchangeChartData({
 
 		dispatch({ type: "FETCH_START" });
 		const mm = state.matchedMarket;
+		const mmAway = state.matchedMarketAway;
 
 		(async () => {
 			try {
@@ -305,36 +341,57 @@ export function useMultiExchangeChartData({
 				}
 
 				const batch = batchResult.data;
-				let predictB = batch.predictB;
-				const pf = mm?.predictFun;
-				if (
-					batch.predict.length > 0 &&
-					predictB.length === 0 &&
-					pf &&
-					(pf.singleMarket === true || !pf.marketIdB || pf.marketIdB === pf.marketIdA)
-				) {
-					predictB = complementPricePoints(batch.predict);
+
+				let data: VenueData;
+				if (mmAway) {
+					// 3-way (FIFA): team-B is the away leg's OWN best-YES. Fetch the away
+					// leg's batch and use its A-side as the B-series. No NO-complement
+					// fallback — P(away) ≠ 1 − P(home) when a draw outcome exists.
+					const awayResult = await fetchChartPriceHistoryBatch(mmAway, timeRange, authToken);
+					if (cancelRef.current !== id) return;
+					const awayBatch = awayResult.ok ? awayResult.data : EMPTY_CHART_VENUE_BUNDLE;
+					data = {
+						poly: batch.poly,
+						polyB: awayBatch.poly,
+						kalshi: batch.kalshi,
+						kalshiB: awayBatch.kalshi,
+						predict: batch.predict,
+						predictB: awayBatch.predict,
+						limitless: batch.limitless,
+						limitlessB: awayBatch.limitless,
+					};
+				} else {
+					let predictB = batch.predictB;
+					const pf = mm?.predictFun;
+					if (
+						batch.predict.length > 0 &&
+						predictB.length === 0 &&
+						pf &&
+						(pf.singleMarket === true || !pf.marketIdB || pf.marketIdB === pf.marketIdA)
+					) {
+						predictB = complementPricePoints(batch.predict);
+					}
+					let limitlessB = batch.limitlessB;
+					const lx = mm?.limitless;
+					if (
+						batch.limitless.length > 0 &&
+						limitlessB.length === 0 &&
+						lx &&
+						(!lx.tokenIdB || lx.tokenIdB === lx.tokenIdA)
+					) {
+						limitlessB = complementPricePoints(batch.limitless);
+					}
+					data = {
+						poly: batch.poly,
+						polyB: batch.polyB,
+						kalshi: batch.kalshi,
+						kalshiB: batch.kalshiB,
+						predict: batch.predict,
+						predictB,
+						limitless: batch.limitless,
+						limitlessB,
+					};
 				}
-				let limitlessB = batch.limitlessB;
-				const lx = mm?.limitless;
-				if (
-					batch.limitless.length > 0 &&
-					limitlessB.length === 0 &&
-					lx &&
-					(!lx.tokenIdB || lx.tokenIdB === lx.tokenIdA)
-				) {
-					limitlessB = complementPricePoints(batch.limitless);
-				}
-				const data: VenueData = {
-					poly: batch.poly,
-					polyB: batch.polyB,
-					kalshi: batch.kalshi,
-					kalshiB: batch.kalshiB,
-					predict: batch.predict,
-					predictB,
-					limitless: batch.limitless,
-					limitlessB,
-				};
 				venueCacheRef.current.set(timeRange, data);
 				const lxMeta = limitlessMetaForLog(mm);
 				if (lxMeta) {
@@ -360,6 +417,7 @@ export function useMultiExchangeChartData({
 		})();
 	}, [
 		state.matchedMarket,
+		state.matchedMarketAway,
 		state.matchResolved,
 		timeRange,
 		stableGetToken,

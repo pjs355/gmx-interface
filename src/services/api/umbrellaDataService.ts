@@ -7,6 +7,12 @@ export interface UmbrellaQuestion {
 	marketId: string;
 	tagIds?: string[];
 	eventDate?: string | null;
+	/** Source-agnostic taxonomy; "moneyline" + a `moneylineLeg` marks a 3-way (FIFA) leg. */
+	marketType?: "moneyline" | "winner" | "total" | "spread" | "prop";
+	/** 3-way moneyline leg (Team A win / Draw / Team B win). */
+	moneylineLeg?: "home" | "away" | "draw";
+	/** Polymarket Gamma market id; per-leg cross-venue lookup key for Polymarket-sourced sports. */
+	polymarketMarketId?: string;
 }
 
 export interface UmbrellaTeamMapping {

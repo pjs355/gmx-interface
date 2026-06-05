@@ -7,7 +7,9 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
 import type { TradingPagePrices } from "@/features/markets/pricing/useTradingPagePrices";
+import { resolveUmbrellaVenueKey } from "@/features/markets/pricing/venueLookupKey";
 import { TradeBoxSkeleton } from "./Skeletons";
+import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
 
 export type UmbrellaTradeBoxPanelProps = {
 	umbrella: Umbrella;
@@ -17,8 +19,6 @@ export type UmbrellaTradeBoxPanelProps = {
 	onPositionChange: (p: "yes" | "no") => void;
 	settledInfo?: SettledInfo | null;
 	tradingPagePrices: TradingPagePrices;
-	/** Venue-prices wire key for active leg (Panda id or polymarketMarketId). */
-	oddsSubscriptionKey?: string;
 	venueOverride?: TradingVenue;
 	mobilePeekBar?: "default" | "hidden";
 };
@@ -31,7 +31,6 @@ export function UmbrellaTradeBoxPanel({
 	onPositionChange,
 	settledInfo,
 	tradingPagePrices,
-	oddsSubscriptionKey,
 	venueOverride,
 	mobilePeekBar = "default",
 }: UmbrellaTradeBoxPanelProps) {
@@ -52,7 +51,12 @@ export function UmbrellaTradeBoxPanel({
 			child
 		);
 
-	const wireOddsKey = typeof oddsSubscriptionKey === "string" ? oddsSubscriptionKey.trim() : "";
+	/**
+	 * Umbrella-level `pandascore_matchId` for esports; per-leg `polymarketMarketId`
+	 * for FIFA 3-way mirror markets. Drives `multiVenueEnabled` + cross-venue SOR in
+	 * `PredictionMarketTradeBox` identically for both.
+	 */
+	const pandascoreMatchId = resolveUmbrellaVenueKey(umbrella, activeMarket);
 
 	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
 	const umbrellaPredictFun = umbrella?.exchangeMatching?.predictFun;
@@ -91,18 +95,18 @@ export function UmbrellaTradeBoxPanel({
 				} as any
 			}
 			orderbook={orderbook ?? null}
-			pandascoreMatchId={wireOddsKey || undefined}
+			pandascoreMatchId={pandascoreMatchId || undefined}
 			umbrellaId={umbrella._id}
 			limitlessMappingFromUmbrella={umbrellaLimitless}
 			predictFunMappingFromUmbrella={umbrellaPredictFun}
-			umbrellaDisplayName={umbrella.displayName}
+			umbrellaDisplayName={formatUmbrellaTitleForTradingPage(umbrella)}
 			initialPosition={activePosition}
 			onPositionChange={onPositionChange}
 			onSideChange={setTradeSide}
 			venueOverride={venueOverride}
 			crossBuyYes={tradingPagePrices.bestYesPrice}
 			crossBuyNo={tradingPagePrices.bestNoPrice}
-			venueRowsForSellStrip={wireOddsKey ? tradingPagePrices.venueRows : undefined}
+			venueRowsForSellStrip={pandascoreMatchId ? tradingPagePrices.venueRows : undefined}
 			mobilePeekBar={mobilePeekBar}
 			tradeRouteIsolationKey={compactTradeDock ? tradeRouteIsolationKey : undefined}
 		/>

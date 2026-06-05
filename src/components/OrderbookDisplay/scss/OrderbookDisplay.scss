@@ -109,6 +109,27 @@
 							}
 						}
 
+						// 3-way (FIFA) outcome tabs — equal-width team buttons (Korea / Czechia / Draw)
+						&.tab-button--outcome {
+							flex: 1;
+							min-width: 0;
+							min-height: 44px;
+							border-color: rgba(255, 255, 255, 0.25);
+							color: rgba(255, 255, 255, 0.7);
+
+							&:hover {
+								border-color: rgba(255, 255, 255, 0.45);
+								color: rgba(255, 255, 255, 0.9);
+							}
+
+							&.active-outcome {
+								background: rgba(255, 255, 255, 0.08);
+								border: 2px solid #fff;
+								color: #fff;
+								font-weight: 700;
+							}
+						}
+
 						// Trade No button - default faded red (brighter)
 						&.trade-no {
 							border-color: rgba(239, 68, 68, 0.6);

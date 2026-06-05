@@ -3,7 +3,13 @@ import dota2Background from "@/assets/market-backgrounds/dota2.jpg";
 import esportsBackground from "@/assets/market-backgrounds/esports.jpg";
 import leagueBackground from "@/assets/market-backgrounds/league.jpg";
 import valorantBackground from "@/assets/market-backgrounds/valorant.jpg";
-import { LIVE_PILL_ID, normalizeTagLabel, STARTING_SOON_PILL_ID } from "./gameLinkFilters";
+import worldCupBackground from "@/assets/market-backgrounds/world-cup.jpg";
+import {
+	LIVE_PILL_ID,
+	normalizeTagLabel,
+	STARTING_SOON_PILL_ID,
+	WORLD_CUP_PILL_ID,
+} from "./gameLinkFilters";
 
 /** Fallback when no tag-specific art matches (Live / Starting Soon pills). */
 const DEFAULT_MARKET_BACKGROUND: string = esportsBackground;
@@ -33,6 +39,9 @@ const MARKET_BACKGROUND_BY_NORMALIZED_TAG: Record<string, string> = {
 };
 
 export function resolveMarketBackgroundUrl(selectedGame: string | null | undefined): string {
+	if (selectedGame === WORLD_CUP_PILL_ID) {
+		return worldCupBackground;
+	}
 	if (selectedGame === LIVE_PILL_ID || selectedGame === STARTING_SOON_PILL_ID) {
 		return DEFAULT_MARKET_BACKGROUND;
 	}

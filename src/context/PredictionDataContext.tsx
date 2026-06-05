@@ -164,13 +164,23 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 				}
 
 				marketsMap[key] = markets;
-				const isSingle = Array.isArray(markets) && markets.length === 1;
+				// FIFA-style umbrellas show moneyline-only on home cards: aggregator
+				// sub-markets (tradeable === false) are trading-page-only. Esports
+				// umbrellas (pandascore_matchId) are on-chain per-map winner markets —
+				// keep ALL their winner questions so the series + per-map odds grid
+				// renders (they carry tradeable === false from the shared taxonomy).
+				const pmid = (cleanedUmbrella as { pandascore_matchId?: unknown })?.pandascore_matchId;
+				const isEsportsUmbrella = typeof pmid === "string" && pmid.length > 0;
+				const homeMarkets = isEsportsUmbrella
+					? markets
+					: markets.filter((m: any) => (m as { tradeable?: boolean }).tradeable !== false);
+				const isSingle = homeMarkets.length === 1;
 				if (isSingle) {
-					singleQuestions[key] = markets[0];
-				} else {
+					singleQuestions[key] = homeMarkets[0];
+				} else if (homeMarkets.length >= 2) {
 					// Legacy shape expected by utils: { questions: any[], orderbooks: { [id]: orderbook } }
 					multiData[key] = {
-						questions: markets,
+						questions: homeMarkets,
 						orderbooks: {},
 					};
 				}

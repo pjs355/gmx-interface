@@ -171,6 +171,25 @@
 	margin: 0 0 16px 0;
 }
 
+// 3-way (FIFA) Basic view: heading + inline outcome selector on one row.
+.prediction-market-odds-heading-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px 16px;
+	margin: 0 0 16px 0;
+
+	.prediction-market-odds-heading {
+		margin: 0;
+	}
+
+	// Outcome buttons share one full-width row (same layout as orderbook outcome tabs).
+	.three-way-leg-selector {
+		flex: 1 1 100%;
+		min-width: 0;
+	}
+}
+
 // Mobile Layout
 .mobile-layout {
 	display: flex;
@@ -643,6 +662,92 @@
 .orderbook-section__cross-venue {
 	margin-top: 0;
 	padding-top: 0;
+}
+
+/*
+ * Per-question collapsible cards (Moneyline + aggregator sub-markets).
+ * Used only on umbrellas that have sub-markets; moneyline-only umbrellas keep
+ * the original inline `.venue-books-container` layout.
+ */
+.venue-books-container--cards {
+	background: transparent;
+	padding: 0;
+	margin-top: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.sub-market-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.question-card {
+	background: #000000;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	overflow: hidden;
+
+	&__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: 14px 16px;
+		background: transparent;
+		border: none;
+		color: #ffffff;
+		font-size: 15px;
+		font-weight: 700;
+		cursor: pointer;
+		text-align: left;
+		transition: background-color 0.15s ease;
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.04);
+		}
+
+		&:focus-visible {
+			outline: 2px solid rgba(168, 85, 247, 0.9);
+			outline-offset: -2px;
+		}
+	}
+
+	&__title {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__header-right {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		flex-shrink: 0;
+	}
+
+	&__aside {
+		color: rgba(255, 255, 255, 0.7);
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	&__chevron {
+		font-size: 13px;
+		color: rgba(255, 255, 255, 0.55);
+		transition: transform 0.18s ease;
+	}
+
+	&--open &__chevron {
+		transform: rotate(180deg);
+	}
+
+	&__body {
+		padding: 0 12px 12px;
+	}
 }
 
 /*
