@@ -252,6 +252,36 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		[matchedVenueRow, oddsAppState?.timestamp],
 	);
 
+	// TEMP DIAGNOSTIC: log esports cards' odds lookup so we can see where the chain breaks.
+	useEffect(() => {
+		const pmid = (umbrella as { pandascore_matchId?: unknown })?.pandascore_matchId;
+		if (typeof pmid !== "string" || !pmid) return;
+		if (!umbrella.displayName?.includes(" vs ")) return;
+		const isFifa = (umbrella as { game?: string })?.game === "soccer-fifwc";
+		if (isFifa) return; // only esports
+		console.log("[ESPORTS-DIAG]", {
+			umbrellaId: umbrella._id,
+			displayName: umbrella.displayName,
+			pandascore_matchId: pmid,
+			hasMatchedRow: Boolean(matchedVenueRow),
+			polyPriceA: (matchedVenueRow as any)?.polyPriceA?.bestAsk ?? null,
+			polyPriceB: (matchedVenueRow as any)?.polyPriceB?.bestAsk ?? null,
+			polyConditionId: (matchedVenueRow as any)?.polyConditionId ?? null,
+			polyTokenIdA: (matchedVenueRow as any)?.polyTokenIdA ?? null,
+			dflowSet: Boolean((matchedVenueRow as any)?.dflow),
+			limitlessSet: Boolean((matchedVenueRow as any)?.limitless),
+			listingYes: listingVenueYesNo.yes,
+			listingNo: listingVenueYesNo.no,
+			marketsLen: oddsAppState?.markets?.length ?? 0,
+		});
+	}, [
+		matchedVenueRow,
+		umbrella,
+		listingVenueYesNo.yes,
+		listingVenueYesNo.no,
+		oddsAppState?.markets,
+	]);
+
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
 		priceDebugLog("homepage PredictionCard venue overlay", {
