@@ -110,6 +110,7 @@ export function UmbrellaTradeBoxPanel({
 			limitlessMappingFromUmbrella={umbrellaLimitless}
 			predictFunMappingFromUmbrella={umbrellaPredictFun}
 			umbrellaDisplayName={formatUmbrellaTitleForTradingPage(umbrella)}
+			umbrellaTeamMappings={umbrella.teamMappings}
 			initialPosition={activePosition}
 			onPositionChange={onPositionChange}
 			onSideChange={setTradeSide}

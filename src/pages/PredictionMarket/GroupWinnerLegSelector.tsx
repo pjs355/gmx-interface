@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
@@ -16,6 +17,8 @@ import "./ThreeWayLegSelector.scss";
 type Props = {
 	/** Umbrella display questions; the N team legs are derived from them. */
 	legs: PredictionMarket[];
+	teamMappings?: UmbrellaTeamMapping[] | null;
+	gameTeamColorBySlug?: Record<string, string> | null;
 	/** Market id of the currently active leg (drives the highlighted button). */
 	activeMarketId: string;
 	/** Switch the active market to the selected leg's YES book. */
@@ -25,11 +28,15 @@ type Props = {
 /**
  * Inline outcome selector for the Basic tab of a FIFA "Group X Winner" prop.
  * Generalizes {@link ThreeWayLegSelector} to N team buttons (no Draw), each with
- * the cross-venue best YES price, colored by a stable per-team palette ("Other"
- * stays neutral grey). Selecting a leg switches the active market to that leg's
- * YES book.
+ * the cross-venue best YES price, colored like the same team on moneyline games.
  */
-export function GroupWinnerLegSelector({ legs, activeMarketId, onSelect }: Props) {
+export function GroupWinnerLegSelector({
+	legs,
+	teamMappings,
+	gameTeamColorBySlug,
+	activeMarketId,
+	onSelect,
+}: Props) {
 	const ordered = useMemo(() => orderGroupWinnerLegs(legs), [legs]);
 	return (
 		<div className="three-way-leg-selector" role="tablist" aria-label="Outcome">
@@ -38,6 +45,8 @@ export function GroupWinnerLegSelector({ legs, activeMarketId, onSelect }: Props
 					key={getMarketId(question) || question.polymarketMarketId}
 					question={question}
 					index={index}
+					teamMappings={teamMappings}
+					gameTeamColorBySlug={gameTeamColorBySlug}
 					active={(getMarketId(question) || "") === activeMarketId}
 					onSelect={onSelect}
 				/>
@@ -49,11 +58,15 @@ export function GroupWinnerLegSelector({ legs, activeMarketId, onSelect }: Props
 function GroupWinnerLegButton({
 	question,
 	index,
+	teamMappings,
+	gameTeamColorBySlug,
 	active,
 	onSelect,
 }: {
 	question: PredictionMarket;
 	index: number;
+	teamMappings?: UmbrellaTeamMapping[] | null;
+	gameTeamColorBySlug?: Record<string, string> | null;
 	active: boolean;
 	onSelect: (q: PredictionMarket) => void;
 }) {
@@ -78,7 +91,7 @@ function GroupWinnerLegButton({
 	const yesPrice = typeof yes === "number" && Number.isFinite(yes) ? yes : null;
 	const cents = yesPrice !== null ? formatPrice(yesPrice) : "--";
 
-	const color = groupWinnerLegColor(question, index);
+	const color = groupWinnerLegColor(question, index, teamMappings, gameTeamColorBySlug);
 	const label = groupWinnerLegLabel(question);
 
 	return (

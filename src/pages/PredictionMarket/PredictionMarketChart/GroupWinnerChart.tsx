@@ -11,6 +11,7 @@ import {
 	Tooltip,
 } from "recharts";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 import {
 	groupWinnerLegColor,
 	groupWinnerLegLabel,
@@ -29,6 +30,8 @@ import "./PredictionMarketChart.scss";
 export interface GroupWinnerChartProps {
 	/** Umbrella display questions; the N team legs are derived from them. */
 	legs: PredictionMarket[];
+	teamMappings?: UmbrellaTeamMapping[] | null;
+	gameTeamColorBySlug?: Record<string, string> | null;
 	/** Group title for the header, e.g. "Group A Winner". */
 	title?: string;
 	className?: string;
@@ -108,6 +111,8 @@ function GroupWinnerTooltip({
  */
 const GroupWinnerChartComponent: React.FC<GroupWinnerChartProps> = ({
 	legs,
+	teamMappings,
+	gameTeamColorBySlug,
 	title,
 	className = "",
 }) => {
@@ -133,11 +138,13 @@ const GroupWinnerChartComponent: React.FC<GroupWinnerChartProps> = ({
 					polymarketMarketId:
 						typeof leg.polymarketMarketId === "string" ? leg.polymarketMarketId : undefined,
 					label: groupWinnerLegLabel(leg),
-					color: getChartStrokeColorForDarkBg(groupWinnerLegColor(leg, index)),
+					color: getChartStrokeColorForDarkBg(
+						groupWinnerLegColor(leg, index, teamMappings, gameTeamColorBySlug),
+					),
 					flagUrl: flag,
 				};
 			}),
-		[ordered],
+		[ordered, teamMappings, gameTeamColorBySlug],
 	);
 
 	const { data, teams, loading, error } = useGroupWinnerChartData(legInputs, timeRange);

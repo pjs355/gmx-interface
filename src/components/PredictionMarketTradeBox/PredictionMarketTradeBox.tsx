@@ -55,6 +55,7 @@ const PredictionMarketTradeBox = forwardRef<
 			limitlessMappingFromUmbrella,
 			predictFunMappingFromUmbrella,
 			umbrellaDisplayName,
+			umbrellaTeamMappings,
 			initialPosition,
 			onPositionChange,
 			onSideChange: onSideChangeCallback,
@@ -466,6 +467,7 @@ const PredictionMarketTradeBox = forwardRef<
 					pandascoreMatchId={pandascoreMatchId}
 					umbrellaId={propUmbrellaId}
 					umbrellaDisplayName={umbrellaDisplayName}
+					umbrellaTeamMappings={umbrellaTeamMappings}
 					crossBuyYes={crossBuyPrices.crossBuyYes}
 					crossBuyNo={crossBuyPrices.crossBuyNo}
 					mobilePeekBar={mobilePeekBar}

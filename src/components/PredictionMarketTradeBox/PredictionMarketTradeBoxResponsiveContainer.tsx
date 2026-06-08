@@ -7,6 +7,7 @@ import Button from "components/Button/Button";
 import { hexToRgba, getContrastingTextColor } from "@/features/markets/presentation/teamColors";
 import { useTradeBoxOutcomePrices } from "@/features/trading/trade-box/hooks/useTradeBoxOutcomePrices";
 import { useTradeBoxTeamPresentation } from "@/features/trading/trade-box/hooks/useTradeBoxTeamPresentation";
+import { usePredictionData } from "@/context/PredictionDataContext";
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
 	market,
@@ -14,6 +15,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	pandascoreMatchId,
 	umbrellaId,
 	umbrellaDisplayName,
+	umbrellaTeamMappings,
 	crossBuyYes,
 	crossBuyNo,
 	runtime,
@@ -24,8 +26,14 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 	const isMobile = useMedia("(max-width: 1100px)");
 	const isCurtainOpen = useIsCurtainOpen();
 	const { openCurtain } = useCurtainActions();
+	const { fifaGameTeamColorBySlug } = usePredictionData();
 
-	const team = useTradeBoxTeamPresentation(market, umbrellaDisplayName);
+	const team = useTradeBoxTeamPresentation(
+		market,
+		umbrellaDisplayName,
+		umbrellaTeamMappings,
+		fifaGameTeamColorBySlug,
+	);
 
 	const outcomePrices = useTradeBoxOutcomePrices({
 		tradingVenue: runtime.state.tradingVenue,

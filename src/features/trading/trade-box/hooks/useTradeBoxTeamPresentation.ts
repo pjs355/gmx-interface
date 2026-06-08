@@ -12,13 +12,17 @@ import { resolveOutcomeSideLabels } from "@/features/markets/presentation/outcom
 import { threeWayLegLabel } from "@/features/markets/listing/threeWayMoneyline";
 import {
 	groupWinnerLegGroupTitle,
+	groupWinnerLegColor,
 	groupWinnerLegLabel,
 	isGroupWinnerLeg,
 } from "@/features/markets/listing/groupWinner";
+import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 
 export function useTradeBoxTeamPresentation(
 	market: PredictionMarket,
 	umbrellaDisplayName?: string,
+	teamMappings?: UmbrellaTeamMapping[] | null,
+	gameTeamColorBySlug?: Record<string, string> | null,
 ) {
 	const { yesTeamLabel, noTeamLabel } = useMemo(
 		() => getYesNoTeamLabels(market, umbrellaDisplayName),
@@ -32,7 +36,9 @@ export function useTradeBoxTeamPresentation(
 		return resolveOutcomeSideLabels({ market, umbrellaDisplayName }).kind === "h2h";
 	}, [market, umbrellaDisplayName]);
 
-	const yesTeamColor: string = (market as { yesColor?: string }).yesColor || "#22c55e";
+	const yesTeamColor: string = isGroupWinnerLeg(market)
+		? groupWinnerLegColor(market, 0, teamMappings, gameTeamColorBySlug)
+		: market.yesColor || "#22c55e";
 	const noTeamColor: string = (market as { noColor?: string }).noColor || "#ef4444";
 
 	const yesTeamTextSolid = useMemo(() => getContrastingTextColor(yesTeamColor), [yesTeamColor]);

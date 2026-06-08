@@ -11,10 +11,13 @@ import {
 	isGroupWinnerOtherLeg,
 	orderGroupWinnerLegs,
 } from "@/features/markets/listing/groupWinner";
+import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
+import { usePredictionData } from "@/context/PredictionDataContext";
 
 interface GroupWinnerActionsProps {
 	umbrellaId: string;
+	teamMappings?: UmbrellaTeamMapping[] | null;
 	multiMarketData: {
 		[umbrellaId: string]: {
 			questions: PredictionMarket[];
@@ -32,9 +35,11 @@ interface GroupWinnerActionsProps {
  */
 export const GroupWinnerActions: React.FC<GroupWinnerActionsProps> = ({
 	umbrellaId,
+	teamMappings,
 	multiMarketData,
 	onNavigate,
 }) => {
+	const { fifaGameTeamColorBySlug } = usePredictionData();
 	const data = multiMarketData[umbrellaId];
 	const legs = useMemo(
 		() => (data?.questions ? orderGroupWinnerLegs(data.questions) : []),
@@ -49,6 +54,8 @@ export const GroupWinnerActions: React.FC<GroupWinnerActionsProps> = ({
 						key={question._id || question.questionId || question.polymarketMarketId}
 						question={question}
 						index={index}
+						teamMappings={teamMappings}
+						gameTeamColorBySlug={fifaGameTeamColorBySlug}
 						onNavigate={onNavigate}
 					/>
 				))}
@@ -60,10 +67,18 @@ export const GroupWinnerActions: React.FC<GroupWinnerActionsProps> = ({
 interface GroupWinnerLegRowProps {
 	question: PredictionMarket;
 	index: number;
+	teamMappings?: UmbrellaTeamMapping[] | null;
+	gameTeamColorBySlug?: Record<string, string> | null;
 	onNavigate: (question: PredictionMarket, position: "yes" | "no") => void;
 }
 
-const GroupWinnerLegRow: React.FC<GroupWinnerLegRowProps> = ({ question, index, onNavigate }) => {
+const GroupWinnerLegRow: React.FC<GroupWinnerLegRowProps> = ({
+	question,
+	index,
+	teamMappings,
+	gameTeamColorBySlug,
+	onNavigate,
+}) => {
 	const { formatPrice } = useOddsDisplay();
 	const { appState } = useOddsMonitor();
 
@@ -80,7 +95,7 @@ const GroupWinnerLegRow: React.FC<GroupWinnerLegRowProps> = ({ question, index, 
 	const yesCents = yesPrice !== null ? formatPrice(yesPrice) : "--";
 
 	const isOther = isGroupWinnerOtherLeg(question);
-	const yesColor = groupWinnerLegColor(question, index);
+	const yesColor = groupWinnerLegColor(question, index, teamMappings, gameTeamColorBySlug);
 	const yesTextColor = getContrastingTextColor(yesColor);
 
 	const label = groupWinnerLegLabel(question);

@@ -1,4 +1,6 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
+import { resolveFifaTeamLegColor } from "@/features/markets/listing/fifaTeamLegColor";
 
 /**
  * FIFA World Cup "Group X Winner" props: one Umbrella per group, one binary
@@ -53,19 +55,6 @@ export function orderGroupWinnerLegs(questions: PredictionMarket[]): PredictionM
 		});
 }
 
-/**
- * Distinct, stable palette for team legs when the question carries no `yesColor`
- * (group-winner data has no per-team colors). Indexed by leg position so the 4
- * teams in a group always render with the same 4 colors across card/table/chart.
- */
-export const GROUP_WINNER_LEG_PALETTE = [
-	"#22c55e", // green
-	"#3b82f6", // blue
-	"#f59e0b", // amber
-	"#ec4899", // pink
-	"#8b5cf6", // violet
-] as const;
-
 /** Neutral grey for an "Other"/catch-all leg (not a team). */
 export const GROUP_WINNER_OTHER_COLOR = "#9ca3af";
 
@@ -77,13 +66,20 @@ export function isGroupWinnerOtherLeg(question: PredictionMarket): boolean {
 	return /\bother\b/i.test(groupWinnerLegLabel(question));
 }
 
-/** YES color for a team leg: explicit `yesColor`, else a stable palette slot; grey for "Other". */
-export function groupWinnerLegColor(question: PredictionMarket, index: number): string {
+/** YES color for a team leg — same slug → hex as FIFA moneyline games; grey for "Other". */
+export function groupWinnerLegColor(
+	question: PredictionMarket,
+	_index: number,
+	teamMappings?: UmbrellaTeamMapping[] | null,
+	gameTeamColorBySlug?: Record<string, string> | null,
+): string {
 	if (isGroupWinnerOtherLeg(question)) return GROUP_WINNER_OTHER_COLOR;
-	const raw = (question as { yesColor?: unknown })?.yesColor;
-	if (typeof raw === "string" && raw.trim() !== "") return raw.trim();
-	const slot = GROUP_WINNER_LEG_PALETTE[index % GROUP_WINNER_LEG_PALETTE.length];
-	return slot ?? "#22c55e";
+	return resolveFifaTeamLegColor({
+		teamLabel: groupWinnerLegLabel(question),
+		yesColor: (question as { yesColor?: unknown }).yesColor as string | undefined,
+		teamMappings,
+		gameTeamColorBySlug,
+	});
 }
 
 /** Team name for a leg, e.g. "Czechia". */

@@ -1,4 +1,8 @@
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import {
+	FIFA_NEUTRAL_OUTCOME_COLOR,
+	resolveFifaTeamLegColor,
+} from "@/features/markets/listing/fifaTeamLegColor";
 
 /** Display order for a 3-way moneyline: Team A win, Team B win, Draw. */
 const LEG_ORDER: Record<string, number> = { home: 0, away: 1, draw: 2 };
@@ -38,16 +42,22 @@ export function orderThreeWayLegs(questions: PredictionMarket[]): PredictionMark
 }
 
 /** Neutral grey for the Draw outcome — it is not a team, so it gets no team color. */
-export const DRAW_COLOR = "#9ca3af";
+export const DRAW_COLOR = FIFA_NEUTRAL_OUTCOME_COLOR;
 
 /**
  * YES color for a 3-way leg: the team's color for home/away, neutral grey for
- * Draw (button + odds bar). Falls back to green when a team color is missing.
+ * Draw (button + odds bar). Uses the same FIFA slug → color resolver as groups.
  */
-export function threeWayLegColor(question: PredictionMarket): string {
+export function threeWayLegColor(
+	question: PredictionMarket,
+	gameTeamColorBySlug?: Record<string, string> | null,
+): string {
 	if (question.moneylineLeg === "draw") return DRAW_COLOR;
-	const raw = (question as { yesColor?: unknown })?.yesColor;
-	return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : "#22c55e";
+	return resolveFifaTeamLegColor({
+		teamLabel: threeWayLegLabel(question),
+		yesColor: (question as { yesColor?: unknown }).yesColor as string | undefined,
+		gameTeamColorBySlug,
+	});
 }
 
 /** Concise outcome label for a 3-way leg row (Team name, or "Draw"). */

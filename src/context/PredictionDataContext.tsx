@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataService";
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
+import { buildFifaGameTeamColorBySlug } from "@/features/markets/listing/fifaTeamLegColor";
 /** Avoid an infinite home skeleton when `fetch` hangs (no browser timeout on stalled TCP). */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -46,6 +47,8 @@ type PredictionDataContextValue = {
 	singleMarketQuestions: Record<string, any>;
 	singleMarketOrderbooks: Record<string, any>;
 	multiMarketData: Record<string, any>;
+	/** FIFA slug → hex from moneyline game umbrellas (group winner reuses these). */
+	fifaGameTeamColorBySlug: Record<string, string>;
 	loading: boolean;
 	booksPreviewLoading: boolean;
 	error?: string;
@@ -71,6 +74,7 @@ const PredictionDataContext = createContext<PredictionDataContextValue>({
 	singleMarketQuestions: {},
 	singleMarketOrderbooks: {},
 	multiMarketData: {},
+	fifaGameTeamColorBySlug: {},
 	loading: true,
 	booksPreviewLoading: false,
 	error: undefined,
@@ -371,6 +375,7 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 			singleMarketQuestions,
 			singleMarketOrderbooks,
 			multiMarketData,
+			fifaGameTeamColorBySlug: buildFifaGameTeamColorBySlug(umbrellas),
 			loading,
 			booksPreviewLoading: false,
 			error,

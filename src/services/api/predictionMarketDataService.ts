@@ -67,6 +67,10 @@ export interface PredictionMarket {
 	polymarketMarketId?: string;
 	/** 3-way moneyline leg (Team A win / Draw / Team B win) when `marketType === "moneyline"`. */
 	moneylineLeg?: "home" | "away" | "draw";
+	/** Team-branded YES color (FIFA / esports). */
+	yesColor?: string;
+	/** Team-branded NO color (head-to-head markets). */
+	noColor?: string;
 	status?: string;
 }
 

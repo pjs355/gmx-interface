@@ -49,6 +49,7 @@ import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
 import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
 import { EsportsLegAccordion } from "./EsportsLegAccordion";
 import type { EsportsLeg } from "@/features/markets/presentation/esportsLegs";
+import { usePredictionData } from "@/context/PredictionDataContext";
 
 type PanelsProps = {
 	umbrella: Umbrella;
@@ -95,6 +96,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	settledInfo,
 	esportsLegs,
 }) => {
+	const { fifaGameTeamColorBySlug } = usePredictionData();
 	/**
 	 * True when this umbrella renders the multi-leg esports accordion (series +
 	 * 1+ map legs). The accordion replaces only the moneyline-odds slot below
@@ -284,7 +286,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	/** Outcome color — stable per-team palette (group winner) or team color +
 	 * neutral Draw (moneyline). */
 	const legColorFor = (question: PredictionMarket, index: number): string =>
-		isGroupWinner ? groupWinnerLegColor(question, index) : threeWayLegColor(question);
+		isGroupWinner
+			? groupWinnerLegColor(question, index, umbrella.teamMappings, fifaGameTeamColorBySlug)
+			: threeWayLegColor(question, fifaGameTeamColorBySlug);
 
 	/** Multi-leg (FIFA) leg selector for the Orderbooks tab: per-outcome buttons
 	 * that replace the orderbook's Yes/No tabs. Selecting a leg switches the active
@@ -375,7 +379,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					{isGroupWinner ? (
 						/* FIFA group winner: esports Basic table generalized to N team
 						   columns, each venue's best YES per team leg. */
-						<GroupWinnerVenueBooksPanel legs={pillQuestions} />
+						<GroupWinnerVenueBooksPanel
+							legs={pillQuestions}
+							teamMappings={umbrella.teamMappings}
+							gameTeamColorBySlug={fifaGameTeamColorBySlug}
+						/>
 					) : isThreeWay ? (
 						/* FIFA 3-way: esports Basic table with a third outcome column
 						   (Team A / Team B / Draw), each venue's best YES per leg. */
@@ -452,6 +460,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				{isGroupWinner ? (
 					<GroupWinnerChart
 						legs={pillQuestions}
+						teamMappings={umbrella.teamMappings}
+						gameTeamColorBySlug={fifaGameTeamColorBySlug}
 						title={
 							groupWinnerGroupLabel(pillQuestions)
 								? `${groupWinnerGroupLabel(pillQuestions)} Winner`
@@ -512,6 +522,8 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					{isGroupWinner ? (
 						<GroupWinnerLegSelector
 							legs={pillQuestions}
+							teamMappings={umbrella.teamMappings}
+							gameTeamColorBySlug={fifaGameTeamColorBySlug}
 							activeMarketId={bookMarketId}
 							onSelect={(q) => onMarketSwitch(q, "yes")}
 						/>

@@ -3,6 +3,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type {
 	UmbrellaExchangeMatching,
 	UmbrellaExchangeMatchingLimitless,
+	UmbrellaTeamMapping,
 } from "@/services/api/umbrellaDataService";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { OrderExecutionResult } from "@/services/api/predictionMarketService";
@@ -67,6 +68,8 @@ export interface TradeBoxProps {
 	predictFunMappingFromUmbrella?: UmbrellaExchangeMatching["predictFun"] | null;
 	/** Umbrella list title — used to derive "Team A vs Team B" when question is only "Match Winner". */
 	umbrellaDisplayName?: string;
+	/** FIFA group-winner team colors from umbrella `teamMappings`. */
+	umbrellaTeamMappings?: UmbrellaTeamMapping[] | null;
 	initialPosition?: "yes" | "no";
 	onPositionChange?: (position: "yes" | "no") => void;
 	onSideChange?: (side: "buy" | "sell") => void;
@@ -219,6 +222,7 @@ export interface TradeBoxPresentationProps extends Pick<
 	| "pandascoreMatchId"
 	| "umbrellaId"
 	| "umbrellaDisplayName"
+	| "umbrellaTeamMappings"
 	| "crossBuyYes"
 	| "crossBuyNo"
 > {

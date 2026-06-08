@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 import type { SnapshotStatus } from "@/types/odds-monitor";
 import {
 	groupWinnerLegColor,
@@ -73,6 +74,8 @@ type GroupVenueRow = {
 type Props = {
 	/** Umbrella display questions; the N team legs are derived from them. */
 	legs: PredictionMarket[];
+	teamMappings?: UmbrellaTeamMapping[] | null;
+	gameTeamColorBySlug?: Record<string, string> | null;
 };
 
 /**
@@ -81,7 +84,11 @@ type Props = {
  * venue rows × best YES ask per team. Read-only; trading is driven from the
  * Orderbooks tab leg selector / trade box.
  */
-export function GroupWinnerVenueBooksPanel({ legs }: Props) {
+export function GroupWinnerVenueBooksPanel({
+	legs,
+	teamMappings,
+	gameTeamColorBySlug,
+}: Props) {
 	const { formatPrice } = useOddsDisplay();
 	const { enabled: wsEnabled } = useOddsMonitor();
 	const formatProbDisplay = useCallback((p: number) => formatPrice(p), [formatPrice]);
@@ -93,9 +100,9 @@ export function GroupWinnerVenueBooksPanel({ legs }: Props) {
 			ordered.map((leg, index) => ({
 				key: legVenueKey(leg),
 				label: groupWinnerLegLabel(leg),
-				color: groupWinnerLegColor(leg, index),
+				color: groupWinnerLegColor(leg, index, teamMappings, gameTeamColorBySlug),
 			})),
-		[ordered],
+		[ordered, teamMappings, gameTeamColorBySlug],
 	);
 
 	const [rowsByLeg, setRowsByLeg] = useState<Record<string, VenueRowModel[]>>({});

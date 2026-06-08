@@ -866,6 +866,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 				return (
 					<GroupWinnerActions
 						umbrellaId={umbrella._id}
+						teamMappings={umbrella.teamMappings}
 						multiMarketData={multiMarketData}
 						onNavigate={navigateToMultiMarket}
 					/>
