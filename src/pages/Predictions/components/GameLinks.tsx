@@ -19,6 +19,7 @@ import {
 	filterHomeCatalogUmbrellas,
 	findEsportsTag,
 	isEsportsMetaTagLabel,
+	isHiddenSidebarTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
 	isWorldCupUmbrella,
@@ -141,7 +142,11 @@ export default function GameLinks({
 
 	const esportsTagLabel = defaultEsportsTagLabel(tags);
 	const esportsMetaTag = linkFilterState.tagsSorted.find((t) => isEsportsMetaTagLabel(t.label));
-	const allGameTags = linkFilterState.tagsSorted.filter((t) => !isEsportsMetaTagLabel(t.label));
+	const allGameTags = linkFilterState.tagsSorted
+		// "FIFA World Cup" back-end Tag duplicates the synthetic World Cup
+		// block (renderWorldCupBlock) — hide it so the sidebar shows one
+		// canonical entry point for those markets.
+		.filter((t) => !isEsportsMetaTagLabel(t.label) && !isHiddenSidebarTagLabel(t.label));
 	const gameTagsOnly = restrictedMode
 		? allGameTags.filter((t) => isRestrictedProductionTagLabel(t.label))
 		: allGameTags;

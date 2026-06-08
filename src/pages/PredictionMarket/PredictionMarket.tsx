@@ -27,6 +27,7 @@ import {
 	isThreeWayMoneylineQuestions,
 	orderThreeWayLegs,
 } from "@/features/markets/listing/threeWayMoneyline";
+import { resolveEsportsLegs } from "@/features/markets/presentation/esportsLegs";
 import "../Predictions/Predictions.scss";
 import "./scss/PredictionMarket.scss";
 import { PredictionCurtainProvider } from "@/components/PredictionMarketTradeBox";
@@ -239,16 +240,45 @@ function PredictionMarketContent() {
 	]);
 
 	/**
-	 * Aggregator sub-markets (Map N winner, totals, …) carry `tradeable === false`
-	 * and have no LevelUp order book / on-chain CTF. Keep them out of the moneyline
-	 * pipeline (orderbook fetch, volume sort, chart, trade box) and render them as
-	 * view-only cards. Markets without subs (esports moneyline-only, FIFA legs) are
-	 * unaffected because their questions are all `tradeable !== false`.
+	 * Per-leg list for the multi-leg esports accordion (series + map_1 + map_2 + ...).
+	 * Resolved from the umbrella's full child question list — INCLUDING `tradeable: false`
+	 * map legs — so each leg can render as its own expandable section. Returns []
+	 * for non-esports umbrellas or esports umbrellas with no map sub-questions, in
+	 * which case the page renders the existing `MarketPanels` layout unchanged.
 	 */
-	const moneylineQuestions = useMemo(
-		() => questions.filter((q) => (q as { tradeable?: boolean }).tradeable !== false),
-		[questions],
+	const esportsLegs = useMemo(
+		() => resolveEsportsLegs(umbrella, questions),
+		[umbrella, questions],
 	);
+	const isMultiLegEsports = esportsLegs.length > 1;
+
+	/**
+	 * Aggregator sub-markets (Map N winner, totals, …) carry `tradeable === false`
+	 * and have no LevelUp order book / on-chain CTF.
+	 *
+	 * Default (single-question umbrellas, FIFA legs, esports moneyline-only): strip
+	 * them out so the moneyline pipeline (orderbook fetch, volume sort, chart,
+	 * trade box) is not polluted by view-only rows.
+	 *
+	 * Multi-leg esports (`isMultiLegEsports`): keep the map legs so each one can
+	 * stream its own orderbook + drive the chart/trade box when its accordion
+	 * section is expanded. The trade box handles "no LevelUp routing" gracefully
+	 * (view-only sell strip) per the resolve helper docs.
+	 */
+	const moneylineQuestions = useMemo(() => {
+		if (isMultiLegEsports) {
+			const legIds = new Set<string>();
+			for (const leg of esportsLegs) {
+				const id = leg.question._id || leg.question.questionId || leg.question.marketId;
+				if (typeof id === "string" && id.length > 0) legIds.add(id);
+			}
+			return questions.filter((q) => {
+				const id = q._id || q.questionId || q.marketId;
+				return typeof id === "string" && legIds.has(id);
+			});
+		}
+		return questions.filter((q) => (q as { tradeable?: boolean }).tradeable !== false);
+	}, [questions, isMultiLegEsports, esportsLegs]);
 
 	const { questionOrderbooks, orderbooksReady, fetchAllOrderbooks } = useUmbrellaLiveOrderbooks(
 		umbrella?._id,
@@ -472,16 +502,63 @@ function PredictionMarketContent() {
 		setActiveMarket(sortedQuestions[0]);
 	}, [sortedQuestions, activeMarket, getMarketId]);
 
+	/**
+	 * For multi-leg Panda esports umbrellas (series + maps) default the active leg
+	 * to Moneyline (series), regardless of which leg has the most volume. Mirrors
+	 * the user-facing rule "Moneyline is open by default". Only fires when the
+	 * user hasn't picked a market yet — direct deep-links (`selectedMarketId` in
+	 * localStorage) and explicit accordion clicks both win.
+	 */
+	useEffect(() => {
+		if (!isMultiLegEsports) return;
+		if (hasUserSelectedMarket) return;
+		const seriesLeg = esportsLegs.find((leg) => leg.slot === null);
+		if (!seriesLeg) return;
+		const seriesId = getMarketId(seriesLeg.question);
+		if (!seriesId) return;
+		if (activeMarket && getMarketId(activeMarket) === seriesId) return;
+		setActiveMarket(seriesLeg.question);
+	}, [isMultiLegEsports, hasUserSelectedMarket, esportsLegs, activeMarket, getMarketId]);
+
+	/**
+	 * The "active leg" question for multi-leg esports. In single-leg / FIFA / Polymarket
+	 * paths this is unused; in multi-leg esports it is the question whose accordion
+	 * section is currently expanded (drives chart + orderbook + trade box).
+	 */
+	const accordionActiveQuestion = useMemo<PredictionMarket | null>(() => {
+		if (!isMultiLegEsports) return null;
+		if (activeMarket) return activeMarket;
+		return esportsLegs[0]?.question ?? null;
+	}, [isMultiLegEsports, activeMarket, esportsLegs]);
+
 	// Chart input: for a 3-way moneyline (FIFA) plot only the two team legs
 	// (home + away YES); the draw is excluded from the chart per product spec
-	// while remaining tradeable / shown in the order-book tabs.
+	// while remaining tradeable / shown in the order-book tabs. For multi-leg
+	// esports the chart shows only the currently expanded leg.
 	const chartQuestions = useMemo(() => {
+		if (isMultiLegEsports) {
+			return accordionActiveQuestion ? [accordionActiveQuestion] : [];
+		}
 		if (!isThreeWayMoneylineQuestions(sortedQuestions)) return sortedQuestions;
 		return orderThreeWayLegs(sortedQuestions).filter((q) => q.moneylineLeg !== "draw");
-	}, [sortedQuestions]);
+	}, [isMultiLegEsports, accordionActiveQuestion, sortedQuestions]);
 
 	// Hooks must be called unconditionally on every render
 	const chartOnlyState = useChartState(chartQuestions as any[], questionOrderbooks);
+
+	/**
+	 * `sortedQuestions` for `MarketPanels` in multi-leg esports mode: restricted to
+	 * the currently expanded leg so MarketPanels' internal question pill strip
+	 * (which would duplicate the accordion's navigation), 3-way / group-winner
+	 * detection, and chart/orderbook routing all narrow to a single question.
+	 * Single-leg / FIFA / Polymarket paths pass through unchanged.
+	 */
+	const panelSortedQuestions = useMemo<PredictionMarket[]>(() => {
+		if (isMultiLegEsports) {
+			return accordionActiveQuestion ? [accordionActiveQuestion] : [];
+		}
+		return sortedQuestions;
+	}, [isMultiLegEsports, accordionActiveQuestion, sortedQuestions]);
 
 	const pandascoreMatchIdRaw =
 		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
@@ -526,24 +603,37 @@ function PredictionMarketContent() {
 		);
 	}
 
+	/**
+	 * For multi-leg esports umbrellas the accordion lives *inside* `MarketPanels`
+	 * (replacing the moneyline-odds heading + cross-venue table slot) so the
+	 * chart at the top and the sticky trade box on the right keep their fixed
+	 * desktop positions instead of being relocated under each accordion leg.
+	 * MarketPanels reads `esportsLegs` and renders the accordion itself when
+	 * `isMultiLegEsports` is true.
+	 */
+	const marketPanelsNode = (
+		<MarketPanels
+			umbrella={umbrella!}
+			titleRef={titleRef}
+			sortedQuestions={panelSortedQuestions as any}
+			questionOrderbooks={questionOrderbooks}
+			activeMarket={(accordionActiveQuestion ?? activeMarket) as any}
+			activePosition={activePosition}
+			onMarketSwitch={handleMarketSwitch}
+			onMarketSwitchWithOrderbook={handleMarketSwitchWithOrderbook}
+			onPositionChange={handlePositionChange}
+			fetchAllOrderbooks={fetchAllOrderbooks}
+			chartState={chartOnlyState}
+			settledInfo={settledInfo}
+			esportsLegs={isMultiLegEsports ? esportsLegs : undefined}
+		/>
+	);
+
 	return (
 		<PredictionCurtainProvider>
 			<div className={`prediction-market-page ${isMobile ? "mobile" : "desktop"}`}>
 				{isMobile ? (
-					<MarketPanels
-						umbrella={umbrella!}
-						titleRef={titleRef}
-						sortedQuestions={sortedQuestions as any}
-						questionOrderbooks={questionOrderbooks}
-						activeMarket={activeMarket as any}
-						activePosition={activePosition}
-						onMarketSwitch={handleMarketSwitch}
-						onMarketSwitchWithOrderbook={handleMarketSwitchWithOrderbook}
-						onPositionChange={handlePositionChange}
-						fetchAllOrderbooks={fetchAllOrderbooks}
-						chartState={chartOnlyState}
-						settledInfo={settledInfo}
-					/>
+					marketPanelsNode
 				) : (
 					<div className="predictions-markets-body">
 						<GameLinks
@@ -557,20 +647,7 @@ function PredictionMarketContent() {
 							onWorldCupSectionSelect={handleTradingWorldCupSectionSelect}
 							worldCupSectionCounts={tradingWorldCupSectionCounts}
 						/>
-						<MarketPanels
-							umbrella={umbrella!}
-							titleRef={titleRef}
-							sortedQuestions={sortedQuestions as any}
-							questionOrderbooks={questionOrderbooks}
-							activeMarket={activeMarket as any}
-							activePosition={activePosition}
-							onMarketSwitch={handleMarketSwitch}
-							onMarketSwitchWithOrderbook={handleMarketSwitchWithOrderbook}
-							onPositionChange={handlePositionChange}
-							fetchAllOrderbooks={fetchAllOrderbooks}
-							chartState={chartOnlyState}
-							settledInfo={settledInfo}
-						/>
+						{marketPanelsNode}
 					</div>
 				)}
 			</div>

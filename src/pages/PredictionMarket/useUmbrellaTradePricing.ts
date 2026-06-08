@@ -20,12 +20,16 @@ export type UseUmbrellaTradePricingArgs = {
 
 /** Shared venue monitor + `useTradingPagePrices` for MarketPanels and home trade dock. */
 export function useUmbrellaTradePricing({ umbrella, activeQuestion }: UseUmbrellaTradePricingArgs) {
-	/** Umbrella-level for esports; per-leg `polymarketMarketId` for FIFA mirror markets. */
+	/**
+	 * Umbrella-level for esports series; per-map `${pandascore_matchId}-map-${slot}`
+	 * for esports map legs; per-leg `polymarketMarketId` for FIFA mirror markets.
+	 */
 	const venueKey = resolveUmbrellaVenueKey(umbrella, activeQuestion);
-	const perLeg = isPerLegVenueKey(umbrella);
+	const perLeg = isPerLegVenueKey(umbrella, activeQuestion);
 
-	// Limitless on the umbrella applies to the match-level (esports) book only; a
-	// per-leg Polymarket key is identified solely by its key (see aggregator-sub precedent).
+	// Limitless on the umbrella applies to the umbrella-level (series) book only;
+	// per-leg keys (Polymarket leg or esports map leg) carry their own routing,
+	// resolved by venue key alone (see aggregator-sub precedent).
 	const umbrellaLimitless = perLeg ? undefined : umbrella?.exchangeMatching?.limitless;
 
 	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();

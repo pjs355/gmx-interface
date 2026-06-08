@@ -3,12 +3,14 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import {
 	gameFilterResetSelection,
 	homeDefaultSelectedTagLabel,
+	isHiddenSidebarTagLabel,
 	isUmbrellaEndedForHomeCatalog,
 	LIVE_PILL_ID,
 	LIVE_WINDOW_MS,
 	STARTING_SOON_PILL_ID,
 	resolveInitialHomeGameFilter,
 	resolveStoredHomeGameFilter,
+	WORLD_CUP_PILL_ID,
 } from "./gameLinkFilters";
 
 const ESPORTS_TAG_ID = "esports-tag-id";
@@ -51,6 +53,30 @@ describe("resolveStoredHomeGameFilter", () => {
 	it("rejects unknown labels", () => {
 		expect(resolveStoredHomeGameFilter("Valorant", tags as any)).toBeNull();
 		expect(resolveStoredHomeGameFilter(null, tags as any)).toBeNull();
+	});
+
+	it("redirects the hidden FIFA World Cup tag to the synthetic World Cup pill", () => {
+		expect(resolveStoredHomeGameFilter("FIFA World Cup", tags as any)).toBe(WORLD_CUP_PILL_ID);
+		// Casing / spacing variants normalize to the same hidden label.
+		expect(resolveStoredHomeGameFilter("fifa world cup", tags as any)).toBe(WORLD_CUP_PILL_ID);
+	});
+
+	it("accepts the synthetic World Cup pill", () => {
+		expect(resolveStoredHomeGameFilter(WORLD_CUP_PILL_ID, tags as any)).toBe(WORLD_CUP_PILL_ID);
+	});
+});
+
+describe("isHiddenSidebarTagLabel", () => {
+	it("matches FIFA World Cup label variants", () => {
+		expect(isHiddenSidebarTagLabel("FIFA World Cup")).toBe(true);
+		expect(isHiddenSidebarTagLabel("fifa world cup")).toBe(true);
+		expect(isHiddenSidebarTagLabel("FIFA  World  Cup")).toBe(true);
+	});
+
+	it("leaves unrelated labels visible", () => {
+		expect(isHiddenSidebarTagLabel("World Cup")).toBe(false);
+		expect(isHiddenSidebarTagLabel("CS2")).toBe(false);
+		expect(isHiddenSidebarTagLabel("FIFA")).toBe(false);
 	});
 });
 

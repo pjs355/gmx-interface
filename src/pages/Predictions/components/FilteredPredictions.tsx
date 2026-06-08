@@ -39,8 +39,11 @@ import {
 	VENUE_SUB_WEIGHT_PREFETCH,
 } from "@/context/VenuePandaSubscriptionContext";
 import {
-	consumeHomePendingGameFilter,
-	consumeHomePendingWorldCupSection,
+	clearHomePendingGameFilter,
+	clearHomePendingWorldCupSection,
+	getHomeGameFilter,
+	peekHomePendingGameFilter,
+	peekHomePendingWorldCupSection,
 	setHomeGameFilter,
 } from "../utils/gameFilterNavigation";
 import type { WorldCupSection } from "./GameLinks";
@@ -250,10 +253,32 @@ function calendarPageHeadingTitle(selectedGame: string | null): string {
 
 export default function FilteredPredictions({ filterType }: FilteredPredictionsProps) {
 	const navigate = useNavigate();
-	const [selectedGame, setSelectedGame] = useState<string | null>(null);
-	const [defaultTagApplied, setDefaultTagApplied] = useState(false);
+	/*
+	 * Initial filter resolution (runs before first paint, no side effects):
+	 *   1. `homePendingGameFilter` — one-shot signal written by the trading
+	 *      page's left-sidebar handler when the user clicks back to a list.
+	 *   2. `homeGameFilter` — sticky persistence of the user's last picked
+	 *      filter on the home page itself.
+	 *   3. `null` — fall through to the first-load default tag effect below.
+	 *
+	 * We use `peek*` (read-only) instead of `consume*` (read + remove) here
+	 * because React 18 Strict Mode mounts components twice in dev: a
+	 * `consume*` call in either `useState`'s initializer or an effect would
+	 * be reached twice, but only the first call sees the pending value —
+	 * the second falls through to the default and overwrites the user's
+	 * chosen list. Cleanup of the pending key happens in a dedicated mount
+	 * effect (idempotent — second run is a no-op).
+	 */
+	const [selectedGame, setSelectedGame] = useState<string | null>(
+		() => peekHomePendingGameFilter() ?? getHomeGameFilter(),
+	);
+	const [defaultTagApplied, setDefaultTagApplied] = useState<boolean>(
+		() => peekHomePendingGameFilter() !== null || getHomeGameFilter() !== null,
+	);
 	/** World Cup sub-section: moneyline matches ("games") vs group-winner ("groups"). */
-	const [worldCupSection, setWorldCupSection] = useState<WorldCupSection>("games");
+	const [worldCupSection, setWorldCupSection] = useState<WorldCupSection>(
+		() => peekHomePendingWorldCupSection() ?? "games",
+	);
 
 	const {
 		umbrellas,
@@ -270,17 +295,21 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		setHomeGameFilter(selectedGame);
 	}, [selectedGame]);
 
-	// Trading sidebar → home + first-load default (single effect avoids race overwriting pending filter).
+	/*
+	 * Clear the one-shot pending filter once mount is committed. Idempotent
+	 * across Strict Mode's double-mount: each mount's effect run is a plain
+	 * `removeItem` — a no-op if the key is already absent. State has already
+	 * been initialized from `peek*` so the pending value is preserved.
+	 */
+	useEffect(() => {
+		clearHomePendingGameFilter();
+		clearHomePendingWorldCupSection();
+	}, []);
+
+	// First-load default: only applies when neither a pending filter nor a
+	// persisted filter was found (both gated via `defaultTagApplied`).
 	useEffect(() => {
 		if (tagsLoading) return;
-		const pending = consumeHomePendingGameFilter();
-		if (pending) {
-			setSelectedGame(pending);
-			const pendingSection = consumeHomePendingWorldCupSection();
-			if (pendingSection) setWorldCupSection(pendingSection);
-			setDefaultTagApplied(true);
-			return;
-		}
 		if (defaultTagApplied) return;
 		const label = homeDefaultSelectedTagLabel(tags);
 		if (label) {

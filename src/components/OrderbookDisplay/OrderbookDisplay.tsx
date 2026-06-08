@@ -75,6 +75,17 @@ interface OrderbookDisplayProps {
 	 * are replaced by these leg buttons and the ladder is locked to the YES side.
 	 */
 	outcomeTabs?: OrderbookOutcomeTab[];
+	/**
+	 * Suppresses the embedded team / outcome row above the ladder. Used by the
+	 * multi-leg esports accordion where the section header's team pills already
+	 * own the activeMarket / activePosition switch — a second copy of the same
+	 * buttons sitting on top of the ladder is redundant and visually noisy.
+	 *
+	 * Has no effect on `accordion` layout (which has no team row anyway), and
+	 * does not affect the FIFA 3-way `outcomeTabs` flow either — callers that
+	 * pass `outcomeTabs` should not also pass `hideOutcomeTabs`.
+	 */
+	hideOutcomeTabs?: boolean;
 }
 
 export default function OrderbookDisplay({
@@ -97,6 +108,7 @@ export default function OrderbookDisplay({
 	wholeContractRestingBook = false,
 	minDisplayableRestingSize,
 	outcomeTabs,
+	hideOutcomeTabs = false,
 }: OrderbookDisplayProps) {
 	const isEmbedded = layout === "embedded";
 	/** FIFA 3-way: leg buttons replace Yes/No and the ladder is locked to YES. */
@@ -297,7 +309,7 @@ export default function OrderbookDisplay({
 	const yesLabel = yesLabelPrice !== null ? formatPrice(yesLabelPrice, teamOddsLayout) : "--";
 	const noLabel = noLabelPrice !== null ? formatPrice(noLabelPrice, teamOddsLayout) : "--";
 
-	const teamTabRow = useOutcomeTabs ? (
+	const teamTabRow = hideOutcomeTabs ? null : useOutcomeTabs ? (
 		<div className="orderbook-embedded-team-row">
 			<div className="orderbook-tabs" role="tablist" aria-label="Outcomes">
 				{outcomeTabs!.map((tab) => (

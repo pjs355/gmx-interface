@@ -8,7 +8,6 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import { resolveUmbrellaEventDate } from "../Predictions/utils/eventDates";
 import { resolveHomeMatchWinnerQuestion } from "@/features/markets/presentation/esportsHomeCard";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
-import { pandaVenueWireKeys } from "@/features/markets/presentation/pandaOddsRows";
 import "./Home.scss";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -243,16 +242,11 @@ export default function Home() {
 			const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
 			const pid = typeof raw === "string" ? raw.trim() : "";
 			if (!pid) continue;
-			// Subscribe series + each map wire key so per-map odds stream on the card.
-			const children = (u as { children?: unknown }).children;
-			const keys = pandaVenueWireKeys(
-				pid,
-				Array.isArray(children)
-					? (children as unknown as Parameters<typeof pandaVenueWireKeys>[1])
-					: [],
-			);
-			if (keys.length === 0) ids.add(pid);
-			else for (const k of keys) ids.add(k);
+			// Home cards only render the series moneyline (see PredictionCard's
+			// esportsOddsRowSpecs filter), so we only subscribe to the series wire
+			// key here. The detail page subscribes to per-map keys via the leg
+			// accordion.
+			ids.add(pid);
 		}
 		return [...ids].sort().join("\0");
 	}, [gamingUmbrellas, esportsUmbrellas]);

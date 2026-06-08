@@ -47,6 +47,8 @@ import {
 } from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
 import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
+import { EsportsLegAccordion } from "./EsportsLegAccordion";
+import type { EsportsLeg } from "@/features/markets/presentation/esportsLegs";
 
 type PanelsProps = {
 	umbrella: Umbrella;
@@ -67,6 +69,15 @@ type PanelsProps = {
 		frozenOrderbooks: Record<string, any>;
 	};
 	settledInfo?: SettledInfo | null;
+	/**
+	 * When provided (multi-leg Panda esports: series + map_1 + map_2 + ...), the
+	 * "Moneyline odds" heading + cross-venue table slot below the chart is
+	 * replaced with a vertical {@link EsportsLegAccordion}. The chart at the top
+	 * and the trade box on the right keep their normal positions — only the
+	 * orderbook section's heading/body swap. Undefined for FIFA, polymarket,
+	 * single-question, and series-only esports umbrellas.
+	 */
+	esportsLegs?: EsportsLeg[];
 };
 
 export const MarketPanels: React.FC<PanelsProps> = ({
@@ -82,7 +93,14 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	fetchAllOrderbooks,
 	chartState,
 	settledInfo,
+	esportsLegs,
 }) => {
+	/**
+	 * True when this umbrella renders the multi-leg esports accordion (series +
+	 * 1+ map legs). The accordion replaces only the moneyline-odds slot below
+	 * the chart; everything else (chart, trade box, comments) stays in place.
+	 */
+	const isMultiLegEsports = Array.isArray(esportsLegs) && esportsLegs.length > 1;
 	/*
 	 * Drives single-instance rendering of `<UmbrellaTradeBoxPanel>` below.
 	 * Both layouts (`.desktop-layout` / `.mobile-layout`) live in the tree
@@ -389,6 +407,12 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					activePosition={activePosition}
 					side={tradeSide}
 					outcomeTabs={multiLegOutcomeTabs}
+					/*
+					 * Multi-leg esports: the accordion header's team pills are the
+					 * canonical activeMarket / activePosition switch — show no
+					 * duplicate Yes/No tab row above the venue ladder.
+					 */
+					hideOutcomeTabs={isMultiLegEsports}
 				/>
 				{/* <RulesSection umbrella={umbrella} /> */}
 			</>
@@ -499,7 +523,10 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						/>
 					)}
 				</div>
-			) : (
+			) : // Multi-leg esports mode renders the accordion which already shows
+			// the leg label in its section header, so the duplicate
+			// "Moneyline odds" h3 inside the body is suppressed.
+			isMultiLegEsports ? null : (
 				<h3 className="prediction-market-odds-heading">{venueBooksSectionTitle}</h3>
 			)
 		) : null;
@@ -540,9 +567,37 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		<div className="venue-books-container">
 			{mediaTabSwitcher}
 			{mediaTab === "livestream" && showStream ? streamBlock : chartAtTopOfVenueBooks}
-			{tabSwitcher}
-			{predictionMarketOddsHeading}
-			<div className={orderbookSectionClass}>{orderbookSectionBody}</div>
+			{isMultiLegEsports && esportsLegs ? (
+				/*
+				 * Multi-leg esports: render the vertical leg accordion in the same
+				 * slot where the moneyline-odds heading + cross-venue table would
+				 * normally live. The chart above and the trade box on the right
+				 * stay anchored; only this block swaps. Each accordion section's
+				 * expanded body re-renders the standard orderbook section
+				 * (Basic/Orderbooks tabs + body) for the currently active leg —
+				 * `activeMarket` already points at that leg via the page-level
+				 * `accordionActiveQuestion` so chart, orderbook, and trade box
+				 * are all wired to the same market.
+				 */
+				<EsportsLegAccordion
+					umbrella={umbrella}
+					legs={esportsLegs}
+					activeMarket={activeMarket}
+					activePosition={activePosition}
+					onMarketSwitch={onMarketSwitch}
+					onPositionChange={onPositionChange}
+				>
+					{tabSwitcher}
+					{predictionMarketOddsHeading}
+					<div className={orderbookSectionClass}>{orderbookSectionBody}</div>
+				</EsportsLegAccordion>
+			) : (
+				<>
+					{tabSwitcher}
+					{predictionMarketOddsHeading}
+					<div className={orderbookSectionClass}>{orderbookSectionBody}</div>
+				</>
+			)}
 		</div>
 	);
 

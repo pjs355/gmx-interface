@@ -3,7 +3,6 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { Tag } from "@/services/api/tagService";
 import { getHomeGameFilter } from "./gameFilterNavigation";
 import { normalizeEventDateInput, resolveUmbrellaEventDate } from "./eventDates";
-import { pandaVenueWireKeys } from "@/features/markets/presentation/pandaOddsRows";
 
 export const LIVE_PILL_ID = "__LIVE__";
 export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
@@ -68,9 +67,14 @@ export function worldCupPropGroupSortKey(umbrella: Umbrella): string {
 
 /**
  * PandaScore match IDs an umbrella needs subscribed on the venue-prices WS to
- * render cross-venue BBO. World Cup umbrellas carry venue routing on their
- * per-team child questions (`polymarketMarketId`); every other umbrella uses its
- * own `pandascore_matchId`. Dedupes while preserving order.
+ * render cross-venue BBO on the listing surfaces. World Cup umbrellas carry
+ * venue routing on their per-team child questions (`polymarketMarketId`); every
+ * other umbrella uses its own `pandascore_matchId`.
+ *
+ * Esports listing cards only render the series moneyline (see PredictionCard's
+ * `esportsOddsRowSpecs` filter), so subscribing to `${matchId}-map-${slot}` wire
+ * keys here is wasted WS work — the detail page subscribes to the full leg set
+ * via {@link EsportsLegAccordion}. Dedupes while preserving order.
  */
 export function umbrellaVenuePandaIds(umbrella: Umbrella | null | undefined): string[] {
 	if (!umbrella) return [];
@@ -88,18 +92,7 @@ export function umbrellaVenuePandaIds(umbrella: Umbrella | null | undefined): st
 	} else {
 		const raw = (umbrella as { pandascore_matchId?: unknown }).pandascore_matchId;
 		const matchId = typeof raw === "string" ? raw.trim() : "";
-		if (matchId) {
-			// Series + each map wire key (matchId-map-N) so per-map odds stream on the
-			// listing grid, not just the series.
-			const children = (umbrella as { children?: unknown }).children;
-			const wireKeys = pandaVenueWireKeys(
-				matchId,
-				Array.isArray(children)
-					? (children as unknown as Parameters<typeof pandaVenueWireKeys>[1])
-					: [],
-			);
-			for (const k of wireKeys.length > 0 ? wireKeys : [matchId]) push(k);
-		}
+		if (matchId) push(matchId);
 	}
 	return ids;
 }
@@ -143,11 +136,17 @@ export function gameFilterResetSelection(_tags: Tag[]): string {
  */
 export function resolveStoredHomeGameFilter(stored: string | null, tags: Tag[]): string | null {
 	if (stored === null || stored.length === 0) return null;
-	if (stored === LIVE_PILL_ID || stored === STARTING_SOON_PILL_ID) return stored;
+	if (stored === LIVE_PILL_ID || stored === STARTING_SOON_PILL_ID || stored === WORLD_CUP_PILL_ID) {
+		return stored;
+	}
 	if (isEsportsMetaTagLabel(stored)) {
 		const esports = findEsportsTag(tags);
 		return esports?.label === stored ? stored : null;
 	}
+	// Stored "FIFA World Cup" pill (back-end Tag) was hidden from the sidebar
+	// in favor of the synthetic World Cup block — redirect so the user lands
+	// on the equivalent visible entry instead of an unselectable orphan.
+	if (isHiddenSidebarTagLabel(stored)) return WORLD_CUP_PILL_ID;
 	return tags.some((t) => t.label === stored) ? stored : null;
 }
 
@@ -161,6 +160,18 @@ export function resolveInitialHomeGameFilter(tags: Tag[]): string {
 
 export function isEsportsMetaTagLabel(tagLabel: string): boolean {
 	return normalizeTagLabel(tagLabel) === "ESPORTS";
+}
+
+/*
+ * The backend may carry a "FIFA World Cup" Tag whose pill duplicates the
+ * synthetic World Cup block (`WORLD_CUP_PILL_ID` → "World Cup" with Games /
+ * Groups children). The synthetic block is the canonical World Cup entry point
+ * for the sidebar; hide the duplicate so the user only sees one. Matched on
+ * the normalized form (`FIFA_WORLD_CUP`) so spacing/casing drift in the tag
+ * label doesn't accidentally re-show it.
+ */
+export function isHiddenSidebarTagLabel(tagLabel: string): boolean {
+	return normalizeTagLabel(tagLabel) === "FIFA_WORLD_CUP";
 }
 
 /** Live / Starting Soon / ESPORTS "All" — not a per-game tag pill. */

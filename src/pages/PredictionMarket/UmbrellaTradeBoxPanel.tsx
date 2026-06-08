@@ -7,7 +7,10 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { SettledInfo } from "./useMatchSettled";
 import { getMarketId } from "./utils";
 import type { TradingPagePrices } from "@/features/markets/pricing/useTradingPagePrices";
-import { resolveUmbrellaVenueKey } from "@/features/markets/pricing/venueLookupKey";
+import {
+	isPerLegVenueKey,
+	resolveUmbrellaVenueKey,
+} from "@/features/markets/pricing/venueLookupKey";
 import { TradeBoxSkeleton } from "./Skeletons";
 import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
 
@@ -52,14 +55,21 @@ export function UmbrellaTradeBoxPanel({
 		);
 
 	/**
-	 * Umbrella-level `pandascore_matchId` for esports; per-leg `polymarketMarketId`
-	 * for FIFA 3-way mirror markets. Drives `multiVenueEnabled` + cross-venue SOR in
-	 * `PredictionMarketTradeBox` identically for both.
+	 * Umbrella-level `pandascore_matchId` for esports series; per-map
+	 * `${pandascore_matchId}-map-${slot}` for esports map legs; per-leg
+	 * `polymarketMarketId` for FIFA 3-way mirror markets. Drives `multiVenueEnabled`
+	 * + cross-venue SOR in `PredictionMarketTradeBox` identically for all of them.
 	 */
 	const pandascoreMatchId = resolveUmbrellaVenueKey(umbrella, activeMarket);
+	const perLeg = isPerLegVenueKey(umbrella, activeMarket);
 
-	const umbrellaLimitless = umbrella?.exchangeMatching?.limitless;
-	const umbrellaPredictFun = umbrella?.exchangeMatching?.predictFun;
+	// Umbrella-level Limitless / Predict.fun routing applies to the umbrella's
+	// series book only. For per-leg keys (FIFA legs or esports map legs) the leg
+	// carries its own `exchangeMatching`; passing the umbrella mappings here would
+	// route trades to the wrong venue market id. The trade box already handles
+	// "no routing on this leg" gracefully (view-only sell strip, no submit).
+	const umbrellaLimitless = perLeg ? undefined : umbrella?.exchangeMatching?.limitless;
+	const umbrellaPredictFun = perLeg ? undefined : umbrella?.exchangeMatching?.predictFun;
 
 	if (settledInfo) {
 		return desktopTradeDockShell(

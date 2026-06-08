@@ -52,6 +52,13 @@ export interface PredictionMarket {
 	/** PandaScore market id; per-sub lookup key for venue prices / orderbooks / chart. */
 	pandascore_marketId?: string | number;
 	pandascore_template?: string;
+	/** PandaScore market kind. `"game"` = per-map; `"match"` = series winner. */
+	pandascore_eventType?: string;
+	/**
+	 * Map index for `pandascore_eventType === "game"` (Map 1, Map 2, ...). Absent
+	 * or 0 on series winner. Wire key for venue prices is `${matchId}-map-${pos}`.
+	 */
+	pandascore_gamePosition?: number;
 	/**
 	 * Polymarket Gamma market id. For Polymarket-sourced sports (FIFA World Cup
 	 * 3-way moneyline) this is the per-leg cross-venue lookup key, used in place

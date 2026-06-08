@@ -1,0 +1,304 @@
+// Vertical leg accordion for multi-leg Panda esports umbrellas (series + maps).
+// Visual language mirrors the trade-box `TradeBoxOutcomeButtons`: active pill =
+// solid team-color fill + `getBorderColorForSelected` outline; inactive pill =
+// 35% tint background and border. Pills here are compact (right-aligned with
+// the chevron) so leg labels on the left keep the visual hierarchy and don't
+// have a wall of color when many maps are present.
+
+.esports-leg-accordion {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	min-width: 0;
+}
+
+// Cards intentionally render against the page's pure-black background — the
+// previous translucent white overlays stacked into visible grey layers that
+// fought with the trade-box / chart panels. The 1px border on its own keeps
+// the card edge legible; expanded sections lean on a slightly brighter border
+// for affordance instead of a background tint.
+.esports-leg-accordion__section {
+	display: flex;
+	flex-direction: column;
+	border-radius: 10px;
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	overflow: hidden;
+	transition: border-color 0.15s ease;
+
+	&--expanded {
+		border-color: rgba(255, 255, 255, 0.12);
+	}
+}
+
+// Header is click-to-toggle (entire bar). The pills and chevron stop event
+// propagation in JS so their own click semantics (market switch / collapse)
+// aren't shadowed by the bar's toggle handler.
+.esports-leg-accordion__header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 10px 14px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+
+	// Hover affordance on collapsed headers: a subtle tint that signals the
+	// bar is interactive. Click is the only open path (hover-to-open was
+	// intentionally removed) — this tint just hints at "click me".
+	&:hover:not(.esports-leg-accordion__header--expanded) {
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	&--expanded {
+		// No background fill — the body below is solid black and the section
+		// border alone separates the card from the page. Cursor stays
+		// `pointer` because clicking the bar collapses the section again.
+		background: transparent;
+	}
+}
+
+.esports-leg-accordion__label {
+	flex: 0 0 auto;
+	font-size: 15px;
+	font-weight: 700;
+	line-height: 1;
+	color: #ffffff;
+	min-width: 88px;
+}
+
+// Pills sit on the right edge of the header. `margin-left: auto` pushes the
+// group away from the leg label, while each pill stays at its content size
+// (with a small min/max to keep alignment tidy across legs).
+.esports-leg-accordion__odds-group {
+	display: flex;
+	flex: 0 0 auto;
+	margin-left: auto;
+	min-width: 0;
+	gap: 6px;
+}
+
+.esports-leg-accordion__odds-pill {
+	flex: 0 0 auto;
+	min-width: 112px;
+	max-width: 168px;
+	min-height: 36px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 12px;
+	border-radius: 6px;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1;
+	white-space: nowrap;
+	cursor: pointer;
+	// Border + background are driven by inline `style` so the active /
+	// inactive / hover transitions stay perfectly in sync with the
+	// trade-box team-color math (`getBorderColorForSelected`, `hexToRgba`).
+	transition:
+		opacity 0.12s ease,
+		transform 0.06s ease,
+		border-color 0.12s ease;
+
+	&:focus-visible {
+		outline: 2px solid rgba(255, 255, 255, 0.55);
+		outline-offset: 2px;
+	}
+
+	&:active {
+		transform: translateY(1px);
+	}
+}
+
+.esports-leg-accordion__odds-pill-team {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.esports-leg-accordion__odds-pill-price {
+	flex-shrink: 0;
+	font-size: 14px;
+	font-weight: 700;
+}
+
+// Chevron button: same visual language as `game-link__caret` in GameLinks.scss
+// (the World Cup expand/collapse on the left sidebar). Plain transparent button,
+// dimmed icon, brightens on hover/focus.
+.esports-leg-accordion__chevron {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	// Sits next to the team pills in the desktop in-row layout. The header's
+	// `gap: 12px` already provides a baseline gap; the extra 12px margin
+	// gives the chevron a clear "zone of its own" so it doesn't read as
+	// part of the rightmost pill (~24px total separation, comfortable
+	// click target spacing).
+	margin-left: 12px;
+	border: none;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.55);
+	cursor: pointer;
+	border-radius: 4px;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+
+	svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	&:hover,
+	&:focus-visible {
+		color: #ffffff;
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	&:focus-visible {
+		outline: 2px solid rgba(255, 255, 255, 0.45);
+		outline-offset: -2px;
+	}
+}
+
+// Expanded body holds the Basic / Orderbooks tab switcher and the panel
+// body for the active leg. Inset the content from the section card edge so
+// the dense cross-venue table and orderbook rows don't kiss the border —
+// `14px` horizontal mirrors the header padding so the body content lines
+// up visually with the leg label / pills above. The hairline top divider
+// separates the body from the header without adding a heavy rule. Explicit
+// `background: #000000` ensures the body reads as part of the page (the
+// site's `.venue-books-container` is also #000), eliminating the layered-grey
+// look that came from stacking translucent overlays.
+.esports-leg-accordion__body {
+	display: flex;
+	flex-direction: column;
+	background: #000000;
+	padding: 8px 14px 14px;
+	border-top: 1px solid rgba(255, 255, 255, 0.06);
+
+	// Basic / Orderbooks tab switcher already carries its own bottom
+	// margin; keep it tight here so the body padding handles spacing
+	// rather than stacking two gaps.
+	.venue-tab-switcher {
+		margin-bottom: 4px;
+	}
+
+	// `EsportsVenueBooksPanel` ships with `padding: 16px 0 0` to give the
+	// table room when it lives directly inside `.venue-books-container`.
+	// Inside the accordion body the inset is already provided by the body
+	// padding + tab switcher margin, so the extra top padding just looks
+	// like an empty gap. Drop it (and tighten the table's own top margin)
+	// so the table sits a comfortable distance under the tabs.
+	.esports-venue-books {
+		padding-top: 0;
+	}
+
+	.esports-venue-books__table-wrap {
+		margin-top: 0;
+	}
+}
+
+// The site-wide rule at the bottom of PredictionMarket.scss pulls
+// `.orderbook-section__cross-venue` to `calc(100% + 24px)` so the basic
+// table sits flush with `.venue-books-container`'s outer padding. Inside
+// the accordion that rule overflows the section card border, which is
+// the main reason the body content looks crammed/broken on desktop +
+// mobile. Re-anchor the table to the body's inset so it respects the
+// card edge. Selector specificity matches the original site-wide rule
+// and adds `.esports-leg-accordion__body` so this override wins.
+.prediction-market-page.desktop
+	.venue-books-container
+	.esports-leg-accordion__body
+	.orderbook-section
+	.orderbook-section__cross-venue,
+.prediction-market-page.mobile
+	.esports-leg-accordion__body
+	.orderbook-section-mobile
+	.orderbook-section__cross-venue {
+	margin-left: 0;
+	margin-right: 0;
+	width: 100%;
+	max-width: 100%;
+}
+
+// Narrow viewports: drop pill min-width so two teams + chevron still fit on
+// one row without the label getting squished. The label can wrap onto its own
+// row if needed (matches MarketPanels' multi-leg heading row breakpoint).
+@media (max-width: 720px) {
+	.esports-leg-accordion__header {
+		flex-wrap: wrap;
+		// Wider row gap so the label / chevron row (chevron is absolute
+		// top-right, label sits on the first wrap row) has clear vertical
+		// separation from the team pills that wrap onto the second row.
+		// 10px read as crammed against the pills; 16px gives them their
+		// own visual zone without making the header feel oversized.
+		gap: 16px;
+		padding: 10px 12px;
+	}
+
+	.esports-leg-accordion__label {
+		flex: 1 1 100%;
+		min-width: 0;
+	}
+
+	.esports-leg-accordion__odds-group {
+		flex: 1 1 auto;
+		margin-left: 0;
+	}
+
+	.esports-leg-accordion__odds-pill {
+		flex: 1 1 0;
+		min-width: 0;
+		max-width: none;
+	}
+
+	.esports-leg-accordion__chevron {
+		position: absolute;
+		right: 12px;
+		top: 10px;
+	}
+
+	.esports-leg-accordion__section {
+		position: relative;
+	}
+
+	// Mobile: zero horizontal padding inside the dropdown so the Basic
+	// cross-venue table and Orderbooks ladder span the full section
+	// width — narrow viewports need every readable pixel. Top / bottom
+	// padding keeps a comfortable vertical breath. The section card's
+	// 1px border + `overflow: hidden` (rounded corners) still frame the
+	// content, so the body content sits flush with the card edge cleanly.
+	.esports-leg-accordion__body {
+		padding: 8px 0 12px;
+	}
+}
+
+// Mobile-only: the site-wide `.prediction-market-page.mobile .venue-tab-switcher`
+// rule adds 8px of horizontal padding around the Basic / Orderbooks button row
+// (so the buttons have a side gutter when they live directly in the venue
+// container). Inside the accordion body that gutter no longer makes sense —
+// the body is already zero-padded for edge-to-edge content — so override
+// it so the tab buttons line up visually with the table / orderbook below.
+// Selector specificity bumped above the site-wide rule.
+.prediction-market-page.mobile
+	.venue-books-container
+	.esports-leg-accordion__body
+	.venue-tab-switcher {
+	padding-left: 0;
+	padding-right: 0;
+}

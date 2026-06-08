@@ -566,14 +566,18 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const isPandaEsportsListing = isEsportsUmbrella || hasPandascoreMatch;
 	const useEsportsMatchWinnerCard = isPandaEsportsListing && matchWinnerQuestion !== null;
 
-	// Series winner + each map that exists, as token-pair odds rows for the card.
+	// Home cards show only the series moneyline. Map 1/Map 2/... legs are
+	// available on the umbrella detail page (EsportsLegAccordion), but cluttering
+	// every listing card with per-map columns hurts scanability. Filtering to the
+	// series spec drops esportsOddsRowSpecs.length to <=1 so renderActions() falls
+	// through to SingleMarketActions (the existing single-row team button render).
 	const esportsOddsRowSpecs = useMemo(
 		() =>
 			isPandaEsportsListing && pandascoreMatchIdForVenues
 				? buildPandaOddsRowSpecs(
 						pandascoreMatchIdForVenues,
 						(umbrella.children ?? []) as unknown as Parameters<typeof buildPandaOddsRowSpecs>[1],
-					)
+					).filter((spec) => spec.slot === null)
 				: [],
 		[isPandaEsportsListing, pandascoreMatchIdForVenues, umbrella.children],
 	);

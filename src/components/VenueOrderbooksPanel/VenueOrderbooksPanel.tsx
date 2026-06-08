@@ -131,6 +131,12 @@ export type VenueOrderbooksPanelProps = {
 	side?: "buy" | "sell";
 	/** FIFA 3-way: leg buttons that replace the orderbook Yes/No tabs (each = YES of a leg). */
 	outcomeTabs?: OrderbookOutcomeTab[];
+	/**
+	 * Suppresses the embedded Yes/No (or outcome) team row above the ladder.
+	 * Used by the multi-leg esports accordion where the per-leg header already
+	 * owns the activeMarket/activePosition switch.
+	 */
+	hideOutcomeTabs?: boolean;
 };
 
 export function VenueOrderbooksPanel({
@@ -145,6 +151,7 @@ export function VenueOrderbooksPanel({
 	activePosition,
 	side = "buy",
 	outcomeTabs,
+	hideOutcomeTabs = false,
 }: VenueOrderbooksPanelProps) {
 	const { appState } = useOddsMonitor();
 	const [selectedVenueId, setSelectedVenueId] = useState("");
@@ -297,6 +304,7 @@ export function VenueOrderbooksPanel({
 						isCollapsed={false}
 						side={side}
 						outcomeTabs={outcomeTabs}
+						hideOutcomeTabs={hideOutcomeTabs}
 						wholeContractRestingBook={
 							selectedVenue.id === "dflow" || selectedVenue.id === "levelup"
 						}
