@@ -19,7 +19,6 @@ import {
 import {
 	findEsportsTag,
 	gameFilterResetSelection,
-	homeDefaultSelectedTagLabel,
 	isEsportsMetaTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
@@ -307,16 +306,35 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	}, []);
 
 	// First-load default: only applies when neither a pending filter nor a
-	// persisted filter was found (both gated via `defaultTagApplied`).
+	// persisted filter was found (both gated via `defaultTagApplied`). Cascades:
+	//   1. LIVE if any active umbrella is currently live
+	//   2. else STARTING SOON if any is starting soon
+	//   3. else null (no pill selected → show everything for the current filter type)
+	// Evaluated once after umbrellas + tags finish loading; if neither pill has
+	// content right now we don't oscillate as time passes.
 	useEffect(() => {
-		if (tagsLoading) return;
+		if (tagsLoading || loading) return;
 		if (defaultTagApplied) return;
-		const label = homeDefaultSelectedTagLabel(tags);
-		if (label) {
-			setSelectedGame(label);
+		const esportsTagId = findEsportsTag(tags)?._id;
+		const now = Date.now();
+		const activeUmbrellas = umbrellas.filter((u) => (u as { active?: boolean }).active === true);
+		const hasLive = activeUmbrellas.some((u) => isUmbrellaLiveByEventDate(u, now, esportsTagId));
+		if (hasLive) {
+			setSelectedGame(LIVE_PILL_ID);
 			setDefaultTagApplied(true);
+			return;
 		}
-	}, [tagsLoading, tags, defaultTagApplied]);
+		const hasStartingSoon = activeUmbrellas.some((u) =>
+			isUmbrellaStartingSoonByEventDate(u, now, esportsTagId),
+		);
+		if (hasStartingSoon) {
+			setSelectedGame(STARTING_SOON_PILL_ID);
+			setDefaultTagApplied(true);
+			return;
+		}
+		setSelectedGame(null);
+		setDefaultTagApplied(true);
+	}, [tagsLoading, loading, tags, umbrellas, defaultTagApplied]);
 
 	const handleWorldCupSectionSelect = (section: WorldCupSection) => {
 		setSelectedGame(WORLD_CUP_PILL_ID);

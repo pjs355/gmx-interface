@@ -215,13 +215,12 @@ export default function GameLinks({
 		return map;
 	}, [linkFilterState]);
 
+	// Attach scroll/resize listeners once. `updateScrollState` is stable
+	// (useCallback with no deps).
 	React.useEffect(() => {
-		if (scrollRef.current) {
-			scrollRef.current.scrollLeft = 0;
-		}
-		updateScrollState();
 		const el = scrollRef.current;
 		if (!el) return;
+		updateScrollState();
 		const onScroll = () => updateScrollState();
 		el.addEventListener("scroll", onScroll, { passive: true });
 		window.addEventListener("resize", updateScrollState);
@@ -229,6 +228,14 @@ export default function GameLinks({
 			el.removeEventListener("scroll", onScroll as any);
 			window.removeEventListener("resize", updateScrollState);
 		};
+	}, [updateScrollState]);
+
+	// Refresh arrow visibility when the pill content changes; do NOT reset
+	// scrollLeft. The previous reset re-ran on every umbrella WS tick (because
+	// `gameTagsOnly` is recomputed via `linkFilterState`) and was snapping the
+	// user back to start mid-scroll on mobile.
+	React.useEffect(() => {
+		updateScrollState();
 	}, [updateScrollState, gameTagsOnly, esportsMetaTag, worldCupExpanded]);
 
 	if (loading || tagsLoading) return null;

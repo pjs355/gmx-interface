@@ -18,11 +18,15 @@
  */
 
 import type { Tag } from "@/services/api/tagService";
-import { isProduction } from "./env";
 
-/** Single source of truth for the production restriction. */
+/** Single source of truth for the production restriction.
+ *
+ * Currently disabled: production should surface the full game catalog (FIFA,
+ * MLBB, SC2, all esports) so dev and prod display the same listings. Flip back
+ * to `isProduction()` to re-enable the Counter-Strike / LoL / Valorant / Dota 2
+ * allowlist (used during a previous staged rollout). */
 export function isRestrictedProductionMode(): boolean {
-	return isProduction();
+	return false;
 }
 
 /** PandaScore videogame slugs shown on public surfaces in restricted production. */

@@ -1011,7 +1011,11 @@ $predictions-compact-card-inline: 60px;
 .game-link-world-cup-block {
 	display: flex;
 	flex-direction: column;
-	width: 100%;
+	/* Size to content in the horizontal pill bar; was `width: 100%` which made
+	   this block claim the whole row on narrow viewports and squashed every other
+	   pill into overlap. `flex: 0 0 auto` also prevents shrinking. */
+	width: auto;
+	flex: 0 0 auto;
 	min-width: 0;
 }
 

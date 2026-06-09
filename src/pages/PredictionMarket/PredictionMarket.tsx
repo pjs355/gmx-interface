@@ -246,10 +246,7 @@ function PredictionMarketContent() {
 	 * for non-esports umbrellas or esports umbrellas with no map sub-questions, in
 	 * which case the page renders the existing `MarketPanels` layout unchanged.
 	 */
-	const esportsLegs = useMemo(
-		() => resolveEsportsLegs(umbrella, questions),
-		[umbrella, questions],
-	);
+	const esportsLegs = useMemo(() => resolveEsportsLegs(umbrella, questions), [umbrella, questions]);
 	const isMultiLegEsports = esportsLegs.length > 1;
 
 	/**

@@ -84,11 +84,7 @@ type Props = {
  * venue rows × best YES ask per team. Read-only; trading is driven from the
  * Orderbooks tab leg selector / trade box.
  */
-export function GroupWinnerVenueBooksPanel({
-	legs,
-	teamMappings,
-	gameTeamColorBySlug,
-}: Props) {
+export function GroupWinnerVenueBooksPanel({ legs, teamMappings, gameTeamColorBySlug }: Props) {
 	const { formatPrice } = useOddsDisplay();
 	const { enabled: wsEnabled } = useOddsMonitor();
 	const formatProbDisplay = useCallback((p: number) => formatPrice(p), [formatPrice]);

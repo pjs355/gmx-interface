@@ -148,9 +148,7 @@ export function EsportsLegAccordion({
 							onChevronClick={() => handleChevronClick(leg)}
 							onHeaderClick={() => handleHeaderClick(leg)}
 						/>
-						{isExpanded ? (
-							<div className="esports-leg-accordion__body">{children}</div>
-						) : null}
+						{isExpanded ? <div className="esports-leg-accordion__body">{children}</div> : null}
 					</section>
 				);
 			})}

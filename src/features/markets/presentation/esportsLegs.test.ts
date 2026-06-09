@@ -42,11 +42,7 @@ describe("resolveEsportsLegs", () => {
 			} as any,
 		]);
 		expect(out.map((l) => l.label)).toEqual(["Moneyline", "Map 1", "Map 2"]);
-		expect(out.map((l) => l.wireKey)).toEqual([
-			"1504737",
-			"1504737-map-1",
-			"1504737-map-2",
-		]);
+		expect(out.map((l) => l.wireKey)).toEqual(["1504737", "1504737-map-1", "1504737-map-2"]);
 	});
 
 	it("keeps tradeable: false map legs (settled / view-only)", () => {
