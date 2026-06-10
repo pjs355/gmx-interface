@@ -70,6 +70,11 @@ export interface TradeBoxProps {
 	umbrellaDisplayName?: string;
 	/** FIFA group-winner team colors from umbrella `teamMappings`. */
 	umbrellaTeamMappings?: UmbrellaTeamMapping[] | null;
+	/**
+	 * Prop ladder selection title ("Mexico +1.5") — overrides inferred spread titles
+	 * when the user picked a synthesized complement cell.
+	 */
+	selectionTitleOverride?: string | null;
 	initialPosition?: "yes" | "no";
 	onPositionChange?: (position: "yes" | "no") => void;
 	onSideChange?: (side: "buy" | "sell") => void;

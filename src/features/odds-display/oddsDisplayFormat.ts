@@ -14,7 +14,13 @@ export type OddsDisplayStyle =
 	| "hong_kong"
 	| "malaysian";
 
-export type OddsPriceLayout = "cell" | "dualWithCents";
+/**
+ * `cell`: compact whole-cent label (home cards, panels).
+ * `dualWithCents`: ratio/american styles with a cents paren (SOR rows).
+ * `ladder`: orderbook ladders — preserve venue tick precision to 0.1¢ so
+ * distinct levels (10.1¢ / 10¢ / 9.9¢) never collapse into identical rows.
+ */
+export type OddsPriceLayout = "cell" | "dualWithCents" | "ladder";
 
 const VALID_STYLES_LIST: OddsDisplayStyle[] = [
 	"default",
@@ -197,10 +203,33 @@ export function formatImpliedProbabilityAsCents(p: number | null | undefined): s
 	return `${Math.round(cents)}¢`;
 }
 
-function appendDualWithCents(primary: string, p: number | null | undefined): string {
+/**
+ * Ladder-precision ¢ label: keeps one fractional digit (trailing zero
+ * stripped) so fractional venue ticks survive — `17.5¢`, `11.1¢`, `12¢`.
+ * Limitless and Polymarket both tick at 0.1¢; whole-cent rounding rendered
+ * 10.1 / 10 / 9.9 as three identical "10¢" rows. Sub-1¢ quotes reuse the
+ * higher-precision path above.
+ */
+export function formatLadderCentsLabel(p: number | null | undefined): string {
+	if (p === undefined || p === null || !Number.isFinite(p)) return "--";
+	const clamped = Math.max(0, Math.min(1, p));
+	const cents = clamped * 100;
+	if (cents < 1) return formatImpliedProbabilityAsCents(p);
+	return `${trimTrailingZerosFixed(cents.toFixed(1))}¢`;
+}
+
+function appendDualWithCents(
+	primary: string,
+	p: number | null | undefined,
+	layout: OddsPriceLayout = "dualWithCents",
+): string {
 	if (primary === "--") return "--";
 	if (p === undefined || p === null || !Number.isFinite(p)) return "--";
-	const cents = formatImpliedProbabilityAsCents(Math.max(0, Math.min(1, p)));
+	const clamped = Math.max(0, Math.min(1, p));
+	const cents =
+		layout === "ladder"
+			? formatLadderCentsLabel(clamped)
+			: formatImpliedProbabilityAsCents(clamped);
 	return `${primary} (${cents})`;
 }
 
@@ -273,9 +302,11 @@ export function formatOddsPrice(
 ): string {
 	switch (style) {
 		case "default":
-			return formatCentsLabel(p);
-		case "american":
+			return layout === "ladder" ? formatLadderCentsLabel(p) : formatCentsLabel(p);
+		case "american": {
+			if (layout === "ladder") return appendDualWithCents(formatAmericanLabel(p), p, "ladder");
 			return layout === "dualWithCents" ? formatAmericanWithCentsParen(p) : formatAmericanLabel(p);
+		}
 		case "decimal":
 		case "multiplier":
 		case "fractional":
@@ -284,7 +315,9 @@ export function formatOddsPrice(
 		case "hong_kong":
 		case "malaysian": {
 			const cell = formatRatioStyleCell(style, p);
-			if (layout === "dualWithCents") return appendDualWithCents(cell, p);
+			if (layout === "dualWithCents" || layout === "ladder") {
+				return appendDualWithCents(cell, p, layout);
+			}
 			return cell;
 		}
 		default:
@@ -303,7 +336,9 @@ export function formatAvgOddsValue(p: number | null | undefined, style: OddsDisp
 			if (pct <= 0) return "0%";
 			if (pct < 0.01) return "<0.01%";
 			if (pct < 1) return `${trimTrailingZerosFixed(pct.toFixed(2))}%`;
-			return `${Math.round(pct)}%`;
+			// One fractional digit so a fee-adjusted avg (e.g. 11.9) is not shown
+			// as the venue's raw tick (12) — matches ladder-row precision.
+			return `${trimTrailingZerosFixed(pct.toFixed(1))}%`;
 		}
 		case "american":
 			return formatAmericanLabel(Math.max(0, Math.min(1, p)));

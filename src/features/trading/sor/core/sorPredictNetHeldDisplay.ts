@@ -1,18 +1,20 @@
 import type { RouteLeg } from "./sor-types";
-import { limitlessNetOutcomeSharesHeldAfterBuy } from "@/features/trading/fees/limitless";
 import { predictFunNetOutcomeSharesHeldAfterBuy } from "@/features/trading/fees/predict";
 
 /**
- * Buy leg: **net** outcome shares held after venue fee where the SOR leg is
- * gross contracts (Predict token-side bps; Limitless CLOB curve, outcome-side
- * buy fee); other venues return gross `leg.shares`. Used for SOR display totals.
+ * Buy leg: net outcome shares for display ("to win").
+ *
+ * - Limitless CLOB: SOR `walkBook` already applies fee-in-contracts via
+ *   `buyReceiveFactor`, so `leg.shares` are **net received** — do not net again.
+ * - Predict.fun: legs are gross; apply token-side bps net-held.
+ * - Other venues: gross `leg.shares`.
  */
 export function sorBuyPredictLegNetHeldShares(
 	leg: Pick<RouteLeg, "venue" | "shares" | "avgPrice">,
 	predictFunFeeRateBps: number | undefined,
 ): number {
 	if (leg.venue === "limitless") {
-		return limitlessNetOutcomeSharesHeldAfterBuy(leg.shares, leg.avgPrice);
+		return leg.shares;
 	}
 	if (leg.venue !== "predictfun") return leg.shares;
 	if (

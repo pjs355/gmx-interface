@@ -1,19 +1,8 @@
 /**
  * Synced from predictions-api `src/sor/dflow-fees.ts` — update both together.
  *
- * DFlow prediction-market taker fee — single implementation for trade UI.
- *
- * ## Spec reference (do not guess coefficients from conflicting summaries)
- *
- * - Primary formula (pond): https://pond.dflow.net/build/prediction-markets/prediction-market-fees
- * - Tier taker scale (Frost default **0.09**) vs printed **0.07** in the same doc — sizing follows the tier row; rebate caps only limit rebate eligibility.
- * - Tier/cookbook tensions: see `DFLOW_FEES_SETTLEMENT_RECIPE_PAGE`; settlement parity uses quote checks.
- *
- * ## Buy vs sell
- *
- * Same `(contracts, price)` USD fee until DFlow documents separate buy/sell collateral schedules.
- * Buy/sell optimizers use marginal sizing (`maxDflowFillForBuyBudget`, `minDflowFillForSellProceeds`)
- * so fills respect non-linear `calculateDflowFee`.
+ * DFlow routes Kalshi markets; taker fee matches kalshi.com:
+ *   round up(0.07 × C × P × (1 − P)) to the next cent.
  */
 
 export const DFLOW_FEE_POND_FORMULA_PAGE =
@@ -25,11 +14,8 @@ export const DFLOW_FEES_SETTLEMENT_RECIPE_PAGE =
 export const DFLOW_QUOTE_API_OPENAPI =
 	"https://pond.dflow.net/openapi/build/trading-api/openapi.json";
 
-/** Default taker coefficient (Frost tier) for the primary rounded term. */
-export const DFLOW_DEFAULT_TAKER_FEE_SCALE = 0.09;
-
-/** Second term before USDC conversion; keep 0.01 until maker-tier parity is confirmed. */
-const DFLOW_FEE_SECOND_SCALE = 0.01;
+/** Kalshi general-market taker coefficient (matches kalshi.com). */
+export const DFLOW_DEFAULT_TAKER_FEE_SCALE = 0.07;
 
 /** Upper bound on share count for binary searches (prevents runaway). */
 const DFLOW_SHARE_SEARCH_CEIL = 1e18;
@@ -42,9 +28,7 @@ export type CalculateDflowFeeOptions = {
 	takerFeeScale?: number;
 };
 
-/**
- * Estimated taker fee in **USDC** using Pond’s decomposition; primary scale defaults to Frost **0.09**.
- */
+/** Estimated Kalshi taker fee in USDC for a fill of `contracts` at `price`. */
 export function calculateDflowFee(
 	contracts: number,
 	price: number,
@@ -52,29 +36,21 @@ export function calculateDflowFee(
 ): number {
 	if (!fin(contracts) || !fin(price) || price >= 1) return 0;
 	const rawScale = opts?.takerFeeScale;
-	const takerScale =
+	const coeff =
 		rawScale != null && Number.isFinite(rawScale) && rawScale > 0
 			? rawScale
 			: DFLOW_DEFAULT_TAKER_FEE_SCALE;
 	const pq = price * (1 - price);
-	const basePart = Math.ceil(takerScale * contracts * pq * 100) / 100;
-	const addPart = DFLOW_FEE_SECOND_SCALE * contracts * pq;
-	const feeInContracts = basePart + addPart;
-	return Math.round(feeInContracts * price * 100) / 100;
+	return Math.ceil(coeff * contracts * pq * 100) / 100;
 }
 
-/**
- * Total USDC spent buying `fillSize` contracts at `price` including DFlow fee.
- */
+/** Total USDC spent buying `fillSize` contracts at `price` including Kalshi taker fee. */
 export function dflowBuyCostUsd(fillSize: number, price: number): number {
 	if (!(fillSize > 0) || !(price > 0 && price < 1)) return 0;
 	return fillSize * price + calculateDflowFee(fillSize, price);
 }
 
-/**
- * Largest fill in `[0, maxShares]` such that `dflowBuyCostUsd(fill, price) <= budgetUsd`
- * (binary search; assumes cost increases with fill size).
- */
+/** Largest fill in `[0, maxShares]` such that `dflowBuyCostUsd(fill, price) <= budgetUsd`. */
 export function maxDflowFillForBuyBudget(
 	budgetUsd: number,
 	price: number,
@@ -93,9 +69,7 @@ export function maxDflowFillForBuyBudget(
 	return lo;
 }
 
-/**
- * Largest **integer** contract count fitting `budgetUsd` at `price`, capped by book depth.
- */
+/** Largest integer contract count fitting `budgetUsd` at `price`, capped by book depth. */
 export function maxWholeDflowContractsForBuyBudget(
 	budgetUsd: number,
 	price: number,
@@ -109,18 +83,13 @@ export function maxWholeDflowContractsForBuyBudget(
 	return s;
 }
 
-/**
- * Net USDC proceeds from selling `fillSize` contracts at bid price `price` after DFlow fee.
- */
+/** Net USDC proceeds from selling `fillSize` contracts at bid price `price` after taker fee. */
 export function dflowSellProceedsUsd(fillSize: number, price: number): number {
 	if (!(fillSize > 0) || !(price > 0 && price < 1)) return 0;
 	return fillSize * price - calculateDflowFee(fillSize, price);
 }
 
-/**
- * Smallest fill in `(0, maxFill]` achieving at least `proceedsUsd` net proceeds; returns `maxFill`
- * if the book cannot deliver `proceedsUsd` in one slice.
- */
+/** Smallest fill achieving at least `proceedsUsd` net proceeds. */
 export function minDflowFillForSellProceeds(
 	proceedsUsd: number,
 	price: number,
@@ -139,19 +108,14 @@ export function minDflowFillForSellProceeds(
 	return hi;
 }
 
-/**
- * Portion of a **gross** USDC buy budget that goes to notional (`shares × approxPrice`)
- * when sizing uses **whole Kalshi/DFlow contracts** against `dflowBuyCostUsd`.
- */
+/** Notional portion of gross buy budget after Kalshi fee-inclusive sizing. */
 export function dflowEffectiveBuyBudget(usd: number, approxPrice: number = 0.5): number {
 	if (!fin(usd) || !fin(approxPrice) || approxPrice >= 1) return 0;
 	const maxS = maxWholeDflowContractsForBuyBudget(usd, approxPrice, DFLOW_SHARE_SEARCH_CEIL);
 	return maxS * approxPrice;
 }
 
-/**
- * Exact fee in USDC for a fill of `fillSize` contracts at `price` on DFlow.
- */
+/** Exact fee in USDC for a fill of `fillSize` contracts at `price`. */
 export function calculateDflowFeeForFill(fillSize: number, price: number): number {
 	return calculateDflowFee(fillSize, price);
 }

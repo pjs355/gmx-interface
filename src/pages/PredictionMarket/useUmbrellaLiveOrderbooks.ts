@@ -10,6 +10,11 @@ type GetOrderbookForQuestion = (
 
 type RefreshOrderbook = (umbrellaId: string, questionId: string) => Promise<unknown | null>;
 
+function parseMarketIdsKey(marketIdsKey: string): string[] {
+	if (!marketIdsKey) return [];
+	return marketIdsKey.split("|").filter(Boolean);
+}
+
 export function useUmbrellaLiveOrderbooks(
 	umbrellaId: string | undefined,
 	questions: PredictionMarket[],
@@ -19,6 +24,11 @@ export function useUmbrellaLiveOrderbooks(
 	const [questionOrderbooks, setQuestionOrderbooks] = useState<Record<string, any>>({});
 	const [orderbooksReady, setOrderbooksReady] = useState(false);
 	const wsPayloadDevLoggedRef = useRef(new Set<string>());
+	const wsRef = useRef<WebSocket | null>(null);
+	const subscribedIdsRef = useRef<Set<string>>(new Set());
+	const receivedOrderbooksRef = useRef<Set<string>>(new Set());
+	const expectedMarketIdsRef = useRef<string[]>([]);
+	const wsUmbrellaIdRef = useRef<string | undefined>(undefined);
 
 	const marketIdsKey = useMemo(
 		() =>
@@ -31,39 +41,53 @@ export function useUmbrellaLiveOrderbooks(
 		[questions],
 	);
 
+	const expectedMarketIds = useMemo(() => parseMarketIdsKey(marketIdsKey), [marketIdsKey]);
+
 	useEffect(() => {
 		wsPayloadDevLoggedRef.current.clear();
 	}, [marketIdsKey]);
 
-	// Seed local map from context (same as PredictionMarket load path)
-	useLayoutEffect(() => {
-		if (!umbrellaId || !marketIdsKey) {
-			setQuestionOrderbooks({});
+	const markReadyIfComplete = useCallback((expected: string[]) => {
+		if (expected.length === 0) {
+			setOrderbooksReady(true);
 			return;
 		}
-		const qids = marketIdsKey.split("|");
-		const seeded: Record<string, unknown> = {};
-		for (const qid of qids) {
-			const ob = getOrderbookForQuestion(umbrellaId, qid);
-			seeded[qid] = ob != null ? normalizeOrderbookPayload(ob) : ob;
+		if (receivedOrderbooksRef.current.size >= expected.length) {
+			setOrderbooksReady(true);
 		}
-		setQuestionOrderbooks(seeded);
-	}, [umbrellaId, marketIdsKey, getOrderbookForQuestion]);
+	}, []);
 
-	// Multiplex WebSocket
-	useEffect(() => {
-		if (!umbrellaId || !marketIdsKey) return;
+	// Seed from context — merge into existing books so adding a spread leg does not wipe moneyline snapshots.
+	useLayoutEffect(() => {
+		if (!umbrellaId || expectedMarketIds.length === 0) {
+			setQuestionOrderbooks({});
+			setOrderbooksReady(false);
+			return;
+		}
 
-		const wsBase = getPredictionWebSocketUrl().replace(/\/$/, "");
-		const wsUrl = `${wsBase}/ws`;
-		const receivedOrderbooks = new Set<string>();
-		let wsErrorLogged = false;
+		setQuestionOrderbooks((prev) => {
+			let changed = false;
+			const next = { ...prev };
+			for (const qid of expectedMarketIds) {
+				if (hasUsableOrderbookSnapshot(next[qid])) continue;
+				const ob = getOrderbookForQuestion(umbrellaId, qid);
+				if (ob == null) continue;
+				const normalized = normalizeOrderbookPayload(ob);
+				if (next[qid] !== normalized) {
+					next[qid] = normalized;
+					changed = true;
+					if (hasUsableOrderbookSnapshot(normalized)) {
+						receivedOrderbooksRef.current.add(qid);
+					}
+				}
+			}
+			return changed ? next : prev;
+		});
+		markReadyIfComplete(expectedMarketIds);
+	}, [umbrellaId, expectedMarketIds, getOrderbookForQuestion, markReadyIfComplete]);
 
-		setOrderbooksReady(false);
-
-		const expectedMarketIds = marketIdsKey.split("|");
-
-		const applyOrderbookForMarket = (marketId: string, raw: unknown) => {
+	const applyOrderbookForMarket = useCallback(
+		(marketId: string, raw: unknown) => {
 			const wrapped =
 				raw && typeof raw === "object" && !Array.isArray(raw)
 					? (raw as Record<string, unknown>)
@@ -89,11 +113,47 @@ export function useUmbrellaLiveOrderbooks(
 				...prev,
 				[marketId]: orderbook,
 			}));
-			receivedOrderbooks.add(marketId);
-			if (receivedOrderbooks.size === expectedMarketIds.length) {
-				setOrderbooksReady(true);
+			receivedOrderbooksRef.current.add(marketId);
+			markReadyIfComplete(expectedMarketIdsRef.current);
+		},
+		[markReadyIfComplete],
+	);
+
+	const subscribeMarkets = useCallback((ids: string[]) => {
+		const ws = wsRef.current;
+		if (!ws || ws.readyState !== WebSocket.OPEN) return;
+		for (const mid of ids) {
+			if (subscribedIdsRef.current.has(mid)) continue;
+			try {
+				ws.send(JSON.stringify({ type: "subscribe", market: mid }));
+				subscribedIdsRef.current.add(mid);
+			} catch {
+				/* ignore */
 			}
-		};
+		}
+	}, []);
+
+	const unsubscribeMarkets = useCallback((ids: string[]) => {
+		const ws = wsRef.current;
+		if (!ws || ws.readyState !== WebSocket.OPEN) return;
+		for (const mid of ids) {
+			if (!subscribedIdsRef.current.has(mid)) continue;
+			try {
+				ws.send(JSON.stringify({ type: "unsubscribe", market: mid }));
+				subscribedIdsRef.current.delete(mid);
+			} catch {
+				/* ignore */
+			}
+		}
+	}, []);
+
+	// One socket per umbrella; subscribe/unsubscribe incrementally when the market set changes.
+	useEffect(() => {
+		if (!umbrellaId || expectedMarketIds.length === 0) return;
+
+		const wsBase = getPredictionWebSocketUrl().replace(/\/$/, "");
+		const wsUrl = `${wsBase}/ws`;
+		let wsErrorLogged = false;
 
 		const routeMessage = (message: unknown) => {
 			if (!message || typeof message !== "object") return;
@@ -122,64 +182,106 @@ export function useUmbrellaLiveOrderbooks(
 			}
 		};
 
-		let ws: WebSocket;
-		try {
-			ws = new WebSocket(wsUrl);
-		} catch (error) {
-			console.error("error", "Failed to create multiplex orderbook WebSocket:", error);
-			return;
-		}
-
-		ws.onopen = () => {
-			for (const mid of expectedMarketIds) {
+		const umbrellaChanged = wsUmbrellaIdRef.current !== umbrellaId;
+		if (umbrellaChanged) {
+			wsUmbrellaIdRef.current = umbrellaId;
+			if (wsRef.current) {
 				try {
-					ws.send(JSON.stringify({ type: "subscribe", market: mid }));
+					wsRef.current.close();
 				} catch {
 					/* ignore */
 				}
+				wsRef.current = null;
 			}
-		};
+			subscribedIdsRef.current = new Set();
+			receivedOrderbooksRef.current = new Set();
+			setOrderbooksReady(false);
+		}
 
-		ws.onmessage = (event) => {
+		const prevExpected = expectedMarketIdsRef.current;
+		const prevSet = new Set(prevExpected);
+		const nextSet = new Set(expectedMarketIds);
+		const toUnsub = prevExpected.filter((id) => !nextSet.has(id));
+		const toSub = expectedMarketIds.filter((id) => !prevSet.has(id));
+		expectedMarketIdsRef.current = expectedMarketIds;
+
+		let ws = wsRef.current;
+		if (!ws || ws.readyState === WebSocket.CLOSED) {
 			try {
-				const message = JSON.parse(event.data as string);
-				routeMessage(message);
+				ws = new WebSocket(wsUrl);
 			} catch (error) {
-				console.error("error", "Failed to parse multiplex WebSocket message:", error);
+				console.error("error", "Failed to create multiplex orderbook WebSocket:", error);
+				return;
 			}
-		};
+			wsRef.current = ws;
 
-		ws.onerror = () => {
-			if (wsErrorLogged) return;
-			wsErrorLogged = true;
-			if (import.meta.env.DEV) {
-				console.debug(
-					"[PredictionMarket] multiplex orderbook WebSocket unavailable (using REST/context books)",
-					wsUrl,
-				);
-			}
-		};
+			ws.onopen = () => {
+				subscribeMarkets(expectedMarketIds);
+			};
+
+			ws.onmessage = (event) => {
+				try {
+					const message = JSON.parse(event.data as string);
+					routeMessage(message);
+				} catch (error) {
+					console.error("error", "Failed to parse multiplex WebSocket message:", error);
+				}
+			};
+
+			ws.onerror = () => {
+				if (wsErrorLogged) return;
+				wsErrorLogged = true;
+				if (import.meta.env.DEV) {
+					console.debug(
+						"[PredictionMarket] multiplex orderbook WebSocket unavailable (using REST/context books)",
+						wsUrl,
+					);
+				}
+			};
+		} else if (ws.readyState === WebSocket.OPEN) {
+			unsubscribeMarkets(toUnsub);
+			subscribeMarkets(toSub);
+			markReadyIfComplete(expectedMarketIds);
+		} else if (ws.readyState === WebSocket.CONNECTING) {
+			const priorOnOpen = ws.onopen;
+			ws.onopen = (ev) => {
+				priorOnOpen?.call(ws, ev);
+				unsubscribeMarkets(toUnsub);
+				subscribeMarkets(toSub);
+				markReadyIfComplete(expectedMarketIds);
+			};
+		}
 
 		const timeout = setTimeout(() => {
-			if (!receivedOrderbooks.size) {
+			if (receivedOrderbooksRef.current.size === 0) {
 				setOrderbooksReady(true);
 			}
 		}, 5000);
 
 		return () => {
 			clearTimeout(timeout);
-			if (ws.readyState === WebSocket.OPEN) {
-				for (const mid of expectedMarketIds) {
-					try {
-						ws.send(JSON.stringify({ type: "unsubscribe", market: mid }));
-					} catch {
-						/* ignore */
-					}
-				}
-			}
-			ws.close();
 		};
-	}, [umbrellaId, marketIdsKey]);
+	}, [
+		umbrellaId,
+		expectedMarketIds,
+		applyOrderbookForMarket,
+		subscribeMarkets,
+		unsubscribeMarkets,
+		markReadyIfComplete,
+	]);
+
+	useEffect(() => {
+		return () => {
+			if (wsRef.current) {
+				try {
+					wsRef.current.close();
+				} catch {
+					/* ignore */
+				}
+				wsRef.current = null;
+			}
+		};
+	}, [umbrellaId]);
 
 	const fetchAllOrderbooks = useCallback(
 		async (qs: PredictionMarket[]) => {

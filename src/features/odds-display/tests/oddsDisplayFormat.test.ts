@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	formatLadderCentsLabel,
 	formatOddsPrice,
 	formatAvgOddsValue,
 	formatOrderbookLevelShares,
@@ -108,6 +109,33 @@ describe("formatOddsPrice grid", () => {
 	it("american dual unchanged shape", () => {
 		expect(formatOddsPrice(0.75, "american", "dualWithCents")).toBe("-300 (75¢)");
 	});
+
+	it("ladder layout preserves fractional cents (Limitless/Polymarket 0.1¢ ticks)", () => {
+		expect(formatOddsPrice(0.175, "default", "ladder")).toBe("17.5¢");
+		expect(formatOddsPrice(0.111, "default", "ladder")).toBe("11.1¢");
+		expect(formatOddsPrice(0.101, "default", "ladder")).toBe("10.1¢");
+		expect(formatOddsPrice(0.099, "default", "ladder")).toBe("9.9¢");
+		expect(formatOddsPrice(0.12, "default", "ladder")).toBe("12¢");
+		expect(formatOddsPrice(0.75, "american", "ladder")).toBe("-300 (75¢)");
+		expect(formatOddsPrice(0.175, "american", "ladder")).toMatch(/\(17\.5¢\)$/);
+	});
+});
+
+describe("formatLadderCentsLabel", () => {
+	it("one fractional digit with trailing zero stripped", () => {
+		expect(formatLadderCentsLabel(0.175)).toBe("17.5¢");
+		expect(formatLadderCentsLabel(0.12)).toBe("12¢");
+		expect(formatLadderCentsLabel(0.1)).toBe("10¢");
+	});
+
+	it("sub-cent quotes keep the high-precision path", () => {
+		expect(formatLadderCentsLabel(0.003)).toBe("0.3¢");
+		expect(formatLadderCentsLabel(0.00004)).toBe("0.004¢");
+	});
+
+	it("spread-sized values stay fractional (0.1¢ spread is not 0¢)", () => {
+		expect(formatLadderCentsLabel(0.001)).toBe("0.1¢");
+	});
 });
 
 describe("formatAvgOddsValue", () => {
@@ -117,6 +145,12 @@ describe("formatAvgOddsValue", () => {
 		expect(formatAvgOddsValue(0.6, "default")).toBe("60%");
 		expect(formatAvgOddsValue(0.00005, "default")).toBe("<0.01%");
 		expect(formatAvgOddsValue(0.006, "default")).toBe("0.6%");
+	});
+
+	it("default keeps one fractional digit so fee-adjusted avgs are not rounded to ticks", () => {
+		expect(formatAvgOddsValue(0.119, "default")).toBe("11.9%");
+		expect(formatAvgOddsValue(0.115, "default")).toBe("11.5%");
+		expect(formatAvgOddsValue(0.12, "default")).toBe("12%");
 	});
 });
 

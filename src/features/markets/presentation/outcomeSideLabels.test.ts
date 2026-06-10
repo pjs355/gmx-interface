@@ -29,6 +29,37 @@ describe("resolveOutcomeSideLabels", () => {
 		expect(r.noLabel).toBe("Under");
 	});
 
+	it("returns signed spread lines instead of Yes/No", () => {
+		const r = resolveOutcomeSideLabels({
+			market: {
+				displayName: "Mexico -1.5",
+				marketType: "spread",
+				line: -1.5,
+				spreadSide: "home",
+			} as never,
+			teamMappings: [
+				{ displayName: "Mexico", shortCode: "MEX" },
+				{ displayName: "South Africa", shortCode: "RSA" },
+			],
+		});
+		expect(r.kind).toBe("binary");
+		expect(r.yesLabel).toBe("MEX -1.5");
+		expect(r.noLabel).toBe("RSA +1.5");
+	});
+
+	it("returns Over/Under with line for total props", () => {
+		const r = resolveOutcomeSideLabels({
+			market: {
+				displayName: "O/U 1.5",
+				marketType: "total",
+				line: 1.5,
+			} as never,
+		});
+		expect(r.kind).toBe("over_under");
+		expect(r.yesLabel).toBe("Over 1.5");
+		expect(r.noLabel).toBe("Under 1.5");
+	});
+
 	it("prefers umbrella teamMappings over title parse", () => {
 		const r = resolveOutcomeSideLabels({
 			umbrella: minimalUmbrella({

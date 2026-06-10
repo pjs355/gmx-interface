@@ -240,10 +240,15 @@ function gameFilterDisplayLabel(selectedGame: string | null): string | null {
 	return selectedGame;
 }
 
-function calendarPageHeadingTitle(selectedGame: string | null): string {
+function calendarPageHeadingTitle(
+	selectedGame: string | null,
+	worldCupSection: WorldCupSection,
+): string {
 	if (selectedGame === LIVE_PILL_ID) return "Live";
 	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
-	if (selectedGame === WORLD_CUP_PILL_ID) return "World Cup";
+	if (selectedGame === WORLD_CUP_PILL_ID) {
+		return worldCupSection === "groups" ? "Groups - World Cup" : "Games - World Cup";
+	}
 	if (!selectedGame || isEsportsMetaTagLabel(selectedGame)) {
 		return DEFAULT_CALENDAR_PAGE_TITLE;
 	}
@@ -775,7 +780,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 					<header className="prediction-calendar-page-heading">
 						<div className="prediction-calendar-page-heading__title-row">
 							{(() => {
-								const calendarTitle = calendarPageHeadingTitle(selectedGame);
+								const calendarTitle = calendarPageHeadingTitle(selectedGame, worldCupSection);
 								const showGameLogo =
 									selectedGame &&
 									!isEsportsMetaTagLabel(selectedGame) &&
@@ -891,6 +896,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 					enabled={filterType === "all"}
 					visibleUmbrellas={visibleUmbrellasForVenueWs}
 					selectedGame={selectedGame}
+					worldCupSection={worldCupSection}
 				>
 					<div className="predictions-page__main">{content}</div>
 				</HomeInlineTradeLayout>

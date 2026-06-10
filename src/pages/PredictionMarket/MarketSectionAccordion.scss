@@ -1,0 +1,202 @@
+// Shared vertical accordion shell for multi-leg esports and match market categories
+// (FIFA moneyline / spread / total). Esports-specific pill styles live in
+// EsportsLegAccordion.scss; FIFA header layouts in MatchMarketCategoryAccordion.scss.
+
+.market-section-accordion {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	min-width: 0;
+}
+
+.market-section-accordion__section {
+	display: flex;
+	flex-direction: column;
+	border-radius: 10px;
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	overflow: hidden;
+	transition: border-color 0.15s ease;
+
+	&--expanded {
+		border-color: rgba(255, 255, 255, 0.12);
+	}
+}
+
+.market-section-accordion__header {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	width: 100%;
+	padding: 10px 14px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+
+	&:hover:not(.market-section-accordion__header--expanded) {
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	&--expanded {
+		background: transparent;
+	}
+
+	.match-market-category-accordion__section-hit {
+		margin-right: auto;
+	}
+}
+
+.market-section-accordion__chevron {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	margin-left: 12px;
+	border: none;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.55);
+	cursor: pointer;
+	border-radius: 4px;
+	position: relative;
+	z-index: 2;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+
+	svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	&:hover,
+	&:focus-visible {
+		color: #ffffff;
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	&:focus-visible {
+		outline: 2px solid rgba(255, 255, 255, 0.45);
+		outline-offset: -2px;
+	}
+}
+
+.market-section-accordion__body {
+	display: flex;
+	flex-direction: column;
+	background: #000000;
+	padding: 8px 14px 14px;
+	border-top: 1px solid rgba(255, 255, 255, 0.06);
+
+	.venue-tab-switcher {
+		margin-bottom: 4px;
+	}
+
+	.esports-venue-books {
+		padding-top: 0;
+	}
+
+	// Basic-tab cross-venue table: flat on black — no outer box or grey fills.
+	.esports-venue-books__table-wrap {
+		margin-top: 0;
+		border: none;
+		border-radius: 0;
+		background: #000000;
+	}
+
+	.esports-venue-books__th,
+	.esports-venue-books__td {
+		border: none;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		background: #000000;
+	}
+
+	.esports-venue-books__th:not(:last-child),
+	.esports-venue-books__td:not(:last-child) {
+		border-right: 1px solid rgba(255, 255, 255, 0.06);
+	}
+
+	.esports-venue-books tbody tr:last-child .esports-venue-books__td,
+	.esports-venue-books tbody tr:last-child th.esports-venue-books__td--label {
+		border-bottom: none;
+	}
+
+	.esports-venue-books thead .esports-venue-books__th {
+		background: #000000;
+	}
+
+	.esports-venue-books tbody th.esports-venue-books__td--label,
+	.esports-venue-books__td--label {
+		background: #000000;
+	}
+}
+
+.prediction-market-page.desktop
+	.venue-books-container
+	.market-section-accordion__body
+	.orderbook-section
+	.orderbook-section__cross-venue,
+.prediction-market-page.mobile
+	.market-section-accordion__body
+	.orderbook-section-mobile
+	.orderbook-section__cross-venue {
+	margin-left: 0;
+	margin-right: 0;
+	width: 100%;
+	max-width: 100%;
+}
+
+@media (max-width: 720px) {
+	.market-section-accordion__header {
+		flex-wrap: wrap;
+		gap: 16px;
+		padding: 10px 12px;
+	}
+
+	.market-section-accordion__chevron {
+		position: absolute;
+		right: 12px;
+		top: 10px;
+	}
+
+	.market-section-accordion__section {
+		position: relative;
+	}
+
+	.market-section-accordion__body {
+		padding: 8px 0 12px;
+
+		.esports-venue-books {
+			padding-left: 12px;
+			box-sizing: border-box;
+		}
+
+		.prediction-market-odds-heading {
+			padding-left: 12px;
+			box-sizing: border-box;
+		}
+	}
+}
+
+.prediction-market-page.mobile
+	.venue-books-container
+	.market-section-accordion__body {
+	.esports-venue-books,
+	.prediction-market-odds-heading {
+		padding-left: 12px;
+		box-sizing: border-box;
+	}
+}
+
+.prediction-market-page.mobile
+	.venue-books-container
+	.market-section-accordion__body
+	.venue-tab-switcher {
+	padding-left: 0;
+	padding-right: 0;
+}

@@ -9,6 +9,9 @@ import { useUmbrellaTradePricing } from "@/pages/PredictionMarket/useUmbrellaTra
 import { useVolumeSortedQuestions } from "@/pages/PredictionMarket/useVolumeSortedQuestions";
 import { useMatchSettled } from "@/pages/PredictionMarket/useMatchSettled";
 import { UmbrellaTradeBoxPanel } from "@/pages/PredictionMarket/UmbrellaTradeBoxPanel";
+import { resolveDefaultTradeQuestion } from "@/features/markets/listing/defaultTradeQuestion";
+import type { WorldCupSection } from "./GameLinks";
+import { WORLD_CUP_PILL_ID } from "../utils/gameLinkFilters";
 
 export type HomeOddsSelectPayload = {
 	umbrella: Umbrella;
@@ -66,6 +69,8 @@ type HomeInlineTradeLayoutProps = {
 	visibleUmbrellas: Umbrella[];
 	/** Reset dock focus when game filter pill changes. */
 	selectedGame: string | null;
+	/** Games vs Groups when the World Cup pill is active. */
+	worldCupSection?: WorldCupSection;
 };
 
 export function HomeInlineTradeLayout({
@@ -73,6 +78,7 @@ export function HomeInlineTradeLayout({
 	enabled,
 	visibleUmbrellas,
 	selectedGame,
+	worldCupSection = "games",
 }: HomeInlineTradeLayoutProps) {
 	const isDesktop = useMedia("(min-width: 1101px)");
 	const isMobile = useMedia("(max-width: 1100px)");
@@ -115,15 +121,19 @@ export function HomeInlineTradeLayout({
 	 * the very first run (on mount) is a no-op so it doesn't immediately wipe
 	 * the lazy-init pin.
 	 */
-	const previousSelectedGameRef = useRef(selectedGame);
+	const dockFilterKey =
+		selectedGame === WORLD_CUP_PILL_ID ? `${selectedGame}:${worldCupSection}` : selectedGame;
+	const previousDockFilterKeyRef = useRef(dockFilterKey);
 	useEffect(() => {
-		if (previousSelectedGameRef.current === selectedGame) return;
-		previousSelectedGameRef.current = selectedGame;
+		if (previousDockFilterKeyRef.current === dockFilterKey) return;
+		previousDockFilterKeyRef.current = dockFilterKey;
 		setPinnedUmbrellaId(null);
 		setHasUserSelected(false);
+		setActiveMarket(null);
+		setActivePosition("yes");
 		writeStoredId(HOME_DOCK_PINNED_UMBRELLA_KEY, null);
 		writeStoredId(HOME_DOCK_ACTIVE_MARKET_KEY, null);
-	}, [selectedGame]);
+	}, [dockFilterKey]);
 
 	/** Drop the pin if the stored umbrella is no longer in the visible set
 	 *  (e.g., it was filtered out by a tag toggle). */
@@ -190,8 +200,13 @@ export function HomeInlineTradeLayout({
 		orderbooksReady,
 	);
 
+	const defaultDockQuestion = useMemo(
+		() => resolveDefaultTradeQuestion(questionsForHook),
+		[questionsForHook],
+	);
+
 	/** Same idea as `MarketPanels`: never leave the dock trade column on skeleton while we have questions. */
-	const tradeBoxActiveMarket = activeMarket ?? sortedQuestions[0] ?? null;
+	const tradeBoxActiveMarket = activeMarket ?? defaultDockQuestion ?? null;
 
 	const { tradingPagePrices } = useUmbrellaTradePricing({
 		umbrella: enabled ? focusedUmbrella : null,
@@ -253,16 +268,16 @@ export function HomeInlineTradeLayout({
 			writeStoredId(HOME_DOCK_ACTIVE_MARKET_KEY, null);
 		}
 
-		// User hasn't pinned a market on this umbrella yet — show the top one.
-		// Pick the default ONCE (when nothing is active or the active leg left the
-		// list); do NOT chase the volume-sorted top, which re-orders on every WS
-		// tick. For multi-leg umbrellas (FIFA 3-way) chasing the moving top makes
-		// the dock snap between Team A / Team B / Draw on every orderbook update.
+		const fallback = resolveDefaultTradeQuestion(sortedQuestions);
+		if (!fallback) return;
+
+		// User hasn't pinned a market on this umbrella yet — Team A moneyline or first
+		// group-winner team. Pick once; do not chase volume sort on every WS tick.
 		if (!hasUserSelected) {
 			const curId = activeMarket ? idOf(activeMarket) : "";
 			const inList = Boolean(curId) && sortedQuestions.some((q) => idOf(q) === curId);
 			if (!inList) {
-				setActiveMarket(sortedQuestions[0]);
+				setActiveMarket(fallback);
 			}
 			return;
 		}
@@ -273,7 +288,7 @@ export function HomeInlineTradeLayout({
 		const curId = activeMarket ? idOf(activeMarket) : "";
 		const inList = Boolean(curId) && sortedQuestions.some((q) => idOf(q) === curId);
 		if (!activeMarket || !inList) {
-			setActiveMarket(sortedQuestions[0]);
+			setActiveMarket(fallback);
 		}
 	}, [enabled, hasUserSelected, sortedQuestions, activeMarket]);
 

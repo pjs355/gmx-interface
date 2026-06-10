@@ -170,9 +170,9 @@ export const VENUE_CONFIGS: Record<TradingVenue, VenueConfig> = {
 		effectiveBuyBudget: (usd, opts) => {
 			return dflowEffectiveBuyBudget(usd, opts?.approxPrice ?? 0.5);
 		},
-		feeDescription: "Probability-weighted (pond formula)",
+		feeDescription: "Kalshi taker fee",
 		feeTooltip:
-			"DFlow — same estimator as SOR: pond prediction-market-fees decomposition (contracts), USDC via ×p; settlement must match quote/order. Kalshi fills whole contracts; USDC spent can be below your cap. See pond.dflow.net/build/prediction-markets/prediction-market-fees",
+			"Kalshi exchange fee: round up(0.07 × contracts × price × (1 − price)) to the next cent. Matches kalshi.com Cost / Max payout on DFlow routes.",
 	},
 };
 

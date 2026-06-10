@@ -41,6 +41,17 @@ export function orderThreeWayLegs(questions: PredictionMarket[]): PredictionMark
 		);
 }
 
+/**
+ * Chart series for a 3-way match: always Team A (home) YES + Team B (away) YES.
+ * Ignores volume sort and the user's active leg (including Draw).
+ */
+export function resolveThreeWayChartLegs(questions: PredictionMarket[]): PredictionMarket[] {
+	if (!isThreeWayMoneylineQuestions(questions)) return [];
+	const home = questions.find((q) => q.moneylineLeg === "home");
+	const away = questions.find((q) => q.moneylineLeg === "away");
+	return [home, away].filter((q): q is PredictionMarket => Boolean(q));
+}
+
 /** Neutral grey for the Draw outcome — it is not a team, so it gets no team color. */
 export const DRAW_COLOR = FIFA_NEUTRAL_OUTCOME_COLOR;
 

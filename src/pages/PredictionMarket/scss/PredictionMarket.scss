@@ -113,6 +113,8 @@
 	flex-direction: column;
 	min-width: 0;
 	//gap: 16px;
+	/* Comments section is hidden — keep scroll breathing room at the bottom. */
+	padding-bottom: 48px;
 }
 
 /* Host for `.prediction-trade-column-shell` — umbrella/home desktop rail scroll lives on `.prediction-trade-column-body`; outer `.right-panel` keeps overflow hidden so the underlay fills the full-height sticky column. */
@@ -194,6 +196,8 @@
 .mobile-layout {
 	display: flex;
 	flex-direction: column;
+	/* Comments section is hidden — keep scroll breathing room at the bottom. */
+	padding-bottom: 48px;
 }
 
 .chart-section-mobile {

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { getVenueConfig, type TradingVenue } from "@/config/venueConfig";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
-import { LIMITLESS_DEFAULT_FEE_RATE_BPS } from "@/features/trading/fees/limitless";
+import { LIMITLESS_DEFAULT_FEE_RATE_BPS, walkLimitlessClobBuyFromSnapshot } from "@/features/trading/fees/limitless";
 import { calculateContractsForMarketOrder } from "@/features/trading/orderbook-walk/calculateContractsForMarketOrder";
 import { EMPTY_TRADE_PREVIEW, type MarketOrderBookPreview } from "./types";
 
@@ -38,6 +38,21 @@ export function useCalculatedMarketOrderData(
 				const venueConfig = getVenueConfig(tradingVenue);
 				const sizingFeeBps =
 					tradingVenue === "limitless" ? LIMITLESS_DEFAULT_FEE_RATE_BPS : predictFunFeeRateBps;
+
+				if (side === "buy" && tradingVenue === "limitless") {
+					const lx = walkLimitlessClobBuyFromSnapshot(effectiveOrderbook, usdAmount);
+					return {
+						calculatedContracts: lx.netShares,
+						remainingUsd: lx.remainingUsd,
+						spent: lx.spentUsd,
+						tradingFee: lx.feeUsd,
+						estimatedCost: lx.spentUsd,
+						grossReceive: null,
+						sellTradingFee: null,
+						netReceive: null,
+					};
+				}
+
 				const bestAskPrice = effectiveOrderbook.asks?.[0]?.price;
 				const effectiveBudget =
 					side === "buy"

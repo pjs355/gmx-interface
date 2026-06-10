@@ -12,6 +12,7 @@ import { MultiMarketActions } from "./MultiMarketActions";
 import { ThreeWayMoneylineActions } from "./ThreeWayMoneylineActions";
 import { GroupWinnerActions } from "./GroupWinnerActions";
 import { isThreeWayMoneylineQuestions } from "@/features/markets/listing/threeWayMoneyline";
+import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
 import {
 	groupWinnerGroupLabel,
 	isGroupWinnerQuestions,
@@ -187,7 +188,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	const displayChildren = useMemo(() => {
 		const children = umbrella.children;
 		if (!Array.isArray(children)) return [];
-		return children.filter((c) => (c as { tradeable?: boolean }).tradeable !== false);
+		// Spread / total props are trading-page-only — never part of the home
+		// card's single-vs-multi decision or its market counts.
+		return children.filter(
+			(c) => (c as { tradeable?: boolean }).tradeable !== false && !isMatchPropQuestion(c),
+		);
 	}, [umbrella.children]);
 	const displayChildrenCount = displayChildren.length;
 

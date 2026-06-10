@@ -5,9 +5,11 @@ import type { OrderbookOutcomeTab } from "@/components/OrderbookDisplay/Orderboo
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type {
+	Umbrella,
+	UmbrellaExchangeMatchingLimitless,
+} from "@/services/api/umbrellaDataService";
 import type { TradingVenue } from "@/features/trading/trade-box/types";
-import type { MatchedMarket } from "@/types/odds-monitor";
-import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
 import { mergeMonitorLimitlessFromUmbrella } from "@/features/markets/odds-monitor/mergeMonitorLimitlessFromUmbrella";
 import { getDflowKalshiMonitorLink } from "@/features/trading/venues/dflow/catalog/monitorDflowBooks";
 import {
@@ -125,6 +127,7 @@ export type VenueOrderbooksPanelProps = {
 	levelUpOrderbook: OrderbookSnapshot | null;
 	market?: PredictionMarket;
 	umbrellaDisplayName?: string;
+	umbrellaTeamMappings?: Umbrella["teamMappings"];
 	onMarketSwitch?: (market: PredictionMarket, position: "yes" | "no") => void;
 	onVenueSelect?: (venue: TradingVenue) => void;
 	activePosition?: "yes" | "no";
@@ -146,6 +149,7 @@ export function VenueOrderbooksPanel({
 	levelUpOrderbook,
 	market,
 	umbrellaDisplayName,
+	umbrellaTeamMappings,
 	onMarketSwitch,
 	onVenueSelect,
 	activePosition,
@@ -298,6 +302,7 @@ export function VenueOrderbooksPanel({
 						error={null}
 						market={market}
 						umbrellaDisplayName={umbrellaDisplayName}
+						umbrellaTeamMappings={umbrellaTeamMappings}
 						onMarketSwitch={handleMarketSwitchOnly}
 						isActiveMarket
 						activePosition={activePosition}

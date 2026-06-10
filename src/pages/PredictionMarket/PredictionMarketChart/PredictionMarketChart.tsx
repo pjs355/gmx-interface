@@ -101,12 +101,12 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	 * matched-market batch for the team-B series.
 	 */
 	const awayConditionId = useMemo<string | undefined>(() => {
-		if (activeMarket?.moneylineLeg && secondMarket?.moneylineLeg) {
+		if (secondMarket?.moneylineLeg === "away") {
 			const cid = (secondMarket as { conditionId?: unknown })?.conditionId;
 			return typeof cid === "string" && cid.trim() !== "" ? cid : undefined;
 		}
 		return undefined;
-	}, [activeMarket, secondMarket]);
+	}, [secondMarket]);
 
 	const isVsSingleMarket = useMemo(() => {
 		const title = (activeMarket?.displayName || activeMarket?.question || "").trim();
@@ -119,7 +119,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		// 3-way moneyline (FIFA): the two lines are the home + away legs' YES series,
 		// so label them by each leg's team name ("Mexico" / "South Africa"). The
 		// generic Yes/No label path returns "Yes"/"No" for moneyline legs.
-		if (activeMarket?.moneylineLeg && secondMarket?.moneylineLeg) {
+		if (activeMarket?.moneylineLeg === "home" && secondMarket?.moneylineLeg === "away") {
 			return {
 				yesTeamLabel: threeWayLegLabel(activeMarket),
 				noTeamLabel: threeWayLegLabel(secondMarket),
@@ -129,7 +129,10 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 	}, [activeMarket, secondMarket, umbrellaDisplayName]);
 
 	const teamAColor: string = (activeMarket as any)?.yesColor || "#22c55e";
-	const teamBColor: string = (activeMarket as any)?.noColor || "#ef4444";
+	const teamBColor: string =
+		secondMarket?.moneylineLeg === "away"
+			? ((secondMarket as any)?.yesColor as string | undefined) || "#ef4444"
+			: (activeMarket as any)?.noColor || "#ef4444";
 
 	const chartTeamAColor = useMemo(() => getChartStrokeColorForDarkBg(teamAColor), [teamAColor]);
 	const chartTeamBColor = useMemo(() => getChartStrokeColorForDarkBg(teamBColor), [teamBColor]);
@@ -277,7 +280,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 	/** Two-team (esports "vs" / 3-way FIFA) markets get the centered logo · date · logo header. */
 	const showMatchHeader =
-		Boolean(activeMarket?.moneylineLeg && secondMarket?.moneylineLeg) ||
+		Boolean(activeMarket?.moneylineLeg === "home" && secondMarket?.moneylineLeg === "away") ||
 		isVsSingleMarket ||
 		Boolean(secondMarket);
 

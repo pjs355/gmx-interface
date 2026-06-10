@@ -86,7 +86,6 @@ ${COLORS.bright}Railway proxy (EU egress):${COLORS.reset}
 
 		const vite: ChildProcess = spawn("npx", ["vite"], {
 			stdio: "inherit",
-			shell: true,
 			env: {
 				...process.env,
 				VITE_ENVIRONMENT_MODE: envMode,

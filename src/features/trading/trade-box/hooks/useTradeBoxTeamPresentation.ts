@@ -16,6 +16,10 @@ import {
 	groupWinnerLegLabel,
 	isGroupWinnerLeg,
 } from "@/features/markets/listing/groupWinner";
+import {
+	isMatchPropQuestion,
+	matchPropSelectionTitle,
+} from "@/features/markets/listing/matchProps";
 import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 
 export function useTradeBoxTeamPresentation(
@@ -23,10 +27,18 @@ export function useTradeBoxTeamPresentation(
 	umbrellaDisplayName?: string,
 	teamMappings?: UmbrellaTeamMapping[] | null,
 	gameTeamColorBySlug?: Record<string, string> | null,
+	/**
+	 * Active Yes/No selection in the trade box. Spread "+" cells are synthesized
+	 * as the No side of the opponent's negative-handicap question, so the title
+	 * must follow the position (No on "South Africa -1.5" reads "Mexico +1.5").
+	 */
+	activePosition?: "yes" | "no" | null,
+	/** When set (from prop ladder click), wins over {@link matchPropSelectionTitle}. */
+	selectionTitleOverride?: string | null,
 ) {
 	const { yesTeamLabel, noTeamLabel } = useMemo(
-		() => getYesNoTeamLabels(market, umbrellaDisplayName),
-		[market, umbrellaDisplayName],
+		() => getYesNoTeamLabels(market, umbrellaDisplayName, teamMappings),
+		[market, umbrellaDisplayName, teamMappings],
 	);
 
 	const isVsSingle = useMemo(() => {
@@ -62,6 +74,21 @@ export function useTradeBoxTeamPresentation(
 		if (overUnderMatch) {
 			return `${overUnderMatch} Players`;
 		}
+		// Match prop (spread/total): always position-aware — "+" ladder cells are
+		// the No side of the opponent's negative-handicap question.
+		if (isMatchPropQuestion(market)) {
+			const marketType = (market as { marketType?: unknown }).marketType;
+			if (marketType === "spread" || marketType === "total") {
+				return matchPropSelectionTitle(
+					market,
+					activePosition ?? "yes",
+					teamMappings ?? undefined,
+				);
+			}
+			const override = selectionTitleOverride?.trim();
+			if (override) return override;
+			return matchPropSelectionTitle(market, activePosition ?? "yes", teamMappings ?? undefined);
+		}
 		// Group-winner leg (FIFA): title is the team name ("Czechia").
 		if (isGroupWinnerLeg(market)) {
 			return groupWinnerLegLabel(market);
@@ -75,7 +102,7 @@ export function useTradeBoxTeamPresentation(
 			return threeWayLegLabel(market);
 		}
 		return market.displayName || market.question;
-	}, [overUnderMatch, market]);
+	}, [overUnderMatch, market, activePosition, teamMappings, selectionTitleOverride]);
 
 	/**
 	 * Match context for 3-way (FIFA) legs — the "Team A vs Team B" line shown in

@@ -6,7 +6,7 @@ import OrderbookDisplay from "components/OrderbookDisplay/OrderbookDisplay";
 import { UmbrellaTradeBoxPanel } from "./UmbrellaTradeBoxPanel";
 // import RulesSection from "components/RulesSection/RulesSection"; // Hidden for now (Rules / Match Winner / Show More)
 import { StreamEmbed } from "./StreamEmbed";
-import { Comments } from "./Comments/Comments";
+// import { Comments } from "./Comments/Comments"; // Hidden for now
 import { EsportsVenueBooksPanel } from "@/components/EsportsVenueBooksPanel/EsportsVenueBooksPanel";
 import { VenueOrderbooksPanel } from "@/components/VenueOrderbooksPanel/VenueOrderbooksPanel";
 import { MarketHeader } from "./MarketHeader";
@@ -47,9 +47,16 @@ import {
 } from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
 import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
+import { resolveUmbrellaVenueKey } from "@/features/markets/pricing/venueLookupKey";
+import { buildMatchPropLadders, matchPropSelectionTitle } from "@/features/markets/listing/matchProps";
+import { MatchPropsSection } from "./MatchPropsSection";
 import { EsportsLegAccordion } from "./EsportsLegAccordion";
 import type { EsportsLeg } from "@/features/markets/presentation/esportsLegs";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { isCategoryAccordionLayout } from "@/features/markets/presentation/matchMarketCategories";
+import type { MatchMarketCategory } from "@/features/markets/presentation/matchMarketCategories";
+import { MatchMarketCategoryAccordion } from "./MatchMarketCategoryAccordion";
+import { MatchCategorySectionBody } from "./MatchCategorySectionBody";
 
 type PanelsProps = {
 	umbrella: Umbrella;
@@ -58,8 +65,18 @@ type PanelsProps = {
 	questionOrderbooks: Record<string, any>;
 	activeMarket: PredictionMarket | null;
 	activePosition: "yes" | "no";
-	onMarketSwitch: (q: PredictionMarket, p: "yes" | "no") => void;
-	onMarketSwitchWithOrderbook: (q: PredictionMarket, p: "yes" | "no") => void;
+	/** Prop ladder title ("Mexico +1.5") when a spread/total cell is active. */
+	activeSelectionTitle?: string | null;
+	onMarketSwitch: (
+		q: PredictionMarket,
+		p: "yes" | "no",
+		selectionTitle?: string | null,
+	) => void;
+	onMarketSwitchWithOrderbook: (
+		q: PredictionMarket,
+		p: "yes" | "no",
+		selectionTitle?: string | null,
+	) => void;
 	onPositionChange: (p: "yes" | "no") => void;
 	fetchAllOrderbooks: (qs: PredictionMarket[]) => Promise<void>;
 	chartState: {
@@ -79,6 +96,13 @@ type PanelsProps = {
 	 * single-question, and series-only esports umbrellas.
 	 */
 	esportsLegs?: EsportsLeg[];
+	/**
+	 * Spread / total questions for this match (trading-page-only). Rendered as
+	 * the {@link MatchPropsSection} carousel below the moneyline odds; excluded
+	 * from `sortedQuestions` so the moneyline pills / 3-way detection / chart
+	 * stay untouched.
+	 */
+	matchProps?: PredictionMarket[];
 };
 
 export const MarketPanels: React.FC<PanelsProps> = ({
@@ -88,6 +112,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	questionOrderbooks,
 	activeMarket,
 	activePosition,
+	activeSelectionTitle,
 	onMarketSwitch,
 	onMarketSwitchWithOrderbook,
 	onPositionChange,
@@ -95,6 +120,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	chartState,
 	settledInfo,
 	esportsLegs,
+	matchProps,
 }) => {
 	const { fifaGameTeamColorBySlug } = usePredictionData();
 	/**
@@ -120,6 +146,13 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	// Track buy/sell side state
 	const [tradeSide] = useState<"buy" | "sell">("buy");
 	const [activeTab, setActiveTab] = useState<"basic" | "orderbooks">("basic");
+	const [categoryTabs, setCategoryTabs] = useState<
+		Record<MatchMarketCategory, "basic" | "orderbooks">
+	>({
+		moneyline: "basic",
+		spread: "basic",
+		total: "basic",
+	});
 	const [venueForTradeBox, setVenueForTradeBox] = useState<TradingVenue | undefined>(undefined);
 	/** Default to chart so the stream iframe doesn't auto-load on page open.
 	 * The embed only mounts when the user selects Livestream (desktop + mobile). */
@@ -138,6 +171,13 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	/** `PredictionMarket` `activeMarket` can lag one frame; trade box skeletons forever on null. */
 	const tradeBoxActiveMarket = activeMarket ?? firstQuestion;
 
+	const chartPinnedPrimaryMarket = chartState.primaryMarket as PredictionMarket | null | undefined;
+	/** Chart venue key is pinned to the moneyline home/series leg — never the active pill. */
+	const chartVenueKey = useMemo(
+		() => resolveUmbrellaVenueKey(umbrella, chartPinnedPrimaryMarket ?? null),
+		[umbrella, chartState.primaryQuestionId],
+	);
+
 	const { tradingPagePrices, pandascoreMatchId } = useUmbrellaTradePricing({
 		umbrella,
 		activeQuestion: tradeBoxActiveMarket,
@@ -150,16 +190,33 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		getMarketId(chartState.primaryMarket) ||
 		(hasQuestions ? getMarketId(sortedQuestions[0]) : "");
 	const primaryChartOrderbook = chartQuestionId ? questionOrderbooks[chartQuestionId] : undefined;
+	const exchangeMatchingLevelupQuestionId =
+		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)?.levelup
+			?.questionId ?? null;
 	const levelUpOrderbookKey = resolveLevelUpOrderbookKey(
 		sortedQuestions,
-		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)?.levelup
-			?.questionId ?? null,
+		exchangeMatchingLevelupQuestionId,
 	);
 	const levelUpOrderbook = levelUpOrderbookKey
 		? (questionOrderbooks[levelUpOrderbookKey] ?? null)
 		: null;
-	/** LevelUp line on the chart when the LevelUp book has resting shares. */
-	const chartLevelUpBookHasRestingShares = levelUpOrderbookHasRestingShares(levelUpOrderbook);
+	/** Chart pins to moneyline markets from `chartState`, not the active map/prop leg. */
+	const chartMarketsForLevelUp = useMemo(() => {
+		const markets: PredictionMarket[] = [];
+		if (chartState.primaryMarket) markets.push(chartState.primaryMarket as PredictionMarket);
+		if (chartState.secondaryMarket) markets.push(chartState.secondaryMarket as PredictionMarket);
+		return markets.length > 0 ? markets : sortedQuestions;
+	}, [chartState.primaryMarket, chartState.secondaryMarket, sortedQuestions]);
+	const chartLevelUpOrderbookKey = resolveLevelUpOrderbookKey(
+		chartMarketsForLevelUp,
+		exchangeMatchingLevelupQuestionId,
+	);
+	const chartLevelUpOrderbook = chartLevelUpOrderbookKey
+		? (questionOrderbooks[chartLevelUpOrderbookKey] ?? null)
+		: null;
+	/** LevelUp line on the chart when the moneyline LevelUp book has resting shares. */
+	const chartLevelUpBookHasRestingShares =
+		levelUpOrderbookHasRestingShares(chartLevelUpOrderbook);
 	const levelUpContextMarket =
 		(levelUpOrderbookKey
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
@@ -214,6 +271,27 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			: undefined;
 	}, [chartState.secondaryMarket, umbrella?.children?.length]);
 
+	const chartSecondaryQuestionId =
+		chartState.secondaryQuestionId ||
+		(chartSecondaryMarket ? getMarketId(chartSecondaryMarket) : "");
+
+	/** Only moneyline chart markets — spread clicks must not pass the full orderbook map. */
+	const chartPinnedOrderbooks = React.useMemo(() => {
+		const pinned: Record<string, unknown> = {};
+		if (chartQuestionId && questionOrderbooks[chartQuestionId] != null) {
+			pinned[chartQuestionId] = questionOrderbooks[chartQuestionId];
+		}
+		if (chartSecondaryQuestionId && questionOrderbooks[chartSecondaryQuestionId] != null) {
+			pinned[chartSecondaryQuestionId] = questionOrderbooks[chartSecondaryQuestionId];
+		}
+		return pinned;
+	}, [
+		chartQuestionId,
+		chartSecondaryQuestionId,
+		questionOrderbooks[chartQuestionId],
+		questionOrderbooks[chartSecondaryQuestionId],
+	]);
+
 	/**
 	 * Team visuals + kickoff for the centered chart match header (logo · date ·
 	 * logo). 3-way (FIFA) legs carry their own flag on `question.image`; esports
@@ -264,6 +342,18 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 	const bookMarket = activeMarket ?? sortedQuestions[0] ?? null;
 	const bookMarketId = bookMarket ? getMarketId(bookMarket) || "" : "";
+
+	/** Spread / totals ladders for the carousel below the moneyline section. */
+	const matchPropLadders = useMemo(
+		() => buildMatchPropLadders(matchProps ?? [], umbrella?.teamMappings),
+		[matchProps, umbrella?.teamMappings],
+	);
+
+	const useCategoryAccordion = isCategoryAccordionLayout(
+		sortedQuestions,
+		matchPropLadders,
+		isMultiLegEsports,
+	);
 
 	/** 3-way moneyline (FIFA): order the order-book tabs home/away/draw and label
 	 * each by its short outcome name ("Korea" / "Czechia" / "Draw"). */
@@ -348,10 +438,15 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 						error={null}
 						onRefresh={() => fetchAllOrderbooks(sortedQuestions)}
 						customTitle={
-							isMultiLeg
-								? legLabelFor(bookMarket, 0)
-								: bookMarket.displayName || (bookMarket as any).question
+							(bookMarket as { marketType?: unknown }).marketType === "spread" ||
+							(bookMarket as { marketType?: unknown }).marketType === "total"
+								? matchPropSelectionTitle(bookMarket, activePosition, umbrella?.teamMappings)
+								: activeSelectionTitle?.trim() ||
+									(isMultiLeg
+										? legLabelFor(bookMarket, 0)
+										: bookMarket.displayName || (bookMarket as any).question)
 						}
+						umbrellaTeamMappings={umbrella?.teamMappings}
 						market={
 							{
 								...(bookMarket as any),
@@ -387,7 +482,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					) : isThreeWay ? (
 						/* FIFA 3-way: esports Basic table with a third outcome column
 						   (Team A / Team B / Draw), each venue's best YES per leg. */
-						<ThreeWayVenueBooksPanel legs={pillQuestions} />
+						<ThreeWayVenueBooksPanel legs={pillQuestions} teamMappings={umbrella.teamMappings} />
 					) : (
 						<EsportsVenueBooksPanel tradingPagePrices={tradingPagePrices} />
 					)}
@@ -410,6 +505,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							: undefined
 					}
 					umbrellaDisplayName={umbrellaTradingTitle}
+					umbrellaTeamMappings={umbrella?.teamMappings}
 					onMarketSwitch={onMarketSwitch}
 					onVenueSelect={setVenueForTradeBox}
 					activePosition={activePosition}
@@ -439,8 +535,20 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			</>
 		);
 
-	// Chart only needs a usable snapshot for the primary chart market; settledView does not change this condition
-	const showChartBlock = hasQuestions && hasUsableOrderbookSnapshot(primaryChartOrderbook);
+	// Latch chart visibility once moneyline books load — prop/spread selection must not flash skeleton.
+	const chartVisibleLatchRef = React.useRef(false);
+	const chartLatchKeyRef = React.useRef("");
+	const chartLatchKey = `${umbrella?._id ?? ""}:${chartQuestionId}`;
+	if (chartLatchKeyRef.current !== chartLatchKey) {
+		chartLatchKeyRef.current = chartLatchKey;
+		chartVisibleLatchRef.current = false;
+	}
+	if (hasQuestions && hasUsableOrderbookSnapshot(primaryChartOrderbook)) {
+		chartVisibleLatchRef.current = true;
+	}
+	const showChartBlock =
+		hasQuestions &&
+		(chartVisibleLatchRef.current || hasUsableOrderbookSnapshot(primaryChartOrderbook));
 	const showChartPlaceholder = !showChartBlock && !(settledView && !hasQuestions);
 
 	// Order inside .venue-books-container: chart → tabs → "Prediction Market Odds" → tab body (e.g. esports table).
@@ -472,13 +580,13 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					<PredictionMarketChart
 						questionId={chartQuestionId}
 						umbrellaId={umbrella?._id}
-						pandaMatchId={pandascoreMatchId || undefined}
+						pandaMatchId={chartVenueKey || undefined}
 						limitlessFromUmbrella={umbrellaLimitless}
 						levelUpOrderbookHasRestingShares={chartLevelUpBookHasRestingShares}
 						umbrellaDisplayName={umbrellaTradingTitle}
 						activeMarket={chartPrimaryMarket}
 						secondMarket={chartSecondaryMarket}
-						questionOrderbooks={questionOrderbooks}
+						questionOrderbooks={chartPinnedOrderbooks}
 						teamALogoUrl={chartHeaderTeams.teamALogoUrl}
 						teamBLogoUrl={chartHeaderTeams.teamBLogoUrl}
 						eventDateMs={chartHeaderTeams.eventDateMs ?? undefined}
@@ -532,6 +640,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							legs={pillQuestions}
 							activeMarketId={bookMarketId}
 							onSelect={(q) => onMarketSwitch(q, "yes")}
+							teamMappings={umbrella.teamMappings}
 						/>
 					)}
 				</div>
@@ -575,21 +684,73 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		</div>
 	) : null;
 
+	const renderCategorySectionBody = useCallback(
+		(category: MatchMarketCategory) => (
+			<MatchCategorySectionBody
+				category={category}
+				umbrella={umbrella}
+				umbrellaTradingTitle={umbrellaTradingTitle}
+				moneylineLegs={pillQuestions}
+				ladders={matchPropLadders}
+				sortedQuestions={sortedQuestions}
+				questionOrderbooks={questionOrderbooks}
+				activeMarket={activeMarket}
+				activePosition={activePosition}
+				activeSelectionTitle={activeSelectionTitle}
+				activeTab={categoryTabs[category]}
+				onTabChange={(tab) => setCategoryTabs((prev) => ({ ...prev, [category]: tab }))}
+				onMarketSwitch={onMarketSwitch}
+				onMarketSwitchWithOrderbook={onMarketSwitchWithOrderbook}
+				fetchAllOrderbooks={fetchAllOrderbooks}
+				settledView={settledView}
+				fifaGameTeamColorBySlug={fifaGameTeamColorBySlug}
+				onVenueSelect={setVenueForTradeBox}
+			/>
+		),
+		[
+			umbrella,
+			umbrellaTradingTitle,
+			pillQuestions,
+			matchPropLadders,
+			sortedQuestions,
+			questionOrderbooks,
+			activeMarket,
+			activePosition,
+			activeSelectionTitle,
+			categoryTabs,
+			onMarketSwitch,
+			onMarketSwitchWithOrderbook,
+			fetchAllOrderbooks,
+			settledView,
+			fifaGameTeamColorBySlug,
+		],
+	);
+
 	const renderVenueBooksContainer = (orderbookSectionClass: string) => (
 		<div className="venue-books-container">
 			{mediaTabSwitcher}
 			{mediaTab === "livestream" && showStream ? streamBlock : chartAtTopOfVenueBooks}
-			{isMultiLegEsports && esportsLegs ? (
+			{useCategoryAccordion ? (
+				<MatchMarketCategoryAccordion
+					moneylineLegs={pillQuestions}
+					ladders={matchPropLadders}
+					teamMappings={umbrella?.teamMappings}
+					activeMarket={activeMarket}
+					activeMarketId={bookMarketId}
+					activePosition={activePosition}
+					onMoneylineSelect={(q) => onMarketSwitch(q, "yes")}
+					onPropSelect={onMarketSwitch}
+					renderSectionBody={renderCategorySectionBody}
+				/>
+			) : isMultiLegEsports && esportsLegs ? (
 				/*
 				 * Multi-leg esports: render the vertical leg accordion in the same
 				 * slot where the moneyline-odds heading + cross-venue table would
-				 * normally live. The chart above and the trade box on the right
-				 * stay anchored; only this block swaps. Each accordion section's
-				 * expanded body re-renders the standard orderbook section
-				 * (Basic/Orderbooks tabs + body) for the currently active leg —
-				 * `activeMarket` already points at that leg via the page-level
-				 * `accordionActiveQuestion` so chart, orderbook, and trade box
-				 * are all wired to the same market.
+				 * normally live. The chart above stays on series moneyline odds;
+				 * the trade box on the right follows the expanded leg. Each
+				 * accordion section's expanded body re-renders the standard
+				 * orderbook section (Basic/Orderbooks tabs + body) for the
+				 * currently active leg.
 				 */
 				<EsportsLegAccordion
 					umbrella={umbrella}
@@ -608,6 +769,16 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					{tabSwitcher}
 					{predictionMarketOddsHeading}
 					<div className={orderbookSectionClass}>{orderbookSectionBody}</div>
+					{/* Spreads + goal totals carousel — selecting a cell routes that
+					    market + side into the trade box exactly like a moneyline leg. */}
+					{!settledView && matchPropLadders.length > 0 ? (
+						<MatchPropsSection
+							ladders={matchPropLadders}
+							activeMarketId={bookMarketId}
+							activePosition={activePosition}
+							onSelect={onMarketSwitch}
+						/>
+					) : null}
 				</>
 			)}
 		</div>
@@ -626,10 +797,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 
 					{renderVenueBooksContainer("orderbook-section")}
 
-					{/* Comments Section */}
+					{/* Comments Section — hidden for now
 					{umbrella && (
 						<Comments umbrellaId={umbrella._id} markets={sortedQuestions as PredictionMarket[]} />
 					)}
+					*/}
 				</div>
 
 				<div className="right-panel">
@@ -639,6 +811,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							questionOrderbooks={questionOrderbooks}
 							activeMarket={tradeBoxActiveMarket}
 							activePosition={activePosition}
+							selectionTitleOverride={activeSelectionTitle}
 							onPositionChange={onPositionChange}
 							settledInfo={settledInfo ?? null}
 							tradingPagePrices={tradingPagePrices}
@@ -658,10 +831,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				    opt in to the stream rather than auto-loading it. */}
 				{renderVenueBooksContainer("orderbook-section-mobile")}
 
-				{/* Comments Section */}
+				{/* Comments Section — hidden for now
 				{umbrella && (
 					<Comments umbrellaId={umbrella._id} markets={sortedQuestions as PredictionMarket[]} />
 				)}
+				*/}
 
 				{/* Mobile Trading Container - Fixed at bottom */}
 				<div className="mobile-trading-container">
@@ -671,6 +845,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							questionOrderbooks={questionOrderbooks}
 							activeMarket={tradeBoxActiveMarket}
 							activePosition={activePosition}
+							selectionTitleOverride={activeSelectionTitle}
 							onPositionChange={onPositionChange}
 							settledInfo={settledInfo ?? null}
 							tradingPagePrices={tradingPagePrices}

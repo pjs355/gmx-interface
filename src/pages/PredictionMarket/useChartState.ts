@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
+import { resolveThreeWayChartLegs } from "@/features/markets/listing/threeWayMoneyline";
+import { getMarketId } from "./utils";
 
 type ChartState = {
 	isInitialized: boolean;
@@ -8,6 +10,26 @@ type ChartState = {
 	secondaryQuestionId: string | null;
 	frozenOrderbooks: Record<string, any>;
 };
+
+function resolveChartMarketPair(questions: any[]): {
+	primary: any | null;
+	secondary: any | null;
+} {
+	if (!questions?.length) return { primary: null, secondary: null };
+
+	const threeWayLegs = resolveThreeWayChartLegs(questions);
+	if (threeWayLegs.length > 0) {
+		return {
+			primary: threeWayLegs[0] ?? null,
+			secondary: threeWayLegs[1] ?? null,
+		};
+	}
+
+	return {
+		primary: questions[0] ?? null,
+		secondary: questions.length > 1 ? questions[1] : null,
+	};
+}
 
 export function useChartState(sortedQuestions: any[], questionOrderbooks: Record<string, any>) {
 	const [chartOnlyState, setChartOnlyState] = useState<ChartState>({
@@ -19,45 +41,35 @@ export function useChartState(sortedQuestions: any[], questionOrderbooks: Record
 		frozenOrderbooks: {},
 	});
 
-	// Store orderbooks in a ref to avoid triggering re-renders
-	const orderbooksRef = useRef(questionOrderbooks);
-	orderbooksRef.current = questionOrderbooks;
-
-	// Initialize/update chart state based on sorted questions ONLY
+	// Chart markets are pinned by leg identity (home/away for 3-way), not volume
+	// sort or the user's active pill. Refresh snapshots when question data updates.
 	useEffect(() => {
-		if (sortedQuestions.length > 0) {
-			const primaryQuestionId = (sortedQuestions[0]._id ||
-				sortedQuestions[0].questionId ||
-				sortedQuestions[0].marketId ||
-				"") as string;
-			const secondaryQuestionId =
-				sortedQuestions.length > 1
-					? sortedQuestions[1]._id || sortedQuestions[1].questionId || sortedQuestions[1].marketId
-					: null;
+		const { primary, secondary } = resolveChartMarketPair(sortedQuestions);
+		if (!primary) return;
 
-			// Only update if the markets actually changed
-			const marketsChanged =
-				primaryQuestionId !== chartOnlyState.primaryQuestionId ||
-				secondaryQuestionId !== chartOnlyState.secondaryQuestionId;
+		const primaryQuestionId = getMarketId(primary);
+		const secondaryQuestionId = secondary ? getMarketId(secondary) : null;
+		if (!primaryQuestionId) return;
 
-			if (marketsChanged) {
-				const primaryMarket = { ...sortedQuestions[0] };
-				const secondaryMarket = sortedQuestions.length > 1 ? { ...sortedQuestions[1] } : null;
+		setChartOnlyState((prev) => {
+			const idsChanged =
+				primaryQuestionId !== prev.primaryQuestionId ||
+				secondaryQuestionId !== prev.secondaryQuestionId;
 
-				setChartOnlyState((prev) => ({
+			if (!prev.isInitialized || idsChanged) {
+				return {
 					...prev,
 					isInitialized: true,
-					primaryMarket,
-					secondaryMarket,
+					primaryMarket: { ...primary },
+					secondaryMarket: secondary ? { ...secondary } : null,
 					primaryQuestionId,
 					secondaryQuestionId,
-					// Keep the same frozenOrderbooks reference to avoid triggering re-renders
-				}));
+				};
 			}
-		}
-	}, [sortedQuestions, chartOnlyState.primaryQuestionId, chartOnlyState.secondaryQuestionId]);
 
-	// Chart uses frozen data from global context - no additional API calls needed
+			return prev;
+		});
+	}, [sortedQuestions]);
 
 	return chartOnlyState;
 }

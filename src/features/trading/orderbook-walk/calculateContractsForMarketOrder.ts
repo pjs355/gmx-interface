@@ -1,6 +1,76 @@
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { MarketOrderCalculation } from "./types";
 
+function buyLevelsFromOrderbook(
+	orderbook: OrderbookSnapshot,
+	position: "yes" | "no",
+): Array<{ price: number; size: number }> {
+	const relevantOrders = position === "yes" ? orderbook.asks : orderbook.bids;
+	if (!relevantOrders?.length) return [];
+	const sorted =
+		position === "yes"
+			? [...relevantOrders].sort((a, b) => a.price - b.price)
+			: [...relevantOrders].sort((a, b) => b.price - a.price);
+	const out: Array<{ price: number; size: number }> = [];
+	for (const order of sorted) {
+		const orderPrice = order.price;
+		const costPerContract = position === "no" ? 1 - orderPrice : orderPrice;
+		if (!(costPerContract > 0) || costPerContract >= 1) continue;
+		let totalAvailableSize = 0;
+		if (order.orders && Array.isArray(order.orders)) {
+			totalAvailableSize = order.orders.reduce((sum, nestedOrder) => {
+				const orderSize = nestedOrder.size || nestedOrder.makerQty || nestedOrder.origSize || 0;
+				return sum + orderSize;
+			}, 0);
+		} else {
+			totalAvailableSize = order.size || 0;
+		}
+		if (totalAvailableSize > 0) {
+			out.push({ price: costPerContract, size: totalAvailableSize });
+		}
+	}
+	return out;
+}
+
+/** Fractional buy walk (preserves sub-cent prices like 11.1¢). */
+function calculateFractionalBuyContracts(
+	orderbook: OrderbookSnapshot,
+	usdAmount: number,
+	position: "yes" | "no",
+): MarketOrderCalculation {
+	const levels = buyLevelsFromOrderbook(orderbook, position);
+	if (levels.length === 0) return { contracts: 0, remainingUsd: usdAmount };
+
+	let remainingUsd = usdAmount;
+	let filledShares = 0;
+	let maxPriceSeen = 0;
+
+	for (const level of levels) {
+		if (remainingUsd <= 0) break;
+		const rowCost = level.size * level.price;
+		if (remainingUsd >= rowCost) {
+			filledShares += level.size;
+			remainingUsd -= rowCost;
+			if (level.price > maxPriceSeen) maxPriceSeen = level.price;
+			continue;
+		}
+		const affordable = remainingUsd / level.price;
+		const takeShares = Math.min(level.size, Math.max(0, affordable));
+		if (takeShares > 0) {
+			filledShares += takeShares;
+			remainingUsd -= takeShares * level.price;
+			if (level.price > maxPriceSeen) maxPriceSeen = level.price;
+		}
+		break;
+	}
+
+	return {
+		contracts: filledShares,
+		remainingUsd,
+		maxPrice: maxPriceSeen,
+	};
+}
+
 /** Step-clearing walk of an orderbook for market buy/sell sizing. */
 export function calculateContractsForMarketOrder(
 	orderbook: OrderbookSnapshot | null,
@@ -64,6 +134,10 @@ export function calculateContractsForMarketOrder(
 			maxPrice: maxPriceSeen,
 			minPrice: minPriceSeen === Infinity ? 0 : minPriceSeen,
 		};
+	}
+
+	if (!wholeSharesOnly) {
+		return calculateFractionalBuyContracts(orderbook, usdAmount, position);
 	}
 
 	const S_cents = Math.floor(usdAmount * 100);

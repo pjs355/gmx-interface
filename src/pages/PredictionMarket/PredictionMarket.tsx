@@ -25,9 +25,16 @@ import { useChartState } from "./useChartState";
 import { useMatchSettled } from "./useMatchSettled";
 import {
 	isThreeWayMoneylineQuestions,
-	orderThreeWayLegs,
+	resolveThreeWayChartLegs,
 } from "@/features/markets/listing/threeWayMoneyline";
+import { getMarketId } from "./utils";
 import { resolveEsportsLegs } from "@/features/markets/presentation/esportsLegs";
+import {
+	isMatchPropQuestion,
+	matchPropSelectionTitle,
+	partitionMatchPropQuestions,
+} from "@/features/markets/listing/matchProps";
+import { resolveDefaultTradeQuestion } from "@/features/markets/listing/defaultTradeQuestion";
 import "../Predictions/Predictions.scss";
 import "./scss/PredictionMarket.scss";
 import { PredictionCurtainProvider } from "@/components/PredictionMarketTradeBox";
@@ -125,13 +132,19 @@ function PredictionMarketContent() {
 		// Intentionally only run on mount — `questions` is the lazy-init value.
 	}, []);
 	const [activeMarket, setActiveMarket] = useState<PredictionMarket | null>(
-		() => initialStoredMatch ?? questions[0] ?? null,
+		// Default: Team A moneyline — never a prop or the draw. Raw question order
+		// can put a spread/total or Draw first.
+		() => initialStoredMatch ?? resolveDefaultTradeQuestion(questions) ?? questions[0] ?? null,
 	);
 	const [activePosition, setActivePosition] = useState<"yes" | "no">(() => {
-		// Read activePosition from localStorage, default to 'yes' if not found
+		// Only restore a stored position when restoring a stored market selection;
+		// a fresh page open is always "Team A moneyline, Yes".
+		if (!initialStoredMatch) return "yes";
 		const storedPosition = localStorage.getItem("activePosition");
 		return storedPosition === "yes" || storedPosition === "no" ? storedPosition : "yes";
 	});
+	/** Prop ladder cell title ("Mexico +1.5") — cleared when leaving props. */
+	const [activeSelectionTitle, setActiveSelectionTitle] = useState<string | null>(null);
 	const [hasUserSelectedMarket, setHasUserSelectedMarket] = useState(false);
 	/*
 	 * Only mark "stored selection processed" when we *actually* used a stored
@@ -250,6 +263,16 @@ function PredictionMarketContent() {
 	const isMultiLegEsports = esportsLegs.length > 1;
 
 	/**
+	 * Split spread / total prop questions (trading-page-only carousel) from the
+	 * core questions so the moneyline pipeline — pills, 3-way detection, chart,
+	 * default market selection — never sees them.
+	 */
+	const { core: coreQuestions, props: matchPropQuestions } = useMemo(
+		() => partitionMatchPropQuestions(questions),
+		[questions],
+	);
+
+	/**
 	 * Aggregator sub-markets (Map N winner, totals, …) carry `tradeable === false`
 	 * and have no LevelUp order book / on-chain CTF.
 	 *
@@ -261,6 +284,11 @@ function PredictionMarketContent() {
 	 * stream its own orderbook + drive the chart/trade box when its accordion
 	 * section is expanded. The trade box handles "no LevelUp routing" gracefully
 	 * (view-only sell strip) per the resolve helper docs.
+	 *
+	 * Spread / total props are excluded except for the one currently ACTIVE
+	 * (selected in the props carousel): appending it keeps its orderbook
+	 * streaming and stops the active-market safety net below from resetting
+	 * the selection, without subscribing every line of every ladder.
 	 */
 	const moneylineQuestions = useMemo(() => {
 		if (isMultiLegEsports) {
@@ -274,8 +302,12 @@ function PredictionMarketContent() {
 				return typeof id === "string" && legIds.has(id);
 			});
 		}
-		return questions.filter((q) => (q as { tradeable?: boolean }).tradeable !== false);
-	}, [questions, isMultiLegEsports, esportsLegs]);
+		const core = coreQuestions.filter((q) => (q as { tradeable?: boolean }).tradeable !== false);
+		if (activeMarket && isMatchPropQuestion(activeMarket)) {
+			return [...core, activeMarket];
+		}
+		return core;
+	}, [questions, coreQuestions, isMultiLegEsports, esportsLegs, activeMarket]);
 
 	const { questionOrderbooks, orderbooksReady, fetchAllOrderbooks } = useUmbrellaLiveOrderbooks(
 		umbrella?._id,
@@ -355,27 +387,55 @@ function PredictionMarketContent() {
 		return () => window.removeEventListener("resize", handler);
 	}, [isMobile, umbrella?.displayName]);
 
+	function resolvePropSelectionTitle(
+		market: PredictionMarket,
+		position: "yes" | "no",
+		selectionTitle?: string | null,
+	): string | null {
+		const marketType = (market as { marketType?: unknown }).marketType;
+		if (marketType === "spread" || marketType === "total") {
+			return matchPropSelectionTitle(market, position, umbrella?.teamMappings);
+		}
+		return selectionTitle?.trim() || null;
+	}
+
 	// Function to switch active market and position when Trade Yes/No is clicked
-	const handleMarketSwitch = useCallback((market: PredictionMarket, position: "yes" | "no") => {
-		setActiveMarket(market);
-		setActivePosition(position);
-		setHasUserSelectedMarket(true);
-	}, []);
+	const handleMarketSwitch = useCallback(
+		(market: PredictionMarket, position: "yes" | "no", selectionTitle?: string | null) => {
+			setActiveMarket(market);
+			setActivePosition(position);
+			setActiveSelectionTitle(resolvePropSelectionTitle(market, position, selectionTitle));
+			setHasUserSelectedMarket(true);
+		},
+		[umbrella?.teamMappings],
+	);
 
 	// Function to update just the position (for trading box callbacks)
-	const handlePositionChange = useCallback((position: "yes" | "no") => {
-		setActivePosition(position);
-	}, []);
+	const handlePositionChange = useCallback(
+		(position: "yes" | "no") => {
+			setActivePosition(position);
+			setActiveSelectionTitle((prev) => {
+				const marketType = activeMarket
+					? (activeMarket as { marketType?: unknown }).marketType
+					: undefined;
+				if (!activeMarket || (marketType !== "spread" && marketType !== "total")) {
+					return prev;
+				}
+				return matchPropSelectionTitle(activeMarket, position, umbrella?.teamMappings);
+			});
+		},
+		[activeMarket, umbrella?.teamMappings],
+	);
 
 	// Function to handle market switch with orderbook opening (for Yes/No button clicks)
 	const handleMarketSwitchWithOrderbook = useCallback(
-		(market: PredictionMarket, position: "yes" | "no") => {
-			// Switch active market and position
+		(market: PredictionMarket, position: "yes" | "no", selectionTitle?: string | null) => {
 			setActiveMarket(market);
 			setActivePosition(position);
+			setActiveSelectionTitle(resolvePropSelectionTitle(market, position, selectionTitle));
 			setHasUserSelectedMarket(true); // Mark as user-selected to prevent auto-reset
 		},
-		[],
+		[umbrella?.teamMappings],
 	);
 
 	// Get the active market's orderbook
@@ -455,9 +515,10 @@ function PredictionMarketContent() {
 				localStorage.removeItem("selectedMarketId");
 			}
 
-			// If no stored market found, use the top market
+			// If no stored market found, default to Team A moneyline (volume order
+			// can put the Draw or a deep prop book first).
 			if (!targetMarket) {
-				targetMarket = sortedQuestions[0];
+				targetMarket = resolveDefaultTradeQuestion(sortedQuestions) ?? sortedQuestions[0];
 			}
 
 			// Set the target market as active
@@ -484,19 +545,20 @@ function PredictionMarketContent() {
 	 */
 	useEffect(() => {
 		if (sortedQuestions.length === 0) return;
+		const fallback = resolveDefaultTradeQuestion(sortedQuestions) ?? sortedQuestions[0];
 		if (activeMarket != null) {
 			const id = getMarketId(activeMarket);
 			if (!id) {
-				setActiveMarket(sortedQuestions[0]);
+				setActiveMarket(fallback);
 				return;
 			}
 			const stillInUmbrella = sortedQuestions.some((q) => getMarketId(q) === id);
 			if (!stillInUmbrella) {
-				setActiveMarket(sortedQuestions[0]);
+				setActiveMarket(fallback);
 			}
 			return;
 		}
-		setActiveMarket(sortedQuestions[0]);
+		setActiveMarket(fallback);
 	}, [sortedQuestions, activeMarket, getMarketId]);
 
 	/**
@@ -528,17 +590,23 @@ function PredictionMarketContent() {
 		return esportsLegs[0]?.question ?? null;
 	}, [isMultiLegEsports, activeMarket, esportsLegs]);
 
-	// Chart input: for a 3-way moneyline (FIFA) plot only the two team legs
-	// (home + away YES); the draw is excluded from the chart per product spec
-	// while remaining tradeable / shown in the order-book tabs. For multi-leg
-	// esports the chart shows only the currently expanded leg.
+	// Chart input: always the match moneyline — never spreads/totals or esports map
+	// legs. For 3-way FIFA always Team A (home) YES + Team B (away) YES — never
+	// the Draw leg and never whichever team pill the user last clicked.
 	const chartQuestions = useMemo(() => {
 		if (isMultiLegEsports) {
-			return accordionActiveQuestion ? [accordionActiveQuestion] : [];
+			const seriesLeg = esportsLegs.find((leg) => leg.slot === null);
+			return seriesLeg ? [seriesLeg.question] : [];
 		}
-		if (!isThreeWayMoneylineQuestions(sortedQuestions)) return sortedQuestions;
-		return orderThreeWayLegs(sortedQuestions).filter((q) => q.moneylineLeg !== "draw");
-	}, [isMultiLegEsports, accordionActiveQuestion, sortedQuestions]);
+		const core = coreQuestions.filter(
+			(q) => !isMatchPropQuestion(q) && (q as { tradeable?: boolean }).tradeable !== false,
+		);
+		if (isThreeWayMoneylineQuestions(core)) {
+			return resolveThreeWayChartLegs(core);
+		}
+		// Stable core order — never volume sort or the active spread/total leg.
+		return core;
+	}, [isMultiLegEsports, esportsLegs, coreQuestions, getMarketId]);
 
 	// Hooks must be called unconditionally on every render
 	const chartOnlyState = useChartState(chartQuestions as any[], questionOrderbooks);
@@ -616,6 +684,7 @@ function PredictionMarketContent() {
 			questionOrderbooks={questionOrderbooks}
 			activeMarket={(accordionActiveQuestion ?? activeMarket) as any}
 			activePosition={activePosition}
+			activeSelectionTitle={activeSelectionTitle}
 			onMarketSwitch={handleMarketSwitch}
 			onMarketSwitchWithOrderbook={handleMarketSwitchWithOrderbook}
 			onPositionChange={handlePositionChange}
@@ -623,6 +692,7 @@ function PredictionMarketContent() {
 			chartState={chartOnlyState}
 			settledInfo={settledInfo}
 			esportsLegs={isMultiLegEsports ? esportsLegs : undefined}
+			matchProps={matchPropQuestions}
 		/>
 	);
 

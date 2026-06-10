@@ -146,13 +146,38 @@ export function useTradeState(
 			if (next.orderType !== orderType) {
 				sticky.setOrderType(next.orderType);
 			}
-			const {
-				amount: _omitAmount,
-				tradingVenue: _omitVenue,
-				orderType: _omitOrder,
-				...nextCore
-			} = next;
-			setCoreState(nextCore);
+			if (typeof updater === "function") {
+				// Re-run the (pure) updater inside React's functional form so the core
+				// update is applied against the *latest queued* core state. Materializing
+				// `next` from `coreStateRef.current` (last committed state) and passing it
+				// as an object would clobber sibling updates queued in the same commit —
+				// e.g. the prop-sync effect setting `selectedPosition` while a market-key
+				// change effect clears `orderResult` (spread cell click: market + position
+				// change together; the stale snapshot reverted the position).
+				setCoreState((prevCore) => {
+					const recomputed = updater({
+						...prevCore,
+						amount: stickyAmount,
+						tradingVenue,
+						orderType,
+					});
+					const {
+						amount: _a,
+						tradingVenue: _v,
+						orderType: _o,
+						...recomputedCore
+					} = recomputed;
+					return recomputedCore;
+				});
+			} else {
+				const {
+					amount: _omitAmount,
+					tradingVenue: _omitVenue,
+					orderType: _omitOrder,
+					...nextCore
+				} = next;
+				setCoreState(nextCore);
+			}
 		},
 		[sticky, stickyAmount, orderType, tradingVenue],
 	);

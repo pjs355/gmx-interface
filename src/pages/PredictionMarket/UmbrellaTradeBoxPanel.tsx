@@ -19,6 +19,7 @@ export type UmbrellaTradeBoxPanelProps = {
 	questionOrderbooks: Record<string, unknown>;
 	activeMarket: PredictionMarket | null;
 	activePosition: "yes" | "no";
+	selectionTitleOverride?: string | null;
 	onPositionChange: (p: "yes" | "no") => void;
 	settledInfo?: SettledInfo | null;
 	tradingPagePrices: TradingPagePrices;
@@ -31,6 +32,7 @@ export function UmbrellaTradeBoxPanel({
 	questionOrderbooks,
 	activeMarket,
 	activePosition,
+	selectionTitleOverride,
 	onPositionChange,
 	settledInfo,
 	tradingPagePrices,
@@ -111,6 +113,7 @@ export function UmbrellaTradeBoxPanel({
 			predictFunMappingFromUmbrella={umbrellaPredictFun}
 			umbrellaDisplayName={formatUmbrellaTitleForTradingPage(umbrella)}
 			umbrellaTeamMappings={umbrella.teamMappings}
+			selectionTitleOverride={selectionTitleOverride}
 			initialPosition={activePosition}
 			onPositionChange={onPositionChange}
 			onSideChange={setTradeSide}

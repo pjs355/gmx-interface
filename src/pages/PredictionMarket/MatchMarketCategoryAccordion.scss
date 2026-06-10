@@ -1,0 +1,73 @@
+@use "./MarketSectionAccordion.scss" as *;
+
+.match-market-category-accordion {
+	.match-market-category-accordion__moneyline-header {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: stretch;
+		min-width: 0;
+		width: 100%;
+		margin-right: auto;
+
+		.match-props__group {
+			flex: 1 1 auto;
+			min-width: 0;
+			width: 100%;
+			margin: 0;
+		}
+
+		.match-props__header {
+			margin-bottom: 8px;
+		}
+
+		.three-way-leg-selector {
+			flex: 1 1 auto;
+			min-width: 0;
+		}
+	}
+
+	.match-market-category-accordion__props-header {
+		flex: 1 1 auto;
+		min-width: 0;
+		width: 100%;
+
+		.match-props__group {
+			margin: 0;
+		}
+
+		.match-props__header {
+			margin-bottom: 8px;
+		}
+	}
+
+	.match-market-category-accordion__section-hit {
+		flex: 1 1 auto;
+		min-width: 0;
+		width: 100%;
+		cursor: pointer;
+	}
+
+	.match-market-category-accordion__odds-controls {
+		min-width: 0;
+		cursor: pointer;
+	}
+
+	.match-props__row-label {
+		cursor: pointer;
+	}
+}
+
+@media (max-width: 720px) {
+	.match-market-category-accordion {
+		.match-market-category-accordion__moneyline-header {
+			flex: 1 1 100%;
+			margin-right: 0;
+			padding-right: 36px;
+		}
+
+		.match-market-category-accordion__props-header {
+			flex: 1 1 100%;
+			padding-right: 36px;
+		}
+	}
+}

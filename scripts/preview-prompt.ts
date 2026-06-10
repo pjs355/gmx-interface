@@ -22,7 +22,6 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<n
 	return new Promise((resolve) => {
 		const child: ChildProcess = spawn(command, args, {
 			stdio: "inherit",
-			shell: true,
 			env,
 		});
 		child.on("close", (code) => resolve(code ?? 1));

@@ -3,6 +3,7 @@ import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { Tag } from "@/services/api/tagService";
 import { getHomeGameFilter } from "./gameFilterNavigation";
 import { normalizeEventDateInput, resolveUmbrellaEventDate } from "./eventDates";
+import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
 
 export const LIVE_PILL_ID = "__LIVE__";
 export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
@@ -87,8 +88,15 @@ export function umbrellaVenuePandaIds(umbrella: Umbrella | null | undefined): st
 		ids.push(id);
 	};
 	if (isWorldCupUmbrella(umbrella)) {
-		const children = (umbrella as { children?: Array<{ polymarketMarketId?: unknown }> }).children;
-		for (const child of children ?? []) push(child?.polymarketMarketId);
+		// Moneyline legs only: spread / total props (potentially dozens per
+		// match) are detail-page-only, so subscribing them here is wasted WS work.
+		const children = (
+			umbrella as { children?: Array<{ polymarketMarketId?: unknown; marketType?: unknown }> }
+		).children;
+		for (const child of children ?? []) {
+			if (isMatchPropQuestion(child)) continue;
+			push(child?.polymarketMarketId);
+		}
 	} else {
 		const raw = (umbrella as { pandascore_matchId?: unknown }).pandascore_matchId;
 		const matchId = typeof raw === "string" ? raw.trim() : "";

@@ -3,6 +3,7 @@ import { umbrellaDataService, type Umbrella } from "@/services/api/umbrellaDataS
 import { OrderbookService } from "@/services/api/orderbookService";
 import { tagService, type Tag } from "@/services/api/tagService";
 import { buildFifaGameTeamColorBySlug } from "@/features/markets/listing/fifaTeamLegColor";
+import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
 /** Avoid an infinite home skeleton when `fetch` hangs (no browser timeout on stalled TCP). */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -175,9 +176,14 @@ export function PredictionDataProvider({ children }: { children: React.ReactNode
 				// renders (they carry tradeable === false from the shared taxonomy).
 				const pmid = (cleanedUmbrella as { pandascore_matchId?: unknown })?.pandascore_matchId;
 				const isEsportsUmbrella = typeof pmid === "string" && pmid.length > 0;
+				// Spread / total props are trading-page-only (carousel below the
+				// moneyline), so home cards never see them regardless of tradeable.
 				const homeMarkets = isEsportsUmbrella
 					? markets
-					: markets.filter((m: any) => (m as { tradeable?: boolean }).tradeable !== false);
+					: markets.filter(
+							(m: any) =>
+								(m as { tradeable?: boolean }).tradeable !== false && !isMatchPropQuestion(m),
+						);
 				const isSingle = homeMarkets.length === 1;
 				if (isSingle) {
 					singleQuestions[key] = homeMarkets[0];

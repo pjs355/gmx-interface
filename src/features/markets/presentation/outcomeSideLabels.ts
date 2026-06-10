@@ -7,6 +7,7 @@ import {
 } from "@/features/positions/utils/historyOutcomeWinner";
 import { stripUmbrellaDisplayPrefix } from "@/features/markets/presentation/umbrellaDisplayName";
 import { isGroupWinnerLeg } from "@/features/markets/listing/groupWinner";
+import { isMatchPropQuestion, spreadOutcomeSideLabels, totalOutcomeSideLabels } from "@/features/markets/listing/matchProps";
 
 export type OutcomeLabelKind = "h2h" | "over_under" | "binary";
 
@@ -28,6 +29,8 @@ export type ResolveOutcomeSideLabelsInput = {
 	umbrella?: Umbrella | null;
 	/** Trade box / chart callers that only have the umbrella title string. */
 	umbrellaDisplayName?: string;
+	/** Match props: home/away team names for spread outcome labels. */
+	teamMappings?: Umbrella["teamMappings"];
 	market?: PredictionMarket | null;
 	hints?: OutcomeSideLabelsHints;
 };
@@ -114,6 +117,30 @@ export function resolveOutcomeSideLabels(input: ResolveOutcomeSideLabelsInput): 
 
 	if (marketTitle.match(/^Over\s+([\d,]+)/i)) {
 		return { yesLabel: "Over", noLabel: "Under", kind: "over_under" };
+	}
+
+	// Spread / total props: each is a binary market on one line ("Korea -1.5?",
+	// "O/U 2.5") — sides are Yes/No (Over/Under for totals), never the two team
+	// names from the umbrella's teamMappings.
+	if (isMatchPropQuestion(input.market)) {
+		if (input.market?.marketType === "total") {
+			const totalLabels = totalOutcomeSideLabels(input.market);
+			if (totalLabels) {
+				return { ...totalLabels, kind: "over_under" };
+			}
+			return { yesLabel: "Over", noLabel: "Under", kind: "over_under" };
+		}
+		if (input.market?.marketType === "spread") {
+			const umbrella = umbrellaFromInput(input);
+			const spreadLabels = spreadOutcomeSideLabels(
+				input.market,
+				input.teamMappings ?? umbrella?.teamMappings,
+			);
+			if (spreadLabels) {
+				return { ...spreadLabels, kind: "binary" };
+			}
+		}
+		return binaryFallback();
 	}
 
 	// 3-way moneyline leg (FIFA): each leg is its own binary market, so the sides

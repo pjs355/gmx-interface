@@ -44,6 +44,8 @@ export interface PredictionMarket {
 	marketType?: "moneyline" | "winner" | "total" | "spread" | "prop";
 	segment?: string;
 	line?: number;
+	/** Team the handicap applies to when `marketType === "spread"`. */
+	spreadSide?: "home" | "away";
 	/** Headline market the home page + canonical routing key off. */
 	isPrimary?: boolean;
 	/** LevelUp runs an on-chain order book (moneyline true, aggregator subs false). */

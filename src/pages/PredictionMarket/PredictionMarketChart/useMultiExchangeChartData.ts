@@ -17,9 +17,12 @@ import {
 	isPredictionPricingDebugEnabled,
 	priceDebugLog,
 } from "@/features/markets/odds-monitor/debugPredictionPricing";
-import { findOddsMatchedMarket } from "@/features/markets/odds-monitor/findOddsMatchedMarket";
+import {
+	findOddsMatchedMarket,
+	findOddsMatchedMarketByConditionId,
+} from "@/features/markets/odds-monitor/findOddsMatchedMarket";
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
-import type { OrderbookData } from "@/types/odds-monitor";
+import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 import { isLimitlessConsoleDebugEnabled } from "@/features/trading/venues/limitless/trade/limitlessConsoleDebug";
 
 export interface MultiExchangeChartResult {
@@ -74,6 +77,77 @@ function limitlessMetaForLog(
 		tokenIdA: lx.tokenIdA,
 		tokenIdB: lx.tokenIdB,
 	};
+}
+
+function applyTeamAFromHomeRow(
+	pt: MergedExchangePoint,
+	m: MatchedMarket,
+	includeLevelUp: boolean,
+): void {
+	const pa = bestAskDisplay100(m.polyPriceA as OrderbookData);
+	if (pa != null) pt.polymarket = pa;
+
+	const da = bestAskDisplay100(m.dflowPriceA as OrderbookData);
+	if (da != null) pt.kalshi = da;
+
+	const pra = bestAskDisplay100(m.predictFunPriceA as OrderbookData);
+	if (pra != null) pt.predictFun = pra;
+
+	const lxa = bestAskDisplay100(m.limitlessPriceA as OrderbookData);
+	if (lxa != null) pt.limitless = lxa;
+
+	if (includeLevelUp) {
+		const lua = bestAskDisplay100(m.levelUpPriceA as OrderbookData);
+		if (lua != null) pt.levelUp = lua;
+	}
+}
+
+/** 2-way home market: team-B series is the home row's B / NO side. */
+function applyTeamBFromHomeRow(
+	pt: MergedExchangePoint,
+	m: MatchedMarket,
+	includeLevelUp: boolean,
+): void {
+	const pb = bestAskDisplay100(m.polyPriceB as OrderbookData);
+	if (pb != null) pt.polymarketB = pb;
+
+	const db = bestAskDisplay100(m.dflowPriceB as OrderbookData);
+	if (db != null) pt.kalshiB = db;
+
+	const prb = bestAskDisplay100(m.predictFunPriceB as OrderbookData);
+	if (prb != null) pt.predictFunB = prb;
+
+	const lxb = bestAskDisplay100(m.limitlessPriceB as OrderbookData);
+	if (lxb != null) pt.limitlessB = lxb;
+
+	if (includeLevelUp) {
+		const lub = bestAskDisplay100(m.levelUpPriceB as OrderbookData);
+		if (lub != null) pt.levelUpB = lub;
+	}
+}
+
+/** 3-way leg market: team-B chart series is this leg's YES (A side), not home NO. */
+function applyTeamBFromAwayLegRow(
+	pt: MergedExchangePoint,
+	leg: MatchedMarket,
+	includeLevelUp: boolean,
+): void {
+	const pa = bestAskDisplay100(leg.polyPriceA as OrderbookData);
+	if (pa != null) pt.polymarketB = pa;
+
+	const da = bestAskDisplay100(leg.dflowPriceA as OrderbookData);
+	if (da != null) pt.kalshiB = da;
+
+	const pra = bestAskDisplay100(leg.predictFunPriceA as OrderbookData);
+	if (pra != null) pt.predictFunB = pra;
+
+	const lxa = bestAskDisplay100(leg.limitlessPriceA as OrderbookData);
+	if (lxa != null) pt.limitlessB = lxa;
+
+	if (includeLevelUp) {
+		const lua = bestAskDisplay100(leg.levelUpPriceA as OrderbookData);
+		if (lua != null) pt.levelUpB = lua;
+	}
 }
 
 function bestAskDisplay100(book: OrderbookData | null | undefined): number | undefined {
@@ -166,6 +240,20 @@ const EMPTY_VENUE: VenueData = {
 	limitlessB: [],
 };
 
+function matchedMarketIdentity(market: MatchedMarketExchange | null | undefined): string {
+	if (!market) return "";
+	return [
+		market.umbrellaId,
+		market.pandaMatchId,
+		market.polyConditionId,
+		market.polyTokenIdA,
+		market.polyTokenIdB,
+	]
+		.map((v) => String(v ?? "").trim())
+		.filter(Boolean)
+		.join("|");
+}
+
 function clamp01(p: number): number {
 	return Math.min(1, Math.max(0, p));
 }
@@ -246,10 +334,44 @@ export function useMultiExchangeChartData({
 	}, [pandaMatchId, umbrellaId]);
 
 	const { appState } = useOddsMonitor();
+	const isThreeWayChart = Boolean(String(awayConditionId ?? "").trim());
 	const matchedLive = useMemo(() => {
 		if (!appState?.markets?.length) return null;
+		if (isThreeWayChart) {
+			const homeCid = String(conditionId ?? "").trim();
+			if (homeCid) {
+				const byHomeLeg = findOddsMatchedMarketByConditionId(appState.markets, homeCid);
+				if (byHomeLeg) return byHomeLeg;
+			}
+		}
 		return findOddsMatchedMarket(appState.markets, pandaMatchId, umbrellaId);
-	}, [appState?.markets, appState?.timestamp, pandaMatchId, umbrellaId, liveTick]);
+	}, [
+		appState?.markets,
+		appState?.timestamp,
+		pandaMatchId,
+		umbrellaId,
+		conditionId,
+		isThreeWayChart,
+		liveTick,
+	]);
+	const matchedLiveAway = useMemo(() => {
+		if (!isThreeWayChart || !appState?.markets?.length) return null;
+		const awayCid = String(awayConditionId ?? "").trim();
+		if (awayCid) {
+			const byAwayLeg = findOddsMatchedMarketByConditionId(appState.markets, awayCid);
+			if (byAwayLeg) return byAwayLeg;
+		}
+		const awayPanda = String(state.matchedMarketAway?.pandaMatchId ?? "").trim();
+		if (awayPanda) return findOddsMatchedMarket(appState.markets, awayPanda, null);
+		return null;
+	}, [
+		isThreeWayChart,
+		awayConditionId,
+		state.matchedMarketAway?.pandaMatchId,
+		appState?.markets,
+		appState?.timestamp,
+		liveTick,
+	]);
 
 	useEffect(() => {
 		// Aggregator sub-question cards pass only a pandaMatchId (their own
@@ -286,9 +408,15 @@ export function useMultiExchangeChartData({
 		};
 	}, [umbrellaId, conditionId, pandaMatchId, awayConditionId]);
 
+	const matchedMarketKey = useMemo(
+		() =>
+			`${matchedMarketIdentity(state.matchedMarket)}::${matchedMarketIdentity(state.matchedMarketAway)}`,
+		[state.matchedMarket, state.matchedMarketAway],
+	);
+
 	useEffect(() => {
 		venueCacheRef.current.clear();
-	}, [state.matchedMarket, state.matchedMarketAway]);
+	}, [matchedMarketKey]);
 
 	useEffect(() => {
 		if (!state.matchResolved) return;
@@ -416,8 +544,7 @@ export function useMultiExchangeChartData({
 			}
 		})();
 	}, [
-		state.matchedMarket,
-		state.matchedMarketAway,
+		matchedMarketKey,
 		state.matchResolved,
 		timeRange,
 		stableGetToken,
@@ -469,34 +596,15 @@ export function useMultiExchangeChartData({
 	const liveOverlayPoint = useMemo((): MergedExchangePoint | null => {
 		if (!matchedLive) return null;
 		const t = Math.floor(Date.now() / 1000 / LIVE_BUCKET_SEC) * LIVE_BUCKET_SEC;
-		const m = matchedLive;
 		const pt: MergedExchangePoint = { timestamp: t };
 
-		const pa = bestAskDisplay100(m.polyPriceA as OrderbookData);
-		const pb = bestAskDisplay100(m.polyPriceB as OrderbookData);
-		if (pa != null) pt.polymarket = pa;
-		if (pb != null) pt.polymarketB = pb;
-
-		const da = bestAskDisplay100(m.dflowPriceA as OrderbookData);
-		const db = bestAskDisplay100(m.dflowPriceB as OrderbookData);
-		if (da != null) pt.kalshi = da;
-		if (db != null) pt.kalshiB = db;
-
-		const pra = bestAskDisplay100(m.predictFunPriceA as OrderbookData);
-		const prb = bestAskDisplay100(m.predictFunPriceB as OrderbookData);
-		if (pra != null) pt.predictFun = pra;
-		if (prb != null) pt.predictFunB = prb;
-
-		const lxa = bestAskDisplay100(m.limitlessPriceA as OrderbookData);
-		const lxb = bestAskDisplay100(m.limitlessPriceB as OrderbookData);
-		if (lxa != null) pt.limitless = lxa;
-		if (lxb != null) pt.limitlessB = lxb;
-
-		if (includeLevelUp) {
-			const lua = bestAskDisplay100(m.levelUpPriceA as OrderbookData);
-			const lub = bestAskDisplay100(m.levelUpPriceB as OrderbookData);
-			if (lua != null) pt.levelUp = lua;
-			if (lub != null) pt.levelUpB = lub;
+		applyTeamAFromHomeRow(pt, matchedLive, includeLevelUp);
+		if (isThreeWayChart) {
+			if (matchedLiveAway) {
+				applyTeamBFromAwayLegRow(pt, matchedLiveAway, includeLevelUp);
+			}
+		} else {
+			applyTeamBFromHomeRow(pt, matchedLive, includeLevelUp);
 		}
 
 		if (
@@ -514,7 +622,14 @@ export function useMultiExchangeChartData({
 			return null;
 		}
 		return attachBestOddsToMergedPoint(pt, includeLevelUp);
-	}, [matchedLive, liveTick, appState?.timestamp, includeLevelUp]);
+	}, [
+		matchedLive,
+		matchedLiveAway,
+		isThreeWayChart,
+		liveTick,
+		appState?.timestamp,
+		includeLevelUp,
+	]);
 
 	const mergedWithLive = useMemo(() => {
 		const id = String(pandaMatchId ?? "").trim();
@@ -542,6 +657,10 @@ export function useMultiExchangeChartData({
 					: {}),
 				...(liveOverlayPoint.limitlessB !== undefined
 					? { limitlessB: liveOverlayPoint.limitlessB }
+					: {}),
+				...(liveOverlayPoint.levelUp !== undefined ? { levelUp: liveOverlayPoint.levelUp } : {}),
+				...(liveOverlayPoint.levelUpB !== undefined
+					? { levelUpB: liveOverlayPoint.levelUpB }
 					: {}),
 			};
 			return attachBestOddsToMergedPoint(blended, includeLevelUp);

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { useCurtainActions } from "@/components/PredictionMarketTradeBox";
 import {
 	hexToRgba,
@@ -14,7 +15,7 @@ import DepthBar from "./DepthBar";
 import "./scss/OrderbookDisplay.scss";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import {
-	formatCentsLabel,
+	formatLadderCentsLabel,
 	formatOrderbookLevelShares,
 	oddsDualLayoutForStyle,
 } from "@/features/odds-display/oddsDisplayFormat";
@@ -26,6 +27,7 @@ import {
 	flattenAndConsolidateRestingLevels,
 	safeOrderbookNumber,
 } from "./orderbookDisplayLevels";
+import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
 
 /**
  * One outcome button for the embedded orderbook tab row. When provided (FIFA
@@ -58,6 +60,7 @@ interface OrderbookDisplayProps {
 	isCollapsed?: boolean;
 	side?: "buy" | "sell";
 	umbrellaDisplayName?: string;
+	umbrellaTeamMappings?: Umbrella["teamMappings"];
 	/** Single always-visible book: team row above ladder; no accordion header. */
 	layout?: "accordion" | "embedded";
 	/**
@@ -104,6 +107,7 @@ export default function OrderbookDisplay({
 	isCollapsed = true,
 	side = "buy",
 	umbrellaDisplayName,
+	umbrellaTeamMappings,
 	layout = "accordion",
 	wholeContractRestingBook = false,
 	minDisplayableRestingSize,
@@ -249,12 +253,19 @@ export default function OrderbookDisplay({
 
 	const { yesTeamLabel, noTeamLabel } = useMemo(() => {
 		if (!market) return { yesTeamLabel: "Yes", noTeamLabel: "No" };
-		const { yesTeamLabel: y, noTeamLabel: n } = getYesNoTeamLabels(market, umbrellaDisplayName);
+		const { yesTeamLabel: y, noTeamLabel: n } = getYesNoTeamLabels(
+			market,
+			umbrellaDisplayName,
+			umbrellaTeamMappings,
+		);
+		if (isMatchPropQuestion(market) && (market as { marketType?: unknown }).marketType === "spread") {
+			return { yesTeamLabel: y, noTeamLabel: n };
+		}
 		return {
 			yesTeamLabel: shortenTeamLabelForButton(y),
 			noTeamLabel: shortenTeamLabelForButton(n),
 		};
-	}, [market, umbrellaDisplayName]);
+	}, [market, umbrellaDisplayName, umbrellaTeamMappings]);
 
 	// Transform the display title for Over/Under markets
 	const displayTitle = useMemo(() => {
@@ -913,7 +924,7 @@ export default function OrderbookDisplay({
 										<div key={`ask-${ask.id}-${index}`} className="order-row ask">
 											<DepthBar depth={ask.depthPercentage} side="ask" />
 											<span className="side-label ask">{isLowestAsk ? "Asks" : ""}</span>
-											<span className="price ask">{formatPrice(ask.price, teamOddsLayout)}</span>
+											<span className="price ask">{formatPrice(ask.price, "ladder")}</span>
 											<span className="size">{formatOrderbookLevelShares(ask.size)}</span>
 											<span className="total">
 												$
@@ -934,7 +945,7 @@ export default function OrderbookDisplay({
 								{spread !== null && (
 									<div className="spread-display">
 										<span className="spread-label">Spread:</span>
-										<span className="spread-value">{formatCentsLabel(spread)}</span>
+										<span className="spread-value">{formatLadderCentsLabel(spread)}</span>
 									</div>
 								)}
 							</div>
@@ -948,7 +959,7 @@ export default function OrderbookDisplay({
 										<div key={`bid-${bid.id}-${index}`} className="order-row bid">
 											<DepthBar depth={bid.depthPercentage} side="bid" />
 											<span className="side-label bid">{isHighestBid ? "Bids" : ""}</span>
-											<span className="price bid">{formatPrice(bid.price, teamOddsLayout)}</span>
+											<span className="price bid">{formatPrice(bid.price, "ladder")}</span>
 											<span className="size">{formatOrderbookLevelShares(bid.size)}</span>
 											<span className="total">
 												$

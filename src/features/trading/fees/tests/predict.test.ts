@@ -112,11 +112,10 @@ describe("sorPredictNetHeldDisplay", () => {
 		expect(sorBuyNetHeldTotalSharesFromLegs([leg], undefined)).toBe(10);
 	});
 
-	it("Limitless leg nets without predict bps; polymarket stays gross", () => {
-		const lx = limitlessLeg(5.547850208044383, 0.35);
-		const lxNet = sorBuyPredictLegNetHeldShares(lx, undefined);
-		expect(lxNet).toBeCloseTo(5.381412, 5);
+	it("Limitless SOR leg shares are already net-held (no second haircut)", () => {
+		const lx = limitlessLeg(808.33, 0.12);
+		expect(sorBuyPredictLegNetHeldShares(lx, undefined)).toBe(808.33);
 		const legs = [lx, polyLeg(2)];
-		expect(sorBuyNetHeldTotalSharesFromLegs(legs, undefined)).toBeCloseTo(lxNet + 2, 5);
+		expect(sorBuyNetHeldTotalSharesFromLegs(legs, undefined)).toBeCloseTo(810.33, 5);
 	});
 });

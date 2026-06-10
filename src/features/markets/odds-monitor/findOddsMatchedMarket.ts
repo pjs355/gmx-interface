@@ -21,3 +21,13 @@ export function findOddsMatchedMarket(
 	}
 	return null;
 }
+
+/** Resolve a venue-prices row by Polymarket condition id (FIFA per-leg markets). */
+export function findOddsMatchedMarketByConditionId(
+	appMarkets: MatchedMarket[] | null | undefined,
+	conditionId: string | null | undefined,
+): MatchedMarket | null {
+	const cid = String(conditionId ?? "").trim();
+	if (!cid || !appMarkets?.length) return null;
+	return appMarkets.find((m) => String(m.polyConditionId ?? "").trim() === cid) ?? null;
+}

@@ -11,13 +11,14 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
  * so the trade page can rewire chart / orderbook / trade box to that map's book
  * when the user expands its accordion section.
  *
- * Polymarket-sourced sports (FIFA World Cup 3-way moneyline) have no pandascore
- * match: each leg (Team A win / Draw / Team B win) is its own binary market, so
- * we fall back to the active question's `polymarketMarketId`.
+ * Polymarket-sourced sports (FIFA 3-way legs, spreads, totals) each have their
+ * own Gamma market id on the Question. The venue-prices feed keys those rows by
+ * `polymarketMarketId` (see backend `buildPolymarketMatchedUmbrellaDocsFromQuestions`),
+ * even when the umbrella also carries a `pandascore_matchId` for SOR routing.
  *
- * This mirrors the backend `resolveMatchId` + per-map fan-out in
- * `src/sor/market-matcher.ts`, so the same trade box / venue books / SOR path
- * works per-leg with no FIFA-specific branching.
+ * Prefer the active question's `polymarketMarketId` whenever it is set (after the
+ * esports per-map fan-out), so orderbooks / trade box / subscriptions target the
+ * same wire row as the prop ladder cells — not the umbrella moneyline book.
  */
 export function resolveUmbrellaVenueKey(
 	umbrella: Pick<Umbrella, "pandascore_matchId"> | null | undefined,
@@ -37,22 +38,22 @@ export function resolveUmbrellaVenueKey(
 		if (eventType === "game" && hasMapPos) {
 			return `${panda}-map-${Math.trunc(pos as number)}`;
 		}
-		return panda;
 	}
 	const poly =
 		typeof activeQuestion?.polymarketMarketId === "string"
 			? activeQuestion.polymarketMarketId.trim()
 			: "";
-	return poly;
+	if (poly) return poly;
+	return panda;
 }
 
 /**
  * True when the venue key is a per-leg key whose lookup must NOT pass an
  * umbrellaId to `findOddsMatchedMarket` (it would fall back to another leg's row).
- * Two cases:
- *  1. Polymarket-sourced sports (FIFA): no umbrella-level `pandascore_matchId`,
- *     each leg keyed by its own `polymarketMarketId`.
- *  2. Esports per-map legs: backend fans out `${pandascore_matchId}-map-${slot}`
+ * Three cases:
+ *  1. Any question with its own `polymarketMarketId` (FIFA legs, spreads, totals).
+ *  2. Umbrellas with no umbrella-level `pandascore_matchId`.
+ *  3. Esports per-map legs: backend fans out `${pandascore_matchId}-map-${slot}`
  *     rows in addition to the umbrella's series row, so looking up by umbrellaId
  *     would still resolve the series row instead of the map row.
  */
@@ -60,9 +61,15 @@ export function isPerLegVenueKey(
 	umbrella: Pick<Umbrella, "pandascore_matchId"> | null | undefined,
 	activeQuestion?: Pick<
 		PredictionMarket,
-		"pandascore_eventType" | "pandascore_gamePosition"
+		"polymarketMarketId" | "pandascore_eventType" | "pandascore_gamePosition"
 	> | null,
 ): boolean {
+	const poly =
+		typeof activeQuestion?.polymarketMarketId === "string"
+			? activeQuestion.polymarketMarketId.trim()
+			: "";
+	if (poly.length > 0) return true;
+
 	const panda =
 		typeof umbrella?.pandascore_matchId === "string" ? umbrella.pandascore_matchId.trim() : "";
 	if (panda.length === 0) return true;

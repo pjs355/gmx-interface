@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo } from "react";
+import { useMedia } from "react-use";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { SnapshotStatus } from "@/types/odds-monitor";
 import { orderThreeWayLegs, threeWayLegLabel } from "@/features/markets/listing/threeWayMoneyline";
+import {
+	abbreviateTeamLabel,
+	type TeamMapping,
+} from "@/features/markets/listing/matchProps";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 import { buildVenuePriceRows } from "@/features/markets/pricing/buildVenuePriceRows";
@@ -58,6 +63,8 @@ type ThreeWayVenueRow = {
 type Props = {
 	/** Umbrella display questions; the three moneyline legs are derived from them. */
 	legs: PredictionMarket[];
+	/** Umbrella team mappings — abbreviates column headers on mobile (MEX / RSA). */
+	teamMappings?: TeamMapping[];
 };
 
 /**
@@ -66,8 +73,9 @@ type Props = {
  * outcome columns — Team A win / Team B win / Draw — one per leg. Read-only; the
  * trade module is driven from the Orderbooks tab leg selector / trade box.
  */
-export function ThreeWayVenueBooksPanel({ legs }: Props) {
+export function ThreeWayVenueBooksPanel({ legs, teamMappings }: Props) {
 	const { formatPrice } = useOddsDisplay();
+	const isMobileViewport = useMedia("(max-width: 1100px)");
 	const { enabled: wsEnabled } = useOddsMonitor();
 	const formatProbDisplay = useCallback((p: number) => formatPrice(p), [formatPrice]);
 
@@ -118,10 +126,15 @@ export function ThreeWayVenueBooksPanel({ legs }: Props) {
 		draw: bestDraw,
 	};
 
+	const legColLabel = (leg: PredictionMarket | null, fallback: string): string => {
+		if (!leg) return fallback;
+		const full = threeWayLegLabel(leg);
+		return isMobileViewport ? abbreviateTeamLabel(full, teamMappings) : full;
+	};
 	const columns: { key: LegCol; label: string }[] = [
-		{ key: "home", label: home ? threeWayLegLabel(home) : "—" },
-		{ key: "away", label: away ? threeWayLegLabel(away) : "—" },
-		{ key: "draw", label: draw ? threeWayLegLabel(draw) : "Draw" },
+		{ key: "home", label: legColLabel(home, "—") },
+		{ key: "away", label: legColLabel(away, "—") },
+		{ key: "draw", label: legColLabel(draw, "Draw") },
 	];
 
 	if (!wsEnabled) {

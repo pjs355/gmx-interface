@@ -1,0 +1,163 @@
+/* Spreads + totals ladders below the moneyline section on the trading page.
+ * Fixed row-label column (team / Over / Under) beside one horizontal carousel
+ * per ladder; both rows share the scroll container so columns stay aligned. */
+.match-props {
+	display: flex;
+	flex-direction: column;
+	gap: 22px;
+	margin-top: 24px;
+
+	&__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 10px;
+	}
+
+	&__title {
+		margin: 0;
+		color: white;
+		font-size: 18px;
+		font-weight: 600;
+		line-height: 1.2;
+	}
+
+	&__ladder {
+		display: flex;
+		align-items: stretch;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	/* Row headers live OUTSIDE the scroll container so they never scroll away;
+	 * heights mirror the cells so the two columns stay row-aligned. */
+	&__labels {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	&__row-label {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		height: 54px;
+		min-width: 64px;
+		max-width: 110px;
+		padding-right: 4px;
+	}
+
+	&__row-logo {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		object-fit: cover;
+		flex-shrink: 0;
+	}
+
+	&__row-label-text {
+		font-size: 13px;
+		font-weight: 600;
+		color: #d1d5db;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	&__scroll {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		overflow-x: auto;
+		min-width: 0;
+		flex: 1;
+		scroll-snap-type: x proximity;
+		scrollbar-width: none;
+		-webkit-overflow-scrolling: touch;
+		/* Soft fade hints that more lines exist off-screen. */
+		mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+	}
+
+	&__row {
+		display: flex;
+		gap: 6px;
+		width: max-content;
+		min-width: 100%;
+		/* Trailing room so the last cell can scroll fully past the fade mask. */
+		padding-right: 28px;
+	}
+
+	&__cell {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 3px;
+		min-width: 84px;
+		height: 54px;
+		padding: 6px 12px;
+		border-radius: 8px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		background: rgba(255, 255, 255, 0.04);
+		cursor: pointer;
+		scroll-snap-align: start;
+		transition:
+			background 0.12s ease,
+			border-color 0.12s ease;
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.1);
+		}
+
+		&--active {
+			background: rgba(255, 255, 255, 0.12);
+			border-color: white;
+		}
+
+		&--empty {
+			visibility: hidden;
+			pointer-events: none;
+		}
+	}
+
+	&__cell-line {
+		font-size: 13px;
+		font-weight: 600;
+		color: #d1d5db;
+		line-height: 1;
+		white-space: nowrap;
+	}
+
+	&__cell-price {
+		font-size: 15px;
+		font-weight: 700;
+		color: white;
+		line-height: 1;
+		white-space: nowrap;
+	}
+}
+
+/* Mobile: touch scroll only — tighten sizes. */
+.prediction-market-page.mobile .match-props {
+	margin-top: 18px;
+	padding: 0 12px;
+
+	&__title {
+		font-size: 1.0625rem;
+	}
+
+	&__row-label {
+		min-width: 52px;
+		max-width: 80px;
+	}
+
+	&__cell {
+		min-width: 76px;
+	}
+}

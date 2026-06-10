@@ -1,5 +1,10 @@
 import { useEffect, useMemo } from "react";
+import { useMedia } from "react-use";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import {
+	abbreviateTeamLabel,
+	type TeamMapping,
+} from "@/features/markets/listing/matchProps";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
@@ -20,6 +25,8 @@ type Props = {
 	activeMarketId: string;
 	/** Switch the active market to the selected leg's YES book. */
 	onSelect: (question: PredictionMarket) => void;
+	/** Umbrella team mappings — abbreviates button labels on mobile (MEX / RSA). */
+	teamMappings?: TeamMapping[];
 };
 
 /**
@@ -30,8 +37,9 @@ type Props = {
  * view without opening the Orderbooks tab. Read path matches the home cards
  * exactly (`listingBestYesNoFromMatched`).
  */
-export function ThreeWayLegSelector({ legs, activeMarketId, onSelect }: Props) {
+export function ThreeWayLegSelector({ legs, activeMarketId, onSelect, teamMappings }: Props) {
 	const ordered = useMemo(() => orderThreeWayLegs(legs), [legs]);
+	const isMobileViewport = useMedia("(max-width: 1100px)");
 	return (
 		<div className="three-way-leg-selector" role="tablist" aria-label="Outcome">
 			{ordered.map((question) => (
@@ -40,6 +48,7 @@ export function ThreeWayLegSelector({ legs, activeMarketId, onSelect }: Props) {
 					question={question}
 					active={(getMarketId(question) || "") === activeMarketId}
 					onSelect={onSelect}
+					abbreviateWith={isMobileViewport ? teamMappings : undefined}
 				/>
 			))}
 		</div>
@@ -50,10 +59,13 @@ function ThreeWayLegButton({
 	question,
 	active,
 	onSelect,
+	abbreviateWith,
 }: {
 	question: PredictionMarket;
 	active: boolean;
 	onSelect: (q: PredictionMarket) => void;
+	/** When set (mobile), team labels collapse to short codes via these mappings. */
+	abbreviateWith?: TeamMapping[];
 }) {
 	const { formatPrice } = useOddsDisplay();
 	const { appState } = useOddsMonitor();
@@ -80,7 +92,8 @@ function ThreeWayLegButton({
 	const cents = yesPrice !== null ? formatPrice(yesPrice) : "--";
 
 	const color = threeWayLegColor(question);
-	const label = threeWayLegLabel(question);
+	const fullLabel = threeWayLegLabel(question);
+	const label = abbreviateWith ? abbreviateTeamLabel(fullLabel, abbreviateWith) : fullLabel;
 
 	return (
 		<button
@@ -88,7 +101,10 @@ function ThreeWayLegButton({
 			role="tab"
 			aria-selected={active}
 			className={`three-way-leg-selector__btn${active ? " three-way-leg-selector__btn--active" : ""}`}
-			onClick={() => onSelect(question)}
+			onClick={(e) => {
+				e.stopPropagation();
+				onSelect(question);
+			}}
 			style={{
 				// Solid team-color fill like the home-page outcome buttons. The
 				// unselected legs are simply dimmed — no grey tint, outline, or glow.

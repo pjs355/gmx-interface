@@ -56,6 +56,7 @@ const PredictionMarketTradeBox = forwardRef<
 			predictFunMappingFromUmbrella,
 			umbrellaDisplayName,
 			umbrellaTeamMappings,
+			selectionTitleOverride,
 			initialPosition,
 			onPositionChange,
 			onSideChange: onSideChangeCallback,
@@ -169,8 +170,8 @@ const PredictionMarketTradeBox = forwardRef<
 		);
 
 		const { yesTeamLabel, noTeamLabel } = useMemo(
-			() => getYesNoTeamLabels(market, umbrellaDisplayName),
-			[market, umbrellaDisplayName],
+			() => getYesNoTeamLabels(market, umbrellaDisplayName, umbrellaTeamMappings),
+			[market, umbrellaDisplayName, umbrellaTeamMappings],
 		);
 
 		const tradeBoxIsVsSingle = useMemo(() => {
@@ -468,6 +469,7 @@ const PredictionMarketTradeBox = forwardRef<
 					umbrellaId={propUmbrellaId}
 					umbrellaDisplayName={umbrellaDisplayName}
 					umbrellaTeamMappings={umbrellaTeamMappings}
+					selectionTitleOverride={selectionTitleOverride}
 					crossBuyYes={crossBuyPrices.crossBuyYes}
 					crossBuyNo={crossBuyPrices.crossBuyNo}
 					mobilePeekBar={mobilePeekBar}
