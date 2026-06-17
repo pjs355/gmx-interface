@@ -28,13 +28,16 @@ import {
 	threeWayLegLabel,
 } from "@/features/markets/listing/threeWayMoneyline";
 import {
-	groupWinnerGroupLabel,
-	groupWinnerLegColor,
-	groupWinnerLegLabel,
-	isGroupWinnerQuestions,
-	orderGroupWinnerLegs,
-} from "@/features/markets/listing/groupWinner";
+	isMultiLegBinaryUmbrella,
+	multiLegLegColor,
+	multiLegLegLabel,
+	multiLegSegmentFromQuestions,
+	multiLegUmbrellaShortTitle,
+	orderMultiLegs,
+	resolveMultiLegLayout,
+} from "@/features/markets/listing/multiLegMarket";
 import GroupWinnerChart from "./PredictionMarketChart/GroupWinnerChart";
+import { MultiLegOutcomeAccordion } from "./MultiLegOutcomeAccordion";
 import { ThreeWayVenueBooksPanel } from "./ThreeWayVenueBooksPanel";
 import { ThreeWayLegSelector } from "./ThreeWayLegSelector";
 import { GroupWinnerVenueBooksPanel } from "./GroupWinnerVenueBooksPanel";
@@ -48,11 +51,16 @@ import {
 import { ChartSkeleton, OrderbookSkeleton } from "./Skeletons";
 import { formatUmbrellaTitleForTradingPage } from "@/features/markets/presentation/umbrellaDisplayName";
 import { resolveUmbrellaVenueKey } from "@/features/markets/pricing/venueLookupKey";
-import { buildMatchPropLadders, matchPropSelectionTitle } from "@/features/markets/listing/matchProps";
+import {
+	buildMatchPropLadders,
+	matchPropSelectionTitle,
+} from "@/features/markets/listing/matchProps";
 import { MatchPropsSection } from "./MatchPropsSection";
 import { EsportsLegAccordion } from "./EsportsLegAccordion";
 import type { EsportsLeg } from "@/features/markets/presentation/esportsLegs";
 import { usePredictionData } from "@/context/PredictionDataContext";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import { listingBestYesNoFromMatched, findMatchedByPolymarketMarketId } from "@/features/markets/listing/listingVenuePrices";
 import { isCategoryAccordionLayout } from "@/features/markets/presentation/matchMarketCategories";
 import type { MatchMarketCategory } from "@/features/markets/presentation/matchMarketCategories";
 import { MatchMarketCategoryAccordion } from "./MatchMarketCategoryAccordion";
@@ -67,11 +75,7 @@ type PanelsProps = {
 	activePosition: "yes" | "no";
 	/** Prop ladder title ("Mexico +1.5") when a spread/total cell is active. */
 	activeSelectionTitle?: string | null;
-	onMarketSwitch: (
-		q: PredictionMarket,
-		p: "yes" | "no",
-		selectionTitle?: string | null,
-	) => void;
+	onMarketSwitch: (q: PredictionMarket, p: "yes" | "no", selectionTitle?: string | null) => void;
 	onMarketSwitchWithOrderbook: (
 		q: PredictionMarket,
 		p: "yes" | "no",
@@ -123,6 +127,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	matchProps,
 }) => {
 	const { fifaGameTeamColorBySlug } = usePredictionData();
+	const { appState } = useOddsMonitor();
 	/**
 	 * True when this umbrella renders the multi-leg esports accordion (series +
 	 * 1+ map legs). The accordion replaces only the moneyline-odds slot below
@@ -215,8 +220,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		? (questionOrderbooks[chartLevelUpOrderbookKey] ?? null)
 		: null;
 	/** LevelUp line on the chart when the moneyline LevelUp book has resting shares. */
-	const chartLevelUpBookHasRestingShares =
-		levelUpOrderbookHasRestingShares(chartLevelUpOrderbook);
+	const chartLevelUpBookHasRestingShares = levelUpOrderbookHasRestingShares(chartLevelUpOrderbook);
 	const levelUpContextMarket =
 		(levelUpOrderbookKey
 			? sortedQuestions.find((q) => getMarketId(q) === levelUpOrderbookKey)
@@ -358,33 +362,74 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	/** 3-way moneyline (FIFA): order the order-book tabs home/away/draw and label
 	 * each by its short outcome name ("Korea" / "Czechia" / "Draw"). */
 	const isThreeWay = isThreeWayMoneylineQuestions(sortedQuestions);
-	/** FIFA "Group X Winner" prop: N team legs (no Draw), each its own binary market. */
-	const isGroupWinner = isGroupWinnerQuestions(sortedQuestions);
-	/** Both 3-way moneyline and group-winner share the multi-leg YES UI (leg pills,
-	 * cross-venue table, inline selector) — only the ordering + label/color differ. */
-	const isMultiLeg = isThreeWay || isGroupWinner;
-	const pillQuestions = isGroupWinner
-		? orderGroupWinnerLegs(sortedQuestions)
-		: isThreeWay
-			? orderThreeWayLegs(sortedQuestions)
-			: sortedQuestions;
+	/** FIFA NegRisk multi-outcome (groups, futures, awards). */
+	const isMultiLegNegRisk = isMultiLegBinaryUmbrella(sortedQuestions);
+	const multiLegSegment = multiLegSegmentFromQuestions(sortedQuestions);
+	const multiLegLayout = multiLegSegment ? resolveMultiLegLayout(multiLegSegment) : undefined;
+	const useMultiLegAccordion =
+		isMultiLegNegRisk && multiLegLayout !== undefined && multiLegLayout.homeTopN !== "all";
 
-	/** Label for a multi-leg outcome — team short name (group winner) or
-	 * home/away/draw name (moneyline). */
+	/** Futures/awards accordion: chart + Basic odds follow the active leg only. */
+	const multiLegActiveChartQuestionId =
+		useMultiLegAccordion && bookMarketId ? bookMarketId : chartQuestionId;
+	const multiLegActiveChartOrderbook = multiLegActiveChartQuestionId
+		? questionOrderbooks[multiLegActiveChartQuestionId]
+		: undefined;
+	const multiLegActiveChartVenueKey = useMemo(
+		() => (useMultiLegAccordion ? resolveUmbrellaVenueKey(umbrella, bookMarket) : chartVenueKey),
+		[useMultiLegAccordion, umbrella, bookMarket, bookMarketId, chartVenueKey],
+	);
+	const multiLegActiveChartOrderbooks = useMemo(() => {
+		if (!useMultiLegAccordion || !multiLegActiveChartQuestionId) return chartPinnedOrderbooks;
+		const ob = questionOrderbooks[multiLegActiveChartQuestionId];
+		return ob != null ? { [multiLegActiveChartQuestionId]: ob } : {};
+	}, [
+		useMultiLegAccordion,
+		multiLegActiveChartQuestionId,
+		questionOrderbooks,
+		chartPinnedOrderbooks,
+	]);
+	const multiLegActiveChartMarket = useMemo(() => {
+		if (!useMultiLegAccordion || !bookMarket) return chartPrimaryMarket;
+		return {
+			...(bookMarket as any),
+			umbrellaChildrenCount: umbrella?.children?.length || 0,
+		};
+	}, [useMultiLegAccordion, bookMarket, chartPrimaryMarket, umbrella?.children?.length]);
+
+	/** Both 3-way moneyline and NegRisk share the multi-leg YES UI. */
+	const isMultiLeg = isThreeWay || isMultiLegNegRisk;
+	const pillQuestions = useMemo(() => {
+		if (isMultiLegNegRisk && multiLegLayout) {
+			const yesPriceByMarketId = new Map<string, number>();
+			for (const q of sortedQuestions) {
+				const id = typeof q.polymarketMarketId === "string" ? q.polymarketMarketId.trim() : "";
+				if (!id) continue;
+				const matched = findMatchedByPolymarketMarketId(appState?.markets, id);
+				if (!matched) continue;
+				const { yes } = listingBestYesNoFromMatched(matched);
+				if (typeof yes === "number" && Number.isFinite(yes)) {
+					yesPriceByMarketId.set(id, yes);
+				}
+			}
+			return orderMultiLegs(sortedQuestions, multiLegLayout, yesPriceByMarketId);
+		}
+		if (isThreeWay) return orderThreeWayLegs(sortedQuestions);
+		return sortedQuestions;
+	}, [isMultiLegNegRisk, multiLegLayout, sortedQuestions, isThreeWay, appState?.markets]);
+
 	const legLabelFor = (question: PredictionMarket, _index: number): string =>
-		isGroupWinner ? groupWinnerLegLabel(question) : threeWayLegLabel(question);
-	/** Outcome color — stable per-team palette (group winner) or team color +
-	 * neutral Draw (moneyline). */
+		isMultiLegNegRisk ? multiLegLegLabel(question) : threeWayLegLabel(question);
 	const legColorFor = (question: PredictionMarket, index: number): string =>
-		isGroupWinner
-			? groupWinnerLegColor(question, index, umbrella.teamMappings, fifaGameTeamColorBySlug)
+		isMultiLegNegRisk
+			? multiLegLegColor(question, index, umbrella.teamMappings, fifaGameTeamColorBySlug)
 			: threeWayLegColor(question, fifaGameTeamColorBySlug);
 
 	/** Multi-leg (FIFA) leg selector for the Orderbooks tab: per-outcome buttons
 	 * that replace the orderbook's Yes/No tabs. Selecting a leg switches the active
 	 * market to that leg's YES book (and YES bet in the trade box). */
 	const multiLegOutcomeTabs =
-		isMultiLeg && pillQuestions.length > 1
+		isMultiLeg && !useMultiLegAccordion && pillQuestions.length > 1
 			? pillQuestions
 					.filter((q): q is PredictionMarket => Boolean(q))
 					.map((question, index) => {
@@ -471,14 +516,20 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		activeTab === "basic" ? (
 			<>
 				<div className="orderbook-section__cross-venue">
-					{isGroupWinner ? (
-						/* FIFA group winner: esports Basic table generalized to N team
-						   columns, each venue's best YES per team leg. */
-						<GroupWinnerVenueBooksPanel
-							legs={pillQuestions}
-							teamMappings={umbrella.teamMappings}
-							gameTeamColorBySlug={fifaGameTeamColorBySlug}
-						/>
+					{isMultiLegNegRisk ? (
+						useMultiLegAccordion ? (
+							<EsportsVenueBooksPanel
+								tradingPagePrices={tradingPagePrices}
+								teamAOverride={bookMarket ? multiLegLegLabel(bookMarket) : undefined}
+								teamBOverride="No"
+							/>
+						) : (
+							<GroupWinnerVenueBooksPanel
+								legs={pillQuestions}
+								teamMappings={umbrella.teamMappings}
+								gameTeamColorBySlug={fifaGameTeamColorBySlug}
+							/>
+						)
 					) : isThreeWay ? (
 						/* FIFA 3-way: esports Basic table with a third outcome column
 						   (Team A / Team B / Draw), each venue's best YES per leg. */
@@ -511,12 +562,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					activePosition={activePosition}
 					side={tradeSide}
 					outcomeTabs={multiLegOutcomeTabs}
-					/*
-					 * Multi-leg esports: the accordion header's team pills are the
-					 * canonical activeMarket / activePosition switch — show no
-					 * duplicate Yes/No tab row above the venue ladder.
-					 */
-					hideOutcomeTabs={isMultiLegEsports}
+					hideOutcomeTabs={isMultiLegEsports || useMultiLegAccordion}
 				/>
 				{/* <RulesSection umbrella={umbrella} /> */}
 			</>
@@ -538,17 +584,22 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	// Latch chart visibility once moneyline books load — prop/spread selection must not flash skeleton.
 	const chartVisibleLatchRef = React.useRef(false);
 	const chartLatchKeyRef = React.useRef("");
-	const chartLatchKey = `${umbrella?._id ?? ""}:${chartQuestionId}`;
+	const chartLatchKey = useMultiLegAccordion
+		? `${umbrella?._id ?? ""}:${multiLegActiveChartQuestionId}`
+		: `${umbrella?._id ?? ""}:${chartQuestionId}`;
 	if (chartLatchKeyRef.current !== chartLatchKey) {
 		chartLatchKeyRef.current = chartLatchKey;
 		chartVisibleLatchRef.current = false;
 	}
-	if (hasQuestions && hasUsableOrderbookSnapshot(primaryChartOrderbook)) {
+	const chartOrderbookForLatch = useMultiLegAccordion
+		? multiLegActiveChartOrderbook
+		: primaryChartOrderbook;
+	if (hasQuestions && hasUsableOrderbookSnapshot(chartOrderbookForLatch)) {
 		chartVisibleLatchRef.current = true;
 	}
 	const showChartBlock =
 		hasQuestions &&
-		(chartVisibleLatchRef.current || hasUsableOrderbookSnapshot(primaryChartOrderbook));
+		(chartVisibleLatchRef.current || hasUsableOrderbookSnapshot(chartOrderbookForLatch));
 	const showChartPlaceholder = !showChartBlock && !(settledView && !hasQuestions);
 
 	// Order inside .venue-books-container: chart → tabs → "Prediction Market Odds" → tab body (e.g. esports table).
@@ -565,17 +616,32 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				className="prediction-market-chart-shell flex grow flex-col overflow-visible rounded-4 bg-black"
 				style={{ minHeight: 300 }}
 			>
-				{isGroupWinner ? (
-					<GroupWinnerChart
-						legs={pillQuestions}
-						teamMappings={umbrella.teamMappings}
-						gameTeamColorBySlug={fifaGameTeamColorBySlug}
-						title={
-							groupWinnerGroupLabel(pillQuestions)
-								? `${groupWinnerGroupLabel(pillQuestions)} Winner`
-								: undefined
-						}
-					/>
+				{isMultiLegNegRisk ? (
+					useMultiLegAccordion && bookMarket ? (
+						<PredictionMarketChart
+							questionId={multiLegActiveChartQuestionId}
+							umbrellaId={umbrella?._id}
+							pandaMatchId={multiLegActiveChartVenueKey || undefined}
+							limitlessFromUmbrella={umbrellaLimitless}
+							levelUpOrderbookHasRestingShares={false}
+							umbrellaDisplayName={umbrellaTradingTitle}
+							activeMarket={multiLegActiveChartMarket}
+							secondMarket={null}
+							questionOrderbooks={multiLegActiveChartOrderbooks}
+						/>
+					) : (
+						<GroupWinnerChart
+							legs={pillQuestions}
+							teamMappings={umbrella.teamMappings}
+							gameTeamColorBySlug={fifaGameTeamColorBySlug}
+							chartTopN={multiLegLayout?.chartTopN ?? "all"}
+							title={(() => {
+								const short = multiLegUmbrellaShortTitle(pillQuestions);
+								if (!short) return undefined;
+								return multiLegSegment?.startsWith("group_") ? `${short} Winner` : short;
+							})()}
+						/>
+					)
 				) : (
 					<PredictionMarketChart
 						questionId={chartQuestionId}
@@ -612,7 +678,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		</div>
 	) : null;
 
-	const venueBooksOddsNoun = isGroupWinner ? "Group winner" : "Moneyline";
+	const venueBooksOddsNoun = isMultiLegNegRisk ? "Outcomes" : "Moneyline";
 	const venueBooksSectionTitle =
 		showCrossVenueBooks && activeTab === "orderbooks"
 			? `${venueBooksOddsNoun} orderbooks`
@@ -627,7 +693,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			showMultiLegBasicSelector ? (
 				<div className="prediction-market-odds-heading-row">
 					<h3 className="prediction-market-odds-heading">{venueBooksSectionTitle}</h3>
-					{isGroupWinner ? (
+					{isMultiLegNegRisk && !useMultiLegAccordion ? (
 						<GroupWinnerLegSelector
 							legs={pillQuestions}
 							teamMappings={umbrella.teamMappings}
@@ -742,6 +808,22 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					onPropSelect={onMarketSwitch}
 					renderSectionBody={renderCategorySectionBody}
 				/>
+			) : useMultiLegAccordion && multiLegLayout ? (
+				<MultiLegOutcomeAccordion
+					umbrella={umbrella}
+					legs={pillQuestions}
+					layout={multiLegLayout}
+					teamMappings={umbrella?.teamMappings}
+					gameTeamColorBySlug={fifaGameTeamColorBySlug}
+					activeMarket={activeMarket}
+					activePosition={activePosition}
+					onMarketSwitch={onMarketSwitch}
+					onPositionChange={onPositionChange}
+				>
+					{tabSwitcher}
+					{predictionMarketOddsHeading}
+					<div className={orderbookSectionClass}>{orderbookSectionBody}</div>
+				</MultiLegOutcomeAccordion>
 			) : isMultiLegEsports && esportsLegs ? (
 				/*
 				 * Multi-leg esports: render the vertical leg accordion in the same
@@ -838,7 +920,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 				*/}
 
 				{/* Mobile Trading Container - Fixed at bottom */}
-				<div className="mobile-trading-container">
+				<div
+					className={`mobile-trading-container${isThreeWay ? " mobile-trading-container--peek-hidden" : ""}`}
+				>
 					{isMobileViewport && (
 						<UmbrellaTradeBoxPanel
 							umbrella={umbrella}
@@ -850,6 +934,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 							settledInfo={settledInfo ?? null}
 							tradingPagePrices={tradingPagePrices}
 							venueOverride={venueForTradeBox}
+							mobilePeekBar={isThreeWay ? "hidden" : "default"}
 						/>
 					)}
 				</div>

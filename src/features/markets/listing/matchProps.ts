@@ -82,6 +82,52 @@ export function abbreviateTeamLabel(
 	return label;
 }
 
+/** Signed handicap suffix from a spread row label ("Mexico -1.5" → "-1.5"). */
+export function spreadSignedLineFromLabel(label: string): string | null {
+	const m = label.trim().match(/\s([+-]\d+(?:\.\d+)?)$/);
+	return m?.[1] ?? null;
+}
+
+/** Mobile All Odds: "Over 2.5 goals" → "O 2.5 goals". */
+export function compactAllOddsTotalLabel(label: string): string {
+	return label.replace(/^Over\s+/i, "O ").replace(/^Under\s+/i, "U ");
+}
+
+/**
+ * All Odds outcome column — on mobile, spread rows show only the signed line
+ * when a team flag is present (the flag identifies the team).
+ */
+export function allOddsOutcomeDisplayLabel(
+	label: string,
+	teamMappings: readonly TeamMapping[] | undefined,
+	isMobile: boolean,
+	opts?: { marketType?: string | null; logoUrl?: string | null },
+): string {
+	if (!isMobile) return label;
+
+	const mt = opts?.marketType?.trim().toLowerCase();
+	const spreadLine = spreadSignedLineFromLabel(label);
+	if (spreadLine && (mt === "spread" || opts?.logoUrl)) {
+		return spreadLine;
+	}
+
+	if (mt === "total" || /^over\s/i.test(label) || /^under\s/i.test(label)) {
+		return compactAllOddsTotalLabel(label);
+	}
+
+	return abbreviateTeamLabel(label, teamMappings);
+}
+
+/** Fixture title "Mexico vs South Africa" → "MEX vs RSA" via teamMappings. */
+export function abbreviateFixtureTitle(
+	title: string,
+	teamMappings: readonly TeamMapping[] | undefined,
+): string {
+	const m = title.match(/^(.+?)\s+vs\s+(.+)$/i);
+	if (!m) return title;
+	return `${abbreviateTeamLabel(m[1], teamMappings)} vs ${abbreviateTeamLabel(m[2], teamMappings)}`;
+}
+
 /**
  * True for spread / total questions — trading-page-only, never on home cards.
  * Structural param so umbrella children typed as partial shapes pass without casts.
@@ -174,7 +220,7 @@ export function totalOutcomeSideLabels(
 ): { yesLabel: string; noLabel: string } | null {
 	const line = questionLine(question);
 	if (line === null) return null;
-	return { yesLabel: `Over ${line}`, noLabel: `Under ${line}` };
+	return { yesLabel: `Over ${line} goals`, noLabel: `Under ${line} goals` };
 }
 
 /**
@@ -211,7 +257,7 @@ export function matchPropSelectionTitle(
 		const line = questionLine(question);
 		if (line === null) return fallback;
 		const sideLabel = position === "yes" ? "Over" : "Under";
-		return `${sideLabel} ${line}`;
+		return `${sideLabel} ${line} goals`;
 	}
 
 	if (marketType !== "spread" || position !== "no") return fallback;

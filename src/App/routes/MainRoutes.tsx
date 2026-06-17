@@ -19,6 +19,7 @@ const Positions = lazy(loadPositionsPage);
 const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));
+const AllOdds = lazy(() => import("pages/AllOdds/AllOddsPage"));
 const TestPage = lazy(() => import("pages/Test/TestPage"));
 
 /** Prevents infinite full-page reload when chunk/HMR keeps failing (see ChunkErrorBoundary). */
@@ -213,6 +214,14 @@ export function MainRoutes() {
 					element={
 						<LazyPage>
 							<Transfers />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/all-odds"
+					element={
+						<LazyPage>
+							<AllOdds />
 						</LazyPage>
 					}
 				/>

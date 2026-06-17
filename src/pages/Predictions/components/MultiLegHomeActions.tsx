@@ -4,77 +4,103 @@ import { hexToRgba, getContrastingTextColor } from "@/features/markets/presentat
 import { oddsBarPercent } from "@/features/markets/pricing/orderbookDisplayPrices";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
-import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
+import { listingBestYesNoFromMatched, findMatchedByPolymarketMarketId } from "@/features/markets/listing/listingVenuePrices";
 import {
-	groupWinnerLegColor,
-	groupWinnerLegLabel,
-	isGroupWinnerOtherLeg,
-	orderGroupWinnerLegs,
-} from "@/features/markets/listing/groupWinner";
+	isMultiLegOtherLeg,
+	multiLegLegColor,
+	multiLegLegImage,
+	multiLegLegLabel,
+	orderMultiLegs,
+	resolveTopN,
+	type MultiLegLayoutProfile,
+} from "@/features/markets/listing/multiLegMarket";
 import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 import { useOddsDisplay } from "@/context/OddsDisplayContext";
 import { usePredictionData } from "@/context/PredictionDataContext";
 
-interface GroupWinnerActionsProps {
+interface MultiLegHomeActionsProps {
 	umbrellaId: string;
+	layout: MultiLegLayoutProfile;
 	teamMappings?: UmbrellaTeamMapping[] | null;
 	multiMarketData: {
 		[umbrellaId: string]: {
 			questions: PredictionMarket[];
-			orderbooks: { [questionId: string]: any };
+			orderbooks: { [questionId: string]: unknown };
 		};
 	};
 	onNavigate: (question: PredictionMarket, position: "yes" | "no") => void;
 }
 
-/**
- * Home-card actions for a FIFA World Cup "Group X Winner" umbrella (N team legs,
- * no Draw). One outcome row per team (flag + name + YES price). Each leg is its
- * own binary Polymarket market, so each row looks up its own cross-venue YES
- * price by `polymarketMarketId`. Row click opens that leg's trade box.
- */
-export const GroupWinnerActions: React.FC<GroupWinnerActionsProps> = ({
+export const MultiLegHomeActions: React.FC<MultiLegHomeActionsProps> = ({
 	umbrellaId,
+	layout,
 	teamMappings,
 	multiMarketData,
 	onNavigate,
 }) => {
 	const { fifaGameTeamColorBySlug } = usePredictionData();
+	const { appState } = useOddsMonitor();
 	const data = multiMarketData[umbrellaId];
-	const legs = useMemo(
-		() => (data?.questions ? orderGroupWinnerLegs(data.questions) : []),
-		[data?.questions],
-	);
+
+	const { ordered, visible, hiddenCount } = useMemo(() => {
+		const questions = data?.questions ?? [];
+		const yesPriceByMarketId = new Map<string, number>();
+		for (const q of questions) {
+			const id = typeof q.polymarketMarketId === "string" ? q.polymarketMarketId.trim() : "";
+			if (!id) continue;
+			const matched = findMatchedByPolymarketMarketId(appState?.markets, id);
+			if (!matched) continue;
+			const { yes } = listingBestYesNoFromMatched(matched);
+			if (typeof yes === "number" && Number.isFinite(yes)) {
+				yesPriceByMarketId.set(id, yes);
+			}
+		}
+		const orderedLegs = orderMultiLegs(questions, layout, yesPriceByMarketId);
+		const topN = resolveTopN(layout.homeTopN, orderedLegs.length);
+		return {
+			ordered: orderedLegs,
+			visible: orderedLegs.slice(0, topN),
+			hiddenCount: Math.max(0, orderedLegs.length - topN),
+		};
+	}, [data?.questions, layout, appState?.markets]);
 
 	return (
 		<div className="single-market-actions single-market-actions--compact">
 			<div className="prediction-card-outcome-rows">
-				{legs.map((question, index) => (
-					<GroupWinnerLegRow
+				{visible.map((question, index) => (
+					<MultiLegHomeRow
 						key={question._id || question.questionId || question.polymarketMarketId}
 						question={question}
 						index={index}
+						layout={layout}
 						teamMappings={teamMappings}
 						gameTeamColorBySlug={fifaGameTeamColorBySlug}
 						onNavigate={onNavigate}
 					/>
 				))}
+				{hiddenCount > 0 ? (
+					<div className="prediction-card-outcome-row prediction-card-outcome-row--more">
+						<span className="prediction-card-outcome-label">{hiddenCount} more outcomes</span>
+					</div>
+				) : null}
 			</div>
 		</div>
 	);
 };
 
-interface GroupWinnerLegRowProps {
+interface MultiLegHomeRowProps {
 	question: PredictionMarket;
 	index: number;
+	layout: MultiLegLayoutProfile;
 	teamMappings?: UmbrellaTeamMapping[] | null;
 	gameTeamColorBySlug?: Record<string, string> | null;
 	onNavigate: (question: PredictionMarket, position: "yes" | "no") => void;
 }
 
-const GroupWinnerLegRow: React.FC<GroupWinnerLegRowProps> = ({
+const MultiLegHomeRow: React.FC<MultiLegHomeRowProps> = ({
 	question,
 	index,
+	layout,
 	teamMappings,
 	gameTeamColorBySlug,
 	onNavigate,
@@ -84,7 +110,6 @@ const GroupWinnerLegRow: React.FC<GroupWinnerLegRowProps> = ({
 
 	const legKey =
 		typeof question.polymarketMarketId === "string" ? question.polymarketMarketId.trim() : "";
-	// Per-leg lookup keyed solely by polymarketMarketId (no umbrellaId).
 	const matched = useMatchVenuePrices(legKey || null, null);
 	const { yes } = useMemo(
 		() => listingBestYesNoFromMatched(matched),
@@ -94,16 +119,12 @@ const GroupWinnerLegRow: React.FC<GroupWinnerLegRowProps> = ({
 	const yesPrice = typeof yes === "number" && Number.isFinite(yes) ? yes : null;
 	const yesCents = yesPrice !== null ? formatPrice(yesPrice) : "--";
 
-	const isOther = isGroupWinnerOtherLeg(question);
-	const yesColor = groupWinnerLegColor(question, index, teamMappings, gameTeamColorBySlug);
+	const isOther = isMultiLegOtherLeg(question);
+	const yesColor = multiLegLegColor(question, index, teamMappings, gameTeamColorBySlug);
 	const yesTextColor = getContrastingTextColor(yesColor);
-
-	const label = groupWinnerLegLabel(question);
+	const label = multiLegLegLabel(question);
 	const yesBarPct = oddsBarPercent(yesPrice);
-	const logoUrl =
-		typeof question.image === "string" && question.image.trim() !== ""
-			? question.image.trim()
-			: null;
+	const logoUrl = multiLegLegImage(question, layout);
 
 	return (
 		<div className="prediction-card-outcome-row">
@@ -175,3 +196,6 @@ const OutcomeLogo: React.FC<{ src: string | null; alt: string; grey?: boolean }>
 		/>
 	);
 };
+
+/** @deprecated Use MultiLegHomeActions */
+export const GroupWinnerActions = MultiLegHomeActions;

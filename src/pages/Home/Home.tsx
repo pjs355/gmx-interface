@@ -6,6 +6,7 @@ import { LoadingState } from "../Predictions/components/LoadingState";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import { resolveUmbrellaEventDate } from "../Predictions/utils/eventDates";
+import { isMlbUmbrella } from "../Predictions/utils/gameLinkFilters";
 import { resolveHomeMatchWinnerQuestion } from "@/features/markets/presentation/esportsHomeCard";
 import { useVenuePandaSubscription } from "@/context/VenuePandaSubscriptionContext";
 import "./Home.scss";
@@ -37,6 +38,7 @@ export default function Home() {
 	const { gamingUmbrellas, esportsUmbrellas } = useMemo(() => {
 		// First filter out inactive umbrellas
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
+			if (isMlbUmbrella(umbrella)) return false;
 			return (umbrella as any).active === true;
 		});
 

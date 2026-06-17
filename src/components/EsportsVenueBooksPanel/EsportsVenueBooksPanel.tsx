@@ -44,9 +44,17 @@ function sortVenueRowsNoSharesLast(
 
 type Props = {
 	tradingPagePrices: TradingPagePrices;
+	/** Override YES column header (e.g. active NegRisk leg label). */
+	teamAOverride?: string;
+	/** Override NO column header. */
+	teamBOverride?: string;
 };
 
-export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
+export function EsportsVenueBooksPanel({
+	tradingPagePrices,
+	teamAOverride,
+	teamBOverride,
+}: Props) {
 	const { formatPrice } = useOddsDisplay();
 	const formatProbDisplay = useCallback((p: number) => formatPrice(p), [formatPrice]);
 
@@ -54,8 +62,8 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 		venueRows,
 		bestYesPrice,
 		bestNoPrice,
-		teamA,
-		teamB,
+		teamA: teamAFromPrices,
+		teamB: teamBFromPrices,
 		source,
 		wsEnabled,
 		wsConnected,
@@ -64,6 +72,8 @@ export function EsportsVenueBooksPanel({ tradingPagePrices }: Props) {
 		matched,
 		appState,
 	} = tradingPagePrices;
+	const teamA = teamAOverride?.trim() || teamAFromPrices;
+	const teamB = teamBOverride?.trim() || teamBFromPrices;
 
 	const orderedVenueRows = useMemo(
 		() => sortVenueRowsNoSharesLast(venueRows, formatProbDisplay),

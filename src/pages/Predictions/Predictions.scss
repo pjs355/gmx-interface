@@ -661,6 +661,21 @@ $predictions-compact-card-inline: 60px;
 	text-align: right;
 }
 
+.prediction-card__top--prop-title {
+	.prediction-card__top-status {
+		flex: 1 1 100%;
+	}
+
+	.prediction-card__headline--prop {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		text-align: left;
+		max-width: 100%;
+	}
+}
+
 .prediction-card--compact .prediction-card__top-headline .prediction-card__headline {
 	display: block;
 	overflow: hidden;
@@ -1089,6 +1104,21 @@ $predictions-compact-card-inline: 60px;
 	padding-left: 12px;
 	gap: 2px;
 	box-sizing: border-box;
+}
+
+/* Mobile World Cup sub-pill row (Games / Groups / Futures / Awards). */
+.game-links-sub-row {
+	display: none;
+}
+
+.game-link--sub-pill {
+	padding-left: 0;
+	font-size: inherit;
+	font-weight: inherit;
+
+	.game-link__label {
+		font-weight: inherit;
+	}
 }
 
 .game-link--sub {
@@ -1603,6 +1633,60 @@ $predictions-compact-card-inline: 60px;
 		width: 20px;
 		height: 20px;
 		border-radius: 6px;
+	}
+
+	.game-links-sub-row {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		margin-top: 8px;
+		padding-bottom: 4px;
+		overflow-x: auto;
+		overflow-y: hidden;
+		white-space: nowrap;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+
+		.game-link {
+			width: auto;
+			flex: 0 0 auto;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 6px 12px;
+			border: none;
+			background: transparent;
+			color: #ffffff;
+			line-height: 1;
+			transition:
+				color 0.15s ease-in-out,
+				background-color 0.15s ease-in-out;
+
+			&:hover {
+				background: #101114;
+				color: #ffffff;
+			}
+
+			&.active {
+				background: #101114;
+				color: #ffffff;
+				font-weight: 700;
+			}
+
+			.game-link__count {
+				color: #9ca3af;
+				line-height: 1;
+			}
+
+			&:hover .game-link__count,
+			&.active .game-link__count {
+				color: #9ca3af;
+			}
+		}
 	}
 
 	.predictions-grid {

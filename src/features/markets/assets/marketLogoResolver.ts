@@ -27,6 +27,12 @@ const VENUE_TO_BASENAME: Record<string, string> = {
 	kalshi: "kalshi",
 	dflow: "kalshi",
 	limitless: "limitless",
+	betdex: "betdex",
+	myraid: "myriad",
+	myriad: "myriad",
+	forkast: "forkast",
+	sxbet: "sxbet",
+	hyperliquid: "hyperliquid",
 };
 
 /** Returns the square logo URL for a known venue, or null. */

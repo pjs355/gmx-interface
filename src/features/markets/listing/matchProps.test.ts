@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import {
+	abbreviateFixtureTitle,
+	allOddsOutcomeDisplayLabel,
 	buildMatchPropLadders,
+	compactAllOddsTotalLabel,
 	matchPropSelectionTitle,
 	propVenueColumnHeaders,
 	spreadOutcomeSideLabels,
+	spreadSignedLineFromLabel,
 	totalOutcomeSideLabels,
 } from "./matchProps";
 
@@ -27,6 +31,18 @@ function spreadQuestion(input: {
 		spreadSide: input.spreadSide,
 	} as PredictionMarket;
 }
+
+describe("abbreviateFixtureTitle", () => {
+	it("abbreviates both sides of a fixture title", () => {
+		expect(abbreviateFixtureTitle("Mexico vs South Africa", teamMappings)).toBe(
+			"MEX vs RSA",
+		);
+	});
+
+	it("returns non-fixture titles unchanged", () => {
+		expect(abbreviateFixtureTitle("World Cup Winner", teamMappings)).toBe("World Cup Winner");
+	});
+});
 
 describe("matchPropSelectionTitle", () => {
 	const mexMinus15 = spreadQuestion({
@@ -59,8 +75,8 @@ describe("matchPropSelectionTitle", () => {
 			marketType: "total",
 			line: 2.5,
 		} as PredictionMarket;
-		expect(matchPropSelectionTitle(total, "yes", teamMappings)).toBe("Over 2.5");
-		expect(matchPropSelectionTitle(total, "no", teamMappings)).toBe("Under 2.5");
+		expect(matchPropSelectionTitle(total, "yes", teamMappings)).toBe("Over 2.5 goals");
+		expect(matchPropSelectionTitle(total, "no", teamMappings)).toBe("Under 2.5 goals");
 	});
 });
 
@@ -72,7 +88,7 @@ describe("totalOutcomeSideLabels", () => {
 				marketType: "total",
 				line: 1.5,
 			} as PredictionMarket),
-		).toEqual({ yesLabel: "Over 1.5", noLabel: "Under 1.5" });
+		).toEqual({ yesLabel: "Over 1.5 goals", noLabel: "Under 1.5 goals" });
 	});
 });
 
@@ -112,9 +128,41 @@ describe("propVenueColumnHeaders", () => {
 			displayName: "Total Goals 2.5",
 		} as PredictionMarket;
 		expect(propVenueColumnHeaders(total, teamMappings)).toEqual({
-			teamA: "Over 2.5",
-			teamB: "Under 2.5",
+			teamA: "Over 2.5 goals",
+			teamB: "Under 2.5 goals",
 		});
+	});
+});
+
+describe("allOddsOutcomeDisplayLabel", () => {
+	it("shows only the signed line for spread rows on mobile when a flag is present", () => {
+		expect(
+			allOddsOutcomeDisplayLabel("Mexico -1.5", teamMappings, true, {
+				marketType: "spread",
+				logoUrl: "https://flag.test/mex.png",
+			}),
+		).toBe("-1.5");
+	});
+
+	it("keeps full spread label on desktop", () => {
+		expect(allOddsOutcomeDisplayLabel("Mexico -1.5", teamMappings, false)).toBe("Mexico -1.5");
+	});
+
+	it("preserves total labels with goals on mobile using O/U shorthand", () => {
+		expect(compactAllOddsTotalLabel("Over 2.5 goals")).toBe("O 2.5 goals");
+		expect(compactAllOddsTotalLabel("Under 0.5 goals")).toBe("U 0.5 goals");
+		expect(
+			allOddsOutcomeDisplayLabel("Over 2.5 goals", teamMappings, true, {
+				marketType: "total",
+			}),
+		).toBe("O 2.5 goals");
+	});
+});
+
+describe("spreadSignedLineFromLabel", () => {
+	it("extracts signed handicaps", () => {
+		expect(spreadSignedLineFromLabel("Mexico -1.5")).toBe("-1.5");
+		expect(spreadSignedLineFromLabel("South Africa +1.5")).toBe("+1.5");
 	});
 });
 

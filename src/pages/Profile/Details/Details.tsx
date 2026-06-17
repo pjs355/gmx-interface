@@ -3,11 +3,7 @@ import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMedia } from "react-use";
 import { userService, type EmailPreferences, type UserProfile } from "@/services/api/userService";
-import { useOddsDisplay } from "@/context/OddsDisplayContext";
-import {
-	parseOddsDisplayStyle,
-	ODDS_DISPLAY_SELECT_OPTIONS,
-} from "@/features/odds-display/oddsDisplayFormat";
+import OddsDisplaySelect from "@/components/OddsDisplaySelect/OddsDisplaySelect";
 import { useAccountData } from "@/context/AccountDataContext";
 import { tradingQueryKeys } from "@/features/trading/queryKeys";
 import DflowProofSection from "./DflowProofSection";
@@ -41,7 +37,6 @@ export default function Details() {
 	const [isSavingPreferences, setIsSavingPreferences] = useState(false);
 	const [preferencesSaved, setPreferencesSaved] = useState(false);
 	const [emailPrefsExpanded, setEmailPrefsExpanded] = useState(false);
-	const { oddsDisplayStyle, setOddsDisplayStyle } = useOddsDisplay();
 
 	// Sync the editor's email-preferences state whenever the canonical
 	// profile changes (login, refetch after save, etc.).
@@ -308,18 +303,7 @@ export default function Details() {
 			<div className="Details-odds-display-section">
 				<div className="Details-odds-display-block">
 					<div className="Details-username-label">Odds display</div>
-					<select
-						value={oddsDisplayStyle}
-						onChange={(e) => setOddsDisplayStyle(parseOddsDisplayStyle(e.target.value))}
-						className="Details-odds-select"
-						aria-label="Odds display format"
-					>
-						{ODDS_DISPLAY_SELECT_OPTIONS.map((o) => (
-							<option key={o.value} value={o.value}>
-								{o.label}
-							</option>
-						))}
-					</select>
+					<OddsDisplaySelect />
 				</div>
 			</div>
 

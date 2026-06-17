@@ -153,15 +153,23 @@
 
 @media (max-width: 720px) {
 	.market-section-accordion__header {
-		flex-wrap: wrap;
-		gap: 16px;
+		flex-wrap: nowrap;
+		gap: 8px;
 		padding: 10px 12px;
 	}
 
 	.market-section-accordion__chevron {
 		position: absolute;
-		right: 12px;
+		right: 8px;
 		top: 10px;
+		width: 22px;
+		height: 22px;
+		margin-left: 0;
+
+		svg {
+			width: 14px;
+			height: 14px;
+		}
 	}
 
 	.market-section-accordion__section {

@@ -231,6 +231,17 @@ export function AppHeaderLinks({
 				)}
 				<div className="App-header-link-container">
 					<HeaderLink
+						qa="all-odds"
+						to="/all-odds"
+						showRedirectModal={showRedirectModal}
+						onClick={small ? clickCloseIcon : undefined}
+						isActive={(_match: any, location: any) => location.pathname === "/all-odds"}
+					>
+						All Odds
+					</HeaderLink>
+				</div>
+				<div className="App-header-link-container">
+					<HeaderLink
 						qa="about"
 						to="/about"
 						showRedirectModal={showRedirectModal}

@@ -2,7 +2,7 @@ const HOME_GAME_FILTER_KEY = "homeGameFilter";
 const HOME_PENDING_GAME_FILTER_KEY = "homePendingGameFilter";
 const HOME_PENDING_WORLD_CUP_SECTION_KEY = "homePendingWorldCupSection";
 
-export type HomeWorldCupSection = "games" | "groups";
+export type HomeWorldCupSection = "games" | "groups" | "futures" | "awards";
 
 export function getHomeGameFilter(): string | null {
 	try {

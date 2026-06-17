@@ -4,19 +4,33 @@ import type { Tag } from "@/services/api/tagService";
 import { getHomeGameFilter } from "./gameFilterNavigation";
 import { normalizeEventDateInput, resolveUmbrellaEventDate } from "./eventDates";
 import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
+import { worldCupSectionForUmbrella, worldCupMultiLegSortKey } from "@/features/markets/listing/multiLegMarket";
+
+export { worldCupMultiLegSortKey };
 
 export const LIVE_PILL_ID = "__LIVE__";
 export const STARTING_SOON_PILL_ID = "__STARTING_SOON__";
 /**
  * Synthetic pill for FIFA World Cup (Polymarket-sourced soccer). Like `LIVE` /
  * `STARTING_SOON` it is not backed by a `/tags` Tag — FIFA umbrellas carry no
- * tagIds — so it is matched structurally via {@link isWorldCupUmbrella}. Dev-only:
- * hidden in restricted production mode, where the non-CS pool is already stripped.
+ * tagIds — so it is matched structurally via {@link isWorldCupUmbrella}. World
+ * Cup markets also appear in All / Live / Starting Soon alongside esports.
  */
 export const WORLD_CUP_PILL_ID = "__WORLD_CUP__";
 
 /** Canonical `Umbrella.game` slug set by the FIFA Polymarket create plan. */
 export const WORLD_CUP_GAME_SLUG = "soccer-fifwc";
+
+/** MLB umbrellas are hidden from listing surfaces until mapping is stable. */
+export function isMlbGameSlug(game: string | null | undefined): boolean {
+	const slug = typeof game === "string" ? game.trim().toLowerCase() : "";
+	return slug === "mlb" || slug.startsWith("mlb");
+}
+
+/** True for MLB umbrellas (hidden from home / all-odds until mapping improves). */
+export function isMlbUmbrella(umbrella: Umbrella | { game?: string } | null | undefined): boolean {
+	return isMlbGameSlug((umbrella as { game?: string } | null | undefined)?.game);
+}
 
 /** True for FIFA World Cup umbrellas (Polymarket 3-way moneyline mirror markets). */
 export function isWorldCupUmbrella(umbrella: Umbrella | null | undefined): boolean {
@@ -24,28 +38,11 @@ export function isWorldCupUmbrella(umbrella: Umbrella | null | undefined): boole
 }
 
 /**
- * True for a FIFA World Cup "Group X Winner" prop umbrella: its children are
- * binary winner legs (`marketType: "winner"`, `segment: "group_*"`). The other
- * World Cup umbrellas are the 3-way moneyline matches ("Games"). Used to split
- * the World Cup view into Games vs Props sub-sections.
+ * True for a FIFA World Cup "Group X Winner" prop umbrella.
+ * @deprecated Prefer worldCupSectionForUmbrella(umbrella) === "groups"
  */
 export function isWorldCupPropUmbrella(umbrella: Umbrella | null | undefined): boolean {
-	if (!isWorldCupUmbrella(umbrella)) return false;
-	const children = (
-		umbrella as { children?: Array<{ marketType?: unknown; segment?: unknown }> } | null | undefined
-	)?.children;
-	if (!Array.isArray(children) || children.length === 0) return false;
-	let count = 0;
-	for (const child of children) {
-		if (
-			child?.marketType === "winner" &&
-			typeof child?.segment === "string" &&
-			child.segment.startsWith("group_")
-		) {
-			count += 1;
-		}
-	}
-	return count >= 2;
+	return worldCupSectionForUmbrella(umbrella) === "groups";
 }
 
 /** Sort key for World Cup group-winner umbrellas (`group_a` … `group_l`). */
@@ -229,6 +226,26 @@ export function umbrellaHasEsportsChildTag(
 	});
 }
 
+/** Esports-tagged umbrellas plus FIFA World Cup (no tagIds on WC children). */
+export function isHomeEsportsCatalogUmbrella(
+	umbrella: Umbrella,
+	esportsTagId: string | undefined,
+): boolean {
+	if (isWorldCupUmbrella(umbrella)) return true;
+	return umbrellaHasEsportsChildTag(umbrella, esportsTagId);
+}
+
+/** World Cup match umbrellas and esports — use event-date live / starting-soon windows. */
+export function isHomeEventDatedCatalogUmbrella(
+	umbrella: Umbrella,
+	esportsTagId: string | undefined,
+): boolean {
+	if (isWorldCupUmbrella(umbrella)) {
+		return worldCupSectionForUmbrella(umbrella) === null;
+	}
+	return umbrellaHasEsportsChildTag(umbrella, esportsTagId);
+}
+
 export type UmbrellaChildTagState = {
 	hasEsportsTag: boolean;
 	hasAnyTagId: boolean;
@@ -265,6 +282,9 @@ export function umbrellaMatchesHomeFilterType(
 	filterType: "esports" | "games" | "all",
 	esportsTagId: string | undefined,
 ): boolean {
+	if (isWorldCupUmbrella(umbrella)) {
+		return filterType === "esports" || filterType === "all";
+	}
 	const { hasEsportsTag, hasAnyTagId } = readUmbrellaChildTagState(umbrella, esportsTagId);
 	if (!hasAnyTagId) return false;
 	if (filterType === "games") return !hasEsportsTag;
@@ -277,7 +297,7 @@ export function isUmbrellaLiveByEventDate(
 	nowMs: number,
 	esportsTagId: string | undefined,
 ): boolean {
-	if (!umbrellaHasEsportsChildTag(umbrella, esportsTagId)) return false;
+	if (!isHomeEventDatedCatalogUmbrella(umbrella, esportsTagId)) return false;
 	const eventDate = resolveUmbrellaEventDate(umbrella);
 	if (!eventDate) return false;
 	const eventMs = eventDate.getTime();
@@ -289,7 +309,7 @@ export function isUmbrellaStartingSoonByEventDate(
 	nowMs: number,
 	esportsTagId: string | undefined,
 ): boolean {
-	if (!umbrellaHasEsportsChildTag(umbrella, esportsTagId)) return false;
+	if (!isHomeEventDatedCatalogUmbrella(umbrella, esportsTagId)) return false;
 	const eventDate = resolveUmbrellaEventDate(umbrella);
 	if (!eventDate) return false;
 	const eventMs = eventDate.getTime();
@@ -305,7 +325,7 @@ export function isUmbrellaEndedForHomeCatalog(
 	nowMs: number,
 	esportsTagId: string | undefined,
 ): boolean {
-	if (umbrellaHasEsportsChildTag(umbrella, esportsTagId)) {
+	if (isHomeEventDatedCatalogUmbrella(umbrella, esportsTagId)) {
 		const eventDate = resolveUmbrellaEventDate(umbrella);
 		if (eventDate === null) {
 			return false;

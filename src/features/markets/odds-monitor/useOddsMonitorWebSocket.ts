@@ -14,6 +14,9 @@ import {
 } from "@/features/trading/venues/limitless/trade/limitlessConsoleDebug";
 import { isPredictionPricingDebugEnabled } from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { disposeWebSocket } from "@/shared/async/disposeWebSocket";
+import { teamToOrderbookData, type VenuePriceSnapshotWire } from "@/features/all-odds/venueSnapshotMerge";
+
+type VenuePriceSnapshot = VenuePriceSnapshotWire;
 
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -167,43 +170,6 @@ function apiItemToMatchedMarket(
 		limitlessPriceB: null,
 		levelUpPriceA: null,
 		levelUpPriceB: null,
-	};
-}
-
-// ── Venue-prices WS → price merge ──────────────────────────────────
-
-interface VenuePriceTeam {
-	bestBid: number | null;
-	bestAsk: number | null;
-	bids?: { price: number; size: number }[];
-	asks?: { price: number; size: number }[];
-	bidLevels?: number;
-	askLevels?: number;
-	totalBidLiquidity?: number;
-	totalAskLiquidity?: number;
-}
-
-interface VenuePriceSnapshot {
-	pandaMatchId: string;
-	venue: string;
-	teamA: VenuePriceTeam;
-	teamB: VenuePriceTeam;
-	timestamp: number;
-	status?: SnapshotStatus;
-}
-
-function teamToOrderbookData(team: VenuePriceTeam, snapshotStatus?: SnapshotStatus): OrderbookData {
-	return {
-		bestBid: team.bestBid,
-		bestAsk: team.bestAsk,
-		bids: team.bids,
-		asks: team.asks,
-		bidLevels: team.bidLevels,
-		askLevels: team.askLevels,
-		totalBidLiquidity: team.totalBidLiquidity,
-		totalAskLiquidity: team.totalAskLiquidity,
-		lastUpdated: Date.now(),
-		snapshotStatus,
 	};
 }
 

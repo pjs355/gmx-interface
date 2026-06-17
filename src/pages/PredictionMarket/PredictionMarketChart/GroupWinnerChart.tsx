@@ -13,10 +13,10 @@ import {
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import type { UmbrellaTeamMapping } from "@/services/api/umbrellaDataService";
 import {
-	groupWinnerLegColor,
-	groupWinnerLegLabel,
-	orderGroupWinnerLegs,
-} from "@/features/markets/listing/groupWinner";
+	multiLegLegColor,
+	multiLegLegLabel,
+	resolveTopN,
+} from "@/features/markets/listing/multiLegMarket";
 import { getChartStrokeColorForDarkBg } from "@/features/markets/presentation/teamColors";
 import { BRAND_NAME, clutchCometLogo } from "@/assets/brandLogo";
 import type { TimeRange } from "./types";
@@ -34,6 +34,8 @@ export interface GroupWinnerChartProps {
 	gameTeamColorBySlug?: Record<string, string> | null;
 	/** Group title for the header, e.g. "Group A Winner". */
 	title?: string;
+	/** Limit chart lines (futures/awards show top 3 by YES). */
+	chartTopN?: number | "all";
 	className?: string;
 }
 
@@ -114,17 +116,21 @@ const GroupWinnerChartComponent: React.FC<GroupWinnerChartProps> = ({
 	teamMappings,
 	gameTeamColorBySlug,
 	title,
+	chartTopN = "all",
 	className = "",
 }) => {
 	const isTradingMobileLayout = useMedia("(max-width: 1100px)");
 	const chartHeight = isTradingMobileLayout ? CHART_HEIGHT_MOBILE_LAYOUT : CHART_HEIGHT_DESKTOP;
 	const [timeRange, setTimeRange] = useState<TimeRange>("1d");
 
-	const ordered = useMemo(() => orderGroupWinnerLegs(legs), [legs]);
+	const chartLegs = useMemo(
+		() => legs.slice(0, resolveTopN(chartTopN, legs.length)),
+		[legs, chartTopN],
+	);
 
 	const legInputs = useMemo<GroupWinnerLegInput[]>(
 		() =>
-			ordered.map((leg, index) => {
+			chartLegs.map((leg, index) => {
 				const key =
 					(typeof leg.polymarketMarketId === "string" && leg.polymarketMarketId.trim()) ||
 					(typeof leg.conditionId === "string" && leg.conditionId.trim()) ||
@@ -137,14 +143,14 @@ const GroupWinnerChartComponent: React.FC<GroupWinnerChartProps> = ({
 					conditionId: typeof leg.conditionId === "string" ? leg.conditionId : undefined,
 					polymarketMarketId:
 						typeof leg.polymarketMarketId === "string" ? leg.polymarketMarketId : undefined,
-					label: groupWinnerLegLabel(leg),
+					label: multiLegLegLabel(leg),
 					color: getChartStrokeColorForDarkBg(
-						groupWinnerLegColor(leg, index, teamMappings, gameTeamColorBySlug),
+						multiLegLegColor(leg, index, teamMappings, gameTeamColorBySlug),
 					),
 					flagUrl: flag,
 				};
 			}),
-		[ordered, teamMappings, gameTeamColorBySlug],
+		[chartLegs, teamMappings, gameTeamColorBySlug],
 	);
 
 	const { data, teams, loading, error } = useGroupWinnerChartData(legInputs, timeRange);

@@ -10,6 +10,7 @@ import { resolveHomeMatchWinnerQuestion } from "@/features/markets/presentation/
 import GameLinks from "./components/GameLinks";
 import {
 	gameFilterResetSelection,
+	isMlbUmbrella,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
 	LIVE_PILL_ID,
@@ -65,6 +66,7 @@ export default function Predictions() {
 	const filteredUmbrellas = useMemo(() => {
 		// First filter out inactive umbrellas
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
+			if (isMlbUmbrella(umbrella)) return false;
 			return (umbrella as any).active === true;
 		});
 

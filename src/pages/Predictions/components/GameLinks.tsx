@@ -1,4 +1,5 @@
 import React from "react";
+import { useMedia } from "react-use";
 import { FiChevronDown, FiChevronRight, FiClock } from "react-icons/fi";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import { usePredictionData } from "context/PredictionDataContext";
@@ -20,6 +21,7 @@ import {
 	findEsportsTag,
 	isEsportsMetaTagLabel,
 	isHiddenSidebarTagLabel,
+	isMlbUmbrella,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
 	isWorldCupUmbrella,
@@ -28,6 +30,7 @@ import {
 	umbrellaHasTagId,
 	umbrellaMatchesHomeFilterType,
 	WORLD_CUP_PILL_ID,
+	GAME_FILTER_COMPACT_MEDIA,
 	useNowTick,
 } from "../utils/gameLinkFilters";
 
@@ -38,7 +41,7 @@ function resolveTagLinkLogo(tag: Tag): string | null {
 	return resolveLogoByTags([tag.label]);
 }
 
-export type WorldCupSection = "games" | "groups";
+export type WorldCupSection = "games" | "groups" | "futures" | "awards";
 
 interface GameLinksProps {
 	selectedGame: string | null;
@@ -50,7 +53,7 @@ interface GameLinksProps {
 	disableFilterToggle?: boolean;
 	worldCupSection?: WorldCupSection;
 	onWorldCupSectionSelect?: (section: WorldCupSection) => void;
-	worldCupSectionCounts?: { games: number; groups: number };
+	worldCupSectionCounts?: { games: number; groups: number; futures: number; awards: number };
 }
 
 function sortTagsForSidebar(tags: Tag[]): Tag[] {
@@ -70,10 +73,11 @@ export default function GameLinks({
 	disableFilterToggle = false,
 	worldCupSection = "games",
 	onWorldCupSectionSelect,
-	worldCupSectionCounts = { games: 0, groups: 0 },
+	worldCupSectionCounts = { games: 0, groups: 0, futures: 0, awards: 0 },
 }: GameLinksProps) {
 	const { tags, tagsLoading } = usePredictionData();
 	const now = useNowTick(60_000);
+	const isCompactLayout = useMedia(GAME_FILTER_COMPACT_MEDIA);
 
 	const worldCupActive = selectedGame === WORLD_CUP_PILL_ID;
 	const [worldCupExpanded, setWorldCupExpanded] = React.useState(worldCupActive);
@@ -112,6 +116,7 @@ export default function GameLinks({
 		}
 
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
+			if (isMlbUmbrella(umbrella)) return false;
 			if (restrictedMode && !isRestrictedProductionUmbrella(umbrella as any)) {
 				return false;
 			}
@@ -291,8 +296,73 @@ export default function GameLinks({
 		onWorldCupSectionSelect?.(section);
 	};
 
+	const handleWorldCupParentClick = () => {
+		selectPill(WORLD_CUP_PILL_ID);
+		if (!worldCupActive) {
+			onWorldCupSectionSelect?.("games");
+		}
+	};
+
+	const renderWorldCupSectionButton = (
+		section: WorldCupSection,
+		label: string,
+		count: number,
+		className = "game-link game-link--sub",
+	) => (
+		<button
+			type="button"
+			className={`${className} ${worldCupActive && worldCupSection === section ? "active" : ""}`}
+			key={section}
+			onClick={() => handleWorldCupSectionClick(section)}
+		>
+			<span className="game-link__inner">
+				<span className="game-link__leading">
+					<span className="game-link__label">{label}</span>
+				</span>
+				<span className="game-link__count" aria-label={`${count} markets`}>
+					{count}
+				</span>
+			</span>
+		</button>
+	);
+
+	const renderWorldCupSubSections = (className = "game-link game-link--sub") => (
+		<>
+			{renderWorldCupSectionButton("games", "Games", worldCupSectionCounts.games, className)}
+			{renderWorldCupSectionButton("groups", "Groups", worldCupSectionCounts.groups, className)}
+			{renderWorldCupSectionButton("futures", "Futures", worldCupSectionCounts.futures, className)}
+			{renderWorldCupSectionButton("awards", "Awards", worldCupSectionCounts.awards, className)}
+		</>
+	);
+
 	const renderWorldCupBlock = () => {
 		if (worldCupMarketCount <= 0) return null;
+
+		if (isCompactLayout) {
+			return (
+				<button
+					type="button"
+					className={`game-link ${worldCupActive ? "active" : ""}`}
+					key={WORLD_CUP_PILL_ID}
+					onClick={handleWorldCupParentClick}
+				>
+					<span className="game-link__inner">
+						<span className="game-link__leading">
+							<img
+								className="game-link__logo game-link__logo--world-cup"
+								src={WORLD_CUP_GAME_LOGO_URL}
+								alt=""
+								aria-hidden
+							/>
+							<span className="game-link__label">World Cup</span>
+						</span>
+						<span className="game-link__count" aria-label={`${worldCupMarketCount} markets`}>
+							{worldCupMarketCount}
+						</span>
+					</span>
+				</button>
+			);
+		}
 
 		const CaretIcon = worldCupExpanded ? FiChevronDown : FiChevronRight;
 
@@ -345,47 +415,24 @@ export default function GameLinks({
 						role="group"
 						aria-label="World Cup sections"
 					>
-						<button
-							type="button"
-							className={`game-link game-link--sub ${
-								worldCupActive && worldCupSection === "games" ? "active" : ""
-							}`}
-							onClick={() => handleWorldCupSectionClick("games")}
-						>
-							<span className="game-link__inner">
-								<span className="game-link__leading">
-									<span className="game-link__label">Games</span>
-								</span>
-								<span
-									className="game-link__count"
-									aria-label={`${worldCupSectionCounts.games} markets`}
-								>
-									{worldCupSectionCounts.games}
-								</span>
-							</span>
-						</button>
-						<button
-							type="button"
-							className={`game-link game-link--sub ${
-								worldCupActive && worldCupSection === "groups" ? "active" : ""
-							}`}
-							onClick={() => handleWorldCupSectionClick("groups")}
-						>
-							<span className="game-link__inner">
-								<span className="game-link__leading">
-									<span className="game-link__label">Groups</span>
-								</span>
-								<span
-									className="game-link__count"
-									aria-label={`${worldCupSectionCounts.groups} markets`}
-								>
-									{worldCupSectionCounts.groups}
-								</span>
-							</span>
-						</button>
+						{renderWorldCupSubSections()}
 					</div>
 				) : null}
 			</div>
+		);
+	};
+
+	const renderWorldCupSubRow = () => {
+		if (!isCompactLayout || !worldCupActive || worldCupMarketCount <= 0) return null;
+
+		return (
+			<nav
+				className="game-links-sub-row game-links-scroll"
+				aria-label="World Cup sections"
+				role="group"
+			>
+				{renderWorldCupSubSections("game-link game-link--sub-pill")}
+			</nav>
 		);
 	};
 
@@ -453,6 +500,7 @@ export default function GameLinks({
 					</button>
 				)}
 			</div>
+			{renderWorldCupSubRow()}
 		</div>
 	);
 }

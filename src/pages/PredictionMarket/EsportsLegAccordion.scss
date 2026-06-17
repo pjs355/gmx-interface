@@ -3,6 +3,89 @@
 
 @use "./MarketSectionAccordion.scss" as *;
 
+.esports-leg-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex: 1 1 auto;
+	min-width: 0;
+	margin-right: auto;
+
+	&__leading {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+
+	&__logo {
+		width: 22px;
+		height: 22px;
+		flex-shrink: 0;
+		object-fit: cover;
+		border-radius: 50%;
+	}
+
+	&__dot {
+		width: 10px;
+		height: 10px;
+		flex-shrink: 0;
+		border-radius: 50%;
+	}
+
+	&__label {
+		font-size: 15px;
+		font-weight: 700;
+		line-height: 1.2;
+		color: #ffffff;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__pills {
+		display: flex;
+		flex-shrink: 0;
+		gap: 6px;
+		margin-left: auto;
+	}
+}
+
+.esports-leg-pill {
+	flex: 0 0 auto;
+	min-width: 112px;
+	max-width: 168px;
+	min-height: 36px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 12px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1;
+	white-space: nowrap;
+	cursor: pointer;
+	transition:
+		opacity 0.12s ease,
+		transform 0.06s ease,
+		border-color 0.12s ease;
+
+	&:focus-visible {
+		outline: 2px solid rgba(255, 255, 255, 0.55);
+		outline-offset: 2px;
+	}
+
+	&:active {
+		transform: translateY(1px);
+	}
+}
+
 .esports-leg-accordion {
 	.market-section-accordion__header {
 		// Esports headers: label left, pills right before chevron.

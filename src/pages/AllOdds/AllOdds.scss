@@ -1,0 +1,516 @@
+.all-odds-page {
+	padding: 24px 20px 48px;
+	max-width: 100%;
+	color: var(--text-primary, #fff);
+	box-sizing: border-box;
+}
+
+.all-odds-page-header h1 {
+	font-size: 1.75rem;
+	font-weight: 700;
+	margin: 0 0 8px;
+}
+
+.all-odds-page-header p {
+	margin: 0 0 20px;
+	color: rgba(255, 255, 255, 0.65);
+	max-width: 720px;
+	line-height: 1.5;
+}
+
+.all-odds-banner {
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.06);
+	margin-bottom: 16px;
+}
+
+.all-odds-banner--error {
+	background: rgba(239, 68, 68, 0.15);
+	color: #fecaca;
+}
+
+.all-odds-matrix {
+	--all-odds-markets-col: 10rem;
+	--all-odds-venue-col: 4.75rem;
+	--all-odds-venue-count: 9;
+	--all-odds-table-min-width: calc(
+		var(--all-odds-markets-col) + var(--all-odds-venue-col) * var(--all-odds-venue-count)
+	);
+	width: 100%;
+	padding-top: 0;
+}
+
+.all-odds-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+	margin-bottom: 12px;
+}
+
+.all-odds-search {
+	min-width: 220px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	background: rgba(0, 0, 0, 0.25);
+	color: inherit;
+}
+
+.all-odds-sport-select {
+	padding: 8px 10px;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	background: rgba(0, 0, 0, 0.25);
+	color: inherit;
+}
+
+.all-odds-fees-toggle {
+	display: inline-flex;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.all-odds-fees-toggle__btn {
+	padding: 8px 12px;
+	border: none;
+	background: rgba(0, 0, 0, 0.25);
+	color: rgba(255, 255, 255, 0.65);
+	font-size: inherit;
+	font-family: inherit;
+	cursor: pointer;
+	transition:
+		background 0.12s ease,
+		color 0.12s ease;
+
+	&:not(:last-child) {
+		border-right: 1px solid rgba(255, 255, 255, 0.15);
+	}
+
+	&:hover {
+		color: rgba(255, 255, 255, 0.9);
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	&--active {
+		background: rgba(255, 255, 255, 0.12);
+		color: #fff;
+	}
+}
+
+.all-odds-scroll-shell {
+	width: 100%;
+	border: 1px solid #4b5563;
+	border-radius: 6px;
+	background: #000;
+}
+
+.all-odds-group-scroll-x {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	width: 100%;
+}
+
+.all-odds-group-scroll-x .all-odds-table {
+	min-width: var(--all-odds-table-min-width);
+	width: 100%;
+}
+
+.all-odds-group-list {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	background: #000;
+	border-radius: 0 0 6px 6px;
+}
+
+.all-odds-group-card {
+	border-bottom: 1px solid #4b5563;
+	width: 100%;
+}
+
+.all-odds-group-card .all-odds-table--body {
+	width: 100%;
+}
+
+.all-odds-group-card:last-child {
+	border-bottom: none;
+}
+
+.all-odds-group-card__title {
+	margin: 0;
+	padding: 12px 14px;
+	font-size: 0.95rem;
+	font-weight: 700;
+	color: #fff;
+	border-bottom: 1px solid #4b5563;
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.all-odds-group-card__start {
+	margin-left: 0.5rem;
+	font-weight: 400;
+	font-size: 0.85em;
+	color: #9ca3af;
+}
+
+.all-odds-table {
+	width: 100%;
+	table-layout: fixed;
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+
+.all-odds-col-markets {
+	width: var(--all-odds-markets-col);
+}
+
+/* Venue cols with no width share remaining table width equally (desktop). */
+.all-odds-col-venue {
+	width: auto;
+}
+
+.all-odds-table--head {
+	margin-bottom: 0;
+}
+
+.all-odds-table--body {
+	border-collapse: collapse;
+}
+
+.all-odds-th-markets {
+	width: var(--all-odds-markets-col);
+	text-align: left !important;
+	padding-left: 12px !important;
+}
+
+.all-odds-th-venue {
+	padding-left: 4px !important;
+	padding-right: 4px !important;
+}
+
+.all-odds-outcome-label {
+	text-align: left !important;
+	overflow: hidden;
+	padding: 8px 0 !important;
+	vertical-align: middle;
+}
+
+.all-odds-outcome-label-inner {
+	padding-left: 12px;
+	padding-right: 8px;
+}
+
+.all-odds-outcome-label--indented .all-odds-outcome-label-inner {
+	padding-left: 20px;
+}
+
+.all-odds-team-logo {
+	width: 18px;
+	height: 18px;
+	object-fit: contain;
+	flex-shrink: 0;
+}
+
+.all-odds-venue-head {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	font-size: 0.875rem;
+	line-height: 1.2;
+	width: 100%;
+}
+
+.all-odds-venue-label {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.all-odds-odds-cell {
+	padding: 0 !important;
+
+	&.esports-venue-books__td--num:not(.esports-venue-books__td--empty):not(.esports-venue-books__td--status) {
+		color: #fff;
+	}
+
+	&.esports-venue-books__td--best {
+		color: #22c55e !important;
+		font-weight: 700;
+	}
+}
+
+.all-odds-odds-link {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	min-height: 2.25rem;
+	padding: 8px 4px;
+	color: inherit !important;
+	text-decoration: none;
+	box-sizing: border-box;
+	transition: background 0.12s ease;
+}
+
+.all-odds-outcome-row .esports-venue-books__num-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	min-height: 2.25rem;
+	padding: 8px 4px;
+	box-sizing: border-box;
+}
+
+.all-odds-odds-link:hover {
+	background: rgba(255, 255, 255, 0.08);
+	color: inherit !important;
+}
+
+.all-odds-odds-link:focus-visible {
+	outline: 2px solid rgba(96, 165, 250, 0.85);
+	outline-offset: -2px;
+}
+
+.all-odds-more-toggle-row th {
+	background: rgba(255, 255, 255, 0.02);
+	padding: 0;
+}
+
+.all-odds-more-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 8px 12px;
+	border: none;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.75);
+	font-size: 0.875rem;
+	font-weight: 600;
+	cursor: pointer;
+	text-align: left;
+}
+
+.all-odds-more-toggle:hover {
+	background: rgba(255, 255, 255, 0.04);
+	color: #fff;
+}
+
+.all-odds-more-caret {
+	display: inline-block;
+	font-size: 1.1rem;
+	line-height: 1;
+	transform: rotate(90deg);
+	transition: transform 0.15s ease;
+}
+
+.all-odds-more-caret--open {
+	transform: rotate(-90deg);
+}
+
+.all-odds-section-header th {
+	background: rgba(255, 255, 255, 0.03);
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.55);
+	text-align: left;
+	padding: 6px 12px 6px 20px;
+}
+
+.all-odds-empty {
+	padding: 24px;
+	text-align: center;
+	color: rgba(255, 255, 255, 0.55);
+	border: 1px solid #4b5563;
+	border-radius: 6px;
+	background: #000;
+}
+
+.all-odds-empty--error {
+	color: #fecaca;
+	border-color: rgba(239, 68, 68, 0.35);
+	background: rgba(239, 68, 68, 0.08);
+}
+
+.all-odds-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 16px;
+	margin-top: 16px;
+}
+
+.all-odds-pagination button {
+	min-height: 44px;
+	min-width: 88px;
+	padding: 8px 16px;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	background: rgba(0, 0, 0, 0.35);
+	color: inherit;
+	cursor: pointer;
+}
+
+.all-odds-pagination button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.all-odds-pagination span {
+	font-size: 0.875rem;
+	opacity: 0.75;
+}
+
+@media (max-width: 1100px) {
+	.all-odds-page {
+		padding: 8px max(4px, env(safe-area-inset-right)) 32px max(4px, env(safe-area-inset-left));
+	}
+
+	.all-odds-page-header h1 {
+		font-size: 1.125rem;
+		margin-bottom: 4px;
+	}
+
+	.all-odds-page-header p {
+		display: none;
+	}
+
+	.all-odds-matrix.esports-venue-books {
+		padding-top: 0;
+	}
+
+	.all-odds-matrix {
+		--all-odds-markets-col: 5.75rem;
+		--all-odds-venue-col: 3rem;
+	}
+
+	.all-odds-toolbar {
+		gap: 8px;
+	}
+
+	.all-odds-search {
+		min-width: 0;
+		flex: 1 1 100%;
+		min-height: 44px;
+	}
+
+	.all-odds-sport-select {
+		min-height: 40px;
+	}
+
+	.all-odds-fees-toggle__btn {
+		padding: 8px 8px;
+		min-height: 40px;
+	}
+
+	.all-odds-scroll-shell {
+		margin-inline: calc(-1 * max(4px, env(safe-area-inset-left)));
+		width: calc(100% + 2 * max(4px, env(safe-area-inset-left)));
+		border-radius: 0;
+		border-inline: none;
+		overflow: visible;
+	}
+
+	.all-odds-scroll-shell::after {
+		display: none;
+	}
+
+	.all-odds-col-venue {
+		width: var(--all-odds-venue-col);
+	}
+
+	.all-odds-matrix .esports-venue-books__th,
+	.all-odds-matrix .esports-venue-books__td {
+		padding: 6px 3px;
+		border-color: rgba(75, 85, 99, 0.6);
+	}
+
+	.all-odds-matrix thead .esports-venue-books__th {
+		font-size: 0.8125rem;
+	}
+
+	.all-odds-th-markets {
+		padding-left: 8px !important;
+	}
+
+	.all-odds-th-venue {
+		padding-left: 2px !important;
+		padding-right: 2px !important;
+	}
+
+	.all-odds-venue-head {
+		gap: 0;
+		font-size: 0;
+	}
+
+	.all-odds-venue-label {
+		display: none;
+	}
+
+	.all-odds-venue-head .esports-venue-books__market-logo {
+		width: 20px;
+		height: 20px;
+	}
+
+	.all-odds-team-logo {
+		width: 20px;
+		height: 20px;
+	}
+
+	.all-odds-outcome-label {
+		overflow: visible;
+	}
+
+	.all-odds-outcome-label-inner {
+		padding-left: 8px;
+		padding-right: 6px;
+		justify-content: flex-start;
+		gap: 6px;
+	}
+
+	.all-odds-outcome-label-inner span {
+		font-size: 0.8125rem;
+		line-height: 1.2;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
+	}
+
+	.all-odds-outcome-row .esports-venue-books__num-cell,
+	.all-odds-odds-link {
+		min-height: 2.75rem;
+		padding: 6px 3px;
+		font-size: 0.8125rem;
+	}
+
+	.all-odds-group-card__title {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 6px 6px;
+		font-size: 0.8125rem;
+	}
+
+	.all-odds-group-card__start {
+		margin-left: 0;
+		font-size: 0.75rem;
+	}
+
+	.all-odds-pagination {
+		gap: 12px;
+	}
+
+	.all-odds-pagination span {
+		font-size: 0.8125rem;
+	}
+}

@@ -60,9 +60,9 @@ export const EVENT_START_COUNTDOWN_THRESHOLD_MS = 24 * 60 * 60 * 1000;
  * Kickoff / start time in the viewer's local timezone, e.g. "June 11 3:00pm".
  * Uses Intl formatToParts so month/day/time stay consistent (no UTC drift).
  */
-export function formatEventStartDisplay(date: Date): string {
+export function formatEventStartDisplay(date: Date, opts?: { compact?: boolean }): string {
 	const formatter = new Intl.DateTimeFormat("en-US", {
-		month: "long",
+		month: opts?.compact ? "short" : "long",
 		day: "numeric",
 		hour: "numeric",
 		minute: "2-digit",
@@ -76,6 +76,9 @@ export function formatEventStartDisplay(date: Date): string {
 	const hour = part("hour");
 	const minute = part("minute");
 	const dayPeriod = part("dayPeriod").toLowerCase();
+	if (opts?.compact) {
+		return `${month} ${day} · ${hour}:${minute}${dayPeriod.charAt(0)}`;
+	}
 	return `${month} ${day} ${hour}:${minute}${dayPeriod}`;
 }
 

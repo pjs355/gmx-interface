@@ -22,16 +22,19 @@ import {
 	isEsportsMetaTagLabel,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
-	isWorldCupPropUmbrella,
+	isMlbUmbrella,
 	isWorldCupUmbrella,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
 	umbrellaHasTradeableHomeChildren,
+	umbrellaMatchesHomeFilterType,
 	umbrellaVenuePandaIds,
 	worldCupPropGroupSortKey,
+	worldCupMultiLegSortKey,
 	WORLD_CUP_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
+import { worldCupSectionForUmbrella } from "@/features/markets/listing/multiLegMarket";
 import {
 	MAX_VENUE_PANDA_SUBSCRIPTIONS,
 	useVenuePandaSubscription,
@@ -247,7 +250,10 @@ function calendarPageHeadingTitle(
 	if (selectedGame === LIVE_PILL_ID) return "Live";
 	if (selectedGame === STARTING_SOON_PILL_ID) return "Starting Soon";
 	if (selectedGame === WORLD_CUP_PILL_ID) {
-		return worldCupSection === "groups" ? "Groups - World Cup" : "Games - World Cup";
+		if (worldCupSection === "games") return "Games - World Cup";
+		if (worldCupSection === "groups") return "Groups - World Cup";
+		if (worldCupSection === "futures") return "Futures - World Cup";
+		return "Awards - World Cup";
 	}
 	if (!selectedGame || isEsportsMetaTagLabel(selectedGame)) {
 		return DEFAULT_CALENDAR_PAGE_TITLE;
@@ -370,6 +376,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 	const filteredUmbrellas = useMemo(() => {
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
+			if (isMlbUmbrella(umbrella)) return false;
 			// Restricted production mode: hide every non-Counter-Strike
 			// umbrella from the public home list. Applied BEFORE the
 			// active-flag check so the count of esports-with-active-bets
@@ -383,9 +390,6 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		const esportsTag = findEsportsTag(tags);
 		const esportsTagId = esportsTag?._id;
 
-		// FIFA World Cup (Polymarket mirror) is non-esports and carries no tagIds, so it
-		// is excluded from the default esports/all pool. Surface it only when its dev-only
-		// pill is selected (restricted production mode already strips the non-CS pool above).
 		const worldCupPillActive = selectedGame === WORLD_CUP_PILL_ID;
 
 		let filtered = activeUmbrellas.filter((umbrella) => {
@@ -395,23 +399,12 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 			if (worldCupPillActive) {
 				if (!isWorldCupUmbrella(umbrella)) return false;
-				const isProp = isWorldCupPropUmbrella(umbrella);
-				return worldCupSection === "groups" ? isProp : !isProp;
+				const section = worldCupSectionForUmbrella(umbrella);
+				if (worldCupSection === "games") return section === null;
+				return section === worldCupSection;
 			}
 
-			const hasEsportsTag = children.some((q) => {
-				const tagIds: string[] | undefined = (q && (q as any).tagIds) as any;
-				if (!Array.isArray(tagIds) || tagIds.length === 0) {
-					return false;
-				}
-				return esportsTag && tagIds.includes(esportsTag._id);
-			});
-
-			if (filterType === "games") return !hasEsportsTag;
-			if (filterType === "esports" || filterType === "all") {
-				return hasEsportsTag;
-			}
-			return true;
+			return umbrellaMatchesHomeFilterType(umbrella, filterType, esportsTagId);
 		});
 
 		if (selectedGame && selectedGame !== LIVE_PILL_ID && selectedGame !== STARTING_SOON_PILL_ID) {
@@ -454,6 +447,12 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 			);
 		}
 
+		if (worldCupPillActive && (worldCupSection === "futures" || worldCupSection === "awards")) {
+			return [...deduped].sort((a, b) =>
+				worldCupMultiLegSortKey(a).localeCompare(worldCupMultiLegSortKey(b)),
+			);
+		}
+
 		return deduped;
 	}, [umbrellas, filterType, selectedGame, worldCupSection, tags, now, restrictedMode]);
 
@@ -461,13 +460,18 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	const worldCupSectionCounts = useMemo(() => {
 		let games = 0;
 		let groups = 0;
+		let futures = 0;
+		let awards = 0;
 		for (const u of umbrellas) {
 			if ((u as { active?: boolean }).active !== true) continue;
 			if (!isWorldCupUmbrella(u)) continue;
-			if (isWorldCupPropUmbrella(u)) groups += 1;
+			const section = worldCupSectionForUmbrella(u);
+			if (section === "groups") groups += 1;
+			else if (section === "futures") futures += 1;
+			else if (section === "awards") awards += 1;
 			else games += 1;
 		}
-		return { games, groups };
+		return { games, groups, futures, awards };
 	}, [umbrellas]);
 
 	const calendarData = useMemo(() => {

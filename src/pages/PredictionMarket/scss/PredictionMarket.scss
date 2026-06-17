@@ -225,6 +225,12 @@
 	will-change: transform;
 	transform: translateZ(0);
 	backface-visibility: hidden;
+
+	&--peek-hidden {
+		min-height: 0;
+		border-top: none;
+		background: transparent;
+	}
 }
 
 .market-header {

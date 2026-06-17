@@ -6,6 +6,7 @@ import { getPredictionApiBaseUrl } from "@/config/predictionApiBase";
 import { isRestrictedProductionMode } from "@/config/restrictedMode";
 import { resolveUmbrellaBannerById } from "@/features/markets/presentation/umbrellaBanners";
 import { isRestrictedProductionUmbrella } from "@/features/markets/presentation/umbrellaGame";
+import { isMlbUmbrella } from "@/pages/Predictions/utils/gameLinkFilters";
 import "./Search.scss";
 
 type SearchResponse = {
@@ -67,10 +68,11 @@ export function Search({ onSearchActive, searchResults, activeQuery }: SearchPro
 				// returns every game; we filter client-side here so a Dota
 				// search like "mongolz" cannot surface a non-CS2 result.
 				const raw = data.data ?? [];
-				const filtered = isRestrictedProductionMode()
-					? raw.filter((u) => isRestrictedProductionUmbrella(u as any))
-					: raw;
-				setResults(filtered);
+				const filtered = raw.filter((u) => !isMlbUmbrella(u));
+				const visible = isRestrictedProductionMode()
+					? filtered.filter((u) => isRestrictedProductionUmbrella(u as any))
+					: filtered;
+				setResults(visible);
 				setShowDropdown(true);
 			} catch (error) {
 				console.error("error", error);

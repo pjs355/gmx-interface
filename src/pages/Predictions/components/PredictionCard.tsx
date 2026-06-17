@@ -10,13 +10,15 @@ import EventStartStatus from "@/components/EventStartStatus/EventStartStatus";
 import { SingleMarketActions } from "./SingleMarketActions";
 import { MultiMarketActions } from "./MultiMarketActions";
 import { ThreeWayMoneylineActions } from "./ThreeWayMoneylineActions";
-import { GroupWinnerActions } from "./GroupWinnerActions";
+import { MultiLegHomeActions } from "./MultiLegHomeActions";
 import { isThreeWayMoneylineQuestions } from "@/features/markets/listing/threeWayMoneyline";
 import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
 import {
-	groupWinnerGroupLabel,
-	isGroupWinnerQuestions,
-} from "@/features/markets/listing/groupWinner";
+	isMultiLegBinaryUmbrella,
+	multiLegSegmentFromQuestions,
+	multiLegUmbrellaShortTitle,
+	resolveMultiLegLayout,
+} from "@/features/markets/listing/multiLegMarket";
 import { mixpanelTrack } from "@/shared/analytics/mixpanel";
 import type { Umbrella } from "services/api/umbrellaDataService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
@@ -47,6 +49,10 @@ import {
 	resolveEsportsCardGameHeadline,
 	resolveHomeMatchWinnerQuestion,
 } from "@/features/markets/presentation/esportsHomeCard";
+import {
+	isPropOrNonMatchHomeCard,
+	shouldShowHomeCardKickoffSchedule,
+} from "@/features/markets/presentation/homeCardSchedule";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
 
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -203,16 +209,22 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		[multiMarketData, umbrella._id],
 	);
 
-	/** FIFA World Cup "Group X Winner" prop (N team legs, no Draw). Treated like a
-	 * 3-way moneyline for the countdown/status header; headline reads "Group X Winner". */
-	const isGroupWinner = useMemo(
-		() => isGroupWinnerQuestions(multiMarketData[umbrella._id]?.questions),
+	/** FIFA NegRisk multi-outcome umbrella (groups, futures, awards). */
+	const isMultiLeg = useMemo(
+		() => isMultiLegBinaryUmbrella(multiMarketData[umbrella._id]?.questions),
 		[multiMarketData, umbrella._id],
 	);
-	const groupWinnerLabel = useMemo(
-		() => (isGroupWinner ? groupWinnerGroupLabel(multiMarketData[umbrella._id]?.questions) : null),
-		[isGroupWinner, multiMarketData, umbrella._id],
-	);
+	const multiLegLayout = useMemo(() => {
+		const segment = multiLegSegmentFromQuestions(multiMarketData[umbrella._id]?.questions);
+		return segment ? resolveMultiLegLayout(segment) : undefined;
+	}, [multiMarketData, umbrella._id]);
+	const multiLegLabel = useMemo(() => {
+		if (!isMultiLeg) return null;
+		const short = multiLegUmbrellaShortTitle(multiMarketData[umbrella._id]?.questions);
+		if (short === null) return null;
+		const segment = multiLegSegmentFromQuestions(multiMarketData[umbrella._id]?.questions);
+		return segment?.startsWith("group_") ? `${short} Winner` : short;
+	}, [isMultiLeg, multiMarketData, umbrella._id]);
 
 	if (typeof umbrella.displayName !== "string") {
 		throw new Error("umbrella displayName missing");
@@ -367,6 +379,30 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return false;
 	}, [dailyTagId, umbrella]);
 
+	const hasPandascoreMatch =
+		typeof umbrella.pandascore_matchId === "string" && umbrella.pandascore_matchId.length > 0;
+
+	const matchWinnerQuestion = useMemo(
+		() => resolveHomeMatchWinnerQuestion(umbrella, { singleMarketQuestions, multiMarketData }),
+		[umbrella, singleMarketQuestions, multiMarketData],
+	);
+
+	const isPandaEsportsListing = isEsportsUmbrella || hasPandascoreMatch;
+	const useEsportsMatchWinnerCard = isPandaEsportsListing && matchWinnerQuestion !== null;
+
+	const umbrellaQuestions = multiMarketData[umbrella._id]?.questions;
+	const homeCardScheduleInput = useMemo(
+		() => ({
+			isDailyUmbrella,
+			isThreeWayMoneyline,
+			useEsportsMatchWinnerCard,
+			questions: umbrellaQuestions,
+		}),
+		[isDailyUmbrella, isThreeWayMoneyline, useEsportsMatchWinnerCard, umbrellaQuestions],
+	);
+	const isPropHomeCard = isPropOrNonMatchHomeCard(homeCardScheduleInput);
+	const showKickoffSchedule = shouldShowHomeCardKickoffSchedule(homeCardScheduleInput);
+
 	const teamLogos = useMemo(() => {
 		const mappings = umbrella.teamMappings;
 		if (!Array.isArray(mappings)) {
@@ -401,13 +437,13 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return resolved;
 	}, [umbrella.teamMappings, umbrella.game]);
 
-	// Get eventDate for esports, daily, and 3-way moneyline (FIFA) cards
+	// Kickoff time only matters for head-to-head sports matches (and daily windows).
 	const eventDate = useMemo(() => {
-		if (!isEsportsUmbrella && !isDailyUmbrella && !isThreeWayMoneyline && !isGroupWinner) {
-			return null;
+		if (isDailyUmbrella || showKickoffSchedule) {
+			return resolveUmbrellaEventDate(umbrella);
 		}
-		return resolveUmbrellaEventDate(umbrella);
-	}, [isEsportsUmbrella, isDailyUmbrella, isThreeWayMoneyline, isGroupWinner, umbrella]);
+		return null;
+	}, [isDailyUmbrella, showKickoffSchedule, umbrella]);
 
 	const eventDateMs = useMemo(() => {
 		if (eventDate === null) {
@@ -560,17 +596,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		return title || umbrella.displayName;
 	}, [isDailyUmbrella, umbrella.displayName, eventDate]);
 
-	const hasPandascoreMatch =
-		typeof umbrella.pandascore_matchId === "string" && umbrella.pandascore_matchId.length > 0;
-
-	const matchWinnerQuestion = useMemo(
-		() => resolveHomeMatchWinnerQuestion(umbrella, { singleMarketQuestions, multiMarketData }),
-		[umbrella, singleMarketQuestions, multiMarketData],
-	);
-
-	const isPandaEsportsListing = isEsportsUmbrella || hasPandascoreMatch;
-	const useEsportsMatchWinnerCard = isPandaEsportsListing && matchWinnerQuestion !== null;
-
 	// Home cards show only the series moneyline. Map 1/Map 2/... legs are
 	// available on the umbrella detail page (EsportsLegAccordion), but cluttering
 	// every listing card with per-map columns hurts scanability. Filtering to the
@@ -611,11 +636,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		if (isDailyUmbrella && endDate !== null) {
 			return endDate;
 		}
-		if ((isEsportsUmbrella || isThreeWayMoneyline || isGroupWinner) && eventDate !== null) {
+		if (showKickoffSchedule && eventDate !== null) {
 			return eventDate;
 		}
 		return null;
-	}, [isDailyUmbrella, isEsportsUmbrella, isThreeWayMoneyline, isGroupWinner, endDate, eventDate]);
+	}, [isDailyUmbrella, showKickoffSchedule, endDate, eventDate]);
 
 	const countdownDateMs = useMemo(() => {
 		if (countdownDate === null) {
@@ -731,7 +756,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		teamLogos.length >= 2 && (hasPandascoreMatch || teamLogos.some((t) => t.logoUrl !== null));
 
 	const cardHeadline = useMemo(() => {
-		if (isGroupWinner) return groupWinnerLabel ?? "Group Winner";
+		if (isMultiLeg) return multiLegLabel ?? "World Cup";
 		if (isThreeWayMoneyline) return "Money Line";
 		if (isPandaEsportsListing) {
 			return resolveEsportsCardGameHeadline(umbrella, tags);
@@ -756,8 +781,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}
 		return truncateMarketName(umbrella.displayName);
 	}, [
-		isGroupWinner,
-		groupWinnerLabel,
+		isMultiLeg,
+		multiLegLabel,
 		isThreeWayMoneyline,
 		isPandaEsportsListing,
 		isDailyUmbrella,
@@ -867,10 +892,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		} else if (displayChildrenCount >= 2) {
 			// FIFA "Group X Winner" prop: N team legs (no Draw), each its own binary
 			// Polymarket market. Render one YES row per team.
-			if (isGroupWinner) {
+			if (isMultiLeg && multiLegLayout) {
 				return (
-					<GroupWinnerActions
+					<MultiLegHomeActions
 						umbrellaId={umbrella._id}
+						layout={multiLegLayout}
 						teamMappings={umbrella.teamMappings}
 						multiMarketData={multiMarketData}
 						onNavigate={navigateToMultiMarket}
@@ -906,8 +932,8 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 
 	const actionContent = renderActions();
 
-	// Live logic for esports and 3-way moneyline (FIFA), based on eventDate
-	const isEventDriven = isEsportsUmbrella || isThreeWayMoneyline || isGroupWinner;
+	// Live / countdown header only for scheduled head-to-head matches.
+	const isEventDriven = showKickoffSchedule;
 	let isLive = false;
 	if (isEventDriven && eventDateMs !== null) {
 		if (now >= eventDateMs) {
@@ -999,14 +1025,30 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 			onFocus={handleCardPointerIntent}
 			style={{ cursor: "pointer" }}
 		>
-			<div className="prediction-card__top prediction-card__top--split">
+			<div
+				className={`prediction-card__top prediction-card__top--split${
+					isPropHomeCard ? " prediction-card__top--prop-title" : ""
+				}`}
+			>
 				<div className="prediction-card__top-status">
-					{isDailyUmbrella ? <span className="prediction-card__daily-badge">Daily</span> : null}
-					{topLeftStatus}
+					{isPropHomeCard ? (
+						<span className="prediction-card__headline prediction-card__headline--prop">
+							{cardHeadlineContent}
+						</span>
+					) : (
+						<>
+							{isDailyUmbrella ? (
+								<span className="prediction-card__daily-badge">Daily</span>
+							) : null}
+							{topLeftStatus}
+						</>
+					)}
 				</div>
-				<div className="prediction-card__top-headline">
-					<span className="prediction-card__headline">{cardHeadlineContent}</span>
-				</div>
+				{!isPropHomeCard ? (
+					<div className="prediction-card__top-headline">
+						<span className="prediction-card__headline">{cardHeadlineContent}</span>
+					</div>
+				) : null}
 			</div>
 
 			{actionContent ? <div className="prediction-actions">{actionContent}</div> : null}

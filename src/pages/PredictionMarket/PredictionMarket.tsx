@@ -13,11 +13,8 @@ import {
 	setHomePendingWorldCupSection,
 } from "@/pages/Predictions/utils/gameFilterNavigation";
 import type { WorldCupSection } from "@/pages/Predictions/components/GameLinks";
-import {
-	isWorldCupPropUmbrella,
-	isWorldCupUmbrella,
-	WORLD_CUP_PILL_ID,
-} from "@/pages/Predictions/utils/gameLinkFilters";
+import { isWorldCupUmbrella, WORLD_CUP_PILL_ID, isMlbUmbrella } from "@/pages/Predictions/utils/gameLinkFilters";
+import { worldCupSectionForUmbrella } from "@/features/markets/listing/multiLegMarket";
 import { MarketPanels } from "./MarketPanels";
 import { useUmbrellaLiveOrderbooks } from "./useUmbrellaLiveOrderbooks";
 import { useVolumeSortedQuestions } from "./useVolumeSortedQuestions";
@@ -177,9 +174,16 @@ function PredictionMarketContent() {
 		[navigate],
 	);
 
+	useEffect(() => {
+		if (umbrella && isMlbUmbrella(umbrella)) {
+			navigate("/", { replace: true });
+		}
+	}, [umbrella, navigate]);
+
 	const tradingWorldCupSection = useMemo((): WorldCupSection => {
 		if (!umbrella) return "games";
-		if (isWorldCupPropUmbrella(umbrella)) return "groups";
+		const section = worldCupSectionForUmbrella(umbrella);
+		if (section !== null) return section;
 		if (isWorldCupUmbrella(umbrella)) return "games";
 		return "games";
 	}, [umbrella]);
@@ -187,13 +191,18 @@ function PredictionMarketContent() {
 	const tradingWorldCupSectionCounts = useMemo(() => {
 		let games = 0;
 		let groups = 0;
+		let futures = 0;
+		let awards = 0;
 		for (const u of umbrellas) {
 			if ((u as { active?: boolean }).active !== true) continue;
 			if (!isWorldCupUmbrella(u)) continue;
-			if (isWorldCupPropUmbrella(u)) groups += 1;
+			const section = worldCupSectionForUmbrella(u);
+			if (section === "groups") groups += 1;
+			else if (section === "futures") futures += 1;
+			else if (section === "awards") awards += 1;
 			else games += 1;
 		}
-		return { games, groups };
+		return { games, groups, futures, awards };
 	}, [umbrellas]);
 	const titleRef = useRef<HTMLHeadingElement | null>(null);
 	const hasLogged = useRef<{ umbrella: boolean; markets: boolean }>({

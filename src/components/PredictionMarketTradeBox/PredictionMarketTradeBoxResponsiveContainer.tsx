@@ -7,7 +7,6 @@ import Button from "components/Button/Button";
 import { hexToRgba, getContrastingTextColor } from "@/features/markets/presentation/teamColors";
 import { useTradeBoxOutcomePrices } from "@/features/trading/trade-box/hooks/useTradeBoxOutcomePrices";
 import { useTradeBoxTeamPresentation } from "@/features/trading/trade-box/hooks/useTradeBoxTeamPresentation";
-import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
 import { usePredictionData } from "@/context/PredictionDataContext";
 
 export default function PredictionMarketTradeBoxResponsiveContainer({
@@ -103,20 +102,6 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 			header={
 				mobilePeekBar === "hidden" || isCurtainOpen ? null : (
 					<div className="prediction-curtain-header">
-						{isMatchPropQuestion(market) ? (
-							<div
-								className="curtain-header-market-title"
-								style={{
-									fontSize: 13,
-									fontWeight: 600,
-									opacity: 0.85,
-									textAlign: "center",
-									marginBottom: 6,
-								}}
-							>
-								{team.displayMarketTitle}
-							</div>
-						) : null}
 						<div className="curtain-header-buttons flex gap-8">
 							<Button
 								variant="secondary"
