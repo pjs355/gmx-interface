@@ -1,16 +1,26 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import SEO from "@/components/Common/SEO";
 import { resolveMarketLogo } from "@/features/markets/assets/marketLogoResolver";
+import { SITE_KEYWORDS } from "@/config/siteMetadata";
+import { homePageJsonLd, webPageJsonLd } from "@/content/seoSchema";
 
 import "./About.scss";
 
 /** Slugs must match {@link resolveMarketLogo} / `market-logos` basenames. */
-const VENUES: Array<{ slug: string; name: string }> = [
+const TRADEABLE_VENUES: Array<{ slug: string; name: string }> = [
 	{ slug: "polymarket", name: "Polymarket" },
 	{ slug: "kalshi", name: "Kalshi" },
 	{ slug: "predict", name: "Predict" },
 	{ slug: "limitless", name: "Limitless" },
-	{ slug: "levelup", name: "LevelUp" },
+];
+
+const COMPARISON_VENUES: Array<{ slug: string; name: string }> = [
+	{ slug: "myriad", name: "Myriad" },
+	{ slug: "betdex", name: "BetDEX" },
+	{ slug: "forkast", name: "Forkast" },
+	{ slug: "sx-bet", name: "SX.bet" },
+	{ slug: "hyperliquid", name: "Hyperliquid" },
 ];
 
 const STEPS: Array<{ title: string; body: ReactNode }> = [
@@ -24,7 +34,7 @@ const STEPS: Array<{ title: string; body: ReactNode }> = [
 			<>
 				Deposit into your ClutchComet account using the built-in deposit flow. Your account has one
 				balance — you do not need to manually move money between Polymarket, Kalshi, Predict,
-				Limitless, and LevelUp. We handle the routing behind the scenes.
+				and Limitless. We handle the routing behind the scenes.
 			</>
 		),
 	},
@@ -45,18 +55,37 @@ const STEPS: Array<{ title: string; body: ReactNode }> = [
 export function About() {
 	return (
 		<div className="about-page">
+			<SEO
+				title="About ClutchComet | Prediction Market Aggregator"
+				description="ClutchComet is a prediction market aggregator. Compare nine venues on matched events and trade Polymarket, Kalshi, Limitless, and Predict from one balance with smart order routing."
+				keywords={SITE_KEYWORDS}
+				canonicalPath="/about"
+				jsonLd={[
+					...homePageJsonLd(),
+					webPageJsonLd({
+						title: "About ClutchComet",
+						description:
+							"ClutchComet is a prediction market aggregator with smart order routing across four tradeable venues.",
+						publishedAt: "2026-06-18",
+						updatedAt: "2026-06-18",
+						canonicalPath: "/about",
+					}),
+				]}
+			/>
 			<div className="about-container">
 				<header className="about-hero">
-					<div className="about-eyebrow">Prediction Market Trading Aggregator</div>
-					<h1 className="about-title">Trade prediction markets without jumping between apps.</h1>
+					<div className="about-eyebrow">Prediction Market Aggregator</div>
+					<h1 className="about-title">The prediction market aggregator for compare-and-execute trading.</h1>
 					<p className="about-lead">
-						ClutchComet connects the biggest prediction markets into one simple trading screen.
+						ClutchComet aggregates Polymarket, Kalshi, Limitless, Predict, and five comparison venues
+						on matched events. One balance. Smart order routing. Live esports viewing.
 					</p>
 				</header>
 
 				<section className="about-section">
-					<div className="about-venues" aria-label="Supported venues">
-						{VENUES.map(({ slug, name }) => {
+					<h2 className="about-section-title">Tradeable venues</h2>
+					<div className="about-venues" aria-label="Tradeable venues">
+						{TRADEABLE_VENUES.map(({ slug, name }) => {
 							const logoUrl = resolveMarketLogo(slug);
 							return (
 								<span key={slug} className="about-venues__chip">
@@ -74,7 +103,29 @@ export function About() {
 							);
 						})}
 					</div>
-					<p className="about-muted about-muted--small">More venues coming soon.</p>
+					<h2 className="about-section-title">Comparison-only on All Odds</h2>
+					<div className="about-venues" aria-label="Comparison-only venues">
+						{COMPARISON_VENUES.map(({ slug, name }) => {
+							const logoUrl = resolveMarketLogo(slug);
+							return (
+								<span key={slug} className="about-venues__chip">
+									{logoUrl ? (
+										<img
+											className="about-venues__logo"
+											src={logoUrl}
+											alt=""
+											width={22}
+											height={22}
+										/>
+									) : null}
+									<span className="about-venues__label">{name}</span>
+								</span>
+							);
+						})}
+					</div>
+					<p className="about-muted about-muted--small">
+						Nine All Odds venues on matched events. Four tradeable. Five comparison-only.
+					</p>
 					<p className="about-pull">
 						See the best prices. Pick where you want to trade. Or use smart routing to get the best
 						available execution across venues.

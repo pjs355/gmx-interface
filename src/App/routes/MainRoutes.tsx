@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, type ErrorInfo, type ReactNode } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigationType, useParams } from "react-router-dom";
 
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
 import { peekHomeCatalogScroll } from "@/pages/Predictions/utils/homeScrollRestore";
@@ -7,6 +7,7 @@ import { loadPositionsPage } from "@/app/routes/positionsRouteLazy";
 import { loadPredictionMarketPage } from "@/app/routes/predictionMarketRouteLazy";
 
 // Eager: homepage and listing pages (most common entry points)
+import HomeRoute from "@/pages/Home/HomeRoute";
 import FilteredPredictions from "@/pages/Predictions/components/FilteredPredictions";
 // import Predictions from "pages/Predictions/Predictions";
 import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
@@ -20,7 +21,38 @@ const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));
 const AllOdds = lazy(() => import("pages/AllOdds/AllOddsPage"));
+const BlogIndex = lazy(() => import("pages/Blog/BlogIndex"));
+const BlogArticle = lazy(() => import("pages/Blog/BlogArticle"));
+const LearnIndex = lazy(() => import("pages/Learn/LearnPage").then((m) => ({ default: m.LearnIndex })));
+const LearnPage = lazy(() => import("pages/Learn/LearnPage"));
 const TestPage = lazy(() => import("pages/Test/TestPage"));
+
+const LEGACY_VENUE_COMPARE_REDIRECTS: Record<string, string> = {
+	"clutchcomet-vs-polymarket": "polymarket-explained",
+	"clutchcomet-vs-kalshi": "kalshi-explained",
+	"clutchcomet-vs-limitless": "limitless-explained",
+	"clutchcomet-vs-predict": "predict-explained",
+	"clutchcomet-vs-myriad": "myriad-explained",
+	"clutchcomet-vs-betdex": "betdex-explained",
+	"clutchcomet-vs-forkast": "forkast-explained",
+	"clutchcomet-vs-sxbet": "sx-bet-explained",
+	"clutchcomet-vs-hyperliquid": "hyperliquid-explained",
+};
+
+function CompareToBlogRedirect() {
+	const { slug } = useParams<{ slug?: string }>();
+	if (slug && LEGACY_VENUE_COMPARE_REDIRECTS[slug]) {
+		return <Navigate to={`/blog/${LEGACY_VENUE_COMPARE_REDIRECTS[slug]}`} replace />;
+	}
+	return <Navigate to={slug ? `/blog/${slug}` : "/blog"} replace />;
+}
+
+function LegacyVenueCompareRedirect() {
+	const { slug } = useParams<{ slug: string }>();
+	const legacySlug = slug ? `clutchcomet-vs-${slug}` : undefined;
+	const target = legacySlug ? LEGACY_VENUE_COMPARE_REDIRECTS[legacySlug] : undefined;
+	return <Navigate to={target ? `/blog/${target}` : "/blog"} replace />;
+}
 
 /** Prevents infinite full-page reload when chunk/HMR keeps failing (see ChunkErrorBoundary). */
 const SESSION_CHUNK_RELOAD_KEY = "levelup_chunk_auto_reload_consumed";
@@ -161,7 +193,27 @@ export function MainRoutes() {
 		<div className="main-routes-shell">
 			<Routes>
 				{/* Home: all markets (esports + non-esports) */}
-				<Route path="/" element={<FilteredPredictions filterType="all" />} />
+				<Route path="/" element={<HomeRoute />} />
+				<Route
+					path="/prediction-market-aggregator"
+					element={<Navigate to="/blog/what-is-a-prediction-market-aggregator" replace />}
+				/>
+				<Route
+					path="/learn/prediction-market-aggregator"
+					element={<Navigate to="/blog/what-is-a-prediction-market-aggregator" replace />}
+				/>
+				<Route
+					path="/prediction-market-aggregators"
+					element={<Navigate to="/blog/best-prediction-market-aggregators-2026" replace />}
+				/>
+				<Route
+					path="/esports-prediction-market-aggregator"
+					element={<Navigate to="/blog/esports-prediction-market-aggregator" replace />}
+				/>
+				<Route
+					path="/learn/esports-prediction-market-aggregator"
+					element={<Navigate to="/blog/esports-prediction-market-aggregator" replace />}
+				/>
 
 				{/* Standalone predictions list + split routes disabled; redirect to home */}
 				{/* <Route path="/predictions" element={<Predictions />} /> */}
@@ -233,6 +285,45 @@ export function MainRoutes() {
 						</LazyPage>
 					}
 				/>
+				<Route
+					path="/blog"
+					element={
+						<LazyPage>
+							<BlogIndex />
+						</LazyPage>
+					}
+				/>
+				<Route path="/blog/clutchcomet-vs-:slug" element={<LegacyVenueCompareRedirect />} />
+				<Route
+					path="/blog/prediction-market-vs-sportsbook"
+					element={<Navigate to="/blog/prediction-markets-vs-sportsbooks" replace />}
+				/>
+				<Route
+					path="/blog/:slug"
+					element={
+						<LazyPage>
+							<BlogArticle />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/learn"
+					element={
+						<LazyPage>
+							<LearnIndex />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/learn/:slug"
+					element={
+						<LazyPage>
+							<LearnPage />
+						</LazyPage>
+					}
+				/>
+				<Route path="/compare" element={<CompareToBlogRedirect />} />
+				<Route path="/compare/:slug" element={<CompareToBlogRedirect />} />
 				{/* Admin-only test pages */}
 				<Route
 					path="/test/tradebox/:umbrellaId"

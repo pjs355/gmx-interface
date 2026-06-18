@@ -1,6 +1,7 @@
 import type { Plugin } from "vite";
 import {
 	SITE_DESCRIPTION,
+	SITE_KEYWORDS,
 	SITE_NAME,
 	SITE_OG_IMAGE,
 	SITE_OG_IMAGE_ALT,
@@ -22,6 +23,7 @@ function escapeHtmlAttr(value: string): string {
 const REPLACEMENTS: Record<string, string> = {
 	__SITE_TITLE__: SITE_TITLE,
 	__SITE_DESCRIPTION__: SITE_DESCRIPTION,
+	__SITE_KEYWORDS__: SITE_KEYWORDS,
 	__SITE_ORIGIN__: SITE_ORIGIN,
 	__SITE_OG_IMAGE__: SITE_OG_IMAGE,
 	__SITE_NAME__: SITE_NAME,

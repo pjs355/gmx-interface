@@ -15,13 +15,18 @@ type SeoProps = {
 	children?: React.ReactNode;
 	title?: string;
 	description?: string;
+	keywords?: string;
 	image?: string;
 	imageAlt?: string;
 	type?: string;
+	canonicalPath?: string;
+	noIndex?: boolean;
+	jsonLd?: unknown[];
 };
 
 function SEO(props: SeoProps) {
-	const { children, ...customMeta } = props;
+	const { children, canonicalPath = "/", noIndex = false, jsonLd = [], keywords, ...customMeta } =
+		props;
 	const meta = {
 		title: SITE_TITLE,
 		description: SITE_DESCRIPTION,
@@ -30,16 +35,20 @@ function SEO(props: SeoProps) {
 		type: "website",
 		...customMeta,
 	};
+	const canonicalUrl = `${SITE_ORIGIN}${canonicalPath.startsWith("/") ? canonicalPath : `/${canonicalPath}`}`;
+	const robots = noIndex ? "noindex, follow" : "index, follow";
+
 	return (
 		<>
 			<Helmet>
 				<title>{meta.title}</title>
-				<meta name="robots" content="follow, index" />
-				<link rel="canonical" href={`${SITE_ORIGIN}/`} />
+				<meta name="robots" content={robots} />
+				<link rel="canonical" href={canonicalUrl} />
 				<meta content={meta.description} name="description" />
+				{keywords ? <meta content={keywords} name="keywords" /> : null}
 				<meta property="og:type" content={meta.type} />
 				<meta property="og:site_name" content={SITE_NAME} />
-				<meta property="og:url" content={`${SITE_ORIGIN}/`} />
+				<meta property="og:url" content={canonicalUrl} />
 				<meta property="og:description" content={meta.description} />
 				<meta property="og:title" content={meta.title} />
 				<meta property="og:image" content={meta.image} />
@@ -52,6 +61,11 @@ function SEO(props: SeoProps) {
 				<meta name="twitter:description" content={meta.description} />
 				<meta name="twitter:image" content={meta.image} />
 				<meta name="twitter:image:alt" content={meta.imageAlt} />
+				{jsonLd.map((block, index) => (
+					<script key={index} type="application/ld+json">
+						{JSON.stringify(block)}
+					</script>
+				))}
 			</Helmet>
 			{children}
 		</>

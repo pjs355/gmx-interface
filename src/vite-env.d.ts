@@ -111,6 +111,12 @@ declare module "react-helmet" {
 	export const Helmet: React.ComponentType<any>;
 }
 
+declare module "virtual:content-manifest" {
+	import type { ContentManifest } from "@/content/types";
+	const manifest: ContentManifest;
+	export default manifest;
+}
+
 declare module "*.po" {
 	export const messages: Record<string, import("@lingui/core").MessageDescriptor>;
 }

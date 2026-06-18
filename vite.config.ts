@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "node:url";
 import http from "node:http";
 import https from "node:https";
+import { contentBuildPlugin } from "./scripts/contentBuildPlugin";
 import { siteMetadataHtmlPlugin } from "./scripts/viteSiteMetadataHtml";
 import { spaEntryManifestPlugin } from "./scripts/spaEntryManifestPlugin";
 
@@ -294,6 +295,7 @@ export default defineConfig(({ mode }) => {
 		customLogger: createViteLoggerWithoutBaseOrgSourcemapNoise(),
 		plugins: [
 			siteMetadataHtmlPlugin(),
+			contentBuildPlugin(projectRoot),
 			spaEntryManifestPlugin(),
 			react({
 				babel: {

@@ -7,10 +7,18 @@ export const SITE_ORIGIN = "https://clutchcomet.com";
 
 export const SITE_NAME = "ClutchComet";
 
-export const SITE_TITLE = "ClutchComet | Prediction market aggregator";
+/** Default `<title>` for the homepage and app shell fallback. */
+export const SITE_TITLE = "ClutchComet | Prediction Market Aggregator";
 
 export const SITE_DESCRIPTION =
-	"Trade on Polymarket, Kalshi, Predict, Limitless, and LevelUp from one screen. Smart order routing finds the best price across venues.";
+	"ClutchComet is a prediction market aggregator. Compare nine venues on matched events, trade Polymarket, Kalshi, Limitless, and Predict from one balance, with smart order routing.";
+
+export const SITE_KEYWORDS =
+	"prediction market aggregator, compare prediction markets, Polymarket Kalshi aggregator, esports prediction markets, smart order routing, line shopping";
+
+export const AGGREGATOR_HUB_PATH = "/blog/what-is-a-prediction-market-aggregator";
+
+export const ESPORTS_AGGREGATOR_HUB_PATH = "/blog/esports-prediction-market-aggregator";
 
 export const SITE_OG_IMAGE = `${SITE_ORIGIN}/og-image.png`;
 
@@ -19,7 +27,7 @@ export const SITE_OG_IMAGE_WIDTH = 1200;
 export const SITE_OG_IMAGE_HEIGHT = 630;
 
 export const SITE_OG_IMAGE_ALT =
-	"ClutchComet: trade prediction markets across Polymarket, Kalshi, Predict, Limitless, and LevelUp with smart order routing.";
+	"ClutchComet prediction market aggregator: compare and trade Polymarket, Kalshi, Limitless, and Predict from one screen.";
 
 export const SITE_FAVICON = "/favicon.png";
 

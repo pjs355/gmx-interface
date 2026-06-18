@@ -10,6 +10,7 @@ sdk/build/
 # Build outputs
 build/
 dist/
+src/generated/
 
 # Playwright E2E suite
 e2e/.user-data/
