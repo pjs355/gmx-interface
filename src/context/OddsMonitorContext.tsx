@@ -7,6 +7,7 @@ import {
 	VenuePandaSubscriptionProvider,
 	useVenuePandaSubscription,
 } from "@/context/VenuePandaSubscriptionContext";
+import { AllOddsVenueSubscriptionProvider } from "@/context/AllOddsVenueSubscriptionContext";
 import { VenuePricesConnectionManager } from "@/context/VenuePricesConnectionManager";
 
 export type OddsMonitorContextValue = {
@@ -53,8 +54,10 @@ export function OddsMonitorProvider({ children }: { children: React.ReactNode })
 
 	return (
 		<VenuePandaSubscriptionProvider>
-			<VenuePricesConnectionManager />
-			<OddsMonitorInner wsUrl={baseWsUrl}>{children}</OddsMonitorInner>
+			<AllOddsVenueSubscriptionProvider>
+				<VenuePricesConnectionManager />
+				<OddsMonitorInner wsUrl={baseWsUrl}>{children}</OddsMonitorInner>
+			</AllOddsVenueSubscriptionProvider>
 		</VenuePandaSubscriptionProvider>
 	);
 }

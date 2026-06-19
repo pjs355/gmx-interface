@@ -1,7 +1,5 @@
 import {
 	useCallback,
-	useEffect,
-	useMemo,
 	useState,
 	type CSSProperties,
 } from "react";
@@ -21,34 +19,15 @@ import {
 	formatEventStartDisplay,
 	normalizeEventDateInput,
 } from "@/pages/Predictions/utils/eventDates";
-import { isMlbGameSlug } from "@/pages/Predictions/utils/gameLinkFilters";
 import { ALL_ODDS_ADAPTERS } from "./adapters";
 import { effectiveBuyImpliedProb } from "./allOddsEffectiveBuyImplied";
-import { buildAllOddsGroups } from "./allOddsViewModel";
 import type { AllOddsGroup, AllOddsMarket, AllOddsOutcomeRow } from "./types";
+import type { AllOddsSportFilter } from "@/features/markets/queries/matchedMarketsQuery";
 import "@/components/EsportsVenueBooksPanel/EsportsVenueBooksPanel.scss";
 
-const GROUPS_PER_PAGE = 25;
 const VENUE_COL_COUNT = ALL_ODDS_ADAPTERS.length;
 
-type SportFilter = "all" | "esports" | "soccer";
-
-function isSoccerMarket(m: AllOddsMarket): boolean {
-	return m.game?.toLowerCase().startsWith("soccer") ?? false;
-}
-
-function isEsportsMarket(m: AllOddsMarket): boolean {
-	return !isSoccerMarket(m);
-}
-
-function groupMatchesSport(group: AllOddsGroup, sport: SportFilter): boolean {
-	if (sport === "all") return true;
-	const sample =
-		group.primaryOutcomes[0]?.market ?? group.moreSections[0]?.outcomes[0]?.market;
-	if (!sample) return false;
-	if (sport === "soccer") return isSoccerMarket(sample);
-	return isEsportsMarket(sample);
-}
+type SportFilter = AllOddsSportFilter;
 
 function outcomeRowKey(row: AllOddsOutcomeRow): string {
 	return `${row.market.pandaMatchId}:${row.yesSide}:${row.label}`;
@@ -114,55 +93,41 @@ function VenueHeaderRow({ isMobile }: { isMobile: boolean }) {
 }
 
 export interface AllOddsMatrixTableProps {
+	groups: AllOddsGroup[];
 	markets: AllOddsMarket[];
 	loading?: boolean;
 	error?: string | null;
+	page: number;
+	totalPages: number;
+	onPageChange: (page: number) => void;
+	search: string;
+	onSearchChange: (value: string) => void;
+	sport: SportFilter;
+	onSportChange: (sport: SportFilter) => void;
 }
 
-export function AllOddsMatrixTable({ markets, loading = false, error = null }: AllOddsMatrixTableProps) {
-	const [search, setSearch] = useState("");
-	const [sport, setSport] = useState<SportFilter>("all");
+export function AllOddsMatrixTable({
+	groups,
+	markets,
+	loading = false,
+	error = null,
+	page,
+	totalPages,
+	onPageChange,
+	search,
+	onSearchChange,
+	sport,
+	onSportChange,
+}: AllOddsMatrixTableProps) {
 	const [includeFees, setIncludeFees] = useState(true);
-	const [page, setPage] = useState(0);
 	const [expandedMore, setExpandedMore] = useState<Record<string, boolean>>({});
 	const isMobile = useMedia("(max-width: 1100px)");
 	const { formatPrice } = useOddsDisplay();
 	const formatProbDisplay = useCallback((p: number) => formatPrice(p), [formatPrice]);
 
-	const allGroups = useMemo(
-		() => buildAllOddsGroups(markets.filter((m) => !isMlbGameSlug(m.game))),
-		[markets],
-	);
-
-	const filteredGroups = useMemo(() => {
-		const q = search.trim().toLowerCase();
-		let list = allGroups.filter((g) => groupMatchesSport(g, sport));
-		if (q) {
-			list = list.filter((g) => {
-				const allOutcomes = [
-					...g.primaryOutcomes,
-					...g.moreSections.flatMap((s) => s.outcomes),
-				];
-				const hay = [g.title, ...allOutcomes.map((o) => o.label), ...allOutcomes.map((o) => o.market.game ?? "")]
-					.filter(Boolean)
-					.join(" ")
-					.toLowerCase();
-				return hay.includes(q);
-			});
-		}
-		return list;
-	}, [allGroups, search, sport]);
-
-	useEffect(() => {
-		setPage(0);
-	}, [search, sport]);
-
-	const pageCount = Math.max(1, Math.ceil(filteredGroups.length / GROUPS_PER_PAGE));
+	const pageCount = Math.max(1, totalPages);
 	const safePage = Math.min(page, pageCount - 1);
-	const pageGroups = filteredGroups.slice(
-		safePage * GROUPS_PER_PAGE,
-		safePage * GROUPS_PER_PAGE + GROUPS_PER_PAGE,
-	);
+	const pageGroups = groups;
 
 	const toggleMore = (groupKey: string) => {
 		setExpandedMore((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
@@ -182,13 +147,13 @@ export function AllOddsMatrixTable({ markets, loading = false, error = null }: A
 					className="all-odds-search"
 					placeholder="Search markets…"
 					value={search}
-					onChange={(e) => setSearch(e.target.value)}
+					onChange={(e) => onSearchChange(e.target.value)}
 					aria-label="Search markets"
 				/>
 				<select
 					className="all-odds-sport-select"
 					value={sport}
-					onChange={(e) => setSport(e.target.value as SportFilter)}
+					onChange={(e) => onSportChange(e.target.value as SportFilter)}
 					aria-label="Sport filter"
 				>
 					<option value="all">All sports</option>
@@ -248,12 +213,12 @@ export function AllOddsMatrixTable({ markets, loading = false, error = null }: A
 				</div>
 			)}
 
-			{filteredGroups.length > GROUPS_PER_PAGE && (
+			{pageCount > 1 && (
 				<div className="all-odds-pagination">
 					<button
 						type="button"
-						disabled={safePage <= 0}
-						onClick={() => setPage((p) => Math.max(0, p - 1))}
+						disabled={safePage <= 0 || loading}
+						onClick={() => onPageChange(Math.max(0, safePage - 1))}
 					>
 						Previous
 					</button>
@@ -262,8 +227,8 @@ export function AllOddsMatrixTable({ markets, loading = false, error = null }: A
 					</span>
 					<button
 						type="button"
-						disabled={safePage >= pageCount - 1}
-						onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+						disabled={safePage >= pageCount - 1 || loading}
+						onClick={() => onPageChange(Math.min(pageCount - 1, safePage + 1))}
 					>
 						Next
 					</button>

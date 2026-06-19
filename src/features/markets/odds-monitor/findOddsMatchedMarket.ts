@@ -1,4 +1,5 @@
 import type { MatchedMarket } from "@/types/odds-monitor";
+import { getVenuePricesClient } from "@/services/venuePricesClient";
 
 /**
  * Resolve a row from venue-prices app state: prefer PandaScore id, then umbrella id
@@ -9,15 +10,24 @@ export function findOddsMatchedMarket(
 	pandaMatchId: string | null | undefined,
 	umbrellaId?: string | null,
 ): MatchedMarket | null {
-	if (!appMarkets?.length) return null;
 	const pid = String(pandaMatchId ?? "").trim();
 	if (pid) {
-		const byPanda = appMarkets.find((m) => String(m.pandaMatchId ?? "").trim() === pid);
-		if (byPanda) return byPanda;
+		const fromMap = getVenuePricesClient().getMarket(pid);
+		if (fromMap) return fromMap;
+	}
+	if (appMarkets?.length) {
+		if (pid) {
+			const byPanda = appMarkets.find((m) => String(m.pandaMatchId ?? "").trim() === pid);
+			if (byPanda) return byPanda;
+		}
+		const uid = String(umbrellaId ?? "").trim();
+		if (uid) {
+			return appMarkets.find((m) => String(m.umbrellaId ?? "").trim() === uid) ?? null;
+		}
 	}
 	const uid = String(umbrellaId ?? "").trim();
 	if (uid) {
-		return appMarkets.find((m) => String(m.umbrellaId ?? "").trim() === uid) ?? null;
+		return getVenuePricesClient().findMarketByUmbrellaId(uid);
 	}
 	return null;
 }
@@ -28,6 +38,9 @@ export function findOddsMatchedMarketByConditionId(
 	conditionId: string | null | undefined,
 ): MatchedMarket | null {
 	const cid = String(conditionId ?? "").trim();
-	if (!cid || !appMarkets?.length) return null;
+	if (!cid) return null;
+	const fromMap = getVenuePricesClient().findMarketByConditionId(cid);
+	if (fromMap) return fromMap;
+	if (!appMarkets?.length) return null;
 	return appMarkets.find((m) => String(m.polyConditionId ?? "").trim() === cid) ?? null;
 }

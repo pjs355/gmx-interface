@@ -165,6 +165,9 @@ function blogIndexJsonLd(posts: BlogPost[]) {
 	};
 }
 
+/** Runs synchronously before paint so users never see crawler-only HTML. */
+const HIDE_PRERENDER_SCRIPT = `<script>(function(){for(var i=0,d=["home-prerender","blog-prerender"];i<d.length;i++){var e=document.getElementById(d[i]);e&&(e.style.display="none")}})()</script>`;
+
 function prerenderStyles(): string {
 	return `<style>
 .blog-prerender{font-family:system-ui,-apple-system,sans-serif;background:#000;color:#fff;padding:24px;max-width:760px;margin:0 auto;line-height:1.6}
@@ -242,6 +245,7 @@ function renderFullHtml(meta: PageMeta, spa: SpaEntryAssets): string {
   </head>
   <body>
     ${meta.bodyHtml}
+    ${HIDE_PRERENDER_SCRIPT}
     <div id="root"></div>
     <script type="module" crossorigin src="${spa.js}"></script>
     <link rel="stylesheet" crossorigin href="${spa.css}">
@@ -382,7 +386,10 @@ export function patchHomeIndexHtml(indexHtml: string): string {
 		out = out.replace("<script src=", `${buildHomeJsonLdScripts()}\n\t\t<script src=`);
 	}
 	if (!out.includes('id="home-prerender"')) {
-		out = out.replace("<div id=\"root\">", `${buildHomePrerenderBlock()}\n\t\t<div id="root">`);
+		out = out.replace(
+			"<div id=\"root\">",
+			`${buildHomePrerenderBlock()}\n\t\t${HIDE_PRERENDER_SCRIPT}\n\t\t<div id="root">`,
+		);
 	}
 	return out;
 }

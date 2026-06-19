@@ -5,12 +5,10 @@ import { getBlogPosts } from "@/content/contentApi";
 import { ContentHubLinks } from "@/content/contentHubLinks";
 import { organizationJsonLd, webSiteJsonLd } from "@/content/seoSchema";
 import { SITE_KEYWORDS } from "@/config/siteMetadata";
-import { useHideContentPrerender } from "@/content/useHideContentPrerender";
 
 import "./contentPages.scss";
 
 export function BlogIndex() {
-	useHideContentPrerender();
 	const posts = getBlogPosts();
 
 	return (

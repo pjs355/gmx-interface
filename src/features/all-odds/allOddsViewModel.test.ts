@@ -433,4 +433,75 @@ describe("buildAllOddsGroups", () => {
 			"No Time vs Match",
 		]);
 	});
+
+	it("shows team winner rows for esports long Panda titles when team names match exactly", () => {
+		const markets: AllOddsMarket[] = [
+			baseMarket({
+				pandaMatchId: "1540333",
+				displayName:
+					"OG vs InterActive Philippines - The International - Southeast Asia Closed Qualifier 2026",
+				game: "DotA 2",
+				homeTeamName: "OG",
+				awayTeamName: "InterActive Philippines",
+				pandaTeamA: "OG",
+				pandaTeamB: "InterActive Philippines",
+				polyPriceA: ask(0.93),
+				polyPriceB: ask(0.07),
+			}),
+		];
+
+		const groups = buildAllOddsGroups(markets);
+		expect(groups).toHaveLength(1);
+		expect(groups[0]!.title).toBe("OG vs InterActive Philippines");
+		expect(groups[0]!.primaryOutcomes.map((o) => o.label).sort()).toEqual([
+			"InterActive Philippines",
+			"OG",
+		]);
+		expect(groups[0]!.moreSections).toHaveLength(0);
+	});
+
+	it("shows team winner rows for esports long Panda titles when display uses shorter team names", () => {
+		const markets: AllOddsMarket[] = [
+			baseMarket({
+				pandaMatchId: "1510146",
+				displayName: "Team Vitality vs Leviatán - VCT - Masters London 2026",
+				game: "Valorant",
+				homeTeamName: "Team Vitality",
+				awayTeamName: "Leviatán Esports",
+				pandaTeamA: "Team Vitality",
+				pandaTeamB: "Leviatán Esports",
+				polyPriceA: ask(0.07),
+				polyPriceB: ask(0.95),
+			}),
+		];
+
+		const groups = buildAllOddsGroups(markets);
+		expect(groups).toHaveLength(1);
+		expect(groups[0]!.title).toBe("Team Vitality vs Leviatán Esports");
+		expect(groups[0]!.primaryOutcomes.map((o) => o.label).sort()).toEqual([
+			"Leviatán Esports",
+			"Team Vitality",
+		]);
+		expect(groups[0]!.moreSections).toHaveLength(0);
+	});
+
+	it("hides groups with only display-only venue quotes and no tradable market prices", () => {
+		const markets: AllOddsMarket[] = [
+			baseMarket({
+				pandaMatchId: "thin-arb",
+				displayName: "Alpha vs Beta",
+				homeTeamName: "Alpha",
+				awayTeamName: "Beta",
+				pandaTeamA: "Alpha",
+				pandaTeamB: "Beta",
+				myraidPriceA: ask(0.55),
+				myraidPriceB: ask(0.48),
+				exchangeMatching: {
+					myraid: { marketIdA: "m-1" },
+				},
+			}),
+		];
+
+		expect(buildAllOddsGroups(markets)).toHaveLength(0);
+	});
 });

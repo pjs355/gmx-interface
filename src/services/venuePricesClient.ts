@@ -18,7 +18,11 @@ import {
 } from "@/features/all-odds/venueSnapshotMerge";
 import type { VenuePriceTeam } from "@/types/venue-prices";
 import { mergeMatchedMarketsIntoStore } from "@/features/markets/odds-monitor/matchedMarketFromApi";
+import { ensureMarketsFromUmbrella } from "@/features/markets/odds-monitor/matchedMarketFromUmbrella";
 import type { MatchedMarketsApiItem } from "@/features/markets/queries/matchedMarketsQuery";
+import type { Umbrella } from "@/services/api/umbrellaDataService";
+
+const NOTIFY_COALESCE_MS = 150;
 
 type VenuePriceSnapshot = VenuePriceSnapshotWire;
 
@@ -66,7 +70,7 @@ function logDflowKalshiMicroscopicRestingSizesIfDebug(
 }
 
 export type VenuePricesSubscriptionMode =
-	| { type: "selective"; pandaMatchIds: string[] }
+	| { type: "selective"; pandaMatchIds: string[]; bboOnly?: boolean }
 	| { type: "all_bbo" };
 
 export interface VenuePricesClientSnapshot {
@@ -338,9 +342,10 @@ class VenuePricesClient {
 	private connected = false;
 	private lastWsError: string | null = null;
 	private subscriptionMode: VenuePricesSubscriptionMode = { type: "selective", pandaMatchIds: [] };
-	private prevSentPandaSubs = new Set<string>();
+	private prevSentPandaSubs = new Map<string, boolean | undefined>();
 	private allBboActive = false;
 	private appStateTimestamp = 0;
+	private notifyTimer: ReturnType<typeof setTimeout> | null = null;
 	private cachedSnapshot: VenuePricesClientSnapshot = {
 		connected: false,
 		lastWsError: null,
@@ -368,6 +373,55 @@ class VenuePricesClient {
 
 	getMarketsMap(): ReadonlyMap<string, MatchedMarket> {
 		return this.markets;
+	}
+
+	getMarket(pandaMatchId: string): MatchedMarket | undefined {
+		return this.markets.get(String(pandaMatchId ?? "").trim());
+	}
+
+	findMarketByUmbrellaId(umbrellaId: string): MatchedMarket | null {
+		const uid = String(umbrellaId ?? "").trim();
+		if (!uid) return null;
+		for (const m of this.markets.values()) {
+			if (String(m.umbrellaId ?? "").trim() === uid) return m;
+		}
+		return null;
+	}
+
+	findMarketByConditionId(conditionId: string): MatchedMarket | null {
+		const cid = String(conditionId ?? "").trim();
+		if (!cid) return null;
+		for (const m of this.markets.values()) {
+			if (String(m.polyConditionId ?? "").trim() === cid) return m;
+		}
+		return null;
+	}
+
+	ensureMarketsFromUmbrella(umbrella: Umbrella, pandaMatchIds: string[]): void {
+		if (ensureMarketsFromUmbrella(this.markets, umbrella, pandaMatchIds)) {
+			this.notify();
+		}
+	}
+
+	mergeMarketsFromMetadataBatch(items: MatchedMarketsApiItem[]): void {
+		if (!items.length) return;
+		const { next, changed } = mergeMatchedMarketsIntoStore(this.markets, items, []);
+		let added = false;
+		for (const [k, v] of next) {
+			if (!this.markets.has(k)) {
+				this.markets.set(k, v);
+				added = true;
+			}
+		}
+		if (!changed && !added) return;
+		for (const [pid, snaps] of this.pendingSnaps.entries()) {
+			if (this.markets.has(pid) && snaps.length) {
+				if (applyVenuePriceUpdates(this.markets, snaps)) {
+					this.pendingSnaps.delete(pid);
+				}
+			}
+		}
+		this.notify();
 	}
 
 	ensureStubMarkets(pandaMatchIds: string[]): void {
@@ -399,11 +453,12 @@ class VenuePricesClient {
 		items: MatchedMarketsApiItem[],
 		activePandaMatchIds: string[],
 	): void {
-		const { next, changed } = mergeMatchedMarketsIntoStore(
+		const { next, changed: mergedChanged } = mergeMatchedMarketsIntoStore(
 			this.markets,
 			items,
 			activePandaMatchIds,
 		);
+		let changed = mergedChanged;
 		for (const [pid, snaps] of this.pendingSnaps.entries()) {
 			if (next.has(pid) && snaps.length) {
 				if (applyVenuePriceUpdates(next, snaps)) {
@@ -446,6 +501,24 @@ class VenuePricesClient {
 	}
 
 	private notify(): void {
+		if (this.notifyTimer !== null) return;
+		this.notifyTimer = setTimeout(() => {
+			this.notifyTimer = null;
+			this.appStateTimestamp = Date.now();
+			this.cachedSnapshot = {
+				connected: this.connected,
+				lastWsError: this.lastWsError,
+				appState: this.buildAppState(),
+			};
+			for (const listener of this.listeners) listener();
+		}, NOTIFY_COALESCE_MS);
+	}
+
+	private flushNotifyNow(): void {
+		if (this.notifyTimer !== null) {
+			clearTimeout(this.notifyTimer);
+			this.notifyTimer = null;
+		}
 		this.appStateTimestamp = Date.now();
 		this.cachedSnapshot = {
 			connected: this.connected,
@@ -469,7 +542,7 @@ class VenuePricesClient {
 		this.ws = null;
 		if (w) disposeWebSocket(w);
 		this.connected = false;
-		this.prevSentPandaSubs = new Set();
+		this.prevSentPandaSubs = new Map();
 		this.allBboActive = false;
 	}
 
@@ -492,7 +565,7 @@ class VenuePricesClient {
 					/* ignore */
 				}
 				this.allBboActive = true;
-				this.prevSentPandaSubs = new Set();
+				this.prevSentPandaSubs = new Map();
 			}
 			return;
 		}
@@ -501,9 +574,11 @@ class VenuePricesClient {
 			this.allBboActive = false;
 		}
 
+		const bboOnly =
+			this.subscriptionMode.type === "selective" ? this.subscriptionMode.bboOnly : undefined;
 		const want = this.getSubscribedPandaIds();
 		const prev = this.prevSentPandaSubs;
-		for (const id of prev) {
+		for (const id of prev.keys()) {
 			if (!want.has(id)) {
 				try {
 					socket.send(JSON.stringify({ type: "unsubscribe", pandaMatchId: id }));
@@ -512,16 +587,34 @@ class VenuePricesClient {
 				}
 			}
 		}
+		const nextSent = new Map<string, boolean | undefined>();
 		for (const id of want) {
-			if (!prev.has(id)) {
+			const prevBbo = prev.get(id);
+			if (prev.has(id) && prevBbo === bboOnly) {
+				nextSent.set(id, bboOnly);
+				continue;
+			}
+			if (prev.has(id)) {
 				try {
-					socket.send(JSON.stringify({ type: "subscribe", pandaMatchId: id }));
+					socket.send(JSON.stringify({ type: "unsubscribe", pandaMatchId: id }));
 				} catch {
 					/* ignore */
 				}
 			}
+			try {
+				socket.send(
+					JSON.stringify({
+						type: "subscribe",
+						pandaMatchId: id,
+						...(bboOnly ? { bboOnly: true } : {}),
+					}),
+				);
+			} catch {
+				/* ignore */
+			}
+			nextSent.set(id, bboOnly);
 		}
-		this.prevSentPandaSubs = new Set(want);
+		this.prevSentPandaSubs = nextSent;
 	}
 
 	private connect(): void {
@@ -538,9 +631,9 @@ class VenuePricesClient {
 				this.lastWsError = null;
 				this.reconnectAttempt = 0;
 				this.allBboActive = false;
-				this.prevSentPandaSubs = new Set();
+				this.prevSentPandaSubs = new Map();
 				this.applySubscriptionOnOpen();
-				this.notify();
+				this.flushNotifyNow();
 			};
 
 			ws.onmessage = (event) => {
@@ -601,7 +694,7 @@ class VenuePricesClient {
 				if (this.ws === ws) this.ws = null;
 				this.connected = false;
 				this.allBboActive = false;
-				this.prevSentPandaSubs = new Set();
+				this.prevSentPandaSubs = new Map();
 				if (ev.reason) this.lastWsError = ev.reason;
 				this.notify();
 

@@ -377,6 +377,15 @@ export default defineConfig(({ mode }) => {
 		build: {
 			outDir: "dist",
 			sourcemap: mode === "sourcemaps" ? "hidden" : false,
+			rollupOptions: {
+				output: {
+					manualChunks(id) {
+						if (id.includes("@privy-io")) return "privy";
+						if (id.includes("node_modules/viem") || id.includes("@walletconnect")) return "viem";
+						if (id.includes("@sentry")) return "sentry";
+					},
+				},
+			},
 		},
 	};
 });

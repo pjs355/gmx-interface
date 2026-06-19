@@ -1,13 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TeamMapping } from "@/features/markets/listing/matchProps";
 import { allOddsVenueFieldPairs } from "./adapters";
-import type { AllOddsExchangeMatching, AllOddsMarket } from "./types";
+import type { AllOddsExchangeMatching, AllOddsGroup, AllOddsMarket } from "./types";
 import { applyVenueSnapshotsToMarkets } from "./venueSnapshotMerge";
 import { isActiveAllOddsMarket } from "./allOddsFreshness";
 import { isMlbGameSlug } from "@/pages/Predictions/utils/gameLinkFilters";
-import { useMatchedMarketsQuery } from "@/features/markets/queries/matchedMarketsQuery";
-import type { MatchedMarketsApiItem } from "@/features/markets/queries/matchedMarketsQuery";
-import { getVenuePricesClient, subscribeVenuePricesClient, getVenuePricesConnectedSnapshot, getVenuePricesLastErrorSnapshot } from "@/services/venuePricesClient";
+import {
+	useAllOddsPageQuery,
+	type AllOddsSportFilter,
+	type MatchedMarketsApiItem,
+} from "@/features/markets/queries/matchedMarketsQuery";
+import {
+	getVenuePricesClient,
+	subscribeVenuePricesClient,
+	getVenuePricesConnectedSnapshot,
+	getVenuePricesLastErrorSnapshot,
+} from "@/services/venuePricesClient";
+import { useAllOddsVenueSubscription } from "@/context/AllOddsVenueSubscriptionContext";
+import { buildAllOddsGroups } from "./allOddsViewModel";
 import { useSyncExternalStore } from "react";
 
 function pickPriceFields(m: AllOddsMarket): Partial<AllOddsMarket> {
@@ -100,21 +110,33 @@ function buildAllOddsMarketsFromApi(
 	return next;
 }
 
+export interface UseAllOddsFeedOptions {
+	page: number;
+	sport: AllOddsSportFilter;
+	q: string;
+}
+
 export interface UseAllOddsFeedResult {
 	markets: AllOddsMarket[];
+	groups: AllOddsGroup[];
 	connected: boolean;
 	error: string | null;
 	loading: boolean;
+	isFetching: boolean;
+	page: number;
+	totalPages: number;
+	totalGroups: number;
 }
 
-export function useAllOddsFeed(): UseAllOddsFeedResult {
+export function useAllOddsFeed({ page, sport, q }: UseAllOddsFeedOptions): UseAllOddsFeedResult {
+	const { setPagePandaMatchIds } = useAllOddsVenueSubscription();
 	const {
-		data: matchedItems,
+		data: pageData,
 		isLoading,
 		isFetching,
 		isError,
 		error: queryError,
-	} = useMatchedMarketsQuery(true);
+	} = useAllOddsPageQuery(page, sport, q, true);
 
 	const connected = useSyncExternalStore(
 		subscribeVenuePricesClient,
@@ -130,16 +152,29 @@ export function useAllOddsFeed(): UseAllOddsFeedResult {
 
 	const marketsRef = useRef(new Map<string, AllOddsMarket>());
 	const [markets, setMarkets] = useState<AllOddsMarket[]>([]);
+	const rafSyncRef = useRef<number | null>(null);
 
 	const syncMarketsState = useCallback(() => {
-		setMarkets(Array.from(marketsRef.current.values()));
+		if (rafSyncRef.current !== null) return;
+		rafSyncRef.current = requestAnimationFrame(() => {
+			rafSyncRef.current = null;
+			setMarkets(Array.from(marketsRef.current.values()));
+		});
 	}, []);
 
 	useEffect(() => {
-		if (!matchedItems?.length) return;
-		marketsRef.current = buildAllOddsMarketsFromApi(matchedItems, marketsRef.current);
+		if (!pageData?.rows?.length) {
+			marketsRef.current = new Map();
+			syncMarketsState();
+			return;
+		}
+		marketsRef.current = buildAllOddsMarketsFromApi(pageData.rows, marketsRef.current);
 		syncMarketsState();
-	}, [matchedItems, syncMarketsState]);
+	}, [pageData?.rows, syncMarketsState]);
+
+	useEffect(() => {
+		setPagePandaMatchIds(pageData?.pandaMatchIds ?? []);
+	}, [pageData?.pandaMatchIds, setPagePandaMatchIds]);
 
 	useEffect(() => {
 		const client = getVenuePricesClient();
@@ -153,7 +188,12 @@ export function useAllOddsFeed(): UseAllOddsFeedResult {
 		});
 	}, [syncMarketsState]);
 
-	const loading = !matchedItems?.length && (isLoading || isFetching);
+	const groups = useMemo(
+		() => buildAllOddsGroups(markets.filter((m) => !isMlbGameSlug(m.game))),
+		[markets],
+	);
+
+	const loading = !pageData && (isLoading || isFetching);
 
 	const error = isError
 		? queryError instanceof Error
@@ -163,8 +203,13 @@ export function useAllOddsFeed(): UseAllOddsFeedResult {
 
 	return {
 		markets,
+		groups,
 		connected,
 		error,
 		loading,
+		isFetching,
+		page: pageData?.page ?? page,
+		totalPages: pageData?.totalPages ?? 1,
+		totalGroups: pageData?.totalGroups ?? 0,
 	};
 }

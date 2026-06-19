@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useSignerContext } from "context/SignerContext";
-import { usePositionsPageData } from "@/context/PositionsDataContext";
+import { useOptionalPositionsPageData } from "@/context/PositionsDataContext";
 
 type PortfolioContextValue = {
 	/** Cash + Positions summary total; `null` while cash or positions summary is loading. */
@@ -31,7 +31,9 @@ let portfolioProviderMissingLogged = false;
 
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 	const { account } = useSignerContext();
-	const { positionsTotalValue, positionsSummaryLoading } = usePositionsPageData();
+	const positionsData = useOptionalPositionsPageData();
+	const positionsTotalValue = positionsData?.positionsTotalValue ?? 0;
+	const positionsSummaryLoading = positionsData?.positionsSummaryLoading ?? false;
 	const collateral = useCollateralTokens();
 
 	const cashBalance: number | null = useMemo(() => {

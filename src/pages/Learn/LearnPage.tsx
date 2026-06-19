@@ -8,13 +8,11 @@ import {
 	organizationJsonLd,
 	webPageJsonLd,
 } from "@/content/seoSchema";
-import { useHideContentPrerender } from "@/content/useHideContentPrerender";
 import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
 
 import "../Blog/contentPages.scss";
 
 export function LearnIndex() {
-	useHideContentPrerender();
 	const landers = getLanders();
 
 	return (
@@ -52,7 +50,6 @@ export function LearnIndex() {
 }
 
 export function LearnPage() {
-	useHideContentPrerender();
 	const { slug = "" } = useParams<{ slug: string }>();
 	const lander = getLanderBySlug(slug);
 

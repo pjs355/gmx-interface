@@ -15,6 +15,7 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import {
 	getListingYesNoPricesForUmbrella,
 	isDeemphasizedSettledLeanOdds,
+	umbrellaHasListableCrossVenueOdds,
 } from "@/features/markets/listing/umbrellaListingOdds";
 import {
 	findEsportsTag,
@@ -28,7 +29,6 @@ import {
 	STARTING_SOON_PILL_ID,
 	umbrellaHasTradeableHomeChildren,
 	umbrellaMatchesHomeFilterType,
-	umbrellaVenuePandaIds,
 	worldCupPropGroupSortKey,
 	worldCupMultiLegSortKey,
 	WORLD_CUP_PILL_ID,
@@ -38,11 +38,6 @@ import {
 	isNonMatchHomeListing,
 	worldCupSectionForUmbrella,
 } from "@/features/markets/listing/multiLegMarket";
-import {
-	MAX_VENUE_PANDA_SUBSCRIPTIONS,
-	useVenuePandaSubscription,
-	VENUE_SUB_WEIGHT_PREFETCH,
-} from "@/context/VenuePandaSubscriptionContext";
 import {
 	clearHomePendingGameFilter,
 	clearHomePendingWorldCupSection,
@@ -61,7 +56,7 @@ import {
 	WORLD_CUP_GAME_LOGO_URL,
 } from "@/features/markets/assets/gameLogoResolver";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
-import { preloadAllOddsRoute } from "@/app/routes/allOddsRouteLazy";
+import { VirtualizedHomeCards } from "./VirtualizedHomeCards";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
@@ -361,7 +356,6 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	// Prefetch umbrella trading route chunk so card clicks are not blocked on Suspense.
 	useEffect(() => {
 		preloadPredictionMarketRoute();
-		preloadAllOddsRoute();
 	}, []);
 
 	// Listen for reset filter event from header
@@ -401,6 +395,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 		let filtered = activeUmbrellas.filter((umbrella) => {
 			if (!umbrellaHasTradeableHomeChildren(umbrella)) return false;
+			if (!umbrellaHasListableCrossVenueOdds(umbrella, appState?.markets)) return false;
 			const children = (umbrella as any).children as Array<any> | undefined;
 			if (!children || children.length === 0) return false;
 
@@ -461,7 +456,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		}
 
 		return deduped;
-	}, [umbrellas, filterType, selectedGame, worldCupSection, tags, now, restrictedMode]);
+	}, [umbrellas, filterType, selectedGame, worldCupSection, tags, now, restrictedMode, appState?.markets]);
 
 	/** Games vs Groups counts for the World Cup sidebar (active World Cup umbrellas only). */
 	const worldCupSectionCounts = useMemo(() => {
@@ -634,43 +629,9 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	const shouldUseCalendar = filterType === "esports" || filterType === "all";
 
 	/*
-	 * Venue-prices subscriptions use a hybrid model:
-	 *   1. Per-card viewport subscriptions (PredictionCard, weight 2) guarantee
-	 *      every on-screen card is priced and follow the scroll position.
-	 *   2. An eager leading-window prefetch (below, weight 1) subscribes the top
-	 *      MAX_VENUE_PANDA_SUBSCRIPTIONS ids of the active filter the moment a
-	 *      tab/section is selected — so prices are already arriving before the
-	 *      user scrolls. The weight split lets on-screen cards always win a slot
-	 *      while the prefetch fills the remaining budget with the leading
-	 *      off-screen markets the user is most likely to reach next.
-	 *
-	 * `visibleUmbrellasForVenueWs` is still computed below because it also feeds
-	 * the HomeInlineTradeLayout dock (unrelated to the WS subscription set).
+	 * Per-card viewport subscriptions (PredictionCard) claim WS budget as cards
+	 * scroll into view — capped at MAX_VENUE_PANDA_SUBSCRIPTIONS (~50).
 	 */
-	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
-	const prefetchPandaIds = useMemo(() => {
-		const ids: string[] = [];
-		const seen = new Set<string>();
-		for (const umbrella of filteredUmbrellas) {
-			for (const id of umbrellaVenuePandaIds(umbrella)) {
-				if (seen.has(id)) continue;
-				seen.add(id);
-				ids.push(id);
-				if (ids.length >= MAX_VENUE_PANDA_SUBSCRIPTIONS) return ids;
-			}
-		}
-		return ids;
-	}, [filteredUmbrellas]);
-	const prefetchPandaIdsKey = prefetchPandaIds.join(",");
-	useEffect(() => {
-		if (prefetchPandaIds.length === 0) return;
-		for (const id of prefetchPandaIds) subscribePandaMatchId(id, VENUE_SUB_WEIGHT_PREFETCH);
-		return () => {
-			for (const id of prefetchPandaIds) unsubscribePandaMatchId(id, VENUE_SUB_WEIGHT_PREFETCH);
-		};
-		// prefetchPandaIdsKey captures the id-set identity; subscribe/unsubscribe are stable.
-	}, [prefetchPandaIdsKey, subscribePandaMatchId, unsubscribePandaMatchId]);
-
 	const visibleUmbrellasForVenueWs = useMemo(
 		() =>
 			collectVisibleUmbrellas(
@@ -880,7 +841,14 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 			<div className={gridClassName}>
 				{filteredUmbrellas.length > 0 ? (
 					<>
-						{filteredUmbrellas.map((umbrella) => renderPredictionCard(umbrella))}
+						{filterType === "esports" ? (
+							filteredUmbrellas.map((umbrella) => renderPredictionCard(umbrella))
+						) : (
+							<VirtualizedHomeCards
+								umbrellas={filteredUmbrellas}
+								renderCard={renderPredictionCard}
+							/>
+						)}
 						{filterType === "esports" && (
 							<div
 								className="view-all-card-filtered"

@@ -3,6 +3,8 @@ import type { MatchedMarket } from "@/types/odds-monitor";
 import { findOddsMatchedMarket } from "@/features/markets/odds-monitor/findOddsMatchedMarket";
 import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
 import { mergeMonitorLimitlessFromUmbrella } from "@/features/markets/odds-monitor/mergeMonitorLimitlessFromUmbrella";
+import { buildVenuePriceRows } from "@/features/markets/pricing/buildVenuePriceRows";
+import { isValidProbPrice } from "@/features/markets/pricing/orderbookBbo";
 
 /**
  * Match-level YES/NO best asks from OddsMonitor (`MatchedMarket` / venue-prices WS).
@@ -20,6 +22,45 @@ export function getListingYesNoPricesForUmbrella(
 		umbrella.exchangeMatching?.limitless ?? null,
 	);
 	return listingBestYesNoFromMatched(merged);
+}
+
+/**
+ * Home / all-markets listing: hide Panda fixtures with no cross-venue liquidity
+ * (all linked venues would show "No shares", unlinked "—", or ~0¢/~100¢ settled lean).
+ */
+export function umbrellaHasListableCrossVenueOdds(
+	umbrella: Umbrella,
+	matchedMarkets: MatchedMarket[] | null | undefined,
+): boolean {
+	const raw = (umbrella as { pandascore_matchId?: unknown }).pandascore_matchId;
+	const panda = typeof raw === "string" ? raw.trim() : "";
+	if (!panda) return true;
+	if (matchedMarkets == null) return true;
+
+	const merged = mergeMonitorLimitlessFromUmbrella(
+		findOddsMatchedMarket(matchedMarkets, panda, umbrella._id),
+		umbrella.exchangeMatching?.limitless ?? null,
+	);
+	if (!merged) return false;
+
+	const rows = buildVenuePriceRows(merged);
+	let hasValidQuote = false;
+	for (const row of rows) {
+		if (!row.linked) continue;
+		if (
+			(row.askA !== null && isValidProbPrice(row.askA)) ||
+			(row.askB !== null && isValidProbPrice(row.askB))
+		) {
+			hasValidQuote = true;
+			break;
+		}
+	}
+	if (!hasValidQuote) return false;
+
+	const { yes, no } = listingBestYesNoFromMatched(merged);
+	if (isDeemphasizedSettledLeanOdds(yes, no)) return false;
+
+	return true;
 }
 
 /**

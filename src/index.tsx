@@ -15,21 +15,29 @@ if (typeof window !== "undefined") {
 import * as Sentry from "@sentry/react";
 import { shouldDropPrivyDuplicateSolanaInsufficientUnhandled } from "@/shared/observability/sentryPrivySolanaFilter";
 
-Sentry.init({
-	dsn: "https://014a3809164e437ea9fa07f4dc0d3f32@o4508413424893952.ingest.us.sentry.io/4510275102703616",
-	// Setting this option to true will send default PII data to Sentry.
-	// For example, automatic IP address collection on events
-	sendDefaultPii: true,
-	beforeSend(event) {
-		if (shouldDropPrivyDuplicateSolanaInsufficientUnhandled(event)) return null;
-		return event;
-	},
-});
+function initSentryDeferred(): void {
+	Sentry.init({
+		dsn: "https://014a3809164e437ea9fa07f4dc0d3f32@o4508413424893952.ingest.us.sentry.io/4510275102703616",
+		sendDefaultPii: true,
+		beforeSend(event) {
+			if (shouldDropPrivyDuplicateSolanaInsufficientUnhandled(event)) return null;
+			return event;
+		},
+	});
+}
+
+if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+	requestIdleCallback(() => initSentryDeferred());
+} else if (typeof window !== "undefined") {
+	setTimeout(() => initSentryDeferred(), 0);
+} else {
+	initSentryDeferred();
+}
 
 import { initMixpanel } from "@/shared/analytics/mixpanel";
 initMixpanel("0da2aa66dee9343cec64d0cdeb46562e", {
 	autocapture: true,
-	record_sessions_percent: 100,
+	record_sessions_percent: 10,
 });
 
 import { PrivyProvider } from "@privy-io/react-auth";
@@ -70,11 +78,8 @@ import { UserDataProvider } from "context/UserDataContext";
 import { RecentSettlementClaimProvider } from "context/RecentSettlementClaimContext";
 import { PortfolioProvider } from "@/context/PortfolioContext";
 import { AccountDataProvider } from "@/context/AccountDataContext";
-import { PositionsDataProvider } from "@/context/PositionsDataContext";
 import { PositionsRouteChunkPreloader } from "@/context/PositionsRouteChunkPreloader";
-import { AllOddsRouteChunkPreloader } from "@/context/AllOddsRouteChunkPreloader";
 import { PostTradeAccountSyncProvider } from "@/features/trading/sor/post-trade/usePostTradeAccountSync";
-import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
 import { TransfersModalProvider } from "context/TransfersModalContext";
 import { OddsDisplayProvider } from "context/OddsDisplayContext";
@@ -148,7 +153,6 @@ createRoot(document.getElementById("root")!).render(
 										 */}
 										<AccountDataProvider>
 											<PositionsRouteChunkPreloader />
-											<AllOddsRouteChunkPreloader />
 											<UserDataProvider>
 												<SetupActivationProvider>
 													{/*
@@ -179,10 +183,8 @@ createRoot(document.getElementById("root")!).render(
 													<FirstSignupSetupGate />
 													<RecentSettlementClaimProvider>
 														<PostTradeAccountSyncProvider>
-															<PositionsDataProvider>
-																<PortfolioProvider>
-																	<PositionsPageMetricsGateProvider>
-																		<RPGProvider>
+															<PortfolioProvider>
+																<RPGProvider>
 																			<TransfersModalProvider>
 																				<OddsDisplayProvider>
 																					<StickyTradeAmountProvider>
@@ -191,9 +193,7 @@ createRoot(document.getElementById("root")!).render(
 																				</OddsDisplayProvider>
 																			</TransfersModalProvider>
 																		</RPGProvider>
-																	</PositionsPageMetricsGateProvider>
-																</PortfolioProvider>
-															</PositionsDataProvider>
+															</PortfolioProvider>
 														</PostTradeAccountSyncProvider>
 													</RecentSettlementClaimProvider>
 												</SetupActivationProvider>

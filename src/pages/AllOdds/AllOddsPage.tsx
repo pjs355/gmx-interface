@@ -1,10 +1,24 @@
+import { useEffect, useState } from "react";
 import { AllOddsMatrixTable } from "@/features/all-odds/AllOddsMatrixTable";
 import { AllOddsSkeleton } from "@/features/all-odds/AllOddsSkeleton";
 import { useAllOddsFeed } from "@/features/all-odds/useAllOddsFeed";
+import type { AllOddsSportFilter } from "@/features/markets/queries/matchedMarketsQuery";
 import "./AllOdds.scss";
 
 export default function AllOddsPage() {
-	const { markets, error, loading } = useAllOddsFeed();
+	const [page, setPage] = useState(0);
+	const [sport, setSport] = useState<AllOddsSportFilter>("all");
+	const [search, setSearch] = useState("");
+
+	useEffect(() => {
+		setPage(0);
+	}, [search, sport]);
+
+	const { groups, markets, error, loading, isFetching, totalPages } = useAllOddsFeed({
+		page,
+		sport,
+		q: search,
+	});
 
 	return (
 		<div className="all-odds-page">
@@ -19,7 +33,19 @@ export default function AllOddsPage() {
 			{loading && markets.length === 0 ? (
 				<AllOddsSkeleton />
 			) : (
-				<AllOddsMatrixTable markets={markets} loading={loading} error={error} />
+				<AllOddsMatrixTable
+					groups={groups}
+					markets={markets}
+					loading={loading || isFetching}
+					error={error}
+					page={page}
+					totalPages={totalPages}
+					onPageChange={setPage}
+					search={search}
+					onSearchChange={setSearch}
+					sport={sport}
+					onSportChange={setSport}
+				/>
 			)}
 		</div>
 	);

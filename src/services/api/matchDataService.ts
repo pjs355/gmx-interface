@@ -2,6 +2,7 @@ import { queryClient } from "@/services/wallets/WalletProvider";
 import {
 	fetchMatchedMarketsRaw,
 	matchedMarketsQueryOptions,
+	MATCHED_MARKETS_MATRIX_QUERY_KEY,
 	type MatchedMarketsApiItem,
 } from "@/features/markets/queries/matchedMarketsQuery";
 import type { MatchedMarketsDflowWire } from "@/types/matchedMarketsDflowWire";
@@ -121,6 +122,7 @@ export function clearMatchDataCache(): void {
 	cachedMarkets = null;
 	lastFetchTime = 0;
 	void queryClient.invalidateQueries({ queryKey: matchedMarketsQueryOptions.queryKey });
+	void queryClient.invalidateQueries({ queryKey: MATCHED_MARKETS_MATRIX_QUERY_KEY });
 }
 
 export { fetchMatchedMarketsRaw };

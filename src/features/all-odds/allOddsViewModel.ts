@@ -162,6 +162,19 @@ function totalOutcomeLabels(m: AllOddsMarket): { over: string; under: string } {
 	return { over: `Over${suffix}`, under: `Under${suffix}` };
 }
 
+/** Remainder after a fixture title prefix — tournament context, not spread/total. */
+function isTournamentContextSuffix(remainder: string): boolean {
+	const trimmed = remainder.trim();
+	if (!trimmed) return false;
+	if (!/^[—–-]/.test(trimmed)) return false;
+	const afterDash = trimmed.replace(/^[—–-]\s*/, "").trim();
+	if (!afterDash) return true;
+	if (isPropDisplay(afterDash)) return false;
+	if (/\b(o\/u|over\/under|total goals?)\b/i.test(afterDash)) return false;
+	if (/\b[+-]\d+(?:\.\d+)?\b/.test(afterDash)) return false;
+	return true;
+}
+
 function isPropMarket(m: AllOddsMarket): boolean {
 	const mt = m.marketType?.trim().toLowerCase();
 	if (mt === "spread") return true;
@@ -175,7 +188,10 @@ function isPropMarket(m: AllOddsMarket): boolean {
 
 	const { home, away } = fixtureTeams(m);
 	const title = home && away ? `${home} vs ${away}` : "";
-	if (title && display !== title && display.startsWith(title)) return true;
+	if (title && display !== title && display.startsWith(title)) {
+		if (isTournamentContextSuffix(display.slice(title.length))) return false;
+		return true;
+	}
 	if (/\b(o\/u|over\/under|total goals?)\b/i.test(display)) return true;
 	if (/\b[+-]\d+(?:\.\d+)?\b/.test(display) && display !== title) return true;
 
@@ -316,6 +332,32 @@ export function outcomeHasValidAsk(row: AllOddsOutcomeRow): boolean {
 			c.ask >= MIN_VALID_PRICE &&
 			c.ask <= MAX_VALID_PRICE,
 	);
+}
+
+const TRADABLE_ALL_ODDS_VENUE_IDS = new Set(
+	ALL_ODDS_ADAPTERS.filter((col) => col.tradable).map((col) => col.id),
+);
+
+/** At least one CC-tradable venue (Poly/Predict/Limitless/Kalshi) has a real ask. */
+export function groupHasTradableVenueQuotes(group: AllOddsGroup): boolean {
+	const rows = [
+		...group.primaryOutcomes,
+		...group.moreSections.flatMap((section) => section.outcomes),
+	];
+	for (const row of rows) {
+		for (const cell of row.venueCells) {
+			if (!TRADABLE_ALL_ODDS_VENUE_IDS.has(cell.id)) continue;
+			if (!cell.linked) continue;
+			if (
+				cell.ask != null &&
+				cell.ask >= MIN_VALID_PRICE &&
+				cell.ask <= MAX_VALID_PRICE
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 type OutcomeDraft = {
@@ -744,6 +786,16 @@ export function buildAllOddsGroups(
 		}
 
 		if (primaryOutcomes.length === 0 && moreSections.length === 0) continue;
+
+		const draftGroup: AllOddsGroup = {
+			groupKey: acc.groupKey,
+			title: acc.title,
+			teamMappings: acc.teamMappings,
+			kind,
+			primaryOutcomes,
+			moreSections,
+		};
+		if (!groupHasTradableVenueQuotes(draftGroup)) continue;
 
 		const fixtureMarkets = marketsByFixture.get(acc.groupKey) ?? [];
 		const ctx = fixtureContextByKey.get(acc.groupKey);

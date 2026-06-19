@@ -17,3 +17,8 @@ export function usePositionsPageData(): PositionsPageData {
 	}
 	return ctx;
 }
+
+/** Safe read when PositionsDataProvider is route-scoped (e.g. header portfolio on non-/positions routes). */
+export function useOptionalPositionsPageData(): PositionsPageData | null {
+	return useContext(PositionsDataContext);
+}

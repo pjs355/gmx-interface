@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigationType, useParams } fr
 
 import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
 import { peekHomeCatalogScroll } from "@/pages/Predictions/utils/homeScrollRestore";
-import { loadPositionsPage } from "@/app/routes/positionsRouteLazy";
+import { PositionsRoute } from "@/app/routes/PositionsRouteShell";
 import { loadPredictionMarketPage } from "@/app/routes/predictionMarketRouteLazy";
 import { loadAllOddsPage } from "@/app/routes/allOddsRouteLazy";
 
@@ -17,7 +17,6 @@ import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
 const PredictionMarket = lazy(loadPredictionMarketPage);
 const Profile = lazy(() => import("pages/Profile/Profile"));
 const Admin = lazy(() => import("pages/Admin/Admin"));
-const Positions = lazy(loadPositionsPage);
 const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));
@@ -254,14 +253,7 @@ export function MainRoutes() {
 						</LazyPage>
 					}
 				/>
-				<Route
-					path="/positions"
-					element={
-						<LazyPage>
-							<Positions />
-						</LazyPage>
-					}
-				/>
+				<Route path="/positions" element={<PositionsRoute />} />
 				<Route
 					path="/transfers"
 					element={

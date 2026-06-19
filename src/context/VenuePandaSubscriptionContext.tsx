@@ -6,7 +6,7 @@ import React, { createContext, useCallback, useContext, useMemo, useRef, useStat
  * subscribed server-side feed and even supports `subscribe_all`. This is a
  * client-side ceiling that bounds browser memory and per-tick re-render churn.
  */
-export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 600;
+export const MAX_VENUE_PANDA_SUBSCRIPTIONS = 50;
 
 /**
  * Subscription weights decide who wins a slot when more than MAX ids are

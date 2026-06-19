@@ -6,12 +6,9 @@ import {
 	SITE_TITLE,
 } from "@/config/siteMetadata";
 import { homePageJsonLd } from "@/content/seoSchema";
-import { useHideContentPrerender } from "@/content/useHideContentPrerender";
 
 /** Homepage route with prediction market aggregator SEO. */
 export function HomeRoute() {
-	useHideContentPrerender();
-
 	return (
 		<>
 			<SEO

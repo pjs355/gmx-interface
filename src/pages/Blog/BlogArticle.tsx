@@ -4,13 +4,11 @@ import SEO from "@/components/Common/SEO";
 import { getBlogPostBySlug, getRelatedBlogPosts } from "@/content/contentApi";
 import { ContentHubLinks } from "@/content/contentHubLinks";
 import { blogPostingJsonLd, breadcrumbJsonLd, faqPageJsonLd, organizationJsonLd, softwareApplicationJsonLd } from "@/content/seoSchema";
-import { useHideContentPrerender } from "@/content/useHideContentPrerender";
 import PageNotFound from "pages/PageNotFound/PageNotFound.jsx";
 
 import "./contentPages.scss";
 
 export function BlogArticle() {
-	useHideContentPrerender();
 	const { slug = "" } = useParams<{ slug: string }>();
 	const post = getBlogPostBySlug(slug);
 

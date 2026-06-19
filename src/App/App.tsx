@@ -2,6 +2,8 @@ import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { useEffect } from "react";
 
+import { useHideContentPrerender } from "@/content/useHideContentPrerender";
+
 import "styles/globals.css";
 // react-toastify@9 does NOT auto-inject styles (v10+ does). Without this import the
 // global `<ToastContainer>` in `AppRoutes` loses `position: fixed`, width, z-index,
@@ -19,6 +21,8 @@ import SEO from "components/Common/SEO";
 import { AppRoutes } from "./routes/AppRoutes.tsx";
 
 function App() {
+	useHideContentPrerender();
+
 	useEffect(() => {
 		const defaultLanguage = localStorage.getItem(LANGUAGE_LOCALSTORAGE_KEY) || defaultLocale;
 		dynamicActivate(defaultLanguage);

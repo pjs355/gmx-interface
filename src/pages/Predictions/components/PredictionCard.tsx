@@ -28,6 +28,10 @@ import { resolveTeamLogoUrl } from "@/features/markets/assets/teamLogo";
 import { usePredictionData } from "context/PredictionDataContext";
 import { useMatchVenuePrices, useOddsMonitor } from "@/context/OddsMonitorContext";
 import { listingBestYesNoFromMatched } from "@/features/markets/listing/listingVenuePrices";
+import { getVenuePricesClient } from "@/services/venuePricesClient";
+import {
+	useMatchedMarketsBatchQuery,
+} from "@/features/markets/queries/matchedMarketsQuery";
 import { buildPandaOddsRowSpecs } from "@/features/markets/presentation/pandaOddsRows";
 import { EsportsMatchMapOddsGrid } from "./EsportsMatchMapOddsGrid";
 import {
@@ -251,57 +255,46 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	// ~2 screens of pre-subscribe lead so BBO is already arriving before a card
 	// scrolls into view (weight 2 keeps on-screen cards prioritised over the
 	// leading-window prefetch when the budget is contended).
-	const [cardViewportRef] = useInViewport<HTMLDivElement>("1000px 0px");
+	const [cardViewportRef, cardInView] = useInViewport<HTMLDivElement>("1000px 0px");
 	const { subscribePandaMatchId, unsubscribePandaMatchId } = useVenuePandaSubscription();
 	const venuePandaIds = useMemo(() => umbrellaVenuePandaIds(umbrella), [umbrella]);
 	const venuePandaIdsKey = venuePandaIds.join(",");
+	const batchLegIds = useMemo(() => {
+		if (!cardInView || !isWorldCupUmbrella(umbrella)) return [];
+		const client = getVenuePricesClient();
+		return venuePandaIds.filter((id) => {
+			const row = client.getMarket(id);
+			return !row?.polyConditionId && !row?.polyTokenIdA;
+		});
+	}, [cardInView, umbrella, venuePandaIdsKey]);
+	const { data: batchLegRows } = useMatchedMarketsBatchQuery(
+		batchLegIds,
+		batchLegIds.length > 0,
+	);
 	useEffect(() => {
-		if (venuePandaIds.length === 0) return;
-		// Every rendered card subscribes its match id(s) at viewport weight. The
-		// venue-prices WS relays from a fully subscribed server feed and the cap is
-		// generous, so we don't gate on IntersectionObserver (which was leaving
-		// esports cards unsubscribed → no odds).
+		if (!batchLegRows?.length) return;
+		getVenuePricesClient().mergeMarketsFromMetadataBatch(batchLegRows);
+	}, [batchLegRows]);
+	useEffect(() => {
+		if (!cardInView || venuePandaIds.length === 0) return;
+		getVenuePricesClient().ensureMarketsFromUmbrella(umbrella, venuePandaIds);
 		for (const id of venuePandaIds) subscribePandaMatchId(id, VENUE_SUB_WEIGHT_VIEWPORT);
 		return () => {
 			for (const id of venuePandaIds) unsubscribePandaMatchId(id, VENUE_SUB_WEIGHT_VIEWPORT);
 		};
-		// venuePandaIdsKey captures the id-set identity; subscribe/unsubscribe are stable.
-	}, [venuePandaIdsKey, subscribePandaMatchId, unsubscribePandaMatchId]);
+	}, [
+		cardInView,
+		umbrella,
+		venuePandaIdsKey,
+		subscribePandaMatchId,
+		unsubscribePandaMatchId,
+		venuePandaIds,
+	]);
 	/** Row object is mutated in place on each WS tick; `timestamp` forces recompute when refs are stable. */
 	const listingVenueYesNo = useMemo(
 		() => listingBestYesNoFromMatched(matchedVenueRow),
 		[matchedVenueRow, oddsAppState?.timestamp],
 	);
-
-	// TEMP DIAGNOSTIC: log esports cards' odds lookup so we can see where the chain breaks.
-	useEffect(() => {
-		const pmid = (umbrella as { pandascore_matchId?: unknown })?.pandascore_matchId;
-		if (typeof pmid !== "string" || !pmid) return;
-		if (!umbrella.displayName?.includes(" vs ")) return;
-		const isFifa = (umbrella as { game?: string })?.game === "soccer-fifwc";
-		if (isFifa) return; // only esports
-		console.log("[ESPORTS-DIAG]", {
-			umbrellaId: umbrella._id,
-			displayName: umbrella.displayName,
-			pandascore_matchId: pmid,
-			hasMatchedRow: Boolean(matchedVenueRow),
-			polyPriceA: (matchedVenueRow as any)?.polyPriceA?.bestAsk ?? null,
-			polyPriceB: (matchedVenueRow as any)?.polyPriceB?.bestAsk ?? null,
-			polyConditionId: (matchedVenueRow as any)?.polyConditionId ?? null,
-			polyTokenIdA: (matchedVenueRow as any)?.polyTokenIdA ?? null,
-			dflowSet: Boolean((matchedVenueRow as any)?.dflow),
-			limitlessSet: Boolean((matchedVenueRow as any)?.limitless),
-			listingYes: listingVenueYesNo.yes,
-			listingNo: listingVenueYesNo.no,
-			marketsLen: oddsAppState?.markets?.length ?? 0,
-		});
-	}, [
-		matchedVenueRow,
-		umbrella,
-		listingVenueYesNo.yes,
-		listingVenueYesNo.no,
-		oddsAppState?.markets,
-	]);
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;
