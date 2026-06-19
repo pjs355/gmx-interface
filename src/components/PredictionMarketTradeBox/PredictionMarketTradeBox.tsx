@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useEffect, useRef, forwardRef } from "react";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
-import { RegisterPrivyOpenFundAction } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { RegisterDepositAction } from "@/features/funding/RegisterDepositAction";
+import { useAfterDepositRefresh } from "@/features/funding/useAfterDepositRefresh";
 import { useSmartWallets } from "@privy-io/react-auth/smart-wallets";
 import type { TradeBoxProps } from "@/features/trading/trade-box/types";
 import type { PredictionMarketTradeBoxHandle } from "@/features/trading/trade-box/types";
@@ -13,7 +14,6 @@ import {
 	useYesNoBalances,
 	checkSufficientShares,
 } from "@/features/trading/trade-box/checkBalances";
-import { useLevelUpPortfolioRefetch } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
 import { useCollateralTokens } from "context/CollateralTokenContext";
 import { useTradeState } from "@/features/trading/trade-box/hooks/useTradeState";
 import { usePolymarketExecutionGate } from "@/features/trading/hooks/usePolymarketExecutionGate";
@@ -93,11 +93,10 @@ const PredictionMarketTradeBox = forwardRef<
 		const { account, ready: signerReady, signer } = useSignerContext();
 		const { login, authenticated } = usePrivy();
 
-		const refreshLevelUpPortfolio = useLevelUpPortfolioRefetch();
+		const refreshAfterDeposit = useAfterDepositRefresh();
 		const collateralTokens = useCollateralTokens();
 		const accountData = useAccountData();
-		const addFundsFromPrivyRef = useRef<(() => void | Promise<void>) | null>(null);
-		const fundEvmForPrivy = accountData.venueAddressChainMap?.levelup.walletAddress;
+		const addFundsFromPrivyRef = useRef<(() => Promise<void>) | null>(null);
 		/** LevelUp REST orderbook (signing + execution always uses this for LevelUp venue). */
 		const levelUpOrderbook = propOrderbook ?? null;
 
@@ -456,11 +455,10 @@ const PredictionMarketTradeBox = forwardRef<
 
 		return (
 			<>
-				<RegisterPrivyOpenFundAction
-					fundTarget={fundEvmForPrivy}
+				<RegisterDepositAction
 					ready={signerReady}
-					onAfterFund={refreshLevelUpPortfolio}
-					fundActionRef={addFundsFromPrivyRef}
+					onComplete={refreshAfterDeposit}
+					depositActionRef={addFundsFromPrivyRef}
 				/>
 				<PredictionMarketTradeBoxResponsiveContainer
 					market={market}

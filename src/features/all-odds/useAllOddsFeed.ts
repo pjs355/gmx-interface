@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TeamMapping } from "@/features/markets/listing/matchProps";
-import { getMatchedMarketsUrl, getOddsWebSocketUrl } from "@/config/oddsMonitorBase";
-import { disposeWebSocket } from "@/shared/async/disposeWebSocket";
 import { allOddsVenueFieldPairs } from "./adapters";
 import type { AllOddsExchangeMatching, AllOddsMarket } from "./types";
-import {
-	applyVenueSnapshotsToMarkets,
-	venueSnapshotsFromMessage,
-} from "./venueSnapshotMerge";
+import { applyVenueSnapshotsToMarkets } from "./venueSnapshotMerge";
 import { isActiveAllOddsMarket } from "./allOddsFreshness";
 import { isMlbGameSlug } from "@/pages/Predictions/utils/gameLinkFilters";
+import { useMatchedMarketsQuery } from "@/features/markets/queries/matchedMarketsQuery";
+import type { MatchedMarketsApiItem } from "@/features/markets/queries/matchedMarketsQuery";
+import { getVenuePricesClient, subscribeVenuePricesClient, getVenuePricesConnectedSnapshot, getVenuePricesLastErrorSnapshot } from "@/services/venuePricesClient";
+import { useSyncExternalStore } from "react";
 
 function pickPriceFields(m: AllOddsMarket): Partial<AllOddsMarket> {
 	return {
@@ -34,25 +33,6 @@ function pickPriceFields(m: AllOddsMarket): Partial<AllOddsMarket> {
 	};
 }
 
-interface MatchedMarketsApiItem {
-	pandaMatchId: string;
-	umbrellaId?: string;
-	displayName: string;
-	game?: string;
-	status?: string;
-	eventDate?: string;
-	pandaTeamA?: string;
-	pandaTeamB?: string;
-	homeTeamName?: string;
-	awayTeamName?: string;
-	moneylineLeg?: "home" | "draw" | "away";
-	marketType?: string;
-	segment?: string;
-	sortOrder?: number;
-	teamMappings?: TeamMapping[];
-	exchangeMatching?: AllOddsExchangeMatching;
-}
-
 function apiItemToAllOddsMarket(item: MatchedMarketsApiItem): AllOddsMarket {
 	const umbrellaId = item.umbrellaId ? String(item.umbrellaId).trim() : undefined;
 	return {
@@ -72,9 +52,12 @@ function apiItemToAllOddsMarket(item: MatchedMarketsApiItem): AllOddsMarket {
 		moneylineLeg: item.moneylineLeg,
 		marketType: item.marketType,
 		segment: typeof item.segment === "string" ? item.segment.trim() || undefined : undefined,
-		sortOrder: typeof item.sortOrder === "number" && Number.isFinite(item.sortOrder) ? item.sortOrder : undefined,
-		teamMappings: item.teamMappings,
-		exchangeMatching: item.exchangeMatching,
+		sortOrder:
+			typeof item.sortOrder === "number" && Number.isFinite(item.sortOrder)
+				? item.sortOrder
+				: undefined,
+		teamMappings: item.teamMappings as TeamMapping[] | undefined,
+		exchangeMatching: item.exchangeMatching as AllOddsExchangeMatching | undefined,
 		polyPriceA: null,
 		polyPriceB: null,
 		predictFunPriceA: null,
@@ -96,7 +79,26 @@ function apiItemToAllOddsMarket(item: MatchedMarketsApiItem): AllOddsMarket {
 	};
 }
 
-const MAPPING_REFRESH_MS = 5 * 60_000;
+function buildAllOddsMarketsFromApi(
+	items: MatchedMarketsApiItem[],
+	prevMap: Map<string, AllOddsMarket>,
+): Map<string, AllOddsMarket> {
+	const next = new Map<string, AllOddsMarket>();
+	for (const item of items) {
+		const pid = String(item.pandaMatchId ?? "").trim();
+		if (!pid) continue;
+		if (isMlbGameSlug(item.game)) continue;
+		const prev = prevMap.get(pid);
+		const fresh = apiItemToAllOddsMarket(item);
+		if (!isActiveAllOddsMarket(fresh)) continue;
+		if (prev) {
+			next.set(pid, { ...fresh, ...pickPriceFields(prev) });
+		} else {
+			next.set(pid, fresh);
+		}
+	}
+	return next;
+}
 
 export interface UseAllOddsFeedResult {
 	markets: AllOddsMarket[];
@@ -106,126 +108,63 @@ export interface UseAllOddsFeedResult {
 }
 
 export function useAllOddsFeed(): UseAllOddsFeedResult {
-	const [markets, setMarkets] = useState<AllOddsMarket[]>([]);
-	const [connected, setConnected] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
-	const marketsRef = useRef(new Map<string, AllOddsMarket>());
-	const wsRef = useRef<WebSocket | null>(null);
+	const {
+		data: matchedItems,
+		isLoading,
+		isFetching,
+		isError,
+		error: queryError,
+	} = useMatchedMarketsQuery(true);
 
-	const subscribeAllBbo = useCallback(() => {
-		const ws = wsRef.current;
-		if (!ws || ws.readyState !== WebSocket.OPEN) return;
-		ws.send(JSON.stringify({ type: "subscribe_all_bbo" }));
-	}, []);
+	const connected = useSyncExternalStore(
+		subscribeVenuePricesClient,
+		getVenuePricesConnectedSnapshot,
+		getVenuePricesConnectedSnapshot,
+	);
+
+	const lastWsError = useSyncExternalStore(
+		subscribeVenuePricesClient,
+		getVenuePricesLastErrorSnapshot,
+		getVenuePricesLastErrorSnapshot,
+	);
+
+	const marketsRef = useRef(new Map<string, AllOddsMarket>());
+	const [markets, setMarkets] = useState<AllOddsMarket[]>([]);
 
 	const syncMarketsState = useCallback(() => {
 		setMarkets(Array.from(marketsRef.current.values()));
 	}, []);
 
-	const loadMatchedMarkets = useCallback(async () => {
-		const url = getMatchedMarketsUrl();
-		const res = await fetch(url);
-		if (!res.ok) {
-			throw new Error(`matched-markets ${res.status}`);
-		}
-		const items = (await res.json()) as MatchedMarketsApiItem[];
-		const next = new Map<string, AllOddsMarket>();
-		for (const item of items) {
-			const pid = String(item.pandaMatchId ?? "").trim();
-			if (!pid) continue;
-			if (isMlbGameSlug(item.game)) continue;
-			const prev = marketsRef.current.get(pid);
-			const fresh = apiItemToAllOddsMarket(item);
-			if (!isActiveAllOddsMarket(fresh)) continue;
-			if (prev) {
-				next.set(pid, { ...fresh, ...pickPriceFields(prev) });
-			} else {
-				next.set(pid, fresh);
-			}
-		}
-		marketsRef.current = next;
+	useEffect(() => {
+		if (!matchedItems?.length) return;
+		marketsRef.current = buildAllOddsMarketsFromApi(matchedItems, marketsRef.current);
 		syncMarketsState();
-		subscribeAllBbo();
-	}, [syncMarketsState, subscribeAllBbo]);
+	}, [matchedItems, syncMarketsState]);
 
 	useEffect(() => {
-		let cancelled = false;
-		setLoading(true);
-		loadMatchedMarkets()
-			.catch((err) => {
-				if (!cancelled) {
-					setError(err instanceof Error ? err.message : String(err));
-				}
-			})
-			.finally(() => {
-				if (!cancelled) setLoading(false);
-			});
+		const client = getVenuePricesClient();
+		return client.subscribeRawSnapshots((snapshots) => {
+			const changed = applyVenueSnapshotsToMarkets(
+				marketsRef.current,
+				snapshots.filter((snap) => marketsRef.current.has(snap.pandaMatchId)),
+				(venue) => allOddsVenueFieldPairs(venue),
+			);
+			if (changed) syncMarketsState();
+		});
+	}, [syncMarketsState]);
 
-		const refreshTimer = window.setInterval(() => {
-			loadMatchedMarkets().catch(() => {});
-		}, MAPPING_REFRESH_MS);
+	const loading = !matchedItems?.length && (isLoading || isFetching);
 
-		return () => {
-			cancelled = true;
-			window.clearInterval(refreshTimer);
-		};
-	}, [loadMatchedMarkets]);
+	const error = isError
+		? queryError instanceof Error
+			? queryError.message
+			: String(queryError)
+		: lastWsError;
 
-	useEffect(() => {
-		const wsUrl = getOddsWebSocketUrl();
-		if (!wsUrl) {
-			setError("Venue prices WebSocket URL not configured");
-			return;
-		}
-
-		const ws = new WebSocket(wsUrl);
-		wsRef.current = ws;
-
-		ws.onopen = () => {
-			setConnected(true);
-			setError(null);
-			subscribeAllBbo();
-		};
-
-		ws.onmessage = (ev) => {
-			try {
-				const msg = JSON.parse(String(ev.data));
-				if (
-					msg?.type === "venue_prices_connected" ||
-					msg?.type === "subscribed" ||
-					msg?.type === "unsubscribed" ||
-					msg?.type === "subscribed_all_bbo" ||
-					msg?.type === "subscribed_all"
-				) {
-					return;
-				}
-				const snapshots = venueSnapshotsFromMessage(msg);
-				if (snapshots.length === 0) return;
-				const changed = applyVenueSnapshotsToMarkets(
-					marketsRef.current,
-					snapshots.filter((snap) => marketsRef.current.has(snap.pandaMatchId)),
-					(venue) => allOddsVenueFieldPairs(venue),
-				);
-				if (changed) syncMarketsState();
-			} catch {
-				/* ignore malformed frames */
-			}
-		};
-
-		ws.onerror = () => {
-			setError("WebSocket connection error");
-		};
-
-		ws.onclose = () => {
-			setConnected(false);
-		};
-
-		return () => {
-			wsRef.current = null;
-			disposeWebSocket(ws);
-		};
-	}, [syncMarketsState, subscribeAllBbo]);
-
-	return { markets, connected, error, loading };
+	return {
+		markets,
+		connected,
+		error,
+		loading,
+	};
 }

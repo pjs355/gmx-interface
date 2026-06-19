@@ -5,6 +5,7 @@ import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
 import { peekHomeCatalogScroll } from "@/pages/Predictions/utils/homeScrollRestore";
 import { loadPositionsPage } from "@/app/routes/positionsRouteLazy";
 import { loadPredictionMarketPage } from "@/app/routes/predictionMarketRouteLazy";
+import { loadAllOddsPage } from "@/app/routes/allOddsRouteLazy";
 
 // Eager: homepage and listing pages (most common entry points)
 import HomeRoute from "@/pages/Home/HomeRoute";
@@ -20,7 +21,7 @@ const Positions = lazy(loadPositionsPage);
 const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));
-const AllOdds = lazy(() => import("pages/AllOdds/AllOddsPage"));
+const AllOdds = lazy(loadAllOddsPage);
 const BlogIndex = lazy(() => import("pages/Blog/BlogIndex"));
 const BlogArticle = lazy(() => import("pages/Blog/BlogArticle"));
 const LearnIndex = lazy(() => import("pages/Learn/LearnPage").then((m) => ({ default: m.LearnIndex })));

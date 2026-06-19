@@ -7,7 +7,8 @@
  *
  * ARCHITECTURE:
  * - The old "Payments" page was replaced with a simplified "Transfers" system (Jan 2026)
- * - Deposits: Handled by Privy's native fundWallet() - no custom modal needed
+ * - Deposits: Privy fiat onramp (useFiatOnramp) and crypto deposit addresses (useDepositAddress)
+ *   via `src/features/funding/` — not this modal.
  * - Withdrawals: Handled by TransfersModal component, controlled by this context
  *
  * USAGE:
@@ -18,8 +19,7 @@
  * - Transfers page (/transfers) - "Withdraw Funds" button
  * - TransfersModal component - listens to isOpen state
  *
- * NOTE: Deposits do NOT use this modal. They use Privy's useFundWallet() hook directly.
- * See: Transfers.tsx, AppHeaderUser.tsx, PositionsHeader.tsx for deposit handling.
+ * NOTE: Deposits do NOT use this modal. See `src/features/funding/` and `/transfers`.
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from "react";

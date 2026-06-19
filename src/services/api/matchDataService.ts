@@ -1,4 +1,9 @@
-import { getMatchedMarketsUrl } from "@/config/oddsMonitorBase";
+import { queryClient } from "@/services/wallets/WalletProvider";
+import {
+	fetchMatchedMarketsRaw,
+	matchedMarketsQueryOptions,
+	type MatchedMarketsApiItem,
+} from "@/features/markets/queries/matchedMarketsQuery";
 import type { MatchedMarketsDflowWire } from "@/types/matchedMarketsDflowWire";
 
 export interface MatchedMarketExchange {
@@ -32,39 +37,8 @@ export interface MatchedMarketExchange {
 	};
 }
 
-interface RemoteMatchedMarket {
-	pandaMatchId: string;
+interface RemoteMatchedMarket extends MatchedMarketsApiItem {
 	umbrellaId: string;
-	displayName: string;
-	game?: string;
-	status?: string;
-	eventDate?: string;
-	pandaTeamA?: string;
-	pandaTeamB?: string;
-	exchangeMatching: {
-		polymarket?: {
-			conditionId: string;
-			slug?: string;
-			tokenIdA: string;
-			tokenIdB: string;
-			negRisk: boolean;
-			tickSize: string;
-		};
-		dflow?: MatchedMarketsDflowWire;
-		predictFun?: {
-			marketIdA?: string;
-			marketIdB?: string;
-			decimalPrecision: 2 | 3;
-			singleMarket?: boolean;
-		};
-		limitless?: {
-			slug: string;
-			tokenIdA: string;
-			tokenIdB: string;
-			orderbookSlugA?: string;
-			orderbookSlugB?: string;
-		};
-	};
 }
 
 function remoteToExchange(remote: RemoteMatchedMarket): MatchedMarketExchange | null {
@@ -106,14 +80,9 @@ export async function fetchMatchedMarkets(): Promise<MatchedMarketExchange[]> {
 		return cachedMarkets;
 	}
 
-	const res = await fetch(getMatchedMarketsUrl());
-	if (!res.ok) {
-		throw new Error(`matchDataService: GET /matched-markets returned ${res.status}`);
-	}
-
-	const remoteData: RemoteMatchedMarket[] = await res.json();
+	const remoteData = await queryClient.fetchQuery(matchedMarketsQueryOptions);
 	const data = remoteData
-		.map(remoteToExchange)
+		.map((remote) => remoteToExchange(remote as RemoteMatchedMarket))
 		.filter((m): m is MatchedMarketExchange => m !== null);
 	cachedMarkets = data;
 	lastFetchTime = now;
@@ -151,4 +120,7 @@ export async function findMatchedMarketByPandaMatchId(
 export function clearMatchDataCache(): void {
 	cachedMarkets = null;
 	lastFetchTime = 0;
+	void queryClient.invalidateQueries({ queryKey: matchedMarketsQueryOptions.queryKey });
 }
+
+export { fetchMatchedMarketsRaw };

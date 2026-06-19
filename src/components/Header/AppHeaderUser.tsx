@@ -11,9 +11,8 @@ import { usePrivy } from "@privy-io/react-auth";
 
 // Removed all userAnalytics and GMX-specific imports
 import { useSignerContext } from "context/SignerContext";
-import { useLevelUpPortfolioRefetch } from "@/features/trading/venues/levelup/portfolio/useLevelUpPortfolioRefetch";
-import { useVenueAddressChainMap } from "@/context/AccountDataContext";
-import { PrivyGatedFundTrigger } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { DepositFundingTrigger } from "@/features/funding/DepositFundingTrigger";
+import { useAfterDepositRefresh } from "@/features/funding/useAfterDepositRefresh";
 
 import { OneClickButton } from "components/OneClickButton/OneClickButton";
 import AddressDropdown from "components/AddressDropdown/AddressDropdown";
@@ -53,9 +52,7 @@ export function AppHeaderUser({
 	// Simplified for prediction markets - centralized signer context
 	const { authenticated: active, account, ready: signerReady } = useSignerContext();
 	const { login, user } = usePrivy();
-	const refreshLevelUpPortfolio = useLevelUpPortfolioRefetch();
-	const venueAddressChainMap = useVenueAddressChainMap();
-	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
+	const refreshAfterDeposit = useAfterDepositRefresh();
 	const { portfolioTotal, cashBalance, cashLoading, portfolioLoading } = usePortfolioContext();
 	const { blockHeaderMetrics } = usePositionsPageMetricsGate();
 	const claimCashSyncPending = useClaimCashSyncPending();
@@ -181,12 +178,8 @@ export function AppHeaderUser({
 					</HeaderLink>
 				</div>
 				<div className="App-header-nav-cash" data-qa="header-cash-wrap">
-					<PrivyGatedFundTrigger
-						fundTarget={fundEvmTarget}
-						ready={signerReady}
-						onAfterFund={refreshLevelUpPortfolio}
-					>
-						{({ openFund, canFund }) => (
+					<DepositFundingTrigger ready={signerReady} onComplete={refreshAfterDeposit}>
+						{({ buyWithCard, canBuyWithCard }) => (
 							<div
 								data-qa="header-cash"
 								data-qa-cash-amount={
@@ -196,10 +189,10 @@ export function AppHeaderUser({
 								}
 								className="header-metric-box header-metric-box--cash"
 								onClick={() => {
-									if (canFund) void openFund();
+									if (canBuyWithCard) void buyWithCard();
 								}}
 								style={{
-									cursor: canFund ? "pointer" : "default",
+									cursor: canBuyWithCard ? "pointer" : "default",
 								}}
 							>
 								<div className="header-metric-row">
@@ -223,7 +216,7 @@ export function AppHeaderUser({
 								</div>
 							</div>
 						)}
-					</PrivyGatedFundTrigger>
+					</DepositFundingTrigger>
 				</div>
 				<div data-qa="user-address" className="App-header-nav-email App-header-user-address">
 					<AddressDropdown

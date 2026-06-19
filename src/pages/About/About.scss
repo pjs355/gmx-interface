@@ -104,12 +104,6 @@
 	line-height: 1.6;
 	color: rgba(255, 255, 255, 0.55);
 	margin: 0 0 14px;
-
-	&--small {
-		font-size: 13px;
-		margin-top: -4px;
-		margin-bottom: 24px;
-	}
 }
 
 .about-pull {
@@ -124,12 +118,33 @@
 	}
 }
 
+// Venue groups
+.about-venue-group {
+	margin-bottom: 28px;
+
+	&:last-of-type {
+		margin-bottom: 24px;
+	}
+}
+
+.about-venues-heading {
+	font-size: 28px;
+	font-weight: 700;
+	color: #ffffff;
+	margin: 0 0 18px;
+	letter-spacing: -0.005em;
+
+	@media (max-width: 767px) {
+		font-size: 24px;
+	}
+}
+
 // Venue chips
 .about-venues {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
-	margin: 0 0 8px;
+	margin: 0;
 }
 
 .about-venues__chip {

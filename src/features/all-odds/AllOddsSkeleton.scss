@@ -1,0 +1,72 @@
+.all-odds-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: 1.5rem;
+	padding: 0.5rem 0 2rem;
+}
+
+.all-odds-skeleton__group {
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 12px;
+	overflow: hidden;
+	background: rgba(255, 255, 255, 0.02);
+}
+
+.all-odds-skeleton__group-header {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.875rem 1rem;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.all-odds-skeleton__logo {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.all-odds-skeleton__title {
+	height: 14px;
+	width: 180px;
+	border-radius: 4px;
+}
+
+.all-odds-skeleton__table {
+	display: flex;
+	flex-direction: column;
+}
+
+.all-odds-skeleton__row {
+	display: grid;
+	grid-template-columns: minmax(120px, 1.4fr) repeat(8, minmax(48px, 1fr));
+	gap: 0.5rem;
+	padding: 0.625rem 1rem;
+	align-items: center;
+}
+
+.all-odds-skeleton__row--head {
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.all-odds-skeleton__cell {
+	height: 12px;
+	border-radius: 4px;
+	min-width: 0;
+}
+
+.all-odds-skeleton__row:not(.all-odds-skeleton__row--head) .all-odds-skeleton__cell:first-child {
+	height: 14px;
+	width: 85%;
+}
+
+.all-odds-skeleton__row:not(.all-odds-skeleton__row--head) .all-odds-skeleton__cell:not(:first-child) {
+	height: 18px;
+}
+
+@media (max-width: 900px) {
+	.all-odds-skeleton__row {
+		grid-template-columns: minmax(100px, 1.2fr) repeat(4, minmax(40px, 1fr));
+	}
+}

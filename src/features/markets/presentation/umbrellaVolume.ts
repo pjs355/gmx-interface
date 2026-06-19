@@ -9,3 +9,15 @@ export function formatUmbrellaCrossVenueVolumeLabel(totalUsd?: number | null): s
 	const rounded = Math.ceil(totalUsd);
 	return `$${rounded.toLocaleString("en-US", { maximumFractionDigits: 0 })} Vol`;
 }
+
+/** Same volume row as esports match-winner cards; also World Cup games, groups, futures, awards. */
+export function shouldShowHomeCardUmbrellaVolume(input: {
+	useEsportsMatchWinnerCard: boolean;
+	displayChildrenCount: number;
+	isWorldCupListing: boolean;
+}): boolean {
+	if (input.useEsportsMatchWinnerCard) return true;
+	if (input.displayChildrenCount === 1) return true;
+	if (input.isWorldCupListing) return true;
+	return false;
+}

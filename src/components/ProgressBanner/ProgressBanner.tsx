@@ -4,7 +4,8 @@ import { useSignerContext } from "@/context/SignerContext";
 import { useLevelUpOrders } from "@/features/trading/venues/levelup/portfolio/useLevelUpOrders";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { useVenueAddressChainMap } from "@/context/AccountDataContext";
-import { PrivyGatedDepositButton } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { DepositFundingButton } from "@/features/funding/DepositFundingTrigger";
+import { useAfterDepositRefresh } from "@/features/funding/useAfterDepositRefresh";
 import "./ProgressBanner.scss";
 
 export function ProgressBanner() {
@@ -12,18 +13,17 @@ export function ProgressBanner() {
 	const { account, authenticated, ready: signerReady } = useSignerContext();
 	const venueAddressChainMap = useVenueAddressChainMap();
 	const fundEvmTarget = venueAddressChainMap?.levelup.walletAddress;
+	const refreshAfterDeposit = useAfterDepositRefresh();
 	const { orders, isLoading: ordersLoading } = useLevelUpOrders(
 		fundEvmTarget,
 		Boolean(authenticated && account && fundEvmTarget),
 	);
 	const { cashBalance, cashLoading } = usePortfolio();
 
-	// Handle Get Started - opens Privy login
 	const handleGetStarted = useCallback(() => {
 		login();
 	}, [login]);
 
-	// Banner 1: Welcome Banner - Show to non-authenticated users
 	if (!authenticated || !account) {
 		return (
 			<div className="progress-banner progress-banner--loaded">
@@ -42,19 +42,11 @@ export function ProgressBanner() {
 		);
 	}
 
-	// For authenticated users, check if they need the Fund Account banner
-	// Wait until we've finished loading balance and trading history
 	const isLoading = cashLoading || ordersLoading;
-
-	// Only show Fund Account banner if:
-	// - Balance is 0
-	// - User has never made a trade (no orders)
-	// - Loading is complete
 	const hasNoBalance = cashBalance === 0;
 	const hasNeverTraded = orders.length === 0;
 	const shouldShowFundBanner = !isLoading && hasNoBalance && hasNeverTraded;
 
-	// Banner 2: Fund Account Banner - Show to authenticated users with 0 balance and no trades
 	if (shouldShowFundBanner) {
 		return (
 			<div className="progress-banner progress-banner--loaded">
@@ -65,18 +57,17 @@ export function ProgressBanner() {
 							Add funds to your account so that you can place your first trade.
 						</h3>
 					</div>
-					<PrivyGatedDepositButton
+					<DepositFundingButton
 						className="progress-banner-button"
-						fundTarget={fundEvmTarget}
 						ready={signerReady}
+						onComplete={refreshAfterDeposit}
 					>
 						Add Funds
-					</PrivyGatedDepositButton>
+					</DepositFundingButton>
 				</div>
 			</div>
 		);
 	}
 
-	// Don't show any banner if user is authenticated, has balance or has traded
 	return null;
 }

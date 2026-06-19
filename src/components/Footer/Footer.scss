@@ -48,18 +48,25 @@
 	justify-content: center;
 	gap: 3.2rem;
 	flex-wrap: wrap;
+
+	a,
+	button.Footer-link {
+		color: #ffffff;
+	}
 }
 
 .Footer-link {
-	color: #d1d5db; /* slate-300 */
+	color: #ffffff;
 	text-decoration: none;
 }
 .Footer-link:hover {
 	color: #ffffff;
+	opacity: 0.85;
 }
 .Footer-link.active {
 	color: #ffffff;
 	font-weight: 600;
+	opacity: 1;
 }
 
 .Footer-right {

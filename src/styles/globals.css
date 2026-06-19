@@ -124,13 +124,17 @@ h6 {
 	box-sizing: border-box;
 }
 
-/* Only apply global link styles to non-header, non-button links */
-a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button) {
+/* Only apply global link styles to non-header, non-footer, non-button links */
+a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button):not(
+		.Footer-link
+	):not(.Footer-social) {
 	font-weight: 500;
 	color: var(--brand-primary-light);
 	text-decoration: inherit;
 }
-a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button):hover {
+a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button):not(
+		.Footer-link
+	):not(.Footer-social):hover {
 	color: var(--brand-primary);
 }
 

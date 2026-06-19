@@ -3,4 +3,31 @@
 	width: 100%;
 	min-height: 60vh;
 	box-sizing: border-box;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	padding-top: 3rem;
+}
+
+.page-skeleton__pulse {
+	width: min(480px, 80%);
+	height: 12px;
+	border-radius: 999px;
+	background: linear-gradient(
+		90deg,
+		rgba(255, 255, 255, 0.04) 0%,
+		rgba(255, 255, 255, 0.12) 50%,
+		rgba(255, 255, 255, 0.04) 100%
+	);
+	background-size: 200% 100%;
+	animation: page-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes page-skeleton-shimmer {
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
 }

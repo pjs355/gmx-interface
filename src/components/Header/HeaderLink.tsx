@@ -1,5 +1,5 @@
 import cx from "classnames";
-import { MouseEventHandler, ReactNode } from "react";
+import { FocusEventHandler, MouseEventHandler, ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
 // Removed GMX legacy imports - not needed for prediction markets
@@ -14,6 +14,8 @@ type Props = {
 	to: string;
 	showRedirectModal: (to: string) => void;
 	onClick?: MouseEventHandler<HTMLDivElement | HTMLAnchorElement>;
+	onMouseEnter?: MouseEventHandler<HTMLAnchorElement>;
+	onFocus?: FocusEventHandler<HTMLAnchorElement>;
 	children?: ReactNode;
 	isActive?: any;
 	qa?: string;
@@ -27,6 +29,8 @@ export function HeaderLink({
 	children,
 	showRedirectModal: _showRedirectModal,
 	onClick,
+	onMouseEnter,
+	onFocus,
 	isActive,
 	qa,
 }: Props) {
@@ -50,6 +54,8 @@ export function HeaderLink({
 			end={exact}
 			to={to}
 			onClick={onClick}
+			onMouseEnter={onMouseEnter}
+			onFocus={onFocus}
 			data-qa={qa}
 		>
 			{children}

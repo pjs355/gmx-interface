@@ -19,9 +19,8 @@ export function getFooterLinks(isHome: boolean) {
 	const FOOTER_LINKS: { home: Link[]; app: Link[] } = {
 		home: [],
 		app: [
-			{ label: "Learn", link: "/learn", isAppLink: true },
-			{ label: "Blog", link: "/blog", isAppLink: true },
-			{ label: "About", link: "/about", isAppLink: true },
+			{ label: "Blog", link: "/blog" },
+			{ label: "About", link: "/about" },
 			{ label: "Privacy Policy", link: "privacy-policy", opensModal: true },
 			// { label: t`Media Kit`, link: "https://docs.gmx.io/docs/community/media-kit", external: true },
 			// { label: "Jobs", link: "/jobs" },

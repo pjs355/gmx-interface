@@ -83,50 +83,51 @@ export function About() {
 				</header>
 
 				<section className="about-section">
-					<h2 className="about-section-title">Tradeable venues</h2>
-					<div className="about-venues" aria-label="Tradeable venues">
-						{TRADEABLE_VENUES.map(({ slug, name }) => {
-							const logoUrl = resolveMarketLogo(slug);
-							return (
-								<span key={slug} className="about-venues__chip">
-									{logoUrl ? (
-										<img
-											className="about-venues__logo"
-											src={logoUrl}
-											alt=""
-											width={22}
-											height={22}
-										/>
-									) : null}
-									<span className="about-venues__label">{name}</span>
-								</span>
-							);
-						})}
+					<div className="about-venue-group">
+						<h3 className="about-venues-heading">Tradeable venues</h3>
+						<div className="about-venues" aria-label="Tradeable venues">
+							{TRADEABLE_VENUES.map(({ slug, name }) => {
+								const logoUrl = resolveMarketLogo(slug);
+								return (
+									<span key={slug} className="about-venues__chip">
+										{logoUrl ? (
+											<img
+												className="about-venues__logo"
+												src={logoUrl}
+												alt=""
+												width={22}
+												height={22}
+											/>
+										) : null}
+										<span className="about-venues__label">{name}</span>
+									</span>
+								);
+							})}
+						</div>
 					</div>
-					<h2 className="about-section-title">Comparison-only on All Odds</h2>
-					<div className="about-venues" aria-label="Comparison-only venues">
-						{COMPARISON_VENUES.map(({ slug, name }) => {
-							const logoUrl = resolveMarketLogo(slug);
-							return (
-								<span key={slug} className="about-venues__chip">
-									{logoUrl ? (
-										<img
-											className="about-venues__logo"
-											src={logoUrl}
-											alt=""
-											width={22}
-											height={22}
-										/>
-									) : null}
-									<span className="about-venues__label">{name}</span>
-								</span>
-							);
-						})}
+					<div className="about-venue-group">
+						<h3 className="about-venues-heading">Comparison-only on All Odds</h3>
+						<div className="about-venues" aria-label="Comparison-only venues">
+							{COMPARISON_VENUES.map(({ slug, name }) => {
+								const logoUrl = resolveMarketLogo(slug);
+								return (
+									<span key={slug} className="about-venues__chip">
+										{logoUrl ? (
+											<img
+												className="about-venues__logo"
+												src={logoUrl}
+												alt=""
+												width={22}
+												height={22}
+											/>
+										) : null}
+										<span className="about-venues__label">{name}</span>
+									</span>
+								);
+							})}
+						</div>
 					</div>
-					<p className="about-muted about-muted--small">
-						Nine All Odds venues on matched events. Four tradeable. Five comparison-only.
-					</p>
-					<p className="about-pull">
+					<p className="about-body">
 						See the best prices. Pick where you want to trade. Or use smart routing to get the best
 						available execution across venues.
 					</p>
@@ -135,8 +136,8 @@ export function About() {
 				<section className="about-section">
 					<h2 className="about-section-title">Built for esports first</h2>
 					<p className="about-body">
-						We are starting with Counter-Strike markets. More esports are coming soon. After that,
-						we are adding broader sports markets and more prediction venues.
+						We cover all major esports markets plus World Cup markets. More sports markets and
+						prediction venues are coming soon.
 					</p>
 				</section>
 
@@ -162,7 +163,7 @@ export function About() {
 						deposit once. You trade across connected markets. We manage the bankroll routing
 						automatically.
 					</p>
-					<p className="about-muted">
+					<p className="about-body">
 						Your funds are held in a Privy crypto wallet connected to your account. ClutchComet does
 						not have custody or control over your funds.
 					</p>

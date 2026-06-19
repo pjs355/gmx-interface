@@ -1,34 +1,17 @@
 import { useEffect, useRef } from "react";
 import { RemoveScroll } from "react-remove-scroll";
-import { RegisterPrivyOpenFundAction } from "@/components/PrivyGatedFundWallet/PrivyGatedFundWallet";
+import { RegisterDepositAction } from "@/features/funding/RegisterDepositAction";
 import { SetupChecklist } from "./SetupChecklist";
 import { KalshiEnableStep } from "./KalshiEnableStep";
 import { useFirstSignupSetup } from "./useFirstSignupSetup";
-import { useFundWalletAfterSetup } from "./useFundWalletAfterSetup";
+import { useDepositAfterSetup } from "./useDepositAfterSetup";
 import type { OnboardingStep } from "./useOnboardingStep";
 
 import "./FirstSignupSetupModal.scss";
 
 /**
  * Blocking, non-dismissible setup modal shown to brand-new users immediately
- * after Privy hands control back to the app. Body of the modal is driven by
- * `step`:
- *
- *   "venues"  → checklist of three rows (Polymarket / Predict / Limitless),
- *               primary button enables once `allReady` flips true. The
- *               primary button advances to "kalshi". No "skip" button
- *               here — venues bootstrap silently and the activators retry
- *               on backoff if anything fails.
- *   "kalshi"  → DFlow Proof prompt with primary "Enable Kalshi trading"
- *               and secondary "Later". Either path leads to "deposit".
- *   "deposit" → Auto-fires Privy `fundWallet` once. Modal stays mounted
- *               showing a brief "Add funds" message; user can close the
- *               Privy modal or fund and we mark onboarding complete
- *               regardless (we set the flag BEFORE opening fundWallet —
- *               see `useFundWalletAfterSetup`).
- *
- * `step` is owned by the parent gate. The modal is purely presentational;
- * it requests transitions via `onAdvance`.
+ * after Privy hands control back to the app.
  */
 export function FirstSignupSetupModal(props: {
 	step: OnboardingStep;
@@ -37,14 +20,8 @@ export function FirstSignupSetupModal(props: {
 }) {
 	const { step, onAdvance, returnPath } = props;
 	const setup = useFirstSignupSetup();
-	const { fundTarget, fundActionRef, triggerFund, fundReady } = useFundWalletAfterSetup();
+	const { depositActionRef, triggerDeposit, depositReady } = useDepositAfterSetup();
 
-	// Hard guard: `triggerFund` may NEVER fire more than once per visit to
-	// the deposit step. Privy's `fundWallet` opens a modal that schedules
-	// internal setState, which can ripple back into this tree and cause the
-	// effect's deps to churn. Without this ref we'd loop ("Maximum update
-	// depth exceeded"). Reset when leaving the deposit step so a future
-	// re-entry (e.g. localStorage hydration) can fire again.
 	const firedRef = useRef(false);
 	useEffect(() => {
 		if (step !== "deposit") firedRef.current = false;
@@ -53,24 +30,13 @@ export function FirstSignupSetupModal(props: {
 	useEffect(() => {
 		if (step !== "deposit") return;
 		if (firedRef.current) return;
-		// Privy's `fundWallet` is fire-and-forget — user can dismiss the
-		// modal with no completion signal. The gate has already POSTed
-		// `/profiles/me/onboarding/complete` before transitioning here, so
-		// even if the user closes Privy, they're done. We trigger fundWallet
-		// once, regardless of whether `fundTarget` resolves later (we wait a
-		// brief moment for the EVM target to hydrate, then fire).
+
 		let cancelled = false;
 		let timer: ReturnType<typeof setTimeout> | null = null;
 		const tryFire = async () => {
 			if (cancelled) return false;
-			if (!fundReady) {
-				// fundTarget not yet resolved (account overview or polymarket
-				// query still loading). Retry shortly. After 5 attempts at
-				// 800ms, give up and just close the modal — we already marked
-				// onboarding complete server-side.
-				return false;
-			}
-			const ok = await triggerFund();
+			if (!depositReady) return false;
+			const ok = await triggerDeposit();
 			if (ok) firedRef.current = true;
 			return ok;
 		};
@@ -80,15 +46,12 @@ export function FirstSignupSetupModal(props: {
 			attempts += 1;
 			const fired = await tryFire();
 			if (fired) {
-				// Modal will auto-close after fundWallet returns/dismisses.
 				timer = setTimeout(() => {
 					if (!cancelled) onAdvance("done");
 				}, 250);
 				return;
 			}
 			if (attempts >= 5) {
-				// Couldn't resolve fund target — bail out cleanly, user can
-				// always deposit later from the header.
 				onAdvance("done");
 				return;
 			}
@@ -100,7 +63,7 @@ export function FirstSignupSetupModal(props: {
 			cancelled = true;
 			if (timer) clearTimeout(timer);
 		};
-	}, [step, fundReady, triggerFund, onAdvance]);
+	}, [step, depositReady, triggerDeposit, onAdvance]);
 
 	return (
 		<RemoveScroll>
@@ -151,14 +114,7 @@ export function FirstSignupSetupModal(props: {
 						</>
 					)}
 
-					{/* Mounts Privy's `useFundWallet` only when the EVM fund target is
-					 * a valid address. Syncs the imperative `openFund()` callback to
-					 * `fundActionRef` so the deposit-step effect can fire it once. */}
-					<RegisterPrivyOpenFundAction
-						fundTarget={fundTarget}
-						ready={true}
-						fundActionRef={fundActionRef}
-					/>
+					<RegisterDepositAction ready={true} depositActionRef={depositActionRef} />
 				</div>
 			</div>
 		</RemoveScroll>

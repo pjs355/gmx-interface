@@ -4,7 +4,7 @@ import {
 	useVenuePandaSubscription,
 	VENUE_SUB_WEIGHT_VIEWPORT,
 } from "@/context/VenuePandaSubscriptionContext";
-import { umbrellaVenuePandaIds } from "../utils/gameLinkFilters";
+import { isWorldCupUmbrella, umbrellaVenuePandaIds } from "../utils/gameLinkFilters";
 import CountdownTimer from "components/CountdownTimer/CountdownTimer";
 import EventStartStatus from "@/components/EventStartStatus/EventStartStatus";
 import { SingleMarketActions } from "./SingleMarketActions";
@@ -15,6 +15,7 @@ import { isThreeWayMoneylineQuestions } from "@/features/markets/listing/threeWa
 import { isMatchPropQuestion } from "@/features/markets/listing/matchProps";
 import {
 	isMultiLegBinaryUmbrella,
+	isNonMatchHomeListing,
 	multiLegSegmentFromQuestions,
 	multiLegUmbrellaShortTitle,
 	resolveMultiLegLayout,
@@ -44,7 +45,10 @@ import {
 	getTagLabelsFromUmbrella,
 	resolveLogoByTags,
 } from "@/features/markets/assets/gameLogoResolver";
-import { formatUmbrellaCrossVenueVolumeLabel } from "@/features/markets/presentation/umbrellaVolume";
+import {
+	formatUmbrellaCrossVenueVolumeLabel,
+	shouldShowHomeCardUmbrellaVolume,
+} from "@/features/markets/presentation/umbrellaVolume";
 import {
 	resolveEsportsCardGameHeadline,
 	resolveHomeMatchWinnerQuestion,
@@ -400,8 +404,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 		}),
 		[isDailyUmbrella, isThreeWayMoneyline, useEsportsMatchWinnerCard, umbrellaQuestions],
 	);
-	const isPropHomeCard = isPropOrNonMatchHomeCard(homeCardScheduleInput);
-	const showKickoffSchedule = shouldShowHomeCardKickoffSchedule(homeCardScheduleInput);
+	const isNonMatchListing = isNonMatchHomeListing(umbrella);
+	const isPropHomeCard =
+		isNonMatchListing || isPropOrNonMatchHomeCard(homeCardScheduleInput);
+	const showKickoffSchedule =
+		!isNonMatchListing && shouldShowHomeCardKickoffSchedule(homeCardScheduleInput);
 
 	const teamLogos = useMemo(() => {
 		const mappings = umbrella.teamMappings;
@@ -829,6 +836,11 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 	};
 
 	const umbrellaVolumeLabel = formatUmbrellaCrossVenueVolumeLabel(umbrella.volume?.totalUsd);
+	const showUmbrellaVolume = shouldShowHomeCardUmbrellaVolume({
+		useEsportsMatchWinnerCard,
+		displayChildrenCount,
+		isWorldCupListing: isWorldCupUmbrella(umbrella),
+	});
 
 	const renderActions = () => {
 		if (useEsportsMatchWinnerCard && matchWinnerQuestion) {
@@ -1053,7 +1065,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({
 
 			{actionContent ? <div className="prediction-actions">{actionContent}</div> : null}
 
-			{umbrellaVolumeLabel && (useEsportsMatchWinnerCard || displayChildrenCount === 1) ? (
+			{umbrellaVolumeLabel && showUmbrellaVolume ? (
 				<div className="prediction-card__meta prediction-card__top--split">
 					<div className="prediction-card__top-status">
 						<span className="prediction-card__volume prediction-card__headline-match-winner">

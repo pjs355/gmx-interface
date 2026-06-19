@@ -2,9 +2,12 @@ import "./PageSkeleton.scss";
 
 /**
  * Suspense fallback for lazy routes: keeps the main column from collapsing to zero
- * height (which pulled the footer up). No visible bars/cards — avoids the old
- * low-contrast white placeholders that read as a random oval flash.
+ * height while showing a subtle loading pulse.
  */
 export function PageSkeleton() {
-	return <div className="page-skeleton" aria-hidden />;
+	return (
+		<div className="page-skeleton" aria-busy aria-label="Loading page">
+			<div className="page-skeleton__pulse" />
+		</div>
+	);
 }

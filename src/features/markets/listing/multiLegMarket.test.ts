@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
 import {
 	isMultiLegBinaryUmbrella,
+	isNonMatchHomeListing,
 	multiLegLegLabel,
 	multiLegUmbrellaShortTitle,
 	orderMultiLegs,
@@ -98,6 +99,25 @@ describe("multiLegMarket", () => {
 				children: [{ segment: "award_golden_ball", marketType: "prop" }],
 			} as never),
 		).toBe("awards");
+	});
+
+	it("treats groups, futures, and awards as non-match home listings", () => {
+		expect(
+			isNonMatchHomeListing({
+				children: [{ segment: "group_a", marketType: "winner" }],
+			} as never),
+		).toBe(true);
+		expect(
+			isNonMatchHomeListing({
+				children: [{ segment: "future_tournament_winner", marketType: "winner" }],
+			} as never),
+		).toBe(true);
+		expect(
+			isNonMatchHomeListing({
+				children: [{ segment: "moneyline", marketType: "winner" }],
+			} as never),
+		).toBe(false);
+		expect(isNonMatchHomeListing({ children: [] } as never)).toBe(false);
 	});
 
 	it("detects multi-leg binary umbrellas with two or more legs", () => {

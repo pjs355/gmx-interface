@@ -1,6 +1,7 @@
 import { FiX } from "react-icons/fi";
 
 import { HeaderLink } from "./HeaderLink";
+import { preloadAllOddsRoute } from "@/app/routes/allOddsRouteLazy";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCopyToClipboard } from "react-use";
@@ -216,6 +217,19 @@ export function AppHeaderLinks({
 					Markets
 				</HeaderLink>
 			</div> */}
+				<div className="App-header-link-container">
+					<HeaderLink
+						qa="all-odds"
+						to="/all-odds"
+						showRedirectModal={showRedirectModal}
+						onClick={small ? clickCloseIcon : undefined}
+						onMouseEnter={() => preloadAllOddsRoute()}
+						onFocus={() => preloadAllOddsRoute()}
+						isActive={(_match: any, location: any) => location.pathname === "/all-odds"}
+					>
+						All Odds
+					</HeaderLink>
+				</div>
 				{active && (
 					<div className="App-header-link-container">
 						<HeaderLink
@@ -229,17 +243,6 @@ export function AppHeaderLinks({
 						</HeaderLink>
 					</div>
 				)}
-				<div className="App-header-link-container">
-					<HeaderLink
-						qa="all-odds"
-						to="/all-odds"
-						showRedirectModal={showRedirectModal}
-						onClick={small ? clickCloseIcon : undefined}
-						isActive={(_match: any, location: any) => location.pathname === "/all-odds"}
-					>
-						All Odds
-					</HeaderLink>
-				</div>
 				<div className="App-header-link-container">
 					<HeaderLink
 						qa="about"

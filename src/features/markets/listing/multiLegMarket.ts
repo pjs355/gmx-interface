@@ -118,6 +118,11 @@ export function multiLegSegmentFromQuestions(
 	return null;
 }
 
+/** Group winners, tournament futures, and player awards — not kickoff-scheduled H2H matches. */
+export function isNonMatchHomeListing(umbrella: Umbrella | null | undefined): boolean {
+	return worldCupSectionForUmbrella(umbrella) !== null;
+}
+
 export function worldCupSectionForUmbrella(
 	umbrella: Umbrella | null | undefined,
 ): WorldCupMultiLegSection | null {

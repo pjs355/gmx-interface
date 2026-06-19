@@ -34,7 +34,10 @@ import {
 	WORLD_CUP_PILL_ID,
 	useNowTick,
 } from "../utils/gameLinkFilters";
-import { worldCupSectionForUmbrella } from "@/features/markets/listing/multiLegMarket";
+import {
+	isNonMatchHomeListing,
+	worldCupSectionForUmbrella,
+} from "@/features/markets/listing/multiLegMarket";
 import {
 	MAX_VENUE_PANDA_SUBSCRIPTIONS,
 	useVenuePandaSubscription,
@@ -58,6 +61,7 @@ import {
 	WORLD_CUP_GAME_LOGO_URL,
 } from "@/features/markets/assets/gameLogoResolver";
 import { preloadPredictionMarketRoute } from "@/app/routes/predictionMarketRouteLazy";
+import { preloadAllOddsRoute } from "@/app/routes/allOddsRouteLazy";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours — matches Home.tsx
@@ -212,6 +216,7 @@ interface FilteredPredictionsProps {
 
 type CalendarDataForVisibility = {
 	upcomingDays: { events: CalendarEvent[] }[];
+	nonMatchMarkets: Umbrella[];
 	unscheduled: Umbrella[];
 };
 
@@ -228,11 +233,12 @@ function collectVisibleUmbrellas(
 	for (const day of calendarData.upcomingDays) {
 		for (const e of day.events) out.push(e.umbrella);
 	}
+	out.push(...calendarData.nonMatchMarkets);
 	out.push(...calendarData.unscheduled);
 	return out;
 }
 
-const DEFAULT_CALENDAR_PAGE_TITLE = "Trade Esport Matches";
+const DEFAULT_CALENDAR_PAGE_TITLE = "Trade Across 5 Prediction Markets";
 
 function gameFilterDisplayLabel(selectedGame: string | null): string | null {
 	if (!selectedGame) return null;
@@ -355,6 +361,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	// Prefetch umbrella trading route chunk so card clicks are not blocked on Suspense.
 	useEffect(() => {
 		preloadPredictionMarketRoute();
+		preloadAllOddsRoute();
 	}, []);
 
 	// Listen for reset filter event from header
@@ -485,6 +492,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		type CalendarDay = { date: Date; events: CalendarEvent[] };
 
 		const upcomingMap = new Map<string, CalendarDay>();
+		const nonMatchMarkets: Umbrella[] = [];
 		const unscheduled: Umbrella[] = [];
 
 		/*
@@ -500,6 +508,10 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		for (let index = 0; index < filteredUmbrellas.length; index += 1) {
 			const umbrella = filteredUmbrellas[index];
 			if (!umbrellaHasTradeableHomeChildren(umbrella)) continue;
+			if (isNonMatchHomeListing(umbrella)) {
+				nonMatchMarkets.push(umbrella);
+				continue;
+			}
 			const eventDate = resolveUmbrellaEventDate(umbrella);
 			if (eventDate === null) {
 				unscheduled.push(umbrella);
@@ -544,6 +556,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 			todayStartMs,
 			upcomingDays,
 			pastDays: [] as CalendarDay[],
+			nonMatchMarkets: nonMatchMarkets.filter(umbrellaHasTradeableHomeChildren),
 			unscheduled: unscheduled.filter(umbrellaHasTradeableHomeChildren),
 		};
 	}, [filteredUmbrellas, filterType, selectedGame, worldCupSection, appState?.markets, now]);
@@ -613,6 +626,11 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		navigate(`/predictions/umbrella/${umbrella._id}`);
 	};
 
+	const isWorldCupNonMatchSection =
+		selectedGame === WORLD_CUP_PILL_ID &&
+		(worldCupSection === "groups" ||
+			worldCupSection === "futures" ||
+			worldCupSection === "awards");
 	const shouldUseCalendar = filterType === "esports" || filterType === "all";
 
 	/*
@@ -708,11 +726,12 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 
 	if (shouldUseCalendar && calendarData) {
 		const hasUpcoming = calendarData.upcomingDays.length > 0;
+		const hasNonMatch = calendarData.nonMatchMarkets.length > 0;
 		const hasUnscheduled = calendarData.unscheduled.length > 0;
 		// Past events are intentionally dropped at the `calendarData` stage
 		// (see comment there) — the home page never shows markets older
 		// than today, so there's no "Recent Events" archive section.
-		const hasAny = hasUpcoming || hasUnscheduled;
+		const hasAny = hasUpcoming || hasNonMatch || hasUnscheduled;
 
 		if (!hasAny) {
 			content = (
@@ -749,6 +768,39 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 						</header>
 						<div className="predictions-grid prediction-calendar-grid">
 							{eventsToShow.map((event) => renderPredictionCard(event.umbrella))}
+						</div>
+					</section>,
+				);
+			}
+
+			if (hasNonMatch) {
+				const nonMatchToShow = calendarData.nonMatchMarkets;
+				const showOddsPicker = !calendarOddsPickerShown;
+				if (showOddsPicker) calendarOddsPickerShown = true;
+				calendarSections.push(
+					<section
+						key="non-match"
+						className={`prediction-calendar-day prediction-calendar-day--non-match${
+							isWorldCupNonMatchSection ? " prediction-calendar-day--non-match-dedicated" : ""
+						}`}
+					>
+						{isWorldCupNonMatchSection ? (
+							showOddsPicker ? (
+								<header className="prediction-calendar-header prediction-calendar-header--odds-only">
+									<div className="prediction-calendar-title" aria-hidden="true" />
+									<PredictionsCalendarOddsPicker />
+								</header>
+							) : null
+						) : (
+							<header className="prediction-calendar-header">
+								<div className="prediction-calendar-title">
+									<span className="prediction-calendar-primary">Props & Futures</span>
+								</div>
+								{showOddsPicker ? <PredictionsCalendarOddsPicker /> : null}
+							</header>
+						)}
+						<div className="predictions-grid prediction-calendar-grid">
+							{nonMatchToShow.map((umbrellaItem) => renderPredictionCard(umbrellaItem))}
 						</div>
 					</section>,
 				);
@@ -875,7 +927,7 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 		);
 	}
 
-	const marketBgUrl = resolveMarketBackgroundUrl(selectedGame);
+	const marketBgUrl = resolveMarketBackgroundUrl(selectedGame, worldCupSection);
 
 	return (
 		<div className="predictions-page predictions-page--market-bg page-layout">

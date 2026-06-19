@@ -326,6 +326,8 @@ export default defineConfig(({ mode }) => {
 			// without pre-bundling, the browser sees "no default export" (Privy / walletconnect chain).
 			include: [
 				"eventemitter3",
+				"@privy-io/react-auth",
+				"@privy-io/react-auth/internal",
 				// Admin (and others) import Firebase; eager pre-bundle reduces
 				// `504 (Outdated Optimize Dep)` / stale `node_modules/.vite/deps/*` URLs after HMR or server restarts.
 				"firebase/app",

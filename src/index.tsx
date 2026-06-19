@@ -72,6 +72,7 @@ import { PortfolioProvider } from "@/context/PortfolioContext";
 import { AccountDataProvider } from "@/context/AccountDataContext";
 import { PositionsDataProvider } from "@/context/PositionsDataContext";
 import { PositionsRouteChunkPreloader } from "@/context/PositionsRouteChunkPreloader";
+import { AllOddsRouteChunkPreloader } from "@/context/AllOddsRouteChunkPreloader";
 import { PostTradeAccountSyncProvider } from "@/features/trading/sor/post-trade/usePostTradeAccountSync";
 import { PositionsPageMetricsGateProvider } from "context/PositionsPageMetricsGateContext";
 import { RPGProvider } from "context/RPGContext";
@@ -147,6 +148,7 @@ createRoot(document.getElementById("root")!).render(
 										 */}
 										<AccountDataProvider>
 											<PositionsRouteChunkPreloader />
+											<AllOddsRouteChunkPreloader />
 											<UserDataProvider>
 												<SetupActivationProvider>
 													{/*

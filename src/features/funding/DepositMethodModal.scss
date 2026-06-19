@@ -1,0 +1,103 @@
+.deposit-method-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.65);
+	backdrop-filter: blur(2px);
+	-webkit-backdrop-filter: blur(2px);
+	font-family: $font-primary;
+	color: var(--privy-color-foreground, #ffffff);
+}
+
+.deposit-method-modal__card {
+	background: var(--privy-color-background, #101114);
+	border: 1px solid var(--privy-color-background-3, #22262e);
+	border-radius: 16px;
+	padding: 24px;
+	width: min(420px, calc(100vw - 32px));
+	max-width: 420px;
+	box-shadow:
+		0 24px 64px rgba(0, 0, 0, 0.5),
+		0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.deposit-method-modal__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 20px;
+}
+
+.deposit-method-modal__title {
+	font-size: 20px;
+	font-weight: 600;
+	margin: 0;
+	letter-spacing: -0.01em;
+}
+
+.deposit-method-modal__close {
+	flex-shrink: 0;
+	width: 32px;
+	height: 32px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--privy-color-foreground-3, #9ca3af);
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+	transition: background 0.15s;
+
+	&:hover {
+		background: var(--privy-color-background-2, #1a1d24);
+		color: var(--privy-color-foreground, #ffffff);
+	}
+}
+
+.deposit-method-modal__actions {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.deposit-method-modal__option {
+	width: 100%;
+	padding: 16px 18px;
+	border-radius: 12px;
+	font-size: 16px;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		opacity 0.15s,
+		transform 0.15s;
+
+	&:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	&:hover:not(:disabled) {
+		transform: translateY(-1px);
+	}
+
+	&--primary {
+		border: none;
+		background: var(--privy-color-accent, var(--brand-primary));
+		color: var(--privy-color-foreground-accent, #ffffff);
+		box-shadow: 0 4px 20px var(--brand-tint-25);
+	}
+
+	&--secondary {
+		background: var(--privy-color-background-2, #1a1d24);
+		color: var(--privy-color-foreground-2, #d1d5db);
+		border: 1px solid var(--privy-color-background-3, #22262e);
+
+		&:hover:not(:disabled) {
+			border-color: rgba(4, 120, 255, 0.45);
+		}
+	}
+}

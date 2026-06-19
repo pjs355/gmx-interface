@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useMemo } from "react";
-import { useLocation } from "react-router-dom";
 import { getOddsWebSocketUrl } from "@/config/oddsMonitorBase";
 import { useOddsMonitorWebSocket } from "@/features/markets/odds-monitor/useOddsMonitorWebSocket";
 import { findOddsMatchedMarket } from "@/features/markets/odds-monitor/findOddsMatchedMarket";
@@ -8,7 +7,7 @@ import {
 	VenuePandaSubscriptionProvider,
 	useVenuePandaSubscription,
 } from "@/context/VenuePandaSubscriptionContext";
-import { routeNeedsOddsMonitor } from "@/context/oddsMonitorRoutes";
+import { VenuePricesConnectionManager } from "@/context/VenuePricesConnectionManager";
 
 export type OddsMonitorContextValue = {
 	enabled: boolean;
@@ -50,13 +49,12 @@ function OddsMonitorInner({
 }
 
 export function OddsMonitorProvider({ children }: { children: React.ReactNode }) {
-	const { pathname } = useLocation();
 	const baseWsUrl = useMemo(() => getOddsWebSocketUrl(), []);
-	const wsUrl = routeNeedsOddsMonitor(pathname) ? baseWsUrl : null;
 
 	return (
 		<VenuePandaSubscriptionProvider>
-			<OddsMonitorInner wsUrl={wsUrl}>{children}</OddsMonitorInner>
+			<VenuePricesConnectionManager />
+			<OddsMonitorInner wsUrl={baseWsUrl}>{children}</OddsMonitorInner>
 		</VenuePandaSubscriptionProvider>
 	);
 }

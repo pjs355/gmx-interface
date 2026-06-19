@@ -1,4 +1,5 @@
 import { AllOddsMatrixTable } from "@/features/all-odds/AllOddsMatrixTable";
+import { AllOddsSkeleton } from "@/features/all-odds/AllOddsSkeleton";
 import { useAllOddsFeed } from "@/features/all-odds/useAllOddsFeed";
 import "./AllOdds.scss";
 
@@ -15,7 +16,11 @@ export default function AllOddsPage() {
 				</p>
 			</header>
 
-			<AllOddsMatrixTable markets={markets} loading={loading} error={error} />
+			{loading && markets.length === 0 ? (
+				<AllOddsSkeleton />
+			) : (
+				<AllOddsMatrixTable markets={markets} loading={loading} error={error} />
+			)}
 		</div>
 	);
 }

@@ -92,12 +92,13 @@ $predictions-compact-card-inline: 60px;
 
 		/*
 		 * Photo layer (mask fades the JPEG itself). Overlays below are separate—
-		 * without this mask, rapid “fade” mostly comes from the bitmap + cover crop + hard band bottom edge.
+		 * without this mask, rapid “fade” mostly comes from the bitmap + hard band bottom edge.
+		 * Fit width (not cover) so wide hero art is not cropped/zoomed into a blurry crop.
 		 */
 		.predictions-page__market-background-photo {
 			position: absolute;
 			inset: 0;
-			background-size: cover;
+			background-size: min(100%, 1440px) auto;
 			background-position: center top;
 			background-repeat: no-repeat;
 			z-index: 0;
@@ -1198,6 +1199,17 @@ $predictions-compact-card-inline: 60px;
 	}
 
 	/* Mobile: same as tablet/desktop — use parent `.predictions-grid` (vertical scroll, no horizontal row). */
+}
+
+/* Dedicated World Cup Groups / Futures / Awards tabs: same calendar grid, no date row. */
+.prediction-calendar-day--non-match-dedicated {
+	margin-bottom: 0;
+}
+
+.prediction-calendar-header--odds-only {
+	justify-content: flex-end;
+	min-height: 0;
+	margin-bottom: -8px;
 }
 
 .prediction-calendar-day--unscheduled .prediction-calendar-primary {
