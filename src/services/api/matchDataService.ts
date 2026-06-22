@@ -118,6 +118,40 @@ export async function findMatchedMarketByPandaMatchId(
 	return markets.find((m) => String(m.pandaMatchId ?? "").trim() === id);
 }
 
+/** Sync lookup from an in-memory catalog (e.g. TanStack `matched-markets` cache). */
+export function resolveMatchedMarketFromCatalog(
+	markets: MatchedMarketExchange[],
+	opts: {
+		umbrellaId?: string;
+		conditionId?: string;
+		pandaMatchId?: string;
+	},
+): MatchedMarketExchange | undefined {
+	const uid = String(opts.umbrellaId ?? "").trim();
+	if (uid) {
+		const byUmbrella = markets.find((m) => String(m.umbrellaId ?? "").trim() === uid);
+		if (byUmbrella) return byUmbrella;
+	}
+	const cid = String(opts.conditionId ?? "").trim();
+	if (cid) {
+		const byCondition = markets.find((m) => String(m.polyConditionId ?? "").trim() === cid);
+		if (byCondition) return byCondition;
+	}
+	const pid = String(opts.pandaMatchId ?? "").trim();
+	if (pid) {
+		return markets.find((m) => String(m.pandaMatchId ?? "").trim() === pid);
+	}
+	return undefined;
+}
+
+export function matchedMarketsApiItemsToExchange(
+	items: MatchedMarketsApiItem[],
+): MatchedMarketExchange[] {
+	return items
+		.map((remote) => remoteToExchange(remote as RemoteMatchedMarket))
+		.filter((m): m is MatchedMarketExchange => m !== null);
+}
+
 export function clearMatchDataCache(): void {
 	cachedMarkets = null;
 	lastFetchTime = 0;

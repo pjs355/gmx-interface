@@ -372,7 +372,7 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 
 			<div className="chart-container" style={{ minWidth: 0, minHeight: 280 }}>
 				<div className="chart-plot-area">
-					{exchangeChart.loading && (
+					{exchangeChart.loading && displayData.length === 0 && (
 						<div className="chart-spinner-overlay">
 							<div className="chart-spinner" />
 						</div>

@@ -606,7 +606,7 @@ class VenuePricesClient {
 					JSON.stringify({
 						type: "subscribe",
 						pandaMatchId: id,
-						...(bboOnly ? { bboOnly: true } : {}),
+						bboOnly: bboOnly === true,
 					}),
 				);
 			} catch {

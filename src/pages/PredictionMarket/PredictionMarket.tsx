@@ -691,6 +691,7 @@ function PredictionMarketContent() {
 			titleRef={titleRef}
 			sortedQuestions={panelSortedQuestions as any}
 			questionOrderbooks={questionOrderbooks}
+			orderbooksReady={orderbooksReady}
 			activeMarket={(accordionActiveQuestion ?? activeMarket) as any}
 			activePosition={activePosition}
 			activeSelectionTitle={activeSelectionTitle}

@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";
 import type { OddsMonitorAppState } from "@/types/odds-monitor";
-import {
-	useMatchedMarketsQuery,
-	fetchMatchedMarketByPandaIdRaw,
-} from "@/features/markets/queries/matchedMarketsQuery";
+import { useMatchedMarketsQuery } from "@/features/markets/queries/matchedMarketsQuery";
 import {
 	getVenuePricesClient,
 	subscribeVenuePricesClient,
@@ -24,8 +21,9 @@ export interface UseOddsMonitorWebSocketResult {
 }
 
 /**
- * Reads live venue BBO from the shared venuePricesClient. Full matched-markets
- * catalog is fetched only on /positions; umbrella trade pages use per-id fetch.
+ * Reads live venue BBO from the shared venuePricesClient and merges
+ * GET /matched-markets metadata on trading routes (/ , umbrella, positions).
+ * /all-odds uses a separate paginated feed and does not load the full catalog here.
  */
 export function useOddsMonitorWebSocket(
 	_wsUrl: string | null,
@@ -34,7 +32,6 @@ export function useOddsMonitorWebSocket(
 	const { pathname } = useLocation();
 	const client = getVenuePricesClient();
 	const needsFullCatalog = routeNeedsFullMatchedMarketsCatalog(pathname);
-	const isUmbrellaTrade = pathname.startsWith("/predictions/umbrella/");
 	const { data: matchedItems, refetch } = useMatchedMarketsQuery(needsFullCatalog);
 
 	const clientSnapshot = useSyncExternalStore(
@@ -60,22 +57,6 @@ export function useOddsMonitorWebSocket(
 		if (!needsFullCatalog || !matchedItems?.length) return;
 		client.replaceMarketsFromMetadata(matchedItems, activePandaMatchIdsRef.current);
 	}, [client, matchedItems, needsFullCatalog, pandaSubsKey]);
-
-	useEffect(() => {
-		if (!isUmbrellaTrade || activePandaMatchIds.length === 0) return;
-		let cancelled = false;
-		void (async () => {
-			const items = await Promise.all(
-				activePandaMatchIds.map((id) => fetchMatchedMarketByPandaIdRaw(id)),
-			);
-			if (cancelled) return;
-			const rows = items.filter((row): row is NonNullable<typeof row> => row !== null);
-			if (rows.length) client.mergeMarketsFromMetadataBatch(rows);
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [client, isUmbrellaTrade, pandaSubsKey, activePandaMatchIds]);
 
 	useEffect(() => {
 		if (!clientSnapshot.connected || !routeNeedsOddsMonitor(pathname)) return;

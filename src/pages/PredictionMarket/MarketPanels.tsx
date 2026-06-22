@@ -14,12 +14,7 @@ import type { PredictionMarket } from "@/services/api/predictionMarketDataServic
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import type { TradingVenue } from "@/components/PredictionMarketTradeBox";
 import type { SettledInfo } from "./useMatchSettled";
-import {
-	getMarketId,
-	hasUsableOrderbookSnapshot,
-	levelUpOrderbookHasRestingShares,
-	resolveLevelUpOrderbookKey,
-} from "./utils";
+import { getMarketId, levelUpOrderbookHasRestingShares, resolveLevelUpOrderbookKey } from "./utils";
 import { useUmbrellaTradePricing } from "./useUmbrellaTradePricing";
 import {
 	isThreeWayMoneylineQuestions,
@@ -71,6 +66,7 @@ type PanelsProps = {
 	titleRef: React.RefObject<HTMLHeadingElement>;
 	sortedQuestions: PredictionMarket[];
 	questionOrderbooks: Record<string, any>;
+	orderbooksReady: boolean;
 	activeMarket: PredictionMarket | null;
 	activePosition: "yes" | "no";
 	/** Prop ladder title ("Mexico +1.5") when a spread/total cell is active. */
@@ -114,6 +110,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	titleRef,
 	sortedQuestions,
 	questionOrderbooks,
+	orderbooksReady,
 	activeMarket,
 	activePosition,
 	activeSelectionTitle,
@@ -189,12 +186,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	});
 	const hasQuestions = sortedQuestions && sortedQuestions.length > 0;
 	const settledView = Boolean(settledInfo);
-	/** Same key as chart + `primaryChartOrderbook` (multiplex map); not always `resolveLevelUpOrderbookKey`. */
+	/** Same key as chart multiplex map; not always `resolveLevelUpOrderbookKey`. */
 	const chartQuestionId =
 		chartState.primaryQuestionId ||
 		getMarketId(chartState.primaryMarket) ||
 		(hasQuestions ? getMarketId(sortedQuestions[0]) : "");
-	const primaryChartOrderbook = chartQuestionId ? questionOrderbooks[chartQuestionId] : undefined;
 	const exchangeMatchingLevelupQuestionId =
 		(umbrella?.exchangeMatching as { levelup?: { questionId?: string } } | undefined)?.levelup
 			?.questionId ?? null;
@@ -372,9 +368,6 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 	/** Futures/awards accordion: chart + Basic odds follow the active leg only. */
 	const multiLegActiveChartQuestionId =
 		useMultiLegAccordion && bookMarketId ? bookMarketId : chartQuestionId;
-	const multiLegActiveChartOrderbook = multiLegActiveChartQuestionId
-		? questionOrderbooks[multiLegActiveChartQuestionId]
-		: undefined;
 	const multiLegActiveChartVenueKey = useMemo(
 		() => (useMultiLegAccordion ? resolveUmbrellaVenueKey(umbrella, bookMarket) : chartVenueKey),
 		[useMultiLegAccordion, umbrella, bookMarket, bookMarketId, chartVenueKey],
@@ -581,7 +574,7 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 			</>
 		);
 
-	// Latch chart visibility once moneyline books load — prop/spread selection must not flash skeleton.
+	// Latch chart visibility once multiplex WS is ready — prop/spread selection must not flash skeleton.
 	const chartVisibleLatchRef = React.useRef(false);
 	const chartLatchKeyRef = React.useRef("");
 	const chartLatchKey = useMultiLegAccordion
@@ -591,15 +584,11 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 		chartLatchKeyRef.current = chartLatchKey;
 		chartVisibleLatchRef.current = false;
 	}
-	const chartOrderbookForLatch = useMultiLegAccordion
-		? multiLegActiveChartOrderbook
-		: primaryChartOrderbook;
-	if (hasQuestions && hasUsableOrderbookSnapshot(chartOrderbookForLatch)) {
+	if (hasQuestions && orderbooksReady) {
 		chartVisibleLatchRef.current = true;
 	}
 	const showChartBlock =
-		hasQuestions &&
-		(chartVisibleLatchRef.current || hasUsableOrderbookSnapshot(chartOrderbookForLatch));
+		hasQuestions && (chartVisibleLatchRef.current || orderbooksReady);
 	const showChartPlaceholder = !showChartBlock && !(settledView && !hasQuestions);
 
 	// Order inside .venue-books-container: chart → tabs → "Prediction Market Odds" → tab body (e.g. esports table).

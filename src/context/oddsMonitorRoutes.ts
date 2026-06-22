@@ -6,7 +6,7 @@ export function routeNeedsOddsMonitor(pathname: string): boolean {
 	return false;
 }
 
-/** Full GET /matched-markets catalog — positions and trading flows only. */
+/** Full GET /matched-markets catalog — all trading routes, not /all-odds. */
 export function routeNeedsFullMatchedMarketsCatalog(pathname: string): boolean {
-	return pathname.startsWith("/positions");
+	return routeNeedsOddsMonitor(pathname);
 }

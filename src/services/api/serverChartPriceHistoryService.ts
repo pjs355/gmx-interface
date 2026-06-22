@@ -77,6 +77,7 @@ export async function fetchChartPriceHistoryBatch(
 	mm: MatchedMarketExchange | null,
 	range: TimeRange,
 	authToken: string | null,
+	signal?: AbortSignal,
 ): Promise<ChartPriceHistoryBatchResult> {
 	if (!mm) {
 		return { ok: true, data: { ...EMPTY_CHART_VENUE_BUNDLE } };
@@ -100,14 +101,22 @@ export async function fetchChartPriceHistoryBatch(
 	};
 
 	try {
-		const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+		const res = await fetch(url, {
+			method: "POST",
+			headers,
+			body: JSON.stringify(body),
+			signal,
+		});
 		if (res.status === 404) return { ok: false, kind: "not_found" };
 		if (!res.ok) return { ok: false, kind: "http", status: res.status };
 		const json: unknown = await res.json();
 		const parsed = parseBatchPayload(json);
 		if (!parsed) return { ok: false, kind: "malformed" };
 		return { ok: true, data: parsed };
-	} catch {
+	} catch (err) {
+		if (err instanceof DOMException && err.name === "AbortError") {
+			return { ok: false, kind: "network" };
+		}
 		return { ok: false, kind: "network" };
 	}
 }

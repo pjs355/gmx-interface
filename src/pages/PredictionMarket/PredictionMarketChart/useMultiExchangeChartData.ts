@@ -11,7 +11,10 @@ import {
 	findMatchedMarketByConditionId,
 	findMatchedMarketByUmbrellaId,
 	findMatchedMarketByPandaMatchId,
+	resolveMatchedMarketFromCatalog,
+	matchedMarketsApiItemsToExchange,
 } from "@/services/api/matchDataService";
+import { useMatchedMarketsQuery } from "@/features/markets/queries/matchedMarketsQuery";
 import { mergeExchangeTimeSeries } from "@/features/markets/chart/mergeExchangeTimeSeries";
 import {
 	isPredictionPricingDebugEnabled,
@@ -54,6 +57,9 @@ interface Args {
 }
 
 const LIVE_BUCKET_SEC = 3;
+/** Client-side cap — backend upstream fetches use 15s each; batch can lag on cold Limitless. */
+const CHART_BATCH_FETCH_MS = 22_000;
+const CHART_AUTH_TOKEN_MS = 3_000;
 
 /** Dedupe chart batch logs (Strict Mode / re-renders). */
 let lastLimitlessChartBatchLogSig = "";
@@ -265,6 +271,20 @@ function complementPricePoints(points: PricePoint[]): PricePoint[] {
 	}));
 }
 
+async function authTokenWithTimeout(
+	getToken: () => Promise<string | null>,
+	ms: number,
+): Promise<string | null> {
+	try {
+		return await Promise.race([
+			getToken(),
+			new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+		]);
+	} catch {
+		return null;
+	}
+}
+
 function reducer(state: State, action: Action): State {
 	switch (action.type) {
 		case "MATCH_START":
@@ -322,6 +342,17 @@ export function useMultiExchangeChartData({
 	const getAccessTokenRef = useRef(getAccessToken);
 	getAccessTokenRef.current = getAccessToken;
 
+	const hasLookupKeys = Boolean(
+		String(umbrellaId ?? "").trim() ||
+			String(conditionId ?? "").trim() ||
+			String(pandaMatchId ?? "").trim(),
+	);
+	const { data: catalogItems } = useMatchedMarketsQuery(hasLookupKeys);
+	const catalogMarkets = useMemo(
+		() => (catalogItems?.length ? matchedMarketsApiItemsToExchange(catalogItems) : []),
+		[catalogItems],
+	);
+
 	const stableGetToken = useCallback(() => getAccessTokenRef.current().catch(() => null), []);
 
 	const [liveTick, setLiveTick] = useState(0);
@@ -378,10 +409,34 @@ export function useMultiExchangeChartData({
 		// pandascore_marketId) — no umbrellaId/conditionId — and resolve history
 		// off that key. Moneyline keeps resolving by umbrellaId/conditionId.
 		const subPandaId = String(pandaMatchId ?? "").trim();
+		const awayId = String(awayConditionId ?? "").trim();
+
+		const resolveAway = (): MatchedMarketExchange | null => {
+			if (!awayId) return null;
+			if (catalogMarkets.length > 0) {
+				return resolveMatchedMarketFromCatalog(catalogMarkets, { conditionId: awayId }) ?? null;
+			}
+			return null;
+		};
+
 		if (!umbrellaId && !conditionId && !subPandaId) {
 			dispatch({ type: "MATCH_RESOLVED", market: null, away: null });
 			return;
 		}
+
+		if (catalogMarkets.length > 0) {
+			const match =
+				resolveMatchedMarketFromCatalog(catalogMarkets, {
+					umbrellaId,
+					conditionId,
+					pandaMatchId: subPandaId,
+				}) ?? null;
+			if (match) {
+				dispatch({ type: "MATCH_RESOLVED", market: match, away: resolveAway() });
+				return;
+			}
+		}
+
 		dispatch({ type: "MATCH_START" });
 		let cancelled = false;
 
@@ -393,9 +448,6 @@ export function useMultiExchangeChartData({
 				if (!match && !umbrellaId && !conditionId && subPandaId) {
 					match = await findMatchedMarketByPandaMatchId(subPandaId);
 				}
-				// 3-way (FIFA): resolve the away leg's own matched market so team-B uses
-				// the away YES series rather than the home market's NO complement.
-				const awayId = String(awayConditionId ?? "").trim();
 				const away = awayId ? ((await findMatchedMarketByConditionId(awayId)) ?? null) : null;
 				if (!cancelled) dispatch({ type: "MATCH_RESOLVED", market: match ?? null, away });
 			} catch {
@@ -406,7 +458,7 @@ export function useMultiExchangeChartData({
 		return () => {
 			cancelled = true;
 		};
-	}, [umbrellaId, conditionId, pandaMatchId, awayConditionId]);
+	}, [umbrellaId, conditionId, pandaMatchId, awayConditionId, catalogMarkets]);
 
 	const matchedMarketKey = useMemo(
 		() =>
@@ -447,14 +499,21 @@ export function useMultiExchangeChartData({
 		dispatch({ type: "FETCH_START" });
 		const mm = state.matchedMarket;
 		const mmAway = state.matchedMarketAway;
+		const batchAbort = new AbortController();
+		const batchTimeoutId = setTimeout(() => batchAbort.abort(), CHART_BATCH_FETCH_MS);
 
 		(async () => {
 			try {
-				const authToken = await stableGetToken();
+				const authToken = await authTokenWithTimeout(stableGetToken, CHART_AUTH_TOKEN_MS);
 
 				if (cancelRef.current !== id) return;
 
-				const batchResult = await fetchChartPriceHistoryBatch(mm, timeRange, authToken);
+				const batchResult = await fetchChartPriceHistoryBatch(
+					mm,
+					timeRange,
+					authToken,
+					batchAbort.signal,
+				);
 				if (cancelRef.current !== id) return;
 
 				if (!batchResult.ok) {
@@ -475,7 +534,12 @@ export function useMultiExchangeChartData({
 					// 3-way (FIFA): team-B is the away leg's OWN best-YES. Fetch the away
 					// leg's batch and use its A-side as the B-series. No NO-complement
 					// fallback — P(away) ≠ 1 − P(home) when a draw outcome exists.
-					const awayResult = await fetchChartPriceHistoryBatch(mmAway, timeRange, authToken);
+					const awayResult = await fetchChartPriceHistoryBatch(
+						mmAway,
+						timeRange,
+						authToken,
+						batchAbort.signal,
+					);
 					if (cancelRef.current !== id) return;
 					const awayBatch = awayResult.ok ? awayResult.data : EMPTY_CHART_VENUE_BUNDLE;
 					data = {
@@ -541,6 +605,8 @@ export function useMultiExchangeChartData({
 				if (cancelRef.current === id) {
 					dispatch({ type: "FETCH_ERROR", error: "Failed to fetch exchange data" });
 				}
+			} finally {
+				clearTimeout(batchTimeoutId);
 			}
 		})();
 	}, [

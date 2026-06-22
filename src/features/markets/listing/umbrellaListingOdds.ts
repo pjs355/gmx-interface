@@ -41,12 +41,23 @@ export function umbrellaHasListableCrossVenueOdds(
 		findOddsMatchedMarket(matchedMarkets, panda, umbrella._id),
 		umbrella.exchangeMatching?.limitless ?? null,
 	);
-	if (!merged) return false;
+	if (!merged) return true;
 
 	const rows = buildVenuePriceRows(merged);
+	const linkedRows = rows.filter((row) => row.linked);
+	if (linkedRows.length === 0) return true;
+
+	const hasAnyPriceTick = linkedRows.some(
+		(row) =>
+			row.askA !== null ||
+			row.askB !== null ||
+			row.bidA !== null ||
+			row.bidB !== null,
+	);
+	if (!hasAnyPriceTick) return true;
+
 	let hasValidQuote = false;
-	for (const row of rows) {
-		if (!row.linked) continue;
+	for (const row of linkedRows) {
 		if (
 			(row.askA !== null && isValidProbPrice(row.askA)) ||
 			(row.askB !== null && isValidProbPrice(row.askB))
