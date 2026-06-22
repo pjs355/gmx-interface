@@ -20,6 +20,7 @@ import {
 import { getChartStrokeColorForDarkBg } from "@/features/markets/presentation/teamColors";
 import { BRAND_NAME, clutchCometLogo } from "@/assets/brandLogo";
 import type { TimeRange } from "./types";
+import { isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
 import {
 	useGroupWinnerChartData,
 	type GroupWinnerChartPoint,
@@ -69,7 +70,9 @@ function GroupWinnerTooltip({
 	const date = ts ? new Date(ts * 1000) : null;
 	const byKey = new Map(teams.map((t) => [t.dataKey, t]));
 	const rows = payload
-		.filter((p) => p.value != null && Number.isFinite(p.value))
+		.filter(
+			(p) => p.value != null && Number.isFinite(p.value) && isValidChartDisplayPct(p.value as number),
+		)
 		.map((p) => ({ team: byKey.get(p.dataKey ?? ""), value: p.value as number }))
 		.filter((r) => r.team)
 		.sort((a, b) => b.value - a.value);

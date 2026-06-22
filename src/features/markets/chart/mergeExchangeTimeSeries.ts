@@ -3,6 +3,7 @@ import type {
 	TimeRange,
 	MergedExchangePoint,
 } from "@/pages/PredictionMarket/PredictionMarketChart/types";
+import { isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
 
 type VenueKey = "levelUp" | "polymarket" | "kalshi" | "predictFun" | "limitless";
 
@@ -126,7 +127,7 @@ export function mergeExchangeTimeSeries(
 		const m = new Map<number, number>();
 		for (const pt of points) {
 			const v = pt.price * 100;
-			if (!Number.isFinite(v)) continue;
+			if (!isValidChartDisplayPct(v)) continue;
 			const t = snapTo(pt.timestamp);
 			m.set(t, v);
 			allTimestamps.add(t);
@@ -141,7 +142,7 @@ export function mergeExchangeTimeSeries(
 			const m = new Map<number, number>();
 			for (const pt of points) {
 				const v = pt.price * 100;
-				if (!Number.isFinite(v)) continue;
+				if (!isValidChartDisplayPct(v)) continue;
 				const t = snapTo(pt.timestamp);
 				m.set(t, v);
 				allTimestamps.add(t);
@@ -163,10 +164,10 @@ export function mergeExchangeTimeSeries(
 		// Team A: forward-fill
 		for (const { venue } of series) {
 			const val = venueMaps.get(venue)?.get(ts);
-			if (val !== undefined && Number.isFinite(val)) {
+			if (val !== undefined && isValidChartDisplayPct(val)) {
 				lastSeenA[venue] = val;
 			}
-			if (lastSeenA[venue] !== undefined && Number.isFinite(lastSeenA[venue]!)) {
+			if (lastSeenA[venue] !== undefined && isValidChartDisplayPct(lastSeenA[venue]!)) {
 				setVenueValue(point, venue, lastSeenA[venue]!);
 			}
 		}
@@ -175,10 +176,10 @@ export function mergeExchangeTimeSeries(
 		if (seriesB) {
 			for (const { venue } of seriesB) {
 				const val = venueBMaps.get(venue)?.get(ts);
-				if (val !== undefined && Number.isFinite(val)) {
+				if (val !== undefined && isValidChartDisplayPct(val)) {
 					lastSeenB[venue] = val;
 				}
-				if (lastSeenB[venue] !== undefined && Number.isFinite(lastSeenB[venue]!)) {
+				if (lastSeenB[venue] !== undefined && isValidChartDisplayPct(lastSeenB[venue]!)) {
 					setVenueBValue(point, venue, lastSeenB[venue]!);
 				}
 			}
@@ -188,7 +189,7 @@ export function mergeExchangeTimeSeries(
 		const teamAValues: number[] = [];
 		for (const v of TEAM_A_KEYS) {
 			const a = getVenueValue(point, v);
-			if (a !== undefined && Number.isFinite(a)) teamAValues.push(a);
+			if (a !== undefined && isValidChartDisplayPct(a)) teamAValues.push(a);
 		}
 		if (teamAValues.length > 0) {
 			point.bestOdds = Math.min(...teamAValues);
@@ -198,7 +199,7 @@ export function mergeExchangeTimeSeries(
 		const teamBValues: number[] = [];
 		for (const v of TEAM_A_KEYS) {
 			const b = getVenueBValue(point, v);
-			if (b !== undefined && Number.isFinite(b)) teamBValues.push(b);
+			if (b !== undefined && isValidChartDisplayPct(b)) teamBValues.push(b);
 		}
 		if (teamBValues.length > 0) {
 			point.bestOddsB = Math.min(...teamBValues);

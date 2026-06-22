@@ -6,6 +6,10 @@ import {
 } from "@/features/markets/odds-monitor/debugPredictionPricing";
 import { normalizeOrderbookPayload } from "../utils";
 import type { ChartDataPoint, TimeRange } from "./types";
+import {
+	impliedProbToChartDisplayPct,
+	isValidChartImpliedProb,
+} from "@/features/markets/chart/chartDisplayPrice";
 
 type UsePredictionChartDataArgs = {
 	questionId: string;
@@ -65,7 +69,10 @@ function normalizePrices(prices: any[]): Array<{ ts: number; price: number }> {
 			ts: p.ts ? Math.floor(p.ts / 1000) : p.timestamp,
 			price: p.price,
 		}))
-		.filter((p: { ts: number; price: number }) => p.ts && typeof p.price === "number")
+		.filter(
+			(p: { ts: number; price: number }) =>
+				p.ts && typeof p.price === "number" && isValidChartImpliedProb(p.price),
+		)
 		.sort((a: { ts: number }, b: { ts: number }) => a.ts - b.ts);
 }
 
@@ -116,7 +123,8 @@ function getLivePrice(
 				(Array.isArray(bestAsk) ? bestAsk[0] : (bestAsk as { price?: unknown })?.price) ?? "0",
 			),
 		);
-		return isNaN(price) || price <= 0 ? null : price;
+		if (isNaN(price)) return null;
+		return isValidChartImpliedProb(price) ? price : null;
 	} catch {
 		return null;
 	}
@@ -236,14 +244,18 @@ export function usePredictionChartData({
 				const secondPrice = findPriceAtOrBefore(secondSorted, ts);
 
 				if (primaryPrice !== null || secondPrice !== null) {
+					const primaryPct = primaryPrice !== null ? impliedProbToChartDisplayPct(primaryPrice) : null;
+					const secondPct =
+						secondPrice !== null ? impliedProbToChartDisplayPct(secondPrice) : null;
+					if (primaryPct === null && secondPct === null) continue;
 					out.push({
 						timestamp: ts,
 						price: primaryPrice,
 						secondPrice: secondPrice,
 						date: date.toISOString(),
 						displayTime: formatDisplayTime(date, timeRange),
-						percentage: primaryPrice !== null ? primaryPrice * 100 : null,
-						secondPercentage: secondPrice !== null ? secondPrice * 100 : null,
+						percentage: primaryPct,
+						secondPercentage: secondPct,
 						isLive: false,
 						secondIsLive: false,
 					});
@@ -290,8 +302,9 @@ export function usePredictionChartData({
 					secondPrice: liveSecondPrice,
 					date: date.toISOString(),
 					displayTime: formatDisplayTime(date, timeRange),
-					percentage: livePrice !== null ? livePrice * 100 : null,
-					secondPercentage: liveSecondPrice !== null ? liveSecondPrice * 100 : null,
+					percentage: livePrice !== null ? impliedProbToChartDisplayPct(livePrice) : null,
+					secondPercentage:
+						liveSecondPrice !== null ? impliedProbToChartDisplayPct(liveSecondPrice) : null,
 					isLive: liveFlags.isLive,
 					secondIsLive: liveFlags.secondIsLive,
 				};
@@ -311,10 +324,15 @@ export function usePredictionChartData({
 		const updatedLast: ChartDataPoint = {
 			...lastPoint,
 			price: livePrice ?? lastPoint.price,
-			percentage: livePrice !== null ? livePrice * 100 : lastPoint.percentage,
+			percentage:
+				livePrice !== null
+					? impliedProbToChartDisplayPct(livePrice)
+					: lastPoint.percentage,
 			secondPrice: liveSecondPrice ?? lastPoint.secondPrice,
 			secondPercentage:
-				liveSecondPrice !== null ? liveSecondPrice * 100 : lastPoint.secondPercentage,
+				liveSecondPrice !== null
+					? impliedProbToChartDisplayPct(liveSecondPrice)
+					: lastPoint.secondPercentage,
 			isLive: livePrice !== null,
 			secondIsLive: liveSecondPrice !== null,
 		};

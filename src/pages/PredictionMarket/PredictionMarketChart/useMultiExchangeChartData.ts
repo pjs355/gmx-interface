@@ -27,6 +27,7 @@ import {
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 import { isLimitlessConsoleDebugEnabled } from "@/features/trading/venues/limitless/trade/limitlessConsoleDebug";
+import { impliedProbToChartDisplayPct, isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
 
 export interface MultiExchangeChartResult {
 	data: MergedExchangePoint[];
@@ -168,8 +169,7 @@ function bestAskDisplay100(book: OrderbookData | null | undefined): number | und
 		const b = Number(book.bestAsk);
 		if (Number.isFinite(b)) x = b;
 	}
-	if (x == null || !Number.isFinite(x) || x < 0.005 || x > 0.995) return undefined;
-	return x * 100;
+	return impliedProbToChartDisplayPct(x ?? Number.NaN) ?? undefined;
 }
 
 /** Recompute bestOdds / bestOddsB; when includeLevelUp is false, LevelUp is excluded from the min (and from stale rows). */
@@ -186,12 +186,12 @@ export function attachBestOddsToMergedPoint(
 	const teamA: number[] = [];
 	for (const k of aKeys) {
 		const v = point[k];
-		if (typeof v === "number" && Number.isFinite(v)) teamA.push(v);
+		if (typeof v === "number" && isValidChartDisplayPct(v)) teamA.push(v);
 	}
 	const teamB: number[] = [];
 	for (const k of bKeys) {
 		const v = point[k];
-		if (typeof v === "number" && Number.isFinite(v)) teamB.push(v);
+		if (typeof v === "number" && isValidChartDisplayPct(v)) teamB.push(v);
 	}
 	return {
 		...point,
@@ -621,7 +621,12 @@ export function useMultiExchangeChartData({
 	const levelUpData = useMemo(
 		(): PricePoint[] =>
 			levelUpChartData
-				.filter((d) => d.percentage !== null && d.timestamp > 0)
+				.filter(
+					(d) =>
+						d.percentage !== null &&
+						isValidChartDisplayPct(d.percentage) &&
+						d.timestamp > 0,
+				)
 				.map((d) => ({ timestamp: d.timestamp, price: d.percentage! / 100 })),
 		[levelUpChartData],
 	);
@@ -629,7 +634,12 @@ export function useMultiExchangeChartData({
 	const levelUpDataB = useMemo(
 		(): PricePoint[] =>
 			levelUpChartData
-				.filter((d) => d.secondPercentage !== null && d.timestamp > 0)
+				.filter(
+					(d) =>
+						d.secondPercentage !== null &&
+						isValidChartDisplayPct(d.secondPercentage) &&
+						d.timestamp > 0,
+				)
 				.map((d) => ({ timestamp: d.timestamp, price: d.secondPercentage! / 100 })),
 		[levelUpChartData],
 	);

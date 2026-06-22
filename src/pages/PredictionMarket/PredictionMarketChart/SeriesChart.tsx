@@ -10,6 +10,7 @@ import {
 	Tooltip,
 } from "recharts";
 import type { ChartDataPoint, MergedExchangePoint } from "./types";
+import { isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
 
 export const VENUE_COLORS: Record<string, string> = {
 	levelUp: "#ffffff",
@@ -103,11 +104,11 @@ export function SeriesChart({
 		let maxValue = 0;
 		let minValue = 100;
 		for (const point of data) {
-			if (point.percentage !== null) {
+			if (point.percentage !== null && isValidChartDisplayPct(point.percentage)) {
 				if (point.percentage > maxValue) maxValue = point.percentage;
 				if (point.percentage < minValue) minValue = point.percentage;
 			}
-			if (point.secondPercentage !== null) {
+			if (point.secondPercentage !== null && isValidChartDisplayPct(point.secondPercentage)) {
 				if (point.secondPercentage > maxValue) maxValue = point.secondPercentage;
 				if (point.secondPercentage < minValue) minValue = point.secondPercentage;
 			}
@@ -274,7 +275,7 @@ function ExchangeTooltipContent({
 
 	const grouped = new Map<string, { a?: number; b?: number; colorA: string; colorB: string }>();
 	for (const entry of payload) {
-		if (entry.value == null) continue;
+		if (entry.value == null || !isValidChartDisplayPct(Number(entry.value))) continue;
 		const key = entry.dataKey as string;
 		const base = baseVenueFromKey(key);
 		const isB = key !== base;

@@ -1,3 +1,5 @@
+import { isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
+
 export function ChartTooltip({
 	primaryTitle,
 	secondaryTitle,
@@ -15,13 +17,15 @@ export function ChartTooltip({
 			return (
 				<div className="prediction-chart-tooltip">
 					<p className="tooltip-time">{formatTime(data.timestamp)}</p>
-					{data.percentage !== null && (
+					{data.percentage !== null && isValidChartDisplayPct(data.percentage) && (
 						<p className="tooltip-price primary-tooltip">
 							<span className="tooltip-label">{primaryTitle}:</span>
 							<span className="tooltip-value primary-value">{data.percentage.toFixed(2)}%</span>
 						</p>
 					)}
-					{(secondaryTitle || isVsSingleMarket) && data.secondPercentage !== null && (
+					{(secondaryTitle || isVsSingleMarket) &&
+						data.secondPercentage !== null &&
+						isValidChartDisplayPct(data.secondPercentage) && (
 						<p className="tooltip-price second-tooltip">
 							<span className="tooltip-label">{secondaryTitle || ""}:</span>
 							<span className="tooltip-value second-value">

@@ -21,6 +21,7 @@ import {
 	priceDebugLog,
 } from "@/features/markets/odds-monitor/debugPredictionPricing";
 import type { UmbrellaExchangeMatchingLimitless } from "@/services/api/umbrellaDataService";
+import { isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
 
 export interface PredictionMarketChartProps {
 	questionId: string;
@@ -235,10 +236,10 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		const merged = displayData;
 		for (let i = merged.length - 1; i >= 0; i--) {
 			const p = merged[i];
-			if (teamA === null && p?.bestOdds != null && Number.isFinite(p.bestOdds)) {
+			if (teamA === null && p?.bestOdds != null && isValidChartDisplayPct(p.bestOdds)) {
 				teamA = p.bestOdds;
 			}
-			if (teamB === null && p?.bestOddsB != null && Number.isFinite(p.bestOddsB)) {
+			if (teamB === null && p?.bestOddsB != null && isValidChartDisplayPct(p.bestOddsB)) {
 				teamB = p.bestOddsB;
 			}
 			if (teamA !== null && teamB !== null) break;
@@ -249,10 +250,10 @@ const PredictionMarketChartComponent: React.FC<PredictionMarketChartProps> = ({
 		const lu = levelUpChartData;
 		for (let i = lu.length - 1; i >= 0; i--) {
 			const p = lu[i];
-			if (teamA === null && p?.percentage != null && Number.isFinite(p.percentage)) {
+			if (teamA === null && p?.percentage != null && isValidChartDisplayPct(p.percentage)) {
 				teamA = p.percentage;
 			}
-			if (teamB === null && p?.secondPercentage != null && Number.isFinite(p.secondPercentage)) {
+			if (teamB === null && p?.secondPercentage != null && isValidChartDisplayPct(p.secondPercentage)) {
 				teamB = p.secondPercentage;
 			}
 			if (teamA !== null && teamB !== null) break;

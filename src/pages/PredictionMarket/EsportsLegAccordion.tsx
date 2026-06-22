@@ -75,6 +75,16 @@ export function EsportsLegAccordion({
 		openCurtain();
 	};
 
+	const handleExpandedChange = (wireKey: string | null) => {
+		setExpandedWireKey(wireKey);
+		if (wireKey === null) return;
+		const leg = legs.find((candidate) => candidate.wireKey === wireKey);
+		if (!leg) return;
+		const legId = getMarketId(leg.question);
+		if (legId === activeQuestionId) return;
+		onMarketSwitch(leg.question, activePosition);
+	};
+
 	const sections = legs.map((leg) => {
 		const legId = getMarketId(leg.question);
 		const isActiveLeg = Boolean(legId) && legId === activeQuestionId;
@@ -100,7 +110,7 @@ export function EsportsLegAccordion({
 			sections={sections}
 			defaultExpandedId={legs[0]?.wireKey ?? "moneyline"}
 			expandedId={expandedWireKey}
-			onExpandedChange={setExpandedWireKey}
+			onExpandedChange={handleExpandedChange}
 		/>
 	);
 }

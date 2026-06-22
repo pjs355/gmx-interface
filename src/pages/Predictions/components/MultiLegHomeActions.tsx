@@ -125,12 +125,27 @@ const MultiLegHomeRow: React.FC<MultiLegHomeRowProps> = ({
 	const label = multiLegLegLabel(question);
 	const yesBarPct = oddsBarPercent(yesPrice);
 	const logoUrl = multiLegLegImage(question, layout);
+	const [showLogo, setShowLogo] = useState(Boolean(logoUrl));
+	useEffect(() => {
+		setShowLogo(Boolean(logoUrl));
+	}, [logoUrl]);
 
 	return (
 		<div className="prediction-card-outcome-row">
-			<div className="prediction-card-outcome-logo">
-				<OutcomeLogo src={logoUrl} alt={label} grey={isOther} />
-			</div>
+			{showLogo && logoUrl ? (
+				<div className="prediction-card-outcome-logo">
+					<img
+						className={
+							isOther
+								? "prediction-card-outcome-logo-img prediction-card-outcome-logo-img--draw"
+								: "prediction-card-outcome-logo-img"
+						}
+						src={logoUrl}
+						alt={label}
+						onError={() => setShowLogo(false)}
+					/>
+				</div>
+			) : null}
 			<div className="prediction-card-outcome-middle">
 				<span className="prediction-card-outcome-label">{label}</span>
 				{yesBarPct !== null ? (
@@ -170,30 +185,6 @@ const MultiLegHomeRow: React.FC<MultiLegHomeRowProps> = ({
 				<strong>{yesCents}</strong>
 			</Button>
 		</div>
-	);
-};
-
-const OutcomeLogo: React.FC<{ src: string | null; alt: string; grey?: boolean }> = ({
-	src,
-	alt,
-	grey = false,
-}) => {
-	const [errored, setErrored] = useState(false);
-	useEffect(() => {
-		setErrored(false);
-	}, [src]);
-	if (!src || errored) return null;
-	return (
-		<img
-			className={
-				grey
-					? "prediction-card-outcome-logo-img prediction-card-outcome-logo-img--draw"
-					: "prediction-card-outcome-logo-img"
-			}
-			src={src}
-			alt={alt}
-			onError={() => setErrored(true)}
-		/>
 	);
 };
 

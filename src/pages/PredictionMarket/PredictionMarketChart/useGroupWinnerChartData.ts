@@ -8,6 +8,10 @@ import { findOddsMatchedMarket } from "@/features/markets/odds-monitor/findOddsM
 import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { OrderbookData } from "@/types/odds-monitor";
 import type { TimeRange } from "./types";
+import {
+	impliedProbToChartDisplayPct,
+	isValidChartDisplayPct,
+} from "@/features/markets/chart/chartDisplayPrice";
 
 /** One team leg to chart (its own binary Polymarket market). */
 export interface GroupWinnerLegInput {
@@ -57,8 +61,7 @@ function bestAskDisplay100(book: OrderbookData | null | undefined): number | und
 		const b = Number(book.bestAsk);
 		if (Number.isFinite(b)) x = b;
 	}
-	if (x == null || !Number.isFinite(x) || x < 0.005 || x > 0.995) return undefined;
-	return x * 100;
+	return impliedProbToChartDisplayPct(x ?? Number.NaN) ?? undefined;
 }
 
 /** Per-leg best-YES history: min across venues per bucket (reuses the merge pipeline). */
@@ -82,7 +85,7 @@ function bestYesHistory(
 	const merged = series.length > 0 ? mergeExchangeTimeSeries(series, range) : [];
 	const out = new Map<number, number>();
 	for (const p of merged) {
-		if (typeof p.bestOdds === "number" && Number.isFinite(p.bestOdds)) {
+		if (typeof p.bestOdds === "number" && isValidChartDisplayPct(p.bestOdds)) {
 			out.set(p.timestamp, p.bestOdds);
 		}
 	}
@@ -181,7 +184,7 @@ export function useGroupWinnerChartData(
 				bestAskDisplay100(m.dflowPriceA as OrderbookData),
 				bestAskDisplay100(m.predictFunPriceA as OrderbookData),
 				bestAskDisplay100(m.limitlessPriceA as OrderbookData),
-			].filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+			].filter((v): v is number => typeof v === "number" && isValidChartDisplayPct(v));
 			if (candidates.length > 0) out[leg.key] = Math.min(...candidates);
 		}
 		return out;
@@ -215,13 +218,16 @@ export function useGroupWinnerChartData(
 			legs.forEach((leg, index) => {
 				const m = history[leg.key];
 				const val = m?.get(ts);
-				if (typeof val === "number" && Number.isFinite(val)) {
+				if (typeof val === "number" && isValidChartDisplayPct(val)) {
 					lastSeen[index] = val;
 				}
 				if (hasLive && ts === liveTs && typeof liveByLeg[leg.key] === "number") {
-					lastSeen[index] = liveByLeg[leg.key];
+					const liveVal = liveByLeg[leg.key];
+					if (isValidChartDisplayPct(liveVal)) {
+						lastSeen[index] = liveVal;
+					}
 				}
-				if (Number.isFinite(lastSeen[index])) {
+				if (Number.isFinite(lastSeen[index]) && isValidChartDisplayPct(lastSeen[index])) {
 					point[`t${index}`] = lastSeen[index];
 				}
 			});
@@ -232,7 +238,7 @@ export function useGroupWinnerChartData(
 		legs.forEach((_, index) => {
 			for (let i = points.length - 1; i >= 0; i -= 1) {
 				const v = points[i][`t${index}`];
-				if (typeof v === "number" && Number.isFinite(v)) {
+				if (typeof v === "number" && isValidChartDisplayPct(v)) {
 					teamSeries[index].latest = v;
 					break;
 				}

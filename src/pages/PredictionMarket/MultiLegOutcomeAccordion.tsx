@@ -90,6 +90,16 @@ export function MultiLegOutcomeAccordion({
 		openCurtain();
 	};
 
+	const handleExpandedChange = (id: string | null) => {
+		setExpandedId(id);
+		if (id === null) return;
+		const leg = legs.find((candidate) => getMarketId(candidate) === id);
+		if (!leg) return;
+		const legId = getMarketId(leg);
+		if (legId === activeQuestionId) return;
+		onMarketSwitch(leg, activePosition);
+	};
+
 	const sections = legs.map((leg, index) => {
 		const legId = getMarketId(leg);
 		const isActiveLeg = Boolean(legId) && legId === activeQuestionId;
@@ -126,7 +136,7 @@ export function MultiLegOutcomeAccordion({
 			sections={sections}
 			defaultExpandedId={legs[0] ? getMarketId(legs[0]) : undefined}
 			expandedId={expandedId}
-			onExpandedChange={setExpandedId}
+			onExpandedChange={handleExpandedChange}
 		/>
 		</>
 	);
@@ -194,7 +204,10 @@ function MultiLegHeaderContent({
 						borderColor: yesSelected ? getBorderColorForSelected(color) : "transparent",
 						color: getContrastingTextColor(yesSelected ? color : mixHexOnBlack(color, 0.35)),
 					}}
-					onClick={() => onPillClick("yes")}
+					onClick={(e) => {
+						e.stopPropagation();
+						onPillClick("yes");
+					}}
 				>
 					{sideLabels.yes} {yesPrice !== null ? formatPrice(yesPrice) : "--"}
 				</button>
@@ -206,7 +219,10 @@ function MultiLegHeaderContent({
 						borderColor: noSelected ? hexToRgba("#fff", 0.3) : "transparent",
 						color: getContrastingTextColor(noSelected ? "#374151" : mixHexOnBlack("#374151", 0.35)),
 					}}
-					onClick={() => onPillClick("no")}
+					onClick={(e) => {
+						e.stopPropagation();
+						onPillClick("no");
+					}}
 				>
 					{sideLabels.no} {noPrice !== null ? formatPrice(noPrice) : "--"}
 				</button>
