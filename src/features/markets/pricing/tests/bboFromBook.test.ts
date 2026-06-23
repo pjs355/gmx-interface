@@ -55,7 +55,7 @@ describe("bboFromBook", () => {
 describe("bboPolicyForTradingVenue", () => {
 	it("maps venues to adapter policies", () => {
 		expect(bboPolicyForTradingVenue("levelup")).toBe("restingOnly");
-		expect(bboPolicyForTradingVenue("dflow")).toBe("ladderFirst");
+		expect(bboPolicyForTradingVenue("dflow")).toBe("kalshiDflow");
 		expect(bboPolicyForTradingVenue("polymarket")).toBe("standard");
 		expect(bboPolicyForTradingVenue("predictfun")).toBe("standard");
 	});

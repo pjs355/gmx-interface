@@ -2,9 +2,11 @@ import type { OrderbookData } from "@/types/odds-monitor";
 import {
 	bestAskProbFromBook,
 	bestAskProbLadderFirst,
+	bestAskProbKalshiDflow,
 	bestAskProbRestingLevelsOnly,
 	bestBidProbFromBook,
 	bestBidProbLadderFirst,
+	bestBidProbKalshiDflow,
 	bestBidProbRestingLevelsOnly,
 } from "@/features/markets/pricing/orderbookBbo";
 import type { BboPolicy, VenueQuotes } from "./types";
@@ -35,6 +37,13 @@ export function applyBboPolicy(
 				askB: bestAskProbRestingLevelsOnly(bookB),
 				bidA: bestBidProbRestingLevelsOnly(bookA),
 				bidB: bestBidProbRestingLevelsOnly(bookB),
+			};
+		case "kalshiDflow":
+			return {
+				askA: bestAskProbKalshiDflow(bookA),
+				askB: bestAskProbKalshiDflow(bookB),
+				bidA: bestBidProbKalshiDflow(bookA),
+				bidB: bestBidProbKalshiDflow(bookB),
 			};
 		default: {
 			const _exhaustive: never = policy;

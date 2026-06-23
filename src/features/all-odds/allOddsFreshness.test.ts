@@ -33,17 +33,24 @@ function market(eventDate?: string): AllOddsMarket {
 }
 
 describe("allOddsFreshness", () => {
-	it("drops markets whose kickoff was more than 24 hours ago", () => {
+	it("drops markets whose kickoff was more than 6 hours ago", () => {
 		const kickoff = new Date("2026-06-12T18:00:00");
 		const now = kickoff.getTime() + ALL_ODDS_STALE_AFTER_MS + 1;
 		expect(isPastAllOddsDisplayCutoff(kickoff.toISOString(), now)).toBe(true);
 		expect(isActiveAllOddsMarket(market(kickoff.toISOString()), now)).toBe(false);
 	});
 
-	it("keeps markets within 24 hours of kickoff and markets without a start time", () => {
+	it("keeps markets within 6 hours of kickoff and markets without a start time", () => {
 		const kickoff = new Date("2026-06-17T12:00:00");
 		const now = kickoff.getTime() + ALL_ODDS_STALE_AFTER_MS - 60_000;
 		expect(isActiveAllOddsMarket(market(kickoff.toISOString()), now)).toBe(true);
 		expect(isActiveAllOddsMarket(market(undefined), now)).toBe(true);
+	});
+
+	it("drops finished matches more than 6 hours after kickoff", () => {
+		const kickoff = new Date("2026-06-22T20:00:00");
+		const now = new Date("2026-06-23T10:30:00").getTime();
+		expect(isPastAllOddsDisplayCutoff(kickoff.toISOString(), now)).toBe(true);
+		expect(isActiveAllOddsMarket(market(kickoff.toISOString()), now)).toBe(false);
 	});
 });

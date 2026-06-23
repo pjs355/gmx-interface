@@ -12,6 +12,7 @@ import {
 	impliedProbToChartDisplayPct,
 	isValidChartDisplayPct,
 } from "@/features/markets/chart/chartDisplayPrice";
+import { bestAskProbKalshiDflow } from "@/features/markets/pricing/orderbookBbo";
 
 /** One team leg to chart (its own binary Polymarket market). */
 export interface GroupWinnerLegInput {
@@ -181,7 +182,8 @@ export function useGroupWinnerChartData(
 			if (!m) continue;
 			const candidates = [
 				bestAskDisplay100(m.polyPriceA as OrderbookData),
-				bestAskDisplay100(m.dflowPriceA as OrderbookData),
+				impliedProbToChartDisplayPct(bestAskProbKalshiDflow(m.dflowPriceA as OrderbookData) ?? Number.NaN) ??
+					undefined,
 				bestAskDisplay100(m.predictFunPriceA as OrderbookData),
 				bestAskDisplay100(m.limitlessPriceA as OrderbookData),
 			].filter((v): v is number => typeof v === "number" && isValidChartDisplayPct(v));

@@ -2,7 +2,7 @@ import { normalizeEventDateInput } from "@/pages/Predictions/utils/eventDates";
 import type { AllOddsMarket } from "./types";
 
 /** Hide scheduled matches this long after kickoff (local time). */
-export const ALL_ODDS_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+export const ALL_ODDS_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 export function isPastAllOddsDisplayCutoff(
 	eventDate: string | undefined,

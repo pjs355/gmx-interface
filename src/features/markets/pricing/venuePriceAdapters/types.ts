@@ -1,6 +1,6 @@
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 
-export type BboPolicy = "standard" | "ladderFirst" | "restingOnly";
+export type BboPolicy = "standard" | "ladderFirst" | "restingOnly" | "kalshiDflow";
 
 export type VenueQuotes = {
 	askA: number | null;
@@ -19,7 +19,8 @@ export type VenueMonitorBooks = {
  *
  * `bboPolicy`:
  * - `standard` — scalar BBO, then resting ladder (Poly, Limitless, Predict).
- * - `ladderFirst` — resting ladder, then scalar (DFlow / Kalshi-sourced books).
+ * - `ladderFirst` — resting ladder, then scalar.
+ * - `kalshiDflow` — whole-contract ladder touch (≥1 contract), then scalar (Kalshi/DFlow).
  * - `restingOnly` — ladder only, ignore bare BBO (LevelUp).
  */
 export type VenuePriceAdapter = {

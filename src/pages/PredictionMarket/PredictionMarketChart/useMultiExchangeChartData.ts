@@ -28,6 +28,7 @@ import { useOddsMonitor } from "@/context/OddsMonitorContext";
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 import { isLimitlessConsoleDebugEnabled } from "@/features/trading/venues/limitless/trade/limitlessConsoleDebug";
 import { impliedProbToChartDisplayPct, isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
+import { bestAskProbKalshiDflow } from "@/features/markets/pricing/orderbookBbo";
 
 export interface MultiExchangeChartResult {
 	data: MergedExchangePoint[];
@@ -94,7 +95,7 @@ function applyTeamAFromHomeRow(
 	const pa = bestAskDisplay100(m.polyPriceA as OrderbookData);
 	if (pa != null) pt.polymarket = pa;
 
-	const da = bestAskDisplay100(m.dflowPriceA as OrderbookData);
+	const da = bestAskDisplay100(m.dflowPriceA as OrderbookData, true);
 	if (da != null) pt.kalshi = da;
 
 	const pra = bestAskDisplay100(m.predictFunPriceA as OrderbookData);
@@ -118,7 +119,7 @@ function applyTeamBFromHomeRow(
 	const pb = bestAskDisplay100(m.polyPriceB as OrderbookData);
 	if (pb != null) pt.polymarketB = pb;
 
-	const db = bestAskDisplay100(m.dflowPriceB as OrderbookData);
+	const db = bestAskDisplay100(m.dflowPriceB as OrderbookData, true);
 	if (db != null) pt.kalshiB = db;
 
 	const prb = bestAskDisplay100(m.predictFunPriceB as OrderbookData);
@@ -142,7 +143,7 @@ function applyTeamBFromAwayLegRow(
 	const pa = bestAskDisplay100(leg.polyPriceA as OrderbookData);
 	if (pa != null) pt.polymarketB = pa;
 
-	const da = bestAskDisplay100(leg.dflowPriceA as OrderbookData);
+	const da = bestAskDisplay100(leg.dflowPriceA as OrderbookData, true);
 	if (da != null) pt.kalshiB = da;
 
 	const pra = bestAskDisplay100(leg.predictFunPriceA as OrderbookData);
@@ -157,17 +158,21 @@ function applyTeamBFromAwayLegRow(
 	}
 }
 
-function bestAskDisplay100(book: OrderbookData | null | undefined): number | undefined {
+function bestAskDisplay100(book: OrderbookData | null | undefined, kalshiDflow = false): number | undefined {
 	if (!book) return undefined;
 	let x: number | undefined;
-	const asks = book.asks?.filter((l) => Number(l.size) > 0) ?? [];
-	if (asks.length > 0) {
-		const prices = asks.map((l) => Number(l.price)).filter((p) => Number.isFinite(p));
-		if (prices.length > 0) x = Math.min(...prices);
-	}
-	if (x == null && book.bestAsk != null) {
-		const b = Number(book.bestAsk);
-		if (Number.isFinite(b)) x = b;
+	if (kalshiDflow) {
+		x = bestAskProbKalshiDflow(book) ?? undefined;
+	} else {
+		const asks = book.asks?.filter((l) => Number(l.size) > 0) ?? [];
+		if (asks.length > 0) {
+			const prices = asks.map((l) => Number(l.price)).filter((p) => Number.isFinite(p));
+			if (prices.length > 0) x = Math.min(...prices);
+		}
+		if (x == null && book.bestAsk != null) {
+			const b = Number(book.bestAsk);
+			if (Number.isFinite(b)) x = b;
+		}
 	}
 	return impliedProbToChartDisplayPct(x ?? Number.NaN) ?? undefined;
 }

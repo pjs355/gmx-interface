@@ -186,6 +186,27 @@ function bookHasQuotableLiquidity(book: OrderbookData | null | undefined): boole
 	return false;
 }
 
+/** BBO-only WS ticks omit depth; keep ladder when scalars refresh on an existing book. */
+function mergeKalshiBboOnlyUpdate(
+	prev: OrderbookData | null | undefined,
+	incoming: OrderbookData,
+): OrderbookData {
+	const incomingHasDepth =
+		(incoming.bids?.length ?? 0) > 0 || (incoming.asks?.length ?? 0) > 0;
+	if (incomingHasDepth) return incoming;
+	const prevHasDepth =
+		prev != null &&
+		((prev.bids?.length ?? 0) > 0 || (prev.asks?.length ?? 0) > 0);
+	if (!prevHasDepth) return incoming;
+	return {
+		...prev,
+		bestBid: incoming.bestBid,
+		bestAsk: incoming.bestAsk,
+		snapshotStatus: incoming.snapshotStatus ?? prev.snapshotStatus,
+		lastUpdated: incoming.lastUpdated,
+	};
+}
+
 export function applyVenuePriceUpdates(
 	markets: Map<string, MatchedMarket>,
 	snapshots: VenuePriceSnapshot[],
@@ -211,7 +232,10 @@ export function applyVenuePriceUpdates(
 		}
 		let assignA = dataA;
 		let assignB = dataB;
-		if (venue === "limitless") {
+		if (venue === "dflow" || venue === "kalshi") {
+			assignA = mergeKalshiBboOnlyUpdate(market.dflowPriceA, dataA);
+			assignB = mergeKalshiBboOnlyUpdate(market.dflowPriceB, dataB);
+		} else if (venue === "limitless") {
 			const prevA = market.limitlessPriceA;
 			const prevB = market.limitlessPriceB;
 			const allowClear = snap.status === "no_liquidity";
@@ -225,8 +249,10 @@ export function applyVenuePriceUpdates(
 			if (pid) logLimitlessWsOrderbookIfChanged(pid, snap, assignA, assignB, market);
 		}
 		for (const [fieldA, fieldB] of fieldPairs) {
-			const a = venue === "limitless" ? assignA : dataA;
-			const b = venue === "limitless" ? assignB : dataB;
+			const useAssign =
+				venue === "limitless" || venue === "dflow" || venue === "kalshi";
+			const a = useAssign ? assignA : dataA;
+			const b = useAssign ? assignB : dataB;
 			(market as unknown as Record<string, unknown>)[fieldA] = a;
 			(market as unknown as Record<string, unknown>)[fieldB] = b;
 		}

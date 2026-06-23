@@ -186,7 +186,7 @@ describe("buildAllOddsGroups", () => {
 		expect(futuresGroup?.primaryOutcomes.map((o) => o.label)).toEqual(["Argentina", "Algeria"]);
 	});
 
-	it("excludes fixture groups when kickoff was more than 24 hours ago", () => {
+	it("excludes fixture groups when kickoff was more than 6 hours ago", () => {
 		const kickoff = new Date("2026-06-12T18:00:00");
 		const now = kickoff.getTime() + ALL_ODDS_STALE_AFTER_MS + 1;
 		const markets: AllOddsMarket[] = [
@@ -426,7 +426,8 @@ describe("buildAllOddsGroups", () => {
 			}),
 		];
 
-		const groups = buildAllOddsGroups(markets);
+		const nowMs = new Date("2026-06-17T12:00:00.000Z").getTime();
+		const groups = buildAllOddsGroups(markets, nowMs);
 		expect(groups.map((g) => g.title)).toEqual([
 			"Sooner vs Match",
 			"Later vs Match",
@@ -483,6 +484,32 @@ describe("buildAllOddsGroups", () => {
 			"Team Vitality",
 		]);
 		expect(groups[0]!.moreSections).toHaveLength(0);
+	});
+
+	it("shows both esports teams when only one side has venue quotes", () => {
+		const markets: AllOddsMarket[] = [
+			baseMarket({
+				pandaMatchId: "1545464",
+				displayName: "ECHO vs Betclic Apogee - DraculaN - Season 7 2026",
+				game: "Counter-Strike 2",
+				homeTeamName: "ECHO",
+				awayTeamName: "Betclic Apogee Esports",
+				pandaTeamA: "ECHO",
+				pandaTeamB: "Betclic Apogee Esports",
+				polyPriceA: null,
+				polyPriceB: ask(0.99),
+			}),
+		];
+
+		const groups = buildAllOddsGroups(markets);
+		expect(groups).toHaveLength(1);
+		expect(groups[0]!.title).toBe("ECHO vs Betclic Apogee Esports");
+		expect(groups[0]!.primaryOutcomes.map((o) => o.label).sort()).toEqual([
+			"Betclic Apogee Esports",
+			"ECHO",
+		]);
+		const echoRow = groups[0]!.primaryOutcomes.find((o) => o.label === "ECHO");
+		expect(echoRow?.venueCells.every((c) => c.ask == null)).toBe(true);
 	});
 
 	it("hides groups with only display-only venue quotes and no tradable market prices", () => {

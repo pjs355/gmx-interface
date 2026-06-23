@@ -75,6 +75,50 @@ export function bestBidProbRestingLevelsOnly(
 	return max === -Infinity ? null : max;
 }
 
+/** Minimum resting size for Kalshi/DFlow whole-contract books (matches OrderbookDisplay). */
+const KALSHI_WHOLE_CONTRACT_MIN_SIZE = 1 - 1e-9;
+
+function bestAskFromRestingLevelsMinSize(
+	book: OrderbookData | null | undefined,
+	minSize: number,
+): number | null {
+	if (!book?.asks?.length) return null;
+	let min = Infinity;
+	for (const a of book.asks) {
+		if ((a.size ?? 0) >= minSize && isValidProbPrice(a.price) && a.price < min) {
+			min = a.price;
+		}
+	}
+	return min === Infinity ? null : min;
+}
+
+function bestBidFromRestingLevelsMinSize(
+	book: OrderbookData | null | undefined,
+	minSize: number,
+): number | null {
+	if (!book?.bids?.length) return null;
+	let max = -Infinity;
+	for (const b of book.bids) {
+		if ((b.size ?? 0) >= minSize && isValidProbPrice(b.price) && b.price > max) {
+			max = b.price;
+		}
+	}
+	return max === -Infinity ? null : max;
+}
+
+/** DFlow/Kalshi: ladder touch with whole-contract min size, then scalar. */
+export function bestAskProbKalshiDflow(book: OrderbookData | null | undefined): number | null {
+	const fromLadder = bestAskFromRestingLevelsMinSize(book, KALSHI_WHOLE_CONTRACT_MIN_SIZE);
+	if (fromLadder !== null) return fromLadder;
+	return parseProb(book?.bestAsk);
+}
+
+export function bestBidProbKalshiDflow(book: OrderbookData | null | undefined): number | null {
+	const fromLadder = bestBidFromRestingLevelsMinSize(book, KALSHI_WHOLE_CONTRACT_MIN_SIZE);
+	if (fromLadder !== null) return fromLadder;
+	return parseProb(book?.bestBid);
+}
+
 /** DFlow strip: ladder touch first, then scalar (stale bestAsk with fresh asks). */
 export function bestAskProbLadderFirst(book: OrderbookData | null | undefined): number | null {
 	const fromLadder = bestAskProbRestingLevelsOnly(book);

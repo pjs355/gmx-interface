@@ -157,7 +157,10 @@ export function AllOddsMatrixTable({
 					aria-label="Sport filter"
 				>
 					<option value="all">All sports</option>
-					<option value="esports">Esports</option>
+					<option value="cs-go">CS2</option>
+					<option value="dota-2">DOTA 2</option>
+					<option value="league-of-legends">League of Legends</option>
+					<option value="valorant">Valorant</option>
 					<option value="soccer">Soccer</option>
 				</select>
 				<OddsDisplaySelect variant="inline" className="all-odds-sport-select" />

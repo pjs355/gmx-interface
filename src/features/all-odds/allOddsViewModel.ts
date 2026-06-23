@@ -5,6 +5,7 @@ import {
 	MAX_VALID_PRICE,
 	MIN_VALID_PRICE,
 } from "@/features/markets/pricing/venueBooksCells";
+import { bestAskProbKalshiDflow } from "@/features/markets/pricing/orderbookBbo";
 import { normalizeEventDateInput } from "@/pages/Predictions/utils/eventDates";
 import type { OrderbookData } from "@/types/odds-monitor";
 import { ALL_ODDS_ADAPTERS, isVenueLinked } from "./adapters";
@@ -27,8 +28,12 @@ import type {
 
 const LEG_ORDER: Record<string, number> = { home: 0, away: 1, draw: 2 };
 
-function touchAsk(book: OrderbookData | null | undefined): number | null {
-	const ask = book?.bestAsk;
+function touchAsk(
+	book: OrderbookData | null | undefined,
+	ladderFirst = false,
+): number | null {
+	if (!book) return null;
+	const ask = ladderFirst ? bestAskProbKalshiDflow(book) : book.bestAsk;
 	return ask != null && Number.isFinite(ask) ? ask : null;
 }
 
@@ -291,11 +296,12 @@ function buildVenueCells(market: AllOddsMarket, yesSide: "A" | "B"): AllOddsVenu
 		const linked = isVenueLinked(market, col);
 		const field = resolvePriceField(market, col, yesSide);
 		const book = market[field] as OrderbookData | null | undefined;
+		const ladderFirst = col.id === "kalshi";
 		return {
 			id: col.id,
 			label: col.label,
 			linked,
-			ask: touchAsk(book),
+			ask: touchAsk(book, ladderFirst),
 			status: book?.snapshotStatus,
 		};
 	});
@@ -530,6 +536,11 @@ function sortOutcomeRows(rows: AllOddsOutcomeRow[]): AllOddsOutcomeRow[] {
 
 function filterVisibleOutcomes(rows: AllOddsOutcomeRow[]): AllOddsOutcomeRow[] {
 	return sortOutcomeRows(rows.filter(outcomeHasValidAsk));
+}
+
+/** Fixture primary rows always include every team leg — never hide a side with no quotes. */
+function filterFixturePrimaryOutcomes(rows: AllOddsOutcomeRow[]): AllOddsOutcomeRow[] {
+	return sortOutcomeRows(rows);
 }
 
 function countValidVenueAsks(row: AllOddsOutcomeRow): number {
@@ -771,9 +782,11 @@ export function buildAllOddsGroups(
 					? [{ sectionKey: "overflow", title: "", outcomes: overflow }]
 					: [];
 		} else {
-			primaryOutcomes = filterVisibleOutcomes(
-				dedupeMoneylinePrimary(acc.primaryDrafts.map(draftToOutcomeRow)),
-			);
+			const primaryRows = dedupeMoneylinePrimary(acc.primaryDrafts.map(draftToOutcomeRow));
+			primaryOutcomes =
+				kind === "fixture"
+					? filterFixturePrimaryOutcomes(primaryRows)
+					: filterVisibleOutcomes(primaryRows);
 			moreSections = sortMoreSections(
 				Array.from(acc.moreDrafts.entries())
 					.map(([sectionKey, section]) => ({

@@ -5,7 +5,7 @@ export const dflowPriceAdapter: VenuePriceAdapter = {
 	id: "dflow",
 	label: "Kalshi",
 	sortPriority: 11,
-	bboPolicy: "ladderFirst",
+	bboPolicy: "kalshiDflow",
 	isMapped(m) {
 		return Boolean(m.dflow);
 	},

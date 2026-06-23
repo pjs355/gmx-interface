@@ -57,7 +57,13 @@ export const MATCHED_MARKETS_MATRIX_QUERY_KEY = ["matched-markets", "matrix"] as
 export const MATCHED_MARKETS_BATCH_QUERY_KEY = ["matched-markets", "batch"] as const;
 export const ALL_ODDS_PAGE_QUERY_KEY = ["matched-markets", "all-odds-page"] as const;
 
-export type AllOddsSportFilter = "all" | "esports" | "soccer";
+export type AllOddsGameSportFilter =
+	| "cs-go"
+	| "dota-2"
+	| "league-of-legends"
+	| "valorant";
+
+export type AllOddsSportFilter = "all" | "soccer" | AllOddsGameSportFilter;
 
 export interface AllOddsPageResponse {
 	page: number;

@@ -25,7 +25,7 @@ export function bboPolicyForTradingVenue(venue: TradingVenue): BboPolicy {
 		case "levelup":
 			return "restingOnly";
 		case "dflow":
-			return "ladderFirst";
+			return "kalshiDflow";
 		case "all":
 		case "polymarket":
 		case "limitless":
