@@ -38,6 +38,7 @@ export function useTradeBoxEffectiveOrderbook(
 		matchedMonitor,
 		yesTeamLabel,
 		noTeamLabel,
+		moneylineLeg,
 		levelUpOrderbook,
 		oddsMonitorEnabled,
 		oddsMonitorConnected,
@@ -106,6 +107,7 @@ export function useTradeBoxEffectiveOrderbook(
 				state.selectedPosition ?? "yes",
 				yesTeamLabel,
 				noTeamLabel,
+				moneylineLeg,
 			);
 			return monitorBookToOrderbookSnapshot(dflowRaw);
 		}
@@ -123,6 +125,7 @@ export function useTradeBoxEffectiveOrderbook(
 		matchedMonitor,
 		yesTeamLabel,
 		noTeamLabel,
+		moneylineLeg,
 		predictOrderbookQuery.data,
 		isPredictSingleMarket,
 		predictVenueBookHints,

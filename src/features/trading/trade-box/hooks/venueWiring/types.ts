@@ -3,6 +3,7 @@
  */
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { MatchedMarket } from "@/types/odds-monitor";
+import type { MoneylineLegWire } from "@/features/markets/pricing/kalshiLegYesBook";
 import type { TradingVenue } from "../../types";
 import type { useSetupActivationOptional } from "@/features/onboarding/SetupActivationContext";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ export interface UseTradeBoxVenueWiringParams {
 	authenticated: boolean;
 	pandaId: string;
 	matchedMonitor: MatchedMarket | null | undefined;
+	moneylineLeg?: MoneylineLegWire | null;
 	yesTeamLabel: string;
 	noTeamLabel: string;
 	levelUpOrderbook: OrderbookSnapshot | null;

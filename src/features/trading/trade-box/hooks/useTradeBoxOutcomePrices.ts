@@ -28,6 +28,7 @@ export function useTradeBoxOutcomePrices(input: ResolveTradeBoxOutcomePricesInpu
 			input.predictVenueBookHints,
 			input.levelUpVenueBookHints,
 			input.matchedMonitor,
+			input.moneylineLeg,
 			input.yesTeamLabel,
 			input.noTeamLabel,
 			input.crossBuyYes,

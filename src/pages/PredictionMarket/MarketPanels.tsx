@@ -541,9 +541,9 @@ export const MarketPanels: React.FC<PanelsProps> = ({
 					limitlessFromUmbrella={umbrellaLimitless}
 					levelUpOrderbook={levelUpOrderbook}
 					market={
-						levelUpContextMarket
+						bookMarket
 							? ({
-									...(levelUpContextMarket as any),
+									...(bookMarket as any),
 									umbrellaChildrenCount: umbrella?.children?.length || 0,
 								} as any)
 							: undefined

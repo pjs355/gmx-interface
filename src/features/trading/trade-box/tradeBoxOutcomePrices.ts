@@ -1,5 +1,6 @@
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
+import type { MoneylineLegWire } from "@/features/markets/pricing/kalshiLegYesBook";
 import { bboFromBook, bboPolicyForTradingVenue } from "@/features/markets/pricing/bboFromBook";
 import type { BboPolicy } from "@/features/markets/pricing/venuePriceAdapters/types";
 import {
@@ -22,6 +23,7 @@ export type ResolveTradeBoxOutcomePricesInput = {
 	predictVenueBookHints?: OutcomeBookHints;
 	levelUpVenueBookHints?: OutcomeBookHints;
 	matchedMonitor?: MatchedMarket | null;
+	moneylineLeg?: MoneylineLegWire | null;
 	yesTeamLabel: string;
 	noTeamLabel: string;
 	crossBuyYes?: number | null;
@@ -98,6 +100,7 @@ export function resolveTradeBoxOutcomePrices(
 		predictVenueBookHints,
 		levelUpVenueBookHints,
 		matchedMonitor,
+		moneylineLeg,
 		yesTeamLabel,
 		noTeamLabel,
 		crossBuyYes,
@@ -117,8 +120,20 @@ export function resolveTradeBoxOutcomePrices(
 	const venueOutcomeDisplayPrices =
 		tradingVenue === "dflow" && matchedMonitor && hasDflowKalshiMonitorLink(matchedMonitor)
 			? binaryOutcomeDisplayPrices(
-					dflowKalshiOrderbookForPosition(matchedMonitor, "yes", yesTeamLabel, noTeamLabel),
-					dflowKalshiOrderbookForPosition(matchedMonitor, "no", yesTeamLabel, noTeamLabel),
+					dflowKalshiOrderbookForPosition(
+						matchedMonitor,
+						"yes",
+						yesTeamLabel,
+						noTeamLabel,
+						moneylineLeg,
+					),
+					dflowKalshiOrderbookForPosition(
+						matchedMonitor,
+						"no",
+						yesTeamLabel,
+						noTeamLabel,
+						moneylineLeg,
+					),
 					bboPolicyForTradingVenue("dflow"),
 					side,
 				)

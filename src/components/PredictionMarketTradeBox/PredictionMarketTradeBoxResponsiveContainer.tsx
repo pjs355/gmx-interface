@@ -46,6 +46,7 @@ export default function PredictionMarketTradeBoxResponsiveContainer({
 		predictVenueBookHints: sorUi.predictVenueBookHints,
 		levelUpVenueBookHints: sorUi.levelUpVenueBookHints,
 		matchedMonitor: sorUi.matchedMonitor,
+		moneylineLeg: market?.moneylineLeg ?? sorUi.matchedMonitor?.moneylineLeg ?? null,
 		yesTeamLabel: team.yesTeamLabel,
 		noTeamLabel: team.noTeamLabel,
 		crossBuyYes,

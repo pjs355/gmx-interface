@@ -5,13 +5,18 @@ import type { OrderbookOutcomeTab } from "@/components/OrderbookDisplay/Orderboo
 import MarketLogo from "@/components/MarketLogo/MarketLogo";
 import type { OrderbookSnapshot } from "@/services/api/orderbookService";
 import type { PredictionMarket } from "@/services/api/predictionMarketDataService";
+import type { MatchedMarket } from "@/types/odds-monitor";
 import type {
 	Umbrella,
 	UmbrellaExchangeMatchingLimitless,
 } from "@/services/api/umbrellaDataService";
 import type { TradingVenue } from "@/features/trading/trade-box/types";
 import { mergeMonitorLimitlessFromUmbrella } from "@/features/markets/odds-monitor/mergeMonitorLimitlessFromUmbrella";
-import { getDflowKalshiMonitorLink } from "@/features/trading/venues/dflow/catalog/monitorDflowBooks";
+import {
+	dflowKalshiDisplayBooks,
+	getDflowKalshiMonitorLink,
+} from "@/features/trading/venues/dflow/catalog/monitorDflowBooks";
+import type { MoneylineLegWire } from "@/features/markets/pricing/kalshiLegYesBook";
 import {
 	isPredictionPricingDebugEnabled,
 	priceDebugLog,
@@ -34,6 +39,7 @@ type VenueEntry = {
 function buildVenueEntries(
 	matched: MatchedMarket,
 	levelUpOrderbook: OrderbookSnapshot | null,
+	moneylineLeg?: MoneylineLegWire | null,
 ): VenueEntry[] {
 	const entries: VenueEntry[] = [];
 
@@ -68,11 +74,12 @@ function buildVenueEntries(
 	}
 
 	if (getDflowKalshiMonitorLink(matched)) {
+		const { bookA, bookB } = dflowKalshiDisplayBooks(matched, moneylineLeg);
 		entries.push({
 			id: "dflow",
 			label: "Kalshi",
-			bookA: monitorOrderbookDataToRestingSnapshot(matched.dflowPriceA),
-			bookB: monitorOrderbookDataToRestingSnapshot(matched.dflowPriceB),
+			bookA: monitorOrderbookDataToRestingSnapshot(bookA),
+			bookB: monitorOrderbookDataToRestingSnapshot(bookB),
 			restricted: false,
 		});
 	}
@@ -167,10 +174,13 @@ export function VenueOrderbooksPanel({
 		return mergeMonitorLimitlessFromUmbrella(base, limitlessFromUmbrella);
 	}, [appState?.markets, pandascoreMatchId, umbrellaId, limitlessFromUmbrella]);
 
+	const moneylineLeg =
+		market?.moneylineLeg ?? matched?.moneylineLeg ?? null;
+
 	const venues = useMemo(() => {
 		if (!matched) return [];
-		return buildVenueEntries(matched, levelUpOrderbook);
-	}, [matched, levelUpOrderbook]);
+		return buildVenueEntries(matched, levelUpOrderbook, moneylineLeg);
+	}, [matched, levelUpOrderbook, moneylineLeg]);
 
 	useEffect(() => {
 		if (!isPredictionPricingDebugEnabled()) return;

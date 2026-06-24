@@ -1,11 +1,9 @@
 import type { VenuePriceAdapter } from "./types";
 import type { MatchedMarket } from "@/types/odds-monitor";
+import { kalshiLegDisplayBooks } from "@/features/markets/pricing/kalshiLegYesBook";
 
 function dflowBooksForLeg(m: MatchedMarket) {
-	if (m.moneylineLeg === "away") {
-		return { bookA: m.dflowPriceB, bookB: m.dflowPriceA };
-	}
-	return { bookA: m.dflowPriceA, bookB: m.dflowPriceB };
+	return kalshiLegDisplayBooks(m);
 }
 
 /** DFlow venue row (UI label Kalshi). Books are Kalshi-sourced on predictions-api. */

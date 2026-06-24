@@ -20,6 +20,7 @@ export function useTradeBoxVenueWiring(params: UseTradeBoxVenueWiringParams) {
 		predictVenueActive: sessions.predictVenueActive,
 		isPredictSingleMarket: sessions.isPredictSingleMarket,
 		predictOrderbookQuery: sessions.predictOrderbookQuery,
+		moneylineLeg: params.moneylineLeg,
 	});
 	const tradingGates = useTradeBoxVenueTradingGates({
 		...params,

@@ -214,6 +214,7 @@ const PredictionMarketTradeBox = forwardRef<
 			authenticated,
 			pandaId,
 			matchedMonitor,
+			moneylineLeg: market?.moneylineLeg ?? matchedMonitor?.moneylineLeg ?? null,
 			yesTeamLabel,
 			noTeamLabel,
 			levelUpOrderbook,

@@ -5,6 +5,7 @@ import { buildFifaThreeWayVenuePriceRows } from "@/features/markets/pricing/buil
 import { buildVenuePriceRows } from "@/features/markets/pricing/buildVenuePriceRows";
 import {
 	kalshiDflowWireSideForLeg,
+	kalshiLegDisplayBooks,
 	kalshiLegYesAskProb,
 } from "@/features/markets/pricing/kalshiLegYesBook";
 import { mergeKalshiBboOnlyUpdate } from "@/features/markets/pricing/kalshiSnapshotMerge";
@@ -44,6 +45,15 @@ describe("kalshiDflowWireSideForLeg", () => {
 		expect(kalshiDflowWireSideForLeg("home")).toBe("A");
 		expect(kalshiDflowWireSideForLeg("draw")).toBe("A");
 		expect(kalshiDflowWireSideForLeg("away")).toBe("B");
+	});
+});
+
+describe("kalshiLegDisplayBooks", () => {
+	it("swaps wire columns for away single-ticker per-leg rows", () => {
+		const m = awayLegMatchedMarket();
+		const { bookA, bookB } = kalshiLegDisplayBooks(m, "away");
+		expect(bookA?.bestAsk).toBe(0.08);
+		expect(bookB?.bestAsk).toBe(0.93);
 	});
 });
 
