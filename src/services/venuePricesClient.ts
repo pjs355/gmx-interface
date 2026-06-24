@@ -17,7 +17,12 @@ import {
 	type VenuePriceSnapshotWire,
 } from "@/features/all-odds/venueSnapshotMerge";
 import type { VenuePriceTeam } from "@/types/venue-prices";
-import { mergeMatchedMarketsIntoStore } from "@/features/markets/odds-monitor/matchedMarketFromApi";
+import { applyKalshiVenueSnapshotMerge } from "@/features/markets/pricing/kalshiSnapshotMerge";
+import {
+	apiItemToMatchedMarket,
+	applyMetadataToMatchedMarket,
+	mergeMatchedMarketsIntoStore,
+} from "@/features/markets/odds-monitor/matchedMarketFromApi";
 import { ensureMarketsFromUmbrella } from "@/features/markets/odds-monitor/matchedMarketFromUmbrella";
 import type { MatchedMarketsApiItem } from "@/features/markets/queries/matchedMarketsQuery";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
@@ -186,27 +191,6 @@ function bookHasQuotableLiquidity(book: OrderbookData | null | undefined): boole
 	return false;
 }
 
-/** BBO-only WS ticks omit depth; keep ladder when scalars refresh on an existing book. */
-function mergeKalshiBboOnlyUpdate(
-	prev: OrderbookData | null | undefined,
-	incoming: OrderbookData,
-): OrderbookData {
-	const incomingHasDepth =
-		(incoming.bids?.length ?? 0) > 0 || (incoming.asks?.length ?? 0) > 0;
-	if (incomingHasDepth) return incoming;
-	const prevHasDepth =
-		prev != null &&
-		((prev.bids?.length ?? 0) > 0 || (prev.asks?.length ?? 0) > 0);
-	if (!prevHasDepth) return incoming;
-	return {
-		...prev,
-		bestBid: incoming.bestBid,
-		bestAsk: incoming.bestAsk,
-		snapshotStatus: incoming.snapshotStatus ?? prev.snapshotStatus,
-		lastUpdated: incoming.lastUpdated,
-	};
-}
-
 export function applyVenuePriceUpdates(
 	markets: Map<string, MatchedMarket>,
 	snapshots: VenuePriceSnapshot[],
@@ -233,8 +217,14 @@ export function applyVenuePriceUpdates(
 		let assignA = dataA;
 		let assignB = dataB;
 		if (venue === "dflow" || venue === "kalshi") {
-			assignA = mergeKalshiBboOnlyUpdate(market.dflowPriceA, dataA);
-			assignB = mergeKalshiBboOnlyUpdate(market.dflowPriceB, dataB);
+			const merged = applyKalshiVenueSnapshotMerge(
+				market.dflowPriceA,
+				market.dflowPriceB,
+				dataA,
+				dataB,
+			);
+			assignA = merged.assignA;
+			assignB = merged.assignB;
 		} else if (venue === "limitless") {
 			const prevA = market.limitlessPriceA;
 			const prevB = market.limitlessPriceB;
@@ -431,15 +421,20 @@ class VenuePricesClient {
 
 	mergeMarketsFromMetadataBatch(items: MatchedMarketsApiItem[]): void {
 		if (!items.length) return;
-		const { next, changed } = mergeMatchedMarketsIntoStore(this.markets, items, []);
-		let added = false;
-		for (const [k, v] of next) {
-			if (!this.markets.has(k)) {
-				this.markets.set(k, v);
-				added = true;
+		let changed = false;
+		for (const item of items) {
+			const pid = String(item.pandaMatchId ?? "").trim();
+			if (!pid) continue;
+			const prev = this.markets.get(pid);
+			if (prev) {
+				applyMetadataToMatchedMarket(prev, item, pid);
+				changed = true;
+			} else {
+				this.markets.set(pid, apiItemToMatchedMarket(item, pid));
+				changed = true;
 			}
 		}
-		if (!changed && !added) return;
+		if (!changed) return;
 		for (const [pid, snaps] of this.pendingSnaps.entries()) {
 			if (this.markets.has(pid) && snaps.length) {
 				if (applyVenuePriceUpdates(this.markets, snaps)) {

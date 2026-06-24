@@ -29,6 +29,7 @@ import type { MatchedMarket, OrderbookData } from "@/types/odds-monitor";
 import { isLimitlessConsoleDebugEnabled } from "@/features/trading/venues/limitless/trade/limitlessConsoleDebug";
 import { impliedProbToChartDisplayPct, isValidChartDisplayPct } from "@/features/markets/chart/chartDisplayPrice";
 import { bestAskProbKalshiDflow } from "@/features/markets/pricing/orderbookBbo";
+import { kalshiLegYesBookFromMarket } from "@/features/markets/pricing/kalshiLegYesBook";
 
 export interface MultiExchangeChartResult {
 	data: MergedExchangePoint[];
@@ -143,7 +144,11 @@ function applyTeamBFromAwayLegRow(
 	const pa = bestAskDisplay100(leg.polyPriceA as OrderbookData);
 	if (pa != null) pt.polymarketB = pa;
 
-	const da = bestAskDisplay100(leg.dflowPriceA as OrderbookData, true);
+	const kalshiAwayBook = kalshiLegYesBookFromMarket({
+		...leg,
+		moneylineLeg: leg.moneylineLeg ?? "away",
+	});
+	const da = bestAskDisplay100(kalshiAwayBook, true);
 	if (da != null) pt.kalshiB = da;
 
 	const pra = bestAskDisplay100(leg.predictFunPriceA as OrderbookData);

@@ -6,6 +6,7 @@ import {
 	MIN_VALID_PRICE,
 } from "@/features/markets/pricing/venueBooksCells";
 import { bestAskProbKalshiDflow } from "@/features/markets/pricing/orderbookBbo";
+import { kalshiDflowWireSideForLeg } from "@/features/markets/pricing/kalshiLegYesBook";
 import { normalizeEventDateInput } from "@/pages/Predictions/utils/eventDates";
 import type { OrderbookData } from "@/types/odds-monitor";
 import { ALL_ODDS_ADAPTERS, isVenueLinked } from "./adapters";
@@ -285,8 +286,10 @@ function resolvePriceField(
 	col: AllOddsVenueColumn,
 	yesSide: "A" | "B",
 ): keyof AllOddsMarket {
-	if (col.id === "kalshi" && market.moneylineLeg === "away") {
-		return col.priceFieldB;
+	if (col.id === "kalshi") {
+		return kalshiDflowWireSideForLeg(market.moneylineLeg) === "B"
+			? col.priceFieldB
+			: col.priceFieldA;
 	}
 	return yesSide === "A" ? col.priceFieldA : col.priceFieldB;
 }

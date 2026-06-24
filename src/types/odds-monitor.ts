@@ -12,6 +12,8 @@ export interface OrderbookLevel {
 
 export type SnapshotStatus = "live" | "no_liquidity" | "awaiting_data";
 
+export type MoneylineLegWire = "home" | "draw" | "away";
+
 export interface OrderbookData {
 	bestBid: number | null;
 	bestAsk: number | null;
@@ -53,6 +55,8 @@ export interface MatchedMarket {
 	format?: "bo1" | "bo3" | "bo5";
 	status?: string;
 	game?: string;
+	/** Per-leg moneyline (FIFA/MLB): drives Kalshi wire column routing on away legs. */
+	moneylineLeg?: MoneylineLegWire;
 	videogameSlug?: string | null;
 	pandaOddsA?: number | null;
 	pandaOddsB?: number | null;

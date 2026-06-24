@@ -46,8 +46,12 @@ function useLegVenueRows(leg: PredictionMarket | null): VenueRowModel[] {
 	const matched = useMatchVenuePrices(venueKey || null, null);
 	return useMemo(
 		// `matched` is mutated in place on WS ticks; `appState.timestamp` forces recompute.
-		() => (matched ? buildVenuePriceRows(matched) : []),
-		[matched, appState?.timestamp],
+		// `leg.moneylineLeg` is authoritative for away→B Kalshi routing even before REST metadata lands.
+		() =>
+			matched
+				? buildVenuePriceRows(matched, { legHint: leg?.moneylineLeg ?? null })
+				: [],
+		[matched, appState?.timestamp, leg?.moneylineLeg],
 	);
 }
 

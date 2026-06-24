@@ -1,4 +1,5 @@
 import type { OrderbookData, SnapshotStatus } from "@/types/odds-monitor";
+import { applyKalshiVenueSnapshotMerge } from "@/features/markets/pricing/kalshiSnapshotMerge";
 
 /** Wire shape for venue-prices / venue_bbo WebSocket payloads. */
 export interface VenuePriceTeam {
@@ -102,8 +103,17 @@ export function applyVenueSnapshotsToMarkets<T extends Record<string, unknown>>(
 		const dataA = teamToOrderbookData(snap.teamA, snap.status);
 		const dataB = teamToOrderbookData(snap.teamB, snap.status);
 		const [fieldA, fieldB] = fieldPairs;
-		(market as Record<string, unknown>)[fieldA] = dataA;
-		(market as Record<string, unknown>)[fieldB] = dataB;
+		const venueKey = snap.venue.toLowerCase();
+		if (venueKey === "dflow" || venueKey === "kalshi") {
+			const prevA = market[fieldA] as OrderbookData | null | undefined;
+			const prevB = market[fieldB] as OrderbookData | null | undefined;
+			const { assignA, assignB } = applyKalshiVenueSnapshotMerge(prevA, prevB, dataA, dataB);
+			(market as Record<string, unknown>)[fieldA] = assignA;
+			(market as Record<string, unknown>)[fieldB] = assignB;
+		} else {
+			(market as Record<string, unknown>)[fieldA] = dataA;
+			(market as Record<string, unknown>)[fieldB] = dataB;
+		}
 		changed = true;
 	}
 	return changed;

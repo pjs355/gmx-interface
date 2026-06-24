@@ -1,5 +1,7 @@
 import type { MatchedMarket } from "@/types/odds-monitor";
 import type { FifaVenueRowModel } from "@/features/markets/pricing/fifaVenueRowModel";
+import { matchedMarketWithLegHint } from "@/features/markets/pricing/buildVenuePriceRows";
+import type { MoneylineLegWire } from "@/features/markets/pricing/kalshiLegYesBook";
 import {
 	applyBboPolicy,
 	VENUE_PRICE_ADAPTERS,
@@ -20,17 +22,24 @@ type LegYesAsk = {
 function legYesAsk(
 	m: MatchedMarket | null,
 	adapter: (typeof VENUE_PRICE_ADAPTERS)[number],
+	legHint: MoneylineLegWire,
 ): LegYesAsk {
 	if (m === null || !adapter.isMapped(m)) {
 		return { ask: null };
 	}
-	const { bookA, bookB } = adapter.books(m);
+	const market = matchedMarketWithLegHint(m, legHint);
+	const { bookA, bookB } = adapter.books(market);
 	const quotes = applyBboPolicy(adapter.bboPolicy, bookA, bookB);
 	return { ask: quotes.askA, status: bookA?.snapshotStatus };
 }
 
-function legQuotes(m: MatchedMarket, adapter: (typeof VENUE_PRICE_ADAPTERS)[number]): VenueQuotes {
-	const { bookA, bookB } = adapter.books(m);
+function legQuotes(
+	m: MatchedMarket,
+	adapter: (typeof VENUE_PRICE_ADAPTERS)[number],
+	legHint: MoneylineLegWire,
+): VenueQuotes {
+	const market = matchedMarketWithLegHint(m, legHint);
+	const { bookA, bookB } = adapter.books(market);
 	return applyBboPolicy(adapter.bboPolicy, bookA, bookB);
 }
 
@@ -43,7 +52,11 @@ function shouldShowFifaVenueRow(
 		(m): m is MatchedMarket => m !== null && adapter.isMapped(m),
 	);
 	if (candidates.length === 0) return false;
-	return candidates.some((m) => adapter.shouldShowRow!(m, legQuotes(m, adapter)));
+	return candidates.some((m) => {
+		const legHint: MoneylineLegWire =
+			m === legs.home ? "home" : m === legs.draw ? "draw" : "away";
+		return adapter.shouldShowRow!(m, legQuotes(m, adapter, legHint));
+	});
 }
 
 /**
@@ -62,9 +75,9 @@ export function buildFifaThreeWayVenuePriceRows(
 		if (!homeMapped && !drawMapped && !awayMapped) continue;
 		if (!shouldShowFifaVenueRow(adapter, legs)) continue;
 
-		const home = legYesAsk(legs.home, adapter);
-		const draw = legYesAsk(legs.draw, adapter);
-		const away = legYesAsk(legs.away, adapter);
+		const home = legYesAsk(legs.home, adapter, "home");
+		const draw = legYesAsk(legs.draw, adapter, "draw");
+		const away = legYesAsk(legs.away, adapter, "away");
 
 		rows.push({
 			id: adapter.id,

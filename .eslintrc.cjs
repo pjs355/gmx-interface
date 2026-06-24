@@ -34,5 +34,39 @@ module.exports = {
 		"no-useless-escape": "off",
 		"@typescript-eslint/ban-ts-comment": "off",
 		"@typescript-eslint/ban-types": "off",
+		"no-restricted-syntax": [
+			"error",
+			{
+				selector:
+					"MemberExpression[property.name='dflowPriceA']:not([object.type='ThisExpression'])",
+				message:
+					"Use kalshiLegYesBook / dflowPriceAdapter.books() — raw dflowPriceA reads bypass away-leg routing.",
+			},
+			{
+				selector:
+					"MemberExpression[property.name='kalshiPriceA']:not([object.type='ThisExpression'])",
+				message:
+					"Use kalshiLegYesBook — raw kalshiPriceA reads bypass away-leg routing.",
+			},
+		],
 	},
+	overrides: [
+		{
+			files: [
+				"src/features/markets/pricing/kalshiLegYesBook.ts",
+				"src/features/markets/pricing/kalshiSnapshotMerge.ts",
+				"src/features/markets/pricing/venuePriceAdapters/dflow.ts",
+				"src/features/trading/venues/dflow/catalog/monitorDflowBooks.ts",
+				"src/components/VenueOrderbooksPanel/**",
+				"src/services/venuePricesClient.ts",
+				"src/features/all-odds/venueSnapshotMerge.ts",
+				"src/pages/PredictionMarket/PredictionMarketChart/useMultiExchangeChartData.ts",
+				"**/*.test.ts",
+				"**/*.test.tsx",
+			],
+			rules: {
+				"no-restricted-syntax": "off",
+			},
+		},
+	],
 };

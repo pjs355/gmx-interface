@@ -1,4 +1,12 @@
 import type { VenuePriceAdapter } from "./types";
+import type { MatchedMarket } from "@/types/odds-monitor";
+
+function dflowBooksForLeg(m: MatchedMarket) {
+	if (m.moneylineLeg === "away") {
+		return { bookA: m.dflowPriceB, bookB: m.dflowPriceA };
+	}
+	return { bookA: m.dflowPriceA, bookB: m.dflowPriceB };
+}
 
 /** DFlow venue row (UI label Kalshi). Books are Kalshi-sourced on predictions-api. */
 export const dflowPriceAdapter: VenuePriceAdapter = {
@@ -10,7 +18,7 @@ export const dflowPriceAdapter: VenuePriceAdapter = {
 		return Boolean(m.dflow);
 	},
 	books(m) {
-		return { bookA: m.dflowPriceA, bookB: m.dflowPriceB };
+		return dflowBooksForLeg(m);
 	},
 	shouldShowRow(m, quotes) {
 		if (!m.dflow) return false;

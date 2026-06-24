@@ -27,6 +27,7 @@ export function apiItemToMatchedMarket(
 		sidesSwapped: false,
 		status: item.status,
 		game: item.game,
+		moneylineLeg: item.moneylineLeg,
 		polyTickSize: (em.polymarket?.tickSize as MatchedMarket["polyTickSize"]) ?? null,
 		polyNegRisk: em.polymarket?.negRisk ?? null,
 		dflow: em.dflow as MatchedMarketsDflowWire | undefined,
@@ -67,7 +68,11 @@ function createStubMatchedMarket(pandaMatchId: string): MatchedMarket {
 	);
 }
 
-function applyMetadataToMatchedMarket(target: MatchedMarket, item: MatchedMarketsApiItem, pid: string): void {
+export function applyMetadataToMatchedMarket(
+	target: MatchedMarket,
+	item: MatchedMarketsApiItem,
+	pid: string,
+): void {
 	const em = item.exchangeMatching;
 	const limitlessBefore = target.limitless;
 	target.pandaMatchId = pid;
@@ -79,6 +84,7 @@ function applyMetadataToMatchedMarket(target: MatchedMarket, item: MatchedMarket
 	target.polyTokenIdB = em.polymarket?.tokenIdB ?? "";
 	target.status = item.status;
 	target.game = item.game;
+	target.moneylineLeg = item.moneylineLeg;
 	target.polyTickSize = (em.polymarket?.tickSize as MatchedMarket["polyTickSize"]) ?? null;
 	target.polyNegRisk = em.polymarket?.negRisk ?? null;
 	target.dflow = em.dflow as MatchedMarketsDflowWire | undefined;
@@ -122,6 +128,7 @@ export function mergeMatchedMarketsIntoStore(
 		if (prev) {
 			applyMetadataToMatchedMarket(prev, item, pid);
 			next.set(pid, prev);
+			changed = true;
 		} else {
 			changed = true;
 			next.set(pid, apiItemToMatchedMarket(item, pid));
