@@ -724,36 +724,20 @@ function BetsSection({
 							</button>
 						))}
 					</div>
-					{/* Combos need both a type AND a phase control; on a narrow
-					    screen the two segmented bars collided, so the phase
-					    collapses to a native dropdown for the combos view (rock
-					    solid on mobile). Straight keeps the quick Live/Past tabs. */}
-					{kind === "combos" ? (
-						<select
-							className="trader-profile-phase-select"
-							value={phase}
-							onChange={(e) => setPhase(e.target.value as BetPhase)}
-							aria-label="Bet phase"
-						>
-							<option value="live">Live</option>
-							<option value="past">Past</option>
-						</select>
-					) : (
-						<div className="trader-profile-period-bar" role="tablist" aria-label="Bet phase">
-							{(["live", "past"] as BetPhase[]).map((p) => (
-								<button
-									key={p}
-									type="button"
-									role="tab"
-									aria-selected={phase === p}
-									className={`trader-profile-period-tab${phase === p ? " is-active" : ""}`}
-									onClick={() => setPhase(p)}
-								>
-									{p === "live" ? "Live" : "Past"}
-								</button>
-							))}
-						</div>
-					)}
+					<div className="trader-profile-period-bar" role="tablist" aria-label="Bet phase">
+						{(["live", "past"] as BetPhase[]).map((p) => (
+							<button
+								key={p}
+								type="button"
+								role="tab"
+								aria-selected={phase === p}
+								className={`trader-profile-period-tab${phase === p ? " is-active" : ""}`}
+								onClick={() => setPhase(p)}
+							>
+								{p === "live" ? "Live" : "Past"}
+							</button>
+						))}
+					</div>
 				</div>
 			</div>
 

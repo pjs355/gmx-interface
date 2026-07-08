@@ -22,9 +22,8 @@ type Props = {
 const MIN_POOL_USD = 10;
 
 /**
- * Stop loss measured against realized cash losses, never open-position
- * marks (odds swing constantly mid-match; unrealized dips must not
- * trigger sells). "None" maps to 100 percent of the pool.
+ * Stop loss on the pool's live mark-to-market value: if it drops by this
+ * share, the copy flattens and halts. "None" maps to 100 percent of the pool.
  */
 const STOP_LOSS_CHIPS = [
 	{ value: 1, label: "None" },

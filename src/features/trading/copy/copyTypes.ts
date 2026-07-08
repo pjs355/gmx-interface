@@ -18,7 +18,6 @@ export type CopySubscriptionJson = {
 	initialPoolUsd: number;
 	scaleFactor: number;
 	sportRestriction: string | null;
-	slippageTolerance: number;
 	stopLossPct: number;
 	minLeaderTradeUsd: number;
 	reservedUsd: number;
@@ -75,7 +74,6 @@ export type CopyDetailJson = {
 };
 
 export type CopySettingsJson = {
-	defaultSlippageTolerance: number;
 	defaultStopLossPct: number;
 	defaultMinLeaderTradeUsd: number;
 };
@@ -85,7 +83,6 @@ export type CreateCopySubscriptionBody = {
 	allocationMode: "usd" | "pct";
 	allocationInput: number;
 	sportRestriction?: string | null;
-	slippageTolerance?: number;
 	stopLossPct?: number;
 	minLeaderTradeUsd?: number;
 };

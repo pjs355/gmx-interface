@@ -499,7 +499,7 @@ function LensBody(props: LensBodyProps) {
 						metric={whaleSort === "age" ? null : whaleSort}
 						onMetricSelect={(m) => onWhaleSortChange(m)}
 						extraSort={{
-							label: "Newest",
+							label: "Age",
 							active: whaleSort === "age",
 							onSelect: () => onWhaleSortChange("age"),
 						}}
@@ -872,17 +872,14 @@ function LiveBetRow({ entry }: { entry: BigBetRow }) {
 			onFocus={() => prefetch(entry.wallet)}
 		>
 			<TraderAvatar wallet={entry.wallet} displayName={name} imageUrl={entry.profileImageUrl} size={36} />
-			<div className="traders-item-main">
-				<span className="traders-item-market" title={entry.marketTitle ?? ""}>
-					{cleanMarketTitle(entry.marketTitle)}
-					<SideTag entry={entry} />
-				</span>
-				<span className="traders-item-sub">
-					{name}
-					{matchup ? ` · ${matchup}` : ""} · placed{" "}
-					{formatRelativeTime(entry.placedAt)}
-				</span>
-			</div>
+			<span className="traders-item-market" title={entry.marketTitle ?? ""}>
+				{cleanMarketTitle(entry.marketTitle)}
+				<SideTag entry={entry} />
+			</span>
+			<span className="traders-item-sub">
+				{name}
+				{matchup ? ` · ${matchup}` : ""} · {formatRelativeTime(entry.placedAt)}
+			</span>
 			<div className="traders-item-stack">
 				<span className="traders-item-stack-value is-big">
 					<span className="traders-item-odds">{oddsLabel(entry.price)}</span>
@@ -908,17 +905,14 @@ function WonBetRow({ entry }: { entry: ClosedLotRow }) {
 			onFocus={() => prefetch(entry.wallet)}
 		>
 			<TraderAvatar wallet={entry.wallet} displayName={name} imageUrl={entry.profileImageUrl} size={36} />
-			<div className="traders-item-main">
-				<span className="traders-item-market" title={entry.marketTitle ?? ""}>
-					{cleanMarketTitle(entry.marketTitle)}
-					<SideTag entry={entry} />
-				</span>
-				<span className="traders-item-sub">
-					{name}
-					{matchup ? ` · ${matchup}` : ""} · settled{" "}
-					{formatRelativeTime(entry.closedAt)}
-				</span>
-			</div>
+			<span className="traders-item-market" title={entry.marketTitle ?? ""}>
+				{cleanMarketTitle(entry.marketTitle)}
+				<SideTag entry={entry} />
+			</span>
+			<span className="traders-item-sub">
+				{name}
+				{matchup ? ` · ${matchup}` : ""} · {formatRelativeTime(entry.closedAt)}
+			</span>
 			<div className="traders-item-stack">
 				<span className="traders-item-stack-value is-big">
 					<span className="traders-item-odds">{oddsLabel(entry.buyPrice)}</span>
@@ -944,17 +938,14 @@ function LostBetRow({ entry }: { entry: ClosedLotRow }) {
 			onFocus={() => prefetch(entry.wallet)}
 		>
 			<TraderAvatar wallet={entry.wallet} displayName={name} imageUrl={entry.profileImageUrl} size={36} />
-			<div className="traders-item-main">
-				<span className="traders-item-market" title={entry.marketTitle ?? ""}>
-					{cleanMarketTitle(entry.marketTitle)}
-					<SideTag entry={entry} />
-				</span>
-				<span className="traders-item-sub">
-					{name}
-					{matchup ? ` · ${matchup}` : ""} · settled{" "}
-					{formatRelativeTime(entry.closedAt)}
-				</span>
-			</div>
+			<span className="traders-item-market" title={entry.marketTitle ?? ""}>
+				{cleanMarketTitle(entry.marketTitle)}
+				<SideTag entry={entry} />
+			</span>
+			<span className="traders-item-sub">
+				{name}
+				{matchup ? ` · ${matchup}` : ""} · {formatRelativeTime(entry.closedAt)}
+			</span>
 			<div className="traders-item-stack">
 				<span className="traders-item-stack-value is-big">
 					<span className="traders-item-odds">{oddsLabel(entry.buyPrice)}</span>
@@ -1007,21 +998,19 @@ function NewWhaleRowView({
 }) {
 	const prefetch = usePrefetchTraderProfile();
 	const name = resolveDisplayName(entry);
-	const age =
-		entry.accountAgeDays <= 1 ? "1 day old" : `${entry.accountAgeDays} days old`;
+	// Age now has its own column, so the sub-line just carries the trade count.
+	const ageCell = `${Math.max(1, entry.accountAgeDays)}d`;
 	return (
 		<Link
 			to={`/traders/${entry.wallet}`}
-			className="traders-item"
+			className="traders-item is-whales"
 			onMouseEnter={() => prefetch(entry.wallet)}
 			onFocus={() => prefetch(entry.wallet)}
 		>
 			<TraderAvatar wallet={entry.wallet} displayName={name} imageUrl={entry.profileImageUrl} size={36} />
 			<div className="traders-item-main">
 				<span className="traders-item-name">{name}</span>
-				<span className="traders-item-sub">
-					{age} · {entry.bets.toLocaleString()} trades
-				</span>
+				<span className="traders-item-sub">{entry.bets.toLocaleString()} trades</span>
 			</div>
 			<MetricCells
 				pnlUsd={entry.pnlUsd}
@@ -1029,6 +1018,9 @@ function NewWhaleRowView({
 				volumeUsd={entry.volumeUsd}
 				metric={whaleSort === "age" ? null : whaleSort}
 			/>
+			<div className={`traders-item-cell${whaleSort === "age" ? " is-active" : ""}`}>
+				<span className="traders-item-cell-value">{ageCell}</span>
+			</div>
 		</Link>
 	);
 }
@@ -1160,13 +1152,10 @@ function BoardFilterBar({
 
 	const sortOptions = useMemo(() => {
 		if (!metricLabels) return [];
-		const opts = extraSort
-			? [{ value: "__extra__", label: extraSort.label }]
-			: [];
-		return [
-			...opts,
-			...metricLabels.map((label, i) => ({ value: METRIC_KEYS[i], label })),
-		];
+		const base = metricLabels.map((label, i) => ({ value: METRIC_KEYS[i], label }));
+		// Extra sort (e.g. New Whales "Age") trails the metrics — matches its
+		// column position on the right of the row.
+		return extraSort ? [...base, { value: "__extra__", label: extraSort.label }] : base;
 	}, [metricLabels, extraSort]);
 
 	const activeSortValue = extraSort?.active ? "__extra__" : (metric ?? METRIC_KEYS[0]);
@@ -1234,7 +1223,14 @@ function BoardFilterBar({
 								Won
 							</button>
 						</div>
-						<div className="traders-head-seg" role="tablist" aria-label="Sort">
+						{/* Desktop: quick Amount/Return tabs. Mobile: they collapse
+						    into the same themed dropdown the metric sort uses, so the
+						    bet controls stop colliding on a narrow screen. */}
+						<div
+							className="traders-head-seg is-betsort-tabs"
+							role="tablist"
+							aria-label="Sort"
+						>
 							<button
 								type="button"
 								role="tab"
@@ -1244,7 +1240,7 @@ function BoardFilterBar({
 								}`}
 								onClick={() => betControls.onBetSortChange("size")}
 							>
-								Biggest
+								Amount
 							</button>
 							<button
 								type="button"
@@ -1255,26 +1251,23 @@ function BoardFilterBar({
 								}`}
 								onClick={() => betControls.onBetSortChange("return")}
 							>
-								Best Return
+								Return
 							</button>
 						</div>
+						<TradersSortMenu
+							label={betControls.betSort === "size" ? "Amount" : "Return"}
+							options={[
+								{ value: "size", label: "Amount" },
+								{ value: "return", label: "Return" },
+							]}
+							value={betControls.betSort}
+							onChange={(v) => betControls.onBetSortChange(v as BetSort)}
+						/>
 					</>
 				)}
 
 				{metricLabels && (
 					<>
-						{extraSort && (
-							<button
-								type="button"
-								className={`traders-filter-metric traders-filter-metric-lead${
-									extraSort.active ? " is-active" : ""
-								}`}
-								aria-pressed={extraSort.active}
-								onClick={extraSort.onSelect}
-							>
-								{extraSort.label}
-							</button>
-						)}
 						{metricLabels.map((label, i) =>
 							sortable ? (
 								<button
@@ -1298,6 +1291,18 @@ function BoardFilterBar({
 									{label}
 								</span>
 							),
+						)}
+						{/* Extra sort trails the metrics as its own aligned column
+						    (New Whales "Age"). */}
+						{extraSort && (
+							<button
+								type="button"
+								className={`traders-filter-metric${extraSort.active ? " is-active" : ""}`}
+								aria-pressed={extraSort.active}
+								onClick={extraSort.onSelect}
+							>
+								{extraSort.label}
+							</button>
 						)}
 						{sortable && (
 							<TradersSortMenu

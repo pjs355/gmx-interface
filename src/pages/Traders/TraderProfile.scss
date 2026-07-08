@@ -9,7 +9,6 @@ $tp-text: #ffffff;
 $tp-text-2: rgba(255, 255, 255, 0.72);
 $tp-text-3: rgba(255, 255, 255, 0.52);
 $tp-text-4: rgba(255, 255, 255, 0.35);
-$tp-accent: #0478ff;
 $tp-pos: #38d39f;
 $tp-pos-soft: rgba(56, 211, 159, 0.12);
 $tp-neg: #ff5e6c;
@@ -224,20 +223,6 @@ $tp-warm-soft: rgba(255, 181, 71, 0.14);
 	}
 }
 
-.trader-profile-section-sub {
-	margin: 0 0 16px;
-	font-size: 13px;
-	color: $tp-text-3;
-	line-height: 1.45;
-	max-width: 640px;
-}
-
-.trader-profile-section-tag {
-	font-size: 12px;
-	color: $tp-text-3;
-	font-variant-numeric: tabular-nums;
-}
-
 // -------- period tabs (Track Record) --------
 .trader-profile-period-bar {
 	display: inline-flex;
@@ -282,36 +267,6 @@ $tp-warm-soft: rgba(255, 181, 71, 0.14);
 	@media (max-width: 767px) {
 		min-height: 40px;
 		padding: 9px 16px;
-		font-size: 13px;
-	}
-}
-
-// Native phase dropdown for the combos view (avoids the two-segmented-bar
-// collision on narrow screens). Styled to sit beside the type pills.
-.trader-profile-phase-select {
-	appearance: none;
-	-webkit-appearance: none;
-	background-color: $tp-surface;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-	background-repeat: no-repeat;
-	background-position: right 12px center;
-	border: 1px solid $tp-border;
-	border-radius: 999px;
-	color: $tp-text;
-	font-family: inherit;
-	font-size: 12px;
-	font-weight: 700;
-	padding: 7px 30px 7px 14px;
-	min-height: 36px;
-	cursor: pointer;
-
-	&:focus-visible {
-		outline: none;
-		border-color: $tp-border-strong;
-	}
-
-	@media (max-width: 767px) {
-		min-height: 40px;
 		font-size: 13px;
 	}
 }
@@ -535,13 +490,14 @@ $tp-warm-soft: rgba(255, 181, 71, 0.14);
 	display: flex;
 	gap: 8px;
 	flex-wrap: wrap;
-}
 
-.trader-profile-combo-payout {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-end;
-	gap: 2px;
+	// On phones the two toggles take their own full-width row below the
+	// heading and sit at opposite ends, so Straight/Combos and Live/Past
+	// always have room and never crowd each other.
+	@media (max-width: 767px) {
+		width: 100%;
+		justify-content: space-between;
+	}
 }
 
 // "Traded → Won" figures. The labels are stated once in the list legend, so
@@ -590,32 +546,10 @@ $tp-warm-soft: rgba(255, 181, 71, 0.14);
 	}
 }
 
-.trader-profile-combo-payout-value {
-	font-size: 15px;
-	font-weight: 800;
-	color: $tp-text;
-	font-variant-numeric: tabular-nums;
-	letter-spacing: -0.2px;
-	white-space: nowrap;
-
-	.is-positive {
-		color: $tp-pos;
-	}
-	.is-negative {
-		color: $tp-neg;
-	}
-}
-
 .trader-profile-combo-arrow {
 	font-size: 12px;
 	font-weight: 700;
 	color: $tp-text-3;
-}
-
-.trader-profile-combo-payout-label {
-	font-size: 11px;
-	color: $tp-text-3;
-	font-variant-numeric: tabular-nums;
 }
 
 // -------- sport filter rail --------
@@ -754,10 +688,6 @@ $tp-warm-soft: rgba(255, 181, 71, 0.14);
 	}
 }
 
-.trader-profile-open-body {
-	min-width: 0;
-}
-
 // Title wraps to the full row width; the side pill flows inline right after
 // the last word (so it reads "Cavaliers under 2.5 [Under]").
 .trader-profile-open-headline {
@@ -848,31 +778,6 @@ $tp-warm-soft: rgba(255, 181, 71, 0.14);
 	&:disabled {
 		opacity: 0.5;
 		cursor: default;
-	}
-}
-
-.trader-profile-open-odds {
-	font-size: 12px;
-	font-weight: 700;
-	color: $tp-text-3;
-	font-variant-numeric: tabular-nums;
-	flex-shrink: 0;
-}
-
-.trader-profile-open-pnl {
-	font-size: 15px;
-	font-weight: 800;
-	color: $tp-text;
-	font-variant-numeric: tabular-nums;
-	letter-spacing: -0.2px;
-	text-align: right;
-	white-space: nowrap;
-
-	&.is-positive {
-		color: $tp-pos;
-	}
-	&.is-negative {
-		color: $tp-neg;
 	}
 }
 

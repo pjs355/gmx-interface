@@ -49,9 +49,6 @@ function statusLabel(status: CopySubscriptionJson["status"]): string {
 
 function skipReasonLabel(reason: string): string {
 	switch (reason) {
-		case "slippage_buy":
-		case "slippage_sell":
-			return "Skipped: price moved beyond slippage";
 		case "pool_exhausted":
 			return "Skipped: pool fully deployed";
 		case "insufficient_balance":

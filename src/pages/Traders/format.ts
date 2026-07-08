@@ -31,13 +31,6 @@ export function formatWinRate(rate: number): string {
 	return `${Math.round(rate * 100)}%`;
 }
 
-export function formatRoi(roi: number): string {
-	if (!Number.isFinite(roi)) return "0%";
-	const pct = roi * 100;
-	const sign = pct > 0 ? "+" : "";
-	return `${sign}${pct.toFixed(1)}%`;
-}
-
 /**
  * "15m ago", "3h ago", "2d ago", "5w ago". Under a minute reads "just now".
  * After 90 days it falls back to a short date so "3mo ago" doesn't feel dead.
@@ -58,27 +51,6 @@ export function formatRelativeTime(iso?: string | null): string {
 	const wk = Math.floor(day / 7);
 	if (wk < 12) return `${wk}w ago`;
 	return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-/**
- * Entry price as cents, the way sports prediction bettors read odds.
- * 0.62 → "62¢". Sub-cent prices keep one decimal ("0.4¢").
- */
-export function formatCents(price: number): string {
-	if (!Number.isFinite(price)) return "";
-	const cents = price * 100;
-	if (cents >= 1) return `${Math.round(cents)}¢`;
-	return `${cents.toFixed(1)}¢`;
-}
-
-/**
- * Payout multiple, e.g. entry at 25¢ pays 4x. Two significant styles:
- * under 10 shows one decimal ("4.2x"), 10+ rounds ("38x").
- */
-export function formatMultiple(multiple: number): string {
-	if (!Number.isFinite(multiple) || multiple <= 0) return "";
-	if (multiple < 10) return `${multiple.toFixed(1)}x`;
-	return `${Math.round(multiple)}x`;
 }
 
 /** Signed percent return: 2.3 → "+230%". Input is a ratio (pnl / cost). */
@@ -216,13 +188,4 @@ export function resolveDisplayName(input: {
 
 function isWalletLike(s: string): boolean {
 	return /^0x[0-9a-fA-F]{6,}/.test(s) || /^0x[0-9a-fA-F]+…[0-9a-fA-F]+$/.test(s);
-}
-
-export function hasRealName(input: {
-	displayName?: string;
-	polymarketUsername?: string;
-}): boolean {
-	if (input.polymarketUsername?.trim()) return true;
-	const dn = input.displayName?.trim();
-	return !!(dn && !isWalletLike(dn));
 }

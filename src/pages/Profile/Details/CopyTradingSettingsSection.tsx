@@ -11,7 +11,6 @@ export default function CopyTradingSettingsSection() {
 	const settingsQuery = useCopySettings({ enabled: authenticated });
 	const updateMutation = useUpdateCopySettings();
 
-	const [slippagePct, setSlippagePct] = useState("");
 	const [stopLossPct, setStopLossPct] = useState("");
 	const [minTradeUsd, setMinTradeUsd] = useState("");
 	const [saved, setSaved] = useState(false);
@@ -20,20 +19,15 @@ export default function CopyTradingSettingsSection() {
 	useEffect(() => {
 		const s = settingsQuery.data;
 		if (!s) return;
-		setSlippagePct(String(Math.round(s.defaultSlippageTolerance * 1000) / 10));
 		setStopLossPct(String(Math.round(s.defaultStopLossPct * 100)));
 		setMinTradeUsd(String(s.defaultMinLeaderTradeUsd));
 	}, [settingsQuery.data]);
 
 	if (!authenticated) return null;
 
-	const slippage = Number(slippagePct) / 100;
 	const stopLoss = Number(stopLossPct) / 100;
 	const minTrade = Number(minTradeUsd);
 	const valid =
-		Number.isFinite(slippage) &&
-		slippage >= 0.005 &&
-		slippage <= 0.2 &&
 		Number.isFinite(stopLoss) &&
 		stopLoss >= 0.05 &&
 		stopLoss <= 1 &&
@@ -44,7 +38,6 @@ export default function CopyTradingSettingsSection() {
 		setError(null);
 		try {
 			await updateMutation.mutateAsync({
-				defaultSlippageTolerance: slippage,
 				defaultStopLossPct: stopLoss,
 				defaultMinLeaderTradeUsd: minTrade,
 			});
@@ -61,29 +54,10 @@ export default function CopyTradingSettingsSection() {
 			<div className="Details-preferences-list">
 				<label className="Details-preference-item">
 					<div className="Details-preference-content">
-						<span className="Details-preference-label">Slippage tolerance (%)</span>
-						<span className="Details-preference-description">
-							Trades are skipped when the price moves further than this. 0.5 to 20.
-						</span>
-					</div>
-					<input
-						type="number"
-						className="Details-username-input"
-						style={{ maxWidth: 110 }}
-						min={0.5}
-						max={20}
-						step={0.5}
-						value={slippagePct}
-						onChange={(e) => setSlippagePct(e.target.value)}
-					/>
-				</label>
-
-				<label className="Details-preference-item">
-					<div className="Details-preference-content">
 						<span className="Details-preference-label">Stop loss (%)</span>
 						<span className="Details-preference-description">
-							Copying halts when realized cash losses reach this share of your pool. Open
-							positions never trigger it. 100 means no stop loss.
+							Copying halts and exits when your pool's live value drops by this share.
+							100 means no stop loss.
 						</span>
 					</div>
 					<input

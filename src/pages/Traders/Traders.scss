@@ -3,7 +3,6 @@
 // -------- design tokens --------
 $traders-bg: #000000;
 $traders-surface: #0e0f13;
-$traders-surface-2: #14161b;
 $traders-surface-hover: #191c22;
 $traders-border: rgba(255, 255, 255, 0.07);
 $traders-border-strong: rgba(255, 255, 255, 0.16);
@@ -11,7 +10,6 @@ $traders-text: #ffffff;
 $traders-text-2: rgba(255, 255, 255, 0.72);
 $traders-text-3: rgba(255, 255, 255, 0.52);
 $traders-text-4: rgba(255, 255, 255, 0.35);
-$traders-accent: #0478ff;
 $traders-pos: #38d39f;
 $traders-neg: #ff5e6c;
 
@@ -312,14 +310,27 @@ $traders-neg: #ff5e6c;
 			display: none;
 		}
 	}
+
+	// The Amount/Return sort tabs collapse into the themed dropdown on phones.
+	&.is-betsort-tabs {
+		@media (max-width: 767px) {
+			display: none;
+		}
+	}
 }
 
 // Metric sort labels on the right — desktop buttons, mobile themed menu.
+// Each label is a fixed-width, right-aligned column that mirrors a row cell
+// (104px track, 12px right padding, 12px gap), so the header lines up exactly
+// over the PnL / Return / Volume values below it.
 .traders-filter-metric {
 	appearance: none;
 	background: transparent;
 	border: none;
 	border-radius: 6px;
+	width: 104px;
+	box-sizing: border-box;
+	text-align: right;
 	padding: 4px 12px;
 	font-size: 10px;
 	font-weight: 700;
@@ -333,23 +344,16 @@ $traders-neg: #ff5e6c;
 		color 140ms ease,
 		background 140ms ease;
 
+	& + & {
+		margin-left: 12px;
+	}
+
 	&.is-active {
 		color: $traders-text;
 	}
 
 	// Clickable sort labels
 	.traders-board-filter.is-sortable & {
-		cursor: pointer;
-
-		&:hover {
-			color: $traders-text-2;
-		}
-	}
-
-	&-lead {
-		margin-right: 8px;
-		padding-left: 0;
-		text-align: left;
 		cursor: pointer;
 
 		&:hover {
@@ -370,21 +374,24 @@ $traders-neg: #ff5e6c;
 
 	@media (max-width: 767px) {
 		display: block;
+		// Breathing room so the trigger doesn't butt up against the Live/Won
+		// tabs to its left.
+		margin-left: 12px;
 	}
 }
 
 .traders-sort-menu__trigger {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	padding: 6px 10px;
-	min-height: 34px;
+	gap: 5px;
+	padding: 5px 9px;
+	min-height: 30px;
 	border: 1px solid $traders-border;
 	border-radius: 8px;
 	background: transparent;
 	color: $traders-text;
 	font-family: inherit;
-	font-size: 12px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
@@ -572,9 +579,32 @@ $traders-neg: #ff5e6c;
 		grid-template-columns: 36px minmax(0, 1fr) auto;
 	}
 
-	// Bet-style rows have a single right-hand stack instead of 3 cells.
+	// Bet rows: avatar, the market title over the who/when sub, and stake → win
+	// pinned right. Children are placed by grid area so the mobile block can
+	// float the title across the full width (see `.traders-item.is-bet` below).
 	&.is-bet {
 		grid-template-columns: 36px minmax(0, 1fr) auto;
+		grid-template-areas:
+			"avatar market stack"
+			"avatar sub    stack";
+		row-gap: 2px;
+
+		.traders-avatar {
+			grid-area: avatar;
+		}
+		.traders-item-market {
+			grid-area: market;
+			// Truncate on desktop instead of pushing the stack (direct grid
+			// child defaults to min-width: auto).
+			min-width: 0;
+		}
+		.traders-item-sub {
+			grid-area: sub;
+			min-width: 0;
+		}
+		.traders-item-stack {
+			grid-area: stack;
+		}
 	}
 
 	@media (max-width: 767px) {
@@ -603,6 +633,38 @@ $traders-neg: #ff5e6c;
 			width: 40px !important;
 			height: 40px !important;
 		}
+	}
+}
+
+// Big Bets rows on mobile: two rows, mirroring the profile trade history.
+// The market title reads across the entire top (wrapping, never truncated);
+// the trader + when and the stake → win figure share the single line below.
+.traders-item.is-bet {
+	@media (max-width: 767px) {
+		grid-template-columns: 40px minmax(0, 1fr) auto;
+		grid-template-areas:
+			"market market market"
+			"avatar sub    stack";
+		align-items: center;
+		row-gap: 8px;
+		column-gap: 12px;
+
+		.traders-item-market {
+			white-space: normal;
+			overflow: visible;
+			text-overflow: clip;
+		}
+		.traders-item-stack {
+			min-width: 0;
+		}
+	}
+}
+
+// New Whales carry a fourth metric column (Age) beside PnL / Return / Volume.
+// Mobile keeps the general single-active-cell collapse.
+.traders-item.is-whales {
+	@media (min-width: 768px) {
+		grid-template-columns: 36px minmax(0, 1fr) repeat(4, 104px);
 	}
 }
 
@@ -1011,14 +1073,6 @@ $traders-neg: #ff5e6c;
 	.traders-item-cell + .traders-item-cell {
 		border-left: none;
 	}
-}
-
-.traders-item-cell-label {
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: $traders-text-4;
 }
 
 // Right-hand stack (bet rows, streak rows)
