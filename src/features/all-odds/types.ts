@@ -49,6 +49,8 @@ export interface AllOddsMarket {
 	sxbetPriceB?: OrderbookData | null;
 	hyperliquidPriceA?: OrderbookData | null;
 	hyperliquidPriceB?: OrderbookData | null;
+	prophetxPriceA?: OrderbookData | null;
+	prophetxPriceB?: OrderbookData | null;
 }
 
 export interface AllOddsVenueColumn {

@@ -37,6 +37,8 @@ function baseMarket(overrides: Partial<AllOddsMarket> & Pick<AllOddsMarket, "pan
 		sxbetPriceB: null,
 		hyperliquidPriceA: null,
 		hyperliquidPriceB: null,
+		prophetxPriceA: null,
+		prophetxPriceB: null,
 		...overrides,
 	};
 }

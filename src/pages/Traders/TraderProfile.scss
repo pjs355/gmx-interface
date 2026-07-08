@@ -1,0 +1,1008 @@
+// -------- design tokens (kept in sync with Traders.scss) --------
+$tp-bg: #000000;
+$tp-surface: #0e0f13;
+$tp-surface-2: #14161b;
+$tp-surface-hover: #191c22;
+$tp-border: rgba(255, 255, 255, 0.07);
+$tp-border-strong: rgba(255, 255, 255, 0.16);
+$tp-text: #ffffff;
+$tp-text-2: rgba(255, 255, 255, 0.72);
+$tp-text-3: rgba(255, 255, 255, 0.52);
+$tp-text-4: rgba(255, 255, 255, 0.35);
+$tp-accent: #0478ff;
+$tp-pos: #38d39f;
+$tp-pos-soft: rgba(56, 211, 159, 0.12);
+$tp-neg: #ff5e6c;
+$tp-neg-soft: rgba(255, 94, 108, 0.12);
+$tp-warm: #ffb547;
+$tp-warm-soft: rgba(255, 181, 71, 0.14);
+
+// -------- shell --------
+.trader-profile-page {
+	background: $tp-bg;
+	min-height: 100vh;
+	padding: 40px 32px 96px;
+	color: $tp-text;
+	-webkit-tap-highlight-color: transparent;
+
+	@media (max-width: 767px) {
+		// Tighter side frame on phones.
+		padding: 16px 12px calc(40px + env(safe-area-inset-bottom));
+	}
+}
+
+.trader-profile-container {
+	max-width: 900px;
+	margin: 0 auto;
+}
+
+.trader-profile-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: $tp-text-3;
+	text-decoration: none;
+	font-size: 13px;
+	font-weight: 600;
+	margin-bottom: 24px;
+	padding: 8px 12px 8px 0;
+	transition: color 140ms ease;
+
+	&:hover {
+		color: $tp-text;
+	}
+
+	@media (max-width: 767px) {
+		min-height: 44px;
+		align-items: center;
+		margin-bottom: 12px;
+		font-size: 14px;
+	}
+}
+
+.trader-profile-state {
+	padding: 40px 24px;
+	text-align: center;
+	color: $tp-text-3;
+	font-size: 14px;
+	background: $tp-surface;
+	border: 1px solid $tp-border;
+	border-radius: 12px;
+
+	&.is-error {
+		color: $tp-neg;
+	}
+}
+
+// -------- header --------
+.trader-profile-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 20px;
+	padding: 0 0 24px;
+	margin-bottom: 32px;
+	border-bottom: 1px solid $tp-border;
+
+	@media (max-width: 767px) {
+		// Stack: identity row on top, full-width Copy Trader button below it —
+		// the primary CTA sits right under the name, impossible to miss.
+		flex-direction: column;
+		align-items: stretch;
+		gap: 14px;
+		padding-bottom: 16px;
+		margin-bottom: 20px;
+
+		// Compact avatar to match the tighter header.
+		.traders-avatar {
+			width: 48px !important;
+			height: 48px !important;
+			font-size: 18px !important;
+		}
+	}
+}
+
+.trader-profile-identity {
+	display: flex;
+	align-items: flex-start;
+	gap: 16px;
+	min-width: 0;
+	flex: 1;
+}
+
+.trader-profile-identity-body {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.trader-profile-name {
+	margin: 0;
+	font-size: 30px;
+	font-weight: 900;
+	color: $tp-text;
+	letter-spacing: -0.6px;
+	line-height: 1.1;
+	word-break: break-word;
+
+	@media (max-width: 767px) {
+		font-size: 20px;
+		line-height: 1.05;
+	}
+}
+
+.trader-profile-meta {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: $tp-text-3;
+	flex-wrap: wrap;
+}
+
+.trader-profile-meta-item {
+	color: $tp-text-2;
+	font-weight: 600;
+}
+
+.trader-profile-chip {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	padding: 5px 10px;
+	border-radius: 6px;
+	background: transparent;
+	border: 1px solid $tp-border;
+	color: $tp-text-2;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	text-decoration: none;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		color 140ms ease;
+
+	&:hover {
+		background: $tp-surface-hover;
+		border-color: $tp-border-strong;
+		color: $tp-text;
+	}
+}
+
+.trader-profile-warnings {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.trader-profile-warning {
+	display: inline-flex;
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: $tp-neg-soft;
+	border: 1px solid rgba(255, 94, 108, 0.3);
+	color: #ff8d96;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+// -------- section --------
+.trader-profile-section {
+	margin-bottom: 40px;
+
+	&:last-child {
+		margin-bottom: 0;
+	}
+
+	@media (max-width: 767px) {
+		margin-bottom: 24px;
+	}
+}
+
+.trader-profile-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-bottom: 14px;
+}
+
+.trader-profile-section-heading {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 800;
+	letter-spacing: -0.3px;
+	color: $tp-text;
+
+	@media (max-width: 767px) {
+		font-size: 17px;
+	}
+}
+
+.trader-profile-section-sub {
+	margin: 0 0 16px;
+	font-size: 13px;
+	color: $tp-text-3;
+	line-height: 1.45;
+	max-width: 640px;
+}
+
+.trader-profile-section-tag {
+	font-size: 12px;
+	color: $tp-text-3;
+	font-variant-numeric: tabular-nums;
+}
+
+// -------- period tabs (Track Record) --------
+.trader-profile-period-bar {
+	display: inline-flex;
+	padding: 3px;
+	background: $tp-surface;
+	border: 1px solid $tp-border;
+	border-radius: 999px;
+	gap: 2px;
+	overflow-x: auto;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+.trader-profile-period-tab {
+	appearance: none;
+	background: transparent;
+	border: none;
+	padding: 7px 14px;
+	border-radius: 999px;
+	color: $tp-text-3;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	white-space: nowrap;
+	min-height: 30px;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+
+	&:hover {
+		color: $tp-text;
+	}
+
+	&.is-active {
+		background: $tp-text;
+		color: $tp-bg;
+	}
+
+	@media (max-width: 767px) {
+		min-height: 40px;
+		padding: 9px 16px;
+		font-size: 13px;
+	}
+}
+
+// Native phase dropdown for the combos view (avoids the two-segmented-bar
+// collision on narrow screens). Styled to sit beside the type pills.
+.trader-profile-phase-select {
+	appearance: none;
+	-webkit-appearance: none;
+	background-color: $tp-surface;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 12px center;
+	border: 1px solid $tp-border;
+	border-radius: 999px;
+	color: $tp-text;
+	font-family: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	padding: 7px 30px 7px 14px;
+	min-height: 36px;
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: none;
+		border-color: $tp-border-strong;
+	}
+
+	@media (max-width: 767px) {
+		min-height: 40px;
+		font-size: 13px;
+	}
+}
+
+// The page-level time window — quiet text tabs (D/W/M/All on phones),
+// matching the general Traders page control. No pill container.
+// Odds format toggle + D/W/M/All window, grouped on the right of the header.
+.trader-profile-window-controls {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.trader-profile-odds-format {
+	flex-shrink: 0;
+}
+
+.trader-profile-window-seg {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.trader-profile-window-tab {
+	appearance: none;
+	background: transparent;
+	border: none;
+	padding: 5px 10px;
+	border-radius: 8px;
+	color: $tp-text-3;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	white-space: nowrap;
+	min-height: 30px;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+
+	&:hover,
+	&:active {
+		color: $tp-text;
+	}
+
+	&.is-active {
+		background: rgba(255, 255, 255, 0.08);
+		color: $tp-text;
+	}
+
+	@media (max-width: 767px) {
+		min-height: 38px;
+		font-size: 13px;
+		padding: 6px 11px;
+	}
+}
+
+.trader-profile-window-label {
+	&.is-short {
+		display: none;
+	}
+
+	@media (max-width: 767px) {
+		&.is-long {
+			display: none;
+		}
+		&.is-short {
+			display: inline;
+		}
+	}
+}
+
+// -------- track record grid --------
+// Desktop: five bordered cards. Phone: one unified full-bleed panel with a
+// PnL hero on top and a 2×2 quadrant of secondary stats, split by hairlines
+// (the gap-as-divider trick) — reads as a single summary, not five boxes.
+.trader-profile-track-grid {
+	display: grid;
+	// Five cards: Realized PnL (wide) + ROI, Win rate, Trades, Volume.
+	grid-template-columns: 2fr repeat(4, 1fr);
+	gap: 8px;
+
+	// Tablet only.
+	@media (max-width: 1023px) and (min-width: 768px) {
+		grid-template-columns: 1fr 1fr 1fr;
+	}
+
+	@media (max-width: 767px) {
+		grid-template-columns: 1fr 1fr;
+		gap: 1px; // the 1px gaps become the dividers
+		background: $tp-border; // divider color shows through the gaps
+		margin: 0 -12px; // full-bleed to the screen edges
+		border-top: 1px solid $tp-border;
+		border-bottom: 1px solid $tp-border;
+	}
+}
+
+.trader-profile-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 16px 18px;
+	background: $tp-surface;
+	border: 1px solid $tp-border;
+	border-radius: 12px;
+
+	// Cell inside the unified panel: no chrome, page-black fill so only the
+	// 1px gaps read as hairline dividers.
+	@media (max-width: 767px) {
+		background: $tp-bg;
+		border: none;
+		border-radius: 0;
+		padding: 13px 16px;
+		gap: 3px;
+	}
+
+	&.is-big {
+		grid-column: span 1;
+
+		@media (min-width: 1024px) {
+			grid-row: span 1;
+
+			.trader-profile-stat-value {
+				font-size: 32px;
+				letter-spacing: -0.5px;
+			}
+		}
+
+		// Phone: PnL hero spans the full width above the quadrant.
+		@media (max-width: 767px) {
+			grid-column: 1 / -1;
+			padding: 16px;
+
+			.trader-profile-stat-value {
+				font-size: 30px;
+				letter-spacing: -0.5px;
+			}
+		}
+	}
+}
+
+.trader-profile-stat-label {
+	font-size: 10px;
+	font-weight: 700;
+	color: $tp-text-4;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.trader-profile-stat-value {
+	font-size: 22px;
+	font-weight: 800;
+	color: $tp-text;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.3px;
+	line-height: 1.1;
+	white-space: nowrap;
+
+	&.is-positive {
+		color: $tp-pos;
+	}
+	&.is-negative {
+		color: $tp-neg;
+	}
+}
+
+// -------- skeletons (loading is a skeleton, never a dim) --------
+.trader-profile-skeleton {
+	display: inline-block;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.06);
+	animation: trader-profile-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes trader-profile-skeleton-pulse {
+	0% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 0.9;
+	}
+	100% {
+		opacity: 0.5;
+	}
+}
+
+.trader-profile-chart-skeleton {
+	height: 220px;
+	display: flex;
+	align-items: stretch;
+
+	.trader-profile-skeleton {
+		flex: 1;
+		border-radius: 8px;
+	}
+}
+
+// -------- Yes / No side tag --------
+.trader-profile-side-tag {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 7px;
+	border-radius: 4px;
+	font-weight: 800;
+	font-size: 11px;
+	letter-spacing: 0.03em;
+	flex-shrink: 0;
+
+	&.is-yes {
+		background: $tp-pos-soft;
+		color: $tp-pos;
+	}
+
+	&.is-no {
+		background: $tp-neg-soft;
+		color: $tp-neg;
+	}
+}
+
+// -------- Bets section (Straight/Combos × Live/Past) --------
+.trader-profile-seg-group {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.trader-profile-combo-payout {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 2px;
+}
+
+// "Traded → Won" figures. The labels are stated once in the list legend, so
+// each row shows just the two numbers and keeps its width for the title.
+.trader-profile-money {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	flex-shrink: 0;
+}
+
+// One-time legend above the list; right-aligned over the money column.
+.trader-profile-money-legend {
+	display: flex;
+	align-items: baseline;
+	justify-content: flex-end;
+	gap: 6px;
+	margin-bottom: 8px;
+	padding-right: 16px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: $tp-text-4;
+
+	@media (max-width: 767px) {
+		margin-left: -12px;
+		margin-right: -12px;
+		padding-right: 12px;
+	}
+}
+
+.trader-profile-money-value {
+	font-size: 15px;
+	font-weight: 800;
+	color: $tp-text;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.2px;
+	white-space: nowrap;
+
+	&.is-positive {
+		color: $tp-pos;
+	}
+	&.is-negative {
+		color: $tp-neg;
+	}
+}
+
+.trader-profile-combo-payout-value {
+	font-size: 15px;
+	font-weight: 800;
+	color: $tp-text;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.2px;
+	white-space: nowrap;
+
+	.is-positive {
+		color: $tp-pos;
+	}
+	.is-negative {
+		color: $tp-neg;
+	}
+}
+
+.trader-profile-combo-arrow {
+	font-size: 12px;
+	font-weight: 700;
+	color: $tp-text-3;
+}
+
+.trader-profile-combo-payout-label {
+	font-size: 11px;
+	color: $tp-text-3;
+	font-variant-numeric: tabular-nums;
+}
+
+// -------- sport filter rail --------
+.trader-profile-sport-rail {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 24px;
+	overflow-x: auto;
+	scrollbar-width: none;
+	scroll-snap-type: x proximity;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+
+	@media (max-width: 767px) {
+		// First chip sits inset from the left edge; chips bleed off / fade on
+		// the right so it's clear there's more to scroll.
+		margin-left: 0;
+		margin-right: -12px;
+		padding: 0 0 4px 4px;
+		mask-image: linear-gradient(to right, black 0%, black calc(100% - 28px), transparent 100%);
+	}
+}
+
+.trader-profile-sport-chip {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 14px;
+	border-radius: 999px;
+	background: $tp-surface;
+	border: 1px solid $tp-border;
+	color: $tp-text-2;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	min-height: 36px;
+	scroll-snap-align: start;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		color 140ms ease;
+
+	&:hover {
+		background: $tp-surface-hover;
+		border-color: $tp-border-strong;
+		color: $tp-text;
+	}
+
+	&.is-active {
+		background: $tp-text;
+		border-color: $tp-text;
+		color: $tp-bg;
+	}
+
+	@media (max-width: 767px) {
+		min-height: 40px;
+		font-size: 14px;
+		padding: 8px 16px;
+	}
+}
+
+// -------- PnL chart --------
+.trader-profile-chart {
+	background: $tp-surface;
+	border: 1px solid $tp-border;
+	border-radius: 12px;
+	padding: 16px 8px 8px 16px;
+
+	// Empty / loading states render inside the same frame — no reflow.
+	.trader-profile-state {
+		background: transparent;
+		border: none;
+	}
+
+	// Full-bleed on phones: the chart runs edge to edge like a native card.
+	@media (max-width: 767px) {
+		margin-left: -12px;
+		margin-right: -12px;
+		border-left: none;
+		border-right: none;
+		border-radius: 0;
+		padding: 14px 4px 6px 10px;
+	}
+}
+
+.trader-profile-chart-tooltip {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	background: rgba(17, 17, 17, 0.95);
+	border: 1px solid $tp-border-strong;
+	border-radius: 8px;
+	padding: 8px 12px;
+}
+
+.trader-profile-chart-tooltip-date {
+	font-size: 11px;
+	color: $tp-text-3;
+}
+
+.trader-profile-chart-tooltip-value {
+	font-size: 14px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+	color: $tp-text;
+
+	&.is-positive {
+		color: $tp-pos;
+	}
+	&.is-negative {
+		color: $tp-neg;
+	}
+}
+
+// -------- open positions --------
+// Stacked: full-width market title on top, meta + money on a footer line
+// below. The title gets the whole row width so it rarely has to truncate.
+.trader-profile-open-row {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px 16px;
+	border-bottom: 1px solid $tp-border;
+
+	&:last-child {
+		border-bottom: none;
+	}
+
+	// Full-bleed list: pad to the screen edge, hairline dividers, taller rows.
+	@media (max-width: 767px) {
+		padding: 14px 12px;
+		border-bottom-color: rgba(255, 255, 255, 0.05);
+	}
+}
+
+.trader-profile-open-body {
+	min-width: 0;
+}
+
+// Title wraps to the full row width; the side pill flows inline right after
+// the last word (so it reads "Cavaliers under 2.5 [Under]").
+.trader-profile-open-headline {
+	min-width: 0;
+	line-height: 1.4;
+
+	.trader-profile-side-tag {
+		margin-left: 6px;
+		vertical-align: middle;
+	}
+}
+
+.trader-profile-open-market {
+	font-size: 15px;
+	font-weight: 600;
+	color: $tp-text;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.trader-profile-open-footer {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.trader-profile-open-meta {
+	font-size: 12px;
+	color: $tp-text-3;
+	font-variant-numeric: tabular-nums;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+
+// "Sold" (cashed out on the market) vs "Settled · Won/Lost" (held to
+// resolution) on past trade rows.
+.trader-profile-exit-tag {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 7px;
+	border-radius: 4px;
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	background: rgba(255, 255, 255, 0.07);
+	color: $tp-text-2;
+
+	&.is-sold {
+		background: $tp-warm-soft;
+		color: $tp-warm;
+	}
+}
+
+.trader-profile-open-prices {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.trader-profile-load-more {
+	appearance: none;
+	display: block;
+	width: 100%;
+	margin-top: 10px;
+	padding: 12px 16px;
+	border-radius: 12px;
+	background: $tp-surface;
+	border: 1px solid $tp-border;
+	color: $tp-text-2;
+	font-size: 13px;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		color 140ms ease;
+
+	&:hover:not(:disabled) {
+		background: $tp-surface-hover;
+		border-color: $tp-border-strong;
+		color: $tp-text;
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+}
+
+.trader-profile-open-odds {
+	font-size: 12px;
+	font-weight: 700;
+	color: $tp-text-3;
+	font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+}
+
+.trader-profile-open-pnl {
+	font-size: 15px;
+	font-weight: 800;
+	color: $tp-text;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.2px;
+	text-align: right;
+	white-space: nowrap;
+
+	&.is-positive {
+		color: $tp-pos;
+	}
+	&.is-negative {
+		color: $tp-neg;
+	}
+}
+
+// -------- trades list container --------
+.trader-profile-list {
+	display: flex;
+	flex-direction: column;
+	background: $tp-surface;
+	border: 1px solid $tp-border;
+	border-radius: 12px;
+	overflow: hidden;
+
+	// Full-bleed native list on phones.
+	@media (max-width: 767px) {
+		margin-left: -12px;
+		margin-right: -12px;
+		border-left: none;
+		border-right: none;
+		border-radius: 0;
+		background: transparent;
+	}
+}
+
+// -------- grouped position (repeat buys collapsed into one holding) --------
+.trader-profile-group {
+	border-bottom: 1px solid $tp-border;
+
+	&:last-child {
+		border-bottom: none;
+	}
+
+	// The group owns the outer divider; its header row must not double up.
+	.trader-profile-open-row {
+		border-bottom: none;
+	}
+
+	@media (max-width: 767px) {
+		border-bottom-color: rgba(255, 255, 255, 0.05);
+	}
+}
+
+.trader-profile-open-row.is-expandable {
+	cursor: pointer;
+	user-select: none;
+	transition: background 120ms ease;
+
+	&:hover {
+		background: $tp-surface-hover;
+	}
+	// Tap feedback on phones.
+	&:active {
+		background: $tp-surface-2;
+	}
+}
+
+// "10 trades ▾" — the affordance that opens the fill history.
+.trader-profile-trade-count {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: $tp-text-2;
+	font-weight: 700;
+}
+
+.trader-profile-caret {
+	font-size: 9px;
+	line-height: 1;
+	color: $tp-text-3;
+	transition: transform 150ms ease;
+
+	&.is-open {
+		transform: rotate(180deg);
+	}
+}
+
+// The dead-simple fill list: side · amount · price · date, one line each.
+.trader-profile-fills {
+	display: flex;
+	flex-direction: column;
+	background: rgba(255, 255, 255, 0.02);
+	border-top: 1px solid $tp-border;
+}
+
+.trader-profile-fill {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	padding: 10px 16px 10px 28px;
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+	border-top: 1px solid rgba(255, 255, 255, 0.04);
+
+	&:first-child {
+		border-top: none;
+	}
+
+	@media (max-width: 767px) {
+		padding: 12px 12px 12px 24px;
+		font-size: 14px;
+	}
+}
+
+.trader-profile-fill-side {
+	flex-shrink: 0;
+	width: 30px;
+	font-size: 11px;
+	font-weight: 800;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+
+	&.is-buy {
+		color: $tp-pos;
+	}
+	&.is-sell {
+		color: $tp-neg;
+	}
+}
+
+.trader-profile-fill-amount {
+	font-weight: 700;
+	color: $tp-text;
+}
+
+.trader-profile-fill-price {
+	color: $tp-text-3;
+}
+
+.trader-profile-fill-date {
+	margin-left: auto;
+	color: $tp-text-4;
+	font-size: 12px;
+	white-space: nowrap;
+}

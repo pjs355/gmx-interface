@@ -33,6 +33,7 @@ const VENUE_TO_BASENAME: Record<string, string> = {
 	forkast: "forkast",
 	sxbet: "sxbet",
 	hyperliquid: "hyperliquid",
+	prophetx: "prophetx",
 };
 
 /** Returns the square logo URL for a known venue, or null. */

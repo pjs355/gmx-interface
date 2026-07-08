@@ -1,0 +1,1258 @@
+@use "../../components/OddsFormatMenu/odds-format-menu" as *;
+
+// -------- design tokens --------
+$traders-bg: #000000;
+$traders-surface: #0e0f13;
+$traders-surface-2: #14161b;
+$traders-surface-hover: #191c22;
+$traders-border: rgba(255, 255, 255, 0.07);
+$traders-border-strong: rgba(255, 255, 255, 0.16);
+$traders-text: #ffffff;
+$traders-text-2: rgba(255, 255, 255, 0.72);
+$traders-text-3: rgba(255, 255, 255, 0.52);
+$traders-text-4: rgba(255, 255, 255, 0.35);
+$traders-accent: #0478ff;
+$traders-pos: #38d39f;
+$traders-neg: #ff5e6c;
+
+// -------- page shell --------
+.traders-page {
+	background: $traders-bg;
+	min-height: 100vh;
+	padding: 56px 32px 96px;
+	color: $traders-text;
+	-webkit-tap-highlight-color: transparent;
+
+	@media (max-width: 767px) {
+		padding: 20px 16px calc(56px + env(safe-area-inset-bottom));
+	}
+}
+
+.traders-container {
+	max-width: 900px;
+	margin: 0 auto;
+}
+
+// -------- hero --------
+.traders-hero {
+	margin: 0 0 36px;
+
+	@media (max-width: 767px) {
+		margin-bottom: 24px;
+	}
+}
+
+.traders-hero-title {
+	font-size: 48px;
+	font-weight: 900;
+	letter-spacing: -1.4px;
+	line-height: 1.05;
+	margin: 0 0 12px;
+	color: $traders-text;
+
+	@media (max-width: 767px) {
+		font-size: 32px;
+		letter-spacing: -0.8px;
+	}
+}
+
+.traders-hero-sub {
+	margin: 0;
+	color: $traders-text-3;
+	font-size: 15px;
+	line-height: 1.5;
+	max-width: 560px;
+
+	// On phones the tabs explain themselves — the tagline is just scroll cost.
+	@media (max-width: 767px) {
+		display: none;
+	}
+}
+
+// -------- sport rail --------
+.traders-sport-rail {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 20px;
+	overflow-x: auto;
+	scrollbar-width: none;
+	scroll-snap-type: x proximity;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+
+	@media (max-width: 767px) {
+		// First chip sits inset from the left edge; chips bleed off / fade on
+		// the right so it's clear there's more to scroll.
+		margin-left: 0;
+		margin-right: -16px;
+		padding: 0 0 4px 4px;
+		mask-image: linear-gradient(to right, black 0%, black calc(100% - 28px), transparent 100%);
+	}
+}
+
+.traders-sport-chip {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 14px;
+	border-radius: 999px;
+	background: $traders-surface;
+	border: 1px solid $traders-border;
+	color: $traders-text-2;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	min-height: 36px;
+	scroll-snap-align: start;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		color 140ms ease;
+
+	&:hover {
+		background: $traders-surface-hover;
+		border-color: $traders-border-strong;
+		color: $traders-text;
+	}
+
+	&:active {
+		background: $traders-surface-hover;
+	}
+
+	&.is-active {
+		background: $traders-text;
+		border-color: $traders-text;
+		color: $traders-bg;
+	}
+
+	@media (max-width: 767px) {
+		min-height: 40px;
+		font-size: 14px;
+		padding: 8px 16px;
+	}
+}
+
+// -------- lens tabs --------
+.traders-lens-bar {
+	display: flex;
+	gap: 0;
+	margin-bottom: 14px;
+	// Horizontal scroll only. `overflow-x: auto` alone makes the browser
+	// compute `overflow-y` to `auto` too, so sub-pixel vertical overflow
+	// (tab border / line-height) leaks a pointless vertical scroll — pin it.
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-width: none;
+	scroll-snap-type: x proximity;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+
+	// App-style: the tab bar pins to the top while you scroll the list, so
+	// switching views never requires scrolling back up.
+	@media (max-width: 767px) {
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		margin-left: -16px;
+		margin-right: -16px;
+		padding-left: 16px;
+		background: rgba(0, 0, 0, 0.88);
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
+	}
+}
+
+.traders-lens-tab {
+	appearance: none;
+	background: transparent;
+	border: none;
+	// Global button styles round every corner (8px) — that curves the ends
+	// of the active-tab underline. Flat bar wanted, so reset it here.
+	border-radius: 0;
+	padding: 12px 18px;
+	color: $traders-text-3;
+	font-size: 15px;
+	font-weight: 700;
+	cursor: pointer;
+	white-space: nowrap;
+	border-bottom: 2px solid transparent;
+	scroll-snap-align: start;
+	transition:
+		color 140ms ease,
+		border-color 140ms ease;
+
+	&:hover {
+		color: $traders-text;
+	}
+
+	&:active {
+		color: $traders-text;
+	}
+
+	&.is-active {
+		color: $traders-text;
+		border-bottom-color: $traders-text;
+	}
+
+	@media (max-width: 767px) {
+		padding: 14px 13px;
+		font-size: 15px;
+	}
+}
+
+// -------- board filter row (time + odds left, metrics / view toggles right) --------
+.traders-board-filter {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 12px;
+	min-height: 44px;
+	border-bottom: 1px solid $traders-border;
+
+	@media (min-width: 768px) {
+		padding: 10px 20px 8px;
+	}
+
+	@media (max-width: 767px) {
+		padding: 6px 10px;
+		min-height: 46px;
+	}
+}
+
+.traders-board-filter-left {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+	min-width: 0;
+
+	// Pin the odds control flush left with no chrome — time tabs sit to its
+	// right so switching lenses never shifts the icon.
+	.traders-odds-format {
+		flex-shrink: 0;
+
+		.odds-format-menu__trigger {
+			border: none;
+			background: transparent;
+			padding: 6px;
+			min-height: 0;
+			transition: opacity 140ms ease;
+
+			&:hover,
+			&[data-hover],
+			&[data-active] {
+				background: transparent;
+				opacity: 0.65;
+			}
+		}
+
+	}
+}
+
+.traders-board-filter-right {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0;
+	margin-left: auto;
+	min-width: 0;
+
+	@media (max-width: 767px) {
+		overflow-x: auto;
+		scrollbar-width: none;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+	}
+}
+
+// Desktop shows full window names; mobile shows D · W · M · All.
+.traders-window-label {
+	&.is-short {
+		display: none;
+	}
+
+	@media (max-width: 767px) {
+		&.is-long {
+			display: none;
+		}
+
+		&.is-short {
+			display: inline;
+		}
+	}
+}
+
+// A group of quiet text tabs. Groups on the same side separate with a
+// hairline, not another pill container.
+.traders-head-seg {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+
+	& + .traders-head-seg {
+		padding-left: 12px;
+		border-left: 1px solid $traders-border;
+	}
+
+	&.is-disabled {
+		opacity: 0.35;
+	}
+
+	// A moot window (live views) disappears on phones — space is scarce.
+	&.is-window.is-disabled {
+		@media (max-width: 767px) {
+			display: none;
+		}
+	}
+}
+
+// Metric sort labels on the right — desktop buttons, mobile themed menu.
+.traders-filter-metric {
+	appearance: none;
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	padding: 4px 12px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: $traders-text-4;
+	font-family: inherit;
+	cursor: default;
+	white-space: nowrap;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+
+	&.is-active {
+		color: $traders-text;
+	}
+
+	// Clickable sort labels
+	.traders-board-filter.is-sortable & {
+		cursor: pointer;
+
+		&:hover {
+			color: $traders-text-2;
+		}
+	}
+
+	&-lead {
+		margin-right: 8px;
+		padding-left: 0;
+		text-align: left;
+		cursor: pointer;
+
+		&:hover {
+			color: $traders-text-2;
+		}
+	}
+
+	@media (max-width: 767px) {
+		display: none;
+	}
+}
+
+// Mobile sort picker — matches OddsFormatMenu styling.
+.traders-sort-menu {
+	position: relative;
+	flex-shrink: 0;
+	display: none;
+
+	@media (max-width: 767px) {
+		display: block;
+	}
+}
+
+.traders-sort-menu__trigger {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	min-height: 34px;
+	border: 1px solid $traders-border;
+	border-radius: 8px;
+	background: transparent;
+	color: $traders-text;
+	font-family: inherit;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition: background 140ms ease;
+
+	&::after {
+		content: "";
+		width: 0;
+		height: 0;
+		border-left: 4px solid transparent;
+		border-right: 4px solid transparent;
+		border-top: 5px solid rgba(255, 255, 255, 0.55);
+	}
+
+	&:hover,
+	&[data-hover],
+	&[data-active] {
+		background: rgba(255, 255, 255, 0.06);
+	}
+}
+
+.traders-sort-menu__items {
+	// Positioned by Headless UI's `anchor` (portaled to <body>), so it can't
+	// be clipped by the filter row's horizontal overflow.
+	z-index: 1000;
+	min-width: min(200px, calc(100vw - 32px));
+	padding: 6px;
+	border-radius: 8px;
+	background: #141414;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+	outline: none;
+}
+
+.traders-sort-menu__item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 10px 12px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.92);
+	font-size: 14px;
+	font-weight: 500;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background-color 0.12s ease;
+
+	&--focus {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	&--selected {
+		color: #f9fafb;
+		background: rgba(255, 255, 255, 0.06);
+	}
+}
+
+.traders-head-tab {
+	appearance: none;
+	background: transparent;
+	border: none;
+	padding: 5px 10px;
+	border-radius: 8px;
+	color: $traders-text-3;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	white-space: nowrap;
+	min-height: 30px;
+	transition:
+		color 140ms ease,
+		background 140ms ease;
+
+	&:hover {
+		color: $traders-text;
+	}
+
+	&:active {
+		color: $traders-text;
+	}
+
+	&.is-active {
+		background: rgba(255, 255, 255, 0.08);
+		color: $traders-text;
+	}
+
+	&:disabled {
+		cursor: not-allowed;
+	}
+
+	@media (max-width: 767px) {
+		min-height: 38px;
+		font-size: 13px;
+		padding: 6px 11px;
+	}
+}
+
+// -------- board --------
+// No `overflow: hidden` here — the odds-format dropdown in the board head
+// must be able to hang past a short board. Full-bleed children round their
+// own corners instead (see `.is-tickets` below).
+.traders-board {
+	background: $traders-surface;
+	border: 1px solid $traders-border;
+	border-radius: 16px;
+
+	// Full-bleed list on phones — edge-to-edge rows read as a native list,
+	// not a card floating on a website.
+	@media (max-width: 767px) {
+		margin-left: -16px;
+		margin-right: -16px;
+		border-left: none;
+		border-right: none;
+		border-radius: 0;
+		background: transparent;
+	}
+}
+
+.traders-board-body {
+	display: flex;
+	flex-direction: column;
+	padding: 6px;
+	// No gap — the metric-column rules run continuously down the board.
+	gap: 0;
+
+	// Ticket lists (combos) run full-bleed so each row's hover fill reaches
+	// the board edges instead of stopping 6px short and looking clipped.
+	// The last ticket rounds itself to match the board (the board no longer
+	// clips via overflow), minus 1px for the board border.
+	&.is-tickets {
+		padding: 0;
+
+		.traders-item.is-ticket:last-child {
+			border-radius: 0 0 15px 15px;
+
+			@media (max-width: 767px) {
+				border-radius: 0;
+			}
+		}
+	}
+
+	@media (max-width: 767px) {
+		padding: 0;
+	}
+}
+
+.traders-board-state {
+	padding: 48px 16px;
+	text-align: center;
+	color: $traders-text-3;
+	font-size: 14px;
+}
+
+// -------- unified list item --------
+// One row system for every lens. Grid:
+//   avatar | main (name / market / meta) | metric cells or stack
+.traders-item {
+	display: grid;
+	grid-template-columns: 36px minmax(0, 1fr) repeat(3, 104px);
+	align-items: center;
+	gap: 12px;
+	padding: 13px 14px;
+	border-radius: 10px;
+	color: $traders-text;
+	text-decoration: none;
+	transition: background 140ms ease;
+	cursor: pointer;
+	min-height: 64px;
+
+	&:hover {
+		background: $traders-surface-hover;
+	}
+
+	// Touch feedback — hover doesn't exist on phones.
+	&:active {
+		background: $traders-surface-hover;
+	}
+
+	&.is-skeleton {
+		cursor: default;
+		pointer-events: none;
+		grid-template-columns: 36px minmax(0, 1fr) auto;
+	}
+
+	// Bet-style rows have a single right-hand stack instead of 3 cells.
+	&.is-bet {
+		grid-template-columns: 36px minmax(0, 1fr) auto;
+	}
+
+	@media (max-width: 767px) {
+		grid-template-columns: 40px minmax(0, 1fr) auto;
+		gap: 12px;
+		padding: 14px 16px;
+		border-radius: 0;
+		min-height: 72px;
+
+		// Hairline dividers — native-list rhythm.
+		& + .traders-item {
+			border-top: 1px solid rgba(255, 255, 255, 0.05);
+		}
+
+		// On phones, metric-cell rows collapse to just the active cell.
+		.traders-item-cell {
+			display: none;
+			padding-right: 0;
+
+			&.is-active {
+				display: flex;
+			}
+		}
+
+		.traders-avatar {
+			width: 40px !important;
+			height: 40px !important;
+		}
+	}
+}
+
+.traders-item-main {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.traders-item-name {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+	font-weight: 700;
+	color: $traders-text;
+	letter-spacing: -0.1px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+
+	@media (max-width: 767px) {
+		font-size: 16px;
+	}
+}
+
+// The bet itself is the headline on bet rows.
+.traders-item-market {
+	font-size: 14px;
+	font-weight: 700;
+	color: $traders-text;
+	letter-spacing: -0.1px;
+	line-height: 1.35;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+
+	@media (max-width: 767px) {
+		font-size: 15px;
+	}
+}
+
+// Colored Yes / No pill following the market statement.
+.traders-side-tag {
+	display: inline-block;
+	padding: 1px 7px;
+	margin-left: 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 800;
+	letter-spacing: 0.03em;
+	vertical-align: 1px;
+
+	&.is-yes {
+		background: rgba(56, 211, 159, 0.14);
+		color: $traders-pos;
+	}
+
+	&.is-no {
+		background: rgba(255, 94, 108, 0.14);
+		color: $traders-neg;
+	}
+}
+
+// Combo titles wrap so every leg stays readable.
+.traders-item-market.is-wrap {
+	white-space: normal;
+
+	.traders-side-tag {
+		margin-right: 4px;
+	}
+}
+
+// -------- combo ticket (parlay breakdown) --------
+// Sportsbook-style card: identity/time on the left, combo odds + stake →
+// payout pinned top-right (skimmable while scrolling), one line per leg
+// on a vertical rail. Tickets separate with hairline dividers, not
+// footer rules.
+.traders-item.is-ticket {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+	padding: 16px;
+	border-radius: 0;
+
+	// Dividers BETWEEN tickets — the card boundary is the line.
+	& + .traders-item.is-ticket {
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	// Static variant (profile page) — not a link, no hover affordance.
+	&.is-static {
+		cursor: default;
+
+		&:hover,
+		&:active {
+			background: transparent;
+		}
+	}
+}
+
+.traders-ticket-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	min-width: 0;
+}
+
+.traders-ticket-name {
+	font-size: 13px;
+	font-weight: 700;
+	color: $traders-text-2;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+	line-height: 28px; // centers against the 28px avatar
+
+	@media (max-width: 767px) {
+		font-size: 14px;
+	}
+}
+
+// "placed 2h ago" / "settled 3d ago" — the am-I-early signal.
+.traders-ticket-time {
+	font-size: 11px;
+	color: $traders-text-3;
+	white-space: nowrap;
+	line-height: 28px;
+	font-variant-numeric: tabular-nums;
+}
+
+// Top-right corner: combo odds over stake → payout.
+.traders-ticket-corner {
+	margin-left: auto;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 2px;
+}
+
+.traders-ticket-corner-odds {
+	font-size: 12px;
+	font-weight: 700;
+	color: $traders-text-3;
+	font-variant-numeric: tabular-nums;
+}
+
+.traders-ticket-corner-payline {
+	font-size: 16px;
+	font-weight: 800;
+	color: $traders-text;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.2px;
+	white-space: nowrap;
+
+	.is-win {
+		color: $traders-pos;
+	}
+	.is-loss {
+		color: $traders-neg;
+	}
+
+	.traders-item-arrow {
+		font-size: 12px;
+	}
+
+	@media (max-width: 767px) {
+		font-size: 17px;
+	}
+}
+
+.traders-ticket-legs {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.traders-ticket-leg {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 7px 0;
+
+	// The parlay rail — a hairline connecting the leg markers.
+	&::before {
+		content: "";
+		position: absolute;
+		left: 8px;
+		top: 0;
+		bottom: 0;
+		width: 1px;
+		background: rgba(255, 255, 255, 0.1);
+	}
+
+	&:first-child::before {
+		top: 50%;
+	}
+
+	&:last-child::before {
+		bottom: 50%;
+	}
+
+	&:only-child::before {
+		display: none;
+	}
+}
+
+// Status marker: hollow dot while pending, filled green check when the
+// leg already hit, filled red cross when it died.
+.traders-ticket-leg-marker {
+	position: relative;
+	z-index: 1;
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 17px;
+	height: 17px;
+	margin-top: 1px;
+	border-radius: 999px;
+	background: $traders-surface;
+	border: 1.5px solid rgba(255, 255, 255, 0.28);
+	color: transparent;
+
+	@media (max-width: 767px) {
+		background: $traders-bg;
+	}
+}
+
+.traders-ticket-leg.is-won .traders-ticket-leg-marker {
+	background: rgba(56, 211, 159, 0.16);
+	border-color: rgba(56, 211, 159, 0.55);
+	color: $traders-pos;
+}
+
+.traders-ticket-leg.is-lost .traders-ticket-leg-marker {
+	background: rgba(255, 94, 108, 0.14);
+	border-color: rgba(255, 94, 108, 0.5);
+	color: $traders-neg;
+}
+
+.traders-ticket-leg-main {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+
+.traders-ticket-leg-title {
+	font-size: 14px;
+	font-weight: 700;
+	color: $traders-text;
+	letter-spacing: -0.1px;
+	line-height: 1.35;
+
+	@media (max-width: 767px) {
+		font-size: 15px;
+	}
+}
+
+// A lost leg visibly kills the ticket; settled-won legs stay readable
+// but hand the spotlight to what's still riding.
+.traders-ticket-leg.is-lost .traders-ticket-leg-title {
+	color: $traders-text-3;
+	text-decoration: line-through;
+	text-decoration-color: rgba(255, 94, 108, 0.6);
+}
+
+.traders-ticket-leg-event {
+	font-size: 12px;
+	color: $traders-text-3;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+
+	@media (max-width: 767px) {
+		font-size: 13px;
+		white-space: normal;
+	}
+}
+
+// Per-leg odds, right-aligned. Pending legs show the live price; settled
+// legs show the last live price seen before resolution, colored by how
+// the leg ended.
+.traders-ticket-leg-odds {
+	flex-shrink: 0;
+	margin-left: auto;
+	font-size: 13px;
+	font-weight: 700;
+	color: $traders-text-2;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.5;
+
+	&.is-won {
+		color: $traders-pos;
+	}
+	&.is-lost {
+		color: $traders-neg;
+		text-decoration: line-through;
+		text-decoration-color: rgba(255, 94, 108, 0.5);
+	}
+}
+
+// Neutral side pill for non-Yes/No leg outcomes (e.g. team names).
+.traders-side-tag.is-neutral {
+	background: rgba(255, 255, 255, 0.08);
+	color: $traders-text-2;
+}
+
+// Odds shown inline beside the payout amounts.
+.traders-item-odds {
+	font-size: 12px;
+	font-weight: 700;
+	color: $traders-text-3;
+	font-variant-numeric: tabular-nums;
+	margin-right: 8px;
+}
+
+.traders-item-sub {
+	font-size: 12px;
+	color: $traders-text-3;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+
+	.is-positive {
+		color: $traders-pos;
+	}
+	.is-negative {
+		color: $traders-neg;
+	}
+
+	@media (max-width: 767px) {
+		font-size: 13px;
+	}
+}
+
+// Three-metric cells (Traders / Combo Traders / New Whales rows). Thin
+// hairlines separate the columns — BETWEEN metrics only (PnL–Return and
+// Return–Volume), never left of PnL. Cells stretch the full row height
+// so the rules run continuously down the board.
+.traders-item-cell {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	align-self: stretch;
+	// Bleed through the row's vertical padding so the column rule is one
+	// unbroken line from the header to the last row.
+	margin-top: -13px;
+	margin-bottom: -13px;
+	padding: 4px 12px;
+
+	& + .traders-item-cell {
+		border-left: 1px solid rgba(255, 255, 255, 0.06);
+	}
+
+	.traders-item-cell-value {
+		opacity: 0.55;
+	}
+
+	&.is-active .traders-item-cell-value {
+		opacity: 1;
+		font-size: 15px;
+	}
+
+	&.is-positive .traders-item-cell-value {
+		color: $traders-pos;
+	}
+	&.is-negative .traders-item-cell-value {
+		color: $traders-neg;
+	}
+}
+
+.traders-item-cell-value {
+	font-size: 14px;
+	font-weight: 800;
+	color: $traders-text;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.15px;
+	white-space: nowrap;
+	transition: opacity 140ms ease;
+}
+
+// Column names removed — metric labels now live in `.traders-board-filter`.
+
+@media (max-width: 767px) {
+	.traders-item-cell {
+		margin-top: 0;
+		margin-bottom: 0;
+
+		&.is-active .traders-item-cell-value {
+			font-size: 17px;
+		}
+	}
+
+	// Only one metric cell shows on phones — no column rules to draw.
+	.traders-item-cell + .traders-item-cell {
+		border-left: none;
+	}
+}
+
+.traders-item-cell-label {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: $traders-text-4;
+}
+
+// Right-hand stack (bet rows, streak rows)
+.traders-item-stack {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 2px;
+	min-width: 110px;
+}
+
+.traders-item-stack-value {
+	font-size: 16px;
+	font-weight: 800;
+	color: $traders-text;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.2px;
+	white-space: nowrap;
+
+	&.is-positive {
+		color: $traders-pos;
+	}
+	&.is-negative {
+		color: $traders-neg;
+	}
+
+	// Stake stays white; the win side of "stake → win" reads green,
+	// a lost stake reads red.
+	.is-win {
+		color: $traders-pos;
+	}
+	.is-loss {
+		color: $traders-neg;
+	}
+
+	// Payout line carries bet rows now that the odds sit beside it.
+	&.is-big {
+		font-size: 17px;
+	}
+
+	// Hot-streak count — the row's whole point, so let it carry the row.
+	&.is-streak {
+		font-size: 22px;
+		font-weight: 900;
+	}
+
+	@media (max-width: 767px) {
+		font-size: 17px;
+
+		&.is-big {
+			font-size: 18px;
+		}
+
+		&.is-streak {
+			font-size: 24px;
+		}
+	}
+}
+
+// The multiple sits inside the arrow on combo rows: $1,000 →6.5x→ $6,500
+.traders-item-arrow {
+	font-size: 12px;
+	font-weight: 700;
+	color: $traders-text-3;
+	letter-spacing: 0;
+}
+
+.traders-item-stack-label {
+	font-size: 11px;
+	color: $traders-text-3;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+
+	&.is-positive {
+		color: $traders-pos;
+	}
+	&.is-negative {
+		color: $traders-neg;
+	}
+}
+
+// -------- avatar --------
+.traders-avatar {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	overflow: hidden;
+	color: #ffffff;
+	font-weight: 800;
+	letter-spacing: 0.02em;
+	line-height: 1;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+	flex-shrink: 0;
+	font-family:
+		"Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+
+	img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+}
+
+// -------- odds format menu (shared OddsFormatMenu component) --------
+.traders-odds-format {
+	flex-shrink: 0;
+}
+
+// -------- pagination --------
+.traders-pagination {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 16px;
+	flex-wrap: wrap;
+
+	@media (max-width: 559px) {
+		justify-content: space-between;
+		gap: 6px;
+	}
+}
+
+.traders-pagination-btn {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	border-radius: 999px;
+	background: $traders-surface;
+	border: 1px solid $traders-border;
+	color: $traders-text-2;
+	font-size: 13px;
+	font-weight: 700;
+	cursor: pointer;
+	min-height: 36px;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		color 140ms ease;
+
+	&:hover:not(:disabled),
+	&:active:not(:disabled) {
+		background: $traders-surface-hover;
+		border-color: $traders-border-strong;
+		color: $traders-text;
+	}
+
+	&:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+
+	@media (max-width: 559px) {
+		min-height: 44px;
+		padding: 10px 20px;
+		font-size: 14px;
+	}
+}
+
+.traders-pagination-numbers {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 3px;
+	background: $traders-surface;
+	border: 1px solid $traders-border;
+	border-radius: 999px;
+
+	// Phones: Prev / Next + the "21–40 of 87" status is enough.
+	@media (max-width: 559px) {
+		display: none;
+	}
+}
+
+.traders-pagination-num {
+	appearance: none;
+	background: transparent;
+	border: none;
+	min-width: 30px;
+	height: 30px;
+	padding: 0 10px;
+	border-radius: 999px;
+	color: $traders-text-3;
+	font-size: 13px;
+	font-weight: 700;
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+	transition:
+		background 140ms ease,
+		color 140ms ease;
+
+	&:hover:not(.is-active) {
+		color: $traders-text;
+	}
+
+	&.is-active {
+		background: $traders-text;
+		color: $traders-bg;
+	}
+}
+
+.traders-pagination-status {
+	margin-left: auto;
+	font-size: 12px;
+	color: $traders-text-3;
+	font-variant-numeric: tabular-nums;
+
+	@media (max-width: 559px) {
+		margin-left: 0;
+		width: 100%;
+		text-align: center;
+	}
+}
+
+// -------- skeletons --------
+.traders-skeleton {
+	display: inline-block;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.06);
+	animation: traders-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes traders-skeleton-pulse {
+	0% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 0.9;
+	}
+	100% {
+		opacity: 0.5;
+	}
+}

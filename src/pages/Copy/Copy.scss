@@ -1,0 +1,541 @@
+// Copy trading UI — same design tokens as Traders.scss / TraderProfile.scss.
+// Copy actions use the purple accent; everything else is the Traders neutral
+// black family (white-active chips, graphite stat cards).
+$cp-bg: #000000;
+$cp-surface: #0e0f13;
+$cp-surface-2: #14161b;
+$cp-border: rgba(255, 255, 255, 0.07);
+$cp-border-strong: rgba(255, 255, 255, 0.16);
+$cp-text: #ffffff;
+$cp-text-2: rgba(255, 255, 255, 0.72);
+$cp-text-3: rgba(255, 255, 255, 0.52);
+$cp-accent: #0478ff;
+$cp-purple: #7c5cff;
+$cp-purple-hover: #6b4be6;
+$cp-pos: #38d39f;
+$cp-neg: #ff5e6c;
+$cp-warm: #ffb547;
+$cp-warm-soft: rgba(255, 181, 71, 0.14);
+
+// -------- Copy action on the trader profile --------
+// Inline on the right of the header on desktop; a prominent full-width
+// primary button under the trader name on mobile — the clear "press this".
+.copy-leader-action {
+	display: inline-flex;
+
+	@media (max-width: 767px) {
+		display: block;
+		width: 100%;
+	}
+}
+
+// Primary "Copy Trader": the Traders design-language white pill — this
+// system's strongest affordance. Purple lives only inside the modal CTA.
+.copy-trade-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 12px 26px;
+	border-radius: 999px;
+	border: none;
+	background: $cp-text;
+	color: $cp-bg;
+	font-size: 15px;
+	font-weight: 700;
+	letter-spacing: -0.1px;
+	cursor: pointer;
+	transition:
+		transform 120ms ease,
+		opacity 120ms ease;
+
+	&:hover {
+		opacity: 0.92;
+	}
+
+	&:active {
+		transform: scale(0.98);
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+
+	@media (max-width: 767px) {
+		width: 100%;
+		padding: 15px;
+		font-size: 16px;
+	}
+}
+
+.copy-trade-active-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px 26px;
+	border-radius: 999px;
+	border: 1px solid $cp-border-strong;
+	background: $cp-surface;
+	color: $cp-text;
+	font-size: 15px;
+	font-weight: 700;
+	text-decoration: none;
+
+	&:hover {
+		background: $cp-surface-2;
+	}
+
+	@media (max-width: 767px) {
+		width: 100%;
+		padding: 15px;
+		font-size: 16px;
+	}
+}
+
+// -------- setup modal --------
+// Traders design language throughout: pure black surface, #0e0f13 graphite
+// cards, white-active pill chips, tiny uppercase labels. The shared Modal /
+// mobile sheet ship a blue slate background; override to the Traders black
+// (important beats the sheet's Tailwind bg utility regardless of order).
+.copy-setup-modal {
+	.Modal-content {
+		background: #0b0d10 !important;
+	}
+}
+
+// Mobile bottom sheet: SlideModal puts the className on the curtain itself.
+div.copy-setup-modal {
+	background: #0b0d10 !important;
+}
+
+.copy-setup {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	// Fixed desktop width so opening Advanced only grows the modal vertically,
+	// never sideways.
+	width: 380px;
+
+	@media (max-width: 700px) {
+		width: 100%;
+	}
+}
+
+// -------- amount card (trader-profile stat card recipe) --------
+.copy-setup-amount-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 16px 18px;
+	background: $cp-surface;
+	border: 1px solid $cp-border;
+	border-radius: 12px;
+}
+
+.copy-setup-amount-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.copy-setup-amount-label {
+	font-size: 10px;
+	font-weight: 700;
+	color: rgba(255, 255, 255, 0.35);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.copy-setup-amount-balance {
+	font-size: 12px;
+	color: $cp-text-3;
+	font-variant-numeric: tabular-nums;
+}
+
+.copy-setup-amount-row {
+	display: flex;
+	align-items: baseline;
+	gap: 3px;
+}
+
+.copy-setup-amount-prefix {
+	// Same size/weight as the amount so "$" and the number read as one figure,
+	// just a touch dimmer. (Was smaller + baseline-detached, which looked off.)
+	font-size: 26px;
+	font-weight: 800;
+	letter-spacing: -0.5px;
+	color: $cp-text-2;
+	line-height: 1;
+
+	@media (max-width: 480px) {
+		font-size: 22px;
+	}
+}
+
+.copy-setup-amount-input {
+	flex: 1;
+	min-width: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: $cp-text;
+	font-size: 26px;
+	font-weight: 800;
+	font-family: inherit;
+	letter-spacing: -0.5px;
+	outline: none;
+	font-variant-numeric: tabular-nums;
+	appearance: textfield;
+	-moz-appearance: textfield;
+
+	&::-webkit-outer-spin-button,
+	&::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+
+	&::placeholder {
+		color: rgba(255, 255, 255, 0.22);
+	}
+
+	@media (max-width: 480px) {
+		font-size: 22px;
+	}
+}
+
+.copy-setup-amount-hint {
+	font-size: 11px;
+	color: $cp-text-3;
+}
+
+.copy-setup-error {
+	color: $cp-neg;
+	font-size: 13px;
+}
+
+.copy-setup-confirm {
+	width: 100%;
+	padding: 14px;
+	border-radius: 12px;
+	border: none;
+	background: $cp-purple;
+	color: $cp-text;
+	font-size: 15px;
+	font-weight: 700;
+	cursor: pointer;
+	transition: background 140ms ease;
+
+	&:hover {
+		background: $cp-purple-hover;
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+}
+
+// -------- Advanced disclosure --------
+.copy-setup-toggle-block {
+	// No divider line — the "Advanced" row reads as a quiet control, not a
+	// section break.
+	margin-top: -4px;
+}
+
+.copy-setup-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	padding: 11px 0;
+	background: none;
+	border: none;
+	color: $cp-text-3;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: color 140ms ease;
+
+	&:hover {
+		color: $cp-text-2;
+	}
+}
+
+.copy-setup-chevron {
+	transition: transform 140ms ease;
+
+	&.is-open {
+		transform: rotate(180deg);
+	}
+}
+
+.copy-setup-options {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 4px 0 2px;
+}
+
+.copy-setup-option-label {
+	font-size: 10px;
+	font-weight: 700;
+	color: rgba(255, 255, 255, 0.35);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	margin-bottom: 8px;
+}
+
+// -------- pill chips (trader-profile sport chip recipe) --------
+.copy-setup-chip-rail {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+
+	@media (max-width: 700px) {
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		scrollbar-width: none;
+		margin: 0 -14px;
+		padding: 0 14px;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+	}
+}
+
+.copy-setup-chip {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 14px;
+	border-radius: 999px;
+	background: $cp-surface;
+	border: 1px solid $cp-border;
+	color: $cp-text-2;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	min-height: 34px;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		color 140ms ease;
+
+	&:hover {
+		background: $cp-surface-2;
+		border-color: $cp-border-strong;
+		color: $cp-text;
+	}
+
+	&.is-active {
+		background: $cp-text;
+		border-color: $cp-text;
+		color: $cp-bg;
+	}
+}
+
+// -------- dashboard --------
+.copy-dash-page {
+	background: $cp-bg;
+	min-height: 100vh;
+	padding: 40px 32px 96px;
+	color: $cp-text;
+
+	@media (max-width: 767px) {
+		padding: 20px 16px 56px;
+	}
+}
+
+.copy-dash-container {
+	max-width: 900px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+
+.copy-dash-title {
+	margin: 0;
+	font-size: 26px;
+	font-weight: 900;
+	letter-spacing: -0.5px;
+}
+
+.copy-dash-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+.copy-dash-status {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 700;
+	background: rgba(56, 211, 159, 0.12);
+	color: $cp-pos;
+
+	&.is-paused {
+		background: $cp-warm-soft;
+		color: $cp-warm;
+	}
+
+	&.is-stopped {
+		background: rgba(255, 94, 108, 0.12);
+		color: $cp-neg;
+	}
+}
+
+.copy-dash-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 12px;
+}
+
+.copy-dash-stat {
+	background: $cp-surface;
+	border: 1px solid $cp-border;
+	border-radius: 12px;
+	padding: 14px 16px;
+
+	.copy-dash-stat-label {
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.4px;
+		color: $cp-text-3;
+		margin-bottom: 6px;
+	}
+
+	.copy-dash-stat-value {
+		font-size: 18px;
+		font-weight: 800;
+
+		&.is-pos {
+			color: $cp-pos;
+		}
+
+		&.is-neg {
+			color: $cp-neg;
+		}
+	}
+}
+
+.copy-dash-section-title {
+	margin: 0 0 10px;
+	font-size: 15px;
+	font-weight: 800;
+	color: $cp-text-2;
+}
+
+.copy-dash-table-wrap {
+	background: $cp-surface;
+	border: 1px solid $cp-border;
+	border-radius: 12px;
+	overflow-x: auto;
+}
+
+.copy-dash-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+
+	th {
+		text-align: left;
+		padding: 10px 14px;
+		color: $cp-text-3;
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.4px;
+		border-bottom: 1px solid $cp-border;
+		white-space: nowrap;
+	}
+
+	td {
+		padding: 10px 14px;
+		border-bottom: 1px solid $cp-border;
+		color: $cp-text-2;
+		white-space: nowrap;
+
+		&.is-pos {
+			color: $cp-pos;
+		}
+
+		&.is-neg {
+			color: $cp-neg;
+		}
+	}
+
+	tr:last-child td {
+		border-bottom: none;
+	}
+}
+
+.copy-dash-empty {
+	padding: 24px;
+	text-align: center;
+	color: $cp-text-3;
+	font-size: 13px;
+}
+
+.copy-dash-stop {
+	width: 100%;
+	padding: 15px;
+	border-radius: 12px;
+	border: 1px solid rgba(255, 94, 108, 0.4);
+	background: rgba(255, 94, 108, 0.12);
+	color: $cp-neg;
+	font-size: 16px;
+	font-weight: 800;
+	cursor: pointer;
+
+	&:hover {
+		background: rgba(255, 94, 108, 0.2);
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+}
+
+.copy-dash-resume {
+	width: 100%;
+	padding: 13px;
+	border-radius: 12px;
+	border: none;
+	background: $cp-accent;
+	color: $cp-text;
+	font-size: 15px;
+	font-weight: 800;
+	cursor: pointer;
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+}
+
+.copy-dash-stop-options {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	font-size: 14px;
+	color: $cp-text-2;
+
+	label {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		cursor: pointer;
+	}
+}

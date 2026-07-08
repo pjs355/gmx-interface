@@ -50,6 +50,13 @@ import type {
 	CashSummary,
 	BaseSmartWalletPendingUsdc,
 } from "@/types/trading";
+import type {
+	CopyDetailJson,
+	CopySettingsJson,
+	CopySubscriptionJson,
+	CreateCopySubscriptionBody,
+	StopCopySubscriptionBody,
+} from "@/features/trading/copy/copyTypes";
 import { PrivateApiError } from "./errors";
 import { isTradingDebugLoggingEnabled } from "@/config/tradingDebug";
 
@@ -1523,6 +1530,70 @@ export function createPrivateApiClient(getToken: GetToken, getIdentityToken?: Ge
 		 * commit the flag first to guarantee the user never sees the modal
 		 * again, even if they dismiss the deposit popup.
 		 */
+		// ── Copy trading ───────────────────────────────────────────────
+
+		/** Create and activate a copy subscription (funds move server-side first). */
+		async postCopySubscription(body: CreateCopySubscriptionBody): Promise<CopySubscriptionJson> {
+			const res = await authorizedFetch("/api/copy/subscriptions", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			return readJson<CopySubscriptionJson>(res);
+		},
+
+		async postCopyStop(
+			subscriptionId: string,
+			body: StopCopySubscriptionBody,
+		): Promise<CopySubscriptionJson> {
+			const res = await authorizedFetch(
+				`/api/copy/subscriptions/${encodeURIComponent(subscriptionId)}/stop`,
+				{ method: "POST", body: JSON.stringify(body) },
+			);
+			return readJson<CopySubscriptionJson>(res);
+		},
+
+		async postCopyResume(subscriptionId: string): Promise<CopySubscriptionJson> {
+			const res = await authorizedFetch(
+				`/api/copy/subscriptions/${encodeURIComponent(subscriptionId)}/resume`,
+				{ method: "POST", body: JSON.stringify({}) },
+			);
+			return readJson<CopySubscriptionJson>(res);
+		},
+
+		async getCopyActive(): Promise<CopySubscriptionJson | null> {
+			const res = await authorizedFetch("/api/copy/subscriptions/active");
+			const body = await parseJsonSafe(res);
+			if (!res.ok) {
+				throw new PrivateApiError(privateApiHttpErrorMessage(body, res.status), res.status, body);
+			}
+			// `data: null` is a valid "no active copy" response; do not use
+			// the envelope unwrapper (it treats null data as an error).
+			if (body && typeof body === "object" && "data" in body) {
+				return (body as { data: CopySubscriptionJson | null }).data;
+			}
+			return body as CopySubscriptionJson | null;
+		},
+
+		async getCopyDetail(subscriptionId: string): Promise<CopyDetailJson> {
+			const res = await authorizedFetch(
+				`/api/copy/subscriptions/${encodeURIComponent(subscriptionId)}`,
+			);
+			return readJson<CopyDetailJson>(res);
+		},
+
+		async getCopySettings(): Promise<CopySettingsJson> {
+			const res = await authorizedFetch("/api/copy/settings");
+			return readJson<CopySettingsJson>(res);
+		},
+
+		async patchCopySettings(body: Partial<CopySettingsJson>): Promise<CopySettingsJson> {
+			const res = await authorizedFetch("/api/copy/settings", {
+				method: "PATCH",
+				body: JSON.stringify(body),
+			});
+			return readJson<CopySettingsJson>(res);
+		},
+
 		async postOnboardingComplete(): Promise<{
 			onboardingCompletedAt: string | null;
 		}> {

@@ -7,6 +7,7 @@ import OddsDisplaySelect from "@/components/OddsDisplaySelect/OddsDisplaySelect"
 import { useAccountData } from "@/context/AccountDataContext";
 import { tradingQueryKeys } from "@/features/trading/queryKeys";
 import DflowProofSection from "./DflowProofSection";
+import CopyTradingSettingsSection from "./CopyTradingSettingsSection";
 import "./Details.scss";
 
 const isMobileBreakpoint = "(max-width: 768px)";
@@ -297,6 +298,8 @@ export default function Details() {
 					)}
 
 					<DflowProofSection />
+
+					<CopyTradingSettingsSection />
 				</div>
 			</div>
 

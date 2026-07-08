@@ -58,6 +58,14 @@ export const ALL_ODDS_ADAPTERS: AllOddsVenueColumn[] = [
 		priceFieldB: "kalshiPriceB",
 	},
 	{
+		id: "prophetx",
+		label: "ProphetX",
+		sortOrder: 130,
+		tradable: false,
+		priceFieldA: "prophetxPriceA",
+		priceFieldB: "prophetxPriceB",
+	},
+	{
 		id: "myraid",
 		label: "Myriad",
 		sortOrder: 140,
@@ -106,6 +114,7 @@ const WIRE_TO_FIELDS: Record<string, [keyof AllOddsMarket, keyof AllOddsMarket]>
 	dflow: ["kalshiPriceA", "kalshiPriceB"],
 	kalshi: ["kalshiPriceA", "kalshiPriceB"],
 	myraid: ["myraidPriceA", "myraidPriceB"],
+	prophetx: ["prophetxPriceA", "prophetxPriceB"],
 	betdex: ["betdexPriceA", "betdexPriceB"],
 	forkast: ["forkastPriceA", "forkastPriceB"],
 	sxbet: ["sxbetPriceA", "sxbetPriceB"],

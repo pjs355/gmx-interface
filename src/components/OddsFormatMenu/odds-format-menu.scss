@@ -27,10 +27,10 @@
 }
 
 .odds-format-menu__items {
-	position: absolute;
-	right: 0;
-	top: calc(100% + 6px);
-	z-index: 60;
+	// Positioning is handled by Headless UI's `anchor` (portaled to <body> +
+	// float-positioned), so it never gets clipped by an overflow container.
+	// No manual position/top/right here — that broke once portaled.
+	z-index: 1000;
 	min-width: min(260px, calc(100vw - 32px));
 	padding: 6px;
 	border-radius: 8px;

@@ -21,6 +21,9 @@ const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));
 const AllOdds = lazy(loadAllOddsPage);
+const Traders = lazy(() => import("pages/Traders/Traders"));
+const TraderProfile = lazy(() => import("pages/Traders/TraderProfile"));
+const CopyDashboard = lazy(() => import("pages/Copy/CopyDashboard"));
 const BlogIndex = lazy(() => import("pages/Blog/BlogIndex"));
 const BlogArticle = lazy(() => import("pages/Blog/BlogArticle"));
 const LearnIndex = lazy(() => import("pages/Learn/LearnPage").then((m) => ({ default: m.LearnIndex })));
@@ -267,6 +270,30 @@ export function MainRoutes() {
 					element={
 						<LazyPage>
 							<AllOdds />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/traders"
+					element={
+						<LazyPage>
+							<Traders />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/traders/:address"
+					element={
+						<LazyPage>
+							<TraderProfile />
+						</LazyPage>
+					}
+				/>
+				<Route
+					path="/copy"
+					element={
+						<LazyPage>
+							<CopyDashboard />
 						</LazyPage>
 					}
 				/>

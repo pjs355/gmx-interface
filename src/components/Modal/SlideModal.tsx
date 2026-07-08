@@ -1,18 +1,23 @@
 import cx from "classnames";
-import React, { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
 import { MdClose } from "react-icons/md";
-import { RemoveScroll } from "react-remove-scroll";
 import { useMedia } from "react-use";
 
 import Portal from "components/Common/Portal";
 
 import Modal from "./Modal";
+import "./SlideModal.scss";
 
-const TOP_OFFSET = 52;
-const DECELERATION = 0.01;
-const DIRECTION_THRESHOLD = 2;
-const MOVEMENT_THRESHOLD = 10;
-
+/**
+ * Mobile bottom sheet. Slides up from the bottom edge; dismisses by drag,
+ * backdrop tap, or the close button.
+ *
+ * All positioning + reveal live in SlideModal.scss (a CSS `transform`
+ * transition toggled by `.is-open`) — NOT utility classes or the Web
+ * Animations API. This project has no Tailwind, so the previous version's
+ * `fixed bottom-0 translate-y-full …` classes generated nothing and the sheet
+ * rendered off-screen with no transform. Plain CSS is framework-independent.
+ */
 function MobileSlideModal({
 	children,
 	label,
@@ -37,275 +42,184 @@ function MobileSlideModal({
 	className?: string;
 	noDivider?: boolean;
 }>) {
-	const curtainStyle = useMemo(
-		() => ({
-			top: `calc(100dvh)`,
-			height: `calc(100dvh - ${TOP_OFFSET}px)`,
-		}),
-		[],
-	);
-	const curtainRef = useRef<HTMLDivElement | null>(null);
+	const sheetRef = useRef<HTMLDivElement | null>(null);
+	const dragHandleRef = useRef<HTMLDivElement | null>(null);
 
-	const isPointerDownRef = useRef(false);
-	const isDraggingRef = useRef(false);
-	const currentRelativeY = useRef(0);
-	const prevScreenY = useRef(0);
-	const prevScreenX = useRef(0);
-	const prevTime = useRef(0);
-	const currentVelocity = useRef(0);
-	const isDirectionLocked = useRef(false);
-	const startX = useRef(0);
-	const startY = useRef(0);
+	// Keep the sheet mounted through its slide-out so the close animates, then
+	// unmount. `entered` toggles the `.is-open` class (translateY(100%) → 0).
+	const [mounted, setMounted] = useState(isOpen);
+	const [entered, setEntered] = useState(false);
+	// The backdrop dismisses on tap-outside, but must NOT react to the tail of
+	// the very gesture that opened the sheet (a touch fires a ghost click /
+	// pointer settle ~300ms after tap), which was closing it instantly.
+	const [backdropArmed, setBackdropArmed] = useState(false);
 
-	const scrollableContainerRef = useRef<HTMLDivElement | null>(null);
-
-	const [isHideTransitionFinished, setIsHideTransitionFinished] = useState(!isOpen);
-
-	const handleAnimate = useCallback((newIsOpen: boolean) => {
-		if (!curtainRef.current) return;
-
-		const oldTransition = curtainRef.current.style.transition;
-		const animation = curtainRef.current.animate(
-			{
-				transform: `translateY(${newIsOpen ? `-100%` : 0})`,
-			},
-			{
-				duration: 150,
-				easing: "ease-out",
-				fill: "both",
-			},
-		);
-		animation.addEventListener("finish", () => {
-			animation.commitStyles();
-			animation.cancel();
-			if (curtainRef.current) {
-				curtainRef.current.style.transition = oldTransition;
-			}
-		});
-	}, []);
-
-	const handleClose = useCallback(() => {
-		setIsOpen(false);
-		handleAnimate(false);
-	}, [setIsOpen, handleAnimate]);
-
-	const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-		if (!curtainRef.current) {
+	// Mount on open; on close, run the slide-down first, then unmount.
+	useEffect(() => {
+		if (isOpen) {
+			setMounted(true);
 			return;
 		}
-		e.stopPropagation();
+		if (!mounted) return;
+		setEntered(false);
+		const t = window.setTimeout(() => setMounted(false), 280);
+		return () => window.clearTimeout(t);
+	}, [isOpen, mounted]);
 
-		if (e.currentTarget === scrollableContainerRef.current) {
-			const scrollTop = scrollableContainerRef.current?.scrollTop;
-			if (scrollTop !== 0) {
-				return;
-			}
-		}
-
-		isPointerDownRef.current = true;
-		isDirectionLocked.current = false;
-		isDraggingRef.current = false;
-		startX.current = e.screenX;
-		startY.current = e.screenY;
-
-		const curtainRect = curtainRef.current.getBoundingClientRect();
-
-		currentRelativeY.current = (curtainRect.height + TOP_OFFSET - curtainRect.top) * -1;
-		prevScreenY.current = e.screenY;
-		prevScreenX.current = e.screenX;
-	}, []);
-
-	const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-		if (!isPointerDownRef.current) return;
-		e.stopPropagation();
-
-		const offsetX = e.screenX - startX.current;
-		const offsetY = e.screenY - startY.current;
-
-		if (!isDirectionLocked.current) {
-			const isVertical = Math.abs(offsetY) > Math.abs(offsetX) * DIRECTION_THRESHOLD;
-
-			if (Math.abs(offsetX) > MOVEMENT_THRESHOLD || Math.abs(offsetY) > MOVEMENT_THRESHOLD) {
-				isDirectionLocked.current = true;
-				isDraggingRef.current = isVertical;
-				if (!isVertical) return;
-			}
-		}
-
-		if (!isDraggingRef.current || !curtainRef.current) return;
-
-		const deltaY = e.screenY - prevScreenY.current;
-
-		curtainRef.current.style.willChange = "transform";
-
-		const time = e.timeStamp - prevTime.current;
-		const velocity = deltaY / time;
-
-		let newY = currentRelativeY.current + deltaY;
-
-		const heightWithBorder = curtainRef.current.clientHeight + 1;
-
-		if (newY > 0) {
-			newY = 0;
-		} else if (newY < -heightWithBorder) {
-			newY = -heightWithBorder;
-		}
-
-		curtainRef.current.style.transform = `translateY(${newY}px)`;
-
-		currentRelativeY.current = newY;
-		prevTime.current = e.timeStamp;
-		currentVelocity.current = velocity;
-
-		prevScreenX.current = e.screenX;
-		prevScreenY.current = e.screenY;
-	}, []);
-
-	const handlePointerUp = useCallback(
-		(e: React.PointerEvent<HTMLDivElement>) => {
-			isPointerDownRef.current = false;
-
-			if (!isDraggingRef.current || !curtainRef.current) {
-				return;
-			}
-
-			e.stopPropagation();
-
-			isDraggingRef.current = false;
-			curtainRef.current.style.willChange = "";
-
-			const targetY =
-				currentRelativeY.current +
-				(Math.sign(currentVelocity.current) * currentVelocity.current ** 2) / (2 * DECELERATION);
-
-			if (curtainRef.current) {
-				const heightWithBorder = curtainRef.current.clientHeight + 1;
-				const isOpen = heightWithBorder / 2 < -targetY;
-				setIsOpen(isOpen);
-				handleAnimate(isOpen);
-			}
-		},
-		[handleAnimate, setIsOpen],
-	);
-
-	const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-		e.stopPropagation();
-
-		isPointerDownRef.current = false;
-		isDraggingRef.current = false;
-	}, []);
+	// Once mounted, flip to entered on the next painted frame so the transform
+	// transitions up from below the fold instead of appearing in place. Two
+	// rAFs guarantee a frame at translateY(100%) lands before the flip.
+	useEffect(() => {
+		if (!mounted || !isOpen) return;
+		let inner = 0;
+		const outer = requestAnimationFrame(() => {
+			inner = requestAnimationFrame(() => setEntered(true));
+		});
+		return () => {
+			cancelAnimationFrame(outer);
+			cancelAnimationFrame(inner);
+		};
+	}, [mounted, isOpen]);
 
 	useEffect(() => {
-		if (!isDraggingRef.current) {
-			if (isOpen) {
-				setIsHideTransitionFinished(false);
-			} else {
-				handleAnimate(false);
-			}
+		if (!entered) {
+			setBackdropArmed(false);
+			return;
 		}
-	}, [isOpen, handleAnimate]);
+		const t = window.setTimeout(() => setBackdropArmed(true), 350);
+		return () => window.clearTimeout(t);
+	}, [entered]);
 
-	const setCurtainRef = useCallback(
-		(el: HTMLDivElement | null) => {
-			curtainRef.current = el;
-			if (el) {
-				handleAnimate(true);
-			}
-		},
-		[handleAnimate],
-	);
-
-	const handleTransitionEnd = useCallback(() => {
-		if (!isOpen) {
-			setIsHideTransitionFinished(true);
-		}
+	// Freeze the page behind the sheet with a body class (same mechanism as the
+	// trade curtain) instead of RemoveScroll, whose wrapper interfered with the
+	// fixed sheet. Save + restore scrollY so the page doesn't jump on close.
+	useEffect(() => {
+		if (!isOpen) return;
+		const scrollY = window.scrollY;
+		document.documentElement.classList.add("slide-modal-locked");
+		document.body.classList.add("slide-modal-locked");
+		document.body.style.top = `-${scrollY}px`;
+		return () => {
+			document.documentElement.classList.remove("slide-modal-locked");
+			document.body.classList.remove("slide-modal-locked");
+			document.body.style.top = "";
+			window.scrollTo(0, scrollY);
+		};
 	}, [isOpen]);
 
-	const stopPropagation = useCallback((e: React.MouseEvent) => {
-		e.stopPropagation();
-	}, []);
+	const close = useCallback(() => setIsOpen(false), [setIsOpen]);
 
-	useEffect(
-		function blurOutsideOnVisible() {
-			if (isOpen) {
-				const focusedElement = document.activeElement;
-				const isNotBody = !document.body.isSameNode(focusedElement);
-				const isOutside = !curtainRef.current?.contains(focusedElement);
+	// Drag-to-dismiss from the grab handle / title bar. Native listeners so
+	// touchmove can preventDefault; the content below scrolls independently.
+	useEffect(() => {
+		const handle = dragHandleRef.current;
+		const el = sheetRef.current;
+		if (!handle || !el || !entered) return;
 
-				if (focusedElement && isNotBody && isOutside) {
-					(focusedElement as HTMLElement).blur();
-				}
+		let startY = 0;
+		let currentY = 0;
+		let dragging = false;
+
+		const onStart = (e: TouchEvent) => {
+			startY = e.touches[0].clientY;
+			currentY = startY;
+			dragging = true;
+			el.style.transition = "none";
+		};
+		const onMove = (e: TouchEvent) => {
+			if (!dragging) return;
+			currentY = e.touches[0].clientY;
+			const dy = currentY - startY;
+			// Track downward drags only (the dismiss direction).
+			if (dy > 0) {
+				e.preventDefault();
+				el.style.transform = `translateY(${dy}px)`;
 			}
-		},
-		[isOpen],
-	);
+		};
+		const onEnd = () => {
+			if (!dragging) return;
+			dragging = false;
+			const dy = currentY - startY;
+			if (dy > 90) {
+				// Past the dismiss threshold: glide off-screen, then close. The
+				// unmount clears the leftover inline transform.
+				el.style.transition = "transform 220ms cubic-bezier(0.4, 0, 1, 1)";
+				el.style.transform = "translateY(100%)";
+				const done = () => {
+					el.removeEventListener("transitionend", done);
+					close();
+				};
+				el.addEventListener("transitionend", done);
+			} else {
+				// Snap back to rest; clearing the inline styles hands control back
+				// to the `.is-open` class transform + transition.
+				el.style.transition = "";
+				el.style.transform = "";
+			}
+		};
 
-	if (isHideTransitionFinished) return null;
+		handle.addEventListener("touchstart", onStart, { passive: false });
+		handle.addEventListener("touchmove", onMove, { passive: false });
+		handle.addEventListener("touchend", onEnd);
+		handle.addEventListener("touchcancel", onEnd);
+		return () => {
+			handle.removeEventListener("touchstart", onStart);
+			handle.removeEventListener("touchmove", onMove);
+			handle.removeEventListener("touchend", onEnd);
+			handle.removeEventListener("touchcancel", onEnd);
+		};
+	}, [entered, close]);
+
+	if (!mounted) return null;
 
 	return (
 		<Portal>
 			<div
-				className={cx(
-					"fixed inset-0 z-[9999] bg-black/70 transition-opacity duration-300",
-					isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-				)}
-				onTransitionEnd={handleTransitionEnd}
-				onClick={handleClose}
+				className={cx("slide-modal-backdrop", {
+					"is-open": entered,
+					"is-armed": entered && backdropArmed,
+				})}
+				onClick={close}
+				aria-hidden="true"
 			/>
-			<RemoveScroll enabled={isOpen}>
+			<div className="slide-modal-anchor">
 				<div
 					data-qa={qa}
-					ref={setCurtainRef}
-					className={cx(
-						"text-body-medium fixed left-0 right-0 z-[10000] flex flex-col rounded-t-4 border-x border-t border-gray-800 bg-slate-800",
-						className,
-					)}
-					style={curtainStyle}
-					onClick={stopPropagation}
+					ref={sheetRef}
+					className={cx("slide-modal-panel", { "is-open": entered }, className)}
 				>
-					<div
-						onPointerDown={handlePointerDown}
-						onPointerMove={handlePointerMove}
-						onPointerUp={handlePointerUp}
-					>
-						<div className="flex touch-none select-none items-stretch justify-between gap-4 px-14 pb-14 pt-14">
-							<div className="text-body-large grow">{label}</div>
-
+					<div ref={dragHandleRef} className="slide-modal-handle">
+						<div className="slide-modal-grabber" aria-hidden="true" />
+						<div className="slide-modal-header">
+							<div className="slide-modal-title">{label}</div>
 							<MdClose
 								fontSize={20}
-								className="cursor-pointer text-slate-100 hover:opacity-90"
-								onClick={handleClose}
+								className="slide-modal-close"
+								onClick={close}
+								aria-label="Close"
 							/>
 						</div>
 						{headerRef ? (
-							<div className="px-14 last:*:mb-14" ref={headerRef} />
+							<div ref={headerRef} />
 						) : headerContent ? (
-							<div className="px-14 last:*:mb-14">{headerContent}</div>
+							<div>{headerContent}</div>
 						) : null}
-
-						{!noDivider && <div className="divider" />}
+						{!noDivider && <div className="slide-modal-divider" />}
 					</div>
 
-					<div
-						className="grow overflow-y-auto"
-						ref={scrollableContainerRef}
-						onPointerDown={handlePointerDown}
-						onPointerMove={handlePointerMove}
-						onPointerUp={handlePointerUp}
-						onPointerCancel={handlePointerCancel}
-					>
-						<div className={cx("flex grow flex-col", contentPadding ? "p-14" : "pr-5")}>
+					<div className="slide-modal-scroll">
+						<div className={cx("slide-modal-content", { "is-flush": !contentPadding })}>
 							{children}
 						</div>
 					</div>
 					{footerContent && (
 						<>
-							<div className="border-b border-stroke-primary" />
+							<div className="slide-modal-divider" />
 							<div>{footerContent}</div>
 						</>
 					)}
 				</div>
-			</RemoveScroll>
+			</div>
 		</Portal>
 	);
 }

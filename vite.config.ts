@@ -332,6 +332,14 @@ export default defineConfig(({ mode }) => {
 				// `504 (Outdated Optimize Dep)` / stale `node_modules/.vite/deps/*` URLs after HMR or server restarts.
 				"firebase/app",
 				"firebase/storage",
+				// Only the lazy-loaded trader profile route imports recharts; without
+				// eager pre-bundling, first navigation to /traders/:address triggers
+				// on-demand optimization and the dynamic import can fail (504) until
+				// a hard reload.
+				"recharts",
+				// Same failure mode for the copy trading setup modal: it pulls the
+				// Polymarket CLOB client into the lazy trader-profile/copy chunks.
+				"@polymarket/clob-client-v2",
 			],
 		},
 		esbuild: {

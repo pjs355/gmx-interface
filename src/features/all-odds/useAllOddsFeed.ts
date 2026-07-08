@@ -40,6 +40,8 @@ function pickPriceFields(m: AllOddsMarket): Partial<AllOddsMarket> {
 		sxbetPriceB: m.sxbetPriceB,
 		hyperliquidPriceA: m.hyperliquidPriceA,
 		hyperliquidPriceB: m.hyperliquidPriceB,
+		prophetxPriceA: m.prophetxPriceA,
+		prophetxPriceB: m.prophetxPriceB,
 	};
 }
 
@@ -86,6 +88,8 @@ function apiItemToAllOddsMarket(item: MatchedMarketsApiItem): AllOddsMarket {
 		sxbetPriceB: null,
 		hyperliquidPriceA: null,
 		hyperliquidPriceB: null,
+		prophetxPriceA: null,
+		prophetxPriceB: null,
 	};
 }
 

@@ -29,6 +29,8 @@ function market(eventDate?: string): AllOddsMarket {
 		sxbetPriceB: null,
 		hyperliquidPriceA: null,
 		hyperliquidPriceB: null,
+		prophetxPriceA: null,
+		prophetxPriceB: null,
 	};
 }
 

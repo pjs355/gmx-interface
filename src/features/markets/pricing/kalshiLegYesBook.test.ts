@@ -126,6 +126,8 @@ describe("cross-surface parity", () => {
 			sxbetPriceB: null,
 			hyperliquidPriceA: null,
 			hyperliquidPriceB: null,
+			prophetxPriceA: null,
+			prophetxPriceB: null,
 		};
 
 		const groups = buildAllOddsGroups([allOddsMarket]);
