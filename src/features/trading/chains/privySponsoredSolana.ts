@@ -118,6 +118,23 @@ function isBlockhashError(err: unknown): boolean {
 	return BLOCKHASH_ERROR_PATTERNS.some((re) => re.test(msg));
 }
 
+/**
+ * Privy refuses to gas-sponsor a transaction that already carries a signature
+ * ("Pre-signed transactions are not supported for gas sponsorship"). LI.FI
+ * Solana bridge routes (deBridge, Mayan, etc.) ship the tx partially signed by
+ * the bridge partner, so sponsorship is impossible for them — the only way to
+ * broadcast is a NON-sponsored send where the user's Solana wallet pays the
+ * ~5000-lamport network fee. Detect that specific rejection so we can retry
+ * unsponsored instead of failing the whole bridge.
+ */
+function isSponsorshipUnsupportedForPresignedError(err: unknown): boolean {
+	const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+	return (
+		msg.includes("pre-signed transactions are not supported") ||
+		msg.includes("not supported for gas sponsorship")
+	);
+}
+
 function extractPrivyErrorMessage(err: unknown): string {
 	if (!err) return "unknown";
 	if (err instanceof Error) return err.message;
@@ -181,6 +198,29 @@ export async function sendPrivySponsoredSolanaTransaction(
 						privyThrownError: err,
 					}),
 				);
+			}
+
+			// Partner-pre-signed tx (LI.FI bridge): Privy can't sponsor it. Retry the
+			// SAME bytes with sponsorship OFF so the user's Solana wallet pays the tiny
+			// network fee and the bridge can actually broadcast.
+			if (isSponsorshipUnsupportedForPresignedError(err)) {
+				try {
+					const { signature } = await signAndSendTransaction({
+						transaction: bytesToSend,
+						wallet,
+						chain,
+						options: { sponsor: false },
+					});
+					return bs58.encode(signature);
+				} catch (unsponsoredErr) {
+					const m2 = extractPrivyErrorMessage(unsponsoredErr);
+					if (typeof console !== "undefined") {
+						console.warn(`[privySponsoredSolana] unsponsored fallback also failed: ${m2}`);
+					}
+					const wrapped = new Error(m2);
+					(wrapped as { cause?: unknown }).cause = unsponsoredErr;
+					throw wrapped;
+				}
 			}
 
 			// Only retry on blockhash errors — and only when we can rewrite the blockhash

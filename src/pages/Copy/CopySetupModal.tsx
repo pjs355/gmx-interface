@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useDelegatedActions, usePrivy } from "@privy-io/react-auth";
+import { useSigners, usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
 import { SlideModal } from "@/components/Modal/SlideModal";
 import { helperToast } from "@/components/Toast/toast";
@@ -8,6 +8,10 @@ import { useCreateCopySubscription } from "@/features/trading/hooks/useCopyTradi
 import { usePrivateApiClient } from "@/features/trading/hooks/usePrivateApiClient";
 import { usePolymarketClobTradingSession } from "@/features/trading/venues/polymarket/session/usePolymarketClobTradingSession";
 import { usePolymarketEoaWalletClient } from "@/features/trading/venues/polymarket/wallet/usePolymarketEoaWalletClient";
+import { useVenueAddressChainMap } from "@/context/AccountDataContext";
+import { buildChainBalances } from "@/features/trading/sor/core/buildChainBalances";
+import { readFundingStableBalancesHuman } from "@/features/trading/sor/prefund/fundingStableBalances";
+import { useWithdrawPlanExecution } from "@/pages/Transfers/useWithdrawPlanExecution";
 import type { TraderProfile as TraderProfileData } from "@/services/api/whaleTrackerService";
 import { prettySportLabel } from "./prettySportLabel";
 import "./Copy.scss";
@@ -20,6 +24,34 @@ type Props = {
 };
 
 const MIN_POOL_USD = 10;
+
+/**
+ * Server-side signing for copy trading. This app uses Privy TEE wallets, so the
+ * backend copy engine signs on the user's behalf via a SESSION SIGNER (a
+ * key-quorum created in the Privy dashboard) — not the old on-device
+ * `delegateWallet`, which TEE wallets reject. Provisioning this signer at
+ * activation grants the backend permission to sign the user's trades. The id
+ * comes from the dashboard; set `VITE_COPY_SESSION_SIGNER_ID` in the frontend
+ * env, and the matching authorization key as `PRIVY_AUTHORIZATION_PRIVATE_KEY`
+ * on the server.
+ */
+const COPY_SESSION_SIGNER_ID = import.meta.env.VITE_COPY_SESSION_SIGNER_ID as string | undefined;
+
+/**
+ * `addSigners` is NOT idempotent: if this wallet already had the copy session
+ * signer granted (a prior activation that was later stopped, or a retry), Privy
+ * rejects with "Duplicate signer(s) provided when updating wallet." That
+ * already-granted state is exactly what copy trading needs — the backend can
+ * already sign — so we treat it as success rather than a failure.
+ */
+function isSignerAlreadyGrantedError(e: unknown): boolean {
+	const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+	return (
+		msg.includes("duplicate signer") ||
+		msg.includes("already been added") ||
+		msg.includes("already added")
+	);
+}
 
 /**
  * Stop loss on the pool's live mark-to-market value: if it drops by this
@@ -43,12 +75,15 @@ export function CopySetupModal({ leader, leaderName, isVisible, setIsVisible }: 
 	const navigate = useNavigate();
 	const { authenticated } = usePrivy();
 	const eoa = usePolymarketEoaWalletClient();
-	const { delegateWallet } = useDelegatedActions();
+	const { addSigners } = useSigners();
 	const privateApi = usePrivateApiClient();
 	// Mounting the CLOB session syncs L2 credentials to the server, which
 	// the copy engine needs for automated order submission.
 	const clobSession = usePolymarketClobTradingSession({ enabled: isVisible });
 	const createMutation = useCreateCopySubscription();
+	// Same multi-chain move+allocate engine the deposit/Transfers flow uses.
+	const venueAddressChainMap = useVenueAddressChainMap();
+	const { executePlan } = useWithdrawPlanExecution();
 
 	const cashQuery = useQuery({
 		queryKey: ["copy", "cash-summary"],
@@ -93,10 +128,86 @@ export function CopySetupModal({ leader, leaderName, isVisible, setIsVisible }: 
 			setError("Wallet not ready. Sign in and try again.");
 			return;
 		}
+		if (!COPY_SESSION_SIGNER_ID) {
+			setError("Copy trading isn't fully configured yet. Please try again later.");
+			return;
+		}
 		setSubmitting(true);
 		setError(null);
 		try {
-			await delegateWallet({ address: eoa.address, chainType: "ethereum" });
+			// Grant the backend session-signer access so the copy engine can sign
+			// trades on the user's behalf (TEE wallets: replaces on-device
+			// delegateWallet, which they don't support). Idempotent: an
+			// already-granted signer is the desired state, not an error.
+			try {
+				await addSigners({
+					address: eoa.address,
+					signers: [{ signerId: COPY_SESSION_SIGNER_ID }],
+				});
+			} catch (signerErr) {
+				if (!isSignerAlreadyGrantedError(signerErr)) throw signerErr;
+			}
+
+			// Fund the pool into your Polymarket wallet using the SAME multi-chain
+			// move+allocate engine the deposit/Transfers flow uses (LI.FI withdraw
+			// plan → executePlan). Sources across Base/BNB/Solana and lands USDC.e in
+			// the Polymarket Safe, which the backend funding worker wraps to pUSD.
+			// Only the shortfall beyond what's already on Polygon is moved. Runs while
+			// you're online so Privy can sign each leg (including Solana).
+			const polymarketWallet = venueAddressChainMap?.polymarket.walletAddress?.trim() ?? "";
+			if (!polymarketWallet) {
+				throw new Error("Your Polymarket wallet isn't ready yet. Try again in a moment.");
+			}
+			const fundingAddrs = {
+				baseSmartWallet: venueAddressChainMap?.levelup.walletAddress?.trim() || null,
+				limitlessMakerBase: venueAddressChainMap?.limitless.walletAddress?.trim() || null,
+				polymarketSafe: polymarketWallet,
+				embeddedEoa: venueAddressChainMap?.predictfun.walletAddress?.trim() || null,
+				solanaAddress: venueAddressChainMap?.dflow.walletAddress?.trim() || null,
+			};
+			const bal = await readFundingStableBalancesHuman(fundingAddrs);
+			const shortfall = amountNumber - Math.max(0, bal.polygon ?? 0);
+			if (shortfall > 0.01) {
+				// Skip dust sources: LI.FI rejects tiny bridge legs, and one failed leg
+				// kills the whole composite plan. Only source from chains holding a
+				// meaningful balance — the real money is on Base/BNB — so every leg is a
+				// clean sponsored EVM bridge instead of a fragile $0.48 Solana leg.
+				const MIN_SOURCE_USD = 1;
+				const usable = (v: number | null | undefined) => {
+					const n = Math.max(0, v ?? 0);
+					return n >= MIN_SOURCE_USD ? n : 0;
+				};
+				// Source only from the OTHER chains — Polygon (the Polymarket Safe) is
+				// the destination, never a funding source.
+				const planBalances = buildChainBalances({
+					baseUsdcBalance: usable(bal.base),
+					baseWalletAddress: fundingAddrs.baseSmartWallet ?? "",
+					limitlessMakerUsdcBalance: usable(bal.limitlessMakerBase),
+					limitlessMakerWalletAddress: fundingAddrs.limitlessMakerBase ?? "",
+					solanaUsdcBalance: usable(bal.solana),
+					solanaWalletAddress: fundingAddrs.solanaAddress ?? "",
+					bnbUsdtBalance: usable(bal.bnb),
+					bnbWalletAddress: fundingAddrs.embeddedEoa ?? "",
+				});
+				const plan = await privateApi.postFundingLifiWithdrawPlan({
+					amountHuman: shortfall.toFixed(6),
+					toChain: 137,
+					toAsset: "USDC",
+					toAddress: polymarketWallet,
+					slippage: 0.005,
+					balances: planBalances,
+				});
+				if (
+					!plan ||
+					(plan.mode !== "lifi" &&
+						plan.mode !== "direct_transfer" &&
+						plan.mode !== "composite")
+				) {
+					throw new Error("Couldn't plan how to move your funds into Polymarket. Try again.");
+				}
+				await executePlan(plan);
+			}
+
 			const sub = await createMutation.mutateAsync({
 				leaderWallet: leader.wallet,
 				allocationMode: "usd",

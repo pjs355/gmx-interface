@@ -16,6 +16,12 @@ export type OddsFormatMenuProps = {
 	 * cause of the popover "freezing" invisibly inside the mobile filter row).
 	 */
 	anchor?: MenuItemsAnchor;
+	/**
+	 * When false, skip the floating/portal and position the panel straight
+	 * below the trigger with plain CSS. Use where there's no overflow clip and
+	 * the popover must NOT flip upward (floating-ui flips when space is tight).
+	 */
+	floating?: boolean;
 };
 
 /**
@@ -25,6 +31,7 @@ export default function OddsFormatMenu({
 	className = "",
 	iconSize = 22,
 	anchor = { to: "bottom end", gap: 6 },
+	floating = true,
 }: OddsFormatMenuProps) {
 	const { oddsDisplayStyle, setOddsDisplayStyle } = useOddsDisplay();
 
@@ -33,7 +40,11 @@ export default function OddsFormatMenu({
 			<Menu.Button type="button" className="odds-format-menu__trigger" aria-label="Odds display">
 				<PiSlidersHorizontal size={iconSize} aria-hidden />
 			</Menu.Button>
-			<Menu.Items className="odds-format-menu__items" modal={false} anchor={anchor}>
+			<Menu.Items
+				className={`odds-format-menu__items${floating ? "" : " odds-format-menu__items--below"}`}
+				modal={false}
+				{...(floating ? { anchor } : {})}
+			>
 				{ODDS_DISPLAY_SELECT_OPTIONS.map((o) => (
 					<Menu.Item key={o.value}>
 						{({ focus }) => (

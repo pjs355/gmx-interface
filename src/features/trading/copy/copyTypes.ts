@@ -53,13 +53,18 @@ export type CopyActivityJson = {
 	action: "buy" | "sell" | "redeem" | "resolve_loss";
 	status: "filled" | "partial" | "skipped" | "failed" | "submitted_unconfirmed";
 	skipReason: string | null;
+	/** Market key for cost-basis grouping (absent on legacy rows). */
+	conditionId?: string;
 	marketTitle: string;
 	sport: string;
 	outcome: "yes" | "no";
 	leaderPrice: number;
 	leaderSizeUsd: number;
 	followerPrice: number | null;
+	/** Filled size: USD cost for buys, shares for sells. */
 	followerFilledSize: number | null;
+	/** Filled shares on a buy — for cost-basis tracking (absent on legacy rows). */
+	followerFilledShares?: number | null;
 	followerProceedsUsd: number | null;
 	errorMessage: string | null;
 	createdAt: string;

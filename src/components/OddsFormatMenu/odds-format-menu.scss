@@ -40,6 +40,14 @@
 	outline: none;
 }
 
+// `floating={false}`: no portal — position straight below the trigger with
+// CSS so the panel always opens downward (never flips up over a banner).
+.odds-format-menu__items--below {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+}
+
 .odds-format-menu__item {
 	display: block;
 	width: 100%;

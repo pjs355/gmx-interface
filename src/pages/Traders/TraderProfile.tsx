@@ -546,7 +546,7 @@ function TrackRecordSection({
 					<OddsFormatMenu
 						className="trader-profile-odds-format"
 						iconSize={16}
-						anchor={{ to: "bottom end", gap: 6 }}
+						floating={false}
 					/>
 					<div
 						className="trader-profile-window-seg"
