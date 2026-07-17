@@ -30,9 +30,9 @@ const DesktopLogo = () => (
 );
 
 const MenuIcon = ({ onClick }: { onClick: () => void }) => (
-	<div className="App-header-menu-icon-block" onClick={onClick}>
+	<button type="button" aria-label="Open menu" className="App-header-menu-icon-block" onClick={onClick}>
 		<RiMenuLine className="App-header-menu-icon" />
-	</div>
+	</button>
 );
 
 type Props = {
@@ -49,6 +49,7 @@ type HeaderLeftProps = {
 
 type HeaderRightProps = {
 	isMobile: boolean;
+	showMenuToggle: boolean;
 	toggleDrawer: () => void;
 	disconnectAccountAndCloseSettings: () => void;
 	openSettings: () => void;
@@ -68,6 +69,7 @@ const HeaderLeft = ({ isMobile, navigate, showRedirectModal }: HeaderLeftProps) 
 
 const HeaderRight = ({
 	isMobile,
+	showMenuToggle,
 	toggleDrawer,
 	disconnectAccountAndCloseSettings,
 	openSettings,
@@ -79,7 +81,7 @@ const HeaderRight = ({
 			openSettings={openSettings}
 			showRedirectModal={showRedirectModal}
 			small={isMobile}
-			menuToggle={isMobile && <MenuIcon onClick={toggleDrawer} />}
+			menuToggle={showMenuToggle && <MenuIcon onClick={toggleDrawer} />}
 		/>
 	</div>
 );
@@ -101,9 +103,15 @@ const Drawer = ({
 	return (
 		<div className="App-header-drawer">
 			<div className="App-header-drawer-close">
-				<div className="App-header-menu-icon-block" onClick={closeDrawer}>
+				<span className="App-header-drawer-title">Menu</span>
+				<button
+					type="button"
+					aria-label="Close menu"
+					className="App-header-menu-icon-block App-header-drawer-close-btn"
+					onClick={closeDrawer}
+				>
 					<FiX className="App-header-menu-icon" />
-				</div>
+				</button>
 			</div>
 			<div className="App-header-drawer-scrollable">
 				<HeaderContent
@@ -118,10 +126,9 @@ const Drawer = ({
 	);
 };
 
-const Backdrop = ({ isVisible, onClick }: { isVisible: boolean; onClick: () => void }) => {
-	if (!isVisible) return null;
-	return <div className="App-header-backdrop" onClick={onClick} />;
-};
+const Backdrop = ({ onClick }: { onClick: () => void }) => (
+	<div className="App-header-backdrop" onClick={onClick} />
+);
 
 const SelectorBackdrop = ({ isVisible, onClick }: { isVisible: boolean; onClick: () => void }) => {
 	if (!isVisible) return null;
@@ -136,26 +143,30 @@ type DrawerContainerProps = {
 	disconnectAccountAndCloseSettings?: () => void;
 };
 
+/*
+ * Stays mounted so the drawer can animate in AND out (translate/opacity via
+ * the `is-open` class). Pointer events are disabled while closed in CSS.
+ */
 const DrawerContainer = ({
 	isVisible,
 	closeDrawer,
 	showRedirectModal,
 	openSettings,
 	disconnectAccountAndCloseSettings,
-}: DrawerContainerProps) => {
-	if (!isVisible) return null;
-	return (
-		<>
-			<Backdrop isVisible={isVisible} onClick={closeDrawer} />
-			<Drawer
-				closeDrawer={closeDrawer}
-				showRedirectModal={showRedirectModal}
-				openSettings={openSettings}
-				disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
-			/>
-		</>
-	);
-};
+}: DrawerContainerProps) => (
+	<div
+		className={cx("App-header-drawer-layer", { "is-open": isVisible })}
+		aria-hidden={!isVisible}
+	>
+		<Backdrop onClick={closeDrawer} />
+		<Drawer
+			closeDrawer={closeDrawer}
+			showRedirectModal={showRedirectModal}
+			openSettings={openSettings}
+			disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
+		/>
+	</div>
+);
 
 export function Header({
 	disconnectAccountAndCloseSettings,
@@ -163,6 +174,9 @@ export function Header({
 	showRedirectModal,
 }: Props) {
 	const isMobile = useMedia("(max-width: 1335px)");
+	// Phones have the bottom tab bar — no burger there. Tablets (769–1335px)
+	// keep the drawer since the tab bar only renders ≤768px.
+	const isPhone = useMedia("(max-width: 768px)");
 	const navigate = useNavigate();
 
 	const [isDrawerVisible, setIsDrawerVisible] = useState(false);
@@ -249,8 +263,11 @@ export function Header({
 			return;
 		}
 
-		const SCROLL_DELTA = 6;
-		const TOP_REVEAL_OFFSET = 80;
+		// Commit to hiding almost immediately on any downward scroll — the sticky
+		// filter pills reach the top within ~120px, so a large reveal offset left
+		// the header lingering behind them. Small offset + delta = it's gone first.
+		const SCROLL_DELTA = 5;
+		const TOP_REVEAL_OFFSET = 8;
 		let lastY = window.scrollY;
 		let ticking = false;
 
@@ -278,6 +295,14 @@ export function Header({
 		return () => window.removeEventListener("scroll", onScroll);
 	}, [isMobile, isDrawerVisible]);
 
+	// Publish hidden state so the sticky mobile filter pills can stick just below
+	// the header while it's shown and slide up to the top edge as it leaves —
+	// they move in sync instead of the header overlapping them mid-scroll.
+	useEffect(() => {
+		document.body.classList.toggle("app-header-hidden", isHeaderHidden);
+		return () => document.body.classList.remove("app-header-hidden");
+	}, [isHeaderHidden]);
+
 	const isHome = isHomeSite();
 	const drawerOpenSettings = isHome ? undefined : openSettings;
 	const drawerDisconnect = isHome ? undefined : disconnectAccountAndCloseSettings;
@@ -299,6 +324,7 @@ export function Header({
 					/>
 					<HeaderRight
 						isMobile={isMobile}
+						showMenuToggle={isMobile && !isPhone}
 						toggleDrawer={toggleDrawer}
 						disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
 						openSettings={openSettings}

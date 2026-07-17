@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { RiArrowLeftSLine } from "react-icons/ri";
 import type { Umbrella } from "@/services/api/umbrellaDataService";
 import gtaIcon from "@/assets/img/ic_gtaVI_24.jpg";
 import {
@@ -19,8 +21,18 @@ type MarketHeaderProps = {
 
 export const MarketHeader: React.FC<MarketHeaderProps> = ({ umbrella, titleRef }) => {
 	const { tags } = usePredictionData();
+	const navigate = useNavigate();
 	const [imageError, setImageError] = useState(false);
 	const [currentSrc, setCurrentSrc] = useState<string | null>(null);
+
+	const goBack = () => {
+		// Fall back to the markets list when there is no in-app history (deep link).
+		if (window.history.length > 1) {
+			navigate(-1);
+		} else {
+			navigate("/");
+		}
+	};
 
 	// Priority 1: Check for server image (ic_{umbrellaID})
 	const serverImage = umbrella && umbrella._id ? resolveUmbrellaIconById(umbrella._id) : null;
@@ -77,6 +89,14 @@ export const MarketHeader: React.FC<MarketHeaderProps> = ({ umbrella, titleRef }
 
 	return (
 		<div className="market-header">
+			<button
+				type="button"
+				className="market-back-btn"
+				aria-label="Back to markets"
+				onClick={goBack}
+			>
+				<RiArrowLeftSLine />
+			</button>
 			<div className="market-title-container">
 				<img
 					src={currentSrc || initialSrc}

@@ -45,7 +45,14 @@ export function umbrellaHasListableCrossVenueOdds(
 
 	const rows = buildVenuePriceRows(merged);
 	const linkedRows = rows.filter((row) => row.linked);
-	if (linkedRows.length === 0) return true;
+	// No venue produced a listable row. Unlike the branches above (catalog still
+	// loading / no monitor row yet), this is a PERMANENT priceless state: mapped
+	// external venues (Polymarket/Limitless/Predict) always emit an all-null row,
+	// so zero rows means the only routing is a LevelUp book that is empty or a
+	// DFlow leg that finalized / never initialized. Such a card renders "Live" +
+	// "--" and looks broken — hide it. It reappears automatically once a real book
+	// exists (a live LevelUp book keeps its row via the adapter's shouldShowRow).
+	if (linkedRows.length === 0) return false;
 
 	const hasAnyPriceTick = linkedRows.some(
 		(row) =>

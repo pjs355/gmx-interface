@@ -512,3 +512,78 @@
 		border-color: rgba(255, 255, 255, 0.5);
 	}
 }
+
+/* ------------------------------------------------------------------
+ * Mobile app feel: settings-style controls — full-width fields with
+ * comfortable tap heights, softer radii, grouped card sections.
+ * ------------------------------------------------------------------ */
+@media (max-width: 768px) {
+	.Details-username-input {
+		min-height: 46px;
+		border-radius: 12px;
+		padding: 10px 14px;
+		border-color: rgba(255, 255, 255, 0.14);
+	}
+
+	.Details-button {
+		min-height: 46px;
+		border-radius: 12px;
+		padding-left: 18px;
+		padding-right: 18px;
+	}
+
+	.Details-info-value {
+		min-height: 46px;
+		display: flex;
+		align-items: center;
+		border-radius: 12px;
+		border-color: rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	.Details-username-label {
+		font-size: 13px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.55);
+	}
+
+	.Details-info-label {
+		font-size: 13px;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.55);
+	}
+
+	.Details-email-preferences-collapsible {
+		border-radius: 16px;
+		border-color: rgba(255, 255, 255, 0.08);
+		background: rgba(255, 255, 255, 0.03);
+	}
+
+	.Details-email-prefs-header {
+		min-height: 54px;
+	}
+
+	.Details-preference-item {
+		border-radius: 12px;
+		border-color: rgba(255, 255, 255, 0.08);
+	}
+
+	.Details-checkbox {
+		width: 22px;
+		height: 22px;
+		min-width: 22px;
+		border-radius: 6px;
+
+		&:checked::after {
+			left: 6px;
+			top: 2px;
+		}
+	}
+
+	.Details-hint {
+		font-style: normal;
+	}
+}

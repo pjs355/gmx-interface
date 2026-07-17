@@ -1004,7 +1004,6 @@
 	bottom: 0;
 	width: 100%;
 	display: block; /* ensure it can size to children */
-	min-height: 64px; /* ensure visible bar even when closed */
 	z-index: 1001;
 	/* respect safe areas on iOS */
 	padding-bottom: constant(safe-area-inset-bottom);
@@ -1013,6 +1012,19 @@
 	will-change: transform;
 	transform: translateZ(0);
 	backface-visibility: hidden;
+	/*
+	 * The wrapper renders even when the sheet is closed and its peek bar is
+	 * hidden (home page). It must NOT swallow taps meant for whatever is
+	 * underneath it (the bottom tab bar, card buttons) — children that do
+	 * paint re-enable their own pointer events below.
+	 */
+	pointer-events: none;
+	min-height: 0;
+}
+
+.prediction-curtain-content,
+.prediction-curtain-header {
+	pointer-events: auto;
 }
 
 /* Mobile debug: highlight tradebox on small screens */
@@ -1069,17 +1081,17 @@
 .prediction-curtain-content {
 	/* Match the inner trade widget so the panel reads as one surface (was `black`). */
 	@include predictions-glass-backdrop($predictions-glass-overlay-tradebox);
-	border-top: 1px solid #4b5563;
-	border-radius: 12px 12px 0 0;
+	border-top: 0.5px solid rgba(255, 255, 255, 0.12);
+	border-radius: 20px 20px 0 0;
 	height: 85vh; /* take up most of the screen */
 	max-height: 85vh;
 	overflow: auto;
 	position: relative;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
-	/* Mount animation. Inline `transform`/`transition` set by the swipe
-	   handlers in `PredictionCurtain.tsx` take over once the user grabs it. */
-	animation: prediction-curtain-slide-in 240ms cubic-bezier(0.2, 0, 0, 1);
+	/* Mount animation (iOS sheet spring). Inline `transform`/`transition` set by
+	   the swipe handlers in `PredictionCurtain.tsx` take over once the user grabs it. */
+	animation: prediction-curtain-slide-in 340ms cubic-bezier(0.32, 0.72, 0, 1);
 	will-change: transform;
 
 	&::-webkit-scrollbar {
@@ -1097,13 +1109,14 @@
 	}
 }
 
-/* Solid black sheet on phone/tablet trade curtain (glass mixin reads transparent when tint is off). */
+/* Solid dark sheet on phone/tablet trade curtain (glass mixin reads transparent when tint is off). */
 @media (max-width: 1100px) {
 	.prediction-curtain-content {
-		background-color: #000000 !important;
+		background-color: #0c0e12 !important;
 		background-image: none !important;
 		-webkit-backdrop-filter: none !important;
 		backdrop-filter: none !important;
+		box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
 	}
 }
 
@@ -1111,11 +1124,13 @@
 .prediction-curtain-backdrop {
 	position: fixed;
 	inset: 0;
-	background: rgba(0, 0, 0, 0.55);
+	background: rgba(0, 0, 0, 0.6);
 	z-index: 1000;
 	pointer-events: auto;
 	-webkit-tap-highlight-color: transparent;
-	animation: prediction-curtain-fade-in 200ms ease-out;
+	animation: prediction-curtain-fade-in 250ms ease-out;
+	-webkit-backdrop-filter: blur(3px);
+	backdrop-filter: blur(3px);
 }
 
 /* Body scroll lock applied while the curtain is open (toggled in PredictionCurtain). */
@@ -1132,11 +1147,13 @@ html.curtain-open {
 
 .prediction-curtain-header {
 	width: 100%;
-	padding: 12px 15px;
-	background: black; /* ensure solid background under header buttons */
-	border-top: 1px solid #4b5563;
-	border-radius: 12px 12px 0 0;
-	min-height: 72px; /* ensure enough height for 48px buttons + padding */
+	padding: 12px 16px;
+	background: rgba(9, 10, 13, 0.92);
+	-webkit-backdrop-filter: saturate(180%) blur(20px);
+	backdrop-filter: saturate(180%) blur(20px);
+	border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+	border-radius: 16px 16px 0 0;
+	min-height: 72px; /* ensure enough height for 52px buttons + padding */
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1152,11 +1169,12 @@ html.curtain-open {
 
 /* Match button sizing in closed header to open state */
 .curtain-header-buttons .position-btn {
-	height: 48px;
+	height: 52px;
 	padding: 12px;
-	font-size: 18px;
-	font-weight: 600;
-	border-radius: 8px;
+	font-size: 17px;
+	font-weight: 700;
+	border-radius: 14px !important;
+	border-width: 0 !important;
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
@@ -1165,15 +1183,16 @@ html.curtain-open {
 
 .curtain-content-inner {
 	position: relative;
-	padding: 20px;
+	padding: 6px 16px 20px;
+	padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
 
 .curtain-drag-handle {
-	width: 40px;
-	height: 4px;
-	background: #6b7280;
-	border-radius: 2px;
-	margin: 8px auto;
+	width: 36px;
+	height: 5px;
+	background: rgba(255, 255, 255, 0.22);
+	border-radius: 9999px;
+	margin: 6px auto 10px;
 	cursor: grab;
 
 	&:active {
@@ -1971,5 +1990,37 @@ html.curtain-open {
 		border: none;
 		border-radius: 0;
 		box-shadow: none;
+	}
+}
+
+/* ------------------------------------------------------------------
+ * Mobile sheet interior: native tap sizes and softer shapes for the
+ * controls inside the trade curtain (position pills, amount field,
+ * primary CTA, Buy/Sell toggle).
+ * ------------------------------------------------------------------ */
+@media (max-width: 1100px) {
+	.prediction-curtain-content .prediction-market-tradebox {
+		.position-selector .position-btn {
+			min-height: 52px;
+			border-radius: 14px;
+			font-size: 17px;
+		}
+
+		.input-container {
+			border-radius: 14px;
+			border-color: rgba(255, 255, 255, 0.14);
+		}
+
+		.trade-button {
+			min-height: 54px;
+			border-radius: 9999px;
+			font-size: 17px;
+			font-weight: 700;
+		}
+
+		.tradebox-header .side-selector .button.side-btn {
+			height: 38px;
+			border-radius: 9999px;
+		}
 	}
 }

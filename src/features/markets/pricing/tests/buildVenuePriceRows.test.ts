@@ -81,4 +81,37 @@ describe("buildVenuePriceRows", () => {
 		);
 		expect(rows).toHaveLength(0);
 	});
+
+	it("hides dflow row when the Kalshi market is finalized (stale-odds lockdown)", () => {
+		const rows = buildVenuePriceRows(
+			baseMatch({
+				dflow: {
+					tickerA: "T-A",
+					eventTicker: "E1",
+					accountsInitializedA: true,
+					accountsInitializedB: true,
+					dflowNestedStatusA: "finalized",
+				},
+				// Frozen pre-resolution ladder — must NOT render for a finalized market.
+				dflowPriceA: book(0.84, [{ price: 0.84, size: 5 }]),
+			}),
+		);
+		expect(rows.some((r) => r.id === "dflow")).toBe(false);
+	});
+
+	it("still shows dflow row while the Kalshi market is active", () => {
+		const rows = buildVenuePriceRows(
+			baseMatch({
+				dflow: {
+					tickerA: "T-A",
+					eventTicker: "E1",
+					accountsInitializedA: true,
+					accountsInitializedB: true,
+					dflowNestedStatusA: "active",
+				},
+				dflowPriceA: book(0.6, [{ price: 0.6, size: 5 }]),
+			}),
+		);
+		expect(rows.some((r) => r.id === "dflow")).toBe(true);
+	});
 });

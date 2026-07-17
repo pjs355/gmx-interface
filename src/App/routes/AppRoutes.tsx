@@ -11,6 +11,7 @@ import { TOAST_AUTO_CLOSE_TIME } from "config/ui";
 // Removed referral code imports - not needed for prediction markets
 
 import { Header } from "components/Header/Header";
+import { MobileTabBar } from "components/MobileTabBar/MobileTabBar";
 import { SettingsModal } from "components/SettingsModal/SettingsModal";
 import { NotifyModal } from "components/NotifyModal/NotifyModal";
 import Footer from "components/Footer/Footer";
@@ -76,6 +77,7 @@ export function AppRoutes() {
 					<Footer />
 				</div>
 			</div>
+			<MobileTabBar />
 			{/*
 			 * Compact, time-dismissable order toast. Matches the pre-existing
 			 * umbrella-page look: no X, no progress bar, no icon, auto-closes

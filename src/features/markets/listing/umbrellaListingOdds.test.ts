@@ -55,6 +55,37 @@ describe("umbrellaHasListableCrossVenueOdds", () => {
 		expect(umbrellaHasListableCrossVenueOdds(baseUmbrella(), markets)).toBe(true);
 	});
 
+	it("hides a LevelUp-only fixture whose book is empty (no listable venue row)", () => {
+		// Real case: umbrella 6a58ed23... matched only to LevelUp with an empty book.
+		// Poly/Limitless/Predict are unmapped, LevelUp's empty book is dropped by its
+		// shouldShowRow → zero rows. Previously shown as a broken "Live" + "--" card.
+		const markets = [baseMatched({ polyConditionId: "", polyTokenIdA: "", polyTokenIdB: "" })];
+		expect(umbrellaHasListableCrossVenueOdds(baseUmbrella(), markets)).toBe(false);
+	});
+
+	it("still shows a LevelUp-only fixture that has a live resting book", () => {
+		const markets = [
+			baseMatched({
+				polyConditionId: "",
+				polyTokenIdA: "",
+				polyTokenIdB: "",
+				levelUpPriceA: {
+					bestBid: 0.5,
+					bestAsk: 0.52,
+					asks: [{ price: 0.52, size: 10 }],
+					bids: [{ price: 0.5, size: 10 }],
+				},
+				levelUpPriceB: {
+					bestBid: 0.48,
+					bestAsk: 0.5,
+					asks: [{ price: 0.5, size: 10 }],
+					bids: [{ price: 0.48, size: 10 }],
+				},
+			}),
+		];
+		expect(umbrellaHasListableCrossVenueOdds(baseUmbrella(), markets)).toBe(true);
+	});
+
 	it("hides one-sided books with bids but no valid asks", () => {
 		const markets = [
 			baseMatched({

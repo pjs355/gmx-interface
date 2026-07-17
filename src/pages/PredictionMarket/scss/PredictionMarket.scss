@@ -25,7 +25,8 @@
 		.market-header .market-title-container h1.text-34 {
 			font-size: 1.0625rem;
 			line-height: 1.35;
-			font-weight: 700;
+			font-weight: 700 !important;
+			letter-spacing: -0.01em;
 			margin-bottom: 0.375rem;
 			max-width: 100%;
 			overflow-wrap: anywhere;
@@ -40,6 +41,43 @@
 			min-width: 0;
 			max-width: 100%;
 		}
+	}
+}
+
+/* Circular back chip — mobile-only app affordance (hidden on desktop below).
+ * Compact: reads as a glyph, not a control that eats a header row. */
+.market-back-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	min-width: 26px;
+	padding: 0;
+	margin: 0 0 4px -4px;
+	border: none;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.07);
+	color: rgba(255, 255, 255, 0.85);
+	font-size: 17px;
+	cursor: pointer;
+	transition:
+		background-color 0.15s ease,
+		transform 0.12s ease;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.14);
+		border-color: transparent;
+	}
+
+	&:active {
+		transform: scale(0.92);
+	}
+}
+
+@media (min-width: 1101px) {
+	.market-back-btn {
+		display: none;
 	}
 }
 
@@ -214,8 +252,10 @@
 	left: 0;
 	right: 0;
 	z-index: 1000;
-	background: #000000;
-	border-top: 1px solid #333333;
+	background: rgba(9, 10, 13, 0.92);
+	-webkit-backdrop-filter: saturate(180%) blur(20px);
+	backdrop-filter: saturate(180%) blur(20px);
+	border-top: 0.5px solid rgba(255, 255, 255, 0.08);
 	/* Reserve space even if inner content is fixed and out of flow */
 	min-height: 72px;
 	/* respect safe areas on iOS */
@@ -230,6 +270,8 @@
 		min-height: 0;
 		border-top: none;
 		background: transparent;
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
 	}
 }
 
@@ -525,41 +567,67 @@
 		}
 	}
 
-	// Basic / Orderbooks switcher: two tabs split the full row with a small
-	// side gutter so each tab has room to breathe (mobile UX request).
-	// The orderbook venue pill strip overrides this below — it has 4+ pills
-	// and should NOT split full-width.
+	// Basic / Orderbooks switcher: native-style segmented control — a rounded
+	// track with a filled cell for the active tab (replaces the web-style
+	// underline tabs on touch). The orderbook venue pill strip overrides
+	// this below — it has 4+ pills and should NOT split full-width.
 	.venue-tab-switcher {
 		display: flex;
-		gap: 8px;
+		gap: 4px;
 		width: 100%;
-		padding-left: 8px;
-		padding-right: 8px;
-		margin-bottom: 28px;
+		padding: 3px;
+		margin-bottom: 20px;
 		box-sizing: border-box;
+		background: rgba(255, 255, 255, 0.06);
+		border-radius: 12px;
 	}
 
 	.venue-tab-btn {
 		flex: 1 1 0;
-		min-height: 44px;
-		padding: 14px 12px;
-		font-size: 17px;
+		min-height: 40px;
+		padding: 10px 12px;
+		font-size: 15px;
 		font-weight: 600;
 		text-align: center;
 		box-sizing: border-box;
+		border-bottom: none;
+		border-radius: 9px;
+		color: rgba(255, 255, 255, 0.6);
+
+		&:hover {
+			background: transparent;
+			border-bottom-color: transparent;
+		}
+
+		&--active {
+			background: #262b34;
+			color: #ffffff;
+			border-bottom-color: transparent;
+			box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+
+			&:hover {
+				background: #262b34;
+				border-bottom-color: transparent;
+			}
+		}
 	}
 
+	/* Section label, app-style: left-aligned small caps instead of a centered web heading. */
 	.prediction-market-odds-heading {
-		font-size: 1.0625rem;
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.5);
 		line-height: 1.2;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		margin-top: 28px;
-		margin-bottom: 14px;
-		padding-left: 12px;
+		margin-top: 24px;
+		margin-bottom: 10px;
+		padding-left: 4px;
 		padding-right: 12px;
-		text-align: center;
+		text-align: left;
 		width: 100%;
 		box-sizing: border-box;
 	}
@@ -587,17 +655,28 @@
 
 	// Orderbook venue pills (LevelUp / Kalshi / Predict / Polymarket): keep
 	// pill-sized buttons but space them out for a tappable mobile UX, and
-	// undo the full-width flex from .venue-tab-switcher above.
+	// undo the full-width segmented track from .venue-tab-switcher above.
 	.venue-orderbooks-pill-strip {
 		gap: 8px;
 		row-gap: 8px;
 		padding: 4px 4px 8px;
 		margin-bottom: 12px;
+		background: transparent;
+		border-radius: 0;
 
 		.venue-tab-btn {
 			flex: 0 0 auto;
 			padding: 10px 14px;
 			font-size: 14px;
+			border-radius: 9999px;
+			background: rgba(255, 255, 255, 0.06);
+			color: #d7dbe2;
+
+			&--active {
+				background: #ffffff;
+				color: #000000;
+				box-shadow: none;
+			}
 		}
 	}
 

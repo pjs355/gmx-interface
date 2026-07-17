@@ -3,6 +3,7 @@
 @import "./themes/fonts.css";
 @import "./themes/colors.css";
 @import "./themes/outline-button.css";
+@import "./mobile-app.css";
 
 :root {
 	font-family: var(--font-primary);
@@ -127,14 +128,14 @@ h6 {
 /* Only apply global link styles to non-header, non-footer, non-button links */
 a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button):not(
 		.Footer-link
-	):not(.Footer-social) {
+	):not(.Footer-social):not(.mobile-tabbar__item) {
 	font-weight: 500;
 	color: var(--brand-primary-light);
 	text-decoration: inherit;
 }
 a:not(.App-header a):not(.App-header-drawer a):not(.button):not(.brand-outline-button):not(
 		.Footer-link
-	):not(.Footer-social):hover {
+	):not(.Footer-social):not(.mobile-tabbar__item):hover {
 	color: var(--brand-primary);
 }
 

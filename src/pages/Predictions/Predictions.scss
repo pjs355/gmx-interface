@@ -1582,8 +1582,8 @@ $predictions-compact-card-inline: 60px;
 	}
 
 	/*
-	 * Horizontal filter strip (≤1099): inactive pills transparent; hover + active share
-	 * trade input fill `#101114` (see `.prediction-market-tradebox .input-container`).
+	 * Horizontal filter strip (≤1099): app-style chips — soft filled pills,
+	 * inverted (white) pill for the active filter so state is instantly legible.
 	 */
 	.game-links-wrapper .game-links-bar .game-link {
 		width: auto;
@@ -1591,34 +1591,50 @@ $predictions-compact-card-inline: 60px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		padding: 8px 12px;
+		padding: 9px 14px;
 		border: none;
-		background: transparent;
-		color: #ffffff;
+		background: rgba(255, 255, 255, 0.06);
+		color: #d7dbe2;
 		line-height: 1;
 		transition:
 			color 0.15s ease-in-out,
-			background-color 0.15s ease-in-out;
+			background-color 0.15s ease-in-out,
+			transform 0.12s ease;
 
 		&:hover {
-			background: #101114;
+			background: rgba(255, 255, 255, 0.1);
 			color: #ffffff;
 		}
 
+		&:active {
+			transform: scale(0.96);
+		}
+
 		&.active {
-			background: #101114;
-			color: #ffffff;
+			background: #ffffff;
+			color: #000000;
 			font-weight: 700;
 		}
 
 		.game-link__count {
-			color: #9ca3af;
+			color: #8b93a1;
 			line-height: 1;
 		}
 
-		&:hover .game-link__count,
-		&.active .game-link__count {
+		&:hover .game-link__count {
 			color: #9ca3af;
+		}
+
+		&.active .game-link__count {
+			color: rgba(0, 0, 0, 0.55);
+		}
+
+		&.active .game-link__live-dot {
+			box-shadow: none;
+		}
+
+		&.active .game-link__clock-icon {
+			color: #000000;
 		}
 	}
 
@@ -1669,34 +1685,42 @@ $predictions-compact-card-inline: 60px;
 			display: inline-flex;
 			align-items: center;
 			justify-content: center;
-			padding: 6px 12px;
+			padding: 7px 12px;
 			border: none;
-			background: transparent;
-			color: #ffffff;
+			background: rgba(255, 255, 255, 0.06);
+			color: #d7dbe2;
 			line-height: 1;
 			transition:
 				color 0.15s ease-in-out,
-				background-color 0.15s ease-in-out;
+				background-color 0.15s ease-in-out,
+				transform 0.12s ease;
 
 			&:hover {
-				background: #101114;
+				background: rgba(255, 255, 255, 0.1);
 				color: #ffffff;
 			}
 
+			&:active {
+				transform: scale(0.96);
+			}
+
 			&.active {
-				background: #101114;
-				color: #ffffff;
+				background: #ffffff;
+				color: #000000;
 				font-weight: 700;
 			}
 
 			.game-link__count {
-				color: #9ca3af;
+				color: #8b93a1;
 				line-height: 1;
 			}
 
-			&:hover .game-link__count,
-			&.active .game-link__count {
+			&:hover .game-link__count {
 				color: #9ca3af;
+			}
+
+			&.active .game-link__count {
+				color: rgba(0, 0, 0, 0.55);
 			}
 		}
 	}
@@ -2001,5 +2025,167 @@ $predictions-compact-card-inline: 60px;
 
 	.predictions-markets-body > .game-links-wrapper .game-link--world-cup-parent .game-link__count {
 		line-height: 1;
+	}
+}
+
+/* ============================================================
+ * Mobile app feel (phones ≤768px)
+ *
+ * Native-app treatment for the markets list: pinned filter chips,
+ * bold compact large-title, quiet meta rows, meter-style odds bars,
+ * chip-style price buttons, and press feedback instead of hover.
+ * ============================================================ */
+@media (max-width: 768px) {
+	/*
+	 * Filter chips pin like a native list header. They stick just BELOW the app
+	 * header while it's visible (no overlap), and ride up to the very top edge
+	 * when the header hides on scroll — `body.app-header-hidden` is toggled by
+	 * Header.tsx, and both transitions run in sync so they move as one.
+	 */
+	.game-links-wrapper {
+		position: sticky;
+		top: var(--app-header-height, 4rem);
+		z-index: 40;
+		padding-top: 10px;
+		padding-bottom: 10px;
+		transition: top 0.25s ease-in-out;
+	}
+
+	body.app-header-hidden .game-links-wrapper {
+		top: 0;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.game-links-wrapper {
+			transition: none;
+		}
+	}
+
+	/* Page title: bold app large-title, tight to the chips above it. */
+	.prediction-calendar-page-heading {
+		margin-bottom: 8px;
+		padding-bottom: 0;
+
+		&__title-row {
+			margin-top: 8px;
+			gap: 8px;
+		}
+
+		&__game-logo {
+			width: 32px;
+			height: 32px;
+			border-radius: 8px;
+		}
+
+		&__title {
+			font-size: 24px;
+			font-weight: 800;
+			letter-spacing: -0.02em;
+			color: #ffffff;
+		}
+	}
+
+	/* Day headers: one quiet line — "TODAY · JULY 16". */
+	.prediction-calendar-title {
+		flex-direction: row;
+		align-items: baseline;
+		gap: 8px;
+	}
+
+	.prediction-calendar-primary {
+		font-size: 13px;
+		letter-spacing: 0.08em;
+	}
+
+	.prediction-calendar-secondary {
+		font-size: 12px;
+		color: #6b7280;
+	}
+
+	.prediction-calendar-day {
+		gap: 8px;
+		margin-bottom: 28px;
+	}
+
+	/* Card rows: hairline separators; press-wash replaces hover-wash. */
+	.prediction-card::after {
+		border-bottom-color: rgba(255, 255, 255, 0.07);
+	}
+
+	.prediction-card:hover {
+		box-shadow: none;
+
+		.prediction-card__headline-main {
+			color: inherit;
+		}
+	}
+
+	.prediction-card:hover::after {
+		border-bottom-color: rgba(255, 255, 255, 0.07);
+	}
+
+	.prediction-card:hover::before {
+		background-color: transparent;
+	}
+
+	.prediction-card:active::before {
+		background-color: rgba(255, 255, 255, 0.05);
+	}
+
+	/* Meta rows step back so team names + prices carry the hierarchy. */
+	.prediction-countdown,
+	.prediction-ended-label {
+		font-size: 11px;
+		color: rgba(255, 255, 255, 0.45);
+	}
+
+	.prediction-live-indicator {
+		font-size: 11px;
+	}
+
+	.prediction-card__headline {
+		font-size: 11px;
+		font-weight: 600;
+		color: rgba(255, 255, 255, 0.45);
+	}
+
+	.prediction-card__headline-match-winner {
+		color: rgba(255, 255, 255, 0.4);
+	}
+
+	.prediction-card--compact .prediction-card__volume {
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.4);
+	}
+
+	.prediction-card-outcome-label {
+		font-size: 15px;
+	}
+
+	/* Odds bar: a real meter (track + rounded fill), not a link underline. */
+	.prediction-card--compact .prediction-card-outcome-odds-bar {
+		height: 3px;
+		background: rgba(255, 255, 255, 0.08);
+		border-radius: 9999px;
+		overflow: hidden;
+	}
+
+	.prediction-card--compact .prediction-card-outcome-odds-bar__fill {
+		height: 100%;
+		border-radius: 9999px;
+	}
+
+	/* Price buttons: soft filled chips — drop the 2px web-form outlines. */
+	.prediction-card-outcome-row .action-button {
+		width: 76px;
+		min-width: 76px;
+		max-width: 76px;
+		border-radius: 12px !important;
+		border-width: 0 !important;
+
+		strong {
+			font-size: 15px;
+			font-weight: 800 !important;
+		}
 	}
 }

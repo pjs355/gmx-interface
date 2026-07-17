@@ -1,7 +1,16 @@
 import { FiX } from "react-icons/fi";
+import {
+	RiArrowRightSLine,
+	RiHome5Line,
+	RiArrowLeftRightLine,
+	RiInformationLine,
+	RiUser3Line,
+	RiLogoutBoxRLine,
+} from "react-icons/ri";
 
 import { HeaderLink } from "./HeaderLink";
-import { preloadAllOddsRoute } from "@/app/routes/allOddsRouteLazy";
+// SUNSET (2026-07-15): All Odds nav link disabled — no preload needed.
+// import { preloadAllOddsRoute } from "@/app/routes/allOddsRouteLazy";
 import { useSignerContext } from "context/SignerContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCopyToClipboard } from "react-use";
@@ -66,6 +75,18 @@ export function AppHeaderLinks({
 			maximumFractionDigits: isInt ? 0 : 2,
 		}).format(num);
 	};
+
+	/** Drawer rows only: icon chip + label + trailing chevron (desktop keeps plain labels). */
+	const drawerRow = (icon: React.ReactNode, label: React.ReactNode) =>
+		small ? (
+			<>
+				<span className="drawer-row-icon">{icon}</span>
+				<span className="drawer-row-label">{label}</span>
+				<RiArrowRightSLine className="drawer-row-chevron" />
+			</>
+		) : (
+			label
+		);
 
 	// const handleLanguageModalClose = useCallback(() => {
 	//   setIsLanguageModalOpen(false);
@@ -199,7 +220,7 @@ export function AppHeaderLinks({
 							);
 						}}
 					>
-						Markets
+						{drawerRow(<RiHome5Line />, "Markets")}
 					</HeaderLink>
 				</div>
 				{/* Second Markets tab (games-only list) disabled — all markets on home */}
@@ -217,7 +238,9 @@ export function AppHeaderLinks({
 					Markets
 				</HeaderLink>
 			</div> */}
-				<div className="App-header-link-container">
+				{/* SUNSET (2026-07-15): Traders + All Odds nav links disabled. Routes redirect
+				    to home (see MainRoutes). Restore these blocks to reactivate the tabs. */}
+				{/* <div className="App-header-link-container">
 					<HeaderLink
 						qa="traders"
 						to="/traders"
@@ -242,7 +265,7 @@ export function AppHeaderLinks({
 					>
 						All Odds
 					</HeaderLink>
-				</div>
+				</div> */}
 				{active && (
 					<div className="App-header-link-container">
 						<HeaderLink
@@ -252,7 +275,7 @@ export function AppHeaderLinks({
 							onClick={small ? clickCloseIcon : undefined}
 							isActive={(_match: any, location: any) => location.pathname === "/transfers"}
 						>
-							Transfers
+							{drawerRow(<RiArrowLeftRightLine />, "Transfers")}
 						</HeaderLink>
 					</div>
 				)}
@@ -264,7 +287,7 @@ export function AppHeaderLinks({
 						onClick={small ? clickCloseIcon : undefined}
 						isActive={(_match: any, location: any) => location.pathname === "/about"}
 					>
-						About
+						{drawerRow(<RiInformationLine />, "About")}
 					</HeaderLink>
 				</div>
 				<div className="App-header-link-container">
@@ -292,19 +315,20 @@ export function AppHeaderLinks({
 									if (clickCloseIcon) clickCloseIcon();
 								}}
 							>
-								Profile
+								{drawerRow(<RiUser3Line />, "Profile")}
 							</a>
 						</div>
 						<div className="App-header-link-container">
 							<a
 								href="#"
+								className="drawer-row--danger"
 								onClick={(e) => {
 									e.preventDefault();
 									(disconnectAccountAndCloseSettings || (() => {}))();
 									logout();
 								}}
 							>
-								Sign out
+								{drawerRow(<RiLogoutBoxRLine />, "Sign out")}
 							</a>
 						</div>
 					</>

@@ -35,7 +35,7 @@ import { resolveDefaultTradeQuestion } from "@/features/markets/listing/defaultT
 import "../Predictions/Predictions.scss";
 import "./scss/PredictionMarket.scss";
 import { PredictionCurtainProvider } from "@/components/PredictionMarketTradeBox";
-import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
+import { PredictionMarketSkeleton } from "./Skeletons/PredictionMarketSkeleton";
 import { useOddsFormatUrlSync } from "@/features/odds-display/useOddsFormatUrlSync";
 
 function sanitizeUmbrellaQuestions(raw: unknown[]): PredictionMarket[] {
@@ -355,12 +355,14 @@ function PredictionMarketContent() {
 		if (!el) return;
 
 		const maxLines = 3;
-		const maxFont = 34; // starting from text-34 intent
-		const minFont = 16; // do not go below this for readability
+		// App-scale header: phones read like a native detail-screen title, not a
+		// hero headline (was 34px — dominated the viewport on small screens).
+		const maxFont = 20;
+		const minFont = 14; // do not go below this for readability
 
 		// Reset to max first
 		el.style.fontSize = `${maxFont}px`;
-		el.style.lineHeight = "1.2";
+		el.style.lineHeight = "1.3";
 		el.style.display = "block";
 		el.style.overflow = "hidden";
 
@@ -649,7 +651,7 @@ function PredictionMarketContent() {
 	);
 
 	if (!umbrella && (loading || contextLoading)) {
-		return <PageSkeleton />;
+		return <PredictionMarketSkeleton />;
 	}
 
 	// Show error page if umbrella is explicitly null after loading

@@ -217,3 +217,43 @@
 .trade-history-row:hover {
 	background: #151515 !important;
 }
+
+/* ------------------------------------------------------------------
+ * Mobile app feel: Positions / History switch as filter chips (white
+ * pill = active) instead of bordered web buttons with hover-lift.
+ * ------------------------------------------------------------------ */
+@media (max-width: 768px) {
+	.positions-tabs .side-btn {
+		flex: 0 0 auto;
+		min-height: 40px;
+		padding: 9px 18px;
+		border-radius: 9999px;
+		border: none;
+		background: rgba(255, 255, 255, 0.06);
+		color: #d7dbe2;
+		font-size: 15px;
+		font-weight: 600;
+
+		&:hover {
+			transform: none;
+			box-shadow: none;
+			border-color: transparent;
+			color: #ffffff;
+			background: rgba(255, 255, 255, 0.1) !important;
+		}
+
+		&:active {
+			transform: scale(0.96);
+		}
+
+		&.selected.primary,
+		&.selected.secondary {
+			background: #ffffff !important;
+			border-color: transparent;
+			color: #000000;
+			font-weight: 700;
+			transform: none;
+			box-shadow: none;
+		}
+	}
+}

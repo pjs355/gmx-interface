@@ -15,7 +15,7 @@ import { DepositFundingTrigger } from "@/features/funding/DepositFundingTrigger"
 import { useAfterDepositRefresh } from "@/features/funding/useAfterDepositRefresh";
 
 import { OneClickButton } from "components/OneClickButton/OneClickButton";
-import AddressDropdown from "components/AddressDropdown/AddressDropdown";
+import { shortenAddress } from "@/services/wallets/shortenAddress";
 
 import { HeaderLink } from "./HeaderLink";
 // Removed unused Link import
@@ -42,13 +42,10 @@ type Props = {
 
 // Removed development networks - prediction markets only need Base
 
-export function AppHeaderUser({
-	small,
-	menuToggle,
-	openSettings,
-	disconnectAccountAndCloseSettings,
-	showRedirectModal,
-}: Props) {
+/* `disconnectAccountAndCloseSettings` stays in Props (callers still pass it;
+ * the tablet drawer uses it) but this component no longer needs it — sign-out
+ * moved to the profile page. */
+export function AppHeaderUser({ small, menuToggle, openSettings, showRedirectModal }: Props) {
 	// Simplified for prediction markets - centralized signer context
 	const { authenticated: active, account, ready: signerReady } = useSignerContext();
 	const { login, user } = usePrivy();
@@ -92,40 +89,40 @@ export function AppHeaderUser({
 				{/* Always show connection options for prediction markets */}
 				{true ? (
 					<>
-						{!small && (
-							<div
-								className="login-text-link"
-								onClick={() => {
-									// Removed userAnalytics call
-									login();
-								}}
-								style={{
-									color: "var(--brand-primary)",
-									cursor: "pointer",
-									padding: "8px 12px",
-									borderRadius: "6px",
-									backgroundColor: "transparent",
-									transition: "background-color 0.2s ease",
-									fontSize: "var(--font-size-body-medium)",
-									fontWeight: "700",
-								}}
-								onMouseEnter={(e) => {
-									e.currentTarget.style.backgroundColor = "#1f2937";
-								}}
-								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor = "transparent";
-								}}
-							>
-								Log In
-							</div>
-						)}
+						{/* Log In + Sign Up pair on every size — the burger (and its
+						    drawer auth buttons) no longer exists on phones. */}
+						<div
+							className="login-text-link"
+							onClick={() => {
+								// Removed userAnalytics call
+								login();
+							}}
+							style={{
+								color: "var(--brand-primary)",
+								cursor: "pointer",
+								padding: "8px 12px",
+								borderRadius: "6px",
+								backgroundColor: "transparent",
+								transition: "background-color 0.2s ease",
+								fontSize: "var(--font-size-body-medium)",
+								fontWeight: "700",
+							}}
+							onMouseEnter={(e) => {
+								e.currentTarget.style.backgroundColor = "#1f2937";
+							}}
+							onMouseLeave={(e) => {
+								e.currentTarget.style.backgroundColor = "transparent";
+							}}
+						>
+							Log In
+						</div>
 						<ConnectWalletButton
 							onClick={() => {
 								// Removed userAnalytics call
 								login();
 							}}
 						>
-							{small ? "Get Started" : "Sign Up"}
+							Sign Up
 						</ConnectWalletButton>
 						{!small && <OneClickButton openSettings={openSettings} />}
 						{/* <NetworkDropdown
@@ -141,23 +138,62 @@ export function AppHeaderUser({
 		);
 	}
 
-	// Build simple Base explorer URL
-	const accountUrl = account ? `https://basescan.org/address/${account}` : "";
+	/* Portfolio + Cash chips: shared by desktop and phone headers. */
+	const portfolioMetric = (
+		<div className="App-header-nav-portfolio" data-qa="header-portfolio-wrap">
+			<HeaderLink
+				className="header-metric-box header-metric-box--portfolio"
+				to="/positions"
+				showRedirectModal={showRedirectModal}
+			>
+				<div className="header-metric-row">
+					<span className="header-metric-label">Portfolio</span>
+					<span className="header-metric-value">
+						{showPortfolioMetricSkeleton ? (
+							<span
+								className="skeleton-box"
+								style={{
+									display: "inline-block",
+									width: 64,
+									height: 14,
+									borderRadius: 4,
+									backgroundColor: "rgba(255, 255, 255, 0.1)",
+								}}
+							/>
+						) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
+							"--"
+						) : (
+							`$${formatCurrency(portfolioTotal)}`
+						)}
+					</span>
+				</div>
+			</HeaderLink>
+		</div>
+	);
 
-	/* Desktop: three direct siblings under `.App-header-container-right` (no extra row wrapper). */
-	if (!small) {
-		return (
-			<>
-				<div className="App-header-nav-portfolio" data-qa="header-portfolio-wrap">
-					<HeaderLink
-						className="header-metric-box header-metric-box--portfolio"
-						to="/positions"
-						showRedirectModal={showRedirectModal}
+	const cashMetric = (
+		<div className="App-header-nav-cash" data-qa="header-cash-wrap">
+			<DepositFundingTrigger ready={signerReady} onComplete={refreshAfterDeposit}>
+				{({ buyWithCard, canBuyWithCard }) => (
+					<div
+						data-qa="header-cash"
+						data-qa-cash-amount={
+							!cashLoading && typeof cashBalance === "number" && isFinite(cashBalance)
+								? cashBalance
+								: undefined
+						}
+						className="header-metric-box header-metric-box--cash"
+						onClick={() => {
+							if (canBuyWithCard) void buyWithCard();
+						}}
+						style={{
+							cursor: canBuyWithCard ? "pointer" : "default",
+						}}
 					>
 						<div className="header-metric-row">
-							<span className="header-metric-label">Portfolio</span>
+							<span className="header-metric-label">Cash</span>
 							<span className="header-metric-value">
-								{showPortfolioMetricSkeleton ? (
+								{showCashMetricSkeleton ? (
 									<span
 										className="skeleton-box"
 										style={{
@@ -168,69 +204,49 @@ export function AppHeaderUser({
 											backgroundColor: "rgba(255, 255, 255, 0.1)",
 										}}
 									/>
-								) : portfolioTotal === null || !isFinite(portfolioTotal) ? (
-									"--"
 								) : (
-									`$${formatCurrency(portfolioTotal)}`
+									`$${formatCurrency(cashBalance)}`
 								)}
 							</span>
 						</div>
+					</div>
+				)}
+			</DepositFundingTrigger>
+		</div>
+	);
+
+	/* Desktop: metrics + profile chip under `.App-header-container-right`.
+	 * The old AddressDropdown menu is gone — the chip goes straight to the
+	 * profile page, where Sign Out now lives. */
+	if (!small) {
+		return (
+			<>
+				{portfolioMetric}
+				{cashMetric}
+				<div data-qa="user-address" className="App-header-nav-email">
+					<HeaderLink
+						className="header-metric-box header-profile-link"
+						to="/profile"
+						showRedirectModal={showRedirectModal}
+					>
+						<div className="header-metric-row">
+							<span className="header-metric-value header-profile-link__label">
+								{isSmartWallet && userEmail ? userEmail : shortenAddress(account as string, 13)}
+							</span>
+						</div>
 					</HeaderLink>
-				</div>
-				<div className="App-header-nav-cash" data-qa="header-cash-wrap">
-					<DepositFundingTrigger ready={signerReady} onComplete={refreshAfterDeposit}>
-						{({ buyWithCard, canBuyWithCard }) => (
-							<div
-								data-qa="header-cash"
-								data-qa-cash-amount={
-									!cashLoading && typeof cashBalance === "number" && isFinite(cashBalance)
-										? cashBalance
-										: undefined
-								}
-								className="header-metric-box header-metric-box--cash"
-								onClick={() => {
-									if (canBuyWithCard) void buyWithCard();
-								}}
-								style={{
-									cursor: canBuyWithCard ? "pointer" : "default",
-								}}
-							>
-								<div className="header-metric-row">
-									<span className="header-metric-label">Cash</span>
-									<span className="header-metric-value">
-										{showCashMetricSkeleton ? (
-											<span
-												className="skeleton-box"
-												style={{
-													display: "inline-block",
-													width: 64,
-													height: 14,
-													borderRadius: 4,
-													backgroundColor: "rgba(255, 255, 255, 0.1)",
-												}}
-											/>
-										) : (
-											`$${formatCurrency(cashBalance)}`
-										)}
-									</span>
-								</div>
-							</div>
-						)}
-					</DepositFundingTrigger>
-				</div>
-				<div data-qa="user-address" className="App-header-nav-email App-header-user-address">
-					<AddressDropdown
-						account={account as string}
-						accountUrl={accountUrl}
-						disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
-						userEmail={userEmail}
-						isSmartWallet={isSmartWallet}
-					/>
 				</div>
 			</>
 		);
 	}
 
-	/* Logged-in mobile: metrics + address live in drawer; bar shows menu only. */
-	return <>{menuToggle}</>;
+	/* Logged-in phone/tablet: balances live in the bar itself (no burger on
+	 * phones — profile/sign-out are reachable via the bottom tabs). */
+	return (
+		<>
+			{portfolioMetric}
+			{cashMetric}
+			{menuToggle}
+		</>
+	);
 }

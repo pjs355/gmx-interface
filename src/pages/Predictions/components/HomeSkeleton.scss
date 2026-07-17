@@ -2,10 +2,21 @@
 	pointer-events: none;
 	user-select: none;
 
+	// Slightly brighter shimmer than the default so shapes actually read on the
+	// pure-black markets background.
 	.skeleton-shimmer {
 		border-radius: 6px;
+		background: linear-gradient(
+			90deg,
+			rgba(255, 255, 255, 0.07) 0%,
+			rgba(255, 255, 255, 0.19) 50%,
+			rgba(255, 255, 255, 0.07) 100%
+		);
+		background-size: 200% 100%;
 	}
 }
+
+/* ---------------- Filter rail ---------------- */
 
 .home-skeleton__sidebar {
 	position: relative;
@@ -17,49 +28,47 @@
 	@media (max-width: 1099px) {
 		.game-links-bar {
 			overflow: hidden;
+			gap: 8px;
 		}
 	}
 }
 
+/* Mobile: horizontal chips. */
 .home-skeleton__pill {
-	cursor: default;
-	background: rgba(255, 255, 255, 0.04);
-
-	&:hover {
-		background: rgba(255, 255, 255, 0.04);
-		color: inherit;
-	}
-}
-
-.home-skeleton__pill-dot {
-	width: 8px;
-	height: 8px;
+	flex: 0 0 auto;
+	height: 34px;
 	border-radius: 9999px;
-	flex-shrink: 0;
 }
 
-.home-skeleton__pill-logo {
+/* Desktop: vertical filter rows (logo + label + count). */
+.home-skeleton__filter-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 36px;
+	padding: 6px 16px 6px 0;
+	box-sizing: border-box;
+}
+
+.home-skeleton__filter-logo {
 	width: 28px;
 	height: 28px;
 	border-radius: 8px;
 	flex-shrink: 0;
-
-	@media (max-width: 1099px) {
-		width: 20px;
-		height: 20px;
-		border-radius: 6px;
-	}
 }
 
-.home-skeleton__pill-label {
-	height: 14px;
-	display: inline-block;
+.home-skeleton__filter-label {
+	height: 15px;
+	border-radius: 6px;
 }
 
-.home-skeleton__pill-count {
-	width: 26px;
+.home-skeleton__filter-count {
+	width: 22px;
 	height: 14px;
-	flex: 0 0 auto;
+	border-radius: 6px;
+	margin-left: auto;
+	flex-shrink: 0;
 }
 
 .home-skeleton__grid--no-dock {
@@ -72,6 +81,20 @@
 	min-width: 0;
 }
 
+/* ---------------- Page + day headings ---------------- */
+
+.home-skeleton__page-title {
+	display: block;
+	height: 26px;
+	width: 180px;
+	border-radius: 8px;
+
+	@media (min-width: 1101px) {
+		height: 34px;
+		width: 280px;
+	}
+}
+
 .home-skeleton__section .prediction-calendar-header {
 	display: flex;
 	align-items: center;
@@ -79,82 +102,100 @@
 	padding: 6px var(--prediction-calendar-heading-inline) 12px;
 }
 
-.home-skeleton__heading {
-	display: block;
-	height: 18px;
-	margin-bottom: 6px;
-}
-
-.home-skeleton__heading-sub {
+.home-skeleton__day {
 	display: block;
 	height: 13px;
+	border-radius: 6px;
 }
+
+.home-skeleton__day-sub {
+	display: block;
+	height: 11px;
+	border-radius: 6px;
+}
+
+.home-skeleton__odds-picker {
+	width: 30px;
+	height: 20px;
+	border-radius: 6px;
+	flex-shrink: 0;
+}
+
+/* ---------------- Market card ---------------- */
 
 .home-skeleton__card {
 	cursor: default;
 
 	&:hover {
-		background: #101114;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	}
+
+	// Kill the interactive glass hover-wash on the skeleton.
+	&:hover::before {
+		background-color: transparent;
 	}
 }
 
-.home-skeleton__chip {
+/* Top row: "Starts In" (left) + game label (right). */
+.home-skeleton__starts {
 	display: inline-block;
-	width: 86px;
-	height: 18px;
-	border-radius: 9999px;
+	width: 140px;
+	height: 11px;
+	border-radius: 6px;
 }
 
-.home-skeleton__headline {
+.home-skeleton__game {
 	display: inline-block;
-	width: 150px;
-	height: 14px;
+	width: 108px;
+	height: 11px;
+	border-radius: 6px;
 	margin-left: auto;
 }
 
-.home-skeleton__rows {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	padding: 4px 20px 0;
-	box-sizing: border-box;
+/* 40px team logo — matches `.prediction-card-outcome-logo`. */
+.home-skeleton__logo {
+	width: 40px;
+	height: 40px;
+	border-radius: 10px;
+	display: block;
 }
 
-.home-skeleton__row {
-	display: flex;
-	align-items: center;
-	gap: 12px;
+.home-skeleton__team {
+	height: 14px;
+	border-radius: 6px;
 }
 
-.home-skeleton__row-logo {
-	width: 28px;
-	height: 28px;
-	border-radius: 9999px;
-	flex-shrink: 0;
-}
-
-.home-skeleton__row-middle {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-.home-skeleton__row-label {
-	height: 12px;
-}
-
-.home-skeleton__row-bar {
-	height: 3px;
+/* Odds meter — mirrors the 3px track on the real compact card. */
+.home-skeleton__bar {
+	position: relative;
 	width: 100%;
+	height: 3px;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.08);
+	overflow: hidden;
+}
+
+.home-skeleton__bar-fill {
+	display: block;
+	height: 100%;
 	border-radius: 9999px;
 }
 
-.home-skeleton__row-button {
+/* Price chip — matches the mobile 76px / desktop 88px action button. */
+.home-skeleton__price {
 	flex: 0 0 auto;
-	width: 86px;
+	width: 76px;
 	height: 44px;
-	border-radius: 8px;
+	border-radius: 12px;
+
+	@media (min-width: 1101px) {
+		width: 88px;
+	}
+}
+
+.home-skeleton__vol {
+	display: inline-block;
+	width: 72px;
+	height: 12px;
+	border-radius: 6px;
 }

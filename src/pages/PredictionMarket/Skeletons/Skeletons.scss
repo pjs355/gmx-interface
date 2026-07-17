@@ -265,3 +265,113 @@
 	width: 100px;
 	height: 16px;
 }
+
+// ------------------------------------------------------------------
+// Full-page trading skeleton (PredictionMarketSkeleton) — mirrors the
+// real umbrella page layout on both breakpoints.
+// ------------------------------------------------------------------
+.pm-skeleton {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.pm-skeleton--desktop {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) var(--predictions-trade-panel-width, 360px);
+	gap: 24px;
+	align-items: start;
+	padding: 12px 0 48px var(--app-content-inline-gutter, 50px);
+}
+
+.pm-skeleton__main {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.pm-skeleton__rail {
+	border-left: 1px solid rgba(229, 231, 235, 0.22);
+	min-width: 0;
+}
+
+.pm-skeleton--mobile {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 10px 8px 96px;
+}
+
+.pm-skeleton__title {
+	height: 22px;
+	width: 68%;
+	border-radius: 6px;
+}
+
+.pm-skeleton__title--line2 {
+	width: 44%;
+}
+
+.pm-skeleton__back {
+	width: 34px;
+	height: 34px;
+	border-radius: 9999px;
+}
+
+.pm-skeleton__tabs {
+	display: flex;
+	gap: 4px;
+	padding: 3px;
+	background: rgba(255, 255, 255, 0.06);
+	border-radius: 12px;
+}
+
+.pm-skeleton__tab {
+	flex: 1;
+	height: 40px;
+	border-radius: 9px;
+}
+
+.pm-skeleton__odds {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.pm-skeleton__section-label {
+	width: 130px;
+	height: 12px;
+	border-radius: 6px;
+}
+
+.pm-skeleton__odds-card {
+	border: 0.5px solid rgba(255, 255, 255, 0.08);
+	border-radius: 14px;
+	background: #0c0e12;
+	overflow: hidden;
+}
+
+.pm-skeleton__odds-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 13px 14px;
+	border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+
+	&:last-child {
+		border-bottom: none;
+	}
+}
+
+.pm-skeleton__odds-venue {
+	flex: 1;
+	height: 14px;
+	border-radius: 6px;
+}
+
+.pm-skeleton__odds-cell {
+	width: 48px;
+	height: 14px;
+	border-radius: 6px;
+	flex-shrink: 0;
+}

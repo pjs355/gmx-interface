@@ -622,15 +622,24 @@
 		// Match the desktop fix: keep above the recharts SVG but well below the
 		// fixed App-header (z-index 850) so 1H/1D stops painting over it on scroll.
 		z-index: 5;
-		background: rgba(0, 0, 0, 0.75);
+		background: rgba(255, 255, 255, 0.06);
+		border-radius: 9999px;
+		padding: 3px;
 	}
 
 	.chart-plot-area .time-range-selector.bottom-right .time-range-btn {
-		min-height: 44px;
+		min-height: 38px;
 		min-width: 44px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		border-radius: 9999px;
+		font-weight: 600;
+
+		&.active {
+			background: #262b34;
+			color: #ffffff;
+		}
 	}
 
 	.venue-checkbox-bar {

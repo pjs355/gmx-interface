@@ -43,6 +43,16 @@ function resolveTagLinkLogo(tag: Tag): string | null {
 
 export type WorldCupSection = "games" | "groups" | "futures" | "awards";
 
+/** Fixed left-to-right order of the World Cup sub-tabs. */
+const WORLD_CUP_SECTION_ORDER: WorldCupSection[] = ["games", "groups", "futures", "awards"];
+
+const WORLD_CUP_SECTION_LABELS: Record<WorldCupSection, string> = {
+	games: "Games",
+	groups: "Groups",
+	futures: "Futures",
+	awards: "Awards",
+};
+
 interface GameLinksProps {
 	selectedGame: string | null;
 	onGameSelect: (game: string | null) => void;
@@ -291,6 +301,31 @@ export default function GameLinks({
 		);
 	};
 
+	// Only show a World Cup sub-tab that still has markets. Group winners,
+	// futures and awards resolve/expire as the tournament progresses; once a
+	// section's umbrellas are deactivated its count drops to 0 and the tab is a
+	// dead end (renders "0", opens an empty list). Hide those. The counts share
+	// the same active-World-Cup-umbrella base as `worldCupMarketCount`, so the
+	// block only renders when at least one section is non-empty.
+	const visibleWorldCupSections = React.useMemo<WorldCupSection[]>(
+		() =>
+			WORLD_CUP_SECTION_ORDER.filter((section) => (worldCupSectionCounts[section] ?? 0) > 0),
+		[worldCupSectionCounts],
+	);
+	const visibleWorldCupSectionsKey = visibleWorldCupSections.join(",");
+
+	// If the section the user is viewing empties out (its last market resolves),
+	// move them to the first section that still has markets so they never land
+	// on a hidden, empty tab.
+	React.useEffect(() => {
+		if (!worldCupActive) return;
+		const first = visibleWorldCupSections[0];
+		if (first === undefined) return;
+		if (visibleWorldCupSections.includes(worldCupSection)) return;
+		onWorldCupSectionSelect?.(first);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [worldCupActive, worldCupSection, visibleWorldCupSectionsKey]);
+
 	const handleWorldCupSectionClick = (section: WorldCupSection) => {
 		setWorldCupExpanded(true);
 		onWorldCupSectionSelect?.(section);
@@ -328,10 +363,14 @@ export default function GameLinks({
 
 	const renderWorldCupSubSections = (className = "game-link game-link--sub") => (
 		<>
-			{renderWorldCupSectionButton("games", "Games", worldCupSectionCounts.games, className)}
-			{renderWorldCupSectionButton("groups", "Groups", worldCupSectionCounts.groups, className)}
-			{renderWorldCupSectionButton("futures", "Futures", worldCupSectionCounts.futures, className)}
-			{renderWorldCupSectionButton("awards", "Awards", worldCupSectionCounts.awards, className)}
+			{visibleWorldCupSections.map((section) =>
+				renderWorldCupSectionButton(
+					section,
+					WORLD_CUP_SECTION_LABELS[section],
+					worldCupSectionCounts[section],
+					className,
+				),
+			)}
 		</>
 	);
 

@@ -5,7 +5,9 @@ import { PageSkeleton } from "@/components/PageSkeleton/PageSkeleton";
 import { peekHomeCatalogScroll } from "@/pages/Predictions/utils/homeScrollRestore";
 import { PositionsRoute } from "@/app/routes/PositionsRouteShell";
 import { loadPredictionMarketPage } from "@/app/routes/predictionMarketRouteLazy";
-import { loadAllOddsPage } from "@/app/routes/allOddsRouteLazy";
+// SUNSET (2026-07-15): All Odds route disabled — see redirect below. Re-enable by
+// restoring this import + the lazy() line + the /all-odds route element.
+// import { loadAllOddsPage } from "@/app/routes/allOddsRouteLazy";
 
 // Eager: homepage and listing pages (most common entry points)
 import HomeRoute from "@/pages/Home/HomeRoute";
@@ -20,9 +22,11 @@ const Admin = lazy(() => import("pages/Admin/Admin"));
 const Transfers = lazy(() => import("pages/Transfers/Transfers"));
 const TradeBoxTest = lazy(() => import("pages/TradeBoxTest/TradeBoxTest"));
 const About = lazy(() => import("pages/About/About"));
-const AllOdds = lazy(loadAllOddsPage);
-const Traders = lazy(() => import("pages/Traders/Traders"));
-const TraderProfile = lazy(() => import("pages/Traders/TraderProfile"));
+// SUNSET (2026-07-15): All Odds + Traders pages disabled (too much data/memory).
+// Code kept intact — reactivate by uncommenting these + their routes below.
+// const AllOdds = lazy(loadAllOddsPage);
+// const Traders = lazy(() => import("pages/Traders/Traders"));
+// const TraderProfile = lazy(() => import("pages/Traders/TraderProfile"));
 const CopyDashboard = lazy(() => import("pages/Copy/CopyDashboard"));
 const BlogIndex = lazy(() => import("pages/Blog/BlogIndex"));
 const BlogArticle = lazy(() => import("pages/Blog/BlogArticle"));
@@ -265,7 +269,13 @@ export function MainRoutes() {
 						</LazyPage>
 					}
 				/>
-				<Route
+				{/* SUNSET (2026-07-15): All Odds + Traders disabled — redirect to home.
+				    Pages/data feeds are dormant (nothing mounts them). Reactivate by
+				    restoring the commented route elements below + their lazy imports. */}
+				<Route path="/all-odds" element={<Navigate to="/" replace />} />
+				<Route path="/traders" element={<Navigate to="/" replace />} />
+				<Route path="/traders/:address" element={<Navigate to="/" replace />} />
+				{/* <Route
 					path="/all-odds"
 					element={
 						<LazyPage>
@@ -288,7 +298,7 @@ export function MainRoutes() {
 							<TraderProfile />
 						</LazyPage>
 					}
-				/>
+				/> */}
 				<Route
 					path="/copy"
 					element={

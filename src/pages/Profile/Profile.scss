@@ -66,10 +66,48 @@
 	margin-top: 32px; /* Desktop padding between tabs and content */
 }
 
+/* Sign out — bottom of the profile page (desktop dropdown + mobile drawer both retired). */
+.profile-signout-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 40px;
+	min-height: 48px;
+	max-width: 360px;
+	width: 100%;
+	padding: 0 24px;
+	border: none;
+	border-radius: 12px;
+	background: rgba(239, 68, 68, 0.12);
+	color: #f87171;
+	font-size: 15px;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background-color 0.15s ease,
+		transform 0.12s ease;
+
+	svg {
+		font-size: 18px;
+	}
+
+	&:hover {
+		background: rgba(239, 68, 68, 0.2);
+		border-color: transparent;
+	}
+
+	&:active {
+		transform: scale(0.98);
+	}
+}
+
 /* Mobile responsive adjustments */
 @media (max-width: 768px) {
 	.profile-header {
-		font-size: 24px;
+		font-size: 22px;
+		font-weight: 800;
+		letter-spacing: -0.02em;
 		margin-bottom: 16px;
 	}
 

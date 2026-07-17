@@ -1,0 +1,167 @@
+/*
+ * Mobile app-feel foundations.
+ *
+ * Everything here is scoped to phone/tablet widths (or coarse pointers) so
+ * desktop is untouched. Goal: the site should behave like a native app on a
+ * phone — no tap-highlight flashes, no accidental text selection on chrome,
+ * no visible scrollbars, instant tap response, press feedback instead of
+ * hover states, and safe-area awareness for notched devices.
+ */
+
+:root {
+	/* Bottom tab bar height (content box, excludes safe-area inset). */
+	--mobile-tabbar-height: 56px;
+	/* iOS-feel spring for sheet / drawer entrances. */
+	--app-ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+	--app-surface: #0c0e12;
+	--app-surface-2: #14171d;
+	--app-hairline: rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 1099px) {
+	html {
+		/* Kill the 300ms double-tap-to-zoom delay app-wide. */
+		touch-action: manipulation;
+	}
+
+	body {
+		/* No rubber-band revealing page background behind fixed chrome. */
+		overscroll-behavior-y: none;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	/* Native apps never flash a grey rectangle on tap. */
+	* {
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	/*
+	 * Interactive chrome should feel like controls, not copyable document
+	 * text. Inputs/textareas keep selection, as does page copy.
+	 */
+	button,
+	[role="button"],
+	.game-link,
+	.prediction-card,
+	.App-header,
+	.App-header-drawer,
+	.mobile-tabbar,
+	.prediction-curtain,
+	.mobile-trading-container {
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
+
+	/* Hide scrollbars — content still scrolls, like an app. */
+	::-webkit-scrollbar {
+		width: 0;
+		height: 0;
+		display: none;
+	}
+	* {
+		scrollbar-width: none;
+	}
+
+	/*
+	 * Press feedback: buttons compress slightly while touched. Replaces
+	 * hover-dependent affordances that do nothing on touch screens.
+	 */
+	button:not(:disabled),
+	[role="button"] {
+		transition:
+			transform 0.12s ease,
+			opacity 0.12s ease,
+			background-color 0.15s ease,
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+	button:not(:disabled):active,
+	[role="button"]:active {
+		transform: scale(0.97);
+	}
+
+	/*
+	 * iOS zooms the page when a focused input's font-size is under 16px.
+	 * Force 16px on text-entry controls so focusing never zooms.
+	 */
+	input[type="text"],
+	input[type="number"],
+	input[type="email"],
+	input[type="search"],
+	input:not([type]),
+	textarea,
+	select {
+		font-size: 16px !important;
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/* Bottom tab bar                                                      */
+/* ------------------------------------------------------------------ */
+
+.mobile-tabbar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 800; /* under header drawer/curtain backdrops (1000+) */
+	display: none;
+	height: calc(var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px));
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	background: rgba(9, 10, 13, 0.92);
+	-webkit-backdrop-filter: saturate(180%) blur(20px);
+	backdrop-filter: saturate(180%) blur(20px);
+	border-top: 0.5px solid var(--app-hairline);
+	transform: translateZ(0);
+}
+
+@media (max-width: 768px) {
+	.mobile-tabbar {
+		display: flex;
+	}
+
+	/* Keep page content (routes + footer) clear of the fixed bar. */
+	body.has-mobile-tabbar .App-content {
+		padding-bottom: calc(var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px));
+	}
+}
+
+.mobile-tabbar__item {
+	flex: 1 1 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	height: var(--mobile-tabbar-height);
+	color: #8b93a1;
+	text-decoration: none !important;
+	font-weight: 500 !important;
+	-webkit-tap-highlight-color: transparent;
+	transition:
+		color 0.15s ease,
+		transform 0.12s ease;
+}
+
+.mobile-tabbar__item:active {
+	transform: scale(0.92);
+}
+
+.mobile-tabbar__item.active {
+	color: #ffffff;
+}
+
+.mobile-tabbar__icon {
+	font-size: 22px;
+	line-height: 1;
+	display: block;
+}
+
+.mobile-tabbar__label {
+	font-size: 10px;
+	line-height: 1;
+	letter-spacing: 0.02em;
+	font-weight: 600;
+}

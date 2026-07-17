@@ -270,3 +270,52 @@
 	max-width: none;
 	width: 25%;
 }
+
+/* ------------------------------------------------------------------
+ * Mobile app feel: the cross-venue odds grid reads as a card list —
+ * soft surface, hairline row separators, quiet header — instead of a
+ * hard-bordered spreadsheet.
+ * ------------------------------------------------------------------ */
+.prediction-market-page.mobile .esports-venue-books__table-wrap {
+	border: 0.5px solid rgba(255, 255, 255, 0.08);
+	border-radius: 14px;
+	background: #0c0e12;
+}
+
+.prediction-market-page.mobile .esports-venue-books__th,
+.prediction-market-page.mobile .esports-venue-books__td {
+	border: none;
+	border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+	padding: 11px 8px;
+}
+
+.prediction-market-page.mobile .esports-venue-books tbody tr:last-child .esports-venue-books__th,
+.prediction-market-page.mobile .esports-venue-books tbody tr:last-child .esports-venue-books__td {
+	border-bottom: none;
+}
+
+.prediction-market-page.mobile .esports-venue-books thead .esports-venue-books__th {
+	background: transparent;
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.45);
+
+	/* inline-flex centering clips both string ends — block + ellipsis instead. */
+	.esports-venue-books__th-text {
+		display: block;
+		width: 100%;
+	}
+}
+
+.prediction-market-page.mobile .esports-venue-books__td--label,
+.prediction-market-page.mobile .esports-venue-books tbody th.esports-venue-books__td--label {
+	background: transparent;
+	color: rgba(255, 255, 255, 0.85);
+	font-weight: 600;
+}
+
+.prediction-market-page.mobile .esports-venue-books__td--num {
+	font-weight: 600;
+}
