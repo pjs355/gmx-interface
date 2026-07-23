@@ -29,11 +29,14 @@ import {
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
 	umbrellaHasTagId,
+	umbrellaHasTradeableHomeChildren,
 	umbrellaMatchesHomeFilterType,
 	WORLD_CUP_PILL_ID,
 	GAME_FILTER_COMPACT_MEDIA,
 	useNowTick,
 } from "../utils/gameLinkFilters";
+import { useOddsMonitor } from "@/context/OddsMonitorContext";
+import { umbrellaHasListableCrossVenueOdds } from "@/features/markets/listing/umbrellaListingOdds";
 
 function resolveTagLinkLogo(tag: Tag): string | null {
 	const cs2 = bundledCounterStrikeLogoFromTagLabels([tag.label]);
@@ -75,6 +78,28 @@ function sortTagsForSidebar(tags: Tag[]): Tag[] {
 	return [...esports, ...rest];
 }
 
+/**
+ * Count-only dedupe: one entry per `pandascore_matchId`, mirroring the home
+ * grid's `dedupeUmbrellasByPandascoreMatch` so pill counts match card counts.
+ * Which duplicate survives is irrelevant to the count, so no scoring here.
+ */
+function dedupeByPandaMatchForCount(umbrellas: Umbrella[]): Umbrella[] {
+	const seen = new Set<string>();
+	const out: Umbrella[] = [];
+	for (const u of umbrellas) {
+		const raw = (u as { pandascore_matchId?: unknown }).pandascore_matchId;
+		const key = typeof raw === "string" ? raw.trim() : "";
+		if (!key) {
+			out.push(u);
+			continue;
+		}
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push(u);
+	}
+	return out;
+}
+
 export default function GameLinks({
 	selectedGame,
 	onGameSelect,
@@ -87,6 +112,7 @@ export default function GameLinks({
 	worldCupSectionCounts = { games: 0, groups: 0, futures: 0, awards: 0 },
 }: GameLinksProps) {
 	const { tags, tagsLoading } = usePredictionData();
+	const { appState } = useOddsMonitor();
 	const now = useNowTick(60_000);
 	const isCompactLayout = useMedia(GAME_FILTER_COMPACT_MEDIA);
 
@@ -120,7 +146,7 @@ export default function GameLinks({
 	const linkFilterState = React.useMemo(() => {
 		if (loading || tagsLoading || !umbrellas || umbrellas.length === 0) {
 			return {
-				typeFilteredUmbrellas: [] as Umbrella[],
+				displayableUmbrellas: [] as Umbrella[],
 				tagsSorted: [] as Tag[],
 				esportsTagId: undefined as string | undefined,
 			};
@@ -128,6 +154,7 @@ export default function GameLinks({
 
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			if (isMlbUmbrella(umbrella)) return false;
+			if (HIDE_WORLD_CUP && isWorldCupUmbrella(umbrella)) return false;
 			if (restrictedMode && !isRestrictedProductionUmbrella(umbrella as any)) {
 				return false;
 			}
@@ -137,7 +164,7 @@ export default function GameLinks({
 		const esportsTag = findEsportsTag(tags);
 		const esportsTagId = esportsTag?._id;
 
-		const typeFilteredUmbrellas = filterHomeCatalogUmbrellas(
+		const catalogUmbrellas = filterHomeCatalogUmbrellas(
 			filterType
 				? activeUmbrellas.filter((umbrella) =>
 						umbrellaMatchesHomeFilterType(umbrella, filterType, esportsTagId),
@@ -147,14 +174,30 @@ export default function GameLinks({
 			esportsTagId,
 		);
 
+		// Match the home grid exactly so a pill's count equals the number of
+		// cards that actually render. The grid additionally drops umbrellas with
+		// no tradeable/open children or no listable cross-venue odds, and
+		// collapses duplicate listings that share a pandascore match. Without
+		// this, a game with only stale/priceless umbrellas shows e.g. "1" but
+		// opens to "no markets".
+		const displayableUmbrellas = dedupeByPandaMatchForCount(
+			catalogUmbrellas.filter((umbrella) => {
+				const children = (umbrella as { children?: unknown[] }).children;
+				if (!Array.isArray(children) || children.length === 0) return false;
+				if (!umbrellaHasTradeableHomeChildren(umbrella)) return false;
+				if (!umbrellaHasListableCrossVenueOdds(umbrella, appState?.markets)) return false;
+				return true;
+			}),
+		);
+
 		const tagsWithActiveMarkets = tags.filter((tag) => {
-			return typeFilteredUmbrellas.some((umbrella) => umbrellaHasTagId(umbrella, tag._id));
+			return displayableUmbrellas.some((umbrella) => umbrellaHasTagId(umbrella, tag._id));
 		});
 
 		const tagsSorted = sortTagsForSidebar(tagsWithActiveMarkets);
 
-		return { typeFilteredUmbrellas, tagsSorted, esportsTagId };
-	}, [umbrellas, loading, tagsLoading, filterType, tags, restrictedMode, now]);
+		return { displayableUmbrellas, tagsSorted, esportsTagId };
+	}, [umbrellas, loading, tagsLoading, filterType, tags, restrictedMode, now, appState?.markets]);
 
 	const esportsTagLabel = defaultEsportsTagLabel(tags);
 	const esportsMetaTag = linkFilterState.tagsSorted.find((t) => isEsportsMetaTagLabel(t.label));
@@ -183,7 +226,7 @@ export default function GameLinks({
 
 	const liveMarketCount = React.useMemo(() => {
 		let n = 0;
-		for (const u of linkFilterState.typeFilteredUmbrellas) {
+		for (const u of linkFilterState.displayableUmbrellas) {
 			if (isUmbrellaLiveByEventDate(u, now, linkFilterState.esportsTagId)) {
 				n += 1;
 			}
@@ -193,7 +236,7 @@ export default function GameLinks({
 
 	const startingSoonMarketCount = React.useMemo(() => {
 		let n = 0;
-		for (const u of linkFilterState.typeFilteredUmbrellas) {
+		for (const u of linkFilterState.displayableUmbrellas) {
 			if (isUmbrellaStartingSoonByEventDate(u, now, linkFilterState.esportsTagId)) {
 				n += 1;
 			}
@@ -202,8 +245,8 @@ export default function GameLinks({
 	}, [linkFilterState, now]);
 
 	const esportsMarketCount = React.useMemo(() => {
-		return linkFilterState.typeFilteredUmbrellas.length;
-	}, [linkFilterState.typeFilteredUmbrellas]);
+		return linkFilterState.displayableUmbrellas.length;
+	}, [linkFilterState.displayableUmbrellas]);
 
 	const worldCupMarketCount = React.useMemo(() => {
 		if (restrictedMode) return 0;
@@ -216,7 +259,7 @@ export default function GameLinks({
 
 	const tagMarketCounts = React.useMemo(() => {
 		const map = new Map<string, number>();
-		const pool = linkFilterState.typeFilteredUmbrellas;
+		const pool = linkFilterState.displayableUmbrellas;
 		for (const tag of linkFilterState.tagsSorted) {
 			if (isEsportsMetaTagLabel(tag.label)) {
 				map.set(tag._id, pool.length);
