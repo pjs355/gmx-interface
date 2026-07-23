@@ -21,6 +21,15 @@ export const WORLD_CUP_PILL_ID = "__WORLD_CUP__";
 /** Canonical `Umbrella.game` slug set by the FIFA Polymarket create plan. */
 export const WORLD_CUP_GAME_SLUG = "soccer-fifwc";
 
+/**
+ * The 2026 FIFA World Cup is over — hide it from every browse/discovery surface
+ * (sidebar pill, sub-tabs, home cards, trading-page WC block). Kept as a
+ * one-line reversible flag rather than deleting the machinery, since FIFA
+ * markets recur. Id-keyed lookups (getUmbrellaById / Positions history) are
+ * intentionally NOT filtered, so settled World Cup positions keep their labels.
+ */
+export const HIDE_WORLD_CUP = true;
+
 /** MLB umbrellas are hidden from listing surfaces until mapping is stable. */
 export function isMlbGameSlug(game: string | null | undefined): boolean {
 	const slug = typeof game === "string" ? game.trim().toLowerCase() : "";

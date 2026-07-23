@@ -13,7 +13,7 @@ import {
 	setHomePendingWorldCupSection,
 } from "@/pages/Predictions/utils/gameFilterNavigation";
 import type { WorldCupSection } from "@/pages/Predictions/components/GameLinks";
-import { isWorldCupUmbrella, WORLD_CUP_PILL_ID, isMlbUmbrella } from "@/pages/Predictions/utils/gameLinkFilters";
+import { isWorldCupUmbrella, WORLD_CUP_PILL_ID, isMlbUmbrella, HIDE_WORLD_CUP } from "@/pages/Predictions/utils/gameLinkFilters";
 import { worldCupSectionForUmbrella } from "@/features/markets/listing/multiLegMarket";
 import { MarketPanels } from "./MarketPanels";
 import { useUmbrellaLiveOrderbooks } from "./useUmbrellaLiveOrderbooks";
@@ -176,6 +176,10 @@ function PredictionMarketContent() {
 
 	useEffect(() => {
 		if (umbrella && isMlbUmbrella(umbrella)) {
+			navigate("/", { replace: true });
+		}
+		// World Cup is over — redirect any cached/deeplinked WC market to home.
+		if (umbrella && HIDE_WORLD_CUP && isWorldCupUmbrella(umbrella)) {
 			navigate("/", { replace: true });
 		}
 	}, [umbrella, navigate]);

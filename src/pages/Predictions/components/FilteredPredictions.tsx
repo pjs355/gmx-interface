@@ -25,6 +25,7 @@ import {
 	isUmbrellaStartingSoonByEventDate,
 	isMlbUmbrella,
 	isWorldCupUmbrella,
+	HIDE_WORLD_CUP,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
 	umbrellaHasTradeableHomeChildren,
@@ -233,7 +234,7 @@ function collectVisibleUmbrellas(
 	return out;
 }
 
-const DEFAULT_CALENDAR_PAGE_TITLE = "Trade Across 5 Prediction Markets";
+const DEFAULT_CALENDAR_PAGE_TITLE = "Trade Across 4 Prediction Markets";
 
 function gameFilterDisplayLabel(selectedGame: string | null): string | null {
 	if (!selectedGame) return null;
@@ -378,6 +379,9 @@ export default function FilteredPredictions({ filterType }: FilteredPredictionsP
 	const filteredUmbrellas = useMemo(() => {
 		const activeUmbrellas = umbrellas.filter((umbrella) => {
 			if (isMlbUmbrella(umbrella)) return false;
+			// World Cup is over — hidden from browse (see HIDE_WORLD_CUP). Id-keyed
+			// lookups still resolve WC umbrellas so settled positions keep labels.
+			if (HIDE_WORLD_CUP && isWorldCupUmbrella(umbrella)) return false;
 			// Restricted production mode: hide every non-Counter-Strike
 			// umbrella from the public home list. Applied BEFORE the
 			// active-flag check so the count of esports-with-active-bets

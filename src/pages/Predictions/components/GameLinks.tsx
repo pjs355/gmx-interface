@@ -24,6 +24,7 @@ import {
 	isMlbUmbrella,
 	isUmbrellaLiveByEventDate,
 	isUmbrellaStartingSoonByEventDate,
+	HIDE_WORLD_CUP,
 	isWorldCupUmbrella,
 	LIVE_PILL_ID,
 	STARTING_SOON_PILL_ID,
@@ -375,6 +376,7 @@ export default function GameLinks({
 	);
 
 	const renderWorldCupBlock = () => {
+		if (HIDE_WORLD_CUP) return null;
 		if (worldCupMarketCount <= 0) return null;
 
 		if (isCompactLayout) {
@@ -462,6 +464,7 @@ export default function GameLinks({
 	};
 
 	const renderWorldCupSubRow = () => {
+		if (HIDE_WORLD_CUP) return null;
 		if (!isCompactLayout || !worldCupActive || worldCupMarketCount <= 0) return null;
 
 		return (

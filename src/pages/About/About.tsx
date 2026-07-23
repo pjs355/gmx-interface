@@ -136,7 +136,7 @@ export function About() {
 				<section className="about-section">
 					<h2 className="about-section-title">Built for esports first</h2>
 					<p className="about-body">
-						We cover all major esports markets plus World Cup markets. More sports markets and
+						We cover all major esports markets. More sports markets and
 						prediction venues are coming soon.
 					</p>
 				</section>
